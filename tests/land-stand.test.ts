@@ -27,13 +27,14 @@ import { PIECES, ticketOf } from '../src/battle/land/pieces';
 import { reachOf } from '../src/battle/land/rules';
 import { LandBattle } from '../src/battle/land/sim';
 import type { FieldTicket } from '../src/battle/core/types';
+import { groundAt } from '../src/battle/land/field';
 import type { LandPlace } from '../src/battle/land/field';
 
 type Ticket = FieldTicket<LandPlace>;
 type U = {
   id: number; side: 'att' | 'def'; kind: 'inf'; x: number; y: number; w: number; d: number; face: number; speed: number; power0: number; str: number; state: string; act: string;
   path: [number, number][]; order: { kind: string; target?: number } | null; home: [number, number]; keepFace: number | null; hid?: boolean; stoodFor?: number;
-  stand?: [number, number]; standBy?: { id: number; st: boolean }[]; heldAt?: [number, number]; stepsBack?: boolean;
+  stand?: [number, number]; standBy?: { id: number; st: boolean }[]; heldAt?: [number, number];
 };
 type Keeps = { way: boolean; side: boolean; beside: boolean; back: boolean; step: boolean };
 const ALL: Keeps = { way: true, side: true, beside: true, back: true, step: true };
@@ -224,8 +225,8 @@ describe('what it chose it keeps: the order, never the side', () => {
 
 describe('what it chose it keeps: a move order sent again to the place it holds (back)', () => {
   const P: [number, number] = [1500, 700];
-  /** One block carries out a move order to P facing north, is eased so far to its right, and is sent the same order again (or to a place so far north of it). */
-  function again(rule: boolean, keeps: Keeps, eased: number, north = 0): { u: U; held: [number, number] | undefined; steps: boolean | undefined; swung: number; left: number } {
+  /** One block carries out a move order to P facing north, is eased so far to its right, and is sent the same order again (or to a place so far north of it, or with another facing). */
+  function again(rule: boolean, keeps: Keeps, eased: number, north = 0, face = 0): { sim: LandBattle; u: U; held: [number, number] | undefined; ticks: number; swung: number; stepped: number; left: number } {
     const { sim, inner, foot } = quiet(rule, keeps);
     const u = put(foot[0], P[0], P[1] - 100, 0);
     inner.send(u, { kind: 'move', x: P[0], y: P[1], face: 0 });
@@ -234,28 +235,37 @@ describe('what it chose it keeps: a move order sent again to the place it holds 
     expect(dist(u.x, u.y, P[0], P[1])).toBeLessThanOrEqual(6.5);
     const held = u.heldAt ? [...u.heldAt] as [number, number] : undefined;
     u.x = P[0] + eased; u.y = P[1]; u.face = 0;
-    inner.send(u, { kind: 'move', x: P[0], y: P[1] + north, face: 0 });
-    const steps = u.stepsBack;
-    let swung = 0;
-    for (let k = 0; k < 8000 && u.order; k++) { sim.step(); swung = Math.max(swung, Math.abs(turn(0, u.face))); }
+    const from: [number, number] = [u.x, u.y];
+    inner.send(u, { kind: 'move', x: P[0], y: P[1] + north, face });
+    let swung = 0, ticks = 0;
+    for (let k = 0; k < 8000 && u.order; k++) { sim.step(); ticks++; swung = Math.max(swung, Math.abs(turn(0, u.face))); }
     expect(u.order).toBeNull();
-    return { u, held, steps, swung, left: dist(u.x, u.y, P[0], P[1] + north) };
+    return { sim, u, held, ticks, swung, stepped: dist(u.x, u.y, from[0], from[1]), left: dist(u.x, u.y, P[0], P[1] + north) };
   }
 
-  it('on, it steps back to it as it faces: no wheel to that way of a few metres and none back', () => {
+  it('on, it has carried that order out: it stands where it is, with no wheel and no step', () => {
     const r = again(true, ALL, 12);
     expect(r.held).toEqual(P);
-    expect(r.steps).toBe(true);
+    // (the order is done at the first tick it is looked at, where the block stands, beside whatever eased it)
+    expect(r.ticks).toBe(1);
     expect(r.swung).toBeLessThan(0.01);
-    expect(r.left).toBeLessThanOrEqual(6.5);
-    // (and carried out again, the place is held still: the next such order is the same order too)
+    expect(r.stepped).toBeLessThan(0.01);
+    // (and the place is held still: the next such order is the same order too)
     expect(r.u.heldAt).toEqual(P);
+  });
+
+  it('on, the same order with another facing turns it where it stands', () => {
+    const r = again(true, ALL, 12, 0, Math.PI / 2), at: [number, number] = [r.u.x, r.u.y];
+    expect(r.stepped).toBeLessThan(0.01);
+    for (let k = 0; k < 100; k++) r.sim.step();
+    expect(Math.abs(turn(r.u.face, Math.PI / 2))).toBeLessThan(0.03);
+    expect(dist(r.u.x, r.u.y, at[0], at[1])).toBeLessThan(0.01);
   });
 
   it('off, or with that keep off, it wheels to its way and back, as it always did', () => {
     for (const r of [again(false, ALL, 12), again(true, { ...ALL, back: false }, 12)]) {
-      expect(r.steps).toBeUndefined();
       expect(r.swung).toBeGreaterThan(0.5);
+      expect(r.stepped).toBeGreaterThan(5);
       expect(r.left).toBeLessThanOrEqual(6.5);
     }
     // (off, nothing of it is kept)
@@ -264,11 +274,12 @@ describe('what it chose it keeps: a move order sent again to the place it holds 
 
   it('on, sent anywhere else, or to that place from off it altogether, it marches as it always did, and holds that place no longer', () => {
     const other = again(true, ALL, 12, 60);
-    expect(other.steps).toBeUndefined();
     expect(other.swung).toBeGreaterThan(0.1);
+    expect(other.left).toBeLessThanOrEqual(6.5);
+    expect(other.u.heldAt).toEqual([P[0], P[1] + 60]);
     const far = again(true, ALL, 300);
-    expect(far.steps).toBeUndefined();
     expect(far.swung).toBeGreaterThan(0.5);
+    expect(far.left).toBeLessThanOrEqual(6.5);
   });
 });
 
@@ -416,6 +427,40 @@ describe('attackers stay where they stop to fight: whole battles, the rocking co
     expect(end(false)).toEqual(off);
     // Off, none of its keeps is read: the same battle whichever way their keys stand.
     expect(end(false, { way: false, side: false, beside: false, back: false, step: false })).toEqual(off);
+  }, 480_000);
+
+  /** The gate's river line again: the battle second each of the attack's tank blocks is first over the river on dry ground (-1: never). */
+  function crossings(seed: number, keeps: Keeps = ALL): number[] {
+    let t = ticketOf(PIECES.find((x) => x.key === 'normandy-1944')!, seed, null) as Ticket;
+    const side = (s: Ticket['att']): Ticket['att'] => ({ ...s, forces: s.forces.filter((f) => f.kind !== 'mg' && f.kind !== 'mor').map((f) => ({ ...f, share: f.share / 0.92 })) });
+    t = { ...t, att: side(t.att), def: side(t.def), place: { ...t.place, name: 'A river line', river: 'Vire' }, reckoning: { ...t.reckoning, odds: 1.2, D: t.reckoning.A / 1.2 } };
+    const sim = new LandBattle(t);
+    sim.standRule = true;
+    sim.standKeeps = { ...keeps };
+    sim.ai.att = true; sim.ai.def = true;
+    const f = (sim as unknown as { field: { cols: number; cell: number; riverMid: number[] } }).field;
+    const tanks = (sim.units as unknown as (Omit<U, 'kind'> & { kind: string })[]).filter((u) => u.side === 'att' && u.kind === 'arm'), at = tanks.map(() => -1);
+    let guard = 0;
+    while (!sim.over && guard++ < 400_000) {
+      sim.step();
+      tanks.forEach((u, i) => {
+        if (at[i] >= 0 || (u.state !== 'steady' && u.state !== 'wavering')) return;
+        const g = groundAt(f as never, u.x, u.y), mid = f.riverMid[Math.min(f.cols - 1, Math.max(0, Math.floor(u.x / f.cell)))];
+        if (mid > 0 && u.y > mid && g !== 'bridge' && g !== 'water' && g !== 'blown') at[i] = sim.t;
+      });
+    }
+    return at;
+  }
+
+  it('the way over a river: no tank block is left on the bridge or short of it where the row is on', () => {
+    // (As first built, `way` left a tank block a step to one side of its way going on a metre and falling back a metre
+    // on the bridge to the battle's end, seeds 19 and 90; and `back`, stepping a block back against the friends that
+    // had eased it, left two short of the river in seed 112. The art director's count of bridges found both.)
+    for (const seed of [19, 90, 112]) {
+      const at = crossings(seed);
+      expect(at.length).toBeGreaterThan(0);
+      for (const t of at) expect(t).toBeGreaterThan(0);
+    }
   }, 480_000);
 
   it('the way over a river: a tank block shoved at the bridge\'s end turned to and fro between two turning points; kept, it does not', () => {

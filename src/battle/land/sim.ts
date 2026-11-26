@@ -127,7 +127,7 @@ export function coveredTanks(t: FieldTicket<LandPlace>, units: LandUnit[]): Set<
  * A block's way round ground it cannot enter: how it moves, the cell it was making for, the turning points, and whether
  * the way gets there or only as near as the block can go.
  */
-interface Way { m: Going; goal: number; pts: [number, number][]; whole: boolean; bars?: number; at?: number; back?: number }
+interface Way { m: Going; goal: number; pts: [number, number][]; whole: boolean; bars?: number; at?: number; fell?: boolean; stopped?: boolean }
 /**
  * How a block finds its way: as its kind moves; or, foot of a corps the card brings on over dry ground, as foot that
  * will not wade (b464(5)): sent at an enemy beyond where the river bends, it goes round the bend by dry ground, as the
@@ -397,11 +397,13 @@ export class LandBattle implements BattleSim<LandUnit> {
    *
    * way: on its way round ground it cannot enter (over a bridge), a block makes for the furthest turning point it can
    * walk straight to. Shoved a step to one side at the bridge's end it lost that line and turned for the nearer point,
-   * found the line again a step on and turned back, and so on for as long as a friend stood beside it. On: while it is
-   * still at the turning point before the one it chose (the march's own 6 m, where a block on a way takes a turning
-   * point as reached) it goes on for the one it chose; further off it falls back to the nearer one, makes for that
-   * until it is at it or that is out of its sight too, and while that nearer point is still under its own box it
-   * steps to it as it faces the one it chose, with no wheel to a way of a few metres.
+   * found the line again a step on and turned back, and so on for as long as a friend stood beside it. On: it goes on
+   * for the turning point it chose for as long as the ground lets it step straight for it, as a block on a move order
+   * goes on for the next point of its way; where the ground stops that step it falls back to the furthest point it
+   * still has a straight line to and follows that line until it sees further than it fell back to; and while the point
+   * it fell back to is under its own box it steps to it as it faces the one after, with no wheel to a way of a few
+   * metres. (Foot that will not wade and a tank held back by the hedges go as before: their way keeps them off ground
+   * their step could enter.)
    *
    * side: a block on the march slides a friend in its way aside and slides aside itself, by the side the friend lies
    * across its front. A friend dead ahead lies now a hair to its left and now a hair to its right as the block's own
@@ -415,8 +417,11 @@ export class LandBattle implements BattleSim<LandUnit> {
    *
    * back: a block that has carried out a move order and is then eased a few metres off its place by its friends is
    * sent there again by its general. It wheeled to that way of a few metres, marched it and wheeled back to its line's
-   * facing. On: a move order sent again to the place it already holds (the place of the move it last carried out, and
-   * still under its own box) is the same order, so it steps back to it as it faces: no wheel.
+   * facing, and the friends that had eased it eased it again. (Stepping back to the place without the wheel, as this
+   * keep was first built, set it against those friends tick by tick: a step back, a shove off, for as long as they
+   * stood there.) On: a move order sent again to the place it already holds (the place of the move it last carried
+   * out, and still under its own box) is the same order, and that order it has carried out: it stands where it is,
+   * beside the friends that eased it, and turns only to the facing its line is given.
    *
    * step: the same of a block on an attack order that has stood to fight. Eased a few metres off its stand with its
    * target at the edge of its hold, it wheeled to that way of a few metres, marched it and wheeled back to what it
@@ -1914,12 +1919,14 @@ export class LandBattle implements BattleSim<LandUnit> {
       }
     }
     // What it chose it keeps (standRule, standKeeps.back): a move order sent again to the place it already holds, the
-    // place of the move it last carried out and still under its own box, is the same order: it steps back to it as it
-    // faces (move). Sent anywhere else, that place is held no longer.
+    // place of the move it last carried out and still under its own box, is the same order, and it has carried that
+    // order out: it is given no way to walk (below), so it stands where it is and faces as the order has it face
+    // (move). Sent anywhere else, that place is held no longer.
+    let there = false;
     if (this.standRule) {
       const h = u.heldAt;
-      if (this.standKeeps.back && o.kind === 'move' && h && h[0] === o.x && h[1] === o.y && this.under(u, o.x, o.y)) u.stepsBack = true;
-      else { u.stepsBack = undefined; u.heldAt = undefined; }
+      there = this.standKeeps.back && o.kind === 'move' && !!h && h[0] === o.x && h[1] === o.y && this.under(u, o.x, o.y);
+      if (!there) u.heldAt = undefined;
     }
     u.order = o;
     u.keepFace = o.face ?? null;
@@ -1929,7 +1936,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     // An attack's way is the one it will walk: to its place in the lane before its target, as the march works it out.
     const t = o.kind === 'attack' && o.target !== undefined ? this.unit(o.target) : undefined;
     const at = t ? this.lanePoint(u, t, this.closeTo(u)) : [o.x, o.y];
-    u.path = at ? this.route(u, at[0], at[1]) : [];
+    u.path = at && !there ? this.route(u, at[0], at[1]) : [];
   }
 
   /** A point under the block's own box, as it faces. */
@@ -1986,21 +1993,20 @@ export class LandBattle implements BattleSim<LandUnit> {
       // Nowhere nearer to go: it stays where it is.
       if (k < 0) return [[u.x, u.y]];
       // What it chose it keeps (standRule, standKeeps.way). It has lost its straight line to the turning point it was
-      // making for. Still at the one before it (the march's own 6 m, where a turning point counts as reached), it goes on
-      // for the one it chose, as the march does from a point it has reached. Further off, it falls back to the nearer
-      // one, and that one it makes for until it is at it, or it is lost too.
-      if (this.standRule && this.standKeeps.way) {
-        const at = (i: number): boolean => dist(u.x, u.y, pts[i][0], pts[i][1]) <= 6;
-        if (w.back !== undefined) {
-          const p = pts[w.back];
-          if (w.back > k || !this.dry(m, u.x, u.y, p[0], p[1])) w.back = undefined;
-          else if (!at(w.back)) k = w.back;
-          else { k = Math.max(k, Math.min(w.back + 1, pts.length - 1)); w.back = undefined; }
-        }
-        if (w.back === undefined && w.at !== undefined && k < w.at) {
-          if (w.at < pts.length && at(w.at - 1)) k = w.at;
-          else w.back = k;
-        }
+      // making for (a step to one side on a bridge is enough): it goes on for the one it chose, as a block on a move
+      // order goes on for the next point of its way, for as long as the ground lets it step straight for it (move).
+      // Where the ground stops that step it falls back to the furthest point it still has a straight line to, as with
+      // the keep off, and follows that line, point by point, until it sees further than it fell back to. (As first
+      // built it kept the chosen point only within the march's 6 m of the one before, and fell back beyond: a tank a
+      // step to one side of its way on a bridge then went on a metre, fell back a metre, and so on to the battle's
+      // end, facing one way the while, so that no count of turns saw it. The art director's count of bridges did.)
+      // Only a block that goes as its kind goes: one whose way keeps off ground its kind could enter (foot that will
+      // not wade, a tank held back by the hedges) is stopped there by its way alone, never by the ground under its
+      // step, so it falls back as with the keep off.
+      if (this.standRule && this.standKeeps.way && m === MOTION[u.kind]) {
+        if (w.at !== undefined && k > w.at) w.fell = false;
+        else if (w.at !== undefined && k < w.at && !w.fell) { if (w.stopped || w.at >= pts.length) w.fell = true; else k = w.at; }
+        w.stopped = false;
         w.at = k;
       }
       const way = pts.slice(k);
@@ -3417,17 +3423,16 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     const off = turn(u.face, head);
     // Blocks wheel before they march; a runner just runs, and one wading the river turns as it wades.
-    // Sent again to the place it holds (standRule, standKeeps.back; send): it steps back to it as it faces, with no wheel
-    // to that way of a few metres and none back, turning only to the facing its line was given.
-    // The same of a block eased off the stand of its attack (standKeeps.step, above): it faces as it would standing.
-    // And of one stepping to the turning point it fell back to (standKeeps.way, route): it faces the one after it.
+    // Eased off the stand of its attack (standRule, standKeeps.step, above): it steps back to it with no wheel to that
+    // way of a few metres and none back, facing as it would standing.
+    // And one stepping to the turning point it fell back to (standKeeps.way, route) faces the one after it.
     const fell = this.standRule && this.standKeeps.way && !run && u.path.length > 1 && to === u.path[0] ? this.ways.get(u.id) : undefined;
-    const via = !!fell && fell.back !== undefined && fell.pts[fell.back] === to && this.under(u, to[0], to[1]);
-    const back = this.standRule && !run && (sidle || via || (u.stepsBack === true && u.order?.kind === 'move'));
+    const via = !!fell && fell.fell === true && fell.at !== undefined && fell.pts[fell.at] === to && this.under(u, to[0], to[1]);
+    const back = this.standRule && !run && (sidle || via);
     if (!run && !wading && !back && Math.abs(off) > 0.6) { this.turnTo(u, head); u.speed = 0; u.act = 'turn'; return; }
     if (run) u.face = head;
     else if (!back) this.turnTo(u, head);
-    else { const want = via ? bearing(u.x, u.y, u.path[1][0], u.path[1][1]) : sidle ? this.facing(u) : u.keepFace; if (want !== null) this.turnTo(u, want); }
+    else { const want = via ? bearing(u.x, u.y, u.path[1][0], u.path[1][1]) : this.facing(u); if (want !== null) this.turnTo(u, want); }
     const m = MOTION[k];
     const g = groundAt(this.field, u.x, u.y);
     let pace = LAND.pace[m][g];
@@ -3447,6 +3452,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     let nx = u.x + ax * stepLen, ny = u.y + ay * stepLen;
     // Ground it cannot enter: try a little to either side, else stop. Not while it is still walking out of such ground.
     if (LAND.pace[m][groundAt(this.field, nx, ny)] <= 0 && LAND.pace[m][g] > 0 && !run) {
+      // (standKeeps.way: the ground has stopped its straight step for the turning point it kept; route falls back.)
+      if (this.standRule && this.standKeeps.way) { const kept = this.ways.get(u.id); if (kept) kept.stopped = true; }
       let moved = false;
       for (const sw of [0.5, -0.5, 1, -1]) {
         const [bx, by] = ahead(head + sw);

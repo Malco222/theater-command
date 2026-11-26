@@ -161,10 +161,8 @@ export interface LandUnit extends UnitBase {
   stoodFor?: number;
   /** (sim.standRule, standKeeps.beside) The friends its stand was last worked out beside, and whether by the ground each stood on or by the stand each was making for. Never set with the rule off. */
   standBy?: { id: number; st: boolean }[];
-  /** (sim.standRule, standKeeps.back) The place of the move order it last carried out, until it is sent anywhere else. Never set with the rule off. */
+  /** (sim.standRule, standKeeps.back) The place of the move order it last carried out, until it is sent anywhere else: sent there again while that place is under its own box, it has carried the order out. Never set with the rule off. */
   heldAt?: [number, number];
-  /** (sim.standRule, standKeeps.back) Its move order was sent again to the place it holds: it steps back to it as it faces. */
-  stepsBack?: boolean;
   /**
    * Guns told to fire on one block and stay put (ai.ts, the computer's main effort; ruling 239(6), the player's order
    * too): they strike it whenever it is in their reach, before whatever else is nearest.
