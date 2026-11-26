@@ -2,7 +2,7 @@
 // tanks firing"; 15:56Z: "i dont want it to be all the time as thats unrealistic with ammo"; 15:57Z: "i dont want the
 // tanks and vehicles doing the exact same thing as each other. i want everything to see like it has its own mind").
 // Looks only (ruling 217): Drill.tankmg gives each tank of an armoured block her own machine-gun mind (drill.ts mgThink
-// and mgFire, DRILL.tankmg). These tests hold that it changes nothing in the fight; that off is off; that with it on the
+// and tankMgFire, DRILL.tankmg). These tests hold that it changes nothing in the fight; that off is off; that with it on the
 // guns are seen firing as the game ships, but not all the time; that each tank fires at her own moment, at targets
 // worth the rounds, from the guns her model carries, and eases off as her rounds run down; that nothing but a tank of an
 // armoured block fires one; and that the hatch rule and the drill book's own path stand beside it.
@@ -77,7 +77,7 @@ const hash = (h: number, s: string): number => { for (let i = 0; i < s.length; i
 
 /** Fights a battle to its end, reading the tanks' machine guns as the drill fires them. */
 function read(b: LandBattle, drill: Drill, drawn?: Map<number, string>): Tally {
-  const d = drill as unknown as { squads: Map<number, Sq>; fired: number; shots: { g?: string }[]; round: (sq: Sq, m: M, w: string, aim: [number, number]) => void; blockAt: (side: string, p: [number, number]) => U | undefined; standing: (sq: Sq) => M[]; mgIn: (r: [number, number], ...ns: number[]) => number; mgThink: (sq: Sq) => void; mgFire: (sq: Sq, m: M) => void; mgMan: (sq: Sq, m: M, f: number) => unknown };
+  const d = drill as unknown as { squads: Map<number, Sq>; fired: number; shots: { g?: string }[]; round: (sq: Sq, m: M, w: string, aim: [number, number]) => void; blockAt: (side: string, p: [number, number]) => U | undefined; standing: (sq: Sq) => M[]; mgIn: (r: [number, number], ...ns: number[]) => number; mgThink: (sq: Sq) => void; tankMgFire: (sq: Sq, m: M) => void; mgMan: (sq: Sq, m: M, f: number) => unknown };
   const out: Tally = { ...NONE(), stock: new Map() };
   const rowOf = (sq: Sq, m: M) => { const ml = m.ml ?? drawn?.get(sq.u.id) ?? b.vehicle(sq.u as never) ?? '_'; return { ml, R: T.models[ml] ?? T.models._ }; };
   // Each tank as the steps go by: her aim as the last step ended, a turret following it, her mark's man, her aim's swings.
@@ -94,7 +94,7 @@ function read(b: LandBattle, drill: Drill, drawn?: Map<number, string>): Tally {
     let v: M | undefined, dd = Infinity;
     for (const x of tq ? d.standing.call(d, tq) : []) { const q = Math.hypot(x.x - aim[0], x.y - aim[1]); if (q < dd) { dd = q; v = x; } }
     // (her own burst this step: its rounds are already off her stock, so her belts are read as they stood before it, in
-    // mgFire below; else it is the drill book's burst)
+    // tankMgFire below; else it is the drill book's burst)
     const own = m.mgT !== undefined && Math.abs(m.mgT - b.t) < 1e-6, was = own && pre ? pre : m;
     const before = R.stock > 0 ? (was.mgLeft ?? R.stock) / R.stock : R.roofStock ? (was.mgRoof ?? R.roofStock) / R.roofStock : 0, tenth = atTenth(R, was);
     const range = v ? Math.hypot(v.x - m.x, v.y - m.y) : -1, k = before < T.low ? 0.5 : 1;
@@ -133,9 +133,9 @@ function read(b: LandBattle, drill: Drill, drawn?: Map<number, string>): Tally {
   };
   // A burst that was due and not fired because her man was not there to be fired at (the drill's own finding of him).
   let noMan = false, firing = false, pre: { mgLeft?: number; mgRoof?: number } | undefined;
-  const man0 = d.mgMan, fire0 = d.mgFire;
+  const man0 = d.mgMan, fire0 = d.tankMgFire;
   d.mgMan = function (this: unknown, sq: Sq, m: M, f: number): unknown { const a = man0.call(this, sq, m, f); if (firing && !a) noMan = true; return a; };
-  d.mgFire = function (this: unknown, sq: Sq, m: M): void {
+  d.tankMgFire = function (this: unknown, sq: Sq, m: M): void {
     const n0 = d.fired, s = of(m), R = rowOf(sq, m).R, tenth = atTenth(R, m);
     noMan = false; firing = true; pre = { mgLeft: m.mgLeft, mgRoof: m.mgRoof }; fire0.call(this, sq, m); firing = false; pre = undefined;
     if (d.fired !== n0) {
@@ -198,7 +198,7 @@ function read(b: LandBattle, drill: Drill, drawn?: Map<number, string>): Tally {
     }
     if (step % 10 === 0) h = hash(h, JSON.stringify(drill.view()));
   }
-  d.round = round0; d.mgThink = think0; d.mgMan = man0; d.mgFire = fire0;
+  d.round = round0; d.mgThink = think0; d.mgMan = man0; d.tankMgFire = fire0;
   for (const z of seen.values()) {
     const A = z.log, off = (i: number, j: number): number => Math.abs(wrap((A[i][1] - A[j][1]) / deg)) * deg;
     for (let i = 1; i < A.length; i++) {

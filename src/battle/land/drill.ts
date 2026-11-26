@@ -5777,7 +5777,7 @@ export class Drill {
     for (const m of sq.veh.length ? [...sq.men, ...sq.veh] : sq.men) {
       if (m.k < 100 ? !this.stands(sq, m) : m.fell !== undefined) continue;
       // (a tank's machine guns, seen firing: her own bursts by her own timers, at her own mark)
-      if (this.tankmg && m.mgAt) this.mgFire(sq, m);
+      if (this.tankmg && m.mgAt) this.tankMgFire(sq, m);
       if (m.shot !== undefined && m.shot !== m.fired) {
         m.fired = m.shot;
         const w: Weapon | undefined = m.role === 'tank' ? 'tank' : m.role === 'gun' ? 'gun' : m.role === 'mortar' ? 'mortar' : m.pose === 'throw_grenade' ? 'grenade' : m.role === 'at' ? 'at' : undefined;
@@ -6208,7 +6208,7 @@ export class Drill {
    * guns rest a pause, and at her next think she looks afresh for the best mark there is (mgAs 5). Each burst is one
    * round at the place her man stands now, as the drill book's: w 'mg', g its gun.
    */
-  private mgFire(sq: Squad, m: Man): void {
+  private tankMgFire(sq: Squad, m: Man): void {
     const u = sq.u, t = this.b.t, T = DR.tankmg;
     if (!m.mgAt || t < (m.mgNext ?? 0) || m.pose === 'fire') return;
     // (no tank opens a spell within `apart` seconds of a burst from another tank of her block: a platoon never opens as

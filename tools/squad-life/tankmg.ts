@@ -79,7 +79,7 @@ export function practice(att: string, def: string, seed: number, month: string, 
 
 /** Fights a battle to its end, reading the tanks' machine guns as the drill fires them. */
 export function read(b: LandBattle, drill: Drill): Tally {
-  const d = drill as unknown as { squads: Map<number, Sq>; fired: number; shots: { g?: string }[]; round: (sq: Sq, m: M, w: string, aim: [number, number]) => void; blockAt: (side: string, p: [number, number]) => U | undefined; standing: (sq: Sq) => M[]; mgFire: (sq: Sq, m: M) => void; mgMan: (sq: Sq, m: M, f: number) => unknown };
+  const d = drill as unknown as { squads: Map<number, Sq>; fired: number; shots: { g?: string }[]; round: (sq: Sq, m: M, w: string, aim: [number, number]) => void; blockAt: (side: string, p: [number, number]) => U | undefined; standing: (sq: Sq) => M[]; tankMgFire: (sq: Sq, m: M) => void; mgMan: (sq: Sq, m: M, f: number) => unknown };
   const out: Tally = { t: 0, sig: '', tanks: 0, tankSecs: 0, bursts: [], kills: [], mainRounds: 0, shells: 0, stock: new Map(), wrong: [], hops: 0, fro: 0, misses: 0, starve: 0 };
   // Each tank as the steps go by: her aim as the last step ended, a turret following it, her mark's man, her aim's swings.
   const seen = new Map<M, { aim?: [number, number]; tur: number; on?: string; log: [number, number][]; run: number }>();
@@ -87,9 +87,9 @@ export function read(b: LandBattle, drill: Drill): Tally {
   // A burst that was due and not fired because her man was not there to be fired at (the drill's own finding of him).
   let noMan = false, firing = false, pre: M | undefined;
   const fromTenth = new Map<string, number>();
-  const man0 = d.mgMan, fire0 = d.mgFire;
+  const man0 = d.mgMan, fire0 = d.tankMgFire;
   d.mgMan = function (this: unknown, sq: Sq, m: M, f: number): unknown { const a = man0.call(this, sq, m, f); if (firing && !a) noMan = true; return a; };
-  d.mgFire = function (this: unknown, sq: Sq, m: M): void {
+  d.tankMgFire = function (this: unknown, sq: Sq, m: M): void {
     const n0 = d.fired, z = of(m), tenth = atTenth(rowOf(sq, m).R, m);
     noMan = false; firing = true; pre = { mgLeft: m.mgLeft, mgRoof: m.mgRoof } as M; fire0.call(this, sq, m); firing = false; pre = undefined;
     if (d.fired !== n0) { z.run = 0; if (tenth) fromTenth.set(`${sq.u.id}:${m.k}`, (fromTenth.get(`${sq.u.id}:${m.k}`) ?? 0) + 1); }
@@ -176,7 +176,7 @@ export function read(b: LandBattle, drill: Drill): Tally {
   }
   // (the fight's own shells, by the craters they left: the same with the switch on, as it changes nothing in the fight)
   out.shells = b.craters.length;
-  d.round = round0; d.mgMan = man0; d.mgFire = fire0;
+  d.round = round0; d.mgMan = man0; d.tankMgFire = fire0;
   for (const z of seen.values()) {
     const A = z.log, off = (i: number, j: number): number => Math.abs(wrap((A[i][1] - A[j][1]) / deg)) * deg;
     for (let i = 1; i < A.length; i++) {
