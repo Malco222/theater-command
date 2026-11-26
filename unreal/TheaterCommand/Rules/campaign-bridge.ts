@@ -9044,18 +9044,23 @@ function find(name: string) {
   const region = pick(s.regions, (r) => r.name);
   const sea = pick(s.seas, (z) => z.name);
   // (a corps of another country, by the name the player knows it by: for a right-click on its figure)
-  let seenId = -1, seenReg = -1;
+  let seenId = -1, seenReg = -1, seenFleet = -1;
   if (!corps && !fleet && !group && !region && !sea && me) { // (the whole picture is read only where nothing else answers to the name)
     try {
-      const seen = pick((view() as unknown as { corps: { id: number; nat: string; name: string; reg: number }[] }).corps.filter((c) => c.nat !== me), (c) => c.name);
+      const seenAll = view() as unknown as { corps: { id: number; nat: string; name: string; reg: number }[]; fleets: { id: number; nat: string; name: string }[] };
+      const seen = pick(seenAll.corps.filter((c) => c.nat !== me), (c) => c.name);
       if (seen) { seenId = seen.id; seenReg = seen.reg; }
+      // (Release 2; Brian, 26 November 2026 03:51Z) And a fleet of another country, by the name it is known by on the
+      // table ("Battle Fleet", or "German ships reported"): for a right-click on its figure with a fleet in hand.
+      const ship = seen ? undefined : pick(seenAll.fleets.filter((f) => f.nat !== me), (f) => f.name);
+      if (ship) seenFleet = ship.id;
     } catch { /* (nothing seen of that name) */ }
   }
 
   return {
     region: region ? region.id : -1, sea: sea ? s.seas.indexOf(sea) : -1,
     corps: corps ? corps.id : seenId, corpsRegion: corps ? corps.reg : seenReg,
-    fleet: fleet ? fleet.id : -1, group: group ? group.id : -1, groupShip: group && group.ship !== undefined ? group.ship : -1, groupBase: group ? group.base : -1,
+    fleet: fleet ? fleet.id : seenFleet, group: group ? group.id : -1, groupShip: group && group.ship !== undefined ? group.ship : -1, groupBase: group ? group.base : -1,
   };
 }
 
