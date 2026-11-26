@@ -90,7 +90,7 @@ import { COMMAND, SKILLS, corpsOf, fit, generalOf, rankOf, vacant, waiting, whyN
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
 import { KIND, TERRAIN_DEF } from '../../../src/campaign/types';
 import { MANPOWER, men1000, menScale } from '../../../src/campaign/manpower';
-import { foldCardWords, foldWords } from '../../../src/campaign/fold';
+import { foldCardLines, foldCardWords } from '../../../src/campaign/fold';
 import { arsenalTop } from '../../../src/campaign/rifles';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
@@ -7019,19 +7019,20 @@ function foldPage(s: Game, reg: number): Page | null {
     const a = corpsOfId(p[0].keep), b = corpsOfId(p[0].gone);
     return {
       heading: a && b ? `${a.name.toUpperCase()} AND ${b.name.toUpperCase()}` : 'TWO CORPS', text: a && b ? `${a.name}: ${fw.men(a)}, ${pct(fw.share(a.str, a))} of its strength. ${b.name}: ${fw.men(b)}, ${pct(fw.share(b.str, b))}.` : '',
-      rows: p.map((v): PageRow => ({
+      rows: p.map((v): PageRow => { const w = foldCardLines(s, s.human!, v); return {
         nat: s.human!, title: `Keep ${v.keepName}`,
         lines: [
-          `${upFirst(foldWords(s, s.human!, v).men)} in one corps at ${pct(fw.share(v.str, corpsOfId(v.keep)))} of its strength, ${grade(v.xp).toLowerCase()}.`,
+          // (The men, the kept unit's noun and the men sent back from fold.ts foldCardLines, as the page says them: the UI director's seventh read of 26 November 2026, point 1.)
+          `${upFirst(w.men)} ${w.one} at ${pct(fw.share(v.str, corpsOfId(v.keep)))} of its strength, ${grade(v.xp).toLowerCase()}.`,
           v.general ? `${v.general} commands${v.stepsDown ? `; ${v.stepsDown} goes to the list of generals waiting for a corps` : ''}.` : 'No general commands it.',
           // (The men in words from fold.ts foldWords, as the news and the page say them: the UI director's point 4 of 26 November 2026.)
-          foldWords(s, s.human!, v).over ?? '',
+          w.over ?? '',
           v.works !== undefined ? `It takes over the fieldworks ${v.goneName} stands in.` : '',
           `${v.goneName} goes home as a cadre: it can be raised again from the arsenal for ${fw.cadre(v, shown(v.cadreCost).toLocaleString('en'))}, in ${fw.months(v.cadreMonths, `${v.cadreMonths} month${v.cadreMonths === 1 ? '' : 's'}`)}.`,
           v.why ?? '',
         ].filter(Boolean),
         buttons: [{ label: `FOLD INTO ${v.keepName.toUpperCase()}`, act: `fold:${v.keep}:${v.gone}`, ok: !v.why, danger: true, tip: v.why ?? `${v.keepName} takes in the men of ${v.goneName}. It cannot be undone.` }],
-      })),
+      }; }),
     };
   });
   return {

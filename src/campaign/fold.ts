@@ -137,6 +137,27 @@ export function foldWords(g: Game, nat: string, v: FoldView, gave?: number): Fol
   return { men, back: `${n} sent back to the reserve${more === null ? rifles : `, and their rifles and ${more} more to the store`}`, over: `${up} men over go back to the reserve${rifles}.` };
 }
 
+/** The fold's words on both cards (the page's foldCard and the 3D game's foldPage), from one function: foldCardLines. */
+export interface FoldCardLines {
+  /** The men in one unit, as foldWords says them: "30,000 men", or at a nation's own scale "about 134,000 men". */
+  men: string;
+  /** The kept unit's noun after the men: "in one corps", or "in one brigade" for a support team. */
+  one: string;
+  /** The line for the men sent back, or null, as foldWords' `over`. */
+  over: string | null;
+}
+
+/**
+ * The fold's words on both cards, for one way of folding (the UI director's seventh read of 26 November 2026, 22:58Z,
+ * point 1): the kept unit's noun follows its kind, as the news says it (rifles.ts orderNoun, keep.kind), so a pair of
+ * support brigades reads "about 27,000 men in one brigade at 100% of its strength". With the teams off no brigade
+ * exists, and every card reads "in one corps" as before.
+ */
+export function foldCardLines(g: Game, nat: string, v: FoldView): FoldCardLines {
+  const w = foldWords(g, nat, v);
+  return { men: w.men, one: `in one ${orderNoun(g.corps.find((c) => c.id === v.keep)?.kind)}`, over: w.over };
+}
+
 /** The fold card's own figures, for both cards (the page's foldCard and the 3D game's foldPage): see foldCardWords. */
 export interface FoldCardWords {
   /** A corps' men, for the heading of each pair: "18,000 men", or at a nation's own scale "about 80,000 men". */

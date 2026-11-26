@@ -10,7 +10,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { offers } from '../src/campaign/arsenal';
 import { levyMen } from '../src/campaign/manpower';
-import { foldCorps } from '../src/campaign/fold';
+import { foldCardLines, foldCorps, foldView } from '../src/campaign/fold';
 import { addCorps, createGame } from '../src/campaign/game';
 import { noRifles, riflesView } from '../src/campaign/rifles';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -143,6 +143,48 @@ describe("the sixth read, point 2: the cadre's offer and the fold's news follow 
       expect(page.note).toBe('Forms up at Chungking, for 50% of the price of a new corps.');
       expect(cadre.blurb).toBe(BLURB('corps'));
       expect(cadre.note).toBe("Forms up at Chungking, for 50% of the price of a new corps. Takes one division's worth of men and 21,300 rifles.");
+    }
+  });
+});
+
+// The UI director's seventh read (26 November 2026, 22:58Z), point 1: "The fold cards take the kept unit's noun, as the
+// news does: about {27,000} men in one brigade at {N%} of its strength (the page's card and the bridge's 3D card alike,
+// keep.kind). Teams off: as today." Both cards take the words from one function, fold.ts foldCardLines, by rifles.ts
+// orderNoun. The 3D card is read through the bridge; the page's line is put together here as ui/main.ts foldCard puts it
+// (its wiring is read, not run: the page needs a document).
+describe("the seventh read, point 1: both fold cards follow the kept unit's kind", () => {
+  type Row = { lines: string[]; buttons: { act: string }[] };
+  /** Two worn units of this kind at China's capital, armed to their strength; the 3D card's row and the helper's lines for keeping the first. */
+  const card = (kind: string, teams: boolean) => {
+    const g = china();
+    if (!teams) setTeams(g, false);
+    const cap = g.nations.CHN.capital, capName = g.regions[cap].name;
+    const ka = addCorps(g, 'CHN', 'Kept unit', kind as never, 1, capName, {}), kc = addCorps(g, 'CHN', 'Folded unit', kind as never, 1, capName, {});
+    ka.str = kc.str = 0.2;
+    g.flags[`rfa:${ka.id}`] = 0.2;
+    g.flags[`rfa:${kc.id}`] = 0.2;
+    TC().load(saveGame(g));
+    const p = TC().page(`fold:${cap}`) as { sections: { rows: Row[] }[] };
+    const row = p.sections.flatMap((x) => x.rows).find((r) => r.buttons[0].act === `fold:${ka.id}:${kc.id}`)!;
+    const w = foldCardLines(g, 'CHN', foldView(g, ka, kc));
+    const page = `<b>${w.men[0].toUpperCase()}${w.men.slice(1)}</b> ${w.one} at 40% of its strength,`;
+    return { bridge: row.lines[0], w, page };
+  };
+
+  it('a machine-gun and a mortar brigade: "About 27,000 men in one brigade at 40% of its strength, ...", on both cards, whole', () => {
+    for (const kind of ['mg', 'mor']) {
+      const { bridge, w, page } = card(kind, true);
+      expect(bridge, kind).toBe('About 27,000 men in one brigade at 40% of its strength, green.');
+      expect(w, kind).toEqual({ men: 'about 27,000 men', one: 'in one brigade', over: null });
+      expect(page, kind).toBe('<b>About 27,000 men</b> in one brigade at 40% of its strength,');
+    }
+  });
+
+  it('an infantry corps, teams on and teams off: "in one corps", as today', () => {
+    for (const teams of [true, false]) {
+      const { bridge, w } = card('inf', teams);
+      expect(bridge).toBe('About 27,000 men in one corps at 40% of its strength, green.');
+      expect(w).toEqual({ men: 'about 27,000 men', one: 'in one corps', over: null });
     }
   });
 });
