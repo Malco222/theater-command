@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 91a49214 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of cbb883fc9 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -7944,6 +7944,18 @@
       /** True while a staff (ai.ts) is giving its orders: those are the computer's, never taken in hand nor sent by radio. */
       __publicField(this, "staffing", false);
       /**
+       * Fighting on after the break (release 2; Brian, 26 November 2026, 03:53Z: "i feel like the battles end abruptly" and
+       * "if the enemy retreats, i have the option to continue on with the battle or end it"; the design director's rulings
+       * of 03:58Z, 06:36Z, 12:16Z and 12:37Z; "After the break" below). Off (the default): an army's break ends the battle
+       * at that instant, as ever, and nothing below is read. On (the bridge's { pursue: true }): at the break the winner
+       * chooses. END there is the battle as it ends with the switch off, to the last figure. PURSUE fights on with the
+       * verdict fixed: the broken army's runners run and its blocks in order fall back, never forward; the day ends when
+       * the last of them has left the field, when the winner calls the pursuit off, or with the day's clock.
+       */
+      __publicField(this, "pursue", false);
+      /** The break as it stood, with `pursue` on and the winner still to choose or fighting on: null otherwise. */
+      __publicField(this, "aftermath", null);
+      /**
        * Hidden in the woods (release 2; Brian, 22 November 04:18Z: ambushes; LAND.hide): off unless whoever opens the field
        * turns it on (hideOn). Off, no block is ever hidden and nothing here is read.
        */
@@ -8105,6 +8117,8 @@
        * comes, and then nothing below reads it.
        */
       __publicField(this, "coming", []);
+      /** The broken army's corps from next door that turned back with it (pursue, "After the break"): never on the field, and nothing lost there. */
+      __publicField(this, "turned", []);
       /** The battle second each joining corps came on. */
       __publicField(this, "joinedAt", /* @__PURE__ */ new Map());
       /** The corps that come up from next door. */
@@ -8450,7 +8464,11 @@
     /** The joiners whose time has come: each corps' blocks walk on together, and its coming is told. */
     arrive() {
       const due = [];
-      while (this.coming.length && this.t >= this.coming[0].at - 1e-9) due.push(this.coming.shift());
+      while (this.coming.length && this.t >= this.coming[0].at - 1e-9) {
+        const c = this.coming.shift();
+        if (this.aftermath && c.u.side === this.aftermath.side) this.turned.push(c);
+        else due.push(c);
+      }
       for (const corps of [...new Set(due.map((c) => c.u.corps))]) {
         const g = due.filter((c) => c.u.corps === corps);
         for (const c of g) this.walkOn(c);
@@ -9341,6 +9359,10 @@
     // ---- Orders -----------------------------------------------------------------------------------------------------
     command(c, by2) {
       if (this.over) return false;
+      if (this.aftermath) {
+        const done = this.afterCommand(c, by2);
+        if (done !== null) return done;
+      }
       const mine = (ids) => ids.map((i) => this.unit(i)).filter((u) => !!u && u.side === by2 && fighting2(u) && u.kind !== "fort" && !(this.staffing && u.waits && !u.waits.free));
       const player = !this.staffing && this.ticket[by2].human;
       const hands = (us) => {
@@ -9355,8 +9377,9 @@
           if (!us.length) return false;
           hands(us);
           const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
+          const back = !!this.aftermath && by2 === this.aftermath.side;
           for (const u of us) {
-            const o = { kind: "move", x: c.x + (us.length > 1 ? u.x - cx : 0), y: c.y + (us.length > 1 ? u.y - cy : 0), face: c.face, ...c.run ? { run: true } : {} };
+            const o = back ? { kind: "withdraw", x: c.x + (us.length > 1 ? u.x - cx : 0), y: by2 === "att" ? 0 : this.field.h, via: true, ...c.run ? { run: true } : {} } : { kind: "move", x: c.x + (us.length > 1 ? u.x - cx : 0), y: c.y + (us.length > 1 ? u.y - cy : 0), face: c.face, ...c.run ? { run: true } : {} };
             give(u, () => this.send(u, o));
           }
           this.say({ what: "contact", side: by2, text: "" });
@@ -10371,6 +10394,7 @@
         this.drill?.step();
         return;
       }
+      if (this.aftermath?.phase === "ask") return;
       if (this.hide && !this.hidStarted) this.hideStart();
       if (this.phones) this.phonesOn();
       if (this.coming.length && this.t >= this.coming[0].at - 1e-9) this.arrive();
@@ -10379,7 +10403,10 @@
       if (this.t >= this.nextThink) {
         this.nextThink = this.t + LAND.think;
         this.staffing = true;
-        for (const s of ["att", "def"]) if (this.ai[s]) thinkFor(this, s);
+        for (const s of ["att", "def"]) if (this.ai[s]) {
+          if (this.aftermath) this.staffAfter(s);
+          else thinkFor(this, s);
+        }
         this.staffing = false;
       }
       for (const u of this.units) {
@@ -10845,7 +10872,7 @@
       let take = ground;
       if (t.kind === "arm" && LAND.alone.on) take *= this.alone(t, u);
       if (t.side === "def" && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake(u, t);
-      if (t.order?.kind === "move" && t.order.run && t.speed > 0.5) take *= LAND.double.exposed;
+      if ((t.order?.kind === "move" || t.order?.kind === "withdraw") && t.order.run && t.speed > 0.5) take *= LAND.double.exposed;
       const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
       const dmg = p * am * amx * take * luck * (u.side === "att" ? this.fortune : 1 / this.fortune) * DT;
       let faceOn = 0;
@@ -11021,7 +11048,7 @@
         to = [u.x, u.side === "att" ? -50 : this.field.h + 50];
         run = true;
       } else if (u.order?.kind === "withdraw") {
-        u.path = this.dry(this.going(u), u.x, u.y, u.x, u.order.y) && !this.exit(this.going(u), u.x, u.y) ? [[u.x, u.order.y]] : this.route(u, u.order.x, u.order.y);
+        u.path = !u.order.via && this.dry(this.going(u), u.x, u.y, u.x, u.order.y) && !this.exit(this.going(u), u.x, u.y) ? [[u.x, u.order.y]] : this.route(u, u.order.x, u.order.y);
         to = u.path[0];
       } else if (u.order?.kind === "attack") {
         let t = this.unit(u.order.target);
@@ -11130,7 +11157,7 @@
       const up = inRiver(g) ? 0 : heightAt(this.field, u.x + Math.sin(head) * 20, u.y + Math.cos(head) * 20) - heightAt(this.field, u.x, u.y);
       pace *= up > 0 ? Math.max(0.4, 1 - up / 20 * 1.5) : 1;
       const top = u.team ? LAND.teams[u.team].speed : LAND.speed[k];
-      const double = !run && u.order?.kind === "move" && !!u.order.run;
+      const double = !run && (u.order?.kind === "move" || u.order?.kind === "withdraw") && !!u.order.run;
       if (double) u.winded = this.t + LAND.double.winded;
       let v = top * Math.max(0.12, pace) * (run ? 1.15 : 1) * (double ? LAND.double.pace[m] : 1) * (u.state === "wavering" ? 0.85 : 1);
       const d = dist(u.x, u.y, to[0], to[1]);
@@ -11654,11 +11681,174 @@
     givingGround(u) {
       return !!u.gives && (u.order?.kind === "withdraw" || u.state === "routing");
     }
+    // ---- After the break (release 2, pursue) ------------------------------------------------------------------------
+    //
+    // Brian, 26 November 2026, 03:53Z: "i feel like the battles end abruptly" and "if the enemy retreats, i have the
+    // option to continue on with the battle or end it". The design director, 03:58Z, 06:36Z, 12:16Z and 12:37Z. With the
+    // switch off an army's break ends the battle at that instant (judge, finish). With it on:
+    //   - At the break the winner and the verdict are fixed, and the winner chooses. A player who won is asked, and the
+    //     battle does not step until he answers ({ do: 'land:pursue' } or { do: 'land:end' }). A computer general
+    //     chooses at its own sight: PURSUE where one of its blocks can still reach one of theirs before it is off the
+    //     field (quarry), END where none can. Never by the bill.
+    //   - END at the break is finish() as it runs with the switch off, at the same instant: the same result to the last
+    //     figure.
+    //   - PURSUE fights on. The broken army gives no fight: its runners run and do not rally, and its blocks in order
+    //     fall back to their own edge and strike nothing (a block under 'withdraw' never strikes: targetOf). Its player
+    //     may pick a block's way back ('move': by that point to its own edge, never forward) and hurry it (run), and no
+    //     more; its corps still coming up turn back. The winner's blocks are the winner's to order as ever; its staff
+    //     sends each after the nearest block of theirs it can catch, and halts those that can catch none.
+    //   - The pursuit ends when the last of the broken army has left the field, when the winner calls it off (the
+    //     player's { do: 'land:end' }; a computer general when nothing more can be caught), when the winner's own bar
+    //     fills, or with the day's clock. Neither side may hand the day to the staff or pull its whole army out: the day
+    //     is decided.
+    //   - The bill (kept): each block of the broken army on the field at the break counts what it has when it leaves or
+    //     the day ends, with no flat share on top; one that had left before the break keeps its share as under END. So
+    //     the rout is priced once, by the field that fought it. R follows from the shares as ever and stays on the side
+    //     of the line the break put it (result.ts: that side is the winner's and the dice's run, never the shares'). The
+    //     result carries `pursued` for the campaign, which then bills no pursuit of its own for the day.
+    // No figure is new: a runner's pace is move's, the double is LAND.double, and a block falling back is struck as one
+    // always was. The staff's sight (quarry) draws on no dice.
+    /**
+     * The break with `pursue` on: fixes the winner and has it choose. True where the battle goes on (a player is asked,
+     * or a computer general pursues); false where it ends here as with the switch off: none of the broken army is left on
+     * the field, the winner's own bar is full, or its computer general sees nothing it can catch.
+     */
+    breakOpens(s, how, why) {
+      const winner = other(s), on = /* @__PURE__ */ new Map();
+      for (const u of this.units) if (u.side === s && live2(u)) on.set(u.id, u.str);
+      if (!on.size || this.brink(winner).bar >= 1) return false;
+      this.aftermath = { side: s, winner, how, why, t: this.t, phase: "ask", on };
+      if (this.ticket[winner].human) {
+        this.say({ what: "land:ask", side: winner, text: `${this.army(s)} has broken. Pursue it, or end the battle here.` });
+        return true;
+      }
+      if (!this.units.some((u) => this.quarry(u))) {
+        this.aftermath = null;
+        return false;
+      }
+      this.pursueOn();
+      return true;
+    }
+    /** The winner fights on: the broken army's orders still on the air are dropped, and its blocks in order fall back. */
+    pursueOn() {
+      const A = this.aftermath;
+      A.phase = "pursue";
+      this.broke[A.side] = true;
+      this.pending = this.pending.filter((p) => this.unit(p.id)?.side !== A.side);
+      for (const u of this.units) if (u.side === A.side && fighting2(u)) this.fallBack(u);
+      this.nextThink = this.t;
+      this.say({ what: "land:pursuit", side: A.winner, text: this.ticket[A.winner].human ? "Your army pursues." : `${this.army(A.winner)} pursues. Get your men off the field.` });
+    }
+    /** A block of the broken army still in order falls back to its own edge, as at the break (judge); a wait for help is over. */
+    fallBack(u) {
+      if (u.waits) this.endWait(u, "gives");
+      u.fellBack = true;
+      if (u.order?.kind !== "withdraw") {
+        u.order = { kind: "withdraw", x: u.x, y: u.side === "att" ? 0 : this.field.h };
+        u.path = [];
+        u.keepFace = null;
+      }
+      u.engaged = void 0;
+    }
+    /**
+     * The block of the broken army this one of the winner's can still catch, as its staff judges by sight: the nearest in
+     * its reach now, or one it gains on and closes with before that block is off the field, both going straight for the
+     * block's own edge at their kinds' paces over open ground (a runner at move's own 1.15). Guns and teams catch only
+     * what is in their reach; a wavering block and a fort catch nothing. Null where none.
+     */
+    quarry(u) {
+      const A = this.aftermath;
+      if (!A || u.side !== A.winner || !fighting2(u) || u.kind === "fort" || u.state === "wavering") return null;
+      const reach = reachOf(u), mine = u.team ? LAND.teams[u.team].speed : LAND.speed[u.kind];
+      let best = null, least = Infinity;
+      for (const e of this.units) {
+        if (e.side !== A.side || !live2(e) || e.hid) continue;
+        const gap = this.gap(u, e);
+        const theirs = (e.team ? LAND.teams[e.team].speed : LAND.speed[e.kind]) * (e.state === "routing" ? 1.15 : 1);
+        const left = theirs > 0 ? (e.side === "att" ? e.y : this.field.h - e.y) / theirs : Infinity;
+        const closes = gap <= reach ? 0 : u.kind !== "art" && mine > theirs ? (gap - reach) / (mine - theirs) : Infinity;
+        if (closes < left && gap < least) {
+          least = gap;
+          best = e;
+        }
+      }
+      return best;
+    }
+    /**
+     * A staff's thought after the break. The broken army's gives no orders. The winner's sends each block that is its to
+     * send (not guns or teams, which fire from where they stand; not one the player has in hand; not one waiting for
+     * help) after the nearest block it can catch, and halts one that can catch none. A computer general with nothing
+     * left to catch calls the pursuit off (judged at the tick's end); a player's staff never ends his battle for him.
+     */
+    staffAfter(s) {
+      const A = this.aftermath;
+      if (s !== A.winner || A.phase !== "pursue") return;
+      let any = false;
+      for (const u of this.units) {
+        if (u.side !== s || !fighting2(u)) continue;
+        const e = this.quarry(u);
+        if (e) any = true;
+        if (u.kind === "art" || u.kind === "fort" || u.taken || u.waits && !u.waits.free) continue;
+        if (!e) {
+          if (u.order?.kind === "attack") this.command({ do: "hold", units: [u.id] }, s);
+          continue;
+        }
+        if (u.order?.kind === "attack" && u.order.target === e.id) continue;
+        if (u.reserve === "held") u.reserve = "sent";
+        this.command({ do: "attack", units: [u.id], target: e.id }, s);
+      }
+      if (!any && !this.ticket[s].human) A.off = true;
+    }
+    /**
+     * An order given after the break: true or false where it is the aftermath's to answer, null where it goes on to the
+     * rules as ever. The winner's { do: 'land:pursue' } and { do: 'land:end' } (the player's, never his staff's); while a
+     * player is choosing, nothing else, so END then is the battle exactly as it stood at the break; never the staff's
+     * dice nor a whole army pulled out; and of the broken army only a way back ('move', 'withdraw'), its fighters on
+     * call, and its staff's seat.
+     */
+    afterCommand(c, by2) {
+      const A = this.aftermath, what = c.do;
+      if (what === "land:pursue") {
+        if (by2 !== A.winner || A.phase !== "ask") return false;
+        this.pursueOn();
+        return true;
+      }
+      if (what === "land:end") {
+        if (by2 !== A.winner || this.staffing) return false;
+        this.endAfter("off");
+        return true;
+      }
+      if (A.phase === "ask" || what === "dice" || what === "withdrawAll") return false;
+      if (by2 !== A.side) return null;
+      return what === "move" || what === "withdraw" || what === "land:air" || what === "auto" ? null : false;
+    }
+    /** After the break, each tick of the pursuit: the broken army keeps falling back, and the pursuit ends by one of its ways. */
+    judgeAfter() {
+      const A = this.aftermath;
+      if (A.phase !== "pursue") return;
+      const b = this.brink(A.winner);
+      this.bar[A.winner] = b.bar;
+      for (const u of this.units) if (u.side === A.side && fighting2(u) && u.order?.kind !== "withdraw") this.fallBack(u);
+      const ended = !this.units.some((u) => u.side === A.side && live2(u)) ? "left" : A.off ? "off" : b.bar >= 1 || !this.units.some((u) => u.side === A.winner && fighting2(u)) ? "spent" : this.t >= this.ticket.limit ? "time" : null;
+      if (ended) this.endAfter(ended);
+    }
+    /** The day ends after the break: END at the break (a player's answer) exactly as with the switch off; else by the pursuit's own count. */
+    endAfter(ended) {
+      const A = this.aftermath;
+      if (A.phase === "ask") this.aftermath = null;
+      else A.ended = ended;
+      this.finish(A.winner, A.how, void 0, A.why);
+    }
     judge() {
+      if (this.aftermath) {
+        this.judgeAfter();
+        return;
+      }
       for (const s of ["att", "def"]) {
         const left = this.units.filter((u) => u.side === s && fighting2(u));
         if (!left.length) {
           const how = this.units.some((u) => u.side === s && u.state === "withdrawn") && !this.units.some((u) => u.side === s && u.state === "routing") ? "withdrew" : "destroyed";
+          if (this.pursue && how === "destroyed" && this.breakOpens(s, "destroyed", this.breakCause(s))) return;
           this.finish(other(s), how, void 0, how === "destroyed" ? this.breakCause(s) : void 0);
           return;
         }
@@ -11682,6 +11872,7 @@
             u.engaged = void 0;
           }
           this.say({ what: "broken", side: s, text: breakLine(why, this.whose(s)), brokeBy: { ...why } });
+          if (this.pursue && this.breakOpens(s, "rout", why)) return;
           this.finish(other(s), "rout", void 0, why);
           return;
         }
@@ -11695,6 +11886,7 @@
      * the break. An attack's runner back in a river it came over counts as before: the card's crossing prices that.
      */
     kept(u) {
+      if (this.aftermath?.phase === "pursue" && this.aftermath.on.has(u.id)) return u.str;
       const caught = u.side === "def" && u.state === "routing" && inRiver(groundAt(this.field, u.x, u.y));
       return u.state === "gone" || caught ? u.str * (1 - LAND.count.gone[u.side]) : u.state === "routing" || u.fellBack ? u.str * (1 - LAND.count.routing[u.side]) : u.str;
     }
@@ -11727,8 +11919,18 @@
         f.p += u.power0;
         forces.set(u.corps, f);
       }
-      for (const c of this.coming) if (!forces.has(c.u.corps)) forces.set(c.u.corps, { corps: c.u.corps, side: c.u.side, lost: 0, p: 0 });
+      for (const c of [...this.coming, ...this.turned]) if (!forces.has(c.u.corps)) forces.set(c.u.corps, { corps: c.u.corps, side: c.u.side, lost: 0, p: 0 });
       const loser = other(winner);
+      const A = this.aftermath?.phase === "pursue" ? this.aftermath : null;
+      let took = 0, tookMen = 0;
+      if (A) for (const u of this.units) {
+        const was = A.on.get(u.id);
+        if (was === void 0) continue;
+        const since = Math.max(0, was - u.str) / u.str0;
+        took += u.power0 * since;
+        tookMen += Math.round(u.men0 * since);
+      }
+      if (A) took /= this.power[A.side];
       const pct = (p) => p < 1e-4 ? "none" : p < 5e-3 ? "less than 1%" : `about ${Math.round(p * 100)}%`;
       const cap = (t) => t[0].toUpperCase() + t.slice(1);
       const line = this.practice && this.ticket.def.human ? "Your line" : this.practice ? "Their line" : `The ${this.ticket.def.adj} line`;
@@ -11736,7 +11938,14 @@
       const lines = [
         how === "rout" ? this.brokeAfter(loser, told ? why : void 0) : how === "withdrew" ? `${this.army(loser)} withdrew from the field.` : how === "time" ? `${line} held until the day was done.` : how === "destroyed" ? `${this.army(loser)} was driven from the field.` : this.staffLine()
       ];
-      if (how !== "objective") lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? "Neither side lost any of its strength." : told ? `By the day's end, counting the rout, ${this.sideOf("att", "attack")} had lost ${pct(lost.att)} of its strength in all, ${this.sideOf("def", "defence")} ${pct(lost.def)}.` : `${cap(this.sideOf("att", "attack"))} lost ${pct(lost.att)} of its strength, ${this.sideOf("def", "defence")} ${pct(lost.def)}.`);
+      if (A) {
+        const halves = Math.max(1, Math.round((this.t - A.t) / 30)), m = Math.floor(halves / 2), half = halves % 2 === 1;
+        const n = ["", "a", "two", "three", "four", "five", "six"][m] ?? `${m}`;
+        const span2 = m === 0 ? "half a minute" : m === 1 ? half ? "a minute and a half" : "a minute" : `${n}${half ? " and a half" : ""} minutes`;
+        const whose = this.ticket[winner].human ? "Your" : this.practice ? "Their" : `The ${this.ticket[winner].adj}`;
+        lines.push(took < 1e-4 ? `${whose} pursuit went on for ${span2} and caught none of them.` : `${whose} pursuit went on for ${span2} and cost ${this.army(loser).replace(/^The /, "the ").replace(/^Your /, "your ").replace(/^Their /, "their ")} ${pct(took)} more of its strength.`);
+      }
+      if (how !== "objective") lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? "Neither side lost any of its strength." : told ? `By the day's end, counting the ${A ? "pursuit" : "rout"}, ${this.sideOf("att", "attack")} had lost ${pct(lost.att)} of its strength in all, ${this.sideOf("def", "defence")} ${pct(lost.def)}.` : `${cap(this.sideOf("att", "attack"))} lost ${pct(lost.att)} of its strength, ${this.sideOf("def", "defence")} ${pct(lost.def)}.`);
       else if (this.contactAt !== null) lines.push(`Before you handed the battle to the staff, ${this.sideOf("att", "attack")} had lost ${pct(lost.att)} of its strength on the field, and ${this.sideOf("def", "defence")} ${pct(lost.def)}.`);
       for (const u of this.units) if (live2(u) && u.state !== "routing") {
         u.act = "idle";
@@ -11761,7 +11970,9 @@
         // Pulled out after the armies met: the rearguard and the stragglers are the rules' to bill, by its bar (b474).
         ...how === "withdrew" && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.bar[loser]) * 1e3) / 1e3 } } : {},
         // What the fighters on call flew and lost, by group, for the campaign's bill (air support).
-        ...this.airOn.att || this.airOn.def ? { air: this.airBill() } : {}
+        ...this.airOn.att || this.airOn.def ? { air: this.airBill() } : {},
+        // Fought on after the break (pursue): for the campaign, which then bills no pursuit of its own for the day.
+        ...A ? { pursued: { at: Math.round(A.t * 10) / 10, seconds: Math.round(this.t - A.t), took: Math.round(took * 1e3) / 1e3, men: tookMen, ended: A.ended ?? "off" } } : {}
       };
       this.strikes = [];
       if (verdict !== winner) this.over.lines.push("The day went their way, but the campaign counts it as close as the odds allowed.");
@@ -11786,7 +11997,8 @@
      * routs at odds the card calls sure or hopeless fall in.
      */
     brokeAfter(s, why) {
-      const sec = this.t - (this.contactAt ?? this.t), who = this.army(s);
+      const at = this.aftermath?.phase === "pursue" ? this.aftermath.t : this.t;
+      const sec = at - (this.contactAt ?? at), who = this.army(s);
       const halves = Math.round(sec / 30), m = Math.floor(halves / 2), half = halves % 2 === 1;
       const n = ["", "a", "two", "three", "four", "five", "six"][m] ?? `${m}`;
       const span2 = halves === 0 ? "within half a minute" : `after ${m === 0 ? "half a minute" : m === 1 ? half ? "a minute and a half" : "a minute" : `${n}${half ? " and a half" : ""} minutes`}`;
@@ -12273,7 +12485,12 @@
     view(as) {
       const ev = this.events;
       this.events = [];
-      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
+      return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking("att"), def: this.breaking("def") }, breakingBy: { att: this.breakCause("att"), def: this.breakCause("def") }, contact: this.contactAt, ...this.setup ? { setup: this.setup } : {}, ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as), ...this.afterView() };
+    }
+    /** After the break (pursue): who broke, who chooses or pursues, the break's second and the phase; nothing before it, nor with the switch off. */
+    afterView() {
+      const A = this.aftermath;
+      return A ? { after: { side: A.side, winner: A.winner, t: Math.ceil(A.t * 100) / 100, phase: A.phase } } : {};
     }
     /** Air support's part of the view, only where a side has fighters on call. */
     airView() {
@@ -12929,6 +13146,8 @@
       /** The hedge cutters' gaps already sent (the rules' cuts, in the order begun). */
       __publicField(this, "cutsSent", 0);
       __publicField(this, "lastView", -1);
+      /** The aftermath's phase at the last view ('' with none): a view goes out when it changes (after the break, pursue). */
+      __publicField(this, "lastPhase", "");
       __publicField(this, "placed", false);
       __publicField(this, "sentOver", false);
       this.me = opts.me ?? null;
@@ -12965,6 +13184,7 @@
       if (opts.bocage) sim.bocage = true;
       if (opts.phones !== false) sim.phones = true;
       if (opts.bearers !== false) sim.bearers = true;
+      if (opts.pursue === true) sim.pursue = true;
       if (opts.stand === true) sim.standRule = true;
       if (opts.facing === true && opts.stand === true) sim.faceRule = true;
       if (opts.teams === true && opts.facing === true && opts.stand === true) sim.teamsRule = true;
@@ -13108,32 +13328,40 @@
       }
       const v = this.sim.view();
       for (const e of v.events) this.events.push(e);
-      if (Math.floor(t) !== this.lastView || v.over) {
+      const phase = v.after?.phase ?? "";
+      if (Math.floor(t) !== this.lastView || v.over || phase !== this.lastPhase) {
         this.lastView = Math.floor(t);
-        this.views.push({
-          t: r2(t),
-          units: v.units.map((u) => landUnitOut(u, v.t, !this.me || this.sim.known(u), !!this.me && u.side === this.me, this.sim)),
-          balance: v.balance,
-          zones: v.zones,
-          ...v.breaking ? { breaking: { att: r32(v.breaking.att), def: r32(v.breaking.def) } } : {},
-          ...v.contact !== void 0 ? { contact: v.contact } : {},
-          ...v.plan ? { plan: Object.fromEntries(Object.entries(v.plan).filter(([, p]) => p?.phase).map(([s, p]) => [s, { phase: p.phase, main: p.main ?? [], startY: p.startY ?? null }])) } : {},
-          ...v.setup ? { setup: v.setup } : {},
-          // (the corps still coming up from next door that the player may know of: where on its edge and when)
-          ...v.coming?.length ? { coming: v.coming.map((c) => ({ id: c.id, side: c.side, corps: c.corps, kind: c.kind, at: r12(c.at), edge: c.edge, x: r12(c.x), y: r12(c.y), ...c.arrive ? { arrive: c.arrive } : {} })) } : {},
-          // (the rider ahead: his own corps' despatch riders, riding in before it)
-          ...v.riders?.length ? { riders: v.riders } : {},
-          // (smoke on call: the screens standing now, the enemy's block named only where he knows it; the smoke rounds
-          // carry how long each hangs, for the 3D field. The hedge cutters' gaps go once each, in the delta's cuts)
-          ...this.sim.screenView(this.me ?? void 0),
-          // (field telephones: the wires he may see; stretcher bearers: the light cases back in the line, each shown once
-          // by its t and unit; the night patrol: the attack's own route, and where it was caught)
-          ...this.sim.phonesView(this.me ?? void 0),
-          ...this.sim.bearerView(this.me ?? void 0),
-          ...this.sim.patrolView(this.me ?? void 0),
-          ...v.over ? { over: v.over } : {}
-        });
+        this.lastPhase = phase;
+        this.views.push(this.row(v, t));
       }
+    }
+    /** One view as the recording keeps it: the blocks as the player may know them, and what the release 2 rows add. */
+    row(v, t) {
+      return {
+        t: r2(t),
+        units: v.units.map((u) => landUnitOut(u, v.t, !this.me || this.sim.known(u), !!this.me && u.side === this.me, this.sim)),
+        balance: v.balance,
+        zones: v.zones,
+        ...v.breaking ? { breaking: { att: r32(v.breaking.att), def: r32(v.breaking.def) } } : {},
+        ...v.contact !== void 0 ? { contact: v.contact } : {},
+        ...v.plan ? { plan: Object.fromEntries(Object.entries(v.plan).filter(([, p]) => p?.phase).map(([s, p]) => [s, { phase: p.phase, main: p.main ?? [], startY: p.startY ?? null }])) } : {},
+        ...v.setup ? { setup: v.setup } : {},
+        // (the corps still coming up from next door that the player may know of: where on its edge and when)
+        ...v.coming?.length ? { coming: v.coming.map((c) => ({ id: c.id, side: c.side, corps: c.corps, kind: c.kind, at: r12(c.at), edge: c.edge, x: r12(c.x), y: r12(c.y), ...c.arrive ? { arrive: c.arrive } : {} })) } : {},
+        // (the rider ahead: his own corps' despatch riders, riding in before it)
+        ...v.riders?.length ? { riders: v.riders } : {},
+        // (smoke on call: the screens standing now, the enemy's block named only where he knows it; the smoke rounds
+        // carry how long each hangs, for the 3D field. The hedge cutters' gaps go once each, in the delta's cuts)
+        ...this.sim.screenView(this.me ?? void 0),
+        // (field telephones: the wires he may see; stretcher bearers: the light cases back in the line, each shown once
+        // by its t and unit; the night patrol: the attack's own route, and where it was caught)
+        ...this.sim.phonesView(this.me ?? void 0),
+        ...this.sim.bearerView(this.me ?? void 0),
+        ...this.sim.patrolView(this.me ?? void 0),
+        // (after the break, pursue: who broke, who chooses or pursues, and the phase)
+        ...v.after ? { after: v.after } : {},
+        ...v.over ? { over: v.over } : {}
+      };
     }
     /**
      * Fights on for up to `seconds` of battle time (none while the setup step is open) and says what happened since the
@@ -13141,7 +13369,7 @@
      */
     tick(seconds, maxSteps = 50) {
       const steps = Math.min(maxSteps, Math.max(0, Math.round(seconds / DT)));
-      for (let i = 0; i < steps && !this.sim.over && !this.sim.setup; i++) {
+      for (let i = 0; i < steps && !this.sim.over && !this.sim.setup && this.sim.aftermath?.phase !== "ask"; i++) {
         this.sim.step();
         this.look();
       }
@@ -13157,7 +13385,7 @@
       const last = !!over && !this.sentOver;
       const d = {
         t: r2(this.sim.t),
-        ...last ? { end: r2(this.sim.t) } : {},
+        ...last ? { end: r2(this.sim.t) } : this.sim.aftermath?.phase === "ask" ? { ask: true } : {},
         ...this.placed ? { reset: true } : {},
         ...this.keeper.drain(),
         rounds: this.roundsNew.sort((a, b) => a.n - b.n),
@@ -13183,7 +13411,13 @@
     /** One of the player's orders, in the rules' own shapes. False where the rules refuse it. */
     order(c) {
       if (!this.me) return false;
-      return this.sim.command(c, this.me);
+      const was = this.sim.aftermath?.phase, ok2 = this.sim.command(c, this.me);
+      if (ok2 && was === "ask" && this.sim.over) {
+        const v = this.sim.view();
+        for (const e of v.events) this.events.push(e);
+        this.views.push(this.row(v, this.sim.t));
+      }
+      return ok2;
     }
     /**
      * Hold until relieved: why one of his blocks may not wait for help (null where it may), and the battle second help
@@ -13415,6 +13649,7 @@
         teams: opts?.teams === true,
         facing: opts?.facing === true,
         stand: opts?.stand === true,
+        pursue: opts?.pursue === true,
         patrol: opts?.patrol !== false,
         captured: opts?.captured !== false,
         worn: opts?.worn !== false,
@@ -13462,6 +13697,7 @@
         teams: o.teams === true,
         facing: o.facing === true,
         stand: o.stand === true,
+        pursue: o.pursue === true,
         patrol: o.patrol !== false,
         captured: o.captured !== false,
         worn: o.worn !== false,
