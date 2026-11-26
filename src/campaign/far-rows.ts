@@ -25,6 +25,8 @@
 //                                          East Africa and the Sahara posts by the record, and the forces facing them
 //   data/campaign/far-books.json           rulings 194 to 196: Japan's stocks of oil and supplies, the lanes that
 //                                          feed them, and America's submarines' worth against them
+//   data/campaign/far-arms.json            the design director's 05:37Z and 05:44Z of 25 November 2026: China's
+//                                          rifles, its three arsenals and the four roads that bring it arms
 //
 // While the far side's switch is off (stage.ts) nothing here happens and the game reads its data files as they are.
 // With it on, each block is laid over the data file it names, in place and once, as this module loads: objects by
@@ -82,9 +84,12 @@ import farShores from '../../data/campaign/far-shores.json';
 import farGuards from '../../data/campaign/far-guards.json';
 import farAfrica from '../../data/campaign/far-africa.json';
 import farBooks from '../../data/campaign/far-books.json';
+import farArms from '../../data/campaign/far-arms.json';
 import japanSeat from '../../data/campaign/far-japan-seat.json';
 import goals from '../../data/campaign/goals.json';
 import tech from '../../data/campaign/tech.json';
+import arms from '../../data/campaign/arms.json';
+import rifles from '../../data/campaign/rifles.json';
 
 type Obj = Record<string, any>;
 
@@ -95,6 +100,8 @@ const TARGETS: Record<string, Obj> = {
   goals,
   // (What a far great power opens with in the tree: ruling 68(a), starting lists and never private technologies.)
   tech,
+  // (A nation's stock of arms and its rifles' rule: the design director's 05:37Z and 05:44Z of 25 November 2026.)
+  arms, rifles,
 };
 
 /** The seats files, in the order they are laid. */
@@ -114,6 +121,8 @@ const FILES: [string, Obj][] = [
   ['far-africa', farAfrica],
   // (Japan's books, rulings 194 to 196: stocks, lanes and the submarines that raid them.)
   ['far-books', farBooks],
+  // (China's rifles, the design director's 05:37Z and 05:44Z of 25 November 2026: its arsenals and roads, after the books.)
+  ['far-arms', farArms],
   // (Japan's seat, ruling 196 points 6 and 7: its two goals, and Japan in America's long one.)
   ['far-japan-seat', japanSeat],
   // (The owed shores, ruling 234's notes of 22:05Z and 22:10Z: last, so its amendments find every row laid.)

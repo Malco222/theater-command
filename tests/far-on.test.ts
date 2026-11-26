@@ -48,8 +48,8 @@ const at = (g: Game, f: Fleet): string => g.regions[f.base].name;
 const SEATS = ['SAF', 'IRN', 'IRQ', 'SAU', 'AFG', 'YEM', 'NEP', 'LBR', 'CHN', 'AUS', 'NZL', 'THA', 'MAN', 'MGL'];
 
 describe("the far side with its switch on: the rows that are nobody's seat", () => {
-  it('lays the fourteen files over the data, in order, and the game reads them as its own', () => {
-    expect(FAR_LAID).toEqual(['far-seats-globe', 'far-seats-pacific', 'far-world', 'far-pacific-war', 'china-line', 'china-setup', 'china-stop3', 'far-south-line', 'far-air', 'far-guards', 'far-africa', 'far-books', 'far-japan-seat', 'far-shores']);
+  it('lays the fifteen files over the data, in order, and the game reads them as its own', () => {
+    expect(FAR_LAID).toEqual(['far-seats-globe', 'far-seats-pacific', 'far-world', 'far-pacific-war', 'china-line', 'china-setup', 'china-stop3', 'far-south-line', 'far-air', 'far-guards', 'far-africa', 'far-books', 'far-arms', 'far-japan-seat', 'far-shores']);
     expect(WD.nations.JAP.name).toBe('Japan');
     expect(WD.great).toEqual(['USA', 'JAP']);
     expect(Object.keys(WD.clients)).toEqual(['MAN', 'MGL']);

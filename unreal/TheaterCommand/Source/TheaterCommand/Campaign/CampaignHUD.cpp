@@ -8033,6 +8033,14 @@ namespace
 												SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
 												.Text_Lambda([this]() { return Controller.IsValid() ? ArsenalSummary(Controller->GetArsenal()) : FText::GetEmpty(); })
 											]
+											// (Release 2, China's rifles; the UI director's point 7 of 26 November 2026) The store's notes, one to a line, in
+											// the summary's own style above the columns; collapsed, and nothing drawn, for a nation whose store does not bind.
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+												.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetArsenal().Notes.Num() > 0 ? EVisibility::Visible : EVisibility::Collapsed; })
+												.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(FString::Join(Controller->GetArsenal().Notes, TEXT("\n"))) : FText::GetEmpty(); })
+											]
 										]
 										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top)
 										[

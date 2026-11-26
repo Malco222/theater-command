@@ -1751,6 +1751,7 @@ struct FArsenal
 	FString Region; // the province in mind; empty for none
 	TArray<FArsenalOffer> Offers;
 	TArray<FLedgerLine> Orders; // what is already on order
+	TArray<FString> Notes; // (Release 2, China's rifles) the store's notes for the top of the card, one to a line; empty unless the nation's store binds
 	int32 Revision = 0;
 };
 

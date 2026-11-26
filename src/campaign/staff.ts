@@ -44,6 +44,7 @@ import { openAirVersion } from './airversion';
 import { cityStartLay } from './citydefences';
 import { openSecretWar } from './secretwar';
 import { drawMen, menLeft, menRules, openManpower } from './manpower';
+import { armOrder, canArm, openRifles } from './rifles';
 import { WORLD_FIRST, WORLD_MAP, acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oceanShares, overseasOf, shoreOf } from './world';
 import { patronOfClient, stationed, tieWar } from './far';
 import { inTheWay, pacificGround, runQuays } from './pacific';
@@ -273,6 +274,8 @@ export function startOpen(g: Game, wide = true): Game {
   // Volunteer legions (release 2): only where stage.json switches them on. (After the reserves of men are opened: the
   // record's legions in the line on the first day are raised from them.)
   openLegions(g);
+  // China's rifles (stage B2): each corps of a nation whose rifles row binds is armed at its strength on the first day.
+  openRifles(g);
   // On the wider map the picture is drawn once here, so that a campaign saved on its first day comes back as it was.
   if (wide) computeSupply(g);
   // The grand campaign counts its railheads with the supply picture: draw it afresh under these rules.
@@ -922,7 +925,9 @@ export function rearMonth(g: Game, nat: string): void {
     const row = T.towns[r.name], worth = row?.[0] ?? T.each;
     if (!(worth > 0)) { g.flags[`rear:${r.id}`] = since; continue; }
     if (menRules(g) && menLeft(g, nat) + 1e-9 < worth) continue;
+    if (!canArm(g, nat, worth)) continue;
     drawMen(g, nat, worth);
+    armOrder(g, nat, worth);
     const c = addCorps(g, nat, row?.[1] ?? T.name.replace('{place}', r.name), 'inf', 1, r.id, { xp: C.xp ?? 0.1, est: worth, hold: 1, stay: 1 });
     c.str = worth;
     g.flags[`rear:${r.id}`] = since;

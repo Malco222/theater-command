@@ -398,6 +398,8 @@ export interface Build {
   revive?: number;
   /** One of the nation's special formations (the grand campaign): the id of its unit in traits.json. */
   elite?: string;
+  /** A corps' rifles drawn from the store when it was ordered, in divisions' worth (rifles.ts armOrder); set only where some were drawn. */
+  rifles?: number;
   /** Works or ships ordered in a conquered town that had settled (release 2, buildings.ts settledFor): delivered while the town is held, whatever the switch says by then. */
   conq?: boolean;
   /** An airborne corps, unlocked by the technology tree (the grand campaign). */
