@@ -1642,9 +1642,11 @@ describe('city defences: the raid card names its place as the news does, the swi
     const on = ruhrByNight({ guns: 2, lights: 2, radar: true }), off = ruhrByNight({ guns: 2, lights: 2, radar: true, on: false });
     expect(line(on.a(), 'Anti-aircraft guns')!.value).toBe('Level 2 guns ring the factories of the Ruhr');
     expect(line(off.a(), 'Anti-aircraft guns')!.value).toBe('Level 2 guns ring the factories of Ruhr');
-    // A raid on the town itself names the place alone.
-    expect(line(assessAir(on.g, [on.f], 'town', on.t), 'Anti-aircraft guns')!.value).toBe('Level 2 guns ring the Ruhr');
-    expect(line(assessAir(off.g, [off.f], 'town', off.t), 'Anti-aircraft guns')!.value).toBe('Level 2 guns ring Ruhr');
+    // A raid on the town itself is not this row's to name (the air rules' line names the town there): the switch leaves
+    // its guns line as it finds it, and that line never speaks of factories.
+    const town = (r: { g: Game; f: AirFleet; t: number }): string => line(assessAir(r.g, [r.f], 'town', r.t), 'Anti-aircraft guns')!.value;
+    expect(town(on)).toBe(town(off));
+    expect(town(on)).toMatch(/^Level 2 guns ring (?!the factories of )/);
     // Under fog on raids: seen at a level some months ago, and never scouted.
     const known = (aa: number, seen: number, ago?: number): KnownDefence => ({ sure: () => true, extra: 0, extraNat: 'GER', aa, ruined: 0, seen, ago });
     const seen = known(2, 2, 2), never = known(3, -1);
