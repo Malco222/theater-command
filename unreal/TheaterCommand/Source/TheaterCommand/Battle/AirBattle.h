@@ -1016,6 +1016,10 @@ private:
 	/** The Battle rules card's "Finer B-17" (rule "b17Fine"), read once as a battle begins into its state's B17FineOn and
 	 * the flight core's AirShow::SetFineB17; off when the file is not in the build. */
 	void B17FineRead();
+	/** The Battle rules card's "Worn B-17 paint" (rule "flyB17Skin"), read once as a battle begins, after B17FineRead:
+	 * with it and the finer B-17 on, her overlay (Content/Data/AirSkin/B17Fine.json) set in Battle/AirSkin for every
+	 * reader of her file; off, AirSkin holds nothing and nothing is read or said. */
+	void B17SkinRead();
 	/** The most close-up shapes of the finer B-17 a battle makes (-TheaterAirB17FineNear=N, 8 unless asked), and whether
 	 * this aircraft may go to its close-up shape now: any aircraft but a finer B-17, one whose close-up shape is made,
 	 * or one while fewer than the most are made. */

@@ -11,6 +11,7 @@
 #include "Battle/AirLight.h"
 #include "Battle/AirLand.h"
 #include "Battle/AirScrew.h"
+#include "Battle/AirSkin.h"
 #include "Battle/AirStage.h"
 #include "Battle/LandLive.h"
 #include "Battle/ShipGuns.h"
@@ -688,6 +689,7 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	SkyFinish(false); // (a turn of the clouds painted aside on a battle begun before: done before its state goes)
 	State = MakeShared<FAirBattleState>();
 	B17FineRead(); // (the Battle rules card's "Finer B-17", read once as the battle begins: every shape it makes follows it)
+	B17SkinRead(); // (and its "Worn B-17 paint", after it: her paint for every shape the battle makes)
 	TimeEyeKey = TimeEyeGroup = -1; // (the timing eye, -TheaterAirTimeEye, begun afresh with each battle)
 	TimeEyeFrom = -1.0;
 	bTimeEyeQuit = false;
@@ -749,6 +751,7 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	SkyFinish(false); // (a turn of the clouds painted aside on a battle begun before: done before its state goes)
 	State = MakeShared<FAirBattleState>();
 	B17FineRead(); // (the Battle rules card's "Finer B-17", read once as the battle begins: every shape it makes follows it)
+	B17SkinRead(); // (and its "Worn B-17 paint", after it: her paint for every shape the battle makes)
 	TimeEyeKey = TimeEyeGroup = -1; // (the timing eye, -TheaterAirTimeEye, begun afresh with each battle)
 	TimeEyeFrom = -1.0;
 	bTimeEyeQuit = false;
@@ -4002,6 +4005,49 @@ void AAirBattle::B17FineRead()
 	}
 }
 
+void AAirBattle::B17SkinRead()
+{
+	// The Battle rules card's "Worn B-17 paint" (FLandLive's rule "flyB17Skin", release 2; off until the Mac's stills are
+	// judged with her markings): the model thread's paint for the finer B-17's shape, Content/Data/AirSkin/B17Fine.json
+	// (Tools/make_air_skin.py; Battle/AirSkin), read here once as the battle begins, after B17FineRead and before any
+	// shape is made, never in a frame. Every reader of her file (the miniature kit's, the earned colours', the nose-art
+	// panel's) asks AirSkin; with the row off it holds nothing, nothing is read and nothing is said: the battle's log, its
+	// shapes and their keys are as they were before. Read once a run and kept (its file does not change while the game runs).
+	static AirSkin::Overlay WornKept;
+	static bool bWornKeptRead = false;
+	AirSkin::Set(nullptr); // (an earlier battle's skin never lingers)
+	if (!State || !FLandLive::RuleNow(TEXT("flyB17Skin")))
+	{
+		return;
+	}
+	if (State->B17FineOn != 1)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air battle: worn B-17 paint: on, but the Battle rules card's Finer B-17 is off, so no B-17 wears it (it is her paint)."));
+		return;
+	}
+	if (!bWornKeptRead)
+	{
+		TArray<uint8> Bytes;
+		const FString Path = FPaths::ProjectContentDir() / TEXT("Data/AirSkin/B17Fine.json");
+		if (!FFileHelper::LoadFileToArray(Bytes, *Path))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: worn B-17 paint: Content/Data/AirSkin/B17Fine.json could not be read, so the finer B-17s wear her plain olive."));
+			return;
+		}
+		const std::string Text(reinterpret_cast<const char*>(Bytes.GetData()), static_cast<size_t>(Bytes.Num()));
+		std::string Why;
+		if (!AirSkin::Read(Text, 143899, 15534, 46, WornKept, Why))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: worn B-17 paint: Content/Data/AirSkin/B17Fine.json does not read (%s), so the finer B-17s wear her plain olive."), UTF8_TO_TCHAR(Why.c_str()));
+			return;
+		}
+		bWornKeptRead = true;
+	}
+	AirSkin::Set(&WornKept);
+	UE_LOG(LogTheater, Display, TEXT("Air battle: worn B-17 paint: on (the Battle rules card's Worn B-17 paint, or -TheaterAirB17Skin): the model thread's paint for her shape, from %s."),
+		UTF8_TO_TCHAR(WornKept.SourceSha256.substr(0, 12).c_str()));
+}
+
 int32 AAirBattle::B17FineNearMost()
 {
 	// (each finer B-17 that once comes near keeps her close-up shape for the battle, some 31 to 37 MB a copy by arithmetic:
@@ -5147,8 +5193,21 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 	// (and with the Battle rules card's "Turning airscrews" on, a shape of its own too, its far shape without its blades:
 	// the shapes are kept for the whole run, and a battle with the row off must draw what it drew before)
 	const bool bScrews = PropSpinOn();
-	const FString ShapeKey = (bStandIn ? FString::Printf(TEXT("%s@%.1f|%s"), *Name, Span, *Model) : Name) + (Scheme > 0 ? FString::Printf(TEXT("|scheme%d"), Scheme) : FString())
+	// (and with the Battle rules card's "Worn B-17 paint" on, the finer B-17 a shape of her own in her worn paint:
+	// AirSkin, read as the battle began (B17SkinRead); off, nothing is asked and the key is what it was)
+	bool bSkin = false;
+	if (AirSkin::Active())
+	{
+		FString SkinKind = Name, SkinWhose;
+		Name.Split(TEXT(":"), &SkinKind, &SkinWhose);
+		bSkin = AirSkin::For(TCHAR_TO_UTF8(*SkinKind)) != nullptr;
+	}
+	FString ShapeKey = (bStandIn ? FString::Printf(TEXT("%s@%.1f|%s"), *Name, Span, *Model) : Name) + (Scheme > 0 ? FString::Printf(TEXT("|scheme%d"), Scheme) : FString())
 		+ (bTorpedo ? TEXT("|torpedo") : TEXT("")) + (bScrews ? TEXT("|screws") : TEXT(""));
+	if (bSkin)
+	{
+		ShapeKey += TEXT("|skin");
+	}
 	TMap<FString, AirParts::FShape>& Shapes = AirParts::Shapes();
 	if (!Shapes.Contains(ShapeKey))
 	{
