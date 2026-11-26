@@ -17,8 +17,9 @@
  *                 formed headline names them.
  *   rowId:<i>:<k> the id of the corps at the front that bit k of rowFront names, so that a corps renamed while the row
  *                 waits is known under its new name and never called lost (the sceptic's T2-3).
- * All of them are cleared wherever the row is sent or struck (`rowDone`), and only there (the switch turned off keeps
- * them until then). With the switch off none is ever written and nothing prints.
+ * All of them are cleared wherever the row is sent or struck (`rowDone`), and where its nation leaves the war for good
+ * (`nationDone`), and only there (the switch turned off keeps them until then). With the switch off none is ever
+ * written and nothing prints.
  */
 import setup from '../../data/campaign/setup-1939.json';
 import { turnToDate } from '../core/ticket';
@@ -148,6 +149,22 @@ export function tellWait(g: Game, i: number, at: Region | undefined): void {
 export function rowDone(g: Game, i: number): void {
   delete g.flags[toldKey(i)]; delete g.flags[atKey(i)]; delete g.flags[frontKey(i)];
   fromOf(ROWS()[i]).forEach((_, k) => { delete g.flags[idKey(i, k)]; });
+}
+
+/**
+ * A nation leaves the war for good (game.ts `capitulate`; domination.ts `leave` and `layDown`): the four telling flags of
+ * every row of that nation that carries any of them go, so no dead data stays in a lost war. The design director, 05:00Z,
+ * 26 November 2026, on the sceptic's truth3-4: "Clear the four telling flags in capitulate and in domination's layDown and
+ * leave, so no dead data stays in a lost war." Only those flags: the rule's own `wait:<i>` stays, and the row is not
+ * struck (no `sent:<i>`). Rows of other nations are not touched. A row that carries none is left as it is, so a war that
+ * never had the switch on (where no telling flag exists) is not changed by a byte.
+ */
+export function nationDone(g: Game, nat: string): void {
+  ROWS().forEach((row, i) => {
+    if (row?.[1] !== nat) return;
+    const told = [toldKey(i), atKey(i), frontKey(i), ...fromOf(row).map((_, k) => idKey(i, k))].some((k) => g.flags[k] !== undefined);
+    if (told) rowDone(g, i);
+  });
 }
 
 /**

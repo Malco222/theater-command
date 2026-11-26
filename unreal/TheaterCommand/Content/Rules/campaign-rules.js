@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of de8892f41 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 4f50f46fc 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -43048,6 +43048,220 @@
     }
   };
 
+  // ../../src/campaign/arrivalwaits.ts
+  var ROWS = () => setup_1939_default.expeditions ?? [];
+  var toldKey = (i) => `rowTold:${i}`;
+  var atKey = (i) => `rowAt:${i}`;
+  var frontKey = (i) => `rowFront:${i}`;
+  var idKey = (i, k) => `rowId:${i}:${k}`;
+  var theOf = (name) => /^(the |[A-Z] Force|Creforce)/i.test(name) || /Force$/.test(name.split("(")[0].trim()) ? "" : "the ";
+  var named3 = (name, head = false) => {
+    const a = theOf(name);
+    return a ? `${head ? "The" : "the"} ${name}` : name;
+  };
+  var NUMBER = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+  var numberWord = (n) => NUMBER[n] ?? String(n);
+  var join = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  var placeOf3 = (g2, c) => g2.regions[c.reg].name;
+  var fromOf = (row2) => Array.isArray(row2?.[6]?.from) ? row2[6].from : [];
+  var present = (g2, nat, from2) => g2.corps.filter((x) => x.nat === nat && !x.dead && from2.includes(x.name));
+  var inOrder = (from2, cs) => [...cs].sort((a, b) => from2.indexOf(a.name) - from2.indexOf(b.name));
+  var holdsNow = (g2, nat, from2, at4) => {
+    const h = rowHolds(g2, nat, from2, at4);
+    return { front: inOrder(from2, h.front), unformed: h.unformed };
+  };
+  var hasOrHave = (xs) => xs.length === 1 ? "has" : "have";
+  function areAtFront(g2, front) {
+    const groups = [];
+    for (const c of front) {
+      const place3 = placeOf3(g2, c);
+      const at4 = groups.find((x) => x.place === place3);
+      if (at4) at4.cs.push(c);
+      else groups.push({ place: place3, cs: [c] });
+    }
+    let k = 0;
+    const said = groups.map((x) => `${join(x.cs.map((c) => named3(c.name, k++ === 0)))} in ${x.place}`);
+    if (groups.length === 1 || groups.every((x) => x.cs.length === 1)) return `${join(said)} are at the front`;
+    return `${said.slice(0, -1).join(", ")}, and ${said[said.length - 1]}, are at the front`;
+  }
+  function waitBeginsLine(g2, nat, rowName, place3, from2, front, unformed) {
+    const head = `${named3(rowName, true)} is due in ${place3} this month`;
+    const n = present(g2, nat, from2).length;
+    if (front.length && unformed.length) {
+      const at4 = front.length === 1 ? `${named3(front[0].name, true)} is at the front in ${placeOf3(g2, front[0])}` : areAtFront(g2, front);
+      const all = front.length + unformed.length === 2 ? "both" : "all of them";
+      return `${head}. ${at4}, and ${join(unformed.map((x) => named3(x)))}, which it is also formed from, ${hasOrHave(unformed)} not formed yet, so the arrival waits for ${all}.`;
+    }
+    if (unformed.length) {
+      return unformed.length === 1 ? `${head}, formed from ${named3(unformed[0])}, which has not formed yet. The arrival waits for it.` : `${head}, formed from ${join(unformed.map((x) => named3(x)))}, which have not formed yet. The arrival waits for them.`;
+    }
+    if (!front.length) return null;
+    if (n === 1) return `${head}, formed from your ${front[0].name}, which is at the front in ${placeOf3(g2, front[0])}. The arrival waits, and forms the month after that corps leaves the front.`;
+    const several2 = `${head}, formed from ${numberWord(n)} of your corps.`;
+    if (front.length === 1) return `${several2} ${named3(front[0].name, true)} is at the front in ${placeOf3(g2, front[0])}, so the arrival waits, and forms the month after that corps leaves the front.`;
+    return `${several2} ${areAtFront(g2, front)}, so the arrival waits, and forms the month after ${front.length === 2 ? "both" : "all of them"} leave the front.`;
+  }
+  function tellWait(g2, i, at4) {
+    const row2 = ROWS()[i];
+    if (!row2 || g2.flags.fromWait !== 1 || !g2.human || row2[1] !== g2.human || !at4) return;
+    const nat = row2[1], from2 = fromOf(row2);
+    const { front, unformed } = holdsNow(g2, nat, from2, at4.id);
+    let mask = g2.flags[frontKey(i)] ?? 0;
+    for (const c of front) {
+      const k = from2.indexOf(c.name);
+      mask |= 1 << k;
+      g2.flags[idKey(i, k)] = c.id;
+    }
+    if (mask) g2.flags[frontKey(i)] = mask;
+    else delete g2.flags[frontKey(i)];
+    g2.flags[atKey(i)] = at4.id;
+    if (g2.flags[toldKey(i)] !== void 0) return;
+    g2.flags[toldKey(i)] = g2.turn;
+    const line = waitBeginsLine(g2, nat, row2[2], at4.name, from2, front, unformed);
+    if (line) headline(g2, "info", line, nat, at4.id);
+  }
+  function rowDone(g2, i) {
+    delete g2.flags[toldKey(i)];
+    delete g2.flags[atKey(i)];
+    delete g2.flags[frontKey(i)];
+    fromOf(ROWS()[i]).forEach((_, k) => {
+      delete g2.flags[idKey(i, k)];
+    });
+  }
+  function nationDone(g2, nat) {
+    ROWS().forEach((row2, i) => {
+      if (row2?.[1] !== nat) return;
+      const told2 = [toldKey(i), atKey(i), frontKey(i), ...fromOf(row2).map((_, k) => idKey(i, k))].some((k) => g2.flags[k] !== void 0);
+      if (told2) rowDone(g2, i);
+    });
+  }
+  var onWall = (g2, nat, name, since) => since !== void 0 && (g2.stories?.fallen ?? []).some((f) => f.nat === nat && f.name === name && f.turn >= since);
+  function waitedOn(g2, i, at4) {
+    const mask = g2.flags[frontKey(i)];
+    if (!mask) return null;
+    const row2 = ROWS()[i];
+    const from2 = fromOf(row2);
+    const here = present(g2, row2[1], from2);
+    const out = { count: here.length, one: here.length === 1 ? here[0].name : null, left: [], stands: [], lost: [] };
+    for (const [k, name] of from2.entries()) {
+      if ((mask & 1 << k) === 0) continue;
+      const x = here.find((c) => c.name === name);
+      const id = g2.flags[idKey(i, k)];
+      if (!x && id !== void 0 && g2.corps.some((c) => c.id === id && !c.dead)) return null;
+      if (x && id !== void 0 && x.id !== id) return null;
+      if (!x && !onWall(g2, row2[1], name, g2.flags[toldKey(i)])) return null;
+      if (!x) out.lost.push(name);
+      else if (!atFrontNow(g2, row2[1], x)) out.left.push(name);
+      else if (x.reg === at4) out.stands.push(name);
+      else return null;
+    }
+    return out;
+  }
+  function formedLine(g2, i, was, own, c, reg, bySea) {
+    const row2 = ROWS()[i];
+    rowDone(g2, i);
+    if (!row2 || !g2.human || row2[1] !== g2.human) return null;
+    const verb = bySea ? "landed at" : "arrived in";
+    const head = `${named3(c.name, true)} has ${verb} ${reg.name}`;
+    if (own) {
+      const from2 = fromOf(row2);
+      const { front } = holdsNow(g2, row2[1], from2, reg.id);
+      const here = present(g2, row2[1], from2);
+      if (!front.length || front.length !== here.length) return null;
+      const alone = front.length === 1 ? `${head} without your ${front[0].name}, which is at the front in ${placeOf3(g2, front[0])} and stays a corps of its own.` : `${head} without ${join(front.map((x) => `your ${x.name}`))}, which are at the front in ${join([...new Set(front.map((x) => placeOf3(g2, x)))])} and stay corps of their own.`;
+      return { alone, after: null };
+    }
+    if (!was) return null;
+    const tail = formedTail(was, c.name);
+    return tail ? { alone: `${head}, ${tail}`, after: `The arrival is ${tail}` } : null;
+  }
+  function joinedLine(g2, i, was, joined3, place3) {
+    const row2 = ROWS()[i];
+    rowDone(g2, i);
+    if (!row2 || !g2.human || row2[1] !== g2.human || !was) return null;
+    const tail = formedTail(was, row2[2]);
+    return tail ? { alone: `${named3(row2[2], true)} has joined ${named3(joined3)} in ${place3}, ${tail}`, after: `The arrival is ${tail}` } : null;
+  }
+  function notFormedLine(g2, i, place3) {
+    const row2 = ROWS()[i];
+    if (!row2 || !g2.human || row2[1] !== g2.human || g2.flags[toldKey(i)] === void 0) return null;
+    return `${named3(row2[2], true)}, due in ${place3}, will not form: every division of it already stands with your forces.`;
+  }
+  function formedTail(was, name) {
+    const yours = (x) => x === name ? "corps of that name" : x;
+    const fromYour = was.count === 1 && was.one ? `from your ${yours(was.one)}` : `from ${numberWord(was.count)} of your corps`;
+    if (was.lost.length) {
+      const been = `which ${was.lost.length === 1 ? "has" : "have"} been lost`;
+      return !was.count ? `formed without ${join(was.lost.map((x) => `your ${yours(x)}`))}, ${been}.` : `formed ${fromYour}, without ${join(was.lost.map((x) => named3(x)))}, ${been}.`;
+    }
+    if (!was.count || !(was.left.length + was.stands.length)) return null;
+    if (was.count === 1 && was.one) return `formed ${fromYour}, now that it ${was.stands.length ? "stands there" : "has left the front"}.`;
+    const left = was.left.length ? `${join(was.left.map((x) => named3(x)))} ${was.left.length === 1 ? "has" : "have"} left the front` : "";
+    const stands2 = was.stands.length ? `${join(was.stands.map((x) => named3(x)))} ${was.stands.length === 1 ? "stands" : "stand"} there` : "";
+    return `formed ${fromYour}, now that ${[left, stands2].filter(Boolean).join(" and ")}.`;
+  }
+  function waiting2(g2, nat) {
+    if (g2.flags.fromWait !== 1 || nat !== g2.human) return [];
+    const out = [];
+    ROWS().forEach((row2, i) => {
+      const since = g2.flags[toldKey(i)];
+      if (since === void 0 || row2[1] !== nat || g2.flags[`sent:${i}`]) return;
+      if (!contactRuleActs(g2, g2.byName[row2[5]])) return;
+      if (Array.isArray(row2[6]?.stops) && !row2[6].stops.includes(stopOf(g2))) return;
+      const at4 = g2.flags[atKey(i)];
+      if (at4 === void 0 || !g2.regions[at4]) return;
+      out.push({ i, row: row2, at: at4, since, from: fromOf(row2) });
+    });
+    return out;
+  }
+  function arrivalWaitOf(g2, c) {
+    if (c.dead || g2.flags.fromWait !== 1 || c.nat !== g2.human) return null;
+    for (const w of waiting2(g2, c.nat)) {
+      if (!w.from.includes(c.name)) continue;
+      const { front, unformed } = holdsNow(g2, c.nat, w.from, w.at);
+      if (!front.includes(c)) continue;
+      const others = front.filter((x) => x !== c).map((x) => named3(x.name));
+      const since = turnToDate(w.since).label;
+      const due = `An arrival due in ${g2.regions[w.at].name}, ${named3(w.row[2])}, is to be formed from this corps`;
+      const who = others.length ? `${join(["this corps", ...others])} leave` : "this corps leaves";
+      const rest = join(unformed.map((x) => named3(x)));
+      const whole2 = !unformed.length ? `${due}, and has waited for it since ${since}. It forms the month after ${who} the front.` : `${due} and from ${rest}, which ${hasOrHave(unformed)} not formed yet, and has waited for it since ${since}. It forms once ${who} the front and ${rest} ${hasOrHave(unformed)} formed.`;
+      return { short: "An arrival waits for it", whole: theWords(whole2) };
+    }
+    return null;
+  }
+  function rowsWaitingOnRows(g2, nat) {
+    if (!nat) return [];
+    const out = [];
+    for (const w of waiting2(g2, nat)) {
+      const { front, unformed } = holdsNow(g2, nat, w.from, w.at);
+      if (front.length || !unformed.length) continue;
+      out.push(theWords(`${named3(w.row[2], true)}, due in ${g2.regions[w.at].name}, has waited since ${turnToDate(w.since).label} for ${join(unformed.map((x) => named3(x)))}, which ${hasOrHave(unformed)} not formed yet.`));
+    }
+    return out;
+  }
+  var FROMWAIT_ROW = {
+    id: "fromwaitrule",
+    name: "Arrivals wait while their corps are at the front",
+    line: "An arrival due on a date and formed from a corps already in the field, yours or any other side's, waits while that corps is at the front, and forms the month after the corps leaves it. Where an arrival is offered to you, you decide instead. Off, the corps is taken wherever it stands, as before. This changes the month some arrivals form. It works only in a grand campaign: from History's shape to Anything goes, and at By the book and Close to history once History's book has closed where the arrival is due. It can be switched on or off in any month.",
+    // The notes the 3D shows on pressing the row (the bridge's act('fromwaitrule:on' / ':off') reads them here and holds
+    // no words of its own): switched on, switched off, and refused outside a grand campaign. The UI director's section 7,
+    // case 1, 00:44Z, 26 November 2026.
+    on: "Arrivals now wait while their corps are at the front: one formed from a corps in the field forms the month after that corps leaves the front.",
+    off: "Arrivals no longer wait: a corps an arrival is formed from is taken wherever it stands, as before.",
+    refused: "Arrivals wait for their corps only in a grand campaign."
+  };
+  var fromWaitOn = (g2) => g2.flags.open === 1 && g2.flags.fromWait === 1;
+  function setFromWait(g2, on2) {
+    if (g2.flags.open !== 1) return false;
+    if (on2) {
+      g2.flags.fromWait = 1;
+      return true;
+    }
+    delete g2.flags.fromWait;
+    return true;
+  }
+
   // ../../src/campaign/domination.ts
   var DOMINATION = domination_default;
   var SIDES = ["axis", "allies"];
@@ -43138,6 +43352,7 @@
   }
   function leave(g2, n) {
     for (const c of g2.corps.filter((c2) => c2.nat === n.id)) removeCorps(g2, c);
+    nationDone(g2, n.id);
     endVoyages(g2, n.id);
     fleetsOnFall(g2, n.id);
     airOnFall(g2, n.id);
@@ -43222,6 +43437,7 @@
     n.fellOn = { turn: g2.turn, week: g2.week, to, how: "terms" };
     delete n.freedOn;
     for (const c of g2.corps.filter((c2) => c2.nat === n.id)) removeCorps(g2, c);
+    nationDone(g2, n.id);
     endVoyages(g2, n.id);
     fleetsOnFall(g2, n.id);
     airOnFall(g2, n.id);
@@ -46799,7 +47015,7 @@
     const c = g2.nations[nat]?.capital ?? -1;
     return c >= 0 ? c : void 0;
   };
-  var named3 = (row2) => !row2.generic;
+  var named4 = (row2) => !row2.generic;
   function refresh2(g2, row2, h, ctx) {
     if (!h.buyer) {
       h.way = "none";
@@ -46830,7 +47046,7 @@
     const me = g2.human;
     if (me && (me === row2.seller || me === buyer)) headline(g2, "info", words, me, capOf2(g2, row2.seller));
     else if (me && was === me) headline(g2, "info", `${plain2} Your term is over.`, me, capOf2(g2, row2.seller));
-    else if (named3(row2) && buyer !== was) headline(g2, "event", plain2, row2.seller, capOf2(g2, row2.seller));
+    else if (named4(row2) && buyer !== was) headline(g2, "event", plain2, row2.seller, capOf2(g2, row2.seller));
   }
   function openRound(g2, row2, ctx) {
     const bidders = biddersOf(g2, row2, ctx);
@@ -46952,7 +47168,7 @@
         if (!feeds.has(k)) feeds.set(k, /* @__PURE__ */ new Set());
         feeds.get(k).add(row2.name);
         fallOf.set(k, P.fall);
-        if (named3(row2)) loud.add(k);
+        if (named4(row2)) loud.add(k);
       }
     }
     for (const f of legionFeeds(g2)) {
@@ -51203,13 +51419,13 @@
   }
   var list3 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   var cap4 = (x) => x.charAt(0).toUpperCase() + x.slice(1);
-  var named4 = (xs) => cap4(list3(xs.map(theGroupName)));
+  var named5 = (xs) => cap4(list3(xs.map(theGroupName)));
   function strafedLine(rep, reader) {
     if (rep.mission !== "ground" || !rep.strafed || reader === null || reader !== rep.attNat) return "";
     const little = rep.strafeLittle?.names ?? [], end = rep.strafeEnd ?? {};
     const short = end.short ?? [], fuel = end.fuel ?? [], caught = end.caught ?? [];
     const full = rep.strafed.filter((n) => !little.includes(n) && !fuel.includes(n) && !caught.includes(n));
-    const say = (xs, words) => !xs.length ? "" : `${named4(xs)} ${typeof words === "string" ? words : words[xs.length === 1 ? 0 : 1]}`;
+    const say = (xs, words) => !xs.length ? "" : `${named5(xs)} ${typeof words === "string" ? words : words[xs.length === 1 ? 0 : 1]}`;
     const lines2 = [say(full, "went down and strafed."), say(short, STRAFE_WORDS.short), say(fuel, STRAFE_WORDS.fuel), say(caught, STRAFE_WORDS.caught), say(little, STRAFE_WORDS.little), say(rep.strafeStayed ?? [], STRAFE_STAYED)].filter(Boolean);
     return lines2.length ? lines2.join(" ") : STRAFE_WORDS.nobody;
   }
@@ -51228,7 +51444,7 @@
     const n = Math.round(cut2 * 100);
     return shipRule(g2, "dc") ? `should lose ${n > 0 ? `about ${n}%` : "almost none"}` : `could lose up to ${n}%`;
   }
-  function placeOf3(g2, kind, target, viewer = null) {
+  function placeOf4(g2, kind, target, viewer = null) {
     if (kind === "strike") return g2.seas[target] ? seaWhat(g2.seas[target].name) : "the sea";
     if (kind === "fleet") {
       const t = g2.fleets.find((x) => x.id === target);
@@ -51313,7 +51529,7 @@
     const kind = kindOf2(f);
     const away2 = f.flew === g2.turn && isOffensive(f.mission);
     const with_ = escorted(g2, f);
-    const place3 = placeOf3(g2, kindFlown(f.mission), f.target, viewer);
+    const place3 = placeOf4(g2, kindFlown(f.mission), f.target, viewer);
     const deck = afloat(f), at4 = groupAt(g2, f);
     const fleet = deck ? carrierOf(g2, f) : f.ashore !== void 0 ? g2.fleets.find((c) => c.id === f.ashore) ?? null : null;
     const own = f.nat === viewer;
@@ -51685,7 +51901,7 @@
       let far = Math.round(d) > 0 ? `${num3(d)} km` : sea ? from2.ship !== void 0 ? "carriers in these waters" : "based on these shores" : from2.ship !== void 0 ? "carriers off this coast" : "based at the target";
       if (weatherOn(g2) && skyOf(g2, skyZone(g2, kind, t)) === "cloud") far += " · cloud";
       const known = quarry && fleetKnown(g2, quarry, nat) !== "exact" ? "report" : "exact";
-      const name = kind === "fleet" ? placeOf3(g2, kind, t, nat).replace(/^the /, "") : p.name;
+      const name = kind === "fleet" ? placeOf4(g2, kind, t, nat).replace(/^the /, "") : p.name;
       out.push({ id: t, sea, zone, known, name, holder: quarry ? quarry.nat : sea ? "" : g2.regions[t].ctrl, x: p.x, y: p.y, km: d, far, groups: can2.length, what: whatIsThere(g2, nat, kind, t, sight2) });
     }
     return out.sort((a, b) => a.km - b.km || a.id - b.id);
@@ -51699,7 +51915,7 @@
   var cityLine = (g2, target, pts) => `Should leave about ${pts < 1 ? "under 1" : Math.round(pts)}% more of ${townName(g2.regions[target])} in ruins: its factories and its pay fall by as much until its holder repairs it.`;
   function effectsOf(g2, kind, target, fc, nat) {
     const out = [];
-    const place3 = placeOf3(g2, kind, target);
+    const place3 = placeOf4(g2, kind, target);
     if ((kind === "bomb" || kind === "night") && armedAt(g2, nat) === target) {
       out.push(strikeWords(g2, nat, target));
       return out;
@@ -51786,7 +52002,7 @@
   }
   function planRaid(g2, kind, target, ids2, nat = g2.human, truth = false) {
     const row2 = kindRow(kind);
-    const place3 = placeOf3(g2, kind, target, nat);
+    const place3 = placeOf4(g2, kind, target, nat);
     const quarry = kind === "fleet" ? g2.fleets.find((x) => x.id === target) ?? null : null;
     const plan = {
       kind,
@@ -61557,23 +61773,23 @@
   var cap8 = (s) => s[0].toUpperCase() + s.slice(1);
   var planes = (n, one2) => `${n.toLocaleString("en-US")} ${one2}${n === 1 ? "" : "s"}`;
   var airFleetsOf = (g2, nat) => g2.airFleets.filter((f) => f.nat === nat);
-  var ROWS = null;
+  var ROWS2 = null;
   var ROWS_N = -1;
   var ROW_KEPT = /* @__PURE__ */ new WeakMap();
   var rowOf = (f) => {
-    if (!ROWS || ROWS_N !== AIR.fleets.length) {
-      ROWS = /* @__PURE__ */ new Map();
+    if (!ROWS2 || ROWS_N !== AIR.fleets.length) {
+      ROWS2 = /* @__PURE__ */ new Map();
       ROWS_N = AIR.fleets.length;
       for (const r of AIR.fleets) {
         const k = `${r.nat}|${r.name}`;
-        if (!ROWS.has(k)) ROWS.set(k, r);
+        if (!ROWS2.has(k)) ROWS2.set(k, r);
       }
     }
     const nat = f.raised ?? f.nat, name = f.parent ?? f.name;
     const kept4 = ROW_KEPT.get(f);
-    if (kept4 && kept4.rows === ROWS && kept4.nat === nat && kept4.name === name) return kept4.row;
-    const row2 = ROWS.get(`${nat}|${name}`);
-    ROW_KEPT.set(f, { rows: ROWS, nat, name, row: row2 });
+    if (kept4 && kept4.rows === ROWS2 && kept4.nat === nat && kept4.name === name) return kept4.row;
+    const row2 = ROWS2.get(`${nat}|${name}`);
+    ROW_KEPT.set(f, { rows: ROWS2, nat, name, row: row2 });
     return row2;
   };
   var homeCommand = (f) => !!rowOf(f)?.home;
@@ -65429,7 +65645,7 @@
     });
   }
   var open2 = (g2, c, to, joining) => allied(g2, c.nat, to.ctrl) && !hostileUnits(g2, to, c.nat).length && (to.id === c.reg || joining || friendlyUnits(g2, to, c.nat).filter((u) => u.kind !== "eng").length < STACK + 2);
-  function join(g2, c, into) {
+  function join2(g2, c, into) {
     const a = into.str * into.divs, b = c.str * c.divs, divs = into.divs + c.divs, men2 = a + b;
     if (men2 > 0) {
       into.xp = (into.xp * a + c.xp * b) / men2;
@@ -65556,7 +65772,7 @@
       delete g2.flags[`bk:b:${c.id}`];
       if (row2.free) return moved;
       if (into && into.reg === c.reg && c.town === void 0) {
-        join(g2, c, into);
+        join2(g2, c, into);
         return moved;
       }
       put(g2, c, to, months4);
@@ -67189,13 +67405,13 @@
     lines2.push({
       label: "The sea behind the beach",
       value: contested ? "contested" : open3 ? "stays open" : "can be closed",
-      effect: contested ? "yours today, but he can bring enough to fight you for it" : open3 ? "the supply ships reach the force" : island ? `cut off, the force can hold out for about ${numberWord(months4)} months on what it carries` : "the force ashore would be cut off from its supplies"
+      effect: contested ? "yours today, but he can bring enough to fight you for it" : open3 ? "the supply ships reach the force" : island ? `cut off, the force can hold out for about ${numberWord2(months4)} months on what it carries` : "the force ashore would be cut off from its supplies"
     });
     if (!to.port) lines2.push({ label: "A harbour", value: `none at ${to.name}`, effect: "the force is fed only once it holds a port on an open sea" });
     return { sea, there: e.ships, come, air: e.air, kept: kept4, shy: shy2, foe, own, need, open: open3, contested, island, months: months4, port: !!to.port, lines: lines2 };
   }
   var round = (x) => Math.round(x).toLocaleString("en-US");
-  var numberWord = (n) => ["no", "one", "two", "three", "four", "five", "six"][n] ?? String(n);
+  var numberWord2 = (n) => ["no", "one", "two", "three", "four", "five", "six"][n] ?? String(n);
   function crossingAccount(g2, nat, path, to, reach3 = skyReach(g2, nat)) {
     const ds = seaDangers(g2, nat, path, to);
     const risk = caughtIn(ds);
@@ -67764,7 +67980,7 @@
     const hits = anchorStrikes(g2, f);
     if (!hits.length) return "";
     const n = hits.reduce((s, e) => s + e.n, 0), r = safeHarbour(g2, f);
-    const lost = n ? `${n === 1 ? "one ship" : `${numberWord(n)} ships`} lost there this month and last` : "struck there this month or last";
+    const lost = n ? `${n === 1 ? "one ship" : `${numberWord2(n)} ships`} lost there this month and last` : "struck there this month or last";
     return `Struck at anchor at ${f.port}: ${lost}. ${r ? `Nearest friendly harbour out of the strikers' reach: ${r.name}${voyageMonths(g2, f, r) ? `, ${voyageMonths(g2, f, r) + 1} months away` : ""}.` : "No friendly harbour is out of the strikers' reach: fighters over the harbour keep them off."}`;
   }
   function withdraws(g2, f) {
@@ -70374,15 +70590,15 @@
   }
 
   // ../../src/campaign/islands.ts
-  var ROWS2 = FAR_STAGE ? far_islands_default.islands : null;
+  var ROWS3 = FAR_STAGE ? far_islands_default.islands : null;
   function islandOf(g2, r) {
-    if (!ROWS2 || !r || !farOn(g2)) return null;
-    const row2 = ROWS2[r.name];
+    if (!ROWS3 || !r || !farOn(g2)) return null;
+    const row2 = ROWS3[r.name];
     return row2 ? { room: row2[0], floor: row2[1] === "quarter" ? 0.25 : 0.5, islet: row2[2] === 1 } : null;
   }
   function roomAt(g2, r, nat) {
-    if (!ROWS2 || !r || !farOn(g2)) return STACK;
-    const row2 = ROWS2[r.name];
+    if (!ROWS3 || !r || !farOn(g2)) return STACK;
+    const row2 = ROWS3[r.name];
     if (!row2) return STACK;
     const inTown = r.garr ? r.garr.filter((c) => allied(g2, nat, c.nat) && !roomless(g2, c)).length : 0;
     return Math.max(0, row2[0] - inTown);
@@ -70413,8 +70629,8 @@
     return (line ? say(isle.room, [...here.filter((u) => u.kind !== "eng"), ...town], "corps", line) : null) ?? (corps.length > line ? say(engRoom(g2, r), here.filter((u) => u.kind === "eng"), "engineer corps beside its troops", corps.length - line) : null);
   }
   function islandLook(g2, r) {
-    if (!ROWS2 || !r || !farOn(g2)) return "";
-    return ROWS2[r.name]?.[3] ?? "";
+    if (!ROWS3 || !r || !farOn(g2)) return "";
+    return ROWS3[r.name]?.[3] ?? "";
   }
 
   // ../../data/campaign/drawn.json
@@ -73835,213 +74051,6 @@
     const T = SUPPORT.tech;
     const has = (id) => hasTech(g2, c.nat, id);
     return { antiTank: [T.antiTank, T.tankDestroyers, T.handHeld].filter(has).length, machineGuns: has(T.support), mortars: has(T.support), snipers: true };
-  }
-
-  // ../../src/campaign/arrivalwaits.ts
-  var ROWS3 = () => setup_1939_default.expeditions ?? [];
-  var toldKey = (i) => `rowTold:${i}`;
-  var atKey = (i) => `rowAt:${i}`;
-  var frontKey = (i) => `rowFront:${i}`;
-  var idKey = (i, k) => `rowId:${i}:${k}`;
-  var theOf = (name) => /^(the |[A-Z] Force|Creforce)/i.test(name) || /Force$/.test(name.split("(")[0].trim()) ? "" : "the ";
-  var named5 = (name, head = false) => {
-    const a = theOf(name);
-    return a ? `${head ? "The" : "the"} ${name}` : name;
-  };
-  var NUMBER = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
-  var numberWord2 = (n) => NUMBER[n] ?? String(n);
-  var join2 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
-  var placeOf4 = (g2, c) => g2.regions[c.reg].name;
-  var fromOf = (row2) => Array.isArray(row2?.[6]?.from) ? row2[6].from : [];
-  var present = (g2, nat, from2) => g2.corps.filter((x) => x.nat === nat && !x.dead && from2.includes(x.name));
-  var inOrder = (from2, cs) => [...cs].sort((a, b) => from2.indexOf(a.name) - from2.indexOf(b.name));
-  var holdsNow = (g2, nat, from2, at4) => {
-    const h = rowHolds(g2, nat, from2, at4);
-    return { front: inOrder(from2, h.front), unformed: h.unformed };
-  };
-  var hasOrHave = (xs) => xs.length === 1 ? "has" : "have";
-  function areAtFront(g2, front) {
-    const groups = [];
-    for (const c of front) {
-      const place3 = placeOf4(g2, c);
-      const at4 = groups.find((x) => x.place === place3);
-      if (at4) at4.cs.push(c);
-      else groups.push({ place: place3, cs: [c] });
-    }
-    let k = 0;
-    const said = groups.map((x) => `${join2(x.cs.map((c) => named5(c.name, k++ === 0)))} in ${x.place}`);
-    if (groups.length === 1 || groups.every((x) => x.cs.length === 1)) return `${join2(said)} are at the front`;
-    return `${said.slice(0, -1).join(", ")}, and ${said[said.length - 1]}, are at the front`;
-  }
-  function waitBeginsLine(g2, nat, rowName, place3, from2, front, unformed) {
-    const head = `${named5(rowName, true)} is due in ${place3} this month`;
-    const n = present(g2, nat, from2).length;
-    if (front.length && unformed.length) {
-      const at4 = front.length === 1 ? `${named5(front[0].name, true)} is at the front in ${placeOf4(g2, front[0])}` : areAtFront(g2, front);
-      const all = front.length + unformed.length === 2 ? "both" : "all of them";
-      return `${head}. ${at4}, and ${join2(unformed.map((x) => named5(x)))}, which it is also formed from, ${hasOrHave(unformed)} not formed yet, so the arrival waits for ${all}.`;
-    }
-    if (unformed.length) {
-      return unformed.length === 1 ? `${head}, formed from ${named5(unformed[0])}, which has not formed yet. The arrival waits for it.` : `${head}, formed from ${join2(unformed.map((x) => named5(x)))}, which have not formed yet. The arrival waits for them.`;
-    }
-    if (!front.length) return null;
-    if (n === 1) return `${head}, formed from your ${front[0].name}, which is at the front in ${placeOf4(g2, front[0])}. The arrival waits, and forms the month after that corps leaves the front.`;
-    const several2 = `${head}, formed from ${numberWord2(n)} of your corps.`;
-    if (front.length === 1) return `${several2} ${named5(front[0].name, true)} is at the front in ${placeOf4(g2, front[0])}, so the arrival waits, and forms the month after that corps leaves the front.`;
-    return `${several2} ${areAtFront(g2, front)}, so the arrival waits, and forms the month after ${front.length === 2 ? "both" : "all of them"} leave the front.`;
-  }
-  function tellWait(g2, i, at4) {
-    const row2 = ROWS3()[i];
-    if (!row2 || g2.flags.fromWait !== 1 || !g2.human || row2[1] !== g2.human || !at4) return;
-    const nat = row2[1], from2 = fromOf(row2);
-    const { front, unformed } = holdsNow(g2, nat, from2, at4.id);
-    let mask = g2.flags[frontKey(i)] ?? 0;
-    for (const c of front) {
-      const k = from2.indexOf(c.name);
-      mask |= 1 << k;
-      g2.flags[idKey(i, k)] = c.id;
-    }
-    if (mask) g2.flags[frontKey(i)] = mask;
-    else delete g2.flags[frontKey(i)];
-    g2.flags[atKey(i)] = at4.id;
-    if (g2.flags[toldKey(i)] !== void 0) return;
-    g2.flags[toldKey(i)] = g2.turn;
-    const line = waitBeginsLine(g2, nat, row2[2], at4.name, from2, front, unformed);
-    if (line) headline(g2, "info", line, nat, at4.id);
-  }
-  function rowDone(g2, i) {
-    delete g2.flags[toldKey(i)];
-    delete g2.flags[atKey(i)];
-    delete g2.flags[frontKey(i)];
-    fromOf(ROWS3()[i]).forEach((_, k) => {
-      delete g2.flags[idKey(i, k)];
-    });
-  }
-  var onWall = (g2, nat, name, since) => since !== void 0 && (g2.stories?.fallen ?? []).some((f) => f.nat === nat && f.name === name && f.turn >= since);
-  function waitedOn(g2, i, at4) {
-    const mask = g2.flags[frontKey(i)];
-    if (!mask) return null;
-    const row2 = ROWS3()[i];
-    const from2 = fromOf(row2);
-    const here = present(g2, row2[1], from2);
-    const out = { count: here.length, one: here.length === 1 ? here[0].name : null, left: [], stands: [], lost: [] };
-    for (const [k, name] of from2.entries()) {
-      if ((mask & 1 << k) === 0) continue;
-      const x = here.find((c) => c.name === name);
-      const id = g2.flags[idKey(i, k)];
-      if (!x && id !== void 0 && g2.corps.some((c) => c.id === id && !c.dead)) return null;
-      if (x && id !== void 0 && x.id !== id) return null;
-      if (!x && !onWall(g2, row2[1], name, g2.flags[toldKey(i)])) return null;
-      if (!x) out.lost.push(name);
-      else if (!atFrontNow(g2, row2[1], x)) out.left.push(name);
-      else if (x.reg === at4) out.stands.push(name);
-      else return null;
-    }
-    return out;
-  }
-  function formedLine(g2, i, was, own, c, reg, bySea) {
-    const row2 = ROWS3()[i];
-    rowDone(g2, i);
-    if (!row2 || !g2.human || row2[1] !== g2.human) return null;
-    const verb = bySea ? "landed at" : "arrived in";
-    const head = `${named5(c.name, true)} has ${verb} ${reg.name}`;
-    if (own) {
-      const from2 = fromOf(row2);
-      const { front } = holdsNow(g2, row2[1], from2, reg.id);
-      const here = present(g2, row2[1], from2);
-      if (!front.length || front.length !== here.length) return null;
-      const alone = front.length === 1 ? `${head} without your ${front[0].name}, which is at the front in ${placeOf4(g2, front[0])} and stays a corps of its own.` : `${head} without ${join2(front.map((x) => `your ${x.name}`))}, which are at the front in ${join2([...new Set(front.map((x) => placeOf4(g2, x)))])} and stay corps of their own.`;
-      return { alone, after: null };
-    }
-    if (!was) return null;
-    const tail = formedTail(was, c.name);
-    return tail ? { alone: `${head}, ${tail}`, after: `The arrival is ${tail}` } : null;
-  }
-  function joinedLine(g2, i, was, joined3, place3) {
-    const row2 = ROWS3()[i];
-    rowDone(g2, i);
-    if (!row2 || !g2.human || row2[1] !== g2.human || !was) return null;
-    const tail = formedTail(was, row2[2]);
-    return tail ? { alone: `${named5(row2[2], true)} has joined ${named5(joined3)} in ${place3}, ${tail}`, after: `The arrival is ${tail}` } : null;
-  }
-  function notFormedLine(g2, i, place3) {
-    const row2 = ROWS3()[i];
-    if (!row2 || !g2.human || row2[1] !== g2.human || g2.flags[toldKey(i)] === void 0) return null;
-    return `${named5(row2[2], true)}, due in ${place3}, will not form: every division of it already stands with your forces.`;
-  }
-  function formedTail(was, name) {
-    const yours = (x) => x === name ? "corps of that name" : x;
-    const fromYour = was.count === 1 && was.one ? `from your ${yours(was.one)}` : `from ${numberWord2(was.count)} of your corps`;
-    if (was.lost.length) {
-      const been = `which ${was.lost.length === 1 ? "has" : "have"} been lost`;
-      return !was.count ? `formed without ${join2(was.lost.map((x) => `your ${yours(x)}`))}, ${been}.` : `formed ${fromYour}, without ${join2(was.lost.map((x) => named5(x)))}, ${been}.`;
-    }
-    if (!was.count || !(was.left.length + was.stands.length)) return null;
-    if (was.count === 1 && was.one) return `formed ${fromYour}, now that it ${was.stands.length ? "stands there" : "has left the front"}.`;
-    const left = was.left.length ? `${join2(was.left.map((x) => named5(x)))} ${was.left.length === 1 ? "has" : "have"} left the front` : "";
-    const stands2 = was.stands.length ? `${join2(was.stands.map((x) => named5(x)))} ${was.stands.length === 1 ? "stands" : "stand"} there` : "";
-    return `formed ${fromYour}, now that ${[left, stands2].filter(Boolean).join(" and ")}.`;
-  }
-  function waiting2(g2, nat) {
-    if (g2.flags.fromWait !== 1 || nat !== g2.human) return [];
-    const out = [];
-    ROWS3().forEach((row2, i) => {
-      const since = g2.flags[toldKey(i)];
-      if (since === void 0 || row2[1] !== nat || g2.flags[`sent:${i}`]) return;
-      if (!contactRuleActs(g2, g2.byName[row2[5]])) return;
-      if (Array.isArray(row2[6]?.stops) && !row2[6].stops.includes(stopOf(g2))) return;
-      const at4 = g2.flags[atKey(i)];
-      if (at4 === void 0 || !g2.regions[at4]) return;
-      out.push({ i, row: row2, at: at4, since, from: fromOf(row2) });
-    });
-    return out;
-  }
-  function arrivalWaitOf(g2, c) {
-    if (c.dead || g2.flags.fromWait !== 1 || c.nat !== g2.human) return null;
-    for (const w of waiting2(g2, c.nat)) {
-      if (!w.from.includes(c.name)) continue;
-      const { front, unformed } = holdsNow(g2, c.nat, w.from, w.at);
-      if (!front.includes(c)) continue;
-      const others = front.filter((x) => x !== c).map((x) => named5(x.name));
-      const since = turnToDate(w.since).label;
-      const due = `An arrival due in ${g2.regions[w.at].name}, ${named5(w.row[2])}, is to be formed from this corps`;
-      const who = others.length ? `${join2(["this corps", ...others])} leave` : "this corps leaves";
-      const rest = join2(unformed.map((x) => named5(x)));
-      const whole2 = !unformed.length ? `${due}, and has waited for it since ${since}. It forms the month after ${who} the front.` : `${due} and from ${rest}, which ${hasOrHave(unformed)} not formed yet, and has waited for it since ${since}. It forms once ${who} the front and ${rest} ${hasOrHave(unformed)} formed.`;
-      return { short: "An arrival waits for it", whole: theWords(whole2) };
-    }
-    return null;
-  }
-  function rowsWaitingOnRows(g2, nat) {
-    if (!nat) return [];
-    const out = [];
-    for (const w of waiting2(g2, nat)) {
-      const { front, unformed } = holdsNow(g2, nat, w.from, w.at);
-      if (front.length || !unformed.length) continue;
-      out.push(theWords(`${named5(w.row[2], true)}, due in ${g2.regions[w.at].name}, has waited since ${turnToDate(w.since).label} for ${join2(unformed.map((x) => named5(x)))}, which ${hasOrHave(unformed)} not formed yet.`));
-    }
-    return out;
-  }
-  var FROMWAIT_ROW = {
-    id: "fromwaitrule",
-    name: "Arrivals wait while their corps are at the front",
-    line: "An arrival due on a date and formed from a corps already in the field, yours or any other side's, waits while that corps is at the front, and forms the month after the corps leaves it. Where an arrival is offered to you, you decide instead. Off, the corps is taken wherever it stands, as before. This changes the month some arrivals form. It works only in a grand campaign: from History's shape to Anything goes, and at By the book and Close to history once History's book has closed where the arrival is due. It can be switched on or off in any month.",
-    // The notes the 3D shows on pressing the row (the bridge's act('fromwaitrule:on' / ':off') reads them here and holds
-    // no words of its own): switched on, switched off, and refused outside a grand campaign. The UI director's section 7,
-    // case 1, 00:44Z, 26 November 2026.
-    on: "Arrivals now wait while their corps are at the front: one formed from a corps in the field forms the month after that corps leaves the front.",
-    off: "Arrivals no longer wait: a corps an arrival is formed from is taken wherever it stands, as before.",
-    refused: "Arrivals wait for their corps only in a grand campaign."
-  };
-  var fromWaitOn = (g2) => g2.flags.open === 1 && g2.flags.fromWait === 1;
-  function setFromWait(g2, on2) {
-    if (g2.flags.open !== 1) return false;
-    if (on2) {
-      g2.flags.fromWait = 1;
-      return true;
-    }
-    delete g2.flags.fromWait;
-    return true;
   }
 
   // ../../data/campaign/desert.json
@@ -77765,6 +77774,7 @@
     X.alive = false;
     X.fellOn = { turn: g2.turn, week: g2.week, to: by2, how: "beaten" };
     recordFall(g2, nat, by2, "beaten");
+    nationDone(g2, nat);
     rememberWars(g2, nat);
     const armistice = nat === "FRA" && !g2.flags.dom && !X.freedOn;
     delete X.freedOn;
@@ -84678,7 +84688,7 @@
     if (lift2.lift < want) wanting.push(lift2.building.length ? `shipping (the ships carry ${lift2.lift} corps a month; troopships for more are on the slips, the next lot ready in ${turnToDate(lift2.building[0]).label})` : `shipping (the ships carry ${lift2.lift} corps a month)`);
     if (wanting.length) return { ...plan, state: "waiting", text: `Your staff is preparing ${way}. Still wanting: ${listAnd3(wanting)}.` };
     const h = x.account.hold;
-    if (!h.open) return { ...plan, state: "warned", text: h.island ? `Your staff has ${way} prepared, and it waits: the force can take ${plan.to.name}, but the enemy can close ${seaWhat(g2.seas[h.sea].name)} behind it, and cut off it holds out for about ${numberWord(h.months)} months on what it carries. The order to sail under that warning is yours alone.` : `Your staff has ${way} prepared, and it waits: once the force is ashore the enemy can close ${seaWhat(g2.seas[h.sea].name)} behind it. The order to sail under that warning is yours alone.` };
+    if (!h.open) return { ...plan, state: "warned", text: h.island ? `Your staff has ${way} prepared, and it waits: the force can take ${plan.to.name}, but the enemy can close ${seaWhat(g2.seas[h.sea].name)} behind it, and cut off it holds out for about ${numberWord2(h.months)} months on what it carries. The order to sail under that warning is yours alone.` : `Your staff has ${way} prepared, and it waits: once the force is ashore the enemy can close ${seaWhat(g2.seas[h.sea].name)} behind it. The order to sail under that warning is yours alone.` };
     const lost = Math.round(x.account.loss * 100);
     return { ...plan, state: "ready", text: `Your staff reports ${way} ready: the way is open, ${force3} corps stand on the quay and the ships can carry ${Math.min(force3, lift2.lift)} of them in a month${lost > 0 ? `, with about ${lost} men in a hundred likely to be lost at sea` : ""}.${h.contested ? ` ${seaHead(g2.seas[h.sea].name)} behind the beach ${seaIs(g2.seas[h.sea].name)} yours today, but the enemy can bring ships enough to fight you for ${seaPlural(g2.seas[h.sea].name) ? "them" : "it"}.` : ""} The order to land is yours.` };
   }
