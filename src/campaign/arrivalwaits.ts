@@ -15,8 +15,8 @@
  *   rowFront:<i>  which of the row's named corps were at the front in any month it waited, a bit mask over the order of
  *                 its `from`, kept across the waiting months; none where it only ever waited for another row. The
  *                 formed headline names them.
- * All three are cleared wherever the row is sent or struck (`rowDone`). With the switch off none is ever written and
- * nothing prints.
+ * All three are cleared wherever the row is sent or struck (`rowDone`), and only there (the switch turned off keeps
+ * them until then). With the switch off none is ever written and nothing prints.
  */
 import setup from '../../data/campaign/setup-1939.json';
 import { turnToDate } from '../core/ticket';
@@ -268,18 +268,23 @@ export const fromWaitOn = (g: Game): boolean => g.flags.open === 1 && g.flags.fr
 /**
  * Switches 'fromWait' on or off in any month of a grand campaign; outside one it does nothing and answers false. On,
  * a row that takes named corps whole waits from the next month it comes due (`expeditions` reads the flag each month).
- * Off deletes the flag, as a war that never had it, and the telling's own flags with it (`rowTold:`, `rowAt:`,
- * `rowFront:`), so a later "on" starts clean: a row waiting this month forms next month wherever its corps stand, with
- * today's headline. The rule's own `wait:<i>` stays: it is the month its half year is counted from, as before. The
- * design director's answer 2 of 00:43Z, 26 November 2026: "Keep the rule's own wait marker. Off acts from the month it
- * is turned off, and what already happened stays in the save, as everywhere." (tests/from-wait-switch-r2: a war never
- * switched on is the whole save of off; tests/from-wait-switch-war: a war switched off mid-war plays by off from that
- * month with its past kept.)
+ * Off deletes the flag, as a war that never had it: a row waiting this month forms next month wherever its corps
+ * stand, with today's headline, and from the moment it is off nothing of the telling is shown (every reader here reads
+ * the switch). The telling's own flags (`rowTold:`, `rowAt:`, `rowFront:`) are NOT cleared here: they go where the row
+ * is sent or struck (`rowDone`), the design director's answer 3 of 00:43Z, 26 November 2026 ("Clear the telling's three
+ * flags where the row is sent or struck (no dead data)"). So a row told, the switch then turned off and on again before
+ * it forms, is not told a second time (section 1: "one headline, once"), and its standing line keeps the wait's first
+ * month (section 7 case 8: "keep the wait's month ... so it is true whatever came before"). A war switched on and off
+ * before any row has waited holds none of them, so its save is the untouched war's; one where a row had waited keeps
+ * them until that row forms or is struck. The rule's own `wait:<i>` stays too: it is the month its half year is counted
+ * from, as before. Her answer 2 of 00:43Z: "Keep the rule's own wait marker. Off acts from the month it is turned off,
+ * and what already happened stays in the save, as everywhere." (tests/from-wait-switch-r2: a war never switched on is
+ * the whole save of off; tests/from-wait-switch-war: a war switched off mid-war plays by off from that month with its
+ * past kept; tests/from-wait-switch-told and -far: off and on again inside one month tells nothing twice.)
  */
 export function setFromWait(g: Game, on: boolean): boolean {
   if (g.flags.open !== 1) return false;
   if (on) { g.flags.fromWait = 1; return true; }
   delete g.flags.fromWait;
-  for (const k of Object.keys(g.flags)) if (k.startsWith('rowTold:') || k.startsWith('rowAt:') || k.startsWith('rowFront:')) delete g.flags[k];
   return true;
 }

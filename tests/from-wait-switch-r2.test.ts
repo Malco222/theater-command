@@ -2,9 +2,10 @@
 // as rewritten at 22:13Z: "It can be switched on or off in any month."). Arrivals wait while their corps are at the
 // front: the setter `setFromWait` (arrivalwaits.ts), the bridge's act('fromwaitrule:on' / ':off') and TC.fromWait(on),
 // the view's `fromWait`, and the ship list's 'fromwaitrule' (the entry only: the rule ships off until the design
-// director's gate). Off is the war as one that never had it where it can: the flag goes, and the telling's own flags
-// with it; a row waiting this month forms next month wherever its corps stand. On in a running war, a row waits from
-// the next month it comes due.
+// director's gate). Off is the war as one that never had it where it can: the flag goes; the telling's own flags stay
+// until the row is sent or struck (the design director's answer 3), and nothing of the telling shows while it is off; a
+// row waiting this month forms next month wherever its corps stand. On in a running war, a row waits from the next
+// month it comes due.
 //
 // The board is tests/from-wait-r2's: September 1939, Grenzmark beside Poznan, Poland at war with Germany; Bavaria and
 // Magdeburg quiet. Germany is the player's. The rows are added at the foot of the data's list and taken off after each test.
@@ -125,7 +126,7 @@ describe('the switch through the bridge', () => {
 });
 
 describe('off and on in a running war', () => {
-  it("off in a waiting month: the waiting row forms the next month where its corps stands, and the telling's flags are cleared", () => {
+  it("off in a waiting month: the waiting row forms the next month where its corps stands, and the telling's flags go with it", () => {
     const { g, i, held } = board(true);
     month(g, 2);
     expect(g.flags[`wait:${i}`]).toBe(2);
@@ -136,7 +137,9 @@ describe('off and on in a running war', () => {
     expect((TC().act('fromwaitrule:off') as { ok: boolean }).ok).toBe(true);
     const h = fromSave();
     expect(h.flags.fromWait).toBeUndefined();
-    expect(telFlags(h)).toEqual([]);
+    // (The telling's flags stay until the row is sent or struck: the design director's answer 3, "Clear the telling's
+    // three flags where the row is sent or struck". Off shows nothing of them.)
+    expect(telFlags(h).sort()).toEqual([`rowAt:${i}`, `rowFront:${i}`, `rowTold:${i}`]);
     // (The rule's own month stays: its half year counts from it, as before.)
     expect(h.flags[`wait:${i}`]).toBe(2);
     // Next month the corps is still in contact at Grenzmark, and is taken all the same: today's line, nothing told.
@@ -149,7 +152,7 @@ describe('off and on in a running war', () => {
     // And in the rules alone, the same.
     expect(setFromWait(g, false)).toBe(true);
     expect(fromWaitOn(g)).toBe(false);
-    expect(telFlags(g)).toEqual([]);
+    expect(telFlags(g).sort()).toEqual([`rowAt:${i}`, `rowFront:${i}`, `rowTold:${i}`]);
   });
 
   it('on in a running war: a row formed before it took its corps from the front; the next row due waits', () => {
