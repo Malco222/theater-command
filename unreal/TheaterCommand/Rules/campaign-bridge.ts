@@ -99,7 +99,7 @@ import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, 
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
 import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
-import { adrift, baseTargets, struckLine, bookBaseOf, fleetReach, landingTargets, passageWhy, safeHarbour, seaAt as seaUnder, seaReading, seekOnceOn, setSeekOnce, voyageMonths, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { adrift, baseTargets, cutOff, cutOffHomeTip, cutOffLine, struckLine, bookBaseOf, fleetReach, harbourFor, landingTargets, passageWhy, safeHarbour, seaAt as seaUnder, seaReading, seekOnceOn, setSeekOnce, voyageMonths, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, overOcean, skyOver, whyNotMission } from '../../../src/campaign/air';
@@ -827,7 +827,8 @@ function drawView(step = false) {
       wingStrike: Math.round(wings.filter((w) => w.kind !== 'ftr').reduce((n, w) => n + w.aircraft, 0)),
       // For the player's own fleets: the seas each can reach this month, so that a fleet in hand shows where it can go.
       // (Release 2, the far chart: none for a fleet in passage to a new base, which keeps on its way or is turned back.)
-      reach: f.nat === s.human && up && f.stance !== 'passage' ? fleetReach(s, f) : [],
+      // (1.5.2) A fleet cut off beyond a shut strait reaches no sea: only a harbour on its side (bases).
+      reach: f.nat === s.human && up && f.stance !== 'passage' && !cutOff(s, f) ? fleetReach(s, f) : [],
       // (Ruling 86.) And the seas it would reach but for a gate shut to it, each with that gate: sea, gate, sea, gate.
       barred: f.nat === s.human && up && f.stance !== 'passage' ? barredSeas(s, f) : [],
       // And the friendly ports it could make its new home. (1.5.1) None for a fleet held where its battle left it this
@@ -1762,8 +1763,9 @@ function raidsSince(s: Game, since: number, turns: number[], skipNat: string | n
         first = false;
       }
       if (first) continue;
-      // (1.5.2, playtest #38: a raid with nothing to say adds no empty note, so a joined note never opens with a space.)
-      if (r.result.trim()) notes.push(r.result.trim());
+      // (every raid takes its slot, as in 1.5.1, empty or not: the callers drop the empty ones after taking their two;
+      // 1.5.2, playtest #38: trimmed, so a joined note never opens with a space)
+      notes.push(r.result.trim());
       if (r.region >= 0) focus.push(r.region);
       if (r.defNat === s.human || (r.region >= 0 && s.regions[r.region].ctrl === s.human)) mine = true;
     }
@@ -1882,7 +1884,7 @@ function stepOne(s: Game, steps: unknown[] | null): void {
     if (!steps) return;
     // The raids it flew, or that were flown as its month closed: shown over the map with the rest of what it did.
     const air = raidsSince(s, air0, [month, s.turn]);
-    const raidNote = air.notes.slice(0, 2).join(' ');
+    const raidNote = air.notes.slice(0, 2).filter(Boolean).join(' ');
     const sea = seaFightsSince(s, sea0);
     const shore = shellingSince(s, shore0);
     const sunk = [...sea.sunk, ...strikeLossesSince(s, air0)];
@@ -3706,10 +3708,13 @@ function endMonth() {
     else {
       judgeGoals(s, s.human);
       try { if (monthBook) monthBook.orders = monthOrders(s); } catch { /* the card tells of home without it */ }
+      // The raids to read next month are those filed from here on (airpages.ts raidsToRead): his own side's as his
+      // month closes, the other nations', and those he orders then.
+      s.flags.raidsFrom = air0;
       endHuman(s);
     }
     const air = raidsSince(s, air0, [month, s.turn]);
-    if (air.flights.length) steps.push({ nat: me, note: air.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: true, raids: air.flights, sunk: strikeLossesSince(s, air0), view: view(true) });
+    if (air.flights.length) steps.push({ nat: me, note: air.notes.slice(0, 2).filter(Boolean).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: true, raids: air.flights, sunk: strikeLossesSince(s, air0), view: view(true) });
     const sea = seaFightsSince(s, sea00);
     if (sea.zones.length) steps.push({ nat: me, note: sea.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: [], mine: true, seas: sea.zones, sunk: sea.sunk, view: view(true) });
     runOthers(s, steps);
@@ -4315,7 +4320,7 @@ function province(id: number) {
           const plan = weighRaid(s, 'recon', r.id);
           if (plan.picked.length) {
             const group = s.airFleets.find((f) => f.id === plan.picked[0]);
-            out.push({ key: `recon:${plan.picked[0]}`, label: 'Send a reconnaissance flight', detail: `${group?.name ?? 'An air group'} photographs ${r.name}: every army here and beside it is seen whole and identified until the month ends. ${plan.effects[0] ?? ''}`.trim(), ok: up && !plan.why, why: plan.why ?? (up ? '' : 'It is not your month.') });
+            out.push({ key: `recon:${plan.picked[0]}`, label: 'Send a reconnaissance flight', detail: `${group?.name ?? 'An air group'} photographs ${placeName(r.name)}: every army here and beside it is seen whole and identified until the month ends. ${plan.effects[0] ?? ''}`.trim(), ok: up && !plan.why, why: plan.why ?? (up ? '' : 'It is not your month.') });
           }
         } catch { /* the air war as its own game is the grand campaign's alone */ }
       }
@@ -4608,7 +4613,9 @@ function force(kind: string, id: number) {
       // (1.5.1; the playtester, 25 November) A fleet sent at the enemy this month stays where the battle left it: its
       // seas and its harbour are shown, refused, with the reason, and not offered only to be turned down.
       const held = heldWhy(s, f);
-      const reach = fleetReach(s, f).slice().sort((a, b) => (a === f.zone ? -1 : b === f.zone ? 1 : 0));
+      // (1.5.2) Cut off at sea beyond a shut strait, it can go to no sea in its reach: only to a harbour on its side.
+      const cut = cutOff(s, f), haven = cut ? harbourFor(s, f) : null;
+      const reach = cut ? [] : fleetReach(s, f).slice().sort((a, b) => (a === f.zone ? -1 : b === f.zone ? 1 : 0));
       for (const z of reach) {
         const here = f.zone === z && f.stance === 'patrol';
         options.push({ key: `fleet:${id}:${z}:patrol`, label: `Patrol the ${s.seas[z].name}`, detail: 'Seeks out enemy warships there and guards the convoys.', ok: up && !here && !held, why: here ? 'It is doing so now.' : notNow || held });
@@ -4617,7 +4624,10 @@ function force(kind: string, id: number) {
         const here = f.zone === z && f.stance === 'raid';
         options.push({ key: `fleet:${id}:${z}:raid`, label: `Raid shipping in the ${s.seas[z].name}`, detail: 'Goes for merchant ships and avoids a fight with the enemy fleet.', ok: up && !here && !held, why: here ? 'It is doing so now.' : notNow || held });
       }
-      options.push({ key: `fleet:${id}:${f.home}:port`, label: `Return to harbour at ${f.port}`, detail: 'Safe from the enemy fleet, and takes no part at sea.', ok: up && f.stance !== 'port' && !held, why: f.stance === 'port' ? 'It is in harbour now.' : notNow || held });
+      options.push({ key: `fleet:${id}:${f.home}:port`, label: `Return to harbour at ${haven?.name ?? f.port}`,
+        detail: cut && haven ? (haven.id === f.base ? `It is cut off beyond a shut strait: it comes in to ${haven.name} on its own side, and keeps its base there.` : `It is cut off beyond a shut strait: it makes for ${haven.name}, the nearest friendly harbour it can reach, which becomes its base.`) : 'Safe from the enemy fleet, and takes no part at sea.',
+        ok: up && f.stance !== 'port' && !held && (!cut || !!haven),
+        why: f.stance === 'port' ? 'It is in harbour now.' : notNow || held || (cut && !haven ? 'It is cut off beyond a shut strait, and no friendly harbour on its side can take it.' : '') });
     }
     if (mine) {
       if (staffRunsDesk(s, 'navy') && fleetKeptByHand(s, id)) options.push({ key: `fleet:${id}:staff`, label: 'Hand it back to your admirals', detail: HAND_BACK_TIP, ok: up, why: notNow });
@@ -4635,7 +4645,9 @@ function force(kind: string, id: number) {
     // (Release 2, mines.ts and heavyseas.ts) Enemy mines where it sails, and a gale over its sea.
     const mined = mine ? mineLine(s, f) : '';
     const gale = mine ? galeLine(s, f) : '';
-    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing, ...(mine && passage ? [passageWhy(s, f)] : []), ...(mine && struckLine(s, f) ? [struckLine(s, f)] : []), ...(shadow ? [shadow] : []), ...(mined ? [mined] : []), ...(gale ? [gale] : []), ...(why ? [why] : []), ...(task ? [task] : []), ...(who ? [who] : [])], options };
+    // (1.5.2) A cut-off fleet's own card says so for as long as it is (the DD, 25 Nov 04:05Z).
+    const cut = mine ? cutOffLine(s, f) : '';
+    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing, ...(cut ? [cut] : []), ...(mine && passage ? [passageWhy(s, f)] : []), ...(mine && struckLine(s, f) ? [struckLine(s, f)] : []), ...(shadow ? [shadow] : []), ...(mined ? [mined] : []), ...(gale ? [gale] : []), ...(why ? [why] : []), ...(task ? [task] : []), ...(who ? [who] : [])], options };
   }
   const f = s.airFleets.find((x) => x.id === id);
   if (!f) return null;
@@ -4667,7 +4679,7 @@ function force(kind: string, id: number) {
   }
   return {
     name: f.name, nat: f.nat, mine,
-    lines: [`${Math.round(f.ftr)} fighters, ${Math.round(f.bmr)} bombers`, `Based in ${base?.name ?? 'the field'}.`, doing], options,
+    lines: [`${Math.round(f.ftr)} fighters, ${Math.round(f.bmr)} bombers`, `Based in ${base ? placeName(base.name) : 'the field'}.`, doing], options,
   };
 }
 
@@ -4685,6 +4697,11 @@ function heldWhyId(s: Game, id: number): string {
   const f = s.fleets.find((x) => x.id === id);
   return f ? heldWhy(s, f) : '';
 }
+/** (1.5.2) Why one of the player's fleets was refused an order: held where this month's battle left it, or cut off beyond a shut strait (its card's line). Empty for neither. */
+function fleetWhyId(s: Game, id: number): string {
+  const f = s.fleets.find((x) => x.id === id);
+  return !f || f.nat !== s.human ? '' : heldWhy(s, f) || cutOffLine(s, f);
+}
 
 /**
  * (1.5.1; Brian, 24 November 2026 18:32Z: "when i move my navy they go right back to where they were before the next
@@ -4694,7 +4711,7 @@ function heldWhyId(s: Game, id: number): string {
 function whoSails(s: Game, id: number): string {
   if (!staffRunsDesk(s, 'navy')) return '';
   return fleetKeptByHand(s, id)
-    ? 'Under your own orders: your admirals leave it where you send it.'
+    ? 'Under your own orders: your admirals leave it to you, wherever it is.'
     : 'Your admirals sail it each month. Give it an order yourself and it stays where you send it.';
 }
 const HAND_BACK_TIP = 'Your admirals sail it again from next month, with the rest of the navy.';
@@ -4716,7 +4733,7 @@ function forceOrder(key: string) {
   else if (what === 'fleetbase') ok = orderRebase(s, Number(id), Number(a));
   else if (what === 'air') ok = orderAir(s, Number(id), a as AirMission, Number(b));
   else if (what === 'airbase') ok = orderAirBase(s, Number(id), Number(a));
-  return { ok, note: ok ? 'The order is given.' : (((what === 'fleet' && a !== 'staff') || what === 'fleetbase') && heldWhyId(s, Number(id))) || 'That order cannot be given now.', view: view() };
+  return { ok, note: ok ? 'The order is given.' : (((what === 'fleet' && a !== 'staff') || what === 'fleetbase') && fleetWhyId(s, Number(id))) || 'That order cannot be given now.', view: view() };
 }
 
 /** Every province's chief town with what the province pays a month and how that ranks (0 to 5), for the map's labels and its wealth view. */
@@ -5347,7 +5364,7 @@ function raidPage(s: Game, mission: AirMission, id: number): Page | null {
         const fac = s.regions[t].fac > 0;
         lines.push(`Likely bomber losses: about ${loss}% (${loss <= 10 ? 'light' : loss <= 25 ? 'the fighters will take a toll' : 'heavy'}). ${fac ? `The raid should stop about ${Math.round(fc.cut * 100)}% of its output for a month.` : 'There is no industry here: the bombers go for the rail yards.'}${fc.rail ? ` About a ${Math.round(fc.rail * 100)}% chance of cutting its railway.` : ''}${fc.ruin ? ` About a ${Math.round(fc.ruin * 100)}% chance of wrecking a factory outright.` : ''}`);
       }
-      lines.push(`Flying it: ${a.att.map((x) => `${x.f.name} from ${s.regions[x.f.base].name} (${craftOf(mission === 'night' ? 0 : x.ftr, x.bmr)})`).join('; ')}.`);
+      lines.push(`Flying it: ${a.att.map((x) => `${x.f.name} from ${placeName(s.regions[x.f.base].name)} (${craftOf(mission === 'night' ? 0 : x.ftr, x.bmr)})`).join('; ')}.`);
       lines.push(a.def.length ? `Rising to meet them: ${a.def.map((x) => `${x.f.name}, about ${Math.round(x.f.ftr * x.w)} fighters`).join('; ')}.${a.aa > 0 ? ` Anti-aircraft guns of level ${a.aa}.` : ''}` : `No enemy fighters are in reach.${a.aa > 0 ? ` Anti-aircraft guns of level ${a.aa}.` : ''}`);
       const now = f.mission === mission && f.target === t;
       buttons.push({ label: now ? 'ORDERED' : `SEND ${f.name.toUpperCase()}`, act: `air:${f.id}:${mission}:${t}`, ok: up && !now, tip: 'Flown when you end the month. A group on a raid does not defend its own sky that month.' });
@@ -5355,7 +5372,7 @@ function raidPage(s: Game, mission: AirMission, id: number): Page | null {
       for (const o of others) {
         if (o.mission === mission && o.target === t) continue;
         if (whyNotMission(s, o, mission, t) !== null) continue;
-        buttons.push({ label: `ALSO SEND ${o.name.toUpperCase()}`, act: `air:${o.id}:${mission}:${t}`, ok: up, tip: `${o.name} from ${s.regions[o.base].name} (${craftOf(o.ftr, o.bmr)}) joins the raid. Groups given the same target fly it together, and the odds above are worked out again.` });
+        buttons.push({ label: `ALSO SEND ${o.name.toUpperCase()}`, act: `air:${o.id}:${mission}:${t}`, ok: up, tip: `${o.name} from ${placeName(s.regions[o.base].name)} (${craftOf(o.ftr, o.bmr)}) joins the raid. Groups given the same target fly it together, and the odds above are worked out again.` });
         if (buttons.length >= 5) break;
       }
     }
@@ -5364,7 +5381,7 @@ function raidPage(s: Game, mission: AirMission, id: number): Page | null {
   return {
     id: `raid:${mission}:${id}`, title: `${RAID_TITLE[mission] ?? 'A RAID'}  \u00B7  ${f.name.toUpperCase()}`,
     headline: targets.length ? `${targets.length} target${targets.length === 1 ? '' : 's'} in reach, nearest first` : 'No target is in reach',
-    note: `${MISSION[mission].what} ${f.name} flies from ${base.name} with ${craftOf(f.ftr, f.bmr)}. Its orders now: ${airDoing(s, f)}. Send more than one group against the same target and they fly it together, which spreads the defenders' fire.`,
+    note: `${MISSION[mission].what} ${f.name} flies from ${placeName(base.name)} with ${craftOf(f.ftr, f.bmr)}. Its orders now: ${airDoing(s, f)}. Send more than one group against the same target and they fly it together, which spreads the defenders' fire.`,
     top: [{ label: 'BACK TO THE AIRFIELD', act: 'open:airfield', ok: true, tip: '' }],
     sections: [{ heading: 'TARGETS', text: targets.length ? '' : 'Move the group to an airfield nearer the enemy, or wait for aircraft with a longer reach.', rows }],
   };
@@ -5382,7 +5399,7 @@ function rebasePage(s: Game, id: number): Page | null {
   }));
   return {
     id: `rebase:${id}`, title: `A NEW AIRFIELD  \u00B7  ${f.name.toUpperCase()}`, headline: `${rows.length} airfield${rows.length === 1 ? '' : 's'} it could move to, nearest first`,
-    note: `${f.name} is based at ${base.name}. A group reaches farther into enemy country from an airfield nearer the front.`,
+    note: `${f.name} is based at ${placeName(base.name)}. A group reaches farther into enemy country from an airfield nearer the front.`,
     top: [{ label: 'BACK TO THE AIRFIELD', act: 'open:airfield', ok: true, tip: '' }], sections: [{ heading: 'AIRFIELDS', text: '', rows }],
   };
 }
@@ -5513,6 +5530,12 @@ function fleetInHand(id: number) {
       // (Release 2, fleetattack.ts) The enemy fleets it can be dropped on to attack now, and why it stays put this
       // month once it has attacked. Empty while the switch is off.
       fleetAttack: fleetAttackOn(s), attack: o?.attack ?? [], held: o?.held ?? '',
+      // (1.5.2) Cut off beyond a shut strait: its card's line, and RETURN TO HARBOUR's tip where a harbour on its side can
+      // take it (empty with none, or when it is not cut off).
+      ...((): { cut: string; homeTip: string } => {
+        const f = s.fleets.find((x) => x.id === id);
+        return { cut: f ? cutOffLine(s, f) : '', homeTip: f ? cutOffHomeTip(s, f) : '' };
+      })(),
       wings: wingsOfFleet(s, id).map((w) => ({ id: w.id, label: w.label, aircraft: Math.round(w.aircraft), doing: w.doing, flew: w.flew })),
     };
   } catch {
@@ -5522,6 +5545,17 @@ function fleetInHand(id: number) {
 const cap1 = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t);
 
 /** A fleet's orders, all in one room: what it is, the seas in its reach and what it would meet, lanes to escort, coasts to shell, splitting and joining. */
+/** (1.5.2) The cut-off line at the head of the fleet page's note, with a space after it; empty when it is not cut off. */
+function cutOffNote(s: Game, id: number): string {
+  const f = s.fleets.find((x) => x.id === id), line = f ? cutOffLine(s, f) : '';
+  return line ? `${line} ` : '';
+}
+/** (1.5.2) Why a cut-off fleet's page lists no sea in its reach. */
+function cutOffWhyNoSea(s: Game, id: number): string {
+  const f = s.fleets.find((x) => x.id === id);
+  return `Every sea in its reach lies beyond the shut strait. ${f && cutOffHomeTip(s, f) ? 'RETURN TO HARBOUR takes it to a harbour on its side.' : 'No friendly harbour on its side can take it, so it stays at sea.'}`;
+}
+
 function fleetPage(s: Game, id: number): Page | null {
   const card = s.flags.open === 1 ? fleetView(s, id) : null;
   if (!card || card.nat !== s.human) return null;
@@ -5672,7 +5706,8 @@ function fleetPage(s: Game, id: number): Page | null {
   return {
     id: `fleet:${id}`, title: card.name.toUpperCase(), headline: `${card.doing}`,
     // (Release 2, the far chart: struck at anchor this month or last, the card says so first, and where is out of reach.)
-    note: `${fl && struckLine(s, fl) ? `${struckLine(s, fl)} ` : ''}${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${why ? ` ${why}` : ''}${task ? ` ${task}` : ''}${who ? ` ${who}` : ''}`,
+    // (1.5.2) Cut off beyond a shut strait: the cut-off line heads the note.
+    note: `${cutOffNote(s, id)}${fl && struckLine(s, fl) ? `${struckLine(s, fl)} ` : ''}${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${why ? ` ${why}` : ''}${task ? ` ${task}` : ''}${who ? ` ${who}` : ''}`,
     top: [
       // (Release 2, the far chart: a fleet in passage to a new base is turned back by the same order.)
       // (1.5.2's #37 and 1.5.1's held fleet, both: the reason it is held comes first, else it says if it is the order now.)
@@ -5682,7 +5717,12 @@ function fleetPage(s: Game, id: number): Page | null {
         ? adrift(fl)
           ? { label: 'TURN BACK', act: `fleet:${id}:${fl.home}:port`, ok: false, tip: `${passageWhy(s, fl)} ${ADRIFT_PICK}` }
           : { label: 'TURN BACK', act: `fleet:${id}:${fl.home}:port`, ok: up, tip: `${passageWhy(s, fl)} Turned back, it makes for ${fl.passage.fromPort} again, steamed from where it is.` }
-        : { label: 'RETURN TO HARBOUR', act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== 'port' && !o?.held, tip: o?.held || `${card.stance === 'port' ? 'It is in harbour now. ' : ''}Safe from the enemy fleet, and takes no part at sea.` },
+        : ((): PageButton => {
+          // (1.5.2) Cut off at sea beyond a shut strait, it makes for the nearest friendly harbour on its side, or has none.
+          const cut = !!fl && cutOff(s, fl), haven = cut && fl ? harbourFor(s, fl) : null;
+          return { label: 'RETURN TO HARBOUR', act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== 'port' && !o?.held && (!cut || !!haven),
+            tip: o?.held || (cut ? (haven && fl ? cutOffHomeTip(s, fl) : 'Cut off beyond a shut strait, and no friendly harbour on its side can take it.') : `${card.stance === 'port' ? 'It is in harbour now. ' : ''}Safe from the enemy fleet, and takes no part at sea.`) };
+        })(),
       // (Release 2, the far chart: waiting at sea with no harbour it can reach, it may be scuttled on his order.)
       ...(fl && adrift(fl) ? [{ label: 'SCUTTLE IT', act: `fleetscuttle:${id}`, ok: up, tip: `${passageWhy(s, fl)} Scuttled, its ships go down at sea and are lost for good.` }] : []),
       ...(staffRunsDesk(s, 'navy') && fleetKeptByHand(s, id) ? [{ label: 'HAND BACK TO YOUR ADMIRALS', act: `fleetstaff:${id}`, ok: up, tip: HAND_BACK_TIP }] : []),
@@ -5701,7 +5741,8 @@ function fleetPage(s: Game, id: number): Page | null {
       { heading: 'ENEMY HARBOURS TO STRIKE', text: '', rows: harbours },
       { heading: 'OUT OF THE STRIKERS\' REACH', text: '', rows: withdraw },
       { heading: 'THE STAFF\'S PLAN', text: '', rows: plan },
-      { heading: 'SEAS IN ITS REACH', text: seas.length ? '' : o?.held ? o.held : up ? 'The country is at peace: the fleet keeps its station.' : 'It is not your month.', rows: seas },
+      // (1.5.2, the release review) Cut off, it is offered no sea: the section says why, not that the country is at peace.
+      { heading: 'SEAS IN ITS REACH', text: seas.length ? '' : o?.held ? o.held : cutOffNote(s, id) ? cutOffWhyNoSea(s, id) : up ? 'The country is at peace: the fleet keeps its station.' : 'It is not your month.', rows: seas },
       { heading: 'LANES TO ESCORT', text: '', rows: lanes },
       { heading: 'COASTS TO SHELL', text: '', rows: coasts },
       { heading: 'FLEETS TO JOIN', text: '', rows: joins },
@@ -6905,7 +6946,8 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
       target: { id: target, name: here?.name ?? p.place, km: Math.round(here?.km ?? 0), holder: here?.holder ?? '', sort: raidSort(s, kind, target), act: '', now: true, picture: picture(target, here?.holder ?? ''), ...titled(here, p.place) },
       // (about twenty words of prose on the card at most: the first sentence of what a hit would do; the rest is on the pointer)
       what: here?.what ?? '', effect: p.why ? '' : bomb ? p.effects[0] ?? '' : ((t: string): string => { const i = t.indexOf('. '); return i > 0 && t.length > 90 ? t.slice(0, i + 1) : t; })(p.effects[0] ?? ''),
-      effects: p.why ? '' : p.effects.join(' '),
+      // (Release 1.5.2: a fight for the sky sent with too few fighters to hold one says so, after what the fight should do.)
+      effects: p.why ? '' : [...p.effects, p.tooFew ?? ''].filter(Boolean).join(' '),
       // (Release 2, atom.ts; the UI director under ruling 134(f).) A raid that carries the atomic bomb: its one line in
       // full in place of the output, railway and city rows; BACK, the safe answer, is lit and takes Enter and Esc; the
       // raid itself takes a click only.
@@ -6926,7 +6968,9 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
         take(/break down about (\d+)% of the works/, (m) => `\u2212${m[1]}%`, 'of the town\'s works');
         take(/(\d+)% of the town guard/, (m) => `\u2212${m[1]}%`, 'of the town guard');
         take(/Fighter odds (\d+(?:\.\d+)?) to 1/, (m) => `${m[1]} to 1`, 'fighter odds going in');
-        take(/with (\d+(?:\.\d+)?) times what the defender/, (m) => `${m[1]}\u00D7`, 'the defender\'s fighters wins the sky');
+        // (1.5.2, the UI director 04:55Z and 05:38Z: the box says what winning a sky takes, both figures, never a bare
+        // multiple; figure and words read on as one sentence, and "of yours" keeps the 50 from reading as the defenders'.)
+        take(/with (\d+(?:\.\d+)?) times what the defender/, (m) => `${m[1]} to 1`, `against the defenders' fighters wins the sky, with ${AIR.sky.least} of yours still over the target at the end`);
         take(/lose up to (\d+)% of their number/, (m) => `${m[1]}%`, 'of warships caught, at most');
         take(/About (\d+(?:\.\d+)?) bombs and torpedoes should hit/, (m) => m[1], 'bombs and torpedoes should hit');
         take(/chance of (\d+)% for (an? [a-z ]+?)[.,]/, (m) => `${m[1]}%`, (m) => `chance ${m[2]} goes down`);
@@ -6945,9 +6989,14 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
         // (by night: an escort that was picked stays on the card and stays at home; one that could join by day says so)
         const stays = !!dn && kind === 'night' && dn.home.includes(x.id);
         const dayOnly = !!dn && kind === 'night' && !stays && dn.barred.includes(x.id);
+        // (A carrier wing whose fleet's station is out of reach of the target has no distance to fly, which the rules
+        // give as Infinity: it has no km, its distance in words is 'Out of reach', and its reason says why. Findings 9
+        // and 34 of 1.5.1; the UI director's words of 05:10Z.)
+        const out = !Number.isFinite(x.km);
         return {
-          id: x.id, name: x.name, kind: x.kind, aircraft: Math.round(x.aircraft), base: x.baseName, afloat: x.ship >= 0, km: Math.round(x.km), ready: x.ready,
-          picked: x.picked || stays, locked: x.locked, lead: !!lead && x.id === lead.id, why: stays ? '' : dayOnly ? 'No escort by night' : x.why ?? '', note: x.note, nat: me,
+          id: x.id, name: x.name, kind: x.kind, aircraft: Math.round(x.aircraft), base: x.baseName, afloat: x.ship >= 0, ...(out ? {} : { km: Math.round(x.km) }), ready: x.ready,
+          far: out ? 'Out of reach' : `${Math.round(x.km).toLocaleString('en-US')} km`,
+          picked: x.picked || stays, locked: x.locked, lead: !!lead && x.id === lead.id, why: stays ? '' : dayOnly ? 'No escort by night' : out && x.why ? 'Its aircraft cannot reach it from the fleet\'s station.' : x.why ?? '', note: x.note, nat: me,
           stays, dayOnly,
           act: stays ? link(target, carry.filter((id) => id !== x.id)) : x.why ? '' : x.picked ? link(target, carry.filter((id) => id !== x.id)) : link(target, [...carry, x.id]),
         };
@@ -7174,7 +7223,7 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       const flown = raidsSince(s, air0, [s.turn]);
       flies = flown.flights;
       // What came of it, in the report's own words first, kept short enough to read while the raid is flown.
-      const told = flown.notes.join(' ') || note;
+      const told = flown.notes.filter(Boolean).join(' ') || note;
       note = told.length > 190 ? `${told.slice(0, told.lastIndexOf('.', 190) + 1) || told.slice(0, 190)}` : told;
       // (Release 2, a raid on troops with the strafers' rule on; the UI director's words of 15:04Z: the report then says
       // who went down, to the side that flew it. Added whole after the cut, so the line is never cut. Nothing with the
@@ -7182,6 +7231,11 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       // leaves it there and the line is said once: the fourth round's check.)
       const strafe = air.after ? '' : s.airReports.filter((r) => r.id > air0).map((r) => strafedLine(r, s.human)).filter(Boolean).join(' ');
       if (strafe) note = note ? `${note} ${strafe}` : strafe;
+      // (Brian, 24 November 2026: a raid "didnt't tell me the results of the battle".) A raid his crews flew: the page
+      // that comes next is its report (airpages.ts), which the 3D game opens once the aircraft have been seen to fly
+      // it. A raid he flew himself has its after card in the air battle, and keeps the page it had; so does a raid
+      // with no aircraft to be seen flying it, which has nothing to wait for (its report is in the month's raids).
+      if (!fought && flies.length > 0 && airPage(s, `airreport:${air.report}`)) open = `airreport:${air.report}`;
     }
     // A search of a sea is seen to go out too: a few aircraft from the group's airfield, or from the ships.
     if (air.ok && part[0] === 'search') {
@@ -7874,14 +7928,14 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     };
     const meets = before && !before.why ? { aa: before.aa, meet: before.def.find((x) => x.f.ftr * x.w >= 1)?.f.nat ?? '', loss: lossOf(before) } : { aa: 0, meet: '', loss: 0 };
     ok = orderAir(s, Number(part[1]), m, t);
-    note = ok ? (t >= 0 ? `${f?.name ?? 'The group'} will fly against ${airPlace(s, m, t)} when the month ends.` : `${f?.name ?? 'The group'}: ${MISSION[m].label.toLowerCase()}.`) : 'That order cannot be given now.';
+    note = ok ? (t >= 0 ? `${f?.name ?? 'The group'} will fly against ${placeName(airPlace(s, m, t))} when the month ends.` : `${f?.name ?? 'The group'}: ${MISSION[m].label.toLowerCase()}.`) : 'That order cannot be given now.';
     if (ok && f && t >= 0) { const p = sea ? s.seas[t] : s.regions[t]; fly = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== 'superiority' && f.bmr >= 1, escort: m !== 'night' && f.ftr >= 1, region: sea ? -1 : t, meetFrom: -1, night: m === 'night', ...meets }; }
   } else if (part[0] === 'airbase') {
     ok = orderAirBase(s, Number(part[1]), Number(part[2]));
-    note = ok ? `The group moves to ${s.regions[Number(part[2])]?.name ?? 'its new airfield'}.` : 'It cannot move there now.';
+    note = ok ? `The group moves to ${s.regions[Number(part[2])] ? placeName(s.regions[Number(part[2])].name) : 'its new airfield'}.` : 'It cannot move there now.';
   } else if (part[0] === 'fleet') {
     ok = orderFleet(s, Number(part[1]), Number(part[2]), part[3] as Stance);
-    note = ok ? `${fleetView(s, Number(part[1]))?.doing ?? 'The order is given'}.` : heldWhyId(s, Number(part[1])) || 'That order cannot be given now.';
+    note = ok ? `${fleetView(s, Number(part[1]))?.doing ?? 'The order is given'}.` : fleetWhyId(s, Number(part[1])) || 'That order cannot be given now.';
     return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
   } else if (part[0] === 'fleetstaff') {
     ok = handBackFleet(s, Number(part[1]));
@@ -7890,7 +7944,7 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
   } else if (part[0] === 'fleetescort') {
     ok = orderEscort(s, Number(part[1]), part.slice(2).join(':'));
-    note = ok ? `${fleetView(s, Number(part[1]))?.doing ?? 'The fleet is bound to the lane'}.` : heldWhyId(s, Number(part[1])) || 'It cannot escort that lane now.';
+    note = ok ? `${fleetView(s, Number(part[1]))?.doing ?? 'The fleet is bound to the lane'}.` : fleetWhyId(s, Number(part[1])) || 'It cannot escort that lane now.';
     return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
   } else if (part[0] === 'fleetshell') {
     const rep2 = orderBombard(s, Number(part[1]), Number(part[2]), part[3] as 'troops' | 'city');

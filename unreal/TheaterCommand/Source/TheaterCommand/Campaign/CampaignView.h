@@ -426,6 +426,9 @@ struct FFleetHand
 	bool bFleetAttack = false;
 	TArray<int32> Attack;
 	FString Held;
+	// (1.5.2) Cut off at sea beyond a shut strait: its card's line, and RETURN TO HARBOUR's tip where a harbour on its side
+	// can take it (empty with none). Both empty when it is not cut off.
+	FString Cut, HomeTip;
 };
 
 /** What else came of something pressed in a room, beyond its words. */
@@ -506,6 +509,8 @@ struct FRaidSeat
 	FString Act; // what to pass back to add it or leave it out
 	int32 Aircraft = 0;
 	int32 Km = 0;
+	FString Far; // (1.5.2) how far it has to fly, in the bridge's words: "1,240 km", or "Out of reach" for a carrier wing whose fleet's station is beyond the target
+	bool bOutOfReach = false; // (1.5.2) the bridge sent no km: it cannot reach the target at all
 	float Ready = 0.0f; // 0 to 1
 	bool bPicked = false;
 	bool bLocked = false; // it goes because it is ordered to stick with its bombers

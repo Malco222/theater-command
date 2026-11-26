@@ -4,7 +4,7 @@
 // air force was only a rating raises it as air groups once at war, and the rating then no longer tilts its battles.
 import { describe, expect, it } from 'vitest';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
-import { AIRWAR, airAI, airRange, cover, defendBattles, fightBack, km, ratedAir, raiseAirForce } from '../src/campaign/air';
+import { AIRWAR, CLOSE, SMALL_SEEN, airAI, airRange, cover, defendBattles, fightBack, km, ratedAir, raiseAirForce, smallOn } from '../src/campaign/air';
 import { createGame } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -76,7 +76,7 @@ describe('the fight back', () => {
 
   it('a staff defending puts fighters on ground support over its battles, and keeps as many on patrol over each', () => {
     const g = startOpen(createGame(23, null));
-    let seen = 0;
+    let seen = 0, small = 0;
     for (let t = 0; t < 12; t++) {
       runTurnAI(g);
       for (const nat of Object.keys(g.nations)) {
@@ -84,7 +84,27 @@ describe('the fight back', () => {
         if (!held.length || !g.nations[nat].alive) continue;
         // The staff's month as it plans it, on a copy: its ground support, then its sweeps and raids.
         const h = loadGame(saveGame(g))!;
-        airAI(h, nat, null);
+        // (Release 1.5.2, the design director's rulings of 25 November, 03:54Z and 13:35Z: an arm too small to hold any
+        // sky, its land fighters under sky.least, whose OWN ground is fought over that month is not bound by this rule.
+        // It fights over its army: every fit fighter group in reach of its army's battle goes on ground support, once
+        // the raids on that ground are met. The rules' own window tells when that month is one of those, and it is
+        // read here as the staff decides, before a group flies. Every other arm, and a small arm whose own ground is
+        // not fought over, is bound exactly as before: tests/small-air-152.test.ts has the small arm's rule in full.)
+        let own = false;
+        const idle: string[] = [];
+        SMALL_SEEN.fn = (at, n, kept) => {
+          if (n !== nat) return;
+          own = true;
+          // Its army's battles past doubt: its home ground under attack, and the ground its own corps stand on.
+          const army = held.filter((b) => at.regions[b].owner === nat || at.regions[b].units.some((u) => !u.dead && u.nat === nat && u.kind !== 'fort'));
+          for (const f of at.airFleets) {
+            if (f.nat !== nat || f.kind !== 'ftr' || !(f.ftr > 0) || f.ship !== undefined) continue;
+            const fit = f.mission === 'support' && f.flew !== at.turn && f.ready >= CLOSE.least && !kept.includes(f.id);
+            if (fit && !f.close && army.some((b) => cover(km(at, f.base, b), airRange(f, at).ftr) > 0)) idle.push(f.name);
+          }
+        };
+        try { airAI(h, nat, null); } finally { SMALL_SEEN.fn = undefined; }
+        if (own) { small++; expect(idle).toEqual([]); continue; }
         const land = h.airFleets.filter((f) => f.nat === nat && f.kind === 'ftr' && f.ftr > 0 && f.ship === undefined);
         for (const b of held) {
           // (at the strengths the staff planned with: an escort flown later in its month may lose a few)
@@ -97,5 +117,9 @@ describe('the fight back', () => {
       }
     }
     expect(seen).toBeGreaterThan(0);
+    // (and with release 1.5.2's switch on, the small arm's rule was met at least once in this war, so its line above
+    // was put to the test; with the switch off no arm takes that road and every arm is bound as in 1.5.1)
+    if (smallOn(g)) expect(small).toBeGreaterThan(0);
+    else expect(small).toBe(0);
   }, 300_000);
 });

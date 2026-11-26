@@ -23,7 +23,7 @@ import type { TicketLine } from '../core/ticket';
 import { fleetKnown, fleetsSeen, seaPicture, type SeaKnown } from './carriers';
 import { allied, atWar, headline, worksFor } from './game';
 import { fogOn } from './intel';
-import { CLASSES, NAVY, airOver, atSea, passageWhy, fleetAction, fleetName, fleetPower, fleetReach, hasSought, markSought, sail, seaRng, shipCount, surfaceShips } from './navy';
+import { CLASSES, NAVY, airOver, atSea, cutOff, passageWhy, fleetAction, fleetName, fleetPower, fleetReach, hasSought, markSought, sail, seaRng, shipCount, surfaceShips } from './navy';
 import { lossAt, shares, type SeaPlanFleet, type SeaPlanSide } from './seaplan';
 import { seaWhere } from './sea-words';
 import type { Fleet, Game, SeaReport, Ships } from './types';
@@ -85,6 +85,8 @@ export function whyNotFleetAttack(g: Game, id: number, target: number): string |
   if (hasSought(g, f)) return `The ${f.name} has already sought battle this month: a fleet seeks battle once a month.`;
   // (A fleet in passage to a new base does nothing on its way: release 2, the far chart.)
   if (f.stance === 'passage') return passageWhy(g, f);
+  // (1.5.2) Cut off at sea beyond a strait shut to it, it reaches nothing until it has a harbour on its side.
+  if (cutOff(g, f)) return `The ${f.name} is cut off beyond a shut strait: send it to harbour on its side first.`;
   const t = g.fleets.find((x) => x.id === target);
   if (!t || !shipCount(t.ships) || fleetKnown(g, t, f.nat) === 'none') return 'No such enemy fleet is known.';
   if (!atWar(g, f.nat, t.nat)) return `${g.nations[t.nat]?.name ?? t.nat} is not at war with ${g.nations[f.nat].name}.`;

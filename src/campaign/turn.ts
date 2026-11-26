@@ -13,7 +13,7 @@ import {
   airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
-import { NAVY, adrift, baseTargets, canPass, inPassage, laneNear, laneSteps, laneStepsFrom, passageWhy, scuttleFleet, turnBack, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, canShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
+import { NAVY, adrift, baseTargets, canPass, cutOff, inPassage, laneNear, laneSteps, laneStepsFrom, passageWhy, scuttleFleet, turnBack, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, canShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
@@ -1779,11 +1779,14 @@ export function fleetOptions(g: Game, id: number): FleetOptions | null {
   const war = g.nations[f.nat].atWar.length > 0;
   // (Release 2, the far chart: a fleet in passage to a new base is held to its way. It can only be turned back.)
   const held = heldAfterAttack(g, f) || inPassage(f);
+  // (1.5.2) Cut off at sea beyond a shut strait, every sea and lane in its reach lies beyond the strait: none is offered
+  // only to be refused (sail() turns them all down). Its way out is to harbour, on its side.
+  const cut = cutOff(g, f);
   const out: FleetOptions = {
-    seas: war && !held ? seaOptions(g, f, f.nat) : [],
+    seas: war && !held && !cut ? seaOptions(g, f, f.nat) : [],
     // (Release 2, the far chart: only the lanes within two months' steaming of it, and its own, until the Pacific lanes
     // are laid; then every lane. Nearest first: laneNear, laneSteps.)
-    lanes: war && !held ? nearestFirst(g, f, escortLanes(g, f.nat).filter((l) => laneNear(g, f, l))).map((l) => planEscort(g, f, l.id)) : [],
+    lanes: war && !held && !cut ? nearestFirst(g, f, escortLanes(g, f.nat).filter((l) => laneNear(g, f, l))).map((l) => planEscort(g, f, l.id)) : [],
     coasts: war ? bombardTargets(g, f, f.nat).map((r) => r.id) : [],
     // (Waiting at sea with no harbour it could reach, the harbours open to it now, where any is: release 2, the far chart.)
     ports: held && !adrift(f) ? [] : baseTargets(g, f).map((r) => r.id),
@@ -1791,8 +1794,9 @@ export function fleetOptions(g: Game, id: number): FleetOptions | null {
     split: g.flags.open === 1 && !inPassage(f) && Object.values(f.ships).reduce((s, n) => s + n, 0) > 1,
   };
   if (fleetAttackOn(g)) out.attack = war ? attackTargets(g, f.id) : [];
-  if (shadowOn(g)) out.shadow = war ? shadowTargets(g, f.id) : [];
-  if (seaMinesOn(g)) out.mines = war && !held ? mineSeas(g, f.id) : [];
+  // (Shadowing and mines sail the fleet to a sea as well (sail()), so a cut-off fleet is offered neither: 1.5.2's rule above.)
+  if (shadowOn(g)) out.shadow = war && !cut ? shadowTargets(g, f.id) : [];
+  if (seaMinesOn(g)) out.mines = war && !held && !cut ? mineSeas(g, f.id) : [];
   if (adrift(f)) { out.held = `${passageWhy(g, f)} ${out.ports.length ? 'A harbour is open to it now: it can make for one.' : 'It can be scuttled.'}`; out.scuttle = true; }
   else if (inPassage(f)) out.held = `${passageWhy(g, f)} It can be turned back to ${f.passage?.fromPort ?? 'the harbour it left'}.`;
   else if (held) out.held = `The ${f.name} was sent at the enemy this month: it stays where the battle left it until next month.`;

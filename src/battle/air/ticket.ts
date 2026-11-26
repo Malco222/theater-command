@@ -10,6 +10,7 @@ import { unitsDecide } from '../../campaign/units';
 import { planRaid, type RaidKind } from '../../campaign/airwar';
 import { armedAt } from '../../campaign/atom';
 import { seatsOf } from '../../campaign/bombers';
+import { placeName } from '../../campaign/game';
 import { orderRaid } from '../../campaign/turn';
 import { weatherOn } from '../../campaign/weather';
 import type { FoughtAir } from '../../campaign/airfought';
@@ -265,7 +266,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     domain: 'air', kind: 'field',
     seed,
     turn: g.turn, date,
-    title: m === 'superiority' ? `The fight for the sky over ${a.place}` : m === 'ground' ? `The raid on the troops at ${a.place}` : m === 'harbour' ? `The raid on ${harbourOf(a.place)}` : quarry ? `The strike on the ${quarry.name}` : `The air battle over ${a.place}`,
+    title: m === 'superiority' ? `The fight for the sky over ${placeName(a.place)}` : m === 'ground' ? `The raid on the troops at ${placeName(a.place)}` : m === 'harbour' ? `The raid on ${harbourOf(a.place)}` : quarry ? `The strike on the ${quarry.name}` : `The air battle over ${placeName(a.place)}`,
     place,
     att: side(nat, att, g.human === nat),
     def: side(defNat, def, g.human === defNat),
@@ -332,9 +333,10 @@ export function escortPair(g: Game, kind: RaidKind, target: number, nat: string)
 
 /**
  * A harbour raid's place in words (the UI director, 03:43Z): where the place's name already says harbour it stands
- * alone ("The raid on Pearl Harbor"); elsewhere "the harbour of Taranto".
+ * alone ("The raid on Pearl Harbor"); elsewhere "the harbour of Taranto", the place with its article where the map's
+ * list gives it one: "the harbour of the Highlands" (the UI director's final read, 25 November 2026, 15:42Z).
  */
-export const harbourOf = (place: string): string => (/\bHarbou?r\b/.test(place) ? place : `the harbour of ${place}`);
+export const harbourOf = (place: string): string => (/\bHarbou?r\b/.test(place) ? place : `the harbour of ${placeName(place)}`);
 
 /** The ground of a strike at sea: open water across the board (a stage draws its own). */
 const OPEN_SEA: AirGround = { land: [], rivers: [], borders: [], target: [], terrain: 'sea', inland: false, north: [0, 1] };

@@ -22,6 +22,7 @@ import { bomberGuns, fighterGuns, type GunKind } from './guns';
 import type { AirAim, AirHitWho, AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
 import type { BomberSeat } from '../../campaign/types';
 import { afterWords, bombWorth, railChanceOf, ruinChanceOf, staffHow, troopCutOf } from '../../campaign/airfought';
+import { placeName } from '../../campaign/game';
 import type { VictoryLevel } from '../../core/ticket';
 export { peopleOf } from '../../campaign/airfought';
 
@@ -852,7 +853,7 @@ export class AirSim implements BattleSim<AirUnit> {
         if (u.run >= SKY.run) {
           u.dropped = u.n;
           // Torpedo bombers attack; dive and level bombers bomb (the UI director, 19 November 14:26Z, ruling 6).
-          this.say('air:bombs', u, `${told(this.called(u), u.strike === 'torpedo' ? '{N} [attacks|attack]' : '{N} [bombs|bomb]')} ${this.quarry() ?? this.place.name}: ${u.n} bombers over the target.`, { n: u.n }, C.bombs);
+          this.say('air:bombs', u, `${told(this.called(u), u.strike === 'torpedo' ? '{N} [attacks|attack]' : '{N} [bombs|bomb]')} ${this.quarry() ?? placeName(this.place.name)}: ${u.n} bombers over the target.`, { n: u.n }, C.bombs);
           this.bombsFall();
           if (this.sea) for (const x of this.sea.drop(this.droppedNow(), u.strike ?? 'bomb', this.t, u.corps)) this.say(x.what, u, x.text, x.extra);
           // A raid on troops: what the bombs are seen to hit, as far as the men the law now books lost allow.
@@ -2244,11 +2245,11 @@ export class AirSim implements BattleSim<AirUnit> {
     const n = this.droppedNow();
     if (!this.railCut && railChanceOf(L, n) > this.rolls.rail) {
       this.railCut = true;
-      this.say('air:rail', null, `The railway through ${this.place.name} is cut.`, { x: SKY.target.x, y: SKY.target.y });
+      this.say('air:rail', null, `The railway through ${placeName(this.place.name)} is cut.`, { x: SKY.target.x, y: SKY.target.y });
     }
     if (!this.ruined && ruinChanceOf(L, n) > this.rolls.ruin) {
       this.ruined = true;
-      this.say('air:ruin', null, `A factory at ${this.place.name} is wrecked outright.`, { x: SKY.target.x, y: SKY.target.y });
+      this.say('air:ruin', null, `A factory at ${placeName(this.place.name)} is wrecked outright.`, { x: SKY.target.x, y: SKY.target.y });
     }
   }
 

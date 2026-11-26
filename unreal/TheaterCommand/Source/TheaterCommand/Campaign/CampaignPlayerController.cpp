@@ -1449,6 +1449,7 @@ void ACampaignPlayerController::EnterCampaign()
 	HumanLaid = Session->GetView().Human;
 	// A clean table: nothing in hand, nothing picked, no old news.
 	Afterwards.Reset(); // (what was left of an order's answer belonged to the war before; the session dropped its own)
+	RaidCardDue.Reset(); // (nor the report of a raid flown in the campaign left)
 	PendingEnemyReach.Reset();
 	Opening.bVisible = false;
 	FaceOff = FFaceOff();
@@ -2424,6 +2425,19 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 				Spread = FMath::Max(Spread, FVector2D::Distance(Map->SortieStart(Sortie), Sortie.To));
 			}
 			Eye->GoTo(Map->MapToWorld(Middle.X, Middle.Y), FMath::Clamp(static_cast<float>(0.3 + Spread / 420.0), 0.4f, 0.85f));
+		}
+		// (Brian, 24 November 2026: a raid "didnt't tell me the results of the battle".) The rules name the raid's report
+		// as the page that comes next. It opens once the aircraft have been seen to fly the raid (PlayerTick), half a
+		// second after the last of them is home: the flight over the map lasts eleven seconds (CampaignMapActor,
+		// FlightLasts). A run of pictures or of steps has it only when it asks for it by name ("-TheaterRaidCard"):
+		// the runs there are were timed without it, and a page opening by itself would lie over their pictures.
+		FString Asked;
+		const bool bRun = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Asked, false) || FParse::Value(FCommandLine::Get(), TEXT("TheaterSteps="), Asked, false);
+		if (Next.StartsWith(TEXT("airreport:")) && (!bRun || FParse::Param(FCommandLine::Get(), TEXT("TheaterRaidCard"))))
+		{
+			RaidCardDue = Next;
+			RaidCardAt = (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0) + 11.5;
+			RaidCardTurn = Session->GetView().Turn;
 		}
 		ClosePage();
 		return;
@@ -6402,6 +6416,25 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			LayEdgeNews(bPageOpen && Page.Month.bValid ? &Page.Month : nullptr);
 		}
 	}
+	// (Brian, 24 November 2026: a raid "didnt't tell me the results of the battle".) The report of a raid his crews
+	// flew, once its aircraft have been seen to fly it, nothing else has the screen and no button of the mouse is held
+	// (a drag of the map, or of a fleet, is let finish). It is dropped when the month moves on, or when something else
+	// has held the screen for twenty seconds: it is still to be read from the airfield, in THE MONTH'S RAIDS.
+	if (!RaidCardDue.IsEmpty())
+	{
+		const double RaidNow = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+		const FCampaignSession* Told = GetSession();
+		if (!Told || bWatching || bMonthCardDue || Told->GetView().Turn != RaidCardTurn || RaidNow >= RaidCardAt + 20.0)
+		{
+			RaidCardDue.Reset();
+		}
+		else if (RaidNow >= RaidCardAt && !IsCardUp() && !IsAnswering() && !bLeftHeld && !bRightHeld)
+		{
+			const FString Due = RaidCardDue;
+			RaidCardDue.Reset();
+			OpenPage(Due);
+		}
+	}
 	// ---- (Release 2, new units ready) The READY plate, once nothing else holds the screen (no battle being fought, nor,
 	// once 1.5's flown raids are merged in, a raid: IsFightingLive; the 3D pre-check, 19:19Z) and the month's own notice
 	// ("June 1941. Your orders.") has gone.
@@ -7252,7 +7285,9 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			else if (Held && PointedRegion != INDEX_NONE)
 			{
 				const bool bShell = FleetHand.bGrand && !FleetHand.bShelled && FleetHand.Coasts.Contains(PointedRegion);
-				Pointer = bShell ? EMouseCursor::Crosshairs : (PointedRegion == Held->Base || Held->Bases.Contains(PointedRegion)) ? EMouseCursor::Default : EMouseCursor::SlashedCircle;
+				// (1.5.2) its own harbour is refused while it is held, or cut off with no harbour on its side
+				const bool bHomeShut = !FleetHand.Held.IsEmpty() || (!FleetHand.Cut.IsEmpty() && FleetHand.HomeTip.IsEmpty());
+				Pointer = bShell ? EMouseCursor::Crosshairs : ((PointedRegion == Held->Base && !bHomeShut) || Held->Bases.Contains(PointedRegion)) ? EMouseCursor::Default : EMouseCursor::SlashedCircle;
 			}
 		}
 		else if (bHandsFree && bFieldTakesClick)
@@ -7817,7 +7852,12 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				const FViewFleet* Held = View.Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; });
 				if (Held && Held->Base == TipRegion)
 				{
-					Line += FString::Printf(TEXT("\nRight-click: %s returns to harbour here."), *Held->Name);
+					// (1.5.2, the release review) Held where this month's battle left it, or cut off beyond a shut strait, its own
+					// harbour says what a right-click there does (or why it does nothing), as the tray's RETURN TO HARBOUR does.
+					Line += !FleetHand.Held.IsEmpty() ? FString::Printf(TEXT("\n%s"), *FleetHand.Held)
+						: !FleetHand.HomeTip.IsEmpty() ? FString::Printf(TEXT("\nRight-click: %s sails for harbour. %s"), *Held->Name, *FleetHand.HomeTip)
+						: !FleetHand.Cut.IsEmpty() ? FString::Printf(TEXT("\n%s"), *FleetHand.Cut)
+						: FString::Printf(TEXT("\nRight-click: %s returns to harbour here."), *Held->Name);
 				}
 				else if (Held && FleetHand.bGrand && !FleetHand.bShelled && FleetHand.Coasts.Contains(TipRegion))
 				{
@@ -8406,8 +8446,18 @@ void ACampaignPlayerController::LayOutFleet()
 		FleetNext = TEXT("patrol");
 	}
 	Tray.FleetNext = FleetNext;
+	// (1.5.2) Held where this month's battle left it, all four of its orders are refused with that reason. Cut off beyond
+	// a shut strait, its three at sea are refused with its card's line, and its way home only with no harbour on its side.
+	Tray.FleetSeaWhy = !FleetHand.Held.IsEmpty() ? FleetHand.Held : FleetHand.Cut;
+	Tray.FleetHomeWhy = !FleetHand.Held.IsEmpty() ? FleetHand.Held : FleetHand.HomeTip.IsEmpty() ? FleetHand.Cut : FString();
+	Tray.FleetHomeTip = FleetHand.HomeTip;
 	Tray.PendingButton = FText::GetEmpty();
+	// (1.5.2) A fleet held or cut off is told so, and not told to right-click seas it cannot go to. Its guns can still
+	// shell a coast in red, if one is in reach.
+	const TCHAR* StillShells = FleetHand.Coasts.Num() > 0 ? TEXT(" A coast in red can still be shelled.") : TEXT("");
 	Tray.Hint = FText::FromString(!View.bHumanUp ? TEXT("It is not your month.")
+		: !FleetHand.Held.IsEmpty() ? FString::Printf(TEXT("%s%s Esc lets it go."), *FleetHand.Held, StillShells)
+		: !FleetHand.Cut.IsEmpty() ? FString::Printf(TEXT("%s%s%s Esc lets it go."), *FleetHand.Cut, FleetHand.HomeTip.IsEmpty() ? TEXT("") : TEXT(" RETURN TO HARBOUR takes it to a harbour on its side."), StillShells)
 		: Tray.bFleetGrand && FleetHand.Coasts.Num() > 0
 		? TEXT("Right-click a ringed sea to send it there, a coast in red to shell it, a port in blue to make it the fleet's home, or its own harbour to bring it in. ORDERS has the rest. Esc lets it go.")
 		: TEXT("Right-click a ringed sea to send the fleet there, a port tinted blue to make it the fleet's new home, or its own harbour to bring it in. Esc lets it go."));
@@ -8573,12 +8623,19 @@ void ACampaignPlayerController::SetFleetStance(const FString& Stance)
 	{
 		// At sea already: it changes what it is doing where it is.
 		FString Note;
-		const FString Name = Fleet->Name;
+		const FString Name = Fleet->Name, Was = Fleet->Stance;
 		if (Session->OrderForce(FString::Printf(TEXT("fleet:%d:%d:%s"), FleetInHand, Fleet->Zone, *FleetNext), Note))
 		{
 			ShowWar(Session->GetView(), TArray<FCorpsMove>());
 			Notify(FString::Printf(TEXT("%s: %s."), *Name, FleetNext == TEXT("raid") ? TEXT("raiding merchant shipping, and keeping clear of the enemy fleet")
 				: FleetNext == TEXT("hunt") ? TEXT("hunting submarines with its destroyers") : TEXT("on patrol, seeking the enemy's warships and guarding the convoys")), 5.0);
+		}
+		else
+		{
+			// (1.5.2) Refused (held where this month's battle left it, or cut off beyond a shut strait): it says why, and
+			// the button stays on what the fleet is doing, not on the order it was refused.
+			FleetNext = Was == TEXT("raid") || Was == TEXT("hunt") ? Was : FString(TEXT("patrol"));
+			Notify(Note.IsEmpty() ? FString(TEXT("That order cannot be given now.")) : Note, 5.0);
 		}
 	}
 	RefreshOrders();
@@ -8629,9 +8686,14 @@ void ACampaignPlayerController::FleetToHarbour()
 	if (Session->OrderForce(FString::Printf(TEXT("fleet:%d:%d:port"), FleetInHand, Home), Note))
 	{
 		CampaignSounds::Play(this, TEXT("ship_horn"), 0.45f);
+		// (1.5.2) Cut off beyond a shut strait it makes for a harbour on its side instead, which becomes its base: the
+		// harbour named is the one it is in now.
+		const FViewFleet* Now = Session->GetView().Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; });
+		const FString Into = Now ? Now->Port : Port;
 		ShowWar(Session->GetView(), TArray<FCorpsMove>());
 		RefreshOrders();
-		Notify(FString::Printf(TEXT("%s returns to harbour at %s."), *Name, *Port), 5.0);
+		Notify(Into == Port ? FString::Printf(TEXT("%s returns to harbour at %s."), *Name, *Into)
+			: FString::Printf(TEXT("%s cannot reach %s: it makes for %s instead, its new base."), *Name, *Port, *Into), 5.0);
 	}
 	else
 	{
@@ -11010,7 +11072,9 @@ bool ACampaignPlayerController::IsBusyForSteps() const
 	// (an order still being answered, or its picture still being laid, counts as the table moving: see MoveAside)
 	// (release 2, the scramble offer: a SCRAMBLE card waits for the step file's own press, SCRAMBLE or LEAVE IT TO THE
 	// STAFF, so it does not count as the table moving; the battle it opens does, as his own raid's)
-	return bWatching || Newsreel.bOn || Announcements.Num() > 0 || EndAsk.bVisible || (IsAnswering() && !Scramble.bVisible);
+	// (a raid's report still to open is the table moving too: the step that flew the raid ends with its report up.
+	// Only a run that asked for the report by name, "-TheaterRaidCard", is ever owed one: see PressPage.)
+	return bWatching || Newsreel.bOn || Announcements.Num() > 0 || EndAsk.bVisible || (IsAnswering() && !Scramble.bVisible) || !RaidCardDue.IsEmpty();
 }
 
 void ACampaignPlayerController::StepThroughMonth()

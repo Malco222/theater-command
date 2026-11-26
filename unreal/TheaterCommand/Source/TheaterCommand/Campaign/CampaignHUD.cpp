@@ -10278,43 +10278,45 @@ namespace
 						TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)[OrderButton(TEXT("HALF"), false, [this]() { if (Controller.IsValid()) { Controller->PickGoing(2); } })];
 					}
 				};
+				// (1.5.2) A fleet's order: dimmed where the rules refuse it (InWhy, its tip then), else with its own tip (InTip). The
+				// dimming and the tip are on the button itself, as a page's are, so a press there and the step player both read them.
+				auto FleetButton = [&OrderButton](const TCHAR* InLabel, bool bInOn, const FString& InWhy, const FString& InTip, TFunction<void()> InDo)
+				{
+					const TSharedRef<SButton> MadeButton = OrderButton(InLabel, bInOn, MoveTemp(InDo));
+					MadeButton->SetEnabled(InWhy.IsEmpty());
+					MadeButton->SetToolTipText(FText::FromString(InWhy.IsEmpty() ? InTip : InWhy));
+					return MadeButton;
+				};
 				if (Army.bFleet)
 				{
-					// A fleet in hand: what it does at sea, the way home, and a card for each ship.
+					// A fleet in hand: what it does at sea, the way home, and a card for each ship. (1.5.2) Held where this month's
+					// battle left it, or cut off beyond a shut strait, the orders refused are dimmed, each saying why, as its page does.
 					TrayOrders->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
 					[
 						SNew(STextBlock).Text(FText::FromString(TEXT("At sea:"))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
 					];
 					TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
 					[
-						SNew(SBox).ToolTipText(FText::FromString(TEXT("Seeks out the enemy's warships in its sea and guards the convoys that cross it.")))
-						[
-							OrderButton(TEXT("PATROL"), Army.FleetNext == TEXT("patrol"), [this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("patrol")); } })
-						]
+						FleetButton(TEXT("PATROL"), Army.FleetNext == TEXT("patrol"), Army.FleetSeaWhy, TEXT("Seeks out the enemy's warships in its sea and guards the convoys that cross it."),
+							[this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("patrol")); } })
 					];
 					TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, Army.bFleetGrand ? 5.0f : 22.0f, 0.0f)
 					[
-						SNew(SBox).ToolTipText(FText::FromString(TEXT("Goes for merchant ships and keeps clear of a fight with the enemy fleet.")))
-						[
-							OrderButton(TEXT("RAID SHIPPING"), Army.FleetNext == TEXT("raid"), [this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("raid")); } })
-						]
+						FleetButton(TEXT("RAID SHIPPING"), Army.FleetNext == TEXT("raid"), Army.FleetSeaWhy, TEXT("Goes for merchant ships and keeps clear of a fight with the enemy fleet."),
+							[this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("raid")); } })
 					];
 					if (Army.bFleetGrand)
 					{
 						TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 22.0f, 0.0f)
 						[
-							SNew(SBox).ToolTipText(FText::FromString(TEXT("Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks. The pointer over a sea says what hunting there would do.")))
-							[
-								OrderButton(TEXT("HUNT SUBMARINES"), Army.FleetNext == TEXT("hunt"), [this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("hunt")); } })
-							]
+							FleetButton(TEXT("HUNT SUBMARINES"), Army.FleetNext == TEXT("hunt"), Army.FleetSeaWhy, TEXT("Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks. The pointer over a sea says what hunting there would do."),
+								[this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("hunt")); } })
 						];
 					}
 					TrayOrders->AddSlot().AutoWidth()
 					[
-						SNew(SBox).ToolTipText(FText::FromString(TEXT("Safe from the enemy fleet, and takes no part at sea.")))
-						[
-							OrderButton(TEXT("RETURN TO HARBOUR"), Army.FleetStance == TEXT("port"), [this]() { if (Controller.IsValid()) { Controller->FleetToHarbour(); } })
-						]
+						FleetButton(TEXT("RETURN TO HARBOUR"), Army.FleetStance == TEXT("port"), Army.FleetHomeWhy, !Army.FleetHomeTip.IsEmpty() ? Army.FleetHomeTip : FString(TEXT("Safe from the enemy fleet, and takes no part at sea.")),
+							[this]() { if (Controller.IsValid()) { Controller->FleetToHarbour(); } })
 					];
 					if (Army.bFleetGrand)
 					{
@@ -14682,8 +14684,10 @@ namespace
 			const TSharedPtr<FSlateBrush> Plate = Model.IsEmpty() ? nullptr : CutOutOf(Model);
 			const FString Craft = Seat.Kind == TEXT("ftr") ? TEXT("fighters") : Seat.Kind == TEXT("bmr") ? TEXT("bombers") : TEXT("aircraft");
 			// (its airfield and how far it has to fly; a fighter group goes as escort)
-			const FString Where = Seat.Kind == TEXT("ftr") ? FString::Printf(TEXT("%s \u00B7 escort, %s km"), *Seat.Base, *FText::AsNumber(Seat.Km).ToString())
-				: FString::Printf(TEXT("%s \u00B7 %s km"), *Seat.Base, *FText::AsNumber(Seat.Km).ToString());
+			// (1.5.2: the distance in the bridge's own words where it sends them; a wing out of reach has no distance, and goes as nobody's escort)
+			const FString Dist = Seat.Far.IsEmpty() ? FString::Printf(TEXT("%s km"), *FText::AsNumber(Seat.Km).ToString()) : Seat.Far;
+			const FString Where = Seat.Kind == TEXT("ftr") && !Seat.bOutOfReach ? FString::Printf(TEXT("%s \u00B7 escort, %s"), *Seat.Base, *Dist)
+				: FString::Printf(TEXT("%s \u00B7 %s"), *Seat.Base, *Dist);
 			TSharedRef<SHorizontalBox> Head = SNew(SHorizontalBox);
 			if (Plate.IsValid())
 			{
@@ -14702,7 +14706,8 @@ namespace
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 				[
 					SNew(SPhraseText).Text(FText::FromString(Where)).Face(Font(TEXT("Regular"), 10)).Ink(bCan ? Muted : Faint).Guess(226.0f)
-					.ToolTipText(FText::FromString(FString::Printf(TEXT("%s%s. %s km to fly to the target."), Seat.bAfloat ? TEXT("Aboard the ") : TEXT("Based at "), *Seat.Base, *FText::AsNumber(Seat.Km).ToString())))
+					.ToolTipText(FText::FromString(Seat.bOutOfReach ? FString::Printf(TEXT("%s%s."), Seat.bAfloat ? TEXT("Aboard the ") : TEXT("Based at "), *Seat.Base)
+						: FString::Printf(TEXT("%s%s. %s to fly to the target."), Seat.bAfloat ? TEXT("Aboard the ") : TEXT("Based at "), *Seat.Base, *Dist)))
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 				[

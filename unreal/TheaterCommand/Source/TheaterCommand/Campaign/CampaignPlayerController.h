@@ -200,6 +200,10 @@ struct FArmyTray
 	bool bFleetGrand = false; // the navy as pieces: it can hunt, escort, shell, split and join
 	int32 FleetAircraft = 0; // the aircraft its carriers bring, if it has carriers
 	FText FleetWarning; // its heavy ships are thinly screened, or its guns have spoken
+	// (1.5.2) Why its orders at sea are refused (held where this month's battle left it, or cut off beyond a shut strait), and
+	// why its way home is (held, or cut off with no friendly harbour on its side): each dims its buttons, with this as the tip.
+	// FleetHomeTip is the way home's own tip where it is cut off with a harbour on its side to make for. Empty when none applies.
+	FString FleetSeaWhy, FleetHomeWhy, FleetHomeTip;
 	FString Posture; // the standing order the picked corps are under: stand, dig or back; empty if they differ
 	bool bByRail = false; // the next order sends them by rail
 	bool bBySea = false; // or by sea: to a friendly port, or ashore on an enemy coast
@@ -1858,6 +1862,12 @@ private:
 	bool bEdgeNewsDue = false;
 	bool bMonthReportOpens = false;
 	void LayEdgeNews(const FMonthCard* Shown);
+	// (Brian, 24 November 2026: a raid "didnt't tell me the results of the battle".) The report of the raid his crews
+	// have just been sent on ('airreport:<id>', which the rules name as the page that comes next): it opens once the
+	// aircraft have been seen to fly the raid, in the month it was flown in.
+	FString RaidCardDue;
+	double RaidCardAt = 0.0;
+	int32 RaidCardTurn = 0;
 	bool bRewatching = false; // the month is being watched again from its card
 	bool bHandStands = false; // (ruling 88) the army in hand has been told to stand this month: the rules keep the order, with the saved game
 	TArray<int32> RoundSeen; // the provinces the round of armies has been to since it last began

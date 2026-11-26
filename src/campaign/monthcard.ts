@@ -38,6 +38,7 @@ import { NO_LAST_MONTH, ROME_HOLDS, majorsOf, stakeDue, stakeWarning } from './d
 import { ARSENAL, workLevel, yardLevel } from './arsenal';
 import { BUDGET, PRODUCTION, ledger } from './economy';
 import { allied, atWar, men, theName } from './game';
+import { loweredOf, loweredShort, loweredSum } from './air';
 import { CLASSES, NAVY, shipCount, shipList } from './navy';
 import { cityOrders } from './orders';
 import { besieged, garrisonOf, guardMen } from './siege';
@@ -314,18 +315,25 @@ const keepsPoint = (whole: string, cut: string): boolean => {
  * there; but a line that loses its point when cut is not cut: it stays in the newsreel and the next is tried in
  * its place. Returns what is shown, each with its place in the list it came from.
  */
-export function fitFoot(items: string[], per: number, lines: number, most: number): { text: string; at: number }[] {
+export function fitFoot(items: string[], per: number, lines: number, most: number, shorts: (string | undefined)[] = []): { text: string; at: number }[] {
   const out: { text: string; at: number }[] = [];
   let left = lines;
   for (let i = 0; i < items.length && out.length < most && left > 0; i++) {
     const whole = `${items[i].replace(/\s+/g, ' ').trim().replace(/[.]$/, '')}.`;
     const need = linesAt(whole, per);
     if (need <= left) { out.push({ text: whole, at: i }); left -= need; continue; }
+    // (A line with a short form of its own, as the UI director words it, gives that where the whole will not fit.)
+    const short = shorts[i];
+    if (short && linesAt(short, per) <= left) { out.push({ text: short, at: i }); left -= linesAt(short, per); continue; }
+    // (Where a line has a short form, it is never shown cut: the UI director, 25 November 2026, 15:04Z.)
+    if (short) continue;
     const cut = wholeWords(whole, per, left);
     if (keepsPoint(whole, cut)) { out.push({ text: cut, at: i }); left = 0; }
   }
   return out;
 }
+/** A line of news that an air command, or a new group of one, forms (air.ts airUpkeep and growCommands). */
+const AIR_FORMS = /^.+ forms in [^,]+(?:, a new group of .+)?\.$/;
 /** The room the foot boxes have, in letters to a line: at home beside a sign and from the box's edge, elsewhere, and what a staff line may run to in all. */
 const FOOT_ROOM = { home: 30, homeWide: 35, elsewhere: 36, staff: 44 };
 const DESK_WORD: Record<string, string> = { research: 'Research', build: 'Build', towns: 'Towns', diplomacy: 'Diplomacy', spies: 'Spies', air: 'Air', navy: 'Navy' };
@@ -1221,7 +1229,15 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   // A march that halts wants his orders and comes first; armies that arrive at one place are one line; and where
   // the town held, the staff speaks of the battle there and not of its loss.
   const held = new Set(ranked.filter((x) => x.row.tag === 'HELD' || x.row.tag === 'BESIEGED').map((x) => x.row.place));
-  const said: { text: string; full: string; hs: Headline[] }[] = [];
+  const said: { text: string; full: string; hs: Headline[]; short?: string }[] = [];
+  // (Several commands' establishments lowered in a month are one line, summed from their own lines, which the reports
+  // keep; with one, its own line. The UI director, 25 November 2026, 05:45Z. It is the foot's first line, ahead of
+  // the air commands that form: the UI director, 14:06Z.)
+  const lowered = news.filter((x) => loweredOf(x.text));
+  const sum = loweredSum(lowered.map((x) => x.text));
+  if (sum) said.push({ text: sum.text, full: sum.text, hs: lowered, short: sum.short });
+  // (One command's own line has its short form too, "Luftflotte 1 cut back: 200 aircraft struck off": 15:04Z.)
+  else for (const h of lowered) said.push({ text: first(h.text), full: h.text, hs: [h], short: loweredShort(h.text) ?? undefined });
   for (const h of news.filter((x) => / has halted at .+ on its march to /.test(x.text))) said.push({ text: first(h.text), full: h.text, hs: [h] });
   const arrivals = new Map<string, Headline[]>();
   for (const h of news) { const m = /^(.+) has arrived at (.+)\.$/.exec(h.text); if (m) arrivals.set(m[2], [...(arrivals.get(m[2]) ?? []), h]); }
@@ -1236,8 +1252,21 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const dir = /^A directive from ([^:]+): /.exec(h.text), title = dir ? N.gov?.dir?.title : undefined;
     said.push({ text: dir && title ? `A directive from ${dir[1]}: ${title}` : first(fixed), full: fixed, hs: [h] });
   }
-  if (signed < slots) for (const f of fitFoot(said.map((s) => s.text), opts.whole ? Infinity : signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken, Math.min(3, slots - signed))) {
-    card.also.push(f.text); card.alsoFull.push(said[f.at].full);
+  const fit = (): { text: string; at: number }[] => fitFoot(said.map((s) => s.text), opts.whole ? Infinity : signed ? FOOT_ROOM.home : FOOT_ROOM.homeWide, slots * 2 - taken, Math.min(3, slots - signed), said.map((s) => s.short));
+  let fitted = signed < slots ? fit() : [];
+  // (The air commands that form in a month, where their lines do not all fit, are one line: "4 air commands formed",
+  // given as the UI director words it, with no full stop. The UI director, 25 November 2026, 14:06Z. A line the card
+  // would show cut counts as not fitting: where a summed form exists, a cut line is never shown, 15:04Z.)
+  const forms = said.filter((s) => s.hs.length === 1 && AIR_FORMS.test(s.hs[0].text));
+  let formed: string | null = null;
+  if (forms.length > 1 && forms.some((s) => !fitted.some((f) => said[f.at] === s && !f.text.endsWith('…')))) {
+    formed = `${forms.length} air commands formed`;
+    said.splice(said.indexOf(forms[0]), 1, { text: formed, full: forms.map((s) => s.full).join(' '), hs: forms.flatMap((s) => s.hs) });
+    for (const s of forms.slice(1)) said.splice(said.indexOf(s), 1);
+    fitted = fit();
+  }
+  for (const f of fitted) {
+    card.also.push(formed !== null && f.text === `${formed}.` ? formed : f.text); card.alsoFull.push(said[f.at].full);
     for (const h of said[f.at].hs) used.add(h);
   }
 

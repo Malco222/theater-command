@@ -1352,7 +1352,7 @@ function whyNotQuay(g: Game, c: Corps, to: Region, rides = false): string | null
   // place its side holds once its span is over is left, not reinforced. line.ts; ruling 224, b390. Never the player's.)
   if (lineShut(g, c.nat, to)) return `By the book, ${to.name} lies beyond the record's line this month.`;
   // A harbour blocked and its quays blown up takes no ship until it is mended (prizes.ts).
-  for (const p of [from, to]) { const out = prizeOut(g, p, 'harbour'); if (out > 0) return `The harbour of ${p.name} is wrecked: no ship will use it for ${out === 1 ? 'a month' : `${out} months`} more.`; }
+  for (const p of [from, to]) { const out = prizeOut(g, p, 'harbour'); if (out > 0) return `The harbour of ${placeName(p.name)} is wrecked: no ship will use it for ${out === 1 ? 'a month' : `${out} months`} more.`; }
   if (hostileUnits(g, to, c.nat).length) {
     if (siegeRules(g) && !harbourOpen(g, to)) return `The enemy holds the quays of ${to.name}: nothing can be run into the town by sea.`;
     // A town under siege with its harbour still open: ships can run more troops into the garrison, if it has room.
@@ -2121,6 +2121,16 @@ export function coastReport(g: Game, att: string): void {
 
 // ---- Fleet orders -------------------------------------------------------------------------------
 
+/**
+ * The seas a fleet puts to sea in from its base: its home sea, and the base's other seas where no strait shut to it lies
+ * between (1.5.2, the playtest's #28). A harbour on both sides of a strait (Spanish Morocco, on the Iberian Coast and
+ * the Western Mediterranean) is no way round it: a fleet there is on its home sea's side. For every other harbour, and
+ * for the strait's own holder, these are all the base's seas, as before.
+ */
+export function baseSeas(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>): number[] {
+  return f.base >= 0 ? g.regions[f.base].seas.filter((z) => z === f.home || canPass(g, f.home, z, f.nat)) : [f.home];
+}
+
 /** Where a fleet sails from, for a far-side submarine group how far its boats raid (`Fleet.reach`), and what sails. */
 type Sailing = Pick<Fleet, 'nat' | 'base' | 'home'> & { reach?: number } & Partial<Pick<Fleet, 'ships'>>;
 
@@ -2140,7 +2150,8 @@ export function fleetReach(g: Game, f: Sailing, calm = false, raid = false): num
   // (Release 2, heavyseas.ts) A sea in a gale can be sailed into but not on through this month; `calm` reads the reach
   // as if no gale blew (a tied fleet's beat is its beat whatever the weather). Nothing with that switch off.
   const gales = calm ? null : galeSeas(g);
-  for (const z of f.base >= 0 ? g.regions[f.base].seas : [f.home]) if (d[z] < 0) { d[z] = 1; q.push(z); }
+  // (1.5.2, the playtest's #28: a harbour on both sides of a strait shut to it is no way round it: baseSeas.)
+  for (const z of baseSeas(g, f)) if (d[z] < 0) { d[z] = 1; q.push(z); }
   for (let i = 0; i < q.length; i++) {
     if (d[q[i]] >= range || gales?.has(q[i])) continue;
     for (const j of g.seas[q[i]].adj) if (d[j] < 0 && canPass(g, q[i], j, f.nat)) { d[j] = d[q[i]] + 1; q.push(j); }
@@ -2155,7 +2166,8 @@ export function fleetReach(g: Game, f: Sailing, calm = false, raid = false): num
 function seaSteps(g: Game, f: Sailing): Int16Array {
   const d = new Int16Array(g.seas.length);
   const q: number[] = [];
-  for (const z of f.base >= 0 ? g.regions[f.base].seas : [f.home]) if (!d[z]) { d[z] = 1; q.push(z); }
+  // (from the seas its reach starts from: baseSeas, 1.5.2's #28, as fleetReach)
+  for (const z of baseSeas(g, f)) if (!d[z]) { d[z] = 1; q.push(z); }
   for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (!d[j] && canPass(g, q[i], j, f.nat)) { d[j] = d[q[i]] + 1; q.push(j); }
   return d;
 }
@@ -2214,6 +2226,121 @@ export function tieLapses(g: Game, f: Fleet): boolean {
  */
 export const tiedNow = (g: Game, f: Fleet): boolean => f.tied && !tieLapses(g, f);
 
+// ---- A fleet cut off beyond a shut strait (1.5.2; the 1.5.1 playtest, 25 November 2026) ----
+// A strait can shut behind a fleet at sea: its holder goes to war with the fleet's nation, shuts it by order, or the
+// ground it stands on changes hands. Its reach is counted from its base, so nothing saw it was out there: the player's
+// order to return to harbour, and the staff's, sailed it home through the shut strait, and a fleet he kept by hand was
+// left at sea with no order that worked. Now a fleet at sea that cannot steam to its own harbour through straits open
+// to it is cut off. It makes for the nearest friendly harbour on its side, which becomes its base, or with none stays
+// at sea; its owner is told once.
+
+/** How many seas a fleet at sea is from each sea it can steam to through straits open to it, with no limit of range (-1: none). */
+function seasFrom(g: Game, f: Fleet): Int16Array {
+  const d = new Int16Array(g.seas.length).fill(-1);
+  const q = [f.zone];
+  d[f.zone] = 0;
+  for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (d[j] < 0 && canPass(g, q[i], j, f.nat)) { d[j] = d[q[i]] + 1; q.push(j); }
+  return d;
+}
+
+/**
+ * True where a fleet is at sea and cannot steam to its own harbour: a strait between is shut to it. (A fleet in passage,
+ * on the far chart, is not: its voyage finds another way, turns back, or waits at sea for a harbour, steamPassages and
+ * goAdrift, release 2.)
+ */
+export function cutOff(g: Game, f: Fleet): boolean {
+  if (!atSea(f) || inPassage(f) || f.zone < 0) return false;
+  const d = seasFrom(g, f);
+  return !baseSeas(g, f).some((z) => d[z] >= 0);
+}
+
+/** The harbour a cut-off fleet would make for: its own where that stands on its side too, else the nearest friendly harbour it can steam to, or null with none. */
+export function harbourFor(g: Game, f: Fleet): Region | null {
+  const d = seasFrom(g, f);
+  // (1.5.2, the release review) Its own harbour first, where it stands on both sides of the strait and the fleet can steam
+  // to its side (Spanish Morocco): sail() makes for its own where it can reach it. Before, a nearer or equal harbour of a
+  // lower number (Andalusia, with Spain an ally) took its base from it, with words that it "cannot reach" its own.
+  const own = f.base >= 0 ? g.regions[f.base] : null;
+  if (own && own.port && allied(g, f.nat, own.ctrl) && own.seas.some((z) => d[z] >= 0)) return own;
+  let best: Region | null = null, bestAt = Infinity;
+  for (const r of g.regions) {
+    if (!r.port || !r.seas.length || !allied(g, f.nat, r.ctrl)) continue;
+    const at = Math.min(...r.seas.map((z) => (d[z] < 0 ? Infinity : d[z])));
+    if (at < bestAt) { best = r; bestAt = at; }
+  }
+  return best;
+}
+
+/** The strait shut between a cut-off fleet and its harbour, for the news: the first gate on its side's edge that is shut to it. */
+function shutBetween(g: Game, f: Fleet): Gate | undefined {
+  const d = seasFrom(g, f);
+  return g.gates.find((gt) => (d[gt.a] >= 0) !== (d[gt.b] >= 0) && !canPass(g, gt.a, gt.b, f.nat));
+}
+
+/** A gate as the subject of a sentence: "the Strait of Gibraltar is", "the Danish straits are". */
+const gateIs = (gt: Gate): string => `${gt.name} ${/s$/.test(gt.name) ? 'are' : 'is'}`;
+
+/** A cut-off fleet makes for the nearest friendly harbour on its side, which becomes its base. False where it has none. */
+function makesHarbour(g: Game, f: Fleet): boolean {
+  const r = harbourFor(g, f);
+  const was = f.port, gate = shutBetween(g, f);
+  // (Its own harbour may stand on both sides of the strait, as Spanish Morocco does, with the side it sailed from the
+  // far one: it comes in on its own side, and that side's sea becomes its home. rebase() would refuse its own base.)
+  if (r && r.id === f.base) {
+    const sea = landfall(g, f, r);
+    if (sea < 0) return false;
+    f.home = sea;
+    f.zone = sea;
+    f.stance = 'port';
+    delete f.lane;
+    g.supplyDirty = true;
+    syncWings(g);
+    return true;
+  }
+  if (!r || !rebase(g, f, r)) return false;
+  headline(g, 'info', `${cap(fleetName(f))} cannot reach ${was}${gate ? `: ${gateIs(gate)} shut to it` : ''}. It makes for ${r.name} instead, its new base.`, f.nat);
+  return true;
+}
+
+/**
+ * The standing line on a cut-off fleet's own card, for as long as it is cut off (DD 25 Nov 04:05Z: a player who skipped
+ * the news still sees it where he looks at the fleet). Empty when it is not cut off.
+ */
+export function cutOffLine(g: Game, f: Fleet): string {
+  if (!cutOff(g, f)) return '';
+  const r = harbourFor(g, f), gate = shutBetween(g, f);
+  return `Cut off${gate ? `: ${gateIs(gate)} shut to it` : ''}. ${r ? `Nearest friendly harbour on its side: ${r.name}.` : 'No friendly harbour on its side can take it.'}`;
+}
+
+/**
+ * (1.5.2, the release review) What RETURN TO HARBOUR does for a cut-off fleet, as its tip: it makes for the harbour on
+ * its side, which becomes its base, or comes in to its own where that stands on both sides of the strait. Empty where it
+ * is not cut off or has no harbour on its side.
+ */
+export function cutOffHomeTip(g: Game, f: Fleet): string {
+  const r = cutOff(g, f) ? harbourFor(g, f) : null;
+  return !r ? '' : r.id === f.base ? `Cut off beyond a shut strait: it comes in to ${r.name} on its own side, and keeps its base there.`
+    : `Cut off beyond a shut strait: it makes for ${r.name}, which becomes its base.`;
+}
+
+/** The month's word to a player whose fleet is cut off, once while it is (a fleet he keeps by hand, or with the navy his own: no admiral moves it). */
+export function cutOffNews(g: Game, nat: string): void {
+  if (nat !== g.human) return;
+  for (const f of fleetsOf(g, nat)) {
+    // (Its own key: 'cut:<region>' is the land's ring news (game.ts cutOffNews), and fleet and region numbers meet. The
+    // release 2 join of 25 November 2026.)
+    const key = `fcut:${f.id}`;
+    if (!cutOff(g, f)) { delete g.flags[key]; continue; }
+    if (g.flags[key] !== undefined || !(keptByHand(g, f) || byHand(g, nat, 'navy'))) continue;
+    g.flags[key] = g.turn;
+    const r = harbourFor(g, f), gate = shutBetween(g, f);
+    // (its own harbour on both sides of the strait: it can come in there, on this side)
+    headline(g, 'info', r && r.id === f.base
+      ? `${cap(fleetName(f))} is cut off in the ${g.seas[f.zone].name}${gate ? `: ${gateIs(gate)} shut to it` : ''}. Send it to harbour and it comes in to ${r.name} on this side of the strait, and keeps its base there.`
+      : `${cap(fleetName(f))} is cut off in the ${g.seas[f.zone].name}${gate ? `: ${gateIs(gate)} shut to it` : ''}, so it cannot sail home to ${f.port}. ${r ? `Send it to harbour and it makes for ${r.name}, the nearest friendly harbour it can reach, or move its base on its page.` : 'No friendly harbour on its side of the strait can take it: it stays at sea.'}`, nat);
+  }
+}
+
 /**
  * Sends a fleet to a sea to patrol or raid there, or back to harbour. In the grand campaign it can also be sent to hunt
  * submarines, or (with the lane named) to sail as the escort of a shipping lane that crosses that sea.
@@ -2224,6 +2351,10 @@ export function sail(g: Game, f: Fleet, zone: number, stance: Stance, lane?: str
   if (inPassage(f)) return false;
   if ((stance === 'escort' || stance === 'hunt') && !seaWar(g)) return false;
   if (stance === 'escort' && !seaRoutes(g).some((r) => r.id === lane && r.zones.includes(zone))) return false;
+  // (1.5.2) A fleet cut off at sea beyond a strait shut to it steams through nothing. Sent to harbour it makes for its
+  // own where it can reach it, else the nearest friendly harbour on its side, which becomes its base; with none it
+  // stays at sea. Sent anywhere else it cannot go: every sea in its reach lies beyond the strait.
+  if (cutOff(g, f)) return stance === 'port' && makesHarbour(g, f);
   if (stance !== 'port' && (!shipCount(f.ships) || !fleetReach(g, f, false, stance === 'raid').includes(zone))) return false;
   const to = stance === 'port' ? f.home : zone;
   // Who holds a sea decides which ports can be supplied, so the supply map is redrawn when a fleet moves.
@@ -2291,12 +2422,23 @@ export function escort(g: Game, f: Fleet, lane: string): boolean {
   return best >= 0 && sail(g, f, best, 'escort', lane);
 }
 
-/** True when a fleet could steam from its present base to this coast, through straits open to it. */
+/**
+ * The seas a fleet steams from, for canSailTo and landfall: on the far chart its voyage's start (wayFrom, release 2:
+ * its sea at sea, in harbour the seas it puts to sea in, baseSeas, so a harbour on both sides of a strait shut to it is
+ * no way round it, 1.5.2's #28); on the old chart its sea when it is at sea, its home sea in harbour (1.5.2).
+ */
+const sailFrom = (g: Game, f: Fleet): number[] => (farOn(g) ? [...new Set(wayFrom(g, f))] : [atSea(f) ? f.zone : f.home]);
+
+/**
+ * True when a fleet could steam from where it is to this coast, through straits open to it: from its sea when it is
+ * at sea, from its home sea in harbour. (1.5.2: it was always from its home sea, so a fleet cut off at sea beyond a
+ * shut strait was offered only the harbours on the far side of it, and none on its own.)
+ */
 export function canSailTo(g: Game, f: Fleet, r: Region): boolean {
   const seen = new Uint8Array(g.seas.length);
   // (Release 2, the far chart: a fleet steams from the sea it is on, at sea, or from its harbour's seas, as its voyage
-  // is reckoned (voyageWay). The old chart reads its home sea.)
-  const q = farOn(g) ? [...new Set(wayFrom(g, f))] : [f.home];
+  // is reckoned (voyageWay). The old chart reads its sea at sea, its home sea in harbour: sailFrom, 1.5.2.)
+  const q = sailFrom(g, f);
   for (const z of q) seen[z] = 1;
   for (let i = 0; i < q.length; i++) {
     if (r.seas.includes(q[i])) return true;
@@ -2343,6 +2485,21 @@ export function orderedTo(g: Game, f: Fleet, m: { base: string; port: string; ho
 }
 
 /**
+ * The sea of this coast a fleet arrives in, sailing from where it is through straits open to it: the coast's first sea
+ * where that one is in reach (always so but where a shut strait splits the coast's seas), else the first that is; -1
+ * where it can reach none. (1.5.2: a fleet that bases at a harbour on both sides of a strait has its home on the side
+ * it came from, not through the strait.)
+ */
+export function landfall(g: Game, f: Fleet, r: Region): number {
+  const seen = new Uint8Array(g.seas.length);
+  // (from the seas canSailTo reads: sailFrom, the far chart's voyage start too)
+  const q = sailFrom(g, f);
+  for (const z of q) seen[z] = 1;
+  for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (!seen[j] && canPass(g, q[i], j, f.nat)) { seen[j] = 1; q.push(j); }
+  return r.seas.find((z) => seen[z]) ?? -1;
+}
+
+/**
  * A base move of the staff's book for a fleet of the player's that is his (the audit's re-check of 25 November 2026:
  * one patrol ordered by hand before May 1940 kept the Pacific Fleet off Pearl Harbor for good, and nothing said so).
  * The move waits on the fleet (Fleet.planBase) and the news tells him: kept by hand under the admirals, it goes there
@@ -2380,12 +2537,16 @@ export function baseTargets(g: Game, f: Fleet): Region[] {
  */
 export function rebase(g: Game, f: Fleet, r: Region, instant = false): boolean {
   if (!r.port || !r.seas.length || (r.id === f.base && !adrift(f)) || !allied(g, f.nat, r.ctrl) || !canSailTo(g, f, r)) return false;
+  // (1.5.2) Its home there is the coast's first sea it can reach from where it is (landfall): a harbour on both sides of
+  // a strait shut to it is its home on the side it came from, not through the strait.
+  const sea = landfall(g, f, r);
+  if (sea < 0) return false;
   const way = !instant && farOn(g) ? voyageWay(g, f, r) : null;
   if (!instant && farOn(g) && !way) return false;
   const was = inPassage(f) && f.passage ? { base: f.passage.from, port: f.passage.fromPort, home: f.passage.fromHome } : { base: f.base, port: f.port, home: f.home };
   f.base = r.id;
   f.port = r.name;
-  f.home = r.seas[0];
+  f.home = sea;
   delete f.lane;
   if (way && way.length > NAVY.range) setOut(g, f, way, was, false);
   else {
@@ -2427,8 +2588,11 @@ function voyageWay(g: Game, f: Fleet, r: Region): number[] | null {
   return null;
 }
 
-/** The seas a fleet's way starts from: the sea it is on if at sea, else its base's seas. */
-const wayFrom = (g: Game, f: Fleet): number[] => (atSea(f) ? [f.zone] : f.base >= 0 ? g.regions[f.base].seas : [f.home]);
+/**
+ * The seas a fleet's way starts from: the sea it is on if at sea, else the seas it puts to sea in from its base
+ * (baseSeas: its base's seas, but a harbour on both sides of a strait shut to it is no way round it, 1.5.2's #28).
+ */
+const wayFrom = (g: Game, f: Fleet): number[] => (atSea(f) ? [f.zone] : baseSeas(g, f));
 
 /** The seas open to a fleet from where it is, through straits open to it: where a voyage of its can lead (voyageWay). */
 function seasOpen(g: Game, f: Fleet): Uint8Array {
@@ -3116,6 +3280,8 @@ export function navalUpkeep(g: Game, nat: string): void {
   // of the player's struck at anchor that he keeps is told once.)
   steamPassages(g, nat);
   for (const f of fleetsOf(g, nat)) { anchorMark(g, f); anchorTold(g, f); }
+  // (1.5.2) A fleet of his cut off at sea beyond a shut strait: he is told once, since no admiral moves it.
+  cutOffNews(g, nat);
   for (const given of NAVY.fleets) {
     // A row with a book of its own forms by it at the book's stops, for the computer's navy (Force H in June 1940),
     // and for a player's in the start month of a campaign begun later (rider b639).

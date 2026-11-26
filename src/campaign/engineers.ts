@@ -43,6 +43,20 @@ const builtField = (g: Game, r: Region): number => g.flags[`wk:field:${r.id}`] ?
 /** The weight of engineers in a force: its engineer divisions at the strength they stand at. */
 export const sappers = (cs: Corps[]): number => cs.reduce((s, c) => s + (c.kind === 'eng' && !c.dead ? c.divs * c.str * (c.supplied ? 1 : 0.5) : 0), 0);
 
+/** Why no field engineers could lay out or enlarge an airfield in this province (`by`: the corps that would, which is not in the way of itself). */
+function fieldWhy(g: Game, r: Region, by?: Corps): string | null {
+  if (!airWar(g)) return 'Airfields are laid out only in the grand campaign.';
+  // Airfields as targets: on a damaged field the job is its repair, free, as the month's work.
+  if (fieldDamaged(g, r.id)) return fieldRepairing(g, r.id) !== undefined ? `The field at ${r.name} is already being repaired.` : null;
+  if (builtField(g, r) >= AIRWAR.fields.engineers) return `The airfield here is as large as field engineers can make it: it serves ${airfieldsHold(g, r.id).toLocaleString('en-US')} aircraft. A larger one is ordered from the treasury.`;
+  const laying = r.units.find((u) => u !== by && !u.dead && u.job?.what === 'airfield' && u.job.reg === r.id);
+  if (laying) return `${laying.name} is already laying out an airfield here.`;
+  return null;
+}
+
+/** True when an engineer corps of this nation with no other work, standing in this province, could be set to lay out an airfield there (the rule of whyNot). */
+export const fieldCanBeLaid = (g: Game, nat: string, r: Region): boolean => groundRules(g) && allied(g, nat, r.ctrl) && !fieldWhy(g, r);
+
 function whyNot(g: Game, c: Corps, key: JobKind): string | null {
   const r = g.regions[c.reg];
   const E = ENGINEERING;
@@ -54,14 +68,7 @@ function whyNot(g: Game, c: Corps, key: JobKind): string | null {
   const other = REPAIRS[key] && (key !== 'plant' || ruinedAt(g, r) <= 1) ? r.units.find((u) => u !== c && !u.dead && u.job?.what === key && u.job.reg === r.id) : undefined;
   if (other) return `${other.name} is already ${REPAIRS[key]} here.`;
   if (key === 'works' && (r.fort?.lv ?? 0) >= E.works.most) return `The works here are at level ${r.fort?.lv ?? 0}: as strong as field engineers can make them. Heavier fortifications are ordered from the treasury.`;
-  if (key === 'airfield') {
-    if (!airWar(g)) return 'Airfields are laid out only in the grand campaign.';
-    // Airfields as targets: on a damaged field the job is its repair, free, as the month's work.
-    if (fieldDamaged(g, r.id)) return fieldRepairing(g, r.id) !== undefined ? `The field at ${r.name} is already being repaired.` : null;
-    if (builtField(g, r) >= AIRWAR.fields.engineers) return `The airfield here is as large as field engineers can make it: it serves ${airfieldsHold(g, r.id).toLocaleString('en-US')} aircraft. A larger one is ordered from the treasury.`;
-    const laying = r.units.find((u) => u !== c && !u.dead && u.job?.what === 'airfield' && u.job.reg === r.id);
-    if (laying) return `${laying.name} is already laying out an airfield here.`;
-  }
+  if (key === 'airfield') { const why = fieldWhy(g, r, c); if (why) return why; }
   if (key === 'mines' && minesAt(g, r) >= E.mines.most) return 'The minefields here are as thick as they can be laid.';
   if (key === 'demolish' && !r.fort) return 'There are no fortifications here to demolish.';
   return null;

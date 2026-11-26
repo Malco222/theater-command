@@ -23,7 +23,7 @@ import { FAR_STAGE } from './stage';
 import { turnToDate } from '../core/ticket';
 import type { AirCampaign, AirFleet, AirMission, AirReport, AirWarMemory, BombStock, CampaignKind, CampaignMonth, Game, Region, SkyFight, SkyState } from './types';
 import {
-  AIR, AIRWAR, afloat, airFleetsOf, airOverBattle, airRange, closeRules, closeStaffRules, cover, crowding, fieldRoom, guardsLand, km, kmTo, rebaseAir, whyNotBase, whyNotMission,
+  AIR, AIRWAR, afloat, airFleetsOf, airOverBattle, airRange, closeRules, closeStaffRules, cover, crowding, fieldRoom, guardsLand, km, kmTo, rebaseAir, smallArm, whyNotBase, whyNotMission,
 } from './air';
 import { allied, atWar, headline, theWords } from './game';
 import { hasTech } from './tech';
@@ -603,7 +603,12 @@ export function campaignOrders(g: Game, nat: string): void {
       const notHeld = targets.filter((t) => { const s = skyFight(g, t); return !(s && s.now === 'held' && allied(g, s.by, nat)); });
       const pool = notHeld.length ? notHeld : targets;
       const flyable = pool.filter((t) => ready.some((f) => whyNotMission(g, f, 'superiority', t) === null));
-      target = flyable.length ? (notHeld.length ? flyable[0] : flyable[c.next++ % flyable.length]) : -1;
+      // (Release 1.5.2, airwar.json ai.back.small: the historian's campaigns are flown by the staff, and no staff sends an
+      // air arm too small to hold any sky to fight for one. Its groups stay on patrol this month, last month's order
+      // with them.)
+      const small = book && smallArm(g, nat);
+      if (small) for (const f of ready) if (f.mission === 'superiority') { f.mission = 'support'; f.target = -1; }
+      target = flyable.length && !small ? (notHeld.length ? flyable[0] : flyable[c.next++ % flyable.length]) : -1;
       for (const f of ready) if (target >= 0 && whyNotMission(g, f, 'superiority', target) === null) { f.mission = 'superiority'; f.target = target; f.camp = c.id; }
     } else if (c.kind === 'bomb') {
       const m = missionOf(c);
@@ -630,6 +635,9 @@ export function campaignOrders(g: Game, nat: string): void {
         f.camp = c.id;
         if (f.bmr <= 0 || f.kind === 'ftr') {
           if (byHand(g, nat, 'air') ? closeRules(g) : closeStaffRules(g)) { f.mission = 'support'; f.target = -1; f.close = true; delete f.escorts; }
+          // (Release 1.5.2: with the player's air war in his staff's hands, his staff does not send an air arm too small
+          // to hold any sky to fight for one: its fighters stay on patrol.)
+          else if (smallArm(g, nat) && !byHand(g, nat, 'air')) { f.mission = 'support'; f.target = -1; }
           else if (sky >= 0 && whyNotMission(g, f, 'superiority', sky) === null) { f.mission = 'superiority'; f.target = sky; }
           continue;
         }

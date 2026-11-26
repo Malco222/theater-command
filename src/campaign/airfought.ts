@@ -15,6 +15,7 @@ import type { VictoryLevel } from '../core/ticket';
 import { fleetsNamed, keptAfloat, keptAfloatPast, shipCount } from './navy';
 import { strafedLine } from './strafers';
 import type { AirFleet, AirReport, BomberRow, BomberShot, Game, SeaSide, ShipClass, Ships } from './types';
+import { placeName } from './game';
 
 export interface FoughtAir {
   /** By campaign air group id: fighters and bombers lost, and downed fighter pilots who fly again. */
@@ -182,8 +183,8 @@ export type StaffHow = 'whole' | 'won' | 'rest';
 /** The staff's line on the after card, in its three forms (the UI director's ruling 226 words, passed 19:48Z). */
 function staffLine(w: { place: string; sky: boolean; how: StaffHow }): string {
   const what = w.sky ? 'fight for the sky over' : 'raid on';
-  if (w.how === 'whole') return `The staff settled the whole ${what} ${w.place}: no shot had been fired.`;
-  return `The staff settled the rest of the ${what} ${w.place} from where it stood${w.how === 'won' ? ': what you had won stays won' : ''}.`;
+  if (w.how === 'whole') return `The staff settled the whole ${what} ${placeName(w.place)}: no shot had been fired.`;
+  return `The staff settled the rest of the ${what} ${placeName(w.place)} from where it stood${w.how === 'won' ? ': what you had won stays won' : ''}.`;
 }
 
 /** How far the fight must have moved his way before "what you had won stays won" is said (the design director, 20:51Z): 5 points. */
@@ -228,7 +229,7 @@ export function afterWords(w: {
     ...(w.staff ? [staffLine({ place: w.place, sky: w.sky, how: w.how ?? 'rest' })] : []),
     ...(w.bombers > 0 ? [bombersLine(w)] : []),
     ...(w.kept ?? []),
-    ...(w.bill ? [`The ${w.sky ? `fight for the sky over ${w.place}` : 'raid'} cost you ${what(w.bill, w.me) || 'nothing'}, and the ${them} lost ${what(w.bill, foe) || 'none'}.`] : []),
+    ...(w.bill ? [`The ${w.sky ? `fight for the sky over ${placeName(w.place)}` : 'raid'} cost you ${what(w.bill, w.me) || 'nothing'}, and the ${them} lost ${what(w.bill, foe) || 'none'}.`] : []),
     // Two kinds of his own already carry an 'and', so a comma sets the enemy's part apart.
     // Nothing down on either side yet: the sea card's form (the UI director, air review 2).
     ...(w.before ? [mine0 === 'none' && !theirs0 ? 'Before you handed it to the staff, no aircraft had fallen on either side.'
@@ -244,7 +245,7 @@ export function afterWords(w: {
  * raiders' bombers by their adjective (18:50Z).
  */
 function bombersLine(w: { place: string; target?: string; me: 'att' | 'def'; adj: Record<'att' | 'def', string>; bombers: number; dropped: number; jettisoned: number; lostBefore?: number }): string {
-  const B = w.bombers, dropped = Math.max(0, Math.min(B, w.dropped)), on = w.target ?? w.place;
+  const B = w.bombers, dropped = Math.max(0, Math.min(B, w.dropped)), on = w.target ?? placeName(w.place);
   const lost = Math.max(0, Math.min(B - dropped, w.lostBefore ?? 0));
   const jett = Math.max(0, Math.min(B - dropped - lost, w.jettisoned));
   const whose = w.me === 'att' ? `your ${B}` : `${B} ${w.adj.att}`;
@@ -299,7 +300,8 @@ export function afterLost(card: Pick<AfterCard, 'groups'>): AfterLost {
   return out;
 }
 
-const FLIP: Record<VictoryLevel, VictoryLevel> = {
+/** A verdict as the other side reads it. */
+export const FLIP: Record<VictoryLevel, VictoryLevel> = {
   'Heroic victory': 'Crushing defeat', 'Decisive victory': 'Decisive defeat', 'Close victory': 'Close defeat', 'Pyrrhic victory': 'Close defeat',
   'Close defeat': 'Close victory', 'Decisive defeat': 'Decisive victory', 'Crushing defeat': 'Heroic victory',
 };
