@@ -290,7 +290,7 @@ namespace AirDesk
 	{
 	public:
 		static constexpr double Reach = 1200.0, Tight = 350.0, Soft = 100.0, FadeS = 1.0, RingS = 1.0, LookEase = 1.0, AwayEase = 1.0, CentreEase = 1.5;
-		static constexpr double DriftLeast = 50.0, DriftShare = 0.5, KnotS = 2.5, PaceEase = 1.0, CarryEase = 0.13;
+		static constexpr double DriftLeast = 50.0, DriftShare = 0.5, KnotS = 2.5, PaceEase = 1.0, CarryEase = 0.13, ZoomEaseS = 0.3, ZoomMost = 1.1;
 		struct Aim
 		{
 			bool bFound = false;     // the groups have aircraft up to look at
@@ -314,10 +314,13 @@ namespace AirDesk
 		/** An aircraft's weight about the look's knot, Far metres from its point in a knot Radius metres wide: nearly 1
 		 * within half of it, a half at it, falling off as the fourth power beyond, never quite 0. */
 		static double Near(double Far, double Radius);
-		/** The player's zoom (Shown, the scene's distance at his own 800 m, and Vel its speed) eased on to where his wheel
-		 * or trackpad has asked for it (Want) over Real seconds, as the framing is (AwayEase, critically damped): a scroll
-		 * never steps the picture in one frame (the raid camera's row, AAirBattle::Zoom). */
-		static void ZoomEase(double& Shown, double& Vel, double Want, double Real);
+		/** The player's zoom (Shown, the scene's distance at his own 800 m, and Vel the speed of its logarithm a second)
+		 * eased on to where his wheel or trackpad has asked for it (Want) over Real seconds, critically damped over
+		 * ZoomEaseS in the distance's logarithm and never faster than ZoomMost of it a second (under 2% of the distance a
+		 * sixtieth of a second): a scroll never steps the picture in one frame, and a notch is about 95% there in under
+		 * three quarters of a second (the raid camera's row, AAirBattle::Zoom). True once there: Shown is then Want and
+		 * Vel 0. */
+		static bool ZoomEase(double& Shown, double& Vel, double Want, double Real);
 
 	private:
 		std::map<int, double> Fade;      // each aircraft's share of its weight, 0 to 1

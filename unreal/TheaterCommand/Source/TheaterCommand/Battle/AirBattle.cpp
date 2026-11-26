@@ -6929,12 +6929,9 @@ void AAirBattle::AimEye(double Real)
 	// at rest once there)
 	if (S.Show.Smooth() && S.bSteadyEye && S.ZoomWant > 0.0)
 	{
-		AirDesk::Overview::ZoomEase(Distance, S.ZoomVel, S.ZoomWant, Real);
-		if (FMath::Abs(Distance - S.ZoomWant) < 0.05 && FMath::Abs(S.ZoomVel) < 0.05)
+		if (AirDesk::Overview::ZoomEase(Distance, S.ZoomVel, S.ZoomWant, Real))
 		{
-			Distance = S.ZoomWant;
 			S.ZoomWant = -1.0;
-			S.ZoomVel = 0.0;
 		}
 	}
 	double Away = Distance * TypeAway / 800.0, Down = Pitch, Heading = Yaw;
