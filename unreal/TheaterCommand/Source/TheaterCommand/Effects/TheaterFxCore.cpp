@@ -5499,6 +5499,30 @@ namespace TheaterFx
 		return Out;
 	}
 
+	void Battle::ThrowCase(double Now, const Vec& At, const Vec& Away, const char* Kind, int Key)
+	{
+		// (Effects (R2): an open-topped gun's loader heaving the case over her side, a closed tank's crewman pitching one
+		// out of the hatch. The row's odds against its own dice: not every case went over the side)
+		CaseRow C;
+		if (!Kind || !*Kind || !(std::fabs(At.X) <= 1e9 && std::fabs(At.Y) <= 1e9 && std::fabs(At.Z) <= 1e9) || !(std::fabs(Now) <= 1.0e9) || !CaseRowOf(Kind, At, C) || RoomForCases() >= static_cast<size_t>(MaxPuffs) * 3 / 5)
+		{
+			return;
+		}
+		const std::string P = std::string("ground_cases.") + Kind + ".";
+		Dice D(static_cast<uint64_t>(static_cast<uint32_t>(Key)) * 0x9E6C63D0676A9A99ull ^ PlaceKey(At) ^ (static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) + 0xCA5Eull));
+		const double Odds = Clamp01(Num(P + "odds", 1.0));
+		const double Roll = D.U();
+		if (Roll >= Odds)
+		{
+			return;
+		}
+		if (Has(P + "case_long_m.0"))
+		{
+			C.M = SafeNum(Range(P + "case_long_m", C.M, C.M).Pick(D), 0.05, 1.5, C.M);
+		}
+		GroundCase(Now + C.After, At, Vec(Away.X, Away.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0)), C, D);
+	}
+
 	const Battle::DustRow& Battle::DustRowOf(const std::string& Ground)
 	{
 		for (const DustRow& R : DustRows)

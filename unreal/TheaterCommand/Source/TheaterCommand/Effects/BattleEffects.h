@@ -220,6 +220,10 @@ public:
 	/** That leak is on something under way: its opening is now at WorldAt, facing Way, going at Velocity (world units
 	 * a second). Every frame while she moves, as BurnMove. The jet leaves the opening and bends astern. */
 	void SteamMove(int32 Id, const FVector& WorldAt, const FVector& Way, const FVector& Velocity);
+	/** Effects (R2), item 7 of the owner's film details: a spent case thrown out of a vehicle by her crew, from WorldAt
+	 * (over an open gun's side, out of a hatch) along Away, by the recipe's ground_cases.<Kind> ("spg", "tank"; laid
+	 * over by -TheaterLandCasesOut and -TheaterLandHatchFumes): no row, nothing. Key: any number for that vehicle. */
+	void ThrowCase(const FVector& WorldAt, const FVector& Away, const FString& Kind, int32 Key);
 	/** Ammunition cooking off at WorldAt (a tank's hatch, a ship's gun mount, aircraft parked on a deck), Up the way
 	 * out of it, the opening AcrossMetres wide: Pops small pops over OverSeconds, each a small flash, a grey-black
 	 * puff, embers in short arcs and now and then a tumbling fragment (never a glowing round going skyward); and

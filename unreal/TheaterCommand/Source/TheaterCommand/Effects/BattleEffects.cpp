@@ -660,6 +660,14 @@ void FBattleEffects::SteamMove(int32 Id, const FVector& WorldAt, const FVector& 
 	});
 }
 
+void FBattleEffects::ThrowCase(const FVector& WorldAt, const FVector& Away, const FString& Kind, int32 Key)
+{
+	Do([=, this]()
+	{
+		Core.ThrowCase(Time(), ToFx(WorldAt), ToFxWay(Away), Named(Kind).c_str(), Key);
+	});
+}
+
 void FBattleEffects::CookOff(const FVector& WorldAt, const FVector& Up, float AcrossMetres, int32 Pops, float OverSeconds, float JetSeconds, float JetFromSeconds, int32 Id)
 {
 	Do([=, this]()

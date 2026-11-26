@@ -14,6 +14,8 @@
 //      lay every piece as before with it, forty hold 16 wisps at most.
 //   D. the breech's puff (the same word and overlay, steam.breech): who puffs (AfterShotOf), and a small grey-brown
 //      puff gone in under 3 s, held to 3 px.
+//   E. hatch fumes and the odd case (-TheaterLandHatchFumes, battle-fx-hatch.json): fumes every second or third shot
+//      with the hatch open, a case one shot in eight when stopped; none shut, nor without the word.
 //
 //     Tools/fx_ten/run.sh [out folder]
 //     fx_ten_test <Content/Effects folder> <out folder>
@@ -640,6 +642,67 @@ namespace
 		Check(P.Seeds == P.SeedsWithout, "the kit's shared dice drawn as often as without it", Say("%.0f draws", static_cast<double>(P.Seeds)));
 		std::printf("     on the screen (1600 px, 42 degrees): the puff %.2f m across its widest rag is %.0f px at 25 m, %.0f px at 150 m (the scene's gate)\n", 2.0 * P.Widest, Px(2.0 * P.Widest, 25.0), Px(2.0 * P.Widest, 150.0));
 	}
+
+	// ----------------------------------------------------------------------------------------------------------------
+	// E. A closed tank's hatch fumes and the odd case
+
+	void HatchFumes()
+	{
+		std::printf("E. Hatch fumes and the odd case (-TheaterLandHatchFumes, battle-fx-hatch.json)\n");
+		using TheaterFx::AfterShotOf;
+		int Fumes = 0, CasesMoving = 0, CasesStopped = 0, Shut = 0, NoWord = 0, Spg = 0;
+		std::string Which;
+		for (int Shot = 1; Shot <= 40; ++Shot)
+		{
+			const TheaterFx::AfterShot M = AfterShotOf(Ask("tank", true, false, true, 1.0, false, Shot, false, true, false));
+			const TheaterFx::AfterShot S = AfterShotOf(Ask("tank", true, false, true, 1.0, true, Shot, false, true, false));
+			const TheaterFx::AfterShot C = AfterShotOf(Ask("tank", true, false, true, 0.3, true, Shot, true, true, true));
+			const TheaterFx::AfterShot N = AfterShotOf(Ask("tank", true, false, true, 1.0, true, Shot, true, false, true));
+			const TheaterFx::AfterShot O = AfterShotOf(Ask("tank", true, true, true, 1.0, true, Shot, false, true, false));
+			Fumes += M.bHatchFumes ? 1 : 0;
+			if (M.bHatchFumes && Shot <= 12)
+			{
+				Which += (Which.empty() ? "" : ",") + std::to_string(Shot);
+			}
+			CasesMoving += M.bHatchCase ? 1 : 0;
+			CasesStopped += S.bHatchCase ? 1 : 0;
+			Shut += C.bHatchFumes || C.bHatchCase ? 1 : 0;
+			NoWord += N.bHatchFumes || N.bHatchCase ? 1 : 0;
+			Spg += O.bHatchFumes || O.bHatchCase ? 1 : 0;
+		}
+		Check(Fumes == 16, "hatch open: fumes every second or third shot (16 of 40)", Say("%.0f of 40", Fumes) + " (" + Which + ", ...)");
+		Check(CasesStopped == 5 && CasesMoving == 0, "a case pitched out one shot in eight, only when stopped", Say("%.0f of 40 stopped, %.0f moving", CasesStopped, CasesMoving));
+		Check(Shut == 0 && NoWord == 0 && Spg == 0, "hatch shut, the word not given, or an open gun: none", Say("%.0f, %.0f, %.0f", Shut, NoWord, Spg));
+		const FxTen::Book Off = Recipe();
+		const FxTen::Book On = Recipe({ "battle-fx-hatch.json" });
+		const Puffed P = PuffOf(On, "hatch_fumes", 2.0, 0.3);
+		Check(P.Pieces >= 5 && P.Widest <= 1.2 && P.Thickest <= 0.17, "on: a faint wisp out of the hatch, no wider than 1.2 m, alpha 0.16", Say("%.0f rags, widest %.2f m, alpha %.2f", static_cast<double>(P.Pieces), P.Widest, P.Thickest));
+		Check(P.Gone <= 5.0 && P.LeastPx >= 3.0, "on: gone within 5 s, each rag held to 3 px", Say("%.1f s", P.Gone));
+		Check(P.Seeds == P.SeedsWithout, "the kit's shared dice drawn as often as without it", Say("%.0f draws", static_cast<double>(P.Seeds)));
+		// (the case pitched out: by the row ground_cases.tank; none without it)
+		auto Pitch = [](const FxTen::Book& Book, const Vec& Eye, std::vector<Bit>& Out)
+		{
+			Kit K(Book);
+			K.Fx.Draw(0.0, FxTen::Looking(Eye, Vec(0.0, 0.0, 2.3)));
+			const uint64_t Was = K.Fx.Seeds;
+			K.Fx.ThrowCase(1.0, Vec(0.0, 0.0, 2.6), Vec(1.0, 0.2, 0.0), "tank", 4242);
+			for (const Bit& B : K.Fx.Bits)
+			{
+				Out.push_back(B);
+			}
+			return K.Fx.Seeds == Was;
+		};
+		std::vector<Bit> COff, COn, CFar;
+		Pitch(Off, Vec(-20.0, -15.0, 2.0), COff);
+		const bool bOwn = Pitch(On, Vec(-20.0, -15.0, 2.0), COn);
+		Pitch(On, Vec(-40.0, -30.0, 2.0), CFar);
+		Check(COff.empty(), "off: no row, no case", "none");
+		const double Long = COn.empty() ? 0.0 : 2.0 * COn[0].R0 * COn[0].Stretch;
+		Check(COn.size() == 1 && IsCase(COn[0]) && Long >= 0.35 && Long <= 0.5, "on: one case, 0.35 to 0.5 m long", Say("%.0f, %.2f m", static_cast<double>(COn.size()), Long));
+		Check(!COn.empty() && COn[0].Life - COn[0].Land2 >= 180.0 && COn[0].Life - COn[0].Land2 <= 240.5, "on: it lies 180 to 240 s", Say("%.0f s", COn.empty() ? 0.0 : COn[0].Life - COn[0].Land2));
+		Check(CFar.empty(), "on: 50 m from the eye (past ground_cases.within_m 40): none", "none");
+		Check(bOwn, "a case's dice its own (the kit's shared dice not drawn)", "own");
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -654,6 +717,7 @@ int main(int Argc, char** Argv)
 	SeaCases();
 	BarrelWisp();
 	BreechPuff();
+	HatchFumes();
 	std::printf("fx_ten_test: %d checks, %d failed\n", Checks, Failed);
 	if (Failed == 0)
 	{

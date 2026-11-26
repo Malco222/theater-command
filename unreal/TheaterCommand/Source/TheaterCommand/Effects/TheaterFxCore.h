@@ -613,6 +613,12 @@ namespace TheaterFx
 		/** That vent is on a moving ship: once a frame, where it is now, the way it blows and the ship's velocity
 		 * there (metres a second). Its steam is born at the vent as it moves and torn astern. */
 		void SteamMove(double Now, int Id, const Vec& At, const Vec& Way, const Vec& Velocity);
+		/** Effects (R2), item 7 of the owner's film details: a spent case thrown out of a vehicle by her crew, from At
+		 * (where it leaves her: over an open gun's side, out of a hatch) along Away (level), by the row ground_cases.<Kind>
+		 * ("spg", "tank"): its length within case_long_m, thrown and lying as the row says, at the row's odds. The towed
+		 * guns' cases as ever (within_m of the eye, most_lying, draw_within_m, three fifths of the screen's room). Its own
+		 * dice, from Key (any number for that vehicle), the place and the moment. No row: nothing. */
+		void ThrowCase(double Now, const Vec& At, const Vec& Away, const char* Kind, int Key);
 		/** Ammunition cooking off inside a burning tank (or a ship's gun mount, or aircraft parked on a deck), seen at
 		 * its hatch, At, Across metres wide, opening along Up: Pops sharp pops (held to 0..40) at ragged, quickening
 		 * moments over Over seconds, each a small flash by the flash rule, a grey-black puff, orange embers in short
