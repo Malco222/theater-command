@@ -63,6 +63,26 @@ const holdsNow = (g: Game, nat: string, from: string[], at: number | undefined):
 const hasOrHave = (xs: unknown[]): string => (xs.length === 1 ? 'has' : 'have');
 
 /**
+ * Two or more corps at the front, each with its place, the place said once (the UI director's section 8 point 5, 02:07Z,
+ * 26 November 2026: "{The 8th Tank Regiment} and {the 13th Tank Regiment} in {the Grenzmark} are at the front, ...
+ * Places mixed: grouped by place, the groups set off by commas: "{A} and {B} in {X}, and {C} in {Y}, are at the
+ * front""). Every place different, section 1's own form: "{A} in {X} and {B} in {Y} are at the front". The groups in
+ * the order the first of each is named.
+ */
+function areAtFront(g: Game, front: Corps[]): string {
+  const groups: { place: string; cs: Corps[] }[] = [];
+  for (const c of front) {
+    const place = placeOf(g, c);
+    const at = groups.find((x) => x.place === place);
+    if (at) at.cs.push(c); else groups.push({ place, cs: [c] });
+  }
+  let k = 0;
+  const said = groups.map((x) => `${join(x.cs.map((c) => named(c.name, k++ === 0)))} in ${x.place}`);
+  if (groups.length === 1 || groups.every((x) => x.cs.length === 1)) return `${join(said)} are at the front`;
+  return `${said.slice(0, -1).join(', ')}, and ${said[said.length - 1]}, are at the front`;
+}
+
+/**
  * The headline the month a row's wait begins (section 1, and section 7 case 2 for both causes with more than one of
  * either), or null where there is nothing to name.
  */
@@ -75,7 +95,7 @@ export function waitBeginsLine(g: Game, nat: string, rowName: string, place: str
     // formed yet".)
     const at = front.length === 1
       ? `${named(front[0].name, true)} is at the front in ${placeOf(g, front[0])}`
-      : `${join(front.map((c, k) => `${named(c.name, k === 0)} in ${placeOf(g, c)}`))} are at the front`;
+      : areAtFront(g, front);
     const all = front.length + unformed.length === 2 ? 'both' : 'all of them';
     return `${head}. ${at}, and ${join(unformed.map((x) => named(x)))}, which it is also formed from, ${hasOrHave(unformed)} not formed yet, so the arrival waits for ${all}.`;
   }
@@ -88,8 +108,7 @@ export function waitBeginsLine(g: Game, nat: string, rowName: string, place: str
   if (n === 1) return `${head}, formed from your ${front[0].name}, which is at the front in ${placeOf(g, front[0])}. The arrival waits, and forms the month after that corps leaves the front.`;
   const several = `${head}, formed from ${numberWord(n)} of your corps.`;
   if (front.length === 1) return `${several} ${named(front[0].name, true)} is at the front in ${placeOf(g, front[0])}, so the arrival waits, and forms the month after that corps leaves the front.`;
-  const list = join(front.map((c, k) => `${named(c.name, k === 0)} in ${placeOf(g, c)}`));
-  return `${several} ${list} are at the front, so the arrival waits, and forms the month after ${front.length === 2 ? 'both' : 'all of them'} leave the front.`;
+  return `${several} ${areAtFront(g, front)}, so the arrival waits, and forms the month after ${front.length === 2 ? 'both' : 'all of them'} leave the front.`;
 }
 
 /**

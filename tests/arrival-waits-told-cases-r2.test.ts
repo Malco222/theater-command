@@ -103,7 +103,7 @@ describe('case 5: a name whose head ends in "Force" takes no article', () => {
   it('a corps of that kind in the standing line and the several headline: "this corps and Gull Force"', () => {
     const { g, cs } = board('Test Army', ['Test Corps', 'Gull Force (2/21st Battalion)']);
     month(g, 2);
-    expect(said(g, 2)).toEqual(['The Test Army is due in Magdeburg this month, formed from two of your corps. The Test Corps in the Grenzmark and Gull Force (2/21st Battalion) in the Grenzmark are at the front, so the arrival waits, and forms the month after both leave the front.']);
+    expect(said(g, 2)).toEqual(['The Test Army is due in Magdeburg this month, formed from two of your corps. The Test Corps and Gull Force (2/21st Battalion) in the Grenzmark are at the front, so the arrival waits, and forms the month after both leave the front.']);
     expect(arrivalWaitOf(g, cs[0])?.whole).toBe('An arrival due in Magdeburg, the Test Army, is to be formed from this corps, and has waited for it since October 1939. It forms the month after this corps and Gull Force (2/21st Battalion) leave the front.');
   });
 });
