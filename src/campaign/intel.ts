@@ -218,8 +218,9 @@ export function cutSays(g: Game, region: number, viewer: string | null = g.human
     const when = monthOf(k.since ?? g.turn);
     const stops = `No train runs into, out of or through ${name} until ${k.hasty > 0 ? `the railwaymen have it running, in ${monthOf(g.turn + k.hasty)}, or engineers relay the track sooner` : 'engineers relay the track'}. Only engineers can be carried up to the break.`;
     // A line cut by bombing says whether guns stood there that month (ruling 125): other causes say nothing of guns.
+    // (The UI director, 25 Nov 2026 21:22Z, case f: of built guns, "No guns were built here to guard the railway.")
     const guns = cutThroughGuns(g, region);
-    const through = guns === null ? '' : guns > 0 ? `, through level ${guns} guns` : '. No guns guarded the railway here';
+    const through = guns === null ? '' : guns > 0 ? `, through level ${guns} guns` : '. No guns were built here to guard the railway';
     return { head: 'Railway cut', line: `${cause ? `${capital(cause)} in ${when}` : `Cut since ${when}`}${through}. ${stops}`, short: `railway cut (${cause ? `${cause}, ` : ''}${when})` };
   }
   const when = monthOf(k.asOf);

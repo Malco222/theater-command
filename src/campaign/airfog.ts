@@ -15,7 +15,7 @@
 // The same code serves the player's card and every staff, of every nation alike.
 
 import type { AirFleet, AirMission, Game } from './types';
-import { AIRWAR, assessAir, carrierOf, fighterReach, fightersInReach, forecastAir, gunsAt, km, kmTo, type AirAssess, type AirForecast, type KnownDefence } from './air';
+import { AIRWAR, assessAir, carrierOf, fighterReach, fightersInReach, forecastAir, gunsAt, km, kmTo, seenAgo, type AirAssess, type AirForecast, type KnownDefence } from './air';
 import { SIGHT, fogOn, sightOf } from './intel';
 import { fleetKnown } from './carriers';
 import { damageOf } from './citydamage';
@@ -230,15 +230,17 @@ export function staffScouts(g: Game, nat: string, mine: AirFleet[], targets: num
 
 // ---- The card's words --------------------------------------------------------------------------------------------
 
-export const agoWords = (n: number): string => (n <= 0 ? 'seen this month' : n === 1 ? 'seen a month ago' : `seen ${n} months ago`);
-const gunWord = (level: number): string => F().words[Math.max(0, Math.min(F().words.length - 1, level))];
+// (The UI director, 25 Nov 2026 21:22Z, case b: every month the fog prints is one helper's, air.ts seenAgo: words to
+// ten, figures from 11, "a month", "this month". A level reads as the card names it, "level 2"; fog.words holds only
+// the none, "none built". Never seen reads "not known", as the card's other lines say it.)
+const gunWord = (level: number): string => (level > 0 ? `level ${level}` : F().words[0]);
 
-/** What the raid card says one side knows of a target's defences, a line each: "Fighters: unknown", "Guns: heavy, seen 3 months ago". */
+/** What the raid card says one side knows of a target's defences, a line each: "Fighters: not known", "Guns: level 2, seen three months ago". */
 export function knownLines(g: Game, k: SkyKnown, withRuin: boolean): { fighters: string; guns: string; damage: string } {
-  const when = k.live ? (k.scouted ? 'scouted' : 'in sight') : agoWords(k.ago);
-  const fighters = k.fighters < 0 ? 'Fighters: unknown' : `Fighters: ${k.fighters > 0 ? `about ${k.fighters.toLocaleString('en-US')} in reach` : 'none in reach'}, ${when}`;
-  const guns = k.guns < 0 ? 'Guns: unknown' : `Guns: ${gunWord(k.guns)}, ${when}`;
-  const damage = !withRuin ? '' : k.ruin < 0 ? 'Damage: unknown' : `Damage: ${k.ruin > 0 ? `${Math.round(k.ruin * 100)}% of the town in ruins` : 'none'}, ${when}`;
+  const when = k.live ? (k.scouted ? 'scouted' : 'in sight') : seenAgo(k.ago);
+  const fighters = k.fighters < 0 ? 'Fighters: not known' : `Fighters: ${k.fighters > 0 ? `about ${k.fighters.toLocaleString('en-US')} in reach` : 'none in reach'}, ${when}`;
+  const guns = k.guns < 0 ? 'Guns: not known' : `Guns: ${gunWord(k.guns)}, ${when}`;
+  const damage = !withRuin ? '' : k.ruin < 0 ? 'Damage: not known' : `Damage: ${k.ruin > 0 ? `${Math.round(k.ruin * 100)}% of the town in ruins` : 'none'}, ${when}`;
   return { fighters, guns, damage };
 }
 
@@ -251,11 +253,12 @@ export function band(lo: number, hi: number, pctOf = true): string {
 
 /**
  * The fighters as a list of targets says them where the place is out of sight: "fighters not known", "about 120
- * fighters in reach when seen a month ago". (The guns of such a row are said in airwar.ts whatIsThere, in the UI
- * director's words of 25 Nov 2026 20:08Z, item 6: the old guns text here had no reader left and is gone.)
+ * fighters in reach when seen two months ago" (the month in words, seenAgo: the UI director, 21:22Z, case b). (The guns
+ * of such a row are said in airwar.ts whatIsThere, in the UI director's words of 25 Nov 2026 20:08Z, item 6: the old
+ * guns text here had no reader left and is gone.)
  */
 export function fogBits(k: SkyKnown): { fighters: string } {
-  const when = agoWords(k.ago).replace(/^seen/, 'when seen');
+  const when = seenAgo(k.ago).replace(/^seen/, 'when seen');
   return {
     fighters: k.fighters < 0 ? 'fighters not known' : `${k.fighters > 0 ? `about ${k.fighters.toLocaleString('en-US')} fighters in reach` : 'no fighters in reach'} ${when}`,
   };

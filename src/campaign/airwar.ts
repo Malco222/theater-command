@@ -25,7 +25,7 @@ import { turnToDate, type TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import type { FoughtAir } from './airfought';
 import {
-  AIR, AIRWAR, CLOSE, afloat, pilotWords, schoolWords, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, seenAgo, squadronsOf, standingGuns, type AirForecast,
+  AIR, AIRWAR, CLOSE, afloat, pilotWords, schoolWords, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, noneSeen, seenAgo, squadronsOf, standingGuns, type AirForecast,
 } from './air';
 import { damageRules } from './citydamage';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
@@ -867,7 +867,12 @@ export interface RaidFog {
   ago: number;
   /** The level of its guns as known, 0 to 3; -1 where never seen. */
   gunLevel: number;
-  /** The card's lines: "Fighters: unknown", "Guns: heavy, seen 3 months ago", "Damage: none, in sight" ('' where towns take no lasting damage). */
+  /**
+   * The fighters in reach as last seen (airfog.ts SkyKnown.fighters), -1 where never seen: a reader asks the sighting
+   * itself, never the words of a line (the UI director, 25 Nov 2026 21:22Z, case b, her code note).
+   */
+  fightersSeen: number;
+  /** The card's lines: "Fighters: not known", "Guns: level 2, seen three months ago", "Damage: none, in sight" ('' where towns take no lasting damage). */
   fighters: string;
   guns: string;
   damage: string;
@@ -1089,7 +1094,7 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
     const pair = (x: number, y: number): [number, number] => [Math.min(x, y), Math.max(x, y)];
     const loss = pair(share(lo), share(fc));
     plan.fog = {
-      live: k.live, scouted: k.scouted, ago: k.ago, gunLevel: k.guns,
+      live: k.live, scouted: k.scouted, ago: k.ago, gunLevel: k.guns, fightersSeen: k.fighters,
       ...knownLines(g, k, damageRules(g) && (kind === 'bomb' || kind === 'night' || kind === 'town')),
       loss, bomberLossN: pair(Math.round(lo.bmrLoss), Math.round(fc.bmrLoss)), fighterLossN: pair(Math.round(lo.ftrLoss), Math.round(fc.ftrLoss)),
       success: pair(lo.success, fc.success), squadrons: pair(Math.round(al.squadrons), Math.round(a.squadrons)),
@@ -1324,11 +1329,13 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
       // (Her 20:08Z marks, items 3 to 5: the months in words, and a none said as none built.)
       const when = seenAgo(fog.ago);
       out.gunsLabel = fog.gunLevel < 0 ? 'Anti-aircraft guns not known' : level ? `Level ${level} anti-aircraft guns, ${when}` : `No guns built, ${when}`;
-      out.gunsTail = fog.gunLevel < 0 ? 'not scouted' : out.gunsTail;
-      out.gunsCount = fog.gunLevel < 0 ? `Guns built here not known, and ${standing}` : out.gunsCount;
+      // (Her 21:22Z marks, case d: at a seen level the tail carries the month, as the 3D tail does; seen with none, the
+      // count takes item 2's form, which holds its month.)
+      out.gunsTail = fog.gunLevel < 0 ? 'not scouted' : level ? when : out.gunsTail;
+      out.gunsCount = fog.gunLevel < 0 ? `Guns built here not known, and ${standing}` : level ? out.gunsCount : noneSeen(fog.ago);
       const [lo, hi] = fog.squadrons;
       out.foeSquadrons = hi;
-      out.foesCount = hi > 0 ? `about ${band(lo, hi, false)} fighter ${hi === 1 ? 'squadron' : 'squadrons'} in range (not scouted)` : fog.fighters === 'Fighters: unknown' ? 'fighters in range not known' : '';
+      out.foesCount = hi > 0 ? `about ${band(lo, hi, false)} fighter ${hi === 1 ? 'squadron' : 'squadrons'} in range (not scouted)` : fog.fightersSeen < 0 ? 'fighters in range not known' : '';
     }
   }
   return out;

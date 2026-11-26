@@ -1319,7 +1319,7 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
     expect(fog.lights).toEqual({ level: 1, cloud: false, lit: 1 });
     expect(line(fog, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 1 searchlights over Ruhr', effect: 'With radar laying the guns, they may light every level of the guns built here, and they help the night fighters a little.' });
     // The guns keep their fog hedge, for the guns are what the side counts.
-    expect(line(fog, 'Anti-aircraft guns')).toEqual({ label: 'Anti-aircraft guns', value: 'Level 1 guns may ring the factories of Ruhr', effect: 'They stop 15% of the bombing. By night they fire by radar and searchlight, and bring down about 75% as many bombers as they would by day.' });
+    expect(line(fog, 'Anti-aircraft guns')).toEqual({ label: 'Anti-aircraft guns', value: 'Not scouted, so reckoned at the worst: level 1 guns round the factories of Ruhr', effect: 'They stop 15% of the bombing. By night they fire by radar and searchlight, and bring down about 75% as many bombers as they would by day.' });
     expect(gunsTerm(fog)).toBeCloseTo(1 * 0.012 * 0.7 * 0.75, 12);
     // The truth, and the raid flown, count the three levels built: the one level of lights lights one of them.
     const truth = r.a();

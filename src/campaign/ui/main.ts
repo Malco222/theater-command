@@ -93,7 +93,7 @@ import { ON_CAMPAIGN, landTicket, staffOnly } from '../../battle/land';
 import { fieldOpen, fightOnField } from '../../battle/ui/page';
 import {
   AIR, CARRIERS, MISSION, carrierRules, groupAt, moveTargets, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowdedFields, crowdedRow, crowding, forecastAir, isOffensive,
-  km as airKm, overOcean, seaKm, skyOver, standingGuns, whyNotMoveAir, whyNotMission, type AirOrder,
+  km as airKm, overOcean, seaKm, seenAgo, skyOver, standingGuns, whyNotMoveAir, whyNotMission, type AirOrder,
 } from '../air';
 import { FIGHTERS, raidCardLines, setFighterTypes } from '../fighters';
 import {
@@ -3405,7 +3405,9 @@ function provinceSlots(r: Region): string {
     ? slot('work:field', plane, 'Airfield', !!afc.field, pipsOf(fl, flComing, 3), afc.field ? `${afc.field.word}: serves ${num(afc.field.holds)} aircraft. ${afc.hidden ? 'What flies from here is not known' : afc.rows.length ? `${afc.rows.length} air group${afc.rows.length > 1 ? 's' : ''}, ${num(afc.rows.reduce((t, x) => t + x.aircraft, 0))} aircraft` : 'No air group based here'}` : 'No airfield: no aircraft can be based here. Engineers can lay one out', afc.field ? `Enlarge it by ${num(ARSENAL.works.field.holds)} aircraft` : 'Build an airfield')
     : slot('work:field', plane, 'Airfields', wings.length > 0 || fl > 0, pipsOf(fl, flComing, 3), `${flying}${fl ? `. Level ${fl} fields: room for ${num(AIR.airfields.holds + fl * ARSENAL.works.field.holds)} aircraft` : ''}`, `Build level ${fl + flComing + 1}`);
   const aa = workLevel(g, 'aa', r.id), aaComing = coming('aa');
-  const guns = slot('work:aa', slotIcon(GUN), 'Air defence', aa > 0, pipsOf(aa, aaComing, 3), aa ? `Level ${aa} guns: they stop ${Math.round(aa * ARSENAL.works.aa.cut * 100)}% of any bombing here` : `None built: only the ${num(standingGuns())} light guns every town has.`, `Build level ${aa + aaComing + 1}`);
+  // (The UI director, 25 Nov 2026 21:22Z, case a: a province is not always a town, so its standing guns are those "every
+  // province has"; the town glance keeps "every town has".)
+  const guns = slot('work:aa', slotIcon(GUN), 'Air defence', aa > 0, pipsOf(aa, aaComing, 3), aa ? `Level ${aa} guns: they stop ${Math.round(aa * ARSENAL.works.aa.cut * 100)}% of any bombing here` : `None built: only the ${num(standingGuns())} light guns every province has.`, `Build level ${aa + aaComing + 1}`);
   // City defences (release 2): the searchlights beside the guns, with the switch on only. (No picture of their own
   // yet: the works' glyph, as for any work without one.)
   const lt = cityDefences(g) ? lightsAt(g, r.id) : 0, ltComing = cityDefences(g) ? coming('lights') : 0;
@@ -6667,8 +6669,14 @@ function raidCard(): string {
           <div class="wayfoot">${esc(w.foot)}</div>`;
       return `<button class="way ${w.kind === 'bomb' ? 'day' : 'night'}${on ? ' on' : ''}" data-act="raidway" data-kind="${w.kind}" aria-pressed="${on}" ${on || w.why ? 'disabled' : ''}><span class="wayhead">${w.kind === 'bomb' ? SUN_SIGN : MOON_SIGN}<b>${esc(w.label)}</b>${on ? '<span class="waytag">Chosen</span>' : '<span class="wayring"></span>'}</span>${body}</button>`;
     };
+    // (The guns' hover, the UI director's 21:22Z marks, case d: it follows what the side knows. In sight, as item 10.)
+    const hid = !!dn.fog && !dn.fog.live, stop = pctOf(dn.day.gunsStop || dn.night.gunsStop);
+    const gunsHover = !hid ? (dn.guns ? `Guns built round the target: they stop ${stop} of the bombing and bring down more of the bombers.` : 'No guns are built round this target. It still puts up the flak any target does.')
+      : dn.fog!.gunLevel < 0 ? 'The guns built round this target are not known, so the forecast reckons them at the worst.'
+        : dn.guns ? `When ${seenAgo(dn.fog!.ago)}, level ${dn.guns} guns were built round this target: at that level they stop ${stop} of the bombing and bring down more of the bombers.`
+          : `No guns were built round this target when ${seenAgo(dn.fog!.ago)}. It still puts up the flak any target does.`;
     head = `<h3 style="margin-top:0">The forecast · by day or by night</h3>
-      <div class="waycommon"><span><b>${num(dn.bombers)}</b>bombers</span><span title="${dn.foeSquadrons ? `Of the ${num(dn.foes)} fighters of the groups in reach, about ${num(dn.foesAble)} can get to the raid.` : 'No enemy fighter group can reach the raid.'}"><b>${dn.foes ? num(dn.foes) : 'No'}</b>enemy fighters in reach${dn.foesCount ? `<small class="waytail"> · ${esc(dn.foesCount)}</small>` : ''}</span><span title="${dn.guns ? `Guns built round the target: they stop ${pctOf(dn.day.gunsStop || dn.night.gunsStop)} of the bombing and bring down more of the bombers.` : 'No guns are built round this target. It still puts up the flak any target does.'}"><svg class="wayaa${dn.guns ? '' : ' none'}" width="26" height="17" viewBox="0 0 24 16" aria-hidden="true"><path d="${ORDER_SIGN.aa}"/></svg><span class="waypips" aria-hidden="true">${[1, 2, 3].map((i) => `<i${i <= dn.guns ? ' class="on"' : ''}></i>`).join('')}</span>${dn.guns ? `<b>Level ${dn.guns}</b>anti-aircraft guns${dn.gunsTail ? `<small class="waytail"> · ${esc(dn.gunsTail)}</small>` : ''}<small class="waytail"> · ${esc(dn.gunsCount)}</small>` : `${esc(dn.gunsCount)}${dn.gunsTail ? `<small class="waytail"> · ${esc(dn.gunsTail)}</small>` : ''}`}</span></div>
+      <div class="waycommon"><span><b>${num(dn.bombers)}</b>bombers</span><span title="${dn.foeSquadrons ? `Of the ${num(dn.foes)} fighters of the groups in reach, about ${num(dn.foesAble)} can get to the raid.` : 'No enemy fighter group can reach the raid.'}"><b>${dn.foes ? num(dn.foes) : 'No'}</b>enemy fighters in reach${dn.foesCount ? `<small class="waytail"> · ${esc(dn.foesCount)}</small>` : ''}</span><span title="${gunsHover}"><svg class="wayaa${dn.guns ? '' : ' none'}" width="26" height="17" viewBox="0 0 24 16" aria-hidden="true"><path d="${ORDER_SIGN.aa}"/></svg><span class="waypips" aria-hidden="true">${[1, 2, 3].map((i) => `<i${i <= dn.guns ? ' class="on"' : ''}></i>`).join('')}</span>${dn.guns ? `<b>Level ${dn.guns}</b>anti-aircraft guns${dn.gunsTail ? `<small class="waytail"> · ${esc(dn.gunsTail)}</small>` : ''}<small class="waytail"> · ${esc(dn.gunsCount)}</small>` : `${esc(dn.gunsCount)}${dn.gunsTail ? `<small class="waytail"> · ${esc(dn.gunsTail)}</small>` : ''}`}</span></div>
       <div class="daynight">${column(dn.day, dn.chosen === 'bomb')}${column(dn.night, dn.chosen === 'night')}</div>${typeLines(p.fighterTypes)}
       ${p.why ? '' : `<div class="sub">${p.effects.map(esc).join(' ')}</div>`}
       ${p.massed ? `<div class="note good"><b>Meeting up.</b> ${esc(p.massed.replace(/^Meeting up pays: /, ''))}</div>` : ''}
