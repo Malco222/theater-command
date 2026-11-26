@@ -1006,6 +1006,18 @@ int main(int Argc, char** Argv)
 			Check(Area["stubble"] <= 0.035 * Arable, "mid-July: the harvest barely begun (stubble 3% of the arable at most)", Fmt("stubble %.1f%% of the arable", 100.0 * Area["stubble"] / Arable));
 	}
 	std::printf("  triangles: near %zu, far %zu, built %zu, ring %zu; instances %zu\n", T.NearTris, T.FarTris, T.BuiltTris, T.RingTris, T.Instances);
+	// The bocage's hedge trees as laid (not their young shoots), and the step in its shrubs' tops from one to the next.
+	if (T.BocageHedgeKm > 0.0)
+		std::printf("  bocage hedge trees: %.1f km of hedgerows and lane banks, %d trees laid (%d left out for the clumps), one to %.1f m of hedge; longest run (12 m apart at most) %d trees over %.0f m, widest gap %.0f m (with a hedge's ends %.0f m); shrub tops, step to the next (tall clumps apart): median %.2f m, 95%% %.2f m, %.1f%% over 0.5 m\n",
+		            T.BocageHedgeKm, T.BocageStandards, T.BocageStandardsDropped, 1000.0 * T.BocageHedgeKm / std::max(1, T.BocageStandards), T.StandardRunMost, T.StandardRunMetres, T.StandardGapMost, T.StandardBareMost,
+		            T.ShrubStepMedian, T.ShrubStep95, 100.0 * T.ShrubStepOver);
+	if (T.BocageStandards > 0)
+	{
+		const auto& Sp = T.StandardSpacingBins;
+		const auto& Ru = T.StandardRunsOf;
+		std::printf("  bocage hedge trees, spacing to the next: under 6 m %d, 6-12 m %d, 12-25 m %d, 25-60 m %d, over 60 m %d; runs (12 m apart at most) of 1 tree %d, 2 %d, 3 %d, 4 %d, 5 %d, 6 or more %d\n",
+		            Sp[0], Sp[1], Sp[2], Sp[3], Sp[4], Ru[0], Ru[1], Ru[2], Ru[3], Ru[4], Ru[5]);
+	}
 	size_t NearMax = 0, FarMax = 0, BuiltMax = 0, NearSum = 0, FarSum = 0;
 	for (const LandField::Tile& Tl : G.Tiles())
 	{

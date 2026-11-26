@@ -4130,11 +4130,29 @@ namespace LandField
 		// from the field the leaves run up from the hedge into the crowns with little sky between (the bocage's walls 4 to
 		// 6 m high in all). A wood's edge and a garden's hedge are lower and looser.
 		const auto InField = [this](V2 P) { return P.X > -60.0 && P.Y > -60.0 && P.X < FW + 60.0 && P.Y < FH + 60.0; };
+		// (on trial "hedgewall", the art director's rulings of 25 November: each shrub turned along its hedge's line within
+		// 15 degrees either way and its own height's jump cut to three tenths, from the numbers already drawn; its tints and
+		// its trees' held closer together; the bocage's trees in runs of two to five, 6 to 12 m apart, with 25 to 60 m of
+		// hedge alone between, one to some 16 m of hedge, the rest of each tree's numbers drawn as before and only its
+		// planting left out, its keeping drawn from its run's own numbers)
+		// (only on the bocage's own hedges: a wood's edge and a garden's hedge stay as they are; half the shrubs turned end
+		// for end, from the same number, so the three shrubs' own shapes do not march the same way down the line)
+		const bool bHedgewall = Fd.Tried("hedgewall");
+		auto LineYaw = [](bool bOn, double Turned, V2 Way) {
+			if (!bOn) return Turned;
+			const double HalfTurns = 2.0 * Turned / (2.0 * Pi);
+			return std::atan2(Way.Y, Way.X) + (HalfTurns - std::floor(HalfTurns) - 0.5) * 0.52 + (HalfTurns >= 1.0 ? Pi : 0.0);
+		};
+		auto HeldTint = [](bool bOn, double Tint, double Keep) { return bOn ? 1.0 + (Tint - 1.0) * Keep : Tint; };
+		std::vector<double> ShrubSteps;
 		for (const Run& Rn : Runs)
 		{
 			Rng R(Rn.Key ^ 0x9A17);
 			const double Total = LineLength(Rn.P);
 			const bool bGarden = Rn.Kind == HkGarden, bBocage = Rn.Kind == HkHedgerow || Rn.Kind == HkLaneBank;
+			if (bBocage) Count.BocageHedgeKm += Total / 1000.0;
+			const bool bWalled = bHedgewall && bBocage;
+			double TopWas = -1.0;
 			const double Thin = bBocage ? 0.0 : R.Next() < 0.15 ? 0.3 : 0.06;
 			const bool bPollards = bBocage && R.Next() < 0.12;
 			const double TreeStep = bGarden ? 1e9 : !bBocage ? 45.0 : bPollards ? R.Range(6.0, 8.5) : R.Range(7.5, 11.0);
@@ -4179,15 +4197,18 @@ namespace LandField
 				const double Shade = R.Range(0.9, 1.1);
 				double Scale, High;
 				Base What = Kind;
+				bool bClump = false;
 				if (bBocage)
 				{
 					Scale = R.Range(0.9, 1.35);
-					High = std::max(1.4, Level + Swell * Noise(S / Wave, Along, Seed ^ 0x9A18) + 0.75 * Noise(S / 2.5, Along, Seed ^ 0x9A19) + R.Range(-0.4, 0.4));
+					const double Jump = R.Range(-0.4, 0.4);
+					High = std::max(1.4, Level + Swell * Noise(S / Wave, Along, Seed ^ 0x9A18) + (bWalled ? 0.4 : 0.75) * Noise(S / 2.5, Along, Seed ^ 0x9A19) + (bWalled ? 0.3 * Jump : Jump));
 					// (a clump grown up: hazel or elder, 3.9 to 5 m over the bank; where a man went over, the next one)
 					if (S >= NextTall && !bTrod)
 					{
 						NextTall = S + R.Range(8.0, 14.0);
 						What = R.Next() < 0.6 ? Base::ShrubC : Base::ShrubB;
+						bClump = true;
 						Scale = R.Range(1.1, 1.4);
 						High = R.Range(3.9, 5.0);
 					}
@@ -4201,7 +4222,14 @@ namespace LandField
 				const double Turned = R.Range(0.0, 2.0 * Pi);
 				const double TintR = R.Range(0.95, 1.05);
 				const double TintB = R.Range(0.92, 1.05);
-				Plant(What, P.X, P.Y, Turned, Scale, High / ShrubHigh, Tint8(Shade * TintR, Shade, Shade * TintB), bThrough);
+				const double Shown = HeldTint(bWalled, Shade, 0.35);
+				Plant(What, P.X, P.Y, LineYaw(bWalled, Turned, Way), Scale, High / ShrubHigh, Tint8(Shown * HeldTint(bWalled, TintR, 0.5), Shown, Shown * HeldTint(bWalled, TintB, 0.5)), bThrough);
+				// (the step in its top from the last shrub's, its tall clumps apart)
+				if (bBocage)
+				{
+					if (!bClump && TopWas > 0.0) ShrubSteps.push_back(std::fabs(High - TopWas));
+					TopWas = bClump ? -1.0 : High;
+				}
 				// Brambles and nettles: on a bocage bank in the field, hanging over both its faces most of their length; else
 				// spilling from the bank's foot here and there (not where he goes over).
 				if (bGarden || bTrod) continue;
@@ -4216,13 +4244,28 @@ namespace LandField
 						const double BrambleTurned = R.Range(0.0, 2.0 * Pi);
 						const double BrambleWide = R.Range(0.7, 1.2);
 						const double Tall = R.Range(0.6, 1.1);
-						Plant(Base::Bramble, F.X, F.Y, BrambleTurned, BrambleWide, Tall, Tint8(1, 1, 1));
+						Plant(Base::Bramble, F.X, F.Y, LineYaw(bWalled, BrambleTurned, Way), BrambleWide, Tall, Tint8(1, 1, 1));
 					}
 				}
 			}
 			// The tall trees.
 			Seg = 0;
 			Before = 0.0;
+			// (on trial "hedgewall", the bocage's in clumps: every tree's numbers drawn from R as before and the tree held back,
+			// then, the hedge's trees all known, runs of 2 to 5 chosen from them, neighbours 6 to 12 m apart, with 25 to 60 m
+			// of hedge alone between, mostly the shorter, from the hedge's own numbers, Rk; only the chosen planted, in order)
+			const bool bClumped = bWalled;
+			struct HeldTree
+			{
+				double S;
+				Base B;
+				V2 P, FromLine; // where it stands, and that from the bank's line
+				double Turned, Wide, Tall;
+				Rgb8 Tint;
+			};
+			std::vector<HeldTree> Held;
+			// (for the log, either way: the trees laid along this hedge)
+			std::vector<double> Stood;
 			// (unevenly: two close here, a wider gap there, 4.5 to 15 m)
 			for (double S = TreeStep * R.Range(0.3, 1.0); S < Total - 3.0; S += bBocage ? std::clamp(TreeStep * R.Range(0.5, 1.5), 4.5, 15.0) : TreeStep * R.Range(0.6, 1.4))
 			{
@@ -4238,7 +4281,146 @@ namespace LandField
 				const double TintR = R.Range(0.92, 1.06);
 				const double TintG = R.Range(0.94, 1.06);
 				const double TintB = R.Range(0.9, 1.04);
+				if (bClumped)
+				{
+					V2 LineWay;
+					const V2 OnLine = PointAt(S, LineWay);
+					Held.push_back({ S, B, P, P - OnLine, Turned, High / TreeHigh(B) * Spread, High / TreeHigh(B), Tint8(HeldTint(true, TintR, 0.5), HeldTint(true, TintG, 0.8), HeldTint(true, TintB, 0.5)) });
+					continue;
+				}
+				const size_t Was = Inst[static_cast<size_t>(B)].size();
 				Plant(B, P.X, P.Y, Turned, High / TreeHigh(B) * Spread, High / TreeHigh(B), Tint8(TintR, TintG, TintB));
+				if (bBocage && Inst[static_cast<size_t>(B)].size() > Was) Stood.push_back(S);
+			}
+			if (bClumped && !Held.empty())
+			{
+				Rng Rk(Rn.Key ^ 0x57A4D1ull);
+				const size_t Many = Held.size();
+				std::vector<char> Chosen(Many, 0);
+				// (the longest run from the I'th, RunMost at most, each next 6 to 12 m on from the last; one 12 to 15.5 m on
+				// slid back along the bank to 10.5 to 12 m, where it is clear; of the longest, the shortest along the hedge)
+				std::vector<size_t> Got, RunTry, RunPath;
+				std::vector<double> SlidTo(Many, 0.0), GotAt, TryAt, PathAt;
+				std::function<void(size_t, double, int)> RunOn = [&](size_t I, double At, int RunMost) {
+					RunPath.push_back(I);
+					PathAt.push_back(At);
+					if (RunPath.size() > RunTry.size() || (RunPath.size() == RunTry.size() && At < TryAt.back()))
+					{
+						RunTry = RunPath;
+						TryAt = PathAt;
+					}
+					if (static_cast<int>(RunPath.size()) < RunMost)
+						for (size_t J = I + 1; J < Many && Held[J].S - At <= 15.5; ++J)
+						{
+							const double Apart = Held[J].S - At;
+							if (Apart >= 6.0) RunOn(J, Apart <= 12.0 ? Held[J].S : At + 10.5 + 1.5 * Held[J].Turned / (2.0 * Pi), RunMost);
+						}
+					RunPath.pop_back();
+					PathAt.pop_back();
+				};
+				auto RunAt = [&](size_t I, int RunMost) {
+					RunTry.clear();
+					TryAt.clear();
+					RunPath.clear();
+					PathAt.clear();
+					RunOn(I, Held[I].S, RunMost);
+				};
+				size_t From = 0;
+				double LastS = -1e9;
+				for (bool bFirstRun = true;; bFirstRun = false)
+				{
+					const int RunMost = [&Rk]() { const double U = Rk.Next(); return U < 0.12 ? 2 : U < 0.35 ? 3 : U < 0.65 ? 4 : 5; }();
+					const double U = Rk.Next();
+					// (where the next run may start: the hedge's first some way in, else 25 to 60 m on, mostly the shorter)
+					const double RunStart = bFirstRun ? 10.0 * U : LastS + 25.0 + 10.0 * U * U, RunStartBy = bFirstRun ? 1e9 : LastS + 60.0;
+					// (the longest run, two or more, starting in the 10 m from there; else the first run of two from 25 m on
+					// within 60; else the first run of two however far; never a tree alone)
+					Got.clear();
+					GotAt.clear();
+					for (int Pass = 0; Pass < 3 && Got.empty(); ++Pass)
+					{
+						const double TryFrom = Pass == 1 ? (bFirstRun ? 0.0 : LastS + 25.0) : RunStart;
+						const double TryBy = Pass == 0 ? std::min(RunStart + 10.0, RunStartBy) : Pass == 1 ? RunStartBy : 1e9;
+						for (size_t I = From; I < Many && Held[I].S <= TryBy; ++I)
+						{
+							if (Held[I].S < TryFrom) continue;
+							RunAt(I, RunMost);
+							if (RunTry.size() >= 2 && RunTry.size() > Got.size())
+							{
+								Got = RunTry;
+								GotAt = TryAt;
+							}
+							if (Pass > 0 ? !Got.empty() : static_cast<int>(Got.size()) >= RunMost) break;
+						}
+					}
+					if (Got.empty()) break;
+					for (size_t K = 0; K < Got.size(); ++K)
+					{
+						Chosen[Got[K]] = 1;
+						SlidTo[Got[K]] = GotAt[K];
+					}
+					LastS = GotAt.back();
+					From = Got.back() + 1;
+				}
+				// (planted in order along the hedge; one slid back where it is clear of what is built and of the ways, as any
+				// hedge tree must be, else where it was drawn)
+				Seg = 0;
+				Before = 0.0;
+				for (size_t K = 0; K < Many; ++K)
+				{
+					const HeldTree& Ht = Held[K];
+					if (!Chosen[K])
+					{
+						++Count.BocageStandardsDropped;
+						continue;
+					}
+					V2 Stand = Ht.P;
+					double StandS = Ht.S;
+					if (SlidTo[K] < Ht.S - 1e-9)
+					{
+						V2 SlidWay;
+						V2 Q = PointAt(SlidTo[K], SlidWay) + Ht.FromLine;
+						if (Clear(Q.X, Q.Y, static_cast<uint8_t>(Built | OcCut)) && Nudged(Q, SlidWay, 0.9, 0.45, 4.0) && Clear(Q.X, Q.Y, OcCut))
+						{
+							Stand = Q;
+							StandS = SlidTo[K];
+						}
+					}
+					const size_t Was = Inst[static_cast<size_t>(Ht.B)].size();
+					Plant(Ht.B, Stand.X, Stand.Y, Ht.Turned, Ht.Wide, Ht.Tall, Ht.Tint);
+					if (Inst[static_cast<size_t>(Ht.B)].size() > Was) Stood.push_back(StandS);
+				}
+			}
+			if (bBocage)
+			{
+				Count.BocageStandards += static_cast<int>(Stood.size());
+				double Bare = Stood.empty() ? Total : std::max(Stood.front(), Total - Stood.back());
+				int InRun = Stood.empty() ? 0 : 1;
+				double RunFrom = Stood.empty() ? 0.0 : Stood.front();
+				for (size_t K = 0; K < Stood.size(); ++K)
+				{
+					if (K > 0)
+					{
+						const double Gap = Stood[K] - Stood[K - 1];
+						Count.StandardGapMost = std::max(Count.StandardGapMost, Gap);
+						Bare = std::max(Bare, Gap);
+						++Count.StandardSpacingBins[Gap < 6.0 ? 0 : Gap <= 12.0 ? 1 : Gap < 25.0 ? 2 : Gap <= 60.0 ? 3 : 4];
+						if (Gap > 12.0)
+						{
+							++Count.StandardRunsOf[static_cast<size_t>(std::min(InRun, 6) - 1)];
+							InRun = 1;
+							RunFrom = Stood[K];
+						}
+						else ++InRun;
+					}
+					if (InRun > Count.StandardRunMost || (InRun == Count.StandardRunMost && Stood[K] - RunFrom > Count.StandardRunMetres))
+					{
+						Count.StandardRunMost = InRun;
+						Count.StandardRunMetres = Stood[K] - RunFrom;
+					}
+				}
+				if (InRun > 0) ++Count.StandardRunsOf[static_cast<size_t>(std::min(InRun, 6) - 1)];
+				Count.StandardBareMost = std::max(Count.StandardBareMost, Bare);
 			}
 			// The young shoots between them (in the field and a little round it): oak, ash and pollard growth 3.5 to 6 m,
 			// every 4 to 7 m, their crowns down in the hedge's top.
@@ -4258,8 +4440,19 @@ namespace LandField
 				const double TintR = R.Range(0.95, 1.08);
 				const double TintG = R.Range(0.97, 1.08);
 				const double TintB = R.Range(0.9, 1.02);
-				Plant(B, P.X, P.Y, Turned, High / TreeHigh(B) * Spread, High / TreeHigh(B), Tint8(TintR, TintG, TintB));
+				Plant(B, P.X, P.Y, Turned, High / TreeHigh(B) * Spread, High / TreeHigh(B), Tint8(HeldTint(bWalled, TintR, 0.5), HeldTint(bWalled, TintG, 0.8), HeldTint(bWalled, TintB, 0.5)));
 			}
+		}
+		if (!ShrubSteps.empty())
+		{
+			const auto Centile = [&ShrubSteps](double Q) {
+				const size_t K = std::min(ShrubSteps.size() - 1, static_cast<size_t>(Q * static_cast<double>(ShrubSteps.size())));
+				std::nth_element(ShrubSteps.begin(), ShrubSteps.begin() + static_cast<std::ptrdiff_t>(K), ShrubSteps.end());
+				return ShrubSteps[K];
+			};
+			Count.ShrubStepMedian = Centile(0.5);
+			Count.ShrubStep95 = Centile(0.95);
+			Count.ShrubStepOver = static_cast<double>(std::count_if(ShrubSteps.begin(), ShrubSteps.end(), [](double D) { return D > 0.5; })) / static_cast<double>(ShrubSteps.size());
 		}
 		// The woods: trees some 7.5 m apart (clearings here and there), undergrowth thick in their edges.
 		{
@@ -7755,6 +7948,320 @@ namespace LandField
 				Cluster(Bm.Far, P, Lr, K < 3 ? 1.3 : 1.0, 0.25, RF, Soft, 0.45, Paint(Sh.Leaf, RF.Range(0.9, 1.05)));
 			}
 		}
+
+		/**
+		 * A shrub of the hedge as one ragged wall (the trial "hedgewall", the art director's rulings of 25 November): a body
+		 * Long along the hedge's line (+x, as the hedge turns it) and Across either side of it, half-widths; its leaves on
+		 * cards over five to eight uneven masses of its own, so its outline is ragged and the dark of a smaller inside shows
+		 * between them; a third of its top cards let above its cap and four to six whips standing 0.4 to 1.2 m over it, so
+		 * the hedge's top is broken and not a row of domes; bare wood under 0.7 m, eight to fourteen tapered stems 2 to 5 cm
+		 * thick, and its lowest leaves pushed out over the bank's faces, so there is no shelf. About 900 triangles near with
+		 * its cards; far, one long notched lump of 38, lit on its top and dark beneath, so that a hedge far off is one band.
+		 */
+		void BuildWallShrub(BaseMesh& Bm, const ShrubSpec& Sh, double Long, double Across, uint64_t Seed)
+		{
+			Rng R(Seed ^ 0x4E77A11ull);
+			constexpr double Foot = -0.5, Bare = 0.7;
+			const double Top = Sh.Top, Mid = 0.5 * (Bare + Top), Half = 0.5 * (Top - Bare);
+			// (the whole body's outward at a point: the cards and the inside light as one soft wall, not as gems)
+			auto Soft = [Long, Across, Mid, Half](V3 P) { return Unit3(V3{ P.X / Long, P.Y / Across, (P.Z - Mid) / Half }); };
+			// (a leaf's colour: lit with its height and its own facing, its underside cooler and darker, held so that its
+			// top over its underside stays near 1.4 to 1.9 in the light)
+			auto Paint = [Top](const Col& Leaf, double Tone) {
+				return [Top, Leaf, Tone](V3 P, V3 Dir) {
+					const double Height = Clamp01((P.Z - Bare) / (Top - Bare));
+					const double Grain = Noise3(P.X * 2.1, P.Y * 2.1, P.Z * 2.1, 0x5A1C);
+					Col C = Varied(Leaf, Tone * (0.88 + 0.12 * Height + 0.04 * Dir.Z) * (1.0 + 0.06 * Grain), 0.03 * Grain);
+					C = Mixed(C, Rgb(58, 82, 74), 0.16 * Clamp01(-Dir.Z) + 0.08 * (1.0 - Height));
+					return Mixed(C, Rgb(118, 132, 66), 0.08 * Clamp01(Dir.Z) * Height);
+				};
+			};
+			// The masses: spread along the body, two of them low and wide (the skirt over the bank's faces), one up to the
+			// top, the rest between; each its own size.
+			struct Lobe
+			{
+				V3 C;
+				double RX, RY, RZ;
+			};
+			std::vector<Lobe> Lobes;
+			const int N = 5 + R.Below(4);
+			for (int K = 0; K < N; ++K)
+			{
+				const double T = -1.0 + 2.0 * (K + 0.5) / N + R.Range(-0.3, 0.3) / N;
+				const bool bLow = K == 1 || K == N - 2;
+				Lobe L;
+				L.RX = Long * R.Range(0.3, 0.46);
+				L.RY = Across * (bLow ? R.Range(0.85, 0.98) : R.Range(0.58, 0.82));
+				L.RZ = bLow ? R.Range(0.42, 0.55) : R.Range(0.45, 0.7);
+				const double Z = bLow ? R.Range(0.95, 1.1) : R.Range(1.4, Top - 0.25 - L.RZ);
+				L.C = { T * (Long - L.RX) * 0.95, Across * R.Range(-0.22, 0.22) * (bLow ? 0.3 : 1.0), Z };
+				Lobes.push_back(L);
+			}
+			// (one of them up to the cap, so the shrub stands its height)
+			{
+				Lobe& Hi = Lobes[static_cast<size_t>(R.Below(N))];
+				Hi.C.Z = Top - 0.12 - Hi.RZ;
+			}
+			// The dark inside: a dark core in each mass (seven tenths of it, sunk toward the hedge's line), cooler and
+			// darker than the leaves but never black, its facets turned this way and that so that what shows between the
+			// leaves is broken shadow and not a smooth lit pad; and three low cores along the stems, so the foot is not
+			// seen through.
+			{
+				std::vector<V3> S;
+				std::vector<std::array<uint32_t, 3>> F;
+				Icosphere(0, S, F);
+				std::vector<Lobe> Cores(Lobes);
+				for (const double X : { -0.58, 0.0, 0.58 }) Cores.push_back({ V3{ X * Long, 0.0, 0.36 }, Long * 0.36, Across * 0.56, 0.4 });
+				for (size_t L = 0; L < Cores.size(); ++L)
+				{
+					const Lobe& Lb = Cores[L];
+					const bool bFootCore = L >= Lobes.size();
+					const double CoreScale = bFootCore ? 1.0 : 0.72;
+					const V3 O{ Lb.C.X, Lb.C.Y * 0.5, bFootCore ? Lb.C.Z : Lb.C.Z - 0.25 * Lb.RZ };
+					const uint64_t Wave = Seed ^ (0x1A51 + 77u * L);
+					Builder B(Bm.Near);
+					const uint32_t Base0 = static_cast<uint32_t>(Bm.Near.Points());
+					for (size_t K = 0; K < S.size(); ++K)
+					{
+						const double D = 1.0 + 0.3 * Noise3(S[K].X * 1.9 + 2.3, S[K].Y * 1.9 - 1.1, S[K].Z * 1.9 + 0.4, Wave);
+						V3 P = O + V3{ S[K].X * Lb.RX * CoreScale * D, S[K].Y * Lb.RY * CoreScale * D, S[K].Z * Lb.RZ * CoreScale * D };
+						// (kept well under the leaves' cap, so no core shows over the top)
+						P.Z = std::min(P.Z, Top - 0.5);
+						const double Height = Clamp01((P.Z - Bare) / (Top - Bare));
+						const V3 Jiggle{ Noise3(P.X * 3.1, P.Y * 3.1, P.Z * 3.1, Wave ^ 0x77), Noise3(P.X * 3.1 + 5.0, P.Y * 3.1, P.Z * 3.1, Wave ^ 0x78),
+									  Noise3(P.X * 3.1, P.Y * 3.1 + 5.0, P.Z * 3.1, Wave ^ 0x79) };
+						const Col In = Mixed(Varied(Sh.Leaf, 0.96 + 0.12 * Height, 0.0), Rgb(48, 72, 72), 0.18);
+						B.Vert(P, Unit3(S[K] * 0.45 + Jiggle * 0.9, S[K]), In);
+					}
+					for (const auto& Fc : F) TriFacing(Bm.Near, Base0 + Fc[0], Base0 + Fc[1], Base0 + Fc[2], S[Fc[0]] + S[Fc[1]] + S[Fc[2]]);
+				}
+			}
+			// The stems: from the foot (sunk in the bank) up and a little out, bending once, into the body; bark brown to
+			// dark grey, lighter where the light reaches them low down.
+			const int Stems = 8 + R.Below(7);
+			for (int K = 0; K < Stems; ++K)
+			{
+				const double U = -1.0 + 2.0 * (K + R.Range(0.2, 0.8)) / Stems;
+				const V3 A{ U * Long * 0.5, Across * R.Range(-0.28, 0.28), Foot + 0.15 };
+				const V3 Lean{ U * R.Range(0.15, 0.4) + R.Range(-0.12, 0.12), (A.Y >= 0.0 ? 1.0 : -1.0) * R.Range(0.05, 0.3), 0.0 };
+				const V3 M = A + V3{ Lean.X, Lean.Y, R.Range(0.9, 1.3) };
+				const V3 T = M + V3{ Lean.X * 0.8 + R.Range(-0.15, 0.15), Lean.Y * 0.6, R.Range(0.5, 0.9) };
+				const double Thick = R.Range(0.01, 0.025);
+				const Col Low = Mixed(Rgb(70, 62, 50), Rgb(40, 36, 30), R.Range(0.0, 0.5)), High = Mixed(Low, Rgb(40, 36, 30), 0.35);
+				Limb(Bm.Near, A, M, Thick, Thick * 0.7, 4, Low, Mixed(Low, High, 0.5));
+				Limb(Bm.Near, M, T, Thick * 0.7, Thick * 0.35, 4, Mixed(Low, High, 0.5), High);
+			}
+			// The whips: none to two thin shoots out of the top, 0.3 to 0.8 m over it, leaning, a few small leaves along them
+			// (each kind its own, and each shrub turned and some end for end, so they do not stand in a row).
+			const int Whips = R.Below(3);
+			std::vector<std::pair<V3, V3>> WhipLine;
+			for (int K = 0; K < Whips; ++K)
+			{
+				const V3 A{ Long * R.Range(-0.75, 0.75), Across * R.Range(-0.35, 0.35), Top - R.Range(0.5, 0.8) };
+				// (most leaning out over the hedge's top, splayed; one in some shrubs standing higher, 0.6 to 0.9 m)
+				const bool bTall = K == 0 && R.Next() < 0.5;
+				const double Rise = bTall ? R.Range(0.55, 0.8) : R.Range(0.3, 0.5), Lean = bTall ? R.Range(0.5, 0.8) : R.Range(0.7, 1.1), Turn = R.Range(0.0, 2.0 * Pi);
+				const V3 T{ A.X + Lean * std::cos(Turn), A.Y + 0.6 * Lean * std::sin(Turn), Top + Rise };
+				Limb(Bm.Near, A, T, 0.01, 0.004, 3, Rgb(66, 60, 46), Mixed(Rgb(78, 76, 52), Sh.Leaf, 0.5));
+				WhipLine.push_back({ A, T });
+			}
+			// The leaves on cards, as many as the triangles left to some 900 allow: first a few up each whip, then over each
+			// mass in its share (its skin's size), each card a little in or out (its radius waving a quarter either way
+			// over the mass), turned out from it; none on the sides below 0.7 m, the lowest pushed out over the bank's faces
+			// and hanging; the top ones under the cap but a third of them, which rise through it.
+			Rng RC(Seed ^ 0xCA4E);
+			const int Budget = std::max(200, (900 - static_cast<int>(Bm.Near.Tris())) / 2);
+			auto Leaf = [&](V3 P, V3 Out, V3 Up, double Size, double Tone) {
+				const bool bOther = RC.Next() < Sh.Other;
+				const V3 Face = Unit3(Out + AnyWay(RC) * 0.45, Out);
+				LeafCard(Bm.Cards, P, Face, Up, Size, Size, bOther ? Sh.CellOther : Sh.Cell, Out, Soft, 0.5, Paint(bOther ? Sh.Second : Sh.Leaf, Tone));
+				// (and for a material with no cards, a sprig in its place: half of them)
+				if (RC.Next() < 0.5) Cluster(Bm.Sprigs, P, 0.32 * Size, 0.8, Sh.Jag, RC, Soft, 0.45, Paint(bOther ? Sh.Second : Sh.Leaf, Tone), true);
+			};
+			int Used = 0;
+			for (const auto& Wl : WhipLine)
+				for (int J = 0; J < 4; ++J)
+				{
+					const double T = RC.Range(0.3 + 0.17 * J, 0.4 + 0.17 * J);
+					const V3 P = Wl.first + (Wl.second - Wl.first) * T;
+					const V3 Out = Unit3(V3{ P.X / Long, P.Y / Across, 0.4 } + AnyWay(RC) * 0.6);
+					Leaf(P, Out, Unit3(Wl.second - Wl.first + AnyWay(RC) * 0.8), RC.Range(0.24, 0.36), RC.Range(0.92, 1.06));
+					++Used;
+				}
+			double Skin = 0.0;
+			for (const Lobe& L : Lobes) Skin += L.RX * L.RY + L.RX * L.RZ + L.RY * L.RZ;
+			// (a skirt of leaves hung over both the bank's faces, 0.15 to 0.45 m up, so the bank is not seen through under it)
+			constexpr int SkirtCards = 7;
+			const int Left = Budget - Used - 2 * SkirtCards - 4;
+			// (and two at each end, for a shrub seen end on)
+			for (int Tip = -1; Tip <= 1; Tip += 2)
+				for (int J = 0; J < 2; ++J)
+				{
+					const V3 P{ Tip * Long * RC.Range(0.85, 1.0), Across * (J == 0 ? RC.Range(-0.6, 0.0) : RC.Range(0.0, 0.6)), RC.Range(0.2, 0.5) };
+					const V3 Out = Unit3(V3{ static_cast<double>(Tip), 0.4 * P.Y / Across, -0.2 });
+					Leaf(P, Out, Unit3(V3{ Out.X, Out.Y, 0.0 } * 0.6 + V3{ 0, 0, -0.3 } + AnyWay(RC) * 0.5, Out), RC.Range(0.5, 0.72), RC.Range(0.84, 0.96));
+					++Used;
+				}
+			for (int Side = -1; Side <= 1; Side += 2)
+				for (int J = 0; J < SkirtCards; ++J)
+				{
+					const double X = Long * (-0.95 + 1.9 * (J + RC.Range(0.15, 0.85)) / SkirtCards);
+					const V3 P{ X, Side * Across * RC.Range(0.8, 1.0), RC.Range(0.16, 0.46) };
+					const V3 Out = Unit3(V3{ 0.25 * X / Long, static_cast<double>(Side), -0.2 });
+					Leaf(P, Out, Unit3(V3{ Out.X, Out.Y, 0.0 } * 0.6 + V3{ 0, 0, -0.3 } + AnyWay(RC) * 0.5, Out), RC.Range(0.5, 0.72), RC.Range(0.84, 0.96));
+					++Used;
+				}
+			for (const Lobe& L : Lobes)
+			{
+				const int Share = static_cast<int>(std::lround(Left * (L.RX * L.RY + L.RX * L.RZ + L.RY * L.RZ) / Skin));
+				const uint64_t Wave = Seed ^ (0x10BE + 131u * static_cast<uint64_t>(&L - Lobes.data()));
+				for (int J = 0; J < Share; ++J)
+				{
+					// (spread over the mass, more on its top and outer side than beneath)
+					V3 U = Unit3(AnyWay(RC) + V3{ 0.0, 0.0, 0.12 } + V3{ L.C.X / Long, L.C.Y / Across, 0.0 } * 0.3);
+					const double Rad = (1.0 + 0.25 * Noise3(U.X * 1.6, U.Y * 1.6, U.Z * 1.6, Wave)) * RC.Range(0.84, 1.06);
+					V3 P = L.C + V3{ U.X * L.RX * Rad, U.Y * L.RY * Rad, U.Z * L.RZ * Rad };
+					double Size = RC.Range(0.42, 0.7);
+					V3 Out = Unit3(V3{ U.X / L.RX, U.Y / L.RY, U.Z / L.RZ });
+					V3 Up = Unit3(Out * 0.5 + V3{ 0, 0, 0.6 } + AnyWay(RC) * 0.8, Out);
+					if (P.Z < Bare + 0.3)
+					{
+						// (the lowest: out over the bank's face, hanging, down to 0.3 to 0.55 m, unevenly along the shrub)
+						P.Z = std::max(P.Z - RC.Range(0.0, 0.3), 0.42 + 0.13 * Noise3(P.X * 0.8, P.Y * 0.3, 0.0, Seed ^ 0x5C1A) + RC.Range(-0.04, 0.04));
+						Size *= 1.25;
+						P.X *= 1.06;
+						P.Y *= RC.Range(1.12, 1.25);
+						Out = Unit3(V3{ Out.X, Out.Y, -0.15 }, Out);
+						Up = Unit3(V3{ Out.X, Out.Y, 0.0 } * 0.8 + V3{ 0, 0, -0.35 } + AnyWay(RC) * 0.35, Out);
+					}
+					const bool bLifted = U.Z > 0.3 && RC.Next() < 0.42;
+					P.Z = std::min(P.Z, bLifted ? Top + RC.Range(0.05, 0.42) : Top - 0.35 * Size);
+					Leaf(P, Out, Up, Size, RC.Range(0.9, 1.1));
+					++Used;
+				}
+			}
+			// The far shrub: a dozen small jagged sprigs (octahedra, turned at random) over the body, its top uneven and its
+			// outline a leafy edge, painted as the near leaves are (lit on top, dark and cool beneath) and a little darker,
+			// so that the hand-over keeps its tone; 96 triangles.
+			Rng RF(Seed ^ 0xFA5);
+			const auto FarPaint = Paint(Sh.Leaf, 0.8);
+			for (int I = 0; I < 12; ++I)
+			{
+				// (three rows of four, the top row's each its own height, so the top is ragged and the body has no gap)
+				const int Row = I / 4;
+				const double X = Long * (-0.9 + 1.8 * (I % 4 + RF.Range(0.1, 0.9)) / 4.0);
+				const double Rad = RF.Range(0.5, 0.7);
+				const double Z = Row == 0 ? RF.Range(0.6, 0.8) : Row == 1 ? RF.Range(1.35, 1.6) : Top - 0.45 * Rad - RF.Range(0.0, 0.6);
+				const V3 O{ X, Across * RF.Range(-0.35, 0.35), Z };
+				Cluster(Bm.Far, O, Rad, Row == 2 ? RF.Range(0.9, 1.3) : 0.95, 0.3, RF, Soft, 0.45, FarPaint, true);
+			}
+		}
+
+		/**
+		 * A bramble as the hedge's foot carries it (the trial "hedgewall"): a low arching mound 2.5 m long along the line
+		 * (+x) and a metre and a bit across, under six to ten canes that arch up out of it and down to root again beyond
+		 * it, leaves on cards over the mound and along the canes. About 260 triangles with its cards; no far level.
+		 */
+		void BuildBrambleMound(BaseMesh& Bm, const ShrubSpec& Sh, uint64_t Seed)
+		{
+			Rng R(Seed ^ 0xB4A3B1Eull);
+			const double Long = 1.25, Across = 0.62, High = Sh.Top - 0.1, Core = 0.5;
+			auto Soft = [Long, Across, High](V3 P) { return Unit3(V3{ P.X / Long, P.Y / Across, P.Z / High }); };
+			auto Paint = [High](const Col& Leaf, double Tone) {
+				return [High, Leaf, Tone](V3 P, V3 Dir) {
+					const double Height = Clamp01(P.Z / High);
+					Col C = Varied(Leaf, Tone * (0.82 + 0.2 * Height + 0.06 * Dir.Z), 0.0);
+					return Mixed(C, Rgb(44, 62, 44), 0.14 * Clamp01(-Dir.Z) + 0.06 * (1.0 - Height));
+				};
+			};
+			// The mound: four rings across it along its length, seven points over it from foot to foot, closed at its ends.
+			{
+				Builder B(Bm.Near);
+				const uint32_t Base0 = static_cast<uint32_t>(Bm.Near.Points());
+				const double Ts[4] = { -0.72, -0.25, 0.25, 0.72 };
+				for (int I = 0; I < 4; ++I)
+				{
+					const double S = std::sqrt(1.0 - Ts[I] * Ts[I]);
+					for (int J = 0; J < 7; ++J)
+					{
+						const double A = Pi * J / 6.0;
+						const double Wob = 1.0 + 0.16 * Noise3(Ts[I] * 2.0, A, 0.3, Seed ^ 0x40B);
+						const V3 P{ Ts[I] * Long * Core, -std::cos(A) * Across * Core * S * Wob, std::sin(A) * High * 0.78 * Core * S * Wob };
+						const double Height = Clamp01(P.Z / High);
+						const V3 Jiggle{ Noise3(P.X * 4.0, P.Y * 4.0, P.Z * 4.0, Seed ^ 0x40C), Noise3(P.X * 4.0 + 5.0, P.Y * 4.0, P.Z * 4.0, Seed ^ 0x40D), 0.0 };
+						B.Vert(P, Unit3(V3{ 0.4 * Ts[I], -std::cos(A), std::sin(A) } + Jiggle * 0.9), Mixed(Varied(Sh.Leaf, 0.66 + 0.16 * Height, 0.0), Rgb(40, 58, 50), 0.24));
+					}
+				}
+				const uint32_t Tip0 = B.Vert({ -Long * Core, 0.0, 0.08 }, { -1, 0, 0 }, Varied(Sh.Leaf, 0.6, 0.0));
+				const uint32_t Tip1 = B.Vert({ Long * Core, 0.0, 0.08 }, { 1, 0, 0 }, Varied(Sh.Leaf, 0.6, 0.0));
+				for (int I = 0; I < 3; ++I)
+					for (int J = 0; J < 6; ++J)
+					{
+						const uint32_t A0 = Base0 + static_cast<uint32_t>(I * 7 + J), A1 = A0 + 1, B0 = A0 + 7, B1 = B0 + 1;
+						const double A = Pi * (J + 0.5) / 6.0;
+						const V3 Toward{ 0, -std::cos(A), std::sin(A) };
+						TriFacing(Bm.Near, A0, B0, B1, Toward);
+						TriFacing(Bm.Near, A0, B1, A1, Toward);
+					}
+				for (int J = 0; J < 6; ++J)
+				{
+					const double A = Pi * (J + 0.5) / 6.0;
+					TriFacing(Bm.Near, Tip0, Base0 + static_cast<uint32_t>(J), Base0 + static_cast<uint32_t>(J + 1), V3{ -1, -std::cos(A), std::sin(A) });
+					TriFacing(Bm.Near, Tip1, Base0 + 21u + static_cast<uint32_t>(J), Base0 + 21u + static_cast<uint32_t>(J + 1), V3{ 1, -std::cos(A), std::sin(A) });
+				}
+			}
+			// The canes: up out of the mound's middle in a bow, over its top and drooping at their ends, mostly in the
+			// leaves; five to seven of them, along the line and aslant.
+			const int Canes = 5 + R.Below(3);
+			std::vector<std::array<V3, 3>> Cane;
+			for (int K = 0; K < Canes; ++K)
+			{
+				const double Way = (K % 2 == 0 ? 1.0 : -1.0), Aslant = R.Range(-0.7, 0.7);
+				const V3 A{ Way * R.Range(-0.2, 0.3), R.Range(-0.2, 0.2), 0.05 };
+				const V3 Dir = Unit3(V3{ Way, Aslant, 0.0 });
+				const double Reach = R.Range(0.75, 1.05), CaneRise = High * R.Range(0.45, 0.68);
+				// (a bow through four points: up steeply, over, and down to its tip a hand over the ground)
+				const V3 B1 = A + Dir * (0.22 * Reach) + V3{ 0, 0, 0.85 * CaneRise };
+				const V3 B2 = A + Dir * (0.55 * Reach) + V3{ 0, 0, CaneRise };
+				const V3 T = A + Dir * Reach + V3{ 0, 0, R.Range(0.12, 0.3) };
+				const Col Red = Mixed(Rgb(84, 56, 50), Rgb(64, 60, 48), R.Range(0.0, 1.0));
+				Limb(Bm.Near, A, B1, 0.011, 0.009, 3, Red, Red);
+				Limb(Bm.Near, B1, B2, 0.009, 0.007, 3, Red, Red);
+				Limb(Bm.Near, B2, T, 0.007, 0.004, 3, Red, Mixed(Red, Rgb(60, 70, 40), 0.4));
+				Cane.push_back({ B1, B2, T });
+			}
+			// The leaves: along each cane's arch, then over the mound, to some 260 triangles in all.
+			Rng RC(Seed ^ 0xCA4F);
+			const int Budget = std::max(30, (260 - static_cast<int>(Bm.Near.Tris())) / 2);
+			auto Leaf = [&](V3 P, V3 Out, V3 Up, double Size) {
+				const bool bOther = RC.Next() < Sh.Other;
+				const double Tone = RC.Range(0.9, 1.08);
+				const V3 Face = Unit3(Out + AnyWay(RC) * 0.4, Out);
+				LeafCard(Bm.Cards, P, Face, Up, Size, Size, bOther ? Sh.CellOther : Sh.Cell, Out, Soft, 0.5, Paint(bOther ? Sh.Second : Sh.Leaf, Tone));
+				Cluster(Bm.Sprigs, P, 0.32 * Size, 0.8, Sh.Jag, RC, Soft, 0.45, Paint(bOther ? Sh.Second : Sh.Leaf, Tone), true);
+			};
+			int Used = 0;
+			for (const auto& C : Cane)
+				for (int J = 0; J < 4 && Used < Budget; ++J)
+				{
+					// (one at the tip, the rest along the bow)
+					const double T = J == 0 ? 1.95 : RC.Range(0.0, 1.8);
+					const V3 P = T < 1.0 ? C[0] + (C[1] - C[0]) * T : C[1] + (C[2] - C[1]) * (T - 1.0);
+					const V3 Out = Unit3(V3{ P.X / Long, P.Y / Across, 0.6 } + AnyWay(RC) * 0.5);
+					Leaf(P, Out, Unit3(V3{ Out.X, Out.Y, 0.5 } + AnyWay(RC) * 0.5, Out), RC.Range(0.36, 0.5));
+					++Used;
+				}
+			while (Used < Budget)
+			{
+				const V3 U = Unit3(AnyWay(RC) + V3{ 0, 0, 0.6 });
+				const V3 S{ U.X, U.Y, std::fabs(U.Z) };
+				const double Rad = RC.Range(0.82, 1.05);
+				const V3 P{ S.X * Long * 0.9 * Rad, S.Y * Across * Rad, std::max(0.12, S.Z * High * 0.85 * Rad) };
+				const V3 Out = Unit3(V3{ S.X / Long, S.Y / Across, S.Z / High });
+				Leaf(P, Out, Unit3(Out * 0.5 + V3{ 0, 0, 0.5 } + AnyWay(RC) * 0.7, Out), RC.Range(0.42, 0.58));
+				++Used;
+			}
+		}
 	}
 
 	void Ground::Impl::MakeBases()
@@ -7769,10 +8276,22 @@ namespace LandField
 		// The hedge shrubs, built ShrubHigh (2.8 m) tall: hawthorn and blackthorn dark, dense and upright-sided; hazel and
 		// field maple lighter and rounder; holly and elder (dark and light clusters mixed) tall and loose, their sprigs above
 		// the rest. Bramble low and sprawling, a metre high.
-		BuildShrub(At(Base::ShrubA), { 2.8, 1.3, 2.5, 10, 200, 0.3, 0.46, 0.42, 0.35, Rgb(50, 68, 34), Rgb(58, 74, 36), 0.25, LeafThorn, LeafThorn }, S + 1);
-		BuildShrub(At(Base::ShrubB), { 2.8, 1.4, 2.2, 10, 180, 0.32, 0.5, 0.3, 0.25, Rgb(72, 94, 42), Rgb(84, 100, 46), 0.3, LeafRound, LeafOak }, S + 2);
-		BuildShrub(At(Base::ShrubC), { 2.8, 1.15, 2.4, 10, 200, 0.3, 0.46, 0.45, 0.6, Rgb(42, 60, 34), Rgb(70, 90, 44), 0.4, LeafOval, LeafRound }, S + 3);
-		BuildShrub(At(Base::Bramble), { 1.0, 0.95, 2.0, 6, 130, 0.2, 0.32, 0.45, 0.15, Rgb(58, 72, 38), Rgb(66, 76, 40), 0.2, LeafThorn, LeafOak }, S + 4);
+		// (on trial "hedgewall": each a ragged wall along the hedge's line, its three kinds' leaves held within some 2 in 100
+		// of one another's brightness and 4 degrees of hue, and the bramble a low arching mound; their own seeds)
+		if (Fd.Tried("hedgewall"))
+		{
+			BuildWallShrub(At(Base::ShrubA), { 2.8, 1.3, 2.5, 10, 200, 0.3, 0.46, 0.42, 0.35, Rgb(78, 102, 50), Rgb(81, 104, 51), 0.25, LeafThorn, LeafThorn }, 1.8, 1.1, S + 101);
+			BuildWallShrub(At(Base::ShrubB), { 2.8, 1.4, 2.2, 10, 180, 0.32, 0.5, 0.3, 0.25, Rgb(80, 104, 52), Rgb(82, 106, 53), 0.3, LeafRound, LeafOak }, 1.9, 1.15, S + 102);
+			BuildWallShrub(At(Base::ShrubC), { 2.8, 1.15, 2.4, 10, 200, 0.3, 0.46, 0.45, 0.6, Rgb(77, 101, 52), Rgb(80, 104, 53), 0.4, LeafOval, LeafRound }, 1.7, 1.05, S + 103);
+			BuildBrambleMound(At(Base::Bramble), { 1.0, 0.95, 2.0, 6, 130, 0.2, 0.32, 0.45, 0.15, Rgb(76, 94, 50), Rgb(80, 99, 52), 0.2, LeafThorn, LeafOak }, S + 104);
+		}
+		else
+		{
+			BuildShrub(At(Base::ShrubA), { 2.8, 1.3, 2.5, 10, 200, 0.3, 0.46, 0.42, 0.35, Rgb(50, 68, 34), Rgb(58, 74, 36), 0.25, LeafThorn, LeafThorn }, S + 1);
+			BuildShrub(At(Base::ShrubB), { 2.8, 1.4, 2.2, 10, 180, 0.32, 0.5, 0.3, 0.25, Rgb(72, 94, 42), Rgb(84, 100, 46), 0.3, LeafRound, LeafOak }, S + 2);
+			BuildShrub(At(Base::ShrubC), { 2.8, 1.15, 2.4, 10, 200, 0.3, 0.46, 0.45, 0.6, Rgb(42, 60, 34), Rgb(70, 90, 44), 0.4, LeafOval, LeafRound }, S + 3);
+			BuildShrub(At(Base::Bramble), { 1.0, 0.95, 2.0, 6, 130, 0.2, 0.32, 0.45, 0.15, Rgb(58, 72, 38), Rgb(66, 76, 40), 0.2, LeafThorn, LeafOak }, S + 4);
+		}
 		for (const Base B : { Base::ShrubA, Base::ShrubB, Base::ShrubC, Base::Bramble }) At(B).FarFrom = 60.0f;
 		// (brambles low under the hedges and in the woods' edges, drawn near only, out to 70 m as the grass is)
 		At(Base::Bramble).Far = Mesh();
@@ -8678,6 +9197,10 @@ namespace LandField
 			for (size_t K = 0; K < Bases.size(); ++K) Bare->Leafless(static_cast<Base>(K), Bases[K]);
 		}
 		for (BaseMesh& B : Bases) Measure(B);
+		// (on trial "hedgewall", a hedge shrub stands for the men's and the camera's sight as high as its body, 2.95 m as
+		// built, as before: its whips over it are seen through)
+		if (Fd.Tried("hedgewall"))
+			for (const Base B : { Base::ShrubA, Base::ShrubB, Base::ShrubC }) At(B).Height = std::min(At(B).Height, 2.95f);
 		// (a burnt-out house in sight as the kit's thing it stands for was: the same shape, its stove and chimney, not its
 		// whole footprint; the size it was planted at kept)
 		for (size_t K = 0; K < HouseFrom.size() && K < HouseModels.size(); ++K)

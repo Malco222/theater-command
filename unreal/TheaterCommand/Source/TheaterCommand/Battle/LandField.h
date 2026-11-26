@@ -513,6 +513,20 @@ namespace LandField
 		int Farmsteads = 0;
 		int Poles = 0;            // the steppe's telegraph poles
 		double RailKm = 0.0;      // and its railway, laid
+		/** The bocage's hedge trees (hedgerows and lane banks, in the field and its band; not their young shoots): the
+		 * hedges' length, the trees laid on them and those the trial "hedgewall" leaves out to clump the rest; the most trees
+		 * in one run (neighbours 12 m apart at most) and its length, the widest gap between two neighbours on one hedge, and
+		 * the longest stretch of a hedge with no tree (its ends counted). And their shrubs' tops: the step in height from
+		 * one to the next along a hedge (its tall clumps apart), median and 95 in 100, metres, and the share over 0.5 m. */
+		double BocageHedgeKm = 0.0;
+		int BocageStandards = 0, BocageStandardsDropped = 0;
+		int StandardRunMost = 0;
+		double StandardRunMetres = 0.0, StandardGapMost = 0.0, StandardBareMost = 0.0;
+		double ShrubStepMedian = 0.0, ShrubStep95 = 0.0, ShrubStepOver = 0.0;
+		/** And how the bocage's hedge trees stand: the spacing from each to the next along its hedge, under 6 m, 6 to 12,
+		 * 12 to 25, 25 to 60 and over 60 m; the runs (neighbours 12 m apart at most) of one tree, two, ... five, six or more. */
+		int StandardSpacingBins[5] = {};
+		int StandardRunsOf[6] = {};
 		size_t NearTris = 0, FarTris = 0, BuiltTris = 0, RingTris = 0;
 		size_t Instances = 0;
 		double CoreSeconds = 0.0; // heights, lanes, parcels, hedges, village, instances
