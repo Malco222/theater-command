@@ -112,9 +112,10 @@ const named = (xs: string[]): string => cap(list(xs.map(theGroupName)));
  * joins its names as the report joins them, every name by theGroupName (21:22Z g). "No fighter group went down to
  * strafe." only where the line would otherwise say nothing at all (the UI director, 26 November 2026 02:06Z, answer 2:
  * "The k line alone. Each group that did not go down has its own line saying why"): a group too short of fuel to go
- * down is told by its own line, standing alone. Last, after the cause lines, a fighter group of a fought raid that did
- * not go down and has no cause line of its own (strafeStayed): "{A} did not go down to strafe." (the UI director, 26
- * November 2026 03:59Z, 2: "No fighter group went down to strafe." stays only where no group has a line at all).
+ * down is told by its own line, standing alone. Last, after the cause lines, a fighter group of the raid, fought or
+ * settled, that did not go down and has no cause line of its own (strafeStayed): "{A} did not go down to strafe." (the UI
+ * director, 26 November 2026 03:59Z, 2, and 05:17Z, round eight, 2 and 4: "No fighter group went down to strafe." only
+ * where there is no group to name).
  */
 export function strafedLine(rep: { mission: string; attNat: string; strafed?: string[]; strafeLittle?: { names: string[] }; strafeEnd?: { short?: string[]; fuel?: string[]; caught?: string[] }; strafeStayed?: string[] }, reader: string | null): string {
   if (rep.mission !== 'ground' || !rep.strafed || reader === null || reader !== rep.attNat) return '';

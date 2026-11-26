@@ -3425,17 +3425,19 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       const end: NonNullable<AirReport['strafeEnd']> = {};
       const little: string[] = [];
       // (The UI director, 26 November 2026 03:59Z, 2: "Where a group that did not go down has no cause line of its own, it
-      // takes a plain line after the cause lines". Fought out only, where the battle knows who went down and why not: a
-      // fighter group of the raid (fighters flying with it) that did not go down, with no strafeEnd of its own. Settled,
-      // or handed to the staff, none is named, so "No fighter group went down to strafe." stands there as before, "as in
-      // your settled cases".)
+      // takes a plain line after the cause lines": a fighter group of the raid (fighters flying with it) that did not go
+      // down, with no strafeEnd of its own. Fought out, the battle says who went down; settled, or handed to the staff,
+      // the settled reckoning does (`strafers`, the groups its rule sent down), and every group of the raid is in a.att
+      // with the fighters it flew (x.ftr), so the same raid names the same groups either way: her answer of 26 November
+      // 2026 05:17Z, round eight, 2, "A settled raid names the groups that did not go down, as a fought one does". Which
+      // sentence only: nothing booked moves.)
       const stayed: string[] = [];
       a.att.forEach((x, i) => {
         const went = down.includes(x.f.id), why = ends[x.f.id];
         if (went && booked(x) >= 1) return;
         if ((why === 'short' && !went) || ((why === 'fuel' || why === 'caught') && !(went && passed(x)))) (end[why] ??= []).push(att[i].fleet);
         else if (went) little.push(att[i].fleet);
-        else if (route === 'fought' && !why && x.ftr > 0) stayed.push(att[i].fleet);
+        else if (!why && x.ftr > 0) stayed.push(att[i].fleet);
       });
       if (Object.keys(end).length) strafeEnd = end;
       if (stayed.length) strafeStayed = stayed;

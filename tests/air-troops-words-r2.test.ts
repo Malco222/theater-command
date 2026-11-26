@@ -703,3 +703,47 @@ describe('the group lines before the result line, which closes (the UI director,
     expect(act.note).toBe(`${line} ${r.result}`);
   });
 });
+
+// The UI director, 26 November 2026 05:17Z, round eight, 2: "Yes, under the lane's switch. A settled raid names the groups
+// that did not go down, as a fought one does, so the same raid reads the same either way. N8 would read "... Groupement de
+// Chasse 3 went down and strafed. Groupement de Chasse 1 did not go down to strafe." Off, as shipped."
+describe('a settled raid names the groups that did not go down, as a fought one does (the UI director, 26 Nov 05:17Z, round eight, 2)', () => {
+  it('N8: settled, Groupement de Chasse 3 strafes and Groupement de Chasse 1 (at Namur, beyond the reach) is named; kept in the save', () => {
+    on();
+    const c = saar(0, 'both');
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect(heard.filter((x) => x.route === 'settled').length).toBe(1);
+    expect(r.strafed).toEqual(names([GC3]));
+    expect(r.strafeStayed).toEqual(names([GC1]));
+    expect(strafedLine(r, 'FRA')).toBe(`Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 ${STRAFE_STAYED}`);
+    expect(loadGame(saveGame(c.g))!.airReports.at(-1)!.strafeStayed).toEqual(names([GC1]));
+    // The defender reads none of it; the bombers' group is never named.
+    expect(strafedLine(r, 'GER')).toBe('');
+    expect(strafedLine(r, 'FRA').includes('Bombardement')).toBe(false);
+  });
+  it('the same raid reads the same settled and fought out, where the same groups go down', () => {
+    let same = 0;
+    for (const k of [0, 1]) {
+      on();
+      const s = saar(k, 'both');
+      const settled = launchRaid(s.g, 'ground', s.target, s.ids, 'FRA')!;
+      const f = saar(k, 'both');
+      const sim = airBattle(airTicket(f.g, 'ground', f.target, f.ids, 'FRA').ticket!) as AirSim;
+      fight(sim);
+      const fought = launchRaid(f.g, 'ground', f.target, f.ids, 'FRA', foughtAir(sim.outcome()))!;
+      if (JSON.stringify(settled.strafed) !== JSON.stringify(fought.strafed) || settled.strafeLittle || fought.strafeLittle || fought.strafeEnd) continue;
+      expect(strafedLine(settled, 'FRA'), `${k}`).toBe(strafedLine(fought, 'FRA'));
+      expect(settled.strafeStayed, `${k}`).toEqual(fought.strafeStayed);
+      same++;
+    }
+    expect(same).toBeGreaterThan(0);
+  });
+  it('off: a settled raid writes no such field and says nothing, as shipped', () => {
+    flyKinds([]);
+    const c = saar(0, 'both');
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect('strafeStayed' in r).toBe(false);
+    expect(strafedLine(r, 'FRA')).toBe('');
+    expect(saveGame(c.g).includes('"strafeStayed"')).toBe(false);
+  });
+});
