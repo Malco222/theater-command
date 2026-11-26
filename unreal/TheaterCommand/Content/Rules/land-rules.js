@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 72e251f5 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of b1fee46c 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -8053,11 +8053,13 @@
        *
        * way: on its way round ground it cannot enter (over a bridge), a block makes for the furthest turning point it can
        * walk straight to. Shoved a step to one side at the bridge's end it lost that line and turned for the nearer point,
-       * found the line again a step on and turned back, and so on for as long as a friend stood beside it. On: while it is
-       * still at the turning point before the one it chose (the march's own 6 m, where a block on a way takes a turning
-       * point as reached) it goes on for the one it chose; further off it falls back to the nearer one, makes for that
-       * until it is at it or that is out of its sight too, and while that nearer point is still under its own box it
-       * steps to it as it faces the one it chose, with no wheel to a way of a few metres.
+       * found the line again a step on and turned back, and so on for as long as a friend stood beside it. On: it goes on
+       * for the turning point it chose for as long as the ground lets it step straight for it, as a block on a move order
+       * goes on for the next point of its way; where the ground stops that step it falls back to the furthest point it
+       * still has a straight line to and follows that line until it sees further than it fell back to; and while the point
+       * it fell back to is under its own box it steps to it as it faces the one after, with no wheel to a way of a few
+       * metres. (Foot that will not wade and a tank held back by the hedges go as before: their way keeps them off ground
+       * their step could enter.)
        *
        * side: a block on the march slides a friend in its way aside and slides aside itself, by the side the friend lies
        * across its front. A friend dead ahead lies now a hair to its left and now a hair to its right as the block's own
@@ -8071,8 +8073,11 @@
        *
        * back: a block that has carried out a move order and is then eased a few metres off its place by its friends is
        * sent there again by its general. It wheeled to that way of a few metres, marched it and wheeled back to its line's
-       * facing. On: a move order sent again to the place it already holds (the place of the move it last carried out, and
-       * still under its own box) is the same order, so it steps back to it as it faces: no wheel.
+       * facing, and the friends that had eased it eased it again. (Stepping back to the place without the wheel, as this
+       * keep was first built, set it against those friends tick by tick: a step back, a shove off, for as long as they
+       * stood there.) On: a move order sent again to the place it already holds (the place of the move it last carried
+       * out, and still under its own box) is the same order, and that order it has carried out: it stands where it is,
+       * beside the friends that eased it, and turns only to the facing its line is given.
        *
        * step: the same of a block on an attack order that has stood to fight. Eased a few metres off its stand with its
        * target at the edge of its hold, it wheeled to that way of a few metres, marched it and wheeled back to what it
@@ -9607,13 +9612,11 @@
           }
         }
       }
+      let there = false;
       if (this.standRule) {
         const h = u.heldAt;
-        if (this.standKeeps.back && o.kind === "move" && h && h[0] === o.x && h[1] === o.y && this.under(u, o.x, o.y)) u.stepsBack = true;
-        else {
-          u.stepsBack = void 0;
-          u.heldAt = void 0;
-        }
+        there = this.standKeeps.back && o.kind === "move" && !!h && h[0] === o.x && h[1] === o.y && this.under(u, o.x, o.y);
+        if (!there) u.heldAt = void 0;
       }
       u.order = o;
       u.keepFace = o.face ?? null;
@@ -9623,7 +9626,7 @@
       delete u.cut;
       const t = o.kind === "attack" && o.target !== void 0 ? this.unit(o.target) : void 0;
       const at = t ? this.lanePoint(u, t, this.closeTo(u)) : [o.x, o.y];
-      u.path = at ? this.route(u, at[0], at[1]) : [];
+      u.path = at && !there ? this.route(u, at[0], at[1]) : [];
     }
     /** A point under the block's own box, as it faces. */
     under(u, x, y) {
@@ -9669,21 +9672,13 @@
           continue;
         }
         if (k < 0) return [[u.x, u.y]];
-        if (this.standRule && this.standKeeps.way) {
-          const at = (i) => dist(u.x, u.y, pts[i][0], pts[i][1]) <= 6;
-          if (w.back !== void 0) {
-            const p = pts[w.back];
-            if (w.back > k || !this.dry(m, u.x, u.y, p[0], p[1])) w.back = void 0;
-            else if (!at(w.back)) k = w.back;
-            else {
-              k = Math.max(k, Math.min(w.back + 1, pts.length - 1));
-              w.back = void 0;
-            }
+        if (this.standRule && this.standKeeps.way && m === MOTION[u.kind]) {
+          if (w.at !== void 0 && k > w.at) w.fell = false;
+          else if (w.at !== void 0 && k < w.at && !w.fell) {
+            if (w.stopped || w.at >= pts.length) w.fell = true;
+            else k = w.at;
           }
-          if (w.back === void 0 && w.at !== void 0 && k < w.at) {
-            if (w.at < pts.length && at(w.at - 1)) k = w.at;
-            else w.back = k;
-          }
+          w.stopped = false;
           w.at = k;
         }
         const way = pts.slice(k);
@@ -11069,8 +11064,8 @@
       }
       const off = turn(u.face, head);
       const fell = this.standRule && this.standKeeps.way && !run && u.path.length > 1 && to === u.path[0] ? this.ways.get(u.id) : void 0;
-      const via = !!fell && fell.back !== void 0 && fell.pts[fell.back] === to && this.under(u, to[0], to[1]);
-      const back = this.standRule && !run && (sidle || via || u.stepsBack === true && u.order?.kind === "move");
+      const via = !!fell && fell.fell === true && fell.at !== void 0 && fell.pts[fell.at] === to && this.under(u, to[0], to[1]);
+      const back = this.standRule && !run && (sidle || via);
       if (!run && !wading && !back && Math.abs(off) > 0.6) {
         this.turnTo(u, head);
         u.speed = 0;
@@ -11080,7 +11075,7 @@
       if (run) u.face = head;
       else if (!back) this.turnTo(u, head);
       else {
-        const want = via ? bearing(u.x, u.y, u.path[1][0], u.path[1][1]) : sidle ? this.facing(u) : u.keepFace;
+        const want = via ? bearing(u.x, u.y, u.path[1][0], u.path[1][1]) : this.facing(u);
         if (want !== null) this.turnTo(u, want);
       }
       const m = MOTION[k];
@@ -11098,6 +11093,10 @@
       const [ax, ay] = ahead(head);
       let nx = u.x + ax * stepLen, ny = u.y + ay * stepLen;
       if (LAND.pace[m][groundAt(this.field, nx, ny)] <= 0 && LAND.pace[m][g] > 0 && !run) {
+        if (this.standRule && this.standKeeps.way) {
+          const kept = this.ways.get(u.id);
+          if (kept) kept.stopped = true;
+        }
         let moved = false;
         for (const sw of [0.5, -0.5, 1, -1]) {
           const [bx, by2] = ahead(head + sw);
