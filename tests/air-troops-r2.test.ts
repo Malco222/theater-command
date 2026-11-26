@@ -904,3 +904,64 @@ describe('what ended a group\'s strafing, as the battle knows it (the UI directo
     expect(saveGame(f.g).includes('"strafeEnd"')).toBe(false);
   });
 });
+
+// The UI director, 26 November 2026 02:06Z, answer 4: "The strafed line. It finished a pass, so it went down and strafed,
+// the first true cause in the order; the harm line after it says how little that did. "before it could do any harm" would
+// not be true of a group that made its passes." And answer 3: "went down to strafe, but ..." stays for a group fuel or a
+// catch ended before it finished any pass. Which sentence only: what the battle booked on the troops, its strafeEnd and
+// every draw are as they were. A fought battle, the Saar with all three French fighter groups and the bombers, the
+// computer on both sides; setup: Groupement de Chasse 3 cut to one aircraft, so its passes book under one fighter's
+// weight, and its board fuel set on the ticket so that bingo comes after one or two passes.
+describe('a group that finished a pass before bingo went down and strafed (the UI director, 26 Nov 02:06Z, answer 4)', () => {
+  const GC1 = 9, GC3 = 10, GC2 = 36;
+  function small(k: number, fuel: number) {
+    const g = startOpen(createGame(7, 'FRA'));
+    setWar(g, 'FRA', 'GER');
+    for (const id of [GC1, GC2]) g.airFleets.find((f) => f.id === id)!.base = g.regions.find((x) => x.name === 'Lorraine')!.id;
+    g.airFleets.find((f) => f.id === GC3)!.ftr = 1;
+    g.seed = (7 + 7919 * k) >>> 0;
+    g.flags.airBattles = k;
+    const target = raidTargets(g, 'ground', 'FRA').find((x) => g.regions[x.id].name === 'Saar')!.id;
+    const ids = [38, GC1, GC2, GC3];
+    const t = ticketOf(g, target, ids, 'FRA');
+    t.place.starts[GC3].fuel = fuel;
+    const s = airBattle(t) as AirSim;
+    const S = s as unknown as { strafing: Map<number, { done: number }> };
+    const u = s.units.find((x) => x.side === 'att' && x.corps === GC3)!;
+    s.ai.att = true; s.ai.def = true;
+    let guard = 0;
+    while (!s.over && guard++ < 20_000) s.step();
+    expect(s.over).toBeTruthy();
+    const o = s.outcome();
+    const rep = launchRaid(g, 'ground', target, ids, 'FRA', foughtAir(o))!;
+    return { o, rep, done: S.strafing.get(u.id)?.done ?? 0, line: strafedLine(rep, 'FRA') };
+  }
+  it('one pass or two made, then bingo, under one fighter\'s weight: the strafed line, not the fuel line', () => {
+    for (const [fuel, passes] of [[1050, 1], [1100, 2]] as const) {
+      const f = small(1, fuel);
+      expect(f.o.strafeEnd, `${fuel}`).toEqual({ [GC3]: 'fuel' });
+      expect(f.done, `${fuel}`).toBe(passes);
+      expect(f.o.strafedBy![GC3], `${fuel}`).toBeGreaterThan(0);
+      expect(f.o.strafedBy![GC3], `${fuel}`).toBeLessThan(1);
+      expect('strafeEnd' in f.rep, `${fuel}`).toBe(false);
+      expect(f.rep.strafeLittle, `${fuel}`).toBeUndefined();
+      expect(f.line, `${fuel}`).toBe('Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 went down and strafed.');
+    }
+  });
+  it('bingo as its first pass begins, no pass made: the fuel line stands (answer 3)', () => {
+    const f = small(1, 1000);
+    expect(f.o.strafeEnd).toEqual({ [GC3]: 'fuel' });
+    expect(f.done).toBe(0);
+    expect(f.o.strafedBy?.[GC3]).toBeUndefined();
+    expect(f.rep.strafeEnd).toEqual({ fuel: ['Groupement de Chasse 3'] });
+    expect(f.line).toBe('Groupement de Chasse 1 and Groupement de Chasse 2 went down and strafed. Groupement de Chasse 3 went down to strafe, but ran short of fuel and turned for home before it could do any harm.');
+  });
+  it('all three passes made under one fighter\'s weight, neither fuel nor a catch: the A5 line, as built (not her answer 4\'s case)', () => {
+    const f = small(1, 1150);
+    expect('strafeEnd' in f.o).toBe(false);
+    expect(f.done).toBe(3);
+    expect(f.o.strafedBy![GC3]).toBeLessThan(1);
+    expect(f.rep.strafeLittle).toEqual({ names: ['Groupement de Chasse 3'] });
+    expect(f.line).toBe('Groupement de Chasse 1 and Groupement de Chasse 2 went down and strafed. Groupement de Chasse 3 went down to strafe, but had too little fight left to do any harm.');
+  });
+});
