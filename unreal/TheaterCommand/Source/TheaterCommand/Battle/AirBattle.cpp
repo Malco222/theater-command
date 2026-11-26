@@ -4041,12 +4041,13 @@ void AAirBattle::B17SkinRead()
 			UE_LOG(LogTheater, Warning, TEXT("Air battle: worn B-17 paint: Content/Data/AirSkin/B17Fine.json does not read (%s), so the finer B-17s wear her plain olive."), UTF8_TO_TCHAR(Why.c_str()));
 			return;
 		}
+		// (her contact shade's strength, for stills with and without it: -TheaterAirB17SkinShade=0..1, the whole of it
+		// unless asked; read once with the file, so the kept overlay is never written again once a reader may hold it)
+		float ShadeAsked = 1.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterAirB17SkinShade="), ShadeAsked);
+		WornKept.ShadeStrength = FMath::Clamp(static_cast<double>(ShadeAsked), 0.0, 1.0);
 		bWornKeptRead = true;
 	}
-	// (her contact shade's strength, for stills with and without it: -TheaterAirB17SkinShade=0..1, the whole of it unless asked)
-	float ShadeAsked = 1.0f;
-	FParse::Value(FCommandLine::Get(), TEXT("TheaterAirB17SkinShade="), ShadeAsked);
-	WornKept.ShadeStrength = FMath::Clamp(static_cast<double>(ShadeAsked), 0.0, 1.0);
 	AirSkin::Set(&WornKept);
 	UE_LOG(LogTheater, Display, TEXT("Air battle: worn B-17 paint: on (the Battle rules card's Worn B-17 paint, or -TheaterAirB17Skin): the model thread's paint for her shape, from %s; contact shade %.2f (-TheaterAirB17SkinShade=0..1)."),
 		UTF8_TO_TCHAR(WornKept.SourceSha256.substr(0, 12).c_str()), WornKept.ShadeStrength);

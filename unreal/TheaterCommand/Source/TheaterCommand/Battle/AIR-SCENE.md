@@ -1566,7 +1566,9 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    The overlay is made by `python3 -I Tools/make_air_skin.py --base Content/Models/B17Fine.json --skin <the model
    thread's file> --out Content/Data/AirSkin/B17Fine.json`: it EXTRACTS (computes no paint of its own), refuses a base
    whose sha256 does not begin 5e1f39002423 or whose points, facings, triangles, part or wear differ from the skin's,
-   and gives the same bytes from the same files. First made from battle-models/air-bar-1126/issue-4/B17.json (sha256
+   and gives the same bytes from the same files. It also refuses (exit 2, nothing written) a file that is not JSON, a
+   colour that is not hex, and a skin holding a dated scheme ("schemes", a key holding "month", a key "from"): such
+   paint is refused aloud, never quietly dropped. First made from battle-models/air-bar-1126/issue-4/B17.json (sha256
    f4d417ed0085e866...). A re-issued model file is one more run of that command and one commit. A re-export of
    B17Fine.json itself fails the cloud test until the tool is run again.
    Cost: none on the graphics chip (the same points, triangles, material and draws: only the colour bytes differ).
@@ -1585,7 +1587,8 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    for the art director (dark against the cloud from the film's eye; panel tones one coat, not a patchwork).
    Contact shade (same row): the overlay's per-point shade (the model thread's, 0.12 to 1, kept x100) multiplies her
    colour in linear light after blend and soot, as a figure's wear is multiplied (CampaignMiniatures.cpp's figure
-   branch), only under the skin. `-TheaterAirB17SkinShade=0..1` sets its strength (1 unless asked; 0 none) so the Mac
+   branch), only under the skin. `-TheaterAirB17SkinShade=0..1` sets its strength (1 unless asked; 0 none; read once a run with
+   the file, as the command line does not change) so the Mac
    can make the same still with and without it. Unknown until the Mac's stills: whether Lumen's own occlusion darkens
    her creases a second time on top of it. Her earned colours' bands are laid without it (their model has no shade):
    where a band crosses a shaded crease it is a little lighter than the coat beside it.
