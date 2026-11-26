@@ -320,18 +320,19 @@ export interface AirAim {
  *   point, where it is or is bound for (its job's x, y). Absent the tick it makes for an enemy or is given a quarry.
  *   A scrambled group patrols the target while it climbs, so it may carry 'rise' and 'hold' at once.
  * - 'bounce', on a group that has dived from above on an enemy (top cover coming down; the dive that ends a staff's
- *   climb is the same move): 'from' its height the view before the dive, 'to' the band it dived to, 'at' the view
- *   second of the dive. The rules change its height at once, in that view (sim.ts touch()): they hold no time for
- *   the drop itself. What they do count is the dive's edge, SKY.edge.bounceFor air seconds of "diving from a higher
- *   band" in which it strikes first: 'over' is that length on the view's clock and 'left' what is left of it. Present
- *   from the dive while that edge lasts; a dive that earns no edge (on fighters down on their passes on the troops)
- *   shows only in the view of the dive, with 'over' and 'left' 0.
+ *   climb is the same move): 'from' its height the view before the dive, 'to' the band it dived to (one band lower:
+ *   groups more than a band apart never meet), 'at' the view second of the dive. The rules change its height at once,
+ *   in that view (sim.ts touch()): they hold no time for the drop itself, so 'over' is 0, always; how to spread the
+ *   drop is the 3D's. What the rules do count is the dive's edge, SKY.edge.bounceFor air seconds of "diving from a
+ *   higher band" in which it strikes first: 'edge' is that length on the view's clock and 'left' what is left of it.
+ *   Present from the dive while that edge lasts; a dive that earns no edge (on fighters down on their passes on the
+ *   troops) shows only in the view of the dive, with 'edge' and 'left' 0.
  */
 export interface AirShown {
   fight?: { id: number; x: number; y: number; vx: number; vy: number; groups: number[] };
   rise?: { x: number; y: number; at: number; from: number; to: number; over: number };
   hold?: { x: number; y: number };
-  bounce?: { from: number; to: number; at: number; over: number; left: number };
+  bounce?: { from: number; to: number; at: number; over: 0; edge: number; left: number };
 }
 
 /** The exact result the rules apply (FieldResult.extra.air): each campaign group's losses, and the bombs dropped. */

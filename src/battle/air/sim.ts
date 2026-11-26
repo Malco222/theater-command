@@ -256,7 +256,7 @@ export class AirSim implements BattleSim<AirUnit> {
     at: new Map<number, { x: number; y: number; alt: number }>(),
     waited: new Set<number>(),
     rise: new Map<number, number>(),
-    dive: new Map<number, { at: number; from: number; to: number; over: number }>(),
+    dive: new Map<number, { at: number; from: number; to: number; edge: number }>(),
   };
 
   constructor(ticket: FieldTicket<AirPlace>, opts: { show?: boolean; look?: number } = {}) {
@@ -1918,12 +1918,14 @@ export class AirSim implements BattleSim<AirUnit> {
         } else K.rise.delete(u.id);
       }
       if (u.air === 'ftr' && flying(u) && !away(u) && u.job.do === 'patrol' && !this.after.has(u.id)) add.hold = { x: r1(u.job.x), y: r1(u.job.y) };
+      // The dive from above: touch() puts the group on its enemy's band at once, so the drop itself takes no time by
+      // rule ('over' 0). What the rules do count is the dive's edge (u.bounce, SKY.edge.bounceFor air seconds).
       if (dove.has(u.id)) {
-        K.dive.set(u.id, { at: this.t, from: Math.round(K.at.get(u.id)?.alt ?? u.alt), to: Math.round(u.alt), over: u.bounce > 0 ? r1(SKY.edge.bounceFor / SKY.scale) : 0 });
+        K.dive.set(u.id, { at: this.t, from: Math.round(K.at.get(u.id)?.alt ?? u.alt), to: Math.round(u.alt), edge: u.bounce > 0 ? r1(SKY.edge.bounceFor / SKY.scale) : 0 });
       }
       const dv = K.dive.get(u.id);
       if (dv) {
-        if (!off(u) && (u.bounce > 0 || dv.at === this.t)) add.bounce = { ...dv, left: dv.over > 0 ? r1(u.bounce / SKY.scale) : 0 };
+        if (!off(u) && (u.bounce > 0 || dv.at === this.t)) add.bounce = { from: dv.from, to: dv.to, at: dv.at, over: 0, edge: dv.edge, left: dv.edge > 0 ? r1(u.bounce / SKY.scale) : 0 };
         else K.dive.delete(u.id);
       }
       // A group not rebuilt this tick (gone or withdrawn) drops the keys it carried; the rest take what is true now. (A
