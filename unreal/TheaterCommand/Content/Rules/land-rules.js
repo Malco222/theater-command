@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 70e93027 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of e30dd1a4 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -3310,10 +3310,44 @@
       mates: [0.8, 0.4, 0.1]
     },
     seasoned: {
-      _about: "Experience you can see (release 2; Brian, 25 November 2026, 15:11Z: 'do those 3 ideas'). Looks only (ruling 217), the drill's own dice; on only where asked and only with squad life (Drill seasoned: the 3D game's switch)."
+      _about: [
+        "Experience you can see (release 2; Brian, 25 November 2026, 15:11Z: 'do those 3 ideas'). Looks only (ruling 217), the drill's own dice; on only where asked and only with squad life (Drill seasoned: the 3D game's switch). A squad's training shows in how it moves: green squads bunch up and freeze for a moment when fire first comes, veterans keep wider gaps and get down fast. By the block's training alone (its experience), never its nation or the date.",
+        "grade: a block's experience (0 to 1) read as its grade: at or under the first number it is green (grade 0), at or over the second it is veteran (grade 1), in a straight line between. Its own two ends: the cuts of 'xp' above stay as they are for the rest of the drill.",
+        "Gaps. step: [green, veteran], what these are multiplied by: the metres between the men of a section (sections.space), each man's drift on the move (life.drift), the gap between a section's two scouts, and the room a man keeps from his mates when he picks his cover. least: the step between the men of a section is never under this many metres. inside: a veteran section opens out only as far as leaves its outer man this many metres inside the furthest a man may stray from his block (45 m).",
+        "First fire: a squad on the march comes under fire (its block leaves the march to go by bounds, to fight, or pinned). freeze: seconds [least, most] before a green man goes to ground, each man his own length; he spends them frozen where he stands. quick: the most a veteran takes where his block goes on by bounds (under a quarter of a second, so he is never held); where it halts to fight or is pinned he keeps squad life's own moment (life.react.ground) and goes on as he was through it, so a veteran squad never takes its places as one and is never seen to freeze. The grades between run in a straight line between the two, and a man stands frozen for the green share of his wait only (under a quarter of a second of it, not at all). notice: a third of the men who freeze stop dead at once, the rest within this many seconds, each his own moment, so a squad is not seen to halt as one. cower: one man in this many of a squad crouches where he is, the others stand stock still (by their places in the squad, not by dice; a group thinned out till that would have all its men who can freeze alike takes it by their order among those left instead, the first standing and the second crouching, so two or more of them are never all given one pose). A squad's leader never freezes, nor a section's key man whatever he carries (where he is its gun his loaders take his pose, and the gun section would freeze as one): he goes down first and his men after him, one by one. drop: seconds a man then stays down before his squad's fire and movement takes him on. knee: the share who go down on a knee; the rest go flat. stride: seconds, at most (and a step), a man going to a knee runs on before he drops, his own moment, so even a squad of veterans is never down in one movement.",
+        "rounds: the first drawn rounds landing at a squad still on the march, before its block itself reacts. after: seconds [least, most] after the first round lands at which each man reacts, his own moment. The squad's leader reacts first, and a section's key man whatever he carries: they duck, and are never frozen. A share of the other men equal to their grade duck: down for 'duck' seconds [least, most], each his own spell; a share 'bent' of them then go on bent low for 'low' seconds [least, most], the others as they marched, so a squad neither gets up nor straightens up as one. The rest stop frozen where they are (the 'freeze' above, shorter the higher the grade) and then go on. No man the block has left behind is held, and it all ends by itself. quiet: seconds without a round landing at the squad before the next round counts as a first round again.",
+        "rush: fire and movement (life.rush). close: [green, veteran], what the time over which a squad's buddy teams rise one after another is multiplied by: a green squad's teams get up closer together, a veteran squad's further apart, always inside the squad's own turn (and on the rolling advance never over its whole turn of 6 seconds). long: how far a green man's rush leans to the long end of his army's rushes, and a veteran's to the short end (0 not at all, 1 all the way); on the rolling advance the same lean takes a green man's spells down toward the short end of theirs and a veteran's toward the long end."
+      ],
+      grade: [0.2, 0.6],
+      step: [0.6, 1.35],
+      least: 2.1,
+      inside: 7,
+      freeze: [1, 3],
+      quick: 0.2,
+      notice: 1,
+      cower: 3,
+      drop: 1.5,
+      knee: 0.6,
+      stride: 0.4,
+      rounds: { after: [0, 1.5], duck: [1, 1.5], bent: 0.5, low: [4, 10], quiet: 60 },
+      rush: { close: [0.6, 1.3], long: 0.45 }
     },
     leaders: {
-      _about: "When the leader falls (release 2; Brian, 25 November 2026, 15:11Z: 'do those 3 ideas'). Looks only (ruling 217), the drill's own dice; on only where asked and only with squad life (Drill leaders: the 3D game's switch)."
+      _about: [
+        "When the leader falls (release 2; Brian, 25 November 2026, 15:11Z: 'do those 3 ideas'). Looks only (ruling 217), the drill's own dice; on only where asked and only with squad life (Drill leaders: the 3D game's switch). 'When the leader falls: the squad hesitates a few seconds, then the next man takes charge.' The drill never chooses who falls: it acts out what follows. A leader here is a rifle section's key man, a platoon squad's leader or its headquarters' leader, or the man who took charge after one. All times are battle seconds (the 3D game shows one as two).",
+        "hold: the squad hesitates this long [least, most], by its own dice, times 'train' by its block's training [raw, regular, veteran]: green men are slow to go on, veterans quick. While it lasts no man of it starts a walk, a run or a rush (a creep or a crawl clear of a mate is no start); men firing fire on. It ends at once if the block breaks, and it outlasts a change of the block's task. floor: with this many men of the squad or fewer left on their feet there is no hesitation (nor in a rout, nor riding or mounting): the next man takes charge at once.",
+        "first: the next man is on his feet this many seconds before the end of it, and never sooner than half a second after the last man caught on the move is down ('drop' at the most): no man is up again while his mates are still dropping. Veterans, whose hesitation is short, are up as soon as that. most: the rest go on after him in the order of their own dice, this share of the squad at the most (one man at least) each half second, so never the squad, nor half of it, in one instant: the last man is up a second or two after the end of it. drop: a man caught on the move drops where he is at his own moment, [least, most] seconds after the leader falls (he finishes his stride): the men drop in the order of their own dice, each in his own share of that time, so no two of a few men drop in one instant, and none in the instant the leader falls. knee: the share of them who only drop to a knee, the rest flat or behind what is there.",
+        "glance: 'men' [least, most] of the men nearest the fallen leader, within 'within' metres of him (never the gun), look his way, and never more than one man in 'oneIn' of those hesitating (one at least): a squad cut down to a few men does not turn to stare as one. Each from his own moment 'after' [least, most] seconds (the nearest first, the others after him), for 'for' [least, most] seconds, turning at 'rate' radians a second (quicker than a man scans his arc: life.scan.rate), off his sights from that moment while he looks.",
+        "The next man: the fallen leader's buddy, the rifleman at his elbow, if he is a plain rifleman on his feet, else the squad's plain rifleman first in its order (for a platoon's headquarters, the first rifle after its leader); never one who keeps by a weapon, a scout, a stretcher bearer, a man on a carry, in a vehicle or tending the fallen man. He is chosen as the hesitation ends, so a man hit meanwhile is not. He is marked in the drill only (acting): the soldier the 3D game draws is never swapped. Where the squad has joined another section (drawn as sections) its leader leads it and no one is marked. If he falls too the squad hesitates again; if the first leader, a light case, gets up again (stretcher bearers), he takes the squad back with no second hesitation."
+      ],
+      hold: [1.5, 3],
+      train: [1.3, 1, 0.6],
+      floor: 2,
+      first: 1,
+      most: 0.25,
+      drop: [0, 0.8],
+      knee: 0.35,
+      glance: { men: [2, 3], oneIn: 3, within: 30, after: [0, 0.4], for: [1, 2], rate: 5 }
     },
     tankmind: {
       _about: [
@@ -4714,6 +4748,255 @@
      * posts, up to about 20 m from the place the rules lay her wreck, their own mark for its shelter; wreckSpot).
      */
     // ---- When the leader falls (Drill.leaders): its helpers stand just above falls(), below this line ----
+    // Brian, 25 November 2026, 15:11Z ("do those 3 ideas"): "When the leader falls: the squad hesitates a few seconds,
+    // then the next man takes charge." Looks only: the drill never chooses who falls and never keeps a man from falling;
+    // it acts out what follows, with its own dice (salts 191 to 198). And never the squad as one man: the men nearest
+    // him look his way each in his own moment, a man caught on the move drops in his own (each at his own step of the
+    // drill: ownMoment), those firing fire on, and they go on one after another, the next man first. The man who takes
+    // charge is marked in the drill only (Man.acting): the soldier the 3D game draws is never swapped (view).
+    /**
+     * A man has just fallen (falls: a key man, before his men join another section; thin: one of the rest). Where he led
+     * a squad (a rifle section's key man, a platoon squad's or its headquarters' leader, or the man who took charge after
+     * one), the men who were with him are noted (Squad.holds) and hesitate (DR.leaders): for 'hold' seconds by the
+     * squad's own dice, longer for green men and shorter for veterans ('train'), each stays where he is till his own
+     * moment: the next man's near the end of it, the rest after him a few at a time ('most'). Two or three of the men
+     * nearest him look his way (fewer of a squad cut down: 'oneIn'); men on the move drop; men firing fire on. Nothing
+     * is done to any of them in the step he falls: each looks or drops at a moment of his own after it (ownMoment). Not
+     * in a rout, nor riding or mounting, nor where 'floor' of them or fewer are left: then the next man takes charge at
+     * the block's next think.
+     */
+    leaderFell(sq, m) {
+      const u = sq.u, t = this.b.t, H = DR.leaders, key = m.j === void 0;
+      if (key && sq.tier >= 1) sq.recheck = true;
+      if (!(key ? m.hasSec && m.role === "rifle" : m.lead) || !live(u) || this.b.over) return;
+      const g = grp(m), men = sq.men.filter((x) => x !== m && x.j !== void 0 && x.fell === void 0 && !x.job && grp(x) === g);
+      if (!men.length) return;
+      for (const o of sq.holds ?? []) o.men = o.men.filter((x) => x !== m && !men.includes(x));
+      const mate = men.filter((x) => !x.pr && !x.lead && x.role !== "mg").sort((a, c) => a.j - c.j || a.n - c.n)[0];
+      const quiet = sq.phase === "flee" || !fighting(u) || men.length <= H.floor || !sq.down || sq.boarding !== void 0 || sq.hop !== void 0;
+      const now = Math.round(t * 10);
+      const len = quiet ? 0 : (H.hold[0] + (H.hold[1] - H.hold[0]) * roll(this.seed, u.id, m.n, now, 191)) * H.train[this.band(u)];
+      const next = quiet ? t : t + Math.max(H.drop[1] + 0.5, len - H.first);
+      (sq.holds ?? (sq.holds = [])).push({ by: m, men, mate, at: t, next });
+      if (quiet) return;
+      const held = men.filter((x) => !x.pr && !VEHICLE.has(x.role) && !CREWED.has(x.role) && x.role !== "holder" && x.role !== "officer" && x.role !== "crew" && !CARRIED.has(x.pose) && !(x.aid !== void 0 && t < x.until));
+      for (const x of men) if (x.holdTo !== void 0 && !held.includes(x)) {
+        x.holdTo = void 0;
+        x.downAt = void 0;
+      }
+      const G2 = H.glance, n = Math.min(G2.men[0] + Math.floor((G2.men[1] - G2.men[0] + 1) * roll(this.seed, u.id, m.n, now, 192)), Math.max(1, Math.floor(held.length / G2.oneIn)));
+      const far = (x) => Math.hypot(x.x - m.x, x.y - m.y);
+      const look = held.filter((x) => x.role !== "mg" && far(x) < G2.within).sort((a, c) => far(a) - far(c) || a.n - c.n).slice(0, n);
+      const per = Math.max(1, Math.round(held.length * H.most));
+      const turn3 = new Map(held.map((x) => [x, roll(this.seed, u.id, x.n, now, 193)]));
+      [...held].sort((a, c) => turn3.get(a) - turn3.get(c) || a.n - c.n).forEach((x, i) => {
+        x.holdTo = next + 0.5 * (1 + Math.floor(i / per));
+      });
+      for (const x of held) {
+        x.downAt = void 0;
+        x.look = void 0;
+      }
+      look.forEach((x, i) => {
+        const from = t + G2.after[0] + (G2.after[1] - G2.after[0]) * (i + roll(this.seed, u.id, x.n, now, 194)) / look.length;
+        x.look = [m.x, m.y, from, from + G2.for[0] + (G2.for[1] - G2.for[0]) * roll(this.seed, u.id, x.n, now, 195)];
+        x.downAt = from;
+      });
+      const order = new Map(held.map((x) => [x, roll(this.seed, u.id, x.n, now, 196)]));
+      const moving = held.filter((x) => x.look === void 0 && MOVING.has(x.pose)).sort((a, c) => order.get(a) - order.get(c) || a.n - c.n);
+      moving.forEach((x, i) => {
+        x.downAt = t + H.drop[0] + (H.drop[1] - H.drop[0]) * (i + roll(this.seed, u.id, x.n, now, 198)) / moving.length;
+      });
+    }
+    /**
+     * When the leader falls, each step (walk): a held man's own moment to stop what he was at has come (Man.downAt). One
+     * of the men who look to the fallen leader comes off his sights to look (glance); one caught on the move drops where
+     * he is. At his own step of the drill, not at its next think: so the men of a squad stop one after another, never
+     * together.
+     */
+    ownMoment(sq, m) {
+      const t = this.b.t;
+      if (t < m.downAt - 1e-6) return;
+      m.downAt = void 0;
+      if (m.holdTo === void 0) return;
+      if (m.look !== void 0 && t < m.look[3]) this.goDown(sq, m, true);
+      else if (MOVING.has(m.pose)) this.goDown(sq, m);
+    }
+    /**
+     * When the leader falls: a man stops where he is. One caught on the move drops flat or behind what is there (lowPose),
+     * a share 'knee' of them only to a knee. One who looks to the fallen leader (glance) is off his sights for it,
+     * kneeling up, or lying if he lay.
+     */
+    goDown(sq, m, look = false) {
+      const lying = LYING.has(m.pose);
+      if (MOVING.has(m.pose)) {
+        m.v = 0;
+        m.spot = [m.x, m.y];
+        m.cover = this.shelter(m.x, m.y, groundOf(this.b.field, m.x, m.y), this.threatDir(sq), true, false).kind;
+      }
+      m.aim = void 0;
+      if (look) m.pose = WATCHING.has(m.pose) ? m.pose : lying ? "hide" : "wait";
+      else m.pose = m.role !== "mg" && roll(this.seed, sq.u.id, m.n, Math.round(this.b.t * 10), 197) < DR.leaders.knee ? "wait" : this.lowPose(m);
+    }
+    /**
+     * When the leader falls, each think of a block with a squad hesitating: the men still held, each with what he was
+     * at, to be looked at again once the block's drill has run (stayDown). A man whose own moment has come goes on,
+     * taking the block's phase up as on its first think: the next man first (takeCharge), the rest after him, never the
+     * squad in one instant. A man caught on the move drops at his own moment, between thinks (ownMoment). A rout ends
+     * it at once for all. One whom something else has got up meanwhile (his block gone on without him: the leash; a
+     * vehicle in his path) is held no more. `lagging`: the men squad life holds back this think (lags); the first man up
+     * is taken off it.
+     */
+    hesitate(sq, lagging) {
+      const t = this.b.t, broke = sq.phase === "flee";
+      let kept = null, done = false;
+      for (const h of sq.holds) {
+        if (!h.men.length) {
+          done = true;
+          continue;
+        }
+        const due = broke || t >= h.next - 1e-6;
+        if (due && !h.up) {
+          h.up = true;
+          const first = this.takeCharge(sq, h).find((x) => x.holdTo !== void 0) ?? h.men.filter((x) => x.holdTo !== void 0 && x.fell === void 0).sort((a, c) => a.j - c.j || a.n - c.n)[0];
+          if (first) {
+            first.holdTo = void 0;
+            first.downAt = void 0;
+            first.lagTo = void 0;
+            this.freshNow.add(first);
+            const i = lagging ? lagging.findIndex(([x]) => x === first) : -1;
+            if (i >= 0) lagging.splice(i, 1);
+            for (const x of h.men) if (x.holdTo !== void 0) x.holdTo = Math.max(x.holdTo, t + 0.05);
+          }
+        } else if (due && !h.led) this.takeCharge(sq, h);
+        let on = false;
+        for (const x of h.men) {
+          if (x.holdTo === void 0) continue;
+          const out = x.fell !== void 0 || !!x.job;
+          if (out || broke || t >= x.holdTo - 1e-6) {
+            x.holdTo = void 0;
+            x.downAt = void 0;
+            if (!out) this.freshNow.add(x);
+            continue;
+          }
+          if (x.downAt !== void 0) {
+            if (!MOVING.has(x.pose) && x.look === void 0) x.downAt = void 0;
+          } else if (MOVING.has(x.pose) && x.pose !== "crawl" && x.pose !== "creep") {
+            x.holdTo = void 0;
+            continue;
+          }
+          on = true;
+          (kept ?? (kept = [])).push([x, { pose: x.pose, v: x.v, spot: x.spot, cover: x.cover, aim: x.aim, until: x.until, slotAt: x.slotAt, el: x.el, rapid: x.rapid, hidden: x.hidden, rushed: x.rushed, shot: x.shot, sentry: x.sentry }]);
+        }
+        if (!on && (h.led || !h.men.some((x) => x.fell === void 0))) {
+          h.men = [];
+          done = true;
+        }
+      }
+      if (done) {
+        const left = sq.holds.filter((h) => h.men.length);
+        sq.holds = left.length ? left : void 0;
+      }
+      return kept;
+    }
+    /**
+     * When the leader falls, once the block's drill has run: a man still held whom it told to get up and go stays as he
+     * was (he starts no move; one shuffling clear of a mate finishes his shuffle), and so does one looking to the fallen
+     * leader, from the moment his look begins till it ends. What else it gave him he takes: he fires on, breaks off for a
+     * fresh clip, ducks as fire comes.
+     */
+    stayDown(kept) {
+      const t = this.b.t;
+      for (const [m, was] of kept) if (MOVING.has(m.pose) || MOVING.has(was.pose) || m.look !== void 0 && m.downAt === void 0 && t < m.look[3]) Object.assign(m, was);
+    }
+    /**
+     * When the leader falls: the hesitation over, the next man takes charge. The fallen leader's buddy, the rifleman at
+     * his elbow (teamOf), if he is a plain rifleman on his feet; else the squad's plain rifleman first in its order.
+     * Never one who keeps by a weapon, a scout, a stretcher bearer, a man on a carry, in a vehicle or tending a fallen
+     * comrade. Chosen only now, so a man hit meanwhile is not. Where the squad has a leader on his feet already (it has
+     * joined another section under its leader; its own leader, a light case, is back), he leads and no one is marked;
+     * else the next man is marked (lead and acting) and the squad forms on him. Returned: who should be first on his
+     * feet, the leader where he is one of them, then the next man. With no one fit to lead yet, none: asked again next think.
+     */
+    takeCharge(sq, h) {
+      const t = this.b.t, left = h.men.filter((x) => x.fell === void 0);
+      if (!left.length) {
+        h.led = true;
+        return [];
+      }
+      const can = (x) => x.fell === void 0 && !x.job && x.role === "rifle" && !x.pr && !x.scout && !x.br && !x.lead && !CARRIED.has(x.pose) && !(x.aid !== void 0 && t < x.until);
+      let heir = h.mate && can(h.mate) ? h.mate : void 0;
+      if (!heir) {
+        for (const x of h.men) if (can(x) && (!heir || x.j < heir.j || x.j === heir.j && x.n < heir.n)) heir = x;
+      }
+      const boss = this.leaderOf(sq, grp(heir ?? left[0]));
+      if (!boss && !heir) return [];
+      h.led = true;
+      if (!boss && heir) {
+        heir.lead = true;
+        heir.acting = true;
+        sq.memo = void 0;
+      }
+      return [...boss && left.includes(boss) ? [boss] : [], ...heir ? [heir] : []];
+    }
+    /**
+     * When the leader falls: who leads a group now (grp), if anyone on his feet does: its rifle key man (his own squad),
+     * else a man marked lead, one who was made its leader before one who took charge. `but`: not counting this man.
+     */
+    leaderOf(sq, g, but) {
+      const key = g % 8 === 0 ? this.memo(sq).keyOf.get((g - g % 8) / 8) : void 0;
+      if (key && key !== but && key.hasSec && key.role === "rifle") return key;
+      let act;
+      for (const x of sq.men) {
+        if (!x.lead || x === but || x.fell !== void 0 || grp(x) !== g) continue;
+        if (!x.acting) return x;
+        if (!act || x.n < act.n) act = x;
+      }
+      return act;
+    }
+    /**
+     * When the leader falls: never two leaders in one group. A man who took charge steps down (his marks cleared, the
+     * squad formed afresh) where his group has its own leader on his feet (it joined another section; the leader is
+     * back), or another who took charge before him in the block's order. Asked only when groups change: a key man fell
+     * and his men joined another section (falls), or a light case is back on his feet (rise).
+     */
+    oneLeader(sq) {
+      sq.recheck = void 0;
+      for (const m of sq.men) {
+        if (!m.acting || m.fell !== void 0) continue;
+        const o = this.leaderOf(sq, grp(m), m);
+        if (o && (!o.acting || o.n < m.n)) {
+          m.lead = void 0;
+          m.acting = void 0;
+          sq.memo = void 0;
+        }
+      }
+    }
+    /**
+     * When the leader falls, with the stretcher bearers on: a light case is back on his feet (rise). The squad's own
+     * leader takes it back: the man who took charge steps down, with no second hesitation. One who had himself taken
+     * charge comes back a plain man where another leads the squad by now.
+     */
+    leaderBack(sq, m) {
+      if (m.acting && (!m.lead || this.leaderOf(sq, grp(m), m))) {
+        m.lead = void 0;
+        m.acting = void 0;
+      }
+      this.oneLeader(sq);
+    }
+    /**
+     * When the leader falls: where a man still and watching looks now (walk). One of the men nearest the fallen leader
+     * turns to him for a second or two from his own moment (Man.look), quicker than a man scans his arc ('rate'); before
+     * and after it, as he was: [the way he wants to face, how far he may turn this step].
+     */
+    glance(m, want, turn3, rate) {
+      const t = this.b.t, [x, y, from, to] = m.look;
+      if (t >= to) {
+        m.look = void 0;
+        return [want, turn3];
+      }
+      if (t < from) return [want, turn3];
+      return [bearing2(m.x, m.y, x, y), Math.min(rate, DR.leaders.glance.rate * DT)];
+    }
     falls(sq) {
       const u = sq.u, t = this.b.t;
       for (const m of sq.men) {
@@ -4741,8 +5024,10 @@
         m.spot = [m.x, m.y];
         if (this.b.bearers && !sq.esc) this.hurt(sq, m);
         this.aid(sq, m);
+        if (this.leaders) this.leaderFell(sq, m);
         if (sq.tier >= 1) this.regroup(sq, m);
       }
+      if (this.leaders && sq.recheck) this.oneLeader(sq);
       if (sq.tier >= 1) this.thin(sq);
     }
     /** A comrade goes to a man who fell, where one is near and the block is not running (nor riding, nor mounting again). */
@@ -4973,6 +5258,7 @@
           m.pose = "down";
           m.spot = [m.x, m.y];
           this.aid(sq, m);
+          if (this.leaders) this.leaderFell(sq, m);
           if (n <= 0 || !cand.length) return;
         }
       }
@@ -5011,6 +5297,7 @@
         m.spot = [m.x, m.y];
         if (b.bearers) this.hurt(sq, m);
         this.aid(sq, m);
+        if (this.leaders) this.leaderFell(sq, m);
       }
       sq.memo = void 0;
     }
@@ -5061,6 +5348,7 @@
             m.lead = void 0;
           }
         }
+        if (this.leaders) this.leaderBack(sq, m);
         sq.memo = void 0;
         n--;
       }
@@ -5219,6 +5507,216 @@
       return u.xp < DR.xp.raw ? 0 : u.xp >= DR.xp.veteran ? 2 : 1;
     }
     // ---- Experience you can see (Drill.seasoned): its helpers follow this line ----
+    /**
+     * Experience you can see: a block's training read as a grade, 0 green to 1 veteran, in a straight line between the
+     * two ends of DR.seasoned.grade. By its experience alone, never its nation or the date. Its own reading of it: band()
+     * keeps its three bands for the rest of the drill.
+     */
+    grade(u) {
+      const [lo, hi] = DR.seasoned.grade;
+      return clamp2((u.xp - lo) / (hi - lo), 0, 1);
+    }
+    /** Experience: what a squad's gaps are multiplied by (DR.seasoned.step): green men bunch up, veterans spread out. */
+    gaps(u) {
+      const [a, b] = DR.seasoned.step;
+      return a + (b - a) * this.grade(u);
+    }
+    /**
+     * Experience: the metres between the men of a section in its wedge, its key man standing ka metres across his block
+     * and the wedge's longer arm `ranks` men long. Bunched, never under DR.seasoned.least (the men still keep SPACE.men
+     * apart); opened out, only as far as leaves its outer man DR.seasoned.inside metres inside the leash (45 m: leash).
+     */
+    stepOf(sq, ka, ranks) {
+      const E = DR.seasoned, S = DR.sections.space, k = this.gaps(sq.u);
+      if (k <= 1) return Math.max(Math.min(S, E.least), S * k);
+      return Math.min(S * k, Math.max(S, (sq.u.w / 2 + 45 - E.inside - Math.abs(ka)) / Math.max(1, ranks)));
+    }
+    /** Experience: whether first fire can catch this man: on his own feet in an infantry block on foot, not one who keeps by a weapon, an officer or a tank. */
+    afoot(sq, m) {
+      const u = sq.u;
+      return !sq.esc && sq.of === void 0 && sq.down && sq.boarding === void 0 && MOTION[u.kind] === "foot" && u.kind !== "cav" && m.esc === void 0 && !m.pr && !VEHICLE.has(m.role) && !CREWED.has(m.role) && m.role !== "holder" && m.role !== "officer";
+    }
+    /**
+     * Experience: seconds before a man takes up going to ground as fire first comes at his squad on the march (lags,
+     * 'ground' from the march; `lag` is squad life's own for him), by his block's grade. A green man DR.seasoned.freeze
+     * [least, most], his own length by his own dice. A veteran whose block goes on by bounds under DR.seasoned.quick, so
+     * he is never held (drop puts him down at his own moment); one whose block halts to fight or is pinned keeps squad
+     * life's own, so a veteran squad never takes its firing places as one. The grades between in a straight line. A
+     * section's key man is never held, whatever he carries: where he is its gun (lags counts only a rifleman its leader)
+     * he would stand frozen with his loaders beside him in his pose, a whole gun section as one.
+     */
+    slow(sq, m, lag, was) {
+      if (was !== "column" && was !== "deploy" || !this.afoot(sq, m)) return lag;
+      if (m.j === void 0) return Math.min(lag, DR.seasoned.quick);
+      const E = DR.seasoned, g = this.grade(sq.u), r = roll(this.seed, sq.u.id, m.n, Math.round(this.b.t * 2), 182);
+      return (1 - g) * (E.freeze[0] + (E.freeze[1] - E.freeze[0]) * r) + g * (sq.phase === "bound" ? E.quick * r : lag);
+    }
+    /**
+     * Experience: fire first comes at a squad on the march (lags: its block leaves the march to go by bounds, to fight,
+     * or pinned). Each man is given his own moment to go down (dropAt: now for one not held, else as his lag ends; drop
+     * acts on it), and one held is to stop dead where he is at a moment of his own (stopAt: a third at once, the rest
+     * within DR.seasoned.notice seconds; freeze), so a squad's men are not seen to halt as one. He is frozen for the green
+     * share of his wait only (slow): the share of it that is squad life's own moment (his block halts to fight or is
+     * pinned) he first goes on as he was, as with squad life alone, so a veteran is never seen to freeze. A squad's leader
+     * and a section's key man are never held (lags, slow): he is seen going down first, his men after him one by one. Any
+     * other new order ends a freeze.
+     */
+    caught(sq, m, first) {
+      const t = this.b.t;
+      if (!first || !this.afoot(sq, m)) {
+        if (m.dropAt !== void 0 && m.dropTo === void 0 && t < m.dropAt + 1 && m.v === 0 && (m.pose === "idle" || m.pose === "cower")) m.pose = "wait";
+        m.dropAt = m.dropTo = m.stopAt = void 0;
+        return;
+      }
+      m.dropAt = m.lagTo ?? t;
+      m.dropTo = m.stopAt = void 0;
+      if (m.lagTo === void 0) return;
+      const E = DR.seasoned, n = Math.round(t * 2), green = (1 - this.grade(sq.u)) * (E.freeze[0] + (E.freeze[1] - E.freeze[0]) * roll(this.seed, sq.u.id, m.n, n, 182));
+      const own = m.lagTo - t - green;
+      if (green >= 0.25) m.stopAt = t + Math.max(own < 0.25 ? 0 : own, E.notice * Math.max(0, 1.5 * roll(this.seed, sq.u.id, m.n, n, 185) - 0.5));
+    }
+    /**
+     * Experience: how a frozen man is seen, crouched where he is ('cower') or stock still on his feet ('idle'). One man
+     * in every DR.seasoned.cower of a squad crouches, the others stand: by their places in the squad and not by dice. A
+     * group thinned out till that would have all its men who can freeze alike (those still on their feet, not its
+     * leader, nor those who keep by its gun: they take the gun's pose, pairs) takes it by their order among those left
+     * instead: the first stands, the second crouches. So two or more such men are never all given one pose, however few
+     * are left; and with its leader and its key man never frozen, no squad stands frozen all in one pose.
+     */
+    stock(sq, m) {
+      const C = DR.seasoned.cower, low = (x) => (x.j ?? 0) % C === 1;
+      let n = 0, at = 0, lows = 0;
+      for (const o of this.memo(sq).bySec.get(grp(m)) ?? []) {
+        if (o.lead) continue;
+        if (o === m) at = n;
+        if (low(o)) lows++;
+        n++;
+      }
+      return (n > 1 && (lows === 0 || lows === n) ? at % C === 1 : low(m)) ? "cower" : "idle";
+    }
+    /**
+     * Experience: a man held till his moment under first fire (caught) freezes where he stands, stock still or crouched
+     * (stock). One already down stays as he is. lags then holds him so till his moment.
+     */
+    freeze(sq, m) {
+      const t = this.b.t;
+      m.stopAt = void 0;
+      if (!MOVING.has(m.pose)) return;
+      m.v = 0;
+      m.spot = [m.x, m.y];
+      m.aim = void 0;
+      m.until = t;
+      m.pose = this.stock(sq, m);
+    }
+    /**
+     * Experience: a man caught on the march by his squad's first fire (caught) goes to ground once his moment has come,
+     * and stays down DR.seasoned.drop seconds before his squad's fire and movement takes him on: true while he is at it.
+     * He goes down on a knee or flat by his own dice, firing if the enemy is in reach of his rifle, else watching. One
+     * still on his feet who goes to a knee, and the gun, run on a stride or three first (each his own, up to
+     * DR.seasoned.stride seconds more than a step; arrive puts him down), so even a squad of veterans is never down in one
+     * movement. Its leader drops to a knee where he stands.
+     */
+    drop(sq, m, e, close, dir) {
+      const t = this.b.t, u = sq.u, E = DR.seasoned, gun = m.role === "mg";
+      if (t < m.dropAt - 1e-6) return false;
+      if (m.dropTo === void 0 ? t > m.dropAt + 1 : t >= m.dropTo - 1e-6) {
+        m.dropAt = m.dropTo = m.stopAt = void 0;
+        return false;
+      }
+      if (m.dropTo !== void 0 && !MOVING.has(m.pose)) {
+        if (close && !m.aim && (m.pose === "wait" || m.pose === "hide")) {
+          m.aim = this.aimFor(sq, m, e);
+          if (m.aim) m.pose = gun ? "lmg_burst" : m.pose === "wait" ? "fire_kneel" : "fire_prone";
+        }
+        return true;
+      }
+      const first = m.dropTo === void 0, lead = !!m.lead || m.j === void 0 && !gun;
+      const knee = lead || !gun && roll(this.seed, u.id, m.n, 183) < E.knee;
+      const own = first && !lead ? DT + E.stride * roll(this.seed, u.id, m.n, Math.round(t * 2), 184) : 0;
+      if (first) m.dropTo = t + own + E.drop;
+      m.el = 1;
+      m.until = m.dropTo;
+      const dx = m.spot[0] - m.x, dy = m.spot[1] - m.y, d = Math.hypot(dx, dy), on = Math.min(d, m.v * own);
+      if (first && !lead && (knee || gun) && MOVING.has(m.pose) && m.pose !== "crawl" && on >= 0.05) {
+        const p = this.leash(sq, [m.x + dx / d * on, m.y + dy / d * on], -4);
+        m.spot = p;
+        m.cover = this.shelter(p[0], p[1], groundOf(this.b.field, p[0], p[1]), dir, true, false).kind;
+        m.aim = void 0;
+        return true;
+      }
+      m.v = 0;
+      m.spot = [m.x, m.y];
+      m.cover = this.shelter(m.x, m.y, groundOf(this.b.field, m.x, m.y), dir, true, false).kind;
+      m.aim = close ? this.aimFor(sq, m, e) : void 0;
+      m.pose = m.aim ? gun ? "lmg_burst" : knee ? "fire_kneel" : "fire_prone" : knee ? "wait" : "hide";
+      return true;
+    }
+    /**
+     * Experience: a drawn round is on its way at this squad, landing at battle time l (round). The first of a spell of
+     * fire is marked (fireAt, the earliest landing of it) and the latest landing kept (fireLast); a spell is over once no
+     * round has landed for DR.seasoned.rounds.quiet seconds, and the next round then counts as a first round again.
+     */
+    incoming(sq, l) {
+      if (sq.fireLast === void 0 || l > sq.fireLast + DR.seasoned.rounds.quiet) sq.fireAt = l;
+      else if (l < sq.fireAt && this.b.t < sq.fireAt) sq.fireAt = l;
+      if (sq.fireLast === void 0 || l > sq.fireLast) sq.fireLast = l;
+    }
+    /**
+     * Experience: the first drawn rounds land at a squad still on the march, before its block itself reacts (advance, not
+     * under fire; follow has just given him his marching step). Each man on foot makes one short reaction at a moment of
+     * his own within DR.seasoned.rounds.after of the first round landing, its leader first (and a section's key man
+     * whatever he carries: he ducks, never frozen, so a gun section does not stop as one). A share of the men equal to
+     * their grade duck: down where they are (on a knee or flat by their own dice) for 'duck' seconds; a share 'bent' of
+     * those then go on bent low for 'low' seconds, each his own spell, the others as they marched, so a squad neither
+     * gets up nor straightens up as one. The rest stop frozen where they stand (stock; shorter the higher the grade),
+     * then go on. Worked out from the mark alone each think, so it ends by itself and comes once to a spell of fire; a
+     * man the block has left outside its leash is not held, so no one is left behind.
+     */
+    flinch(sq, m, dir) {
+      const t = this.b.t, u = sq.u, E = DR.seasoned, R = E.rounds;
+      if (m.dropAt !== void 0 && m.lagTo === void 0) m.dropAt = m.dropTo = m.stopAt = void 0;
+      if (sq.fireAt === void 0 || t < sq.fireAt - 1e-6 || !this.afoot(sq, m)) return;
+      if (t >= sq.fireAt + R.after[1] + Math.max(R.duck[1] + R.low[1], E.freeze[1])) return;
+      const g = this.grade(u), n = Math.round(sq.fireAt * 10), lead = !!m.lead || m.j === void 0;
+      const ducks = lead || roll(this.seed, u.id, m.n, n, 187) < g, r = roll(this.seed, u.id, m.n, n, 188);
+      const at = sq.fireAt + (lead ? 0 : R.after[0] + (R.after[1] - R.after[0]) * roll(this.seed, u.id, m.n, n, 186));
+      const len = ducks ? R.duck[0] + (R.duck[1] - R.duck[0]) * r : (1 - g) * (E.freeze[0] + (E.freeze[1] - E.freeze[0]) * r);
+      if (t < at - 1e-6) return;
+      if (t >= at + len - 1e-6) {
+        if (ducks && (m.pose === "walk" || m.pose === "run") && roll(this.seed, u.id, m.n, n, 181) < R.bent && t < at + len + R.low[0] + (R.low[1] - R.low[0]) * roll(this.seed, u.id, m.n, n, 189)) m.pose = "advance";
+        return;
+      }
+      const p = [m.x, m.y];
+      if (this.leash(sq, p, -6) !== p) return;
+      m.v = 0;
+      m.spot = p;
+      m.until = t + 0.5;
+      if (ducks) {
+        m.cover = this.shelter(m.x, m.y, groundOf(this.b.field, m.x, m.y), dir, true, false).kind;
+        m.pose = m.role !== "mg" && (lead || roll(this.seed, u.id, m.n, 183) < E.knee) ? "wait" : "hide";
+      } else m.pose = this.stock(sq, m);
+    }
+    /**
+     * Experience: fire and movement by the block's grade (rushOf): where in his army's lengths of rush a man's own falls
+     * (at, and the part of the range his dice then move him over: a green man toward the long end, a veteran toward the
+     * short), and what the time over which a squad's teams rise is multiplied by (close: a green squad's teams get up
+     * closer together, a veteran squad's further apart). On the rolling advance (advance) the same: a green squad's teams
+     * drop closer together and each man's spell down leans short (so his rush long), a veteran's the other way.
+     */
+    rushBy(u) {
+      const E = DR.seasoned.rush, g = this.grade(u);
+      return { at: E.long * (1 - g), part: 1 - E.long, close: E.close[0] + (E.close[1] - E.close[0]) * g };
+    }
+    /**
+     * Experience: a man on the move would go down within the room two men keep (SPACE.men) of a mate already down. A
+     * bunched squad's men go down closer together in time, so on the rolling advance (advance) he goes on a step or two
+     * first, and goes down at his next think: bunched, never piled up.
+     */
+    piled(sq, m) {
+      if (!MOVING.has(m.pose)) return false;
+      for (const o of this.memo(sq).up) if (o !== m && !MOVING.has(o.pose) && Math.hypot(o.x - m.x, o.y - m.y) < SPACE.men) return true;
+      return false;
+    }
     nums(u) {
       const s = this.b.style[u.side];
       return DR.style[s && this.b.ai[u.side] ? s.id : "plain"];
@@ -5479,8 +5977,10 @@
     rushOf(sq, m, n, bk, bound) {
       const L2 = DR.life.rush, u = sq.u, [ti, nT] = this.teamOf(sq, m), wave = bound === "wave";
       const lo = wave ? 0.7 : L2.len[0], hi = wave ? 1 : L2.len[1];
-      const len = bk.rush * (lo + (hi - lo) * roll(this.seed, u.id, m.n, n, 103));
-      const W = Math.max(0, Math.min(wave ? L2.wave : L2.spread * bk.slot, bk.cyc - bk.rush * hi - 0.35));
+      const E = this.seasoned ? this.rushBy(u) : null, r = roll(this.seed, u.id, m.n, n, 103);
+      const len = bk.rush * (lo + (hi - lo) * (E ? E.at + E.part * r : r));
+      let W = Math.max(0, Math.min(wave ? L2.wave : L2.spread * bk.slot, bk.cyc - bk.rush * hi - 0.35));
+      if (E) W = Math.max(0, Math.min(W * E.close, bk.cyc - bk.rush * (lo + (hi - lo) * (E.at + E.part)) - 0.35));
       const ord = nT <= 1 || bound === "body" && m.role === "mg" ? 0 : (ti + Math.floor(roll(this.seed, u.id, grp(m), n, 101) * nT)) % nT;
       return [ord / Math.max(1, nT) * W + 0.3 * roll(this.seed, u.id, m.n, n, 102), len];
     }
@@ -5510,8 +6010,10 @@
           let lag = lo + (hi - lo) * r * (kind === "ground" && this.band(u) === 0 ? R.raw : 1);
           if (kind === "up") lag = lo + (hi - lo) * ((ti + 0.6 * r) / Math.max(1, nT));
           else if (kind === "back") lag = m.role === "mg" ? hi : lo + (hi - lo) * 0.8 * r;
+          else if (kind === "ground" && this.seasoned) lag = this.slow(sq, m, lag, was);
           if (kind !== "break" && (m.lead || m.j === void 0 && m.role !== "mg")) lag = Math.min(lag, 0.2);
           if (lag >= 0.25) m.lagTo = t + lag;
+          if (this.seasoned) this.caught(sq, m, kind === "ground" && (was === "column" || was === "deploy"));
         }
       }
       let held = null;
@@ -5522,6 +6024,7 @@
           this.freshNow.add(m);
           continue;
         }
+        if (this.seasoned && m.stopAt !== void 0 && t >= m.stopAt - 1e-6) this.freeze(sq, m);
         (held ?? (held = [])).push([m, { pose: m.pose, v: m.v, spot: m.spot, cover: m.cover, aim: m.aim, until: m.until, slotAt: m.slotAt, el: m.el, rapid: m.rapid, hidden: m.hidden, rushed: m.rushed, shot: m.shot, sentry: m.sentry }]);
       }
       return held;
@@ -5600,7 +6103,8 @@
     drift(sq, m) {
       const D2 = DR.life.drift, u = sq.u;
       const T = D2.every[0] + (D2.every[1] - D2.every[0]) * roll(this.seed, u.id, m.n, 126), ph = (this.b.t / T + roll(this.seed, u.id, m.n, 127)) * Math.PI * 2;
-      return [D2.across * Math.sin(ph * 0.73 + 6.3 * roll(this.seed, u.id, m.n, 128)), D2.along * Math.sin(ph)];
+      const k = this.seasoned ? this.gaps(u) : 1;
+      return [D2.across * k * Math.sin(ph * 0.73 + 6.3 * roll(this.seed, u.id, m.n, 128)), D2.along * k * Math.sin(ph)];
     }
     /**
      * Squad life: the gait of a man keeping up with his block under fire. Left further behind his place than his own
@@ -5699,6 +6203,7 @@
         return;
       }
       const held = this.life ? this.lags(sq, was) : null;
+      const stay = this.leaders && sq.holds ? this.hesitate(sq, held) : null;
       switch (ph) {
         case "column":
           this.column(sq);
@@ -5738,6 +6243,7 @@
           break;
       }
       if (held) for (const [m, snap] of held) Object.assign(m, snap);
+      if (stay) this.stayDown(stay);
       this.ambush(sq);
       this.officer(sq);
       for (const m of sq.men) if (m.fell === void 0 && !m.job && MOVING.has(m.pose) && Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) < 0.3) this.arrive(sq, m);
@@ -5865,7 +6371,7 @@
         return [ka + Math.cos(ang) * r, kl + Math.sin(ang) * r * 0.8];
       }
       const ph = sq.phase;
-      if (m.scout && (ph === "deploy" || ph === "bound" || ph === "column")) return [ka + (i % 2 ? 5 : -5) + m.jx * 0.3, kl + S.ahead + m.jy * 0.4];
+      if (m.scout && (ph === "deploy" || ph === "bound" || ph === "column")) return [ka + (i % 2 ? 5 : -5) * (this.seasoned ? this.gaps(sq.u) : 1) + m.jx * 0.3, kl + S.ahead + m.jy * 0.4];
       const outer = key?.team === 1 ? -1 : 1, rest = mates.filter((x) => x.role !== "mg");
       let side, rank;
       if (m.role === "mg") {
@@ -5877,7 +6383,8 @@
         side = r % 2 ? outer : -outer;
         rank = Math.floor(r / 2) + 1;
       }
-      return [ka + side * rank * S.space + m.jx * 0.25, kl - rank * S.space * 0.35 + m.jy * 0.3];
+      const step = this.seasoned ? this.stepOf(sq, ka, Math.ceil(rest.length / 2) + 1) : S.space;
+      return [ka + side * rank * step + m.jx * 0.25, kl - rank * step * 0.35 + m.jy * 0.3];
     }
     /**
      * The men who keep by a weapon or an officer (Man.pr), each step: an automatic weapon's or a launcher's number two
@@ -6084,7 +6591,7 @@
       const R = reach ?? DR.xp.seek[this.band(u)] * (u.kind === "arm" || u.kind === "art" ? 2 : 1);
       const going = m.role === "tank" ? "tracks" : m.role === "gun" ? "guns" : m.role === "lorry" ? "wheels" : "foot";
       const pace = LAND.pace[going];
-      const sep = m.role === "tank" ? 16 : m.role === "gun" ? 18 : m.role === "lorry" ? 10 : CREWED.has(m.role) ? DR.teams.sep : 3.5;
+      const sep = m.role === "tank" ? 16 : m.role === "gun" ? 18 : m.role === "lorry" ? 10 : CREWED.has(m.role) ? DR.teams.sep : this.seasoned ? Math.max(SPACE.men, 3.5 * this.gaps(u)) : 3.5;
       const cand = [p];
       const a0 = roll(this.seed, u.id, m.n, 7) * Math.PI * 2;
       const settle = reach === void 0 && going === "foot" && (sq.phase === "fight" || sq.phase === "hold" || sq.phase === "startline" || sq.phase === "pinned" || sq.phase === "rest");
@@ -6350,8 +6857,10 @@
           m.el = void 0;
           const ready = this.life && e ? this.readyNow(sq, m, gapE) : close;
           this.follow(sq, m, s, dbl ? "run" : ready ? "advance" : "walk");
+          if (this.seasoned && !dbl) this.flinch(sq, m, dir);
           continue;
         }
+        if (this.seasoned && m.dropAt !== void 0 && this.drop(sq, m, e, close, dir)) continue;
         if (m.role === "officer" && sq.leap) {
           this.follow(sq, m, s, "creep");
           m.aim = void 0;
@@ -6437,11 +6946,12 @@
           let ph = book && bound !== "wave" ? (t - this.turnFor(sq, m, bound) * 2 + 600) % 6 : (t + roll(this.seed, u.id, m.n, 11) * cyc) % cyc;
           let drop = book && bound !== "wave" ? 2 : cyc * share;
           if (life && bound !== "wave") {
-            ph = (ph - this.teamShare(sq, m) * DR.life.rush.roll + 600) % 6;
-            drop = 1.2 + roll(this.seed, u.id, m.n, Math.floor((t - this.turnFor(sq, m, bound) * 2 + 600) / 6), 107);
+            const E = this.seasoned ? this.rushBy(u) : null, r = roll(this.seed, u.id, m.n, Math.floor((t - this.turnFor(sq, m, bound) * 2 + 600) / 6), 107);
+            ph = (ph - this.teamShare(sq, m) * (E ? Math.min(DR.life.rush.roll * E.close, 6) : DR.life.rush.roll) + 600) % 6;
+            drop = 1.2 + (E ? 1 - E.at - E.part * r : r);
           }
           const gain = (s[0] - m.x) * hx + (s[1] - m.y) * hy, behind = gain > 12;
-          if (ph < drop && m.role !== "officer" && !behind) {
+          if (ph < drop && m.role !== "officer" && !behind && !(this.seasoned && this.piled(sq, m))) {
             if (m.pose !== "fire_prone" && m.pose !== "lmg_burst" && m.pose !== "fire_kneel") {
               m.spot = [m.x, m.y];
               m.cover = "none";
@@ -8808,6 +9318,7 @@
               want += this.scan(sq, m);
               turn3 = Math.min(rate, DR.life.scan.rate * DT);
             }
+            if (this.leaders && m.look) [want, turn3] = this.glance(m, want, turn3, rate);
           }
           if (this.tankmind && m.mind?.hull !== void 0) want = m.mind.hull;
           if (want !== void 0 && !(this.b.trucks && m.role === "lorry")) m.face = turnTo(m.face, want, turn3);
@@ -8881,6 +9392,7 @@
             continue;
           }
         }
+        if (this.leaders && m.downAt !== void 0) this.ownMoment(sq, m);
         step(m);
       }
       if (sq.fo) for (const m of sq.fo) {
@@ -8949,7 +9461,7 @@
       if (!live(u)) return;
       for (const m of sq.veh.length ? [...sq.men, ...sq.veh] : sq.men) {
         if (m.k < 100 ? !this.stands(sq, m) : m.fell !== void 0) continue;
-        if (this.tankmg && m.mgAt) this.mgFire(sq, m);
+        if (this.tankmg && m.mgAt) this.tankMgFire(sq, m);
         if (m.shot !== void 0 && m.shot !== m.fired) {
           m.fired = m.shot;
           const w = m.role === "tank" ? "tank" : m.role === "gun" ? "gun" : m.role === "mortar" ? "mortar" : m.pose === "throw_grenade" ? "grenade" : m.role === "at" ? "at" : void 0;
@@ -9055,6 +9567,7 @@
       if (this.hatches && v.role === "tank" && !tq.esc) {
         for (const x2 of alive) if (x2.role === "tank") this.alarm(tq, x2, l, x2 !== v);
       }
+      if (this.seasoned) this.incoming(tq, l);
       const base = { t: Math.round(t * 10) / 10, l, by: u.id, k: m.k, w, on: on.id, x: 0, y: 0, r: "miss" };
       if (m.j !== void 0) base.j = m.j;
       if (w === "mg" && m.role === "tank") base.g = this.tankmg ? m.mgG : this.tankGun(u, m, aim, k0);
@@ -9389,7 +9902,7 @@
      * guns rest a pause, and at her next think she looks afresh for the best mark there is (mgAs 5). Each burst is one
      * round at the place her man stands now, as the drill book's: w 'mg', g its gun.
      */
-    mgFire(sq, m) {
+    tankMgFire(sq, m) {
       const u = sq.u, t = this.b.t, T = DR.tankmg;
       if (!m.mgAt || t < (m.mgNext ?? 0) || m.pose === "fire") return;
       if (!m.mgRun && sq.men.some((x) => x !== m && x.mgT !== void 0 && t - x.mgT < T.apart)) {
@@ -9536,7 +10049,7 @@
       const b = this.b, out = [];
       const r13 = (v) => Math.round(v * 10) / 10, r22 = (v) => Math.round(v * 100) / 100;
       const one = (m) => {
-        const o = { k: m.k, r: m.hasSec && m.role === "rifle" || m.lead ? "leader" : m.role, x: r13(m.x), y: r13(m.y), f: r22(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r13(m.went ?? 0) : 0, c: m.cover };
+        const o = { k: m.k, r: m.hasSec && m.role === "rifle" || m.lead && !m.acting ? "leader" : m.role, x: r13(m.x), y: r13(m.y), f: r22(wrap(m.face)), p: m.pose, v: MOVING.has(m.pose) || CARRIED.has(m.pose) ? r13(m.went ?? 0) : 0, c: m.cover };
         if (m.j !== void 0) o.j = m.j;
         if (m.aim) o.a = [r13(m.aim[0]), r13(m.aim[1])];
         if (m.shot !== void 0) o.s = r13(m.shot);
