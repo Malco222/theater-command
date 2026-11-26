@@ -30,10 +30,12 @@ const atKey = (i: number): string => `rowAt:${i}`;
 const frontKey = (i: number): string => `rowFront:${i}`;
 
 /**
- * The article a name takes in running text: none where it opens with "the", is an "X Force" or is Creforce (the
- * general's line's rule, game.ts, lifted here: the UI director's section 0), or where its head, before any bracket,
- * ends in "Force" (her section 7, case 5, 00:44Z, 26 November 2026: "a name whose head (before any bracket) ends in
- * "Force" takes none, as "W Force" and "Creforce" do: "Special Force is due in ...""), else "the ".
+ * The article a name takes in the telling's own sentences: none where it opens with "the", is an "X Force" or is
+ * Creforce (the general's line's rule, game.ts `generalsThe`: the UI director's section 0), or where its head, before
+ * any bracket, ends in "Force" (her section 7, case 5, 00:44Z, 26 November 2026: "a name whose head (before any bracket)
+ * ends in "Force" takes none, as "W Force" and "Creforce" do: "Special Force is due in ...""), else "the ". The telling's
+ * sentences only, which exist only with the switch on: game.ts's general's line keeps the base's rule (`generalsThe`),
+ * so that with the switch off every sentence is the base's, byte for byte.
  */
 export const theOf = (name: string): string => (/^(the |[A-Z] Force|Creforce)/i.test(name) || /Force$/.test(name.split('(')[0].trim()) ? '' : 'the ');
 /** A name with its article: "The" at the head of a sentence, "the" elsewhere. (None after "your": write the bare name.) */

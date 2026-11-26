@@ -55,7 +55,7 @@ import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, rai
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willBurn } from './prizes';
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
-import { formedLine, rowDone, tellWait, theOf, waitedOn } from './arrivalwaits';
+import { formedLine, rowDone, tellWait, waitedOn } from './arrivalwaits';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -4822,6 +4822,16 @@ export function rowHolds(g: Game, nat: string, from: string[], at: number | unde
 }
 
 /**
+ * The article the general's line gives the row's name ("{general} arrives in {place} with the {row}."): none where the
+ * name opens with "the", is an "X Force" or is Creforce, else "the ". Exactly the rule of 70d6f6a1f, and never widened:
+ * the line exists with the switch 'fromWait' off, and with it off every sentence is the base's, byte for byte. The UI
+ * director's section 7 case 5 (a name whose head ends in "Force" takes none) is for the telling's own sentences,
+ * arrivalwaits.ts `theOf`, which exist only with the switch on; her 02:10Z puts "Special Force" in the general's line on
+ * the later-patch list, a shipped line. (tests/general-line-article and -far: a table over every dated row.)
+ */
+export const generalsThe = (name: string): string => (/^(the |[A-Z] Force|Creforce)/i.test(name) ? '' : 'the ');
+
+/**
  * A grand campaign begun after the first day (staff.ts, startOpen): a row whose men history's full-size corps already
  * brought ('carried', the corps row's name: the South Africans and New Zealanders of XIII and XXX Corps, ruling 229,
  * 1c) does not come as well, once that corps has landed under history.
@@ -5934,7 +5944,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     if (o.until) g.flags[`lent:${i}`] = c.id;
     // (A war row that drew divisions from living corps is remembered by its corps until its war is over: above.)
     else if (g.flags.open === 1 && o.war && (c.drew?.length || c.rowed)) g.flags[`lent:${i}`] = c.id;
-    const the = theOf(c.name);
+    const the = generalsThe(c.name);
     // Troops come ashore at a port across the sea: a colony's, or a foreign one for a nation that lives by its ships.
     // An army that marched there, or is forming up at home, simply arrives.
     const bySea = reg.port && (reg.overseas || (g.nations[nat].seaSupply && reg.owner !== nat));
