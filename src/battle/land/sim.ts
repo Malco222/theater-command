@@ -616,7 +616,12 @@ export class LandBattle implements BattleSim<LandUnit> {
     const p = this.ticket.place, H = LAND.hold;
     const streets = streetsOf(p);
     // (A corps come up from next door holds no works: the card prices it with none.)
-    return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 && t.joined === undefined ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
+    return this.takeOf(p.terrain) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 && t.joined === undefined ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
+  }
+
+  /** The held defence's share of the damage on its ground: hold.take, or its refit while hitsShake is on (LAND.shaken). */
+  private takeOf(terrain: string): number {
+    return (this.hitsShake ? LAND.shaken.take[terrain] : undefined) ?? LAND.hold.take[terrain] ?? 0.4;
   }
 
   /** The share of the attack's tanks and lorries, by strength, that must cross the river: 0 where it has none (b494). */

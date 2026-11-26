@@ -457,6 +457,22 @@ export const LAND = {
    */
   spent: { att: 0.13, def: 0.18 } as Record<'att' | 'def', number>,
   /**
+   * The refits that ride with "Only the hits that land shake a unit" (sim.hitsShake), read in place of the values they
+   * name only while it is on (the design director, 26 November 13:36Z); off, the values above stand, byte for byte, and
+   * since hitsShake needs "Attackers stay where they stop to fight" (stand), only with both on. Each fitted by the method
+   * and record of the value it replaces, with stand and hitsShake on:
+   * - take.marsh 1.23, in place of hold.take.marsh 1.32 (DD 13:47Z). Its record, ruling 226 mark 4: the plain attack
+   *   (select all, right-click the nearest, Space) at 1.1 to 1.4 on marsh carries the ground within 4 points of its
+   *   card, about 2 in the attack's favour. Over 800 battles: 1.22 +1.2, 1.23 +1.7, 1.24 +3.3; 1.32 +10.4 (the old sum
+   *   had marsh blocks breaking mid-fight; with each blow's nerve on its own harm they stand, and the held marsh gave
+   *   the attack more than its card).
+   * spent is not refitted (DD 14:08Z): with it on, its record (each side's losses within a fifth of the campaign's
+   * bill, winners and losers alike, b356) holds on every set, and its drift is below one step of the knob.
+   */
+  shaken: {
+    take: { marsh: 1.23 } as Record<string, number>,
+  },
+  /**
    * But not while more than this share of its power stands fresh or has not fought: one worn block never takes a fresh
    * army with it (ruling 226(2), b476(1)).
    */

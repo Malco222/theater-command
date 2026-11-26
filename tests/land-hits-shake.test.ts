@@ -4,7 +4,7 @@
 // harm. These tests hold the rule on one tick's blows, that a blow doing no harm costs nothing with it on, that the
 // bridge turns it on only when asked or with sniper teams, and that it changes a battle through nerve.
 import { describe, expect, it } from 'vitest';
-import { LandBattle, PRACTICE_GROUNDS, practiceTicket, withTeams } from '../src/battle/land';
+import { LAND, LandBattle, PRACTICE_GROUNDS, practiceTicket, withTeams } from '../src/battle/land';
 import { LiveBattle } from '../src/battle/land/live';
 
 type Tick = { dmg: number; nerve: number; own: number; n: number };
@@ -32,6 +32,16 @@ describe('only the hits that land shake a unit', () => {
     expect(p.tickNerve(tick([[0.003, 2.5]]))).toBeCloseTo(2.5, 12);
     // no harm at all: the weights' mean (only what was held back for the air reads it)
     expect(p.tickNerve(tick([[0, 2], [0, 4]]))).toBe(3);
+  });
+
+  it('reads its refits in place of the values they name only while on (DD 26 Nov 13:36Z)', () => {
+    const b = new LandBattle(ticket()), p = b as unknown as { takeOf(t: string): number };
+    // off: the hold's own values, every ground (switch off = the whole save)
+    for (const g of Object.keys(LAND.hold.take)) expect(p.takeOf(g)).toBe(LAND.hold.take[g]);
+    b.hitsShake = true;
+    for (const g of Object.keys(LAND.hold.take)) expect(p.takeOf(g)).toBe(LAND.shaken.take[g] ?? LAND.hold.take[g]);
+    expect(p.takeOf('marsh')).toBe(1.23);
+    expect(LAND.hold.take.marsh).toBe(1.32);
   });
 
   it('is turned on by the bridge only when asked, or with sniper teams', () => {
