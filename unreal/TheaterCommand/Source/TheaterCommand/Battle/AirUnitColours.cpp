@@ -255,6 +255,16 @@ namespace AirUnitColours
 		double FacingZ(const Mesh& M, size_t K) { return M.Facings.size() > K * 3 + 2 ? M.Facings[K * 3 + 2] : 0.0; }
 		int PartOf(const Mesh& M, size_t K) { return K < M.Parts.size() ? M.Parts[K] : 0; }
 		PaintIs IsOf(const Found& F, int Paint) { return Paint >= 0 && static_cast<size_t>(Paint) < F.Paints.size() ? F.Paints[static_cast<size_t>(Paint)] : PaintIs::Never; }
+		/** What a paint is to the regions: a line of the coat (LinesTakeCoat) is the coat where it lies. */
+		PaintIs AsCoat(PaintIs Is) { return Is == PaintIs::Line ? PaintIs::Coat : Is; }
+		double ShadeOf(const Found& F, int Paint) { return Paint >= 0 && static_cast<size_t>(Paint) < F.Shade.size() ? F.Shade[static_cast<size_t>(Paint)] : 1.0; }
+		/** An earned colour as a line of the coat wears it: each channel by its shade (unchanged at 1). */
+		Rgb Shaded(Rgb C, double K)
+		{
+			if (K == 1.0) return C;
+			auto One = [K](uint8_t V) { return static_cast<uint8_t>(std::clamp(std::lround(V * K), 0L, 255L)); };
+			return Rgb{ One(C.R), One(C.G), One(C.B) };
+		}
 
 		double RootAt(const Tail& T, double X) { return T.RootA + T.RootB * X; }
 
@@ -824,6 +834,11 @@ namespace AirUnitColours
 		return true;
 	}
 
+	bool LinesTakeCoat(const std::string& Kind)
+	{
+		return Kind == "B17Fine";
+	}
+
 	TailPart PartFor(const std::string& Nation)
 	{
 		const std::string N = NationOf(Nation);
@@ -844,6 +859,28 @@ namespace AirUnitColours
 			if (Name == "upper" || Name == "upper2" || Name == "under" || Name == "nose") F.Paints[K] = PaintIs::Coat;
 			else if (Name == "boss" || Name == "hub") F.Paints[K] = PaintIs::Boss;
 			else if (Name == "leg") F.Paints[K] = PaintIs::Hub;
+		}
+		// (the finer B-17's rivet and seam lines: the coat where they lie, each a shade of it as her file paints the line
+		// against the coat it runs over, upper for rivet and seam, under for rivet_under and seam_under)
+		F.Shade.assign(M.PaintNames.size(), 1.0);
+		if (LinesTakeCoat(M.Kind))
+		{
+			auto Light = [&M](int Paint)
+			{
+				if (Paint < 0 || static_cast<size_t>(Paint) >= M.Colours.size()) return -1.0;
+				const Rgb& C = M.Colours[static_cast<size_t>(Paint)];
+				return 0.2126 * C.R + 0.7152 * C.G + 0.0722 * C.B;
+			};
+			const double Upper = Light(M.Paint("upper")), Under = Light(M.Paint("under"));
+			for (size_t K = 0; K < M.PaintNames.size(); ++K)
+			{
+				const std::string& Name = M.PaintNames[K];
+				const bool bUpper = Name == "rivet" || Name == "seam", bUnder = Name == "rivet_under" || Name == "seam_under";
+				const double Coat = bUpper ? Upper : Under, Own = Light(static_cast<int>(K));
+				if ((!bUpper && !bUnder) || Coat <= 0.0 || Own < 0.0) continue;
+				F.Paints[K] = PaintIs::Line;
+				F.Shade[K] = std::clamp(Own / Coat, 0.4, 1.6);
+			}
 		}
 		const size_t Count = N.Count();
 		if (Count == 0) { F.Note = "no points"; return F; }
@@ -1234,7 +1271,52 @@ namespace AirUnitColours
 				}
 			}
 		}
+
+		// ---- A far shape made without spinners (the finer B-17's, Content/Models/B17Fine.json: no boss or hub point on it,
+		// its airscrews' domes in the nacelles' "engine" grey, its cowlings' lips a ring further back than the near
+		// shape's). So that steps 1 and 2 show past 300 m as they do close up, on it alone: that grey within each spinner's
+		// place stands for the spinner, and each band is laid behind the far shape's own lip. A far shape with a spinner
+		// of its own, every other model's, is laid as it always was (FarPaints and FarCowlFront left empty).
+		const Mesh& Fa = M.Far;
+		const int Grey = M.Paint("engine");
+		bool bFarSpinner = false; // (a point of it a spinner where Places would make one)
+		for (size_t K = 0; K < Fa.Count() && !bFarSpinner; ++K)
+		{
+			const PaintIs Is = IsOf(F, Fa.Paints[K]);
+			if (Is != PaintIs::Boss && Is != PaintIs::Hub) continue;
+			for (const Engine& E : F.Engines)
+			{
+				if (!E.bSpinner || E.bCap || (Is == PaintIs::Hub) != E.bHubStandIn) continue;
+				bFarSpinner = bFarSpinner || (std::hypot(Fa.Y(K) - E.Hub[1], Fa.Z(K) - E.Hub[2]) <= (E.bHubStandIn ? 0.3 : 0.6) && Fa.X(K) >= E.SpinnerBack - 0.02 && Fa.X(K) <= E.SpinnerFront + 0.02);
+			}
+		}
+		if (Fa.Count() > 0 && !bFarSpinner && Grey >= 0 && static_cast<size_t>(Grey) < F.Paints.size() && !F.Engines.empty() && !F.Engines.front().bCap)
+		{
+			F.FarPaints = F.Paints;
+			F.FarPaints[static_cast<size_t>(Grey)] = F.Engines.front().bHubStandIn ? PaintIs::Hub : PaintIs::Boss;
+			for (const Engine& E : F.Engines)
+			{
+				// (the far shape's own lip: its foremost coat about the axis, behind the near lip, as the near lip is found)
+				Spread Lip;
+				for (size_t K = 0; K < Fa.Count(); ++K)
+				{
+					if (AsCoat(IsOf(F, Fa.Paints[K])) != PaintIs::Coat) continue;
+					const double Off = std::hypot(Fa.Y(K) - E.Hub[1], Fa.Z(K) - E.Hub[2]), X = Fa.X(K);
+					if (Off >= 0.08 && Off <= E.Reach && X <= E.CowlFront + 0.02 && X >= E.SpinnerBack - 2.5) Lip.Take(X);
+				}
+				F.FarCowlFront.push_back(Lip.Any() && E.Band > 0.0 ? std::min(Lip.Hi, E.CowlFront) : E.CowlFront);
+			}
+		}
 		return F;
+	}
+
+	Found OnShape(const Found& F, bool bFar)
+	{
+		Found Out = F;
+		if (!bFar) return Out;
+		if (!F.FarPaints.empty()) Out.Paints = F.FarPaints;
+		for (size_t K = 0; K < Out.Engines.size() && K < F.FarCowlFront.size(); ++K) Out.Engines[K].CowlFront = F.FarCowlFront[K];
+		return Out;
 	}
 
 	bool FirstAt(const std::string& Pattern, const Frame& F, const double Normal[2], double X, double Z)
@@ -1273,14 +1355,15 @@ namespace AirUnitColours
 		return true;
 	}
 
-	void Places(const Model& M, const Found& F, bool bFar, std::vector<Where>& Out, std::vector<int>* TailOf)
+	void Places(const Model& M, const Found& Regions, bool bFar, std::vector<Where>& Out, std::vector<int>* TailOf)
 	{
+		const Found F = OnShape(Regions, bFar); // (a far shape made without spinners laid by its own stand-ins: Find)
 		const Mesh& Me = bFar ? M.Far : M.Near;
 		Out.assign(Me.Count(), Where::None);
 		if (TailOf) TailOf->assign(Me.Count(), -1);
 		for (size_t K = 0; K < Me.Count(); ++K)
 		{
-			const PaintIs Is = IsOf(F, Me.Paints[K]);
+			const PaintIs Is = AsCoat(IsOf(F, Me.Paints[K]));
 			const double X = Me.X(K), Y = Me.Y(K), Z = Me.Z(K);
 			if (Is == PaintIs::Boss || Is == PaintIs::Hub)
 			{
@@ -1328,8 +1411,9 @@ namespace AirUnitColours
 		return N;
 	}
 
-	Coat Paint(const Model& M, const Found& F, bool bFar, const Palette& P, const Look& L)
+	Coat Paint(const Model& M, const Found& Regions, bool bFar, const Palette& P, const Look& L)
 	{
+		const Found F = OnShape(Regions, bFar); // (a far shape made without spinners laid by its own stand-ins: Find)
 		Coat Out;
 		const Mesh& Me = bFar ? M.Far : M.Near;
 		Out.Took.assign(Me.Count(), Takes::Keep);
@@ -1558,10 +1642,10 @@ namespace AirUnitColours
 		for (size_t K = 0; K < Me.Count(); ++K)
 		{
 			int Under = -1;
-			const Takes T = Pa.At(Me.X(K), Me.Y(K), Me.Z(K), IsOf(F, Me.Paints[K]), PartOf(Me, K), FacingY(Me, K), &Under);
+			const Takes T = Pa.At(Me.X(K), Me.Y(K), Me.Z(K), AsCoat(IsOf(F, Me.Paints[K])), PartOf(Me, K), FacingY(Me, K), &Under);
 			Out.Took[K] = T;
 			if (T == Takes::Keep) continue;
-			Out.Points.emplace_back(static_cast<int>(K), Sooted(M, Pa.ColourOf(T), Soot(static_cast<int>(K))));
+			Out.Points.emplace_back(static_cast<int>(K), Sooted(M, Shaded(Pa.ColourOf(T), ShadeOf(F, Me.Paints[K])), Soot(static_cast<int>(K))));
 			if (Under >= 0)
 			{
 				const Patch& Pt = Pa.Patches[static_cast<size_t>(Under)];
@@ -1589,8 +1673,8 @@ namespace AirUnitColours
 		for (size_t T = 0; T + 2 < Me.Triangles.size(); T += 3)
 		{
 			const int C[3] = { Me.Triangles[T], Me.Triangles[T + 1], Me.Triangles[T + 2] };
-			const PaintIs Is = IsOf(F, Me.Paints[static_cast<size_t>(C[0])]);
-			if (Is == PaintIs::Never || IsOf(F, Me.Paints[static_cast<size_t>(C[1])]) != Is || IsOf(F, Me.Paints[static_cast<size_t>(C[2])]) != Is) continue;
+			const PaintIs Is = AsCoat(IsOf(F, Me.Paints[static_cast<size_t>(C[0])]));
+			if (Is == PaintIs::Never || AsCoat(IsOf(F, Me.Paints[static_cast<size_t>(C[1])])) != Is || AsCoat(IsOf(F, Me.Paints[static_cast<size_t>(C[2])])) != Is) continue;
 			Point Corners[3];
 			Spread X, Y, Z;
 			for (int I = 0; I < 3; ++I)
@@ -1666,7 +1750,11 @@ namespace AirUnitColours
 					if (Co.bEarned)
 					{
 						const double Sooting = B.W[0] * Soot(C[0]) + B.W[1] * Soot(C[1]) + B.W[2] * Soot(C[2]);
-						Co.Colour = Sooted(M, Pa.ColourOf(What), Sooting);
+						// (a piece of a line's triangle a shade of the coat's colour, mixed as its corners are; any other exactly as before)
+						const double S0 = ShadeOf(F, Me.Paints[static_cast<size_t>(C[0])]), S1 = ShadeOf(F, Me.Paints[static_cast<size_t>(C[1])]),
+									 S2 = ShadeOf(F, Me.Paints[static_cast<size_t>(C[2])]);
+						const double Shading = S0 == 1.0 && S1 == 1.0 && S2 == 1.0 ? 1.0 : B.W[0] * S0 + B.W[1] * S1 + B.W[2] * S2;
+						Co.Colour = Sooted(M, Shaded(Pa.ColourOf(What), Shading), Sooting);
 					}
 					Index.push_back(static_cast<int>(Ct.Corners.size()));
 					Ct.Corners.push_back(Co);

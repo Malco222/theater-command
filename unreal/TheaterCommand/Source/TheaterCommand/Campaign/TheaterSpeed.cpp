@@ -253,6 +253,9 @@ namespace
 	float CapMaxWas = 0.0f; // (...t.MaxFPS as it stood before)
 	int32 CapSyncWas = 0; // (...and r.VSync)
 	int32 Summaries = 0;
+	// (the last five seconds the log closed, its frames a second and worst frame, for a reader that prints them beside
+	// its own counts: TheaterSpeed::LastWindow, the air battle's timing eye)
+	double LastWindowClock = 0.0, LastWindowRate = 0.0, LastWindowWorstMs = 0.0;
 
 	double Ms(uint64 Cycles)
 	{
@@ -1023,6 +1026,14 @@ namespace TheaterSpeed
 		}
 	}
 
+	bool LastWindow(double& Seconds, double& FramesASecond, double& WorstMs)
+	{
+		Seconds = LastWindowClock;
+		FramesASecond = LastWindowRate;
+		WorstMs = LastWindowWorstMs;
+		return LastWindowClock > 0.0;
+	}
+
 	void NoteFrame(float DeltaSeconds, UWorld* World)
 	{
 		ApplyCommandLineSets(); // (in case no table was laid first: it is done once)
@@ -1236,6 +1247,9 @@ namespace TheaterSpeed
 		}
 
 		const double Frames = WindowFrames;
+		LastWindowClock = WindowClock;
+		LastWindowRate = Frames / WindowClock;
+		LastWindowWorstMs = WindowWorst * 1000.0;
 		UE_LOG(LogTheater, Display, TEXT("Speed: %.1f s, %.1f frames a second (worst frame %.1f ms; %d of %d over 33 ms, %d of those beside the step player's look); game %.1f ms, draw %.1f ms, graphics chip %.1f ms"),
 			WindowClock, Frames / WindowClock, WindowWorst * 1000.0, WindowSlow, WindowFrames, WindowSlowBeside, WindowGame / Frames, WindowDraw / Frames, WindowChip / Frames);
 		// (Speed, 18 November 2026: a line of its own, so that the line above reads as it did. Is the draw thread's time
