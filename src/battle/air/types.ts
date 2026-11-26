@@ -245,7 +245,19 @@ export interface AirPlace {
    * bombers kept by name (a carrier's, or a battle not made from a campaign).
    */
   bombers?: Record<number, BomberSeats>;
+  /**
+   * The colours the battle's groups have earned (campaign/airnicks.ts), a row for each group of either side that has
+   * any: its campaign group (the corps of its forces, and of each of its units' extra.corps in the 3D view), its
+   * nation, which of that nation's schemes (0 on) and how far earned (1 the spinner, 2 and the nose band, 3 and the
+   * tail), and its earned name where the campaign shows earned names. Paint for the 3D game (Battle/AirUnitColours
+   * reads place.corpsMarks): read by no rule, so with it or without it the same battle is fought. Absent where no
+   * group in the battle has earned colours.
+   */
+  corpsMarks?: CorpsMark[];
 }
+
+/** One group's earned colours as the place carries them (AirPlace.corpsMarks). */
+export interface CorpsMark { corps: number; nat: string; scheme: number; tier: number; name: string }
 
 /**
  * One bomber as an event names it: its seat in its group's list (AirPlace.bombers[corps].seats), and what is painted

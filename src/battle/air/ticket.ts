@@ -8,6 +8,7 @@
 import { AIR, AIRWAR, UD_ROLES, airWar, udRole, assessAir, bombLaw, carrierOf, forecastAir, fxpOf, groupAt, levelOf } from '../../campaign/air';
 import { unitsDecide } from '../../campaign/units';
 import { planRaid, type RaidKind } from '../../campaign/airwar';
+import { nicknamesOn } from '../../campaign/nicknames';
 import { armedAt } from '../../campaign/atom';
 import { seatsOf } from '../../campaign/bombers';
 import { orderRaid } from '../../campaign/turn';
@@ -27,7 +28,7 @@ import { cloudOf } from './sky';
 import { troopPlace } from './troops';
 import { onBoard, STAGES } from './stages';
 import { airStyles, STYLES } from './styles';
-import type { AirOutcome, AirPlace } from './types';
+import type { AirOutcome, AirPlace, CorpsMark } from './types';
 
 /**
  * The raids that can be fought out in the first slice (ruling of 2026-11-17 17:51Z): the player's day raids and fights
@@ -217,6 +218,13 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     const seats = seatsOf(g, a.att.find((x) => x.f.id === f.corps)!.f, f.men, seed);
     if (seats) bombers[f.corps] = seats;
   }
+  // The colours the groups of either side have earned (campaign/airnicks.ts), for the 3D game to paint: one row a
+  // group, by the same id its forces and its units carry. Read off the game, never written to it, and read by no rule.
+  const corpsMarks: CorpsMark[] = [];
+  for (const id of new Set([...att, ...def].map((f) => f.corps))) {
+    const f = g.airFleets.find((x) => x.id === id);
+    if (f?.colours) corpsMarks.push({ corps: f.id, nat: f.nat, scheme: f.colours.scheme, tier: f.colours.tier, name: f.nick && nicknamesOn(g) ? f.nick : '' });
+  }
   // A raid on troops (release 2): the army under the raid, and the campaign's law for it (troops.ts). The card expects
   // the ground fire to bring down its share of the fighters that go down on them (forecastAir), so the field is told
   // how many of the raid's fighters lost are the ground fire's, and arms the defence with the rest.
@@ -261,6 +269,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     // until the doctrine store lands (the design director 24 Nov 15:33Z).
     ...(H && !sweep ? { roles: Object.fromEntries([...new Set([nat, ...att.map((f) => f.nat)])].map((n) => [n, [...UD_ROLES] as Role[]])) } : {}),
     ...(Object.keys(bombers).length ? { bombers } : {}),
+    ...(corpsMarks.length ? { corpsMarks } : {}),
   };
   const date = turnToDate(g.turn).label;
   const ticket: FieldTicket<AirPlace> = {
