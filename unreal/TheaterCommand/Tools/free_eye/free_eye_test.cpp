@@ -388,6 +388,11 @@ namespace
 					Report(Name, M, Line);
 					GateSmooth(Name, M);
 					if (TurnMost > E.Set.TurnFastest * 1.01) Fault("%s: the turn swung %.1f deg/s (fastest %.0f)", Name, TurnMost, E.Set.TurnFastest);
+					// (and a key held long reaches each fastest: a hold slower than asked is a fault too)
+					if (TurnMost < E.Set.TurnFastest * 0.99 || TiltMost < E.Set.TiltFastest * 0.99 || ZoomMost < E.Set.ZoomFastest * 0.99)
+					{
+						Fault("%s: a key held never reached its fastest (turn %.1f of %.0f, tilt %.1f of %.0f, zoom %.3f of %.2f)", Name, TurnMost, E.Set.TurnFastest, TiltMost, E.Set.TiltFastest, ZoomMost, E.Set.ZoomFastest);
+					}
 					if (TiltMost > E.Set.TiltFastest * 1.01) Fault("%s: the tilt swung %.1f deg/s (fastest %.0f)", Name, TiltMost, E.Set.TiltFastest);
 					if (ZoomMost > E.Set.ZoomFastest * 1.01) Fault("%s: the zoom swung %.3f /s (fastest %.2f)", Name, ZoomMost, E.Set.ZoomFastest);
 					if (M.Cuts) Fault("%s: %d cuts from his hand alone", Name, M.Cuts);
@@ -736,7 +741,9 @@ namespace
 			const std::string Name = Steady ? "rule 8 steady height 3 s" : "rule 8 steady height off";
 			Report(Name, M, Line);
 			if (Flat > 1e-6) Fault("%s: X and Y not followed exactly (%.3g m off)", Name.c_str(), Flat);
-			if (Steady && Hi - Lo > 3.0) Fault("%s: the pivot heaves %.2f m of the ship's 6 (the low-pass is not working)", Name.c_str(), Hi - Lo);
+			// (a first-order low-pass of time constant SteadyZ passes 1 / sqrt(1 + (2 pi SteadyZ / 8)^2) of an 8 s swell)
+			const double Gain = 6.0 / std::sqrt(1.0 + std::pow(2.0 * Pi * 3.0 / 8.0, 2.0));
+			if (Steady && std::abs(Hi - Lo - Gain) > 0.05 * Gain) Fault("%s: the pivot heaves %.2f m of the ship's 6 (a low-pass of 3 s passes %.2f)", Name.c_str(), Hi - Lo, Gain);
 			if (!Steady && std::abs(Hi - Lo - 6.0) > 0.05) Fault("%s: without it the pivot should heave with the ship (%.2f m)", Name.c_str(), Hi - Lo);
 		}
 	}
@@ -791,6 +798,8 @@ namespace
 			if (M.Lowest < E.Set.FloorHard - 1e-9) Fault("%s: the eye stood %.3f m over the wave (FloorHard %.2f)", Name.c_str(), M.Lowest, E.Set.FloorHard);
 			if (M.HardLifts) Fault("%s: the lift could not climb in time on %d frames (a swell is to be met by the eased lift)", Name.c_str(), M.HardLifts);
 			if (Under > M.Frames / 50) Fault("%s: %d frames under 0.9 of FloorClear (the lift does not keep him clear)", Name.c_str(), Under);
+			// (a crest rising under him is met by the lift led at the crest's own rate: at FloorClear, not under it)
+			if (M.Lowest < E.Set.FloorClear * 0.95) Fault("%s: the eye stood %.3f m over the wave (a crest rising under him met late)", Name.c_str(), M.Lowest);
 		}
 		// the lift carries the picture and never tips it
 		{
@@ -855,8 +864,8 @@ namespace
 	}
 
 	/** Looking straight up at a ship from the water, her clearance 20 m: under her the eye is either in the sea or too
-	 * near her, so the floor's lift and her clearance meet, and the view is held by the hard rules there (counted, not
-	 * eased). Held: never under the wave, never inside her clearance, finite. */
+	 * near her, so the floor's lift and her clearance meet, and the hard rules act on most frames there (counted). Held:
+	 * never under the wave, never inside her clearance, finite, and the picture to the kick all the same. */
 	void RuleFloorAndClear()
 	{
 		for (Timing K : Timings)
@@ -886,9 +895,10 @@ namespace
 			double Nearest = 1e9;
 			for (const Rec& R : M.Recs) Nearest = std::min(Nearest, (R.P.Eye - Sc.Where(0, R.Bt)).Length());
 			char Line[120];
-			std::snprintf(Line, sizeof(Line), "nearest her %.6f m (clear 20); hard rules only here", Nearest);
+			std::snprintf(Line, sizeof(Line), "nearest her %.6f m (clear 20)", Nearest);
 			const std::string Name = std::string("sea straight up at a ship from the water ") + TimingName(K);
 			Report(Name, M, Line);
+			GateSmooth(Name, M);
 			if (M.Lowest < E.Set.FloorHard - 1e-9) Fault("%s: the eye stood %.3f m over the wave", Name.c_str(), M.Lowest);
 			if (Nearest < 20.0 - 1e-6) Fault("%s: the eye came %.3f m from her (clear 20)", Name.c_str(), Nearest);
 			if (!M.bFinite) Fault("%s: not finite", Name.c_str());
@@ -1184,8 +1194,8 @@ namespace
 			{
 				// (drawn one by one: the order a call's arguments are worked out in is the compiler's)
 				const double WantH = R.Next() < 0.5 ? Nan : R.In(-50.0, 50.0);
-				const double WantT = R.In(-3.0, 3.0);
-				const double WantZ = R.In(-2.0, 3.0);
+				const double WantT = R.Next() < 0.3 ? (R.Next() < 0.5 ? Nan : -INFINITY) : R.In(-3.0, 3.0);
+				const double WantZ = R.Next() < 0.3 ? (R.Next() < 0.5 ? Nan : INFINITY) : R.In(-2.0, 3.0);
 				E.Want(WantH, WantT, WantZ);
 			}
 			const FreeEye::Pose P = E.Update(In, Dt, &Sea);
@@ -1598,6 +1608,1156 @@ namespace
 			}
 		}
 	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// Exact amounts and exact curves: each hand moves what it says by the amount it says, the springs step on the
+	// critically damped curve itself, and the edges of Begin, of RealDt and of the world are as written.
+	struct Flat : FreeEye::World
+	{
+		double Height = 0.0;
+		bool bNan = false;
+		double Floor(double, double) const override { return bNan ? std::nan("") : Height; }
+	};
+
+	/** Begins looking at Look from a heading and a tilt (degrees) on the boom of a zoom. */
+	void BeginOn(FreeEye::Eye& E, const Vec& Look, double HeadingDeg, double TiltDeg, double Zoom, const Vec& Frame = Vec{})
+	{
+		const double Arm = E.ArmOf(Zoom), Hd = HeadingDeg * Rad, Tl = TiltDeg * Rad;
+		const Vec Boom{ -std::sin(Hd) * Arm * std::cos(Tl), -std::cos(Hd) * Arm * std::cos(Tl), Arm * std::sin(Tl) };
+		E.Begin(Look + Boom, Look, Frame);
+	}
+
+	void Rest(FreeEye::Eye& E, double Seconds, const FreeEye::World* W = nullptr)
+	{
+		FreeEye::Input In;
+		for (int F = 0; F < static_cast<int>(Seconds * 60.0); ++F) E.Update(In, 1.0 / 60.0, W);
+	}
+
+	void RuleHandsExact()
+	{
+		const double Dt = 1.0 / 60.0;
+		double Worst = 0.0;
+		int Checked = 0;
+		auto Check = [&Worst, &Checked](const char* What, double Zoom, double Got, double Wanted)
+		{
+			const double Off = std::abs(Got - Wanted) / std::max(1.0, std::abs(Wanted));
+			Worst = std::max(Worst, Off);
+			++Checked;
+			if (!(Off <= 1e-9)) Fault("hands at zoom %.2f: %s came to %.12g (wanted %.12g)", Zoom, What, Got, Wanted);
+		};
+		const double Zooms[] = { 0.0, 0.3, 0.8 };
+		for (double Z : Zooms)
+		{
+			const Vec Look{ 40.0, -70.0, 200.0 };
+			auto Fresh = [&](FreeEye::Eye& E)
+			{
+				BeginOn(E, Look, 30.0, 25.0, Z);
+				Rest(E, 0.1);
+			};
+			const double Hd = 30.0 * Rad;
+			const Vec Right{ std::cos(Hd), -std::sin(Hd), 0.0 }, Ahead{ std::sin(Hd), std::cos(Hd), 0.0 };
+			// one frame of a key, then still: the pivot moves by the key's rate times that frame, the turn and the tilt
+			// by the degrees given, the zoom by its step
+			auto One = [&](const std::function<void(FreeEye::Input&)>& Set, FreeEye::Eye& E)
+			{
+				FreeEye::Input In;
+				Set(In);
+				E.Update(In, Dt, nullptr);
+				Rest(E, 6.0);
+			};
+			const double Reach = std::max(FreeEye::Eye().ArmOf(Z), 8.0);
+			{
+				FreeEye::Eye E;
+				Fresh(E);
+				const Vec P0 = E.Pivot();
+				One([](FreeEye::Input& In) { In.PanRight = 1.0; }, E);
+				const Vec D = E.Pivot() - P0;
+				Check("a frame of pan right (along the view's right)", Z, D.X * Right.X + D.Y * Right.Y, 0.9 * Reach * Dt);
+				Check("a frame of pan right (nothing ahead)", Z, D.X * Ahead.X + D.Y * Ahead.Y + D.Z, 0.0);
+			}
+			{
+				FreeEye::Eye E;
+				Fresh(E);
+				const Vec P0 = E.Pivot();
+				One([](FreeEye::Input& In) { In.PanAhead = -1.0; }, E);
+				const Vec D = E.Pivot() - P0;
+				Check("a frame of pan back (along the view's ahead)", Z, D.X * Ahead.X + D.Y * Ahead.Y, -0.9 * Reach * Dt);
+				Check("a frame of pan back (nothing right)", Z, D.X * Right.X + D.Y * Right.Y + D.Z, 0.0);
+			}
+			{
+				FreeEye::Eye E;
+				Fresh(E);
+				const Vec P0 = E.Pivot();
+				One([](FreeEye::Input& In) { In.Rise = 1.0; }, E);
+				const Vec D = E.Pivot() - P0;
+				Check("a frame of rise", Z, D.Z, 0.6 * Reach * Dt);
+				Check("a frame of rise (nothing level)", Z, std::hypot(D.X, D.Y), 0.0);
+			}
+			{
+				// a slide after a zoom notch, while the boom is still growing: by what the picture shows now
+				FreeEye::Eye E;
+				Fresh(E);
+				FreeEye::Input In;
+				In.Zoom = Z > 0.5 ? 2.0 : -2.0;
+				E.Update(In, Dt, nullptr);
+				In = FreeEye::Input();
+				for (int F = 0; F < 6; ++F) E.Update(In, Dt, nullptr);
+				const double Tall = 2.0 * E.Arm() * std::tan(0.5 * E.Last().Fov * Rad);
+				const Vec P0 = E.Pivot();
+				In.SlideRight = 0.1;
+				In.SlideAhead = -0.05;
+				In.Aspect = 2.0;
+				E.Update(In, Dt, nullptr);
+				Rest(E, 6.0);
+				const Vec D = E.Pivot() - P0;
+				Check("a slide right of a tenth (its width)", Z, D.X * Right.X + D.Y * Right.Y, 0.1 * Tall * 2.0);
+				Check("a slide back of a twentieth (its height)", Z, D.X * Ahead.X + D.Y * Ahead.Y, -0.05 * Tall);
+			}
+			{
+				FreeEye::Eye E;
+				Fresh(E);
+				double H0, T0, H1, T1;
+				LookOf(E.Last(), H0, T0);
+				One([](FreeEye::Input& In) { In.Turn = 10.0; In.Tilt = 10.0; }, E);
+				LookOf(E.Last(), H1, T1);
+				Check("10 degrees of turn (clockwise from above)", Z, std::remainder(H1 - H0, 2.0 * Pi) * Deg, 10.0);
+				Check("10 degrees of tilt (further down)", Z, (T1 - T0) * Deg, 10.0);
+			}
+			{
+				FreeEye::Eye E;
+				Fresh(E);
+				const double In1 = Z > 0.0 ? 1.0 : -1.0;
+				const double Want = E.ArmOf(std::clamp(Z - In1 * 0.06, 0.0, 1.0));
+				One([In1](FreeEye::Input& In) { In.Zoom = In1; }, E);
+				Check("a notch of zoom (the boom's length)", Z, E.Arm(), Want);
+				Check("the lens at that zoom", Z, E.Last().Fov, 44.0 + 6.0 * E.Zoom());
+			}
+		}
+		{
+			// the lens follows the zoom on every frame of a zoom (not its want)
+			FreeEye::Eye E;
+			BeginAt(E, 0.2);
+			FreeEye::Input In;
+			double Off = 0.0;
+			for (int F = 0; F < 240; ++F)
+			{
+				In.Zoom = F < 30 ? -0.3 : 0.0;
+				E.Update(In, Dt, nullptr);
+				Off = std::max(Off, std::abs(E.Last().Fov - (44.0 + 6.0 * E.Zoom())));
+			}
+			if (Off > 1e-9) Fault("hands: the lens left the zoom's by %.3g degrees on a frame", Off);
+		}
+		{
+			// ground style: a slide alone, or a rise alone, lets go too
+			for (int Which = 0; Which < 2; ++Which)
+			{
+				FreeEye::Eye E;
+				E.Set.bPanKeepsLock = false;
+				BeginAt(E, 0.4);
+				FreeEye::Input In;
+				In.bLock = true;
+				In.AnchorId = 3;
+				In.Anchor = Vec{ 10.0, 0.0, 50.0 };
+				for (int F = 0; F < 60; ++F) E.Update(In, Dt, nullptr);
+				(Which ? In.Rise : In.SlideRight) = 0.02;
+				E.Update(In, Dt, nullptr);
+				if (E.Locked() != -1) Fault("rule 4 ground style: a %s alone did not let go", Which ? "rise" : "slide");
+			}
+		}
+		std::printf("%-44s %d amounts, worst off %.2e of each\n", "hands move by what they say", Checked, Worst);
+	}
+
+	/** The springs' curves: a small step of each (no hold acting) follows the exact critically damped curve,
+	 * x(t) = 1 - (1 + w t) e^(-w t) of the step, on any frames; and a long move held to its fastest stops on its want
+	 * without running past it. */
+	void RuleSpringCurves()
+	{
+		double Worst = 0.0;
+		for (Timing K : Timings)
+		{
+			for (int Which = 0; Which < 4; ++Which)
+			{
+				FreeEye::Eye E;
+				BeginAt(E, 0.4);
+				Rest(E, 0.1);
+				const double Step = Which == 0 ? 2.0 * Rad : Which == 1 ? -2.0 * Rad : Which == 2 ? -0.01 : 1.0;
+				const double W = Which == 0 ? E.Set.TurnEase : Which == 1 ? E.Set.TiltEase : Which == 2 ? E.Set.ZoomEase : E.Set.Ease;
+				const double X0 = Which == 0 ? E.Heading() : Which == 1 ? E.Tilt() : Which == 2 ? E.Zoom() : E.Rel().X;
+				Clock C(K, 3);
+				double Time = 0.0, Off = 0.0;
+				FreeEye::Input In;
+				for (int F = 0; Time < (Which == 3 ? 0.4 : 1.5); ++F)
+				{
+					const double Dt = C.Next();
+					In = FreeEye::Input();
+					if (F == 0)
+					{
+						if (Which == 0) E.Want(X0 + Step, E.Tilt(), E.Zoom());
+						if (Which == 1) E.Want(E.Heading(), X0 + Step, E.Zoom());
+						if (Which == 2) E.Want(E.Heading(), E.Tilt(), X0 + Step);
+						// (a slide of a metre to the right, the heading 0)
+						if (Which == 3) In.SlideRight = 1.0 / (2.0 * E.Arm() * std::tan(0.5 * E.Last().Fov * Rad) * In.Aspect);
+					}
+					E.Update(In, Dt, nullptr);
+					Time += Dt;
+					const double X = Which == 0 ? E.Heading() : Which == 1 ? E.Tilt() : Which == 2 ? E.Zoom() : E.Rel().X;
+					const double Curve = X0 + Step * (1.0 - (1.0 + W * Time) * std::exp(-W * Time));
+					Off = std::max(Off, std::abs(X - Curve) / std::abs(Step));
+				}
+				Worst = std::max(Worst, Off);
+				const char* What = Which == 0 ? "turn" : Which == 1 ? "tilt" : Which == 2 ? "zoom" : "offset";
+				if (Off > 1e-9) Fault("springs %s: the %s's step left the critically damped curve by %.3g of it", TimingName(K), What, Off);
+			}
+		}
+		std::printf("%-44s off the exact curve by %.2e of the step at most\n", "springs: small steps on the exact curve", Worst);
+		double Past = 0.0;
+		for (Timing K : Timings)
+		{
+			for (int Which = 0; Which < 8; ++Which)
+			{
+				FreeEye::Eye E;
+				// (and on stiff springs, which brake late: there the holds alone stop them on the want)
+				const bool bStiff = Which >= 4;
+				if (bStiff) E.Set.TurnEase = E.Set.TiltEase = E.Set.ZoomEase = E.Set.Ease = 40.0;
+				const int What = Which % 4;
+				BeginAt(E, 0.0);
+				Rest(E, 0.1);
+				if (What == 0) E.Want(E.Heading() + 170.0 * Rad, E.Tilt(), E.Zoom());
+				if (What == 1) E.Want(E.Heading(), 89.0 * Rad, 0.3);
+				if (What == 2) E.Want(E.Heading(), E.Tilt(), 1.0);
+				const double Goal = What == 0 ? E.WantHeading() : What == 1 ? 89.0 * Rad : What == 2 ? 1.0 : 0.0;
+				const double Way = What == 0 ? 1.0 : 1.0;
+				Clock C(K, 5);
+				FreeEye::Input In;
+				double Most = 0.0, Start = 0.0;
+				for (int F = 0; F < 60 * 12; ++F)
+				{
+					In = FreeEye::Input();
+					if (What == 3 && F == 0) In.SlideRight = 4.0;
+					E.Update(In, C.Next(), nullptr);
+					if (What == 3 && F == 0) Start = E.WantRel().X;
+					const double X = What == 0 ? E.Heading() : What == 1 ? E.Tilt() : What == 2 ? E.Zoom() : E.Rel().X;
+					const double G = What == 3 ? Start : Goal;
+					Most = std::max(Most, Way * (X - G) / (What == 3 ? std::max(E.Arm(), E.Set.FeelArm) : 1.0));
+				}
+				Past = std::max(Past, Most);
+				if (Most > 1e-9) Fault("springs %s%s: a long %s ran past its want by %.3g", TimingName(K), bStiff ? " stiff" : "", What == 0 ? "turn" : What == 1 ? "tilt" : What == 2 ? "zoom" : "slide", Most);
+			}
+		}
+		std::printf("%-44s ran past its want by %.2e at most\n", "springs: long holds stop on the want", Past);
+	}
+
+	/** A long glide onto a still anchor comes to rest on it without running past (the pivot's way along the line). */
+	void RuleGlideEnd()
+	{
+		double Past = 0.0;
+		int Cuts = 0;
+		for (Timing K : Timings)
+		{
+			FreeEye::Eye E;
+			BeginAt(E, 0.7);
+			const Vec Anchor{ 2900.0, 0.0, 50.0 };
+			const Vec Way = (Anchor - E.Pivot()).Unit();
+			Script Sc;
+			Sc.Where = StillAt;
+			Sc.Feed = [&Anchor](FreeEye::Input& In, FreeEye::Eye&, double Time, double)
+			{
+				In.bLock = Time > 0.5;
+				In.AnchorId = 2;
+				In.Anchor = Anchor;
+			};
+			Measured M = Fly(E, Sc, K, 30.0);
+			Smoothness(M, Sc, E.Set.FeelArm);
+			for (const Rec& R : M.Recs)
+			{
+				const Vec Off = R.Pivot - Anchor;
+				Past = std::max(Past, Off.X * Way.X + Off.Y * Way.Y + Off.Z * Way.Z);
+			}
+			Cuts += M.Cuts;
+			GateSmooth(std::string("glide 2.9 km onto a still anchor ") + TimingName(K), M);
+		}
+		std::printf("%-44s past the anchor by %.4f m at most, cuts %d\n", "glide 2.9 km onto a still anchor", Past, Cuts);
+		if (Past > 0.01) Fault("glide: the pivot ran %.3f m past a still anchor", Past);
+		if (Cuts) Fault("glide: a 2.9 km lock at zoom 0.7 cut");
+	}
+
+	/** The lift up on a floor risen under him (eased, held, clear of it) and back down when it goes, on the spring's
+	 * own curve at LiftSettle: 1 - ... from L0 down, L0 (1 + 3 t) e^(-3 t). */
+	void RuleLiftCurve()
+	{
+		FreeEye::Eye E;
+		Flat W;
+		BeginOn(E, Vec{ 0.0, 0.0, 20.0 }, 0.0, 30.0, 0.6);
+		Rest(E, 0.5, &W);
+		const double Low = E.Last().Eye.Z;
+		W.Height = Low + 8.0;
+		FreeEye::Input In;
+		double Up = 0.0, Time = 0.0, Lowest = 1e9;
+		int Hard0 = E.HardLifts();
+		for (int F = 0; F < 300; ++F)
+		{
+			E.Update(In, 1.0 / 60.0, &W);
+			Time += 1.0 / 60.0;
+			Lowest = std::min(Lowest, E.Last().Eye.Z - W.Height);
+			if (Up == 0.0 && E.Lift() > 0.9 * 11.0) Up = Time;
+		}
+		const double L0 = E.Lift();
+		W.Height = -50.0;
+		double Off = 0.0;
+		Time = 0.0;
+		for (int F = 0; F < 60 * 12; ++F)
+		{
+			E.Update(In, 1.0 / 60.0, &W);
+			Time += 1.0 / 60.0;
+			if (Time < 3.0) Off = std::max(Off, std::abs(E.Lift() - L0 * (1.0 + 3.0 * Time) * std::exp(-3.0 * Time)) / L0);
+		}
+		std::printf("%-44s up to %.4f m (11 wanted) in %.2f s to 0.9, lowest %.3f m over the floor; down off the curve by %.2e, left %.3g m\n",
+			"the lift on a floor risen 8 m and gone", L0, Up, Lowest, Off, E.Lift());
+		if (std::abs(L0 - 11.0) > 1e-6) Fault("lift: it stood %.4f m up for a floor 8 m over the eye (11 wanted: 8 and FloorClear)", L0);
+		if (!(Up > 0.0 && Up < 0.5)) Fault("lift: it took %.2f s to climb 0.9 of 11 m (at LiftRise 12 some 0.3)", Up);
+		if (E.HardLifts() != Hard0 + 1) Fault("lift: %d hard lifts for one floor risen at once (one wanted)", E.HardLifts() - Hard0);
+		if (Off > 1e-6) Fault("lift: settling down left the spring's curve at LiftSettle by %.3g of it", Off);
+		if (E.Lift() != 0.0) Fault("lift: 12 s after the floor went the lift still stood %.3g m", E.Lift());
+	}
+
+	/** Begin on an eye already flown (turning, panning, locked, lifted): the first frame is the shot exactly and the
+	 * next stands still; and Begin's edges: straight down, straight up, under the floor, over the ceiling, between
+	 * FloorHard and FloorClear. */
+	void RuleBeginEdges()
+	{
+		{
+			FreeEye::Eye E;
+			Flat W;
+			BeginAt(E, 0.1);
+			FreeEye::Input In;
+			In.bLock = true;
+			In.AnchorId = 1;
+			for (int F = 0; F < 120; ++F)
+			{
+				In.Anchor = Vec{ 2.0 * F, 0.0, 30.0 };
+				In.PanRight = 1.0;
+				In.Turn = 2.0;
+				In.Tilt = -0.5;
+				In.Zoom = 0.1;
+				if (F == 60) W.Height = 60.0;
+				E.Update(In, 1.0 / 60.0, &W);
+			}
+			const Vec Shot{ 500.0, 300.0, 900.0 }, At{ 600.0, 700.0, 500.0 };
+			E.Begin(Shot, At, Vec{});
+			In = FreeEye::Input();
+			const FreeEye::Pose P1 = E.Update(In, 1.0 / 60.0, &W);
+			const FreeEye::Pose P2 = E.Update(In, 1.0 / 60.0, &W);
+			const double Off = (P1.Eye - Shot).Length(), Dir = ((P1.Look - P1.Eye).Unit() - (At - Shot).Unit()).Length();
+			const double Moved = (P2.Eye - P1.Eye).Length() + (P2.Look - P1.Look).Length();
+			std::printf("%-44s eye off %.2e m, direction %.2e, then moved %.2e m, locked %d, cut %d\n", "Begin on an eye already flown", Off, Dir, Moved, E.Locked(), P1.bCut ? 1 : 0);
+			if (Off > 1e-9 || Dir > 1e-9) Fault("Begin again: the first frame is %.3g m and %.3g off the shot", Off, Dir);
+			if (Moved > 1e-9) Fault("Begin again: the view moved %.3g m on the second frame with no input (swings or lift kept)", Moved);
+			if (E.Locked() != -1 || P1.bCut) Fault("Begin again: still locked, or a cut");
+		}
+		struct Shot
+		{
+			const char* Name;
+			Vec Eye, Look;
+			bool bCut;
+		};
+		const Shot Shots[] = {
+			{ "straight down", Vec{ 10.0, 20.0, 600.0 }, Vec{ 10.0, 20.0, 0.0 }, false },
+			{ "straight up", Vec{ 10.0, 20.0, 40.0 }, Vec{ 10.0, 20.0, 900.0 }, false },
+			{ "2 m over the floor", Vec{ 0.0, 0.0, 2.0 }, Vec{ 0.0, 300.0, 2.0 }, false },
+			{ "under the sea", Vec{ 0.0, 0.0, -5.0 }, Vec{ 0.0, 300.0, 20.0 }, true },
+			{ "over the ceiling", Vec{ 0.0, 0.0, 2000.0 }, Vec{ 0.0, 600.0, 1000.0 }, true },
+		};
+		for (const Shot& S : Shots)
+		{
+			for (Timing K : Timings)
+			{
+				FreeEye::Eye E;
+				E.Set.EyeMost = 1500.0;
+				E.Begin(S.Eye, S.Look, Vec{});
+				Script Sc;
+				Sc.Where = StillAt;
+				Sc.Feed = [](FreeEye::Input&, FreeEye::Eye&, double, double) {};
+				Measured M = Fly(E, Sc, K, 6.0);
+				Smoothness(M, Sc, E.Set.FeelArm);
+				const FreeEye::Pose& P = M.Recs.front().P;
+				const double Off = (P.Eye - S.Eye).Length(), Dir = ((P.Look - P.Eye).Unit() - (S.Look - S.Eye).Unit()).Length();
+				char Name[96];
+				std::snprintf(Name, sizeof(Name), "Begin %s %s", S.Name, TimingName(K));
+				char Line[120];
+				std::snprintf(Line, sizeof(Line), "first frame %.2e m, %.2e off the shot, cut %d", Off, Dir, P.bCut ? 1 : 0);
+				Report(Name, M, Line);
+				GateSmooth(Name, M);
+				if (P.bCut != S.bCut) Fault("%s: the first frame %s a cut", Name, P.bCut ? "is" : "is not");
+				if (!S.bCut && (Off > 1e-9 || Dir > 1e-9)) Fault("%s: the first frame is %.3g m and %.3g off the shot", Name, Off, Dir);
+				if (M.Cuts != (S.bCut ? 1 : 0)) Fault("%s: %d cuts", Name, M.Cuts);
+				if (!S.bCut && M.HardLifts) Fault("%s: %d hard lifts", Name, M.HardLifts);
+				if (M.HardStops) Fault("%s: %d hard stops (a shot over the ceiling is let down on its first frame)", Name, M.HardStops);
+				if (M.Lowest < E.Set.FloorHard - 1e-9) Fault("%s: the eye stood %.3f m over the floor", Name, M.Lowest);
+				double High = -1e9, TiltOut = 0.0;
+				for (const Rec& R : M.Recs)
+				{
+					High = std::max(High, R.P.Eye.Z);
+					double Hh, Tt;
+					LookOf(R.P, Hh, Tt);
+					if (R.Time > 3.0) TiltOut = std::max({ TiltOut, Tt - E.Set.TiltMost * Rad, E.Set.TiltLeast * Rad - Tt });
+				}
+				if (High > 1500.0 + 1e-9) Fault("%s: the eye stood at %.2f m (EyeMost 1500)", Name, High);
+				if (TiltOut > 1e-9) Fault("%s: 3 s on the tilt is still %.3g degrees out of its range", Name, TiltOut * Deg);
+			}
+		}
+	}
+
+	/** The edges of time and of the world: a frame of no time after a cut is no cut; RealDt not finite is no time; a
+	 * floor not finite is FloorFlat; FloorFlat is kept with no world; a wave risen on a frame of no time is held. */
+	void RuleEdges()
+	{
+		{
+			FreeEye::Eye E;
+			BeginAt(E, 0.4);
+			const double T0 = E.WantTilt(), S0 = E.WantZoom();
+			E.Want(std::nan(""), -INFINITY, INFINITY);
+			if (E.WantTilt() != T0 || E.WantZoom() != S0) Fault("edges: Want of a tilt or zoom not finite changed it (%.4f, %.4f)", E.WantTilt(), E.WantZoom());
+			FreeEye::Input In;
+			In.bLock = true;
+			In.AnchorId = 2;
+			In.Anchor = Vec{ 50.0, 0.0, 50.0 };
+			In.bLetGo = true;
+			E.Update(In, 1.0 / 60.0, nullptr);
+			const int OnLetGo = E.Locked();
+			FreeEye::Input Nan;
+			Nan.bLock = true;
+			Nan.AnchorId = 3;
+			Nan.Anchor = Vec{ std::nan(""), 0.0, 0.0 };
+			E.Update(Nan, 1.0 / 60.0, nullptr);
+			const int OnNan = E.Locked();
+			const bool bFinite = E.Last().Eye.Finite() && E.Pivot().Finite();
+			if (OnLetGo != -1) Fault("edges: a rise of bLock with bLetGo on the same frame locked on");
+			if (OnNan != -1 || !bFinite) Fault("edges: a lock on an anchor not finite took (%d), or the view went not finite", OnNan);
+		}
+		{
+			FreeEye::Eye E;
+			BeginAt(E, 0.4);
+			FreeEye::Input In;
+			In.bLock = true;
+			In.AnchorId = 1;
+			In.Anchor = Vec{ 9000.0, 0.0, 100.0 };
+			const bool bCut = E.Update(In, 1.0 / 60.0, nullptr).bCut;
+			const bool bAgain = E.Update(In, 0.0, nullptr).bCut;
+			if (!bCut || bAgain) Fault("edges: a far lock cut %d, then a frame of no time cut %d (1 then 0 wanted)", bCut ? 1 : 0, bAgain ? 1 : 0);
+			In.PanRight = 1.0;
+			E.Update(In, 1.0 / 60.0, nullptr);
+			const FreeEye::Pose Was = E.Last();
+			const Vec Rel0 = E.Rel();
+			const FreeEye::Pose A = E.Update(In, std::nan(""), nullptr);
+			const FreeEye::Pose B = E.Update(In, -INFINITY, nullptr);
+			if (!Same(A, Was) || !Same(B, Was) || E.Rel().X != Rel0.X) Fault("edges: a RealDt not finite moved the view");
+		}
+		{
+			Flat W;
+			W.bNan = true;
+			for (int WithWorld = 0; WithWorld < 2; ++WithWorld)
+			{
+				FreeEye::Eye E;
+				E.Set.FloorFlat = 100.0;
+				BeginOn(E, Vec{ 0.0, 0.0, 112.0 }, 0.0, 20.0, 0.2);
+				FreeEye::Input In;
+				double Lowest = 1e9;
+				for (int F = 0; F < 600; ++F)
+				{
+					In.Rise = F < 400 ? -1.0 : 0.0;
+					E.Update(In, 1.0 / 60.0, WithWorld ? &W : nullptr);
+					Lowest = std::min(Lowest, E.Last().Eye.Z);
+				}
+				std::printf("%-44s lowest %.3f m (FloorFlat 100)\n", WithWorld ? "a world whose floor is not finite" : "no world, FloorFlat 100", Lowest);
+				if (Lowest < 100.5 - 1e-9) Fault("edges: %s, the eye went down to %.3f m (FloorFlat 100)", WithWorld ? "a floor not finite" : "no world", Lowest);
+				if (E.Last().Eye.Z < 103.0 - 1e-6) Fault("edges: %s, the eye came to rest %.3f m over FloorFlat", WithWorld ? "a floor not finite" : "no world", E.Last().Eye.Z - 100.0);
+			}
+		}
+		{
+			FreeEye::Eye E;
+			Flat W;
+			BeginAt(E, 0.3);
+			Rest(E, 0.2, &W);
+			W.Height = E.Last().Eye.Z + 2.0;
+			const FreeEye::Pose P = E.Update(FreeEye::Input(), 0.0, &W);
+			if (P.Eye.Z < W.Height + E.Set.FloorHard - 1e-9) Fault("edges: a wave risen over the eye on a frame of no time left it %.3f m under", W.Height - P.Eye.Z);
+		}
+	}
+
+	/** A new frame (a new FrameId, or the same one jumped as a group joins the raid) is carried, never flung, and a
+	 * view let go at speed comes to rest without turning back; also a let go or a lock on a frame that jumps. */
+	void RuleFrames()
+	{
+		for (Timing K : Timings)
+		{
+			for (int Which = 0; Which < 3; ++Which)
+			{
+				FreeEye::Eye E;
+				auto FrameOf = [Which](double Bt, int& Id)
+				{
+					Id = Bt < 5.0 ? 0 : 1;
+					if (Bt < 5.0) return Vec{ 100.0 * Bt, 0.0, 3000.0 };
+					if (Which == 0) return Vec{ 500.0, 900.0 + 100.0 * (Bt - 5.0), 3000.0 };
+					if (Which == 1) return Vec{ 500.0 + 600.0, 0.0, 3000.0 };
+					Id = 0;
+					return Vec{ 500.0 + 600.0 + 100.0 * (Bt - 5.0), 0.0, 3000.0 };
+				};
+				int Id0 = 0;
+				BeginAt(E, 0.5, FrameOf(0.0, Id0));
+				Script Sc;
+				Sc.Where = StillAt;
+				Sc.Feed = [&FrameOf](FreeEye::Input& In, FreeEye::Eye&, double, double Bt)
+				{
+					In.Frame = FrameOf(Bt, In.FrameId);
+				};
+				Measured M = Fly(E, Sc, K, 14.0);
+				Smoothness(M, Sc, E.Set.FeelArm);
+				double Back = 0.0;
+				for (size_t I = 1; I < M.Recs.size(); ++I)
+				{
+					if (M.Recs[I].Time < 5.0 || Which != 1) continue;
+					Back = std::max(Back, -(M.Recs[I].Pivot.X - M.Recs[I - 1].Pivot.X));
+				}
+				char Name[96];
+				std::snprintf(Name, sizeof(Name), "frame %s %s", Which == 0 ? "changed (new id, 900 m off)" : Which == 1 ? "changed and still" : "jumped 600 m, same id", TimingName(K));
+				char Line[64];
+				std::snprintf(Line, sizeof(Line), "turned back %.3g m", Back);
+				Report(Name, M, Line);
+				GateSmooth(Name, M);
+				if (M.Cuts) Fault("%s: %d cuts", Name, M.Cuts);
+				if (Back > 1e-9) Fault("%s: the view let go at 100 m/s turned back by %.3g m", Name, Back);
+			}
+			const double Jumps[] = { 40.0, 200.0, 1500.0 };
+			for (double J : Jumps)
+			{
+				for (int Lock = 0; Lock < 2; ++Lock)
+				{
+					FreeEye::Eye E;
+					auto Plane = [](int, double Bt) { return Vec{ 150.0 * Bt, 0.0, 2000.0 }; };
+					auto FrameAt = [J](double Bt) { return Vec{ 0.0, 80.0 * Bt + (Bt > 6.0 ? J : 0.0), 2000.0 }; };
+					BeginAt(E, 0.6, Plane(1, 0.0));
+					Script Sc;
+					Sc.Where = StillAt;
+					Sc.Feed = [&Plane, &FrameAt, Lock, J](FreeEye::Input& In, FreeEye::Eye&, double, double Bt)
+					{
+						In.Frame = FrameAt(Bt);
+						// (a shift under TeleportBeyond is a new frame only by its id: the scene's to say, FREE-EYE.md)
+						In.FrameId = Bt > 6.0 && J < 1000.0 ? 1 : 0;
+						In.bLock = Lock ? Bt > 6.0 : Bt < 6.0;
+						In.AnchorId = 1;
+						In.Anchor = Plane(1, Bt);
+					};
+					Measured M = Fly(E, Sc, K, 16.0);
+					Smoothness(M, Sc, E.Set.FeelArm);
+					char Name[96];
+					std::snprintf(Name, sizeof(Name), "%s as the frame jumps %.0f m %s", Lock ? "lock" : "let go", J, TimingName(K));
+					Report(Name, M);
+					GateSmooth(Name, M);
+					if (M.Cuts) Fault("%s: %d cuts", Name, M.Cuts);
+				}
+			}
+		}
+	}
+
+	/** Cuts and teleports start the view from rest where they put it: no turn, tilt, zoom, offset or lift carried
+	 * across; and the teleport's slack is three frames of the anchor's own speed. */
+	void RuleCutsClean()
+	{
+		const double Dt = 1.0 / 60.0;
+		{
+			FreeEye::Eye E;
+			Flat W;
+			W.Height = 0.0;
+			BeginOn(E, Vec{ 0.0, 0.0, 30.0 }, 0.0, 10.0, 0.3);
+			FreeEye::Input In;
+			for (int F = 0; F < 120; ++F)
+			{
+				In.Turn = 2.5;
+				In.Tilt = 0.6;
+				In.Zoom = 0.02;
+				In.Rise = -1.0;
+				if (F == 30) W.Height = 40.0;
+				E.Update(In, Dt, &W);
+			}
+			const double LiftWas = E.Lift();
+			W.Height = 0.0;
+			In = FreeEye::Input();
+			In.bLock = true;
+			In.AnchorId = 4;
+			In.Anchor = Vec{ 8000.0, 0.0, 200.0 };
+			const double H0 = E.Heading(), T0 = E.Tilt(), S0 = E.Zoom();
+			const bool bCut = E.Update(In, Dt, &W).bCut;
+			const double H1 = E.Heading(), T1 = E.Tilt(), S1 = E.Zoom();
+			const Vec Rel1 = E.Rel();
+			E.Update(In, Dt, &W);
+			const double DH = std::abs(std::remainder(E.Heading() - H1, 2.0 * Pi)), DT = std::abs(E.Tilt() - T1), DS = std::abs(E.Zoom() - S1);
+			const double DRel = (E.Rel() - Rel1).Length();
+			const double Most = 1.5 * Dt * Dt * 1.0001;
+			std::printf("%-44s cut %d; then turned %.3g deg, tilted %.3g deg, zoomed %.3g, offset %.3g m; lift %.3g m (was %.1f)\n",
+				"a cut while turning, tilting, zooming, lifted", bCut ? 1 : 0, DH * Deg, DT * Deg, DS, DRel, E.Lift(), LiftWas);
+			if (!bCut) Fault("cuts: an 8 km lock did not cut");
+			if (DH > E.Set.TurnPush * Rad * Most || DT > E.Set.TiltPush * Rad * Most || DS > E.Set.ZoomPush * Most)
+			{
+				Fault("cuts: the frame after a cut turned %.3g deg, tilted %.3g deg, zoomed %.3g: a swing carried across the cut", DH * Deg, DT * Deg, DS);
+			}
+			if (DRel > 1e-9) Fault("cuts: the offset moved %.3g m the frame after a cut onto it", DRel);
+			if (E.Lift() > 1e-9) Fault("cuts: a cut to open water kept a lift of %.3g m", E.Lift());
+			(void)H0;
+			(void)T0;
+			(void)S0;
+		}
+		{
+			// a cut is judged from where the pivot is, not where he wants it: a slide far off, then a lock right here
+			FreeEye::Eye E;
+			BeginAt(E, 0.8);
+			FreeEye::Input In;
+			In.SlideRight = 4.0;
+			E.Update(In, Dt, nullptr);
+			In = FreeEye::Input();
+			In.bLock = true;
+			In.AnchorId = 2;
+			In.Anchor = E.Pivot() + Vec{ 50.0, 0.0, 0.0 };
+			const bool bCut = E.Update(In, Dt, nullptr).bCut;
+			if (bCut) Fault("cuts: a lock 50 m from the pivot cut because his slide wanted it %.0f m off", E.WantRel().Length());
+		}
+		{
+			// a teleport mid-glide: the glide starts again from rest, and the slack is three frames of speed
+			FreeEye::Eye E;
+			BeginAt(E, 0.4);
+			FreeEye::Input In;
+			In.bLock = true;
+			In.AnchorId = 5;
+			int Cuts = 0;
+			double DRel = 0.0;
+			Vec RelCut;
+			for (int F = 0; F < 120; ++F)
+			{
+				In.Anchor = Vec{ 400.0 + (F >= 40 ? 1500.0 : 0.0), 0.0, 50.0 };
+				const bool bCut = E.Update(In, Dt, nullptr).bCut;
+				Cuts += bCut ? 1 : 0;
+				if (bCut) RelCut = E.Rel();
+				if (F == 41) DRel = (E.Rel() - RelCut).Length();
+			}
+			const double Most = 1.5 * E.Set.GlidePush * std::max(E.Arm(), E.Set.FeelArm) * Dt * Dt * 1.0001;
+			std::printf("%-44s cuts %d; the offset then moved %.4f m (a push from rest %.4f)\n", "a teleport mid-glide", Cuts, DRel, Most);
+			if (Cuts != 1) Fault("teleport: %d cuts for one 1.5 km jump mid-glide", Cuts);
+			if (DRel > Most) Fault("teleport: the glide went on at its speed across a teleport (%.3f m in a frame)", DRel);
+		}
+		{
+			// a let go on the frame after a teleport: the cut's own step is no speed to carry
+			FreeEye::Eye E;
+			BeginAt(E, 0.4);
+			FreeEye::Input In;
+			In.AnchorId = 5;
+			double Most = 0.0;
+			Vec Was;
+			for (int F = 0; F < 200; ++F)
+			{
+				In.bLock = F < 61;
+				In.Anchor = Vec{ 100.0 + (F >= 60 ? 1500.0 : 0.0), 0.0, 50.0 };
+				E.Update(In, Dt, nullptr);
+				if (F > 60) Most = std::max(Most, (E.Pivot() - Was).Length());
+				Was = E.Pivot();
+			}
+			std::printf("%-44s the pivot then moved %.3f m a frame at most\n", "a let go the frame after a teleport", Most);
+			if (Most > 1.0) Fault("teleport: a let go the frame after a teleport flung the pivot %.1f m in a frame", Most);
+		}
+		for (int Big = 0; Big < 2; ++Big)
+		{
+			FreeEye::Eye E;
+			BeginAt(E, 0.5, Vec{});
+			FreeEye::Input In;
+			In.bLock = true;
+			In.AnchorId = 6;
+			In.bAnchorVel = true;
+			In.AnchorVel = Vec{ 1200.0, 0.0, 0.0 };
+			int Cuts = 0;
+			double X = 0.0;
+			for (int F = 0; F < 600; ++F)
+			{
+				// one frame's step of 200 m and two frames of its speed (no teleport), or 200 m and three and a half
+				X += 20.0 + (F == 400 ? (Big ? 270.0 : 240.0) - 20.0 : 0.0);
+				In.Anchor = Vec{ X, 0.0, 50.0 };
+				Cuts += E.Update(In, Dt, nullptr).bCut && F > 0 ? 1 : 0;
+			}
+			if (Cuts != Big) Fault("teleport: a step of %s at 1200 m/s cut %d times (%d wanted: TeleportBeyond and three frames of its speed)", Big ? "270 m" : "240 m", Cuts, Big);
+		}
+	}
+
+	/** Ride turns where he wants to sit with the ship, and a skip to a ship headed otherwise is no turn of the view;
+	 * a skip between two heaving ships with their speed fed is carried as smoothly as one measured. */
+	void RuleRideMore()
+	{
+		{
+			FreeEye::Eye E;
+			BeginAt(E, 0.4);
+			FreeEye::Input In;
+			In.bLock = true;
+			In.AnchorId = 1;
+			In.bRide = true;
+			double Jump = 0.0;
+			Vec Want0;
+			for (int F = 0; F < 60 * 30; ++F)
+			{
+				const double Bt = F / 60.0;
+				In.AnchorId = Bt < 25.0 ? 1 : 2;
+				In.AnchorHeading = Bt < 25.0 ? ShipHeading(Bt) : 2.5;
+				In.Anchor = In.AnchorId == 1 ? ShipAt(Bt, 0.0) : ShipAt(Bt, 0.0) + Vec{ 300.0, 0.0, 0.0 };
+				In.PanAhead = Bt > 0.5 && Bt < 1.5 ? 1.0 : 0.0;
+				const double Hw = E.Heading();
+				E.Update(In, 1.0 / 60.0, nullptr);
+				if (F == 120) Want0 = E.WantRel();
+				if (In.AnchorId == 2) Jump = std::max(Jump, std::abs(std::remainder(E.Heading() - Hw, 2.0 * Pi)));
+				if (F == 60 * 25 - 1)
+				{
+					const Vec W1 = E.WantRel();
+					const double Turned = std::atan2(W1.X, W1.Y) - std::atan2(Want0.X, Want0.Y);
+					std::printf("%-44s his offset turned %.3f deg with the ship's 90\n", "rule 7 ride turns where he sits", Turned * Deg);
+					if (std::abs(Turned * Deg - 90.0) > 0.01) Fault("rule 7: where he sits off her turned %.3f deg as she turned 90", Turned * Deg);
+				}
+			}
+			std::printf("%-44s the view's heading moved %.3f deg a frame at most after the skip\n", "rule 7 skip to a ship headed otherwise", Jump * Deg);
+			if (Jump * Deg > 2.4) Fault("rule 7: the skip to a ship headed otherwise turned the view %.2f deg in a frame", Jump * Deg);
+		}
+		for (Timing K : Timings)
+		{
+			for (int Fed = 0; Fed < 2; ++Fed)
+			{
+				FreeEye::Eye E;
+				E.Set.SteadyZ = 3.0;
+				auto Ship = [](int Key, double Bt)
+				{
+					return Vec{ 200.0 * Key, 12.0 * Bt, 8.0 + (Key == 1 ? 3.0 : -3.0) * std::sin(2.0 * Pi * Bt / 8.0 + Key) };
+				};
+				BeginAt(E, 0.35);
+				Script Sc;
+				Sc.Where = [&Ship](int Key, double Bt) { return Key < 0 ? Vec{} : Ship(Key, Bt); };
+				Sc.Feed = [&Ship, Fed](FreeEye::Input& In, FreeEye::Eye&, double, double Bt)
+				{
+					In.bLock = true;
+					In.AnchorId = Bt < 10.0 ? 0 : 1;
+					In.Anchor = Ship(In.AnchorId, Bt);
+					In.bAnchorVel = Fed != 0;
+					In.AnchorVel = (Ship(In.AnchorId, Bt + 1e-4) - Ship(In.AnchorId, Bt - 1e-4)) * (1.0 / 2e-4);
+				};
+				Measured M = Fly(E, Sc, K, 20.0);
+				Smoothness(M, Sc, E.Set.FeelArm, 0.5);
+				char Name[96];
+				std::snprintf(Name, sizeof(Name), "rule 8 skip between heaving ships, %s %s", Fed ? "fed" : "measured", TimingName(K));
+				Report(Name, M);
+				GateSmooth(Name, M);
+				if (M.Cuts) Fault("%s: %d cuts", Name, M.Cuts);
+			}
+		}
+	}
+
+	/** The caps' edges: a ceiling lowered under a rising eye stops it once; the anchor's clearance is no rule after a
+	 * let go; a box given with its corners swapped is the same box. */
+	void RuleCapsMore()
+	{
+		{
+			FreeEye::Eye E;
+			E.Set.EyeMost = 5000.0;
+			BeginOn(E, Vec{ 0.0, 0.0, 1000.0 }, 0.0, 20.0, 0.5);
+			FreeEye::Input In;
+			int Stops = 0;
+			double High = 0.0;
+			for (int F = 0; F < 600; ++F)
+			{
+				In.Rise = F < 300 ? 1.0 : 0.0;
+				if (F == 150) E.Set.EyeMost = E.Last().Eye.Z + 1.0;
+				E.Update(In, 1.0 / 60.0, nullptr);
+				if (F >= 150) High = std::max(High, E.Last().Eye.Z - E.Set.EyeMost);
+			}
+			Stops = E.HardStops();
+			std::printf("%-44s hard stops %d, over it by %.3g m at most\n", "a ceiling lowered onto a rising eye", Stops, High);
+			if (Stops != 1) Fault("caps: a ceiling lowered once onto a rising eye stopped it %d times (once: its rise is spent there)", Stops);
+			if (High > 1e-9) Fault("caps: the eye stood %.3g m over a lowered ceiling", High);
+		}
+		{
+			FreeEye::Eye E;
+			BeginAt(E, 0.0);
+			FreeEye::Input In;
+			double Nearest = 1e9;
+			for (int F = 0; F < 600; ++F)
+			{
+				In.bLock = F < 60;
+				In.AnchorId = 3;
+				In.Anchor = Vec{ 0.0, 0.0, 50.0 };
+				In.AnchorClear = 30.0;
+				In.PanAhead = F > 120 && F < 300 ? 1.0 : 0.0;
+				E.Update(In, 1.0 / 60.0, nullptr);
+				if (F > 120) Nearest = std::min(Nearest, (E.Last().Eye - In.Anchor).Length());
+			}
+			std::printf("%-44s nearest %.2f m (clearance 30, no rule unlocked), hard stops %d\n", "the anchor's clearance after a let go", Nearest, E.HardStops());
+			if (Nearest > 29.0) Fault("caps: after a let go the eye was still kept %.2f m off the anchor it let go of", Nearest);
+			if (E.HardStops()) Fault("caps: %d hard stops with nothing locked", E.HardStops());
+		}
+		{
+			double Out = 0.0, Reached = 1e9;
+			for (int Swap = 0; Swap < 2; ++Swap)
+			{
+				FreeEye::Eye E;
+				BeginAt(E, 0.4);
+				FreeEye::Input In;
+				double Lo = 0.0, Hi = 0.0;
+				for (int F = 0; F < 1000; ++F)
+				{
+					In.bBox = true;
+					In.BoxMin = Swap ? Vec{ 100.0, 100.0, 300.0 } : Vec{ -100.0, -100.0, -300.0 };
+					In.BoxMax = Swap ? Vec{ -100.0, -100.0, -300.0 } : Vec{ 100.0, 100.0, 300.0 };
+					In.PanRight = F < 300 ? 1.0 : -1.0;
+					In.PanAhead = F < 300 ? -1.0 : 1.0;
+					E.Update(In, 1.0 / 60.0, nullptr);
+					const Vec P = E.Pivot();
+					Out = std::max({ Out, std::abs(P.X) - 100.0, std::abs(P.Y) - 100.0, std::abs(P.Z) - 300.0 });
+					Lo = std::min(Lo, P.X);
+					Hi = std::max(Hi, P.X);
+				}
+				Reached = std::min({ Reached, -Lo, Hi });
+			}
+			if (Reached < 90.0) Fault("caps: a box with its corners swapped held the pivot short of a wall it should reach (%.1f m of 100)", Reached);
+			std::printf("%-44s out of it by %.3g m at most\n", "a box with its corners given swapped", Out);
+			if (Out > 1e-9) Fault("caps: a box with its corners swapped let the pivot %.3g m out", Out);
+		}
+	}
+
+	/** The carries review round 1 found rough, each now flown and gated: a let go at speed, a lock on a much faster
+	 * aircraft, an aircraft met head on and one passing through the eye, a moving frame run into a fixed box. */
+	void RuleCarries()
+	{
+		for (Timing K : Timings)
+		{
+			const double Zooms[] = { 0.0, 0.4 };
+			const double Paces[] = { 1.0, 4.0 };
+			for (double Z : Zooms)
+			{
+				for (double Pace : Paces)
+				{
+					// let go of an aircraft at 150 m/s of battle time, the frame still: it coasts on and never turns back
+					FreeEye::Eye E;
+					auto Plane = [](int Key, double Bt) { return Key < 0 ? Vec{} : Vec{ 150.0 * Bt, 0.0, 800.0 }; };
+					BeginAt(E, Z, Plane(1, 0.0));
+					Script Sc;
+					Sc.Where = Plane;
+					Sc.Pace = [Pace](double) { return Pace; };
+					Sc.Feed = [&Plane](FreeEye::Input& In, FreeEye::Eye&, double Time, double Bt)
+					{
+						In.bLock = Time < 6.0;
+						In.AnchorId = 1;
+						In.Anchor = Plane(1, Bt);
+					};
+					Measured M = Fly(E, Sc, K, 16.0);
+					Smoothness(M, Sc, E.Set.FeelArm);
+					double Back = 0.0;
+					for (size_t I = 1; I < M.Recs.size(); ++I)
+					{
+						if (M.Recs[I].Time > 6.0) Back = std::max(Back, M.Recs[I - 1].Pivot.X - M.Recs[I].Pivot.X);
+					}
+					char Name[96];
+					std::snprintf(Name, sizeof(Name), "let go at %.0f m/s, zoom %.1f %s", 150.0 * Pace, Z, TimingName(K));
+					char Line[64];
+					std::snprintf(Line, sizeof(Line), "turned back %.3g m", Back);
+					Report(Name, M, Line);
+					GateSmooth(Name, M);
+					// (the lock itself on a plane four times faster than the view glides may cut; the let go never)
+					int LateCuts = 0;
+					for (const Rec& R : M.Recs) LateCuts += R.P.bCut && R.Time > 1.0 ? 1 : 0;
+					if (Back > 1e-9) Fault("%s: the view turned back %.3g m", Name, Back);
+					if (LateCuts) Fault("%s: %d cuts after the lock", Name, LateCuts);
+				}
+			}
+			const double Fast[] = { 300.0, 600.0, 1500.0 };
+			for (double Z : Zooms)
+			{
+				for (double V : Fast)
+				{
+					// a lock on an aircraft much faster than the view: glided onto within GlideLongest, or cut
+					FreeEye::Eye E;
+					auto Plane = [V](int Key, double Bt) { return Key < 0 ? Vec{} : Vec{ -300.0 + V * Bt, 200.0, 900.0 }; };
+					BeginAt(E, Z, Vec{ 0.0, 0.0, 850.0 });
+					Script Sc;
+					Sc.Where = Plane;
+					Sc.Feed = [&Plane](FreeEye::Input& In, FreeEye::Eye&, double Time, double Bt)
+					{
+						In.bLock = Time > 0.3;
+						In.AnchorId = 1;
+						In.Anchor = Plane(1, Bt);
+						In.bAnchorVel = true;
+						In.AnchorVel = Plane(1, Bt + 1.0) - Plane(1, Bt);
+					};
+					Measured M = Fly(E, Sc, K, 24.0);
+					Smoothness(M, Sc, E.Set.FeelArm);
+					double Stray = 0.0, OnAt = -1.0;
+					for (const Rec& R : M.Recs)
+					{
+						if (R.Key < 0) continue;
+						const double Off = (R.Pivot - Plane(1, R.Bt)).Length();
+						Stray = std::max(Stray, Off);
+						if (OnAt < 0.0 && Off < 1.0) OnAt = R.Time;
+					}
+					char Name[96];
+					std::snprintf(Name, sizeof(Name), "lock on %.0f m/s, zoom %.1f %s", V, Z, TimingName(K));
+					char Line[96];
+					std::snprintf(Line, sizeof(Line), "strayed %.0f m, on it at %.1f s", Stray, OnAt);
+					Report(Name, M, Line);
+					GateSmooth(Name, M);
+					if (Stray > E.Set.CutBeyond) Fault("%s: the pivot fell %.0f m behind it (CutBeyond %.0f)", Name, Stray, E.Set.CutBeyond);
+					if (M.Cuts == 0 && !(OnAt > 0.0 && OnAt < E.Set.GlideLongest + 2.0)) Fault("%s: not cut, and on it only at %.1f s", Name, OnAt);
+				}
+			}
+			for (int Side = 0; Side < 3; ++Side)
+			{
+				// an aircraft met head on (dead on, 40 m off), and one locked as it passes through the eye
+				FreeEye::Eye E;
+				const double Off = Side == 1 ? 40.0 : 0.0;
+				auto Plane = [Off, Side](int Key, double Bt)
+				{
+					if (Key < 0) return Vec{};
+					return Side == 2 ? Vec{ Off, -200.0 + 200.0 * Bt, 1000.0 } : Vec{ Off, 700.0 - 200.0 * Bt, 1000.0 };
+				};
+				BeginOn(E, Vec{ 0.0, 0.0, 1000.0 }, 0.0, 5.0, 0.2);
+				const double LockAt = Side == 2 ? 1.0 - E.Arm() * std::cos(5.0 * Rad) / 200.0 : 0.5;
+				Script Sc;
+				Sc.Where = Plane;
+				Sc.Feed = [&Plane, LockAt](FreeEye::Input& In, FreeEye::Eye&, double Time, double Bt)
+				{
+					In.bLock = Time > LockAt;
+					In.AnchorId = 1;
+					In.Anchor = Plane(1, Bt);
+					In.bAnchorVel = true;
+					In.AnchorVel = Plane(1, Bt + 1.0) - Plane(1, Bt);
+					In.AnchorClear = 30.0;
+				};
+				Measured M = Fly(E, Sc, K, 10.0);
+				Smoothness(M, Sc, E.Set.FeelArm);
+				char Name[96];
+				std::snprintf(Name, sizeof(Name), "%s %s", Side == 0 ? "head on, dead on" : Side == 1 ? "head on, 40 m off" : "locked as it passes through the eye", TimingName(K));
+				Report(Name, M);
+				GateSmooth(Name, M);
+				if (M.HardStops) Fault("%s: %d hard stops at its clearance", Name, M.HardStops);
+			}
+			{
+				// let go of a 6 g turn at four times the battle's pace, its speed fed for the end of the frame (half a
+				// frame late for the movement this frame, which the carry must not take up). (A skip to a wingman in
+				// such a turn is no test of smoothness: a glide onto a reference turning at 940 m/s/s is felt at that.)
+				FreeEye::Eye E;
+				auto Turner = [](int Key, double Bt)
+				{
+					if (Key < 0) return Vec{};
+					const double A = 111.0 / 210.0 * Bt;
+					return Vec{ 210.0 * std::sin(A), 210.0 * std::cos(A), 1500.0 };
+				};
+				BeginAt(E, 0.3, Vec{ 0.0, 210.0, 1450.0 });
+				Script Sc;
+				Sc.Where = Turner;
+				Sc.Pace = [](double) { return 4.0; };
+				Sc.Feed = [&Turner](FreeEye::Input& In, FreeEye::Eye&, double Time, double Bt)
+				{
+					In.Frame = Vec{ 0.0, 210.0, 1450.0 };
+					In.bLock = Time < 3.0;
+					In.AnchorId = 1;
+					In.Anchor = Turner(1, Bt);
+					In.bAnchorVel = true;
+					In.AnchorVel = (Turner(1, Bt + 1e-4) - Turner(1, Bt - 1e-4)) * (4.0 / 2e-4);
+				};
+				Measured M = Fly(E, Sc, K, 8.0);
+				Smoothness(M, Sc, E.Set.FeelArm, 1.0);
+				const std::string Name = std::string("let go of a 6 g turn at pace 4, fed ") + TimingName(K);
+				Report(Name, M);
+				GateSmooth(Name, M);
+			}
+			{
+				// a let go on the frame a new frame comes in: its speed measured a frame on, his rest then set by it
+				FreeEye::Eye E;
+				auto Plane = [](int Key, double Bt) { return Key < 0 ? Vec{} : Vec{ 150.0 * Bt, 0.0, 800.0 }; };
+				auto FrameAt = [](double Bt) { return Bt < 4.0 ? Vec{} : Vec{ 0.0, 100.0 * (Bt - 4.0), 0.0 }; };
+				BeginAt(E, 0.4, Vec{});
+				Script Sc;
+				Sc.Where = StillAt;
+				Sc.Feed = [&Plane, &FrameAt](FreeEye::Input& In, FreeEye::Eye&, double, double Bt)
+				{
+					In.Frame = FrameAt(Bt);
+					In.FrameId = Bt < 4.0 ? 0 : 1;
+					In.bLock = Bt < 4.0;
+					In.AnchorId = 1;
+					In.Anchor = Plane(1, Bt);
+				};
+				Measured M = Fly(E, Sc, K, 14.0);
+				Smoothness(M, Sc, E.Set.FeelArm);
+				// (in the new frame he goes on at 150 east and -100 north and comes to rest: never turning back)
+				double Back = 0.0;
+				for (size_t I = 1; I < M.Recs.size(); ++I)
+				{
+					if (M.Recs[I - 1].Bt < 4.0) continue;
+					const Vec D = (M.Recs[I].Pivot - FrameAt(M.Recs[I].Bt)) - (M.Recs[I - 1].Pivot - FrameAt(M.Recs[I - 1].Bt));
+					Back = std::max(Back, -(D.X * 150.0 - D.Y * 100.0) / std::hypot(150.0, 100.0));
+				}
+				char Name[96];
+				std::snprintf(Name, sizeof(Name), "let go as a new frame comes in %s", TimingName(K));
+				char Line[64];
+				std::snprintf(Line, sizeof(Line), "turned back %.3g m", Back);
+				Report(Name, M, Line);
+				GateSmooth(Name, M);
+				if (Back > 1e-9) Fault("%s: the view turned back %.3g m in the new frame", Name, Back);
+				if (M.Cuts) Fault("%s: %d cuts", Name, M.Cuts);
+			}
+			{
+				// a long boom near the ceiling tilted down at once: the tilt waits for the pivot to make room
+				FreeEye::Eye E;
+				E.Set.EyeMost = 1500.0;
+				// (his offset slow, so the pivot is slow to make room)
+				E.Set.GlidePush = 1.0;
+				E.Set.GlideFastest = 0.5;
+				BeginOn(E, Vec{ 0.0, 0.0, 1400.0 }, 0.0, 10.0, 0.6);
+				E.Want(E.Heading(), 89.0 * Rad, 0.75);
+				Script Sc;
+				Sc.Where = StillAt;
+				Sc.Feed = [](FreeEye::Input&, FreeEye::Eye&, double, double) {};
+				Measured M = Fly(E, Sc, K, 10.0);
+				Smoothness(M, Sc, E.Set.FeelArm);
+				char Name[96];
+				std::snprintf(Name, sizeof(Name), "tilted down and out under the ceiling %s", TimingName(K));
+				Report(Name, M);
+				GateSmooth(Name, M);
+				if (M.HardStops) Fault("%s: %d hard stops at the ceiling", Name, M.HardStops);
+			}
+			{
+				// low over a ridge at 130 m/s: the lift looks ahead and climbs before the slope is under the eye
+				struct Ridge : FreeEye::World
+				{
+					double Floor(double X, double) const override { return std::clamp((X - 1500.0) * 0.35, 0.0, 60.0); }
+				};
+				Ridge W;
+				FreeEye::Eye E;
+				auto FrameAt = [](double Bt) { return Vec{ 130.0 * Bt, 0.0, 0.0 }; };
+				BeginOn(E, Vec{ 0.0, 0.0, 8.0 }, 90.0, 20.0, 0.3);
+				Script Sc;
+				Sc.Where = [&FrameAt](int, double Bt) { return FrameAt(Bt); };
+				Sc.Ground = &W;
+				Sc.Feed = [&FrameAt](FreeEye::Input& In, FreeEye::Eye&, double, double Bt) { In.Frame = FrameAt(Bt); };
+				Measured M = Fly(E, Sc, K, 16.0);
+				Smoothness(M, Sc, E.Set.FeelArm);
+				char Name[96];
+				std::snprintf(Name, sizeof(Name), "low over a ridge at 130 m/s %s", TimingName(K));
+				Report(Name, M);
+				GateSmooth(Name, M);
+				if (M.HardLifts) Fault("%s: %d hard lifts", Name, M.HardLifts);
+				if (M.Lowest < 0.9 * E.Set.FloorClear) Fault("%s: the eye came down to %.2f m over the slope (0.9 of FloorClear wanted)", Name, M.Lowest);
+			}
+			const double BoxZooms[] = { 0.3, 0.6 };
+			for (double Z : BoxZooms)
+			{
+				// a frame running at 100 m/s into a fixed box: the pivot is met by his offset, not stopped on the wall
+				FreeEye::Eye E;
+				auto FrameAt = [](double Bt) { return Vec{ 100.0 * Bt, 0.0, 2000.0 }; };
+				BeginAt(E, Z, FrameAt(0.0));
+				Script Sc;
+				Sc.Where = StillAt;
+				Sc.Feed = [&FrameAt](FreeEye::Input& In, FreeEye::Eye&, double, double Bt)
+				{
+					In.Frame = FrameAt(Bt);
+					In.bBox = true;
+					In.BoxMin = Vec{ -5000.0, -5000.0, 0.0 };
+					In.BoxMax = Vec{ 600.0, 5000.0, 6000.0 };
+				};
+				Measured M = Fly(E, Sc, K, 14.0);
+				Smoothness(M, Sc, E.Set.FeelArm);
+				char Name[96];
+				std::snprintf(Name, sizeof(Name), "a frame run into a fixed box, zoom %.1f %s", Z, TimingName(K));
+				Report(Name, M);
+				GateSmooth(Name, M);
+				if (M.HardStops) Fault("%s: %d hard stops on the box", Name, M.HardStops);
+			}
+		}
+	}
+
+	/** Rule 2 under random hands (keys pressed and let go at random, wheel notches, two-finger slides, turns and tilts),
+	 * high in a clear sky over a still frame, twenty minutes a timing: every move is his, so the picture is held to the
+	 * kick all the way, and the ceiling (which his rise and his zoom meet often here) holds by its wants. A ceiling met
+	 * as the pivot's spring comes in sideways may still be stopped by a centimetre or two now and then; more than a
+	 * handful of stops means it is being held by the hard rule again. */
+	void RuleHandsRandom()
+	{
+		for (uint64_t Seed : { 1ULL, 2ULL })
+		{
+			for (Timing K : Timings)
+			{
+				FreeEye::Eye E;
+				BeginAt(E, 0.5, Vec{ 0.0, 0.0, 6000.0 });
+				Lcg R(Seed);
+				FreeEye::Input Held;
+				Script Sc;
+				Sc.Where = StillAt;
+				Sc.Feed = [&R, &Held](FreeEye::Input& In, FreeEye::Eye&, double, double)
+				{
+					if (R.Next() < 0.02)
+					{
+						auto Key = [&R]() { const double V = R.Next(); return V < 0.3 ? -1.0 : V < 0.7 ? 0.0 : 1.0; };
+						Held = FreeEye::Input();
+						Held.PanRight = Key();
+						Held.PanAhead = Key();
+						Held.Rise = Key() * 0.5;
+						Held.Turn = Key() * 3.0;
+						Held.Tilt = Key() * 2.0;
+					}
+					In = Held;
+					In.Frame = Vec{ 0.0, 0.0, 6000.0 };
+					if (R.Next() < 0.03) In.Zoom = R.Next() < 0.5 ? 1.0 : -1.0;
+					if (R.Next() < 0.02)
+					{
+						In.SlideRight = R.In(-0.05, 0.05);
+						In.SlideAhead = R.In(-0.05, 0.05);
+					}
+				};
+				Measured M = Fly(E, Sc, K, 1200.0, Seed + 40);
+				Smoothness(M, Sc, E.Set.FeelArm);
+				char Name[64];
+				std::snprintf(Name, sizeof(Name), "rule 2 random hands seed %d %s", static_cast<int>(Seed), TimingName(K));
+				double Top = -1e9;
+				int AtTop = 0;
+				for (const Rec& Fr : M.Recs)
+				{
+					Top = std::max(Top, Fr.P.Eye.Z);
+					if (Fr.P.Eye.Z > E.Set.EyeMost - 1.0) ++AtTop;
+				}
+				char Line[96];
+				std::snprintf(Line, sizeof(Line), "eye up to %.2f m, %d frames within a metre of EyeMost", Top, AtTop);
+				Report(Name, M, Line);
+				GateSmooth(Name, M);
+				if (M.HardStops > 8) Fault("%s: %d hard stops with no cap moving (a handful at most)", Name, M.HardStops);
+				if (M.Lowest < E.Set.FloorHard - 1e-9) Fault("%s: the eye stood %.3f m over the floor", Name, M.Lowest);
+			}
+		}
+		for (Timing K : Timings)
+		{
+			// his descent held for half a minute onto a flat floor, then his rise for a second: the want stops at the
+			// floor's clearance (it does not sink on under the ground), so the view comes to rest there softly and rises
+			// at once when he lets it.
+			FreeEye::Eye E;
+			BeginAt(E, 0.3, Vec{ 0.0, 0.0, 10.0 });
+			Script Sc;
+			Sc.Where = StillAt;
+			Sc.Feed = [](FreeEye::Input& In, FreeEye::Eye&, double, double) { In.Rise = -1.0; };
+			Measured M = Fly(E, Sc, K, 30.0);
+			const double Rested = M.Recs.back().P.Eye.Z;
+			const double Lifted = E.Lift();
+			Sc.Feed = [](FreeEye::Input& In, FreeEye::Eye&, double, double) { In.Rise = 1.0; };
+			Measured Up = Fly(E, Sc, K, 1.0);
+			M.HardLifts += Up.HardLifts;
+			Smoothness(M, Sc, E.Set.FeelArm);
+			const double Rose = E.Last().Eye.Z - Rested;
+			char Line[96];
+			std::snprintf(Line, sizeof(Line), "rested at %.3f m (lifted %.3f m), then rose %.2f m in a second", Rested, Lifted, Rose);
+			const std::string Name = std::string("rule 9 his descent held into the floor ") + TimingName(K);
+			Report(Name, M, Line);
+			GateSmooth(Name, M);
+			if (M.HardLifts) Fault("%s: %d hard lifts from his own descent", Name.c_str(), M.HardLifts);
+			if (!(Lifted < 0.5)) Fault("%s: the floor's lift held the view up %.2f m (his want sank under the floor)", Name.c_str(), Lifted);
+			if (Rested < E.Set.FloorClear - 0.05 || Rested > E.Set.FloorClear + 0.5) Fault("%s: rested %.3f m over the floor (FloorClear %.1f)", Name.c_str(), Rested, E.Set.FloorClear);
+			if (!(Rose > 3.0)) Fault("%s: rose only %.2f m in a second of his rise (the want sank under the floor)", Name.c_str(), Rose);
+		}
+	}
 }
 
 int main()
@@ -1617,6 +2777,18 @@ int main()
 	RuleRobust();
 	AirBattle();
 	SeaBattle();
+	RuleHandsExact();
+	RuleSpringCurves();
+	RuleGlideEnd();
+	RuleLiftCurve();
+	RuleBeginEdges();
+	RuleEdges();
+	RuleFrames();
+	RuleCutsClean();
+	RuleRideMore();
+	RuleCapsMore();
+	RuleCarries();
+	RuleHandsRandom();
 	std::printf("%d fault%s\n", Faults, Faults == 1 ? "" : "s");
 	return std::min(Faults, 100);
 }

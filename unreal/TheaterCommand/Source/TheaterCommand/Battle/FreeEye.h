@@ -30,19 +30,25 @@
  * never a jump. The picture is held to a kick of 1,200 degrees a second squared: the look's own turning, and the eye's
  * acceleration seen from max(Arm, FeelArm) away (|accel| / max(Arm, FeelArm)), measured against the reference's own
  * movement. When he locks on, skips to another aircraft or lets go, the view is carried: where the pivot is and how
- * fast it goes in the world are kept across the change, and it then glides onto the new reference; only a change too
- * far to glide (CutBeyond) or a thing that jumped (TeleportBeyond) is a cut, and Pose.bCut says so on that one frame.
+ * fast it goes in the world are kept across the change (its speed the pivot's own over the last frame), and it then
+ * glides onto the new reference; let go, it comes to rest where that speed braked at the glide's push takes it, and
+ * never turns back. Only a change too far to glide (CutBeyond, GlideLongest, or an eye whose glide would pass inside
+ * the anchor's clearance) or a thing that jumped (TeleportBeyond) is a cut, and Pose.bCut says so on that one frame.
  *
  * The caps (tilt, boom, the ceiling EyeMost, the pivot's box, the anchor's clearance) are put on what he WANTS, so the
  * springs come to rest at a cap softly; a hard stop on the frame itself is only the last guard, for a cap that moved
- * (a ship heaving, a box sliding) or two eased moves meeting one together. Where two caps cannot both hold, the higher
- * wins: the floor, then the ceiling, then the anchor's clearance, then the box. The anchor's clearance is kept by the
- * boom's length: where the eye's way from where it is to where it comes to rest would pass nearer the anchor than
+ * (a ship heaving, a box sliding, a ceiling the reference's steadied heave carries the eye against: centimetres) or a
+ * cut placed against one. One more, small: his offset's spring coming in on a ceiling-held height while it also moves
+ * sideways (a pan with a rise) can run a centimetre or two past it, which the ceiling then stops (in twenty minutes
+ * of random hands, none to a dozen frames, at most some 3 cm). Where two caps cannot both hold, the higher wins: the
+ * floor, then the ceiling, then the anchor's clearance, then the box. The anchor's clearance is kept by the boom's
+ * length: where the eye's way from where it is to where it comes to rest would pass nearer the anchor than
  * AnchorClear (a short boom gliding onto a new ship), the boom's goal is made just long enough, and comes back in to
  * his own zoom as the pivot arrives (pushed off her every frame instead, the eye would slide round her with a jolt).
- * Two places the hard rules hold the view rather than the springs, by the geometry: a long boom swung under the floor
- * (its end flung at the ground faster than any lift climbs), and looking straight up at a ship from the water (under
- * her the eye is either in the sea or inside her clearance).
+ * Two places the hard rules act on most frames, by the geometry: a long boom swung under the floor (its end flung at
+ * the ground faster than any lift climbs), and looking straight up at a ship from the water (under her the eye is
+ * either in the sea or inside her clearance, and her heave moves that cap every frame); the picture is held to the
+ * kick there all the same.
  *
  * Headings as everywhere in the cores: radians, 0 north, clockwise seen from above. Axes: X east, Y north, Z up,
  * metres. Tilt + looks down on the pivot, - looks up at it from below. The same inputs give the same outputs bit for
@@ -97,12 +103,8 @@ namespace FreeEye
 		/** How fast the springs catch up (a critically damped spring's rate, 1/s): his offset (pan, rise, slide, and
 		 * the glide onto a new reference), the zoom, the turn and the tilt. */
 		double Ease = 8.0, ZoomEase = 8.0, TurnEase = 10.0, TiltEase = 8.0;
-		/** The turn's and the tilt's fastest swing and hardest push, degrees a second and a second squared. The turn is
-		 * 120 and 400, not the 140 and 500 first asked: a turn of 140 deg/s at the hardest push of 500 swings the eye
-		 * at the boom's end by 842 deg/s/s of the picture alone (push plus the swing's own pull inward, 8.7 + 6.0 per
-		 * second squared), and with a pan of his offset at its own hardest (344) that is over the 1,200 the picture is
-		 * held to; at 120 and 400 the two together come to about 1,000. */
-		double TurnFastest = 120.0, TurnPush = 400.0, TiltFastest = 70.0, TiltPush = 260.0;
+		/** The turn's and the tilt's fastest swing and hardest push, degrees a second and a second squared. */
+		double TurnFastest = 140.0, TurnPush = 500.0, TiltFastest = 70.0, TiltPush = 260.0;
 		/** The zoom's fastest swing and hardest push, shares of the whole zoom a second and a second squared. The boom's
 		 * length is on a log scale of ln(4000) = 8.3 across the zoom, so 0.5 a second (the first asked) is a boom
 		 * growing 63 times a second, the eye flung back at 1,750 deg/s/s of its own distance; 0.25 and 0.8 hold the
@@ -119,14 +121,20 @@ namespace FreeEye
 		double GlideFastest = 3.0, GlidePush = 6.0;
 		/** A lock whose pivot would come to rest further than this from where it is now is a cut, not a glide (a glide
 		 * across the whole battle tells him nothing); the same anchor moved further than TeleportBeyond (plus three
-		 * frames of its own speed) in one frame jumped, and the view cuts with it. Metres. */
+		 * frames of its own speed) in one frame jumped, and the view cuts with it; the frame stepped as far (or, on the
+		 * first frame after Begin, that far from Begin's) is a new frame, carried, as a new FrameId is. Metres. */
 		double CutBeyond = 3000.0, TeleportBeyond = 200.0;
+		/** A lock whose glide would take longer than this, seconds, is a cut too (added to the specification's numbers):
+		 * the glide is held to max(Arm, FeelArm), so on the drone's short boom a lock 3 km off, or on an aircraft some
+		 * hundreds of metres a second faster than the view, would crawl onto it for a minute or more. */
+		double GlideLongest = 15.0;
 		/** Air and sea: his pan and rise move him about inside the anchor's moving frame and the lock holds (he drifts
 		 * through the bomber stream; he sits off a ship's bow as she steams). False (a ground-style scene): a pan lets go
 		 * first. Zoom, turn and tilt never let go. */
 		bool bPanKeepsLock = true;
 		/** While locked, the anchor's height followed through a low-pass of this time constant, seconds, so a ship's
-		 * heave does not bob the picture; 0 off. X and Y are always followed exactly. */
+		 * heave does not bob the picture; 0 off. X and Y are always followed exactly. A first-order low-pass: of an 8 s
+		 * heave, 3 s passes 39% (6 s: 21%, 10 s: 13%). */
 		double SteadyZ = 0.0;
 		/** The VERTICAL lens, degrees, at the nearest zoom and the farthest. */
 		double FovNear = 44.0, FovFar = 50.0;
@@ -138,7 +146,8 @@ namespace FreeEye
 		 * hardest push, a share of max(Arm, FeelArm) a second squared (344 degrees of the picture). LiftPush is added to
 		 * the specification's numbers: an unheld lift met a 12 m swell with a jolt of some 28,000 deg/s/s. A goal that
 		 * climbs is led by the spring's own lag at that rate (no more than FloorClear), so a crest rising under him at
-		 * 4 m/s is met at FloorClear and not a metre under it. */
+		 * 4 m/s is met at FloorClear and not a metre under it. His own descent (Rise) is held where the eye he wants
+		 * stands FloorClear over the floor under it, so it comes to rest there softly instead of the lift chasing it. */
 		double LiftRise = 12.0, LiftSettle = 3.0, LiftPush = 6.0;
 		/** Where the lift looks for the floor: round the eye this far, metres, and ahead along the pivot's movement this
 		 * long, seconds, so a crest coming on or a rise the view flies at is met before it is under the eye. Added to the
@@ -176,7 +185,9 @@ namespace FreeEye
 		Vec AnchorVel;
 		double AnchorHeading = 0.0;
 		bool bRide = false;
-		/** The reference while nothing is locked, fed every frame; a new FrameId is a new frame (carried, not cut). */
+		/** The reference while nothing is locked, fed every frame; a new FrameId is a new frame (carried, not cut). The
+		 * scene gives a new FrameId whenever the frame shifts rather than moves (a group joining the raid moves its
+		 * middle): a step under TeleportBeyond with the same id is ridden as the frame's own movement. */
 		Vec Frame;
 		int FrameId = 0;
 		/** Let go of the lock (the scene may also just stop sending bLock). After a let go the lock takes again only on
@@ -206,8 +217,11 @@ namespace FreeEye
 		Settings Set;
 
 		/** From a camera as it stands (the director's shot when he takes the free camera): heading and tilt from the
-		 * direction, the boom the distance (held to its range), the pivot on the line of sight; no jump on the first
-		 * frame. Nothing is locked; the reference is Frame. */
+		 * direction, the boom the distance (held to its range), the pivot on the line of sight; the first frame is the
+		 * shot exactly (a tilt past its range, straight down or up, eases into the range from the next), whatever this
+		 * eye did before. Only a shot under FloorHard over the floor or over EyeMost is moved (lifted clear, or let down
+		 * under the ceiling) on that first frame, which then says it is a cut. Nothing is locked; the reference is Frame,
+		 * which the first Update's Frame is to continue. */
 		void Begin(const Vec& EyeAt, const Vec& LookAt, const Vec& Frame);
 		/** One frame. RealDt in real seconds (held to 0..0.25: a longer hitch moves the view no further than a quarter
 		 * second would, so a stall never flings it). InWorld may be null (then Settings::FloorFlat). */
@@ -238,7 +252,7 @@ namespace FreeEye
 		/** The floor's lift now, metres. */
 		double Lift() const { return LiftZ; }
 		/** How many cuts, how many frames the floor had to put the eye clear at once (the lift could not climb in time),
-		 * and how many frames a cap stopped the view hard (it moved, or two eased moves met it together). */
+		 * and how many frames a cap stopped the view hard (it moved; or the centimetre or two above). */
 		int Cuts() const { return CutCount; }
 		int HardLifts() const { return HardLiftCount; }
 		int HardStops() const { return HardStopCount; }
@@ -269,10 +283,17 @@ namespace FreeEye
 		/** A new reference whose speed was not known on its first frame: it is measured on the next and the carry made
 		 * good then (bCoast: the change was a let go, whose rest place moves with it). */
 		bool bMeasureNext = false, bCoast = false;
-		/** The frame's last good place and id, and the last frame's lock input (a lock takes on its rise). */
-		Vec FrameLast;
+		/** The frame's last good place, id and speed, and the last frame's lock input (a lock takes on its rise). */
+		Vec FrameLast, FrameVelLast;
 		int FrameIdLast = 0;
-		bool bFrameIdKnown = false;
+		bool bFrameIdKnown = false, bFrameVelKnown = false;
+		/** The pivot (without the lift) at the end of the last frame and its speed over that frame, the speed a change of
+		 * reference carries; not good across a cut or a hard stop. */
+		Vec PivotEnd, ChordVel;
+		bool bPivotEndGood = false, bChordGood = false;
+		/** The first frame after Begin (the director's shot exactly), and whether that shot stood over the ceiling (let
+		 * down under it, a cut). */
+		bool bFirst = false, bBeginCut = false;
 		bool bInLockLast = false;
 		int InIdLast = -1;
 		Pose Now;
