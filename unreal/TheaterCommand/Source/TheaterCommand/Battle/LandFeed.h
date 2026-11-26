@@ -521,11 +521,14 @@ namespace LandFeed
 		 * END, and the rules fight nothing more until he answers, 2 the winner fights on. AfterBroke and AfterWinner: the
 		 * side that broke and the side that holds the field (0 the attacker, 1 the defender; -1 none). AfterAt: the
 		 * break's battle second (never before it). AfterBrokeName and AfterWinnerName: those two armies as the rules name
-		 * them ("The German army"), for the screen's line. As the last view read has them.
+		 * them ("The German army"), for the screen's line. AfterUntil: the battle second the pursuit ends at the latest,
+		 * where the rules give it (the row's "until", the pursuit's own clock); 0 where they do not: the day's limit.
+		 * As the last view read has them.
 		 */
 		int After = 0;
 		int AfterBroke = -1, AfterWinner = -1;
 		double AfterAt = 0.0;
+		double AfterUntil = 0.0;
 		std::string AfterBrokeName, AfterWinnerName;
 		/** The craters' numbers already read (the views repeat them). */
 		std::set<int> CraterIds;

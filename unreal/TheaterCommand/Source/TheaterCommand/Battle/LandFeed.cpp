@@ -1012,6 +1012,7 @@ namespace LandFeed
 				R.AfterBroke = SideOf(AfterRow["side"].Str(""));
 				R.AfterWinner = SideOf(AfterRow["winner"].Str(""));
 				R.AfterAt = AfterRow["t"].Num(R.Views.back().T);
+				R.AfterUntil = AfterRow["until"].Num(0.0);
 				R.AfterBrokeName = AfterRow["broke"].Str("");
 				R.AfterWinnerName = AfterRow["by"].Str("");
 			}

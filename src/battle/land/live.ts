@@ -346,6 +346,8 @@ export interface LiveOpts {
    * continue on with the battle or end it"; the rules' sim.pursue): on only where true.
    */
   pursue?: boolean;
+  /** With pursue: the pursuit's own clock, a day's length from the break at the latest (the rules' sim.pursueLate): on only where true. */
+  pursueLate?: boolean;
   patrol?: boolean;
   /**
    * Looks the player can switch off on the Battle rules card (release 2; Brian, 23 November 01:11Z "Do all of these"):
@@ -569,6 +571,7 @@ export class LiveBattle {
     if (opts.phones !== false) sim.phones = true;
     if (opts.bearers !== false) sim.bearers = true;
     if (opts.pursue === true) sim.pursue = true;
+    if (opts.pursue === true && opts.pursueLate === true) sim.pursueLate = true;
     if (opts.stand === true) sim.standRule = true;
     // ("facing" works only with "stand" on: the design director, 26 November 01:02Z.)
     if (opts.facing === true && opts.stand === true) sim.faceRule = true;

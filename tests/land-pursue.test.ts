@@ -184,12 +184,52 @@ describe('fighting on after the break (pursue)', () => {
       expect(o.lines[1]).toMatch(/^Your army pursued (the|their) .*army for (half a minute|a minute( and a half)?|\w+( and a half)? minutes) (but did it no more harm|and cost it [\d,]+ more men, (about \d+%|less than 1%) of its strength|and cost it (about \d+%|less than 1%) more of its strength)\.$/);
       if (o.pursued!.took >= 1e-4 && o.pursued!.men >= 1) expect(o.lines[1]).toContain(` ${o.pursued!.men.toLocaleString('en-GB')} more men, `);
       expect(o.lines.some((l) => l.includes('counting the rout and the pursuit'))).toBe(c.off.lines.some((l) => l.includes('counting the rout')));
-      // And its last dispatch, by how it ended (none where the pursuers were spent).
+      // And its last dispatch, by how it ended.
       const said = sim.log.filter((e) => e.what === 'land:pursuit').map((e) => e.text);
       if (o.pursued!.ended === 'time') expect(said[said.length - 1]).toBe('The day is done, and the pursuit with it.');
       if (o.pursued!.ended === 'left') expect(said[said.length - 1]).toMatch(/^The last of (the|their) .*army has left the field\.$/);
+      if (o.pursued!.ended === 'spent') expect(said[said.length - 1]).toBe('Your army can pursue no further, and the pursuit ends.');
       // (a block that had fled before the break was not on the field at it)
       for (const u of goneBefore) expect(['gone', 'withdrawn']).toContain(u.state);
+    }
+  });
+
+  it('with the pursuit\'s own clock (pursueLate) it may run past the day\'s, and ends a day\'s length from the break at the latest', () => {
+    // The design director, 26 November 2026, 18:04Z: the latest end is the break plus the ticket's own limit, both
+    // sides alike, no new figure; off, the day's clock ends it as first built.
+    for (const c of CASES) {
+      const day = open(c.key, c.seed, c.winner, true);
+      run(day, asked);
+      expect(day.afterView().after!.until).toBeUndefined();
+      day.command({ do: 'land:pursue' } as Command, c.winner);
+      run(day);
+      const late = open(c.key, c.seed, c.winner, true);
+      late.pursueLate = true;
+      run(late, asked);
+      const until = late.aftermath!.t + late.ticket.limit;
+      expect(late.aftermath!.t).toBeCloseTo(day.over!.pursued!.at, 1);
+      expect(late.afterView().after).toMatchObject({ phase: 'ask', until: Math.round(until * 100) / 100 });
+      late.command({ do: 'land:pursue' } as Command, c.winner);
+      run(late);
+      const o = late.over!;
+      expect(o).not.toBeNull();
+      expect(o.winner).toBe(c.off.winner);
+      expect(o.how).toBe('rout');
+      expect(o.pursued).toBeDefined();
+      expect(late.t).toBeLessThanOrEqual(until + 1);
+      // Where the day's clock cut the pursuit short, its own clock lets it run on: to the field's own end, or to a
+      // day's length from the break.
+      if (day.over!.pursued!.ended === 'time') {
+        expect(late.t).toBeGreaterThanOrEqual(day.t);
+        if (o.pursued!.ended === 'time') {
+          expect(late.t).toBeGreaterThanOrEqual(until - 1);
+          const said = late.log.filter((e) => e.what === 'land:pursuit').map((e) => e.text);
+          expect(said[said.length - 1]).toBe('The pursuit has run its course.');
+        }
+      } else {
+        // (ended by the field before the day's clock: the same battle either way)
+        expect(JSON.stringify(o)).toBe(JSON.stringify(day.over));
+      }
     }
   });
 

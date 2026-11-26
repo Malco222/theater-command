@@ -1523,16 +1523,21 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		const bool bPursuingNow = S.Rec.After == 2 && S.Rec.AfterWinner == S.Rec.Me;
 		const bool bPursuedNow = S.Rec.After == 2 && S.Rec.AfterBroke == S.Rec.Me;
 		const FSlateFontInfo AfterFace = Serif(TEXT("Regular"), 13.0f);
-		// (the day's clock ends a pursuit, so while one runs the line says how long the day has left)
-		const int32 DayLeft = FMath::Max(0, static_cast<int32>(FMath::CeilToDouble(S.Rec.Limit - S.Battle)));
+		// (the day's clock ends a pursuit, so while one runs the line says how long the day has left; where the rules
+		// give the pursuit a clock of its own, the row's "until", how long that has left)
+		// (her words for that case, 18:12Z: "at the latest", since the field's own ends can come first)
+		const bool bOwnClock = S.Rec.AfterUntil > 0.0;
+		const int32 DayLeft = FMath::Max(0, static_cast<int32>(FMath::CeilToDouble((bOwnClock ? S.Rec.AfterUntil : S.Rec.Limit) - S.Battle)));
 		// (the army that broke opens its line as the rules name it; the one that pursues stands inside its line, so its
 		// first letter goes small: "the German army")
 		const FString BrokeName = S.Rec.AfterBrokeName.empty() ? FString(TEXT("The enemy army")) : Wide(S.Rec.AfterBrokeName);
 		FString ByName = S.Rec.AfterWinnerName.empty() ? FString(TEXT("the enemy army")) : Wide(S.Rec.AfterWinnerName);
 		ByName = ByName.Left(1).ToLower() + ByName.Mid(1);
 		const FString AfterWord = bAskedNow ? FString::Printf(TEXT("%s has broken. Pursue it, or end the battle now. The clock stands until you choose."), *BrokeName)
-			: bPursuingNow ? FString::Printf(TEXT("Your army pursues. The day ends in %d:%02d."), DayLeft / 60, DayLeft % 60)
-			: bPursuedNow ? FString::Printf(TEXT("Your army has broken and falls back to your own edge of the field, with %s in pursuit. The day ends in %d:%02d."), *ByName, DayLeft / 60, DayLeft % 60) : FString();
+			: bPursuingNow ? (bOwnClock ? FString::Printf(TEXT("Your army pursues. The pursuit ends in %d:%02d at the latest."), DayLeft / 60, DayLeft % 60)
+				: FString::Printf(TEXT("Your army pursues. The day ends in %d:%02d."), DayLeft / 60, DayLeft % 60))
+			: bPursuedNow ? (bOwnClock ? FString::Printf(TEXT("Your army has broken and falls back to your own edge of the field, with %s in pursuit. The pursuit ends in %d:%02d at the latest."), *ByName, DayLeft / 60, DayLeft % 60)
+				: FString::Printf(TEXT("Your army has broken and falls back to your own edge of the field, with %s in pursuit. The day ends in %d:%02d."), *ByName, DayLeft / 60, DayLeft % 60)) : FString();
 		double AfterY = 76.0;
 		if (!AfterWord.IsEmpty())
 		{
