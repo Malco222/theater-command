@@ -108,6 +108,10 @@ struct FAirBattleState
 	AirDesk::Flyover Fly;
 	/** The strategy camera's look and framing, flying smooth (AirShow::Show::SetSmooth; AAirBattle::AimEye). */
 	AirDesk::Overview Over;
+	/** The Battle rules card's "The raid camera holds steady" (FLandLive's rule "flySteadyEye", off until the Mac and the
+	 * art director pass it), read once as the battle opens: on, and flying smooth, the strategy camera is Over's;
+	 * off, AimEye's as it was (30899121's), to the byte. */
+	bool bSteadyEye = false;
 	bool bFlying = false;
 	bool bFlyTried = false;     // looked for once, when the battle's first groups stand
 	double FlyT = 0.0;

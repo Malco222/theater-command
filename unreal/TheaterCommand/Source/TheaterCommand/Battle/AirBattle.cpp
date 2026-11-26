@@ -659,6 +659,14 @@ static bool AirOldFlying()
 	return bAsked;
 }
 
+// (release 2: Brian, 26 November 2026 04:11Z, "the bombing video camera is super choppy") The Battle rules card's "The
+// raid camera holds steady" (FLandLive's rule "flySteadyEye"; -TheaterAirSteadyEye on, -TheaterAirNoSteadyEye off), read
+// once as a battle opens. On, and flying smooth, the strategy camera is AirDesk::Overview's (AimEye); off, as it was.
+static bool SteadyEyeOn()
+{
+	return FLandLive::RuleNow(TEXT("flySteadyEye"));
+}
+
 void AAirBattle::ReplayWhenReady(const FString& Key)
 {
 	PendingReplay = Key;
@@ -705,6 +713,7 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	S.Show = AirShow::Show(S.Recording.Seed ? S.Recording.Seed : 238);
 	AirFeed::Apply(S.Board, S.Show);
 	S.Show.SetSmooth(!AirOldFlying());
+	S.bSteadyEye = SteadyEyeOn();
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, S.Recording.Views.front().Groups, S.Recording.Seed);
 	S.Desk.Begin(S.Board, S.Recording.Views.front().Head.Me);
 	S.Card = S.Desk.CardOf(S.Recording.Card);
@@ -757,6 +766,7 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	::UnitTable::SetMonth(S.Board.Year, S.Board.Month + 1); // (its aircraft wear the paint of its month; the feed's months count from 0)
 	AirFeed::Apply(S.Board, S.Show);
 	S.Show.SetSmooth(!AirOldFlying());
+	S.bSteadyEye = SteadyEyeOn();
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, First.Groups, 0);
 	S.Desk.Begin(S.Board, First.Head.Me);
 	// (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable". With the Battle
@@ -6736,8 +6746,8 @@ void AAirBattle::AimEye(double Real)
 			Lens->PostProcessSettings.bOverride_MotionBlurAmount = true;
 			Lens->PostProcessSettings.MotionBlurAmount = 0.12f;
 			// (flying smooth, the strategy camera starts afresh when it is back, a cut: the aircraft it went with have
-			// flown on meanwhile, AirDesk::Overview)
-			if (S.Show.Smooth())
+			// flown on meanwhile, AirDesk::Overview; only with the raid camera row on, S.bSteadyEye: off, as it was)
+			if (S.Show.Smooth() && S.bSteadyEye)
 			{
 				bLookSet = false;
 			}
@@ -6790,9 +6800,10 @@ void AAirBattle::AimEye(double Real)
 	double CrowdSpan = 0.0;
 	// (flying smooth: its rings soft, the look going with the aircraft it is on, the framing by their mean span, all of
 	// it AirDesk::Overview's, which Tools/air_show/air_smooth_probe --shake plays as here; the hard rings jumped the
-	// whole picture each time an aircraft crossed one, Brian's "the bomber is shaking", 25 November 13:27Z)
+	// whole picture each time an aircraft crossed one, Brian's "the bomber is shaking", 25 November 13:27Z; only with
+	// the raid camera row on, S.bSteadyEye: off, the hard rings below as they were, to the byte)
 	double OverAway = -1.0;
-	if (S.Show.Smooth())
+	if (S.Show.Smooth() && S.bSteadyEye)
 	{
 		const AirDesk::Overview::Aim OverAim = S.Over.Step(S.Show.Planes(), Picked, Real, FocusAnchor, !bLookSet);
 		if (OverAim.bFound)
@@ -7079,7 +7090,7 @@ void AAirBattle::AimEye(double Real)
 	// (the look carried with the crowd as it moves, and only a jump to another crowd eased: eased all the way, at the
 	// clock's x10 the look trailed the raid by a kilometre and more, and the strategy pictures before the meeting showed
 	// empty sky, the art director on 2b177386's Pearl 01, Midway 01 and Bremen 01, 22 November 04:16Z)
-	if (bLookSet && !bOnShip && !bOnGuns && !bOnChutes && S.Show.Smooth())
+	if (bLookSet && !bOnShip && !bOnGuns && !bOnChutes && S.Show.Smooth() && S.bSteadyEye)
 	{
 		// (flying smooth: carried with the aircraft it is on and eased on to the rest, AirDesk::Overview::Look; in the
 		// show's metres, Wanted being World(Focus) here)

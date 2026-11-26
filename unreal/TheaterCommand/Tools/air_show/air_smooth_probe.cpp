@@ -137,6 +137,9 @@ namespace
 //    of the frames, or than the old camera's share.
 // AIR_SMOOTH_OLD=1 flies it as release 1.5 did, with the strategy camera as it was, and reports only; its report is
 // the same, to the byte, as the release 2 build's before this check (Tools/air_show/data/shake-old-30899121.txt, run.sh).
+// The Battle rules card's rows, as a battle reads them when it opens (each on unless set to 0): AIR_SMOOTH_EYE=0, "The
+// raid camera holds steady" off, the scene's eye the strategy camera as it was (both cameras are measured either way;
+// run.sh holds its report to data/shake-eye-off-2464374bb.txt).
 //
 // Usage: air_smooth_probe --shake <recording.json> <frames: 60|mac|N> <speed: 1|4|10|game|b1:T> <views: replay|live|late>
 //                         [from battle s] [to battle s] [seed, 1]
@@ -488,6 +491,9 @@ namespace Shake
 		AirFeed::Apply(Rec.Board, Show);
 		const bool bOld = std::getenv("AIR_SMOOTH_OLD") != nullptr;
 		Show.SetSmooth(!bOld);
+		// (the Battle rules card's rows, as a battle reads them when it opens; each on unless set to 0 here: the raid
+		// camera, "flySteadyEye", AIR_SMOOTH_EYE=0 the scene's eye the strategy camera as it was (both are measured))
+		const bool bEyeRow = !std::getenv("AIR_SMOOTH_EYE") || std::string(std::getenv("AIR_SMOOTH_EYE")) != "0";
 		Show.Eye = AirShow::Vec(Rec.Board.TargetX, Rec.Board.TargetY - 6000.0, 5000.0);
 		const std::shared_ptr<const AirGround::BoardLand> BoardGround =
 			Rec.Board.StageKey.empty() ? std::make_shared<const AirGround::BoardLand>(Rec.Board.Land) : std::shared_ptr<const AirGround::BoardLand>();
@@ -597,7 +603,7 @@ namespace Shake
 			}
 			if (Smooth.Now.bValid || Before.Now.bValid)
 			{
-				const V3 E = (bOld ? Before : Smooth).Now.At;
+				const V3 E = (bOld || !bEyeRow ? Before : Smooth).Now.At;
 				Show.Eye = Board(E);
 			}
 			Show.Advance(BattleT);
@@ -687,7 +693,7 @@ namespace Shake
 
 		// ---- the reckoning ----
 		std::printf("%s | frames %s, clock %s, views %s%s, battle %.0f to %.0f s | %d frames over %.1f real s\n", Path.substr(Path.find_last_of('/') + 1).c_str(), FrameKind.c_str(), SpeedKind.c_str(),
-			FeedKind.c_str(), bOld ? ", flown as release 1.5 (AIR_SMOOTH_OLD)" : "", From, EndT, Frame, Wall);
+			(FeedKind + (bOld ? ", flown as release 1.5 (AIR_SMOOTH_OLD)" : "") + (!bOld && !bEyeRow ? ", the raid camera's row off (AIR_SMOOTH_EYE=0)" : "")).c_str(), "", From, EndT, Frame, Wall);
 		std::map<std::tuple<std::string, int, int>, Cell> Cells; // (model, doing, pace)
 		std::map<std::string, BoxRow> Boxes;
 		std::map<std::pair<std::string, int>, Cell> InBox; // (model, pace): a bomber in her box all the 1.5 s about it

@@ -55,6 +55,19 @@ if ! { AIR_SMOOTH_OLD=1 "$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.j
   echo "FAIL: flown as release 1.5 (AIR_SMOOTH_OLD=1), air_smooth_probe --shake's report is not data/shake-old-30899121.txt's"
   STATUS=1
 fi
+# The Battle rules card's "The raid camera holds steady" (flySteadyEye; Brian, 26 November 2026 04:11Z: "the bombing
+# video camera is super choppy"), off until the Mac and the art director pass it: off, the scene's eye is the strategy
+# camera as it was (AimEye's hard rings, 30899121's) and nothing else changes. With its row off (AIR_SMOOTH_EYE=0) the
+# report must be, to the byte, what 2464374bb's own Battle files give with the scene's eye on the old camera
+# (data/shake-eye-off-2464374bb.txt: the raid's minute at 60 frames x1 and on a Mac's frames x4, and Bremen's B-17s at
+# 60 frames x1, replayed). Both cameras are measured either way; the game's own gates are in AimEye.
+if ! { AIR_SMOOTH_EYE=0 "$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.json" 60 1 live 200 260;
+       AIR_SMOOTH_EYE=0 "$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.json" mac 4 live 200 260;
+       AIR_SMOOTH_EYE=0 "$OUT/air_smooth_probe" --shake "$ROOT/Content/Data/AirBattles/bremen-b17.json" 60 1 replay; } |
+     cmp -s - "$HERE/data/shake-eye-off-2464374bb.txt"; then
+  echo "FAIL: with the raid camera's row off (AIR_SMOOTH_EYE=0), air_smooth_probe --shake's report is not data/shake-eye-off-2464374bb.txt's"
+  STATUS=1
+fi
 # A raid on troops (Battle/AirMarks, Battle/AirShowTroops; Brian, 24 November 2026: "if a bomber group is bombing troops
 # instead of a factory or town and they get intercepted than i want that playable"): every hit on a piece of the column
 # shown once as its bomb or rounds arrive, every other bomb clear of every piece, the strafing pass within the flight's
