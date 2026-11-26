@@ -2266,9 +2266,19 @@ namespace
 					Q[K] = ToWorld(P, Vec(Faces[F][K][0] ? Hi.X : Lo.X, Faces[F][K][1] ? Hi.Y : Lo.Y, Faces[F][K][2] ? Hi.Z : Lo.Z));
 				}
 				const double Shaded[3] = { Col[0] * Shades[F], Col[1] * Shades[F], Col[2] * Shades[F] };
-				const Vec T1[3] = { Q[0], Q[1], Q[2] }, T2[3] = { Q[0], Q[2], Q[3] };
-				Solid(C, Cam, T1, Shaded, 0);
-				Solid(C, Cam, T2, Shaded, 0);
+				// (in tiles of at most 4 m: Solid drops a triangle with a corner behind the eye, and the eye stands on her deck)
+				const int Nu = std::clamp(static_cast<int>(std::ceil((Q[1] - Q[0]).Length() / 4.0)), 1, 200);
+				const int Nv = std::clamp(static_cast<int>(std::ceil((Q[3] - Q[0]).Length() / 4.0)), 1, 200);
+				auto At = [&](int U, int V) { const double A = static_cast<double>(U) / Nu, Bv = static_cast<double>(V) / Nv; return Q[0] + (Q[1] - Q[0]) * A + (Q[3] - Q[0]) * Bv + (Q[2] - Q[1] - Q[3] + Q[0]) * (A * Bv); };
+				for (int U = 0; U < Nu; ++U)
+				{
+					for (int V = 0; V < Nv; ++V)
+					{
+						const Vec T1[3] = { At(U, V), At(U + 1, V), At(U + 1, V + 1) }, T2[3] = { At(U, V), At(U + 1, V + 1), At(U, V + 1) };
+						Solid(C, Cam, T1, Shaded, 0);
+						Solid(C, Cam, T2, Shaded, 0);
+					}
+				}
 			}
 		};
 		const double Hull[3] = { 0.075, 0.085, 0.095 }, DeckCol[3] = { 0.09, 0.085, 0.075 }, Works[3] = { 0.11, 0.12, 0.13 };

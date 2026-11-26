@@ -2180,6 +2180,8 @@ in `/mnt/project-files/effects-r2/seam/sea/` (README there: every call letter fo
 - Tests: `unreal/TheaterCommand/Tools/fx_sea/run.sh` (g++ and clang++, the strict flags, `-ffp-contract=off`), every
   part with its controls, and no draw on the battle's shared seed. The cost lines are kept out of the compilers'
   comparison.
-- Preview: `./fxpreview recipe.txt out deck <drench|wash|lane|brass|haze> <frames> [WxH]` (see `Deck` at the top of
-  `fxpreview.cpp`). For the haze, append the flattened `fx-sea-haze.json` to the recipe:
+- Preview: `./fxpreview recipe.txt out deck <drench|wash|lane|brass|haze> <frames> [WxH]` (see `Deck` in
+  `fxpreview.cpp`; `FX_EYE=x,y,z` and `FX_AT=x,y,z` place the eye in her frame, `FX_FLEET` the haze's ships). The
+  calibre ladder: `./fxpreview recipe.txt out ladder sea 0`. The stills of release 2 (b_drench, b_wash, b_oil_lane,
+  b_brass, b_aa_haze) and the commands that made them: `/mnt/project-files/effects-r2/tickets/ten-b-ticket.md`. For the haze, append the flattened `fx-sea-haze.json` to the recipe:
   `cat <(python3 flatten.py ../fx.json) <(python3 flatten.py ../fx-sea-haze.json)`.
