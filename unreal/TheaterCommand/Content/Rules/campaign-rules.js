@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 38f50824 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6ccad44e 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -68861,6 +68861,12 @@
       rise: 0.8,
       pace: [3.4, 4.6]
     },
+    wounded: {
+      _about: "Wounded and knocked-down men (release 2; Brian, 25 November 2026, 16:14Z: 'im not seeing multiple soliders being taken out by an explosion if they are in the blast radius'). Looks only (ruling 217), the drill's own dice; the rules' losses stay as booked; on only where asked (Drill wounded: the 3D game's switch)."
+    },
+    paces: {
+      _about: "Every man his own pace (release 2; Brian, 25 November 2026, 17:30Z: 'it looks like they are all jogging at the same speed'; 16:24Z: 'the soldiers of a squad keep zig zaging at the same time'). Looks only (ruling 217), the drill's own dice; the rules never read it; on only where asked (Drill paces: the 3D game's switch, off until a Mac off/on line and the art director pass it). The numbers are laid here by the build."
+    },
     hatch: {
       _about: "Heads up, hatches down (release 2; Brian, 25 November 2026, 15:11Z: 'do those 3 ideas'). Looks only (ruling 217), the drill's own dice; on only where asked (Drill hatches: the 3D game's switch). A tank's commander rides with his head out of his hatch, for the view, until something sends him down: a round at his own tank, a shell bursting within 'burst' metres of her, or the enemy within his own nerve of it: 'near' metres by his crew's experience [raw, regular, veteran], each commander his own share 'own' [least, most] of it. He drops inside 'drop' seconds [least, most] after the first of it (times 'quick' by experience: a veteran is down at once) and comes up again once nothing has troubled him for 'quiet' seconds by experience (his own share 'own' of it): a green commander closes up early and stays down long, a veteran rides heads up until the rounds are at him and is up again soon after. A round at another tank of his block sends him down too a share 'mates' of the time, by experience. A commander struck in his hatch (book.tankMg) stays down. Off, a block's tanks close up as one with the enemy inside 120 m.",
       near: [260, 160, 90],
@@ -69318,6 +69324,24 @@
        * (DR.exits).
        */
       __publicField(this, "exits");
+      /**
+       * Wounded and knocked-down men (release 2; Brian, 25 November 2026, 16:14Z: "im not seeing multiple soliders being
+       * taken out by an explosion if they are in the blast radius"): a shell burst gathers the losses its block is owed
+       * and is placed so that the men nearest it are the ones taken; of a block's fallen a share lie wounded and not
+       * dead (view()'s wd with no cy, with or without the bearers rule); living men inside the stun ring are knocked
+       * down and held a few seconds (kd). Looks only (the drill's own dice): the rules' losses stay as booked. It needs
+       * the burst rule (blast) for the bursts; the wounded share works without it. Off unless asked (DR.wounded).
+       */
+      __publicField(this, "wounded");
+      /**
+       * Every man his own pace (release 2; Brian, 25 November 2026, 17:30Z: "it looks like they are all jogging at the
+       * same speed"; 16:24Z: "the soldiers of a squad keep zig zaging at the same time"): each man on foot moves at a
+       * pace a little his own and steps off at his own moment, sprints across the open under fire and dashes the short
+       * bound between cover, comes on slower under a gun or a load, tires after a long run; and a squad steers by its
+       * march and its track over some seconds, not by one step of its block, so its men no longer swerve together.
+       * Looks only (the drill's own dice): the rules never read it. Off unless asked (DR.paces).
+       */
+      __publicField(this, "paces");
       /** Squad life: the men taking up their block's phase this think (their lag just over), as on a fresh phase. */
       __publicField(this, "freshNow", /* @__PURE__ */ new Set());
       __publicField(this, "sup", new Suppression());
@@ -69348,6 +69372,8 @@
       this.tankmind = !!opts.tankmind;
       this.tankmg = !!opts.tankmg;
       this.exits = !!opts.exits;
+      this.wounded = !!opts.wounded;
+      this.paces = !!opts.paces;
       this.byBook = opts.book ?? (this.platoons || this.life);
       this.scale = opts.scale !== void 0 && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
       for (const u of b.units) {
