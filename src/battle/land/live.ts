@@ -71,6 +71,12 @@ export interface TrackDelta {
 export interface LiveDelta {
   /** Battle time the rules have reached: nothing at or before it will change. */
   t: number;
+  /**
+   * After the break (pursue): the player who won is asked, PURSUE or END, and the rules fight nothing more until he
+   * answers ({ do: 'land:pursue' } or { do: 'land:end' }). Written straight after t, as `end` is on the last delta, so
+   * the game reads it off the delta's head and stops asking for more. Never with the switch off.
+   */
+  ask?: true;
   /** The setup step: the men were placed again (the player moved a block): drop every track and take these. */
   reset?: true;
   men: TrackDelta[];
@@ -428,6 +434,11 @@ export interface LiveOpts {
    */
   phones?: boolean;
   bearers?: boolean;
+  /**
+   * Fighting on after the break (release 2; Brian, 26 November 2026: "if the enemy retreats, i have the option to
+   * continue on with the battle or end it"; the rules' sim.pursue): on only where true.
+   */
+  pursue?: boolean;
   patrol?: boolean;
   /**
    * Looks the player can switch off on the Battle rules card (release 2; Brian, 23 November 01:11Z "Do all of these"):
@@ -624,6 +635,8 @@ export class LiveBattle {
   /** The hedge cutters' gaps already sent (the rules' cuts, in the order begun). */
   private cutsSent = 0;
   private lastView = -1;
+  /** The aftermath's phase at the last view ('' with none): a view goes out when it changes (after the break, pursue). */
+  private lastPhase = '';
   private placed = false;
   private sentOver = false;
 
@@ -663,6 +676,7 @@ export class LiveBattle {
     if (opts.bocage) sim.bocage = true;
     if (opts.phones !== false) sim.phones = true;
     if (opts.bearers !== false) sim.bearers = true;
+    if (opts.pursue === true) sim.pursue = true;
     if (opts.stand === true) sim.standRule = true;
     // ("facing" works only with "stand" on: the design director, 26 November 01:02Z.)
     if (opts.facing === true && opts.stand === true) sim.faceRule = true;
@@ -781,31 +795,41 @@ export class LiveBattle {
     for (const r of this.drill.rounds() as (Round & { n: number })[]) if (!this.seen.has(r.n)) { this.seen.add(r.n); this.roundsNew.push(r); }
     const v = this.sim.view();
     for (const e of v.events) this.events.push(e);
-    if (Math.floor(t) !== this.lastView || v.over) {
+    // (after the break, pursue: a view the moment the winner is asked, and the moment the pursuit begins)
+    const phase = v.after?.phase ?? '';
+    if (Math.floor(t) !== this.lastView || v.over || phase !== this.lastPhase) {
       this.lastView = Math.floor(t);
-      this.views.push({
-        t: r2(t), units: v.units.map((u) => landUnitOut(u as LandUnit, v.t, !this.me || this.sim.known(u as LandUnit), !!this.me && u.side === this.me, this.sim)), balance: v.balance, zones: v.zones,
-        // (the bars as the player sees them: under the field spread the enemy's as his staff reads it, the mask; with
-        // nobody playing, or no spread, the true ones, as the view above read them)
-        ...(v.breaking ? { breaking: { att: r3(this.sim.shownBar('att', this.me)), def: r3(this.sim.shownBar('def', this.me)) } } : {}),
-        ...(v.contact !== undefined ? { contact: v.contact } : {}),
-        ...(v.plan ? { plan: Object.fromEntries(Object.entries(v.plan).filter(([, p]) => p?.phase).map(([s, p]) => [s, { phase: p!.phase, main: p!.main ?? [], startY: p!.startY ?? null }])) } : {}),
-        ...(v.setup ? { setup: v.setup } : {}),
-        // (the corps still coming up from next door that the player may know of: where on its edge and when)
-        ...(v.coming?.length ? { coming: v.coming.map((c) => ({ id: c.id, side: c.side, corps: c.corps, kind: c.kind, at: r1(c.at), edge: c.edge, x: r1(c.x), y: r1(c.y), ...(c.arrive ? { arrive: c.arrive } : {}) })) } : {}),
-        // (the rider ahead: his own corps' despatch riders, riding in before it)
-        ...(v.riders?.length ? { riders: v.riders } : {}),
-        // (smoke on call: the screens standing now, the enemy's block named only where he knows it; the smoke rounds
-        // carry how long each hangs, for the 3D field. The hedge cutters' gaps go once each, in the delta's cuts)
-        ...this.sim.screenView(this.me ?? undefined),
-        // (field telephones: the wires he may see; stretcher bearers: the light cases back in the line, each shown once
-        // by its t and unit; the night patrol: the attack's own route, and where it was caught)
-        ...this.sim.phonesView(this.me ?? undefined),
-        ...this.sim.bearerView(this.me ?? undefined),
-        ...this.sim.patrolView(this.me ?? undefined),
-        ...(v.over ? { over: v.over } : {}),
-      });
+      this.lastPhase = phase;
+      this.views.push(this.row(v, t));
     }
+  }
+
+  /** One view as the recording keeps it: the blocks as the player may know them, and what the release 2 rows add. */
+  private row(v: ReturnType<LandBattle['view']>, t: number): Record<string, unknown> {
+    return {
+      t: r2(t), units: v.units.map((u) => landUnitOut(u as LandUnit, v.t, !this.me || this.sim.known(u as LandUnit), !!this.me && u.side === this.me, this.sim)), balance: v.balance, zones: v.zones,
+      // (the bars as the player sees them: under the field spread the enemy's as his staff reads it, the mask; with
+      // nobody playing, or no spread, the true ones, as the view above read them)
+      ...(v.breaking ? { breaking: { att: r3(this.sim.shownBar('att', this.me)), def: r3(this.sim.shownBar('def', this.me)) } } : {}),
+      ...(v.contact !== undefined ? { contact: v.contact } : {}),
+      ...(v.plan ? { plan: Object.fromEntries(Object.entries(v.plan).filter(([, p]) => p?.phase).map(([s, p]) => [s, { phase: p!.phase, main: p!.main ?? [], startY: p!.startY ?? null }])) } : {}),
+      ...(v.setup ? { setup: v.setup } : {}),
+      // (the corps still coming up from next door that the player may know of: where on its edge and when)
+      ...(v.coming?.length ? { coming: v.coming.map((c) => ({ id: c.id, side: c.side, corps: c.corps, kind: c.kind, at: r1(c.at), edge: c.edge, x: r1(c.x), y: r1(c.y), ...(c.arrive ? { arrive: c.arrive } : {}) })) } : {}),
+      // (the rider ahead: his own corps' despatch riders, riding in before it)
+      ...(v.riders?.length ? { riders: v.riders } : {}),
+      // (smoke on call: the screens standing now, the enemy's block named only where he knows it; the smoke rounds
+      // carry how long each hangs, for the 3D field. The hedge cutters' gaps go once each, in the delta's cuts)
+      ...this.sim.screenView(this.me ?? undefined),
+      // (field telephones: the wires he may see; stretcher bearers: the light cases back in the line, each shown once
+      // by its t and unit; the night patrol: the attack's own route, and where it was caught)
+      ...this.sim.phonesView(this.me ?? undefined),
+      ...this.sim.bearerView(this.me ?? undefined),
+      ...this.sim.patrolView(this.me ?? undefined),
+      // (after the break, pursue: who broke, who chooses or pursues, and the phase)
+      ...(v.after ? { after: v.after } : {}),
+      ...(v.over ? { over: v.over } : {}),
+    };
   }
 
   /**
@@ -814,7 +838,8 @@ export class LiveBattle {
    */
   tick(seconds: number, maxSteps = 50): LiveDelta {
     const steps = Math.min(maxSteps, Math.max(0, Math.round(seconds / DT)));
-    for (let i = 0; i < steps && !this.sim.over && !this.sim.setup; i++) { this.sim.step(); this.look(); }
+    // (after the break, pursue: no step while the player who won has not chosen)
+    for (let i = 0; i < steps && !this.sim.over && !this.sim.setup && this.sim.aftermath?.phase !== 'ask'; i++) { this.sim.step(); this.look(); }
     return this.delta();
   }
 
@@ -830,7 +855,7 @@ export class LiveBattle {
     const last = !!over && !this.sentOver;
     const d: LiveDelta = {
       t: r2(this.sim.t),
-      ...(last ? { end: r2(this.sim.t) } : {}),
+      ...(last ? { end: r2(this.sim.t) } : this.sim.aftermath?.phase === 'ask' ? { ask: true as const } : {}),
       ...(this.placed ? { reset: true as const } : {}),
       ...this.keeper.drain(),
       rounds: this.roundsNew.sort((a, b) => a.n - b.n), events: this.events, views: this.views,
@@ -849,7 +874,20 @@ export class LiveBattle {
   /** One of the player's orders, in the rules' own shapes. False where the rules refuse it. */
   order(c: Command): boolean {
     if (!this.me) return false;
-    return this.sim.command(c, this.me);
+    const was = this.sim.aftermath?.phase, ok = this.sim.command(c, this.me);
+    // After the break (pursue): END answered while the battle stood still ends it between steps, so its last words and
+    // its result are looked at here, as a step's look would have.
+    if (ok && was === 'ask' && this.sim.over) {
+      const v = this.sim.view();
+      for (const e of v.events) this.events.push(e);
+      this.views.push(this.row(v, this.sim.t));
+    }
+    return ok;
+  }
+
+  /** After the break (pursue): why an order of his was not taken, where the aftermath is why (sim.afterWhy); else null. */
+  afterWhy(): string | null {
+    return this.me ? this.sim.afterWhy(this.me) : null;
   }
 
   /**

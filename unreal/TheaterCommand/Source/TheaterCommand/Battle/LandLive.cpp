@@ -318,6 +318,17 @@ namespace
 		// so the card's odds stand; they change how a battle goes, so this row waits for the design director's ruling and
 		// its paired measure, then the Mac and the art director. Off; -TheaterLandRuleSnipers turns it on for a run.)
 		{ TEXT("snipers"), TEXT("Sniper teams"), TEXT("Each army brings a few sniper pairs, hidden in houses, woods and hedges. They kill few, but they shoot officers, machine gunners and tank commanders, slow an advance and shake men's nerve; once found they are easily driven off. Needs Forest ambushes. Off: no snipers on the field."), TEXT("TheaterLandNoSnipers"), false, TEXT("TheaterLandRuleSnipers") },
+		// (Fighting on after the break, release 2: Brian, 26 November 2026 03:53Z, "i feel like the battles end abruptly"
+		// and "if the enemy retreats, i have the option to continue on with the battle or end it". When an army breaks
+		// the battle does not end at once: the clock stands, a player who won chooses PURSUE or END THE BATTLE, and a
+		// computer general that won chooses at its own sight. END is the battle as it ends today, to the figure;
+		// PURSUE fights on with the verdict fixed, the broken army only falling back, until the last of it is off the
+		// field, he calls it off or the day's clock runs out (the design director's rulings of 03:58Z, 06:36Z, 12:16Z
+		// and 12:37Z; the rules' sim.pursue, "After the break"). It is NOT looks only: a pursuit changes what the
+		// broken army loses, so it has its own fairness gate and stays off until that gate, the Mac and the art
+		// director pass it; -TheaterLandRulePursue turns it on for a run. Key and flags mine; the name and the line
+		// are the UI director's (26 November 2026, 13:32Z): the name says what is true when the row is on.)
+		{ TEXT("pursue"), TEXT("Winners choose whether to pursue a broken army"), TEXT("When an army breaks, the battle need not end there. If yours has won, the clock stands while you choose: pursue the broken army until the last of it has left the field or the day ends, or end the battle at once. You can call a pursuit off at any time. A computer army that wins chooses for itself, by what it can see. A broken army falls back to its own edge of the field; when it is yours, you choose its way back and can hurry it. Off: the battle ends the moment an army breaks, as before. This changes how battles turn out. A change takes effect from the next battle."), TEXT("TheaterLandNoPursue"), false, TEXT("TheaterLandRulePursue") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 
@@ -633,10 +644,12 @@ void FLandLive::Answers(TArray<FAnswer>& Out)
 	}
 }
 
-double FLandLive::TimeOf(const std::string& Delta, bool& bOutLast)
+double FLandLive::TimeOf(const std::string& Delta, bool& bOutLast, bool& bOutAsk)
 {
-	// {"t":12.3,"end":12.3,... : the rules write t first, and end straight after it on the battle's last delta.
+	// {"t":12.3,"end":12.3,... : the rules write t first, and end straight after it on the battle's last delta; or
+	// "ask":true there while the player who won has not chosen between PURSUE and END (release 2, `pursue`).
 	bOutLast = false;
+	bOutAsk = false;
 	if (Delta.compare(0, 5, "{\"t\":") != 0)
 	{
 		return -1.0;
@@ -649,6 +662,7 @@ double FLandLive::TimeOf(const std::string& Delta, bool& bOutLast)
 		return -1.0;
 	}
 	bOutLast = std::strncmp(Past, ",\"end\":", 7) == 0;
+	bOutAsk = std::strncmp(Past, ",\"ask\":true", 11) == 0;
 	return T;
 }
 
@@ -721,6 +735,9 @@ uint32 FLandLive::Run()
 	// The clock waits for the 3D field's hedges (Field), or 20 s.
 	bool bNeedPiece = true;
 	bool bDeploying = bSetup;
+	// (after the break, release 2 `pursue`: the player who won is asked and the rules fight nothing more until he
+	// answers, so no more is asked of them; an order they take while he is asked is his answer)
+	bool bAsked = false;
 	const double HeaderAt = FPlatformTime::Seconds();
 	while (!bStopping.load())
 	{
@@ -746,6 +763,7 @@ uint32 FLandLive::Run()
 			// (a block placed stands its men again: the next piece starts them afresh; begun, the clock runs)
 			if (A.bOk && (Asked.Kind == TEXT("place") || Asked.Kind == TEXT("drawup"))) bNeedPiece = true;
 			if (A.bOk && Asked.Kind == TEXT("begin")) { bDeploying = false; bNeedPiece = true; }
+			if (A.bOk && Asked.Kind == TEXT("order") && bAsked) { bAsked = false; bNeedPiece = true; }
 			// (the hedges in, the blocks on their lines hide: their men stand again; given or not, the clock may run)
 			if (Asked.Kind == TEXT("hedges"))
 			{
@@ -759,7 +777,7 @@ uint32 FLandLive::Run()
 		const double Target = WantT.load() + AheadT.load();
 		const double Now = FoughtT.load();
 		const bool bFieldWait = !bFieldIn.load() && FPlatformTime::Seconds() - HeaderAt < 20.0;
-		const bool bBehind = !bDeploying && !bFieldWait && !bOver.load() && Now + 1e-6 < Target;
+		const bool bBehind = !bDeploying && !bFieldWait && !bOver.load() && !bAsked && Now + 1e-6 < Target;
 		if (bNeedPiece || bBehind)
 		{
 			// At most half a battle second a call, so orders given meanwhile wait no longer than that.
@@ -776,8 +794,8 @@ uint32 FLandLive::Run()
 			if (Ms > MostStepMs.load()) MostStepMs.store(Ms);
 			const FTCHARToUTF8 Narrow(*Answer);
 			std::string Delta(Narrow.Get(), static_cast<size_t>(Narrow.Length()));
-			bool bLast = false;
-			const double T = TimeOf(Delta, bLast);
+			bool bLast = false, bAsk = false;
+			const double T = TimeOf(Delta, bLast, bAsk);
 			if (T < 0.0)
 			{
 				Fail(TEXT("TC.landTo's answer is not a delta"));
@@ -797,6 +815,7 @@ uint32 FLandLive::Run()
 			Deltas.Enqueue(MoveTemp(Delta));
 			FoughtT.store(T);
 			if (bLast) bOver.store(true);
+			bAsked = bAsk;
 			bNeedPiece = false;
 			bDidSomething = true;
 		}

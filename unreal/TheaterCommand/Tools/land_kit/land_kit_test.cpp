@@ -538,9 +538,12 @@ namespace
 				 { "LightTank", "BEL", 1940, 5, "none", false }, { "LightTank", "POL", 1939, 9, "none", false }, { "Truck", "GRE", 1941, 4, "none", true },
 				 { "LightTank", "POR", 1942, 6, "none", false, true }, { "LightTank", "CHN", 1942, 6, "none", false, true }, { "Truck", "VEN", 1942, 6, "none", false, true },
 				 // (France's roundel: as first painted, blue outside; with every nation's mark, the campaign map's order,
-				 // red outside, on her own and on Vichy's; Vichy bare without the word, as before)
+				 // red outside, on her own, on Vichy's and on the Free French; Vichy bare without the word, as before, and
+				 // the Free French in the Americans' star)
 				 { "LightTank", "FRA", 1940, 5, "bluering", false }, { "LightTank", "FRA", 1940, 5, "bluering", true }, { "LightTank", "FRA", 1940, 5, "redring", false, true },
-				 { "Truck", "FRA", 1940, 5, "redring", true, true }, { "LightTank", "VIC", 1941, 6, "redring", false, true }, { "LightTank", "VIC", 1941, 6, "none", true } })
+				 { "Truck", "FRA", 1940, 5, "redring", true, true }, { "LightTank", "VIC", 1941, 6, "redring", false, true }, { "LightTank", "VIC", 1941, 6, "none", true },
+				 { "LightTank", "FFR", 1943, 6, "redring", false, true }, { "Truck", "FFR", 1943, 6, "redring", true, true }, { "LightTank", "FFR", 1943, 6, "white", false },
+				 { "LightTank", "FFR", 1943, 6, "white", true } })
 		{
 			Cases.push_back(C);
 		}

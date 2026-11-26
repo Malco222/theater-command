@@ -214,6 +214,7 @@ bool ALandBattle::BeginLiveFrom(const FString& InKey, int32 Seed, const FString&
 	bLiveWaiting = true;
 	bLiveBroken = false;
 	LiveBrokenAt = -1.0;
+	AfterLogged = 0;
 	LiveWaited = 0.0;
 	LiveHeld = 0.0;
 	SetActorTickEnabled(true);
@@ -350,6 +351,11 @@ void ALandBattle::PumpLive()
 		{
 			S.General.bAllBack = false;
 		}
+		// (after the break, release 2 `pursue`: an answer the rules would not take may be given again)
+		if (!A.bOk && A.Kind == TEXT("order") && (A.Asked.Contains(TEXT("land:pursue")) || A.Asked.Contains(TEXT("land:end"))))
+		{
+			S.AfterSent = 0;
+		}
 		if (!A.bOk && A.Kind != TEXT("hedges"))
 		{
 			S.Note = NoteOf(!A.Why.IsEmpty() ? A.Why : A.Kind == TEXT("place") ? FString(TEXT("The block cannot stand there")) : FString(TEXT("The order was not taken")));
@@ -416,6 +422,14 @@ void ALandBattle::PumpLive()
 		Lap(MsRead);
 		S.Play.Extend(G);
 		Lap(MsPlay);
+		// (after the break, release 2 `pursue`: the phase moved on, so his answer was taken; said once in the log)
+		if (S.Rec.After != AfterLogged)
+		{
+			AfterLogged = S.Rec.After;
+			S.AfterSent = 0;
+			UE_LOG(LogTheater, Display, TEXT("Land battle (live): after the break at %.1f s: %s"), S.Rec.AfterAt,
+				S.Rec.After == 1 ? TEXT("the player who won is asked, PURSUE or END; the clock stands") : S.Rec.After == 2 ? TEXT("the winner pursues") : TEXT("over"));
+		}
 		LandFell::Phase("live: the men grown", G.bReset ? 1 : 0);
 		if (S.Men && !S.Men->Extend(Delta, Error))
 		{
@@ -622,7 +636,9 @@ double ALandBattle::LiveClock(double From, double To, double Real)
 	if (!S.Rec.bOver)
 	{
 		// Never past what the rules have decided, less the margin: the clock waits there for them (forward only).
-		const double Cap = FMath::Max(From, S.Rec.Fought - LiveMargin);
+		// (After the break, release 2 `pursue`: while the player who won is asked nothing more is decided until he
+		// answers, so the clock comes right up to the break, where the battle's last words are, and stands there.)
+		const double Cap = FMath::Max(From, S.Rec.After == 1 ? S.Rec.AfterAt : S.Rec.Fought - LiveMargin);
 		if (To > Cap + 1e-9)
 		{
 			To = Cap;
@@ -632,9 +648,10 @@ double ALandBattle::LiveClock(double From, double To, double Real)
 		{
 			LiveHeld = 0.0;
 		}
-		// (said only once the wait is felt, and never in the setup step, whose clock stands still by design)
+		// (said only once the wait is felt, and never in the setup step, whose clock stands still by design, nor while
+		// he is asked after the break, when it stands for him)
 		static const std::string Waiting = "HOLDING A MOMENT WHILE THE FIGHT IS WORKED OUT";
-		if (LiveHeld > 1.5 && !S.Rec.bSetup && !bLiveBroken && S.Note.empty())
+		if (LiveHeld > 1.5 && !S.Rec.bSetup && S.Rec.After != 1 && !bLiveBroken && S.Note.empty())
 		{
 			S.Note = Waiting;
 			S.NoteAge = -1.0;

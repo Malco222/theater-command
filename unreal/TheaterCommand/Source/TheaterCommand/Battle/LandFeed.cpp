@@ -1032,6 +1032,22 @@ namespace LandFeed
 			R.Views.push_back(std::move(Row));
 			ReadViewExtras(V, Craters, R.Blocks);
 			if (V["setup"].IsNull() && R.bSetup) { R.bSetup = false; Out.bBegun = true; }
+			// (after the break, release 2 `pursue`: who broke, and whether the winner is asked or fights on; a row with
+			// none of it is a battle not yet broken, or one ended at the break)
+			const Json& AfterRow = V["after"];
+			if (AfterRow.IsObject())
+			{
+				R.After = AfterRow["phase"].Str("") == "ask" ? 1 : 2;
+				R.AfterBroke = SideOf(AfterRow["side"].Str(""));
+				R.AfterWinner = SideOf(AfterRow["winner"].Str(""));
+				R.AfterAt = AfterRow["t"].Num(R.Views.back().T);
+				R.AfterBrokeName = AfterRow["broke"].Str("");
+				R.AfterWinnerName = AfterRow["by"].Str("");
+			}
+			else
+			{
+				R.After = 0;
+			}
 		}
 		for (auto& Pair : Craters)
 		{

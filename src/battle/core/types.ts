@@ -609,6 +609,16 @@ export interface FieldResult {
   extra?: Record<string, unknown>;
   /** Land: what each side's fighters on call flew and lost, by group (AirFlown); only where a side had any. */
   air?: Partial<Record<Side, AirFlown[]>>;
+  /**
+   * Land, fought on after the break (release 2, the switch `pursue`; src/battle/land/sim.ts, "After the break"): set
+   * where the winner pursued the army that broke. 'at': the battle second of the break; 'seconds': how long the pursuit
+   * went on; 'took' and 'men': the share of its starting power, and the men, the broken army lost on the field after the
+   * break (already inside 'lost', 'men' and 'forces'); 'ended': the last of it left the field ('left'), the winner
+   * called the pursuit off ('off'), the day's clock ran out ('time'), or the winner's own army was spent ('spent'). The
+   * campaign reads it: the pursuit was fought on the field, so the rules bill none of their own for the day (the design
+   * director, 26 November 2026, 12:16Z and 12:37Z).
+   */
+  pursued?: { at: number; seconds: number; took: number; men: number; ended: 'left' | 'off' | 'time' | 'spent' };
 }
 
 /** The plain picture of the battle the screens draw from: the browser page and the 3D game alike. */
@@ -729,6 +739,16 @@ export interface BattleView<U extends UnitBase = UnitBase> {
   bearers?: { unit: number; out: number; waiting: number; back: number | null }[];
   aid?: { side: Side; unit: number; x: number; y: number }[];
   returns?: { t: number; unit: number; n: number }[];
+  /**
+   * Land, after the break (release 2, the switch `pursue`; src/battle/land/sim.ts, "After the break"): the army that
+   * broke ('side'), the one that holds the field ('winner'), the battle second of the break ('t', to the hundredth and
+   * never before it, so a clock brought up to it has passed the break's own words) and the phase: 'ask'
+   * while a player who won has not chosen between PURSUE and END (the battle does not step), 'pursue' while the
+   * winner fights on. 'broke' and 'by': the two armies as the rules name them ("The German army"; on a practice ground
+   * "Your army" or "Their army"), for the screen's line. Left out before the break, with the switch off, and where the
+   * battle ended at the break.
+   */
+  after?: { side: Side; winner: Side; t: number; phase: 'ask' | 'pursue'; broke: string; by: string };
 }
 
 /** What a domain's sim offers the clock, the screens and the hand-back. */

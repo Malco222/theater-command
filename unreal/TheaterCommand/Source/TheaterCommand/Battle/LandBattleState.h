@@ -296,6 +296,13 @@ struct FLandBattleState
 	/** The battle's end: the last line shown, then the after card a few seconds on. */
 	bool bOver = false, bCard = false;
 	double OverReal = 0.0;
+	/**
+	 * After the break (release 2, the battle rule `pursue`): the phase (Rec.After, 1 asked or 2 pursuing) in which he
+	 * gave his answer or called his pursuit off, 0 with none sent. While it is the recording's phase still, his press
+	 * is on its way to the rules: the buttons are put away and nothing is sent twice. Cleared when the phase moves on
+	 * or the rules refuse it.
+	 */
+	int AfterSent = 0;
 	/** A short note in the middle of the screen (the camera held, a cut asked for), and how long it has shown. */
 	std::string Note;
 	double NoteAge = -1.0;

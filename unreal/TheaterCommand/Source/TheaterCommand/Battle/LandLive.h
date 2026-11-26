@@ -182,6 +182,6 @@ private:
 	std::atomic<bool> bFieldIn { false };
 
 	/** The battle time a delta opens with ({"t":12.3,...), and whether it is the last ({"t":..,"end":..). */
-	static double TimeOf(const std::string& Delta, bool& bOutLast);
+	static double TimeOf(const std::string& Delta, bool& bOutLast, bool& bOutAsk);
 	void Fail(const FString& InWhy);
 };

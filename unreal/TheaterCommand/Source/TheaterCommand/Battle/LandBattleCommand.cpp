@@ -1604,6 +1604,18 @@ void ALandBattle::GeneralDo(const FString& Word)
 	{
 		BeginFight();
 	}
+	else if (Word == TEXT("pursue") || Word == TEXT("endbattle"))
+	{
+		// (After the break, release 2, the battle rule `pursue`: his answer while he is asked, PURSUE or END THE BATTLE,
+		// or his pursuit called off. Only where he won, only once the clock shown has come up to the break, and once:
+		// the rules refuse whatever else is not his to give, sim.ts afterCommand.)
+		const bool bHis = S.Rec.bLive && !S.Rec.bOver && S.Rec.After != 0 && S.Rec.AfterWinner == S.Rec.Me && S.Battle >= S.Rec.AfterAt - 1e-6;
+		if (bHis && S.AfterSent != S.Rec.After && (Word == TEXT("endbattle") || S.Rec.After == 1))
+		{
+			S.AfterSent = S.Rec.After;
+			OrderLive(FString(Word == TEXT("pursue") ? TEXT("{\"do\":\"land:pursue\"}") : TEXT("{\"do\":\"land:end\"}")));
+		}
+	}
 	else if (Word == TEXT("clear"))
 	{
 		G.Armed.clear();
