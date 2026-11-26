@@ -2,10 +2,15 @@
 // scene plays it, its looks and colours) by a small orthographic painter: a depth buffer, one light, flat faces. Not
 // the game's renderer.
 //   strip_<case>.ppm   one German rifleman killed by a rifle round (from the front, from his left, running), at 0,
-//                      0.05, 0.1, 0.2, 0.4 and 1.0 s of life after the round, seen square to the shot: hits off (today)
-//                      and the jolt on (the new), each panel <case>_<off|on>_<k>.ppm
-//   dense_<off|on>.ppm a dense moment of a recorded battle seen from above at a slant, hits off and every part on,
-//                      with dense_<off|on>.txt: each fallen man's clip, rate and start and where he is in the picture
+//                      0.02, 0.033, 0.05, 0.1, 0.2, 0.4 and 1.0 s of life after the round, seen square to the shot: hits
+//                      off (today) and the jolt alone on (bJolt; variety off, so the same fall), each panel
+//                      <case>_<off|on>_<k>.ppm
+//   wounded_<k>.ppm    three men wounded (wd, no back) and one killed beside them, every part on, at 0.5, 2, 5 and 20 s
+//                      of life after the round: close (wounded_<k>.ppm) and at a battle camera's distance, about 50 m
+//                      (wounded_far_<k>.ppm), with wounded.txt: what each does down there and where he is drawn
+//   dense_<off|on>.ppm a dense moment of a recorded battle from a battle camera's slant, while the last men there are
+//                      still falling, hits off and every part on, with dense_<off|on>.txt: each fallen man's clip, rate
+//                      and start and where he is in the picture
 // Usage: land_hits_picture <soldiers folder> <armies.json> <out folder> [battle.json]
 // land_hits_pictures.py lays them out with their labels.
 #include "Battle/LandMen.h"
@@ -215,14 +220,15 @@ int main(int Argc, char** Argv)
 	// ---- The strips.
 	struct Case { const char* Name; double SX, SY, Go; };
 	const Case Cases[] = { { "front", 0.0, 150.0, 0.0 }, { "left", -150.0, 0.0, 0.0 }, { "running", 0.0, 150.0, 2.5 } };
-	const double Times[] = { 0.0, 0.05, 0.1, 0.2, 0.4, 1.0 };
+	const double Times[] = { 0.0, 0.02, 0.033, 0.05, 0.1, 0.2, 0.4, 1.0 };
+	constexpr int NT = static_cast<int>(sizeof(Times) / sizeof(Times[0]));
 	for (const Case& Cs : Cases)
 	{
 		const std::string Rec = Strip(Cs.SX, Cs.SY, Cs.Go);
-		D3 Centres[6];
+		D3 Centres[NT];
 		for (int On = 0; On < 2; ++On)
 		{
-			for (int K = 0; K < 6; ++K)
+			for (int K = 0; K < NT; ++K)
 			{
 				Crowd C;
 				Fill(C, Fs);
@@ -258,6 +264,58 @@ int main(int Argc, char** Argv)
 				PaintMan(C, Man, Cv);
 				Cv.Save(Out + "/" + Cs.Name + "_" + (On ? "on" : "off") + "_" + std::to_string(K) + ".ppm");
 				if (K == 0 && On == 0) std::printf("strip %s: fall %s\n", Cs.Name, C.Info(Man).FallClip.c_str());
+			}
+		}
+	}
+	// ---- The wounded: three men wounded at 5 s (no back: they lie for good), a fourth killed beside them.
+	{
+		const double Wd = 5.0;
+		std::ostringstream R;
+		R.precision(10);
+		R << "{\"seed\": 42, \"date\": \"July 1944\", \"sky\": {\"latLon\": [49.12, -1.09]},"
+		  << "\"blocks\": [{\"id\": 1, \"army\": \"USA\", \"nat\": \"USA\", \"standIn\": \"POL\"}, {\"id\": 2, \"army\": \"GER\", \"nat\": \"GER\"}], \"men\": [";
+		for (int K = 0; K < 4; ++K)
+		{
+			R << (K ? "," : "") << "{\"b\": 2, \"k\": " << K + 1 << ", \"r\": \"rifle\", \"at\": [[0, " << 2.5 * K << ", 0, 0], [60, " << 2.5 * K
+			  << ", 0, 0]], \"ch\": [[0, \"fire_stand\", \"none\", 0, 0, 0, 0]], " << (K < 3 ? "\"wd\": " : "\"d\": ") << Wd << "}";
+		}
+		R << ", {\"b\": 1, \"k\": 1, \"r\": \"rifle\", \"at\": [[0, 3.75, 150, 3.14159265], [60, 3.75, 150, 3.14159265]], \"ch\": [[0, \"fire_prone\", \"none\", 0, 0, 0, 0]]}],"
+		  << "\"rounds\": [{\"t\": " << Wd << ", \"l\": " << Wd << ", \"w\": \"rifle\", \"by\": 1, \"k\": 1, \"on\": 2, \"ok\": 4, \"x\": 7.5, \"y\": 0, \"r\": \"kill\"}]}";
+		const double After[] = { 0.5, 2.0, 5.0, 20.0 };
+		std::ofstream Txt(Out + "/wounded.txt");
+		for (int K = 0; K < 4; ++K)
+		{
+			Crowd C;
+			Fill(C, Fs);
+			Crowd::Hits H;
+			H.bJolt = H.bVariety = H.bWounded = true;
+			C.SetHits(H);
+			std::string Err;
+			C.Build(R.str(), [](double, double) { return LandMen::Ground(); }, Err);
+			C.SetEye(3.75, -30, 2);
+			const double T = Wd + After[K] / 2.0;
+			for (int F = 0; F / 30.0 < T - 1e-9; ++F) C.Update(F / 30.0);
+			C.Update(T);
+			// (close: from in front and above at a slant, the four side by side; far: the same at a battle camera's
+			// distance, about 18 pixels a metre)
+			const D3 Look = Unit(D3 { 0.25, 1.0, -0.55 });
+			for (int Far = 0; Far < 2; ++Far)
+			{
+				Canvas Cv;
+				if (Far) Cv.Begin(240, 120, D3 { 3.75, 0.6, 0.3 }, Look, D3 { 0, 0, 1 }, 18.0, 196, 206, 214);
+				else Cv.Begin(1000, 420, D3 { 3.75, 0.6, 0.3 }, Look, D3 { 0, 0, 1 }, 95.0, 196, 206, 214);
+				PaintGround(Cv, 3.75, 0.6, 9.0);
+				for (int M = 0; M < 4; ++M)
+				{
+					const int Ix = C.Find(2, M + 1, 0);
+					PaintMan(C, Ix, Cv);
+					if (Far) continue;
+					const ManInfo& In = C.Info(Ix);
+					double Sx, Sy, Sz;
+					Cv.Project(D3 { 2.5 * M, -1.2, 0.0 }, Sx, Sy, Sz);
+					Txt << K << " " << Sx << " " << Sy << " " << (M < 3 ? (In.WoundClip + " then " + In.WoundLoop) : ("killed: " + In.FallClip)) << "\n";
+				}
+				Cv.Save(Out + "/wounded_" + (Far ? "far_" : "") + std::to_string(K) + ".ppm");
 			}
 		}
 	}
@@ -334,12 +392,14 @@ int main(int Argc, char** Argv)
 			C.Build(RecText, GroundAt, Err);
 			C.SetThrift(true);
 			C.SetEye(BestX, BestY - 20, 15);
-			const double T = BestT + 3.0;
+			// (a third of a second of the battle after the last man here began to fall: he and the few before him mid-fall)
+			const double T = BestT + 0.35;
 			for (int F = 0; F / 30.0 < T; ++F) C.Update(F / 30.0);
 			C.Update(T);
 			const double Gz = GroundAt(BestX, BestY).Height;
 			Canvas Cv;
-			Cv.Begin(1100, 800, D3 { BestX, BestY, Gz }, D3 { 0.0, 0.55, -1.0 }, D3 { 0, 1, 0 }, 26.0, 150, 160, 120);
+			// (a battle camera's slant: from behind and above, 35 degrees down, about 48 pixels a metre)
+			Cv.Begin(1100, 760, D3 { BestX, BestY + 2.0, Gz + 0.5 }, D3 { 0.0, 1.0, -0.7 }, D3 { 0, 0, 1 }, 48.0, 150, 160, 120);
 			// (the ground under them: their own heights, a grid of half-metre squares)
 			for (int I = -40; I < 40; ++I)
 			{
@@ -358,7 +418,7 @@ int main(int Argc, char** Argv)
 				double X = 0, Y = 0, Z = 0;
 				float Fa = 0;
 				if (!C.Visible(I) || !C.PlaceOf(I, X, Y, Z, Fa)) continue;
-				if (std::fabs(X - BestX) > 21 || std::fabs(Y - BestY) > 17) continue;
+				if (std::fabs(X - BestX) > 13 || std::fabs(Y - BestY - 2.0) > 14) continue;
 				PaintMan(C, I, Cv);
 				const ManInfo& In = C.Info(I);
 				if (In.FallStarted < 0 && In.WoundStarted < 0) continue;
@@ -369,7 +429,7 @@ int main(int Argc, char** Argv)
 			}
 			Cv.Save(Out + "/dense_" + (On ? "on" : "off") + ".ppm");
 		}
-		std::printf("dense moment at %.1f s\n", BestT + 3.0);
+		std::printf("dense moment at %.2f s\n", BestT + 0.35);
 	}
 	return 0;
 }

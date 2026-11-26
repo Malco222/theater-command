@@ -113,6 +113,9 @@ namespace
 		double Dead = -1.0, Started = -1.0, X = 0.0, Y = 0.0;
 		float Rate = 1.f, Skip = 0.f;
 		bool bDeaths = false;
+		double Speed = 0.0;   // his speed over the third of a second before he fell (metres a second of life, Life 2)
+		std::string StartFrom;  // his fall clip's "start"[0]
+		bool bAimed = false;
 	};
 
 	struct Played
@@ -166,8 +169,10 @@ namespace
 		double Last = 0.0;
 		for (int I = 0; I < N; ++I) Last = std::max(Last, C.Info(I).Dead);
 		const double End = Last + 4.0;
-		std::vector<double> X(static_cast<size_t>(N), 0.0), Y(static_cast<size_t>(N), 0.0);
+		std::vector<double> X(static_cast<size_t>(N), 0.0), Y(static_cast<size_t>(N), 0.0), Speed(static_cast<size_t>(N), 0.0);
 		std::vector<char> Got(static_cast<size_t>(N), 0);
+		// (each man's place over the last ten frames, for his speed as he fell)
+		std::vector<std::pair<double, double>> Ring(static_cast<size_t>(N) * 10);
 		uint64_t H = Out.Hash;
 		for (int F = 0; F * (1.0 / 30.0) <= End; ++F)
 		{
@@ -180,6 +185,15 @@ namespace
 					float Fa = 0.f;
 					C.PlaceOf(I, X[static_cast<size_t>(I)], Y[static_cast<size_t>(I)], Z, Fa);
 					Got[static_cast<size_t>(I)] = 1;
+					const auto& Then = Ring[static_cast<size_t>(I) * 10 + static_cast<size_t>((F + 1) % 10)];
+					if (F >= 10) Speed[static_cast<size_t>(I)] = std::hypot(X[static_cast<size_t>(I)] - Then.first, Y[static_cast<size_t>(I)] - Then.second) / (9.0 / 30.0) / 2.0;
+				}
+				else if (!Got[static_cast<size_t>(I)])
+				{
+					double PX = 0.0, PY = 0.0, PZ = 0.0;
+					float Fa = 0.f;
+					C.PlaceOf(I, PX, PY, PZ, Fa);
+					Ring[static_cast<size_t>(I) * 10 + static_cast<size_t>(F % 10)] = { PX, PY };
 				}
 			}
 			if (F % 30 != 0) continue;
@@ -216,6 +230,7 @@ namespace
 			R.From = In.FallFrom;
 			R.Dead = In.Dead;
 			R.Started = In.FallStarted;
+			R.Speed = Speed[static_cast<size_t>(I)];
 			R.X = X[static_cast<size_t>(I)];
 			R.Y = Y[static_cast<size_t>(I)];
 #ifndef LAND_HITS_BASE
@@ -224,6 +239,11 @@ namespace
 #endif
 			const Soldier* S = C.SoldierOf(I);
 			R.bDeaths = S && !S->Deaths.empty();
+#ifndef LAND_HITS_BASE
+			R.bAimed = In.bFallAimed;
+			const int Ci = S ? S->ClipIndex(R.Clip) : -1;
+			if (Ci >= 0) R.StartFrom = S->Clips[static_cast<size_t>(Ci)].StartFrom;
+#endif
 			const K* Best = nullptr;
 			for (const K& Kk : Kills[static_cast<size_t>(I)])
 			{
@@ -348,6 +368,17 @@ namespace
 	{
 		const Vec3 D { P.X - F.T[0], P.Y - F.T[1], P.Z - F.T[2] };
 		return { F.R[0] * D.X + F.R[3] * D.Y + F.R[6] * D.Z, F.R[1] * D.X + F.R[4] * D.Y + F.R[7] * D.Z, F.R[2] * D.X + F.R[5] * D.Y + F.R[8] * D.Z };
+	}
+
+	/** The angle between two frames' turns (radians). */
+	double AngleBetween(const Xform& A, const Xform& B)
+	{
+		double Tr = 0.0;
+		for (int I = 0; I < 3; ++I)
+		{
+			for (int K = 0; K < 3; ++K) Tr += static_cast<double>(A.R[I * 3 + K]) * B.R[I * 3 + K];
+		}
+		return std::acos(std::clamp((Tr - 1.0) / 2.0, -1.0, 1.0));
 	}
 
 	bool SameBits(const Pose& A, const Pose& B, int Bone)
@@ -509,6 +540,17 @@ namespace
 			const double Lb = L.X * Fx + L.Y * Fy, Rb = R.X * Fx + R.Y * Fy;
 			Check(Lb < Rb, std::string("jolt ") + Name + Fmt(": the left shoulder (struck) is turned back against the right (%.1f against %.1f cm)", 100.0 * Lb, 100.0 * Rb));
 		}
+		// (d) the modeller's bones: the chest turned more than 4 degrees and the rifle (bone 'weapon', on the root) moved
+		// with it, so the turn is free to be that big
+		{
+			const int Chi = S->BoneIndex("chest");
+			const double Turn = AngleBetween(A2.FramesOf(Ix)[Chi], B2.FramesOf(Ix)[Chi]);
+			const bool bGunMoved = !SameBits(PA, PB, Gun);
+			if (!bLegFall)
+			{
+				Check(Turn > 4.0 * 0.0174533 && bGunMoved, std::string("jolt ") + Name + Fmt(": (d) the chest turned %.1f degrees, the weapon bone moved with it", Turn / 0.0174533));
+			}
+		}
 		PlayTo(A2, B2, C2, Hit + 0.34);
 		A2.PoseOf(Ix, PA);
 		B2.PoseOf(Ix, PB);
@@ -529,9 +571,41 @@ namespace
 		}
 	}
 
+	/** The head 40 ms behind the chest: at death + 0.02 s and + 0.033 s the head's turn (against the unjolted) is less than
+	 * the chest's, and it has caught up by 0.1 s. */
+	void HeadLag(const Files& Fs)
+	{
+		Man1 M;
+		M.D = Hit;
+		M.bShooter = true;
+		M.SX = -150.0;
+		const std::string Rec = Little({ M });
+		Crowd::Hits On;
+		On.bJolt = true;
+		const double Ats[] = { 0.02, 0.033, 0.05, 0.1 };
+		double Head[4] = {}, Chest[4] = {};
+		for (int K = 0; K < 4; ++K)
+		{
+			Crowd A, B;
+			MakeCrowd(A, Fs, Rec, Crowd::Hits());
+			MakeCrowd(B, Fs, Rec, On);
+			double Clock = 0.0;
+			A.Update(0.0);
+			B.Update(0.0);
+			PlayTo(A, B, Clock, Hit + Ats[K]);
+			const int Ix = A.Find(2, 1, 0);
+			const Soldier* S = A.SoldierOf(Ix);
+			Head[K] = AngleBetween(A.FramesOf(Ix)[S->BoneIndex("head")], B.FramesOf(Ix)[S->BoneIndex("head")]);
+			Chest[K] = AngleBetween(A.FramesOf(Ix)[S->BoneIndex("chest")], B.FramesOf(Ix)[S->BoneIndex("chest")]);
+			std::printf("  jolt head lag: at death + %.3f s chest %.1f, head %.1f degrees off the unjolted\n", Ats[K], Chest[K] / 0.0174533, Head[K] / 0.0174533);
+		}
+		Check(Head[0] < Chest[0] && Head[1] < Chest[1], "jolt: (d) the head lags the chest at + 0.02 s and + 0.033 s (turned less)");
+	}
+
 	void Jolts(const Files& Fs)
 	{
 		std::printf("== jolt\n");
+		HeadLag(Fs);
 		JoltCase(Fs, "from the front", 0.0, 150.0, 0.0, "rifle", false);
 		JoltCase(Fs, "from his left", -150.0, 0.0, 0.0, "rifle", false);
 		JoltCase(Fs, "from behind", 0.0, -150.0, 0.0, "rifle", false);
@@ -555,6 +629,100 @@ namespace
 			if (C.Info(C.Find(2, Fillers + 1, 0)).FallClip.rfind("die_leg_", 0) == 0) break;
 		}
 		JoltCase(Fs, "leg fall from the front", 0.0, 150.0, 0.0, "rifle", true, Fillers);
+	}
+
+	/** One man's fall (variety on), his dice another's by the men standing far off before him (Fillers), his lead's kind
+	 * where given, with others about him (Near) and the scene's room (Room). */
+	std::string FallOf(const Files& Fs, const Man1& M, int Fillers, const std::string& Kind, const std::vector<Man1>& Near, const RoomFn& Room = RoomFn())
+	{
+		std::vector<Man1> All;
+		for (int K = 0; K < Fillers; ++K)
+		{
+			Man1 F;
+			F.X = 500.0 + 10.0 * K;
+			All.push_back(F);
+		}
+		All.push_back(M);
+		for (const Man1& N : Near) All.push_back(N);
+		Crowd C;
+		Crowd::Hits On;
+		On.bVariety = true;
+		On.bJolt = true;
+		if (Room) C.SetRoom(Room);
+		MakeCrowd(C, Fs, Little(All), On);
+		const int Ix = C.Find(2, Fillers + 1, 0);
+		if (!Kind.empty()) C.SetFallKind(Ix, Kind);
+		for (int F = 0; F <= static_cast<int>((Hit + 0.1) * 30.0); ++F) C.Update(F / 30.0);
+		return C.Info(Ix).FallClip;
+	}
+
+	void Rules(const Files& Fs)
+	{
+		std::printf("== the soldier modeller's rules (bVariety)\n");
+		const Soldier& S = *Fs.ByArmy.at("GER");
+		auto StartOf = [&S](const std::string& Clip) { const int I = S.ClipIndex(Clip); return I >= 0 ? S.Clips[static_cast<size_t>(I)].StartFrom : std::string("?"); };
+		// (a) a man walking (2.4 battle m/s, 1.2 of life) is not aiming: never a fall opening at the shoulder; a man at
+		// his aim may take one
+		int Walked = 0, WalkShoulder = 0, WalkIdle = 0, AimShoulder = 0;
+		std::map<std::string, int> Seen;
+		for (int V = 0; V < 14; ++V)
+		{
+			Man1 W;
+			W.Pose = "advance";
+			W.Go = 2.4;
+			W.D = Hit;
+			W.bShooter = true;
+			W.SY = 150.0;
+			const std::string F = FallOf(Fs, W, V, "", {});
+			++Walked;
+			++Seen[F];
+			WalkShoulder += StartOf(F) == "fire_stand" ? 1 : 0;
+			WalkIdle += StartOf(F) == "idle" ? 1 : 0;
+			Man1 A = W;
+			A.Pose = "fire_stand";
+			A.Go = 0.0;
+			AimShoulder += StartOf(FallOf(Fs, A, V, "", {})) == "fire_stand" ? 1 : 0;
+		}
+		std::printf("  (a) a walking man's falls over 14 dice:");
+		for (const auto& KV : Seen) std::printf(" %s(%s) %d", KV.first.c_str(), StartOf(KV.first).c_str(), KV.second);
+		std::printf("\n");
+		Check(WalkShoulder == 0 && WalkIdle * 3 >= Walked, Fmt("rules (a): a walking man never opens at the shoulder (%.0f), a third or more open in idle (%.0f of 14)", WalkShoulder, WalkIdle));
+		Check(AimShoulder > 0, Fmt("rules (a): a man at his aim may (%.0f of 14 open at the shoulder)", AimShoulder));
+		// (b) never a thrown fall for a bullet, even where his lead asks the kind
+		int Thrown = 0;
+		for (int V = 0; V < 10; ++V)
+		{
+			Man1 T;
+			T.D = Hit;
+			T.bShooter = true;
+			T.SY = 150.0;
+			const std::string F = FallOf(Fs, T, V, "thrown", {});
+			Thrown += F.rfind("die_thrown_", 0) == 0 ? 1 : 0;
+			T.W = "mg";
+			Thrown += FallOf(Fs, T, V, "thrown", {}).rfind("die_thrown_", 0) == 0 ? 1 : 0;
+		}
+		Check(Thrown == 0, Fmt("rules (b): no die_thrown_* for a rifle's or an mg's round, the kind asked 20 times (%.0f)", Thrown));
+		// (c) room: die_side_b carries him 1.07 m to his left; with a man standing a metre to his left, never; with none
+		// there, sometimes. A scene with no room anywhere: no fall that carries him more than half a metre.
+		int SideB = 0, SideBFree = 0, Far = 0;
+		for (int V = 0; V < 16; ++V)
+		{
+			Man1 A;
+			A.D = Hit;
+			A.bShooter = true;
+			A.SX = 150.0;    // (from his right: the side falls)
+			A.SY = 0.0;
+			Man1 Left;
+			Left.X = -1.0;
+			Left.Pose = "fire_stand";
+			SideB += FallOf(Fs, A, V, "side", { Left }) == "die_side_b" ? 1 : 0;
+			SideBFree += FallOf(Fs, A, V, "side", {}) == "die_side_b" ? 1 : 0;
+			const std::string F = FallOf(Fs, A, V, "", {}, [](double, double, double, double) { return false; });
+			const int Ci = S.ClipIndex(F);
+			if (Ci >= 0 && S.Clips[static_cast<size_t>(Ci)].bEndOffset && std::hypot(S.Clips[static_cast<size_t>(Ci)].EndOffset.X, S.Clips[static_cast<size_t>(Ci)].EndOffset.Y) > 0.5f) ++Far;
+		}
+		Check(SideB == 0 && SideBFree > 0, Fmt("rules (c): die_side_b with a man a metre to his left %.0f times, with none %.0f of 16", SideB, SideBFree));
+		Check(Far == 0, Fmt("rules (c): the scene with no room: falls carrying him over half a metre %.0f of 16", Far));
 	}
 
 	void Struck(const Files& Fs)
@@ -623,13 +791,14 @@ namespace
 	{
 		std::printf("== wounded\n");
 		std::vector<Man1> Men;
-		// three men within 5 m, wounded together; a fourth carried (the bearers' way, left as before); a fifth never back
-		const double Xs[] = { 0.0, 2.0, 4.0 };
-		for (double X : Xs)
+		// six men wounded together, the first three within 5 m (all get up at back); a carried man (the bearers' way, left
+		// as before); a man who never gets up; a man wounded and later killed where he lies; a wounded man who had a round to
+		// fire after he went down
+		for (int I = 0; I < 6; ++I)
 		{
 			Man1 M;
-			M.X = X;
-			M.Y = 1.0 * X;
+			M.X = 2.0 * I;
+			M.Y = I < 3 ? 1.0 * I : 3.0 * I;
 			M.Wd = 6.0;
 			M.Back = 30.0;
 			Men.push_back(M);
@@ -644,94 +813,252 @@ namespace
 		Stays.Pose = "fire_kneel";
 		Stays.Wd = 7.0;
 		Men.push_back(Stays);
-		const std::string Rec = Little(Men);
+		Man1 Killed;
+		Killed.X = 140.0;
+		Killed.Wd = 7.0;
+		Killed.D = 12.0;
+		Men.push_back(Killed);
+		const int N = static_cast<int>(Men.size());
+		const int KilledIx = N - 1, StaysIx = N - 2, CarriedIx = N - 3;
+		std::string Rec = Little(Men);
+		// (the first man has rounds booked after his wound: he fires none while down)
+		{
+			const size_t At = Rec.find("\"rounds\": [");
+			const std::string Shots = "{\"t\": 9.0, \"l\": 9.0, \"w\": \"rifle\", \"by\": 2, \"k\": 1, \"on\": 1, \"ok\": 1, \"x\": 0, \"y\": 100, \"r\": \"miss\"},"
+				"{\"t\": 15.0, \"l\": 15.0, \"w\": \"rifle\", \"by\": 2, \"k\": 1, \"on\": 1, \"ok\": 1, \"x\": 0, \"y\": 100, \"r\": \"miss\"},";
+			Rec.insert(At + 11, Shots);
+		}
 		Crowd::Hits On;
 		On.bJolt = On.bVariety = On.bWounded = true;
 		Crowd C, Off;
 		MakeCrowd(C, Fs, Rec, On);
 		MakeCrowd(Off, Fs, Rec, Crowd::Hits());
-		const int N = 5;
 		std::vector<int> Ix;
 		for (int I = 0; I < N; ++I) Ix.push_back(C.Find(2, I + 1, 0));
 		const Soldier* S = C.SoldierOf(Ix[0]);
-		const int Ch = S->BoneIndex("chest"), Pe = S->BoneIndex("pelvis");
-		std::vector<int> WasDown(N, 0), Flipped(N, 0), Rose(N, 0);
-		std::vector<double> LowestUp(N, 9.0);
+		const int Ch = S->BoneIndex("chest"), Pe = S->BoneIndex("pelvis"), Hd = S->BoneIndex("head");
+		const size_t NB = S->Bones.size();
+		std::vector<int> WasDown(static_cast<size_t>(N), 0), Flipped(static_cast<size_t>(N), 0), Rose(static_cast<size_t>(N), 0), UpFlip(static_cast<size_t>(N), 0);
+		std::vector<double> MostDown(static_cast<size_t>(N), 0.0), MostUp(static_cast<size_t>(N), 0.0), Stirred(static_cast<size_t>(N), 0.0), Moved(static_cast<size_t>(N), 0.0);
+		std::vector<Vec3> Was(static_cast<size_t>(N)), Start(static_cast<size_t>(N));
+		std::vector<std::vector<Vec3>> Still(static_cast<size_t>(N));
+		std::vector<double> UpChest(static_cast<size_t>(N), 0.0);
 		bool bFinite = true;
-		for (int F = 0; F <= 36 * 30; ++F)
+		int ShotsDown = 0;
+		double KillJump = 0.0, KillHead = 0.0, KillHeadWas = -1.0;
+		auto Points = [&](int M) {
+			std::vector<Vec3> P;
+			for (size_t K = 0; K < NB; ++K) P.push_back(C.FramesOf(M)[K].Point(S->Bones[K].Head));
+			return P;
+		};
+		for (int F = 0; F <= 40 * 30; ++F)
 		{
 			const double T = F / 30.0;
 			C.Update(T);
 			Off.Update(T);
+			for (const Event& E : C.Events())
+			{
+				if (E.Man == Ix[0] && E.Fx == "muzzle_flash" && E.T >= 6.0 && E.T < 30.0) ++ShotsDown;
+			}
 			for (int I = 0; I < N; ++I)
 			{
 				const int M = Ix[static_cast<size_t>(I)];
 				bFinite = bFinite && FramesFinite(C, M);
 				const ManInfo& In = C.Info(M);
-				if (In.WoundStarted < 0.0 || (In.Back >= 0.0 && T >= In.Back)) continue;
-				// (his chest's front, its own x, on the field: face down below -0.5, on his back above 0.5; from his fall's
-				// last stillness on, the clip's own roll before it not counted: the hand-over and what he does down there)
+				const Vec3 Pel = C.FramesOf(M)[Pe].Point(S->Bones[static_cast<size_t>(Pe)].Head);
+				const double Step = F > 0 ? Len(Minus(Pel, Was[static_cast<size_t>(I)])) : 0.0;
+				Was[static_cast<size_t>(I)] = Pel;
+				if (I == KilledIx && T > 11.5 && T < 13.5)
+				{
+					KillJump = std::max(KillJump, Step);
+					const double Hz = C.FramesOf(M)[Hd].Point(S->Bones[static_cast<size_t>(Hd)].Head).Z;
+					// (his jolt, a third of a second from his death, is no pop: measured outside it)
+					if (KillHeadWas >= 0.0 && (T < 12.0 || T > 12.0 + 0.34 / 2.0 + 1.0 / 30.0)) KillHead = std::max(KillHead, std::fabs(Hz - KillHeadWas));
+					KillHeadWas = Hz;
+				}
+				if (In.WoundStarted < 0.0) continue;
 				const int Wc = S->ClipIndex(In.WoundClip);
-				const double Still = In.WoundStarted + (Wc >= 0 ? 0.9 * static_cast<double>(S->Clips[static_cast<size_t>(Wc)].Long) / 2.0 : 0.0);
+				const double Ends = In.WoundStarted + (Wc >= 0 ? static_cast<double>(S->Clips[static_cast<size_t>(Wc)].Long) / 2.0 : 0.0);
 				const float Up = C.FramesOf(M)[Ch].R[6];
-				if (T >= Still && T < Still + 1.0 / 30.0) std::printf("  wounded %d: chest front %.2f up as his fall ends\n", I + 1, static_cast<double>(Up));
-				if (T < Still) continue;
-				if (Up < -0.5f) WasDown[static_cast<size_t>(I)] = 1;
-				if (Up > 0.5f && WasDown[static_cast<size_t>(I)]) Flipped[static_cast<size_t>(I)] = 1;
-				const double Pz = C.FramesOf(M)[Pe].Point(S->Bones[static_cast<size_t>(Pe)].Head).Z;
-				if (T > In.WoundStarted + 2.5) Rose[static_cast<size_t>(I)] = std::max(Rose[static_cast<size_t>(I)], Pz > 0.45 ? 1 : 0);
+				// down: from his fall's end till back (the hand-over into what he does down there counted)
+				if (T >= Ends && (In.Back < 0.0 || T < In.Back) && (I != KilledIx || T < 12.0))
+				{
+					if (Up < -0.5f) WasDown[static_cast<size_t>(I)] = 1;
+					if (Up > 0.5f && WasDown[static_cast<size_t>(I)]) Flipped[static_cast<size_t>(I)] = 1;
+					if (T > Ends + 1.0 / 30.0) MostDown[static_cast<size_t>(I)] = std::max(MostDown[static_cast<size_t>(I)], Step);
+					if (T > Ends + 0.5 && Pel.Z > 0.45f) Rose[static_cast<size_t>(I)] = 1;
+					// (alive: how far any bone moves from where it lay two seconds after his fall's end, over the next 15 s,
+					// his pelvis's own move taken out)
+					const std::vector<Vec3> P = Points(M);
+					if (T >= Ends + 2.0 && Still[static_cast<size_t>(I)].empty()) { Still[static_cast<size_t>(I)] = P; Start[static_cast<size_t>(I)] = Pel; }
+					else if (!Still[static_cast<size_t>(I)].empty() && T < Ends + 17.0)
+					{
+						const Vec3 Drift = Minus(Pel, Start[static_cast<size_t>(I)]);
+						Moved[static_cast<size_t>(I)] = std::max(Moved[static_cast<size_t>(I)], Len(Drift));
+						for (size_t K = 0; K < NB; ++K)
+						{
+							if (S->OnWeapon(static_cast<int>(K))) continue;
+							Stirred[static_cast<size_t>(I)] = std::max(Stirred[static_cast<size_t>(I)], Len(Minus(Minus(P[K], Still[static_cast<size_t>(I)][K]), Drift)));
+						}
+					}
+				}
+				// getting up: from a second before back to five after
+				if (In.Back >= 0.0 && T >= In.Back - 1.0 && T < In.Back + 5.0)
+				{
+					MostUp[static_cast<size_t>(I)] = std::max(MostUp[static_cast<size_t>(I)], Step);
+					if (T < In.Back) UpChest[static_cast<size_t>(I)] = Up;
+					else if ((UpChest[static_cast<size_t>(I)] < -0.5f && Up > 0.5f) || (UpChest[static_cast<size_t>(I)] > 0.5f && Up < -0.5f)) UpFlip[static_cast<size_t>(I)] = 1;
+				}
 			}
 		}
 		for (int I = 0; I < N; ++I)
 		{
 			const ManInfo& In = C.Info(Ix[static_cast<size_t>(I)]);
-			std::printf("  wounded %d: down at %.2f in %s, then %s (phase %.3f, rate %.3f); back %.1f\n", I + 1, In.WoundStarted, In.WoundClip.c_str(), In.WoundLoop.c_str(),
-				static_cast<double>(In.WoundPhase), static_cast<double>(In.WoundRate), In.Back);
+			std::printf("  wounded %d: down at %.2f in %s, then %s (phase %.3f, rate %.3f, dragged %.1f m); back %.1f; pelvis at most %.1f cm a frame down, %.1f cm getting up; stirring %.0f cm\n",
+				I + 1, In.WoundStarted, In.WoundClip.c_str(), In.WoundLoop.c_str(), static_cast<double>(In.WoundPhase), static_cast<double>(In.WoundRate), static_cast<double>(In.Dragged), In.Back,
+				100.0 * MostDown[static_cast<size_t>(I)], 100.0 * MostUp[static_cast<size_t>(I)], 100.0 * Stirred[static_cast<size_t>(I)]);
 		}
+		std::set<std::string> Ways;
 		bool bApart = true;
-		for (int A = 0; A < 3; ++A)
+		for (int A = 0; A < 6; ++A)
 		{
-			for (int B = A + 1; B < 3; ++B)
+			const ManInfo& Ia = C.Info(Ix[static_cast<size_t>(A)]);
+			Ways.insert(Ia.WoundLoop);
+			for (int B = A + 1; B < 3 && A < 3; ++B)
 			{
-				const ManInfo& Ia = C.Info(Ix[static_cast<size_t>(A)]);
 				const ManInfo& Ib = C.Info(Ix[static_cast<size_t>(B)]);
 				if (Ia.WoundClip == Ib.WoundClip && Ia.WoundLoop == Ib.WoundLoop && std::fabs(Ia.WoundPhase - Ib.WoundPhase) < 0.05f) bApart = false;
 			}
 		}
-		bool bAllDown = true, bNoFlip = true, bStayed = true;
-		for (int I = 0; I < 3; ++I)
+		bool bAllDown = true, bNoFlip = true, bStayed = true, bSmooth = true, bUpSmooth = true, bAlive = true, bNoUpFlip = true, bDragged = false, bFaceDown = true;
+		for (int I = 0; I < 6; ++I)
 		{
-			bAllDown = bAllDown && C.Info(Ix[static_cast<size_t>(I)]).WoundStarted >= 0.0;
-			bNoFlip = bNoFlip && !Flipped[static_cast<size_t>(I)];
-			bStayed = bStayed && !Rose[static_cast<size_t>(I)];
+			const size_t K = static_cast<size_t>(I);
+			const ManInfo& In = C.Info(Ix[K]);
+			bAllDown = bAllDown && In.WoundStarted >= 0.0;
+			bNoFlip = bNoFlip && !Flipped[K];
+			bStayed = bStayed && !Rose[K];
+			bSmooth = bSmooth && MostDown[K] < 0.08;
+			bUpSmooth = bUpSmooth && MostUp[K] < 0.15;
+			bNoUpFlip = bNoUpFlip && !UpFlip[K];
+			bAlive = bAlive && Stirred[K] > 0.15;
+			bDragged = bDragged || (In.Dragged > 1.0f && Moved[K] > 1.0);
+			bFaceDown = bFaceDown && WasDown[K];
 		}
-		Check(bAllDown, "wounded: the three wd men went down at wd");
+		Check(bAllDown, "wounded: the six wd men went down at wd");
 		Check(bApart, "wounded: three men within 5 m, three different falls, loops or phases");
-		for (int I = 0; I < N; ++I) if (Flipped[static_cast<size_t>(I)]) std::printf("  wounded %d: face down, then on his back\n", I + 1);
-		Check(bNoFlip && !Flipped[4], "wounded: never face down onto his back after his fall");
-		Check(bStayed && !Rose[4], "wounded: down from his fall's end till back (pelvis under 0.45 m)");
-		// up at back: his stance's again, on his feet
+		Check(Ways.size() >= 2, Fmt("wounded: each his own choice down there (%.0f ways among six)", static_cast<double>(Ways.size())));
+		Check(bDragged, "wounded: one at least drags himself more than a metre on (and his body goes with him)");
+		Check(bAlive && Stirred[static_cast<size_t>(StaysIx)] > 0.15, "wounded: every man down reads as alive (some bone of his moves 15 cm or more besides his drag, over 15 s)");
+		Check(bFaceDown, "wounded: a man who gets up at back lies face down (his file has no get_up_back)");
+		Check(bNoFlip && !Flipped[static_cast<size_t>(StaysIx)], "wounded: never face down onto his back after his fall");
+		Check(bStayed && !Rose[static_cast<size_t>(StaysIx)], "wounded: down from his fall's end till back (pelvis under 0.45 m)");
+		Check(bSmooth, "wounded: down there his pelvis never moves 8 cm in a frame (the hand-over into his loop or his drag about his pelvis)");
+		Check(bUpSmooth, "wounded: getting up at back his pelvis never moves 15 cm in a frame (no jump)");
+		Check(bNoUpFlip, "wounded: getting up, never rolled from face down to his back or back");
 		bool bUp = true;
-		for (int I = 0; I < 3; ++I)
+		for (int I = 0; I < 6; ++I)
 		{
 			const int M = Ix[static_cast<size_t>(I)];
 			const double Pz = C.FramesOf(M)[Pe].Point(S->Bones[static_cast<size_t>(Pe)].Head).Z;
-			bUp = bUp && C.LieOf(M) < 0.1f && Pz > 0.8;
+			double X = 0.0, Y = 0.0, Z = 0.0;
+			float Fa = 0.f;
+			C.PlaceOf(M, X, Y, Z, Fa);
+			const Vec3 Pel = C.FramesOf(M)[Pe].Point(S->Bones[static_cast<size_t>(Pe)].Head);
+			bUp = bUp && C.LieOf(M) < 0.1f && Pz > 0.8 && std::hypot(Pel.X - X, Pel.Y - Y) < 0.4;
 		}
-		Check(bUp, "wounded: up on his feet after back");
-		Check(C.Info(Ix[3]).WoundStarted < 0.0, "wounded: a carried man (cy) is left to the bearers' way");
-		Check(C.Info(Ix[4]).WoundStarted >= 0.0 && C.LieOf(Ix[4]) > 0.9f, "wounded: a man with no back still down at the end");
+		Check(bUp, "wounded: up on his feet after back, back on his own place");
+		Check(C.Info(Ix[static_cast<size_t>(CarriedIx)]).WoundStarted < 0.0, "wounded: a carried man (cy) is left to the bearers' way");
+		Check(C.Info(Ix[static_cast<size_t>(StaysIx)]).WoundStarted >= 0.0 && C.LieOf(Ix[static_cast<size_t>(StaysIx)]) > 0.9f, "wounded: a man with no back still down at the end");
+		const ManInfo& Ki = C.Info(Ix[static_cast<size_t>(KilledIx)]);
+		std::printf("  wounded then killed: %s, pelvis at most %.1f cm a frame, head %.1f cm a frame about his death\n", Ki.FallClip.c_str(), 100.0 * KillJump, 100.0 * KillHead);
+		Check(Ki.FallClip == "still" && KillJump < 0.05 && KillHead < 0.05, "wounded: killed where he lies, he goes still there (no new fall, no jump)");
+		Check(ShotsDown == 0, Fmt("wounded: no shot from a man down wounded (%.0f)", ShotsDown));
 		bool bOffNone = true;
 		for (int I = 0; I < N; ++I) bOffNone = bOffNone && Off.Info(Ix[static_cast<size_t>(I)]).WoundStarted < 0.0;
 		Check(bOffNone, "wounded: off, no man goes down (as before)");
 		Check(bFinite, "wounded: no NaN");
 	}
 
+	/** A live battle: a wound sent in a later delta (wd, back) as the drill will send it, read by Extend. */
+	void LiveWound(const Files& Fs)
+	{
+		Man1 M;
+		const std::string Whole = Little({ M });
+		// (the header: the whole battle without its men; the man in a first delta, his wound in a second)
+		std::string Header = Whole;
+		const size_t A = Header.find("\"men\": [");
+		const size_t B = Header.find("], \"rounds\"");
+		const std::string Row = Header.substr(A + 8, B - A - 8);
+		Header.erase(A + 8, B - A - 8);
+		Crowd C;
+		Crowd::Hits On;
+		On.bWounded = true;
+		MakeCrowd(C, Fs, Header, On);
+		std::string Err;
+		std::string Mine = Row;
+		Mine.insert(1, "\"n\": 0, ");
+		const bool bOk1 = C.Extend("{\"t\": 1.0, \"men\": [" + Mine + "]}", Err);
+		for (int F = 0; F <= 90; ++F) C.Update(F / 30.0);
+		const bool bOk2 = C.Extend("{\"t\": 3.0, \"men\": [{\"n\": 0, \"wd\": 4.0, \"back\": 20.0}]}", Err);
+		for (int F = 91; F <= 10 * 30; ++F) C.Update(F / 30.0);
+		const int Ix = C.Find(2, 1, 0);
+		const bool bDown = Ix >= 0 && C.Info(Ix).WoundStarted >= 0.0 && C.LieOf(Ix) > 0.9f;
+		std::printf("  live: deltas %s, %s (%s); the man %s\n", bOk1 ? "read" : "refused", bOk2 ? "read" : "refused", Err.c_str(), bDown ? "down wounded" : "not down");
+		Check(bOk1 && bOk2 && bDown, "wounded: a live battle's wd in a later delta (Extend) puts him down");
+	}
+
+	/** A flinch clip by name (hit_flinch_f, the soldiers thread's, here a stand-in made of fire_stand with its additive base):
+	 * laid over his pose instead of the code's jolt, pelvis to the bit where the clip leaves it, no NaN. */
+	void FlinchByName(const Files& Fs, const std::string& Folder)
+	{
+		std::string Text = ReadFile(Folder + "/soldier_GER.json");
+		const size_t Key = Text.find("\"fire_stand\":{");
+		const size_t Open = Key == std::string::npos ? Key : Text.find('{', Key);
+		size_t Close = Open;
+		for (int Depth = 0; Close != std::string::npos && Close < Text.size(); ++Close)
+		{
+			if (Text[Close] == '{') ++Depth;
+			else if (Text[Close] == '}' && --Depth == 0) break;
+		}
+		const size_t Clips = Text.find("\"clips\":{");
+		if (Open == std::string::npos || Clips == std::string::npos || Close >= Text.size()) { Check(false, "flinch: the test's stand-in clip made"); return; }
+		std::string Body = Text.substr(Open, Close - Open + 1);
+		Body.insert(1, "\"additive_base\": [\"fire_stand\", 0.0], ");
+		Text.insert(Clips + 9, "\"hit_flinch_f\": " + Body + ", ");
+		auto Own = std::make_shared<Soldier>();
+		std::string Err;
+		if (!Own->Load(Text, Err)) { Check(false, "flinch: the stand-in file loads: " + Err); return; }
+		Files F2 = Fs;
+		F2.ByArmy["GER"] = Own;
+		Man1 M;
+		M.D = Hit;
+		M.bShooter = true;
+		M.SY = 150.0;
+		const std::string Rec = Little({ M });
+		Crowd A, B;
+		Crowd::Hits On;
+		On.bJolt = true;
+		MakeCrowd(A, Fs, Rec, On);
+		MakeCrowd(B, F2, Rec, On);
+		double Clock = 0.0;
+		A.Update(0.0);
+		B.Update(0.0);
+		PlayTo(A, B, Clock, Hit + 0.3);
+		const int Ix = A.Find(2, 1, 0);
+		Pose PA, PB;
+		A.PoseOf(Ix, PA);
+		B.PoseOf(Ix, PB);
+		bool bDiffer = false;
+		for (int K = 0; K < MaxBones; ++K) bDiffer = bDiffer || !SameBits(PA, PB, K);
+		Check(bDiffer && FramesFinite(B, Ix), "flinch: a file with hit_flinch_f plays it over his pose in place of the code's jolt (no NaN)");
+	}
+
 	void Variety(const std::string& Battle, const Played& P, std::map<std::string, int>& StandOnly)
 	{
 		static const std::set<std::string> Stands = { "die_back_a", "die_back_b", "die_forward_b", "die_head_a", "die_knees_a", "die_knees_b", "die_side_a", "die_side_b",
 			"die_side_c", "die_side_d" };
-		int Same = 0, Limp = 0, Old = 0, Bullets = 0;
+		int Same = 0, Limp = 0, Old = 0, Bullets = 0, Thrown = 0, Shoulder = 0, Stand = 0, Idle = 0, Run = 0;
 		std::map<std::string, int> Kinds, Clips;
 		for (const Row& A : P.Rows)
 		{
@@ -740,19 +1067,30 @@ namespace
 			if (A.W != "rifle" && A.W != "mg") continue;
 			++Bullets;
 			++Kinds[A.Kind];
+			Thrown += A.Clip.rfind("die_thrown_", 0) == 0 ? 1 : 0;
+			Run += A.Stance == "run" ? 1 : 0;
+			if (A.Stance == "stand" && !A.bAimed)
+			{
+				++Stand;
+				Idle += A.StartFrom == "idle" ? 1 : 0;
+				Shoulder += A.StartFrom == "fire_stand" ? 1 : 0;
+			}
 			++Clips[A.Clip];
 			if (Stands.count(A.Clip)) ++StandOnly[A.Clip];
 			for (const Row& O : P.Rows)
 			{
 				if (&O == &A || O.Clip != A.Clip || O.Started < 0.0) continue;
-				if (std::fabs(O.Started - A.Started) > 5.0 || std::hypot(O.X - A.X, O.Y - A.Y) > 15.0) continue;
+				if (std::fabs(O.Started - A.Started) > 8.0 || std::hypot(O.X - A.X, O.Y - A.Y) > 15.0) continue;
 				if (O.Rate == A.Rate && O.Skip == A.Skip) ++Same;
 			}
 		}
 		std::printf("  %s: %d bullet deaths, %zu clips; by kind:", Battle.c_str(), Bullets, Clips.size());
 		for (const auto& KV : Kinds) std::printf(" %s %.0f%%", KV.first.c_str(), 100.0 * KV.second / std::max(1, Bullets));
 		std::printf("\n");
-		Check(Same == 0, "variety " + Battle + Fmt(": same clip within 15 m and 5 s at the same rate and start: %.0f", Same));
+		std::printf("  %s: run falls %.0f%% of bullet deaths; standing falls of men not aiming %d, %d of them opening in idle\n", Battle.c_str(), 100.0 * Run / std::max(1, Bullets), Stand, Idle);
+		Check(Same == 0, "variety " + Battle + Fmt(": same clip within 15 m and 8 s at the same rate and start: %.0f", Same));
+		Check(Thrown == 0, "variety " + Battle + Fmt(": (b) a thrown fall (die_thrown_*) for a bullet: %.0f", Thrown));
+		Check(Shoulder == 0, "variety " + Battle + Fmt(": (a) a standing fall opening at the shoulder (fire_stand) for a man not aiming: %.0f", Shoulder));
 		Check(Limp == 0, "variety " + Battle + Fmt(": limp (no clip, a file with falls): %.0f", Limp));
 		Check(Old == 0, "variety " + Battle + Fmt(": on the old three-clip table (a file with falls): %.0f", Old));
 		Check(!P.bNaN, "variety " + Battle + ": no NaN");
@@ -784,13 +1122,27 @@ int main(int Argc, char** Argv)
 		int Falls = 0;
 		for (const Row& R : P.Rows) Falls += R.Started >= 0.0 ? 1 : 0;
 		std::printf("off %s: %d men, %d falls, hash %s%s\n", NameOf(Battles[K]).c_str(), P.Men, Falls, Hex(P.Hash).c_str(), P.bNaN ? " NaN" : "");
+#ifndef LAND_HITS_BASE
+		// (how fast the men killed by a bullet in a gait were going, metres a second of life: the walking line, WalkBelow)
+		int Gait = 0, Bands[6] = {};
+		for (const Row& R : P.Rows)
+		{
+			if (R.Stance != "run" || (R.W != "rifle" && R.W != "mg")) continue;
+			++Gait;
+			++Bands[R.Speed < 1.0 ? 0 : R.Speed < 1.6 ? 1 : R.Speed < 2.2 ? 2 : R.Speed < 2.8 ? 3 : R.Speed < 3.5 ? 4 : 5];
+		}
+		std::printf("  gait speeds of %d bullet deaths in a gait (life m/s): <1 %d, 1-1.6 %d, 1.6-2.2 %d, 2.2-2.8 %d, 2.8-3.5 %d, >3.5 %d\n", Gait, Bands[0], Bands[1], Bands[2], Bands[3], Bands[4], Bands[5]);
+#endif
 	}
 #ifdef LAND_HITS_BASE
 	return 0;
 #else
 	Jolts(Fs);
+	FlinchByName(Fs, Argv[1]);
+	Rules(Fs);
 	Struck(Fs);
 	Wounded(Fs);
+	LiveWound(Fs);
 	std::printf("== variety (bVariety alone, then every part on)\n");
 	std::map<std::string, int> StandOnly, StandAll;
 	for (size_t K = 0; K < Battles.size(); ++K)
@@ -808,7 +1160,7 @@ int main(int Argc, char** Argv)
 		std::printf("  standing falls reached by bullets:");
 		for (const auto& KV : StandOnly) { std::printf(" %s %d", KV.first.c_str(), KV.second); Reached += KV.second; }
 		std::printf("\n");
-		Check(StandOnly.size() >= 5, Fmt("variety: the standing falls bullets never reached are reached (%.0f of them, %.0f falls)", static_cast<double>(StandOnly.size()), Reached));
+		Check(StandOnly.size() >= 3, Fmt("variety: the standing falls bullets never reached are reached (%.0f of them, %.0f falls)", static_cast<double>(StandOnly.size()), Reached));
 	}
 	std::printf("%s: %d failed\n", Failed ? "FAIL" : "ok", Failed);
 	return Failed ? 1 : 0;

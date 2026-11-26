@@ -170,13 +170,23 @@ namespace LandMen
 		/** The clip's prop keys by name, or none. */
 		const PropKeys* PropOf(const std::string& Track) const;
 		/** Bullet hits (Crowd::SetHits): where a fall or a wound of the soldiers thread's struck him (its "hit": {bone,
-		 * side, from}: the bone's name, left or right where it has one, and the shot's side, front, back, left or right),
-		 * empty where the clip does not say. */
+		 * side, at, push, from, blast}: the bone's name, the face of his body struck (front, back, left or right, his own
+		 * frame at the clip's first key), a point on his cloth on that bone in the file's rest-pose axes (bAt), the way the
+		 * blow drove him (unit, his own axes; the round came from minus it; bPush), the kind word (how he FALLS, never
+		 * where he was struck), and whether it is a blast's), empty where the clip does not say. */
 		struct HitPlace
 		{
 			std::string Bone, Side, From;
+			Vec3 At, Push;
+			bool bAt = false, bPush = false, bBlast = false;
 		};
 		HitPlace Hit;
+		/** The pose the clip starts in (its "start": [clip, time]): a fall's opening, e.g. "idle" or "fire_stand"; empty
+		 * where not given. */
+		std::string StartFrom;
+		/** A flinch's "additive_base": [clip, time], the pose its keys are a difference from; empty none. */
+		std::string AddBase;
+		float AddBaseT = 0.f;
 		float Speed() const { return Long > 0.f && Stride > 0.f ? Stride / Long : 0.f; }
 	};
 
@@ -363,6 +373,9 @@ namespace LandMen
 	 * that block) and seat in her bed (two abreast, the odd ones on her right, front to back), each -1 where the rules
 	 * did not say; false where no vehicle carries him. Asked from several threads at once, as GroundFn is. */
 	using SeatFn = std::function<bool(double X, double Y, int Block, int SeatOn, int Seat, SeatPlace& Out)>;
+	/** Bullet hits (bVariety): whether a fall that carries a man from (X0, Y0) to (X1, Y1) on the field has room, no wall,
+	 * hedge or vehicle in its way (the scene's; the crowd checks the other men itself). Asked from one thread. */
+	using RoomFn = std::function<bool(double X0, double Y0, double X1, double Y1)>;
 
 	/**
 	 * Where a man stands: his root on the field (x, y), his heading, and how far his body lies along the ground's slope
@@ -451,9 +464,11 @@ namespace LandMen
 		double Back = -1.0;             // back: on his feet again, -1 never
 		double WoundStarted = -1.0;     // when he went down wounded, as played
 		std::string WoundClip;          // the fall he went down in
-		std::string WoundLoop;          // what he does down there: a loop clip's name, or "hold" (its last frame, breathing)
+		std::string WoundLoop;          // what he does down there: a loop clip's name, "crawl" (dragging himself), or "hold" (stirring)
 		float WoundPhase = 0.f;         // his own place in that loop (a share), and its rate, or the breathing's
 		float WoundRate = 1.f;
+		float Dragged = 0.f;            // metres he dragged himself after his fall (bWounded), 0 none
+		bool bFallAimed = false;        // aiming or firing as he fell (bVariety: a standing fall opening at the shoulder is his)
 	};
 
 	/** His drawn look at one level of detail: the triangles, each point's paint and its colour (sRGB, 0 to 255). */
@@ -610,9 +625,20 @@ namespace LandMen
 		 *   is, the same clip at his own rate (0.85 to 1.15) and start (0 to 0.1 s in). Head, gut and leg falls four times
 		 *   as likely for a rifle's or an mg's kill by his own dice; a man walking or just halted takes the standing falls;
 		 *   no man lying goes limp where his file has falls.
+		 *   A standing fall opens in the pose its clip's "start" names: for a man not aiming or firing none that opens
+		 *   at the shoulder (fire_stand), those that open in idle preferred for a man walking or just halted. Never a
+		 *   thrown fall (die_thrown_*, or "hit" blast) for a bullet; none that carries him into another man, a body or
+		 *   (SetRoom) a wall, hedge or vehicle where another is left.
 		 *  bWounded: a man struck and not killed (wd, not carried) goes down with the jolt in a fall chosen as a dead
-		 *   man's is (Fates and neighbours), and lies breathing, or in his loop, till back.
+		 *   man's is (Fates and neighbours; the soldiers thread's wound_arm/_gut/_leg by name where his file has them),
+		 *   then lives down there, each man his own: a loop by name (wounded_clutch_*, wounded_writhe, wounded_waiting)
+		 *   where it lies as he does, some dragging themselves a few metres on (wounded_crawl, else crawl), else his
+		 *   fall's last frame held with breathing and stirring (the head lifted, an arm reaching, a knee drawn up). A man
+		 *   who will get up at back lies face down unless his file has get_up_back; up at back from where he lies
+		 *   (get_up_face/_back by name, else go_prone backwards). Killed down there, he goes still where he lies.
 		 *  bFlinch: kept for the graze flinch; nothing yet (misses are not booked per man here).
+		 * The jolt plays a flinch clip by name where his file has one (hit_flinch_f/_b/_l/_r, _kneel_*, _run_*,
+		 * hit_flinch_prone: its difference from its additive_base laid over his pose), else the code's.
 		 */
 		struct Hits
 		{
@@ -621,6 +647,8 @@ namespace LandMen
 		};
 		void SetHits(const Hits& H);
 		const Hits& HitsOf() const;
+		/** Bullet hits: the scene's walls, hedges and vehicles for a fall's room (none: only the men are checked). */
+		void SetRoom(const RoomFn& Fn);
 		/**
 		 * Bullet hits: where on the field the round that killed or wounded him struck him, and the part (the bone's name,
 		 * or "body" where he is not known): by his fall's clip ("hit" in the soldier file, else die_head_* the head,

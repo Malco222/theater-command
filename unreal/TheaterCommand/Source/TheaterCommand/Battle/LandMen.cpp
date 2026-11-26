@@ -824,12 +824,25 @@ namespace LandMen
 			Cl.Stride = static_cast<float>(C["stride"].Num0(0.0));
 			Cl.bLoop = C["loop"].K == J::Bool ? C["loop"].B : C["loop"].Num0() != 0.0;
 			Cl.StyleOf = C["style_of"].Text("");
-			// (bullet hits: where the fall or wound struck him, the soldiers thread's "hit": {bone, side, from}, where given)
+			// (bullet hits: where the fall or wound struck him, the soldiers thread's "hit": {bone, side, at, push, from,
+			// blast}, where given; the pose it starts in; a flinch's additive base)
 			if (C.Has("hit"))
 			{
-				Cl.Hit.Bone = C["hit"]["bone"].Text("");
-				Cl.Hit.Side = C["hit"]["side"].Text("");
-				Cl.Hit.From = C["hit"]["from"].Text("");
+				const J& H = C["hit"];
+				Cl.Hit.Bone = H["bone"].Text("");
+				Cl.Hit.Side = H["side"].Text("");
+				Cl.Hit.From = H["from"].Text("");
+				Cl.Hit.bAt = H["at"].Size() >= 3;
+				if (Cl.Hit.bAt) Cl.Hit.At = V3(H["at"]);
+				Cl.Hit.bPush = H["push"].Size() >= 3;
+				if (Cl.Hit.bPush) Cl.Hit.Push = V3(H["push"]);
+				Cl.Hit.bBlast = H["blast"].K == J::Bool && H["blast"].B;
+			}
+			if (C["start"].Size() >= 1) Cl.StartFrom = C["start"].At(0).Text("");
+			if (C["additive_base"].Size() >= 2)
+			{
+				Cl.AddBase = C["additive_base"].At(0).Text("");
+				Cl.AddBaseT = static_cast<float>(C["additive_base"].Number(1));
 			}
 			if (C["end_offset"].Size() >= 3)
 			{
@@ -1557,11 +1570,6 @@ namespace LandMen
 			Class EndClass = Up;
 			int Loops = 0;
 			float LastT = -1.f;             // the clip's time last frame, for its events
-			// Bullet hits (bWounded): a wounded man's loop down there, turned about his root by Yaw and moved by Shift
-			// (his own axes) so it lies as his fall left him; bWound: one of his wounded segments (his fall or what he does
-			// after), so the rules' stances wait.
-			bool bTurned = false, bWound = false;
-			float Yaw = 0.f, ShiftX = 0.f, ShiftY = 0.f;
 		};
 
 		struct Shot
@@ -2212,19 +2220,37 @@ namespace LandMen
 			// leg fall buckles (the calf bone, -1 none).
 			double JoltAt = -1.0;
 			Vec3 JoltAway { -1.f, 0.f, 0.f };
-			float JoltBend = 0.f, JoltTwist = 0.f, JoltOmega = 20.f, JoltSecond = 0.f, JoltKnee = 0.f;
+			float JoltBend = 0.f, JoltTwist = 0.f, JoltOmega = 20.f, JoltSecond = 0.f, JoltKnee = 0.f, JoltLong = 0.33f;
 			int JoltCalf = -1;
+			// The jolt's flinch clip by name (the soldiers thread's hit_flinch_*: its difference from its additive base laid
+			// over his pose instead of the code's turn), -1 none.
+			int FlinchClip = -1, FlinchBase = -1;
+			float FlinchBaseT = 0.f;
 			// Wounded (bWounded): wd and back from his track, not carried; when his fall down there ends, where his pelvis
-			// lies then (his own axes, z 0), the fall's last pose (his rifle stays where it fell), his breathing (held:
-			// no loop), and when he got up again (his body moved back to his root over the get-up: UpShift).
+			// lies then (his own axes, z 0), the fall's last pose (his rifle stays where it fell), and what he does down
+			// there (DownPose): Hold (the last pose, breathing and stirring), Loop (a loop clip lined up on him about his
+			// pelvis: turned by DownYaw about WoundPivot, its pelvis moved there by DownShift) or Drag (the crawl lined up
+			// so, carried on along its own forward at DragSpeed for DragFor life seconds, then held where it got to and
+			// stirring). His pelvis now (DownAt), for the slope's pivot and the get-up.
 			double Wd = -1.0, Back = -1.0;
 			bool bCarried = false;
 			double WoundEnds = -1.0;
 			Vec3 WoundPivot;
 			Pose WoundEnd;
-			bool bBreathe = false;
+			enum DownKind : uint8_t { Hold, Loop, Drag } DownHow = Hold;
+			int DownClip = -1;
+			float DownYaw = 0.f, DragSpeed = 0.f, DragFor = 0.f;
+			Vec3 DownShift, DownAt;
+			bool bFaceUp = false;
+			// Up again at back (UpAt): the get-up's pose laid over where he lay, turned by UpYaw and moved by UpShift (his own
+			// axes) at first, both eased out once he is on his feet (UpFor life seconds); the pose he lay in as he began to
+			// rise (UpFrom, in the get-up's own axes), blended out over its first quarter second.
 			double UpAt = -1.0;
 			Vec3 UpShift;
+			float UpYaw = 0.f, UpFor = 1.4f;
+			Pose UpFrom;
+			// Killed while down wounded: he goes still where he lies (no head dropped, no new fall).
+			bool bStill = false;
 		};
 
 		std::map<std::string, std::shared_ptr<const Soldier>> Soldiers;
@@ -2234,6 +2260,7 @@ namespace LandMen
 		bool bGore = false;
 		int GoredN = 0;
 		Crowd::Hits HitsNow;    // bullet hits (SetHits): all off, as before
+		RoomFn RoomAt;          // (bullet hits: the scene's walls, hedges and vehicles for a fall's room, SetRoom)
 		std::map<std::string, ArmyColours> Armies;
 		std::vector<TrackData> Tracks;
 		std::map<std::tuple<int, int, int>, int> TrackOf;   // (block, k, j)
@@ -2252,6 +2279,9 @@ namespace LandMen
 			size_t AtFrom = 0, AtTo = 0, ChFrom = 0, ChTo = 0;
 			bool bD = false, bOut = false;
 			double D = 0.0, Out = 0.0;
+			// (bullet hits: wd, back and cy, as ReadTracks reads them; null clears)
+			bool bWd = false, bBack = false, bCy = false, bCarried = false;
+			double Wd = -1.0, Back = -1.0;
 		};
 		// (kept from one delta to the next, so reading one makes nothing new)
 		std::vector<News> NewsRead;
@@ -3477,7 +3507,6 @@ namespace LandMen
 			const Clip& C = M.S->Clips[static_cast<size_t>(G.Clip)];
 			OutT = ClipTime(M, G, Now, OutLie);
 			Sample(C, OutT, Out);
-			if (G.bTurned) TurnRoot(*M.S, Out, G.Yaw, G.ShiftX, G.ShiftY);
 			if (G.bShift && C.bEndOffset && C.Long > 0.f)
 			{
 				// go_prone carries his pelvis forward by its end offset as he goes down; taken back along the way, he lies
@@ -3635,6 +3664,10 @@ namespace LandMen
 		// ---------------------------------------------------------------------------------------------------------
 		// The falls.
 		// ---------------------------------------------------------------------------------------------------------
+		/** Bullet hits (bVariety): a man in a gait slower than this (metres a second of life) is walking, and takes the
+		 * standing falls (the run falls for men truly running). */
+		static constexpr float WalkBelow = 1.6f;
+
 		std::string StanceForFall(const Man& M, double Now) const
 		{
 			// How he stood when he was hit, as drawn (a man half way down to the ground counts as kneeling).
@@ -3654,15 +3687,16 @@ namespace LandMen
 				else if (G.How == Segment::Gait) St = G.EndClass == Prone ? "prone" : "run";
 				else St = G.EndClass == Prone ? "prone" : G.EndClass == Kneel ? "kneel" : "stand";
 			}
-			// (bullet hits, bVariety: a man walking, or just halted from a gait, on his feet takes the standing falls, wherever
-			// he stands; a man running still the running ones)
+			// (bullet hits, bVariety: a man walking on his feet takes the standing falls, wherever he walks; one just halted
+			// from a gait the standing ones too, or in cover the cover ones, below; a man running still the running ones)
 			if (HitsNow.bVariety && G.Clip >= 0 && G.EndClass == Up)
 			{
 				const std::string& Name = M.S->Clips[static_cast<size_t>(G.Clip)].Name;
-				const bool bWalk = G.How == Segment::Gait && (Name == "walk" || Name == "creep" || Name == "reel_walk" || M.V < 2.2f * static_cast<float>(Life));
+				const bool bWalk = G.How == Segment::Gait && (Name == "walk" || Name == "creep" || Name == "reel_walk" || M.V < WalkBelow * static_cast<float>(Life));
 				const bool bHalted = G.How != Segment::Gait && G.How != Segment::Once && M.Prev.Clip >= 0 && M.Prev.How == Segment::Gait
 					&& M.Prev.EndClass == Up && (Now - G.Start) * Life < 1.5;
-				if (bWalk || bHalted) return "stand";
+				if (bWalk) return "stand";
+				if (bHalted) St = "stand";
 			}
 			if (St == "stand" || St == "kneel")
 			{
@@ -3804,7 +3838,52 @@ namespace LandMen
 			return Off < 1.22 ? "front" : Off > 1.92 ? "back" : "side";
 		}
 
-		int ChooseFall(Man& M, const std::string& St, const std::string& From, double At = -1.0, bool bWound = false)
+		/** Whether he is aiming or firing (bullet hits: a standing fall opening at the shoulder is his to take): a firing
+		 * pose shown, or a round of his around now. */
+		bool AimingNow(const Man& M) const
+		{
+			if (M.bShooting || M.Cur.bFiring) return true;
+			if (M.Cur.Clip < 0) return false;
+			const std::string& Name = M.S->Clips[static_cast<size_t>(M.Cur.Clip)].Name;
+			return Name.rfind("fire_", 0) == 0 || Name == "lmg_burst";
+		}
+
+		/** Whether a clip's last pose has him on his back (his chest's front, its own x, up). */
+		static bool EndsFaceUp(const Soldier& S, int Ci)
+		{
+			const int Ch = S.BoneIndex("chest");
+			if (Ci < 0 || Ch < 0) return false;
+			const Clip& C = S.Clips[static_cast<size_t>(Ci)];
+			Pose P;
+			Sample(C, C.Long, P);
+			Xform Fr[MaxBones];
+			BoneFrames(S, P, Fr);
+			return Fr[Ch].R[6] > 0.f;
+		}
+
+		/** Room for a fall (bullet hits, bVariety): where its end offset carries his pelvis (more than half a metre), the way
+		 * there and a third of a metre on clear of every other man and body (within 0.55 m) and, where the scene says
+		 * (SetRoom), of walls, hedges and vehicles. */
+		bool HasRoom(const Man& M, const Clip& C, const std::vector<std::pair<double, double>>& Others) const
+		{
+			if (!C.bEndOffset) return true;
+			const double EX = static_cast<double>(C.EndOffset.X), EY = static_cast<double>(C.EndOffset.Y), L = std::hypot(EX, EY);
+			if (L < 0.5) return true;
+			const double Sf = std::sin(static_cast<double>(M.F)), Cf = std::cos(static_cast<double>(M.F));
+			const double K = (L + 0.33) / L;
+			const double DX = (Sf * EX + Cf * EY) * K, DY = (Cf * EX - Sf * EY) * K;
+			const double LL = DX * DX + DY * DY;
+			for (const auto& O : Others)
+			{
+				const double U = std::clamp(((O.first - M.X) * DX + (O.second - M.Y) * DY) / LL, 0.0, 1.0);
+				const double QX = M.X + DX * U - O.first, QY = M.Y + DY * U - O.second;
+				// (a man standing right on his place is not in the way: he is where he stood too)
+				if (U > 0.15 && QX * QX + QY * QY < 0.55 * 0.55) return false;
+			}
+			return !RoomAt || RoomAt(M.X, M.Y, M.X + DX, M.Y + DY);
+		}
+
+		int ChooseFall(Man& M, const std::string& St, const std::string& From, double At = -1.0, bool bWound = false, bool bFaceDown = false)
 		{
 			const Soldier& S = *M.S;
 			// (bullet hits, bVariety: the neighbours' rule hard and with or without sections, and his own rate and start
@@ -3881,7 +3960,8 @@ namespace LandMen
 							if ((O.X - M.X) * (O.X - M.X) + (O.Y - M.Y) * (O.Y - M.Y) < 225.0)
 							{
 								Beside.push_back(*Shown);
-								if (bVar && At - When <= 8.0) Recent.push_back(*Shown);
+								const bool bLies = O.State != Man::Alive || (O.Info.WoundStarted >= 0.0 && O.UpAt < 0.0);
+								if (bVar && (At - When <= 8.0 || (bLies && (O.X - M.X) * (O.X - M.X) + (O.Y - M.Y) * (O.Y - M.Y) < 16.0))) Recent.push_back(*Shown);
 							}
 						}
 					}
@@ -3892,9 +3972,9 @@ namespace LandMen
 						for (const std::string& Name : KV.second) Taken += Takes(Kind, Name) ? 1 : 0;
 						if (Taken == 0) continue;
 						double W = Kind == "spin" ? 0.6 : Kind == "thrown" ? 0.2 : Kind == "crawl" ? 0.3 : 1.0;
-						// (wounded: never thrown; dragging himself on (crawl) as likely as any, more with the fire behind him,
-						// so he drags himself from it, less with it ahead)
-						if (bWound && WoundKinds.empty()) W = Kind == "thrown" ? 0.0 : Kind == "crawl" ? (From == "back" ? 3.0 : From == "side" ? 1.0 : From == "front" ? 0.4 : 2.0) : W;
+						// (wounded: never thrown; dragging himself on (crawl: its end held, propped, reads alive) more likely
+						// than any, the more with the fire behind him, so he drags himself from it)
+						if (bWound && WoundKinds.empty()) W = Kind == "thrown" ? 0.0 : Kind == "crawl" ? (From == "back" ? 6.0 : From == "side" ? 5.0 : From == "front" ? 4.0 : 5.0) : W;
 						if (From == "front") W *= Kind == "back" ? 3.0 : Kind == "knees" ? 1.5 : Kind == "forward" ? 0.4 : 1.0;
 						if (From == "back") W *= Kind == "forward" ? 3.0 : Kind == "back" ? 0.3 : 1.0;
 						if (From == "side") W *= Kind == "side" ? 3.0 : Kind == "spin" ? 2.0 : 1.0;
@@ -3933,15 +4013,54 @@ namespace LandMen
 					}
 					double Sum = 0.0;
 					for (const auto& O : Odds) Sum += O.second;
-					// (bVariety: none a body within 15 m showed in the last 8 s, where any other has a weight)
-					if (bVar && !Recent.empty())
+					// (bVariety, hard where any other has a weight, the soldiers thread's rules first: never a thrown fall
+					// for a bullet; a standing fall opening at the shoulder only for a man aiming or firing, one opening in
+					// idle the more likely for a man who was not; room for where the fall carries him; then none a body
+					// within 15 m showed in the last 8 s, nor one a body within 4 m lies in)
+					if (bVar)
 					{
-						double Hard = 0.0;
-						for (const auto& O : Odds) Hard += std::find(Recent.begin(), Recent.end(), O.first) == Recent.end() ? O.second : 0.0;
-						if (Hard > 0.0)
+						const int Rule = 1, Near = 2;
+						std::vector<int> Bar(Odds.size(), 0);
+						const bool bBullet = bWound || M.KillW == Weapon::Rifle || M.KillW == Weapon::Mg;
+						const bool bAiming = AimingNow(M);
+						M.Info.bFallAimed = bAiming;
+						const std::vector<std::pair<double, double>> Others = OthersNear(M, 8.0);
+						for (size_t I = 0; I < Odds.size(); ++I)
 						{
-							for (auto& O : Odds) if (std::find(Recent.begin(), Recent.end(), O.first) != Recent.end()) O.second = 0.0;
+							const int Ci = S.ClipIndex(Odds[I].first);
+							if (Ci < 0) continue;
+							const Clip& C = S.Clips[static_cast<size_t>(Ci)];
+							if (bBullet && (C.Name.rfind("die_thrown_", 0) == 0 || C.Hit.bBlast)) Bar[I] |= Rule;
+							if (St == "stand" && !C.StartFrom.empty())
+							{
+								if (C.StartFrom == "fire_stand") { if (!bAiming) Bar[I] |= Rule; else Odds[I].second *= 2.0; }
+								else if (!bAiming && C.StartFrom == "idle") Odds[I].second *= 3.0;
+							}
+							if (bWound && bFaceDown && EndsFaceUp(S, Ci)) Bar[I] |= Rule;
+							if (!HasRoom(M, C, Others)) Bar[I] |= Rule;
+							if (std::find(Recent.begin(), Recent.end(), Odds[I].first) != Recent.end()) Bar[I] |= Near;
+						}
+						// (all the rules where something is left; else the rules without the neighbours (his own rate and
+						// start below); else a bullet's never-thrown alone; else as weighed)
+						for (const int Mask : { Rule | Near, Rule, -1 })
+						{
+							double Hard = 0.0;
+							for (size_t I = 0; I < Odds.size(); ++I)
+							{
+								const int Ci = S.ClipIndex(Odds[I].first);
+								const bool bThrown = bBullet && Ci >= 0 && (Odds[I].first.rfind("die_thrown_", 0) == 0 || S.Clips[static_cast<size_t>(Ci)].Hit.bBlast);
+								const bool bOut = Mask < 0 ? bThrown : (Bar[I] & Mask) != 0;
+								Hard += bOut ? 0.0 : Odds[I].second;
+							}
+							if (Hard <= 0.0) continue;
+							for (size_t I = 0; I < Odds.size(); ++I)
+							{
+								const int Ci = S.ClipIndex(Odds[I].first);
+								const bool bThrown = bBullet && Ci >= 0 && (Odds[I].first.rfind("die_thrown_", 0) == 0 || S.Clips[static_cast<size_t>(Ci)].Hit.bBlast);
+								if (Mask < 0 ? bThrown : (Bar[I] & Mask) != 0) Odds[I].second = 0.0;
+							}
 							Sum = Hard;
+							break;
 						}
 					}
 					if (Sum <= 0.0) for (auto& O : Odds) { O.second = 1.0; Sum += 1.0; }
@@ -4017,6 +4136,26 @@ namespace LandMen
 
 		void StartFall(Man& M, double D)
 		{
+			if (HitsNow.bWounded && M.Info.WoundStarted >= 0.0 && M.UpAt < 0.0)
+			{
+				// (bullet hits: killed while he lies wounded: he goes still where he lies, as he lies; no new fall)
+				M.Info.FallStance = "prone";
+				M.Info.FallKind = "still";
+				M.Info.FallFrom = FromWhere(M);
+				M.Info.FallClip = "still";
+				M.FallClip = -1;
+				M.FallAt = D;
+				M.FallFrom = M.Now;
+				M.FallLie0 = M.Lie;
+				M.FallLastT = -1.f;
+				M.Info.FallStarted = D;
+				M.FallDur = 0.6 / Life;
+				M.FallPivot = M.DownAt;
+				M.bStill = true;
+				M.State = Man::Settling;
+				if (HitsNow.bJolt) JoltFrom(M, D, false);
+				return;
+			}
 			const std::string St = StanceForFall(M, D);
 			// (Effects (R2): the side a gored man's falls are read by, his burst's or under, or his gun's where it burst
 			// under him and he has no fall from under he may take (GoreSide), for FromWhere and ChooseFall; empty for a man
@@ -4102,12 +4241,20 @@ namespace LandMen
 					if (L >= 1.0) Away = { static_cast<float>(-Fwd / L), static_cast<float>(-Right / L), 0.f };
 				}
 			}
+			// (the clip's own "push", where it has one: the way his fall carries him from the blow)
+			{
+				const int Pi = bWound ? M.Cur.Clip : M.FallClip;
+				const Clip* Pc = Pi >= 0 ? &M.S->Clips[static_cast<size_t>(Pi)] : nullptr;
+				const float PL = Pc && Pc->Hit.bPush ? std::hypot(Pc->Hit.Push.X, Pc->Hit.Push.Y) : 0.f;
+				if (PL > 0.3f) Away = { Pc->Hit.Push.X / PL, Pc->Hit.Push.Y / PL, 0.f };
+			}
 			M.JoltAway = Away;
 			// (the struck shoulder: the shooter's side, his right where the shot comes from his right; from ahead or
 			// behind, either by his dice)
 			const float Side = Away.Y < -0.25f ? 1.f : Away.Y > 0.25f ? -1.f : Shoulder < 0.5 ? 1.f : -1.f;
 			const float Deg = 0.0174532925f;
-			M.JoltBend = 16.f * Deg * Size;
+			// (struck from a side, he leans the more, so his outline moves sideways at a distance)
+			M.JoltBend = 16.f * Deg * Size * (1.f + 0.7f * std::fabs(Away.Y));
 			M.JoltTwist = Side * 14.f * Deg * Size;
 			M.JoltOmega = static_cast<float>(18.0 + 4.0 * Pace);
 			M.JoltSecond = bMg ? static_cast<float>(0.07 + 0.04 * Second) : 0.f;
@@ -4125,6 +4272,25 @@ namespace LandMen
 					M.JoltCalf = M.S->BoneIndex(bRight ? "calf_r" : "calf_l");
 					M.JoltKnee = static_cast<float>(15.0 + 10.0 * Knee) * Deg * Size;
 					M.JoltTwist = 0.f;
+				}
+			}
+			// The soldiers thread's flinch by name where his file has it (the letter where the round came FROM in his own
+			// frame), its difference from its additive base laid over his pose instead of the code's turn.
+			M.FlinchClip = M.FlinchBase = -1;
+			M.JoltLong = 0.33f;
+			{
+				const std::string& St = M.Info.FallStance;
+				const char* Letter = -Away.X > 0.7071f ? "f" : Away.X > 0.7071f ? "b" : -Away.Y > 0.f ? "r" : "l";
+				const std::string Name = St == "prone" ? std::string("hit_flinch_prone")
+					: std::string(St == "kneel" || St == "cover" ? "hit_flinch_kneel_" : St == "run" ? "hit_flinch_run_" : "hit_flinch_") + Letter;
+				const int Fi = M.S->ClipIndex(Name);
+				if (Fi >= 0)
+				{
+					const Clip& Fc = M.S->Clips[static_cast<size_t>(Fi)];
+					M.FlinchClip = Fi;
+					M.FlinchBase = Fc.AddBase.empty() ? -1 : M.S->ClipIndex(Fc.AddBase);
+					M.FlinchBaseT = Fc.AddBaseT;
+					M.JoltLong = std::max(0.05f, Fc.Long);
 				}
 			}
 			M.JoltAt = At;
@@ -4182,7 +4348,27 @@ namespace LandMen
 		{
 			// (life's seconds: the clips' clock, Life of them a battle second)
 			const double T = (Now - M.JoltAt) * Life;
-			if (T <= 0.0 || T >= 0.33) return;
+			if (T <= 0.0 || T >= static_cast<double>(M.JoltLong)) return;
+			if (M.FlinchClip >= 0)
+			{
+				// (the flinch clip: each bone's turn and move from its base laid over his, faded out over its last 0.1 s)
+				const Clip& Fc = M.S->Clips[static_cast<size_t>(M.FlinchClip)];
+				Pose Fp, Bp;
+				Sample(Fc, static_cast<float>(T), Fp);
+				if (M.FlinchBase >= 0) Sample(M.S->Clips[static_cast<size_t>(M.FlinchBase)], M.FlinchBaseT, Bp);
+				else Sample(Fc, 0.f, Bp);
+				const float Wf = 1.f - Smooth(static_cast<float>((T - (static_cast<double>(Fc.Long) - 0.1)) / 0.1));
+				const size_t NB = std::min(M.S->Bones.size(), static_cast<size_t>(MaxBones));
+				for (size_t B = 1; B < NB; ++B)
+				{
+					const Quat& Bq = Bp.Rot[B];
+					const Quat Inv { Bq.W, -Bq.X, -Bq.Y, -Bq.Z };
+					const Quat Dq = QSlerp(Quat { 1.f, 0.f, 0.f, 0.f }, QNormal(QMul(Inv, Fp.Rot[B])), Wf);
+					P.Rot[B] = QNormal(QMul(P.Rot[B], Dq));
+					P.Move[B] = Add(P.Move[B], Scale(Sub(Fp.Move[B], Bp.Move[B]), Wf));
+				}
+				return;
+			}
 			const double Pn = JoltPulse(M, T, T);
 			const double Ph = JoltPulse(M, T - 0.04, T);
 			const Soldier& S = *M.S;
@@ -4195,7 +4381,9 @@ namespace LandMen
 			BoneFrames(S, P, Fr);
 			const Vec3 Base = Fr[Top].Point(S.Bones[static_cast<size_t>(Top)].Head);
 			const int Tip = Nk >= 0 ? Nk : Upper;
+			if (Tip == Top) return;   // (no spine to turn about: a file without neck and chest)
 			const Vec3 TipAt = Fr[Tip].Point(S.Bones[static_cast<size_t>(Tip)].Head);
+			if (Length(Sub(TipAt, Base)) < 0.02f) return;
 			const Vec3 Spine = Unit(Sub(TipAt, Base));
 			// (bent toward 'away' as it lies across his spine; a man lying with the shot along him heaves up off the ground)
 			Vec3 Across = Sub(M.JoltAway, Scale(Spine, Dot(M.JoltAway, Spine)));
@@ -4257,19 +4445,23 @@ namespace LandMen
 			}
 		}
 
-		/** A wounded man held on his fall's last frame breathes (bWounded): spine_02 and chest heave 2 degrees either way
-		 * and roll a little, about 0.3 times a second at his own rate and phase, coming in over his first second down. */
-		void Breathe(const Man& M, Pose& P, double Now) const
+		/** A wounded man down there breathes (bWounded; held, or done dragging himself): spine_02 and chest heave 2 degrees
+		 * either way and roll a little, about 0.3 times a second at his own rate and phase, coming in over his first second
+		 * down (From: when he lay still). */
+		void Breathe(const Man& M, Pose& P, double Now, double From) const
 		{
-			const double T = (Now - M.WoundEnds) * Life;
+			const double T = (Now - From) * Life;
 			if (T <= 0.0) return;
 			const Soldier& S = *M.S;
 			const int Sp1 = S.BoneIndex("spine_01"), Sp2 = S.BoneIndex("spine_02"), Ch = S.BoneIndex("chest"), Nk = S.BoneIndex("neck");
 			if (Sp2 < 0 && Ch < 0) return;
+			const int A = Sp1 >= 0 ? Sp1 : Sp2 >= 0 ? Sp2 : Ch, B = Nk >= 0 ? Nk : Ch >= 0 ? Ch : Sp2;
+			if (A == B) return;   // (no spine to heave about)
 			Xform Fr[MaxBones];
 			BoneFrames(S, P, Fr);
-			const int A = Sp1 >= 0 ? Sp1 : Sp2 >= 0 ? Sp2 : Ch, B = Nk >= 0 ? Nk : Ch >= 0 ? Ch : Sp2;
-			const Vec3 Spine = Unit(Sub(Fr[B].Point(S.Bones[static_cast<size_t>(B)].Head), Fr[A].Point(S.Bones[static_cast<size_t>(A)].Head)));
+			const Vec3 Along = Sub(Fr[B].Point(S.Bones[static_cast<size_t>(B)].Head), Fr[A].Point(S.Bones[static_cast<size_t>(A)].Head));
+			if (Length(Along) < 0.02f) return;
+			const Vec3 Spine = Unit(Along);
 			Vec3 Side = Cross(Spine, Vec3 { 0.f, 0.f, 1.f });
 			Side = Length(Side) < 0.3f ? Vec3 { 0.f, 1.f, 0.f } : Unit(Side);
 			const double Ph = 6.28318530717959 * (0.3 * static_cast<double>(M.Info.WoundRate) * T + static_cast<double>(M.Info.WoundPhase));
@@ -4281,24 +4473,80 @@ namespace LandMen
 			TurnBone(S, Fr, P, Sp2, Spine, Roll);
 		}
 
-		/** Whether a loop's pose at its start lies as a fall's last pose does (both on his back), and the turn about his
-		 * root (Yaw, radians) and the move (his own axes) that lay its pelvis and its head where the fall left them. */
-		bool LiesAlike(const Soldier& S, const Pose& End, const Pose& Loop, float& OutYaw, float& OutX, float& OutY) const
+		/** A slow pulse, 0 to 1 and back, each Period seconds at his phase (Ph, a share), resting about half the time. */
+		static float Pulse(double T, double Period, double Ph)
 		{
-			const int Pe = S.BoneIndex("pelvis"), Hd = S.BoneIndex("head"), Ch = S.BoneIndex("chest");
-			if (Pe < 0 || Hd < 0 || Ch < 0) return false;
-			Xform A[MaxBones], B[MaxBones];
-			BoneFrames(S, End, A);
-			BoneFrames(S, Loop, B);
-			// (the chest's front, its own x, up: on his back)
-			if (A[Ch].R[6] < 0.5f || B[Ch].R[6] < 0.5f) return false;
-			const Vec3 PA = A[Pe].Point(S.Bones[static_cast<size_t>(Pe)].Head), HA = A[Hd].Point(S.Bones[static_cast<size_t>(Hd)].Head);
-			const Vec3 PB = B[Pe].Point(S.Bones[static_cast<size_t>(Pe)].Head), HB = B[Hd].Point(S.Bones[static_cast<size_t>(Hd)].Head);
-			OutYaw = static_cast<float>(std::atan2(HA.Y - PA.Y, HA.X - PA.X) - std::atan2(HB.Y - PB.Y, HB.X - PB.X));
-			const float C = std::cos(OutYaw), Sn = std::sin(OutYaw);
-			OutX = PA.X - (C * PB.X - Sn * PB.Y);
-			OutY = PA.Y - (Sn * PB.X + C * PB.Y);
-			return true;
+			const double X = std::sin(6.28318530717959 * (T / Period + Ph));
+			return X > 0.0 ? static_cast<float>(X * X) : 0.f;
+		}
+
+		/**
+		 * A wounded man down there stirs (bWounded; held, or done dragging himself), so he reads as alive at fifty metres
+		 * and none as the dead beside him: each in its own slow pulses at his own rate and phase, coming in over a second
+		 * (From: when he lay still). Face down: his head lifted off the ground and turned, an arm reaching out along the
+		 * ground, a knee drawn out to the side and that foot lifted; on his back: his head lifted toward his chest, a hand
+		 * brought up to the wound (the arm raised and bent), a knee drawn up. Never the pelvis nor the clavicles.
+		 */
+		void Stir(const Man& M, Pose& P, double Now, double From) const
+		{
+			const double T = (Now - From) * Life;
+			if (T <= 0.0) return;
+			const Soldier& S = *M.S;
+			const int Pe = S.BoneIndex("pelvis"), Nk = S.BoneIndex("neck"), Hd = S.BoneIndex("head"), Ch = S.BoneIndex("chest");
+			if (Pe < 0 || Nk < 0 || Ch < 0) return;
+			Xform Fr[MaxBones];
+			BoneFrames(S, P, Fr);
+			const Vec3 Along = Sub(Fr[Nk].Point(S.Bones[static_cast<size_t>(Nk)].Head), Fr[Pe].Point(S.Bones[static_cast<size_t>(Pe)].Head));
+			if (Length(Along) < 0.1f) return;
+			const Vec3 U = Unit(Along);
+			Vec3 F { Fr[Ch].R[0], Fr[Ch].R[3], Fr[Ch].R[6] };
+			F = Sub(F, Scale(U, Dot(F, U)));
+			if (Length(F) < 0.1f) return;
+			F = Unit(F);
+			const Vec3 Lt = Unit(Cross(U, F));     // (his right, as he lies: U x F)
+			const bool bUp = F.Z > 0.f;
+			const float In = Smooth(static_cast<float>(T));
+			const double Rate = static_cast<double>(M.Info.WoundRate);
+			const double Ph = static_cast<double>(M.Info.WoundPhase);
+			// (which arm and which leg: his own, by his phase)
+			const bool bRightArm = std::fmod(Ph * 7.0, 1.0) < 0.5, bRightLeg = std::fmod(Ph * 13.0, 1.0) < 0.5;
+			// (each never quite still: a third of the way up at rest, so a still frame shows him propped and reaching too)
+			const float Head = In * 0.8f * (0.35f + 0.65f * Pulse(T * Rate, 4.3, Ph));
+			const float Look = In * 0.35f * static_cast<float>(std::sin(6.28318530717959 * (T * Rate / 9.0 + Ph * 3.0)));
+			const float Arm = In * (0.35f + 0.65f * Pulse(T * Rate, 6.1, Ph + 0.37));
+			const float Knee = In * (0.3f + 0.7f * Pulse(T * Rate, 7.7, Ph + 0.71));
+			// The head: lifted (toward his chest on his back, off the ground face down) and turned to look about.
+			const float Lift = bUp ? 1.f : -1.f;
+			TurnBone(S, Fr, P, Nk, Lt, 0.5f * Lift * Head);
+			if (Hd >= 0)
+			{
+				TurnBone(S, Fr, P, Hd, Lt, 0.5f * Lift * Head);
+				TurnBone(S, Fr, P, Hd, U, Look);
+			}
+			// An arm: on his back brought up to the wound, raised and bent; face down reaching out along the ground.
+			const int Ua = S.BoneIndex(bRightArm ? "upperarm_r" : "upperarm_l"), La = S.BoneIndex(bRightArm ? "lowerarm_r" : "lowerarm_l");
+			if (bUp)
+			{
+				TurnBone(S, Fr, P, Ua, Lt, -1.1f * Arm);
+				TurnBone(S, Fr, P, La, Lt, -1.2f * Arm);
+			}
+			else
+			{
+				TurnBone(S, Fr, P, Ua, F, (bRightArm ? 1.f : -1.f) * 1.0f * Arm);
+				TurnBone(S, Fr, P, La, Lt, -0.6f * Arm);
+			}
+			// A knee: drawn up on his back; face down drawn out to the side, the foot lifted.
+			const int Th = S.BoneIndex(bRightLeg ? "thigh_r" : "thigh_l"), Ca = S.BoneIndex(bRightLeg ? "calf_r" : "calf_l");
+			if (bUp)
+			{
+				TurnBone(S, Fr, P, Th, Lt, -0.8f * Knee);
+				TurnBone(S, Fr, P, Ca, Lt, 1.4f * Knee);
+			}
+			else
+			{
+				TurnBone(S, Fr, P, Th, F, (bRightLeg ? 1.f : -1.f) * 0.6f * Knee);
+				TurnBone(S, Fr, P, Ca, Lt, 1.2f * Knee);
+			}
 		}
 
 		/** A pose turned about his root's ground point by Yaw and moved by X, Y (his own axes): the whole man, rigid. */
@@ -4314,14 +4562,153 @@ namespace LandMen
 			P.Move[0] = Sub(Turned, Head);
 		}
 
+		/** The same pose with its root moved level under its pelvis (its children moved back, so nothing else moves): two
+		 * poses so rooted blend with their pelvises going straight from one to the other, however their roots are turned,
+		 * not swung about where the root was. */
+		static void RootUnderPelvis(const Soldier& S, Pose& P)
+		{
+			const int Pe = S.BoneIndex("pelvis");
+			if (Pe < 0 || S.Bones.empty() || S.Bones[0].Parent >= 0) return;
+			Xform Fr[MaxBones];
+			BoneFrames(S, P, Fr);
+			const Vec3 Pel = Fr[Pe].Point(S.Bones[static_cast<size_t>(Pe)].Head);
+			const Vec3 Head = S.Bones[0].Head;
+			const Vec3 Was = Add(Head, P.Move[0]);
+			const Vec3 Now { Pel.X, Pel.Y, Was.Z };
+			const Vec3 D = Sub(Was, Now);
+			float R[9];
+			QMat(P.Rot[0], R);
+			const Vec3 Local { R[0] * D.X + R[3] * D.Y + R[6] * D.Z, R[1] * D.X + R[4] * D.Y + R[7] * D.Z, R[2] * D.X + R[5] * D.Y + R[8] * D.Z };
+			const size_t NB = std::min(S.Bones.size(), static_cast<size_t>(MaxBones));
+			for (size_t B = 1; B < NB; ++B)
+			{
+				if (S.Bones[B].Parent == 0) P.Move[B] = Add(P.Move[B], Local);
+			}
+			P.Move[0] = Sub(Now, Head);
+		}
+
+		/** A pose turned by Yaw about the upright through C (his own axes): rigid, C stays where it is. */
+		static void TurnPoseAbout(const Soldier& S, Pose& P, float Yaw, const Vec3& C)
+		{
+			const float Co = std::cos(Yaw), Sn = std::sin(Yaw);
+			TurnRoot(S, P, Yaw, C.X - (Co * C.X - Sn * C.Y), C.Y - (Sn * C.X + Co * C.Y));
+		}
+
+		/** A pose's pelvis (his own axes) and the way from it to his head (level, radians from his x), and whether his chest's
+		 * front faces up (on his back). False where the file lacks those bones. */
+		static bool LieOf(const Soldier& S, const Pose& P, Vec3& OutPelvis, float& OutWay, bool& bOutUp)
+		{
+			const int Pe = S.BoneIndex("pelvis"), Hd = S.BoneIndex("head"), Ch = S.BoneIndex("chest");
+			if (Pe < 0 || Hd < 0 || Ch < 0) return false;
+			Xform Fr[MaxBones];
+			BoneFrames(S, P, Fr);
+			OutPelvis = Fr[Pe].Point(S.Bones[static_cast<size_t>(Pe)].Head);
+			const Vec3 H = Fr[Hd].Point(S.Bones[static_cast<size_t>(Hd)].Head);
+			OutWay = static_cast<float>(std::atan2(H.Y - OutPelvis.Y, H.X - OutPelvis.X));
+			bOutUp = Fr[Ch].R[6] > 0.f;
+			return true;
+		}
+
+		/** Whether loop clip Li at clip time Lt lies as pose End does (both face up or both face down, his chest square to
+		 * the ground), and the turn about End's pelvis (OutYaw) and the loop's move before it (OutShift, his own axes) that
+		 * lay its pelvis on End's and its head the way End's lies. */
+		bool LoopFits(const Soldier& S, const Pose& End, int Li, float Lt, float& OutYaw, Vec3& OutShift) const
+		{
+			Pose Lp;
+			Sample(S.Clips[static_cast<size_t>(Li)], Lt, Lp);
+			Vec3 PA, PB;
+			float WA = 0.f, WB = 0.f;
+			bool bA = false, bB = false;
+			const bool bGotA = LieOf(S, End, PA, WA, bA);
+			const bool bGotB = LieOf(S, Lp, PB, WB, bB);
+			if (!bGotA || !bGotB || bA != bB) return false;
+			Xform A[MaxBones], B[MaxBones];
+			const int Ch = S.BoneIndex("chest");
+			BoneFrames(S, End, A);
+			BoneFrames(S, Lp, B);
+			if (std::fabs(A[Ch].R[6]) < 0.5f || std::fabs(B[Ch].R[6]) < 0.5f) return false;
+			OutYaw = WA - WB;
+			OutShift = { PA.X - PB.X, PA.Y - PB.Y, 0.f };
+			return true;
+		}
+
+		/** Where his pelvis lies now, down wounded (his own axes, z 0): where his fall left it, or as far on as he has dragged
+		 * himself. */
+		Vec3 DownPelvis(const Man& M, double Now) const
+		{
+			Vec3 At = M.WoundPivot;
+			if (M.DownHow == Man::Drag && Now > M.WoundEnds)
+			{
+				const double Gone = static_cast<double>(M.DragSpeed) * std::min((Now - M.WoundEnds) * Life, static_cast<double>(M.DragFor));
+				At.X += static_cast<float>(std::cos(static_cast<double>(M.DownYaw)) * Gone);
+				At.Y += static_cast<float>(std::sin(static_cast<double>(M.DownYaw)) * Gone);
+			}
+			At.Z = 0.f;
+			return At;
+		}
+
+		/** When he lay still down there (his fall's end, or the end of dragging himself), for breathing and stirring. */
+		double StillFrom(const Man& M) const
+		{
+			return M.WoundEnds + (M.DownHow == Man::Drag ? static_cast<double>(M.DragFor) / Life : 0.0);
+		}
+
+		/**
+		 * His pose down there from his fall's end (bWounded): held, his fall's last frame; a loop, lined up on him about
+		 * his pelvis (the fall's last pose turned into the loop's axes and blended into the loop over 0.8 s, the whole then
+		 * turned back about his pelvis, so the pelvis stays put and nothing swings about his root); dragging himself, the
+		 * crawl lined up so and carried on along its own forward, then held where it got to. Stateless in time.
+		 */
+		void DownPose(const Man& M, double Now, Pose& P) const
+		{
+			P = M.WoundEnd;
+			if (M.DownHow == Man::Hold || M.DownClip < 0) return;
+			const Soldier& S = *M.S;
+			const Clip& L = S.Clips[static_cast<size_t>(M.DownClip)];
+			const double T = std::max(0.0, (Now - M.WoundEnds) * Life);
+			const double Rate = static_cast<double>(M.Info.WoundRate);
+			const double Played = M.DownHow == Man::Drag ? std::min(T, static_cast<double>(M.DragFor)) : T;
+			const double Long = static_cast<double>(std::max(L.Long, 0.01f));
+			const float Lt = static_cast<float>(std::fmod(Played * Rate + static_cast<double>(M.Info.WoundPhase) * Long, Long));
+			const double Gone = M.DownHow == Man::Drag ? static_cast<double>(M.DragSpeed) * Played : 0.0;
+			Pose B;
+			Sample(L, Lt, B);
+			if (M.DownHow == Man::Drag)
+			{
+				// (a crawl's steps go on in place: its pelvis held where it was at its start, the man carried on instead)
+				const int Pe = S.BoneIndex("pelvis");
+				Pose B0;
+				Sample(L, static_cast<float>(std::fmod(static_cast<double>(M.Info.WoundPhase) * Long, Long)), B0);
+				Vec3 P0, P1;
+				float W0 = 0.f, W1 = 0.f;
+				bool bU0 = false, bU1 = false;
+				const bool bGot0 = Pe >= 0 && LieOf(S, B0, P0, W0, bU0);
+				const bool bGot1 = Pe >= 0 && LieOf(S, B, P1, W1, bU1);
+				if (bGot0 && bGot1) TurnRoot(S, B, 0.f, P0.X - P1.X, P0.Y - P1.Y);
+			}
+			TurnRoot(S, B, 0.f, M.DownShift.X + static_cast<float>(Gone), M.DownShift.Y);
+			Pose A0 = M.WoundEnd;
+			TurnPoseAbout(S, A0, -M.DownYaw, M.WoundPivot);
+			const float W = Smooth(static_cast<float>(T / 0.8));
+			if (W < 1.f)
+			{
+				RootUnderPelvis(S, A0);
+				RootUnderPelvis(S, B);
+				Blend(A0, B, W, P);
+			}
+			else P = B;
+			TurnPoseAbout(S, P, M.DownYaw, M.WoundPivot);
+		}
+
 		/**
 		 * A man struck and not killed goes down (bWounded; wd and not carried): his fall chosen as a dead man's is, through
 		 * the Fates and neighbours (ChooseFall's wound falls: the soldiers thread's wound_arm, wound_gut, wound_leg where his
-		 * file has them, else his stance's falls, never thrown, dragging himself on (crawl) as likely as any), the jolt
-		 * over it. Then, each man his own: the loop the soldiers thread makes for where he was struck
-		 * (wounded_clutch_arm, _gut, _leg; wounded_writhe), else wounded_waiting, where it lies as his fall left him (on
-		 * his back: turned about him to lie there, never face down to his back); else his fall's last frame held,
-		 * breathing. His own phase and rate. The rules' stances wait till back.
+		 * file has them, else his stance's falls, never thrown, dragging himself on (crawl) as likely as any; one ending
+		 * face down for a man who gets up at back and has no get_up_back), the jolt over it. Then, each man his own by his
+		 * own dice: on his back the loop the soldiers thread makes for where he was struck (wounded_clutch_arm, _gut, _leg;
+		 * wounded_writhe), else wounded_waiting, where it lies as his fall left him; face down, some drag themselves 1.5 to
+		 * 3.5 m on (wounded_crawl, else crawl) where there is room; else his fall's last frame held; held or done dragging,
+		 * breathing and stirring. His own phase and rate. The rules' stances wait till back.
 		 */
 		void StartWound(Man& M, double At)
 		{
@@ -4329,20 +4716,25 @@ namespace LandMen
 			const std::string St = StanceForFall(M, At);
 			M.Info.HitPart = HitsNow.bVariety ? HitPartOf(M) : std::string();
 			const std::string Kind0 = M.Info.FallKind, Stance0 = M.Info.FallStance, From0 = M.Info.FallFrom;
-			int Ci = ChooseFall(M, St, std::string(), At, true);
-			M.Info.FallKind = Kind0;
-			M.Info.FallStance = Stance0;
-			M.Info.FallFrom = From0;
+			const bool bGetsUp = M.Back >= 0.0 && S.ClipIndex("get_up_back") < 0;
+			int Ci = ChooseFall(M, St, std::string(), At, true, bGetsUp);
 			const float Rate = M.Info.FallRate, Skip = M.Info.FallSkip;
 			M.Info.FallRate = 1.f;
 			M.Info.FallSkip = 0.f;
 			if (Ci < 0) Ci = S.ClipIndex("go_prone");
-			if (Ci < 0) return;
+			if (Ci < 0)
+			{
+				M.Info.FallKind = Kind0;
+				M.Info.FallStance = Stance0;
+				M.Info.FallFrom = From0;
+				return;
+			}
 			const Clip& C = S.Clips[static_cast<size_t>(Ci)];
 			M.Info.Wounded = M.Wd;
 			M.Info.Back = M.Back;
 			M.Info.WoundStarted = At;
 			M.Info.WoundClip = C.Name;
+			M.Info.Dragged = 0.f;
 			Sample(C, C.Long, M.WoundEnd);
 			M.WoundPivot = PelvisOf(M, M.WoundEnd);
 			if (C.bEndOffset)
@@ -4350,10 +4742,10 @@ namespace LandMen
 				M.WoundPivot.X = C.EndOffset.X;
 				M.WoundPivot.Y = C.EndOffset.Y;
 			}
+			M.DownAt = M.WoundPivot;
 			Segment G = OnceOf(Ci, Skip, C.Long, At, (C.Long - Skip) / (Life * Rate), Prone, 0.12f);
 			G.LieA = M.Lie;
 			G.LieB = 1.f;
-			G.bWound = true;
 			M.Queue.clear();
 			Start(M, G, At);
 			M.WoundEnds = At + G.Dur;
@@ -4361,46 +4753,169 @@ namespace LandMen
 			Dice WD(OwnSeed(M, 0x3D0D5ull));
 			const double Ph = WD.U();
 			const double Rt = WD.U();
+			const double Pick = WD.U();
+			const double Far = WD.U();
 			M.Info.WoundPhase = static_cast<float>(Ph);
 			M.Info.WoundRate = static_cast<float>(0.85 + 0.3 * Rt);
-			// What he does down there: the wanted loops by name, then the stand-in, where it lies as he does.
+			Vec3 Pel;
+			float Way = 0.f;
+			bool bUp = false;
+			const bool bLies = LieOf(S, M.WoundEnd, Pel, Way, bUp);
+			M.bFaceUp = bLies && bUp;
+			// What he does down there: the wanted loops by name, then the stand-ins, where they lie as he does.
 			const std::string Part = C.Hit.Bone.rfind("thigh", 0) == 0 || C.Hit.Bone.rfind("calf", 0) == 0 || C.Name == "wound_leg" || C.Name.rfind("die_leg_", 0) == 0 ? "leg"
 				: C.Hit.Bone.rfind("spine", 0) == 0 || C.Hit.Bone == "pelvis" || C.Name == "wound_gut" || C.Name.rfind("die_gut_", 0) == 0 ? "gut" : "arm";
-			const std::string Wanted[3] = { "wounded_clutch_" + Part, "wounded_writhe", "wounded_waiting" };
-			M.bBreathe = true;
+			M.DownHow = Man::Hold;
+			M.DownClip = -1;
+			M.DownYaw = 0.f;
+			M.DownShift = Vec3();
 			M.Info.WoundLoop = "hold";
-			Segment Down;
-			Down.Clip = Ci;
-			Down.How = Segment::Hold;
-			Down.HoldT = C.Long;
-			Down.BlendIn = 0.f;
-			Down.EndClass = Prone;
-			Down.LieA = Down.LieB = 1.f;
-			Down.bWound = true;
-			for (const std::string& Name : Wanted)
-			{
+			auto Try = [&](const std::string& Name, Man::DownKind How) {
 				const int Li = S.ClipIndex(Name);
-				if (Li < 0) continue;
-				Pose Lp;
-				Sample(S.Clips[static_cast<size_t>(Li)], 0.f, Lp);
-				float Yaw = 0.f, X = 0.f, Y = 0.f;
-				if (!LiesAlike(S, M.WoundEnd, Lp, Yaw, X, Y)) continue;
-				Down.Clip = Li;
-				Down.How = Segment::Loop;
-				Down.Phase = M.Info.WoundPhase;
-				Down.Rate = M.Info.Jitter * static_cast<float>(Life) * M.Info.WoundRate;
-				Down.BlendIn = 0.8f;
-				Down.bRifleDown = true;
-				Down.bTurned = true;
-				Down.Yaw = Yaw;
-				Down.ShiftX = X;
-				Down.ShiftY = Y;
-				M.bBreathe = false;
-				M.Info.WoundLoop = Name;
-				break;
+				if (Li < 0) return false;
+				const Clip& L = S.Clips[static_cast<size_t>(Li)];
+				float Yaw = 0.f;
+				Vec3 Shift;
+				const float Lt = static_cast<float>(std::fmod(static_cast<double>(M.Info.WoundPhase) * static_cast<double>(L.Long), static_cast<double>(std::max(L.Long, 0.01f))));
+				if (!LoopFits(S, M.WoundEnd, Li, Lt, Yaw, Shift)) return false;
+				if (How == Man::Drag)
+				{
+					// (a few metres on along the crawl's own forward, where no man, body, wall or hedge is in the way)
+					const float Speed = L.Speed() * M.Info.WoundRate;
+					if (Speed <= 0.05f) return false;
+					// (his own way first, 1.5 to 3.5 m; where that is blocked, a metre, the shortest that still reads as a drag;
+					// each with half a metre more clear beyond, for his head and arms ahead of his pelvis)
+					float Dist = static_cast<float>(1.5 + 2.0 * Far);
+					const std::vector<std::pair<double, double>> Others = OthersNear(M, 12.0);
+					Clip Way2;
+					Way2.bEndOffset = true;
+					const Vec3 From = M.WoundPivot;
+					Way2.EndOffset = { From.X + std::cos(Yaw) * (Dist + 0.5f), From.Y + std::sin(Yaw) * (Dist + 0.5f), 0.f };
+					if (!HasRoom(M, Way2, Others))
+					{
+						Dist = 1.f;
+						Way2.EndOffset = { From.X + std::cos(Yaw) * (Dist + 0.5f), From.Y + std::sin(Yaw) * (Dist + 0.5f), 0.f };
+						if (!HasRoom(M, Way2, Others)) return false;
+					}
+					M.DragSpeed = Speed;
+					M.DragFor = Dist / Speed;
+					M.Info.Dragged = Dist;
+				}
+				M.DownHow = How;
+				M.DownClip = Li;
+				M.DownYaw = Yaw;
+				M.DownShift = Shift;
+				M.Info.WoundLoop = How == Man::Drag ? "crawl:" + Name : Name;
+				return true;
+			};
+			const bool bCrawled = C.Name.rfind("die_crawl_", 0) == 0;
+			if (M.bFaceUp)
+			{
+				// (the soldiers thread's loops whenever they fit; the stand-in, wounded_waiting, for three men in four)
+				if (!Try("wounded_clutch_" + Part, Man::Loop) && !Try("wounded_writhe", Man::Loop) && Pick < 0.75) Try("wounded_waiting", Man::Loop);
 			}
-			M.Queue.push_back(Down);
+			else if (!bCrawled && Pick < 0.7)
+			{
+				if (!Try("wounded_crawl", Man::Drag)) Try("crawl", Man::Drag);
+			}
+			// (the jolt read with the wound's stance and push; his fall's record kept as a dead man's is not)
 			if (HitsNow.bJolt) JoltFrom(M, At, true);
+			M.Info.FallKind = Kind0;
+			M.Info.FallStance = Stance0;
+			M.Info.FallFrom = From0;
+		}
+
+		/**
+		 * Up again at back (bWounded): from where he lies, the get-up by name for how he lies (get_up_back, get_up_face),
+		 * else go_prone backwards (he lies face down: StartWound saw to that). Its first pose is laid over his (turned about
+		 * the upright and moved, UpYaw and UpShift, so its pelvis and head lie on his), the pose he lay in blended out over
+		 * its first quarter second; the turn and the move eased out once he is on his feet, no faster than a walk; then the
+		 * rules' stance. The pelvis never jumps.
+		 */
+		void StartGetUp(Man& M, double Now)
+		{
+			const Soldier& S = *M.S;
+			M.UpAt = Now;
+			M.UpYaw = 0.f;
+			M.UpShift = Vec3();
+			M.UpFrom = M.Now;
+			M.UpFor = 0.f;
+			const size_t Ch = std::min(M.ChCursor, M.Stances.empty() ? size_t(0) : M.Stances.size() - 1);
+			int Gi = S.ClipIndex(M.bFaceUp ? "get_up_back" : "get_up_face");
+			bool bShift = false;
+			float From = 0.f, To = 0.f;
+			if (Gi >= 0) To = S.Clips[static_cast<size_t>(Gi)].Long;
+			else if ((Gi = S.ClipIndex("go_prone")) >= 0) { From = S.Clips[static_cast<size_t>(Gi)].Long; bShift = true; }
+			if (Gi < 0 || M.Stances.empty() || M.Stances[Ch].Cl == Prone)
+			{
+				// (none, or the rules have him lie: their stance from lying, as any man's)
+				M.Shown = -1;
+				M.EndClass = Prone;
+				return;
+			}
+			// (go_prone backwards a wounded man's slow, laboured way up: 2.2 s, twice a fit man's)
+			const double Dur = (bShift ? 2.2 : static_cast<double>(To)) / Life;
+			Segment G = OnceOf(Gi, From, To, Now, Dur, Up, 0.f);
+			G.bShift = bShift;
+			G.LieA = 1.f;
+			G.LieB = 0.f;
+			M.Queue.clear();
+			Start(M, G, Now);
+			M.bPrev = false;
+			Pose G0;
+			float Lie0 = 0.f, T0 = 0.f;
+			SampleSegment(M, M.Cur, Now, G0, Lie0, T0);
+			Vec3 PL, PG;
+			float WL = 0.f, WG = 0.f;
+			bool bL = false, bG = false;
+			const bool bGotL = LieOf(S, M.UpFrom, PL, WL, bL);
+			const bool bGotG = LieOf(S, G0, PG, WG, bG);
+			if (bGotL && bGotG)
+			{
+				M.UpYaw = WL - WG;
+				const float Co = std::cos(M.UpYaw), Sn = std::sin(M.UpYaw);
+				M.UpShift = { PL.X - (Co * PG.X - Sn * PG.Y), PL.Y - (Sn * PG.X + Co * PG.Y), 0.f };
+				// (the pose he lay in, in the get-up's own axes: turned and moved back)
+				const float Ci = std::cos(-M.UpYaw), Si = std::sin(-M.UpYaw);
+				TurnRoot(S, M.UpFrom, -M.UpYaw, -(Ci * M.UpShift.X - Si * M.UpShift.Y), -(Si * M.UpShift.X + Ci * M.UpShift.Y));
+			}
+			// (eased out from seven tenths of the way up, over 1.6 s or at a shuffle, 0.6 m/s, the longer)
+			const float Dist = std::hypot(M.UpShift.X, M.UpShift.Y);
+			M.UpFor = static_cast<float>(0.7 * Dur * Life) + UpEase(Dist, M.UpYaw);
+			M.Queue.push_back(SegmentOf(M, M.Stances[Ch], Now + Dur, 0.2f));
+			M.Shown = static_cast<int>(Ch);
+			M.EndClass = M.Stances[Ch].Cl;
+		}
+
+		/** How long the get-up's turn and move take to ease out (life seconds): 1.6 s, or a shuffle's 0.6 m/s and 2.5 s a
+		 * radian of turn, the longer. */
+		static float UpEase(float Dist, float Yaw) { return std::max(1.6f, Dist / 0.6f + std::fabs(Yaw) * 0.4f); }
+
+		/** How much of the get-up's turn and move is left (1 at first, 0 once eased out), Now. */
+		float UpLeft(const Man& M, double Now) const
+		{
+			if (M.UpAt < 0.0 || M.UpFor <= 0.f) return 0.f;
+			const double Tu = (Now - M.UpAt) * Life;
+			const float Ease = UpEase(std::hypot(M.UpShift.X, M.UpShift.Y), M.UpYaw);
+			const double Start = static_cast<double>(M.UpFor - Ease);
+			return 1.f - Smooth(static_cast<float>((Tu - Start) / static_cast<double>(Ease)));
+		}
+
+		/** The others near him (within Reach): men where they stand, bodies where their pelvis came to rest. */
+		std::vector<std::pair<double, double>> OthersNear(const Man& M, double Reach) const
+		{
+			std::vector<std::pair<double, double>> Others;
+			for (const Man& O : Men)
+			{
+				if (&O == &M || O.bRider || !O.bVisible || O.Last < 0.0) continue;
+				double OX = O.X, OY = O.Y;
+				const Vec3 Pv = O.State != Man::Alive ? O.FallPivot : O.Info.WoundStarted >= 0.0 && O.UpAt < 0.0 ? O.DownAt : Vec3();
+				const double Sf = std::sin(static_cast<double>(O.F)), Cf = std::cos(static_cast<double>(O.F));
+				OX += Sf * static_cast<double>(Pv.X) + Cf * static_cast<double>(Pv.Y);
+				OY += Cf * static_cast<double>(Pv.X) - Sf * static_cast<double>(Pv.Y);
+				if ((OX - M.X) * (OX - M.X) + (OY - M.Y) * (OY - M.Y) < Reach * Reach) Others.push_back({ OX, OY });
+			}
+			return Others;
 		}
 
 		// ---------------------------------------------------------------------------------------------------------
@@ -4764,7 +5279,7 @@ namespace LandMen
 			}
 			if (M.State != Man::Alive) bPose = true;
 			// (bullet hits: posed every frame while his jolt lasts)
-			if (M.JoltAt >= 0.0 && Now >= M.JoltAt && (Now - M.JoltAt) * Life < 0.33) bPose = true;
+			if (M.JoltAt >= 0.0 && Now >= M.JoltAt && (Now - M.JoltAt) * Life < static_cast<double>(M.JoltLong)) bPose = true;
 
 			Pose P;
 			float Lie = 0.f, RifleDown = 0.f, HeadDrop = 0.f;
@@ -4786,17 +5301,12 @@ namespace LandMen
 					if (M.Info.WoundStarted < 0.0) StartWound(M, M.Wd);
 					bDown = M.Info.WoundStarted >= 0.0;
 				}
-				else if (M.Info.WoundStarted >= 0.0 && M.UpAt < 0.0)
-				{
-					// Up again at back: from lying (TurnTo from Prone to the rules' stance now), his body brought back
-					// from where his fall left it to his place over the get-up.
-					M.UpAt = Now;
-					M.UpShift = M.WoundPivot;
-					M.EndClass = Prone;
-					M.Shown = -1;
-					M.bBreathe = false;
-				}
+				else if (M.Info.WoundStarted >= 0.0 && M.UpAt < 0.0) StartGetUp(M, Now);
 			}
+			if (bDown) M.DownAt = DownPelvis(M, Now);
+			// (getting up at back: the rules' stances wait till he is on his feet)
+			const bool bGetUp = M.UpAt >= 0.0 && M.State == Man::Alive && M.Cur.Start == M.UpAt && Now < M.UpAt + M.Cur.Dur;
+			const float UpK = M.State == Man::Alive && !bDown ? UpLeft(M, Now) : 0.f;
 			if (M.State == Man::Alive)
 			{
 				// The rules' stance on his timeline; a man about to get up and move starts getting up early, so he is
@@ -4820,7 +5330,7 @@ namespace LandMen
 					}
 				}
 				if (!M.bLeaving && M.Shown == static_cast<int>(M.ChCursor) + 1 && Want == static_cast<int>(M.ChCursor)) Want = M.Shown;
-				if (Want != M.Shown && Want >= 0 && !bDown)
+				if (Want != M.Shown && Want >= 0 && !bDown && !bGetUp)
 				{
 					TurnTo(M, Want, Now, Until);
 					M.Shown = Want;
@@ -4861,7 +5371,7 @@ namespace LandMen
 				// placed every frame (a thrifty frame too: no clip is sampled nor bone framed, only his place).
 				// The mesh drawn by a vertex-animation material (BankShow) goes smoothly between them: the clip's poses either
 				// side of where it has got to, or two clips' nearest by their blend.
-				if (bBankOn && M.Banked && BanksAt(M.L) && !M.Cur.bShift && !(M.bPrev && W < 1.f && M.Prev.bShift) && !M.Cur.bTurned && !(M.bPrev && W < 1.f && M.Prev.bTurned))
+				if (bBankOn && M.Banked && BanksAt(M.L) && !M.Cur.bShift && !(M.bPrev && W < 1.f && M.Prev.bShift) && !bDown && UpK <= 0.f)
 				{
 					const Segment& G = M.bPrev && W < 0.5f ? M.Prev : M.Cur;
 					float LieG = 0.f;
@@ -4911,6 +5421,21 @@ namespace LandMen
 					if (M.Prev.bRifleDown) RifleDown += 1.f - W;
 				}
 				else M.bPrev = false;
+				// (bullet hits, bWounded: down there from his fall's end, DownPose; getting up, the pose he lay in blended
+				// out over a quarter second and the get-up laid where he lay, eased out to his own place)
+				if (bDown && bSample && Now >= M.WoundEnds) DownPose(M, Now, P);
+				if (UpK > 0.f && bSample)
+				{
+					const float Wu = Smooth(static_cast<float>((Now - M.UpAt) * Life / 0.4));
+					if (Wu < 1.f)
+					{
+						Pose From = M.UpFrom;
+						RootUnderPelvis(S, From);
+						RootUnderPelvis(S, P);
+						Blend(From, P, Wu, P);
+					}
+					TurnRoot(S, P, UpK * M.UpYaw, UpK * M.UpShift.X, UpK * M.UpShift.Y);
+				}
 
 				// The clip's own events (footsteps, knees, falls, kit): from the segment shown.
 				if (!bQuiet && M.Cur.Clip >= 0)
@@ -5011,8 +5536,9 @@ namespace LandMen
 					P = M.FallFrom;
 					Lie = M.FallLie0;
 					const float K = Smooth(U) * (2.f - Smooth(U)) * 0.5f + Smooth(U) * 0.5f;
-					HeadDrop = 0.42f * K;
-					RifleDown = K;
+					// (bullet hits: killed down there wounded, he only goes still)
+					HeadDrop = M.bStill ? 0.f : 0.42f * K;
+					RifleDown = M.bStill ? 0.f : K;
 				}
 				bRest = Since >= M.FallDur;
 			}
@@ -5023,8 +5549,10 @@ namespace LandMen
 			M.Last = Now;
 			if (!bPose)
 			{
-				// (a thrifty frame: his bones as they were; his shots still go off on time, from his muzzle as last posed)
-				if (!bQuiet) ShotEvents(M, M.Last, Now, Out);
+				// (a thrifty frame: his bones as they were; his shots still go off on time, from his muzzle as last posed; none
+				// from a man down wounded)
+				if (!bQuiet && !bDown) ShotEvents(M, M.Last, Now, Out);
+				else if (bDown) ShotsDone(M, Now);
 				return;
 			}
 			if (BankK >= 0 && RifleDown >= 0.5f && M.Banked->Have[BankSpec.size() + static_cast<size_t>(BankK)])
@@ -5065,28 +5593,24 @@ namespace LandMen
 			}
 			else
 			{
-				// (bullet hits: the jolt and a wounded man's breathing, layers over his pose)
+				// (bullet hits: the jolt, and a wounded man's breathing and stirring, layers over his pose)
 				if (M.JoltAt >= 0.0) Jolt(M, P, Now);
-				if (M.bBreathe && bDown) Breathe(M, P, Now);
+				if (bDown && M.DownHow != Man::Loop && Now >= M.WoundEnds)
+				{
+					Breathe(M, P, Now, StillFrom(M));
+					Stir(M, P, Now, StillFrom(M));
+				}
 				M.Now = P;
 				BoneFrames(S, P, M.Model);
 				if (RifleDown > 0.f) LowerRifle(M, M.Model, std::min(1.f, RifleDown), M.State == Man::Alive ? 0.035f : 0.02f);
 				if (HeadDrop > 0.f) DropHead(M, M.Model, HeadDrop);
 			}
 			Pl.Lie = Lie;
-			// (bullet hits, bWounded: down, laid on the slope about where his pelvis comes to rest; up again, his body
-			// brought back from there to his place over the get-up)
-			if (bDown) Pl.Pivot = Scale(M.WoundPivot, Lie);
-			if (M.State == Man::Alive && M.UpAt >= 0.0 && !bDown)
-			{
-				const float K = 1.f - Smooth(static_cast<float>((Now - M.UpAt) * Life / 1.2));
-				if (K > 0.f)
-				{
-					const double Sf = std::sin(static_cast<double>(Pl.Facing)), Cf = std::cos(static_cast<double>(Pl.Facing));
-					Pl.X += (Sf * static_cast<double>(M.UpShift.X) + Cf * static_cast<double>(M.UpShift.Y)) * static_cast<double>(K);
-					Pl.Y += (Cf * static_cast<double>(M.UpShift.X) - Sf * static_cast<double>(M.UpShift.Y)) * static_cast<double>(K);
-				}
-			}
+			// (bullet hits, bWounded: down, laid on the slope about where his pelvis lies; getting up, about where it is
+			// as the get-up's place eases back to his own; killed down there, about where he lay)
+			if (bDown) Pl.Pivot = Scale(M.DownAt, Lie);
+			if (UpK > 0.f) Pl.Pivot = Scale(M.DownAt, UpK);
+			if (M.State == Man::Settling && M.bStill) Pl.Pivot = M.FallPivot;
 			// (carried: raised onto the stretcher over his first second on it, as the bearers lift him)
 			if (M.State == Man::Alive && M.Shown >= 0 && static_cast<size_t>(M.Shown) < M.Stances.size() && M.Stances[static_cast<size_t>(M.Shown)].Lift > 0.f)
 			{
@@ -5122,11 +5646,8 @@ namespace LandMen
 			M.bFooting = true;
 			const size_t NB = S.Bones.size();
 			for (size_t B = 0; B < NB; ++B) M.Frames[B] = Compose(M.World, M.Model[B]);
-			if (!bQuiet) ShotEvents(M, M.Last, Now, Out);
-			else
-			{
-				for (size_t I = M.ShotCur; I < M.Shots.size() && M.Shots[I].T <= Now; ++I) M.Shots[I].Done = M.Shots[I].How == Shot::Burst ? M.Shots[I].Bullets : 1;
-			}
+			if (!bQuiet && !bDown) ShotEvents(M, M.Last, Now, Out);
+			else ShotsDone(M, Now);
 			if (bRest)
 			{
 				// At rest for good: on the ground where he fell, laid on its slope about his pelvis. Skinned once per
@@ -5136,7 +5657,7 @@ namespace LandMen
 				R.Y = M.Y;
 				R.Facing = M.F;
 				R.Lie = 1.f;
-				R.Pivot = M.State == Man::Falling ? M.FallPivot : Vec3();
+				R.Pivot = M.State == Man::Falling || M.bStill ? M.FallPivot : Vec3();
 				M.Place = R;
 				M.World = WorldOf(R, GroundAt, &M.Footing);
 				M.bFooting = true;
@@ -5145,6 +5666,12 @@ namespace LandMen
 				M.Info.Rested = Now;
 			}
 			if (!bSameBank) ++M.Stamp;
+		}
+
+		/** His rounds up to Now shown without a flash or a sound (a quiet frame, or a man down wounded). */
+		static void ShotsDone(Man& M, double Now)
+		{
+			for (size_t I = M.ShotCur; I < M.Shots.size() && M.Shots[I].T <= Now; ++I) M.Shots[I].Done = M.Shots[I].How == Shot::Burst ? M.Shots[I].Bullets : 1;
 		}
 
 		/** One man back to the start of the battle (a man new to a live battle starts there too). */
@@ -5178,7 +5705,12 @@ namespace LandMen
 			M.Info.WoundClip.clear();
 			M.Info.WoundLoop.clear();
 			M.JoltAt = M.WoundEnds = M.UpAt = -1.0;
-			M.bBreathe = false;
+			M.Info.Dragged = 0.f;
+			M.Info.bFallAimed = false;
+			M.DownHow = Man::Hold;
+			M.DownClip = -1;
+			M.bStill = false;
+			M.UpFor = 0.f;
 			for (int L = 0; L < LodCount; ++L) { M.bSkinned[L] = false; M.RestAt[L].clear(); M.RestFacing[L].clear(); }
 			for (Shot& Sh : M.Shots) { Sh.Done = 0; Sh.LastC = -1.f; }
 			M.ShotCur = 0;
@@ -5712,6 +6244,7 @@ namespace LandMen
 		if (Mn.bLeaving && Mn.State == Impl::Man::Alive) { Mn.Fade = 0.f; Mn.bVisible = false; }
 	}
 	void Crowd::SetHits(const Hits& H) { Inner->HitsNow = H; }
+	void Crowd::SetRoom(const RoomFn& Fn) { Inner->RoomAt = Fn; }
 	const Crowd::Hits& Crowd::HitsOf() const { return Inner->HitsNow; }
 
 	bool Crowd::PoseOf(int Man, Pose& Out) const
@@ -5755,7 +6288,9 @@ namespace LandMen
 				{
 					if (S.Bones[K].Parent == B && !S.OnWeapon(static_cast<int>(K))) { Child = static_cast<int>(K); break; }
 				}
-				if (Bone == "head") At = M.Frames[B].Point(Add(S.Bones[static_cast<size_t>(B)].Head, Vec3 { 0.f, 0.f, 0.1f }));
+				// (the clip's own "at": a point on his cloth there, in the file's rest-pose axes, skinned to the bone)
+				if (C.Hit.bAt && !C.Hit.Bone.empty() && S.BoneIndex(C.Hit.Bone) == B) At = M.Frames[B].Point(C.Hit.At);
+				else if (Bone == "head") At = M.Frames[B].Point(Add(S.Bones[static_cast<size_t>(B)].Head, Vec3 { 0.f, 0.f, 0.1f }));
 				else if (Child >= 0)
 				{
 					const Vec3 To = M.Frames[Child].Point(S.Bones[static_cast<size_t>(Child)].Head);
@@ -6034,6 +6569,16 @@ namespace LandMen
 				Nw.AtFrom = Nw.AtTo = Pts.size() / 4;
 				Nw.ChFrom = Nw.ChTo = Chs.size();
 				return In.Members([&](const std::string& Field) {
+					if (Is(Field, "cy"))
+					{
+						// (carried: any span of bearers at all)
+						size_t Spans = 0;
+						Nw.bCy = true;
+						if (!In.AtList()) return In.Skip();
+						if (!In.Items([&](size_t) { ++Spans; return In.Skip(); })) return false;
+						Nw.bCarried = Spans > 0;
+						return true;
+					}
 					if (Is(Field, "at") || Is(Field, "ch"))
 					{
 						if (!In.AtList()) return In.Skip();
@@ -6053,6 +6598,8 @@ namespace LandMen
 					else if (Is(Field, "fo")) Nw.bFo = V.Num0() != 0.0;
 					else if (Is(Field, "d")) { Nw.bD = V.K != J::Null; Nw.D = V.Num0(); }
 					else if (Is(Field, "out")) { Nw.bOut = V.K != J::Null; Nw.Out = V.Num0(); }
+					else if (Is(Field, "wd")) { Nw.bWd = true; Nw.Wd = V.K == J::Num ? V.Num0() : -1.0; }
+					else if (Is(Field, "back")) { Nw.bBack = true; Nw.Back = V.K == J::Num ? V.Num0() : -1.0; }
 					return true;
 				});
 			});
@@ -6140,6 +6687,9 @@ namespace LandMen
 			if (Nw.bD) Tr.D = Nw.D;
 			// (out -1: he is back on the list)
 			if (Nw.bOut) Tr.OutT = Nw.Out < 0.0 ? -1.0 : Nw.Out;
+			if (Nw.bWd) Tr.Wd = Nw.Wd;
+			if (Nw.bBack) Tr.Back = Nw.Back;
+			if (Nw.bCy) Tr.bCarried = Nw.bCarried;
 			Touch(N);
 		}
 		// Where each moving man stands now, [n, x, y, f] at t: his provisional last point, in place of the one before.
@@ -6196,6 +6746,10 @@ namespace LandMen
 			if (Mn.Info.Dead != Tr.D) Dirty.push_back(Tr.Man);
 			Mn.Info.Dead = Tr.D;
 			Mn.Info.Out = Tr.D >= 0.0 ? -1.0 : Tr.OutT;
+			// (bullet hits: a wound, his getting up and his bearers as the latest delta has them)
+			Mn.Wd = Tr.Wd;
+			Mn.Back = Tr.Back;
+			Mn.bCarried = Tr.bCarried;
 			// (back on the list after his block left: whole again, as the battle read whole never had him leave)
 			if (Mn.Info.Out < 0.0 && Mn.State == Impl::Man::Alive)
 			{
@@ -6303,7 +6857,8 @@ namespace LandMen
 			{
 				const Impl::Man& Mn = I.Men[K];
 				return !Mn.bRider && Mn.State == Impl::Man::Alive && ((Mn.Info.Dead >= 0.0 && BattleTime >= Mn.Info.Dead)
-					|| (I.HitsNow.bWounded && Mn.Wd >= 0.0 && Mn.Info.WoundStarted < 0.0 && BattleTime >= Mn.Wd)); // (bullet hits: a wound's fall, chosen as a dead man's)
+					|| (I.HitsNow.bWounded && Mn.Wd >= 0.0 && Mn.Info.WoundStarted < 0.0 && BattleTime >= Mn.Wd && !Mn.bCarried
+						&& (Mn.Back < 0.0 || BattleTime < Mn.Back) && !(Mn.Info.Dead >= 0.0 && Mn.Info.Dead <= Mn.Wd))); // (bullet hits: a wound's fall, chosen as a dead man's)
 			};
 			size_t From = 0;
 			while (From < N)
