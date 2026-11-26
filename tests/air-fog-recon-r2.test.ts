@@ -482,7 +482,7 @@ describe('the raid card\'s place names take the news\'s article (the UI director
     for (const [place, att, def] of [['Cotentin', 'UK', 'GER'], ['Crimea', 'GER', 'SOV']] as const) {
       const off = card(place, 'harbour', att, def, false), on = card(place, 'harbour', att, def, true);
       // The card has two guns lines (the harbour's and the factories'): each is read by its own words.
-      for (const c of [off, on]) expect(guns(c.sight)).toHaveLength(2);
+      for (const [c, n] of [[off, 2], [on, 1]] as const) expect(guns(c.sight)).toHaveLength(n);
       const harbour = (lines: Lines): string => guns(lines).find((v) => v.includes('the harbour of'))!;
       expect(harbour(off.sight)).toBe(`Level 2 guns ring the harbour of ${place}`);
       expect(harbour(off.never)).toBe(`Not scouted, so reckoned at the worst: level 3 guns round the harbour of ${place}`);

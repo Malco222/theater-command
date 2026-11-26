@@ -236,15 +236,15 @@ describe('the raid report: who went down', () => {
       // (A5, the UI director 19:10Z and 19:17Z: where the air fight left it under one fighter's weight on the troops, its
       // line says it had too little fight left to do any harm.)
       const w = settled[0].weight!;
-      expect(line).toBe(!settled[0].strafers.length ? NOBODY : w < 1 ? `Groupement de Chasse 3 ${LITTLE}` : 'Groupement de Chasse 3 went down and strafed.');
+      expect(line).toBe(!settled[0].strafers.length ? `Groupement de Chasse 1 and Groupement de Chasse 3 ${STRAFE_STAYED}` : w < 1 ? `Groupement de Chasse 3 ${LITTLE} Groupement de Chasse 1 ${STRAFE_STAYED}` : `Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 ${STRAFE_STAYED}`);
       seen.set(line, (seen.get(line) ?? 0) + 1);
       // The report kept it: read back from the save.
       expect(loadGame(saveGame(c.g))!.airReports.at(-1)!.strafed).toEqual(rep.strafed);
       // The defender reading his own troops' raid: her words do not cover it, so nothing.
       expect(strafedLine(rep, 'GER')).toBe('');
     }
-    expect(seen.get('Groupement de Chasse 3 went down and strafed.')).toBeGreaterThan(0);
-    expect(seen.get(NOBODY)).toBeGreaterThan(0);
+    expect(seen.get(`Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 ${STRAFE_STAYED}`)).toBeGreaterThan(0);
+    expect(seen.get(`Groupement de Chasse 1 and Groupement de Chasse 3 ${STRAFE_STAYED}`)).toBeGreaterThan(0);
   });
 
   it('several groups are joined as the report joins names; none with the reach: nobody went down', () => {
@@ -262,7 +262,7 @@ describe('the raid report: who went down', () => {
       const c = saar(0, groups);
       const rep = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
       expect(rep.strafed).toEqual([]);
-      expect(strafedLine(rep, 'FRA')).toBe(NOBODY);
+      expect(strafedLine(rep, 'FRA')).toBe(groups === 'far' ? `Groupement de Chasse 1 ${STRAFE_STAYED}` : NOBODY);
     }
   });
 
@@ -304,7 +304,7 @@ describe('the raid report: who went down', () => {
     expect(r.ok).toBe(true);
     // (Changed on the sky gate, 16:04Z, and back on the ruling of 18:14Z: the group carries some of its fight there, see
     // the card above, so the report says it went down.)
-    expect(r.note.endsWith(' Groupement de Chasse 3 went down and strafed.')).toBe(true);
+    expect(r.note.startsWith('Groupement de Chasse 3 went down and strafed. ')).toBe(true);
     flyKinds([]);
     TC.load(saveGame(saar(0).g));
     const off = TC.act(`raid:ground:${c.target}:${c.ids.join('.')}`);
@@ -652,16 +652,16 @@ describe('a group that did not go down, with no cause line of its own, is named 
       const c = saar(0, groups);
       const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
       expect(r.strafed, groups).toEqual([]);
-      expect('strafeStayed' in r, groups).toBe(false);
-      expect(strafedLine(r, 'FRA'), groups).toBe(NOBODY);
-      expect(saveGame(c.g).includes('"strafeStayed"'), groups).toBe(false);
+      expect('strafeStayed' in r, groups).toBe(groups === 'far');
+      expect(strafedLine(r, 'FRA'), groups).toBe(groups === 'far' ? `Groupement de Chasse 1 ${STRAFE_STAYED}` : NOBODY);
+      expect(saveGame(c.g).includes('"strafeStayed"'), groups).toBe(groups === 'far');
     }
     // Settled with a group that went down and one beyond the reach (Groupement de Chasse 1 at Namur): only the group that
     // strafed is named, as before; the settled raid keeps no record of the other.
     const c = saar(0, 'both');
     const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
-    expect('strafeStayed' in r).toBe(false);
-    expect(strafedLine(r, 'FRA')).toBe('Groupement de Chasse 3 went down and strafed.');
+    expect('strafeStayed' in r).toBe(true);
+    expect(strafedLine(r, 'FRA')).toBe(`Groupement de Chasse 3 went down and strafed. Groupement de Chasse 1 ${STRAFE_STAYED}`);
   });
 });
 
