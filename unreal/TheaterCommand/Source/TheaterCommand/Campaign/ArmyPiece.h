@@ -149,6 +149,16 @@ public:
 	void SetEye(double EyeDistance, bool bByFocus);
 	/** The yaw every piece turns to, to face the eye: at once, or once a fleet under sail has come to rest. */
 	void FaceTable(float Yaw);
+	/**
+	 * (Release 2, the campaign map: Campaign/FleetHeading.h. Brian, 26 November 2026: "the wake of the boats when moving
+	 * don't follow the direction they came from".) A fleet at sea lies on the heading she came in on, her wake astern of
+	 * her along it, and only her standard is turned to the eye. bOn: she lies so (the map says it of each fleet whenever
+	 * the fleets are laid: tc.Map.FleetHeading, and not one in harbour); off, she faces the table as every piece does.
+	 * TableYaw is the yaw the table is turned to. CameYaw is the heading she takes where she has none of her own yet, or
+	 * (bTakeIt) where she has changed her place without sailing there. Never turns a fleet under sail: her sail does that.
+	 */
+	void LieHeaded(bool bOn, float TableYaw, float CameYaw, bool bTakeIt);
+	bool LiesHeaded() const { return bHeaded; }
 	bool IsSailing() const { return bMarching && bSailing; }
 	bool IsInCamp() const { return What == 0 && bCamp; }
 	int32 GetWorksState() const { return What == 0 ? WorksState : 0; }
@@ -295,6 +305,12 @@ private:
 	void ApplyStandard();
 	/** A point of the standard as it stands now, grown and leaning, in the piece's own space. */
 	FVector OnStandard(const FVector& Point) const;
+	// (Release 2: a fleet that lies on her own heading, see LieHeaded.) While she does, her standard is turned back about
+	// the piece's upright to the eye's yaw, foot and all. bStandardTurned: its foot has been moved from where it was built.
+	bool bHeaded = false, bStandardTurned = false;
+	float EyeYaw = 0.0f; // the yaw the table is turned to, as the map last said
+	float StandardTurnNow() const;
+	void TurnStandard();
 
 	int32 RegionId = INDEX_NONE;
 	FString NationTag;
