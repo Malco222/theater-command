@@ -103,15 +103,16 @@ struct FLandGeneralShown
 
 	/**
 	 * The spotter's mark (release 2, -TheaterLandSpotter; Brian, 24 November 20:38Z): while he looks down on the field
-	 * (the top view, or his own tilt as steep), a ring on the ground round each of his fighting blocks: a hidden enemy
-	 * inside it is found (LandSight::Finds, the rules' own distances). Every block's ring for hidden men; a block in
-	 * hand's for guns and for vehicles too, each with its word. A stroke is a run of the ring on the screen (a ring
-	 * part off the screen or behind the eye is several, a dashed one many).
+	 * (the top view, or his own tilt as steep), once the battle is under way (not while he sets his army out), a ring
+	 * on the ground round each of his fighting blocks: a hidden enemy inside it is seen (LandSight::Finds, the rules'
+	 * own distances). Every block's ring for hidden men on foot; a block in hand's for guns and teams and for tanks
+	 * and motorised blocks too, each with its word. A stroke is a run of the ring on the screen (a ring part off the
+	 * screen or behind the eye is several, a dashed one many).
 	 */
 	struct SightStroke
 	{
 		int Block = -1;
-		/** 0 hidden men, 1 guns, 2 lorries and tanks. */
+		/** 0 hidden men on foot, 1 guns and teams (machine guns and mortars), 2 tanks and motorised blocks. */
 		int Kind = 0;
 		bool bChosen = false;
 		std::vector<std::pair<double, double>> Points;

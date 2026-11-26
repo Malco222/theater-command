@@ -966,8 +966,10 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	}
 
 	// ---- The spotter's mark (release 2, -TheaterLandSpotter): looking down on the field, a pale ring on the ground
-	// round each of his fighting units; a hidden enemy inside it is found. Every unit's ring for hidden men; a unit in
-	// hand's brighter, with dashed rings farther out for hidden guns and vehicles, each with its word. ----
+	// round each of his fighting units; a hidden enemy inside it is seen. Every unit's ring for hidden men on foot; a
+	// unit in hand's brighter, with dashed rings farther out for hidden guns and teams and for hidden tanks and
+	// motorised units, each with its word: the rules' own kinds (their machine gun and mortar teams count with the
+	// guns, their motorised infantry with the tanks). ----
 	for (const FLandGeneralShown::SightStroke& R : G.Sights)
 	{
 		TArray<FVector2D> Points;
@@ -979,13 +981,81 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		const FLinearColor Ink = R.bChosen ? BrightBrass * FLinearColor(1.0f, 1.0f, 1.0f, R.Kind == 0 ? 0.95f : 0.7f) : Cream * FLinearColor(1.0f, 1.0f, 1.0f, 0.45f);
 		Lines(Points, Ink, R.bChosen && R.Kind == 0 ? 2.0f : 1.5f, 1);
 	}
+	// (the mark's own lines, drawn under the views' chips at the top right further down: worked out here, so that a
+	// ring's word is not written under them. What a ring is, by the rules' kinds; how far off men lying in wait open
+	// fire, which is mostly farther than they are seen; who does not wait at all (guns, tanks and the mortar team,
+	// which this screen calls MORTARS and the rules count with the guns, so it is named: the machine gun team alone
+	// of the teams has a hold of its own; and any block sent to attack or given a target, which as the rules stand
+	// makes a hidden machine gun team one of those); what the ring does for one that has fired; and, where smoke is
+	// on call, that a screen hides him. The distances are LandSight::Finds, the rules' own, and
+	// Tools/land_play/run.sh holds each line to the rules.)
+	TArray<FString> SpotterLines;
+	const FSlateFontInfo SpotterFace = Typed(10.0f, true, 30);
+	double SpotterLeft = Size.X, SpotterBottom = 0.0;
+	if (G.bSights)
+	{
+		const LandSight::Finds Finds;
+		SpotterLines.Add(bHand ? TEXT("RINGS: A HIDDEN ENEMY OF THE RING'S KIND IS SEEN INSIDE IT") : TEXT("RINGS: HIDDEN MEN ON FOOT ARE SEEN INSIDE ONE. PICK A UNIT FOR GUNS AND TANKS"));
+		SpotterLines.Add(FString::Printf(TEXT("MEN LYING IN WAIT FIRE ON TROOPS IN PLAIN SIGHT WITHIN %d m (MACHINE-GUNS %d m, IN FOREST %d m)"), static_cast<int32>(Finds.Ambush + 0.5), static_cast<int32>(Finds.AmbushMg + 0.5),
+			static_cast<int32>(Finds.AmbushForest + 0.5)));
+		SpotterLines.Add(TEXT("HIDDEN GUNS, MORTARS AND TANKS, AND ANY SENT TO ATTACK OR GIVEN A TARGET, DO NOT WAIT: FULL RANGE"));
+		SpotterLines.Add(TEXT("ONE THAT HAS FIRED IS PLACED AT ONCE INSIDE ITS RING: YOUR FIRE TELLS ON IT IN FULL"));
+		if (FLandLive::RuleNow(TEXT("smoke")))
+		{
+			SpotterLines.Add(TEXT("NONE IS SEEN THROUGH A SMOKE SCREEN"));
+		}
+		for (const FString& Line : SpotterLines)
+		{
+			SpotterLeft = FMath::Min(SpotterLeft, Size.X - 22.0 - WideOf(Line, SpotterFace) - 12.0);
+		}
+		// (the chips stand at 78, 22 high; the lines from 8 under them, 20 each)
+		SpotterBottom = 78.0 + 22.0 + 8.0 + 20.0 * SpotterLines.Num();
+	}
+	// (the words' plates already set this painting, each as its left, its top and its width: no word is written on
+	// another's. From high up a unit's three rings stand closer together on the screen than one word is long.)
+	TArray<FVector> WordsAt;
 	for (const FLandGeneralShown::SightWord& W : G.SightWords)
 	{
 		const FVector2D At = Local(W.X, W.Y);
-		const FString Words = FString::Printf(TEXT("%s %d m"), W.Kind == 0 ? TEXT("MEN") : W.Kind == 1 ? TEXT("GUNS") : TEXT("VEHICLES"), static_cast<int32>(W.Metres + 0.5));
+		const FString Words = FString::Printf(TEXT("%s %d m"), W.Kind == 0 ? TEXT("ON FOOT") : W.Kind == 1 ? TEXT("GUNS AND TEAMS") : TEXT("TANKS AND MOTORISED"), static_cast<int32>(W.Metres + 0.5));
 		const FSlateFontInfo Face = Typed(10.0f, true, 30);
-		Fill(At.X + 6.0, At.Y - 9.0, WideOf(Words, Face) + 10.0, 18.0, Plate, 2);
-		Write(Words, At.X + 11.0, At.Y - 8.0, Face, BrightBrass, 3);
+		// (kept on the field: hung to the left of its point where the right edge is near, clear of the bar above and
+		// the cards below)
+		const double PlateW = WideOf(Words, Face) + 10.0;
+		const double PX = At.X + 6.0 + PlateW <= Size.X - 8.0 ? At.X + 6.0 : FMath::Max(8.0, At.X - 6.0 - PlateW);
+		const double WordLowest = FMath::Max(FieldTop, FieldBottom - 18.0);
+		double WordOwn = FMath::Clamp(At.Y - 9.0, FieldTop, WordLowest);
+		// (and clear of the views' chips and the mark's own lines at the top right: dropped just under them)
+		if (PX + PlateW > SpotterLeft - 4.0 && WordOwn < SpotterBottom + 2.0)
+		{
+			WordOwn = FMath::Min(SpotterBottom + 4.0, WordLowest);
+		}
+		// (and clear of the words already set: its own row or, where that is taken, the nearest free row of those hard
+		// under or over one of them, or just under the mark's lines. Go -2 its own row, -1 under the lines, then two
+		// for each word set.)
+		double PY = WordOwn, WordNearest = -1.0;
+		for (int32 Go = -2; Go < 2 * WordsAt.Num(); ++Go)
+		{
+			const double WordRow = FMath::Clamp(Go == -2 ? WordOwn : Go == -1 ? SpotterBottom + 4.0 : WordsAt[Go / 2].Y + (Go % 2 == 0 ? 20.0 : -20.0), FieldTop, WordLowest);
+			const double WordMoved = FMath::Abs(WordRow - WordOwn);
+			if (WordNearest >= 0.0 && WordMoved >= WordNearest)
+			{
+				continue;
+			}
+			bool bWordFree = !(PX + PlateW > SpotterLeft - 4.0 && WordRow < SpotterBottom + 2.0);
+			for (const FVector& Set : WordsAt)
+			{
+				bWordFree = bWordFree && (PX + PlateW + 2.0 <= Set.X || Set.X + Set.Z + 2.0 <= PX || WordRow + 20.0 <= Set.Y || Set.Y + 20.0 <= WordRow);
+			}
+			if (bWordFree)
+			{
+				PY = WordRow;
+				WordNearest = WordMoved;
+			}
+		}
+		WordsAt.Add(FVector(PX, PY, PlateW));
+		Fill(PX, PY, PlateW, 18.0, Plate, 2);
+		Write(Words, PX + 5.0, PY + 1.0, Face, BrightBrass, 3);
 	}
 
 	// ---- The routes of his orders: brass, bright for those in hand; dashed and faint while still on the air, solid and
@@ -1155,6 +1225,11 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		Write(Under, CX + 8.0, CY + 19.0, UnderFace, SoonInk, 9);
 	}
 
+	// (the film in a corner's window, release 2, where it is up: under the three news lines at the left and the setup's
+	// words, which end at 128; worked out here so the despatch paper can stand under it)
+	UTextureRenderTarget2D* const Film = Scene->CornerPicture();
+	const double FilmW = FMath::Clamp(Size.X * 0.22, 240.0, 420.0), FilmH = FilmW * 9.0 / 16.0, FilmX = 18.0, FilmY = FieldTop + 3.0 * 20.0 + 8.0;
+
 	// ---- His despatch riders (the rider ahead, release 2): a motorcycle mark where each rides; a click on one reads out his
 	// despatch beside him. ----
 	for (const FLandGeneralShown::RiderMark& R : G.RiderMarks)
@@ -1204,8 +1279,8 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			}
 			const double CW = Room + 20.0, CH = 30.0 + 19.0 * Said.Num();
 			// (on the desk strip under the title band, below the news lines, so the foot stays the cards' alone: the UI
-			// director, 18:26Z)
-			const double CX = 18.0, CY = FieldTop + 3.0 * 20.0 + 8.0;
+			// director, 18:26Z; under the film's window while that is up)
+			const double CX = 18.0, CY = Film ? FilmY + FilmH + 12.0 : FieldTop + 3.0 * 20.0 + 8.0;
 			Fill(CX - 1.0, CY - 1.0, CW + 2.0, CH + 2.0, Brass, 10);
 			Fill(CX, CY, CW, CH, Paper, 10);
 			Write(TEXT("DESPATCH RIDER"), CX + 10.0, CY + 6.0, Head, InkSoft, 11);
@@ -1275,9 +1350,9 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	}
 
 	// ---- The film in a corner (release 2, -TheaterLandCorner; Brian, 24 November 20:38Z): the film director's shot in
-	// a small window at the top left while he commands from his own view, in a brass frame; a click on it, or C, gives
-	// the film the whole screen. ----
-	if (UTextureRenderTarget2D* Film = Scene->CornerPicture())
+	// a small window at the left under the news lines while he commands from his own view, in a brass frame; a click on
+	// it, or C, gives the film the whole screen. ----
+	if (Film)
 	{
 		if (CornerBrush.GetResourceObject() != Film)
 		{
@@ -1285,7 +1360,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			CornerBrush.ImageSize = FVector2D(480.0f, 270.0f);
 			CornerBrush.DrawAs = ESlateBrushDrawType::Image;
 		}
-		const double Wd = FMath::Clamp(Size.X * 0.22, 240.0, 420.0), Ht = Wd * 9.0 / 16.0, X = 18.0, Y = 82.0;
+		const double Wd = FilmW, Ht = FilmH, X = FilmX, Y = FilmY;
 		Fill(X - 2.0, Y - 2.0, Wd + 4.0, Ht + 4.0, Brass, 10);
 		Fill(X - 1.0, Y - 1.0, Wd + 2.0, Ht + 2.0, DeskInk, 11);
 		FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 12, Geometry.ToPaintGeometry(FVector2D(Wd, Ht), FSlateLayoutTransform(FVector2D(X, Y))), &CornerBrush, ESlateDrawEffect::IgnoreTextureAlpha, FLinearColor::White);
@@ -1294,13 +1369,15 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		const FString FilmWords = TEXT("THE FILM: C FILLS THE SCREEN");
 		Fill(X, Y + Ht - 20.0, WideOf(FilmWords, FilmFace) + 14.0, 20.0, Plate, 13);
 		Write(FilmWords, X + 7.0, Y + Ht - 18.0, FilmFace, Cream, 14);
-		Buttons.Add({ FSlateRect(static_cast<float>(X), static_cast<float>(Y), static_cast<float>(X + Wd), static_cast<float>(Y + Ht)), FString(TEXT("general:film")) });
+		// (its own word, not the FILM buttons' on the bars: the window stands on the field, where only the left
+		// button presses it, OnMouseButtonDown)
+		Buttons.Add({ FSlateRect(static_cast<float>(X), static_cast<float>(Y), static_cast<float>(X + Wd), static_cast<float>(Y + Ht)), FString(TEXT("window:film")) });
 	}
 
 	// ---- His kept views (release 2; Brian, 24 November 20:38Z, saved views): four small chips under the clock, each
 	// with its number: lit where he stands at one, plain where one is kept, faint where none is yet. A click flies
-	// there (never kept: it is kept as the view stands); Shift and a click keeps it anew. F1 to F4, or Option with 1
-	// to 4, do the same. ----
+	// there (never kept: it is kept, where his own hand's last move brings the view to rest, LandGeneralEye's
+	// KeepView); Shift and a click keeps it anew. F1 to F4, or Option with 1 to 4, do the same. ----
 	{
 		const FSlateFontInfo ViewsFace = Typed(10.0f, true, 30);
 		const double ChipW = 24.0, ChipH = 22.0, ChipGap = 4.0;
@@ -1321,13 +1398,12 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			Buttons.Add({ FSlateRect(static_cast<float>(X), static_cast<float>(Y), static_cast<float>(X + ChipW), static_cast<float>(Y + ChipH)), FString::Printf(TEXT("general:view:%d"), K) });
 			X += ChipW + ChipGap;
 		}
-		// (the spotter's mark's one line, under them, while its rings are up)
-		if (G.bSights)
+		// (the spotter's mark's lines, under them, while its rings are up: worked out with the rings' words above)
+		for (int32 K = 0; K < SpotterLines.Num(); ++K)
 		{
-			const FString Line = bHand ? TEXT("RINGS: A HIDDEN ENEMY INSIDE ONE IS FOUND") : TEXT("RINGS: HIDDEN MEN INSIDE ONE ARE FOUND. PICK A UNIT FOR GUNS AND VEHICLES");
-			const double LineW = WideOf(Line, ViewsFace);
-			Fill(Size.X - 22.0 - LineW - 12.0, Y + ChipH + 8.0, LineW + 18.0, 20.0, Plate, 10);
-			Write(Line, Size.X - 22.0 - LineW - 3.0, Y + ChipH + 10.0, ViewsFace, Cream, 11);
+			const double LineW = WideOf(SpotterLines[K], SpotterFace), LineY = Y + ChipH + 8.0 + 20.0 * K;
+			Fill(Size.X - 22.0 - LineW - 12.0, LineY, LineW + 18.0, 20.0, Plate, 10);
+			Write(SpotterLines[K], Size.X - 22.0 - LineW - 3.0, LineY + 2.0, SpotterFace, K == 0 ? Cream : Muted, 11);
 		}
 	}
 
@@ -1741,9 +1817,14 @@ void SLandBattleScreen::Do(const FString& Action)
 		}
 		Scene->SetSpeed(Speed);
 	}
+	else if (Action == TEXT("window:film"))
+	{
+		// (the film's window on the field, pressed: as the FILM button)
+		Scene->GeneralDo(FString(TEXT("film")));
+	}
 	else if (Action.StartsWith(TEXT("general:view:")))
 	{
-		// (a kept view's chip: flown to; with Shift, kept anew as the view stands)
+		// (a kept view's chip: flown to; with Shift, kept anew, LandGeneralEye's KeepView)
 		Scene->GeneralDo((FSlateApplication::Get().GetModifierKeys().IsShiftDown() ? FString(TEXT("keepview:")) : FString(TEXT("view:"))) + Action.Mid(13));
 	}
 	else if (Action.StartsWith(TEXT("general:")))
@@ -1784,7 +1865,13 @@ FReply SLandBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPo
 	const FVector2D Local = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
 	if (const FButton* Hit = ButtonAt(Local))
 	{
-		Do(Hit->Action);
+		// (the film's window and the views' chips stand on the field: only the left button presses them, so an order
+		// given with the right button over one does not start the film or fly the view)
+		const bool bOnField = Hit->Action == TEXT("window:film") || Hit->Action.StartsWith(TEXT("general:view:"));
+		if (!bOnField || Event.GetEffectingButton() == EKeys::LeftMouseButton)
+		{
+			Do(Hit->Action);
+		}
 		return FReply::Handled();
 	}
 	if (IsGeneral())
@@ -2004,13 +2091,13 @@ FReply SLandBattleScreen::OnMouseMove(const FGeometry& Geometry, const FPointerE
 		}
 		// (the block under the pointer, a tag or a card, for its plate)
 		HoverAt = Local;
-		HoverBlock = TagUnder(Local);
-		if (const FButton* Over = HoverBlock < 0 ? ButtonAt(Local) : nullptr)
-		{
-			HoverBlock = Over->Action.StartsWith(TEXT("pick:")) ? FCString::Atoi(*Over->Action.Mid(5)) : -1;
-		}
+		// (a button stands over any tag under it: the film's window and the views' chips are on the field, and a tag
+		// behind one is not to be had through it)
+		const FButton* Over = ButtonAt(Local);
+		const int32 TagHere = Over ? -1 : TagUnder(Local);
+		HoverBlock = !Over ? TagHere : Over->Action.StartsWith(TEXT("pick:")) ? FCString::Atoi(*Over->Action.Mid(5)) : -1;
 		// (over his bar or a card, no word by the pointer)
-		Battle->GeneralMove(GeneralHeld < 0 && ButtonAt(Local) ? FVector2D(-1.0, -1.0) : ToPixels(Geometry, Local), TagUnder(Local));
+		Battle->GeneralMove(GeneralHeld < 0 && Over ? FVector2D(-1.0, -1.0) : ToPixels(Geometry, Local), TagHere);
 		return FReply::Handled();
 	}
 	if (!bDragging)
@@ -2081,7 +2168,7 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 			: !Event.IsAltDown() ? -1 : Key == EKeys::One ? 0 : Key == EKeys::Two ? 1 : Key == EKeys::Three ? 2 : Key == EKeys::Four ? 3 : -1; ViewKey >= 0)
 		{
 			// (his kept views: F1 to F4, or Option with 1 to 4 where the Mac keeps the F keys for itself, fly to one;
-			// with Shift the view as it stands is kept under that number)
+			// with Shift the view is kept under that number, LandGeneralEye's KeepView)
 			if (!Event.IsRepeat())
 			{
 				Scene->GeneralDo(FString::Printf(TEXT("%s:%d"), Event.IsShiftDown() ? TEXT("keepview") : TEXT("view"), ViewKey));
