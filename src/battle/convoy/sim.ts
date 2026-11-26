@@ -514,11 +514,17 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     // (a rise to periscope depth for a reason is a rise to the surface cut short there: the reason is why she stops)
     const rising = b.keelTo < b.keel, cut = rising && dive === 'periscope' && !!reason;
     let quiet = false;
-    if (back) { quiet = true; b.ducking = true; }
+    // (turned back down against her commander's order before her rise was said: still down as the log goes, but he was
+    // told she would attack, so it is said that she stays at periscope depth, and why, m14)
+    if (back) { quiet = !override; b.ducking = true; if (override) { note = 'stay'; b.duckQuiet = false; } }
     else if (unsaid && why === 'attack') quiet = true;
-    else if (duck && !rising) { b.ducking = true; quiet = b.duckQuiet = this.sec - b.duckUp < AGAIN; }
+    // (a duck that overrides her commander's order is always said: he must hear why his order was not done, m14)
+    else if (duck && !rising) { b.ducking = true; quiet = b.duckQuiet = !override && this.sec - b.duckUp < AGAIN; }
     else if (dive === 'surfaced') quiet = why === 'attack' && b.ducking && b.duckQuiet;
     else b.ducking = b.duckQuiet = false;
+    // (held at periscope depth for her look round by her commander's Surface: his order's reply says so, not a line that
+    // she 'stays at periscope depth', 6a's review)
+    if (note === 'look' && !rising && why === 'ordered') quiet = true;
     if (quiet && dive !== 'surfaced') b.duckWhy = reason ?? '';
     b.stopped = cut && why === 'attack' ? reason! : '';
     b.saying = { dive, why, reason, override, rising, quiet, cut, ...(note ? { note } : {}) };
@@ -534,7 +540,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     const n = b.u.name;
     const words = s.dive === 'surfaced' ? (s.why === 'forced' ? `${n} is forced to the surface` : `${n} surfaces`)
       : s.note === 'mended' ? `${n} has made good her damage and dives`
-      : s.dive === 'deep' ? `${n} ${s.note === 'stay' ? 'stays' : 'goes'} deep` : s.rising ? `${n} comes up ${s.cut ? 'only ' : ''}to periscope depth${s.note === 'look' && !s.cut ? ' to look round' : ''}` : b.keel < b.keelTo ? `${n} dives` : `${n} stays at periscope depth`;
+      : s.dive === 'deep' ? `${n} ${s.note === 'stay' ? 'stays' : 'goes'} deep` : s.rising ? `${n} comes up ${s.cut ? 'only ' : ''}to periscope depth${s.note === 'look' && !s.cut ? ' to look round' : ''}` : b.keel < b.keelTo && s.note !== 'stay' ? `${n} dives` : `${n} stays at periscope depth`;
     // (up from a duck: the second it ended, from which the next is no news for AGAIN)
     if (s.dive === 'surfaced') { if (b.ducking) b.duckUp = this.sec; b.ducking = b.duckQuiet = false; }
     this.say('sea:dive', b.u, s.quiet ? '' : `${words}${s.reason ? `: ${s.reason}` : ''}.`, { dive: s.dive, keel: b.keelTo, why: s.why, ...(s.reason ? { reason: s.reason } : {}), ...(s.override ? { override: true } : {}) });
@@ -1009,7 +1015,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
           // (sent after a boat she does not hold: at full speed to where her side last knew the boat, then search there)
           goX = e.dx; goY = e.dy; speed = E.top;
           if (dist(u.x, u.y, goX, goY) < 600) { e.doing = 'search'; e.seenAt = now; }
-          if (now - e.huntFrom > huntCap) this.goBack(e);
+          if (now - e.huntFrom > huntCap) this.goBack(e, true);
           break;
         }
         goX = e.echo && e.echo.kind !== 'asdic' && b.dive === 'surfaced' ? b.u.x : e.dx; goY = e.echo && e.echo.kind !== 'asdic' && b.dive === 'surfaced' ? b.u.y : e.dy;
@@ -1017,7 +1023,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         const d = dist(u.x, u.y, goX, goY);
         if ((b.doing === 'up' || b.doing === 'gun') && this.atSurface(b) && !b.abandoned && d <= E.ram && checking && this.staffRuns(u) && b.struck < 0 && this.rng.chance(S.ramShare)) { this.ram(e, b); break; }
         if (b.dive !== 'surfaced' && d < 600) { e.doing = 'search'; e.seenAt = now; }
-        if (now - e.huntFrom > huntCap) this.goBack(e);
+        if (now - e.huntFrom > huntCap) this.goBack(e, true);
         break;
       }
       case 'search': {
@@ -1028,7 +1034,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         speed = E.hunt;
         if (e.holds >= 0 && e.echo?.kind === 'asdic') e.doing = 'attack';
         else if (target && target.dive === 'surfaced' && e.echo && e.echo.kind !== 'asdic') e.doing = 'run';
-        if (now - e.seenAt > E.lostFor || now - e.huntFrom > huntCap) this.goBack(e);
+        if (now - e.seenAt > E.lostFor || now - e.huntFrom > huntCap) this.goBack(e, true);
         break;
       }
       case 'attack': {
@@ -1039,14 +1045,14 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         if (b.dive === 'surfaced') { e.doing = 'run'; break; }
         if (e.kit.hedgehog && d <= E.ahead && d > 120) this.chargeAhead(e, b);
         else if (d <= 60) this.chargePattern(e, b);
-        if (now - e.huntFrom > huntCap) this.goBack(e);
+        if (now - e.huntFrom > huntCap) this.goBack(e, true);
         break;
       }
       case 'open': {
         goX = u.x + Math.sin(u.face) * 500; goY = u.y + Math.cos(u.face) * 500;
         speed = E.hunt;
         if (dist(u.x, u.y, e.dx, e.dy) >= e.openTo) e.doing = e.holds >= 0 && e.echo?.kind === 'asdic' ? 'attack' : 'search';
-        if (now - e.huntFrom > huntCap) this.goBack(e);
+        if (now - e.huntFrom > huntCap) this.goBack(e, true);
         break;
       }
       case 'back': {
@@ -1074,7 +1080,9 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
   private beginHunt(e: Escort, by: 'staff' | 'order' = 'staff'): void {
     const b = this.boatOf.get(e.holds);
     if (!b) return;
-    e.doing = b.dive === 'surfaced' && e.echo?.kind !== 'asdic' ? 'run' : 'search';
+    // (to the datum at full speed where she is on the surface or the datum is far, and searches from there; held by
+    // sonar, she works the contact at once: m22, a hunt sent from far off no longer creeps the whole way at E.hunt)
+    e.doing = e.echo?.kind !== 'asdic' && (b.dive === 'surfaced' || dist(e.u.x, e.u.y, b.u.x, b.u.y) >= 600) ? 'run' : 'search';
     e.huntFrom = this.sec;
     e.seenAt = this.sec;
     e.dx = b.u.x; e.dy = b.u.y;
@@ -1091,7 +1099,12 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     }
   }
 
-  private goBack(e: Escort): void {
+  private goBack(e: Escort, gaveUp = false): void {
+    // (an escort her commander sent to hunt or search that gives it up says so, m9: the staff's own go back unsaid)
+    if (gaveUp && (e.order === 'hunt' || e.order === 'move')) {
+      const prey = e.order === 'hunt' ? this.boatOf.get(e.prey >= 0 ? e.prey : e.chase) : undefined;
+      this.say('sea:order', e.u, prey ? `${e.u.name} gives up the hunt for ${prey.u.name} and goes back to the convoy.` : `${e.u.name} has found nothing there and goes back to the convoy.`, { ok: true, do: 'back', units: [e.u.id] }, undefined, 'def');
+    }
     if (e.holds >= 0) this.drop(e, 'left');
     e.doing = 'back';
     e.order = null;
@@ -1623,6 +1636,12 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     }
   }
 
+  /** The boat an order makes her let go of, said first in her reply (m12): 'lets Boat 3 go and ', or nothing. */
+  private letGo(e: Escort): string {
+    const b = e.holds >= 0 ? this.boatOf.get(e.holds) : undefined;
+    return b && b.doing !== 'lost' && b.doing !== 'left' ? `lets ${b.u.name} go and ` : '';
+  }
+
   private orderEscort(e: Escort, c: Command | ConvoyCommand): Reply {
     const u = e.u, no = (why: string): Reply => ({ ok: false, u, says: `${u.name} can't ${why}.` });
     if (e.doing === 'lost') return no('take orders: it has been sunk');
@@ -1634,6 +1653,11 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         if (b.doing === 'lost') return no(`hunt ${b.u.name}: she has been sunk`);
         const held = this.known.def.has(b.u.id), spot = this.spots.def.get(b.u.id);
         if (!held && (!spot || this.sec - spot.t > LAST_SEEN)) return no(`hunt ${b.u.name}: no escort holds her, and she was last seen more than three minutes ago`);
+        // (already hunting her: the running hunt goes on, never started again, m6: no second pattern at once, no second hunt)
+        if ((e.prey === b.u.id || e.chase === b.u.id) && (e.doing === 'run' || e.doing === 'search' || e.doing === 'attack' || e.doing === 'open')) {
+          e.order = 'hunt';
+          return { ok: true, u, does: [`is already hunting ${b.u.name}`, `are already hunting ${b.u.name}`] };
+        }
         e.order = 'hunt';
         if (e.holds === b.u.id) { this.beginHunt(e, 'order'); return { ok: true, u, does: [`hunts ${b.u.name}`, `hunt ${b.u.name}`] }; }
         e.prey = b.u.id;
@@ -1646,13 +1670,18 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         const where = held ? '' : ' where she was last seen';
         return { ok: true, u, does: was ? [`lets ${was} go and hunts ${b.u.name}${where}`, `let ${was} go and hunt ${b.u.name}${where}`] : [`hunts ${b.u.name}${where}`, `hunt ${b.u.name}${where}`] };
       }
-      case 'convoy:screen': case 'hold': this.goBack(e); return { ok: true, u, does: ['goes back to its station round the convoy', 'go back to their stations round the convoy'] };
+      case 'convoy:screen': case 'hold': {
+        const was = this.letGo(e);
+        this.goBack(e);
+        return { ok: true, u, does: [`${was}goes back to its station round the convoy`, `${was}go back to their stations round the convoy`] };
+      }
       case 'convoy:rescue': {
         const t = this.byId.get(c.target);
         if (!t || t.state !== 'gone') return no(`pick up survivors there: ${t ? `${t.name} is still afloat` : 'there is no wreck there'}`);
+        const was = this.letGo(e);
         this.goBack(e); e.doing = 'rescue'; e.order = 'rescue'; e.tx = t.x; e.ty = t.y; e.until = this.sec + 600 + Math.round(dist(e.u.x, e.u.y, t.x, t.y) / E.top);
         this.later.push({ at: e.until - 300, run: () => { if (e.doing === 'rescue') this.say('sea:rescue', e.u, `${e.u.name} picks up survivors.`, { on: t.id, by: e.u.id, wreck: { unit: t.id, ship: 1 } }, undefined, 'def', Math.round(e.u.x), Math.round(e.u.y)); } });
-        return { ok: true, u, does: [`goes to pick up survivors from ${t.name}`, `go to pick up survivors from ${t.name}`] };
+        return { ok: true, u, does: [`${was}goes to pick up survivors from ${t.name}`, `${was}go to pick up survivors from ${t.name}`] };
       }
       case 'convoy:starshell': {
         if (this.sec < e.nextShell) { const m = Math.ceil((e.nextShell - this.sec) / 60); return no(`fire star shell yet: the next is ready in ${m === 1 ? 'a minute' : `${countWords(m)} minutes`}`); }
@@ -1662,9 +1691,10 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         return { ok: true, u };
       }
       case 'move': {
+        const was = this.letGo(e);
         if (e.holds >= 0) this.drop(e, 'left');
         e.doing = 'move'; e.order = 'move'; e.tx = c.x; e.ty = c.y; e.chase = -1; e.prey = -1;
-        return { ok: true, u, does: ['steams to the spot to search there', 'steam to the spot to search there'] };
+        return { ok: true, u, does: [`${was}steams to the spot to search there`, `${was}steam to the spot to search there`] };
       }
       default: return { ok: false, u };
     }
@@ -1710,8 +1740,11 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         const moved = this.setDive(b, c.deep ? 'deep' : 'periscope', 'ordered');
         this.unlook(b);
         b.doing = c.deep ? 'deep' : 'evade'; b.until = this.sec + 300;
-        // (on her way up to periscope depth from below it, a look round's rise among them: said so, never 'already at')
-        return moved ? { ok: true, u } : { ok: true, u, says: !c.deep && b.keel > B.scope + 0.5 ? `${u.name} is coming up to periscope depth already.` : `${u.name} is already ${c.deep ? 'deep' : 'at periscope depth'}.` };
+        // (on her way up to periscope depth from below it, a look round's rise among them: said so, never 'already at';
+        // started up from deep, said at once, not only once she is there, m11; on her way down, said so, 6a's review)
+        if (moved) return b.keelTo < b.keel - 0.5 ? { ok: true, u, says: `${u.name} starts up to periscope depth.` } : { ok: true, u };
+        const there = c.deep ? B.deep : B.scope;
+        return { ok: true, u, says: b.keel > there + 0.5 ? `${u.name} is coming up to periscope depth already.` : b.keel < there - 0.5 ? `${u.name} is going ${c.deep ? 'deep' : 'down to periscope depth'} already.` : `${u.name} is already ${c.deep ? 'deep' : 'at periscope depth'}.` };
       }
       case 'convoy:surface': {
         if (up) return { ok: false, u, says: this.atSurface(b) ? `${u.name} is on the surface already: she was forced up.` : `${u.name} is coming up to the surface already: she was forced up.` };
@@ -1720,8 +1753,11 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         b.doing = b.tubes > 0 ? 'close' : 'away';
         // (at periscope depth, she looks round there first, C1 (a): the order is held for it, and said so; from below, her
         // rise to periscope depth says it as she gets there)
-        if (b.rise && (!moved || b.keel < B.scope - 0.5)) return { ok: true, u, says: `${u.name} takes one look round at periscope depth before she surfaces.` };
-        return moved ? { ok: true, u } : { ok: true, u, says: `${u.name} stays on the surface.` };
+        // (from below it, she starts up at once, and says so then, m11; at it, or on her way to it from above, the look round
+        // is said; with her look had, a rise from below the surface is said as it starts)
+        if (b.rise) return { ok: true, u, says: b.keel > B.scope + 0.5 ? `${u.name} starts up, to take one look round at periscope depth before she surfaces.` : `${u.name} takes one look round at periscope depth before she surfaces.` };
+        if (moved) return b.keel > 1 ? { ok: true, u, says: `${u.name} starts up to the surface.` } : { ok: true, u };
+        return { ok: true, u, says: `${u.name} stays on the surface.` };
       }
       case 'convoy:evade': {
         if (up) return hurt('evade');
@@ -1740,6 +1776,8 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         const d = dist(u.x, u.y, t.x, t.y);
         if (d > S.gunAt) return no(`fire her deck gun at ${t.name}: the ship is ${metres(Math.round(d / 50) * 50)} away, and the gun reaches ${metres(S.gunAt)}`);
         b.order = 'gun'; b.target = t.id;
+        // (her crew already fighting their gun: it turns on the ship ordered, m21)
+        if (b.doing === 'gun') b.gunOn = t.id;
         return { ok: true, u, does: [`turns her deck gun on ${t.name}`, `turn their deck guns on ${t.name}`] };
       }
       case 'convoy:leave': case 'withdraw': {
