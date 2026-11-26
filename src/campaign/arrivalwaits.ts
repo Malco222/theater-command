@@ -21,7 +21,7 @@
 import setup from '../../data/campaign/setup-1939.json';
 import { turnToDate } from '../core/ticket';
 import { headline, rowHolds, theWords } from './game';
-import { contactRuleActs } from './history';
+import { contactRuleActs, stopOf } from './history';
 import type { Corps, Game, Region } from './types';
 
 const ROWS = (): any[][] => (setup as any).expeditions as any[][] ?? [];
@@ -195,6 +195,11 @@ function waiting(g: Game, nat: string): { i: number; row: any[]; at: number; sin
     // (A row the rule no longer holds, the dial turned to a book stop whose book is open where it is due, forms next
     // month wherever its corps stand: neither card speaks for it. history.ts `contactRuleActs`, as game.ts reads it.)
     if (!contactRuleActs(g, g.byName[row[5]])) return;
+    // (Nor a row whose `stops` leave out the dial's stop: game.ts returns at its stops check before it can wait or form,
+    // so while the dial stands there it never forms, and "it forms the month after this corps leaves the front" would be
+    // false. Its three flags are kept, not cleared: the dial can come back to a stop it acts at, and then the card
+    // returns with the wait's first month and the row is not told a second time. The refuter's interplay-3.)
+    if (Array.isArray(row[6]?.stops) && !(row[6].stops as number[]).includes(stopOf(g))) return;
     const at = g.flags[atKey(i)];
     if (at === undefined || !g.regions[at]) return;
     out.push({ i, row, at, since, from: fromOf(row) });
