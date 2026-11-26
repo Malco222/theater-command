@@ -4071,7 +4071,7 @@ bool AAirBattle::PropSpinOn()
 			}
 			else
 			{
-				UE_LOG(LogTheater, Warning, TEXT("Air battle: turning airscrews: on, but /Game/Campaign/Materials/M_ScrewHaze is missing (run Tools/build_content.sh): past 300 m the blades are taken out with no haze in their place."));
+				UE_LOG(LogTheater, Warning, TEXT("Air battle: turning airscrews: on, but /Game/Campaign/Materials/M_ScrewHaze is missing (run Tools/build_content.sh): past 300 m the blades stay standing as before (no haze to put in their place); close to, the stronger smear."));
 			}
 		}
 	}
@@ -4257,7 +4257,15 @@ namespace AirParts
 	static bool TakeFarScrews(FShape& Away, const FMiniatureMesh& Far, const FShape& Near, const FString& Kind, const FVector& Middle, double Fit)
 	{
 		FString Text;
-		if (Near.Screws.Num() == 0 || !FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models") / (Kind + TEXT(".json")))))
+		// (the file the far mesh itself was read from: with -TheaterOldVehicles, Models/Old's where one is kept, as
+		// FMiniatureMesh reads it; the near screws' file and this one not the same model, SameScrews leaves the shape be)
+		static const bool bOldVehicles = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldVehicles"));
+		FString Path = FPaths::ProjectContentDir() / TEXT("Models") / (Kind + TEXT(".json"));
+		if (bOldVehicles && FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Models") / TEXT("Old") / (Kind + TEXT(".json"))))
+		{
+			Path = FPaths::ProjectContentDir() / TEXT("Models") / TEXT("Old") / (Kind + TEXT(".json"));
+		}
+		if (Near.Screws.Num() == 0 || !FFileHelper::LoadFileToString(Text, *Path))
 		{
 			return false;
 		}
@@ -5185,8 +5193,9 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 				{
 					AirParts::Recoat(Away.Colors, FMiniatureMesh::VehicleColour(Nation).ToFColor(true), Navy);
 				}
-				// (the row "flyPropSpin": its airscrews out of the far shape as well, to turn as its copies' haze)
-				if (bScrews && Near.Screws.Num() > 0)
+				// (the row "flyPropSpin": its airscrews out of the far shape as well, to turn as its copies' haze; only with
+				// the haze's ink there to draw them, else the far shape keeps its blades: never no airscrew at all)
+				if (bScrews && Near.Screws.Num() > 0 && ScrewHazeInk())
 				{
 					const int32 Before = Away.Triangles.Num() / 3;
 					if (AirParts::TakeFarScrews(Away, Far, Near, Kind, Middle, Fit))
@@ -5438,7 +5447,12 @@ void AAirBattle::ResortScrews()
 void AAirBattle::FarScrews(FPlaneMade& Made, UProceduralMeshComponent* Mesh, const AirShow::PlaneOut& P, bool bFar)
 {
 	// (the copies draw a far aircraft's airscrews as their haze; one on its own mesh draws them here, its far shape in
-	// section 0 having none: each running screw's haze, section 5, and each feathered one's blades standing still, 6)
+	// section 0 having none: each running screw's haze, section 5, and each feathered one's blades standing still, 6.
+	// Near and never far yet, as most on their own meshes are each frame: nothing to make, show or hide.)
+	if (!bFar && !Made.bFarScrews)
+	{
+		return;
+	}
 	const AirParts::FShape* Far = AirParts::Shapes().Find(Made.Shape + TEXT("|far"));
 	if (!Mesh || !Far || Far->Screws.Num() == 0 || Far->StillBlades.Num() != Far->Screws.Num())
 	{
@@ -5995,7 +6009,7 @@ void AAirBattle::Draw(double Real)
 		const bool bNearShape = Lit && Lit->bTwoShapes && (bRidden || Away < (Lit->bNear ? 450.0 : 300.0) || (Lit->bNear && Lit->bBay && P.Bay > 0.0))
 			&& (bRidden || B17FineNearRoom(*Lit));
 		// (the row "flyPropSpin": one with an engine stopped and feathered stays on its own mesh, where its still blades are)
-		const bool bFeatheredFar = S.PropSpinOn == 1 && P.bFeathered && !P.DeadEngines.empty();
+		const bool bFeatheredFar = S.PropSpinOn == 1 && P.bFeathered && !P.DeadEngines.empty() && ScrewHazeInk();
 		if (bCopiesOn && Lit && Lit->bTwoShapes && !bNearShape && !bFeatheredFar)
 		{
 			const bool bLightWanted = Away * Enlarged > LightFromM * (Lit->bCopy && Lit->bLight ? 0.9 : 1.0);

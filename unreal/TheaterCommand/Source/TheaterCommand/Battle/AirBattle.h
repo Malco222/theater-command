@@ -600,12 +600,13 @@ private:
 	 * 04:00Z, "the b-17 propellers didnt look like they were spinning"): read once a battle, the first time a shape is
 	 * asked for, into its state's PropSpinOn. On, every shape is kept under its own key ("|screws"): its far shape (the
 	 * copies' and the light shape's, past 300 m) has its blades and its modeller's blur disc taken out, and the copies
-	 * draw each airscrew as an even haze (M_ScrewHaze, ScrewHaze); the near discs trail a stronger smear. Off: nothing
+	 * draw each airscrew as an even haze (M_ScrewHaze, ScrewHaze; without it the far shape keeps its blades as before);
+	 * the near discs trail a stronger smear. Off: nothing
 	 * is read, made or drawn otherwise.
 	 */
 	bool PropSpinOn();
 	/** The far airscrews' haze (M_ScrewHaze: M_Highlight's look, usable on the copies), made when the row is first read on;
-	 * null where the content has none (the far shapes then lose their still blades, with no haze). */
+	 * null where the content has none (the far shapes then keep their blades, as with the row off; the near smear stays). */
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ScrewHaze;
 	/** The haze's ink while the row is on this battle, else null. */

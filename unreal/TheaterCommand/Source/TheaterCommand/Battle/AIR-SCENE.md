@@ -1494,26 +1494,37 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    from that, with no haze (an airscrew is 2 or 3 pixels there). The copies draw each airscrew as an even, faint haze
    (AirScrew::MakeDisc, 24 steps round, 288 triangles, colour 222224, alpha 0/70/60/0 out from the boss) on
    M_ScrewHaze, M_Highlight's look flagged for instanced meshes (Tools/build_content.py builds it when it is missing; it
-   must be built on the Mac and its .uasset committed: without it the log says so once and the far blades are taken
-   out with nothing in their place). Close to, the turning disc keeps its 576 triangles and trails a stronger smear
-   behind each blade (darkest at the blade, a sharp edge ahead, a faint haze between). An engine dead and feathered
+   must be built on the Mac and its .uasset committed: without it the log says so once and the far shapes keep their
+   blades standing, as with the row off, so that no aircraft is ever drawn with no airscrew at all). Close to, the
+   turning disc keeps its 576 triangles and trails a stronger smear behind each blade (darkest at the blade, a sharp
+   edge ahead, a faint haze between), near black (8, 8, 8): both inks take a point's colour bytes as linear light, with
+   no Power 2.2 as M_MapSurface has, so the old disc's 30 was a mid grey. An engine dead and feathered
    still shows its blades standing still: close to as before (BladesOf), and far off its bomber leaves the copies for
    its own mesh, its far shape with the feathered screw's own blades (kept apart as they were taken out, section 6) and
    the running ones' haze (section 5). The discs and the haze sort against the clouds as the air fight's effects do (0
    seen from over the clouds' base, -30 from under it); before, a disc's 0 drew it over every cloud, the ones hiding its
    own aircraft too.
    Cost (counted, not timed): no draw call more per aircraft; one see-through draw more per copies' mesh that has haze
-   (its far shape with and without shadow: at most 2 a model, about 6 in the Bremen raid); the light copies none. A
+   (its far shape with and without shadow: at most 2 a model, about 6 in the Bremen raid; with the row unitColours on,
+   each colour look is a shape of its own, so 2 a look); the light copies none. A
    B-17's far copy 5,970 opaque triangles and 1,152 of haze, against 7,122; the finer B-17's 18,202 and 1,152, against
    20,514; a Bf 109's 4,454 and 288 against 4,770. Each far shape's file is read once more as it is made (the finer
    B-17's 10.3 MB), so the warm-up grows. A bomber feathered past 300 m: its own mesh, two or three draws, while it is
-   in view.
+   in view, and its whole far shape even past 1,500 m (not the light one).
+   What it promises, and what it does not: past 300 m, all of the Overview, a B-17's airscrew is 4 to 8 pixels across
+   in the picture the game draws, and its haze does not turn: no frozen blades and no black discs, a faint even blur
+   (12.6 and 11.6 levels darker than the sky at 434 and 832 m in the test's painter; against dark ground, about sRGB
+   80, it comes out a few levels lighter than the ground, arithmetic). Whether that reads as a turning airscrew is the
+   art director's call on the Mac. Only close to (rides, under 300 m) is a turn drawn.
    `-TheaterAirPropSpin` on for a run, `-TheaterAirNoPropSpin` off, `-TheaterRulesFlip=flyPropSpin` clicks the card's
    switch. The cloud test: air_prop_spin_test in run.sh (every aircraft in Content/Models and Old: one haze a screw, no
    blade or blur triangle left far off and nothing else taken, each screw's blades kept apart; the near disc changes the
-   picture 69, 54 and 38 levels of 255 a frame at 60 fps at 50, 150 and 280 m against the old disc's 17, 16 and 14; the
-   haze stands 16.8 and 15.3 levels off the sky at 434 and 832 m; the row off read from the source) and air_light_test
-   built with -DAIR_LIGHT_SCREWS (every light shape held within half a pixel of the far shape without its airscrews).
+   picture 64, 51 and 36 levels of 255 a frame at 60 fps at 50, 150 and 280 m against the old disc's 13, 12 and 11,
+   which the test checks fall short of 30; the haze stands 12.6 and 11.6 levels off the sky at 434 and 832 m; the row
+   off read from the source: those checks count lines of text, they show the guards are there, not how they behave, so
+   the Mac's run 1 against a build of the branch's base is the real proof that off is byte for byte as before) and
+   air_light_test built with -DAIR_LIGHT_SCREWS (every light shape, Content/Models and Old, held within half a pixel
+   of the far shape without its airscrews).
    The pictures are the test's own software painter at the scene's real scale (about 1,050 pixels across, 1,008 a
    radian), not the Mac's: TSR may even out the near smear (see-through draws write no motion), which only the Mac shows.
    The Mac's run (build_content.sh first, for M_ScrewHaze): the Bremen raid, the Overview and a ride, at 1x and at 1/2
@@ -1529,5 +1540,7 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    By eye (a still each, for the art director): at the Overview no still Y of blades and no black disc with a yellow rim
    on any B-17, Bf 109 or Fw 190, a faint grey haze at each engine; in a ride the near discs' smear seen to turn, not
    shimmering; a bomber crossing 300 m with no jump from a turning disc to still blades; a feathered engine's blades
-   standing still, near and far; from under the clouds' base, the haze and discs behind a cloud, not over it; no grey
-   checkered discs anywhere (M_ScrewHaze missing on a copy). Off: the picture exactly as before.
+   standing still, near and far; from under the clouds' base, the haze and discs behind a cloud, not over it (and, a
+   guess: ground smoke or rain behind a bomber may draw over its discs there, as over the air fight's tracers today);
+   no ghost trail behind the haze when the camera pans with the formation (TSR, a guess); no grey checkered discs
+   anywhere (M_ScrewHaze missing on a copy). Off: the picture exactly as before, compared with the branch's base.
