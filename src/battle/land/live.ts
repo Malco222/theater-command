@@ -344,6 +344,20 @@ export interface LiveOpts {
    */
   exits?: boolean;
   /**
+   * Wounded and knocked-down men (release 2, looks only; Brian, 25 November 16:14Z: "im not seeing multiple soliders
+   * being taken out by an explosion if they are in the blast radius"; Drill.wounded): a burst takes the men nearest
+   * it together, a share of the fallen lie wounded, and living men near a burst are knocked down and get up again.
+   * Counts never change. Off unless true.
+   */
+  wounded?: boolean;
+  /**
+   * Every man his own pace (release 2, looks only; Brian, 25 November 17:30Z: "it looks like they are all jogging at
+   * the same speed"; 16:24Z: "the soldiers of a squad keep zig zaging at the same time"; Drill.paces): each man's own
+   * pace and step-off, sprints and dashes, loaded and tired men slower, and a squad that no longer swerves as one.
+   * Off unless true.
+   */
+  paces?: boolean;
+  /**
    * Direct command (Brian, 03:09Z "do 1 2 and 3"; the rules' switches, sim.ts perUnit and radio). staff: a block he
    * orders is his, and his staff fights the rest of his side. radio: his orders land a few seconds later, longer where
    * the block is hit. Both on for the player unless turned off.
@@ -545,7 +559,7 @@ export class LiveBattle {
     if (opts.cars === true && !piece) sim.cars = true;
     if (opts.aa === true && !piece) sim.aa = true;
     if (opts.light === true && !piece) sim.light = true;
-    this.drill = sim.drillOn({ sections: true, ...(opts.platoons === false ? {} : { platoons: true }), ...(opts.book !== undefined ? { book: opts.book } : {}), ...(opts.life === true ? { life: true } : {}), ...(opts.hatches === true ? { hatches: true } : {}), ...(opts.seasoned === true ? { seasoned: true } : {}), ...(opts.leaders === true ? { leaders: true } : {}), ...(opts.tankmind === true ? { tankmind: true } : {}), ...(opts.tankmg === true ? { tankmg: true } : {}), ...(opts.exits === true ? { exits: true } : {}) });
+    this.drill = sim.drillOn({ sections: true, ...(opts.platoons === false ? {} : { platoons: true }), ...(opts.book !== undefined ? { book: opts.book } : {}), ...(opts.life === true ? { life: true } : {}), ...(opts.hatches === true ? { hatches: true } : {}), ...(opts.seasoned === true ? { seasoned: true } : {}), ...(opts.leaders === true ? { leaders: true } : {}), ...(opts.tankmind === true ? { tankmind: true } : {}), ...(opts.tankmg === true ? { tankmg: true } : {}), ...(opts.exits === true ? { exits: true } : {}), ...(opts.wounded === true ? { wounded: true } : {}), ...(opts.paces === true ? { paces: true } : {}) });
     // Every block of his side placeable (the rules' setupOn all), not only his guns and teams.
     if (opts.setup && this.me) sim.setupOn(this.me, true);
     if (opts.hide !== false) sim.hideOn();

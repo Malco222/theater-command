@@ -846,6 +846,24 @@ export class Drill {
    * (DR.exits).
    */
   readonly exits: boolean;
+  /**
+   * Wounded and knocked-down men (release 2; Brian, 25 November 2026, 16:14Z: "im not seeing multiple soliders being
+   * taken out by an explosion if they are in the blast radius"): a shell burst gathers the losses its block is owed
+   * and is placed so that the men nearest it are the ones taken; of a block's fallen a share lie wounded and not
+   * dead (view()'s wd with no cy, with or without the bearers rule); living men inside the stun ring are knocked
+   * down and held a few seconds (kd). Looks only (the drill's own dice): the rules' losses stay as booked. It needs
+   * the burst rule (blast) for the bursts; the wounded share works without it. Off unless asked (DR.wounded).
+   */
+  readonly wounded: boolean;
+  /**
+   * Every man his own pace (release 2; Brian, 25 November 2026, 17:30Z: "it looks like they are all jogging at the
+   * same speed"; 16:24Z: "the soldiers of a squad keep zig zaging at the same time"): each man on foot moves at a
+   * pace a little his own and steps off at his own moment, sprints across the open under fire and dashes the short
+   * bound between cover, comes on slower under a gun or a load, tires after a long run; and a squad steers by its
+   * march and its track over some seconds, not by one step of its block, so its men no longer swerve together.
+   * Looks only (the drill's own dice): the rules never read it. Off unless asked (DR.paces).
+   */
+  readonly paces: boolean;
   /** Squad life: the men taking up their block's phase this think (their lag just over), as on a fresh phase. */
   private readonly freshNow = new Set<Man>();
   private readonly sup = new Suppression();
@@ -853,7 +871,7 @@ export class Drill {
   private tankMemo: { t: number; at: Partial<Record<Side, [number, number][]>> } = { t: -1, at: {} };
   private readonly priMemo = new Map<number, { t: number; men: Man[] }>();
 
-  constructor(b: LandBattle, opts: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; hatches?: boolean; seasoned?: boolean; leaders?: boolean; tankmind?: boolean; tankmg?: boolean; exits?: boolean; scale?: number } = {}) {
+  constructor(b: LandBattle, opts: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; hatches?: boolean; seasoned?: boolean; leaders?: boolean; tankmind?: boolean; tankmg?: boolean; exits?: boolean; wounded?: boolean; paces?: boolean; scale?: number } = {}) {
     this.b = b;
     this.seed = b.ticket.seed;
     this.sections = !!opts.sections || !!opts.platoons;
@@ -865,6 +883,8 @@ export class Drill {
     this.tankmind = !!opts.tankmind;
     this.tankmg = !!opts.tankmg;
     this.exits = !!opts.exits;
+    this.wounded = !!opts.wounded;
+    this.paces = !!opts.paces;
     this.byBook = opts.book ?? (this.platoons || this.life);
     this.scale = opts.scale !== undefined && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
     for (const u of b.units) { this.squads.set(u.id, this.make(u)); this.addMech(u); this.addEscorts(u); }
