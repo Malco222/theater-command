@@ -13,8 +13,10 @@
 //
 // The design director's ruling of 01:28Z put three more choices of the same kind on the same row and switch, one rule,
 // "what it chose it keeps while that still holds", read only from the game's own facts: the way over a river (way),
-// the place beside a friend (beside) and the jostled block (back); a fourth of that kind found at the rule's own gate
-// is with them (step). Each has its own key in sim.standKeeps so the gate can count them alone and together.
+// the place beside a friend (side: the side two friends slide apart; beside: the ground a friend it stood aside for
+// holds) and the jostled block (back); a fourth of that kind found at the rule's own gate is with them (step, his yes
+// of 02:30Z, when he gave the two halves of the place beside a friend a key each). Each has its own key in
+// sim.standKeeps so the gate can count them alone and together.
 //
 // The staged tests put one attacking block before one defending block on a real field, both staffs silent, and draw
 // the defender back by hand; the last ones count the rocking in whole battles, as the gate counts it.
@@ -33,8 +35,8 @@ type U = {
   path: [number, number][]; order: { kind: string; target?: number } | null; home: [number, number]; keepFace: number | null; hid?: boolean; stoodFor?: number;
   stand?: [number, number]; standBy?: { id: number; st: boolean }[]; heldAt?: [number, number]; stepsBack?: boolean;
 };
-type Keeps = { way: boolean; beside: boolean; back: boolean; step: boolean };
-const ALL: Keeps = { way: true, beside: true, back: true, step: true };
+type Keeps = { way: boolean; side: boolean; beside: boolean; back: boolean; step: boolean };
+const ALL: Keeps = { way: true, side: true, beside: true, back: true, step: true };
 type Inner = {
   send(u: U, o: { kind: 'attack' | 'move'; x: number; y: number; target?: number; face?: number }): void;
   gap(a: U, b: U): number;
@@ -302,7 +304,7 @@ describe('what it chose it keeps: eased off the stand of its attack (step)', () 
   });
 });
 
-describe('what it chose it keeps: the place beside a friend (beside)', () => {
+describe('what it chose it keeps: the place beside a friend (side, beside)', () => {
   /**
    * A block marches north into a friend standing dead ahead, a hair to its right: the two slide apart, the friend to
    * the right. Then the friend lies a metre to its left, as a waver of the block's own heading has it: which way next?
@@ -319,15 +321,18 @@ describe('what it chose it keeps: the place beside a friend (beside)', () => {
     return { first, second: b.x - a.x };
   }
 
-  it('on, the side the two slid apart the tick before is the side they slide now; with that keep off, it flips', () => {
-    const kept = slide(ALL), flips = slide({ ...ALL, beside: false });
+  it('side: on, the side the two slid apart the tick before is the side they slide now; with that keep off, it flips', () => {
+    const kept = slide(ALL), flips = slide({ ...ALL, side: false });
     expect(kept.first).toBeGreaterThan(0.2);
     expect(flips.first).toBeGreaterThan(0.2);
     expect(kept.second).toBeGreaterThan(0.2);
     expect(flips.second).toBeLessThan(-0.2);
+    // and it is its own key: the other half of the place beside a friend, off, changes nothing here
+    const alone = slide({ ...ALL, beside: false });
+    expect(alone.second).toBe(kept.second);
   });
 
-  it('a friend it stood aside for holds the same ground, whether a tick finds it halted or stepping', () => {
+  it('beside: a friend it stood aside for holds the same ground, whether a tick finds it halted or stepping', () => {
     const at = (keeps: Keeps, speed: number, st: boolean): { id: number; x: number; y: number } | null => {
       const { inner, foot } = quiet(true, keeps);
       const u = put(foot[0], 1500, 600, 0), f = put(foot[1], 1500, 900, 0);
@@ -344,6 +349,9 @@ describe('what it chose it keeps: the place beside a friend (beside)', () => {
     // The stand its own attack has it make for: stepping (and nearer to it), it holds that either way; halted, only with the keep.
     expect(at(ALL, 0, true)?.x).toBe(1700);
     expect(at({ ...ALL, beside: false }, 0, true)).toBeNull();
+    // and it is its own key: the side two friends slide apart, off, changes nothing here
+    expect(at({ ...ALL, side: false }, 6, false)?.x).toBe(1500);
+    expect(at({ ...ALL, side: false }, 0, true)?.x).toBe(1700);
   });
 });
 
@@ -407,7 +415,7 @@ describe('attackers stay where they stop to fight: whole battles, the rocking co
     expect(end(true)).toEqual(on);
     expect(end(false)).toEqual(off);
     // Off, none of its keeps is read: the same battle whichever way their keys stand.
-    expect(end(false, { way: false, beside: false, back: false, step: false })).toEqual(off);
+    expect(end(false, { way: false, side: false, beside: false, back: false, step: false })).toEqual(off);
   }, 480_000);
 
   it('the way over a river: a tank block shoved at the bridge\'s end turned to and fro between two turning points; kept, it does not', () => {

@@ -390,10 +390,10 @@ export class LandBattle implements BattleSim<LandUnit> {
   standRule = false;
   /**
    * What it chose it keeps while that still holds (the design director, 26 November 2026 01:28Z: one rule with the
-   * stand above, on the same row and switch, read only from the game's own facts, with no new figure). Three more
-   * choices a block made afresh every tick with no memory of the tick before, and so turned back and forth between.
-   * Each has its own key here so the rule's gate can count them alone and together; all are on with the rule, and none
-   * is read with it off.
+   * stand above, on the same row and switch, read only from the game's own facts, with no new figure; and 02:30Z:
+   * yes to `step`, and a key each for the two halves of a block's place beside a friend). More choices a block made
+   * afresh every tick with no memory of the tick before, and so turned back and forth between. Each has its own key
+   * here so the rule's gate can count them alone and together; all are on with the rule, and none is read with it off.
    *
    * way: on its way round ground it cannot enter (over a bridge), a block makes for the furthest turning point it can
    * walk straight to. Shoved a step to one side at the bridge's end it lost that line and turned for the nearer point,
@@ -403,14 +403,15 @@ export class LandBattle implements BattleSim<LandUnit> {
    * until it is at it or that is out of its sight too, and while that nearer point is still under its own box it
    * steps to it as it faces the one it chose, with no wheel to a way of a few metres.
    *
-   * beside: a block on the march slides a friend in its way aside and slides aside itself, by the side the friend lies
+   * side: a block on the march slides a friend in its way aside and slides aside itself, by the side the friend lies
    * across its front. A friend dead ahead lies now a hair to its left and now a hair to its right as the block's own
    * heading wavers, so the two were slid one way and the other tick by tick. On: the side it slid to pass that friend
-   * the tick before is the side it slides now, while the two still overlap and the ground still lets them. And the
-   * place of its stand before its target: a friend it stood aside for holds the same ground still (where it is, or the
-   * stand its own attack has it make for), whether a tick finds that friend halted or stepping (one that waits and
-   * steps by turns held the one ground one tick and the other, or none, the next, and the stand hopped between two
-   * places 30 m and more apart).
+   * the tick before is the side it slides now, while the two still overlap and the ground still lets them.
+   *
+   * beside: the place of its stand before its target. A friend it stood aside for holds the same ground still (where
+   * it is, or the stand its own attack has it make for), whether a tick finds that friend halted or stepping (one that
+   * waits and steps by turns held the one ground one tick and the other, or none, the next, and the stand hopped
+   * between two places 30 m and more apart).
    *
    * back: a block that has carried out a move order and is then eased a few metres off its place by its friends is
    * sent there again by its general. It wheeled to that way of a few metres, marched it and wheeled back to its line's
@@ -422,7 +423,7 @@ export class LandBattle implements BattleSim<LandUnit> {
    * fights. On: while its stand is still under its own box it steps back to it as it faces what it fights, and its
    * stand is kept the while.
    */
-  standKeeps = { way: true, beside: true, back: true, step: true };
+  standKeeps = { way: true, side: true, beside: true, back: true, step: true };
   /** faceRule: of the enemies that struck each block this tick, the costliest, what its blow cost face on, and whether it landed on the front. */
   private readonly costliest = new Map<number, { by: number; cost: number; front: boolean }>();
   /** Each own team block's parent force (own-teams.ts ownTeamParents), by the forces' ids: read once from the ticket. */
@@ -2752,7 +2753,7 @@ export class LandBattle implements BattleSim<LandUnit> {
    * left alone; enemies keep a few metres between their fronts. For the screens and the models as much as for the
    * fight: two divisions never share one patch of ground.
    */
-  /** standKeeps.beside: by pair of friends, the way across the first's front they last slid apart, and the count of the tick they did. */
+  /** standKeeps.side: by pair of friends, the way across the first's front they last slid apart, and the count of the tick they did. */
   private readonly sides = new Map<string, { x: number; y: number; n: number }>();
   private spreads = 0;
   private spread(): void {
@@ -2771,7 +2772,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const go = (u: LandUnit, ux: number, uy: number, push: number): void => {
       if (can(u, ux, uy, push)) { u.x = clamp(u.x + ux * push, 5, this.field.w - 5); u.y = clamp(u.y + uy * push, 5, this.field.h - 5); }
     };
-    const keep = this.standRule && this.standKeeps.beside, now = keep ? ++this.spreads : 0;
+    const keep = this.standRule && this.standKeeps.side, now = keep ? ++this.spreads : 0;
     for (let i = 0; i < us.length; i++) for (let j = i + 1; j < us.length; j++) {
       const a = us[i], b = us[j];
       const dx = b.x - a.x, dy = b.y - a.y;
@@ -2809,7 +2810,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       if (a.side === b.side && (a.pressing !== undefined || b.pressing !== undefined) && !this.narrows(a, a.x, a.y) && !this.narrows(b, b.x, b.y)) {
         const p = Math.min(pl / 2, (Math.max(a.speed, b.speed) + LAND.spread) * DT);
         let sl = Math.sign(lat) || (a.id < b.id ? 1 : -1);
-        // What it chose it keeps (standRule, standKeeps.beside): the side these two slid past each other the tick
+        // What it chose it keeps (standRule, standKeeps.side): the side these two slid past each other the tick
         // before is the side they slide now, while they still overlap and the ground still lets them.
         const pair = keep ? `${a.id}:${b.id}` : '', was = keep ? this.sides.get(pair) : undefined;
         if (was && was.n === now - 1) {
