@@ -2085,7 +2085,11 @@ function frontsMonth(g: Game, nat: string, N: FrontsNow, plans: PlanPhase | null
       }
       // A landing: on the first of its places still the enemy's; a place already its side's is a hop made.
       if (places.length && mine(places[0])) { done(); continue; }
-      const shore = places.find((r) => atWar(g, nat, r.ctrl));
+      // (Of the row's places still the enemy's, the first whose shore takes a corps of the force: one that takes none is
+      // full, and the staff goes on to the plan's next shore (the design director, 21:37Z, 26 November 2026, 2). On
+      // ground that is no island every shore takes the force, and the first is taken as it always was.)
+      const enemy = places.filter((r) => atWar(g, nat, r.ctrl));
+      const shore = enemy.find((r) => shoreWave(g, r, nat, force).left >= 1) ?? enemy[0];
       if (!shore) continue;
       if (!here.port || !here.seas.length) { if (early) for (const x of force) toQuay(x, F.id, shore); continue; }
       if (!inReach(here, shore)) {
@@ -2109,8 +2113,11 @@ function frontsMonth(g: Game, nat: string, N: FrontsNow, plans: PlanPhase | null
       // this quay by sea, as a row that goes with a lead comes to it: next month they read it together.)
       // (An island of the Pacific takes as many of the force as it has room for in men, the lead first, a corps too
       // large for what is left passed over: `shoreWave`, islands.ts `fitWave`.)
+      // (A wave is the corps that fit, in plan order; if none fits, the shore is full and the staff goes to the plan's
+      // next shore: the design director, 21:37Z, 26 November 2026, 2. The row's shore is ended, not made, so the row's
+      // next follow-on is its own the same month, and nothing behind this shore reads it as a hop made.)
       const sw = shoreWave(g, shore, nat, force);
-      if (sw.left < 1) { waits(`no room on the shore: ${shore.name} is full`); continue; }
+      if (sw.left < 1) { waits(`no room on the shore: ${shore.name} is full`); g.flags[key] = -g.turn; now = frontsAgain(g) ?? now; continue; }
       let wave = sw.wave;
       const joined: number[] = [];
       if (hopsReading(g, nat, shore)) {
