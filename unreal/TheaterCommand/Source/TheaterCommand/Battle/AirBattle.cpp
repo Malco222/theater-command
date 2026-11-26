@@ -4383,11 +4383,11 @@ namespace AirParts
 		{
 			return false;
 		}
-		TArray<FPiece> Still;
+		TArray<FShape::FPiece> Still;
 		Still.SetNum(Near.Screws.Num());
 		for (size_t J = 0; J < Cut.Blades.size(); ++J)
 		{
-			FPiece& Piece = Still[Which[J]];
+			FShape::FPiece& Piece = Still[Which[J]];
 			TMap<int32, int32> Into;
 			for (const int T : Cut.Blades[J])
 			{
