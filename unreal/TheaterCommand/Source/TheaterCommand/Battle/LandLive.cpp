@@ -180,8 +180,8 @@ namespace
 		// and 12:37Z; the rules' sim.pursue, "After the break"). It is NOT looks only: a pursuit changes what the
 		// broken army loses, so it has its own fairness gate and stays off until that gate, the Mac and the art
 		// director pass it; -TheaterLandRulePursue turns it on for a run. Key and flags mine; the name and the line
-		// are stand-ins until the UI director's.)
-		{ TEXT("pursue"), TEXT("Pursue a broken enemy"), TEXT("When the enemy army breaks, the battle waits and you choose: pursue it, or end the battle there. A pursuit goes on until the last of them has left the field, you call it off, or the day ends. Off: the battle ends the moment an army breaks, as before. This changes how battles turn out. A change takes effect from the next battle."), TEXT("TheaterLandNoPursue"), false, TEXT("TheaterLandRulePursue") },
+		// are the UI director's (26 November 2026, 13:32Z): the name says what is true when the row is on.)
+		{ TEXT("pursue"), TEXT("Winners choose whether to pursue a broken army"), TEXT("When an army breaks, the battle need not end there. If yours has won, the clock stands while you choose: pursue the broken army until the last of it has left the field or the day ends, or end the battle at once. You can call a pursuit off at any time. A computer army that wins chooses for itself, by what it can see. A broken army falls back to its own edge of the field; when it is yours, you choose its way back and can hurry it. Off: the battle ends the moment an army breaks, as before. This changes how battles turn out. A change takes effect from the next battle."), TEXT("TheaterLandNoPursue"), false, TEXT("TheaterLandRulePursue") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 

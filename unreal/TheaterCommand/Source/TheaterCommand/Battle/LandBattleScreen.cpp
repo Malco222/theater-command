@@ -1513,8 +1513,10 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	// i have the option to continue on with the battle or end it"). Once the clock shown has come up to the break: while
 	// he is asked, one line on the desk strip and his two answers under it, side by side, PURSUE lit; while his pursuit
 	// runs, CALL OFF THE PURSUIT there; where his own army broke and the enemy pursues, one line. The rules decide what
-	// each press does and refuse what is not his to give (sim.ts, "After the break"). The words are stand-ins until the
-	// UI director's. ----
+	// each press does and refuse what is not his to give (sim.ts, "After the break"). The words are the UI director's
+	// (26 November 2026, 13:32Z; ui-director/battle-pursue-UI-MARKS.md, A to D): the other army by the rules' own name
+	// for it, and END THE BATTLE and CALL OFF THE PURSUIT with no key, since a press of either cannot be taken back.
+	// The battle's buttons take no tips. ----
 	if (S.Rec.bLive && !S.Rec.bOver && S.Rec.After != 0 && S.Rec.Me >= 0 && S.Battle >= S.Rec.AfterAt - 1e-6)
 	{
 		const bool bAskedNow = S.Rec.After == 1 && S.Rec.AfterWinner == S.Rec.Me;
@@ -1523,9 +1525,14 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		const FSlateFontInfo AfterFace = Serif(TEXT("Regular"), 13.0f);
 		// (the day's clock ends a pursuit, so while one runs the line says how long the day has left)
 		const int32 DayLeft = FMath::Max(0, static_cast<int32>(FMath::CeilToDouble(S.Rec.Limit - S.Battle)));
-		const FString AfterWord = bAskedNow ? FString(TEXT("The enemy army has broken. Pursue it, or end the battle here. The clock waits."))
+		// (the army that broke opens its line as the rules name it; the one that pursues stands inside its line, so its
+		// first letter goes small: "the German army")
+		const FString BrokeName = S.Rec.AfterBrokeName.empty() ? FString(TEXT("The enemy army")) : Wide(S.Rec.AfterBrokeName);
+		FString ByName = S.Rec.AfterWinnerName.empty() ? FString(TEXT("the enemy army")) : Wide(S.Rec.AfterWinnerName);
+		ByName = ByName.Left(1).ToLower() + ByName.Mid(1);
+		const FString AfterWord = bAskedNow ? FString::Printf(TEXT("%s has broken. Pursue it, or end the battle now. The clock stands until you choose."), *BrokeName)
 			: bPursuingNow ? FString::Printf(TEXT("Your army pursues. The day ends in %d:%02d."), DayLeft / 60, DayLeft % 60)
-			: bPursuedNow ? FString::Printf(TEXT("Your army has broken and falls back to your edge. The day ends in %d:%02d."), DayLeft / 60, DayLeft % 60) : FString();
+			: bPursuedNow ? FString::Printf(TEXT("Your army has broken and falls back to your own edge of the field, with %s in pursuit. The day ends in %d:%02d."), *ByName, DayLeft / 60, DayLeft % 60) : FString();
 		double AfterY = 76.0;
 		if (!AfterWord.IsEmpty())
 		{
