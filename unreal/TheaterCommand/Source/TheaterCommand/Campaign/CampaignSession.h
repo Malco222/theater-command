@@ -78,9 +78,11 @@ public:
 	/**
 	 * Where a picked-up army could go. If asked for (release 1): OutDanger, the regions the enemy the player can see
 	 * could strike next month; OutFar, friendly ground beyond this month's reach with about how many months the march
-	 * would take; OutStanding, the road still ahead of a corps already on a standing march.
+	 * would take; OutStanding, the road still ahead of a corps already on a standing march; (the 1.5.3 patch) OutComesOut,
+	 * the corps of the hand inside a town that an order would bring out with a move to make; and OutStays, beside the army
+	 * in the field, the rules' reason why the last of the others stays inside.
 	 */
-	TArray<FReachRegion> Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger = nullptr, TMap<int32, int32>* OutFar = nullptr, TArray<int32>* OutStanding = nullptr, bool* OutSpent = nullptr);
+	TArray<FReachRegion> Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger = nullptr, TMap<int32, int32>* OutFar = nullptr, TArray<int32>* OutStanding = nullptr, bool* OutSpent = nullptr, TArray<int32>* OutComesOut = nullptr, FString* OutStays = nullptr);
 	/** (Ruling 87.) The rules' plan for a march of these corps to a place on a standing order: nothing is ordered by asking. */
 	/** Army, ArmyIds: (one voice after a press) the army in hand's name as its tray names it, and its corps in the field, so that the line names whom it is true of. */
 	FMarchPlan PlanMarch(const TArray<int32>& CorpsIds, int32 RegionId, const FString& Army = FString(), const TArray<int32>& ArmyIds = TArray<int32>());
@@ -139,8 +141,12 @@ public:
 	FGateAsk AskGate(int32 GateId);
 	/** The march up to an enemy army that is not next door, and the attack, planned as one order (the rules' own reckoning). */
 	FApproachPlan PlanApproach(const TArray<int32>& CorpsIds, int32 RegionId);
-	/** (Rules 84.2.4.) Why the player's corps inside a province's town take no marching orders, in the rules' own sentence; empty where he has none there. */
-	FString GarrisonWhy(int32 RegionId);
+	/**
+	 * (Rules 84.2.4.) Why the player's corps inside a province's town take no marching orders, in the rules' own sentence;
+	 * empty where he has none there. (The 1.5.3 review.) Given the corps in hand, the sentence is theirs, not the whole
+	 * town's (a bundle before it answers for the town).
+	 */
+	FString GarrisonWhy(int32 RegionId, const TArray<int32>& CorpsIds = TArray<int32>());
 	/** (Rules 84.2.5; ruling 211(a).) Why these corps cannot go forward onto that ground by themselves ("Guns cannot take ground alone. ..."), in the rules' own sentence; empty where they can, and before that version. */
 	FString WhyNotLead(const TArray<int32>& CorpsIds, int32 RegionId);
 	/** Why the chosen corps cannot go by sea to a place the by-sea offer leaves out: the rules' own sentence for the first test it fails, or nothing. */

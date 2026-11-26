@@ -63,7 +63,7 @@ import { legionDrafts } from './legions';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
 import { clearTownWorks, flakLine, flakLostWithTown, isFlakLine, townFlak, townFlakCut, townWorksMonth, townWorksWords } from './citydefences';
-import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fedBySea, feedingSeas, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld, fortTerm, type SeaReach } from './siege';
+import { SIEGE, apOutOfTown, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fedBySea, feedingSeas, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld, fortTerm, whyNotTakeField, type SeaReach } from './siege';
 import { battleHit } from './repairs';
 import { TOWNS, townName, townSize, worthOf } from './towns';
 import { WEATHER, skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
@@ -3770,6 +3770,9 @@ export interface NoTrain {
   at?: number;
 }
 
+/** What a garrison that would ride this month once out of its town is told (whyNoTrain): a hand is told it only where it holds for every corps (whyNoTrainFor). */
+const TRAIN_FIELD = 'A garrison does not take the train: TAKE THE FIELD first.';
+
 /** A reason that is news he can act on: its opening takes the emphasis. */
 const news = (code: NoTrain['code'], strong: string, rest: string, at: number): NoTrain => ({ code, line: `${strong} ${rest}`, strong, at });
 
@@ -3791,21 +3794,42 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
   const open = (r: Region): boolean => (allied(g, c.nat, r.ctrl) && !besieged(g, r)) || junctionOpenTo(g, c.nat, r);
   const mended = (r: number): string => (hastyLeft(g, r) > 0 ? `the railwaymen have it running, in ${turnToDate(g.turn + hastyLeft(g, r)).label}, or engineers relay it sooner` : 'engineers relay the track');
   if (c.kind === 'fort') return { code: 'fort', line: 'Fortress troops do not go by train.' };
-  // (A garrison in a town nobody besieges is not shut in: it takes the field first, and rides from the country outside.)
-  if (c.town) return { code: 'town', line: besieged(g, from) ? `${c.name} is shut in the town at ${from.name}. No train leaves a siege.` : 'A garrison does not take the train: TAKE THE FIELD first.', at: from.id };
   // The test is four weeks of movement in hand. A corps that has moved, fought or worked has spent part of its month;
   // one slowed for want of fuel opens its month with three and has spent nothing (ruling 118(c); the art director's
-  // lines). A fast corps with five may march a week and still ride.
-  if (c.ap < 4) return {
+  // lines). A fast corps with five may march a week and still ride. (A garrison has not moved: it is answered below.
+  // The 1.5.3 review: on the eve of war no month passes, and a corps brought out of its town then has spent nothing,
+  // though it has no move until the war opens. It is told so, as is any corps on the eve with less than a train takes.)
+  if (!c.town && c.ap < 4) return {
     code: 'spent',
-    line: c.ap < c.apMax ? `No train for ${c.name} this month: it has spent part of its month, and the railway takes a whole one.`
+    line: c.ap < c.apMax && g.flags.eve === 1 ? `No train for ${c.name} before the war opens: the railway takes a whole month of movement, and it has less.`
+      : c.ap < c.apMax ? `No train for ${c.name} this month: it has spent part of its month, and the railway takes a whole one.`
       : fuelSlows(g, c) ? `No train for ${c.name} this month: short of fuel, it has less than the whole month a train takes.`
       : `No train for ${c.name} this month: the railway takes a whole month of movement, and it has less.`,
   };
   if (sandNoRail(from)) return { code: 'desert', line: 'No railway crosses the desert.', at: from.id };
+  // (A garrison in a town under siege is shut in. One in a town nobody besieges takes the field first, and rides from
+  // the country outside: it is answered below.)
+  if (c.town && besieged(g, from)) return { code: 'town', line: `${c.name} is shut in the town at ${from.name}. No train leaves a siege.`, at: from.id };
   if (besieged(g, from) && !junctionOpenTo(g, c.nat, from)) return news('siege', `${from.name} is under siege.`, 'No train leaves it.', from.id);
   if (net && !onNet(from.id)) return { code: 'noline', line: `No railway runs through ${from.name}: ${c.name} goes by road.`, at: from.id };
   if (net && railCut(g, from.id)) return news('cut', `The railway at ${from.name} is cut${cutAside(g, from.id)}.`, `No train leaves until ${mended(from.id)}.`, from.id);
+  // (The 1.5.3 review: coming out costs a move (apOutOfTown) and a train takes four, so a garrison is sent to TAKE THE
+  // FIELD only where that would put it on a train this month. Where the field outside is full it cannot come out, and is
+  // told so (whyNotTakeField), as garrisonLine tells it. On the eve of war, when no month passes, any other is told to
+  // come out now and ride when the war opens, as a corps brought out then has its whole month; after that, that out of
+  // the town it can ride next month. Its province's own railway is answered first, as above: no railway in the desert
+  // or off the lines, and none while the line is cut, so that the way out of the town is never promised a train its
+  // province does not have.)
+  if (c.town) {
+    const field = whyNotTakeField(g, c);
+    return {
+      code: 'town',
+      line: field ? `A garrison does not take the train. ${field}` : apOutOfTown(g, c) >= 4 ? TRAIN_FIELD
+        : g.flags.eve === 1 ? 'A garrison does not take the train: TAKE THE FIELD now, and it can go by rail when the war opens.'
+        : 'A garrison does not take the train. Out of the town, it can go by rail next month.',
+      at: from.id,
+    };
+  }
   if (to === undefined || to === c.reg || !g.regions[to]) return null;
   const dest = g.regions[to];
   if (sandNoRail(dest)) return { code: 'desert', line: 'No railway crosses the desert.', at: to };
@@ -3887,13 +3911,17 @@ export function whyNoTrainFor(g: Game, corps: Corps[], to?: number): NoTrain | n
     const dest = to === undefined ? undefined : g.regions[to];
     return dest && !roomForAll(g, dest, corps) ? { code: 'room', line: roomRefusal(g, dest, corps) ?? roomSays(g, dest) ?? `${dest.name} has no room for ${corps.length === 1 ? 'another corps' : `${corps.length} more corps`}.`, at: dest.id } : null;
   }
-  const no = whys[first]!;
+  // (The 1.5.3 review.) TAKE THE FIELD is said only where it would put every corps of the hand on a train: beside a
+  // corps of the garrison that would not, that one's reason is given (it can ride next month, or the field is full).
+  const other = whys.findIndex((w) => !!w && w.line !== TRAIN_FIELD);
+  const lead = other < 0 ? first : other;
+  const no = whys[lead]!;
   if (whys.every(Boolean)) {
     // (Where none can ride for want of a whole month, it is said once of the army: "No train for the American army
     // this month: it has spent part of its month, ...", the one voice of 84.2.6.)
     if (corps.length < 2 || !whys.every((w) => w!.code === 'spent' && w!.line.startsWith('No train for '))) return no;
     const { who, many } = forceWords(g, corps);
-    const rest = no.line.slice(no.line.indexOf(' this month:'));
+    const rest = no.line.slice(`No train for ${corps[lead].name}`.length);
     return { ...no, line: `No train for ${who}${many ? rest.replace(': it has spent part of its month', ': they have spent part of their month').replace(': short of fuel, it has', ': short of fuel, they have').replace(', and it has less', ', and they have less') : rest}` };
   }
   const names = corps.filter((_, i) => whys[i]).map((c) => c.name);

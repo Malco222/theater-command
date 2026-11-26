@@ -45,6 +45,7 @@ import { grade, STORIES } from './stories';
 import { SIGHT, armyBand, corpsKnown, reportSource, sightOf, sortKnown, strengthBand, type Source } from './intel';
 import { armyOf } from './joint';
 import { townName } from './towns';
+import { whyNotTakeField } from './siege';
 import { corpsMood, forceMorale, moraleWord, restWord, type Mood } from './morale';
 import { withered } from './wither';
 
@@ -506,12 +507,24 @@ export function whyNotOrder(g: Game, c: Corps): string | null {
  * or to attack (Version 84.2.4, on Brian's words of 2026-11-17: "if an enemy army is out of a city i couldnt attack
  * them"). A garrison takes no marching orders, and the sentence names the cure: TAKE THE FIELD, or a sortie where an
  * enemy army stands round the town. One corps is named; several are "They". The corps are of one province.
+ * (The 1.5.3 patch; the 1.5.1 playtest's find 18.) Corps that all went in this month come out with no move
+ * (apOutOfTown), so taking the field is no way to march: they are told when they can. (The 1.5.3 review.) On the eve
+ * of war no month passes, and a corps brought out then has no move until the war opens, when it has its whole month
+ * as every corps in the field has: Warsaw's Defence Command is told to take the field now, and that it marches when
+ * the war opens. And where the field outside has no room for another corps, TAKE THE FIELD is refused: the sentence
+ * gives the rules' reason (whyNotTakeField), not that order.
  */
 export function garrisonLine(g: Game, cs: Corps[]): string {
   const r = g.regions[cs[0].reg], town = townName(r), one = cs.length === 1;
   const who = one ? `${cs[0].name} is ${(r.garr?.length ?? 0) > 1 ? 'in ' : ''}the garrison of ${town}` : `They are the garrison of ${town}`;
   const shut = g.flags.sieges === 1 && r.units.some((u) => !u.dead && atWar(g, u.nat, r.ctrl));
-  return shut ? `${who}, shut in by the army round it. Order a sortie against that army.` : `${who}. Order ${one ? 'it' : 'them'} to take the field first.`;
+  if (shut) return `${who}, shut in by the army round it. Order a sortie against that army.`;
+  // (room outside as siege.ts whyNotTakeField counts it, and its sentence: asked of it, so that release 2's room, an
+  // island's and the fortress rows' that take none, is counted as TAKE THE FIELD counts it. With those off, as before.)
+  const full = whyNotTakeField(g, cs[0]);
+  if (full?.startsWith('There is no room in the field')) return `${who}. ${full}`;
+  if (cs.every((c) => c.town === g.turn)) return g.flags.eve === 1 ? `${who}. Order ${one ? 'it' : 'them'} to take the field now, and ${one ? 'it' : 'they'} can march when the war opens.` : `${who}. ${one ? 'It' : 'They'} went in this month, and can march out next month.`;
+  return `${who}. Order ${one ? 'it' : 'them'} to take the field first.`;
 }
 /** Why the player's corps inside the town of a province take no marching orders, in the rules' sentence; null where he has none inside. */
 export function whyNotOrderGarrison(g: Game, region: number): string | null {

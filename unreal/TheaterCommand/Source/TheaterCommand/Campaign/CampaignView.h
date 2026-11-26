@@ -112,6 +112,7 @@ struct FViewCorps
 	int32 Region = INDEX_NONE;
 	int32 Moves = 0; // weeks of action left this month
 	int32 MovesMax = 0;
+	int32 MovesOut = INDEX_NONE; // (the 1.5.3 patch) a corps of his inside a town: the moves it has once an order brings it out (0 if it went in this month); INDEX_NONE where the rules do not say
 	int32 MarchTo = INDEX_NONE; // (release 1) the province it is marching to on a standing order
 	int32 MarchMonths = 0; // and about how many months it has still to go
 	bool bMarchNext = false; // (one voice after a press) and that it has still to set off, as the next month opens

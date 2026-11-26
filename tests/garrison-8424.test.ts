@@ -42,6 +42,7 @@ describe('corps inside a town say why they take no marching orders (Version 84.2
     expect(whyNotOrder(g, a)).toBeNull();
     expect(whyNotOrderGarrison(g, r.id)).toBeNull();
     expect(garrison(g, a)).toBe(true);
+    a.town = -1; // (in since a month before this one: one that went in this month is told when it can march, tests/garrison-words-153.test.ts)
     const alone = `${a.name} is the garrison of ${town}. Order it to take the field first.`;
     expect(whyNotOrder(g, a)).toBe(alone);
     expect(corpsDetail(g, a).noOrders).toBe(alone);
@@ -51,6 +52,7 @@ describe('corps inside a town say why they take no marching orders (Version 84.2
     expect(whyNotOrder(g, b)).toBeNull();
     expect(corpsDetail(g, b).noOrders).toBeNull();
     expect(garrison(g, b)).toBe(true);
+    b.town = -1;
     expect(myGarrison(g, r.id).length).toBe(2);
     expect(whyNotOrder(g, a)).toBe(`${a.name} is in the garrison of ${town}. Order it to take the field first.`);
     expect(whyNotOrder(g, b)).toBe(`${b.name} is in the garrison of ${town}. Order it to take the field first.`);
@@ -70,6 +72,7 @@ describe('corps inside a town say why they take no marching orders (Version 84.2
     expect(to).toBeDefined();
     expect(planMarch(g, a, to.id).ok).toBe(true);
     expect(garrison(g, a)).toBe(true);
+    a.town = -1; // (in since a month before this one, as above)
     expect(a.ap).toBe(0);
     const said = whyNotOrder(g, a)!;
     expect(said).toMatch(/ is the garrison of .+\. Order it to take the field first\.$/);

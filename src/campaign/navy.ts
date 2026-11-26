@@ -49,7 +49,7 @@ import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf, theatreOf, unitsF
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, hasRoom, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, roomForAll, routineNews, warning, placed, type Assessment } from './game';
 import { islandOf, roomAt, roomRefusal, roomSays } from './islands';
 import { traitFleet, traitSeaLoss } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, feeders, fieldCtrl, garrisonOf, roomIn, siegeRules, housed } from './siege';
+import { SIEGE, apOutOfTown, arrive, besieged, besiegerOf, feeders, fieldCtrl, garrisonOf, roomIn, siegeRules, housed, whyNotTakeField } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
 import { RES, fieldBeside, fuelFleet, laneStopped } from './resources';
 import { bargainOutputLoss, replacedDeal } from './bargains';
@@ -1334,6 +1334,55 @@ export function sailFirst(g: Game, c: Corps, to: Region, rides = false): Region 
   return sailLeg(g, c, to, rides);
 }
 
+/** The end of garrisonAboard's line for a garrison that would get aboard this month once out of its town. */
+const FIELD_FIRST = ': TAKE THE FIELD first.';
+
+/**
+ * Why a corps inside its town takes no ship (1.5.3; the playtest's find 17), in the railway's own form (whyNoTrain): a
+ * garrison has not moved, and is never told it has. Shut in, it is told so. (The 1.5.3 review.) Otherwise it is sent
+ * to TAKE THE FIELD only where that would get it aboard this month: coming out costs a move (apOutOfTown), and a ship
+ * takes a corps with its whole month. Where the field outside is full it cannot come out, and is told so
+ * (whyNotTakeField). On the eve of war no month passes, and a corps brought out then has no move until the war opens,
+ * when it has its whole month: it is told to come out now and embark then. Any other is told that out of the town it
+ * can embark next month. Airborne troops are told the same of the transport aircraft (`air`).
+ */
+function garrisonAboard(g: Game, c: Corps, air = false): string {
+  const from = g.regions[c.reg], no = air ? 'A garrison does not emplane' : 'A garrison does not take ship', go = air ? 'take off' : 'embark';
+  if (!air && besieged(g, from)) return `${c.name} is shut in the town at ${from.name}. No ship leaves a siege.`;
+  const field = whyNotTakeField(g, c);
+  if (field) return `${no}. ${field}`;
+  if (g.flags.eve === 1) return `${no}: TAKE THE FIELD now, and it can ${go} when the war opens.`;
+  return apOutOfTown(g, c) >= Math.min(4, c.apMax) ? `${no}${FIELD_FIRST}` : `${no}. Out of the town, it can ${go} next month.`;
+}
+
+/**
+ * (The 1.5.3 review.) The line for the corps of a hand inside their town, by ship or by air: TAKE THE FIELD only where it
+ * would get every one of them aboard this month; beside one it would not, that one's line (it can go next month, or
+ * the field is full), as whyNoTrainFor judges a hand for the train.
+ */
+function garrisonsAboard(g: Game, cs: Corps[], air = false): string {
+  const lines = cs.map((c) => garrisonAboard(g, c, air));
+  return lines.find((l) => !l.endsWith(FIELD_FIRST)) ?? lines[0];
+}
+
+/** Why corps in hand cannot all be shipped to a friendly port: the first refusal, a garrison's judged for the hand as a landing's is (garrisonsAboard). Null where every one can. */
+export function whyNotShipAll(g: Game, cs: Corps[], to: Region): string | null {
+  const whys = cs.map((c) => whyNotShip(g, c, to)).filter((w): w is string => !!w);
+  return whys.find((w) => !w.endsWith(FIELD_FIRST)) ?? whys[0] ?? null;
+}
+
+/** The shipping left for so many corps this month: the sentence where there is too little, or null. */
+const noLift = (g: Game, nat: string, n: number): string | null => {
+  const left = liftLeft(g, nat);
+  return left >= n ? null : left ? `There is shipping for only ${left} more corps this month.` : 'All the shipping is in use this month.';
+};
+
+/** A harbour blocked and its quays blown up takes no ship until it is mended (prizes.ts): the sentence, or null where it is whole. */
+function harbourWrecked(g: Game, p: Region): string | null {
+  const out = prizeOut(g, p, 'harbour');
+  return out > 0 ? `The harbour of ${placeName(p.name)} is wrecked: no ship will use it for ${out === 1 ? 'a month' : `${out} months`} more.` : null;
+}
+
 /** Why a corps cannot be shipped to a friendly port, or null if it can. */
 export function whyNotShip(g: Game, c: Corps, to: Region, rides = false): string | null {
   const why = whyNotQuay(g, c, to, rides);
@@ -1351,7 +1400,15 @@ export function whyNotShip(g: Game, c: Corps, to: Region, rides = false): string
 function whyNotQuay(g: Game, c: Corps, to: Region, rides = false): string | null {
   const n = g.nations[c.nat], from = g.regions[c.reg];
   if (n.sealift <= 0) return `${n.name} has no shipping to move an army by sea.`;
-  if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return 'Only a corps that has not moved this month can embark.';
+  // (1.5.3; the playtest's find 17.) A garrison has not moved: it is told what it is and how it comes out, as the railway
+  // tells it. (The 1.5.3 review.) Its own harbour is answered first: one in a town with no port is told so, as a landing
+  // force is (whyNotLand), and one whose harbour is wrecked is told for how long, never that it can embark next month.
+  // And the shipping: with none left this month it is told so, never to take the field for a ship that does not sail.
+  // (The shipping as release 2 counts it, below: a row riding in a corps' lift, `rides`, and the book's own shipping take none.)
+  if (c.town !== undefined) return !from.port ? `${placeName(from.name, true)} has no port: troops are shipped from one port to another.` : harbourWrecked(g, from) ?? (!rides && ownShips !== c.nat ? noLift(g, c.nat, 1) : null) ?? garrisonAboard(g, c);
+  // (The 1.5.3 review. On the eve of war no month passes: a corps brought out of its town then has moved nowhere, though
+  // it has no move until the war opens.)
+  if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return c.kind !== 'fort' && g.flags.eve === 1 ? `No ship for ${c.name} before the war opens: the voyage takes a whole month of movement, and it has less.` : 'Only a corps that has not moved this month can embark.';
   // (The place at fault is named, so a refused order by sea says what is wrong with it: the UI director, build 1638.)
   if (to.id === from.id) return `They are in ${placeName(to.name)} already.`;
   for (const p of [to, from]) if (!p.port) return `${placeName(p.name, true)} has no port: troops are shipped from one port to another.`;
@@ -1361,7 +1418,7 @@ function whyNotQuay(g: Game, c: Corps, to: Region, rides = false): string | null
   // place its side holds once its span is over is left, not reinforced. line.ts; ruling 224, b390. Never the player's.)
   if (lineShut(g, c.nat, to)) return `By the book, ${to.name} lies beyond the record's line this month.`;
   // A harbour blocked and its quays blown up takes no ship until it is mended (prizes.ts).
-  for (const p of [from, to]) { const out = prizeOut(g, p, 'harbour'); if (out > 0) return `The harbour of ${placeName(p.name)} is wrecked: no ship will use it for ${out === 1 ? 'a month' : `${out} months`} more.`; }
+  for (const p of [from, to]) { const wrecked = harbourWrecked(g, p); if (wrecked) return wrecked; }
   if (hostileUnits(g, to, c.nat).length) {
     if (siegeRules(g) && !harbourOpen(g, to)) return `The enemy holds the quays of ${to.name}: nothing can be run into the town by sea.`;
     // A town under siege with its harbour still open: ships can run more troops into the garrison, if it has room.
@@ -1458,7 +1515,11 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (airborne(cs)) {
     if (cs.some((c) => c.nat !== nat || c.reg !== from.id)) return 'An airborne force takes off from one place.';
     if (!allied(g, nat, from.ctrl)) return 'Airborne troops take off from friendly airfields.';
-    if (cs.some((c) => c.ap < Math.min(4, c.apMax))) return 'Only corps that have not moved this month can emplane.';
+    // (The 1.5.3 review.) A garrison has not moved: it is answered first, as one asked to take ship is.
+    const indoors = cs.filter((c) => c.town !== undefined);
+    if (indoors.length) return garrisonsAboard(g, indoors, true);
+    // (On the eve of war no month passes, and no assault goes in: one brought out of its town then has moved nowhere.)
+    if (cs.some((c) => c.ap < Math.min(4, c.apMax))) return g.flags.eve === 1 ? 'No airborne assault goes in before the war opens.' : 'Only corps that have not moved this month can emplane.';
     if (allied(g, nat, to.ctrl) || !atWar(g, nat, to.ctrl)) return `${to.name} is not enemy ground.`;
     if (stationBars(g, nat, to)) return whyStationBars(g, nat, to);
     if (!from.seas.some((z) => to.seas.includes(z))) return `${to.name} is out of reach: the transport aircraft can cross one sea, from a coast on it to another.`;
@@ -1469,7 +1530,13 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (n.sealift <= 0) return `${n.name} has no shipping for a landing.`;
   if (cs.some((c) => (c.nat !== nat && !sailsWith(g, nat, c)) || c.reg !== from.id)) return 'A landing force sails from one port.';
   if (!from.port) return 'A landing force has to embark at a port.';
-  if (cs.some((c) => c.kind === 'fort' || c.ap < Math.min(4, c.apMax))) return 'Only corps that have not moved this month can embark.';
+  // (The 1.5.3 review.) A garrison in the force: the shipping is answered first, then the hand's way out of the town.
+  // (The shipping as release 2 counts it, below: a row riding in a corps' lift and the book's own shipping take none.)
+  const liftShort = (): string | null => (ownShips !== nat ? noLift(g, nat, cs.length - riding(g, cs).length) : null);
+  const inside = cs.filter((c) => c.town !== undefined);
+  if (inside.length) return liftShort() ?? garrisonsAboard(g, inside);
+  if (cs.some((c) => c.kind === 'fort')) return 'Only corps that have not moved this month can embark.';
+  if (cs.some((c) => c.ap < Math.min(4, c.apMax))) return g.flags.eve === 1 ? 'No landing is made before the war opens.' : 'Only corps that have not moved this month can embark.';
   if (!to.seas.length) return `${to.name} has no coast.`;
   if (allied(g, nat, to.ctrl) || cs.some((c) => !atWar(g, c.nat, to.ctrl))) return `${to.name} is not enemy ground.`;
   // (Nor on ground the enemy's troops stand on by agreement with an owner any country of the force is at peace with: far.ts.)
@@ -1477,7 +1544,8 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (cs.length > STACK) return `No more than ${STACK} corps can go ashore in one place.`;
   // (A row that goes with a corps of the force sails in that corps' lift: rider b604 to ruling 234, stations.ts.)
   // (Nor is a dated landing of the book, on the record's own shipping: rider b626.)
-  if (ownShips !== nat && liftLeft(g, nat) < cs.length - riding(g, cs).length) return liftLeft(g, nat) ? `There is shipping for only ${liftLeft(g, nat)} more corps this month.` : 'All the shipping is in use this month.';
+  const short = liftShort();
+  if (short) return short;
   // (The landing ships in the Pacific carry no more of a country's troops to an enemy shore there than the record's did:
   // a second count, read for the Pacific's ground alone. Rider b614 to ruling 234; pacific.ts shoreLift. Not read with
   // the far side off.)
@@ -5992,7 +6060,10 @@ export function fleetAction(g: Game, zone: Game['seas'][number], nat: string, mi
   const sum = (fs: Fleet[]): number => fs.reduce((s, f) => s + fleetPower(g, f), 0);
   const names = (fs: Fleet[]): string => { const l = fs.map(fleetName); return l.length === 1 ? l[0] : `${l.slice(0, -1).join(', ')} and ${l[l.length - 1]}`; };
   const where = at ? `at ${at.port}` : seaWhere(zone.name);
-  const A = sum(mine) + airA, D = Math.max(1, (at ? sum(met) * at.anchor + at.shore : sum(met)) + airD);
+  // (1.5.3, playtest #26) Each side's strength as it came to the battle, summed before any ship goes down: the report's
+  // "before the battle" line was summed after the sinkings.
+  const powA = sum(mine), powD = sum(met);
+  const A = powA + airA, D = Math.max(1, (at ? powD * at.anchor + at.shore : powD) + airD);
   const att = mine.map(sideOf), def = met.map(sideOf);
   // (Release 2, seekOnce) The seeking side has sought its battle for the month; the defenders are not marked.
   markSought(g, mine);
@@ -6012,8 +6083,10 @@ export function fleetAction(g: Game, zone: Game['seas'][number], nat: string, mi
   if (afloatWatch.tell) { mine.forEach((f, i) => afloatWatch.tell!({ route: 'action', nat: f.nat, sunk: att[i].sunk, saved: keptA[i] })); met.forEach((f, i) => afloatWatch.tell!({ route: 'action', nat: f.nat, sunk: def[i].sunk, saved: keptD[i] })); }
   const total = (sides: SeaSide[]): Ships => { const t = none(); for (const s of sides) for (const c of CLASSES) t[c] += s.sunk[c]; return t; };
   const ships = (fs: SeaSide[]): number => fs.reduce((s, x) => s + shipCount(x.ships), 0);
+  // (1.5.3, playtest #26) "1 ship against 30", not "1 ships".
+  const sent = ships(att);
   const lines: TicketLine[] = [
-    { label: 'Forces', value: `${ships(att)} ships against ${ships(def)}`, effect: `Fleet strength ${Math.round(sum(mine))} against ${Math.round(sum(met))} before the battle` },
+    { label: 'Forces', value: `${sent} ship${sent === 1 ? '' : 's'} against ${ships(def)}`, effect: `Fleet strength ${Math.round(powA)} against ${Math.round(powD)} before the battle` },
   ];
   if (airA > 0.5 || airD > 0.5) lines.push({ label: 'Air', value: airA > airD ? 'The attacker has the stronger air cover from the coast' : airD > airA ? 'The defender has the stronger air cover from the coast' : 'Even', effect: `Worth ${Math.round(airA)} to the attacker and ${Math.round(airD)} to the defender` });
   const flag = (fs: Fleet[]): string => fs.filter((f) => f.admiral).map((f) => `${f.admiral!.name}${f.admiral!.level > 1 ? ` (level ${f.admiral!.level})` : ''}`).join(', ') || 'no admiral named';
@@ -6043,7 +6116,8 @@ export function fleetAction(g: Game, zone: Game['seas'][number], nat: string, mi
   if (at) {
     rep.port = at.port;
     const n = airA > 0.5 || airD > 0.5 ? 2 : 1;
-    lines.splice(n, 0, { label: 'In harbour', value: `The ${names(met)} ${met.length === 1 ? 'was' : 'were'} caught at anchor at ${at.port}`, effect: `Ships at anchor fight at ${Math.round(at.anchor * 100)}% of their weight` });
+    // (1.5.3, playtest #26) "The Battle Fleet was caught", not "The the Battle Fleet": a fleet's name brings its own article.
+    lines.splice(n, 0, { label: 'In harbour', value: `${cap(names(met))} ${met.length === 1 ? 'was' : 'were'} caught at anchor at ${at.port}`, effect: `Ships at anchor fight at ${Math.round(at.anchor * 100)}% of their weight` });
     if (at.shore > 0) lines.splice(n + 1, 0, { label: 'Shore batteries', value: `The guns of ${at.port} fire on the attackers`, effect: `Worth ${Math.round(at.shore)} to the defence` });
   }
   g.seaReports.push(rep);
