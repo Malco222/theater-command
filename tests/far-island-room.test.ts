@@ -506,6 +506,96 @@ describe("the design director's stand-ins of 14:28Z, flagged G (c)", () => {
   }, 300000);
 });
 
+// The UI director's marks of 15:02Z 25 November 2026 and his answers of 21:37Z 26 November 2026, every sentence as the
+// 3D game reads it through the bridge (TC.province, TC.railTip, TC.bySeaWhy, TC.move), on three boards of seed 3.
+describe("the island's sentences on a live board", () => {
+  it("says each of the UI director's sentences whole on a live board, through the bridge", () => {
+    // Board A: seed 3, Britain seated, its first month, the far side on.
+    {
+      const g = war('UK');
+      const sg = at(g, 'Singapore'), jo = at(g, 'Johore');
+      const ids = (cs: Corps[]) => cs.map((c) => c.id);
+      const a1 = corps(g, 'UK', '1st Army', jo, 2), a2 = corps(g, 'UK', '2nd Army', jo, 2);
+      TC().load(saveGame(g));
+      expect(TC().province(sg.id).island.line, "head Singapore").toBe("Singapore has room for 5 divisions, about 75,000 men.");
+      expect(TC().railTip(ids([a1, a2]), sg.id).no, "some there (Singapore 22,050 of his; two armies of 30,000 by rail from Johore)").toBe("Singapore has room for 5 divisions, about 75,000 men, and 23,000 of yours are there: only 52,000 more can go, and you are sending 60,000.");
+      const a3 = corps(g, 'UK', '3rd Army', jo, 2), a4 = corps(g, 'UK', '4th Army', jo, 2, 0.5);
+      clear(g, sg);
+      TC().load(saveGame(g));
+      expect(TC().railTip(ids([a1, a2, a3]), sg.id).no, "none there (Singapore emptied by hand; 90,000 by rail)").toBe("Singapore has room for 5 divisions, about 75,000 men: you are sending 90,000.");
+      const f = [1, 2, 3, 4, 5].map((k) => corps(g, 'UK', `Filler ${k}`, sg));
+      TC().load(saveGame(g));
+      expect(TC().railTip(ids([a4]), sg.id).no, "full (five fresh divisions of his on Singapore)").toBe("Singapore is full: it has room for about 75,000 men and 75,000 of yours are there.");
+      relocate(g, f[4], jo); relocate(g, f[3], jo);
+      const ally = g.corps.find((c) => !c.dead && c.nat !== 'UK' && c.kind === 'inf' && allied(g, c.nat, 'UK'))!;
+      ally.divs = 1; ally.str = 1; relocate(g, ally, sg);
+      TC().load(saveGame(g));
+      expect(TC().railTip(ids([a1]), sg.id).no, 'ally there').toBe("Singapore has room for 5 divisions, about 75,000 men, and 60,000 are there: only 15,000 more can go, and you are sending 30,000.");
+      relocate(g, ally, jo); relocate(g, f[2], jo);
+      const over = corps(g, 'UK', 'Over', jo, 2, 30400 / 30000);
+      TC().load(saveGame(g));
+      expect(TC().railTip(ids([over, f[2]]), sg.id).no, "shortfall, some there (30,000 there; 45,400 sent)").toBe("Singapore has room for 5 divisions, about 75,000 men, and 30,000 of yours are there: you are sending 400 men more than fit.");
+      for (const x of f.slice(0, 2)) relocate(g, x, jo);
+      const big = corps(g, 'UK', 'Big Army', jo, 5, 1), extra = corps(g, 'UK', 'Over Too', jo, 1, 400 / 15000);
+      TC().load(saveGame(g));
+      expect(TC().railTip(ids([big, extra]), sg.id).no, "shortfall, none there (75,400 sent)").toBe("Singapore has room for 5 divisions, about 75,000 men: you are sending 400 men more than fit.");
+      const huge = corps(g, 'UK', 'XIV Corps', jo, 6, 0.9), huge2 = corps(g, 'UK', 'XV Corps', jo, 6, 1), huge3 = corps(g, 'UK', 'XVI Corps', jo, 7, 1);
+      TC().load(saveGame(g));
+      expect(TC().railTip(ids([huge]), sg.id).no, "too large, no split").toBe("Singapore has room for 5 divisions, about 75,000 men. XIV Corps has 81,000: too many for the island.");
+      setBreakUp(g, true);
+      TC().load(saveGame(g));
+      expect(TC().railTip(ids([huge]), sg.id).no, "too large, split on").toBe("Singapore has room for 5 divisions, about 75,000 men. XIV Corps has 81,000, too many to go there whole: split it and send a part.");
+      setBreakUp(g, false);
+      const e = [1, 2, 3].map((k) => { const x = addCorps(g, 'UK', `Engineers ${k}`, 'eng', 1, jo.id, {}); x.ap = x.apMax; return x; });
+      TC().load(saveGame(g));
+      expect(TC().railTip(ids(e), sg.id).no, "engineers, none there (three by rail)").toBe("Singapore has room for 2 engineer corps as well as its troops: only 2 can go.");
+      relocate(g, e[0], sg);
+      TC().load(saveGame(g));
+      expect(TC().railTip(ids([e[1], e[2]]), sg.id).no, "engineers, one there (two by rail)").toBe("Singapore has room for 2 engineer corps as well as its troops and one of yours is there: only one more can go.");
+      relocate(g, e[1], sg);
+      TC().load(saveGame(g));
+      expect(TC().bySeaWhy(ids([e[2]]), sg.id).why, "engineers, full (one by sea)").toBe("Singapore can take no more engineers: it has room for 2 engineer corps as well as its troops, and 2 of yours are there.");
+      expect(TC().railTip(ids([e[2]]), sg.id).no, "engineers, full (one by rail)").toBe("Singapore can take no more engineers: it has room for 2 engineer corps as well as its troops, and 2 of yours are there.");
+      // The swap: 12,000 stay, 4,500 go out, a corps of 67,500 marches from Johore.
+      clear(g, sg);
+      corps(g, 'UK', 'Stays', sg, 1, 0.8); corps(g, 'UK', 'Also Stays', sg, 1, 0.8);
+      const ninth = corps(g, 'UK', '9th Corps', jo, 5, 0.9);
+      TC().load(saveGame(g));
+      expect(TC().move([ninth.id], sg.id).note, "swap refused (two of 12,000 there; a corps of 67,500 marches from Johore)").toBe("Singapore has room for 5 divisions, about 75,000 men, and 12,000 of yours stay there after the swap: only 63,000 more can go, and 9th Corps has 67,500.");
+    }
+    // Board B: seed 3, Japan seated, its first month, at war with America by hand; landings from Kwajalein.
+    {
+      const g = war('JAP');
+      const wake = at(g, 'Wake'), q = at(g, 'Kwajalein');
+      const a = corps(g, 'JAP', 'First', q), b = corps(g, 'JAP', 'Second', q);
+      const e1 = addCorps(g, 'JAP', 'Engineers 1', 'eng', 1, q.id, {}), e2 = addCorps(g, 'JAP', 'Engineers 2', 'eng', 1, q.id, {});
+      for (const x of [e1, e2]) x.ap = x.apMax;
+      declareWar(g, 'JAP', 'USA');
+      TC().load(saveGame(g));
+      expect(TC().province(wake.id).island.line, "head Wake").toBe("Wake has room for one division, about 15,000 men.");
+      expect(TC().province(at(g, 'Okinawa').id).island.line, "head Okinawa").toBe("Okinawa has room for 4 divisions, about 60,000 men.");
+      expect(TC().bySeaWhy([a.id, b.id], wake.id).why, "landing, none there (two divisions on Wake)").toBe("Wake has room for one division, about 15,000 men: you are sending 30,000.");
+      expect(TC().bySeaWhy([a.id, e1.id, e2.id], wake.id).why, "landing, engineers (one division and two engineer corps on Wake)").toBe("Wake has room for one engineer corps as well as its troops: only one can go.");
+      const big1 = corps(g, 'JAP', 'South Seas Force', q, 2), big2 = corps(g, 'JAP', 'Second Force', q, 2), big3 = corps(g, 'JAP', 'Third Force', q, 3);
+      TC().load(saveGame(g));
+      expect(TC().bySeaWhy([big1.id, a.id, big2.id], wake.id).why, "landing, too large, one more too large").toBe("Wake has room for one division, about 15,000 men. South Seas Force has 30,000: too many for the island. One more of the corps you are sending is too large for Wake as well.");
+      expect(TC().bySeaWhy([big1.id, big2.id, big3.id], wake.id).why, "landing, too large, two more too large").toBe("Wake has room for one division, about 15,000 men. South Seas Force has 30,000: too many for the island. Two more of the corps you are sending are too large for Wake as well.");
+    }
+    // Board C: seed 3, America seated, its first month: Wake its own.
+    {
+      const g = war('USA');
+      const wake = at(g, 'Wake'), hon = at(g, 'Honolulu');
+      const first = corps(g, 'USA', 'First', hon), second = corps(g, 'USA', 'Second', hon);
+      const s1 = addCorps(g, 'USA', 'Sappers', 'eng', 1, hon.id, {}), s2 = addCorps(g, 'USA', 'Bridgers', 'eng', 1, hon.id, {});
+      for (const x of [s1, s2]) x.ap = x.apMax;
+      relocate(g, first, wake); relocate(g, s1, wake);
+      TC().load(saveGame(g));
+      expect(TC().bySeaWhy([second.id], wake.id).why, "full (one fresh division there; a second by sea)").toBe("Wake is full: it has room for about 15,000 men and 15,000 of yours are there.");
+      expect(TC().bySeaWhy([s2.id], wake.id).why, "engineers full (one there; a second by sea)").toBe("Wake can take no more engineers: it has room for one engineer corps as well as its troops, and yours is there.");
+    }
+  }, 600000);
+});
+
 describe('one body', () => {
   it("no file but islands.ts reads an island's room or counts corps against it by a path of its own", () => {
     expect(Object.keys(SOURCES).length).toBeGreaterThan(100);
