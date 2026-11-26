@@ -1414,7 +1414,7 @@ int main(int Argc, char** Argv)
 		std::printf("  far crowns (GS9), triangles:%s\n", Line.c_str());
 		Check(Crowns > 0 && Bad.empty(), "the trees far off as crowns of 30 to 48 triangles, inside the tree, faces out, darker beneath", Bad.empty() ? Fmt("%.0f trees", Crowns) : "wrong:" + Bad);
 		// (on trial "farcrowns": the crown CrownLobed makes in CrownOf's place, by the class it reads from the far mesh:
-		// a broadleaf in lobes, 48 to 66 triangles; a conifer in two skirts, 30 to 40; a palm as CrownOf's)
+		// a broadleaf in lobes, 48 to 66 triangles; a conifer in three skirts of eight sides, 54; a palm as CrownOf's)
 		if (F.Tried("farcrowns"))
 		{
 			std::string Lobed, Wrong;
@@ -1523,7 +1523,7 @@ int main(int Argc, char** Argv)
 				Lobed += std::string(" ") + BaseNames[static_cast<int>(B)] + " (" + Bm.Name + ", " + (Class == 0 ? "broadleaf" : Class == 1 ? "conifer" : Class == 2 ? "palm" : Class == 3 ? "column" : "none") +
 					Fmt(", width/height %.2f,", Narrow) + Fmt(" foot/top %.2f)", Taper) + Fmt(" far %.0f,", static_cast<double>(Bm.Far.Tris())) + Fmt(" crown %.0f ->", static_cast<double>(Was)) + Fmt(" %.0f", static_cast<double>(Now)) +
 					(bMeasured ? Fmt(", heart %.2f", HeartLeast) + Fmt("-%.2f of cap", Heart) + Fmt(" (%.2f of the lightest),", Whole) + Fmt(" lobes span %.0f%% of its leaves", 100.0 * Cover) : std::string()) + ";";
-				const bool bFits = Class == 0 ? Now >= 48 && Now <= 66 : Class == 1 ? Now >= 30 && Now <= 40 : Class == 3 ? Now >= 30 && Now <= 66 : Now == Was;
+				const bool bFits = Class == 0 ? Now >= 48 && Now <= 66 : Class == 1 ? Now == 54 : Class == 3 ? Now >= 30 && Now <= 66 : Now == Was;
 				if (!bFits || !bFinite || !bInside || !bOut || !bDark || !bHeart || Cover < 0.8)
 					Wrong += std::string(" ") + BaseNames[static_cast<int>(B)] + (!bFits ? " (triangles)" : "") + (!bFinite ? " (not finite)" : "") + (!bInside ? " (outside the tree)" : "") + (!bOut ? " (a face in)" : "") +
 						(!bDark ? " (not darker beneath)" : "") + (!bHeart ? " (heart)" : "") + (Cover < 0.8 ? " (cover)" : "");
@@ -1556,7 +1556,7 @@ int main(int Argc, char** Argv)
 					const double Nb = static_cast<double>(G.Instances(B).size());
 					std::printf("    dumped %s (%s): %zu standing, mean scale %.3f across, %.3f up\n", BaseNames[static_cast<int>(B)], Bm.Name.c_str(), G.Instances(B).size(), Sc / Nb, Sz / Nb);
 				}
-			Check(Wrong.empty(), "the trial \"farcrowns\": each tree's crown by its class (lobes 48 to 66 triangles, a column's 30 to 66, a conifer's skirts 30 to 40, a palm as before), finite, inside the tree, faces out, darker beneath, its heart 0.40 to 0.55 of its cap, its lobes at the height of 80% of its leaves", Wrong.empty() ? std::string("all") : "wrong:" + Wrong);
+			Check(Wrong.empty(), "the trial \"farcrowns\": each tree's crown by its class (lobes 48 to 66 triangles, a column's 30 to 66, a conifer's three skirts 54, a palm as before), finite, inside the tree, faces out, darker beneath, its heart 0.40 to 0.55 of its cap, its lobes at the height of 80% of its leaves", Wrong.empty() ? std::string("all") : "wrong:" + Wrong);
 		}
 	}
 	Check(BadCards.empty() && Carded == 10, "the hedge shrubs and the trees have their leaf cards, each point its place on the leaves' picture, and no other mesh has any",

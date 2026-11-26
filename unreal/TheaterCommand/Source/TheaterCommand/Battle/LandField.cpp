@@ -8157,15 +8157,17 @@ namespace LandField
 						const double Height = Clamp01((P.Z - Zb) / std::max(1.0, Zt - Zb));
 						const double Outward = Clamp01(std::hypot(P.X - Hub.X, P.Y - Hub.Y) / std::max(0.5, T.CR));
 						const double Grain = Noise3(P.X * 1.7, P.Y * 1.7, P.Z * 1.7, 0x7EAF);
-						// (lit by the crown's height first, the whole crown's top over its underside, then by the lump's own)
-						const double Lit = 0.58 + 0.36 * Height + 0.08 * Outward + 0.14 * Clamp01(Q.Z);
+						// (lit by the crown's height first, the whole crown's top over its underside, then by the lump's own;
+						// its sunlit caps kept low, so that a far-level wood is no lighter over the near-level wood before it
+						// than the old far level was: the art director's Normandy high view, 26 November)
+						const double Lit = 0.58 + 0.21 * Height + 0.08 * Outward + 0.07 * Clamp01(Q.Z);
 						Col Cc = Varied(T.Leaf, Lit * (1.0 + 0.06 * Grain), 0.02 * Grain);
 						Cc = Mixed(Cc, Dark, 0.55 * Clamp01(-1.1 * Q.Z) * (1.0 - 0.5 * Height) + 0.25 * std::pow(1.0 - Height, 1.5));
 						// (its sunlit tops lighter in the leaves' own hue, not toward a yellow: the near tree's leaves on their
 						// cards read cooler and greyer than their paint, so the far tree, which has no cards, is taken a little
 						// cooler and a third of the way to its grey, and stays no warmer, no more saturated and no fatter than the
 						// near tree it follows at the switch, nor more saturated than the grass)
-						Cc = Mixed(Cc, Scaled(T.Leaf, 1.3), 0.5 * T.Light * Clamp01(Q.Z) * (0.4 + 0.6 * Height));
+						Cc = Mixed(Cc, Scaled(T.Leaf, 1.3), 0.3 * T.Light * Clamp01(Q.Z) * (0.4 + 0.6 * Height));
 						Cc = Varied(Cc, 0.95, -0.05);
 						const double Grey = 0.299 * Cc.R + 0.587 * Cc.G + 0.114 * Cc.B;
 						Cc = Mixed(Cc, Rgb(Grey, Grey, Grey), 0.33);
@@ -10925,9 +10927,9 @@ namespace LandField
 		const uint64_t Seed = Hash(static_cast<uint64_t>(From.Points()), static_cast<uint64_t>(std::lround(R.High * 100.0)), 0xC40);
 		auto PointAt = [&From](size_t K) { return V3{ From.Positions[K * 3], From.Positions[K * 3 + 1], From.Positions[K * 3 + 2] }; };
 		// The trunk: a three-sided stub from the ground to the crown's foot, a little into it, no higher; the stem's own
-		// colour (a birch's white).
-		auto Stub = [&](double Top) {
-			const double Rt = std::clamp(R.TrunkR * 0.8, 0.12, 0.6);
+		// colour (a birch's white); a conifer's (Girth 0.5) half as thick, its stem a thin line under its skirts.
+		auto Stub = [&](double Top, double Girth) {
+			const double Rt = std::clamp(R.TrunkR * 0.8 * Girth, 0.12 * Girth, 0.6);
 			uint32_t Foot[3], Head[3];
 			for (int K = 0; K < 3; ++K)
 			{
@@ -10947,38 +10949,43 @@ namespace LandField
 		};
 		if (R.Class == 1)
 		{
-			// A conifer: two stacked skirts of eight sides, the lower as wide as the far mesh's lowest boughs, tapering to
-			// the tip. Seen from above a round dark crown with snow on its upper side: some of each skirt's eight upward faces
-			// snow and the rest dark bough, so that the snow's share of the crown's upward face is some 0.7 of the near
-			// firs' (the far mesh's own share is about 1.4 times the near tree's, so about half the far mesh's), and the
-			// dark green of the boughs between and the darker underside show through, as on the near tree.
+			// A conifer: three stacked skirts of eight sides, blunt, the lowest as wide as the near tree's lowest boughs,
+			// each higher one narrower, the top one a small cone to the tip. Its body the far mesh's leaf at 0.7 (darker
+			// than the near fir's own paint, which its own shade darkens and a crown, casting none, has not), its
+			// underside darker. In snow: its tip lighter (the top cone's point, fading down into the bough) and each
+			// upward face of the two lower skirts snow along its rim, fading up to the dark bough at the skirt's apex, so
+			// that from above the crown reads as dark tiers with snow on their rims and a lighter point, and from the
+			// side its body stays dark: no face all snow from rim to apex, which seen from high is a sunlit sliver, the
+			// same way on every crown, a hatch over the wood. And its rims more ragged than in summer, the snow's weight
+			// on them: the far mesh's own snow is whiter than the near tree's (its paint some 233 against 191) and covers
+			// more of it (from straight above some 0.72 of it against 0.45), which a crown must not take over whole.
 			std::vector<double> Foot;
 			for (const size_t K : R.In)
 				if (From.Positions[K * 3 + 2] < R.Lo[2] + 0.4 * Tall) Foot.push_back(std::hypot(From.Positions[K * 3] - CX, From.Positions[K * 3 + 1] - CY));
 			std::sort(Foot.begin(), Foot.end());
-			// (as wide as the far mesh's lowest boughs reach, and a little more: the far mesh's boughs are a little
-			// narrower than the near tree's, some 0.85 of them on the winter spruce)
-			const double Rb = std::min(1.08 * R.Reach - std::hypot(CX, CY), std::max(0.3, Foot.empty() ? 0.25 * Wide : 1.08 * Foot.back()));
-			const Col Snow = Rgb(R.Snow[0], R.Snow[1], R.Snow[2]);
-			// (its boughs darker than the far mesh's paint, its underside darker still: the near fir is dark inside from
-			// its own shade, which a crown, casting none, has not; so that a far fir in a picture is within a tenth of the
-			// near firs' brightness and shows their dark green between its snow)
+			// (as wide as the far mesh's lowest boughs reach and more: the far mesh's boughs are some 0.85 of the near
+			// tree's on the winter spruce, and a crown as slim as them reads slimmer than the near fir; at 1.13 its height
+			// over the width of its outline is the near mesh's own, seen from 10 to 60 degrees down)
+			const double Rb = std::min(1.13 * R.Reach - std::hypot(CX, CY), std::max(0.3, Foot.empty() ? 0.25 * Wide : 1.13 * Foot.back()));
+			// (its snow as the near fir shows it, a third of the way from the far mesh's paint to the bough: no whiter
+			// than the near tree's)
+			const Col Snow = Mixed(Rgb(R.Snow[0], R.Snow[1], R.Snow[2]), Leaf, 0.33);
 			const Col Bough = Scaled(Leaf, 0.7), Under = Varied(Leaf, 0.45, -0.06);
+			const bool bSnowed = R.SnowUp > 0.0;
+			// (a rim's snow 0.6 of the way from the bough to the snow on the winter spruce, less on a tree with less snow
+			// on it: seen from straight above, the snow's amount on the crown some 0.7 of the near firs')
+			const Col SnowedRim = Mixed(Bough, Snow, std::min(1.0, 0.83 * R.SnowUp));
 			// (from the ground up: a far mesh's lowest boughs may dip under it)
 			const double Z0 = std::max(0.0, R.Lo[2]);
-			Stub(Z0 + 0.05 * Tall);
+			Stub(Z0 + 0.05 * Tall, 0.5);
 			struct Skirt
 			{
 				double Rim, Radius, Apex, Hollow;
-				int SnowRim;
 			};
-			// (the share of each skirt's upward faces under snow, by count: on the lower some 0.6 of the far mesh's own share,
-			// on the upper, which the snow lies on more, 0.8 of it; seen from above, weighed by how much of each face shows,
-			// some 0.5 of the far mesh's share, 0.7 of the near firs')
-			const Skirt Skirts[2] = { { Z0 + 0.03 * Tall, Rb, Z0 + 0.66 * Tall, Z0 + 0.2 * Tall, static_cast<int>(std::lround(8.0 * 0.6 * R.SnowUp)) },
-				{ Z0 + 0.42 * Tall, 0.64 * Rb, R.Hi[2], Z0 + 0.55 * Tall, static_cast<int>(std::lround(8.0 * 0.8 * R.SnowUp)) } };
+			const Skirt Skirts[3] = { { Z0 + 0.03 * Tall, Rb, Z0 + 0.42 * Tall, Z0 + 0.16 * Tall }, { Z0 + 0.28 * Tall, 0.72 * Rb, Z0 + 0.80 * Tall, Z0 + 0.37 * Tall },
+				{ Z0 + 0.68 * Tall, 0.36 * Rb, R.Hi[2], Z0 + 0.76 * Tall } };
 			constexpr int Sides = 8;
-			for (int Sk = 0; Sk < 2; ++Sk)
+			for (int Sk = 0; Sk < 3; ++Sk)
 			{
 				const Skirt& S = Skirts[Sk];
 				const double Turn = 2.0 * Pi * Unit(Hash(Seed, static_cast<uint64_t>(Sk)));
@@ -10990,23 +10997,26 @@ namespace LandField
 				for (int K = 0; K < Sides; ++K)
 				{
 					const double A = Turn + 2.0 * Pi * K / Sides;
-					// (each rim corner a little in or out and up or down, so the skirt's edge is not one ruled line)
-					const double J = 1.0 + 0.06 * (2.0 * Unit(Hash(Seed, static_cast<uint64_t>(Sk), static_cast<uint64_t>(K))) - 1.0);
-					const double Dz = 0.04 * Tall * (2.0 * Unit(Hash(Seed ^ 0x5C1, static_cast<uint64_t>(Sk), static_cast<uint64_t>(K))) - 1.0);
+					// (each rim corner a little in or out and up or down, so the skirt's edge is not one ruled line; in snow
+					// more, 0.2 of its reach and 0.08 of the tree's height, so that from high no two crowns' tiers line up)
+					const double J = 1.0 + (bSnowed ? 0.2 : 0.06) * (2.0 * Unit(Hash(Seed, static_cast<uint64_t>(Sk), static_cast<uint64_t>(K))) - 1.0);
+					const double Dz = (bSnowed ? 0.08 : 0.04) * Tall * (2.0 * Unit(Hash(Seed ^ 0x5C1, static_cast<uint64_t>(Sk), static_cast<uint64_t>(K))) - 1.0);
 					Out8[K] = V3{ std::cos(A), std::sin(A), 0.0 };
-					Ring[K] = V3{ CX, CY, std::max(S.Rim + Dz, Z0) } + Out8[K] * (S.Radius * J);
+					// (never out past 1.145 of the far tree's reach: the crown no wider than the tree a step nearer, give or
+					// take its widening)
+					Ring[K] = V3{ CX, CY, std::max(S.Rim + Dz, Z0) } + Out8[K] * (bSnowed ? std::min(S.Radius * J, 1.145 * R.Reach - std::hypot(CX, CY)) : S.Radius * J);
 					Down[K] = Bd.Vert(Ring[K], Unit3(Out8[K] * 0.4 + V3{ 0, 0, -1 }), Under);
 				}
 				for (int K = 0; K < Sides; ++K)
 				{
 					const int J = (K + 1) % Sides;
 					const V3 Mid = (Ring[K] + Ring[J]) * 0.5;
-					// (each upward face one colour, snow or dark bough, its corners its own: the snow's corners shared with the
-					// boughs' would spread a pale wash over every face, and the dark green would not show from any side)
-					const bool bSnow = (K + 1) * S.SnowRim / Sides > K * S.SnowRim / Sides;
-					const Col Face = bSnow ? Mixed(Snow, Leaf, 0.12) : Bough;
-					const uint32_t ApexI = Bd.Vert(Apex, { 0, 0, 1 }, Face);
-					const uint32_t UpK = Bd.Vert(Ring[K], Unit3(Out8[K] + V3{ 0, 0, Slope }), Face), UpJ = Bd.Vert(Ring[J], Unit3(Out8[J] + V3{ 0, 0, Slope }), Face);
+					// (each upward face its own corners: in snow a lower skirt's rim corners its snow and its apex the bough,
+					// the top cone's point 0.6 of the way to the snow and its rim the bough; out of snow all bough)
+					const Col RimPaint = bSnowed && Sk < 2 ? SnowedRim : Bough;
+					const Col TipPaint = bSnowed && Sk == 2 ? Mixed(Bough, Snow, 0.6) : Bough;
+					const uint32_t ApexI = Bd.Vert(Apex, { 0, 0, 1 }, TipPaint);
+					const uint32_t UpK = Bd.Vert(Ring[K], Unit3(Out8[K] + V3{ 0, 0, Slope }), RimPaint), UpJ = Bd.Vert(Ring[J], Unit3(Out8[J] + V3{ 0, 0, Slope }), RimPaint);
 					TriFacing(Out, ApexI, UpK, UpJ, Unit3(Mid - V3{ CX, CY, Mid.Z }) + V3{ 0, 0, 0.2 });
 					TriFacing(Out, HollowI, Down[J], Down[K], V3{ 0, 0, -1 });
 				}
@@ -11171,7 +11181,7 @@ namespace LandField
 		}
 		double FootZ = 1e9;
 		for (const Lobe& Lb : Lobes) FootZ = std::min(FootZ, Lb.O.Z - 0.55 * Lb.RZ);
-		Stub(std::max(0.3, FootZ));
+		Stub(std::max(0.3, FootZ), 1.0);
 		// (a little greyer than the far mesh's, never more saturated than the grass beside it)
 		auto Greyer = [](const Col& C) { const double G = 0.299 * C.R + 0.587 * C.G + 0.114 * C.B; return Mixed(C, Rgb(G, G, G), 0.06); };
 		for (size_t L = 0; L < Lobes.size(); ++L)
