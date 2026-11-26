@@ -29,17 +29,26 @@ describe('the far side off', () => {
     for (const r of [...places(g), undefined]) expect(contactRuleActs(g, r)).toBe(true);
   });
 
-  it.each([1, 2])('at stop %i it acts nowhere with the west\'s book open, even with the Pacific\'s marked closed', (stop) => {
+  it.each([1, 2])('at stop %i it acts on no known place with the west\'s book open, even with the Pacific\'s marked closed', (stop) => {
     const g = campaign(stop);
     g.flags['hist:off:pacific'] = 30;
-    for (const r of [...places(g), undefined]) expect(contactRuleActs(g, r)).toBe(false);
+    for (const r of places(g)) expect(contactRuleActs(g, r)).toBe(false);
   });
 
   it.each([1, 2])('at stop %i with the west\'s book closed it acts on every known place', (stop) => {
     const g = campaign(stop);
     g.flags['hist:off:west'] = 9;
     for (const r of places(g)) expect(contactRuleActs(g, r)).toBe(true);
-    expect(contactRuleActs(g, undefined)).toBe(false);
+  });
+
+  // The design director's answer 4 of 00:43Z, 26 November 2026: "A row that reads no book keeps no book: the contact
+  // rule acts (forces, never a book that is not there)."
+  it.each([1, 2])('at stop %i a place not known reads no book and keeps none: it acts, with every book open or the west\'s closed', (stop) => {
+    const g = campaign(stop);
+    expect(rowBook(g, undefined)).toBeNull();
+    expect(contactRuleActs(g, undefined)).toBe(true);
+    g.flags['hist:off:west'] = 9;
+    expect(contactRuleActs(g, undefined)).toBe(true);
   });
 
   it('closed by the book itself (claims.ts `bookMonth`): Germany at war with Belgium in September 1939 closes the west\'s, and it acts', () => {

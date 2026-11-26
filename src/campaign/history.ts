@@ -216,15 +216,18 @@ export function rowBook(g: Game, place: Region | undefined): string | null {
  * due on `place`. The design director's 22:05Z of 25 November 2026: "One sentence, one scope: the contact rule acts
  * where the stop is 3 to 5 OR the row's theatre's book is closed." At stops 3 to 5 it always acts; at a stop that keeps
  * a book (1 and 2), only where the row's book (`rowBook`) is closed, read as the stations read it (`bookClosed`, the
- * flag claims.ts `closeBook` writes with the theatres that hang on it: Burma closes with the Pacific). A row whose
- * place is not known keeps its book. The three doors read it here: game.ts `expeditions()` (the far side's and the old
- * chart's take) and drawn.ts `heldAlready` (the draw). A book for every row or ground (her known-list item, after the
- * 24 wars: China's and East Africa's own books, the north's and Finland's) would change this one place, `rowBook`.
+ * flag claims.ts `closeBook` writes with the theatres that hang on it: Burma closes with the Pacific). A row that
+ * reads no book (`rowBook` null: its place not known, or far-side ground with no stations table laid) keeps no book,
+ * and the rule acts: the design director's answer 4 of 00:43Z, 26 November 2026, "A row that reads no book keeps no
+ * book: the contact rule acts (forces, never a book that is not there)." The three doors read it here: game.ts
+ * `expeditions()` (the far side's and the old chart's take) and drawn.ts `heldAlready` (the draw). A book for every
+ * row or ground (her known-list item, after the 24 wars: China's and East Africa's own books, the north's and
+ * Finland's) would change this one place, `rowBook`.
  */
 export function contactRuleActs(g: Game, place: Region | undefined): boolean {
   if (!stopDef(g).book) return true;
   const book = rowBook(g, place);
-  return book !== null && bookClosed(g, book) > 0;
+  return book === null || bookClosed(g, book) > 0;
 }
 
 /** How the dial bears on one of the great choices this month. */

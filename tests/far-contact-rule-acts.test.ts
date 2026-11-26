@@ -12,6 +12,7 @@ import { bookMonth } from '../src/campaign/claims';
 import { createGame, declareWar } from '../src/campaign/game';
 import { bookClosed, contactRuleActs, rowBook, setStop, stopDef } from '../src/campaign/history';
 import { startOpen } from '../src/campaign/staff';
+import { stations } from '../src/campaign/stations';
 import { farOn, shoreOf } from '../src/campaign/world';
 import type { Game, Region } from '../src/campaign/types';
 
@@ -46,11 +47,11 @@ describe('the scope: stops 3 to 5, or the row\'s book closed', () => {
     for (const r of [p.far, p.old, p.americas, undefined]) expect(contactRuleActs(g, r)).toBe(true);
   });
 
-  it.each([1, 2])('at stop %i with every book open it acts nowhere', (stop) => {
+  it.each([1, 2])('at stop %i with every book open it acts on no known place', (stop) => {
     const g = campaign(stop);
     expect(stopDef(g).book).toBe(true);
     const p = places(g);
-    for (const r of [p.far, p.old, p.americas, undefined]) expect(contactRuleActs(g, r)).toBe(false);
+    for (const r of [p.far, p.old, p.americas]) expect(contactRuleActs(g, r)).toBe(false);
   });
 
   it.each([1, 2])('at stop %i with the Pacific\'s book closed it acts on far-side ground only', (stop) => {
@@ -60,7 +61,6 @@ describe('the scope: stops 3 to 5, or the row\'s book closed', () => {
     expect(contactRuleActs(g, p.far)).toBe(true);
     expect(contactRuleActs(g, p.old)).toBe(false);
     expect(contactRuleActs(g, p.americas)).toBe(false);
-    expect(contactRuleActs(g, undefined)).toBe(false);
   });
 
   it.each([1, 2])('at stop %i with the west\'s book alone closed by hand it acts on the old chart and the Americas, not on far-side ground', (stop) => {
@@ -70,7 +70,6 @@ describe('the scope: stops 3 to 5, or the row\'s book closed', () => {
     expect(contactRuleActs(g, p.far)).toBe(false);
     expect(contactRuleActs(g, p.old)).toBe(true);
     expect(contactRuleActs(g, p.americas)).toBe(true);
-    expect(contactRuleActs(g, undefined)).toBe(false);
   });
 
   it('the west\'s book closed by the book itself closes the Pacific\'s with it (claims.ts `closeBook`): it then acts on every known place', () => {
@@ -86,6 +85,25 @@ describe('the scope: stops 3 to 5, or the row\'s book closed', () => {
     expect(contactRuleActs(g, p.far)).toBe(true);
     expect(contactRuleActs(g, p.old)).toBe(true);
     expect(contactRuleActs(g, p.americas)).toBe(true);
-    expect(contactRuleActs(g, undefined)).toBe(false);
+  });
+});
+
+// The design director's answer 4 of 00:43Z, 26 November 2026: "A row that reads no book keeps no book: the contact rule
+// acts (forces, never a book that is not there). That is one line, plus a test that the far stage always lays the table."
+describe('a row that reads no book keeps no book', () => {
+  it('the far stage lays the stations table, and it names the Pacific\'s theatre: far-side ground always reads a book', () => {
+    const g = campaign(1);
+    expect(farOn(g)).toBe(true);
+    expect(stations()).not.toBeNull();
+    expect(stations()!.theatre).toBe('pacific');
+    expect(rowBook(g, places(g).far)).toBe('pacific');
+  });
+
+  it.each([1, 2])('at stop %i a place not known reads no book: the rule acts there, every book open or any closed', (stop) => {
+    const g = campaign(stop);
+    expect(rowBook(g, undefined)).toBeNull();
+    expect(contactRuleActs(g, undefined)).toBe(true);
+    g.flags['hist:off:pacific'] = 30;
+    expect(contactRuleActs(g, undefined)).toBe(true);
   });
 });
