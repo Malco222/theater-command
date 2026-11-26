@@ -44,7 +44,7 @@ import { shipRule } from './tech';
 import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneName, zoneOfGroup, zoneOfRegion } from './weather';
 import { whyNotField, wrecked } from './airversion';
 import { wayWords } from './ferry';
-import { resultFor, strafeSection, type StrafeSection } from './strafers';
+import { strafeSection, type StrafeSection } from './strafers';
 import { fieldKnown, fieldRules, fieldView } from './fieldstate';
 import { band, bandNote, fogBits, fogged, knownDefence, knownLines, raidFogOn, rememberSkies, skyKnown } from './airfog';
 
@@ -1370,11 +1370,11 @@ export function raidReplays(g: Game, turn = g.turn, viewer: string | null = g.hu
     return { id: s.id ?? f?.id ?? -1, name: s.fleet, nat: s.nat, base, baseName: r?.name ?? '', x: r?.x ?? 0, y: r?.y ?? 0, ftr: s.ftr, bmr: s.bmr, lostFtr: s.lostFtr, lostBmr: s.lostBmr };
   });
   const mineToo = (nat: string): boolean => viewer === null || (!!nat && allied(g, nat, viewer));
-  // (The report's result sentence as the viewer reads it, strafers.ts resultFor: a raider whose only aircraft over the
-  // troops had too little fight left reads their line alone, the UI director 19:17Z; every other report as before.)
+  // (The report's own result sentence, to both sides: the UI director, 21:22Z, h, "Only the raider's report card prints
+  // the A5 line by itself. Every other reader of the raid's result keeps i's line ... and the 3D raid list".)
   return g.airReports.filter((r) => r.turn === turn && (mineToo(r.attNat) || mineToo(r.defNat))).map((r) => {
     const p = r.zone >= 0 ? g.seas[r.zone] : g.regions[r.region];
-    return { id: r.id, turn: r.turn, kind: r.mission, region: r.region, zone: r.zone, place: r.place, x: p?.x ?? 0, y: p?.y ?? 0, attNat: r.attNat, defNat: r.defNat, attackers: side(r.att), defenders: side(r.def), won: r.won, level: r.level, result: resultFor(r, viewer) };
+    return { id: r.id, turn: r.turn, kind: r.mission, region: r.region, zone: r.zone, place: r.place, x: p?.x ?? 0, y: p?.y ?? 0, attNat: r.attNat, defNat: r.defNat, attackers: side(r.att), defenders: side(r.def), won: r.won, level: r.level, result: r.result };
   });
 }
 

@@ -498,3 +498,51 @@ describe('the line where the harm rounds to nothing (the UI director, 21:22Z, i)
     expect(r2.result).toBe(FOUND_LITTLE);
   });
 });
+
+// The UI director, 25 November 2026 21:22Z, h: "Only the raider's report card prints the A5 line by itself. Every other
+// reader of the raid's result keeps i's line, by the cut: the news, the raided side's report, the month card's raid row
+// (monthcard.ts:784, to both sides) and the 3D raid list. So the result is never emptied, the month card never loses the
+// raid, and no double space appears in the news." Round seven's alone case: the Saar, all three French fighter groups
+// at Lorraine with no bombers, against 2. Jagddivision at 648 (setup), each going down with under one fighter's weight.
+describe('the alone case: only the raider\'s report card prints the A5 line by itself (the UI director, 21:22Z, h)', () => {
+  const HARM_LITTLE = 'The raids did the troops little harm.';
+  function alone() {
+    const c = saar(0, 'three');
+    const d = c.g.airFleets.find((f) => f.id === 3)!;
+    d.ftr = 648; d.est.ftr = Math.max(d.est.ftr, 648);
+    return { ...c, ids: c.ids.filter((id) => id !== BOMBERS) };
+  }
+  it('the report card (the raider) the A5 line alone; the news, the defender, the month card to both sides and the raid list keep the result sentence', async () => {
+    on();
+    const c = alone();
+    const { monthCard, monthMark } = await import('../src/campaign/monthcard');
+    const { raidReplays } = await import('../src/campaign/airwar');
+    const marks = { FRA: monthMark(c.g, 'FRA'), GER: monthMark(c.g, 'GER') };
+    const news0 = c.g.headlines.length;
+    const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect(r.strafeLittle).toEqual({ names: names([GC1, GC2, GC3]), alone: true });
+    expect(r.result).toBe(HARM_LITTLE);
+    // The raider's report card (ui/main.ts airReportCard: resultFor, then the line): the A5 line by itself.
+    expect(resultFor(r, 'FRA')).toBe('');
+    expect(strafedLine(r, 'FRA')).toBe(`Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 ${LITTLE}`);
+    // The raided side's report: the result sentence.
+    expect(resultFor(r, 'GER')).toBe(HARM_LITTLE);
+    // The news (both sides read it): the result sentence, and no double space.
+    const news = c.g.headlines.slice(news0).map((h) => h.text).filter((t) => t.includes('raid the German troops'));
+    expect(news.length).toBe(1);
+    expect(news[0]).toContain(` troops at the Saar. ${HARM_LITTLE} `);
+    expect(news[0].includes('  ')).toBe(false);
+    // The month card's raid row, to both sides: the raid is there, the result sentence under it.
+    for (const nat of ['FRA', 'GER'] as const) {
+      const card = monthCard(c.g, marks[nat], nat);
+      const rows = [card.lead, ...card.rows].filter((x) => x?.report?.type === 'air' && x.report.id === r.id);
+      expect(rows.length, nat).toBe(1);
+      expect(rows[0]!.follows, nat).toBe(HARM_LITTLE);
+    }
+    // The raid list (the 3D replays, as either side reads it; flownRaids, which the bridge's raidsSince reads for the 3D
+    // act's note, is the player's own reading of it, so the note opens with the result sentence and the line follows).
+    const { flownRaids } = await import('../src/campaign/turn');
+    for (const nat of ['FRA', 'GER']) expect(raidReplays(c.g, c.g.turn, nat).find((x) => x.id === r.id)!.result).toBe(HARM_LITTLE);
+    expect(flownRaids(c.g).find((x) => x.id === r.id)!.result).toBe(HARM_LITTLE);
+  });
+});

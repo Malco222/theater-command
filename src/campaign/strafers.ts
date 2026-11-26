@@ -107,10 +107,12 @@ export function strafedLine(rep: { mission: string; attNat: string; strafed?: st
 }
 
 /**
- * The raid report's own result sentence, as `reader` reads it: the report's, except for the raider where the only
- * aircraft that reached the troops were groups with too little fight left (strafeLittle.alone), whose line already
- * gives the cause (the UI director, 19:17Z: "Print the A5 line alone there"). The defender, whom her words do not
- * cover, reads the report's own sentence. Every other report reads as it always did.
+ * The raid report's own result sentence on the raider's report card (the browser's, ui/main.ts airReportCard): the
+ * report's, except where the only aircraft that reached the troops were groups with too little fight left
+ * (strafeLittle.alone), whose line already gives the cause (the UI director, 19:17Z: "Print the A5 line alone there"; 21:22Z,
+ * h: "Only the raider's report card prints the A5 line by itself. Every other reader of the raid's result keeps i's
+ * line, by the cut: the news, the raided side's report, the month card's raid row ... and the 3D raid list", which read
+ * the report's own sentence). The defender reads the report's own sentence; every other report reads as it always did.
  */
 export function resultFor(rep: { mission: string; attNat: string; result: string; strafeLittle?: { alone?: true } }, reader: string | null): string {
   return rep.mission === 'ground' && rep.strafeLittle?.alone && reader !== null && reader === rep.attNat ? '' : rep.result;
