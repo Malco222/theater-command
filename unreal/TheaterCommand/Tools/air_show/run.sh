@@ -100,6 +100,26 @@ if ! { "$OUT/air_smooth_probe" --shake "$HERE/data/raid-steps.json" 60 1 live 20
   echo "FAIL: with both rows on, air_smooth_probe --shake's report is not data/shake-rows-on-2464374bb.txt's"
   STATUS=1
 fi
+# The strategy camera as the player sees it over Bremen's B-17s at 60 frames x1 (air_eye_probe: AimEye's strategy
+# camera frame by frame), each of its frames (<prefix>-over.csv, 3.4 MB, held by its cksum) to the byte with each row
+# off and on: both off, 30899121's (its own Battle files; its look jumped 20 px and more 92.6 times a real minute through the
+# battle, 106.6 in the fight); the camera's row alone on, 30899121's flying under 2464374bb's camera (0.4); the bombers' row alone on,
+# 2464374bb's flying under the old camera (78.6); both on, 2464374bb's (0.0).
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -DROWS -DBOXROW -DMARKS -I"$SRC" \
+  "$HERE/air_eye_probe.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  -o "$OUT/air_eye_probe"
+for EB in "0 0 3481327893 3448371 30899121" "1 0 731922131 3597993 30899121-under-2464374bb's-camera" "0 1 4087172811 3451605 2464374bb-under-the-old-camera" "1 1 4260831152 3605140 2464374bb"; do
+  read -r E1 B1 K1 K2 WHO <<< "$EB"
+  if ! CAMROW_EYE=$E1 CAMROW_BOX=$B1 "$OUT/air_eye_probe" rec "$ROOT/Content/Data/AirBattles/bremen-b17.json" "$OUT/eye-e${E1}b${B1}" x1 > "$OUT/eye-e${E1}b${B1}.txt"; then
+    echo "FAIL: air_eye_probe did not run with CAMROW_EYE=$E1 CAMROW_BOX=$B1"
+    STATUS=1
+  elif [ "$(cksum < "$OUT/eye-e${E1}b${B1}-over.csv" | awk '{print $1, $2}')" != "$K1 $K2" ]; then
+    echo "FAIL: with CAMROW_EYE=$E1 CAMROW_BOX=$B1, air_eye_probe's strategy camera is not $WHO's (cksum $(cksum < "$OUT/eye-e${E1}b${B1}-over.csv"), wanted $K1 $K2)"
+    STATUS=1
+  else
+    echo "pass: with CAMROW_EYE=$E1 CAMROW_BOX=$B1, the strategy camera's every frame over Bremen is $WHO's"
+  fi
+done
 # A raid on troops (Battle/AirMarks, Battle/AirShowTroops; Brian, 24 November 2026: "if a bomber group is bombing troops
 # instead of a factory or town and they get intercepted than i want that playable"): every hit on a piece of the column
 # shown once as its bomb or rounds arrive, every other bomb clear of every piece, the strafing pass within the flight's
