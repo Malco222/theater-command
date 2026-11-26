@@ -834,7 +834,9 @@ namespace TheaterFx
 			Span Throw{ 2.0, 4.0 }, Up{ 1.0, 2.5 }, Lie{ 2.0, 4.0 }, Tumble{ 15.0, 30.0 };
 			Rgb Col, Dark;
 		};
-		bool CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& Out_) const; // (false: none for this gun, too far off, or no room)
+		// (false: none for this gun, too far off, or no room. Ground, when given, is what the gun stands on: none on a
+		// ground named in ground_cases.not_on, as the sea scene's turrets on "water" (Effects (R2), -TheaterSeaNoFalseCases))
+		bool CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& Out_, const char* Ground = nullptr) const;
 		void GroundCase(double T, const Vec& Breech, const Vec& Away, const CaseRow& C, Dice& D);
 		int LayCase(int Slot, const Bit& B, double Age, const Vec& P, double A, const View& Eye, int Room); // (a spent case's shadow, tube and mouth: the places it took)
 		/** Effects (R2), -TheaterLandGunFlash (Brian, 23 November: "how does the gun fire look when they shoot? can we make

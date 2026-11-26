@@ -7,6 +7,8 @@
 //      control; on, heavy bursts exactly as before, medium a 6 to 8 m grey burst gone in about 5 s and light a 3 to
 //      4 m grey puff gone in about 3 s, each lingering by its own row; a six-minute barrage of all three holds fewer
 //      pieces than before, and the kit's shared dice are drawn as often as before.
+//   B. no false brass at sea (-TheaterSeaNoFalseCases, battle-fx-sea-cases.json): off, a turret on the water throws a
+//      field gun's case, the fault; on, none on the water, and the same guns on earth lay every piece as before.
 //
 //     Tools/fx_ten/run.sh [out folder]
 //     fx_ten_test <Content/Effects folder> <out folder>
@@ -255,6 +257,142 @@ namespace
 		const Barrage HOn = SixMinutes(On, true, false, false);
 		Check(HOn.Digests == HOff.Digests, "on: six minutes of heavy flak alone, every piece as before", Say("%.0f samples", static_cast<double>(HOn.Digests.size())));
 	}
+
+	// ----------------------------------------------------------------------------------------------------------------
+	// Shared by B to F: a fight played at 30 frames a second, sampled every second
+
+	struct Fight
+	{
+		std::vector<uint64_t> Digests;
+		std::vector<std::vector<uint64_t>> Heaps;
+		size_t MostBits = 0, MostLying = 0;
+		uint64_t Seeds = 0;
+		double DensestMs = 0.0, MeanMs = 0.0;
+	};
+
+	/** Frames of a fight seen from Eye toward Look, Script(Fx, Now, Frame) each frame before the Draw. */
+	Fight Play(const FxTen::Book& Book, const Vec& Eye, const Vec& Look, int Frames, const std::function<void(Battle&, double, int)>& Script, bool bHeaps = true)
+	{
+		Kit K(Book);
+		Fight R;
+		const Battle::View V = FxTen::Looking(Eye, Look);
+		K.Fx.Draw(0.0, V);
+		for (int Frame = 1; Frame <= Frames; ++Frame)
+		{
+			const double Now = Frame / 30.0;
+			Script(K.Fx, Now, Frame);
+			const auto Was = std::chrono::steady_clock::now();
+			K.Fx.Draw(Now, V);
+			const double Ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Was).count();
+			R.MeanMs += Ms / Frames;
+			if (K.Fx.Bits.size() > R.MostBits)
+			{
+				R.MostBits = K.Fx.Bits.size();
+				R.DensestMs = Ms;
+			}
+			R.MostLying = std::max(R.MostLying, K.Fx.CaseUntil.size());
+			if (Frame % 30 == 0)
+			{
+				R.Digests.push_back(FxTen::Digest(K.Fx));
+				if (bHeaps)
+				{
+					R.Heaps.push_back(FxTen::Heap(K.Fx));
+				}
+			}
+		}
+		R.Seeds = K.Fx.Seeds;
+		return R;
+	}
+
+	/** Of every sample, how many of Small's pieces Big has not (Small's pieces all in Big: none). */
+	size_t MissingAll(const Fight& Small, const Fight& Big)
+	{
+		size_t Miss = 0;
+		for (size_t I = 0; I < Small.Heaps.size() && I < Big.Heaps.size(); ++I)
+		{
+			Miss += FxTen::Missing(Small.Heaps[I], Big.Heaps[I]);
+		}
+		return Miss;
+	}
+
+	/** A spent case on the ground or in the air (GroundCase's piece). */
+	bool IsCase(const Bit& B)
+	{
+		return B.Form == Bit::Shape::Plate && B.bThrown && B.Gravity == 9.8;
+	}
+
+	// ----------------------------------------------------------------------------------------------------------------
+	// B. No false brass at sea
+
+	void SeaCases()
+	{
+		std::printf("B. No false brass at sea (-TheaterSeaNoFalseCases, battle-fx-sea-cases.json)\n");
+		const FxTen::Book Off = Recipe();
+		const FxTen::Book On = Recipe({ "battle-fx-sea-cases.json" });
+		// (a battleship's broadside close to the eye: three turrets firing every 8 s for a minute, the sea scene's rows,
+		// the howitzer's at 180 mm and over and the tank gun's below, on "water"; the same on "earth", the control)
+		auto Broadside = [](const char* Ground)
+		{
+			return [Ground](Battle& Fx, double Now, int Frame)
+			{
+				if (Frame % 240 == 15)
+				{
+					for (int Turret = 0; Turret < 3; ++Turret)
+					{
+						Fx.Muzzle(Now, Vec(-12.0 + 12.0 * Turret, 0.0, 6.0), Vec(0.1, 1.0, 0.3), Turret == 1 ? "tank_gun" : "howitzer", Ground);
+					}
+				}
+			};
+		};
+		const Vec Eye(0.0, -22.0, 8.0), Look(0.0, 10.0, 6.0);
+		const Fight WOff = Play(Off, Eye, Look, 1800, Broadside("water"));
+		const Fight WOn = Play(On, Eye, Look, 1800, Broadside("water"));
+		const Fight EOff = Play(Off, Eye, Look, 1800, Broadside("earth"));
+		const Fight EOn = Play(On, Eye, Look, 1800, Broadside("earth"));
+		// (the cases off lays on the water: the pieces off has that on has not)
+		size_t OffOnly = 0, OffOnlyCases = 0;
+		{
+			Kit KOff(Off), KOn(On);
+			const Battle::View V = FxTen::Looking(Eye, Look);
+			KOff.Fx.Draw(0.0, V);
+			KOn.Fx.Draw(0.0, V);
+			for (Kit* K : { &KOff, &KOn })
+			{
+				for (int Turret = 0; Turret < 3; ++Turret)
+				{
+					K->Fx.Muzzle(0.5, Vec(-12.0 + 12.0 * Turret, 0.0, 6.0), Vec(0.1, 1.0, 0.3), Turret == 1 ? "tank_gun" : "howitzer", "water");
+				}
+			}
+			const std::vector<uint64_t> HOn = FxTen::Heap(KOn.Fx);
+			for (const Bit& B : KOff.Fx.Bits)
+			{
+				if (!std::binary_search(HOn.begin(), HOn.end(), FxTen::PieceHash(B)))
+				{
+					++OffOnly;
+					OffOnlyCases += IsCase(B) ? 1u : 0u;
+				}
+			}
+		}
+		Check(OffOnlyCases > 0 && OffOnly == OffOnlyCases, "off: a turret on the water throws a field gun's case (the fault)", Say("%.0f cases", static_cast<double>(OffOnlyCases)));
+		Check(MissingAll(WOn, WOff) == 0, "on: on the water, every piece on lays was laid off", Say("%.0f missing", static_cast<double>(MissingAll(WOn, WOff))));
+		size_t CasesOn = 0;
+		{
+			Kit K(On);
+			K.Fx.Draw(0.0, FxTen::Looking(Eye, Look));
+			for (int Turret = 0; Turret < 3; ++Turret)
+			{
+				K.Fx.Muzzle(0.5, Vec(-12.0 + 12.0 * Turret, 0.0, 6.0), Vec(0.1, 1.0, 0.3), Turret == 1 ? "tank_gun" : "howitzer", "water");
+			}
+			for (const Bit& B : K.Fx.Bits)
+			{
+				CasesOn += IsCase(B) ? 1u : 0u;
+			}
+		}
+		Check(CasesOn == 0 && WOn.MostLying == 0, "on: no case thrown on the water", Say("%.0f cases", static_cast<double>(CasesOn)));
+		Check(EOn.Digests == EOff.Digests, "on: the same guns on earth, every piece as before", Say("%.0f samples", static_cast<double>(EOn.Digests.size())));
+		Check(WOn.Seeds == WOff.Seeds && EOn.Seeds == EOff.Seeds, "the kit's shared dice drawn as often as before", Say("%.0f draws", static_cast<double>(WOn.Seeds)));
+		std::printf("     a minute's broadside, 3 turrets every 8 s: most pieces %zu off, %zu on; lying cases most %zu off, %zu on\n", WOff.MostBits, WOn.MostBits, WOff.MostLying, WOn.MostLying);
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -266,6 +404,7 @@ int main(int Argc, char** Argv)
 	}
 	Folder = Argv[1];
 	FlakKinds();
+	SeaCases();
 	std::printf("fx_ten_test: %d checks, %d failed\n", Checks, Failed);
 	if (Failed == 0)
 	{

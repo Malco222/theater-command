@@ -4042,7 +4042,7 @@ namespace TheaterFx
 		// so the cases pile up behind the gun through a fight. Its own dice)
 		{
 			CaseRow Cases;
-			if (CaseRowOf(GunIn ? GunIn : "", At, Cases) && RoomForCases() < static_cast<size_t>(MaxPuffs) * 3 / 5)
+			if (CaseRowOf(GunIn ? GunIn : "", At, Cases, GroundIn) && RoomForCases() < static_cast<size_t>(MaxPuffs) * 3 / 5)
 			{
 				Dice DC(PlaceKey(At) * 0xD1B54A32D192ED03ull ^ static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)));
 				const Vec Flat_ = Vec(Fw.X, Fw.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
@@ -5279,12 +5279,30 @@ namespace TheaterFx
 		LookLamp(Now, At, Fw, L);
 	}
 
-	bool Battle::CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& C) const
+	bool Battle::CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& C, const char* Ground) const
 	{
 		const std::string P = "ground_cases." + Gun + ".";
 		if (Gun.empty() || !Has(P + "case_m") || !bEyeKnown || (LastEye - At).Length() > Num("ground_cases.within_m", 40.0))
 		{
 			return false;
+		}
+		// (Effects (R2), no false brass at sea, -TheaterSeaNoFalseCases: a ship's big turrets fire by the howitzer's row,
+		// whose 0.4 m field-gun case would lie on the water behind the muzzle, fixed in the world. A gun standing on a
+		// ground named in ground_cases.not_on throws none; without the key, as before)
+		if (Ground && *Ground && Book)
+		{
+			for (int I = 0; I < 8; ++I)
+			{
+				std::string NotOn;
+				if (!Book->FindWord(("ground_cases.not_on." + std::to_string(I)).c_str(), NotOn))
+				{
+					break;
+				}
+				if (NotOn == Ground)
+				{
+					return false;
+				}
+			}
 		}
 		C.M = std::max(0.005, Num(P + "case_m", 0.08));
 		C.D = std::max(0.003, Num(P + "case_d_m", 0.012));
