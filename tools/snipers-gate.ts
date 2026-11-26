@@ -69,6 +69,20 @@ function fight(job: Job, arm: string): Record<string, unknown> {
   const b = new LandBattle(on ? withSnipers(t0) : t0);
   if (job.plain) { b.ai.att = false; b.ai.def = true; plainAttack(b); } else b.ai.att = b.ai.def = true;
   b.hideOn();
+  // (SNP_TRACE=1: every order given in the battle, to trace what a mend changes (the design director, 26 November
+  // 00:41Z). Each [t, side, do, units, target, x, y, pa]; pa 1: one block sent at an enemy that only sniper pairs of its
+  // side were firing on.)
+  const cmds: unknown[] = [];
+  if (process.env.SNP_TRACE) {
+    const give = b.command.bind(b) as (c: Record<string, unknown>, side: string, ...rest: unknown[]) => boolean;
+    (b as unknown as { command: unknown }).command = (c: Record<string, unknown>, side: string, ...rest: unknown[]): boolean => {
+      const ids = c.units as number[] | undefined;
+      const one = c.do === 'attack' && ids?.length === 1 ? b.units.find((u) => u.id === ids[0]) : undefined;
+      const at = one ? b.units.filter((m) => m.side === one.side && m.id !== one.id && m.engaged === c.target) : [];
+      cmds.push([Math.round(b.t * 10) / 10, side, c.do, ids ?? null, c.target ?? null, c.x ?? null, c.y ?? null, at.length > 0 && at.every((m) => m.team === 'snp') ? 1 : 0]);
+      return give(c, side, ...rest);
+    };
+  }
   const rng = (b as unknown as { rng: { next(): number } }).rng;
   if (arm === 'p0') rng.next();
   const snp = b.units.filter((u) => u.team === 'snp');
@@ -122,6 +136,7 @@ function fight(job: Job, arm: string): Record<string, unknown> {
       pin: pins.length ? { n: pins.length, mean: Math.round((pins.reduce((a, p) => a + p, 0) / pins.length) * 10) / 10, most: Math.max(...pins) } : null,
       closed: Math.round(closed / 10),
     } : {}),
+    ...(process.env.SNP_TRACE ? { cmds } : {}),
   };
 }
 
