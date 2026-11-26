@@ -9,12 +9,12 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { stockOf } from '../src/campaign/arms';
+import { ARMS, stockOf } from '../src/campaign/arms';
 import { offers } from '../src/campaign/arsenal';
 import { foldCardWords, foldCorps, foldView, foldWords } from '../src/campaign/fold';
 import { addCorps, createGame, setWar } from '../src/campaign/game';
 import { MANPOWER, classNow, comesWords, corpsMenWords, levyMen, manpower, menPer, menScale, menWords, menWorth, noMenWords, reserveLevelWords, reserveWords } from '../src/campaign/manpower';
-import { RIFLES, arsenalTop, inWords, levelOf, noRifles, riflesMonth, riflesSeen, riflesTakes, riflesView, riflesWait } from '../src/campaign/rifles';
+import { RIFLES, arsenalTop, carries, inWords, levelOf, riflesRow, noRifles, riflesMonth, riflesSeen, riflesTakes, riflesView, riflesWait } from '../src/campaign/rifles';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { MEN_PER_DIV, type Game } from '../src/campaign/types';
@@ -354,6 +354,37 @@ describe('the second read: the fold', () => {
     expect(foldCorps(h, p.a, p.b)).toBe(true);
     expect(Math.round(((stockOf(h, 'CHN', 'rifles') - sh) * PER) / 100) * 100).toBe(42600);
     expect(last(h)).toBe('Folded corps is folded into Kept corps at Chungking: about 134,000 men in one corps, and 42,600 spare rifles to the store. Its cadre has gone home and can be raised again from the arsenal.');
+  });
+
+  it("11. no men said sent back, the leftover men's rifles alone: their rifles are the spare ones said (the sceptic's S1 of the sixth read)", () => {
+    // Both corps armed at their strength (flags), so nothing passes the kept corps' full and no worn part goes: the
+    // fold gives the store only the rifles of the 67 men over, 0.001 of a division's worth, 21 rifles, which round to
+    // no thousand of men and to no hundred of rifles. The news says them exactly, and the store gains them.
+    const g = grand();
+    const { a, b } = two(g, 'CHN', 0.6, 0.4005);
+    g.flags[`rfa:${a.id}`] = 0.6; g.flags[`rfa:${b.id}`] = 0.4005;
+    const v = foldView(g, a, b);
+    expect(v.over).toBeGreaterThan(0);
+    expect(Math.round((v.over * 67000) / 1000)).toBe(0);
+    const s = stockOf(g, 'CHN', 'rifles');
+    expect(foldCorps(g, a, b)).toBe(true);
+    expect(Math.round((stockOf(g, 'CHN', 'rifles') - s) * PER)).toBe(21);
+    expect(last(g)).toBe('Folded corps is folded into Kept corps at Chungking: about 134,000 men in one corps, and 21 spare rifles to the store. Its cadre has gone home and can be raised again from the arsenal.');
+  });
+
+  it("11. China's rifles row with no rifles shelf: a fold whose leftover men round to no thousand reads as built, with no rifles (the sceptic's S2 of the sixth read)", () => {
+    // (The rifles' rule carries only where the row and the shelf both stand, rifles.ts carries: the shelf is taken
+    // away by hand for this one fold, so China has its row and its men's scale but keeps no store.)
+    const g = grand();
+    const { a, b } = two(g, 'CHN', 0.6, 0.4005);
+    const shelf = ARMS.nations.CHN.rifles;
+    delete ARMS.nations.CHN.rifles;
+    undo.push(() => { ARMS.nations.CHN.rifles = shelf; });
+    expect(riflesRow(g, 'CHN')).not.toBeNull();
+    expect(carries(g, 'CHN')).toBe(false);
+    expect(foldView(g, a, b).over).toBeGreaterThan(0);
+    expect(foldCorps(g, a, b)).toBe(true);
+    expect(last(g)).toBe('Folded corps is folded into Kept corps at Chungking: about 134,000 men in one corps. Its cadre has gone home and can be raised again from the arsenal.');
   });
 
   it('11. a nation without a store or a scale of its own: as built, byte for byte', () => {
