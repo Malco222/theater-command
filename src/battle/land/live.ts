@@ -606,6 +606,9 @@ export class LiveBattle {
         caughtLeft[u.side]--;
         model = standInModel('arm', took.from, opts.designYears?.[took.from] ?? yearOf(ticket), 0);
       }
+      // (the drill reads a tank's machine guns and her rounds from the model the player sees: looks only, and kept only
+      // with its tankmg switch on)
+      if (u.kind === 'arm') this.drill.drawnAs(u.id, model);
       return {
         id: u.id, side: u.side, nat: u.nat, kind: u.kind, name: u.name, short: u.short, parent: u.parent, corps: u.corps,
         figures0: u.figures0, men0: u.men0, tray: u.tray, w: u.w, d: u.d, ...(u.cal ? { cal: u.cal } : {}), ...(u.team ? { team: u.team } : {}),
