@@ -68,7 +68,8 @@ import { TECH, idleTeams, techView, type TechNode } from '../tech';
 import { GOOD_NAME, RES, fieldCard, fieldOverseas, fieldYield, keepsStores, laneKey, laneNotCounted, resRules, seaLanes, standing as depotState, stores, type Book, type Lane, type ResLine } from '../resources';
 import { LEAGUE, leagueFounded, leagueMembers, ownPath, small as isSmall, type PathId, type PathOption } from '../league';
 import { ARSENAL, canLay, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel, worksOpening, yardLevel, type Hull, type Offer } from '../arsenal';
-import { riflesWait } from '../rifles';
+import { arsenalTop, riflesWait } from '../rifles';
+import { foldWords } from '../fold';
 import { PLANS, buildsOwn, planRules } from '../plans';
 import { GUARD_TOP, guardSays, guardTabs, type GuardTab } from '../guard';
 import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf, type Trait } from '../traits';
@@ -3727,10 +3728,12 @@ function foldCard(reg: number): string {
   const vs = foldChoicesAt(g, reg);
   const pct = (x: number): string => `${Math.round(x * 100)}%`;
   const row = (v: (typeof vs)[number]): string => {
+    const w = foldWords(g, g.human!, v);
     const bits = [
-      `<b>${num(v.men)} men</b> in one corps at ${pct(v.str)} of its strength, ${esc(grade(v.xp).toLowerCase())}.`,
+      `<b>${esc(upFirst(w.men))}</b> in one corps at ${pct(v.str)} of its strength, ${esc(grade(v.xp).toLowerCase())}.`,
       v.general ? `${esc(v.general)} commands${v.stepsDown ? `; ${esc(v.stepsDown)} goes to the list of generals waiting for a corps` : ''}.` : 'No general commands it.',
-      v.back > 0 ? `${num(v.back)} men over go back to the reserve.` : '',
+      // (The men in words from fold.ts foldWords, as the news and the 3D card say them: the UI director's point 4 of 26 November 2026.)
+      w.over ? esc(w.over) : '',
       v.works !== undefined ? `It takes over the fieldworks ${esc(v.goneName)} stands in.` : '',
       `${esc(v.goneName)} goes home as a cadre: it can be raised again from the arsenal for ${money(v.cadreCost)} from the treasury and ${num(v.cadreMen)} men from the reserve, in ${monthsWord(v.cadreMonths)}.`,
     ].filter(Boolean).join(' ');
@@ -4152,9 +4155,12 @@ function buildPane(): string {
     : `Your factories pay into the treasury every month. Losses in the field are made good first, at ${perDiv} a division, as fast as the depots can train men: about ${depots}% of the army a month. What is left is yours to spend.`}</p>
     <div class="facts"><div class="fact"><span>In the treasury</span><b${L.treasury < 0 ? ' style="color:var(--red)"' : ''}>${inHand(L.treasury)}</b></div><div class="fact"><span>${L.budget ? 'After upkeep, a month' : 'Each month'}</span><b${L.net < 0 ? ' style="color:var(--red)"' : ''}>${cash(L.net, true)}</b></div><div class="fact"><span>On order</span><b>${n.queue.length}</b></div></div>
     <div class="acts"><button class="btn small" data-act="ledger">Open the ledger</button>${L.budget && hasTraits(me) ? '<button class="btn small" data-act="traits">National abilities</button>' : ''}</div>`;
-  // (A store of rifles that holds back the month's replacements says so: rifles.ts riflesWait, the UI director's line 12.)
-  const wait = riflesWait(g, me);
-  if (wait) out += `<div class="note">${esc(wait)}</div>`;
+  // (A nation whose store binds: lines 1 and 2 at the top of the arsenal, and line 12 under them while it is true,
+  // rifles.ts arsenalTop, the UI director's point 7 of 26 November 2026. Any other nation: as before, where riflesWait
+  // says nothing.)
+  const top = arsenalTop(g, me);
+  if (top) out += `<div class="note">${esc(top[0])}<br>${esc(top[1])}</div>${top.slice(2).map((t) => `<div class="note">${esc(t)}</div>`).join('')}`;
+  else { const wait = riflesWait(g, me); if (wait) out += `<div class="note">${esc(wait)}</div>`; }
   if (L.treasury < 0) out += `<div class="note"><b>The treasury is in debt.</b> Nothing new can be ordered and no replacements go out until the books balance. Unpaid troops rest badly and men drift away.</div>`;
   const footing = n.atWar.length ? null : peaceFooting(g, me), fv = footingOf(g, me);
   // (With the nation's footing switched on, its strip stands here in every month: ruling 172. A tip shows in its first month.)

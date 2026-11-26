@@ -262,30 +262,71 @@ export function menScale(nat: string): number | null {
 /** Men to one of the nation's divisions' worth, for what it is shown: its own scale, else MEN_PER_DIV. */
 export const menPer = (nat: string): number => menScale(nat) ?? MEN_PER_DIV;
 
-/** Men to the hundred, for a nation with a scale of its own (the UI director: men and rifles to the hundred everywhere). */
-const men100 = (men: number): string => (Math.round(Math.max(0, men) / 100) * 100).toLocaleString('en-US');
+/**
+ * Men to the thousand, for a nation with a scale of its own: an estimate, said with "about" (the UI director's read of
+ * 26 November 2026, 01:59Z, point 1: "a nation's men at its own scale, which are an estimate and say 'About', to the
+ * thousand"). Rifles stay to the hundred.
+ */
+export const men1000 = (men: number): string => (Math.round(Math.max(0, men) / 1000) * 1000).toLocaleString('en-US');
+/** "division's worth" for one, "divisions' worth" for any other count. */
+const worth = (d: number): string => (d === 1 ? "division's worth" : "divisions' worth");
 
 /**
  * The reserve in a sentence, for a nation with a scale of its own (the UI director's line 14 of 25 November 2026:
- * "About 500,000 men stand in reserve: about seven divisions' worth."; the men shown rounded, not the scale), or null
- * for any other, whose line stays as it was.
+ * "About 500,000 men stand in reserve: about seven divisions' worth."; the men shown rounded, not the scale, and to the
+ * thousand by her read of 26 November, point 1), or null for any other, whose line stays as it was.
  */
 export function reserveWords(nat: string, divs: number): string | null {
   const per = menScale(nat);
   if (per === null) return null;
   const d = Math.round(Math.max(0, divs));
-  return `About ${men100(divs * per)} men stand in reserve: about ${inWords(d)} ${d === 1 ? "division's" : "divisions'"} worth.`;
+  return `About ${men1000(divs * per)} men stand in reserve: about ${inWords(d)} ${worth(d)}.`;
 }
 
 /**
  * The month's class in a sentence, for a nation with a scale of its own (the UI director's line 15 of 25 November
  * 2026: "About 105,000 men come of age each month in the land you still hold."; where a page shows the class before
- * the share of the homeland held, 'whole', "with all your homeland held"), or null for any other.
+ * the share of the homeland held, 'whole', "with all your homeland held"; the men to the thousand by her read of 26
+ * November, point 1), or null for any other.
  */
 export function comesWords(nat: string, cls: number, whole = false): string | null {
   const per = menScale(nat);
   if (per === null) return null;
-  return `About ${men100(cls * per)} men come of age each month ${whole ? 'with all your homeland held' : 'in the land you still hold'}.`;
+  return `About ${men1000(cls * per)} men come of age each month ${whole ? 'with all your homeland held' : 'in the land you still hold'}.`;
+}
+
+/**
+ * How the reserve stands, in a sentence, for a nation with a scale of its own at a level below ample (1 thinning, 2
+ * short, 3 spent), or null for any other nation or level. The UI director's read of 26 November 2026, point 5: "about"
+ * on each figure at the nation's own scale, to the thousand, months in words ("The reserve is thinning: about 201,000
+ * men are left of about 496,000."); the spent line says no class figure, since line 15 says it in the same panel.
+ */
+export function reserveLevelWords(nat: string, level: number, divs: number, start: number, cls: number): string | null {
+  const per = menScale(nat);
+  if (per === null || level < 1 || level > 3) return null;
+  if (level === 1) return `The reserve is thinning: about ${men1000(divs * per)} men are left of about ${men1000(start * per)}.`;
+  if (level === 2) return `The reserve is running short: about ${men1000(divs * per)} men are left. Every loss made good and every new corps is taken from it.`;
+  const months = cls > 0 ? Math.ceil(3 / cls) : 0;
+  return `The reserve is spent. Only the men who come of age each month reach the armies, and no new corps can be raised${months ? `: a new infantry corps is about ${months === 1 ? 'a month' : `${inWords(months)} months`} of them` : ''}.`;
+}
+
+/**
+ * The arsenal's refusal for lack of men, for a nation with a scale of its own, or null for any other (whose refusal
+ * stays "The reserve has not the men: this takes 45,000 and 15,000 are left. ..."). The UI director's read of 26
+ * November 2026, point 6: "The reserve has not the men: this takes three divisions' worth and about one is left. About
+ * 105,000 men come of age each month in the land you still hold."; under half a division's worth left, "less than half
+ * of one is left"; "about one" from half up, words to ten. What is left never reads as what it takes: where rounding
+ * would show the need or more, it shows one less (the same care as the store's, rifles.ts noRifles).
+ */
+export function noMenWords(nat: string, divs: number, left: number, cls: number): string | null {
+  const per = menScale(nat);
+  if (per === null) return null;
+  const l = Math.max(0, left);
+  const shown = l < 0.5 ? 0 : Math.min(Math.round(l), Math.ceil(divs) - 1);
+  // (An order of one division's worth with half of one or more left: "about one" would read as the need, and "less than
+  // half" would be untrue, so it says "less than one is left". No order of one division's worth is offered today.)
+  const rest = shown >= 1 ? `about ${inWords(shown)} ${shown === 1 ? 'is' : 'are'} left` : l < 0.5 ? 'less than half of one is left' : 'less than one is left';
+  return `The reserve has not the men: this takes ${inWords(divs)} ${worth(divs)} and ${rest}. ${comesWords(nat, cls)}`;
 }
 
 /**
@@ -326,10 +367,11 @@ export function manpower(g: Game, nat: string | null = g.human, callUp = 1): Men
   const gap = Math.max(0, classGapUntil(g, nat) - g.turn), drawnDivs = g.flags[kx(nat)] ?? 0;
   // (Men at the nation's own scale where the rows lay one, China's; every other nation's at MEN_PER_DIV, as before.)
   const per = menPer(nat);
-  const line = level === 3 ? `The reserve is spent. Only the ${menWords(cls * per)} men who come of age each month reach the armies, and no new corps can be raised${months ? `: a new infantry corps is about ${months === 1 ? 'a month' : `${months} months`} of them` : ''}.`
+  // (A nation with a scale of its own says each level at that scale, with "about": reserveLevelWords.)
+  const line = reserveLevelWords(nat, level, divs, start, cls) ?? (level === 3 ? `The reserve is spent. Only the ${menWords(cls * per)} men who come of age each month reach the armies, and no new corps can be raised${months ? `: a new infantry corps is about ${months === 1 ? 'a month' : `${months} months`} of them` : ''}.`
     : level === 2 ? `The reserve is running short: ${menWords(divs * per)} men are left. Every loss made good and every new corps is taken from it.`
     : level === 1 ? `The reserve is thinning: ${menWords(divs * per)} men are left of ${menWords(start * per)}.`
-    : reserveWords(nat, divs) ?? `${menWords(divs * per)} men stand in reserve.`;
+    : reserveWords(nat, divs) ?? `${menWords(divs * per)} men stand in reserve.`);
   return { nat, divs, men: Math.round(divs * per), start, share: start > 0 ? divs / start : 0, classMen: Math.round(cls * per), home, drawn: Math.round(drawnDivs * per), came: Math.round(Math.max(0, divs - start + drawnDivs) * per), gap, word: WORDS[level], line, per, comes: comesWords(nat, cls) };
 }
 

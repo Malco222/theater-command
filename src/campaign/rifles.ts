@@ -591,11 +591,26 @@ export function riflesView(g: Game, nat: string): RiflesView | null {
   const filled = corps > 0 ? Math.max(0, Math.min(10, Math.round((10 * stock) / corps))) : 0;
   const bar = '■'.repeat(filled) + '□'.repeat(10 - filled);
   // Words to the UI director (the form's section 7): "Rifles in store ■■■□□□□□□□ 21,000 of the 64,000 an infantry
-  // corps takes · +9,500 a month: Chungking's arsenals 4,500 · the Burma Road 5,000".
-  const line = `Rifles in store ${bar} ${n100(stock)} of the ${n0(Math.round(corps / 1000) * 1000)} an infantry corps takes · +${n100(inflow.total)} a month${parts.length ? `: ${parts.map((p) => `${p.label} ${n100(p.rifles)}`).join(' · ')}` : ''}`;
+  // corps takes · +9,500 a month: Chungking's arsenals 4,500 · the Burma Road 5,000". The corps to the hundred, as
+  // lines 8 and 9 say it (her read of 26 November 2026, point 2: 63,900).
+  const line = `Rifles in store ${bar} ${n100(stock)} of the ${n100(corps)} an infantry corps takes · +${n100(inflow.total)} a month${parts.length ? `: ${parts.map((p) => `${p.label} ${n100(p.rifles)}`).join(' · ')}` : ''}`;
   // The UI director's line 2: the arsenal page ("replacements", the game's one word).
   const says = 'Your new corps and your replacements are armed from this store. It fills from your arsenals and from the roads you still hold.';
   return { nat, perDiv: per, refit: num(row.refit), binds: row.binds !== false, stock, inflow, picture: { bar, stock, corps, total: inflow.total, parts, line }, says };
+}
+
+/**
+ * The top of the arsenal for a nation whose store binds, or null for any other (whose arsenal is as before): line 1
+ * (the store's picture line), line 2 (the sentence under it) and, while it is true, line 12 (replacements held back by
+ * an empty store) under them. The UI director's read of 26 November 2026, point 7. Spoken by the page (ui/main.ts
+ * buildPane) and the 3D game's arsenal (campaign-bridge.ts arsenal, its 'notes').
+ */
+export function arsenalTop(g: Game, nat: string): string[] | null {
+  if (!binds(g, nat)) return null;
+  const v = riflesView(g, nat);
+  if (!v) return null;
+  const wait = riflesWait(g, nat);
+  return [v.picture.line, v.says, ...(wait ? [wait] : [])];
 }
 
 export interface RiflesSeen { nat: string; inflow: Inflow; line: string; card: string }

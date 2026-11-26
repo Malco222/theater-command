@@ -353,7 +353,7 @@ describe('the views', () => {
     expect(v.inflow.works.map((w) => [w.place, Math.round(w.rifles), w.held])).toEqual([['Chungking', 3000, true], ['Changteh', 1000, true], ['Kweiyang', 500, true]]);
     expect(v.inflow.roads.map((r) => [r.id, r.tons, Math.round(r.rifles), r.state])).toEqual([['burma-road', 1250, 2500, 'open'], ['sinkiang-road', 650, 1300, 'open'], ['haiphong-rail', 0, 0, 'open'], ['hongkong-canton', 0, 0, 'cut']]);
     expect(Math.round(v.inflow.total)).toBe(8300);
-    expect(v.picture.line).toBe("Rifles in store ■■■■□□□□□□ 24,900 of the 64,000 an infantry corps takes · +8,300 a month: Chungking's arsenals 3,000 · Changteh's arsenals 1,000 · Kweiyang's arsenals 500 · the Burma Road 2,500 · the Sinkiang road 1,300");
+    expect(v.picture.line).toBe("Rifles in store ■■■■□□□□□□ 24,900 of the 63,900 an infantry corps takes · +8,300 a month: Chungking's arsenals 3,000 · Changteh's arsenals 1,000 · Kweiyang's arsenals 500 · the Burma Road 2,500 · the Sinkiang road 1,300");
   });
 
   it('another seat sees the roads and the monthly inflow, and no stock figure anywhere', () => {
@@ -378,7 +378,7 @@ describe('the views', () => {
   it('the picture line leaves out a works whose place is lost', () => {
     const g = grand();
     hold(g, 'Chungking', 'JAP');
-    expect(riflesView(g, 'CHN')!.picture.line).toBe("Rifles in store □□□□□□□□□□ 0 of the 64,000 an infantry corps takes · +5,300 a month: Changteh's arsenals 1,000 · Kweiyang's arsenals 500 · the Burma Road 2,500 · the Sinkiang road 1,300");
+    expect(riflesView(g, 'CHN')!.picture.line).toBe("Rifles in store □□□□□□□□□□ 0 of the 63,900 an infantry corps takes · +5,300 a month: Changteh's arsenals 1,000 · Kweiyang's arsenals 500 · the Burma Road 2,500 · the Sinkiang road 1,300");
   });
 });
 

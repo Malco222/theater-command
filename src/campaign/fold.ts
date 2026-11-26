@@ -13,9 +13,9 @@ import { clamp } from '../core/math';
 import { MEN_PER_DIV, type Corps, type Game, type General } from './types';
 import { headline, removeCorps, worksOf } from './game';
 import { appoint, generalOf } from './commanders';
-import { MANPOWER, returnMen } from './manpower';
+import { MANPOWER, men1000, menScale, returnMen } from './manpower';
 import { cadreTerms } from './economy';
-import { riflesBack, riflesFold } from './rifles';
+import { binds, riflesBack, riflesFold } from './rifles';
 import { noteCorps } from './stories';
 import { atItsPost, postWords } from './pacific';
 
@@ -65,6 +65,8 @@ export interface FoldView {
   str: number; men: number; xp: number; org: number; ap: number;
   /** Men over, who go back to the reserve. */
   back: number;
+  /** The same two in divisions' worth: what fills the kept corps, and what goes back to the reserve (for foldWords). */
+  fill: number; over: number;
   /** The general who commands the kept corps afterwards, and the one who goes to the list of generals waiting. */
   general: string | null; stepsDown: string | null;
   /** The kept corps takes over the other's fieldworks, better than its own: their months. */
@@ -85,12 +87,41 @@ export function foldView(g: Game, keep: Corps, gone: Corps): FoldView {
     keep: keep.id, gone: gone.id, keepName: keep.name, goneName: gone.name, why: whyNotFold(g, keep, gone),
     str: fill / keep.divs, men: Math.round(fill * MEN_PER_DIV), xp: mix(keep.xp, gone.xp),
     org: clamp(mix(keep.org, gone.org) - MANPOWER.fold.org, 0, 1), ap: Math.min(keep.ap, gone.ap),
-    back: Math.round((mine + theirs - fill) * MEN_PER_DIV),
+    back: Math.round((mine + theirs - fill) * MEN_PER_DIV), fill, over: Math.max(0, mine + theirs - fill),
     general: lead?.name ?? null, stepsDown: out?.name ?? null,
     cadreCost: t.cost, cadreMonths: t.months, cadreMen: t.divs * MEN_PER_DIV,
   };
   if (worksOf(gone) > worksOf(keep)) v.works = worksOf(gone);
   return v;
+}
+
+/** The fold's men in words, for each of its speakers: the news (foldCorps), the page's card and the 3D game's card. */
+export interface FoldWords {
+  /** The men in one corps: "30,000 men", or at a nation's own scale "about 134,000 men". */
+  men: string;
+  /** The news' clause for the men sent back, or null where none go back: "6,000 sent back to the reserve", and for a
+   * nation with a store "about 27,000 sent back to the reserve, and their rifles to the store". */
+  back: string | null;
+  /** The cards' line for the men sent back, or null: "6,000 men over go back to the reserve.", and for a nation with a
+   * store "About 27,000 men over go back to the reserve, and their rifles to the store." */
+  over: string | null;
+}
+
+/**
+ * The fold's men in words (the UI director's read of 26 November 2026, point 4): a nation's men at its own scale with
+ * "about", to the thousand, as the reserve line beside them counts them; for a nation with a store, the rifles as a
+ * clause on the men sent back ("..., about 27,000 sent back to the reserve, and their rifles to the store."). Every
+ * other nation as built, byte for byte. Where no men go back (or, at a nation's own scale, fewer than rounds to a
+ * thousand), nothing is said of men or rifles going back, even where the moved men's rifles pass the kept corps' full
+ * and go to the store: the clause belongs to the men sent back.
+ */
+export function foldWords(g: Game, nat: string, v: FoldView): FoldWords {
+  const per = menScale(nat), rifles = binds(g, nat) ? ', and their rifles to the store' : '';
+  const men = per === null ? `${v.men.toLocaleString('en-US')} men` : `about ${men1000(v.fill * per)} men`;
+  const n = per === null ? (v.back > 0 ? v.back.toLocaleString('en-US') : null) : Math.round((v.over * per) / 1000) > 0 ? `about ${men1000(v.over * per)}` : null;
+  if (n === null) return { men, back: null, over: null };
+  const up = n[0].toUpperCase() + n.slice(1);
+  return { men, back: `${n} sent back to the reserve${rifles}`, over: `${up} men over go back to the reserve${rifles}.` };
 }
 
 /** Every way two of this nation's corps in a province could be folded together now: each allowed pair, both ways round. */
@@ -136,6 +167,8 @@ export function foldCorps(g: Game, keep: Corps, gone: Corps): boolean {
   if (gone.rowed) { gone.name = gone.rowed.name; gone.hold = gone.rowed.hold; if (gone.rowed.stay) gone.stay = true; else delete gone.stay; }
   delete gone.drew; delete gone.rowed;
   (n.cadres ??= []).push(gone);
-  if (keep.nat === g.human) headline(g, 'info', `${lentAs ?? gone.name} is folded into ${keep.name} at ${g.regions[reg].name}: ${v.men.toLocaleString('en-US')} men in one corps${v.back > 0 ? `, ${v.back.toLocaleString('en-US')} sent back to the reserve` : ''}. Its cadre has gone home and can be raised again from the arsenal.`, keep.nat, reg);
+  // (The men in words from foldWords, which the page's card and the 3D game's card speak too.)
+  const w = foldWords(g, keep.nat, v);
+  if (keep.nat === g.human) headline(g, 'info', `${lentAs ?? gone.name} is folded into ${keep.name} at ${g.regions[reg].name}: ${w.men} in one corps${w.back ? `, ${w.back}` : ''}. Its cadre has gone home and can be raised again from the arsenal.`, keep.nat, reg);
   return true;
 }

@@ -12,7 +12,7 @@ import { worksName } from './rivers';
 import { AIR, AIRWAR, airFleetsOf, airPool, airRange, airWar, airfieldsHold, carrierRules, cover, foundAirFleet, hasAirfield, joinPilots, km, poolIn, whyNotBase } from './air';
 import { fieldRules, fieldTier, setConcrete } from './fieldstate';
 import { syncWings } from './carriers';
-import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
+import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, noMenWords, raisable } from './manpower';
 import { carved, noRifles as riflesShort, riflesFor as riflesOf, riflesTakes } from './rifles';
 import { govMul } from './government';
 import { settledFor, settledTownsOn, whyNotWorksHere } from './buildings';
@@ -614,7 +614,8 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
   const out: Omit<Offer, 'poor'>[] = [];
   const poor = (cost: number): string | null => (n.pp < cost ? POOR : null);
   // Every new corps is filled from the reserve of men (the grand campaign).
-  const noMen = (divs: number): string | null => (raisable(g, nat, divs) < 1 ? `The reserve has not the men: this takes ${menWords(divs * MEN_PER_DIV)} and ${menWords(menLeft(g, nat) * MEN_PER_DIV)} are left. ${menWords(classNow(g, nat, govMul(g, nat, 'men')) * MEN_PER_DIV)} come of age each month.` : null);
+  // (A nation with a scale of its own says it in divisions' worth, the class at its own scale: manpower.ts noMenWords.)
+  const noMen = (divs: number): string | null => (raisable(g, nat, divs) < 1 ? noMenWords(nat, divs, menLeft(g, nat), classNow(g, nat, govMul(g, nat, 'men'))) ?? `The reserve has not the men: this takes ${menWords(divs * MEN_PER_DIV)} and ${menWords(menLeft(g, nat) * MEN_PER_DIV)} are left. ${menWords(classNow(g, nat, govMul(g, nat, 'men')) * MEN_PER_DIV)} come of age each month.` : null);
   const menFor = (divs: number): { men?: number } => (menRules(g) ? { men: divs * MEN_PER_DIV } : {});
   // And armed from the store of rifles, where the nation keeps one (rifles.ts): a store too short refuses the order.
   const noRifles = (divs: number): string | null => riflesShort(g, nat, divs);

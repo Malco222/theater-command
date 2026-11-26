@@ -90,6 +90,8 @@ import { COMMAND, SKILLS, corpsOf, fit, generalOf, rankOf, vacant, waiting, whyN
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
 import { KIND, TERRAIN_DEF } from '../../../src/campaign/types';
 import { MANPOWER } from '../../../src/campaign/manpower';
+import { foldWords } from '../../../src/campaign/fold';
+import { arsenalTop } from '../../../src/campaign/rifles';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { airPiece } from '../../../src/campaign/airversion';
@@ -4768,6 +4770,10 @@ function arsenal(region = -1) {
     budget: budgeted(s),
     money: inHand(s.nations[me].pp),
     region: s.regions[region]?.name ?? '',
+    // (Release 2, China's rifles: for a nation whose store binds, the store's line, the sentence under it and, while it
+    // is true, the line on replacements held back, at the top of the arsenal: rifles.ts arsenalTop, the UI director's
+    // point 7 of 26 November 2026. Every other nation's arsenal has no such field, as before.)
+    ...((top) => (top ? { notes: top } : {}))(arsenalTop(s, me)),
     offers: arsenalOffers(s, region).map((o) => ({
       key: o.key, group: o.group, label: o.label, blurb: o.blurb, size: o.size, months: o.months, kind: (o as { kind?: string }).kind ?? '',
       cost: shown(o.cost), upkeep: shown(o.upkeep), at: o.at, where: s.regions[o.at]?.name ?? '',
@@ -6823,9 +6829,10 @@ function foldPage(s: Game, reg: number): Page | null {
       rows: p.map((v): PageRow => ({
         nat: s.human!, title: `Keep ${v.keepName}`,
         lines: [
-          `${num(v.men)} men in one corps at ${pct(v.str)} of its strength, ${grade(v.xp).toLowerCase()}.`,
+          `${upFirst(foldWords(s, s.human!, v).men)} in one corps at ${pct(v.str)} of its strength, ${grade(v.xp).toLowerCase()}.`,
           v.general ? `${v.general} commands${v.stepsDown ? `; ${v.stepsDown} goes to the list of generals waiting for a corps` : ''}.` : 'No general commands it.',
-          v.back > 0 ? `${num(v.back)} men over go back to the reserve.` : '',
+          // (The men in words from fold.ts foldWords, as the news and the page say them: the UI director's point 4 of 26 November 2026.)
+          foldWords(s, s.human!, v).over ?? '',
           v.works !== undefined ? `It takes over the fieldworks ${v.goneName} stands in.` : '',
           `${v.goneName} goes home as a cadre: it can be raised again from the arsenal for ${shown(v.cadreCost).toLocaleString('en')} from the treasury and ${num(v.cadreMen)} men from the reserve, in ${v.cadreMonths} month${v.cadreMonths === 1 ? '' : 's'}.`,
           v.why ?? '',

@@ -11,9 +11,10 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { afterEach, describe, expect, it } from 'vitest';
 import { stockOf } from '../src/campaign/arms';
 import { offers } from '../src/campaign/arsenal';
-import { createGame, setWar } from '../src/campaign/game';
-import { MANPOWER, comesWords, corpsMenWords, manpower, menPer, menScale, menWords, reserveWords } from '../src/campaign/manpower';
-import { RIFLES, inWords, levelOf, noRifles, riflesMonth, riflesSeen, riflesTakes, riflesView, riflesWait } from '../src/campaign/rifles';
+import { foldCorps, foldView, foldWords } from '../src/campaign/fold';
+import { addCorps, createGame, setWar } from '../src/campaign/game';
+import { MANPOWER, classNow, comesWords, corpsMenWords, levyMen, manpower, menPer, menScale, menWords, noMenWords, reserveLevelWords, reserveWords } from '../src/campaign/manpower';
+import { RIFLES, arsenalTop, inWords, levelOf, noRifles, riflesMonth, riflesSeen, riflesTakes, riflesView, riflesWait } from '../src/campaign/rifles';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { MEN_PER_DIV, type Game } from '../src/campaign/types';
@@ -138,26 +139,26 @@ describe('the order', () => {
 });
 
 describe("China's men at its own scale", () => {
-  it('14 and 15. the reserve and the class, at 67,000 men a division\'s worth, the men to the hundred', () => {
+  it('14 and 15. the reserve and the class, at 67,000 men a division\'s worth, the men to the thousand (her read of 26 November, point 1)', () => {
     const g = grand();
     expect([menScale('CHN'), menPer('CHN'), menScale('JAP'), menPer('JAP')]).toEqual([67000, 67000, null, MEN_PER_DIV]);
     const v = manpower(g, 'CHN')!;
     expect(v.divs).toBeCloseTo(7.4, 12);
-    expect(v.line).toBe("About 495,800 men stand in reserve: about seven divisions' worth.");
-    expect(v.comes).toBe('About 104,800 men come of age each month in the land you still hold.');
-    expect([v.per, v.men]).toEqual([67000, 495800]);
-    // Where a page shows the class before the share of the homeland held.
-    expect(comesWords('CHN', MANPOWER.class.CHN, true)).toBe('About 167,500 men come of age each month with all your homeland held.');
+    expect(v.line).toBe("About 496,000 men stand in reserve: about seven divisions' worth.");
+    expect(v.comes).toBe('About 105,000 men come of age each month in the land you still hold.');
+    expect([v.per, v.men, v.classMen]).toEqual([67000, 495800, 104816]);
+    // Where a page shows the class before the share of the homeland held (167,500 men).
+    expect(comesWords('CHN', MANPOWER.class.CHN, true)).toBe('About 168,000 men come of age each month with all your homeland held.');
     // The number rule at its edges.
     expect(reserveWords('CHN', 1)).toBe("About 67,000 men stand in reserve: about one division's worth.");
-    expect(reserveWords('CHN', 10.4)).toBe("About 696,800 men stand in reserve: about ten divisions' worth.");
+    expect(reserveWords('CHN', 10.4)).toBe("About 697,000 men stand in reserve: about ten divisions' worth.");
     expect(reserveWords('CHN', 11)).toBe("About 737,000 men stand in reserve: about 11 divisions' worth.");
   });
 
   it("16. the ledger's men block says a new corps in divisions' worth for a nation with its own scale", () => {
     const g = grand();
     const v = manpower(g, 'CHN')!;
-    // (About 104,800 men a month on the first day: 201,000 men is two months of the class.)
+    // (104,816 men a month on the first day: 201,000 men is two months of the class.)
     expect(Math.ceil((3 * v.per) / v.classMen)).toBe(2);
     expect(corpsMenWords(v, 3)).toBe("A new infantry corps takes three divisions' worth of men, about two months of the class.");
     // Every other nation as before, byte for byte (the sceptic's S5).
@@ -186,7 +187,7 @@ describe('the 3D game says what the page says', () => {
     expect(a.offers.find((o) => o.key === 'corps:inf')!.note).not.toContain('from the reserve');
     const v = TC().view() as { men: { tip: string } | null };
     // (Line 14 says the divisions' worth: the tip does not say it again in figures, the sceptic's S3.)
-    expect(v.men!.tip.split('\n').slice(0, 2)).toEqual(["About 495,800 men stand in reserve: about seven divisions' worth.", 'About 104,800 men come of age each month in the land you still hold.']);
+    expect(v.men!.tip.split('\n').slice(0, 2)).toEqual(["About 496,000 men stand in reserve: about seven divisions' worth.", 'About 105,000 men come of age each month in the land you still hold.']);
     expect(v.men!.tip.split('\n')[2]).toMatch(/^Drawn since the campaign opened: /);
     expect(v.men!.tip).not.toContain('That is enough for');
     // A reserve of 7.6 divisions' worth: line 14 says eight, and nothing beside it says seven.
@@ -194,7 +195,7 @@ describe('the 3D game says what the page says', () => {
     gg.flags['mp:CHN'] = 7.6;
     TC().load(saveGame(gg));
     const t = (TC().view() as { men: { tip: string } }).men.tip;
-    expect(t.split('\n')[0]).toBe("About 509,200 men stand in reserve: about eight divisions' worth.");
+    expect(t.split('\n')[0]).toBe("About 509,000 men stand in reserve: about eight divisions' worth.");
     expect(t).not.toContain('That is enough for');
   });
 
@@ -202,5 +203,167 @@ describe('the 3D game says what the page says', () => {
     TC().start({ human: 'JAP', seed: 7, view: 'grand', world: true });
     const tip = (TC().view() as { men: { tip: string } }).men.tip.split('\n');
     expect(tip[1]).toMatch(/^That is enough for about \d+ divisions?\.$/);
+  });
+});
+
+// ---- The UI director's second read (26 November 2026, 01:59Z, on pacific-japan/ui-ask-rifles-words-2-1126.md) ----------
+// Point 1: a nation's men at its own scale to the thousand, with "about" (above). Point 2: line 1 says 63,900. Point 4:
+// the fold's men at the nation's own scale, the rifles as a clause on the men sent back. Point 5: the reserve's levels.
+// Point 6: the refusal for lack of men. Point 7: lines 1, 2 and 12 at the top of the arsenal, page and 3D card.
+
+describe('the second read: the store at the top of the arsenal', () => {
+  const LINE1 = "Rifles in store □□□□□□□□□□ 0 of the 63,900 an infantry corps takes · +8,300 a month: Chungking's arsenals 3,000 · Changteh's arsenals 1,000 · Kweiyang's arsenals 500 · the Burma Road 2,500 · the Sinkiang road 1,300";
+  const LINE2 = 'Your new corps and your replacements are armed from this store. It fills from your arsenals and from the roads you still hold.';
+
+  it('2. line 1 says what an infantry corps takes to the hundred, as lines 8 and 9 do', () => {
+    expect(riflesView(grand(), 'CHN')!.picture.line).toBe(LINE1);
+  });
+
+  it('7. lines 1 and 2 at the top of the arsenal, line 12 under them while it is true; no other nation has them', () => {
+    const g = grand();
+    expect(arsenalTop(g, 'CHN')).toEqual([LINE1, LINE2]);
+    const c = g.corps.find((x) => x.nat === 'CHN' && !x.dead && x.kind === 'inf')!;
+    c.str = levelOf(g, c) - 0.1;
+    store(g, 0);
+    expect(arsenalTop(g, 'CHN')).toEqual([LINE1, LINE2, "No rifles for this month's replacements: your corps wait for the store to fill."]);
+    expect(arsenalTop(g, 'JAP')).toBeNull();
+    expect(arsenalTop(grand('JAP', 17), 'JAP')).toBeNull();
+  });
+});
+
+describe('the second read: the reserve of men at a nation\'s own scale', () => {
+  it('5. each level, "about" on each figure, to the thousand, months in words, beside line 15', () => {
+    const g = grand();
+    const at = (divs: number): { word: string; line: string; comes: string | null } => { g.flags['mp:CHN'] = divs; const v = manpower(g, 'CHN')!; return { word: v.word, line: v.line, comes: v.comes }; };
+    const comes = 'About 105,000 men come of age each month in the land you still hold.';
+    // Thinning (under half of the 7.4 it opened with): her example.
+    expect(at(3)).toEqual({ word: 'Thinning', line: 'The reserve is thinning: about 201,000 men are left of about 496,000.', comes });
+    // Spent (under the class of 2.5 a month at full homeland): the class figure is left to line 15 beside it.
+    expect(at(2)).toEqual({ word: 'Spent', line: 'The reserve is spent. Only the men who come of age each month reach the armies, and no new corps can be raised: a new infantry corps is about two months of them.', comes });
+    // Running short: a form she gave no words for, laid by the same rules. China's class (2.5) stands above a quarter
+    // of what it opened with (1.85), so on this chart China passes from thinning to spent; the sentence is pinned here.
+    expect(reserveLevelWords('CHN', 2, 1.8, 7.4, 1.5644)).toBe('The reserve is running short: about 121,000 men are left. Every loss made good and every new corps is taken from it.');
+    // Spent with a class of a quarter of the full (a homeland mostly lost): twelve months, in figures.
+    expect(reserveLevelWords('CHN', 3, 0.1, 7.4, 0.25)).toBe('The reserve is spent. Only the men who come of age each month reach the armies, and no new corps can be raised: a new infantry corps is about 12 months of them.');
+    expect(reserveLevelWords('CHN', 3, 0.1, 7.4, 0.5)).toBe('The reserve is spent. Only the men who come of age each month reach the armies, and no new corps can be raised: a new infantry corps is about six months of them.');
+    // Ample: line 14, as before.
+    expect(reserveLevelWords('CHN', 0, 7.4, 7.4, 1.5644)).toBeNull();
+    // Every nation without a scale of its own keeps its lines.
+    expect([1, 2, 3].map((lv) => reserveLevelWords('JAP', lv, 1, 10, 1))).toEqual([null, null, null]);
+    const j = grand('JAP', 17);
+    j.flags['mp:JAP'] = 0;
+    const jv = manpower(j, 'JAP')!;
+    const cls = classNow(j, 'JAP'), months = Math.ceil(3 / cls);
+    expect(jv.line).toBe(`The reserve is spent. Only the ${menWords(cls * MEN_PER_DIV)} men who come of age each month reach the armies, and no new corps can be raised${months ? `: a new infantry corps is about ${months === 1 ? 'a month' : `${months} months`} of them` : ''}.`);
+  });
+
+  it("6. the refusal for lack of men: divisions' worth, about one from half up, less than half, never the need", () => {
+    const g = grand();
+    const cap = g.nations.CHN.capital;
+    const why = (left: number, key: string): string | null => { g.flags['mp:CHN'] = left; return offers(g, 'CHN', cap).find((o) => o.key === key)!.why; };
+    const CLASS = ' About 105,000 men come of age each month in the land you still hold.';
+    expect(why(1.4, 'corps:inf')).toBe(`The reserve has not the men: this takes three divisions' worth and about one is left.${CLASS}`);
+    expect(why(0.5, 'corps:inf')).toBe(`The reserve has not the men: this takes three divisions' worth and about one is left.${CLASS}`);
+    expect(why(0.49, 'corps:inf')).toBe(`The reserve has not the men: this takes three divisions' worth and less than half of one is left.${CLASS}`);
+    expect(why(0, 'corps:inf')).toBe(`The reserve has not the men: this takes three divisions' worth and less than half of one is left.${CLASS}`);
+    expect(why(1.5, 'corps:inf')).toBe(`The reserve has not the men: this takes three divisions' worth and about two are left.${CLASS}`);
+    // What is left never reads as what it takes: 2.5 to 2.99 of three read "about two", 1.5 to 1.99 of two "about one".
+    expect(why(2.6, 'corps:inf')).toBe(`The reserve has not the men: this takes three divisions' worth and about two are left.${CLASS}`);
+    expect(why(2.99, 'corps:inf')).toBe(`The reserve has not the men: this takes three divisions' worth and about two are left.${CLASS}`);
+    expect(why(1.5, 'corps:mtn')).toBe(`The reserve has not the men: this takes two divisions' worth and about one is left.${CLASS}`);
+    // An order of one division's worth (none is offered today) with half of one or more left.
+    expect(noMenWords('CHN', 1, 0.7, 1.5644171779141105)).toBe(`The reserve has not the men: this takes one division's worth and less than one is left.${CLASS}`);
+    expect(noMenWords('CHN', 1, 0.2, 1.5644171779141105)).toBe(`The reserve has not the men: this takes one division's worth and less than half of one is left.${CLASS}`);
+    // Every nation without a scale of its own: as before.
+    expect(noMenWords('JAP', 3, 1, 1)).toBeNull();
+    const j = grand('JAP', 17);
+    j.flags['mp:JAP'] = 1;
+    expect(offers(j, 'JAP', j.nations.JAP.capital).find((o) => o.key === 'corps:inf')!.why).toMatch(/^The reserve has not the men: this takes 45,000 and 15,000 are left\. [\d,.]+( million)? come of age each month\.$/);
+  });
+});
+
+describe('the second read: the fold', () => {
+  /** Two corps of two divisions at the capital, at these strengths, with the reserve full enough for anything. */
+  const two = (g: Game, nat: string, sa: number, sb: number) => {
+    levyMen(g, nat, 30);
+    const at = g.regions[g.nations[nat].capital].name;
+    const a = addCorps(g, nat, 'Kept corps', 'inf', 2, at, {}), b = addCorps(g, nat, 'Folded corps', 'inf', 2, at, {});
+    a.str = sa; b.str = sb;
+    return { a, b, at };
+  };
+  const last = (g: Game): string => g.headlines[g.headlines.length - 1].text;
+
+  it("11. China's men at her own scale with \"about\", and the rifles as a clause on the men sent back", () => {
+    const g = grand();
+    const { a, b } = two(g, 'CHN', 0.6, 0.6);
+    expect(foldWords(g, 'CHN', foldView(g, a, b))).toEqual({ men: 'about 134,000 men', back: 'about 27,000 sent back to the reserve, and their rifles to the store', over: 'About 27,000 men over go back to the reserve, and their rifles to the store.' });
+    expect(foldCorps(g, a, b)).toBe(true);
+    expect(last(g)).toBe('Folded corps is folded into Kept corps at Chungking: about 134,000 men in one corps, about 27,000 sent back to the reserve, and their rifles to the store. Its cadre has gone home and can be raised again from the arsenal.');
+  });
+
+  it('11. (the reading) no men sent back: nothing is said of rifles, though the moved men\'s pass the kept corps\' full', () => {
+    const g = grand();
+    // The kept corps is armed to its full (no flag) at strength 0.3: the 0.6 moved in bring rifles it already holds.
+    const { a, b } = two(g, 'CHN', 0.3, 0.3);
+    const s = stockOf(g, 'CHN', 'rifles');
+    expect(foldCorps(g, a, b)).toBe(true);
+    expect(stockOf(g, 'CHN', 'rifles') - s).toBeCloseTo(0.6, 12);
+    expect(last(g)).toBe('Folded corps is folded into Kept corps at Chungking: about 80,000 men in one corps. Its cadre has gone home and can be raised again from the arsenal.');
+    // Men sent back that round to no thousand (67 men): said as none.
+    const h = grand();
+    const p = two(h, 'CHN', 0.6, 0.4005);
+    expect(foldView(h, p.a, p.b).back).toBeGreaterThan(0);
+    expect(foldCorps(h, p.a, p.b)).toBe(true);
+    expect(last(h)).toBe('Folded corps is folded into Kept corps at Chungking: about 134,000 men in one corps. Its cadre has gone home and can be raised again from the arsenal.');
+  });
+
+  it('11. a nation without a store or a scale of its own: as built, byte for byte', () => {
+    const g = grand('JAP', 17);
+    const { a, b, at } = two(g, 'JAP', 0.6, 0.6);
+    expect(foldWords(g, 'JAP', foldView(g, a, b))).toEqual({ men: '30,000 men', back: '6,000 sent back to the reserve', over: '6,000 men over go back to the reserve.' });
+    expect(foldCorps(g, a, b)).toBe(true);
+    expect(last(g)).toBe(`Folded corps is folded into Kept corps at ${at}: 30,000 men in one corps, 6,000 sent back to the reserve. Its cadre has gone home and can be raised again from the arsenal.`);
+    const h = grand('JAP', 17);
+    const p = two(h, 'JAP', 0.3, 0.3);
+    expect(foldCorps(h, p.a, p.b)).toBe(true);
+    expect(last(h)).toBe(`Folded corps is folded into Kept corps at ${p.at}: 18,000 men in one corps. Its cadre has gone home and can be raised again from the arsenal.`);
+  });
+});
+
+describe('the second read: the 3D game says what the page says', () => {
+  type Call = (...a: unknown[]) => unknown;
+  const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
+  type Row = { lines: string[]; buttons: { act: string }[] };
+  /** The 3D fold card's row for these two corps, laid at the capital of the seat being played. */
+  const foldRow = (nat: string, sa: number, sb: number): Row => {
+    const gg = loadGame((TC().save() as { text: string }).text)!;
+    const cap = gg.nations[nat].capital, at = gg.regions[cap].name;
+    const a = addCorps(gg, nat, 'Kept corps', 'inf', 2, at, {}), b = addCorps(gg, nat, 'Folded corps', 'inf', 2, at, {});
+    a.str = sa; b.str = sb;
+    TC().load(saveGame(gg));
+    const p = TC().page(`fold:${cap}`) as { sections: { rows: Row[] }[] };
+    return p.sections.flatMap((x) => x.rows).find((r) => r.buttons[0].act === `fold:${a.id}:${b.id}`)!;
+  };
+
+  it("7. lines 1 and 2 at the top of the 3D arsenal for China, and nothing new for Japan", () => {
+    TC().start({ human: 'CHN', seed: 7, view: 'grand', world: true });
+    const a = TC().arsenal(-1) as { notes?: string[] };
+    expect(a.notes).toEqual([
+      "Rifles in store ■□□□□□□□□□ 8,300 of the 63,900 an infantry corps takes · +8,300 a month: Chungking's arsenals 3,000 · Changteh's arsenals 1,000 · Kweiyang's arsenals 500 · the Burma Road 2,500 · the Sinkiang road 1,300",
+      'Your new corps and your replacements are armed from this store. It fills from your arsenals and from the roads you still hold.',
+    ]);
+    TC().start({ human: 'JAP', seed: 17, view: 'grand', world: true });
+    expect('notes' in (TC().arsenal(-1) as object)).toBe(false);
+  });
+
+  it("11. the 3D fold card speaks China's men at her scale with the rifles' clause, and Japan's as built", () => {
+    TC().start({ human: 'CHN', seed: 7, view: 'grand', world: true });
+    const c = foldRow('CHN', 0.6, 0.6);
+    expect(c.lines[0]).toMatch(/^About 134,000 men in one corps at 100% of its strength, [a-z]+\.$/);
+    expect(c.lines).toContain('About 27,000 men over go back to the reserve, and their rifles to the store.');
+    TC().start({ human: 'JAP', seed: 17, view: 'grand', world: true });
+    const j = foldRow('JAP', 0.6, 0.6);
+    expect(j.lines[0]).toMatch(/^30,000 men in one corps at 100% of its strength, [a-z]+\.$/);
+    expect(j.lines).toContain('6,000 men over go back to the reserve.');
   });
 });
