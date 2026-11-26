@@ -684,10 +684,21 @@ export const natIndex = (g: Game, nat: string): number => Object.keys(g.nations)
  * filled it, and stores a new holder filled in the very month he took the port.
  */
 export function keptStoresRun(g: Game, r: Region, drawn = false): number {
+  if (!r.overseas || !r.port || !worksKept(r) || !keptStoresHis(g, r)) return 0;
+  return Math.min(portKeep(g, r), Math.max(0, g.turn - (drawn ? 0 : 1) - g.flags[storesKey(r.id)]));
+}
+/**
+ * True where a port's kept stores are its present holder's: the record of the fill names him, and the fill came after
+ * the port's last capture (Region.since). The one reading of whose stores they are, under true reach (the design
+ * director's ruling of 22:08Z, 25 November 2026: "one town, one larder, one reading: the window feeds only the holder
+ * who filled it, as the guard charges only that holder"): the guard charges by it (keptStoresRun), and the supply
+ * picture's window opens the quay by it (computeSupply), as does a fortress crew's living on the port's stores
+ * (onPortStores). A captor whose own ships fill the port in the very month he takes it has a fill no later than his
+ * capture, which reads as not his until his next month's fill.
+ */
+export function keptStoresHis(g: Game, r: Region): boolean {
   const last = g.flags[storesKey(r.id)];
-  if (!r.overseas || !r.port || !worksKept(r) || last === undefined || last <= r.since) return 0;
-  if (Object.keys(g.nations)[g.flags[storesByKey(r.id)] ?? -1] !== r.ctrl) return 0;
-  return Math.min(portKeep(g, r), Math.max(0, g.turn - (drawn ? 0 : 1) - last));
+  return last !== undefined && last > r.since && Object.keys(g.nations)[g.flags[storesByKey(r.id)] ?? -1] === r.ctrl;
 }
 /**
  * A fortress crew in a fortified port overseas living on the port's stores this month (07:12Z): the sea behind it is
@@ -698,7 +709,8 @@ export function keptStoresRun(g: Game, r: Region, drawn = false): number {
 export function onPortStores(g: Game, c: Corps): boolean {
   if (!fortRow(g, c) || !c.supplied) return false;
   const r = g.regions[c.reg], last = g.flags[`stores:${r.id}`];
-  return r.overseas && !!r.port && !!r.fort && last !== undefined && last < g.turn && g.turn - last <= portKeep(g, r);
+  // (Under true reach only where the window feeds the port: its kept stores are the present holder's, keptStoresHis.)
+  return r.overseas && !!r.port && !!r.fort && last !== undefined && last < g.turn && g.turn - last <= portKeep(g, r) && (!trueReach(g) || keptStoresHis(g, r));
 }
 export function fortShare(g: Game, defenders: Corps[]): number {
   let all = 0, forts = 0;
@@ -1342,7 +1354,8 @@ export function computeSupply(g: Game): void {
             g.flags[storesByKey(r.id)] = (places ??= new Map(Object.keys(g.nations).map((n, i) => [n, i]))).get(r.ctrl)!;
           }
         }
-        else if (g.turn - (g.flags[storesKey(r.id)] ?? -99) <= portKeep(g, r)) quay = true;
+        // (Under true reach the kept stores feed only the holder who filled them, the guard's own reading: keptStoresHis.)
+        else if (g.turn - (g.flags[storesKey(r.id)] ?? -99) <= portKeep(g, r) && (!truly || keptStoresHis(g, r))) quay = true;
       }
       if (!depot && !quay) continue;
       // A pocket that has eaten its stores feeds nobody (the grand campaign): its depot is a name, and no ship comes in.

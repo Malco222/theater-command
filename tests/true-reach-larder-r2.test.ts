@@ -18,7 +18,7 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_SUPPLY_CHECK = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, allied, capitulate, capture, computeSupply, createGame, declareWar, keptStoresRun, natIndex, portKeep, setTrueReach, trueReach } from '../src/campaign/game';
+import { addCorps, allied, capitulate, capture, computeSupply, createGame, declareWar, keptStoresHis, keptStoresRun, natIndex, onPortStores, portKeep, setTrueReach, trueReach } from '../src/campaign/game';
 import { finishMonthEnd } from '../src/campaign/finish';
 import { liberate } from '../src/campaign/liberation';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -669,6 +669,77 @@ describe('a besieged port begins its siege with its kept stores\' months eaten (
       const e = h.byName['El Alamein'];
       expect([on, e.port, storesOf(h, e)]).toEqual([on, false, 2]);
       expect([on, card(h, e).at(-1)]).toEqual([on, `Closely invested, its stores would feed the defenders for ${on ? 'two months' : '2 months'}.`]);
+    }
+  });
+
+  it('K1, the window reads the guard\'s record (the design director, 22:08Z): a captured larder feeds the new holder only once he has filled it himself; the holder who filled it is fed as before (off: the captor lives on the old stores, pinned)', () => {
+    const fed: Record<string, number[]> = {};
+    for (const on of [false, true]) {
+      for (const shape of ['battle', 'hand back', 'retaken', 'holder'] as const) {
+        const g = war(on);
+        const r = g.byName['Malta'];
+        // Every nation's ships, to stop them running (the sea shut behind the port for everyone) and to run them again.
+        const was = Object.values(g.nations).map((n) => [n.seaSupply, n.sealift] as const);
+        const ships = (run: boolean): void => Object.values(g.nations).forEach((n, i) => { n.seaSupply = run ? was[i][0] : false; n.sealift = run ? was[i][1] : 0; });
+        const draw = (t: number): void => { g.turn = t; g.phase = g.order.indexOf('UK'); g.supplyDirty = true; computeSupply(g); };
+        declareWar(g, 'ITA', 'UK');
+        if (shape === 'battle' || shape === 'hand back') {
+          // Month 1: Italy takes Malta. Month 2: Italy's ships fill its stores, Italy's record (staged; off, no record).
+          g.turn = 1;
+          capture(g, r, 'ITA');
+          at(g, r, 2, 2, on ? 'ITA' : null);
+        } else {
+          // Month 1: Britain's own ships fill Malta's stores, and on, the draw writes her record.
+          draw(1);
+          expect([on, shape, g.flags[`stores:${r.id}`], filler(g, r)]).toEqual([on, shape, 1, on ? 'UK' : undefined]);
+          // Retaken: Italy takes Malta in month 2.
+          if (shape === 'retaken') { g.turn = 2; capture(g, r, 'ITA'); }
+        }
+        ships(false);
+        // Month 3: Britain takes Malta by battle, has it handed back at Italy's fall, or retakes it by battle.
+        g.turn = 3;
+        if (shape === 'battle' || shape === 'retaken') capture(g, r, 'UK');
+        if (shape === 'hand back') capitulate(g, 'ITA', 'UK');
+        expect([on, shape, r.ctrl, r.since]).toEqual([on, shape, 'UK', shape === 'hand back' ? 1 : shape === 'holder' ? 0 : 3]);
+        const c = addCorps(g, 'UK', 'Window test', 'inf', 1, 'Malta', {});
+        expect(garrison(g, c)).toBe(true);
+        const months: number[] = [];
+        for (let t = shape === 'holder' ? 2 : 3; t <= 8; t++) {
+          // Month 5: Britain's own ships fill the stores once, and the sea shuts again.
+          if (t === 5 && shape !== 'holder') { ships(true); draw(5); ships(false); expect([on, shape, g.flags[`stores:${r.id}`], filler(g, r)]).toEqual([on, shape, 5, on ? 'UK' : undefined]); }
+          draw(t);
+          if (c.supplied) months.push(t);
+          // The picture and the guard read one record: on, in every month the window could feed, the garrison is fed
+          // exactly where the guard would charge the kept stores as the holder's.
+          const last = g.flags[`stores:${r.id}`];
+          if (on && t > last && t - last <= portKeep(g, r)) expect([shape, t, c.supplied]).toEqual([shape, t, keptStoresRun(g, r, true) > 0]);
+          if (on) expect([shape, t, c.supplied]).toEqual([shape, t, t - last <= portKeep(g, r) && keptStoresHis(g, r)]);
+        }
+        fed[`${on} ${shape}`] = months;
+      }
+    }
+    expect(fed).toEqual({
+      // Off: the window feeds whoever holds the port on whoever's stores; the captor lives two months on Italy's.
+      'false battle': [3, 4, 5, 6, 7], 'false hand back': [3, 4, 5, 6, 7], 'false retaken': [3, 5, 6, 7], 'false holder': [2, 3],
+      // On: never on stores that were not his; on his own, for portKeep months after the fill, as the holder who filled
+      // them is fed, on and off alike.
+      'true battle': [5, 6, 7], 'true hand back': [5, 6, 7], 'true retaken': [5, 6, 7], 'true holder': [2, 3],
+    });
+  });
+
+  it('K2: a fortress crew lives on its port\'s stores only where the window feeds it: under true reach only on the present holder\'s (off: on any, pinned)', () => {
+    for (const on of [false, true]) {
+      for (const [by, last, since, his] of [['UK', 2, 0, true], ['ESP', 2, 0, false], [null, 2, 0, false], ['UK', 2, 2, false]] as const) {
+        const g = war(on, true);
+        const gib = g.byName['Gibraltar'];
+        const crew = g.corps.find((c) => !c.dead && c.nat === 'UK' && c.name === 'Gibraltar garrison')!;
+        expect([on, crew.reg, portKeep(g, gib)]).toEqual([on, gib.id, 16]);
+        // Gibraltar in month 4, its stores filled in month 2 by the record `by`, taken in month `since`; the crew fed.
+        at(g, gib, 4, last, by);
+        gib.since = since;
+        crew.supplied = true;
+        expect([on, by, since, keptStoresHis(g, gib), onPortStores(g, crew)]).toEqual([on, by, since, his, on ? his : true]);
+      }
     }
   });
 });
