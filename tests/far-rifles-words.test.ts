@@ -9,12 +9,12 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { stockOf } from '../src/campaign/arms';
+import { ARMS, stockOf } from '../src/campaign/arms';
 import { offers } from '../src/campaign/arsenal';
 import { foldCardWords, foldCorps, foldView, foldWords } from '../src/campaign/fold';
 import { addCorps, createGame, setWar } from '../src/campaign/game';
-import { MANPOWER, classNow, comesWords, corpsMenWords, levyMen, manpower, menPer, menScale, menWords, noMenWords, reserveLevelWords, reserveWords } from '../src/campaign/manpower';
-import { RIFLES, arsenalTop, inWords, levelOf, noRifles, riflesMonth, riflesSeen, riflesTakes, riflesView, riflesWait } from '../src/campaign/rifles';
+import { MANPOWER, classNow, comesWords, corpsMenWords, levyMen, manpower, menPer, menScale, menWords, menWorth, noMenWords, reserveLevelWords, reserveWords } from '../src/campaign/manpower';
+import { RIFLES, arsenalTop, carries, inWords, levelOf, riflesRow, noRifles, riflesMonth, riflesSeen, riflesTakes, riflesView, riflesWait } from '../src/campaign/rifles';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { MEN_PER_DIV, type Game } from '../src/campaign/types';
@@ -324,30 +324,67 @@ describe('the second read: the fold', () => {
   };
   const last = (g: Game): string => g.headlines[g.headlines.length - 1].text;
 
-  it("11. China's men at her own scale with \"about\", and the rifles as a clause on the men sent back", () => {
+  it("11. China's men at her own scale with \"about\", and the rifles as a clause on the men sent back (the news re-pinned to the sixth read, point 3)", () => {
     const g = grand();
     const { a, b } = two(g, 'CHN', 0.6, 0.6);
     expect(foldWords(g, 'CHN', foldView(g, a, b))).toEqual({ men: 'about 134,000 men', back: 'about 27,000 sent back to the reserve, and their rifles to the store', over: 'About 27,000 men over go back to the reserve, and their rifles to the store.' });
+    const s = stockOf(g, 'CHN', 'rifles');
     expect(foldCorps(g, a, b)).toBe(true);
-    expect(last(g)).toBe('Folded corps is folded into Kept corps at Chungking: about 134,000 men in one corps, about 27,000 sent back to the reserve, and their rifles to the store. Its cadre has gone home and can be raised again from the arsenal.');
+    // (Both armed to their full, no flag: the 0.4 the kept corps' full cannot take go back with their rifles; the 0.8
+    // moved in pass its full, 0.4 x 2, and the folded corps' worn part is (1 - 0.6) x 2: 1.6 more, 34,080 rifles.)
+    expect(stockOf(g, 'CHN', 'rifles') - s).toBeCloseTo(0.4 + 0.8 + 0.8, 12);
+    expect(last(g)).toBe('Folded corps is folded into Kept corps at Chungking: about 134,000 men in one corps, about 27,000 sent back to the reserve, and their rifles and 34,100 more to the store. Its cadre has gone home and can be raised again from the arsenal.');
   });
 
-  it('11. (the reading) no men sent back: nothing is said of rifles, though the moved men\'s pass the kept corps\' full', () => {
+  it('11. no men sent back: the rifles the fold gave the store are said (re-pinned to the sixth read, point 3)', () => {
     const g = grand();
     // The kept corps is armed to its full (no flag) at strength 0.3: the 0.6 moved in bring rifles it already holds.
     const { a, b } = two(g, 'CHN', 0.3, 0.3);
     const s = stockOf(g, 'CHN', 'rifles');
     expect(foldCorps(g, a, b)).toBe(true);
     // (And the folded corps, at its full level and strength 0.3, sends its worn part to the store, (1 - 0.3) x 2 = 1.4:
-    // the design director's ruling 1 of 06:04Z, 26 November 2026. No men go back, so the words are as before.)
+    // the design director's ruling 1 of 06:04Z, 26 November 2026. 2.0 in all, 42,600 rifles.)
     expect(stockOf(g, 'CHN', 'rifles') - s).toBeCloseTo(0.6 + 1.4, 12);
-    expect(last(g)).toBe('Folded corps is folded into Kept corps at Chungking: about 80,000 men in one corps. Its cadre has gone home and can be raised again from the arsenal.');
-    // Men sent back that round to no thousand (67 men): said as none.
+    expect(last(g)).toBe('Folded corps is folded into Kept corps at Chungking: about 80,000 men in one corps, and 42,600 spare rifles to the store. Its cadre has gone home and can be raised again from the arsenal.');
+    // Men sent back that round to no thousand (67 men): said as none, and their rifles counted with the spare ones.
     const h = grand();
     const p = two(h, 'CHN', 0.6, 0.4005);
     expect(foldView(h, p.a, p.b).back).toBeGreaterThan(0);
+    const sh = stockOf(h, 'CHN', 'rifles');
     expect(foldCorps(h, p.a, p.b)).toBe(true);
-    expect(last(h)).toBe('Folded corps is folded into Kept corps at Chungking: about 134,000 men in one corps. Its cadre has gone home and can be raised again from the arsenal.');
+    expect(Math.round(((stockOf(h, 'CHN', 'rifles') - sh) * PER) / 100) * 100).toBe(42600);
+    expect(last(h)).toBe('Folded corps is folded into Kept corps at Chungking: about 134,000 men in one corps, and 42,600 spare rifles to the store. Its cadre has gone home and can be raised again from the arsenal.');
+  });
+
+  it("11. no men said sent back, the leftover men's rifles alone: their rifles are the spare ones said (the sceptic's S1 of the sixth read)", () => {
+    // Both corps armed at their strength (flags), so nothing passes the kept corps' full and no worn part goes: the
+    // fold gives the store only the rifles of the 67 men over, 0.001 of a division's worth, 21 rifles, which round to
+    // no thousand of men and to no hundred of rifles. The news says them exactly, and the store gains them.
+    const g = grand();
+    const { a, b } = two(g, 'CHN', 0.6, 0.4005);
+    g.flags[`rfa:${a.id}`] = 0.6; g.flags[`rfa:${b.id}`] = 0.4005;
+    const v = foldView(g, a, b);
+    expect(v.over).toBeGreaterThan(0);
+    expect(Math.round((v.over * 67000) / 1000)).toBe(0);
+    const s = stockOf(g, 'CHN', 'rifles');
+    expect(foldCorps(g, a, b)).toBe(true);
+    expect(Math.round((stockOf(g, 'CHN', 'rifles') - s) * PER)).toBe(21);
+    expect(last(g)).toBe('Folded corps is folded into Kept corps at Chungking: about 134,000 men in one corps, and 21 spare rifles to the store. Its cadre has gone home and can be raised again from the arsenal.');
+  });
+
+  it("11. China's rifles row with no rifles shelf: a fold whose leftover men round to no thousand reads as built, with no rifles (the sceptic's S2 of the sixth read)", () => {
+    // (The rifles' rule carries only where the row and the shelf both stand, rifles.ts carries: the shelf is taken
+    // away by hand for this one fold, so China has its row and its men's scale but keeps no store.)
+    const g = grand();
+    const { a, b } = two(g, 'CHN', 0.6, 0.4005);
+    const shelf = ARMS.nations.CHN.rifles;
+    delete ARMS.nations.CHN.rifles;
+    undo.push(() => { ARMS.nations.CHN.rifles = shelf; });
+    expect(riflesRow(g, 'CHN')).not.toBeNull();
+    expect(carries(g, 'CHN')).toBe(false);
+    expect(foldView(g, a, b).over).toBeGreaterThan(0);
+    expect(foldCorps(g, a, b)).toBe(true);
+    expect(last(g)).toBe('Folded corps is folded into Kept corps at Chungking: about 134,000 men in one corps. Its cadre has gone home and can be raised again from the arsenal.');
   });
 
   it('11. a nation without a store or a scale of its own: as built, byte for byte', () => {
@@ -749,5 +786,112 @@ describe('the third read of 04:58Z: months in words, and the refusal in one meas
     expect(noMenWords('CHN', 0.27, 18079 / per, cls)).toBe(`The reserve is 11 men short: this takes about 18,000 men.${CLASS}`);
     expect(noMenWords('CHN', 0.27, 17500 / per, cls)).toBe(`The reserve is 590 men short: this takes about 18,000 men.${CLASS}`);
     expect(noMenWords('CHN', 0.27, 17499 / per, cls)).toBe(`The reserve has not the men: this takes about 18,000 men and about 17,000 are left.${CLASS}`);
+  });
+});
+
+// The UI director's sixth read (26 November 2026, 18:55Z), point 3: the rifles a fold gives the store are said in the
+// fold's news, under the rifles switch (only where a store exists), at the store line's own measure (to the hundred,
+// rifles.ts storeRifles), so the news and the store agree; where that reads 0, the exact figure in words to ten. On the
+// round 6 builder's live boards (China seated, seed 7, the bridge's own start and the Play list, each pair worn to 0.6
+// of its full by hand and folded through the 3D game's own action).
+describe('the sixth read, point 3: the fold\'s news says the rifles it gives the store', () => {
+  type Call = (...a: unknown[]) => unknown;
+  const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
+  // (The Play list, SHIP_PLAY_A15B57BEB of /mnt/project-files/gates/gamestart.ts, copied.)
+  const SHIP_PLAY = ['nicknames', 'marked', 'taskforcerule', 'rearguardrule', 'rearbridgesrule', 'shadowrule', 'voyagelogrule',
+    'seaminesrule', 'heavyseasrule', 'shadowrelayrule', 'fleetwhyrule', 'settledtownsrule', 'columns',
+    'logistics:lorryShift', 'logistics:wagons', 'logistics:dumps', 'seekoncerule'];
+  const CADRE = ' Its cadre has gone home and can be raised again from the arsenal.';
+  /**
+   * The board: China's two corps by name (or, with no names, the first pair of whole-size infantry corps of one size in
+   * one province), worn to 0.6 of their full; `worn`, if given, the folded corps' armed level above its strength in
+   * whole rifles. Folded through TC.act; the news it wrote, and the store's gain in whole rifles.
+   */
+  const board = (keep: string, gone: string, worn?: number) => {
+    TC().start({ view: 'grand', human: 'CHN', seed: 7, world: true });
+    TC().r2Ship(SHIP_PLAY);
+    const g = loadGame((TC().save() as { text: string }).text)!;
+    let k = g.corps.find((c) => c.name === keep && c.nat === 'CHN')!, x = g.corps.find((c) => c.name === gone && c.nat === 'CHN')!;
+    if (!keep) {
+      const cs = g.corps.filter((c) => c.nat === 'CHN' && !c.dead && (c.full ?? 1) === 1 && c.divs >= 1 && c.kind === 'inf');
+      [k, x] = cs.flatMap((a) => cs.filter((y) => y !== a && y.reg === a.reg && y.divs === a.divs).map((y) => [a, y]))[0]!;
+    }
+    for (const c of [k, x]) { c.str = 0.6 * (c.full ?? 1); c.supplied = true; }
+    if (worn !== undefined) g.flags[`rfa:${x.id}`] = x.str + worn / (x.divs * PER);
+    TC().load(saveGame(g));
+    const b = loadGame((TC().save() as { text: string }).text)!;
+    const s0 = stockOf(b, 'CHN', 'rifles'), h0 = b.headlines.length;
+    expect((TC().act(`fold:${k.id}:${x.id}`) as { ok: boolean }).ok).toBe(true);
+    const a = loadGame((TC().save() as { text: string }).text)!;
+    return { news: a.headlines.slice(h0).map((h) => h.text), gain: Math.round((stockOf(a, 'CHN', 'rifles') - s0) * PER), at: a.regions[k.reg].name, keep: k.name, gone: x.name, store: riflesView(a, 'CHN')!.stock - riflesView(b, 'CHN')!.stock };
+  };
+  const hundred = (x: number): string => (Math.round(x / 100) * 100).toLocaleString('en-US');
+
+  it('no men sent back: Chuchow, "and 2,300 spare rifles to the store"; Ningpo, "1,900"', () => {
+    const c = board('3rd War Area: 23rd Army Group and the New Fourth Army', '3rd War Area: 10th Army Group');
+    expect(c.gain).toBe(2300);
+    expect(c.news).toEqual([`3rd War Area: 10th Army Group is folded into 3rd War Area: 23rd Army Group and the New Fourth Army at Chuchow: about 51,000 men in one corps, and 2,300 spare rifles to the store.${CADRE}`]);
+    const n = board('3rd War Area (the Chekiang coast)', '10th Army Group (Taichow)');
+    // (Past the kept corps' full 1,150 and the folded corps' worn part 767: 1,917, the store's figure to the hundred.)
+    expect(n.gain).toBe(1917);
+    expect(hundred(n.store)).toBe('1,900');
+    expect(n.news).toEqual([`10th Army Group (Taichow) is folded into 3rd War Area (the Chekiang coast) at Ningpo: about 9,000 men in one corps, and 1,900 spare rifles to the store.${CADRE}`]);
+  });
+
+  it('men sent back and nothing more: Changsha, as built', () => {
+    const c = board('', '');
+    expect(c.at).toBe('Changsha');
+    expect(c.gain).toBe(8520);
+    expect(c.news).toEqual([`${c.gone} is folded into ${c.keep} at Changsha: about 134,000 men in one corps, about 27,000 sent back to the reserve, and their rifles to the store.${CADRE}`]);
+    expect(c.news[0]).toBe(`9th War Area: 27th Army Group is folded into 9th War Area: 15th Army Group at Changsha: about 134,000 men in one corps, about 27,000 sent back to the reserve, and their rifles to the store.${CADRE}`);
+  });
+
+  it('both: Changsha with the folded corps armed 1,200 rifles above its strength, "and their rifles and 1,200 more to the store"', () => {
+    const c = board('', '', 1200);
+    expect(c.gain).toBe(8520 + 1200);
+    expect(c.news).toEqual([`9th War Area: 27th Army Group is folded into 9th War Area: 15th Army Group at Changsha: about 134,000 men in one corps, about 27,000 sent back to the reserve, and their rifles and 1,200 more to the store.${CADRE}`]);
+  });
+
+  it('spare rifles that read 0 at the hundred: the exact figure, in words to ten', () => {
+    const K = '3rd War Area: 23rd Army Group and the New Fourth Army', G = '3rd War Area: 10th Army Group';
+    const head = `${G} is folded into ${K} at Chuchow: about 51,000 men in one corps`;
+    expect(board(K, G, 1).news).toEqual([`${head}, and one spare rifle to the store.${CADRE}`]);
+    expect(board(K, G, 7).news).toEqual([`${head}, and seven spare rifles to the store.${CADRE}`]);
+    expect(board(K, G, 30).news).toEqual([`${head}, and 30 spare rifles to the store.${CADRE}`]);
+    // (Nothing given: as built.)
+    expect(board(K, G, 0).news).toEqual([`${head}.${CADRE}`]);
+    // And beside men sent back: "and one more".
+    expect(board('', '', 1).news[0]).toMatch(/about 27,000 sent back to the reserve, and their rifles and one more to the store\. Its cadre/);
+  });
+});
+
+// The UI director's sixth read (26 November 2026, 18:55Z), point 4: a need under 500 men (which reads no thousand) is
+// said exactly, with no "about", in menWorth and in the refusal alike, so the two keep one figure: "The reserve is {69}
+// men short: this takes {469} men." No order on China's map is one today, so through the functions.
+describe('the sixth read, point 4: a need under 500 men, said exactly', () => {
+  const CLASS = ' About 105,000 men come of age each month in the land you still hold.';
+  const per = 67000, cls = 1.5644171779141105;
+
+  it('menWorth, the order\'s note and the fold card say "469 men"; 500 and up as before', () => {
+    expect(menScale('CHN')).toBe(per);
+    expect(menWorth(per, 469 / per)).toBe('469 men');
+    expect(menWorth(per, 469 / per, false)).toBe('469 men');
+    expect(menWorth(per, 499 / per)).toBe('499 men');
+    expect(menWorth(per, 7 / per)).toBe('seven men');
+    expect(menWorth(per, 1 / per)).toBe('one man');
+    expect(menWorth(per, 500 / per)).toBe('about 1,000 men');
+    expect(menWorth(per, 0.27)).toBe('about 18,000 men');
+    expect(menWorth(per, 3)).toBe("three divisions' worth of men");
+    const g = grand();
+    expect(riflesTakes(g, 'CHN', 469 / per)).toBe('Takes 469 men and 100 rifles.');
+    expect(foldCardWords('CHN').cadre({ cadreCost: 0, cadreMen: (469 / per) * MEN_PER_DIV } as never, '0')).toBe('469 men from the reserve');
+  });
+
+  it('the refusal: "The reserve is 69 men short: this takes 469 men. ..."', () => {
+    expect(noMenWords('CHN', 469 / per, 400 / per, cls)).toBe(`The reserve is 69 men short: this takes 469 men.${CLASS}`);
+    expect(noMenWords('CHN', 469 / per, 0, cls)).toBe(`The reserve is 469 men short: this takes 469 men.${CLASS}`);
+    expect(noMenWords('CHN', 469 / per, 468 / per, cls)).toBe(`The reserve is one man short: this takes 469 men.${CLASS}`);
+    // (500 men and up: as laid in the fifth read.)
+    expect(noMenWords('CHN', 0.01, 600 / per, cls)).toBe(`The reserve is 70 men short: this takes about 1,000 men.${CLASS}`);
   });
 });

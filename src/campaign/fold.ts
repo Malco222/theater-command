@@ -15,7 +15,7 @@ import { headline, men, removeCorps, worksOf } from './game';
 import { appoint, generalOf } from './commanders';
 import { MANPOWER, men1000, menScale, menWorth, returnMen } from './manpower';
 import { cadreTerms } from './economy';
-import { binds, inWords, riflesBack, riflesFold } from './rifles';
+import { binds, inWords, orderNoun, riflesBack, riflesFold, storeRifles } from './rifles';
 import { noteCorps } from './stories';
 import { atItsPost, postWords } from './pacific';
 
@@ -105,6 +105,9 @@ export interface FoldWords {
   /** The cards' line for the men sent back, or null: "6,000 men over go back to the reserve.", and for a nation with a
    * store "About 27,000 men over go back to the reserve, and their rifles to the store." */
   over: string | null;
+  /** The news' clause for the rifles the fold gave the store where no men are said sent back, or null: "and 2,300
+   * spare rifles to the store" (set only where the news passes what the fold gave, foldCorps). */
+  spare?: string | null;
 }
 
 /**
@@ -115,13 +118,23 @@ export interface FoldWords {
  * thousand), nothing is said of men or rifles going back, even where the moved men's rifles pass the kept corps' full
  * and go to the store: the clause belongs to the men sent back.
  */
-export function foldWords(g: Game, nat: string, v: FoldView): FoldWords {
+export function foldWords(g: Game, nat: string, v: FoldView, gave?: number): FoldWords {
   const per = menScale(nat), rifles = binds(g, nat) ? ', and their rifles to the store' : '';
   const men = per === null ? `${v.men.toLocaleString('en-US')} men` : `about ${men1000(v.fill * per)} men`;
   const n = per === null ? (v.back > 0 ? v.back.toLocaleString('en-US') : null) : Math.round((v.over * per) / 1000) > 0 ? `about ${men1000(v.over * per)}` : null;
-  if (n === null) return { men, back: null, over: null };
+  // The news (gave set, foldCorps: what passed the kept corps' full and the emptied corps' worn part, in divisions'
+  // worth) says the rifles the fold gave the store, at the store line's own measure, where the nation keeps a store:
+  // the UI director's sixth read of 26 November 2026, 18:55Z, point 3. With no men said sent back, all it gave (the
+  // leftover men's too, where they round to no thousand): "..., and 2,300 spare rifles to the store." With men sent
+  // back, what came besides theirs: "..., and their rifles and 1,200 more to the store." Where nothing came besides,
+  // and wherever no store is kept, as built.
+  if (n === null) {
+    const spare = gave === undefined ? null : storeRifles(g, nat, gave + v.over);
+    return { men, back: null, over: null, ...(gave === undefined ? {} : { spare: spare === null ? null : `and ${spare} spare rifle${spare === 'one' ? '' : 's'} to the store` }) };
+  }
   const up = n[0].toUpperCase() + n.slice(1);
-  return { men, back: `${n} sent back to the reserve${rifles}`, over: `${up} men over go back to the reserve${rifles}.` };
+  const more = gave === undefined || !rifles ? null : storeRifles(g, nat, gave);
+  return { men, back: `${n} sent back to the reserve${more === null ? rifles : `, and their rifles and ${more} more to the store`}`, over: `${up} men over go back to the reserve${rifles}.` };
 }
 
 /** The fold card's own figures, for both cards (the page's foldCard and the 3D game's foldPage): see foldCardWords. */
@@ -183,7 +196,7 @@ export function foldCorps(g: Game, keep: Corps, gone: Corps): boolean {
   const mine = keep.str * keep.divs, fill = v.str * keep.divs, from = Math.max(0, fill - mine);
   if (keep.mor !== undefined && gone.mor !== undefined && fill > 0) keep.mor = (keep.mor * mine + gone.mor * from) / fill;
   keep.xp = v.xp; keep.org = v.org; keep.str = v.str; keep.ap = v.ap;
-  riflesFold(g, keep, gone, from);
+  const gave = riflesFold(g, keep, gone, from);
   if (gone.fought) keep.fought = true;
   if (gone.pressed) keep.pressed = true;
   if ((gone.blows ?? 0) > (keep.blows ?? 0)) keep.blows = gone.blows;
@@ -207,8 +220,9 @@ export function foldCorps(g: Game, keep: Corps, gone: Corps): boolean {
   if (gone.rowed) { gone.name = gone.rowed.name; gone.hold = gone.rowed.hold; if (gone.rowed.stay) gone.stay = true; else delete gone.stay; }
   delete gone.drew; delete gone.rowed;
   (n.cadres ??= []).push(gone);
-  // (The men in words from foldWords, which the page's card and the 3D game's card speak too.)
-  const w = foldWords(g, keep.nat, v);
-  if (keep.nat === g.human) headline(g, 'info', `${lentAs ?? gone.name} is folded into ${keep.name} at ${g.regions[reg].name}: ${w.men} in one corps${w.back ? `, ${w.back}` : ''}. Its cadre has gone home and can be raised again from the arsenal.`, keep.nat, reg);
+  // (The men in words from foldWords, which the page's card and the 3D game's card speak too; the noun follows the kept
+  // unit's kind, "brigade" for a support team: the UI director's sixth read, point 2.)
+  const w = foldWords(g, keep.nat, v, gave);
+  if (keep.nat === g.human) headline(g, 'info', `${lentAs ?? gone.name} is folded into ${keep.name} at ${g.regions[reg].name}: ${w.men} in one ${orderNoun(keep.kind)}${w.back ? `, ${w.back}` : w.spare ? `, ${w.spare}` : ''}. Its cadre has gone home and can be raised again from the arsenal.`, keep.nat, reg);
   return true;
 }

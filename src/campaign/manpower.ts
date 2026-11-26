@@ -283,8 +283,16 @@ export const worth = (d: number): string => (d === 1 ? "division's worth" : "div
  * worth", with " of men" after it where 'ofMen'), and part of a division's worth (the cadre of a corps its row keeps
  * small) in men with "about", to the thousand, as the fold card says it ("about 18,000 men"), never "0 divisions'
  * worth". One form for the fold card, the order's note (rifles.ts riflesTakes) and the refusal (noMenWords).
+ * A need under 500 men, which reads no thousand, is said exactly, with no "about", one to ten in words ("469 men"), so
+ * the refusal's shortfall and its need keep one figure: "The reserve is 69 men short: this takes 469 men." (the UI
+ * director's sixth read of 26 November 2026, 18:55Z, point 4; no order on the map is one today).
  */
-export const menWorth = (per: number, d: number, ofMen = true): string => (Number.isInteger(d) ? `${inWords(d)} ${worth(d)}${ofMen ? ' of men' : ''}` : `about ${men1000(d * per)} men`);
+export const menWorth = (per: number, d: number, ofMen = true): string => {
+  if (Number.isInteger(d)) return `${inWords(d)} ${worth(d)}${ofMen ? ' of men' : ''}`;
+  if (toThousand(d * per) > 0) return `about ${men1000(d * per)} men`;
+  const r = Math.round(Math.max(0, d * per));
+  return `${inWords(r)} ${r === 1 ? 'man' : 'men'}`;
+};
 
 /**
  * The reserve in a sentence, for a nation with a scale of its own (the UI director's line 14 of 25 November 2026:

@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of d24c57761 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e530bd802 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -18,7 +18,7 @@
     },
     needs: { inf: 0, mtn: 0, cav: 0, eng: 0, mot: 1, art: 1, arm: 2 },
     teams: {
-      _about: "Release 2 (Brian, 21 Nov 03:57Z): support teams built apart from the infantry, off unless the game's 'teams' flag is set (src/campaign/teams.ts). One division's worth each. card: what each division of them is worth on the attack card (perDiv, at most 'most'): mg, a defence stiffened against men on foot; mor, the share of the defence's fieldworks the attack's mortars break up. A computer staff orders one only where it buys more on the card for its price than the corps or refit the same money would (the design director's 19:48Z of 25 November 2026; src/campaign/orderworth.ts). frontage: how many stand in one front sector (the staff sends no more there); in an attack each takes a place on the roads as any corps does (the design director's 21:33Z of 25 November 2026). First figures, for the design director to rule.",
+      _about: "Release 2 (Brian, 21 Nov 03:57Z): support teams built apart from the infantry, off unless the game's 'teams' flag is set (src/campaign/teams.ts). One division's worth each. card: what each division of them is worth on the attack card (perDiv, at most 'most'): mg, a defence stiffened against men on foot; mor, the share of the defence's fieldworks the attack's mortars break up. A computer staff orders one only where it buys more on the card for its price than the corps or refit the same money would (the design director's 19:48Z of 25 November 2026; src/campaign/orderworth.ts). frontage: how many stand in one front sector (the staff sends no more there); in an attack each takes a place on the roads as any corps does (the design director's 21:33Z of 25 November 2026). First figures, for the design director to rule. The size, divs: 1 (one division's worth of men, and of rifles where a nation's rifles bind), is a stand-in (G) by the design director's 21:13Z of 26 November 2026: the historian is asked for a machine-gun and a mortar brigade's establishment in men and rifles, and his figure is laid with its mark before 'teams' goes on with the far side, so that no rifles-binding nation draws a division's rifles for a brigade once teams play.",
       mg: { label: "Machine-gun brigade", name: "Machine-Gun Brigade", divs: 1, cost: 16, months: 3, blurb: "Heavy machine guns on tripods. Fires from behind the line and stiffens a defence against men on foot, most from fieldworks. Cannot take ground on its own: it goes in beside infantry or tanks, and is lost if caught alone." },
       mor: { label: "Mortar brigade", name: "Mortar Brigade", divs: 1, cost: 18, months: 3, blurb: "Heavy mortars. Lobs its bombs from behind the line and breaks up the fieldworks an attack goes in against. Cannot take ground on its own: it goes in beside infantry or tanks, and is lost if caught alone." },
       card: { mg: { perDiv: 0.04, most: 0.1 }, mor: { perDiv: 0.05, most: 0.15 } },
@@ -26934,14 +26934,28 @@
     for (const nat of Object.keys(g2.nations)) if (binds(g2, nat)) stampLevels(g2, nat);
   }
   function riflesFold(g2, keep3, gone, from2) {
-    if (!carries(g2, keep3.nat)) return;
+    if (!carries(g2, keep3.nat)) return 0;
     const worn = Math.max(0, levelOf(g2, gone) - gone.str) * gone.divs;
+    let gave = 0;
     if (from2 > 0 && keep3.divs > 0) {
       const full = keep3.full ?? 1, lvl = levelOf(g2, keep3) + from2 / keep3.divs;
       setLevel(g2, keep3, Math.min(full, lvl));
-      if (lvl > full) riflesBack(g2, keep3.nat, (lvl - full) * keep3.divs);
+      if (lvl > full) {
+        riflesBack(g2, keep3.nat, (lvl - full) * keep3.divs);
+        gave += (lvl - full) * keep3.divs;
+      }
     }
-    if (worn > 0) riflesBack(g2, keep3.nat, worn);
+    if (worn > 0) {
+      riflesBack(g2, keep3.nat, worn);
+      gave += worn;
+    }
+    return gave;
+  }
+  function storeRifles(g2, nat, divs) {
+    if (!carries(g2, nat) || !(divs > 0)) return null;
+    const x = divs * riflesRow(g2, nat).perDiv;
+    if (Math.round(x / 100) > 0) return n100(x);
+    return Math.round(x) > 0 ? inWords(Math.round(x)) : null;
   }
   function riflesBack(g2, nat, divs) {
     if (carries(g2, nat) && divs > 0) giveBack(g2, nat, "rifles", divs);
@@ -53355,13 +53369,14 @@
         group: "army",
         kind: c.kind,
         label: `${c.name}, a cadre`,
-        blurb: `The cadre of a corps whose men were folded into another: its staff, its name, its record and its honours. Raised again it is the same corps filled with new men, and it keeps ${Math.round(MANPOWER.fold.xp * 100)}% of what it knew.`,
+        // (The noun follows the cadre's own kind, "brigade" for a support team: the UI director's sixth read, point 2.)
+        blurb: `The cadre of a ${orderNoun(c.kind)} whose men were folded into another: its staff, its name, its record and its honours. Raised again it is the same ${orderNoun(c.kind)} filled with new men, and it keeps ${Math.round(MANPOWER.fold.xp * 100)}% of what it knew.`,
         size: plural4(c.divs, "division"),
         cost: t.cost,
         months: t.months,
         upkeep: budgeted(g2) ? corpsUpkeep(c.kind, c.divs) : 0,
         at: at4,
-        note: at4 < 0 ? "" : `Forms up at ${g2.regions[at4].name}, for ${Math.round(MANPOWER.fold.price * 100)}% of the price of a new corps.`,
+        note: at4 < 0 ? "" : `Forms up at ${g2.regions[at4].name}, for ${Math.round(MANPOWER.fold.price * 100)}% of the price of a new ${orderNoun(c.kind)}.`,
         why: whyNoCadre(g2, nat, c) ?? (at4 < 0 ? "There is no home ground left to raise troops on." : noMen(t.divs) ?? noRifles2(t.divs, c.kind) ?? poor(t.cost)),
         ...menFor(t.divs),
         ...riflesFor2(t.divs)
@@ -72491,7 +72506,12 @@
   var toThousand = (men2) => Math.round(Math.max(0, men2) / 1e3) * 1e3;
   var men1000 = (men2) => toThousand(men2).toLocaleString("en-US");
   var worth3 = (d) => d === 1 ? "division's worth" : "divisions' worth";
-  var menWorth = (per, d, ofMen = true) => Number.isInteger(d) ? `${inWords(d)} ${worth3(d)}${ofMen ? " of men" : ""}` : `about ${men1000(d * per)} men`;
+  var menWorth = (per, d, ofMen = true) => {
+    if (Number.isInteger(d)) return `${inWords(d)} ${worth3(d)}${ofMen ? " of men" : ""}`;
+    if (toThousand(d * per) > 0) return `about ${men1000(d * per)} men`;
+    const r = Math.round(Math.max(0, d * per));
+    return `${inWords(r)} ${r === 1 ? "man" : "men"}`;
+  };
   function reserveWords(nat, divs) {
     const per = menScale(nat);
     if (per === null) return null;
@@ -80598,13 +80618,17 @@
     if (worksOf2(gone) > worksOf2(keep3)) v.works = worksOf2(gone);
     return v;
   }
-  function foldWords(g2, nat, v) {
+  function foldWords(g2, nat, v, gave) {
     const per = menScale(nat), rifles = binds(g2, nat) ? ", and their rifles to the store" : "";
     const men2 = per === null ? `${v.men.toLocaleString("en-US")} men` : `about ${men1000(v.fill * per)} men`;
     const n = per === null ? v.back > 0 ? v.back.toLocaleString("en-US") : null : Math.round(v.over * per / 1e3) > 0 ? `about ${men1000(v.over * per)}` : null;
-    if (n === null) return { men: men2, back: null, over: null };
+    if (n === null) {
+      const spare = gave === void 0 ? null : storeRifles(g2, nat, gave + v.over);
+      return { men: men2, back: null, over: null, ...gave === void 0 ? {} : { spare: spare === null ? null : `and ${spare} spare rifle${spare === "one" ? "" : "s"} to the store` } };
+    }
     const up = n[0].toUpperCase() + n.slice(1);
-    return { men: men2, back: `${n} sent back to the reserve${rifles}`, over: `${up} men over go back to the reserve${rifles}.` };
+    const more = gave === void 0 || !rifles ? null : storeRifles(g2, nat, gave);
+    return { men: men2, back: `${n} sent back to the reserve${more === null ? rifles : `, and their rifles and ${more} more to the store`}`, over: `${up} men over go back to the reserve${rifles}.` };
   }
   function foldCardWords(nat) {
     const per = menScale(nat);
@@ -80634,7 +80658,7 @@
     keep3.org = v.org;
     keep3.str = v.str;
     keep3.ap = v.ap;
-    riflesFold(g2, keep3, gone, from2);
+    const gave = riflesFold(g2, keep3, gone, from2);
     if (gone.fought) keep3.fought = true;
     if (gone.pressed) keep3.pressed = true;
     if ((gone.blows ?? 0) > (keep3.blows ?? 0)) keep3.blows = gone.blows;
@@ -80666,8 +80690,8 @@
     delete gone.drew;
     delete gone.rowed;
     (n.cadres ?? (n.cadres = [])).push(gone);
-    const w = foldWords(g2, keep3.nat, v);
-    if (keep3.nat === g2.human) headline(g2, "info", `${lentAs ?? gone.name} is folded into ${keep3.name} at ${g2.regions[reg].name}: ${w.men} in one corps${w.back ? `, ${w.back}` : ""}. Its cadre has gone home and can be raised again from the arsenal.`, keep3.nat, reg);
+    const w = foldWords(g2, keep3.nat, v, gave);
+    if (keep3.nat === g2.human) headline(g2, "info", `${lentAs ?? gone.name} is folded into ${keep3.name} at ${g2.regions[reg].name}: ${w.men} in one ${orderNoun(keep3.kind)}${w.back ? `, ${w.back}` : w.spare ? `, ${w.spare}` : ""}. Its cadre has gone home and can be raised again from the arsenal.`, keep3.nat, reg);
     return true;
   }
 

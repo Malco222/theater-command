@@ -14,7 +14,7 @@ import { skyLive } from './airfog';
 import { fieldRules, fieldTier, setConcrete } from './fieldstate';
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, noMenWords, raisable } from './manpower';
-import { carved, noRifles as riflesShort, riflesFor as riflesOf, riflesTakes } from './rifles';
+import { carved, noRifles as riflesShort, orderNoun, riflesFor as riflesOf, riflesTakes } from './rifles';
 import { govMul } from './government';
 import { settledFor, settledTownsOn, whyNotWorksHere } from './buildings';
 import { cityDefences, lightsAt, nightRaided } from './citydefences';
@@ -656,9 +656,10 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     const at = raiseSite(g, nat, c.kind, sel);
     out.push({
       key: `cadre:${c.id}`, group: 'army', kind: c.kind, label: `${c.name}, a cadre`,
-      blurb: `The cadre of a corps whose men were folded into another: its staff, its name, its record and its honours. Raised again it is the same corps filled with new men, and it keeps ${Math.round(MANPOWER.fold.xp * 100)}% of what it knew.`,
+      // (The noun follows the cadre's own kind, "brigade" for a support team: the UI director's sixth read, point 2.)
+      blurb: `The cadre of a ${orderNoun(c.kind)} whose men were folded into another: its staff, its name, its record and its honours. Raised again it is the same ${orderNoun(c.kind)} filled with new men, and it keeps ${Math.round(MANPOWER.fold.xp * 100)}% of what it knew.`,
       size: plural(c.divs, 'division'), cost: t.cost, months: t.months, upkeep: budgeted(g) ? corpsUpkeep(c.kind, c.divs) : 0, at,
-      note: at < 0 ? '' : `Forms up at ${g.regions[at].name}, for ${Math.round(MANPOWER.fold.price * 100)}% of the price of a new corps.`,
+      note: at < 0 ? '' : `Forms up at ${g.regions[at].name}, for ${Math.round(MANPOWER.fold.price * 100)}% of the price of a new ${orderNoun(c.kind)}.`,
       why: whyNoCadre(g, nat, c) ?? (at < 0 ? 'There is no home ground left to raise troops on.' : noMen(t.divs) ?? noRifles(t.divs, c.kind) ?? poor(t.cost)),
       ...menFor(t.divs),
       ...riflesFor(t.divs),
