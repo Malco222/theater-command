@@ -86,7 +86,7 @@ import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
 import { nearX, ringStretch, wrapSpan } from '../wrap';
 import { WORLD, beyondEurope, closedGround, lakesOf, motherLine, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, gunsTo, shippingWords, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
-import { strafedLine, type StrafeSection } from '../strafers';
+import { resultFor, strafedLine, type StrafeSection } from '../strafers';
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import { ON_CAMPAIGN, landTicket, staffOnly } from '../../battle/land';
@@ -6780,7 +6780,7 @@ function airReportCard(r: AirReport): string {
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Battle Ticket · ${aw ? 'air raid' : 'air campaign'}, ${what} · ${date(r.turn)}</div><h2>${esc(airTitle(r))}</h2></header>
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
-      <div class="sub">${esc(r.result)}${sky}${strafedLine(r, g.human) ? ` ${esc(strafedLine(r, g.human))}` : ''}</div>
+      <div class="sub">${esc(resultFor(r, g.human))}${sky}${strafedLine(r, g.human) ? `${resultFor(r, g.human) || sky ? ' ' : ''}${esc(strafedLine(r, g.human))}` : ''}</div>
       <div class="vs"><div><h4>${chip(r.attNat)} ${natName(r.attNat)} attacking</h4>${side(r.att)}</div><div class="mid">vs</div><div class="r"><h4>${r.defNat ? natName(r.defNat) : 'No defenders'} ${r.defNat ? chip(r.defNat) : ''}</h4>${side(r.def)}</div></div>
       <h3>What the campaign map fed into the battle</h3>
       ${ticketTable(r.lines)}

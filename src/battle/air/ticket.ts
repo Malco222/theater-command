@@ -384,7 +384,7 @@ export function foughtAir(o: AirOutcome): FoughtAir {
   return {
     lost, dropped: o.dropped, jettisoned: o.jettisoned, lostBefore: o.lostBefore, lostAfter: o.lostAfter, flew, chance: o.chance,
     ...(o.strafed !== undefined ? { strafed: o.strafed } : {}),
-    ...(o.strafers ? { strafers: [...o.strafers], strafeFire: o.strafeFire ?? 0 } : {}),
+    ...(o.strafers ? { strafers: [...o.strafers], strafeFire: o.strafeFire ?? 0, ...(o.strafedBy ? { strafedBy: { ...o.strafedBy } } : {}), ...(o.strafeEnd ? { strafeEnd: { ...o.strafeEnd } } : {}) } : {}),
     ...(o.gaveUp ? { gaveUp: o.gaveUp } : {}), ...(o.sunk ? { sunk: o.sunk } : {}), ...(o.kept ? { kept: o.kept } : {}), ...(o.staff ? { staff: o.staff } : {}), ...(o.rolls ? { rolls: o.rolls } : {}),
     ...(Object.keys(fell).length ? { fell, shot } : {}), ...(Object.keys(guns).length ? { guns } : {}),
   };
