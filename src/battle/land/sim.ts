@@ -346,6 +346,15 @@ export class LandBattle implements BattleSim<LandUnit> {
    * is new.
    */
   pursueLate = false;
+  /**
+   * Falling back round an enemy in the way (release 2, the row `wayround`; the design director, 26 November 2026
+   * 18:32Z, after the pursuit gate's declared read). A block ordered to fall back walked the straight line to its own
+   * edge with no account of an enemy block standing on that line: it stepped into that block's ground, spread() eased
+   * it back as fast as it walked, and it marked time there until the battle ended (three of 2,535 pursuits; the same
+   * in the day's fight). On: wayRound below. Every block under 'withdraw' alike, either side, broken or in order.
+   * Off: today, to the byte.
+   */
+  roundRule = false;
   /** The break as it stood, with `pursue` on and the winner still to choose or fighting on: null otherwise. */
   aftermath: Aftermath | null = null;
   /**
@@ -3285,6 +3294,16 @@ export class LandBattle implements BattleSim<LandUnit> {
       const sg = Math.sign(along ? lat : dep) || (a.id < b.id ? 1 : -1);
       const ux = (along ? rx : fx) * sg, uy = (along ? ry : fy) * sg;
       const push = Math.min((along ? pl : pd) / 2, LAND.spread * DT);
+      // (wayround) A block falling back whose step this tick was into this enemy's ground: its next move looks for the
+      // way round it (the nearest such enemy, where more than one's ground undid the step).
+      if (this.roundRule && a.side !== b.side) {
+        const bar = (u: LandUnit, e: LandUnit, ox: number, oy: number): void => {
+          if (u.order?.kind !== 'withdraw' || u.pressing === undefined || ox * Math.sin(u.pressing) + oy * Math.cos(u.pressing) <= 0) return;
+          const was = u.barred === undefined ? undefined : this.unit(u.barred);
+          if (!was || dist(e.x, e.y, u.x, u.y) < dist(was.x, was.y, u.x, u.y)) u.barred = e.id;
+        };
+        bar(a, b, dx, dy); bar(b, a, -dx, -dy);
+      }
       // A block wading the river is never put back into it by an enemy on the bank: the enemy gives the room (b464(5)).
       const wa = a.side !== b.side && inRiver(groundAt(this.field, a.x, a.y)), wb = a.side !== b.side && inRiver(groundAt(this.field, b.x, b.y));
       if (!wa) go(a, -ux, -uy, wb ? 2 * push : push);
@@ -3928,9 +3947,101 @@ export class LandBattle implements BattleSim<LandUnit> {
     return want;
   }
 
+  /**
+   * (wayround) The point a block falling back steps to first, across its own way, to go round an enemy block in its
+   * line; null where it has none to go round or its lane is already clear. `to` is where its way leads next; `barred`
+   * the enemy whose ground undid its step last tick (spread).
+   *
+   * What two enemy blocks may not share is their boxes and LAND.apart, as spread() reckons them. However either is
+   * turned, spread() leaves the pair alone once their middles are `clear` apart: half this block's width and the
+   * other's half-diagonal one way, half its depth, that half-diagonal and LAND.apart the other, the longer of the two
+   * blocks' own reckonings. So the block steps across its way, to the side it already leans to (the nearer end),
+   * until its lane passes that far from the enemy's middle, then goes on; once it is that far past it along its way
+   * the round is done. The end is chosen once and kept while that enemy stands there (within LAND.apart of where it
+   * stood): no change of mind between the ends. An end is closed where the step across leaves the field, crosses
+   * ground this block cannot, ends in another enemy block's ground (shares, spread()'s own reckoning) or leads
+   * through the ground of one it is not against already; and the further end is closed where the enemy block does
+   * not stand wholly ahead (level with it, the step to that end is through the block itself: in one pursuit a block
+   * shoved its enemy sideways for four minutes so). With both closed nothing is chosen and the block does as it did
+   * before. No figure is new.
+   */
+  private shares(u: LandUnit, e: LandUnit, x: number, y: number, face: number): boolean {
+    // (spread() reads a pair in the frame of whichever comes first among the blocks: `u` as it would stand at (x, y) faced `face`)
+    const first = this.units.indexOf(u) < this.units.indexOf(e);
+    const A = first ? { x, y, face, w: u.w, d: u.d } : e, B = first ? e : { x, y, face, w: u.w, d: u.d };
+    const dx = B.x - A.x, dy = B.y - A.y;
+    const [fx, fy] = ahead(A.face), [rx, ry] = ahead(A.face + Math.PI / 2);
+    const lat = dx * rx + dy * ry, dep = dx * fx + dy * fy;
+    const c = Math.abs(Math.cos(B.face - A.face)), s = Math.abs(Math.sin(B.face - A.face));
+    return A.w / 2 + (B.w / 2) * c + (B.d / 2) * s - Math.abs(lat) > 0 && A.d / 2 + (B.w / 2) * s + (B.d / 2) * c + LAND.apart - Math.abs(dep) > 0;
+  }
+  private wayRound(u: LandUnit, to: [number, number], barred: number | undefined): [number, number] | null {
+    const far = dist(u.x, u.y, to[0], to[1]);
+    if (far < 1) return null;
+    // Its way, and across it.
+    const hx = (to[0] - u.x) / far, hy = (to[1] - u.y) / far, nx = hy, ny = -hx;
+    const half = (b: LandUnit): number => Math.hypot(b.w, b.d) / 2;
+    const clear = (e: LandUnit): number => Math.max(
+      Math.hypot(u.w / 2 + half(e), u.d / 2 + half(e) + LAND.apart), Math.hypot(e.w / 2 + half(u), e.d / 2 + half(u) + LAND.apart));
+    const stands = (e: LandUnit | undefined): e is LandUnit => !!e && fighting(e) && e.kind !== 'fort';
+    let R = u.round;
+    if (R) { const e = this.unit(R.by); if (!stands(e) || dist(e.x, e.y, R.at[0], R.at[1]) > LAND.apart) R = u.round = undefined; }
+    // The step across that takes its lane clear of this enemy toward (ox, oy), a side of its way: where it ends.
+    const across = (e: LandUnit, ox: number, oy: number): [number, number] => {
+      const by = clear(e) + 1 - ((u.x - e.x) * ox + (u.y - e.y) * oy);
+      return [u.x + ox * by, u.y + oy * by];
+    };
+    if (barred !== undefined && R?.by !== barred) {
+      const e = this.unit(barred);
+      if (stands(e)) {
+        const m = this.going(u), f = this.field, face = Math.atan2(hx, hy), pace = u.w / 2;
+        const others = this.units.filter((o) => o !== e && o.side !== u.side && stands(o));
+        // (an enemy block it stands against already is no bar to stepping away from it)
+        const apartFrom = others.filter((o) => !this.shares(u, o, u.x, u.y, face));
+        // (it makes the step across faced along it and comes out of it faced along its way: its box as it lies either way)
+        const lies = (o: LandUnit, x: number, y: number): boolean => this.shares(u, o, x, y, face) || this.shares(u, o, x, y, face + Math.PI / 2);
+        const open = (side: 1 | -1): boolean => {
+          const [px, py] = across(e, nx * side, ny * side);
+          if (px < 5 || px > f.w - 5 || py < 5 || py > f.h - 5) return false;
+          if (!this.bears(m, px, py) || !this.dry(m, u.x, u.y, px, py)) return false;
+          if (others.some((o) => lies(o, px, py))) return false;
+          // Nor through the ground of an enemy block it is not against, on the step across: read every half width of its own.
+          const leg = dist(u.x, u.y, px, py);
+          for (let k = 1; pace > 0 && k * pace < leg; k++) {
+            const x = u.x + (px - u.x) * k * pace / leg, y = u.y + (py - u.y) * k * pace / leg;
+            if (apartFrom.some((o) => lies(o, x, y))) return false;
+          }
+          return true;
+        };
+        const first: 1 | -1 = (u.x - e.x) * nx + (u.y - e.y) * ny >= 0 ? 1 : -1, other: 1 | -1 = first === 1 ? -1 : 1;
+        // The further end only where that block stands wholly ahead of this one along its way (their boxes, as they
+        // lie): level with it, the step across to the further end would be through the block itself.
+        const c = Math.abs(Math.cos(e.face - face)), sn = Math.abs(Math.sin(e.face - face));
+        const before = (e.x - u.x) * hx + (e.y - u.y) * hy >= u.d / 2 + (e.w / 2) * sn + (e.d / 2) * c;
+        const side = open(first) ? first : before && open(other) ? other : null;
+        // (both ends closed: the way round it kept, if any, stands; else none)
+        if (side !== null) R = u.round = { by: e.id, at: [e.x, e.y], side, over: [nx * side, ny * side] };
+      }
+    }
+    if (!R) return null;
+    const e = this.unit(R.by)!;
+    // Past it along its way: done.
+    if ((u.x - e.x) * hx + (u.y - e.y) * hy > clear(e)) { u.round = undefined; return null; }
+    // Its lane is clear of that block's ground, by the side it chose (as that side lay when it chose it): straight on.
+    const [ox, oy] = R.over;
+    if ((u.x - e.x) * ox + (u.y - e.y) * oy >= clear(e) + 0.5) return null;
+    const [px, py] = across(e, ox, oy);
+    return [clamp(px, 5, this.field.w - 5), clamp(py, 5, this.field.h - 5)];
+  }
+
   private move(u: LandUnit): void {
     const k = u.kind;
     u.pressing = undefined;
+    // (wayround) The enemy whose ground undid its step back last tick, if any: read once.
+    const barred = this.roundRule ? u.barred : undefined;
+    if (barred !== undefined) u.barred = undefined;
+    // (a way round is its falling back's own: another order, or a rout, and it is forgotten)
+    if (u.round && (u.state === 'routing' || u.order?.kind !== 'withdraw')) u.round = undefined;
     if (u.ovr && this.drive(u)) return;
     const gave = u.yieldTo !== undefined ? this.unit(u.yieldTo) : undefined;
     u.yieldTo = undefined;
@@ -3941,6 +4052,11 @@ export class LandBattle implements BattleSim<LandUnit> {
       // (after the break, pursue: by the point the player gave it, where he picked its way, 'via')
       u.path = !u.order.via && this.dry(this.going(u), u.x, u.y, u.x, u.order.y) && !this.exit(this.going(u), u.x, u.y) ? [[u.x, u.order.y]] : this.route(u, u.order.x, u.order.y);
       to = u.path[0];
+      // (wayround) An enemy block's ground undid its step back: round the nearer end of it first, then on.
+      if (this.roundRule && to) {
+        const by = this.wayRound(u, to, barred);
+        if (by) { u.path = [by, ...u.path]; to = by; }
+      }
     }
     else if (u.order?.kind === 'attack') {
       let t = this.unit(u.order.target!);

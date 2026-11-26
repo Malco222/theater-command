@@ -329,6 +329,20 @@ namespace
 		// director pass it; -TheaterLandRulePursue turns it on for a run. Key and flags mine; the name and the line
 		// are the UI director's (26 November 2026, 13:32Z): the name says what is true when the row is on.)
 		{ TEXT("pursue"), TEXT("Winners choose whether to pursue a broken army"), TEXT("When an army breaks, the battle need not end there. If yours has won, the clock stands while you choose: pursue the broken army until the last of it has left the field or the day ends, or end the battle at once. You can call a pursuit off at any time. A computer army that wins chooses for itself, by what it can see. A broken army falls back to its own edge of the field; when it is yours, you choose its way back and can hurry it. Off: the battle ends the moment an army breaks, as before. This changes how battles turn out. A change takes effect from the next battle."), TEXT("TheaterLandNoPursue"), false, TEXT("TheaterLandRulePursue") },
+		// (Falling back round an enemy in the way (release 2; the pursuit gate's declared read of 26 November 2026, the
+		// design director's ruling of 18:32Z): a block ordered to fall back made straight for its own edge, and where
+		// an enemy block stood on that line that the field could not ease out of its way (on a river's bank, on the
+		// field's edge) and it walked slower than the field eased it back (foot in a wood), it marked time against
+		// that block until the battle ended: three of 2,535 pursuits ran to their clock's end so. On, it walks round
+		// the nearer end of that block's box, by the boxes and the field's own distance between enemies, no new figure;
+		// the end is chosen once and kept while that block stands there; with both ends closed it does as before. A
+		// row and a switch of its own, since every block falling back acts so, either side, broken or in order, in a
+		// pursuit or in the day's fighting (the rules' sim.roundRule, wayRound). It is NOT looks only: it has its own
+		// fairness gate and stays off until that gate, the Mac and the art director pass it;
+		// -TheaterLandRuleWayRound turns it on for a run. Key and flags mine; the name and the line are the UI
+		// director's (26 November 2026, 18:39Z, the line as she amended it at 21:26Z on what today's field really
+		// does), set beside `pursue` as she asked.)
+		{ TEXT("wayround"), TEXT("Units falling back go round an enemy in their way"), TEXT("A unit falling back that finds an enemy unit in its way steps round the nearer end of it and goes on to its own edge: on either side, broken or in order, in a pursuit or in the day's fighting. Where both ends are closed (the field's edge, ground it cannot cross, another enemy), it goes on as with the row off. Off: a unit falling back makes straight for its own edge, as before: it shoulders through an enemy unit in its way or drives it ahead, and where it moves slowly and that unit cannot give ground, it can be held against it until the battle ends. This changes how battles turn out. A change takes effect from the next battle."), TEXT("TheaterLandNoWayRound"), false, TEXT("TheaterLandRuleWayRound") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 
