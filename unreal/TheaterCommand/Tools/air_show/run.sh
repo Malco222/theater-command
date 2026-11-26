@@ -113,6 +113,14 @@ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -DAIR_LIGHT_SCREWS -I"$SRC" \
   "$HERE/air_light_test.cpp" "$SRC/Battle/AirLight.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_light_screws_test"
 "$OUT/air_light_screws_test" "$ROOT"/Content/Models/*.json "$ROOT"/Content/Models/Old/*.json || STATUS=1
+# Bomber markings (the Battle rules card's "Bomber markings", row flyBomberMarks; Brian, 25 November 2026, of the approved
+# studio pictures: "Build it into the game"): the markings' data file (Tools/air_marks/make_b17_marks.py) read as the
+# game reads it, made on her file, wound as it, on her skin near and far, reading the right way round, apex forward,
+# clear of her star and bar; who wears which letters, the same at any cadence, never by date, the show's record untouched.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_letters_test.cpp" "$SRC/Battle/AirLetters.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  -o "$OUT/air_letters_test"
+"$OUT/air_letters_test" "$ROOT/Content/Data/AirMarks/b17-fine-marks.json" "$ROOT/Content/Models" "$SRC" "$@" || STATUS=1
 # The sky's picture (the clouds as the scene lays and turns them, drawn by a small software painter): AIR_SKY_PICTURES=1.
 if [ "${AIR_SKY_PICTURES:-}" = "1" ]; then
   $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
