@@ -801,3 +801,44 @@ describe('(f) each ruling seen to bite, switch on', () => {
     expect(GOT).toBe(83);
   });
 });
+
+describe('(g) after the sceptics: the glide reads its own height, and the crew reads the ticket\'s kit', () => {
+  it('a glide\'s jump reads outBand at the scene\'s own band, low, middle and high (the test figure out.glide 0.5): the fighter pilot over his own ground and each of a bomber\'s men', () => {
+    withBook(() => { SKY.fate.out.glide = 0.5; SKY.fate.base.ftr = [0, 0, 0, 0, 0, 0, 0, 1, 0]; SKY.fate.base.bmr = [0, 0, 0, 0, 0, 0, 0, 1, 0]; }, () => {
+      for (const band of [0, 1, 2] as const) {
+        const want = Math.min(0.95, 0.5 * SKY.fate.outBand[band]);
+        const rng = new Rng(500 + band);
+        let n = 0, k = 0;
+        for (let i = 0; i < 8_000; i++) {
+          const f = fateOf(rng, fighter({ over: 'own', band, alt: SKY.bands.alt[band] }), freshMemory());
+          expect(f.how).toBe('glide');
+          n++; if (f.chutes) k++;
+        }
+        expect(Math.abs(k / n - want), `fighter band ${band}: ${k}/${n} against ${want}`).toBeLessThan(4 * Math.sqrt((want * (1 - want)) / n) + 0.01);
+        const brng = new Rng(600 + band);
+        let men = 0, up = 0;
+        for (let i = 0; i < 2_000; i++) {
+          const f = fateOf(brng, scene({ crew: 5, band, alt: SKY.bands.alt[band] }), freshMemory());
+          expect(f.how).toBe('glide');
+          men += 5; up += f.chutes;
+        }
+        expect(Math.abs(up / men - want), `bomber band ${band}: ${up}/${men} against ${want}`).toBeLessThan(4 * Math.sqrt((want * (1 - want)) / men) + 0.01);
+      }
+    });
+  });
+  it('a bomber\'s crew follows the guns its ticket carries, not the date: a 1939 Alsace raid flying the He 111H\'s guns falls with crew 5, as shipped with 4', () => {
+    const tk = alsaceOf(0);
+    const kit = bomberGuns('He111', 'GER', { year: 1941, month: 0 });
+    expect(kit.mark).toBe('He 111H');
+    expect(bomberGuns('He111', 'GER', tk.place.when ?? { year: 1939, month: 8 }).mark).toBe('He 111P');
+    const swapped = structuredClone(tk);
+    swapped.place.guns!.GER.bmr = kit;
+    const crews = (t: Ticket): number[] => {
+      const seen = new Set<number>();
+      for (const e of lostOf(flown({ key: 'kit', run: { key: '', ticket: t, play: 'ai' } }, true).history())) if (fallOf(e).air === 'bmr') seen.add(fallOf(e).crew!);
+      return [...seen];
+    };
+    expect(crews(tk)).toEqual([4]);
+    expect(crews(swapped)).toEqual([5]);
+  });
+});
