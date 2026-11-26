@@ -13,7 +13,7 @@ import { stockOf } from '../src/campaign/arms';
 import { offers } from '../src/campaign/arsenal';
 import { foldCardWords, foldCorps, foldView, foldWords } from '../src/campaign/fold';
 import { addCorps, createGame, setWar } from '../src/campaign/game';
-import { MANPOWER, classNow, comesWords, corpsMenWords, levyMen, manpower, menPer, menScale, menWords, noMenWords, reserveLevelWords, reserveWords } from '../src/campaign/manpower';
+import { MANPOWER, classNow, comesWords, corpsMenWords, levyMen, manpower, menPer, menScale, menWords, menWorth, noMenWords, reserveLevelWords, reserveWords } from '../src/campaign/manpower';
 import { RIFLES, arsenalTop, inWords, levelOf, noRifles, riflesMonth, riflesSeen, riflesTakes, riflesView, riflesWait } from '../src/campaign/rifles';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -831,5 +831,36 @@ describe('the sixth read, point 3: the fold\'s news says the rifles it gives the
     expect(board(K, G, 0).news).toEqual([`${head}.${CADRE}`]);
     // And beside men sent back: "and one more".
     expect(board('', '', 1).news[0]).toMatch(/about 27,000 sent back to the reserve, and their rifles and one more to the store\. Its cadre/);
+  });
+});
+
+// The UI director's sixth read (26 November 2026, 18:55Z), point 4: a need under 500 men (which reads no thousand) is
+// said exactly, with no "about", in menWorth and in the refusal alike, so the two keep one figure: "The reserve is {69}
+// men short: this takes {469} men." No order on China's map is one today, so through the functions.
+describe('the sixth read, point 4: a need under 500 men, said exactly', () => {
+  const CLASS = ' About 105,000 men come of age each month in the land you still hold.';
+  const per = 67000, cls = 1.5644171779141105;
+
+  it('menWorth, the order\'s note and the fold card say "469 men"; 500 and up as before', () => {
+    expect(menScale('CHN')).toBe(per);
+    expect(menWorth(per, 469 / per)).toBe('469 men');
+    expect(menWorth(per, 469 / per, false)).toBe('469 men');
+    expect(menWorth(per, 499 / per)).toBe('499 men');
+    expect(menWorth(per, 7 / per)).toBe('seven men');
+    expect(menWorth(per, 1 / per)).toBe('one man');
+    expect(menWorth(per, 500 / per)).toBe('about 1,000 men');
+    expect(menWorth(per, 0.27)).toBe('about 18,000 men');
+    expect(menWorth(per, 3)).toBe("three divisions' worth of men");
+    const g = grand();
+    expect(riflesTakes(g, 'CHN', 469 / per)).toBe('Takes 469 men and 100 rifles.');
+    expect(foldCardWords('CHN').cadre({ cadreCost: 0, cadreMen: (469 / per) * MEN_PER_DIV } as never, '0')).toBe('469 men from the reserve');
+  });
+
+  it('the refusal: "The reserve is 69 men short: this takes 469 men. ..."', () => {
+    expect(noMenWords('CHN', 469 / per, 400 / per, cls)).toBe(`The reserve is 69 men short: this takes 469 men.${CLASS}`);
+    expect(noMenWords('CHN', 469 / per, 0, cls)).toBe(`The reserve is 469 men short: this takes 469 men.${CLASS}`);
+    expect(noMenWords('CHN', 469 / per, 468 / per, cls)).toBe(`The reserve is one man short: this takes 469 men.${CLASS}`);
+    // (500 men and up: as laid in the fifth read.)
+    expect(noMenWords('CHN', 0.01, 600 / per, cls)).toBe(`The reserve is 70 men short: this takes about 1,000 men.${CLASS}`);
   });
 });
