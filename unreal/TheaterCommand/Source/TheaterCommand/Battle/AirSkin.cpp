@@ -77,6 +77,18 @@ namespace AirSkin
 			return true;
 		}
 
+		/** A whole number 0 to 2^53 (a size or a point's number): anything else, negative, fractional or huge, is refused
+		 * before it is cast. */
+		bool SkinWhole(const LandJson::Json& Node, uint64_t& Out)
+		{
+			if (!Node.IsNumber() || !(Node.Value >= 0.0) || !(Node.Value < 9007199254740992.0) || Node.Value != std::floor(Node.Value))
+			{
+				return false;
+			}
+			Out = static_cast<uint64_t>(Node.Value);
+			return true;
+		}
+
 		bool SkinPercents(const LandJson::Json& List, size_t Count, std::vector<uint8_t>& Out)
 		{
 			if (!List.IsArray() || List.Items.size() != Count)
@@ -213,25 +225,25 @@ namespace AirSkin
 			return false;
 		}
 		O.PanelBlend = static_cast<int>(Panel.Value);
-		if (!SkinHex(Root["base_fnv64"].Str(""), 16, O.BaseFnv64) || !Root["base_bytes"].IsNumber())
+		if (!SkinHex(Root["base_fnv64"].Str(""), 16, O.BaseFnv64) || !SkinWhole(Root["base_bytes"], O.BaseBytes))
 		{
 			Why = "no base_fnv64 or base_bytes";
 			return false;
 		}
-		O.BaseBytes = static_cast<uint64_t>(Root["base_bytes"].Num());
 		const LandJson::Json& Checks = Root["check"];
 		for (const LandJson::Json& C : Checks.Items)
 		{
 			Check Ch;
 			Ch.bFar = C["shape"].Str("") == "far";
-			Ch.Point = static_cast<size_t>(C["point"].Num(-1.0) < 0.0 ? 0.0 : C["point"].Num());
 			Ch.Paint = C["paint"].Int(0);
-			uint64_t A = 0, B = 0;
-			if (!SkinHex(C["rgb"].Str(""), 6, A) || !SkinHex(C["shaded"].Str(""), 6, B) || Ch.Point >= O.LevelOf(Ch.bFar).Count())
+			uint64_t A = 0, B = 0, At = 0;
+			if (!SkinWhole(C["point"], At) || At >= static_cast<uint64_t>(O.LevelOf(Ch.bFar).Count()) || !SkinHex(C["rgb"].Str(""), 6, A)
+				|| !SkinHex(C["shaded"].Str(""), 6, B))
 			{
 				Why = "a check point not whole";
 				return false;
 			}
+			Ch.Point = static_cast<size_t>(At);
 			Ch.Rgb = static_cast<uint32_t>(A);
 			Ch.Shaded = static_cast<uint32_t>(B);
 			O.Checks.push_back(Ch);
