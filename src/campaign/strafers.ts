@@ -57,6 +57,11 @@ export const STRAFE_WORDS = {
   // (The report: a group that went down with too little fight left to do any harm, the UI director 19:10Z A5 and its
   // forms at 19:17Z; the order's answer for a group that carries nothing, A6, said by the battle, src/battle/air/sim.ts.)
   little: 'went down to strafe, but had too little fight left to do any harm.',
+  // (What ended a group's strafing short, as the battle knows it, one group and two or more: the UI director, 21:22Z j and
+  // k, and 21:28Z, the new case.)
+  short: ['was too short of fuel to go down and turned for home.', 'were too short of fuel to go down and turned for home.'],
+  fuel: ['went down to strafe, but ran short of fuel and turned for home before it could do any harm.', 'went down to strafe, but ran short of fuel and turned for home before they could do any harm.'],
+  caught: ['went down to strafe, but was caught by enemy fighters before it could do any harm.', 'went down to strafe, but were caught by enemy fighters before they could do any harm.'],
 } as const;
 
 /**
@@ -93,17 +98,21 @@ const named = (xs: string[]): string => cap(list(xs.map(theGroupName)));
 /**
  * The raid report's line on who went down, as `reader` reads it: only a raid on troops whose report kept its strafers
  * (the switch on when it was flown), and only for the side that flew it. '' otherwise: for the defender, whom her words
- * do not cover, for any other raid, and for a report saved without the field (an older save, or the switch off). The
- * groups that went down with too little fight left to do any harm (strafeLittle) are told apart, after the others
- * (the UI director, 19:17Z: "{A} went down and strafed. {B} went down to strafe, but had too little fight left to do any
- * harm."), each sentence joining its names as the report joins them.
+ * do not cover, for any other raid, and for a report saved without the field (an older save, or the switch off). Each
+ * cause its own sentence, in the order the raid ran (the UI director, 21:22Z and 21:28Z): those that strafed; those too
+ * short of fuel to go down (strafeEnd.short); those that ran short after going down (strafeEnd.fuel); those caught
+ * (strafeEnd.caught); those with too little fight left (strafeLittle, 19:10Z A5 and its forms at 19:17Z). Each sentence
+ * joins its names as the report joins them, every name by theGroupName (21:22Z g). Where no group went down at all,
+ * "No fighter group went down to strafe." as before, and a group too short of fuel to go down after it.
  */
-export function strafedLine(rep: { mission: string; attNat: string; strafed?: string[]; strafeLittle?: { names: string[] } }, reader: string | null): string {
+export function strafedLine(rep: { mission: string; attNat: string; strafed?: string[]; strafeLittle?: { names: string[] }; strafeEnd?: { short?: string[]; fuel?: string[]; caught?: string[] } }, reader: string | null): string {
   if (rep.mission !== 'ground' || !rep.strafed || reader === null || reader !== rep.attNat) return '';
-  if (!rep.strafed.length) return STRAFE_WORDS.nobody;
-  const little = rep.strafeLittle?.names ?? [];
-  const full = rep.strafed.filter((n) => !little.includes(n)), few = rep.strafed.filter((n) => little.includes(n));
-  return [full.length ? `${named(full)} went down and strafed.` : '', few.length ? `${named(few)} ${STRAFE_WORDS.little}` : ''].filter(Boolean).join(' ');
+  const little = rep.strafeLittle?.names ?? [], end = rep.strafeEnd ?? {};
+  const short = end.short ?? [], fuel = end.fuel ?? [], caught = end.caught ?? [];
+  const full = rep.strafed.filter((n) => !little.includes(n) && !fuel.includes(n) && !caught.includes(n));
+  const say = (xs: string[], words: string | readonly [string, string]): string => (!xs.length ? '' : `${named(xs)} ${typeof words === 'string' ? words : words[xs.length === 1 ? 0 : 1]}`);
+  const went = full.length + fuel.length + caught.length + little.length > 0;
+  return [went ? say(full, 'went down and strafed.') : STRAFE_WORDS.nobody, say(short, STRAFE_WORDS.short), say(fuel, STRAFE_WORDS.fuel), say(caught, STRAFE_WORDS.caught), say(little, STRAFE_WORDS.little)].filter(Boolean).join(' ');
 }
 
 /**

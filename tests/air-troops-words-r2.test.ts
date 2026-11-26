@@ -546,3 +546,53 @@ describe('the alone case: only the raider\'s report card prints the A5 line by i
     expect(flownRaids(c.g).find((x) => x.id === r.id)!.result).toBe(HARM_LITTLE);
   });
 });
+
+// The UI director, 25 November 2026 21:22Z, j and k, and 21:28Z: the three sentences, one group, two "{A} and {B}" and
+// three or more "{A}, {B} and {C}", every name by theGroupName; "The order of the report's lines, as the raid ran: those
+// that strafed; those too short of fuel to go down; those that ran short after going down; those caught; those with too
+// little fight left (the A5 line). Each cause its own sentence; a group in one only." The fought battles that make each
+// line are in tests/air-troops-r2.test.ts; here the forms, from a report (smallest setup: the report's fields only).
+describe('what ended a group\'s strafing short: the forms and the order (the UI director, 21:22Z j and k, 21:28Z)', () => {
+  const SHORT = ['was too short of fuel to go down and turned for home.', 'were too short of fuel to go down and turned for home.'];
+  const FUEL = ['went down to strafe, but ran short of fuel and turned for home before it could do any harm.', 'went down to strafe, but ran short of fuel and turned for home before they could do any harm.'];
+  const CAUGHT = ['went down to strafe, but was caught by enemy fighters before it could do any harm.', 'went down to strafe, but were caught by enemy fighters before they could do any harm.'];
+  type End = { short?: string[]; fuel?: string[]; caught?: string[] };
+  const rep = (strafed: string[], end: End, little: string[] = []) => ({ mission: 'ground', attNat: 'FRA', strafed, strafeEnd: end, ...(little.length ? { strafeLittle: { names: little } } : {}) });
+  it('her words, kept with the others', () => {
+    expect(STRAFE_WORDS.short).toEqual(SHORT);
+    expect(STRAFE_WORDS.fuel).toEqual(FUEL);
+    expect(STRAFE_WORDS.caught).toEqual(CAUGHT);
+  });
+  it('one, two, three or more; a name in its own language and an English one, at the head of a sentence and inside a list', () => {
+    for (const [key, W] of [['short', SHORT], ['fuel', FUEL], ['caught', CAUGHT]] as const) {
+      const lead = key === 'short' ? `${NOBODY} ` : '';
+      expect(strafedLine(rep([], { [key]: ['Groupement de Chasse 3'] }), 'FRA')).toBe(`${lead}Groupement de Chasse 3 ${W[0]}`);
+      expect(strafedLine(rep([], { [key]: ['2nd Fighter Group'] }), 'FRA')).toBe(`${lead}The 2nd Fighter Group ${W[0]}`);
+      expect(strafedLine(rep([], { [key]: ['2nd Fighter Group', 'JG 26'] }), 'FRA')).toBe(`${lead}The 2nd Fighter Group and JG 26 ${W[1]}`);
+      expect(strafedLine(rep([], { [key]: ['JG 26', '2nd Fighter Group'] }), 'FRA')).toBe(`${lead}JG 26 and the 2nd Fighter Group ${W[1]}`);
+      expect(strafedLine(rep([], { [key]: ['JG 26', 'Groupement de Chasse 3', '3rd Fighter Aviation Division'] }), 'FRA')).toBe(`${lead}JG 26, Groupement de Chasse 3 and the 3rd Fighter Aviation Division ${W[1]}`);
+    }
+  });
+  it('in the order the raid ran, each cause its own sentence, a group in one only; the defender reads none of it', () => {
+    // (A fought group of `strafed` whose strafing fuel or a catch ended is told by that cause, not as having strafed.)
+    const r = rep(['A', '1st Fighter Group', 'C', 'D'], { short: ['B'], fuel: ['1st Fighter Group'], caught: ['C'] }, ['D']);
+    expect(strafedLine(r, 'FRA')).toBe(`A went down and strafed. B ${SHORT[0]} The 1st Fighter Group ${FUEL[0]} C ${CAUGHT[0]} D ${LITTLE}`);
+    expect(strafedLine(r, 'GER')).toBe('');
+    // A caught group that never began a pass is not among `strafed`: it went down all the same, so no line for nobody.
+    expect(strafedLine(rep([], { caught: ['C'] }), 'FRA')).toBe(`C ${CAUGHT[0]}`);
+    expect(strafedLine(rep([], { fuel: ['C'] }), 'FRA')).toBe(`C ${FUEL[0]}`);
+    // Too short of fuel to go down beside groups that did.
+    expect(strafedLine(rep(['A'], { short: ['B', 'C'] }), 'FRA')).toBe(`A went down and strafed. B and C ${SHORT[1]}`);
+  });
+  it('the settled raid knows no fuel and no catch: none of these lines, and no field', () => {
+    on();
+    for (const n of [200, 646, 648]) {
+      const c = saar(0, 'three');
+      const d = c.g.airFleets.find((f) => f.id === 3)!;
+      d.ftr = n; d.est.ftr = Math.max(d.est.ftr, n);
+      const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+      expect('strafeEnd' in r).toBe(false);
+    }
+    expect(saveGame(saar(0).g).includes('"strafeEnd"')).toBe(false);
+  });
+});

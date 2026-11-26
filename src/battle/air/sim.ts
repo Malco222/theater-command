@@ -212,6 +212,15 @@ export class AirSim implements BattleSim<AirUnit> {
    * (the report's words, the UI director 19:10Z A5). It goes out only in the outcome of a raid on troops with the rule on.
    */
   private booked = new Map<number, number>();
+  /**
+   * With the strafers' rule on: by campaign group id, what ended a group's strafing short, as the battle knows it, for
+   * the report's words (the UI director, 25 November 2026 21:22Z, j and k, and 21:28Z): 'short', a group with the reach
+   * that bingo turned for home before its go-down; 'fuel', one that bingo turned for home after its go-down, before its
+   * passes were over; 'caught', one a defending fighter group caught on its passes (or on its way down to them) whose
+   * passes the catch ended (cleared again when it makes a pass after it). Read by nothing in the battle; out only in the
+   * outcome of a raid on troops with the rule on, and only when not empty.
+   */
+  private ended = new Map<number, 'short' | 'fuel' | 'caught'>();
   /** The raid's fighter groups ordered to stay with the bombers (or given any other order): they never go down on their own. */
   private keepUp = new Set<number>();
   /** The bomber box each of the raid's fighter groups was last escorting (it goes down once that box has bombed). */
@@ -799,8 +808,14 @@ export class AirSim implements BattleSim<AirUnit> {
     }
     // Fuel: only the raid's fighters are far from home.
     if (u.air === 'ftr' && u.fuel0 < SKY.fuel.home) {
-      u.fuel -= dt * (u.contacts.length ? SKY.fuel.fight : 1);
+      const burn = dt * (u.contacts.length ? SKY.fuel.fight : 1);
+      // (The strafers' rule, for the report's words only: a group with the reach that would still go down, whose fuel
+      // runs out before its go-down, was too short of fuel to go down, 21:22Z k.)
+      if (this.troops?.law.reach && u.fuel > 0 && u.fuel - burn <= 0 && !this.strafing.has(u.id) && this.willStrafe(u)) this.ended.set(u.corps, 'short');
+      u.fuel -= burn;
       if (u.fuel <= 0 && u.job.do !== 'home') {
+        // (... and one turned for home by bingo after its go-down, on its passes or on its way to them: 21:28Z.)
+        if (this.troops?.law.reach && u.job.do === 'strafe' && this.strafing.has(u.id) && !this.strafing.get(u.id)!.over) this.ended.set(u.corps, 'fuel');
         u.fuel = 0; u.job = { do: 'home' };
         this.say('air:bingo', u, told(this.called(u), '{N} [is|are] short of fuel and [turns|turn] for home.'), undefined, C.bingo);
       }
@@ -958,7 +973,12 @@ export class AirSim implements BattleSim<AirUnit> {
   private pass(u: AirUnit): void {
     const s = this.strafing.get(u.id)!, S = TROOPS.strafe;
     // Jumped: the pass is broken off. A group with fight left turns on its attackers (aimAt); one fought out runs for home.
-    if (u.contacts.length) { s.run = false; s.p = 0; if (u.vig < SKY.spent) u.job = { do: 'home' }; return; }
+    if (u.contacts.length) {
+      s.run = false; s.p = 0; if (u.vig < SKY.spent) u.job = { do: 'home' };
+      // (The strafers' rule, for the report's words only: caught by enemy fighters, 21:22Z j.)
+      if (this.troops!.law.reach) this.ended.set(u.corps, 'caught');
+      return;
+    }
     // (The strafers' rule, 18:14Z: between passes the fight it carries is read afresh; jumped by a defender it had not met,
     // it carries less on the passes still to fly, and with none it goes home, gone for the raid: 19:09Z, item 2.)
     if (!s.run && !(this.carries(u) > 0)) { this.sendHome(u); return; }
@@ -983,7 +1003,11 @@ export class AirSim implements BattleSim<AirUnit> {
     // The pass made: its part of the group counts on the troops, by the campaign's own law, and its hits follow.
     s.done++; s.run = false; s.p = 0;
     this.strafed += part;
-    if (this.troops!.law.reach) this.booked.set(u.corps, (this.booked.get(u.corps) ?? 0) + part);
+    if (this.troops!.law.reach) {
+      this.booked.set(u.corps, (this.booked.get(u.corps) ?? 0) + part);
+      // (A pass made after a catch: the catch did not end its passes.)
+      if (this.ended.get(u.corps) === 'caught') this.ended.delete(u.corps);
+    }
     const mid = [(s.from[0] + s.to[0]) / 2, (s.from[1] + s.to[1]) / 2];
     this.marksHit(u, this.troops!.land(this.droppedNow(), this.strafed, 'strafe', mid[0], mid[1]));
     if (s.done >= S.passes) {
@@ -2231,7 +2255,7 @@ export class AirSim implements BattleSim<AirUnit> {
       // A raid on troops: the fighters that strafed, and the organisation cut the field earned by the campaign's own law
       // from them and the bombers that dropped. Fought to the end, the campaign books the cut from these same counts.
       ...(this.troops ? { strafed: this.strafed, troops: { cut: troopCutOf(this.troops.law, att.reduce((s, u) => s + u.dropped, 0), this.strafed) } } : {}),
-      ...(this.troops?.law.reach ? { strafers: [...this.firedOn].sort((x, y) => x - y), strafeFire: this.fireOwed, strafedBy: Object.fromEntries([...this.booked].sort((x, y) => x[0] - y[0])) } : {}),
+      ...(this.troops?.law.reach ? { strafers: [...this.firedOn].sort((x, y) => x - y), strafeFire: this.fireOwed, strafedBy: Object.fromEntries([...this.booked].sort((x, y) => x[0] - y[0])), ...(this.ended.size ? { strafeEnd: Object.fromEntries([...this.ended].sort((x, y) => x[0] - y[0])) } : {}) } : {}),
       ...(this.place.bombs ? { rolls: this.staff ? { ...(this.railCut ? { rail: 0 } : {}), ...(this.ruined ? { ruin: 0 } : {}) } : { ...this.rolls }, railCut: this.railCut, ruined: this.ruined } : {}),
     };
   }

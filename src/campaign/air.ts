@@ -3026,6 +3026,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   let strafed: string[] | undefined;
   // (And those of them that went down with under one fighter's weight on the troops: the UI director, 19:10Z A5.)
   let strafeLittle: AirReport['strafeLittle'];
+  // (And, fought out, those whose strafing fuel or a catch ended short, as the battle knows it: 21:22Z j and k, 21:28Z.)
+  let strafeEnd: AirReport['strafeEnd'];
   const bookGround = (hit: FieldHit): void => {
     for (const x of hit.losses) {
       const f = g.airFleets.find((y) => y.id === x.id);
@@ -3277,8 +3279,22 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       // fought, what its passes counted), is told as having too little fight left to do any harm. Alone: they were all
       // that reached the troops, no bomber's weight and no other strafer's.)
       const booked = (x: AirAssess['att'][number]): number => (route === 'fought' ? battle?.strafedBy?.[x.f.id] ?? 0 : x.f.ftr * x.esc * x.crowd * carry);
-      const little = a.att.flatMap((x, i) => (down.includes(x.f.id) && booked(x) < 1 ? [att[i].fleet] : []));
-      if (little.length) strafeLittle = { names: little, ...(little.length === strafed.length && !(through > 0) ? { alone: true as const } : {}) };
+      // (j, k and the new case, the UI director 21:22Z and 21:28Z: "A group that went down takes the line of what ended
+      // its pass, as the battle knows it; the A5 line only where neither fuel nor a jump ended it", a group in one line
+      // only. Fought out only: the battle's strafeEnd, by group, 'short' (bingo before its go-down: it never went down),
+      // 'fuel' (bingo after it) or 'caught'; a group that did a fighter's harm or more strafed, whatever ended it. Settled,
+      // or handed to the staff, no fuel and no catch is known, so none of these lines is made.)
+      const ends = route === 'fought' ? battle?.strafeEnd ?? {} : {};
+      const end: NonNullable<AirReport['strafeEnd']> = {};
+      const little: string[] = [];
+      a.att.forEach((x, i) => {
+        const went = down.includes(x.f.id), why = ends[x.f.id];
+        if (went && booked(x) >= 1) return;
+        if ((why === 'short' && !went) || why === 'fuel' || why === 'caught') (end[why] ??= []).push(att[i].fleet);
+        else if (went) little.push(att[i].fleet);
+      });
+      if (Object.keys(end).length) strafeEnd = end;
+      if (little.length) strafeLittle = { names: little, ...(little.length === strafed.length && !end.fuel && !end.caught && !(through > 0) ? { alone: true as const } : {}) };
     }
     let divs = 0;
     for (const c of foes) {
@@ -3382,6 +3398,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   if (transit) rep.ferry = transit.to;
   if (strafed) rep.strafed = strafed;
   if (strafeLittle) rep.strafeLittle = strafeLittle;
+  if (strafeEnd) rep.strafeEnd = strafeEnd;
   g.airReports.push(rep);
   storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' || m === 'airfield' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
   // (Release 2, earned names for air groups under the switch 'nicknames', airnicks.ts: the missions completed and the
