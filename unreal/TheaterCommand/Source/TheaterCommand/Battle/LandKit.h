@@ -324,9 +324,26 @@ namespace LandKit
 		 * November 2026: "have the paint be on it regardless of the year"; the art director's ruling of the same day): no
 		 * coat and no mark is chosen by the battle's month. A coat follows the field's ground where her file or her army
 		 * has one for it (the first of that ground's rows); else it is the first her file's rows name, and Germany's is
-		 * tank grey for the whole war on every model. Her mark is the first her army painted (the British flash). The
-		 * month still chooses her parts (a long gun, skirts): those are not paint. Off: by the month, as before. */
+		 * tank grey for the whole war on every model. Her mark is the first her army painted (the British flash, as the
+		 * campaign map's pieces wear it: red, white, red; Poland is never in it). The grey carries less road dust than
+		 * the files lay for the dark yellow, a dry earth about as bright as the grey, on a skirt in its lowest third only.
+		 * The month still chooses her parts (a long gun, skirts): those are not paint. Off: by the month, as before. */
 		bool bAnyYear = false;
+		/** Every nation's mark, and marks that read (release 2, on its own switch, the trial word "allmarks"; Brian, 26
+		 * November 2026: "i did a tank battle in the cairo and the british tank didn't have any" markings; the art
+		 * director's paper of 04:06Z the same day). Each of thirty-three more nations wears the mark the campaign map's
+		 * pieces already wear, as plain rings and discs. A mark takes at most half the dirt of the coat round it; on a
+		 * light coat its white may rise to 20 levels brighter than the coat beside it (never past 222, 216, 200), so the
+		 * British flash is not lost on sand; the flash is painted at its true size or up to 1.4 times it where one plate
+		 * takes the whole of it, and a ring mark at 0.22 m where one does. Her rulings of 06:17Z: the flash is the map's
+		 * own, red, white, red, on British and Canadian vehicles in every year; Australia, New Zealand, South Africa and
+		 * India wear their own roundels and Poland her chequer, so thirty-eight nations in all; no mark here goes by the
+		 * year. France's roundel takes the campaign map's order, red outside (the kit's first has the colours the
+		 * British way about). Off: as before, point for point. */
+		bool bAllMarks = false;
+		/** With bAllMarks, the three marks new to the game (Portugal's, China's, Venezuela's), which wait on the
+		 * historian's answer and go on by a word of their own (the trial word "newmarks"). Off: those three stay bare. */
+		bool bNewMarks = false;
 	};
 
 	class Model
@@ -841,6 +858,11 @@ namespace LandKit
 		/** Paint and marks the same in every year (release 2, the trial word "anyyear"; Dress::bAnyYear): on, no vehicle's
 		 * coat or mark is chosen by the battle's month. Off unless set; set before Load. */
 		bool bAnyYear = false;
+		/** Every nation's mark, and marks that read on a light coat (release 2, the trial word "allmarks";
+		 * Dress::bAllMarks). Off: as before. */
+		bool bAllMarks = false;
+		/** With bAllMarks, the three marks that wait on the historian (the trial word "newmarks"; Dress::bNewMarks). */
+		bool bNewMarks = false;
 
 	private:
 		std::vector<Vehicle> All;

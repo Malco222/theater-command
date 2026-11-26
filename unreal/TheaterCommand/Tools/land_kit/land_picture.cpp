@@ -246,6 +246,9 @@ namespace
 		bool bBurntCoat = false;
 		// No coat or mark by the battle's month (release 2, LandKit's Dress::bAnyYear, the trial word "anyyear").
 		bool bAnyYear = false;
+		// Every nation's mark, and marks that read (release 2, LandKit's Dress::bAllMarks, the trial word "allmarks"),
+		// and with it the three marks that wait on the historian (Dress::bNewMarks, "newmarks").
+		bool bAllMarks = false, bNewMarks = false;
 		struct Other
 		{
 			std::string ModelName, Nation;
@@ -783,7 +786,7 @@ int main(int argc, char** argv)
 		// its army's face by month (the Type 97's khaki, then two camouflages) is a different model in each, and two
 		// panels a year apart were being painted from whichever was loaded first)
 		const std::string Key = Name + "|" + Nation + "|" + std::to_string(For.Year * 100 + For.Month) + (For.bMarks ? "|marks" : "") + (For.Coat.empty() ? "" : "|coat " + For.Coat)
-			+ (For.bBurntCoat ? "|burnt" : "") + (For.bAnyYear ? "|anyyear" : "");
+			+ (For.bBurntCoat ? "|burnt" : "") + (For.bAnyYear ? "|anyyear" : "") + (For.bAllMarks ? "|allmarks" : "") + (For.bNewMarks ? "|newmarks" : "");
 		if (!Models.count(Key))
 		{
 			std::string Text, Error;
@@ -801,6 +804,8 @@ int main(int argc, char** argv)
 			D.Coat = For.Coat;
 			D.bBurntCoat = For.bBurntCoat;
 			D.bAnyYear = For.bAnyYear;
+			D.bAllMarks = For.bAllMarks;
+			D.bNewMarks = For.bNewMarks;
 			if (!M->Load(Text, D, Error))
 			{
 				std::printf("%s: %s\n", Name.c_str(), Error.c_str());
@@ -915,6 +920,103 @@ int main(int argc, char** argv)
 		P.CameraUp = K.Up;
 		P.Caption = K.Caption;
 		Panels.push_back(P);
+	}
+	// (LAND_KIT_ALLMARKS=1: the trial word "allmarks"'s own sheet instead, release 2; Brian, 26 November 2026: "i did a
+	// tank battle in the cairo and the british tank didn't have any" markings; the art director's paper of 04:06Z and
+	// her notes of 06:17Z. The flash first: as shipped and as the map's, on the dark coat and on Cairo's stone, and whole
+	// vehicles for its size. Then each of thirty-eight nations' marks close on the light tank's turret, the smallest
+	// place there is (0.13 m), once on her dark coat and once on a light one; and one from the play eye's distance.
+	// LAND_KIT_ALLMARKS=flash paints the flash's panels alone)
+	const bool bAllMarksSheet = std::getenv("LAND_KIT_ALLMARKS") != nullptr;
+	if (bAllMarksSheet)
+	{
+		const bool bFlashOnly = std::string(std::getenv("LAND_KIT_ALLMARKS")) == "flash";
+		auto Look = [&Panels](const std::string& File, const char* Of, const char* Whose, bool bAll, bool bNew, const char* InCoat, bool bClose, const std::string& Words)
+		{
+			Panel P;
+			P.File = File;
+			P.ModelName = Of;
+			P.Nation = Whose;
+			P.Year = 1942;
+			P.Month = 6;
+			P.bMarks = true;
+			P.bAllMarks = bAll;
+			P.bNewMarks = bNew;
+			P.Coat = InCoat;
+			P.bClose = bClose;
+			P.CameraBearing = 42.0;
+			P.CameraUp = bClose ? 14.0 : 15.0;
+			P.Caption = Words;
+			Panels.push_back(P);
+		};
+		Look("allmarks_a_uk_shipped", "LightTank", "UK", false, false, "", true, "British, June 1942, as shipped: white, red, white, at her place's size");
+		Look("allmarks_b_uk_dark", "LightTank", "UK", true, false, "", true, "British, ALL MARKS: the map's flash, red, white, red");
+		Look("allmarks_c_uk_stone_shipped", "LightTank", "UK", false, false, "stone", true, "on Cairo's stone, as shipped: the white melts into the coat");
+		Look("allmarks_d_uk_stone", "LightTank", "UK", true, false, "stone", true, "on Cairo's stone, ALL MARKS: red holds the edge");
+		Look("allmarks_e_uk_light_whole", "LightTank", "UK", true, false, "stone", false, "the light tank whole, on stone, ALL MARKS");
+		Look("allmarks_f_uk_sherman", "Sherman", "UK", true, false, "", false, "Sherman, British, ALL MARKS: the flash as large as one plate takes");
+		Look("allmarks_g_can_sexton", "Sexton", "CAN", true, false, "", false, "Sexton, Canadian, ALL MARKS: the flash");
+		Look("allmarks_h_uk_lorry", "Truck", "UK", true, false, "stone", false, "the lorry in British hands, on stone, ALL MARKS");
+		// (France's roundel: the kit's first has its colours the British way about; with every nation's mark, the map's order)
+		Look("allmarks_i_fra_shipped", "LightTank", "FRA", false, false, "", true, "France, as shipped: blue outside, which is Britain's order");
+		Look("allmarks_j_fra", "LightTank", "FRA", true, false, "", true, "France, ALL MARKS: the map's order, red outside, at her place's size");
+		struct Worn
+		{
+			const char* Nation;
+			const char* Name;
+			bool bNew;
+		};
+		const Worn Wears[] = {
+			{ "AUS", "Australia", false }, { "NZL", "New Zealand", false }, { "SAF", "South Africa", false }, { "IND", "India", false }, { "POL", "Poland", false },
+			{ "VIC", "Vichy France", false }, { "BEL", "Belgium", false }, { "NED", "Netherlands", false }, { "LUX", "Luxembourg", false }, { "DEN", "Denmark", false },
+			{ "NOR", "Norway", false }, { "SWE", "Sweden", false }, { "FIN", "Finland", false }, { "EST", "Estonia", false }, { "LAT", "Latvia", false },
+			{ "LIT", "Lithuania", false }, { "IRL", "Ireland", false }, { "ESP", "Spain", false }, { "POR", "Portugal (waits on the historian)", true }, { "SUI", "Switzerland", false },
+			{ "HUN", "Hungary", false }, { "ROM", "Romania", false }, { "YUG", "Yugoslavia", false }, { "BUL", "Bulgaria", false }, { "GRE", "Greece", false },
+			{ "SVK", "Slovakia", false }, { "TUR", "Turkey", false }, { "IRQ", "Iraq", false }, { "IRN", "Iran", false }, { "THA", "Thailand", false },
+			{ "CHN", "China (waits on the historian)", true }, { "MEX", "Mexico", false }, { "BRA", "Brazil", false }, { "ARG", "Argentina", false }, { "CHL", "Chile", false },
+			{ "PER", "Peru", false }, { "COL", "Colombia", false }, { "VEN", "Venezuela (waits on the historian)", true } };
+		for (const Worn& W : Wears)
+		{
+			if (bFlashOnly)
+			{
+				break;
+			}
+			Look(std::string("allmarks_m_") + W.Nation + "_dark", "LightTank", W.Nation, true, W.bNew, "", true, std::string(W.Name) + ", on the dark coat");
+			Look(std::string("allmarks_m_") + W.Nation + "_light", "LightTank", W.Nation, true, W.bNew, "stone", true, std::string(W.Name) + ", on a light coat");
+		}
+		// (the play eye: the land battle's 70 degree lens on a screen 1,920 wide sees at 60 m what this painter's 28
+		// degree one, 560 wide, sees at about 37 m; three light tanks abreast, their turrets' marks the smallest there are)
+		for (int Eye = 0; Eye < 2 && !bFlashOnly; ++Eye)
+		{
+			Panel P;
+			P.File = Eye ? "allmarks_z_eye_light" : "allmarks_z_eye_dark";
+			P.ModelName = "LightTank";
+			P.Nation = "UK";
+			P.Year = 1942;
+			P.Month = 6;
+			P.bMarks = true;
+			P.bAllMarks = true;
+			P.Coat = Eye ? "stone" : "";
+			P.Pin.X = -7.0;
+			P.Pin.Heading = 0.15;
+			const char* Beside[2] = { "BEL", "SUI" };
+			for (int I = 0; I < 2; ++I)
+			{
+				Panel::Other O;
+				O.ModelName = "LightTank";
+				O.Nation = Beside[I];
+				O.Pin.X = I == 0 ? 0.0 : 7.0;
+				O.Pin.Y = I == 0 ? 1.5 : -1.0;
+				O.Pin.Heading = I == 0 ? -0.1 : 0.2;
+				P.Others.push_back(O);
+			}
+			P.bAim = true;
+			P.AimAt = V3(0.0, 0.0, 1.2);
+			P.AimFrom = V3(0.35, -0.92, 0.2);
+			P.AimDistance = 37.0;
+			P.Caption = Eye ? "from the play eye (60 m in the game), on a light coat: Britain, Belgium, Switzerland" : "from the play eye (60 m in the game), on the dark coat: Britain, Belgium, Switzerland";
+			Panels.push_back(P);
+		}
 	}
 	// (LAND_KIT_HOUSE=1: the farmhouse pilot's own sheet instead, release 2's -TheaterLandTrial=houses; LAND_KIT_HOUSE=farm
 	// its barn's and byre's)
@@ -1591,7 +1693,7 @@ int main(int argc, char** argv)
 	const TankLook Tanks[3] = { { "Sherman", "USA", "M4 Sherman" }, { "PanzerIV", "GER", "Panzer IV" }, { "Tiger", "GER", "Tiger" } };
 	for (const TankLook& T : Tanks)
 	{
-		if (bMarksSheet || bHouseSheet || bJapanSheet || bBurntSheet || bSupportSheet || bAnyYearSheet)
+		if (bMarksSheet || bHouseSheet || bJapanSheet || bBurntSheet || bSupportSheet || bAnyYearSheet || bAllMarksSheet)
 		{
 			break;
 		}
@@ -1626,7 +1728,7 @@ int main(int argc, char** argv)
 		C.Caption = std::string(T.Title) + ": knocked out, hatches thrown, gun drooped";
 		Panels.push_back(C);
 	}
-	if (!bMarksSheet && !bHouseSheet && !bJapanSheet && !bBurntSheet && !bSupportSheet && !bAnyYearSheet)
+	if (!bMarksSheet && !bHouseSheet && !bJapanSheet && !bBurntSheet && !bSupportSheet && !bAnyYearSheet && !bAllMarksSheet)
 	{
 		Panel D;
 		D.File = "Tiger_d";
