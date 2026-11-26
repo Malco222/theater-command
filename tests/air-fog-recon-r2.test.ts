@@ -353,3 +353,73 @@ describe('fog on raids: the town\'s guns and the offer\'s note', () => {
     }
   });
 });
+
+// The UI director's answer of 26 Nov 2026 02:06Z, 1: under fog the Flak line names the place the guns line beside it
+// names, so one card never reads as two sets of guns: a town raid round {Leipzig}, a harbour raid round {the harbour of
+// Bremen}, the factories as today (round {Rhineland}). The same month or "Not scouted" hedge as before.
+describe('fog on raids: the Flak line names the place its guns line names', () => {
+  type Lines = { label: string; value: string }[];
+  const line = (lines: Lines, label: string): string => lines.find((l) => l.label === label)!.value;
+  const guns = (g: Game, t: number, level: number): void => { if (level > 0) g.flags[`wk:aa:${t}`] = level; else delete g.flags[`wk:aa:${t}`]; };
+  /** The two fog forms, weighed as the card weighs a place out of sight: never scouted, and seen two months ago at level 2. */
+  const fogForms = (g: Game, nat: string, fleets: AirFleet[], m: 'town' | 'harbour' | 'bomb', t: number): [Lines, Lines] => [
+    assessAir(g, fleets, m, t, { ...knownDefence(g, nat, t, 'high'), seen: -1, ago: 0, aa: 3 }).lines,
+    assessAir(g, fleets, m, t, { ...knownDefence(g, nat, t, 'high'), seen: 2, ago: 2, aa: 2 }).lines,
+  ];
+
+  it('a town card names its town on the Flak line and the guns line, the name its town line prints', () => {
+    const g = britain(true);
+    const t = id(g, 'Saxony');
+    guns(g, t, 2);
+    const p = previewRaid(g, 'town', t);
+    expect(p.why).toBeNull();
+    expect(p.fog!.live).toBe(false);
+    const town = line(p.lines, 'The town').match(/^Troops inside (.+?) fight /)![1];
+    expect(town).toBe('Leipzig');
+    // The card as the player sees it out of sight: never scouted.
+    expect(line(p.lines, 'Flak')).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round Leipzig, 720 light and 360 heavy, and the 60 light guns every target has.');
+    expect(line(p.lines, 'Anti-aircraft guns')).toBe('Not scouted, so reckoned at the worst: level 3 guns round Leipzig');
+    const [never, seen] = fogForms(g, 'UK', going(g, p.picked), 'town', t);
+    expect(line(never, 'Flak')).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round Leipzig, 720 light and 360 heavy, and the 60 light guns every target has.');
+    expect(line(never, 'Anti-aircraft guns')).toBe('Not scouted, so reckoned at the worst: level 3 guns round Leipzig');
+    expect(line(seen, 'Flak')).toBe('Seen two months ago: about 720 guns built round Leipzig, 480 light and 240 heavy, and the 60 light guns every target has.');
+    expect(line(seen, 'Anti-aircraft guns')).toBe('Level 2 guns ringed Leipzig when seen two months ago');
+    for (const lines of [never, seen]) expect(line(lines, 'The town')).toMatch(/^Troops inside Leipzig fight /);
+    // In sight the Flak line names no place, as before.
+    expect(line(assessAir(g, going(g, p.picked), 'town', t).lines, 'Flak')).toBe('About 720 guns built here, 480 light and 240 heavy, and the 60 light guns every target has.');
+  });
+
+  it('a harbour card names "the harbour of Bremen" on the Flak line and the guns line', () => {
+    const g = startOpen(createGame(7, 'UK'));
+    setWar(g, 'UK', 'GER');
+    setWar(g, 'UK', 'ITA');
+    setRaidFog(g, true);
+    const t = id(g, 'Bremen');
+    guns(g, t, 2);
+    const p = previewRaid(g, 'harbour', t);
+    expect(p.why).toBeNull();
+    expect(p.fog!.live).toBe(false);
+    expect(line(p.lines, 'Flak')).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round the harbour of Bremen, 720 light and 360 heavy, and the 60 light guns every target has.');
+    expect(line(p.lines, 'Anti-aircraft guns')).toBe('Not scouted, so reckoned at the worst: level 3 guns round the harbour of Bremen');
+    const [never, seen] = fogForms(g, 'UK', going(g, p.picked), 'harbour', t);
+    expect(line(never, 'Flak')).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round the harbour of Bremen, 720 light and 360 heavy, and the 60 light guns every target has.');
+    expect(line(never, 'Anti-aircraft guns')).toBe('Not scouted, so reckoned at the worst: level 3 guns round the harbour of Bremen');
+    expect(line(seen, 'Flak')).toBe('Seen two months ago: about 720 guns built round the harbour of Bremen, 480 light and 240 heavy, and the 60 light guns every target has.');
+    expect(line(seen, 'Anti-aircraft guns')).toBe('Level 2 guns ringed the harbour of Bremen when seen two months ago');
+  });
+
+  it('a factory card\'s Flak line names the province, as today', () => {
+    const g = britain(true);
+    const t = id(g, 'Rhineland');
+    guns(g, t, 2);
+    const p = previewRaid(g, 'bomb', t);
+    expect(p.why).toBeNull();
+    expect(p.fog!.live).toBe(false);
+    expect(line(p.lines, 'Flak')).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round Rhineland, 720 light and 360 heavy, and the 60 light guns every target has.');
+    const [never, seen] = fogForms(g, 'UK', going(g, p.picked), 'bomb', t);
+    expect(line(never, 'Flak')).toBe('Not scouted, so reckoned at the worst: about 1,080 guns built round Rhineland, 720 light and 360 heavy, and the 60 light guns every target has.');
+    expect(line(never, 'Anti-aircraft guns')).toBe('Not scouted, so reckoned at the worst: level 3 guns round the factories of Rhineland');
+    expect(line(seen, 'Flak')).toBe('Seen two months ago: about 720 guns built round Rhineland, 480 light and 240 heavy, and the 60 light guns every target has.');
+    expect(line(seen, 'Anti-aircraft guns')).toBe('Level 2 guns ringed the factories of Rhineland when seen two months ago');
+  });
+});
