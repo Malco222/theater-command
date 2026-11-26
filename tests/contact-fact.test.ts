@@ -311,8 +311,8 @@ describe('every caller: a row reads the one test with the corps that leave in th
   it('the telling reads the same test: two corps of one row on one province are both at the front; a corps of another row relieves', () => {
     const { g, c, nm } = board();
     const d = add(g, 'GER', 'Test Corps', 'inf', nm, 2);
-    expect(rowHolds(g, 'GER', ['Test Corps', 'III Corps'], g.byName.Magdeburg.id).front).toEqual([c, d]);
-    expect(rowHolds(g, 'GER', ['Test Corps'], g.byName.Magdeburg.id).front).toEqual([]);
+    expect(rowHolds(g, 'GER', ['Test Corps', 'III Corps'], g.byName.Magdeburg.id, -1).front).toEqual([c, d]);
+    expect(rowHolds(g, 'GER', ['Test Corps'], g.byName.Magdeburg.id, -1).front).toEqual([]);
     expect(atFrontNow(g, 'GER', d, ['Test Corps', 'III Corps'])).toBe(true);
     expect(atFrontNow(g, 'GER', d, ['Test Corps'])).toBe(false);
   });

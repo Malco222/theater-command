@@ -4856,7 +4856,7 @@ function warBegan(g: Game, w: string[]): number {
  * its posting lies beyond the old chart, and no book dates its country's rows (stations.ts `bookKept`). Never with
  * the far side off, and never a row posted on the old chart.
  */
-const farRow = (g: Game, nat: string, row: any[]): boolean => {
+export const farRow = (g: Game, nat: string, row: any[]): boolean => {
   const posting = g.byName[row[5]];
   return farOn(g) && !!posting && beyondEurope(posting) && !bookKept(g, nat);
 };
@@ -4867,7 +4867,7 @@ const farRow = (g: Game, nat: string, row: any[]): boolean => {
  * declared is a war not yet begun. (A war on from the first day was declared by nobody: a row that never saw it on
  * reads it as not yet begun.)
  */
-function warOver(g: Game, i: number, w: string[]): boolean {
+export function warOver(g: Game, i: number, w: string[]): boolean {
   if (warOn(g, w)) return false;
   if (g.flags[`due:${i}`] !== undefined) return true;
   return Object.keys(g.flags).some((k) => {
@@ -4904,25 +4904,78 @@ const UNLESS = new Set<string>(((setup as any).expeditions as any[] ?? []).map((
  */
 const rowLanded = (g: Game, name: string): boolean => ((setup as any).expeditions as any[] ?? []).some((row, i) => row[2] === name && (g.flags[`came:${i}`] !== undefined || g.flags[`sent:${i}`] === 1));
 /**
- * True where a corps a row takes whole (`from`) is not on the board because the dated row of its country that makes it
- * waits, unsent (`wait:`), and no living corps carries that name yet. Read by `expeditions` under the switch 'fromWait'
- * alone, on the far side: the row that names it waits with it, and has its half year from the month it comes.
+ * The read-only form of `bookWaits`: true while a book row still waits, the enemy never yet on a ground its ally's
+ * leaving event names. It keeps no month (`bookWaits` keeps it, when `expeditions` reads the row).
  */
-const fromWaits = (g: Game, nat: string, from: string[]): boolean => ((setup as any).expeditions as any[] ?? []).some((r2, j) => r2[1] === nat
-  && from.includes(r2[2]) && !g.flags[`sent:${j}`] && g.flags[`wait:${j}`] !== undefined && !g.corps.some((x) => x.nat === nat && !x.dead && x.name === r2[2]));
+const bookWaitsNow = (g: Game, owner: string): boolean => g.flags[`book:${owner}`] === undefined && !leavingThreat(g, owner);
+
 /**
- * What holds a dated row of `nat`'s that takes the corps `from` names whole, as the board stands, read for the telling
- * (arrivalwaits.ts) and never by the rule itself: its named corps at the front (on a live front of its staff's plan, on
- * the far side; or in contact, an enemy at war on its province or beside it, away from `at`, the province the row
- * forms in), and the names a waiting row has still to make (the far side's chain, `fromWaits`). Changes nothing.
+ * Whether a dated row of `nat`'s (row `j` of the dated rows) is still to come, read from its own state as `expeditions`
+ * reads it before the half year, writing nothing: 'ended' (sent, struck or closed, or its time over: its months out,
+ * its war over on the far side, or its country overrun before its call-up was counted), 'due' (it comes now, or is
+ * held now by its corps, its place, its room or anything else read after the half year's start, so that the rows'
+ * existing end strikes it where it never comes), 'notYet' (its date, war, stop, theatre or posting's war not come, its
+ * country shipping its own army, or a row of another country). The chain reads it (`fromWaits`): the design director's
+ * ruling of 06:10Z, 26 November 2026, "the chain asks whether its maker is still to come, read from the maker's own
+ * state (due, unsent, not struck, no living corps of its name), whatever holds it". Its gates are `expeditions`' own,
+ * in the same order: a gate added there before the half year is added here too.
  */
-export function rowHolds(g: Game, nat: string, from: string[], at: number | undefined): { front: Corps[]; unformed: string[] } {
+export function rowComes(g: Game, nat: string, j: number): 'notYet' | 'due' | 'ended' {
+  const row = (((setup as any).expeditions as any[]) ?? [])[j];
+  if (!row || row[1] !== nat) return 'notYet';
+  if (g.flags[`sent:${j}`]) return 'ended';
+  const { booked, o } = rowWords(g, nat, row);
+  const fromWar = g.flags.open === 1 && !!o.war && o.after !== undefined;
+  if (!fromWar && g.turn < row[0]) return 'notYet';
+  if (o.open && g.flags.open !== 1) return 'notYet';
+  if (o.stops && !(o.stops as number[]).includes(stopOf(g))) return 'notYet';
+  if (shipsItsOwn(g, nat)) return 'notYet';
+  if (g.flags.open === 1) {
+    const reg = g.byName[row[5]];
+    const k = reg ? THEATRE_OF.get(reg.name) ?? -1 : -1;
+    if (k >= 0 && THEATRE_LIST[k].scripted && row[0] >= (THEATRE_LIST[k].opens ?? 0) && (!booked || bookWaitsNow(g, reg!.owner))) return 'notYet';
+    if (o.war) {
+      if (!warOn(g, o.war)) return farRow(g, nat, row) && warOver(g, j, o.war) ? 'ended' : 'notYet';
+      if (!o.war.includes(nat) && !atWar(g, nat, o.war[0]) && !atWar(g, nat, o.war[1])) return 'notYet';
+      if (fromWar && g.flags[`due:${j}`] === undefined && g.nations[nat].fellOn) return 'ended';
+      // (Computed as `expeditions` would keep it, never kept here.)
+      const due = g.flags[`due:${j}`] ?? (fromWar ? Math.max(warBegan(g, o.war), g.turn - 1) + o.after : g.turn);
+      if (g.turn < due) return 'notYet';
+    }
+    // (Ruling B7: a row posted on ground of a country its own is at peace with waits for that war: not yet its war.)
+    if (rowPlace(g, nat, row, o, reg).waits) return 'notYet';
+  }
+  if (o.until && g.turn >= o.until) return 'ended';
+  return 'due';
+}
+
+/**
+ * True where a corps a row takes whole (`from`) is not on the board because the dated row of its country that makes it
+ * is still to come, read from that maker's own state (`rowComes` 'due': its date and war come, unsent, not struck),
+ * whatever holds it, and no living corps carries that name yet, on the board or on a long passage. Read by
+ * `expeditions` under the switch 'fromWait' alone, on the far side: the row that names it (row `i`, never its own
+ * maker) waits with it, and has its half year from the month it comes. The design director's ruling of 06:10Z, 26
+ * November 2026 (the chain by the maker's own state); as first built it read the maker's written wait (`wait:`), so a
+ * maker held by its place, which writes none, held nothing, and its chained row laid the maker's division first.
+ */
+const fromWaits = (g: Game, nat: string, from: string[], i: number): boolean => ((setup as any).expeditions as any[] ?? []).some((r2, j) =>
+  j !== i && r2[1] === nat && from.includes(r2[2]) && rowComes(g, nat, j) === 'due'
+  && !g.corps.some((x) => x.nat === nat && !x.dead && x.name === r2[2])
+  && !(g.atSea ?? []).some((v) => v.corps.nat === nat && !v.corps.dead && v.corps.name === r2[2]));
+/**
+ * What holds a dated row of `nat`'s (row `i`) that takes the corps `from` names whole, as the board stands, read for
+ * the telling (arrivalwaits.ts) and never by the rule itself: its named corps at the front (on a live front of its
+ * staff's plan, on the far side; or in contact, the one contact test, away from `at`, the province the row forms in),
+ * and the names a waiting row has still to make (the far side's chain, `fromWaits`). Changes nothing. With the switch
+ * 'fromWait' off nothing reaches it: the telling's readers return first.
+ */
+export function rowHolds(g: Game, nat: string, from: string[], at: number | undefined, i: number): { front: Corps[]; unformed: string[] } {
   const far = farOn(g);
   // (The corps the row would take leave together, and keep nothing for each other: the one contact test's `leaving`.)
   const gone = g.flags.fromWait === 1 ? new Set(rowTakes(g, nat, { from })) : NO_LEAVING;
   return {
     front: g.corps.filter((x) => x.nat === nat && !x.dead && from.includes(x.name) && ((far && onLiveFront(g, nat, x)) || (x.reg !== at && corpsInContact(g, nat, x, gone)))),
-    unformed: far ? from.filter((n) => fromWaits(g, nat, [n])) : [],
+    unformed: far ? from.filter((n) => fromWaits(g, nat, [n], i)) : [],
   };
 }
 
@@ -5685,6 +5738,24 @@ export function declineOffer(g: Game, id: number): boolean {
 }
 
 /**
+ * A dated row's words as `expeditions` reads them this month, writing nothing: whether it is one of the book's rows
+ * (`booked`), and its words (`o`) with the book's 'from' list, the stood war rows' table and the book-only hold laid
+ * on. Read by `expeditions` for every row, and by `rowComes`.
+ */
+export function rowWords(g: Game, nat: string, row: any[]): { booked: boolean; o: any } {
+  const booked = g.flags.open === 1 && row[1] === nat && bookRow(g, nat, g.byName[row[5]]);
+  // (Nothing is counted twice, b609: a division the roster already names elsewhere is not added again. The corps that
+  // holds it, where it still lives, is broken up into the row: the book's 'from' list, read as a row's own.)
+  const o00 = booked && BOOK!.from?.[row[2]] ? { ...(row[6] ?? {}), from: [...(row[6]?.from ?? []), ...BOOK!.from[row[2]]] } : row[6] ?? {};
+  // (The stood war rows, drawn.ts and counting.json: in the grand campaign such a row waits for the war the table
+  // names for it, and takes the share of a corps the table names, as W Force's row takes its brigade. The setup row
+  // keeps its own words, so no historical scenario moves.)
+  const o0 = countedWords(g, nat, row, o00);
+  const o = bookOnly(g, nat, row[2]) ? { ...o0, hold: 1, stay: 1 } : o0;
+  return { booked, o };
+}
+
+/**
  * `take` is the one row the player has just said yes to (ruling B8, `takeOffer`): that row alone is read, and it
  * forms as the rule always formed it. Every other reading gives none, and reads every row.
  */
@@ -5711,15 +5782,10 @@ function expeditions(g: Game, nat: string, take?: number): void {
   };
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
     if (take !== undefined && i !== take) return;
-    const booked = g.flags.open === 1 && row[1] === nat && bookRow(g, nat, g.byName[row[5]]);
-    // (Nothing is counted twice, b609: a division the roster already names elsewhere is not added again. The corps that
-    // holds it, where it still lives, is broken up into the row: the book's 'from' list, read as a row's own.)
-    const o00 = booked && BOOK!.from?.[row[2]] ? { ...(row[6] ?? {}), from: [...(row[6]?.from ?? []), ...BOOK!.from[row[2]]] } : row[6] ?? {};
-    // (The stood war rows, drawn.ts and counting.json: in the grand campaign such a row waits for the war the table
-    // names for it, and takes the share of a corps the table names, as W Force's row takes its brigade. The setup row
-    // keeps its own words, so no historical scenario moves.)
-    const o0 = countedWords(g, nat, row, o00);
-    const o = bookOnly(g, nat, row[2]) ? { ...o0, hold: 1, stay: 1 } : o0;
+    // (The row's words as this month reads them: `rowWords`, which `rowComes` reads too.)
+    const { booked, o } = rowWords(g, nat, row);
+    // (Every gate below that keeps a row from coming before its half year is read in the same order by `rowComes`,
+    // which the chain reads (`fromWaits`): a gate added here before the half year is added there too.)
     // (A country's own call-up counted from its war's start waits for no book month in the grand campaign: ruling 229, part 3.)
     const fromWar = g.flags.open === 1 && !!o.war && o.after !== undefined;
     // (The far side: a fallen country's row raised in the place itself comes under its ground's keeper: `keptLevy`.)
@@ -5841,6 +5907,8 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // 18th Division, whose row at Hainan waits while the 21st Army's 18th Division is in the line at Tungkun. As built
     // the Rangoon row found nobody to take and came whole from nobody, and the Hainan row, its corps come free, made a
     // second 18th Division beside it. `fromWaits`.)
+    // (The maker read from its own state, due and unsent whatever holds it, never from a wait it wrote: `rowComes`, the
+    // design director's ruling of 06:10Z, 26 November 2026. A maker held by its place writes no wait, and still holds.)
     // (At a stop that keeps a book, stops 1 and 2, the book's rows keep their book as every other piece does, and
     // neither of the two is read: the contact rule acts at stops 3 to 5. Her ruling of 21:25Z, 25 November 2026.)
     // (And where the book of the row's own place is closed it acts there too, at every stop: "a closed book brings the
@@ -5859,7 +5927,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     let own = false;
     if (Array.isArray(o.from) && !ashore && row[1] === nat && farOn(g) && (g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name)
       && (onLiveFront(g, nat, x) || (inFight && x.reg !== reg?.id && corpsInContact(g, nat, x, leavingNow))))
-      || (inFight && fromWaits(g, nat, o.from)))) {
+      || (inFight && fromWaits(g, nat, o.from, i)))) {
       if (o.adds > 0) own = true;
       else { if (inFight) tellWait(g, i, reg); g.flags[`wait:${i}`] = g.turn; return; }
     }

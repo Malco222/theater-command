@@ -56,8 +56,8 @@ const fromOf = (row: any[]): string[] => (Array.isArray(row?.[6]?.from) ? (row[6
 /** The named corps of the row standing on the board, in the order the row names them. */
 const present = (g: Game, nat: string, from: string[]): Corps[] => g.corps.filter((x) => x.nat === nat && !x.dead && from.includes(x.name));
 const inOrder = (from: string[], cs: Corps[]): Corps[] => [...cs].sort((a, b) => from.indexOf(a.name) - from.indexOf(b.name));
-const holdsNow = (g: Game, nat: string, from: string[], at: number | undefined): { front: Corps[]; unformed: string[] } => {
-  const h = rowHolds(g, nat, from, at);
+const holdsNow = (g: Game, nat: string, from: string[], at: number | undefined, i: number): { front: Corps[]; unformed: string[] } => {
+  const h = rowHolds(g, nat, from, at, i);
   return { front: inOrder(from, h.front), unformed: h.unformed };
 };
 
@@ -124,7 +124,7 @@ export function tellWait(g: Game, i: number, at: Region | undefined): void {
   const row = ROWS()[i];
   if (!row || g.flags.fromWait !== 1 || !g.human || row[1] !== g.human || !at) return;
   const nat = row[1] as string, from = fromOf(row);
-  const { front, unformed } = holdsNow(g, nat, from, at.id);
+  const { front, unformed } = holdsNow(g, nat, from, at.id, i);
   // (Kept across the waiting months, not replaced: a row that waited on the front and then only for another row still
   // gets section 4's headline. The UI director's section 7, case 6: "It closes the wait he was told of, and it is true:
   // the corps did leave the front.")
@@ -237,7 +237,7 @@ export function formedLine(g: Game, i: number, was: WaitedOn | null, own: boolea
   const head = `${named(c.name, true)} has ${verb} ${reg.name}`;
   if (own) {
     const from = fromOf(row);
-    const { front } = holdsNow(g, row[1], from, reg.id);
+    const { front } = holdsNow(g, row[1], from, reg.id, i);
     const here = present(g, row[1], from);
     // (Every corps it leaves, and which of them is at the front: the words cover all of them at the front.)
     if (!front.length || front.length !== here.length) return null;
@@ -344,7 +344,7 @@ export function arrivalWaitOf(g: Game, c: Corps): { short: string; whole: string
   if (c.dead || g.flags.fromWait !== 1 || c.nat !== g.human) return null;
   for (const w of waiting(g, c.nat)) {
     if (!w.from.includes(c.name)) continue;
-    const { front, unformed } = holdsNow(g, c.nat, w.from, w.at);
+    const { front, unformed } = holdsNow(g, c.nat, w.from, w.at, w.i);
     if (!front.includes(c)) continue;
     const others = front.filter((x) => x !== c).map((x) => named(x.name));
     const since = turnToDate(w.since).label;
@@ -367,7 +367,7 @@ export function rowsWaitingOnRows(g: Game, nat: string | null): string[] {
   if (!nat) return [];
   const out: string[] = [];
   for (const w of waiting(g, nat)) {
-    const { front, unformed } = holdsNow(g, nat, w.from, w.at);
+    const { front, unformed } = holdsNow(g, nat, w.from, w.at, w.i);
     if (front.length || !unformed.length) continue;
     // (Its month as the UI director's section 7, case 8, gives it: "has waited since {month}".)
     out.push(theWords(`${named(w.row[2], true)}, due in ${g.regions[w.at].name}, has waited since ${turnToDate(w.since).label} for ${join(unformed.map((x) => named(x)))}, which ${hasOrHave(unformed)} not formed yet.`));
