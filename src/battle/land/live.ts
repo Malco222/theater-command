@@ -762,6 +762,11 @@ export class LiveBattle {
     return ok;
   }
 
+  /** After the break (pursue): why an order of his was not taken, where the aftermath is why (sim.afterWhy); else null. */
+  afterWhy(): string | null {
+    return this.me ? this.sim.afterWhy(this.me) : null;
+  }
+
   /**
    * Hold until relieved: why one of his blocks may not wait for help (null where it may), and the battle second help
    * could reach it there (null where it may not wait).

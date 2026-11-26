@@ -97,6 +97,14 @@ describe('fighting on after the break (pursue)', () => {
       // (the break's second, never before it and within a hundredth)
       expect(after.t).toBeGreaterThanOrEqual(c.t);
       expect(after.t - c.t).toBeLessThan(0.0101);
+      // The two armies by the rules' own names, for the screen's line; no dispatch asks (the break's own line stands).
+      expect(after.broke).toMatch(/ army$/);
+      expect(after.by).toMatch(/ army$/);
+      expect(after.broke).not.toBe(after.by);
+      expect(sim.log.some((e) => e.what === 'land:ask')).toBe(false);
+      // An order refused while he chooses says he must choose first; the other side's refusal is not the aftermath's to explain.
+      expect(sim.afterWhy(c.winner)).toBe(`Choose first: pursue ${after.broke[0].toLowerCase()}${after.broke.slice(1)}, or end the battle.`);
+      expect(sim.afterWhy(other(c.winner))).toBeNull();
     }
   });
 
@@ -108,10 +116,11 @@ describe('fighting on after the break (pursue)', () => {
       expect(JSON.stringify(sim.over)).toBe(JSON.stringify(c.off));
       expect(sim.aftermath).toBeNull();
       expect(sim.view().after).toBeUndefined();
-      // And everything said, but the question itself.
+      // And everything said, to the last word: the question is the screen's, never a dispatch.
       const off = open(c.key, c.seed, c.winner, false);
       run(off);
-      expect(JSON.stringify(sim.log.filter((e) => e.what !== 'land:ask'))).toBe(JSON.stringify(off.log));
+      expect(JSON.stringify(sim.log)).toBe(JSON.stringify(off.log));
+      expect(sim.afterWhy(c.winner)).toBeNull();
     }
   });
 
@@ -124,6 +133,9 @@ describe('fighting on after the break (pursue)', () => {
       const mine0 = units(sim).filter((u) => u.side === c.winner).reduce((a, u) => a + u.str, 0);
       expect(sim.command({ do: 'land:pursue' } as Command, c.winner)).toBe(true);
       expect(sim.aftermath!.phase).toBe('pursue');
+      expect(sim.log[sim.log.length - 1]).toMatchObject({ what: 'land:pursuit', text: 'Your army takes up the pursuit.' });
+      // (his own orders in a pursuit are refused for their own reasons, never the aftermath's)
+      expect(sim.afterWhy(c.winner)).toBeNull();
       // He cannot hand a decided day to the staff, nor pull his whole army out of it.
       expect(sim.command({ do: 'dice' }, c.winner)).toBe(false);
       expect(sim.command({ do: 'withdrawAll', side: c.winner }, c.winner)).toBe(false);
@@ -168,6 +180,14 @@ describe('fighting on after the break (pursue)', () => {
       expect(o.pursued!.seconds).toBe(Math.round(sim.t - c.t));
       expect(o.pursued!.took).toBeCloseTo(took / P, 3);
       expect(['left', 'off', 'time', 'spent']).toContain(o.pursued!.ended);
+      // The after card: how long he pursued and what it cost them, under the break's line; the strength line counts both.
+      expect(o.lines[1]).toMatch(/^Your army pursued (the|their) .*army for (half a minute|a minute( and a half)?|\w+( and a half)? minutes) (but did it no more harm|and cost it [\d,]+ more men, (about \d+%|less than 1%) of its strength|and cost it (about \d+%|less than 1%) more of its strength)\.$/);
+      if (o.pursued!.took >= 1e-4 && o.pursued!.men >= 1) expect(o.lines[1]).toContain(` ${o.pursued!.men.toLocaleString('en-GB')} more men, `);
+      expect(o.lines.some((l) => l.includes('counting the rout and the pursuit'))).toBe(c.off.lines.some((l) => l.includes('counting the rout')));
+      // And its last dispatch, by how it ended (none where the pursuers were spent).
+      const said = sim.log.filter((e) => e.what === 'land:pursuit').map((e) => e.text);
+      if (o.pursued!.ended === 'time') expect(said[said.length - 1]).toBe('The day is done, and the pursuit with it.');
+      if (o.pursued!.ended === 'left') expect(said[said.length - 1]).toMatch(/^The last of (the|their) .*army has left the field\.$/);
       // (a block that had fled before the break was not on the field at it)
       for (const u of goneBefore) expect(['gone', 'withdrawn']).toContain(u.state);
     }
@@ -186,6 +206,8 @@ describe('fighting on after the break (pursue)', () => {
     expect(sim.over).not.toBeNull();
     expect(sim.over!.pursued).toMatchObject({ ended: 'off', seconds: Math.round(sim.t - c.t) });
     expect(sim.over!.winner).toBe(c.off.winner);
+    const said = sim.log.filter((e) => e.what === 'land:pursuit').map((e) => e.text);
+    expect(said[said.length - 1]).toBe('Your army calls off the pursuit.');
   });
 
   it('a player whose army broke may pick the way back and hurry, and no more', () => {
@@ -203,6 +225,10 @@ describe('fighting on after the break (pursue)', () => {
     expect(sim.command({ do: 'withdrawAll', side: me }, me)).toBe(false);
     expect(sim.command({ do: 'land:end' } as Command, me)).toBe(false);
     expect(sim.over).toBeNull();
+    // Why, in the general's note; and the dispatch that told him who pursues and where to go.
+    expect(sim.afterWhy(me)).toBe('Your army has broken: it can only fall back. Choose its way back, or hurry it.');
+    expect(sim.afterWhy(them)).toBeNull();
+    expect(sim.log.filter((e) => e.what === 'land:pursuit')[0].text).toMatch(/^(The|Their) .*army takes up the pursuit\. Get your men back to your own edge of the field\.$/);
     // A point FORWARD of it and to one side: it goes back all the same, by that side, at the double.
     const forward = me === 'att' ? Math.min(sim.field.h - 20, u.y + 400) : Math.max(20, u.y - 400);
     const aside = Math.max(100, Math.min(sim.field.w - 100, u.x + (u.x < sim.field.w / 2 ? 300 : -300)));
@@ -218,6 +244,7 @@ describe('fighting on after the break (pursue)', () => {
     run(sim);
     expect(sim.over!.pursued).toBeDefined();
     expect(sim.over!.broke).toBe(me);
+    expect(sim.over!.lines.some((l) => /^(The|Their) .*army pursued yours for /.test(l))).toBe(true);
   });
 
   it('two computer generals: the winner chooses at its own sight, and a battle it ends at the break is the battle with the switch off', () => {
@@ -266,7 +293,12 @@ describe('the live battle after the break (pursue)', () => {
     // The last view fought says who is asked.
     const views = deltas.flatMap((d) => d.views);
     expect(views[views.length - 1].after).toMatchObject({ winner: at!.me, phase: 'ask' });
-    expect(deltas.some((d) => d.events.some((e) => e.what === 'land:ask'))).toBe(true);
+    expect((views[views.length - 1].after as { broke: string }).broke).toMatch(/ army$/);
+    // (no dispatch asks: the screen does, from the view)
+    expect(deltas.some((d) => d.events.some((e) => e.what === 'land:ask'))).toBe(false);
+    // An order given before he has chosen is refused, and says he must choose first.
+    expect(L.order({ do: 'hold', units: [] } as Command)).toBe(false);
+    expect(L.afterWhy()).toMatch(/^Choose first: pursue .*army, or end the battle\.$/);
     // Asked again and again, the rules fight nothing more.
     const t0 = L.sim.t;
     const idle = L.tick(5, 100000);

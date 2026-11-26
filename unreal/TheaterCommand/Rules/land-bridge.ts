@@ -169,8 +169,12 @@ function cannotGo(who: string, why: string, on?: keyof typeof BARRED | null): st
 
   landOrder(c: Command) {
     const ok = need().order(c);
-    // (a wait refused says why in the rules' own words: the first of its blocks' reason, for the general's note)
     const o = c as { do?: string; units?: number[] };
+    // (after the break, release 2 `pursue`: an order refused because he must choose first, or because his army has
+    // broken, says so before any other reason; his two answers themselves never take this note)
+    const after = !ok && o.do !== 'land:pursue' && o.do !== 'land:end' ? need().afterWhy() : null;
+    if (after) return { ok, why: after };
+    // (a wait refused says why in the rules' own words: the first of its blocks' reason, for the general's note)
     if (!ok && o.do === 'land:wait' && o.units?.length) return { ok, why: need().waitWhy(Number(o.units[0])).why ?? '' };
     // (so do a cut and a screen refused: hedge cutters and smoke on call)
     const p = c as { x?: number; y?: number; x0?: number; y0?: number; x1?: number; y1?: number };

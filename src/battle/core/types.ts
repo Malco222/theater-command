@@ -676,9 +676,11 @@ export interface BattleView<U extends UnitBase = UnitBase> {
    * broke ('side'), the one that holds the field ('winner'), the battle second of the break ('t', to the hundredth and
    * never before it, so a clock brought up to it has passed the break's own words) and the phase: 'ask'
    * while a player who won has not chosen between PURSUE and END (the battle does not step), 'pursue' while the
-   * winner fights on. Left out before the break, with the switch off, and where the battle ended at the break.
+   * winner fights on. 'broke' and 'by': the two armies as the rules name them ("The German army"; on a practice ground
+   * "Your army" or "Their army"), for the screen's line. Left out before the break, with the switch off, and where the
+   * battle ended at the break.
    */
-  after?: { side: Side; winner: Side; t: number; phase: 'ask' | 'pursue' };
+  after?: { side: Side; winner: Side; t: number; phase: 'ask' | 'pursue'; broke: string; by: string };
 }
 
 /** What a domain's sim offers the clock, the screens and the hand-back. */
