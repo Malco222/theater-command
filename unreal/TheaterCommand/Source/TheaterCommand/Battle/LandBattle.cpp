@@ -4731,6 +4731,17 @@ void ALandBattle::MakeArmour()
 	// changes a coat (the desert's). "-TheaterLandNoAnyYear" off whatever the trial.
 	Armour->bAnyYear = LandParts::OnTrial("anyyear") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoAnyYear"));
 	UE_LOG(LogTheater, Log, TEXT("Land battle: paint and marks in every year %s"), Armour->bAnyYear ? TEXT("ON (-TheaterLandTrial=anyyear, release 2): no coat or mark by the battle's month") : TEXT("off (by the month, as before)"));
+	// Every nation's mark, and marks that read (release 2, on trial: "-TheaterLandTrial=allmarks", off until the art
+	// director and a Mac reading pass; Brian, 26 November 2026: "i did a tank battle in the cairo and the british tank
+	// didn't have any" markings; the art director's paper of the same day; LandKit's Dress::bAllMarks). Thirty-eight
+	// more nations wear the mark the campaign map's pieces wear; the British flash is the map's own, red, white, red,
+	// as large as one plate takes, and its white rises on a sand coat. Three marks new to the game (Portugal's,
+	// China's, Venezuela's) wait on the historian behind a word of their own, "newmarks", which does nothing without
+	// "allmarks". "-TheaterLandNoAllMarks" off whatever the trial.
+	Armour->bAllMarks = LandParts::OnTrial("allmarks") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoAllMarks"));
+	Armour->bNewMarks = Armour->bAllMarks && LandParts::OnTrial("newmarks");
+	UE_LOG(LogTheater, Log, TEXT("Land battle: every nation's mark %s%s"), Armour->bAllMarks ? TEXT("ON (-TheaterLandTrial=allmarks, release 2): thirty-eight more nations' marks, the flash red, white, red") : TEXT("off (as before)"),
+		Armour->bNewMarks ? TEXT("; the three new marks ON (newmarks)") : TEXT(""));
 	std::string Error;
 	{
 		// How a pierced tank ends by the face struck (the modeller's measured odds: a rear hit on a Tiger or a Panther

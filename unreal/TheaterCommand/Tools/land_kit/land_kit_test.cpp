@@ -456,7 +456,10 @@ namespace
 	 * Every battle model with mark places, worn by her own nation (a "_" file by the Americans and the Germans), and
 	 * the owners whose marks change with the month (the British: none, then the flash, then the star) or who wear
 	 * another's kit; and the same owners with no mark by the year (Dress::bAnyYear, the trial word "anyyear"; Brian,
-	 * 26 November 2026, "have the paint be on it regardless of the year": the flash in 1940 and in 1944 alike):
+	 * 26 November 2026, "have the paint be on it regardless of the year": the flash in 1940 and in 1944 alike, and by
+	 * the art director's ruling the campaign map's own flash, red, white, red, never the star, and never on a Pole);
+	 * and every nation's mark (Dress::bAllMarks, the trial word "allmarks": thirty-eight more nations on the light tank
+	 * and the lorry, three of them only with Dress::bNewMarks; the flash on a stone coat by her pass lines):
 	 * loaded with the marks off and on. Off must be as before; on, each body with a place gains marks
 	 * (none where the owner paints none) at both levels, every point within its lift of her own skin (the near level
 	 * within 12 mm, the far within 35 mm), facing out, its triangles wound to face out, in the owner's paint (by area).
@@ -469,8 +472,12 @@ namespace
 		{
 			std::string Model, Nation;
 			int Year = 1944, Month = 7;
-			std::string Expect; // white (the star), cross, red (the star), flash, rectangle, yellow (the army star), none
+			std::string Expect; // white (the star), cross, red (the star), flash, rectangle, yellow (the army star), none;
+			                    // redflash (the map's flash: red, white, red); own (one of the thirty-eight nations' own);
+			                    // bluering (France's roundel as first painted, blue outside); redring (as the map's, red outside)
 			bool bAnyYear = false;
+			bool bAllMarks = false, bNewMarks = false;
+			std::string Coat = std::string(); // (a coat picked for her: "stone", the picture sheets' light coat)
 		};
 		auto Expected = [](const std::string& Nation, int Year, int Month)
 		{
@@ -514,12 +521,37 @@ namespace
 				 { "LightTank", "JAP", 1942, 1, "yellow", false }, { "LightTank", "ITA", 1942, 10, "rectangle", false }, { "Truck", "SOV", 1943, 7, "red", false },
 				 // (no mark by the year: the flash before its month and after the star's, the Poles' from 1939, a file's
 				 // own rows read for their first mark, and the others' as in any month)
-				 { "LightTank", "UK", 1941, 6, "flash", true }, { "Sexton", "UK", 1940, 6, "flash", true }, { "Sexton", "UK", 1944, 7, "flash", true },
-				 { "Sherman", "UK", 1940, 9, "flash", true }, { "Sherman", "UK", 1944, 7, "flash", true }, { "Sherman", "POL", 1939, 9, "flash", true },
+				 { "LightTank", "UK", 1941, 6, "redflash", true }, { "Sexton", "UK", 1940, 6, "redflash", true }, { "Sexton", "UK", 1944, 7, "redflash", true },
+				 { "Sherman", "UK", 1940, 9, "redflash", true }, { "Sherman", "UK", 1944, 7, "redflash", true }, { "Sherman", "CAN", 1944, 7, "redflash", true },
+				 { "LightTank", "AUS", 1942, 1, "redflash", true }, { "LightTank", "IND", 1944, 3, "redflash", true },
+				 // (the Poles never in a British flash: bare until "allmarks" gives them their chequer)
+				 { "Sherman", "POL", 1939, 9, "none", true }, { "Sherman", "POL", 1944, 8, "none", true },
 				 { "Sherman", "USA", 1940, 1, "white", true }, { "Sherman", "SOV", 1941, 6, "red", true }, { "LightTank", "JAP", 1945, 8, "yellow", true },
-				 { "Tiger", "GER", 1940, 5, "cross", true } })
+				 { "Tiger", "GER", 1940, 5, "cross", true },
+				 // (every nation's mark, with no word for the year: the flash in every month, the others as before)
+				 { "LightTank", "UK", 1940, 6, "redflash", false, true }, { "Sherman", "UK", 1944, 7, "redflash", false, true }, { "Sexton", "CAN", 1944, 7, "redflash", false, true },
+				 { "Truck", "UK", 1942, 6, "redflash", false, true }, { "LightTank", "UK", 1942, 6, "redflash", false, true, false, "stone" },
+				 { "Truck", "UK", 1942, 6, "redflash", false, true, false, "stone" }, { "Sherman", "UK", 1942, 6, "redflash", true, true },
+				 { "Sherman", "USA", 1944, 7, "white", false, true }, { "Tiger", "GER", 1944, 7, "cross", false, true }, { "T34", "SOV", 1943, 7, "red", false, true },
+				 { "LightTank", "JAP", 1942, 1, "yellow", false, true }, { "LightTank", "ITA", 1942, 10, "rectangle", false, true },
+				 // (and with it off, as shipped: no mark for a nation the game had none for, the three new ones bare without their word)
+				 { "LightTank", "BEL", 1940, 5, "none", false }, { "LightTank", "POL", 1939, 9, "none", false }, { "Truck", "GRE", 1941, 4, "none", true },
+				 { "LightTank", "POR", 1942, 6, "none", false, true }, { "LightTank", "CHN", 1942, 6, "none", false, true }, { "Truck", "VEN", 1942, 6, "none", false, true },
+				 // (France's roundel: as first painted, blue outside; with every nation's mark, the campaign map's order,
+				 // red outside, on her own and on Vichy's; Vichy bare without the word, as before)
+				 { "LightTank", "FRA", 1940, 5, "bluering", false }, { "LightTank", "FRA", 1940, 5, "bluering", true }, { "LightTank", "FRA", 1940, 5, "redring", false, true },
+				 { "Truck", "FRA", 1940, 5, "redring", true, true }, { "LightTank", "VIC", 1941, 6, "redring", false, true }, { "LightTank", "VIC", 1941, 6, "none", true } })
 		{
 			Cases.push_back(C);
+		}
+		for (const char* Each : { "AUS", "NZL", "SAF", "IND", "POL", "VIC", "BEL", "NED", "LUX", "DEN", "NOR", "SWE", "FIN", "EST", "LAT", "LIT", "IRL", "ESP", "POR", "SUI", "HUN", "ROM",
+				 "YUG", "BUL", "GRE", "SVK", "TUR", "IRQ", "IRN", "THA", "CHN", "MEX", "BRA", "ARG", "CHL", "PER", "COL", "VEN" })
+		{
+			const std::string Nation = Each;
+			const bool bNew = Nation == "POR" || Nation == "CHN" || Nation == "VEN";
+			Cases.push_back({ "LightTank", Nation, 1942, 6, "own", false, true, bNew });
+			Cases.push_back({ "Truck", Nation, 1942, 6, "own", false, true, bNew });
+			Cases.push_back({ "LightTank", Nation, 1942, 6, "own", false, true, bNew, "stone" });
 		}
 		int Failures = 0;
 		size_t AllAdded = 0, AllCases = 0;
@@ -537,6 +569,9 @@ namespace
 			D.Year = C.Year;
 			D.Month = C.Month;
 			D.bAnyYear = C.bAnyYear;
+			D.bAllMarks = C.bAllMarks;
+			D.bNewMarks = C.bNewMarks;
+			D.Coat = C.Coat;
 			Model Off, On;
 			const auto T0 = Clock::now();
 			const bool bOff = Off.Load(Text, D, Error);
@@ -555,6 +590,8 @@ namespace
 			size_t Added[2] = { 0, 0 }, AddedTris[2] = { 0, 0 }, OnSkin[2] = { 0, 0 }, Bad = 0, Wound = 0, Tris = 0;
 			double Worst[2] = { 0.0, 0.0 };
 			double White = 0.0, Black = 0.0, Red = 0.0, Yellow = 0.0, AreaAll = 0.0;
+			// (how bright her red and her white are against the coat under them, by area: brightness 0.21 R + 0.72 G + 0.07 B)
+			double RedLum = 0.0, RedGap = 0.0, WhiteLum = 0.0, CoatLum = 0.0;
 			for (size_t B = 0; B < On.Bodies.size(); ++B)
 			{
 				// (her places on this body, in its frame)
@@ -672,7 +709,7 @@ namespace
 							// (her own paint under it, the nearest of her skin's triangles: a mark under her dust reads
 							// against her paint, a white lighter and a black darker than it, however dusty both are)
 							const V3 Mid = (A + Bv + Cv) * (1.0 / 3.0);
-							double Under = 1e18, SkinSum = 0.0;
+							double Under = 1e18, SkinSum = 0.0, SkinLum = 0.0;
 							for (size_t Ts : Skin)
 							{
 								const V3 Q = NearestOnTriangle(Mid, PointOf(Was, Was.Triangles[Ts]), PointOf(Was, Was.Triangles[Ts + 1]), PointOf(Was, Was.Triangles[Ts + 2]));
@@ -680,16 +717,30 @@ namespace
 								{
 									Under = (Mid - Q).Dot(Mid - Q);
 									SkinSum = 0.0;
+									SkinLum = 0.0;
+									const double Weigh[3] = { 0.21, 0.72, 0.07 };
 									for (int K = 0; K < 3; ++K)
 									{
 										for (int Ch = 0; Ch < 3; ++Ch)
 										{
-											SkinSum += Was.Colours[Was.Triangles[Ts + static_cast<size_t>(K)] * 4 + static_cast<size_t>(Ch)] / 3.0;
+											const double Level255 = Was.Colours[Was.Triangles[Ts + static_cast<size_t>(K)] * 4 + static_cast<size_t>(Ch)] / 3.0;
+											SkinSum += Level255;
+											SkinLum += Weigh[Ch] * Level255;
 										}
 									}
 								}
 							}
 							AreaAll += Area;
+							CoatLum += SkinLum * Area;
+							if (R >= 90 && R >= 1.6 * G)
+							{
+								RedLum += (0.21 * R + 0.72 * G + 0.07 * Bc) * Area;
+								RedGap += (R - G) * Area;
+							}
+							else if (std::min({ R, G, Bc }) >= 120 && (R + G + Bc) >= 420)
+							{
+								WhiteLum += (0.21 * R + 0.72 * G + 0.07 * Bc) * Area;
+							}
 							White += (std::min({ R, G, Bc }) >= 120 && (R + G + Bc) >= 420) || (std::min({ R, G, Bc }) >= 90 && R + G + Bc >= SkinSum + 60.0) ? Area : 0.0;
 							Black += std::max({ R, G, Bc }) <= 80 || R + G + Bc <= SkinSum - 60.0 ? Area : 0.0;
 							Red += R >= 90 && R >= 1.6 * G ? Area : 0.0;
@@ -745,15 +796,44 @@ namespace
 			// arms' sides; the marks under her own dust, chipped and scuffed)
 			const bool bPaint = C.Expect == "none" || (C.Expect == "white" && Wh > 0.8) || (C.Expect == "cross" && Wh > 0.1 && Bl > 0.35)
 				|| (C.Expect == "red" && Rd > 0.8) || (C.Expect == "flash" && Wh > 0.45 && Rd > 0.2) || (C.Expect == "rectangle" && Rd > 0.6 && Wh > 0.05)
-				|| (C.Expect == "yellow" && Ye > 0.8);
+				|| (C.Expect == "yellow" && Ye > 0.8) || (C.Expect == "redflash" && Rd > 0.45 && Wh > 0.2) || C.Expect == "own"
+				// (a roundel's rings by area: the outer 56 in a hundred, the middle 33, the disc 11)
+				|| (C.Expect == "bluering" && Rd > 0.04 && Rd < 0.25 && Wh > 0.2) || (C.Expect == "redring" && Rd > 0.4 && Rd < 0.7 && Wh > 0.2);
 			if (Why.empty() && !bPaint)
 			{
 				Why = "not her owner's paint";
 			}
+			// (the flash on a stone coat, the art director's pass lines of 26 November as paint, before any light: her red
+			// bands 45 or more below the coat beside them, red over green by 50 or more, her white band not darker than the coat)
+			std::string Read;
+			if (C.Expect == "redflash" && C.Coat == "stone" && Red > 0.0 && White > 0.0)
+			{
+				const double Coat0 = CoatLum / Near, Red0 = RedLum / Red, Gap0 = RedGap / Red, White0 = WhiteLum / White;
+				char Buf[160];
+				std::snprintf(Buf, sizeof(Buf), "  on stone: coat %.0f, red %.0f (%.0f below; red over green %.0f), white %.0f (%+.0f)", Coat0, Red0, Coat0 - Red0, Gap0, White0, White0 - Coat0);
+				Read = Buf;
+				if (Why.empty() && !(Coat0 - Red0 >= 45.0 && Gap0 >= 50.0 && White0 >= Coat0))
+				{
+					Why = "the flash does not read on stone";
+				}
+			}
+			// (every nation's mark: her places' sizes as painted, the largest and the least)
+			if (C.bAllMarks && !On.Painted.empty())
+			{
+				double Least = 1e9, Most = 0.0;
+				for (const Mark& Mk : On.Painted)
+				{
+					Least = std::min(Least, Mk.Radius);
+					Most = std::max(Most, Mk.Radius);
+				}
+				char Buf[96];
+				std::snprintf(Buf, sizeof(Buf), "  painted %.2f to %.2f m", Least, Most);
+				Read += Buf;
+			}
 			AllAdded += AddedTris[0];
 			std::printf("  %-11s %-3s %04d-%02d %-9s near %4zu triangles (%5.1f%% of points on her skin, worst %4.1f mm)  far %3zu (%5.1f%%, worst %4.1f mm)  white %3.0f%% black %3.0f%% red %3.0f%% yellow %3.0f%%  +%.0f ms  %s\n",
 				C.Model.c_str(), C.Nation.c_str(), C.Year, C.Month, C.Expect.c_str(), AddedTris[0], Share * 100.0, Worst[0] * 1000.0, AddedTris[1], FarShare * 100.0,
-				Worst[1] * 1000.0, Wh * 100.0, Bl * 100.0, Rd * 100.0, Ye * 100.0, Ms(T1, T2) - Ms(T0, T1), Why.empty() ? "ok" : ("FAIL " + Why).c_str());
+				Worst[1] * 1000.0, Wh * 100.0, Bl * 100.0, Rd * 100.0, Ye * 100.0, Ms(T1, T2) - Ms(T0, T1), (Why.empty() ? "ok" + Read : "FAIL " + Why + Read).c_str());
 			Failures += Why.empty() ? 0 : 1;
 		}
 		std::printf("  %zu looks checked, %zu mark triangles near in all: %s\n", AllCases, AllAdded, Failures ? "FAIL" : "ok");
@@ -2287,6 +2367,142 @@ int main(int argc, char** argv)
 				std::string(Name) + ": her grey is not greyer than her dark yellow (" + Why + ")");
 		}
 		Report("the German grey is grey on her skin in 1944", Grey, "of her grey points there by the month");
+		// (less dust on the grey; the art director's mend of 26 November, 06:17Z: in every year her wheels, her lower hull
+		// and her skirts' feet stand at most 25 levels above the grey beside them in one light, and a skirt carries dust in
+		// its lowest third only. Held here as paint, before any light (brightness 0.21 red, 0.72 green, 0.07 blue): each
+		// kind of her running gear (road wheels, idlers, sprockets, return rollers) on the average at most 25 above her
+		// hull's sides a metre and more up; her skirts' feet at most 25 above the same skirts' upper halves; and those
+		// upper halves no warmer (red less blue) than her hull's sides by more than 4: the dust is a warm earth on a cool
+		// grey, so any of it up there shows as warmth. Her skirts are the side plates that stand wider than she does in
+		// June 1941, before she wore any. On the picture sheet, in one sun, the Panzer IV's wheels then stand 0 to 5
+		// above her skirts' upper halves, her sprocket 7 to 13 and her skirts' feet 5 to 11, where her wheels stood 58 to
+		// 85 above her hull. By the month the same grey keeps her files' pale dust: printed, not judged)
+		struct Dusty
+		{
+			double Sides = 0.0, SidesWarm = 0.0, Gear = -1e9, SkirtTop = 0.0, SkirtTopWarm = 0.0, SkirtFoot = 0.0;
+			size_t SidePoints = 0, GearPoints = 0, TopPoints = 0, FootPoints = 0;
+			std::string GearKind = "none";
+		};
+		// (how wide her hull's side plates stand)
+		auto Widest = [](const Model& M)
+		{
+			double Outer = 0.0;
+			for (const Body& Each : M.Bodies)
+			{
+				const Mesh& Of = Each.Near;
+				for (size_t K = 0; Each.Name == "hull" && K * 4 + 3 < Of.Colours.size(); ++K)
+				{
+					if (std::fabs(Of.Normals[K * 3 + 1]) > 0.9)
+					{
+						Outer = std::max(Outer, std::fabs(Each.Pivot.Y + static_cast<double>(Of.Points[K * 3 + 1])));
+					}
+				}
+			}
+			return Outer;
+		};
+		auto DustOf = [](const Model& M, double Bare)
+		{
+			Dusty Out;
+			auto Lum = [](const Mesh& Of, size_t K) { return 0.21 * Of.Colours[K * 4] + 0.72 * Of.Colours[K * 4 + 1] + 0.07 * Of.Colours[K * 4 + 2]; };
+			auto Warm = [](const Mesh& Of, size_t K) { return static_cast<double>(Of.Colours[K * 4]) - static_cast<double>(Of.Colours[K * 4 + 2]); };
+			const std::string Kinds[4] = { "wheel", "idler", "sprocket", "roller" };
+			double KindSum[4] = { 0.0, 0.0, 0.0, 0.0 };
+			size_t KindPoints[4] = { 0, 0, 0, 0 };
+			for (const Body& Each : M.Bodies)
+			{
+				const Mesh& Of = Each.Near;
+				const size_t N = Of.Colours.size() / 4;
+				for (size_t Which = 0; Which < 4; ++Which)
+				{
+					for (size_t K = 0; Each.Name.compare(0, Kinds[Which].size(), Kinds[Which]) == 0 && K < N; ++K)
+					{
+						KindSum[Which] += Lum(Of, K);
+						++KindPoints[Which];
+					}
+				}
+				if (Each.Name != "hull")
+				{
+					continue;
+				}
+				// (her skirts: the side plates wider than her bare hull, their foot and their top)
+				double Foot = 1e9, Top = -1e9;
+				for (size_t K = 0; K < N; ++K)
+				{
+					const double Wide = std::fabs(Each.Pivot.Y + static_cast<double>(Of.Points[K * 3 + 1])), High = Each.Pivot.Z + static_cast<double>(Of.Points[K * 3 + 2]);
+					if (std::fabs(Of.Normals[K * 3 + 1]) > 0.9 && Wide > Bare + 0.02)
+					{
+						Foot = std::min(Foot, High);
+						Top = std::max(Top, High);
+					}
+				}
+				for (size_t K = 0; K < N; ++K)
+				{
+					const double Wide = std::fabs(Each.Pivot.Y + static_cast<double>(Of.Points[K * 3 + 1])), High = Each.Pivot.Z + static_cast<double>(Of.Points[K * 3 + 2]);
+					if (std::fabs(Of.Normals[K * 3 + 1]) > 0.8 && High >= 1.0 && Wide <= Bare + 0.02)
+					{
+						Out.Sides += Lum(Of, K);
+						Out.SidesWarm += Warm(Of, K);
+						++Out.SidePoints;
+					}
+					if (std::fabs(Of.Normals[K * 3 + 1]) > 0.9 && Wide > Bare + 0.02 && Top > Foot + 0.3)
+					{
+						const double Up = (High - Foot) / (Top - Foot);
+						if (Up >= 0.5)
+						{
+							Out.SkirtTop += Lum(Of, K);
+							Out.SkirtTopWarm += Warm(Of, K);
+							++Out.TopPoints;
+						}
+						else if (Up <= 0.2)
+						{
+							Out.SkirtFoot += Lum(Of, K);
+							++Out.FootPoints;
+						}
+					}
+				}
+			}
+			Out.Sides = Out.SidePoints ? Out.Sides / static_cast<double>(Out.SidePoints) : 0.0;
+			Out.SidesWarm = Out.SidePoints ? Out.SidesWarm / static_cast<double>(Out.SidePoints) : 0.0;
+			Out.SkirtTop = Out.TopPoints ? Out.SkirtTop / static_cast<double>(Out.TopPoints) : 0.0;
+			Out.SkirtTopWarm = Out.TopPoints ? Out.SkirtTopWarm / static_cast<double>(Out.TopPoints) : 0.0;
+			Out.SkirtFoot = Out.FootPoints ? Out.SkirtFoot / static_cast<double>(Out.FootPoints) : 0.0;
+			// (the palest kind of her running gear, on its average)
+			for (size_t Which = 0; Which < 4; ++Which)
+			{
+				if (KindPoints[Which] > 50 && KindSum[Which] / static_cast<double>(KindPoints[Which]) > Out.Gear)
+				{
+					Out.Gear = KindSum[Which] / static_cast<double>(KindPoints[Which]);
+					Out.GearKind = Kinds[Which];
+					Out.GearPoints = KindPoints[Which];
+				}
+			}
+			return Out;
+		};
+		Tally Wheels, Skirts;
+		for (const char* Name : { "PanzerIV", "Tiger", "StuG3", "Panther", "Hummel", "Truck" })
+		{
+			// (the Panzer IV and the StuG wear their skirts in July 1944)
+			const bool bSkirts = std::string(Name) == "PanzerIV" || std::string(Name) == "StuG3";
+			Model ByMonth, AnyYear;
+			std::string Why;
+			const bool bOk = Dressed(Name, "GER", 1941, 6, "plains", false, ByMonth, Why) && Dressed(Name, "GER", 1944, 7, "plains", true, AnyYear, Why);
+			const double Bare = bOk ? Widest(ByMonth) : 0.0;
+			const Dusty Was = bOk ? DustOf(ByMonth, Bare) : Dusty(), Now = bOk ? DustOf(AnyYear, Bare) : Dusty();
+			std::printf("  %-10s her palest running gear over her hull's sides: June 1941 by the month (%s) %s %+.0f; in every year (%s) %s %+.0f (sides %.0f over %zu points, gear %.0f over %zu)", Name,
+				ByMonth.Coat.c_str(), Was.GearKind.c_str(), Was.Gear - Was.Sides, AnyYear.Coat.c_str(), Now.GearKind.c_str(), Now.Gear - Now.Sides, Now.Sides, Now.SidePoints, Now.Gear, Now.GearPoints);
+			Wheels.Note(bOk && Now.SidePoints > 50 && Now.GearPoints > 50 && Now.Gear - Now.Sides <= 25.0, Now.Gear - Now.Sides,
+				std::string(Name) + ": her running gear stands too far above her grey (" + Why + ")");
+			if (bSkirts)
+			{
+				std::printf("; her skirts' feet over their upper halves %+.0f, the upper halves' warmth over her sides' %+.0f (%zu and %zu points)", Now.SkirtFoot - Now.SkirtTop,
+					Now.SkirtTopWarm - Now.SidesWarm, Now.FootPoints, Now.TopPoints);
+				Skirts.Note(bOk && Now.TopPoints > 50 && Now.FootPoints > 20 && Now.SkirtFoot - Now.SkirtTop <= 25.0 && Now.SkirtTopWarm - Now.SidesWarm <= 4.0,
+					std::max(Now.SkirtFoot - Now.SkirtTop, 0.0), std::string(Name) + ": dust above the lowest third of her skirts, their feet too pale, or no skirts found");
+			}
+			std::printf("\n");
+		}
+		Report("the grey's running gear at most 25 above her sides, as paint", Wheels, "levels at the most");
+		Report("a skirt on the grey: dust in its lowest third only", Skirts, "levels, her skirts' feet over their upper halves");
 	}
 
 	std::printf("\n%s\n", Failures ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");

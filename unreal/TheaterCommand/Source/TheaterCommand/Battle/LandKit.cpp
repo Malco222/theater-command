@@ -1005,6 +1005,16 @@ namespace LandKit
 				OutShade = "463E2D";
 				return true;
 			}
+			if (D.Coat == "stone")
+			{
+				// The British Light Stone on any nation's vehicle, one colour all over: for the picture sheets only (the
+				// art director's sheet of every nation's mark on a light coat, 26 November 2026). No rule picks it.
+				OutName = "stone";
+				OutUpper = "C9B88E";
+				OutUpper2 = "C9B88E";
+				OutShade = "7C7258";
+				return true;
+			}
 			if (D.Terrain == "desert")
 			{
 				// On a desert field the lorry wears her owner's desert coat, as the tanks' files pick theirs there
@@ -1597,25 +1607,277 @@ namespace LandKit
 			Out.push_back(std::move(Middle));
 		}
 
+		// ---- Every nation's mark (release 2, Dress::bAllMarks, the trial word "allmarks"): the art director's paper of
+		// 26 November 2026, 04:06Z. Nothing new is invented: each of thirty-three more nations wears the mark the
+		// campaign map's pieces and the aircraft already wear (Campaign/CampaignMiniatures.cpp's painter and the unit
+		// table's rings), in the map's own colours, as plain rings and discs written outside first, every piece side by
+		// side in one coat (a piece over another stood off a stepped plate lets the lower show in cracks). Three are new
+		// here by her ruling: Portugal's red and green (the map's red cross on white is the medical emblem), China's
+		// plain white disc on blue (no rayed sun) and Venezuela's, Colombia's with a thin white ring outside it. Latvia's
+		// red is her flag's carmine, so that her mark is not Denmark's or Peru's. Her note of 06:17Z adds five, so
+		// thirty-eight: Australia's, New Zealand's, South Africa's and India's roundels (the last row of each in the unit
+		// table's "marking_months", its rings only) and Poland's chequer (the map painter's); and the three new ones wait
+		// on the historian behind a word of their own (Dress::bNewMarks). ----
+		constexpr MarkPaint MapWhite{ 242, 240, 232 }, MapRed{ 200, 16, 46 }, MapBlue{ 31, 58, 147 }, MapBlack{ 20, 20, 20 }, MapYellow{ 242, 194, 0 },
+			MapGreen{ 30, 138, 68 }, MapOrange{ 244, 123, 32 };
+		// (the unit table's own white, blue, black, green and light blue; the painter's own blues and reds for six flags)
+		constexpr MarkPaint TableWhite{ 242, 238, 226 }, TableBlue{ 31, 63, 143 }, TableBlack{ 26, 26, 26 }, TableGreen{ 30, 122, 60 }, TableSky{ 116, 172, 223 },
+			GreekBlue{ 13, 94, 175 }, SwedishBlue{ 0, 106, 167 }, FinnishBlue{ 0, 53, 128 }, SwissRed{ 218, 41, 28 }, TurkishRed{ 227, 10, 23 },
+			ChineseBlue{ 10, 28, 140 }, Carmine{ 158, 48, 57 };
+		// (the unit table's last "marking_months" rows: South Africa's orange, India's dark blue and light blue)
+		constexpr MarkPaint TableOrange{ 226, 122, 31 }, TableNavy{ 28, 44, 85 }, TablePale{ 143, 176, 208 };
+
+		/** One convex piece of a mark from its corners, wound the way the painter fills (counter-clockwise, across then up). */
+		void MarkShape(std::vector<MarkPiece>& Out, std::vector<std::pair<double, double>> Corners, const MarkPaint& C)
+		{
+			double Twice = 0.0;
+			for (size_t K = 0; K < Corners.size(); ++K)
+			{
+				const auto& C0 = Corners[K];
+				const auto& C1 = Corners[(K + 1) % Corners.size()];
+				Twice += C0.first * C1.second - C1.first * C0.second;
+			}
+			if (Twice < 0.0)
+			{
+				std::reverse(Corners.begin(), Corners.end());
+			}
+			MarkPiece P;
+			P.Outline = std::move(Corners);
+			P.R = C.R;
+			P.G = C.G;
+			P.B = C.B;
+			Out.push_back(std::move(P));
+		}
+		/** Three rings as the map's painter lays them: the outer to 0.66 of the mark, the middle to 0.33, a disc within. */
+		void MarkRings(std::vector<MarkPiece>& Out, const MarkPaint& Outer, const MarkPaint& Middle, const MarkPaint& Centre)
+		{
+			MarkRing(Out, 0.66, 1.0, Outer);
+			MarkRing(Out, 0.33, 0.66, Middle);
+			MarkDisc(Out, 0.33, Centre, 0);
+		}
+		/** The band between two five-pointed stars about one middle, a point straight up (Inner smaller than Outer): ten
+		 * four-sided pieces, one along each side of the stars (the two sides are level with each other, so each is convex). */
+		void MarkStarBand(std::vector<MarkPiece>& Out, double Outer, double Inner, const MarkPaint& C)
+		{
+			auto Corner = [](double R, double Deg) { return std::pair<double, double>(R * std::cos(Deg * Rad), R * std::sin(Deg * Rad)); };
+			for (int K = 0; K < 10; ++K)
+			{
+				// (the stars' corners in turn: a tip, then the notch 36 degrees on, at 0.382 of the tip's distance)
+				const double Deg0 = 90.0 + 36.0 * K, Deg1 = Deg0 + 36.0;
+				const double Far0 = K % 2 == 0 ? 1.0 : 0.382, Far1 = K % 2 == 0 ? 0.382 : 1.0;
+				MarkShape(Out, { Corner(Outer * Far0, Deg0), Corner(Outer * Far1, Deg1), Corner(Inner * Far1, Deg1), Corner(Inner * Far0, Deg0) }, C);
+			}
+		}
+		/** What of a disc lies outside a five-pointed star on it (the star Size, the disc Reach, a point straight up):
+		 * five pieces, each from a notch of the star out between two of its tips to the disc's edge (convex). */
+		void MarkRoundStar(std::vector<MarkPiece>& Out, double Size, double Reach, const MarkPaint& C)
+		{
+			auto Corner = [](double R, double Deg) { return std::pair<double, double>(R * std::cos(Deg * Rad), R * std::sin(Deg * Rad)); };
+			for (int K = 0; K < 5; ++K)
+			{
+				const double Tip = 90.0 + 72.0 * K;
+				std::vector<std::pair<double, double>> Corners = { Corner(Size * 0.382, Tip + 36.0), Corner(Size, Tip) };
+				for (int Step = 0; Step <= 6; ++Step)
+				{
+					Corners.push_back(Corner(Reach, Tip + 12.0 * Step));
+				}
+				Corners.push_back(Corner(Size, Tip + 72.0));
+				MarkShape(Out, std::move(Corners), C);
+			}
+		}
+		/** One of the thirty-eight nations' marks of the art director's paper and her note of 06:17Z, its pieces added to
+		 * Out where one is given; false where the nation is not one of them (her mark is an older one's, or she has
+		 * none), and for the three that wait on the historian (Portugal, China, Venezuela) unless bNewMarks. */
+		bool NationMark(const std::string& Nation, std::vector<MarkPiece>* Out, bool bNewMarks)
+		{
+			struct Three
+			{
+				const char* Nation;
+				MarkPaint Outer, Middle, Centre;
+			};
+			static const Three Ringed[] = {
+				{ "BEL", MapRed, MapYellow, MapBlack }, { "DEN", MapRed, MapWhite, MapRed }, { "NOR", MapRed, MapWhite, MapBlue },
+				{ "IRL", MapGreen, MapWhite, MapOrange }, { "ESP", MapRed, MapYellow, MapRed }, { "HUN", MapRed, MapWhite, MapGreen },
+				{ "ROM", MapRed, MapYellow, MapBlue }, { "YUG", MapBlue, MapWhite, MapRed }, { "BUL", MapRed, MapGreen, MapWhite },
+				{ "GRE", GreekBlue, MapWhite, GreekBlue }, { "SVK", TableWhite, TableBlue, MapRed }, { "LUX", MapRed, TableWhite, TableSky },
+				{ "EST", TableBlue, TableBlack, TableWhite }, { "LAT", Carmine, TableWhite, Carmine }, { "LIT", MapYellow, TableGreen, MapRed },
+				{ "IRQ", TableBlack, TableWhite, TableGreen }, { "IRN", TableGreen, TableWhite, MapRed }, { "THA", MapRed, TableWhite, TableBlue },
+				{ "MEX", TableGreen, TableWhite, MapRed }, { "ARG", TableSky, TableWhite, TableSky }, { "PER", MapRed, TableWhite, MapRed },
+				{ "COL", MapYellow, TableBlue, MapRed } };
+			std::vector<MarkPiece> Unkept;
+			std::vector<MarkPiece>& To = Out ? *Out : Unkept;
+			for (const Three& Each : Ringed)
+			{
+				if (Nation == Each.Nation)
+				{
+					MarkRings(To, Each.Outer, Each.Middle, Each.Centre);
+					return true;
+				}
+			}
+			if (Nation == "NED")
+			{
+				// (red, white and blue, the orange disc small in the middle)
+				MarkRing(To, 0.66, 1.0, MapRed);
+				MarkRing(To, 0.33, 0.66, MapWhite);
+				MarkRing(To, 0.16, 0.33, MapBlue);
+				MarkDisc(To, 0.16, MapOrange, 0);
+				return true;
+			}
+			if (Nation == "SWE")
+			{
+				// (a thin yellow ring round the blue: the three crowns are for aircraft, at half a metre they are mush)
+				MarkRing(To, 0.82, 1.0, MapYellow);
+				MarkDisc(To, 0.82, SwedishBlue, 0);
+				return true;
+			}
+			if (Nation == "FIN")
+			{
+				MarkRing(To, 0.7, 1.0, MapWhite);
+				MarkRing(To, 0.4, 0.7, FinnishBlue);
+				MarkDisc(To, 0.4, MapWhite, 0);
+				return true;
+			}
+			if (Nation == "SUI")
+			{
+				// A red disc and a white beam cross inside it, its arms 0.62 of the disc and not reaching its edge: the
+				// cross, then the red round it, as the four quarters between its arms and the four caps beyond their ends.
+				const double Arm = 0.62, Half = 0.19, Edge = std::sqrt(1.0 - Half * Half), From = std::asin(Half) / Rad;
+				MarkBox(To, -Half, -Arm, Half, Arm, MapWhite, 0);
+				MarkBox(To, -Arm, -Half, -Half, Half, MapWhite, 0);
+				MarkBox(To, Half, -Half, Arm, Half, MapWhite, 0);
+				for (int Turn = 0; Turn < 4; ++Turn)
+				{
+					const double Co = std::cos(Turn * 90.0 * Rad), Si = std::sin(Turn * 90.0 * Rad);
+					auto Turned = [Co, Si](double A, double U) { return std::pair<double, double>(A * Co - U * Si, A * Si + U * Co); };
+					std::vector<std::pair<double, double>> Quarter = { Turned(Half, Half) }, Cap = { Turned(Arm, Half), Turned(Arm, -Half) };
+					for (int Step = 0; Step <= 6; ++Step)
+					{
+						const double Deg = From + (90.0 - 2.0 * From) * Step / 6.0, Low = -From + 2.0 * From * Step / 6.0;
+						Quarter.push_back(Turned(std::cos(Deg * Rad), std::sin(Deg * Rad)));
+						Cap.push_back(Turned(Step == 0 || Step == 6 ? Edge : std::cos(Low * Rad), Step == 0 ? -Half : Step == 6 ? Half : std::sin(Low * Rad)));
+					}
+					MarkShape(To, std::move(Quarter), SwissRed);
+					MarkShape(To, std::move(Cap), SwissRed);
+				}
+				return true;
+			}
+			if (Nation == "AUS" || Nation == "NZL")
+			{
+				// (the unit table's last "marking_months" row of each, its rings only: the red taken out, blue and white.
+				// New Zealand's white side bars are for aircraft, so on land the two are alike; their flags tell them apart)
+				MarkRing(To, 0.5, 1.0, TableBlue);
+				MarkDisc(To, 0.5, TableWhite, 0);
+				return true;
+			}
+			if (Nation == "SAF")
+			{
+				// (the table's: orange in place of the red)
+				MarkRing(To, 0.62, 1.0, TableBlue);
+				MarkRing(To, 0.3, 0.62, TableWhite);
+				MarkDisc(To, 0.3, TableOrange, 0);
+				return true;
+			}
+			if (Nation == "IND")
+			{
+				// (the table's last: dark blue with a light blue middle)
+				MarkRing(To, 0.45, 1.0, TableNavy);
+				MarkDisc(To, 0.45, TablePale, 0);
+				return true;
+			}
+			if (Nation == "POL")
+			{
+				// (the map painter's chequer: a white square, its side the place's width, red in two opposite quarters. A
+				// mark's across runs to the left of whoever looks at the plate (PaintMark's Across), on every side of her
+				// alike, so the red is seen upper left and lower right)
+				MarkBox(To, -1.0, -1.0, 0.0, 0.0, MapRed, 0);
+				MarkBox(To, 0.0, 0.0, 1.0, 1.0, MapRed, 0);
+				MarkBox(To, -1.0, 0.0, 0.0, 1.0, MapWhite, 0);
+				MarkBox(To, 0.0, -1.0, 1.0, 0.0, MapWhite, 0);
+				return true;
+			}
+			if (!bNewMarks && (Nation == "POR" || Nation == "CHN" || Nation == "CHI" || Nation == "VEN"))
+			{
+				return false;
+			}
+			if (Nation == "POR")
+			{
+				MarkRing(To, 0.62, 1.0, MapRed);
+				MarkDisc(To, 0.62, MapGreen, 0);
+				return true;
+			}
+			if (Nation == "TUR")
+			{
+				// (a thin white ring round the red: no crescent)
+				MarkRing(To, 0.8, 1.0, MapWhite);
+				MarkDisc(To, 0.8, TurkishRed, 0);
+				return true;
+			}
+			if (Nation == "CHN" || Nation == "CHI")
+			{
+				MarkRing(To, 0.45, 1.0, ChineseBlue);
+				MarkDisc(To, 0.45, MapWhite, 0);
+				return true;
+			}
+			if (Nation == "BRA")
+			{
+				// (the table's star: green, yellow, blue and white five-pointed stars, one inside the other)
+				MarkStarBand(To, 1.0, 0.78, TableGreen);
+				MarkStarBand(To, 0.78, 0.56, MapYellow);
+				MarkStarBand(To, 0.56, 0.32, TableBlue);
+				MarkStar(To, 0.32, TableWhite, 0);
+				return true;
+			}
+			if (Nation == "CHL")
+			{
+				// (a red ring, a blue disc, and a white five-pointed star on the blue)
+				MarkRing(To, 0.8, 1.0, MapRed);
+				MarkRoundStar(To, 0.72, 0.8, TableBlue);
+				MarkStar(To, 0.72, TableWhite, 0);
+				return true;
+			}
+			if (Nation == "VEN")
+			{
+				// (Colombia's, with a thin white ring outside the yellow so that it is not hers)
+				MarkRing(To, 0.9, 1.0, TableWhite);
+				MarkRing(To, 0.66, 0.9, MapYellow);
+				MarkRing(To, 0.33, 0.66, TableBlue);
+				MarkDisc(To, 0.33, MapRed, 0);
+				return true;
+			}
+			return false;
+		}
+
 		/** Which mark her owner painted: each nation's plain period marking, never a party emblem (the art director's
 		 * rule). By the battle's month as before: the file's own "mark_months" rows for her nation first (the British:
 		 * none, then the recognition flash from November 1941, the Allies' white star from July 1943); "none" where her
 		 * army painted none that the art director has ruled on. With bAnyYear (Dress::bAnyYear, release 2, the trial word
 		 * "anyyear"; Brian, 26 November 2026: "have the paint be on it regardless of the year", of a British tank at
 		 * Cairo with no markings) no month chooses it and none leaves her bare: the first mark her file's rows give, else
-		 * her nation's first (the British and the Commonwealth: the flash, in every year). */
-		std::string MarkWorn(const std::string& Nation, int Year, int Month, const Json::Value& Months, bool bAnyYear)
+		 * her nation's first. With bAllMarks (Dress::bAllMarks, the trial word "allmarks") a nation with none of these
+		 * wears her own of the art director's thirty-eight ("mark " and her tag; Vichy the French roundel), three of
+		 * them only with bNewMarks, and no mark goes by the year either. The art director's rulings of 26 November,
+		 * 06:17Z, under either word: the flash is the campaign map's own, red, white, red ("red flash"), and never the
+		 * Allies' star, which is America's; the British and the Canadians wear it; Australia, New Zealand, South Africa
+		 * and India wear it until "allmarks" gives them their own roundels; Poland never wears it (bare until her
+		 * chequer comes with "allmarks"). */
+		std::string MarkWorn(const std::string& Nation, int Year, int Month, const Json::Value& Months, bool bAnyYear, bool bAllMarks, bool bNewMarks)
 		{
+			const bool bNoYear = bAnyYear || bAllMarks;
 			const int Key = Year * 12 + Month;
 			auto KeyOf = [](const std::string& Text, int Otherwise)
 			{
 				int Y = 0, M = 0;
 				return std::sscanf(Text.c_str(), "%d-%d", &Y, &M) == 2 ? Y * 12 + M : Otherwise;
 			};
-			auto NameOf = [](const std::string& Kind) { return Kind == "star" ? std::string("white star") : Kind; };
+			auto NameOf = [bNoYear](const std::string& Kind) { return Kind == "star" ? std::string("white star") : Kind == "flash" && bNoYear ? std::string("red flash") : Kind; };
+			const bool bOwnMark = Nation == "AUS" || Nation == "NZL" || Nation == "SAF" || Nation == "IND" || Nation == "POL";
+			if (bAllMarks && bOwnMark)
+			{
+				return "mark " + Nation;
+			}
 			const Json::Value Rows = Months[Nation];
-			// (Dress::bAnyYear: the first mark her file's rows give, whatever their months; none there, her nation's below)
-			for (size_t I = 0; bAnyYear && I < Rows.Count(); ++I)
+			// (no mark by the year: the first mark her file's rows give, whatever their months; none there, her nation's below)
+			for (size_t I = 0; bNoYear && I < Rows.Count(); ++I)
 			{
 				const std::string Kind = Rows.At(I)["mark"].Str("none");
 				if (Kind != "none")
@@ -1623,7 +1885,7 @@ namespace LandKit
 					return NameOf(Kind);
 				}
 			}
-			for (size_t I = 0; !bAnyYear && I < Rows.Count(); ++I)
+			for (size_t I = 0; !bNoYear && I < Rows.Count(); ++I)
 			{
 				const Json::Value Row = Rows.At(I);
 				if (KeyOf(Row["from"].Str(), -1) <= Key && Key <= KeyOf(Row["to"].Str(), 1 << 30))
@@ -1644,11 +1906,11 @@ namespace LandKit
 			{
 				return "red star";
 			}
-			if (bAnyYear && (Nation == "UK" || Nation == "CAN" || Nation == "AUS" || Nation == "NZL" || Nation == "SAF" || Nation == "IND" || Nation == "POL"))
+			if (bNoYear && (Nation == "UK" || Nation == "CAN" || bOwnMark))
 			{
-				// (the flash in every year: not bare before November 1941, not the Allies' star from July 1943, and the
-				// Poles' from 1939)
-				return "flash";
+				// (the flash in every year: not bare before November 1941, never the Allies' star from July 1943; the
+				// Poles bare, never in a British flash)
+				return Nation == "POL" ? "none" : "red flash";
 			}
 			if (Nation == "UK" || Nation == "CAN" || Nation == "AUS" || Nation == "NZL" || Nation == "SAF" || Nation == "IND" || (Nation == "POL" && Year >= 1940))
 			{
@@ -1662,9 +1924,15 @@ namespace LandKit
 			{
 				return "army star";
 			}
-			if (Nation == "FRA")
+			if (Nation == "FRA" || (bAllMarks && Nation == "VIC"))
 			{
-				return "roundel";
+				// (with every nation's mark, France's in the campaign map's order, red outside: the kit's first roundel
+				// has its colours the British way about, blue outside)
+				return bAllMarks ? "red roundel" : "roundel";
+			}
+			if (bAllMarks && NationMark(Nation, nullptr, bNewMarks))
+			{
+				return "mark " + Nation;
 			}
 			return "none";
 		}
@@ -1674,7 +1942,7 @@ namespace LandKit
 		 * French roundel: sharp edges, scuffed); the art director, 24 November. */
 		bool MarkByHand(const std::string& Kind)
 		{
-			return Kind == "red star" || Kind == "flash" || Kind == "rectangle" || Kind == "army star";
+			return Kind == "red star" || Kind == "flash" || Kind == "red flash" || Kind == "rectangle" || Kind == "army star";
 		}
 
 		/** A mark's pieces, bottom layer first. */
@@ -1717,6 +1985,15 @@ namespace LandKit
 				MarkBox(Out, -0.3, -0.75, 0.3, 0.75, MarkRed, 0);
 				MarkBox(Out, 0.3, -0.75, 0.9, 0.75, MarkWhite, 0);
 			}
+			else if (Kind == "red flash")
+			{
+				// The flash as the campaign map's pieces wear it (Campaign/CampaignMiniatures.cpp, UK-FLASH; the art
+				// director, 26 November 2026: one nation, one mark): red, white, red, three upright bands of equal width,
+				// 1.6 wide to 1 high. The red outside holds its edge on a sand coat, where a white band melts into stone.
+				MarkBox(Out, -1.0, -0.62, -1.0 / 3.0, 0.62, MarkRed, 0);
+				MarkBox(Out, -1.0 / 3.0, -0.62, 1.0 / 3.0, 0.62, MarkWhite, 0);
+				MarkBox(Out, 1.0 / 3.0, -0.62, 1.0, 0.62, MarkRed, 0);
+			}
 			else if (Kind == "rectangle")
 			{
 				// The Italians' company rectangle, the first company's red, with the first platoon's one white bar (their
@@ -1735,6 +2012,19 @@ namespace LandKit
 				MarkRing(Out, 0.66, 1.0, MarkBlue);
 				MarkRing(Out, 0.33, 0.66, MarkWhite);
 				MarkDisc(Out, 0.33, MarkRed, 0);
+			}
+			else if (Kind == "red roundel")
+			{
+				// France's roundel as the campaign map's pieces wear it (Campaign/CampaignMiniatures.cpp: FRA, VIC and FFR,
+				// red, white, blue from the outside in): the kit's "roundel" above has the colours the other way about,
+				// which is Britain's. Worn with every nation's mark (Dress::bAllMarks), in the kit's own three paints.
+				MarkRing(Out, 0.66, 1.0, MarkRed);
+				MarkRing(Out, 0.33, 0.66, MarkWhite);
+				MarkDisc(Out, 0.33, MarkBlue, 0);
+			}
+			else if (Kind.compare(0, 5, "mark ") == 0)
+			{
+				NationMark(Kind.substr(5), &Out, true); // one of the thirty-eight nations' own (Dress::bAllMarks)
 			}
 		}
 
@@ -1755,6 +2045,9 @@ namespace LandKit
 		 * its lower third takes more of the track's dust; it is chipped back to her paint here and there (most at a plate's
 		 * edge and round a bolt or a weld); a stencilled mark is scuffed in streaks and a hand-painted one (bHand) has
 		 * slightly uneven brushed edges. bMustFit: none at all where no place within reach takes the whole of it.
+		 *
+		 * bReadable (Dress::bAllMarks, the art director's rules of 26 November 2026): the mark takes at most half the dirt
+		 * of the coat round it, and on a light coat its white may rise to 20 levels brighter than the coat beside it.
 		 */
 		struct MarkSkin
 		{
@@ -1765,7 +2058,7 @@ namespace LandKit
 		};
 		size_t PaintMark(Mesh& Out, const V3& Pivot, const std::vector<MarkPiece>& Pieces, const V3& At, const V3& Facing, double Radius,
 			double Dust, double Step, double Lift, uint64_t Seed, const MarkSkin& Skin = MarkSkin(), bool bHand = false, bool bMustFit = false,
-			double* Moved = nullptr, double* Scale = nullptr)
+			double* Moved = nullptr, double* Scale = nullptr, bool bReadable = false)
 		{
 			const V3 F = Facing.Unit(V3(1.0, 0.0, 0.0));
 			// (on a wall its top is toward the sky; on a roof, toward her front)
@@ -2033,16 +2326,20 @@ namespace LandKit
 						}
 						// (at most six tenths of the way: a mark under a caked hull still reads as hers)
 						const double Share = Clamp(1.0 - Kept, 0.0, 0.6);
+						// (bReadable: half of that, and no more than half the coat's own dirt in all: a crew repaints its
+						// mark, and a mark dusted to the coat's colour is no mark)
+						const double Taken = bReadable ? 0.5 * Share : Share;
 						if (Share > 0.002)
 						{
-							R = Lerp(R, ToPicture(Ad[0] / Share), Share);
-							G = Lerp(G, ToPicture(Ad[1] / Share), Share);
-							B = Lerp(B, ToPicture(Ad[2] / Share), Share);
+							R = Lerp(R, ToPicture(Ad[0] / Share), Taken);
+							G = Lerp(G, ToPicture(Ad[1] / Share), Taken);
+							B = Lerp(B, ToPicture(Ad[2] / Share), Taken);
 						}
 						// Its own dust, fine and even, graded up from its foot (the track's dust thrown up the plate), a
 						// little by her file's word for the mark.
 						const double Low = Smooth(-0.15, -1.0, U0);
-						const double Dusted = Clamp(0.03 + 0.1 * Clamp(Dust / 100.0, 0.0, 1.0) + 0.25 * Low + 0.04 * (Noise(Flat * 70.0, Seed + 17) - 0.5), 0.0, 0.5);
+						const double DustedAll = Clamp(0.03 + 0.1 * Clamp(Dust / 100.0, 0.0, 1.0) + 0.25 * Low + 0.04 * (Noise(Flat * 70.0, Seed + 17) - 0.5), 0.0, 0.5);
+						const double Dusted = bReadable ? std::min(DustedAll, std::max(0.0, 0.5 * Clamp(1.0 - Kept, 0.0, 1.0) - Taken)) : DustedAll;
 						R = Lerp(R, DustPic[0], Dusted);
 						G = Lerp(G, DustPic[1], Dusted);
 						B = Lerp(B, DustPic[2], Dusted);
@@ -2056,10 +2353,40 @@ namespace LandKit
 						}
 						// (no mark brighter than the Sherman's star, 184, 177, 157 at its brightest, the art director's mend of
 						// 24 November: the British flash on a clean light tank read the brightest thing on her)
-						const double Down = std::min({ 1.0, 184.0 / std::max(R, 1.0), 177.0 / std::max(G, 1.0), 157.0 / std::max(B, 1.0) });
+						double CapR = 184.0, CapG = 177.0, CapB = 157.0, Want = 0.0;
+						if (bReadable)
+						{
+							// (on a light coat, its own brightness 150 or more beside the point, a white may rise until it
+							// is 20 levels brighter than that coat, never past 222, 216, 200: the British flash on a sand
+							// coat was capped at the sand's own brightness and its white bands were lost. On a dark coat the
+							// cap above stands. Brightness is 0.21 red, 0.72 green, 0.07 blue.)
+							const double CoatBright = 0.21 * Sk[0] + 0.72 * Sk[1] + 0.07 * Sk[2];
+							if (CoatBright >= 150.0)
+							{
+								const double DarkCap = 0.21 * 184.0 + 0.72 * 177.0 + 0.07 * 157.0, LightCap = 0.21 * 222.0 + 0.72 * 216.0 + 0.07 * 200.0;
+								Want = std::min(CoatBright + 20.0, LightCap);
+								const double Rise = Clamp((Want - DarkCap) / (LightCap - DarkCap), 0.0, 1.0);
+								CapR = Lerp(184.0, 222.0, Rise);
+								CapG = Lerp(177.0, 216.0, Rise);
+								CapB = Lerp(157.0, 200.0, Rise);
+							}
+						}
+						const double Down = std::min({ 1.0, CapR / std::max(R, 1.0), CapG / std::max(G, 1.0), CapB / std::max(B, 1.0) });
 						R *= Down;
 						G *= Down;
 						B *= Down;
+						if (Want > 0.0 && P.R >= 190 && P.G >= 190 && P.B >= 180)
+						{
+							// (a white paint under its dust and cap, still short of that: lifted to it, no channel past the most)
+							const double Now = 0.21 * R + 0.72 * G + 0.07 * B;
+							if (Now > 1.0 && Now < Want)
+							{
+								const double Lifted = std::min({ Want / Now, 222.0 / std::max(R, 1.0), 216.0 / std::max(G, 1.0), 200.0 / std::max(B, 1.0) });
+								R *= std::max(1.0, Lifted);
+								G *= std::max(1.0, Lifted);
+								B *= std::max(1.0, Lifted);
+							}
+						}
 					}
 					else
 					{
@@ -2648,6 +2975,18 @@ namespace LandKit
 			}
 		}
 		const bool bAmerican = D.Nation == "USA";
+		// Less road dust on the grey where no coat goes by the year (Dress::bAnyYear; the art director's mend of 26
+		// November 2026, 06:17Z). The files' dust for the grey is the pale sand that suits the dark yellow: on the grey
+		// her wheels stood 60 to 85 levels above her hull and half of each skirt was sand, and it read as the yellow
+		// coat showing through. So the grey's road dust is a dry earth about as bright as the grey itself and warmer
+		// (5C5447: wheels, lower hull and a skirt's foot at most 25 levels above the grey beside them in one light, which
+		// is about 16 as paint), and on a skirt it lies in the lowest third only. By the month, and every other coat, as
+		// before.
+		const bool bGreyDust = D.bAnyYear && !bCaptured && Coat == "grey" && D.Nation == "GER";
+		if (bGreyDust)
+		{
+			DustColour = FromHex("5C5447");
+		}
 
 		// The month's swaps of parts (the Panzer IV's long gun and her skirts, the lorry's tilt): parts named only by a
 		// choice not taken are scaled to nothing, and the chosen face's sockets stand in for the default ones.
@@ -3056,7 +3395,7 @@ namespace LandKit
 				Fires.push_back(S.At);
 			}
 		}
-		const Lin Dust = FromPicture(156, 141, 112), SunFaded = FromPicture(108, 101, 76);
+		const Lin Dust = bGreyDust ? FromHex("5C5447") : FromPicture(156, 141, 112), SunFaded = FromPicture(108, 101, 76);
 		// (release 2, the whole picture's worn paint: the field's own ground, Dress::FieldDust; her lower third is the third
 		// of her height, never under 0.6 m)
 		const bool bFieldDust = D.FieldDust[0] >= 0.0;
@@ -3164,6 +3503,19 @@ namespace LandKit
 				// (the burnt coat's cut adds points: her own keep the edges they had before it)
 				std::copy(NearEdgeOwn.begin(), NearEdgeOwn.end(), Edge.begin());
 			}
+			// (the grey's dust, Dress::bAnyYear: each skirt plate's foot and top, to keep its dust to the lowest third)
+			std::vector<double> SkirtFoot(Parts.size(), 1.0), SkirtTop(Parts.size(), 0.0);
+			for (size_t K = 0; bGreyDust && K < N; ++K)
+			{
+				const size_t Of = static_cast<size_t>(Raw.Parts[K]);
+				if (Parts[Of].Name.compare(0, 5, "skirt") == 0)
+				{
+					const double Zed = Raw.Points[K * 3 + 2];
+					const bool bFirst = SkirtFoot[Of] > SkirtTop[Of];
+					SkirtFoot[Of] = bFirst ? Zed : std::min(SkirtFoot[Of], Zed);
+					SkirtTop[Of] = bFirst ? Zed : std::max(SkirtTop[Of], Zed);
+				}
+			}
 			std::vector<uint8_t> Colour(N * 4, 255);
 			std::vector<float> Burn(N, 0.0f);
 			std::vector<uint8_t> BurntTo(D.bBurntCoat ? N * 3 : 0, 0);
@@ -3238,6 +3590,9 @@ namespace LandKit
 					const double Share = PaintK == Rubber ? 0.25 : 0.5;
 					return Mix(Cv, FieldDust, std::min(0.6, Share * Ramp * Patch));
 				};
+				// (the grey's dust on a skirt: all of it in the plate's lowest third, none above; 1 everywhere else)
+				const double SkirtFootK = SkirtFoot[static_cast<size_t>(PartK)], SkirtTopK = SkirtTop[static_cast<size_t>(PartK)];
+				const double SkirtDust = SkirtTopK > SkirtFootK ? 1.0 - Smooth(0.27, 0.36, (At.Z - SkirtFootK) / (SkirtTopK - SkirtFootK)) : 1.0;
 				// (everything done to her paint from here: worn edges, dust, soot, her creases' shade; a scale and an addition
 				// to the paint, which the national marks read to take on her own dirt, Dress::bMarks)
 				auto Finish = [&](Lin Cv)
@@ -3273,7 +3628,7 @@ namespace LandKit
 					if (!bFileDust && (bCoat || PaintK == Tread || PaintK == Rubber || PaintK == Steel))
 					{
 						const double Low = Clamp(1.0 - At.Z / 1.0, 0.0, 1.0);
-						Cv = Mix(Cv, Dust, 0.42 * Low * Low * (0.6 + 0.8 * Noise(Here * 3.0, Seed + 5)));
+						Cv = Mix(Cv, Dust, 0.42 * Low * Low * (0.6 + 0.8 * Noise(Here * 3.0, Seed + 5)) * SkirtDust);
 					}
 					// Exhaust soot as the file lays it.
 					if (Raw.SootIn[K] > 4)
@@ -3292,7 +3647,7 @@ namespace LandKit
 						// (captured: her new coat is weeks old, not months, so half the file's road dust; the art director's
 						// mend, 23 November: on a captor's green the file's pale streaks down the skirts read as the old coat)
 						const double DustBy = bCaptured ? 0.5 : 1.0;
-						Cv = Mix(Cv, DustColour, DustBy * Clamp(Raw.DustIn[K] / 100.0, 0.0, 1.0));
+						Cv = Mix(Cv, DustColour, DustBy * Clamp(Raw.DustIn[K] / 100.0, 0.0, 1.0) * SkirtDust);
 						Cv = Mix(Cv, HazeColour, DustBy * Clamp(Raw.Haze[K] / 100.0, 0.0, 1.0));
 						Cv = OwnGround(Cv);
 						Cv = Cv * Clamp(static_cast<double>(Raw.ShadeIn[K]), 0.0, 1.0);
@@ -3633,7 +3988,7 @@ namespace LandKit
 			const bool bCaptorMarked = bCaptured && (D.Nation == "GER" || D.Nation == "USA" || D.Nation == "SOV");
 			if (D.bMarks && !bCaptorMarked && !Marks.empty())
 			{
-				const std::string MarkKind = MarkWorn(D.Nation, D.Year, D.Month, R["mark_months"], D.bAnyYear);
+				const std::string MarkKind = MarkWorn(D.Nation, D.Year, D.Month, R["mark_months"], D.bAnyYear, D.bAllMarks, D.bNewMarks);
 				std::vector<MarkPiece> Pieces;
 				MarkPieces(MarkKind, Pieces);
 				if (Level == 0 && !Pieces.empty())
@@ -3715,9 +4070,52 @@ namespace LandKit
 					Skin.Count = Members[static_cast<size_t>(Pt.Body)].size();
 					Skin.DustColour = bFileDust ? DustColour : Dust;
 					// (a file that gives no dust for its mark: as dusty as the files' middling marks, 45)
-					const size_t Added = PaintMark(Level == 0 ? Bo.Near : Bo.Far, Bo.Pivot, Pieces, Mk.At, Mk.Facing, Mk.Radius * (bCaptured ? 1.5 : 1.0),
-						Mk.Dust > 0.0 ? Mk.Dust : 45.0, Level == 0 ? 0.03 : 0.12, Level == 0 ? 0.004 : 0.012, Mix(I + 1, static_cast<uint64_t>(Level) + 1, 0x4D41524Bull),
-						Skin, MarkByHand(MarkKind), Level == 0 && PaintedMade[I]);
+					const double DustWord = Mk.Dust > 0.0 ? Mk.Dust : 45.0;
+					const uint64_t MarkSeed = Mix(I + 1, static_cast<uint64_t>(Level) + 1, 0x4D41524Bull);
+					size_t Added = 0;
+					bool bSized = false;
+					if (D.bAllMarks && Level == 0 && !bCaptured)
+					{
+						// Marks that read (Dress::bAllMarks; the art director, 26 November 2026). The British flash is
+						// painted smaller than life at her files' places: tried at 1.4 times its true size (0.46 m wide
+						// by 0.29 high), then at true, the largest that lies whole on one plate, else at its place's size as
+						// before. One of the thirty-eight nations' ring marks on a tank is tried at 0.22 m, the least that
+						// reads, where her file's place is smaller (Poland's chequer is her place's own width). Where the
+						// plate takes neither, the place's own size: never left off.
+						const double FlashTrue = 0.46 / 2.0;
+						const bool bRingMark = (MarkKind.compare(0, 5, "mark ") == 0 && MarkKind != "mark POL") || (MarkKind == "red roundel" && D.Nation == "VIC");
+						std::vector<double> Tries;
+						if (MarkKind == "red flash")
+						{
+							Tries = { 1.4 * FlashTrue, FlashTrue };
+						}
+						else if (bRingMark && PartIndex("turret") >= 0)
+						{
+							Tries = { 0.22 };
+						}
+						for (const double Try : Tries)
+						{
+							if (Try <= Mk.Radius)
+							{
+								continue;
+							}
+							double Sized = 1.0;
+							Added = PaintMark(Bo.Near, Bo.Pivot, Pieces, Mk.At, Mk.Facing, Try, DustWord, 0.03, 0.004, MarkSeed, Skin, MarkByHand(MarkKind), true, nullptr, &Sized, true);
+							if (Added > 0)
+							{
+								// (the far level, and whoever reads her places, at the size it was painted)
+								Painted[I].Radius = Try * Sized;
+								bSized = true;
+								break;
+							}
+						}
+					}
+					if (!bSized)
+					{
+						Added = PaintMark(Level == 0 ? Bo.Near : Bo.Far, Bo.Pivot, Pieces, Mk.At, Mk.Facing, Mk.Radius * (bCaptured ? 1.5 : 1.0), DustWord,
+							Level == 0 ? 0.03 : 0.12, Level == 0 ? 0.004 : 0.012, MarkSeed, Skin, MarkByHand(MarkKind), Level == 0 && PaintedMade[I], nullptr, nullptr,
+							D.bAllMarks);
+					}
 					Kept[I] = Added > 0 || !(Level == 0 && PaintedMade[I]) ? 1 : 0;
 				}
 				if (Level == 0)
@@ -6934,6 +7332,8 @@ namespace LandKit
 		}
 		D.bBurntCoat = bBurntCoat;
 		D.bAnyYear = bAnyYear;
+		D.bAllMarks = bAllMarks;
+		D.bNewMarks = bNewMarks;
 		std::string Why;
 		if (!Looks[OutKey].Load(Text, D, Why))
 		{
