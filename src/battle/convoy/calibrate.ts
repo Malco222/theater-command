@@ -71,13 +71,17 @@ export function staffNights(t: ConvoyTicket, n = 40): StaffNights {
  */
 export function restFrom(staff: StaffNights, limit: number): (sec: number) => ConvoyCounts & { tally: Partial<ConvoyTally> } {
   return (sec) => {
-    const i = Math.min(9, Math.max(-1, Math.floor((10 * sec) / Math.max(1, limit)) - 1));
+    // (the staff's mean at this very second: read in a straight line between the ends of its tenth, the night opening at
+    // nothing, so no part of the night is counted twice after a hand-over (the playtester's M7))
+    const f = Math.min(10, Math.max(0, (10 * sec) / Math.max(1, limit)));
+    const j = Math.min(9, Math.floor(f)), w = f - j;
+    const at = (p: number[]): number => { const lo = j === 0 ? 0 : p[j - 1]; return lo + (p[j] - lo) * w; };
     const out: ConvoyCounts & { tally: Partial<ConvoyTally> } = { ss: {}, dd: {}, mv: 0, tally: {} };
     for (const [k, p] of Object.entries(staff.profile)) {
-      const v = Math.max(0, p[9] - (i < 0 ? 0 : p[i]));
+      const v = Math.max(0, p[9] - at(p));
       if (k === 'mv') out.mv = v; else if (k.startsWith('ss:')) out.ss[+k.slice(3)] = v; else out.dd[+k.slice(3)] = v;
     }
-    for (const [k, p] of Object.entries(staff.tallies ?? {})) out.tally[k as keyof ConvoyTally] = Math.max(0, p[9] - (i < 0 ? 0 : p[i]));
+    for (const [k, p] of Object.entries(staff.tallies ?? {})) out.tally[k as keyof ConvoyTally] = Math.max(0, p[9] - at(p));
     return out;
   };
 }

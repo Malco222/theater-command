@@ -10,7 +10,7 @@ import { convoyCloseWith, type ConvoyPlayed } from '../src/campaign/convoyhand';
 import { loadGame, saveGame } from '../src/campaign/save';
 import type { Game } from '../src/campaign/types';
 import {
-  afterDusk, againstStaff, CONVOY, CONVOY_PRACTICE, ConvoySim, convoyNight, countWords, restFrom, sharesOf, convoyNightsAhead, convoyPracticeTicket, fateWords, foughtOf, inRun, levelOfNight, lightOf, namesOf, nightBooked, nightHours, moonLit,
+  afterDusk, againstStaff, CONVOY, CONVOY_PRACTICE, ConvoySim, QUIET, convoyNight, countWords, restFrom, sharesOf, convoyNightsAhead, convoyPracticeTicket, fateWords, foughtOf, inRun, levelOfNight, lightOf, namesOf, nightBooked, nightHours, moonLit,
   plainConvoyTicket, rankIn, ranksOf, seaAt, staffNight, staffNights, type ConvoyKit, type ConvoyOverExtra, type ConvoyTally, type ConvoyTicket, type ConvoyUnit, type ConvoyView,
 } from '../src/battle/convoy';
 import type { FieldEvent, Side } from '../src/battle/core/types';
@@ -359,9 +359,12 @@ describe('orders answered (playtest bugs 12-14 and 23)', () => {
         // (a captain's dive says why, unless it is a duck again within two minutes of the last; against the attack
         // order, only an escort closing takes her down)
         expect(typeof x.reason).toBe('string');
-        if (e.text) expect(e.text).toContain(`: ${x.reason}.`);
-        // (forced down from the surface against the order; once down and held, she may go deep, and says why)
-        if (x.override && x.dive === 'periscope') expect(x.reason).toBe('an escort is closing');
+        // (forced down from the surface against the order, said as her captain's, the UI director's round 7 W2; once down
+        // and held, she may go deep, and says why)
+        if (x.override && x.dive === 'periscope') {
+          expect(x.reason).toBe('an escort is closing');
+          if (e.text) expect(e.text).toMatch(new RegExp(`^${boat.name}'s captain will not (stay|come) up with an escort closing on her: she keeps to periscope depth and attacks from there if the convoy comes within reach\\.$`));
+        } else if (e.text) expect(e.text).toContain(`: ${x.reason}.`);
       }
       checked += held;
     }
@@ -423,7 +426,8 @@ describe('orders answered (playtest bugs 12-14 and 23)', () => {
     const { v } = run(sim, 'att', (w) => boatsUp(w).length > 0);
     const boat = boatsUp(v)[0];
     sim.command({ do: 'convoy:dive', units: [boat.id], deep: true }, 'att');
-    expect(said(sim.view('att').events, 'sea:dive', boat.id)[0].text).toBe(`${boat.name} goes deep.`);
+    // (out of the attack until his next order, said with it: the design director's R6 (a))
+    expect(said(sim.view('att').events, 'sea:dive', boat.id)[0].text).toBe(`${boat.name} goes deep, out of the attack until your next order.`);
     const keel = (w: ConvoyView): number => w.units.find((u) => u.id === boat.id)!.extra.keel ?? 0;
     run(sim, 'att', (w) => keel(w) >= 60, 600);
     sim.command({ do: 'convoy:attack', units: [boat.id], under: true }, 'att');
@@ -489,7 +493,8 @@ describe('the escorts\' contacts as the player reads them (playtest bugs 9, 10 a
       expect(sim.command({ do: 'convoy:hunt', units: [other.id], target: spot.id }, 'def')).toBe(false);
       expect(said(sim.view('def').events, 'sea:order', other.id)[0].text).toBe(`${other.name} can't hunt ${spot.name}: no escort holds her, and she was last seen more than three minutes ago.`);
     }
-    // Over the night: a contact on a boat some escort held within two minutes is the same fight (no new line): found
+    // Over the night: a contact on a boat some escort held within QUIET, five minutes (round 7, the design director's R2
+    // (a); two minutes before it), is the same fight (no new line): found
     // again by the same escort, picked up by another, or found again as she comes up from a duck (round 4: on a radar
     // night the escorts' log was a line each time she ducked and came up). Only news is said.
     const rest = run(sim, 'def', () => false, 4 * 3600).told.concat(told);
@@ -498,18 +503,18 @@ describe('the escorts\' contacts as the player reads them (playtest bugs 9, 10 a
     expect(gained.some((e) => !(e.extra as { fresh: boolean }).fresh)).toBe(true);
     for (const e of gained) expect(!!e.text).toBe((e.extra as { news: boolean }).news);
     for (const e of gained) if (e.text) expect(e.text).toMatch(/^Escort \d+ (has Boat \d+ on (radar|sonar)|sights Boat \d+)\.$/);
-    // A contact lost is told on a line of its own once it is sure: when no escort has found her again within two
-    // minutes (the scene's own end of the contact is at once, and says nothing).
+    // A contact lost is told on a line of its own once it is sure: when no escort has found her again within QUIET
+    // (the scene's own end of the contact is at once, and says nothing).
     for (const e of sonar.filter((e) => (e.extra as { lost?: string }).lost !== undefined)) expect(e.text).toBe('');
     const lost = rest.filter((e) => e.what === 'sea:lost');
     expect(lost.length).toBeGreaterThan(0);
-    // (told two minutes on, with the hour she was lost: when the map's mark of her began)
+    // (told QUIET on, with the hour she was lost: when the map's mark of her began)
     for (const e of lost) {
       expect(e.text).toMatch(/^Escort \d+ lost Boat \d+( when she dived,)? at \d+:\d\d, and no escort has found her again\.$/);
       const at = (e.extra as { at: number }).at;
-      expect(e.t - at).toBe(120);
+      expect(e.t - at).toBe(QUIET);
       expect(e.text).toContain(`at ${Math.floor(at / 3600)}:${String(Math.floor((at % 3600) / 60)).padStart(2, '0')},`);
-      // (no escort found her in those two minutes; one that finds her as they end is told after it)
+      // (no escort found her in those five minutes; one that finds her as they end is told after it)
       expect(rest.some((o) => o.what === 'sea:sonar' && (o.extra as { on: number }).on === (e.extra as { on: number }).on && (o.extra as { fresh?: boolean }).fresh !== undefined && o.t > at && o.t < e.t)).toBe(false);
     }
     // Every boat reported is told lost before she is reported again: never a boat that comes and goes with no line at
@@ -802,7 +807,14 @@ describe('a radar night\'s boats press home (round 3, the rules owner\'s (i) to 
           expect(x.dive).not.toBe('deep');
           // (said, or left unsaid where she ducks again within two minutes of coming up from the last: round 4)
           // (or, ordered up from deep while an escort holds her or is in her sight, only to periscope depth: round 5)
-          if (x.override) { forced++; expect(x.dive).toBe('periscope'); expect(x.reason).toMatch(/^an escort (is closing|holds her|is in her sight)$/); if (e.text) expect(e.text).toMatch(/^Boat \d+ (dives|comes up only to periscope depth): an escort (is closing|holds her|is in her sight)\.$/); }
+          if (x.override) { forced++; expect(x.dive).toBe('periscope'); expect(x.reason).toMatch(/^an escort (is closing|holds her|is in her sight)$/); if (e.text) {
+            // (said as her captain's while the order stands, the UI director's round 7 W2; where her salvo ended the order
+            // before the line was said, the plain line, true without it)
+            const captain = /^Boat \d+'s captain will not (stay|come) up with an escort (closing on her|holding her|in her sight): she keeps to periscope depth and attacks from there if the convoy comes within reach\.$/;
+            const plain = /^Boat \d+ (dives|comes up only to periscope depth): an escort (is closing|holds her|is in her sight)\.$/;
+            if (v.units.find((u) => u.id === e.unit)?.extra.order === 'attack') expect(e.text).toMatch(captain);
+            else expect(captain.test(e.text) || plain.test(e.text)).toBe(true);
+          } }
         }
         for (const u of v.units) if (under.has(u.id) && (u.extra.order !== 'attack' || u.state === 'gone')) under.delete(u.id);
         void t;
@@ -1224,9 +1236,11 @@ describe('the boats as the log and the scene are told them (round 5, A to E)', (
       };
       sim.command({ do: 'convoy:attack', units: [boat.id], under: false }, 'att');
       const { told } = run(sim, 'att', (w) => { const u = w.units.find((x) => x.id === boat.id); if (!u || u.extra.order !== 'attack' || u.state !== 'steady') under = false; return !under; }, 3600);
-      // (her first line: stopped at periscope depth, or up to the surface where nothing held her or was in her sight when she got there)
+      // (her first line: stopped at periscope depth, said as her captain's against the order (the UI director's round 7 W2), or up to the surface where nothing held her or was in her sight when she got there;
+      // or, with her lookouts blind below periscope depth's band (round 7, D (a)), at periscope depth to look round where nothing holds
+      // her and none is yet in her sight as she gets there)
       const first = said(told, 'sea:dive', boat.id).find((e) => e.text);
-      if (first && first.text !== `${boat.name} surfaces.`) { expect(first.text).toMatch(new RegExp(`^${boat.name} comes up only to periscope depth: an escort (holds her|is in her sight)\\.$`)); cut++; }
+      if (first && first.text !== `${boat.name} surfaces.` && first.text !== `${boat.name} comes up to periscope depth to look round.`) { expect(first.text).toMatch(new RegExp(`^${boat.name}'s captain will not come up with an escort (holding her|in her sight): she keeps to periscope depth and attacks from there if the convoy comes within reach\\.$`)); cut++; }
     }
     expect(tried).toBeGreaterThan(1);
     expect(cut).toBeGreaterThan(0);
@@ -1410,7 +1424,8 @@ describe('round 6a: the design director\'s calls C1, C1b, C3 and C5, and the UI 
 
   it('C3 (a): a boat fires only from periscope depth or the surface, never deep or on her way between', () => {
     let salvoes = 0;
-    for (const night of [2, 3]) for (const seed of [1, 2]) {
+    // (seed 3 as well since round 7's lookouts by keel (D) moved the nights: more than 40 salvoes read, as before)
+    for (const night of [2, 3]) for (const seed of [1, 2, 3]) {
       const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[night], seed, null));
       const spy = sim as unknown as Inside, fire = spy.fire.bind(sim);
       spy.fire = (b, m) => { salvoes++; expect((b.dive === 'surfaced' && b.keel <= 0) || Math.abs(b.keel - B.scope) <= 0.5).toBe(true); fire(b, m); };
@@ -1450,9 +1465,10 @@ describe('round 6a: the design director\'s calls C1, C1b, C3 and C5, and the UI 
 
   it('the UI director\'s marks, 6: a shell that keeps her up says until when, and her repair is said as she dives', () => {
     // (night 3 seed 3 had it on round 6; with round 5's charges kept (C4 waits), its kept boat is sunk by gunfire before her repair,
-    // so seed 11, where 6a has one kept and mended, is read beside it: every line on both is checked)
+    // so seed 11, where 6a has one kept and mended, was read beside it; round 7's lookouts by keel (D) move the nights, and of
+    // seeds 1 to 20 seed 10 is the one with a boat kept and mended: every line on both is checked)
     const told: FieldEvent[] = [];
-    for (const seed of [3, 11]) {
+    for (const seed of [3, 10]) {
       const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[3], seed, null));
       const night: FieldEvent[] = [];
       while (!sim.over) { sim.advance(); night.push(...sim.view().events); }
@@ -1545,4 +1561,400 @@ describe('round 6a: a boat the look round left stuck', () => {
     // (the tick a hunt starts is the tick she is sent deep: never two ticks running held and hunted)
     expect(huntedHeld).toBeLessThanOrEqual(1);
   }, 60_000);
+});
+
+describe('round 7: the playtester\'s round 5 replay, the fixes that need no call', () => {
+  it('M7: the staff\'s share of the rest of the night runs from the hand-over second, with no step at a tenth', () => {
+    const t = convoyPracticeTicket(CONVOY_PRACTICE[0], 1, 'def');
+    const staff = staffNights(t, 6);
+    const limit = new ConvoySim(t).limit, rest = restFrom(staff, limit), p = staff.profile.mv;
+    // (from dusk the staff's whole night; at dawn nothing)
+    expect(rest(0).mv).toBeCloseTo(p[9], 9);
+    expect(rest(limit).mv).toBeCloseTo(0, 9);
+    let last = Infinity;
+    for (let sec = 0; sec <= limit; sec += 30) {
+      const v = rest(sec).mv;
+      expect(v).toBeLessThanOrEqual(last + 1e-9);
+      last = v;
+    }
+    // (one second either side of a tenth's end moves the share by no more than the staff's mean pace in that tenth)
+    for (let k = 1; k <= 9; k++) {
+      const end = (k * limit) / 10, pace = (Math.max(p[k] - p[k - 1], k > 1 ? p[k - 1] - p[k - 2] : p[0]) * 10) / limit;
+      expect(Math.abs(rest(end - 1).mv - rest(end + 1).mv)).toBeLessThanOrEqual(2 * pace + 1e-9);
+    }
+    // (and a hand-over half way through a tenth books half that tenth, not all of it again)
+    const mid = 3.5 * limit / 10;
+    expect(rest(mid).mv).toBeCloseTo(p[9] - (p[2] + p[3]) / 2, 9);
+    for (const [k, q] of Object.entries(staff.tallies)) expect(rest(mid).tally[k as keyof ConvoyTally]).toBeCloseTo(Math.max(0, q[9] - (q[2] + q[3]) / 2), 9);
+  }, 120_000);
+
+  type Boat7 = { u: ConvoyUnit; dive: string; keel: number; keelTo: number; order: string | null; doing: string; scopeAt: number; gunOn: number };
+  type Escort7 = { u: ConvoyUnit; doing: string; holds: number; prey: number; huntFrom: number; echo: { kind: string } | null };
+  type In7 = {
+    sec: number; boats: Boat7[]; escorts: Escort7[]; merchants: { u: ConvoyUnit; lost: boolean }[]; tally: ConvoyTally;
+    boatOf: Map<number, Boat7>; firstHeard: (b: Boat7) => number; seesEscort: (b: Boat7) => boolean;
+    setDive: (b: Boat7, dive: string, why: string, ...more: unknown[]) => boolean;
+  };
+  const B7 = CONVOY.boat;
+  const dist = (ax: number, ay: number, bx: number, by: number): number => Math.hypot(ax - bx, ay - by);
+  /** The lines told to a side since the last look, for one unit. */
+  const lines = (sim: ConvoySim, side: Side, id: number): FieldEvent[] => sim.view(side).events.filter((e) => e.text && (e.unit === id || (e.extra as { units?: number[] } | undefined)?.units?.includes(id)));
+
+  it('m11 and 6a\'s review: Dive and Surface to a boat below periscope depth are answered as she starts up, and no order line says she stays where she does not', () => {
+    const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[2], 1, 'att'));
+    const spy = sim as unknown as In7;
+    const calm = (b: Boat7): boolean => b.dive === 'surfaced' && b.keel <= 0 && (b.doing === 'close' || b.doing === 'away') && spy.firstHeard(b) < 0 && !spy.seesEscort(b);
+    let b: Boat7 | undefined;
+    while (!sim.over && !b) { sim.advance(); b = spy.boats.find(calm); }
+    expect(b).toBeDefined();
+    const id = b!.u.id;
+    lines(sim, 'att', id);
+    // (Dive, one tick, Dive again: on her way down she is going down to periscope depth, not already there)
+    sim.command({ do: 'convoy:dive', units: [id] }, 'att');
+    sim.advance(); lines(sim, 'att', id);
+    expect(b!.keel).toBeLessThan(B7.scope - 0.5);
+    sim.command({ do: 'convoy:dive', units: [id] }, 'att');
+    expect(lines(sim, 'att', id).map((e) => e.text)).toEqual([`${b!.u.name} is going down to periscope depth already, and out of the attack until your next order.`]);
+    // (Go deep, then once deep Surface: she starts up at once, to look round at periscope depth first, and says so now)
+    sim.command({ do: 'convoy:dive', units: [id], deep: true }, 'att');
+    while (!sim.over && b!.keel < B7.deep - 1) sim.advance();
+    lines(sim, 'att', id);
+    sim.command({ do: 'convoy:surface', units: [id] }, 'att');
+    expect(lines(sim, 'att', id).map((e) => e.text)).toEqual([`${b!.u.name} starts up, to take one look round at periscope depth before she surfaces.`]);
+    // (and Dive to a boat lying deep: she starts up to periscope depth, said at once)
+    sim.command({ do: 'convoy:dive', units: [id], deep: true }, 'att');
+    while (!sim.over && b!.keel < B7.deep - 1) sim.advance();
+    lines(sim, 'att', id);
+    sim.command({ do: 'convoy:dive', units: [id] }, 'att');
+    expect(lines(sim, 'att', id).map((e) => e.text)).toEqual([`${b!.u.name} starts up to periscope depth, out of the attack until your next order.`]);
+  }, 60_000);
+
+  it('6a\'s review: Go deep and Surface in the same second at periscope depth, before her look: the log says the look, never that she stays', () => {
+    const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[2], 1, 'att'));
+    const spy = sim as unknown as In7;
+    const ok = (b: Boat7): boolean => b.dive === 'periscope' && Math.abs(b.keel - B7.scope) <= 0.5 && b.doing === 'close' && b.scopeAt >= 0 && spy.sec - b.scopeAt === 9;
+    let b: Boat7 | undefined;
+    while (!sim.over && !b) { sim.advance(); b = spy.boats.find(ok); }
+    expect(b).toBeDefined();
+    const id = b!.u.id;
+    lines(sim, 'att', id);
+    sim.command({ do: 'convoy:dive', units: [id], deep: true }, 'att');
+    sim.command({ do: 'convoy:surface', units: [id] }, 'att');
+    const said = lines(sim, 'att', id).map((e) => e.text);
+    // (each Dive and Go deep says she is out of the attack until his next order, R6 (a))
+    expect(said).toEqual([`${b!.u.name} goes deep, out of the attack until your next order.`, `${b!.u.name} takes one look round at periscope depth before she surfaces.`]);
+  }, 60_000);
+
+  it('m14: a captain who turns an Attack order back says so, every time, a turn back before her rise was said included', () => {
+    let over = 0, quiet = 0;
+    for (const [night, seed] of [[2, 1], [3, 1], [3, 2]]) {
+      const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[night], seed, 'att'));
+      const spy = sim as unknown as In7;
+      let next = 0;
+      while (!sim.over) {
+        if (spy.sec >= next) { next += 600; sim.command({ do: 'convoy:attack', units: spy.boats.map((b) => b.u.id) }, 'att'); }
+        sim.advance();
+        for (const e of sim.view('att').events) if (e.what === 'sea:dive' && (e.extra as { override?: boolean } | undefined)?.override) { over++; if (!e.text) quiet++; }
+      }
+    }
+    expect(over).toBeGreaterThan(50);
+    expect(quiet).toBe(0);
+  }, 240_000);
+
+  it('m21: a deck gun order to a crew already fighting their gun turns it on the ship ordered', () => {
+    const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[0], 1, 'att'));
+    const spy = sim as unknown as In7;
+    while (!sim.over && !spy.boats.some((b) => b.doing === 'close')) sim.advance();
+    const b = spy.boats.find((x) => x.doing === 'close')!, m = spy.merchants.find((x) => !x.lost)!, e = spy.escorts[0];
+    // (her crew fighting their gun at an escort, the ship ordered 400 m off: as a boat forced up and fighting finds herself)
+    b.dive = 'surfaced'; b.keel = 0; b.keelTo = 0; b.doing = 'gun'; b.gunOn = e.u.id;
+    b.u.x = m.u.x + 400; b.u.y = m.u.y;
+    expect(sim.command({ do: 'convoy:gun', units: [b.u.id], target: m.u.id }, 'att')).toBe(true);
+    expect(b.gunOn).toBe(m.u.id);
+  });
+
+  it('m6: a second hunt order on a boat the escort is already hunting keeps the hunt running, never a second hunt or pattern', () => {
+    const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[0], 7, 'def'));
+    const spy = sim as unknown as In7;
+    let e: Escort7 | undefined;
+    while (!sim.over && !e) { sim.advance(); e = spy.escorts.find((x) => x.holds >= 0); }
+    expect(e).toBeDefined();
+    const prey = e!.holds;
+    expect(sim.command({ do: 'convoy:hunt', units: [e!.u.id], target: prey }, 'def')).toBe(true);
+    const hunts = spy.tally.hunts, from = e!.huntFrom;
+    for (let k = 0; k < 20; k++) sim.advance();
+    lines(sim, 'def', e!.u.id);
+    expect(sim.command({ do: 'convoy:hunt', units: [e!.u.id], target: prey }, 'def')).toBe(true);
+    expect(spy.tally.hunts).toBe(hunts);
+    expect(e!.huntFrom).toBe(from);
+    expect(lines(sim, 'def', e!.u.id).map((x) => x.text)).toEqual([`${e!.u.name} is already hunting ${spy.boatOf.get(prey)!.u.name}.`]);
+  }, 60_000);
+
+  it('m12 and m22: an order that lets a held boat go says so; a hunt on a dived boat far off runs to her datum, not creeping', () => {
+    const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[1], 4, 'def'));
+    const spy = sim as unknown as In7;
+    let e: Escort7 | undefined;
+    while (!sim.over && !e) { sim.advance(); e = spy.escorts.find((x) => x.holds >= 0 && x.echo?.kind !== 'asdic' && dist(x.u.x, x.u.y, spy.boatOf.get(x.holds)!.u.x, spy.boatOf.get(x.holds)!.u.y) > 1000); }
+    expect(e).toBeDefined();
+    const b = spy.boatOf.get(e!.holds)!;
+    // (she dives as the order is given: the hunt runs to where she went down, and searches there)
+    spy.setDive(b, 'deep', 'evade', 'test');
+    sim.command({ do: 'convoy:hunt', units: [e!.u.id], target: b.u.id }, 'def');
+    expect(e!.doing).toBe('run');
+    // (another escort holding a boat, sent to a spot: she lets the boat go, and says so)
+    let f: Escort7 | undefined;
+    while (!sim.over && !f) { sim.advance(); f = spy.escorts.find((x) => x.holds >= 0 && x !== e); }
+    expect(f).toBeDefined();
+    const held = spy.boatOf.get(f!.holds)!;
+    lines(sim, 'def', f!.u.id);
+    sim.command({ do: 'move', units: [f!.u.id], x: f!.u.x + 3000, y: f!.u.y }, 'def');
+    expect(lines(sim, 'def', f!.u.id).map((x) => x.text)).toEqual([`${f!.u.name} lets ${held.u.name} go and steams to the spot to search there.`]);
+  }, 60_000);
+
+  it('R2 (a): the news window is words only: on the old two minutes the night is fought the same, and QUIET tells fewer finds and losses', () => {
+    for (const [night, seed] of [[1, 4], [3, 1]]) {
+      const fight = (window?: number): { counts: string; tally: string; lines: number } => {
+        const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[night], seed, null));
+        if (window !== undefined) (sim as unknown as { newsFor: number }).newsFor = window;
+        let lines = 0;
+        while (!sim.over) { sim.advance(); for (const e of sim.view().events) if (e.text && (e.what === 'sea:sonar' || e.what === 'sea:lost')) lines++; }
+        return { counts: JSON.stringify(sim.counts), tally: JSON.stringify(sim.tally), lines };
+      };
+      const quiet = fight(), old = fight(120);
+      expect(quiet.counts).toBe(old.counts);
+      expect(quiet.tally).toBe(old.tally);
+      expect(quiet.lines).toBeLessThan(old.lines);
+    }
+    expect(QUIET).toBe(300);
+  }, 240_000);
+
+  it('R2 (a): a line still to be said never holds the clock, so no news window reaches the fight, however long', () => {
+    // (the code audit of round 7: the lost-contact line waits the window in the sim's later queue, and a quiet spell would
+    // not run the clock on while anything waited there; at a window of 3,000 s these two nights were fought otherwise)
+    for (const [night, seed] of [[3, 11], [4, 12], [4, 33]]) {
+      const fight = (window?: number): string => {
+        const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[night], seed, null));
+        if (window !== undefined) (sim as unknown as { newsFor: number }).newsFor = window;
+        sim.runOut();
+        return JSON.stringify([sim.counts, sim.tally, sim.worked]);
+      };
+      expect(fight(3000)).toBe(fight());
+    }
+  }, 240_000);
+
+  it('D (a): a boat\'s lookouts see nothing while her keel is below periscope depth\'s band', () => {
+    let below = 0, seen = 0, added = 0;
+    for (const night of [0, 1, 2]) for (const seed of [1, 2]) {
+      const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[night], seed, null));
+      const spy = sim as unknown as In7;
+      const boats = spy.boats as (Boat7 & { sees: Set<number> })[];
+      const look = (sim as unknown as { look: () => void }).look.bind(sim);
+      (sim as unknown as { look: () => void }).look = () => {
+        const was = new Map(boats.map((b) => [b, new Set(b.sees)]));
+        look();
+        for (const b of boats) for (const id of b.sees) if (!was.get(b)!.has(id)) { added++; expect(b.keel).toBeLessThanOrEqual(B7.scope + 0.5); }
+      };
+      while (!sim.over) {
+        sim.advance();
+        for (const b of boats) {
+          // (her lookouts' sightings are made at the field's checks: none while she is below the band, and none in her sight there)
+          if (b.keel > B7.scope + 0.5 && b.doing !== 'out') { below++; expect(spy.seesEscort(b)).toBe(false); }
+          else if (b.sees.size) seen++;
+        }
+      }
+    }
+    expect(below).toBeGreaterThan(1000);
+    expect(seen).toBeGreaterThan(0);
+    expect(added).toBeGreaterThan(0);
+  }, 240_000);
+
+  it('C (a): an Attack order held at periscope depth for her look goes on once it is done, as the same order given then would, an escort in her sight or not', () => {
+    let held = 0;
+    for (const [night, seed] of [[2, 1], [2, 2], [3, 1]]) {
+      const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[night], seed, 'att'));
+      const spy = sim as unknown as In7 & { looked: (b: Boat7) => boolean; firstHeard: (b: Boat7) => number };
+      const fresh = (b: Boat7): boolean => b.dive === 'periscope' && Math.abs(b.keel - B7.scope) <= 0.5 && b.scopeAt >= 0 && spy.sec - b.scopeAt <= 5 && !spy.looked(b) && spy.firstHeard(b) < 0 && b.doing !== 'up' && b.doing !== 'gun';
+      let b: Boat7 | undefined;
+      while (!sim.over && !b) { sim.advance(); b = spy.boats.find(fresh); }
+      if (!b) continue;
+      held++;
+      // (an escort in her sight from the order on: the gate of a boat forced down would keep her there)
+      const sees = spy.seesEscort.bind(sim);
+      spy.seesEscort = (x) => x === b || sees(x);
+      sim.command({ do: 'convoy:attack', units: [b.u.id], under: false }, 'att');
+      expect(b.dive).toBe('periscope');
+      const at = spy.sec;
+      while (!sim.over && b.dive !== 'surfaced' && spy.sec - at < 120) sim.advance();
+      expect(b.dive).toBe('surfaced');
+      expect(spy.sec - at).toBeLessThanOrEqual(CONVOY.detect.boat + 10);
+    }
+    expect(held).toBeGreaterThan(1);
+  }, 120_000);
+
+  it('R5 (a): under a Surface order her captain still dives for an escort she sees closing, says so, and comes back up once free', () => {
+    const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[2], 1, 'att'));
+    const spy = sim as unknown as In7 & { ticket: ConvoyTicket; boats: (Boat7 & { sees: Set<number> })[]; firstHeard: (b: Boat7) => number };
+    const calm = (b: Boat7): boolean => b.dive === 'surfaced' && b.keel <= 0 && (b.doing === 'close' || b.doing === 'away') && spy.firstHeard(b) < 0 && !spy.seesEscort(b);
+    let b: (Boat7 & { sees: Set<number> }) | undefined;
+    while (!sim.over && !b) { sim.advance(); b = spy.boats.find(calm) as (Boat7 & { sees: Set<number> }) | undefined; }
+    expect(b).toBeDefined();
+    sim.command({ do: 'convoy:surface', units: [b!.u.id] }, 'att');
+    lines(sim, 'att', b!.u.id);
+    // (an escort running in on her at full speed, within her lookouts' reach)
+    const e = spy.escorts.find((x) => x.doing !== 'lost')!, r = spy.ticket.place.light.vis * B7.lookout * 0.5;
+    const inner = sim as unknown as { escortHelm: (x: Escort7, dt: number, c: boolean) => void };
+    const helm = inner.escortHelm.bind(sim);
+    let closing = true;
+    inner.escortHelm = (x, dt, c) => { if (x !== e) { helm(x, dt, c); return; } if (closing) { x.u.face = Math.atan2(b!.u.x - x.u.x, b!.u.y - x.u.y); x.u.speed = CONVOY.escort.top; } else x.u.speed = 0; };
+    e.u.x = b!.u.x + r; e.u.y = b!.u.y;
+    b!.sees.add(e.u.id);
+    sim.advance();
+    expect(b!.dive).toBe('periscope');
+    const said = lines(sim, 'att', b!.u.id).filter((x) => x.what === 'sea:dive');
+    expect(said.map((x) => x.text)).toEqual([`${b!.u.name} dives: an escort is closing.`]);
+    expect((said[0].extra as { override?: boolean }).override).toBe(true);
+    // (the escort gone far off: free, she looks round at periscope depth and comes back up, the order standing)
+    closing = false; e.u.x = b!.u.x + 30_000; e.u.speed = 0; b!.sees.delete(e.u.id);
+    const at = spy.sec;
+    while (!sim.over && b!.dive !== 'surfaced' && spy.sec - at < 600) sim.advance();
+    expect(b!.dive).toBe('surfaced');
+    expect(b!.order).toBe('surface');
+  }, 60_000);
+
+  it('m9: an escort sent to search a spot that finds nothing says so as she goes back', () => {
+    const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[0], 1, 'def'));
+    const spy = sim as unknown as In7;
+    for (let k = 0; k < 60; k++) sim.advance();
+    const e = spy.escorts.find((x) => x.holds < 0)!;
+    // (a spot astern of the convoy, where no boat is)
+    sim.command({ do: 'move', units: [e.u.id], x: e.u.x, y: e.u.y - 8000 }, 'def');
+    lines(sim, 'def', e.u.id);
+    let back: FieldEvent | undefined;
+    while (!sim.over && !back && e.doing !== 'screen') { sim.advance(); back = lines(sim, 'def', e.u.id).find((x) => /goes back to the convoy/.test(x.text ?? '')); }
+    expect(back?.text).toBe(`${e.u.name} has found nothing there and goes back to the convoy.`);
+  }, 120_000);
+});
+
+describe('round 7: the UI director\'s words, as the field says them (ui-director/convoy-round7-UI-MARKS.md)', () => {
+  type BoatW = { u: ConvoyUnit; dive: string; keel: number; order: string | null; doing: string; tubes: number };
+  type InW = { boats: BoatW[]; escorts: { u: ConvoyUnit; holds: number; doing: string }[]; boatOf: Map<number, BoatW> };
+  const S = CONVOY.boat;
+
+  it('W4: a torpedo line counts what she fires: the whole of a salvo, so many torpedoes, or a single one', () => {
+    let fewer = 0, whole = 0;
+    for (const seed of [1, 2, 3]) {
+      const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[0], seed, null));
+      while (!sim.over) {
+        sim.advance();
+        for (const e of sim.view().events) {
+          if (e.what !== 'sea:torpedo') continue;
+          const n = (e.extra as { fish: number }).fish;
+          const fires = n >= S.salvo ? 'fires a salvo' : n === 1 ? 'fires a single torpedo' : `fires ${countWords(n)} torpedoes`;
+          expect(e.text).toMatch(new RegExp(`^Boat \\d+ ${fires} at (the convoy|Escort \\d+)\\.$`));
+          if (n < S.salvo) fewer++; else whole++;
+        }
+      }
+    }
+    expect(whole).toBeGreaterThan(0);
+    expect(fewer).toBeGreaterThan(0);
+  }, 120_000);
+
+  it('W4 and night0-5: her salvo ends his attack order, and the log says so, with what her captain does then', () => {
+    let told = 0;
+    for (const seed of [1, 2, 3]) {
+      const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[2], seed, 'att'));
+      const spy = sim as unknown as InW;
+      let b: BoatW | undefined;
+      while (!sim.over && !b) { sim.advance(); b = spy.boats.find((x) => x.doing === 'close' && x.tubes > 0 && x.keel <= 0); }
+      if (!b) continue;
+      sim.command({ do: 'convoy:attack', units: [b.u.id], under: true }, 'att');
+      let fired: FieldEvent | undefined, line: FieldEvent | undefined;
+      while (!sim.over && !fired && b.doing !== 'lost' && b.doing !== 'left') {
+        sim.advance();
+        const es = sim.view('att').events.filter((e) => e.unit === b!.u.id);
+        fired = es.find((e) => e.what === 'sea:torpedo');
+        if (fired) line = es.find((e) => e.what === 'sea:order' && (e.extra as { do?: string }).do === 'fired');
+      }
+      if (!fired) continue;
+      const dived = (fired.extra as { dive: string }).dive !== 'surfaced';
+      expect(line?.text).toBe(`${b.u.name} has fired, and her attack order with it: she turns away to reload${dived ? ', and her captain brings her up once no escort holds her and none is in her sight' : ''}.`);
+      expect(b.order).toBeNull();
+      // (the page's own: never in the scene's picture)
+      told++;
+    }
+    expect(told).toBeGreaterThan(0);
+  }, 120_000);
+
+  it('W4: Leave the night is answered as leaving it, and her captain\'s own ways home keep their words', () => {
+    const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[0], 1, 'att'));
+    const spy = sim as unknown as InW;
+    let b: BoatW | undefined;
+    while (!sim.over && !b) { sim.advance(); b = spy.boats.find((x) => x.doing === 'close'); }
+    sim.view('att');
+    sim.command({ do: 'convoy:leave', units: [b!.u.id] }, 'att');
+    const left = sim.view('att').events.find((e) => e.what === 'withdrawn' && e.unit === b!.u.id);
+    expect(left?.text).toBe(`${b!.u.name} leaves the night and turns for home.`);
+  });
+
+  it('W1: a side\'s own view names the escorts that hold its boats, seen or not; the whole picture and the other side have no such names', () => {
+    let named = 0, unseen = 0;
+    for (const seed of [1, 2]) {
+      const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[1], seed, 'att'));
+      const spy = sim as unknown as InW;
+      while (!sim.over && named < 20) {
+        sim.advance();
+        const v = sim.view('att');
+        for (const u of v.units) {
+          if (u.kind !== 'ss' || !(u.extra.heard ?? []).length) continue;
+          expect(u.extra.heardNames).toEqual(u.extra.heard!.map((id) => spy.escorts.find((e) => e.u.id === id)!.u.name));
+          if (u.extra.heard!.some((id) => !v.units.some((w) => w.id === id))) unseen++;
+          named++;
+        }
+        for (const u of sim.view().units) expect(u.extra.heardNames).toBeUndefined();
+        for (const u of sim.view('def').units) expect(u.extra.heardNames).toBeUndefined();
+      }
+    }
+    expect(named).toBeGreaterThan(0);
+    // (on the radar night the escort that holds her is often out of her side's sight: the page says so)
+    expect(unseen).toBeGreaterThan(0);
+  }, 120_000);
+
+  it('W5 and firsttimer-10: a night that ends with no boat left in it says how the last one left it', () => {
+    const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[0], 1, 'att'));
+    const spy = sim as unknown as InW;
+    while (!sim.over && !spy.boats.every((b) => b.doing !== 'out')) sim.advance();
+    sim.command({ do: 'convoy:leave', units: spy.boats.filter((b) => b.doing !== 'lost' && b.doing !== 'left').map((b) => b.u.id) }, 'att');
+    while (!sim.over) sim.advance();
+    expect(sim.over!.how).toBe('withdrew');
+    const x = sim.over!.extra as unknown as ConvoyOverExtra;
+    expect(x.ended).toBe(spy.boats.some((b) => b.doing === 'left') ? 'home' : 'sunk');
+    // (a night fought to dawn has no such word)
+    const dawn = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[2], 1, null));
+    while (!dawn.over) dawn.advance();
+    if (dawn.over!.how === 'time') expect((dawn.over!.extra as unknown as ConvoyOverExtra).ended).toBeUndefined();
+  }, 120_000);
+
+  it('W2: a captain turning back an Attack order says so as his, with what she does instead; under other orders the plain line stands', () => {
+    let captain = 0;
+    for (const seed of [1, 2, 3, 4]) {
+      const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[3], seed, 'att'));
+      const spy = sim as unknown as InW;
+      let ordered = false;
+      while (!sim.over && sim.t < 4 * 3600) {
+        sim.advance();
+        if (!ordered && spy.boats.some((b) => b.doing === 'close')) { sim.command({ do: 'convoy:attack', units: spy.boats.filter((b) => b.doing === 'close').map((b) => b.u.id), under: false }, 'att'); ordered = true; }
+        for (const e of sim.view('att').events) {
+          if (e.what !== 'sea:dive' || !e.text) continue;
+          const x = e.extra as { override?: boolean; dive: string };
+          if (/'s captain will not/.test(e.text)) {
+            captain++;
+            expect(x.override).toBe(true);
+            expect(x.dive).toBe('periscope');
+            expect(e.text).toMatch(/^Boat \d+'s captain will not (stay|come) up with an escort (closing on her|holding her|in her sight): she keeps to periscope depth and attacks from there if the convoy comes within reach\.$/);
+          }
+        }
+      }
+    }
+    expect(captain).toBeGreaterThan(0);
+  }, 240_000);
 });

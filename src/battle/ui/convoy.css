@@ -48,12 +48,25 @@ body { margin: 0; background: var(--desk-950); }
 .convoy .ntags { position: absolute; top: var(--space-3); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: calc(100% - 24px); pointer-events: none; }
 .convoy .ntag { padding: 4px 12px; font: 700 12px/16px var(--font-typed); letter-spacing: .12em; color: var(--brass-100); background: rgba(14,11,8,.82); border: 1px solid var(--brass-700); border-radius: var(--radius-plate); display: none; text-align: center; }
 .convoy .nstaff { padding: 6px 16px; font: 700 13px/18px var(--font-typed); letter-spacing: .1em; color: var(--on-brass); background: linear-gradient(180deg, #ecc884, var(--brass-300)); border: 1px solid var(--brass-100); border-radius: var(--radius-plate); box-shadow: var(--shadow-lit); display: none; text-align: center; }
-/* (the log on a dark plate: the names on the sea are put clear of it, and a piece under it is dimmed, still clickable) */
-.convoy .nlog { position: absolute; left: var(--space-3); bottom: var(--space-3); max-width: min(720px, calc(100% - 24px)); font-size: 13px; line-height: 18px; pointer-events: none; text-shadow: 0 1px 2px #000; color: var(--paper-200); background: rgba(8,10,14,.78); border: 1px solid var(--line); border-radius: var(--radius-plate); padding: 6px 10px; }
+/* (the log in the side panel, under the orders: nothing of the sea is drawn under it, the UI director's round 7 W3) */
+.convoy .nlog { margin-top: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-plate); font-size: 13px; line-height: 18px; color: var(--paper-200); display: grid; gap: 4px; }
 .convoy .nlog:empty { display: none; }
-.convoy .nlog .is-good { color: var(--gain); }
-.convoy .nlog .is-bad { color: var(--alarm); }
-.convoy .nlog .is-warn { color: var(--amber); }
+/* (with the panel hidden, only the latest line, along the sea's bottom edge; the names on the sea are put above it, and
+   a mark under it shows through, still clickable) */
+.convoy .nlogline { position: absolute; left: 0; right: 0; bottom: 0; padding: 4px var(--space-3); font-size: 13px; line-height: 18px; pointer-events: none; text-shadow: 0 1px 2px #000, 0 0 6px #000; color: var(--paper-200); background: linear-gradient(0deg, rgba(8,10,14,.6), rgba(8,10,14,0)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.convoy .nlogline:empty { display: none; }
+.convoy .nlog .is-good, .convoy .nlogline .is-good { color: var(--gain); }
+.convoy .nlog .is-bad, .convoy .nlogline .is-bad { color: var(--alarm); }
+.convoy .nlog .is-warn, .convoy .nlogline .is-warn { color: var(--amber); }
+/* (a banner that names a unit is a button: a click looks at it) */
+.convoy .ntag.is-link { pointer-events: auto; cursor: pointer; }
+.convoy .ntag.is-link:hover { border-color: var(--brass-300); }
+/* (the pack's rules, under a quiet fold) */
+.convoy .orules { margin: var(--space-2) 0; font-size: 13px; }
+.convoy .orules summary { cursor: pointer; color: var(--brass-100); }
+.convoy .orules p { font-size: 13px; line-height: 18px; }
+/* (a newcomer's words: a hover note on each) */
+.convoy .tip { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 .convoy .nkey { margin-top: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-plate); font-size: 12px; line-height: 16px; color: var(--paper-200); }
 .convoy .nkey .tc-label { margin-bottom: var(--space-1); }
 .convoy .nkey .krow { display: flex; align-items: center; gap: 6px; }
@@ -61,7 +74,7 @@ body { margin: 0; background: var(--desk-950); }
 
 .convoy .nside { width: 320px; overflow-y: auto; background: var(--desk-900); border-left: 1px solid var(--line); padding: var(--space-3); }
 .convoy .nside.is-folded { width: auto; padding: var(--space-2) 6px; }
-.convoy .nside.is-folded .norders, .convoy .nside.is-folded .nkey { display: none !important; }
+.convoy .nside.is-folded .norders, .convoy .nside.is-folded .nkey, .convoy .nside.is-folded .nlog { display: none !important; }
 .convoy .nside .nunfold { display: none; }
 .convoy .nside.is-folded .nunfold { display: inline-flex; writing-mode: vertical-rl; height: auto; padding: var(--space-3) 0; width: var(--control-sm); }
 .convoy .norders { padding: var(--space-3) var(--space-4); }

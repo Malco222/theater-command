@@ -102,6 +102,8 @@ export interface ConvoyExtra {
   scope?: boolean;
   tubes?: number;
   heard?: number[];
+  /** Their names, on the boat's own side's view only (seen or not): who holds her, for the page. */
+  heardNames?: string[];
   gun?: number;
   gunMm?: number;
   // An escort's.
@@ -171,4 +173,6 @@ export interface ConvoyOverExtra {
   staff?: { counts: ConvoyCounts; tally: ConvoyTally };
   /** Battle seconds each side was commanded by its player (0: the staff had it all night). */
   steered: Record<Side, number>;
+  /** A night that ended with no boat left in it: how the last boat left it, gone home or lost (words only). */
+  ended?: 'home' | 'sunk';
 }
