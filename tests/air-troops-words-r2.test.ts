@@ -247,7 +247,7 @@ describe('the raid report: who went down', () => {
     expect(seen.get(`Groupement de Chasse 1 and Groupement de Chasse 3 ${STRAFE_STAYED}`)).toBeGreaterThan(0);
   });
 
-  it('several groups are joined as the report joins names; none with the reach: nobody went down', () => {
+  it('several groups are joined as the report joins names; none with the reach: the group beyond it is named as not gone down, the bombers alone read nobody went down', () => {
     on();
     const two = saar(0);
     two.g.airFleets.find((f) => f.id === GC1)!.base = two.g.regions.find((r) => r.name === 'Lorraine')!.id;
@@ -296,7 +296,7 @@ describe('the raid report: who went down', () => {
     }
   });
 
-  it('through the bridge: the 3D act\'s note carries the line whole after the report\'s own words; off, it is as before', () => {
+  it('through the bridge: the 3D act\'s note carries the line whole before the report\'s own words; off, it is as before', () => {
     on();
     const c = saar(0);
     TC.load(saveGame(c.g));
@@ -529,7 +529,7 @@ describe('the alone case: only the raider\'s report card prints the A5 line by i
     const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
     expect(r.strafeLittle).toEqual({ names: names([GC1, GC2, GC3]), alone: true });
     expect(r.result).toBe(HARM_LITTLE);
-    // The raider's report card (ui/main.ts airReportCard: resultFor, then the line): the A5 line by itself.
+    // The raider's report card (ui/main.ts airReportCard: strafedThenResult, the line then resultFor): the A5 line by itself.
     expect(resultFor(r, 'FRA')).toBe('');
     expect(strafedLine(r, 'FRA')).toBe(`Groupement de Chasse 1, Groupement de Chasse 2 and Groupement de Chasse 3 ${LITTLE}`);
     // The raided side's report: the result sentence.
@@ -646,7 +646,7 @@ describe('a group that did not go down, with no cause line of its own, is named 
     // No group with a line at all: the line for nobody, as before.
     expect(strafedLine(rep([], []), 'FRA')).toBe(NOBODY);
   });
-  it('the settled raid names no such group: "No fighter group went down to strafe." stands, as in her settled cases', () => {
+  it('the settled raid names the group that did not go down, as a fought one does; with no group to name, "No fighter group went down to strafe." stands', () => {
     on();
     for (const groups of ['far', 'alone'] as const) {
       const c = saar(0, groups);
@@ -656,8 +656,8 @@ describe('a group that did not go down, with no cause line of its own, is named 
       expect(strafedLine(r, 'FRA'), groups).toBe(groups === 'far' ? `Groupement de Chasse 1 ${STRAFE_STAYED}` : NOBODY);
       expect(saveGame(c.g).includes('"strafeStayed"'), groups).toBe(groups === 'far');
     }
-    // Settled with a group that went down and one beyond the reach (Groupement de Chasse 1 at Namur): only the group that
-    // strafed is named, as before; the settled raid keeps no record of the other.
+    // Settled with a group that went down and one beyond the reach (Groupement de Chasse 1 at Namur): the group that
+    // strafed is named, then the one that did not go down, as a fought raid names them.
     const c = saar(0, 'both');
     const r = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
     expect('strafeStayed' in r).toBe(true);
