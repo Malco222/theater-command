@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of a4deadea6 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 0cf21ed1a 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -7962,6 +7962,15 @@
        * is new.
        */
       __publicField(this, "pursueLate", false);
+      /**
+       * Falling back round an enemy in the way (release 2, the row `wayround`; the design director, 26 November 2026
+       * 18:32Z, after the pursuit gate's declared read). A block ordered to fall back walked the straight line to its own
+       * edge with no account of an enemy block standing on that line: it stepped into that block's ground, spread() eased
+       * it back as fast as it walked, and it marked time there until the battle ended (three of 2,535 pursuits; the same
+       * in the day's fight). On: wayRound below. Every block under 'withdraw' alike, either side, broken or in order.
+       * Off: today, to the byte.
+       */
+      __publicField(this, "roundRule", false);
       /** The break as it stood, with `pursue` on and the winner still to choose or fighting on: null otherwise. */
       __publicField(this, "aftermath", null);
       /**
@@ -10587,6 +10596,15 @@
         const sg = Math.sign(along ? lat : dep) || (a.id < b.id ? 1 : -1);
         const ux = (along ? rx : fx) * sg, uy = (along ? ry : fy) * sg;
         const push = Math.min((along ? pl : pd) / 2, LAND.spread * DT);
+        if (this.roundRule && a.side !== b.side) {
+          const bar = (u, e, ox, oy) => {
+            if (u.order?.kind !== "withdraw" || u.pressing === void 0 || ox * Math.sin(u.pressing) + oy * Math.cos(u.pressing) <= 0) return;
+            const was = u.barred === void 0 ? void 0 : this.unit(u.barred);
+            if (!was || dist(e.x, e.y, u.x, u.y) < dist(was.x, was.y, u.x, u.y)) u.barred = e.id;
+          };
+          bar(a, b, dx, dy);
+          bar(b, a, -dx, -dy);
+        }
         const wa = a.side !== b.side && inRiver(groundAt(this.field, a.x, a.y)), wb = a.side !== b.side && inRiver(groundAt(this.field, b.x, b.y));
         if (!wa) go(a, -ux, -uy, wb ? 2 * push : push);
         if (!wb) go(b, ux, uy, wa ? 2 * push : push);
@@ -11046,9 +11064,95 @@
       }
       return want;
     }
+    /**
+     * (wayround) The point a block falling back steps to first, across its own way, to go round an enemy block in its
+     * line; null where it has none to go round or its lane is already clear. `to` is where its way leads next; `barred`
+     * the enemy whose ground undid its step last tick (spread).
+     *
+     * What two enemy blocks may not share is their boxes and LAND.apart, as spread() reckons them. However either is
+     * turned, spread() leaves the pair alone once their middles are `clear` apart: half this block's width and the
+     * other's half-diagonal one way, half its depth, that half-diagonal and LAND.apart the other, the longer of the two
+     * blocks' own reckonings. So the block steps across its way, to the side it already leans to (the nearer end),
+     * until its lane passes that far from the enemy's middle, then goes on; once it is that far past it along its way
+     * the round is done. The end is chosen once and kept while that enemy stands there (within LAND.apart of where it
+     * stood): no change of mind between the ends. An end is closed where the step across leaves the field, crosses
+     * ground this block cannot, ends in another enemy block's ground (shares, spread()'s own reckoning) or leads
+     * through the ground of one it is not against already; and the further end is closed where the enemy block does
+     * not stand wholly ahead (level with it, the step to that end is through the block itself: in one pursuit a block
+     * shoved its enemy sideways for four minutes so). With both closed nothing is chosen and the block does as it did
+     * before. No figure is new.
+     */
+    shares(u, e, x, y, face) {
+      const first = this.units.indexOf(u) < this.units.indexOf(e);
+      const A = first ? { x, y, face, w: u.w, d: u.d } : e, B = first ? e : { x, y, face, w: u.w, d: u.d };
+      const dx = B.x - A.x, dy = B.y - A.y;
+      const [fx, fy] = ahead(A.face), [rx, ry] = ahead(A.face + Math.PI / 2);
+      const lat = dx * rx + dy * ry, dep = dx * fx + dy * fy;
+      const c = Math.abs(Math.cos(B.face - A.face)), s = Math.abs(Math.sin(B.face - A.face));
+      return A.w / 2 + B.w / 2 * c + B.d / 2 * s - Math.abs(lat) > 0 && A.d / 2 + B.w / 2 * s + B.d / 2 * c + LAND.apart - Math.abs(dep) > 0;
+    }
+    wayRound(u, to, barred) {
+      const far = dist(u.x, u.y, to[0], to[1]);
+      if (far < 1) return null;
+      const hx = (to[0] - u.x) / far, hy = (to[1] - u.y) / far, nx = hy, ny = -hx;
+      const half = (b) => Math.hypot(b.w, b.d) / 2;
+      const clear = (e2) => Math.max(
+        Math.hypot(u.w / 2 + half(e2), u.d / 2 + half(e2) + LAND.apart),
+        Math.hypot(e2.w / 2 + half(u), e2.d / 2 + half(u) + LAND.apart)
+      );
+      const stands = (e2) => !!e2 && fighting2(e2) && e2.kind !== "fort";
+      let R = u.round;
+      if (R) {
+        const e2 = this.unit(R.by);
+        if (!stands(e2) || dist(e2.x, e2.y, R.at[0], R.at[1]) > LAND.apart) R = u.round = void 0;
+      }
+      const across = (e2, ox2, oy2) => {
+        const by2 = clear(e2) + 1 - ((u.x - e2.x) * ox2 + (u.y - e2.y) * oy2);
+        return [u.x + ox2 * by2, u.y + oy2 * by2];
+      };
+      if (barred !== void 0 && R?.by !== barred) {
+        const e2 = this.unit(barred);
+        if (stands(e2)) {
+          const m = this.going(u), f = this.field, face = Math.atan2(hx, hy), pace = u.w / 2;
+          const others = this.units.filter((o) => o !== e2 && o.side !== u.side && stands(o));
+          const apartFrom = others.filter((o) => !this.shares(u, o, u.x, u.y, face));
+          const lies = (o, x, y) => this.shares(u, o, x, y, face) || this.shares(u, o, x, y, face + Math.PI / 2);
+          const open = (side2) => {
+            const [px2, py2] = across(e2, nx * side2, ny * side2);
+            if (px2 < 5 || px2 > f.w - 5 || py2 < 5 || py2 > f.h - 5) return false;
+            if (!this.bears(m, px2, py2) || !this.dry(m, u.x, u.y, px2, py2)) return false;
+            if (others.some((o) => lies(o, px2, py2))) return false;
+            const leg = dist(u.x, u.y, px2, py2);
+            for (let k = 1; pace > 0 && k * pace < leg; k++) {
+              const x = u.x + (px2 - u.x) * k * pace / leg, y = u.y + (py2 - u.y) * k * pace / leg;
+              if (apartFrom.some((o) => lies(o, x, y))) return false;
+            }
+            return true;
+          };
+          const first = (u.x - e2.x) * nx + (u.y - e2.y) * ny >= 0 ? 1 : -1, other2 = first === 1 ? -1 : 1;
+          const c = Math.abs(Math.cos(e2.face - face)), sn = Math.abs(Math.sin(e2.face - face));
+          const before = (e2.x - u.x) * hx + (e2.y - u.y) * hy >= u.d / 2 + e2.w / 2 * sn + e2.d / 2 * c;
+          const side = open(first) ? first : before && open(other2) ? other2 : null;
+          if (side !== null) R = u.round = { by: e2.id, at: [e2.x, e2.y], side, over: [nx * side, ny * side] };
+        }
+      }
+      if (!R) return null;
+      const e = this.unit(R.by);
+      if ((u.x - e.x) * hx + (u.y - e.y) * hy > clear(e)) {
+        u.round = void 0;
+        return null;
+      }
+      const [ox, oy] = R.over;
+      if ((u.x - e.x) * ox + (u.y - e.y) * oy >= clear(e) + 0.5) return null;
+      const [px, py] = across(e, ox, oy);
+      return [clamp(px, 5, this.field.w - 5), clamp(py, 5, this.field.h - 5)];
+    }
     move(u) {
       const k = u.kind;
       u.pressing = void 0;
+      const barred = this.roundRule ? u.barred : void 0;
+      if (barred !== void 0) u.barred = void 0;
+      if (u.round && (u.state === "routing" || u.order?.kind !== "withdraw")) u.round = void 0;
       if (u.ovr && this.drive(u)) return;
       const gave = u.yieldTo !== void 0 ? this.unit(u.yieldTo) : void 0;
       u.yieldTo = void 0;
@@ -11059,6 +11163,13 @@
       } else if (u.order?.kind === "withdraw") {
         u.path = !u.order.via && this.dry(this.going(u), u.x, u.y, u.x, u.order.y) && !this.exit(this.going(u), u.x, u.y) ? [[u.x, u.order.y]] : this.route(u, u.order.x, u.order.y);
         to = u.path[0];
+        if (this.roundRule && to) {
+          const by2 = this.wayRound(u, to, barred);
+          if (by2) {
+            u.path = [by2, ...u.path];
+            to = by2;
+          }
+        }
       } else if (u.order?.kind === "attack") {
         let t = this.unit(u.order.target);
         if (u.order.press && t && !fighting2(t) && (!this.ai[u.side] || u.taken)) {
@@ -13217,6 +13328,7 @@
       if (opts.bearers !== false) sim.bearers = true;
       if (opts.pursue === true) sim.pursue = true;
       if (opts.pursue === true && opts.pursueLate === true) sim.pursueLate = true;
+      if (opts.wayround === true) sim.roundRule = true;
       if (opts.stand === true) sim.standRule = true;
       if (opts.facing === true && opts.stand === true) sim.faceRule = true;
       if (opts.teams === true && opts.facing === true && opts.stand === true) sim.teamsRule = true;
@@ -13686,6 +13798,7 @@
         facing: opts?.facing === true,
         stand: opts?.stand === true,
         pursue: opts?.pursue === true,
+        wayround: opts?.wayround === true,
         patrol: opts?.patrol !== false,
         captured: opts?.captured !== false,
         worn: opts?.worn !== false,
@@ -13734,6 +13847,7 @@
         facing: o.facing === true,
         stand: o.stand === true,
         pursue: o.pursue === true,
+        wayround: o.wayround === true,
         patrol: o.patrol !== false,
         captured: o.captured !== false,
         worn: o.worn !== false,
