@@ -11,6 +11,8 @@
 import { describe, expect, it } from 'vitest';
 import { setFromWait } from '../src/campaign/arrivalwaits';
 import { breakUp, rejoin, setBreakUp } from '../src/campaign/breakup';
+import { divisionsOf } from '../src/campaign/armies';
+import { rowOver } from '../src/campaign/drawn';
 import { deliver } from '../src/campaign/economy';
 import { foldCorps } from '../src/campaign/fold';
 import { addCorps, atWar, createGame, probeLine, relocate, resolveBattle } from '../src/campaign/game';
@@ -176,6 +178,22 @@ describe('the lineage: a corps made of one that took part took part too', () => 
     deliver(g, 'GER');
     expect(gone.dead).toBe(false);
     expect(g.lastBattle).toEqual({ 77: [keep.id], 78: [4, keep.id] });
+  });
+
+  it("a lent row's listed corps whose war is over stands up a corps of the divisions it drew: that corps is listed with it", () => {
+    const g = open();
+    setFromWait(g, true);
+    const at = g.byName.Berlin;
+    const c = addCorps(g, 'GER', 'Test Lent Corps', 'inf', 2, at.id, {});
+    const [d0] = divisionsOf(g, c);
+    // (One division drawn from a corps no longer on the board, one its own: the war over, the drawn one stands apart.)
+    c.drew = [{ name: [d0.name, d0.short], no: d0.no, from: 987654 }];
+    g.lastBattle = { [at.id]: [c.id], 1: [5] };
+    const before = new Set(g.corps);
+    expect(rowOver(g, c, () => false, true)).toBe(true);
+    const made = g.corps.filter((x) => !before.has(x) && !x.dead);
+    expect(made).toHaveLength(1);
+    expect(g.lastBattle).toEqual({ [at.id]: [c.id, made[0].id], 1: [5] });
   });
 
   it('with the switch off nothing is carried', () => {
