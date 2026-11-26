@@ -180,8 +180,11 @@ describe("every move of a fleet's base keeps its beat in the new base's reach (b
     for (const on of [false, true]) {
       const g = world(on);
       const f = fleet(g, 'UK', 'Dover Fleet');
-      const was = f.station;
-      expect(rebase(g, f, g.byName['London'])).toBe(true);
+      const was = f.station, to = g.byName['West Country'];
+      // (Its beat, the English Channel, in reach of West Country and not its home sea there, the Irish Sea.)
+      expect(to.seas[0]).not.toBe(was);
+      expect(rebase(g, f, to)).toBe(true);
+      expect(f.home).not.toBe(was);
       expect(f.station).toBe(was);
       expect(f.tied).toBe(true);
       expect(tiedNow(g, f)).toBe(true);
