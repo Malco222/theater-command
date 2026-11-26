@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2327e9ec0 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a5ee169e0 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -53544,7 +53544,10 @@
   function whyNotField(g2, f) {
     if (!wrecked(g2, f)) return null;
     if (f.way !== void 0) return `On its way to ${g2.regions[f.way.to]?.name ?? "another airfield"}: out of the fight until it gets there.`;
-    if (!fieldShut(g2, f.base)) return `Grounded. ${g2.regions[f.base].name} is cut off, and no fuel or bombs reach its field. It flies again once they reach the island by sea.`;
+    if (!fieldShut(g2, f.base)) {
+      const at4 = g2.regions[f.base].name, are = placeName2(at4) !== at4 && /s$/.test(at4);
+      return `Grounded. ${placeName2(at4, true)} ${are ? "are" : "is"} cut off, and no fuel or bombs reach its field. It flies again once they reach the island by sea.`;
+    }
     return g2.flags.fields === 1 && fieldRules(g2) ? `Grounded: the runway at ${g2.regions[f.base].name} is cratered until it is repaired.` : `Grounded this month: saboteurs wrecked the field at ${g2.regions[f.base].name}.`;
   }
   var groupsOnField = (g2, region, nat) => g2.airFleets.filter((f) => f.base === region && f.ship === void 0 && f.ftr + f.bmr > 0 && nat(f.nat));
@@ -112330,9 +112333,13 @@
           return false;
       }
     }
-    /** A group sent home by an order before it ever met an enemy (a bomber group before it bombed). */
+    /**
+     * A group sent home by an order before it ever met an enemy (a bomber group before it bombed; a raid's fighter group
+     * before its first strafing pass on the troops: release 2, the design director, 26 November 2026 02:20Z, "it
+     * delivered its blow and then went home, so it did not break off"; only a raid on troops ever has a pass).
+     */
     markQuit(u) {
-      if (!this.met.has(u.id) && !(u.air === "bmr" && u.dropped > 0)) this.quitUnmet.add(u.id);
+      if (!this.met.has(u.id) && !(u.air === "bmr" && u.dropped > 0) && !((this.strafing.get(u.id)?.done ?? 0) > 0)) this.quitUnmet.add(u.id);
     }
     /**
      * The side that gave the battle up: BREAK OFF ALL, or every one of its groups sent home before it met an enemy, one

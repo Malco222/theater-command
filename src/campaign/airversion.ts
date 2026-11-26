@@ -17,6 +17,8 @@ import { turnToDate } from '../core/ticket';
 import type { AirFleet, Game } from './types';
 import { damageField, fieldRules, fieldShut } from './fieldstate';
 import { fieldWithered } from './wither';
+// (Release 2: the far side's cut-off line takes 1.5.2's article, "Grounded. The Admiralty Islands are ..."; the seam review of 26 Nov.)
+import { placeName } from './game';
 
 export const AIRV = data as unknown as {
   nightGuns: { on: boolean; share: number };
@@ -114,7 +116,11 @@ export const wrecked = (g: Game, f: AirFleet): boolean => f.ship === undefined &
 export function whyNotField(g: Game, f: AirFleet): string | null {
   if (!wrecked(g, f)) return null;
   if (f.way !== undefined) return `On its way to ${g.regions[f.way.to]?.name ?? 'another airfield'}: out of the fight until it gets there.`;
-  if (!fieldShut(g, f.base)) return `Grounded. ${g.regions[f.base].name} is cut off, and no fuel or bombs reach its field. It flies again once they reach the island by sea.`;
+  if (!fieldShut(g, f.base)) {
+    // (A plural name of the article list takes "are", as placeOwns takes its apostrophe alone: "The Admiralty Islands are cut off".)
+    const at = g.regions[f.base].name, are = placeName(at) !== at && /s$/.test(at);
+    return `Grounded. ${placeName(at, true)} ${are ? 'are' : 'is'} cut off, and no fuel or bombs reach its field. It flies again once they reach the island by sea.`;
+  }
   return g.flags.fields === 1 && fieldRules(g) ? `Grounded: the runway at ${g.regions[f.base].name} is cratered until it is repaired.` : `Grounded this month: saboteurs wrecked the field at ${g.regions[f.base].name}.`;
 }
 

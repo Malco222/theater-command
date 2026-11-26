@@ -2132,9 +2132,13 @@ export class AirSim implements BattleSim<AirUnit> {
     }
   }
 
-  /** A group sent home by an order before it ever met an enemy (a bomber group before it bombed). */
+  /**
+   * A group sent home by an order before it ever met an enemy (a bomber group before it bombed; a raid's fighter group
+   * before its first strafing pass on the troops: release 2, the design director, 26 November 2026 02:20Z, "it
+   * delivered its blow and then went home, so it did not break off"; only a raid on troops ever has a pass).
+   */
   private markQuit(u: AirUnit): void {
-    if (!this.met.has(u.id) && !(u.air === 'bmr' && u.dropped > 0)) this.quitUnmet.add(u.id);
+    if (!this.met.has(u.id) && !(u.air === 'bmr' && u.dropped > 0) && !((this.strafing.get(u.id)?.done ?? 0) > 0)) this.quitUnmet.add(u.id);
   }
 
   /**
