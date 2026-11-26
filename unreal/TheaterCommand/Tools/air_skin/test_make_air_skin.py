@@ -6,14 +6,18 @@
 On small made-up files: two runs give the same bytes; blend, soot, shade and the repaint list come out as the skin
 has them, with the rounding bounded; nothing keyed by month or year and no marks reach the overlay; gloss and metal
 only when asked; each refusal (the base's sha256, unequal points/facings/triangles/part/wear, 45 colours, other paint
-names, a value out of range). Given the three real files: the committed overlay is what the tool makes from them,
+names, a value out of range, a colour not hex, a file not JSON (exit 2 from main, nothing written), and a dated
+scheme: "schemes", a key holding "month", a key "from"; a "year" key is let through). Given the three real files: the committed overlay is what the tool makes from them,
 byte for byte, and its check colours are the game's law of its own numbers.
 """
+import contextlib
 import copy
 import hashlib
+import io
 import json
 import os
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
@@ -46,7 +50,8 @@ def made_up():
     skin["colours"][11] = "241F1B"
     skin["marks"] = [{"tag": "USA"}]
     del skin["mark_months"]
-    skin["schemes"] = [{"from": "1944-04", "colours": {"p0": "FFFFFF"}}]
+    # (a dated "schemes" in the skin is refused now, not dropped: see the refusals below; the base's mark_months is
+    # the base's own and never read)
     for name, lv in (("near", skin["near"]), ("far", skin["far"])):
         n = len(lv["paints"])
         lv["blend"] = [(i * 11) % 101 for i in range(n)]
@@ -138,6 +143,51 @@ def made_up_tests():
     s = copy.deepcopy(skin)
     s["far"]["paints"][2] = 46
     refused(base, s, "a paint past the colours")
+    # bad input is refused (exit 2), never a traceback; a dated scheme is refused, never dropped
+    s = copy.deepcopy(skin)
+    s["colours"][5] = "ZZZZZZ"
+    refused(base, s, "a colour ZZZZZZ")
+    s = copy.deepcopy(skin)
+    s["mark_months"] = {"USA": [[1942, 1]]}
+    refused(base, s, "a mark_months key")
+    s = copy.deepcopy(skin)
+    s["near"]["month"] = 4
+    refused(base, s, "a month key in a level")
+    s = copy.deepcopy(skin)
+    s["schemes"] = [{"from": "1944-04", "colours": s["colours"]}]
+    refused(base, s, "dated schemes")
+    s = copy.deepcopy(skin)
+    s["tally"] = {"from": 1943}
+    refused(base, s, "a from key deep in the file")
+    s = copy.deepcopy(skin)
+    s["year"] = 2026
+    s["light_from_L"] = 1
+    try:
+        M.make(dump(base), dump(s), base_sha_prefix="")
+        check(True, "a year key and a key merely holding 'from' are accepted (the real file has both)")
+    except M.Refused as e:
+        check(False, "a year key accepted: %s" % e)
+    for cut, what in ((dump(skin)[:-40], "a skin cut short"), (b"\xff\xfe not json", "a skin that is not text")):
+        try:
+            M.make(dump(base), cut, base_sha_prefix="")
+            check(False, "refused: " + what)
+        except M.Refused:
+            check(True, "refused: " + what)
+    with tempfile.TemporaryDirectory() as tmp:
+        bp, sp, op = (os.path.join(tmp, n) for n in ("base.json", "skin.json", "out.json"))
+        with open(bp, "wb") as f:
+            f.write(dump(base))
+        with open(sp, "wb") as f:
+            f.write(dump(skin)[:-40])
+        err = io.StringIO()
+        kept = M.make.__defaults__
+        M.make.__defaults__ = (False, "")  # (the made-up base is not the game's: let the cut-off skin be what refuses)
+        try:
+            with contextlib.redirect_stderr(err):
+                code = M.main(["--base", bp, "--skin", sp, "--out", op])
+        finally:
+            M.make.__defaults__ = kept
+        check(code == 2 and not os.path.exists(op) and "not JSON" in err.getvalue(), "a cut-off skin: exit 2, said, and no file written")
 
 
 def real_tests(base_path, skin_path, overlay_path):
