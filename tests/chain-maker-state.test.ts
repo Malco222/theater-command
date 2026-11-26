@@ -12,11 +12,11 @@
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { divisionsOf } from '../src/campaign/armies';
 import { setFromWait } from '../src/campaign/arrivalwaits';
 import { corpsInContact } from '../src/campaign/drawn';
-import { createGame, declareWar, relocate, rowComes, rowHolds, startPhase } from '../src/campaign/game';
+import { addCorps, createGame, declareWar, postedFor, putToSea, relocate, rowComes, rowHolds, startPhase } from '../src/campaign/game';
 import { setStop, stopOf } from '../src/campaign/history';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game } from '../src/campaign/types';
@@ -169,6 +169,52 @@ describe('a row whose own name is in its list is never held by itself', () => {
       // (Read as another row's maker, the same row holds: the exclusion is the row's own index alone.)
       expect(rowHolds(g, nat, [name], undefined, -1).unformed).toEqual([name]);
     }
+  });
+});
+
+describe("the maker's own state, read as expeditions reads it", () => {
+  let added = 0;
+  const addRow = (row: any[]): number => { rows.push(row); added++; return rows.length - 1; };
+  afterEach(() => { while (added > 0) { rows.pop(); added--; } });
+
+  it("ruling B7: a maker posted on ground of a country Japan is at peace with waits for that war: 'notYet', and it holds nobody; the same ground Japan's, it is due and holds", () => {
+    const g = board(true, 'CHN');
+    g.turn = 60;
+    // (A province beyond Europe held by a country Japan is neither allied with nor at war with, which the maker's row,
+    // taking nobody and keyed to no war, is posted to: `postedFor` says it waits for that war.)
+    const maker = (at: string): any[] => [50, 'JAP', 'Test Maker Corps', 'inf', 1, at, {}];
+    const place = g.regions.find((r) => {
+      if (!r.ctrl || r.ctrl === 'JAP' || postedFor(g, 'JAP', maker(r.name), r)?.waits !== true) return false;
+      // (Nothing else of the maker's gates keeps it: with the same ground Japan's it is due.)
+      const was = r.ctrl;
+      r.ctrl = 'JAP';
+      const j = addRow(maker(r.name));
+      const due = rowComes(g, 'JAP', j) === 'due';
+      rows.pop(); added--;
+      r.ctrl = was;
+      return due;
+    })!;
+    expect(place).toBeDefined();
+    const j = addRow(maker(place.name));
+    const i = addRow([50, 'JAP', 'Test Chained Army', 'inf', 1, 'Tokyo', { from: ['Test Maker Corps'] }]);
+    expect(rowComes(g, 'JAP', j)).toBe('notYet');
+    expect(rowHolds(g, 'JAP', ['Test Maker Corps'], g.byName.Tokyo.id, i).unformed).toEqual([]);
+    place.ctrl = 'JAP';
+    expect(rowComes(g, 'JAP', j)).toBe('due');
+    expect(rowHolds(g, 'JAP', ['Test Maker Corps'], g.byName.Tokyo.id, i).unformed).toEqual(['Test Maker Corps']);
+  });
+
+  it('a corps of the maker\'s name on a long passage is living: the chained row is not held by the maker', () => {
+    const g = board(true, 'CHN');
+    g.turn = 60;
+    expect(rowComes(g, 'JAP', M)).toBe('due');
+    expect(rowHolds(g, 'JAP', rows[C][6].from, g.byName.Okinawa.id, C).unformed).toEqual([MAKER]);
+    const x = addCorps(g, 'JAP', MAKER, 'inf', 1, g.byName.Tokyo.id, {});
+    putToSea(g, x, g.byName.Okinawa, 3);
+    expect(g.corps.includes(x)).toBe(false);
+    expect(g.atSea?.some((v) => v.corps === x)).toBe(true);
+    expect(rowComes(g, 'JAP', M)).toBe('due');
+    expect(rowHolds(g, 'JAP', rows[C][6].from, g.byName.Okinawa.id, C).unformed).toEqual([]);
   });
 });
 
