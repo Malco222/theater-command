@@ -255,6 +255,8 @@ describe('the draw at the orders', () => {
     const capName = g.regions[n.capital].name;
     const ka = addCorps(g, 'CHN', 'Kept corps', 'inf', 2, capName, {}), kc = addCorps(g, 'CHN', 'Folded corps', 'inf', 2, capName, {});
     ka.str = kc.str = 0.2;
+    // (The kept corps armed to its strength, so nothing the fold moves passes its full and the store stays as it was.)
+    g.flags[`rfa:${ka.id}`] = 0.2;
     expect(foldCorps(g, ka, kc)).toBe(true);
     expect(offer(`cadre:${kc.id}`).rifles).toBe(2 * PER);
     expect(offer(`cadre:${kc.id}`).why).toBe(noRifles(g, 'CHN', 2));
@@ -744,12 +746,15 @@ describe('the armed level', () => {
     expect(held()).toBeCloseTo(before, 12);
   });
 
-  it("15. (the director's answer 4) a fold's leftover men bring their rifles home", () => {
+  it("15. (the director's answer 4) a fold's leftover men bring their rifles home, and what passes the kept corps' full", () => {
     const g = grand('CHN');
     const capName = g.regions[g.nations.CHN.capital].name;
     store(g, 1);
     men(g);
-    // 1.2 and 1.2 fill a corps of 2 with 0.4 left over: 0.4 divisions' worth of men and of rifles go home.
+    // 1.2 and 1.2 fill a corps of 2 with 0.4 left over: 0.4 divisions' worth of men and of rifles go home. The kept
+    // corps stands at its full level (no flag) and strength 0.6: it already holds rifles for the 0.8 moved in, so
+    // theirs pass its full and go back to the store too (the director's ruling of 22:29Z: "the leftover men's rifles
+    // plus what passes the kept corps' full").
     const a = addCorps(g, 'CHN', 'Kept corps', 'inf', 2, capName, {}), b = addCorps(g, 'CHN', 'Folded corps', 'inf', 2, capName, {});
     a.str = b.str = 0.6;
     const m = menLeft(g, 'CHN');
@@ -757,11 +762,12 @@ describe('the armed level', () => {
     expect(a.str).toBe(1);
     expect(`rfa:${a.id}` in g.flags).toBe(false);
     expect(menLeft(g, 'CHN') - m).toBeCloseTo(0.4, 12);
-    expect(stock(g) - 1).toBeCloseTo(0.4, 12);
-    expect(Math.round((stock(g) - 1) * PER)).toBe(Math.round(0.4 * PER));
-    // Nothing left over: nothing comes back.
+    expect(stock(g) - 1).toBeCloseTo(0.4 + 0.8, 12);
+    expect(Math.round((stock(g) - 1) * PER)).toBe(Math.round(1.2 * PER));
+    // Nothing left over and nothing past the full: nothing comes back.
     const c = addCorps(g, 'CHN', 'A third corps', 'inf', 2, capName, {}), d = addCorps(g, 'CHN', 'A fourth corps', 'inf', 2, capName, {});
     c.str = d.str = 0.3;
+    g.flags[`rfa:${c.id}`] = 0.3;
     const s = stock(g);
     expect(foldCorps(g, c, d)).toBe(true);
     expect(stock(g)).toBe(s);
@@ -773,6 +779,57 @@ describe('the armed level', () => {
     expect(foldCorps(g, e, f)).toBe(true);
     expect(menLeft(g, 'JAP') - mj).toBeCloseTo(0.4, 12);
     expect('sa:JAP' in g.flags).toBe(false);
+  });
+
+  it("15. (the ruling of 22:29Z) a fold that fills the kept corps' level exactly to its full gives back only the leftover's", () => {
+    const g = grand('CHN');
+    const capName = g.regions[g.nations.CHN.capital].name;
+    store(g, 1);
+    men(g);
+    // Kept: level 0.6 at strength 0.6. Folded: 0.6 at 0.6. 0.8 moves (0.6 + 0.8 / 2 = 1.0, the full), 0.4 is left over.
+    const a = addCorps(g, 'CHN', 'Kept corps', 'inf', 2, capName, {}), b = addCorps(g, 'CHN', 'Folded corps', 'inf', 2, capName, {});
+    a.str = b.str = 0.6;
+    g.flags[`rfa:${a.id}`] = 0.6;
+    g.flags[`rfa:${b.id}`] = 0.6;
+    expect(foldCorps(g, a, b)).toBe(true);
+    expect(a.str).toBe(1);
+    expect(`rfa:${a.id}` in g.flags).toBe(false);
+    expect(stock(g) - 1).toBeCloseTo(0.4, 12);
+  });
+
+  it('15. (the ledger over a chain) fold, break up, rejoin, fold: the rifles held by corps plus the store change by nothing', () => {
+    const g = grand('CHN');
+    g.phase = g.order.indexOf('CHN');
+    setBreakUp(g, true);
+    const capName = g.regions[g.nations.CHN.capital].name;
+    store(g, 1);
+    men(g);
+    const held = (): number => corpsOf(g).reduce((s, x) => s + levelOf(g, x) * x.divs, 0) + stock(g);
+    const before = held();
+    // A fold past the full with men left over: kept level 0.9 at 0.6, folded 0.6 at 0.6 (no worn part), 3 divisions
+    // each. 1.2 moves (0.9 + 0.4 = 1.3: 0.9 passes the full), 0.6 is left over.
+    const a = addCorps(g, 'CHN', 'Kept corps', 'inf', 3, capName, {}), b = addCorps(g, 'CHN', 'Folded corps', 'inf', 3, capName, {});
+    a.str = 0.6; g.flags[`rfa:${a.id}`] = 0.9;
+    b.str = 0.6; g.flags[`rfa:${b.id}`] = 0.6;
+    const start = held();
+    expect(foldCorps(g, a, b)).toBe(true);
+    expect(stock(g) - 1).toBeCloseTo(0.6 + 0.9, 12);
+    expect(held()).toBeCloseTo(start, 12);
+    // Battle takes men and leaves the rifles (test 21); then it is broken up and rejoined.
+    a.str = 0.5;
+    const p = breakUp(g, a, [0])!;
+    expect(p).not.toBeNull();
+    expect(held()).toBeCloseTo(start, 12);
+    expect(rejoin(g, p, a)).toBe(true);
+    expect(held()).toBeCloseTo(start, 12);
+    // A second fold, into the kept corps at its full level and half its men: what the moved men bring passes it.
+    const c = addCorps(g, 'CHN', 'A third corps', 'inf', 3, capName, {});
+    c.str = 0.5; g.flags[`rfa:${c.id}`] = 0.5;
+    const mid = held();
+    expect(foldCorps(g, a, c)).toBe(true);
+    expect(held()).toBeCloseTo(mid, 12);
+    // (The only change over the whole chain is the three corps laid by hand.)
+    expect(mid - before).toBeCloseTo(0.5 * 3 + 0.6 * 3 + 0.9 * 3, 12);
   });
 
   it('16. an older save is stamped once at its next month', () => {

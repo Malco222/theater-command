@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { RIFLES, armOrder, binds, canArm, carries, carve, carved, noRifles, riflesFor } from '../src/campaign/rifles';
 import { cancelBuild, corpsCost, corpsKinds, corpsList, orderCorps, specOf } from '../src/campaign/economy';
 import { offers } from '../src/campaign/arsenal';
-import { createGame } from '../src/campaign/game';
+import { addCorps, createGame } from '../src/campaign/game';
+import { foldCorps } from '../src/campaign/fold';
 import { levyMen, menLeft } from '../src/campaign/manpower';
 import { startOpen } from '../src/campaign/staff';
 
@@ -34,5 +35,15 @@ describe('far off', () => {
     expect(menLeft(g, nat)).toBeCloseTo(men, 9);
     expect(Object.keys(g.flags).filter((k) => /^(sa|sam|rfa|rfo|rflm|rflc):/.test(k))).toEqual([]);
     for (const o of offers(g, nat, n.capital)) { expect(o.rifles, o.key).toBeUndefined(); expect(o.why ?? '', o.key).not.toMatch(/rifles/); }
+    // A fold with men left over, into a corps that would pass its full (the ruling of 22:29Z): the men go home as
+    // today, and nothing of the store's is written.
+    const capName = g.regions[n.capital].name;
+    const a = addCorps(g, nat, 'Kept corps', 'inf', 2, capName, {}), c = addCorps(g, nat, 'Folded corps', 'inf', 2, capName, {});
+    a.str = c.str = 0.6;
+    const m = menLeft(g, nat);
+    expect(foldCorps(g, a, c)).toBe(true);
+    expect(a.str).toBe(1);
+    expect(menLeft(g, nat) - m).toBeCloseTo(0.4, 12);
+    expect(Object.keys(g.flags).filter((k) => /^(sa|sam|rfa|rfo|rflm|rflc):/.test(k))).toEqual([]);
   });
 });

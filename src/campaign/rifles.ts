@@ -140,13 +140,17 @@ export function openRifles(g: Game): void {
 
 /**
  * A fold (fold.ts): the men moved into the kept corps came armed, so its level rises by what they bring ('from', in
- * divisions' worth), up to its full. (The director's answer 4: "Men and rifles travel together; only a broken corps
- * loses them". A kept corps worn below its level keeps the rifles of the men it lost, and the moved men's rifles are
- * added to them, never lost in them. Rifles that would arm it past its full are not given back: answer 4 gives back
- * the leftover men's only; a question for the director.)
+ * divisions' worth), up to its full, and the part that would pass its full goes back to the store (riflesBack), as the
+ * leftover men's rifles do. (The director's answer 4: "Men and rifles travel together; only a broken corps loses
+ * them". A kept corps worn below its level keeps the rifles of the men it lost, and the moved men's rifles are added
+ * to them, never lost in them. Her ruling of 22:29Z, 25 November 2026, on the rifles past the full: yes, they go back
+ * to the store; "Answer 4's test then reads 'the leftover men's rifles plus what passes the kept corps' full'".)
  */
 export function riflesFold(g: Game, keep: Corps, from: number): void {
-  if (binds(g, keep.nat) && from > 0 && keep.divs > 0) setLevel(g, keep, Math.min(keep.full ?? 1, levelOf(g, keep) + from / keep.divs));
+  if (!binds(g, keep.nat) || !(from > 0) || !(keep.divs > 0)) return;
+  const full = keep.full ?? 1, lvl = levelOf(g, keep) + from / keep.divs;
+  setLevel(g, keep, Math.min(full, lvl));
+  if (lvl > full) riflesBack(g, keep.nat, (lvl - full) * keep.divs);
 }
 
 /**
