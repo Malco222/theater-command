@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 0cf21ed1a 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 9b8031983 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -11112,9 +11112,9 @@
       };
       if (barred !== void 0 && R?.by !== barred) {
         const e2 = this.unit(barred);
-        if (stands(e2)) {
+        if (stands(e2) && !e2.hid) {
           const m = this.going(u), f = this.field, face = Math.atan2(hx, hy), pace = u.w / 2;
-          const others = this.units.filter((o) => o !== e2 && o.side !== u.side && stands(o));
+          const others = this.units.filter((o) => o !== e2 && o.side !== u.side && stands(o) && !o.hid);
           const apartFrom = others.filter((o) => !this.shares(u, o, u.x, u.y, face));
           const lies = (o, x, y) => this.shares(u, o, x, y, face) || this.shares(u, o, x, y, face + Math.PI / 2);
           const open = (side2) => {
