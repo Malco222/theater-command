@@ -326,23 +326,31 @@ describe('4. once the Pacific lanes are laid, a fleet\'s page lists every lane, 
     const g = startOpen(createGame(3, 'UK'));
     for (let k = 0; !humanUp(g) && k < 80; k++) stepAI(g);
     if (!atWar(g, 'UK', 'GER')) declareWar(g, 'GER', 'UK');
-    expect(lanesLaid(g)).toBe(false);
-    const all = escortLanes(g, 'UK');
-    // A fleet far from some of its country's lanes: the China Fleet, or whichever lists fewer than all.
-    const f = g.fleets.find((x) => x.nat === 'UK' && x.ships.dd > 0 && x.stance !== 'passage' && fleetOptions(g, x.id)!.lanes.length < all.length)!;
-    expect(f).toBeTruthy();
-    const before = fleetOptions(g, f.id)!.lanes.map((l) => l.lane);
-    expect(before.length).toBeLessThan(all.length);
-    // The Pacific planner's three lanes laid (here, the Hawaii lane's row alone stands for them).
+    // The Pacific planner's three lanes are laid as data now (far-books.json: the Hawaii, South Pacific and Cape lanes,
+    // Pacific batch 3, A), so the whole world opens with them laid. "Before" is that world with the three rows taken
+    // out of the route list for a moment, and put back exactly as they stood for "after".
+    const PACIFIC = ['america-hawaii', 'america-australia', 'britain-india'];
     const routes = seaRoutes(g);
-    routes.push({ id: 'america-hawaii', name: 'the Hawaii lane', to: 'USA', zones: [g.seas.findIndex((s) => s.name === 'Hawaiian Waters')], carries: false } as never);
+    const laid = [...routes];
+    expect(lanesLaid(g)).toBe(true);
+    expect(laid.filter((r) => PACIFIC.includes(r.id)).map((r) => r.id).sort()).toEqual([...PACIFIC].sort());
+    routes.splice(0, routes.length, ...laid.filter((r) => !PACIFIC.includes(r.id)));
+    let f: Fleet | undefined;
+    let before: string[] = [];
     try {
-      expect(lanesLaid(g)).toBe(true);
-      const after = fleetOptions(g, f.id)!.lanes;
-      expect(after.length).toBe(escortLanes(g, 'UK').length);
-      expect(after.length).toBeGreaterThan(before.length);
-      const steps = after.map((l) => laneSteps(g, f, escortLanes(g, 'UK').find((x) => x.id === l.lane)!));
-      for (let i = 1; i < steps.length; i++) expect(steps[i]).toBeGreaterThanOrEqual(steps[i - 1]);
-    } finally { routes.pop(); }
+      expect(lanesLaid(g)).toBe(false);
+      const all = escortLanes(g, 'UK');
+      // A fleet far from some of its country's lanes: the China Fleet, or whichever lists fewer than all.
+      f = g.fleets.find((x) => x.nat === 'UK' && x.ships.dd > 0 && x.stance !== 'passage' && fleetOptions(g, x.id)!.lanes.length < all.length);
+      expect(f).toBeTruthy();
+      before = fleetOptions(g, f!.id)!.lanes.map((l) => l.lane);
+      expect(before.length).toBeLessThan(all.length);
+    } finally { routes.splice(0, routes.length, ...laid); }
+    expect(lanesLaid(g)).toBe(true);
+    const after = fleetOptions(g, f!.id)!.lanes;
+    expect(after.length).toBe(escortLanes(g, 'UK').length);
+    expect(after.length).toBeGreaterThan(before.length);
+    const steps = after.map((l) => laneSteps(g, f!, escortLanes(g, 'UK').find((x) => x.id === l.lane)!));
+    for (let i = 1; i < steps.length; i++) expect(steps[i]).toBeGreaterThanOrEqual(steps[i - 1]);
   });
 });
