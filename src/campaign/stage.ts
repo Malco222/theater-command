@@ -197,3 +197,12 @@ export const AIRNAMES_STAGE: boolean = staged('TC_AIRNAMES', 'airNames');
 // TC_CITYDEFENCES.
 /** True where new grand campaigns open with searchlights, guns by night by what they see, and towns their garrisons fortify (stage.json 'cityDefences'). */
 export const CITYDEFENCES_STAGE: boolean = staged('TC_CITYDEFENCES', 'cityDefences');
+// The town's guns against tanks, held back from city defences behind a sub-switch of its own, off (the design
+// director's ruling of 25 Nov 2026 22:10Z: city defences goes forward without guns against tanks; what fails stays
+// off, and we say so). It holds back the heavy anti-aircraft guns' cut to the tanks that storm a town with a living
+// garrison, the card's line and its fog form, and the gun level lost with a town that falls by such a storm. Why: the
+// gate's reading found that this part alone delays Britain's landing in the west at stops 4 and 5, by a path not yet
+// traced, so it stays off until its cause is named. A grand campaign carries the flag 'flakGround' only where this and
+// CITYDEFENCES_STAGE are both true. Forced by TC_FLAKGROUND.
+/** True where new grand campaigns that open with city defences also open with the town's guns against tanks (stage.json 'flakGround'). */
+export const FLAKGROUND_STAGE: boolean = staged('TC_FLAKGROUND', 'flakGround');
