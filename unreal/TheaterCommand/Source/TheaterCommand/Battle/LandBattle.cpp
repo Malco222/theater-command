@@ -2310,6 +2310,7 @@ bool ALandBattle::Open()
 	// the recipe, played at her case_clang in PlayArmourEvents
 	S.bBarrelSmoke = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandBarrelSmoke"));
 	S.bHatchFumes = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandHatchFumes"));
+	S.bCasesOut = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCasesOut"));
 	if (S.bBarrelSmoke)
 	{
 		Effects->LayOver(TEXT("battle-fx-barrel.json"));
@@ -2319,6 +2320,11 @@ bool ALandBattle::Open()
 	{
 		Effects->LayOver(TEXT("battle-fx-hatch.json"));
 		UE_LOG(LogTheater, Log, TEXT("Land battle: a closed tank's hatch fumes and the odd case (-TheaterLandHatchFumes, release 2)"));
+	}
+	if (S.bCasesOut)
+	{
+		Effects->LayOver(TEXT("battle-fx-cases-out.json"));
+		UE_LOG(LogTheater, Log, TEXT("Land battle: cases over an open gun's side (-TheaterLandCasesOut, release 2)"));
 	}
 	if (!Effects->Begin(Root, UnitsPerMetre, [this, FieldPtr](const FVector& Point)
 		{
@@ -10545,7 +10551,7 @@ void ALandBattle::PlayArmourEvents()
 		// an open gun's breech puffs; an open gun's loader heaves the case over her side; a closed tank with her hatch
 		// open lets a faint wisp of fumes out every second or third shot, and now and then, stopped, a case is pitched
 		// out. Only near the eye: every vehicle's beats come here.
-		if (Effects && (S.bBarrelSmoke || S.bHatchFumes) && E.Fx == "case_clang" && E.Vehicle >= 0
+		if (Effects && (S.bBarrelSmoke || S.bHatchFumes || S.bCasesOut) && E.Fx == "case_clang" && E.Vehicle >= 0
 			&& static_cast<size_t>(E.Vehicle) < S.Armour->Vehicles().size())
 		{
 			const LandKit::Vehicle& V = S.Armour->Vehicles()[static_cast<size_t>(E.Vehicle)];
@@ -10562,6 +10568,7 @@ void ALandBattle::PlayArmourEvents()
 			Ask.Shot = Shot;
 			Ask.bBarrelSmoke = S.bBarrelSmoke;
 			Ask.bHatchFumes = S.bHatchFumes;
+			Ask.bCasesOut = S.bCasesOut;
 			const TheaterFx::AfterShot Out = FromEye < 300.0 ? TheaterFx::AfterShotOf(Ask) : TheaterFx::AfterShot();
 			// (her own numbers in the kit: E.Key's, +100000 and +200000 and LandBurn's are taken; a vehicle is either a gun
 			// with a breech or a closed tank, so the breech puff and the hatch fumes share this one)
@@ -10583,6 +10590,16 @@ void ALandBattle::PlayArmourEvents()
 			const LandKit::V3 Across(V.DustRight.X - V.DustLeft.X, V.DustRight.Y - V.DustLeft.Y, 0.0);
 			const double AcrossLong = FMath::Max(1.0e-3, FMath::Sqrt(Across.X * Across.X + Across.Y * Across.Y));
 			const double SideX = Across.X / AcrossLong, SideY = Across.Y / AcrossLong;
+			if (Out.bOverSide)
+			{
+				const double MidX = 0.5 * (V.DustLeft.X + V.DustRight.X), MidY = 0.5 * (V.DustLeft.Y + V.DustRight.Y);
+				const double Off = (Loader.X - MidX) * SideX + (Loader.Y - MidY) * SideY;
+				const double Way = Off < 0.0 ? -1.0 : 1.0;
+				const double Out_ = FMath::Max(0.0, 0.5 * V.Look().Wide - FMath::Abs(Off));
+				// (her loader's place is on her floor, her side at his waist: the case goes over it from his chest)
+				Effects->ThrowCase(World(Loader.X + SideX * Way * Out_, Loader.Y + SideY * Way * Out_, Loader.Z + 1.2),
+					WorldWay(SideX * Way, SideY * Way, 0.0), TEXT("spg"), E.Key);
+			}
 			if (Out.bHatchCase)
 			{
 				const double Way = (Shot / 8) % 2 == 0 ? 1.0 : -1.0;

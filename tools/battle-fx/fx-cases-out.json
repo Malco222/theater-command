@@ -1,0 +1,20 @@
+{
+ "what": "Cases over the side of open-topped self-propelled guns (release 2, behind the land battle's -TheaterLandCasesOut; item 7 of the owner's film details, 26 November). Laid over battle-fx.json for that battle alone (FBattleEffects::LayOver). The M7, the Hummel, the Sexton, the SU-76, the M10 and their like fought from open compartments, and the loader heaved the spent case over the side, where it lay by her tracks: ground_cases.spg, thrown by the scene's ThrowCase from her loader's place out over her side at the row's odds (not every case went over), lying three to five minutes. The towed guns' cases (ground_cases.at_gun, howitzer) are as before.",
+ "ground_cases": {
+  "spg": {
+   "_how": "A self-propelled gun's case heaved over the side by her loader.",
+   "case_m": 0.41,
+   "case_long_m": [0.37, 0.45],
+   "case_d_m": 0.115,
+   "after_s": 0.6,
+   "breech_back_m": 0,
+   "side": 0,
+   "scatter_mps": 0.3,
+   "throw_mps": [1.5, 3.0],
+   "up_mps": [0.8, 1.6],
+   "lie_s": [180, 300],
+   "tumble": [4, 8],
+   "odds": 0.7
+  }
+ }
+}

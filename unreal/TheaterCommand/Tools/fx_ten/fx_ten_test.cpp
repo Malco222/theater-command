@@ -16,6 +16,8 @@
 //      puff gone in under 3 s, held to 3 px.
 //   E. hatch fumes and the odd case (-TheaterLandHatchFumes, battle-fx-hatch.json): fumes every second or third shot
 //      with the hatch open, a case one shot in eight when stopped; none shut, nor without the word.
+//   F. cases over the side (-TheaterLandCasesOut, battle-fx-cases-out.json): a battery of six open guns for five
+//      minutes throws about 7 cases in 10, each lying 180 to 300 s, within most_lying.
 //
 //     Tools/fx_ten/run.sh [out folder]
 //     fx_ten_test <Content/Effects folder> <out folder>
@@ -703,6 +705,84 @@ namespace
 		Check(CFar.empty(), "on: 50 m from the eye (past ground_cases.within_m 40): none", "none");
 		Check(bOwn, "a case's dice its own (the kit's shared dice not drawn)", "own");
 	}
+
+	// ----------------------------------------------------------------------------------------------------------------
+	// F. Cases over an open gun's side
+
+	void CasesOut()
+	{
+		std::printf("F. Cases over the side (-TheaterLandCasesOut, battle-fx-cases-out.json: ground_cases.spg)\n");
+		using TheaterFx::AfterShotOf;
+		Check(AfterShotOf(Ask("tank", false, true, false, 0.0, false, 3, false, false, true)).bOverSide, "an open gun (a loader's place), the word given: over the side", "thrown");
+		Check(!AfterShotOf(Ask("tank", true, false, true, 1.0, true, 8, false, false, true)).bOverSide && !AfterShotOf(Ask("gun", true, true, false, 0.0, true, 3, false, false, true)).bOverSide, "a closed tank, a towed gun: never over the side", "none");
+		Check(!AfterShotOf(Ask("tank", false, true, false, 0.0, false, 3, true, true, false)).bOverSide, "an open gun without the word: none", "none");
+		const FxTen::Book Off = Recipe();
+		const FxTen::Book On = Recipe({ "battle-fx-cases-out.json" });
+		// (a battery of six open guns in a line 15 to 40 m from the eye, each firing every 7 to 10 s for five minutes,
+		// each case over her right side)
+		int Shots = 0;
+		auto Battery = [&Shots](Battle& Fx, double Now, int Frame)
+		{
+			static thread_local std::vector<double> Next;
+			if (Frame == 1)
+			{
+				Shots = 0;
+				Next.assign(6, 0.0);
+				for (int I = 0; I < 6; ++I)
+				{
+					Next[static_cast<size_t>(I)] = 0.5 + 1.3 * I;
+				}
+			}
+			for (int I = 0; I < 6; ++I)
+			{
+				double& At = Next[static_cast<size_t>(I)];
+				if (At <= Now)
+				{
+					TheaterFx::Dice D(static_cast<uint64_t>(I) * 131ull + static_cast<uint64_t>(Frame));
+					const Vec Gun(-15.0 + 9.0 * I, 18.0, 0.0);
+					Fx.Muzzle(Now, Gun + Vec(0.0, 3.0, 2.0), Vec(0.0, 1.0, 0.4), "tank_gun", "earth"); // (a vehicle's shot, as LandPlay names it)
+					Fx.ThrowCase(Now + 1.4, Gun + Vec(1.5, -0.5, 1.9), Vec(1.0, -0.2, 0.0), "spg", 9000 + I * 77 + Frame);
+					++Shots;
+					At += D.U(7.0, 10.0);
+				}
+			}
+		};
+		const Vec Eye(0.0, -6.0, 2.0), Look(0.0, 18.0, 1.0);
+		const Fight BOff = Play(Off, Eye, Look, 9000, Battery);
+		const int ShotsOff = Shots;
+		size_t Thrown = 0;
+		bool bLong = true, bLie = true;
+		std::vector<uint64_t> SeenCases;
+		const Fight BOn = Play(On, Eye, Look, 9000, [&](Battle& Fx, double Now, int Frame)
+		{
+			Battery(Fx, Now, Frame);
+			for (const Bit& B : Fx.Bits)
+			{
+				if (IsCase(B) && B.Stretch * 2.0 * B.R0 >= 0.36)
+				{
+					const uint64_t H = FxTen::PieceHash(B);
+					if (std::find(SeenCases.begin(), SeenCases.end(), H) == SeenCases.end())
+					{
+						SeenCases.push_back(H);
+						const double L = B.Stretch * 2.0 * B.R0;
+						bLong = bLong && L >= 0.369 && L <= 0.451;
+						const double Lie = B.Life - B.Land2;
+						bLie = bLie && ((Lie >= 179.5 && Lie <= 300.5) || Lie <= 3.0);
+					}
+				}
+			}
+		});
+		Thrown = SeenCases.size();
+		Check(ShotsOff == Shots && Shots >= 180, "six guns, five minutes: about 200 shots", Say("%.0f shots", Shots));
+		Check(Thrown >= static_cast<size_t>(0.55 * Shots) && Thrown <= static_cast<size_t>(0.85 * Shots), "on: about 7 in 10 cases over the side (odds 0.7)", Say("%.0f of %.0f", static_cast<double>(Thrown), Shots));
+		Check(bLong, "on: each 0.37 to 0.45 m long", "0.37 to 0.45 m");
+		Check(bLie, "on: each lies 180 to 300 s (or, past most_lying, a moment)", "180 to 300 s");
+		Check(BOn.MostLying <= 200, "on: lying cases within ground_cases.most_lying 200", Say("%.0f at most (off %.0f)", static_cast<double>(BOn.MostLying), static_cast<double>(BOff.MostLying)));
+		Check(MissingAll(BOff, BOn) == 0, "on: every piece the battery laid off is laid on (the cases add only)", Say("%.0f missing", static_cast<double>(MissingAll(BOff, BOn))));
+		Check(BOn.Seeds == BOff.Seeds, "the kit's shared dice drawn as often as before", Say("%.0f draws", static_cast<double>(BOn.Seeds)));
+		std::printf("     the battery: %d shots, %zu cases over the side; most pieces %zu off, %zu on; lying most %zu off, %zu on\n", Shots, Thrown, BOff.MostBits, BOn.MostBits, BOff.MostLying, BOn.MostLying);
+		std::printf("     time: the densest frame's Draw, %.3f ms on (%zu pieces), %.3f ms off (%zu pieces); a frame's mean %.3f ms on, %.3f ms off\n", BOn.DensestMs, BOn.MostBits, BOff.DensestMs, BOff.MostBits, BOn.MeanMs, BOff.MeanMs);
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -718,6 +798,7 @@ int main(int Argc, char** Argv)
 	BarrelWisp();
 	BreechPuff();
 	HatchFumes();
+	CasesOut();
 	std::printf("fx_ten_test: %d checks, %d failed\n", Checks, Failed);
 	if (Failed == 0)
 	{
