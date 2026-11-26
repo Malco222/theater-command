@@ -8,8 +8,9 @@
 // the card named opens, not a month before or after. The shutting side's line reads only its own sight (how long its
 // side has held the sea), never Britain's stores. With the switch off, nothing of it is said or written.
 import { describe, expect, it } from 'vitest';
-import { addCorps, computeSupply, createGame, declareWar, removeCorps, startPhase } from '../src/campaign/game';
-import { zoneOf } from '../src/campaign/navy';
+import { addCorps, computeSupply, createGame, declareWar, portKeep, removeCorps, startPhase } from '../src/campaign/game';
+import { SIGHT, fogOn, sightOf } from '../src/campaign/intel';
+import { closedTo, zoneOf } from '../src/campaign/navy';
 import { PORTSTORES_ROW, monthSaid, portCardLines, portCorpsLine, portCutOff, portStoresOn, setPortStores, type PortLine } from '../src/campaign/portcut';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game } from '../src/campaign/types';
@@ -58,6 +59,29 @@ function malta(human: string | null, corps: string[] = ['9th Corps'], fill = 16,
   month(g, fill);
   expect(g.flags[`stores:${MALTA}`]).toBe(fill);
   return { g, cs };
+}
+/** One nation's month as it opens, in the month already set (game.ts startPhase). */
+function phase(g: Game, nat: string): void {
+  g.phase = g.order.indexOf(nat);
+  startPhase(g, nat);
+}
+/**
+ * Gibraltar held by a British 9th Corps, its stores filled by a real draw in December 1940 (turn 16), Italy and
+ * Germany at war with Britain, France's fleet in harbour (so that the Western Mediterranean is not Britain's by her
+ * ally's ships), and the fleets placed as asked.
+ */
+function gibraltar(human: string, place: (g: Game) => void): { g: Game; gib: number; ninth: Corps } {
+  const g = grand(human);
+  const [ninth] = garrison(g, 'Gibraltar', ['9th Corps']);
+  g.turn = 16;
+  g.supplyDirty = true;
+  computeSupply(g);
+  declareWar(g, 'ITA', 'UK');
+  declareWar(g, 'GER', 'UK');
+  for (const f of g.fleets) if (f.nat === 'FRA') f.stance = 'port';
+  place(g);
+  g.supplyDirty = true;
+  return { g, gib: g.byName.Gibraltar.id, ninth };
 }
 const news = (g: Game, from = 0): string[] => g.headlines.slice(from).map((h) => h.text).filter((t) => /Malta|Gibraltar|stores/.test(t) && !/memorial|wireless|honour|ring broke|Rats of/.test(t));
 const texts = (ls: PortLine[]): string[] => ls.map((l) => l.text);
@@ -261,6 +285,109 @@ describe('the shutting side, from its own sight only', () => {
     const air = malta('ITA', ['9th Corps'], 16, (g) => { g.nations.ITA.air = 200; });
     month(air.g, 17);
     expect(texts(portCardLines(air.g, MALTA, 'ITA'))).toEqual(['Your aircraft have held the sky over the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from March and is lost at the start of May, unless ships get through.']);
+  });
+});
+
+describe('the shutting side: a count only where the rule\'s clock runs, from its own sight', () => {
+  it('Gibraltar with only the Western Mediterranean held by Italy and the waters off the Iberian coast open: the stores are filled every month, and Italy\'s card has no count', () => {
+    const { g, gib, ninth } = gibraltar('ITA', (h) => sail(h, 'ITA', 'wmed', ['1st Fleet']));
+    const [wmed, iberia] = g.regions[gib].seas;
+    expect([g.seas[wmed].name, g.seas[iberia].name]).toEqual(['Western Mediterranean', 'Iberian Coast']);
+    for (let t = 16; t <= 22; t++) {
+      g.turn = t;
+      phase(g, 'ITA');
+      phase(g, 'UK');
+      // (One sea still open is a quay: game.ts computeSupply, `r.seas.some((z) => open[z])`.)
+      expect([t, closedTo(g, wmed, 'UK'), closedTo(g, iberia, 'UK'), g.flags[`stores:${gib}`], ninth.org, ninth.supplied]).toEqual([t, true, false, t, 1, true]);
+      expect(portCutOff(g, gib, 'ITA')).toBeNull();
+      expect(portCardLines(g, gib, 'ITA')).toEqual([]);
+    }
+    expect(ninth.dead).toBe(false);
+  });
+
+  it('the clock starts when the last of the port\'s seas is shut: the second Italian fleet off the Iberian coast in January 1941, counted from then, and the corps struck off as the month named opens', () => {
+    const { g, gib, ninth } = gibraltar('ITA', (h) => sail(h, 'ITA', 'wmed', ['1st Fleet']));
+    g.turn = 16;
+    phase(g, 'ITA');
+    phase(g, 'UK');
+    expect(g.flags[`seaShut:${g.regions[gib].seas[0]}:UK`]).toBe(16);
+    expect(portCardLines(g, gib, 'ITA')).toEqual([]);
+    // January 1941: Italy's month opens with the Iberian waters still open (the stores are filled), then her second
+    // fleet sails there, and Britain's month opens with both seas shut.
+    g.turn = 17;
+    phase(g, 'ITA');
+    sail(g, 'ITA', 'iberia', ['2nd Fleet']);
+    g.supplyDirty = true;
+    phase(g, 'UK');
+    expect([g.flags[`stores:${gib}`], g.flags[`seaShut:${g.regions[gib].seas[1]}:UK`]]).toEqual([17, 17]);
+    const line = 'Your fleets have held the Western Mediterranean and the waters off the Iberian coast since January. Counting from then, the garrison of Gibraltar goes hungry from April and is lost at the start of June, unless ships get through.';
+    expect(texts(portCardLines(g, gib, 'ITA'))).toEqual([line]);
+    const f = portCutOff(g, gib, 'ITA')!;
+    expect([f.heldSince, f.heldHungry, f.heldLost]).toEqual([17, 20, 22]);
+    // The rule's own clock, month by month: fed through March, hungry from April, struck off as June opens.
+    for (let t = 18; t <= 22; t++) {
+      g.turn = t;
+      phase(g, 'ITA');
+      phase(g, 'UK');
+      expect([t, ninth.supplied, ninth.dead]).toEqual([t, t < 20, t >= 22]);
+      if (t < 22) expect(texts(portCardLines(g, gib, 'ITA'))).toEqual([line]);
+    }
+    expect(g.flags[`stores:${gib}`]).toBe(17);
+  });
+
+  it('out of its sight, the line is the same whether a British corps or a fortress crew stands in Malta or none; seen whole, the crew\'s stores are counted and an empty port has no line', () => {
+    // Italy's aircraft alone shut the sea: no Italian fleet at sea, so nothing of Italy's sees Malta.
+    const g = grand('ITA', true, true);
+    const [ninth] = garrison(g, 'Malta', ['9th Corps']);
+    g.turn = 16;
+    g.supplyDirty = true;
+    computeSupply(g);
+    declareWar(g, 'ITA', 'UK');
+    g.nations.ITA.air = 200;
+    g.supplyDirty = true;
+    month(g, 16, ['ITA', 'UK']);
+    month(g, 17, ['ITA', 'UK']);
+    const r = g.regions[MALTA];
+    expect([fogOn(g, 'ITA'), sightOf(g, 'ITA')[MALTA]]).toEqual([true, SIGHT.none]);
+    const line = 'Your aircraft have held the sky over the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from March and is lost at the start of May, unless ships get through.';
+    expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual([line]);
+    // The garrison taken off: Malta is still British, and Italy sees nothing of it, so its card says the same.
+    removeCorps(g, ninth);
+    expect([r.ctrl, sightOf(g, 'ITA')[MALTA]]).toEqual(['UK', SIGHT.none]);
+    expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual([line]);
+    // A British fortress crew put in (under the fortress rows its stores are the port's: three months, not two). The
+    // holder's own count reads them; the shutting side, which cannot see them, counts the port's own two.
+    addCorps(g, 'UK', '9th Corps', 'inf', 2, 'Malta', {});
+    addCorps(g, 'UK', 'Malta fortress', 'fort', 1, 'Malta', {});
+    expect(portKeep(g, r)).toBe(3);
+    expect(portCutOff(g, MALTA, 'ITA')!.keep).toBe(2);
+    expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual([line]);
+    // With the fog lifted, Italy sees Malta whole: the crew and its stores are counted.
+    g.flags.nofog = 1;
+    expect(sightOf(g, 'ITA')[MALTA]).toBe(SIGHT.full);
+    expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual(['Your aircraft have held the sky over the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from April and is lost at the start of June, unless ships get through.']);
+    // And seen whole with no garrison for the rule to starve (the crew keeps its own clock), there is no line.
+    for (const c of [...r.units]) if (c.kind !== 'fort') removeCorps(g, c);
+    expect(portCardLines(g, MALTA, 'ITA')).toEqual([]);
+  });
+
+  it('a glimpse (an Italian fleet at sea off Malta sees the flags and the count): with no corps of Britain\'s counted there, no line', () => {
+    const { g, cs: [ninth] } = malta('ITA');
+    month(g, 17);
+    expect(sightOf(g, 'ITA')[MALTA]).toBe(SIGHT.glimpse);
+    expect(portCardLines(g, MALTA, 'ITA')).toHaveLength(1);
+    removeCorps(g, ninth);
+    expect(portCardLines(g, MALTA, 'ITA')).toEqual([]);
+  });
+
+  it('with another nation in the line, every nation by its adjective and no "Your" in the middle of it: Germany\'s player at a Gibraltar shut by Italy and Germany', () => {
+    const { g, gib } = gibraltar('GER', (h) => { sail(h, 'ITA', 'wmed', ['1st Fleet']); sail(h, 'GER', 'iberia', ['Battle Fleet']); });
+    for (const t of [16, 17]) { g.turn = t; phase(g, 'GER'); phase(g, 'ITA'); phase(g, 'UK'); }
+    expect(texts(portCardLines(g, gib, 'GER'))).toEqual(['Italian fleets have held the Western Mediterranean, and German fleets have held the waters off the Iberian coast since December 1940. Counting from then, the garrison of Gibraltar goes hungry from March and is lost at the start of May, unless ships get through.']);
+    // (Italy's player reads the same line by the adjectives: Germany is in it too.)
+    const it = gibraltar('ITA', (h) => { sail(h, 'ITA', 'wmed', ['1st Fleet']); sail(h, 'GER', 'iberia', ['Battle Fleet']); });
+    for (const t of [16, 17]) { it.g.turn = t; phase(it.g, 'GER'); phase(it.g, 'ITA'); phase(it.g, 'UK'); }
+    expect(texts(portCardLines(it.g, it.gib, 'ITA'))[0]).toMatch(/^Italian fleets have held the Western Mediterranean, and German fleets have held the waters off the Iberian coast since December 1940\./);
   });
 });
 
