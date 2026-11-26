@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 0c0a5903 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 09a7113b 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -9455,6 +9455,16 @@
             return r.every(Number.isFinite) && this.callAir(by2, r);
           }
           if (c.do === "land:place") {
+            const many = c.places;
+            if (Array.isArray(many)) {
+              const us = (c.units ?? []).map((id) => this.unit(Number(id))), at = many.map((p) => Array.isArray(p) ? p.map(Number) : []);
+              if (by2 !== this.setup || us.some((v) => !v) || this.placeManyWhy(us, at) !== null) return false;
+              us.forEach((v, i) => {
+                const f2 = at[i][2];
+                this.place(v, at[i][0], at[i][1], f2 !== void 0 && Number.isFinite(f2) ? f2 : void 0);
+              });
+              return true;
+            }
             const u = this.unit(Number(c.units?.[0])), x = Number(c.x), y = Number(c.y);
             if (!u || this.placeWhy(u, x, y) !== null || by2 !== this.setup) return false;
             const f = c.face === void 0 ? void 0 : Number(c.face);
@@ -9906,15 +9916,42 @@
     setupRoom() {
       return this.room ? [...this.room] : null;
     }
-    /** Why a block may not stand there in the setup step, or null where it may (release 2). */
-    placeWhy(u, x, y) {
+    /**
+     * Why a block may not stand there in the setup step, or null where it may (release 2). 'but': blocks placed in the
+     * same act, which are not counted where they stand now (placeManyWhy counts them where they will stand).
+     */
+    placeWhy(u, x, y, but) {
+      return this.placeable(u) ?? this.standWhy(u, x, y, this.room, but);
+    }
+    /** Why a block may not be placed at all in the setup step, wherever it would stand, or null where it may be (release 2). */
+    placeable(u) {
       if (!this.setup || u.side !== this.setup) return "The battle has begun.";
       if (this.placeAll ? u.kind === "fort" || !fighting2(u) : u.kind !== "art" || !fighting2(u)) return this.placeAll ? "Fortifications stay where they are built." : "Only guns and support teams are placed.";
       if (u.dug || u.waits) return "It is dug in where it stands.";
-      return this.standWhy(u, x, y, this.room);
+      return null;
+    }
+    /**
+     * Why several blocks may not be placed as one act in the setup step (release 2), or null where they all may: each
+     * block by its own checks (placeWhy), the others of the act counted where they would stand and not where they stand
+     * now. Names the first block that cannot go. A control of the setup step: nothing in the fight reads it.
+     */
+    placeManyWhy(us, at) {
+      if (!us.length || us.length !== at.length) return { id: us[0]?.id ?? -1, why: "Nothing to place." };
+      const act = new Set(us);
+      if (act.size !== us.length) return { id: us[0].id, why: "A block stands in one place only." };
+      for (let i = 0; i < us.length; i++) {
+        const u = us[i], x = Number(at[i][0]), y = Number(at[i][1]);
+        const why = this.placeWhy(u, x, y, act);
+        if (why !== null) return { id: u.id, why };
+        for (let j = 0; j < i; j++) {
+          const o = us[j];
+          if (Math.abs(at[j][0] - x) < (o.w + u.w) / 2 + LAND.placeClear && Math.abs(at[j][1] - y) < (o.d + u.d) / 2 + LAND.placeClear) return { id: u.id, why: "Another block stands there." };
+        }
+      }
+      return null;
     }
     /** Why a block may not stand there inside its side's ground 'r' (the setup step's own checks), or null where it may. */
-    standWhy(u, x, y, r) {
+    standWhy(u, x, y, r, but) {
       if (!Number.isFinite(x) || !Number.isFinite(y)) return "Off the field.";
       const hw = u.w / 2, hd = u.d / 2;
       if (x - hw < r[0] || x + hw > r[2] || y - hd < r[1] || y + hd > r[3]) return "Outside your ground.";
@@ -9927,7 +9964,7 @@
         if (Math.sign(x - xAt(y)) !== Math.sign(u.x - xAt(u.y))) return "It stays on its own bank of the river.";
       }
       for (const o of this.units) {
-        if (o === u || !live2(o)) continue;
+        if (o === u || !live2(o) || but?.has(o)) continue;
         if (Math.abs(o.x - x) < (o.w + u.w) / 2 + LAND.placeClear && Math.abs(o.y - y) < (o.d + u.d) / 2 + LAND.placeClear) return "Another block stands there.";
       }
       return null;
@@ -12251,6 +12288,90 @@
     }
   };
 
+  // ../../src/battle/land/formation.ts
+  var FORMATIONS = ["line", "two", "wedge", "column"];
+  var ROW = 110;
+  var STEP = 60;
+  var widthOf = (us) => us.reduce((a, u) => a + u.w, 0) + GAP * Math.max(0, us.length - 1);
+  var byX = (a, b) => a.x - b.x || a.id - b.id;
+  function wrap2(us, wide) {
+    const rows = [];
+    for (const u of us) {
+      const r = rows[rows.length - 1];
+      if (r && widthOf([...r, u]) <= wide) r.push(u);
+      else rows.push([u]);
+    }
+    return rows;
+  }
+  function drawnUp(kind, blocks, dir, room) {
+    if (!blocks.length) return [];
+    const wide = room[2] - room[0] - 0.1, deep = room[3] - room[1] - 0.1;
+    const ahead2 = (a, b) => dir * (b.y - a.y) || byX(a, b);
+    let front = blocks.filter((u) => !u.rear).sort(byX), rear = blocks.filter((u) => u.rear).sort(byX);
+    if (!front.length) {
+      front = rear;
+      rear = [];
+    }
+    const maxD = Math.max(...blocks.map((u) => u.d)), close = maxD + LAND.placeClear + 1;
+    const rows = [];
+    let pitch = ROW;
+    if (kind === "column") {
+      const file = [...[...front].sort(ahead2), ...[...rear].sort(ahead2)];
+      pitch = maxD + GAP;
+      const perFile = Math.max(1, Math.floor((deep - maxD) / pitch) + 1), files = Math.ceil(file.length / perFile);
+      for (let k = 0; k < file.length; k += files) rows.push({ us: file.slice(k, k + files).sort(byX), back: 0 });
+    } else {
+      if (kind === "wedge" && widthOf(front) <= wide && front.length >= 3) {
+        const mid = Math.floor((front.length - 1) / 2);
+        rows.push({ us: front, back: 0, steps: front.map((_, i) => Math.abs(i - mid)) });
+      } else if (kind === "two" && front.length >= 2) {
+        const order = [...front].sort(ahead2), n = Math.ceil(front.length / 2);
+        for (const r of wrap2(order.slice(0, n).sort(byX), wide)) rows.push({ us: r, back: 0 });
+        for (const r of wrap2(order.slice(n).sort(byX), wide)) rows.push({ us: r, back: 0 });
+      } else {
+        for (const r of wrap2(front, wide)) rows.push({ us: r, back: 0 });
+      }
+      for (const r of wrap2(rear, wide)) rows.push({ us: r, back: 0 });
+    }
+    const wedge = rows.find((r) => r.steps), most = wedge ? Math.max(...wedge.steps) : 0;
+    let step = most > 0 ? STEP : 0;
+    const need2 = () => maxD + most * step + pitch * (rows.length - 1);
+    if (need2() > deep && most > 0) step = Math.max(0, (deep - maxD - pitch * (rows.length - 1)) / most);
+    if (need2() > deep && rows.length > 1) pitch = (deep - maxD - most * step) / (rows.length - 1);
+    if (need2() > deep + 1e-6 || rows.length > 1 && pitch < close) return null;
+    const slots = [];
+    let back = 0;
+    for (const r of rows) {
+      let x = -widthOf(r.us) / 2;
+      r.us.forEach((u, i) => {
+        slots.push({ id: u.id, x: x + u.w / 2, y: -dir * (back + (r.steps ? r.steps[i] * step : 0)) });
+        x += u.w + GAP;
+      });
+      back += pitch + (r.steps ? most * step : 0);
+    }
+    const size = new Map(blocks.map((u) => [u.id, u]));
+    const box = () => [
+      Math.min(...slots.map((s) => s.x - size.get(s.id).w / 2)),
+      Math.min(...slots.map((s) => s.y - size.get(s.id).d / 2)),
+      Math.max(...slots.map((s) => s.x + size.get(s.id).w / 2)),
+      Math.max(...slots.map((s) => s.y + size.get(s.id).d / 2))
+    ];
+    const cx = blocks.reduce((a, u) => a + u.x, 0) / blocks.length, cy = blocks.reduce((a, u) => a + u.y, 0) / blocks.length;
+    const b0 = box(), mx = (b0[0] + b0[2]) / 2, my = (b0[1] + b0[3]) / 2;
+    for (const s of slots) {
+      s.x += cx - mx;
+      s.y += cy - my;
+    }
+    const b1 = box(), E = 0.02;
+    const sx = b1[0] < room[0] + E ? room[0] + E - b1[0] : b1[2] > room[2] - E ? room[2] - E - b1[2] : 0;
+    const sy = b1[1] < room[1] + E ? room[1] + E - b1[1] : b1[3] > room[3] - E ? room[3] - E - b1[3] : 0;
+    for (const s of slots) {
+      s.x = Math.round((s.x + sx) * 100) / 100;
+      s.y = Math.round((s.y + sy) * 100) / 100;
+    }
+    return slots;
+  }
+
   // ../../src/battle/land/pieces.ts
   var NORMANDY = {
     key: "normandy-1944",
@@ -12782,6 +12903,7 @@
     if (w === "clear") return { cover: c(0.2), base: 1400, kind: "cumulus", hour: 10 };
     return { cover: c(0.45), base: 1e3, kind: "cumulus", hour: 10 };
   }
+  var DRAW = { reach: 400, step: 20 };
   var LiveBattle = class {
     constructor(ticket, piece, opts = {}) {
       __publicField(this, "ticket", ticket);
@@ -13124,6 +13246,66 @@
       if (ok2) this.replace();
       return ok2;
     }
+    /**
+     * Why several of his blocks, each [id, x, y, face?], may not be placed as one act in the setup step: the block that
+     * cannot go (its id and name) and why, or null where they all may.
+     */
+    canPlaceMany(list) {
+      if (!this.me || !this.sim.setup) return { id: -1, who: "", why: "Not now: the battle has begun." };
+      if (!list.length) return { id: -1, who: "", why: "Nothing to place." };
+      const us = list.map((p) => this.sim.units.find((v) => v.id === Number(p[0])));
+      const lost = us.findIndex((u) => !u || u.side !== this.me);
+      if (lost >= 0) return { id: Number(list[lost][0]), who: "", why: us[lost] ? "Only your own troops take your orders." : "No such block." };
+      const no = this.sim.placeManyWhy(us, list.map((p) => p.slice(1)));
+      return no ? { ...no, who: this.whoIs(no.id) } : null;
+    }
+    /** Places several of the player's blocks as one act in the setup step, each [id, x, y, face?]: all of them or none. */
+    placeMany(list) {
+      if (this.canPlaceMany(list) !== null) return false;
+      const ok2 = this.sim.command({ do: "land:place", units: list.map((p) => Number(p[0])), places: list.map((p) => p.slice(1)) }, this.me);
+      if (ok2) this.replace();
+      return ok2;
+    }
+    /**
+     * Draws his blocks up in the setup step (formation.ts; Brian, 26 November 2026): those named, or with none named
+     * every block of his that may be placed, in a line, two lines, a wedge or a column about the middle of where they
+     * stand, facing the enemy, guns and support teams behind. Where a place of it is barred (water, a block that stays, a
+     * fort), the whole formation is tried a little to every side, the nearest first, and stands on the first ground that
+     * takes all of it: never outside his own ground. Says where each was placed, or the block that cannot go and why.
+     */
+    drawUp(kind, ids = []) {
+      const none2 = (why, id) => ({ ok: false, why, ...id !== void 0 && id >= 0 ? { id, who: this.whoIs(id) } : {}, placed: [] });
+      const room = this.sim.setupRoom();
+      if (!this.me || !this.sim.setup || !room) return none2("Not now: the battle has begun.");
+      const me = this.me, mine = this.sim.units.filter((u) => u.side === me);
+      const named = ids.length ? mine.filter((u) => ids.includes(u.id)) : mine;
+      const us = named.filter((u) => this.sim.placeable(u) === null);
+      if (!us.length) return none2(named.length ? this.sim.placeable(named[0]) : "Nothing to draw up.", named[0]?.id);
+      const dir = me === "att" ? 1 : -1, face = me === "att" ? 0 : Math.PI;
+      const slots = drawnUp(kind, us.map((u) => ({ id: u.id, x: u.x, y: u.y, w: u.w, d: u.d, rear: u.kind === "art" })), dir, room);
+      if (!slots) return none2("Your ground has no room to draw them up so.");
+      const order = slots.map((s) => us.find((u) => u.id === s.id));
+      const shifts = [];
+      for (let dx = -DRAW.reach; dx <= DRAW.reach; dx += DRAW.step) for (let dy = -DRAW.reach; dy <= DRAW.reach; dy += DRAW.step) shifts.push([dx, dy]);
+      shifts.sort((a, b) => Math.hypot(a[0], a[1]) - Math.hypot(b[0], b[1]) || a[1] - b[1] || a[0] - b[0]);
+      let first = null;
+      for (const [dx, dy] of shifts) {
+        const at = slots.map((s) => [s.x + dx, s.y + dy, face]);
+        const no = this.sim.placeManyWhy(order, at);
+        if (no) {
+          first ?? (first = no);
+          continue;
+        }
+        const list = slots.map((s, i) => [s.id, at[i][0], at[i][1], face]);
+        return this.placeMany(list) ? { ok: true, why: "", placed: list } : none2("Not now: the battle has begun.");
+      }
+      return none2(first?.why ?? "Your ground has no room to draw them up so.", first?.id);
+    }
+    /** A block's name as the player reads it ('' for none). */
+    whoIs(id) {
+      const u = this.sim.units.find((v) => v.id === id);
+      return u ? this.sim.named(u) : "";
+    }
     /** Ends the setup step: the clock may run. */
     begin() {
       if (!this.me || !this.sim.setup) return false;
@@ -13293,6 +13475,18 @@
       const why = need().canPlace(id, x, y);
       const ok2 = need().place(id, x, y, face ?? void 0);
       return { ok: ok2, why: ok2 ? "" : why ?? "Not now: the battle has begun." };
+    },
+    landPlaceMany(list) {
+      const l = need(), rows = Array.isArray(list) ? list.filter((p) => Array.isArray(p)).map((p) => p.map(Number)) : [];
+      const no = l.canPlaceMany(rows);
+      const ok2 = no === null && l.placeMany(rows);
+      return { ok: ok2, why: ok2 ? "" : no?.why ?? "Not now: the battle has begun.", ...no && no.id >= 0 ? { id: no.id, who: no.who } : {} };
+    },
+    landDrawUp(kind, ids) {
+      const k = FORMATIONS.find((f) => f === kind);
+      if (!k) return { ok: false, why: "No such formation.", placed: 0 };
+      const r = need().drawUp(k, Array.isArray(ids) ? ids.map(Number) : []);
+      return { ok: r.ok, why: r.why, ...r.id !== void 0 ? { id: r.id, who: r.who ?? "" } : {}, placed: r.placed.length };
     },
     landBegin() {
       return { ok: need().begin() };
