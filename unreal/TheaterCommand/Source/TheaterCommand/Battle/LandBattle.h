@@ -800,6 +800,8 @@ private:
 	/** Real seconds the clock has waited on the rules this time; whether they have stopped (and it was said). */
 	double LiveHeld = 0.0;
 	bool bLiveBroken = false;
+	/** After the break (release 2, the battle rule `pursue`): the recording's phase (LandFeed Recording::After) as last said in the log. */
+	int32 AfterLogged = 0;
 	/** The tanks' meshes made again (a block placed anew in the setup step, her vehicles changed): their names' round. */
 	int32 BodyRound = 0;
 	/** A live battle's opening, frame by frame: true while it has the frame (the scene not open yet). */

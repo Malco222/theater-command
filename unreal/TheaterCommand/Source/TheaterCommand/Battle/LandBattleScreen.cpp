@@ -1509,6 +1509,45 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		}
 	}
 
+	// ---- After the break (release 2, the battle rule `pursue`; Brian, 26 November 2026 03:53Z: "if the enemy retreats,
+	// i have the option to continue on with the battle or end it"). Once the clock shown has come up to the break: while
+	// he is asked, one line on the desk strip and his two answers under it, side by side, PURSUE lit; while his pursuit
+	// runs, CALL OFF THE PURSUIT there; where his own army broke and the enemy pursues, one line. The rules decide what
+	// each press does and refuse what is not his to give (sim.ts, "After the break"). The words are stand-ins until the
+	// UI director's. ----
+	if (S.Rec.bLive && !S.Rec.bOver && S.Rec.After != 0 && S.Rec.Me >= 0 && S.Battle >= S.Rec.AfterAt - 1e-6)
+	{
+		const bool bAskedNow = S.Rec.After == 1 && S.Rec.AfterWinner == S.Rec.Me;
+		const bool bPursuingNow = S.Rec.After == 2 && S.Rec.AfterWinner == S.Rec.Me;
+		const bool bPursuedNow = S.Rec.After == 2 && S.Rec.AfterBroke == S.Rec.Me;
+		const FSlateFontInfo AfterFace = Serif(TEXT("Regular"), 13.0f);
+		// (the day's clock ends a pursuit, so while one runs the line says how long the day has left)
+		const int32 DayLeft = FMath::Max(0, static_cast<int32>(FMath::CeilToDouble(S.Rec.Limit - S.Battle)));
+		const FString AfterWord = bAskedNow ? FString(TEXT("The enemy army has broken. Pursue it, or end the battle here. The clock waits."))
+			: bPursuingNow ? FString::Printf(TEXT("Your army pursues. The day ends in %d:%02d."), DayLeft / 60, DayLeft % 60)
+			: bPursuedNow ? FString::Printf(TEXT("Your army has broken and falls back to your edge. The day ends in %d:%02d."), DayLeft / 60, DayLeft % 60) : FString();
+		double AfterY = 76.0;
+		if (!AfterWord.IsEmpty())
+		{
+			const double AfterWide = WideOf(AfterWord, AfterFace);
+			Fill(Size.X * 0.5 - AfterWide * 0.5 - 10.0, AfterY, AfterWide + 20.0, 24.0, Plate, 10);
+			Write(AfterWord, Size.X * 0.5 - AfterWide * 0.5, AfterY + 3.0, AfterFace, BrightBrass, 11);
+			AfterY += 30.0;
+		}
+		if (bAskedNow && S.AfterSent != S.Rec.After)
+		{
+			const double PursueW = ButtonWidth(TEXT("PURSUE"), TEXT("P")), EndW = ButtonWidth(TEXT("END THE BATTLE"), TEXT(""));
+			const double AfterX = Size.X * 0.5 - (PursueW + 6.0 + EndW) * 0.5;
+			Button(TEXT("PURSUE"), TEXT("P"), TEXT("general:pursue"), AfterX, AfterY, true, false, 12);
+			Button(TEXT("END THE BATTLE"), TEXT(""), TEXT("general:endbattle"), AfterX + PursueW + 6.0, AfterY, false, false, 12);
+		}
+		else if (bPursuingNow && S.AfterSent != S.Rec.After)
+		{
+			const double OffW = ButtonWidth(TEXT("CALL OFF THE PURSUIT"), TEXT(""));
+			Button(TEXT("CALL OFF THE PURSUIT"), TEXT(""), TEXT("general:endbattle"), Size.X * 0.5 - OffW * 0.5, AfterY, false, false, 12);
+		}
+	}
+
 	// ---- The foot: his units' cards in one row (never wrapping: it scrolls), and at its right end BEGIN THE BATTLE while he
 	// deploys, and the clock's and the camera's buttons where the top bar has no room for them. ----
 	double RowRight = FootRight;
@@ -2620,6 +2659,8 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		}
 		else if (Key == EKeys::V && !bSetup) { Scene->GeneralDo(TEXT("ride")); return FReply::Handled(); }
 		else if (Key == EKeys::Enter && bSetup) { Scene->GeneralDo(TEXT("begin")); return FReply::Handled(); }
+		// (after the break, release 2 `pursue`: P pursues while he is asked; the scene and the rules refuse it at any other time)
+		else if (Key == EKeys::P && !bSetup && !Event.IsRepeat()) { Scene->GeneralDo(TEXT("pursue")); return FReply::Handled(); }
 		// (U, "draw up", while he places his army: each press draws them up in the next of the four, Line first; release 2.
 		// The scene does nothing with the row off, or once the battle has begun.)
 		else if (Key == EKeys::U && bSetup) { Scene->GeneralDo(TEXT("drawup")); return FReply::Handled(); }

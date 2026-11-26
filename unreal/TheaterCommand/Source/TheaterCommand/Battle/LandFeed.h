@@ -515,6 +515,16 @@ namespace LandFeed
 		int Me = -1;
 		bool bSetup = false;
 		double Room[4] = { 0, 0, 0, 0 };
+		/**
+		 * After the break (release 2, the battle rule `pursue`; the view rows' "after", src/battle/land/live.ts): 0 none
+		 * (before the break, the rule off, or the battle ended at the break), 1 the player who won is asked, PURSUE or
+		 * END, and the rules fight nothing more until he answers, 2 the winner fights on. AfterBroke and AfterWinner: the
+		 * side that broke and the side that holds the field (0 the attacker, 1 the defender; -1 none). AfterAt: the
+		 * break's battle second (never before it). As the last view read has them.
+		 */
+		int After = 0;
+		int AfterBroke = -1, AfterWinner = -1;
+		double AfterAt = 0.0;
 		/** The craters' numbers already read (the views repeat them). */
 		std::set<int> CraterIds;
 
