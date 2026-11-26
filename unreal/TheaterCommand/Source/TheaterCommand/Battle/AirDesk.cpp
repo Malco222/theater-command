@@ -756,11 +756,25 @@ namespace AirDesk
 		return 1.0 / (1.0 + X * X * X * X);
 	}
 
-	void Overview::ZoomEase(double& Shown, double& Vel, double Want, double Real)
+	bool Overview::ZoomEase(double& Shown, double& Vel, double Want, double Real)
 	{
-		double Gone = Shown - Want;
-		Settle(Gone, Vel, Real, AwayEase);
-		Shown = Want + Gone;
+		// (eased in the distance's logarithm, so that a notch out or in is the same glide near or far, over its own
+		// ZoomEaseS: the framing's AwayEase was slow and floaty for a hand on the wheel, a notch 95% there in 2.4 s; and
+		// never faster than ZoomMost, so that a spin of many notches glides at an even pace instead of lurching)
+		const double Was = std::log(std::max(Shown, 1e-3) / std::max(Want, 1e-3));
+		double Gone = Was;
+		Settle(Gone, Vel, Real, ZoomEaseS);
+		const double Most = ZoomMost * std::max(Real, 0.0);
+		Gone = Was + std::clamp(Gone - Was, -Most, Most);
+		Vel = std::clamp(Vel, -ZoomMost, ZoomMost);
+		if (std::fabs(Gone) < 1e-4 && std::fabs(Vel) < 1e-3)
+		{
+			Shown = Want;
+			Vel = 0.0;
+			return true;
+		}
+		Shown = Want * std::exp(Gone);
+		return false;
 	}
 
 	double Overview::TypeAwayOf(double Span)

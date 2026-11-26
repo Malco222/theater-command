@@ -113,7 +113,7 @@ struct FAirBattleState
 	 * off, AimEye's as it was (30899121's), to the byte. */
 	bool bSteadyEye = false;
 	/** With it on, where the player's wheel or trackpad has asked his zoom to go (AAirBattle::Zoom; -1 nowhere, the zoom
-	 * at rest) and the zoom's speed on its way there (AirDesk::Overview::ZoomEase, in AimEye). */
+	 * at rest) and the speed of its logarithm a second on its way there (AirDesk::Overview::ZoomEase, in AimEye). */
 	double ZoomWant = -1.0, ZoomVel = 0.0;
 	/** With it on, the strategy camera's jumps of the picture over 20 px since the log's last 5 s sky line (AimEye,
 	 * SteadyEyeSky), and what they are judged from: its eye and look the last two frames, the last frame's real seconds,

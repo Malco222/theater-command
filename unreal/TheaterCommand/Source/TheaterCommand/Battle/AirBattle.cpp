@@ -678,9 +678,14 @@ static bool BoxKeepOn()
 	return FLandLive::RuleNow(TEXT("flyBoxKeep"));
 }
 
-// (the two rows, in the log as a battle opens: the camera in use and each row's state, for the Mac's check)
+// (the two rows, in the log as a battle opens: the camera in use and each row's state, for the Mac's check; only with
+// either row on, so that with both off the log is as it was, line for line)
 static void LogRows(const FAirBattleState& S)
 {
+	if (!S.bSteadyEye && !S.Show.BoxKeep())
+	{
+		return;
+	}
 	UE_LOG(LogTheater, Display, TEXT("Air battle: the strategy camera is %s (\"The raid camera holds steady\", flySteadyEye, %s); \"Each bomber keeps her place in her box\" (flyBoxKeep) %s%s."),
 		S.Show.Smooth() && S.bSteadyEye ? TEXT("AirDesk::Overview's, held steady, the zoom eased") : TEXT("the old one, the crowd's middle in hard rings"), S.bSteadyEye ? TEXT("on") : TEXT("off"),
 		S.Show.BoxKeep() ? TEXT("on") : TEXT("off"), S.Show.Smooth() ? TEXT("") : TEXT("; flying as release 1.5 (-TheaterAirOldFlying), so neither row flies"));
@@ -6933,12 +6938,9 @@ void AAirBattle::AimEye(double Real)
 	// at rest once there)
 	if (S.Show.Smooth() && S.bSteadyEye && S.ZoomWant > 0.0)
 	{
-		AirDesk::Overview::ZoomEase(Distance, S.ZoomVel, S.ZoomWant, Real);
-		if (FMath::Abs(Distance - S.ZoomWant) < 0.05 && FMath::Abs(S.ZoomVel) < 0.05)
+		if (AirDesk::Overview::ZoomEase(Distance, S.ZoomVel, S.ZoomWant, Real))
 		{
-			Distance = S.ZoomWant;
 			S.ZoomWant = -1.0;
-			S.ZoomVel = 0.0;
 		}
 	}
 	double Away = Distance * TypeAway / 800.0, Down = Pitch, Heading = Yaw;
