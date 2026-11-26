@@ -8,8 +8,10 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { atWar, createGame, declareWar } from '../src/campaign/game';
-import { beatOnMove, fleetReach, inPassage, navalUpkeep, rebase, setBeatReach, turnBack } from '../src/campaign/navy';
+import { NAVY, beatOnMove, fleetReach, inPassage, navalUpkeep, rebase, setBeatReach, tieLapses, tiedNow, turnBack } from '../src/campaign/navy';
+import { setStop } from '../src/campaign/history';
 import { startOpen } from '../src/campaign/staff';
+import { bookFleets } from '../src/campaign/stations';
 import type { Fleet, Game, Region } from '../src/campaign/types';
 
 const fleet = (g: Game, nat: string, name: string): Fleet => g.fleets.find((f) => f.nat === nat && f.name === name)!;
@@ -79,11 +81,47 @@ describe("every move of a fleet's base keeps its beat in the new base's reach (b
       const g2 = world(on);
       const f2 = fleet(g2, 'UK', 'Home Fleet');
       const near = g2.regions.find((x) => x.port && x.seas.length && x.ctrl === 'UK' && x.id !== f2.base && x.seas.includes(f2.home))!;
-      if (near) {
-        const kept = f2.station;
-        expect(rebase(g2, f2, near)).toBe(true);
-        expect(f2.station).toBe(kept);
-      }
+      expect(near).toBeTruthy();
+      const kept = f2.station;
+      expect(rebase(g2, f2, near)).toBe(true);
+      expect(f2.station).toBe(kept);
+    }
+  });
+
+  it("a beat in the new base's reach that is not its home sea is kept, on and off (the rule's first half)", () => {
+    for (const on of [false, true]) {
+      const g = world(on);
+      const f = fleet(g, 'UK', 'Home Fleet');
+      const to = g.byName['Northumbria'];
+      // A sea in reach of both harbours and not Northumbria's home sea (the North Sea).
+      const before = reach(g, f);
+      f.base = to.id;
+      const after = reach(g, f);
+      f.base = g.byName['Highlands'].id;
+      const beat = after.find((z) => before.includes(z) && z !== to.seas[0] && !to.seas.includes(z))!;
+      expect(beat).toBeGreaterThanOrEqual(0);
+      f.station = beat;
+      expect(rebase(g, f, to)).toBe(true);
+      expect(f.home).toBe(to.seas[0]);
+      expect(f.home).not.toBe(beat);
+      expect(f.station).toBe(beat);
+    }
+  });
+
+  it('a fleet in passage turned back keeps a beat the harbour it turns back to reaches, though not its home sea', () => {
+    for (const on of [false, true]) {
+      const g = world(on);
+      const f = fleet(g, 'UK', 'Home Fleet');
+      const home = f.base, homeSea = f.home, reach0 = reach(g, f);
+      const r = farHarbour(g, f);
+      expect(rebase(g, f, r)).toBe(true);
+      expect(inPassage(f)).toBe(true);
+      const beat = reach0.find((z) => z !== homeSea && !g.regions[home].seas.includes(z))!;
+      f.station = beat;
+      expect(turnBack(g, f)).toBe(true);
+      expect(f.base).toBe(home);
+      expect(f.home).not.toBe(beat);
+      expect(f.station).toBe(beat);
     }
   });
 
@@ -106,7 +144,7 @@ describe("every move of a fleet's base keeps its beat in the new base's reach (b
     }
   });
 
-  it('a staff that moves a fleet for a job writes the job\'s beat after the move, by the same function', () => {
+  it("a job's beat written after the move (as the cover move and standing forward do) comes from the same function", () => {
     const g = world(true);
     const f = fleet(g, 'UK', 'Home Fleet');
     const r = farHarbour(g, f);
@@ -117,5 +155,83 @@ describe("every move of a fleet's base keeps its beat in the new base's reach (b
     // A job's seas in reach (a landing's cover, a quay) take it, as beatOnMove reads them with the old beat.
     const z = reach(g, f).find((x) => x !== f.home)!;
     expect(beatOnMove(g, f, was, { seas: [z], keep: true })).toBe(z);
+  });
+
+  it('a tied fleet moved where its beat is out of reach: on, the tie lapses with the beat (rider b598(2)); off, the tie lapses as it always did, its beat out of reach', () => {
+    for (const on of [false, true]) {
+      const g = world(on);
+      const f = fleet(g, 'UK', 'Dover Fleet');
+      expect(f.tied).toBe(true);
+      const was = f.station, to = g.byName['Alexandria'];
+      expect(rebase(g, f, to)).toBe(true);
+      if (on) {
+        expect(f.tied).toBe(false);
+        expect(f.station).toBe(f.home);
+      } else {
+        expect(f.tied).toBe(true);
+        expect(f.station).toBe(was);
+        expect(tieLapses(g, f)).toBe(true);
+      }
+      expect(tiedNow(g, f)).toBe(false);
+    }
+  });
+
+  it('a tied fleet moved where its beat stays in reach keeps its tie and its beat, on and off', () => {
+    for (const on of [false, true]) {
+      const g = world(on);
+      const f = fleet(g, 'UK', 'Dover Fleet');
+      const was = f.station;
+      expect(rebase(g, f, g.byName['London'])).toBe(true);
+      expect(f.station).toBe(was);
+      expect(f.tied).toBe(true);
+      expect(tiedNow(g, f)).toBe(true);
+    }
+  });
+
+  it("a fleet of the book's coming home after its months: on, the beat it had there in that base's reach; off, the beat it had", () => {
+    for (const on of [false, true]) {
+      const g = startOpen(createGame(3, null));
+      setStop(g, 1, true);
+      if (on) setBeatReach(g, true);
+      const f3 = fleet(g, 'JAP', '3rd Fleet');
+      const home = f3.base;
+      for (const nm of ['Balikpapan', 'Cam Ranh']) g.byName[nm].ctrl = 'JAP';
+      g.flags['st:done:JAP:south'] = 28;
+      for (const e of ['USA', 'UK']) declareWar(g, 'JAP', e);
+      g.turn = 30;
+      bookFleets(g, 'JAP');
+      expect(f3.bookBase).toBeTruthy();
+      // The beat it had at home, written there before it left, now a sea out of that harbour's reach.
+      const away = f3.base;
+      f3.base = home;
+      const out = g.seas.findIndex((z, i) => z.adj.length > 0 && !reach(g, f3).includes(i));
+      f3.base = away;
+      f3.bookBase![3] = out;
+      g.turn = 32;
+      bookFleets(g, 'JAP');
+      expect([f3.base, f3.bookBase]).toEqual([home, undefined]);
+      expect(f3.station).toBe(on ? f3.home : out);
+    }
+  });
+
+  it("a raider's beat is read by its own longer reach: a hunting ground its boats reach from the new base is kept", () => {
+    const g = world(true);
+    const f = fleet(g, 'GER', 'U-boat Fleet');
+    expect(f.duty).toBe('raid');
+    f.reach = NAVY.range + 6;
+    const beat = f.station;
+    // A harbour of Germany's from which the hunting ground lies beyond a surface fleet's reach but within the boats'.
+    const keep = [f.base, f.port, f.home, f.zone, f.stance] as const;
+    let to: Region | undefined;
+    for (const r of g.regions) {
+      if (!r.port || !r.seas.length || r.ctrl !== 'GER' || r.id === f.base) continue;
+      f.base = r.id;
+      const plain = fleetReach(g, f, true).includes(beat), boats = fleetReach(g, f, true, true).includes(beat);
+      [f.base, f.port, f.home, f.zone, f.stance] = keep;
+      if (!plain && boats) { to = r; break; }
+    }
+    expect(to).toBeTruthy();
+    expect(rebase(g, f, to!, true)).toBe(true);
+    expect(f.station).toBe(beat);
   });
 });

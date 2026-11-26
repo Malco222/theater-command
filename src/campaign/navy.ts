@@ -2391,7 +2391,7 @@ export function rebase(g: Game, f: Fleet, r: Region, instant = false): boolean {
   // (Its beat the one it had while that lies in reach of its new base, else its new home sea: the one rule for every
   // move of base, beatOnMove, under its own switch (beatReachOn). A staff that moved it for a job writes the job's beat
   // after, by the same function.)
-  if (beatReachOn(g)) f.station = beatOnMove(g, f, beat, null);
+  beatAfterMove(g, f, beat);
   g.supplyDirty = true;
   syncWings(g);
   return true;
@@ -2415,11 +2415,25 @@ export function beatOnMove(g: Game, f: Fleet, was: number, job: { seas: readonly
 }
 
 /**
+ * A fleet's beat after any move of its base (rebase, turnBack), with the beat-in-reach switch on: the one rule
+ * (beatOnMove, no job of its own). Where the beat it had is out of the new base's reach, a tie that held it there lapses
+ * with it (rider b598(2): a tie lapses once its beat is out of reach, and from then its admiral places it as any other
+ * fleet), so a tied fleet is never held to a new home sea nobody tied it to. Nothing with the switch off.
+ */
+function beatAfterMove(g: Game, f: Fleet, beat: number): void {
+  if (!beatReachOn(g)) return;
+  const now = beatOnMove(g, f, beat, null);
+  if (f.tied && now !== beat) f.tied = false;
+  f.station = now;
+}
+
+/**
  * True where every move of a fleet's base gives it its beat by that one rule (beatOnMove), so its beat lies within its
  * new base's reach (the design director, 20:02Z, 2, and 21:09Z (a): in the 24 wars a cover move left the beat out of
  * reach 453 times in 529, a withdrawal 94 in 138, the other moves, a fleet whose base fell or a navy escaping, 141 in
- * 574). rebase and turnBack read it for every move; a staff that moved a fleet for a job (a landing's cover, standing
- * forward, a quay) writes the job's beat after, by the same function. Its own switch (stage.json 'beatReach'): off,
+ * 574). rebase and turnBack read it for every move (beatAfterMove; a tie whose beat is out of reach lapses with it),
+ * and so does a fleet of the book's coming home (stations.ts); a staff that moved a fleet for a job (a landing's cover,
+ * standing forward, a quay) writes the job's beat after, by the same function. It acts on both charts. Its own switch (stage.json 'beatReach'): off,
  * every beat is as shipped and the whole save the same. The grand campaign, with the switch on.
  */
 export const beatReachOn = (g: Game): boolean => g.flags.open === 1 && g.flags.beatReach === 1;
@@ -2531,8 +2545,8 @@ export function turnBack(g: Game, f: Fleet): boolean {
   f.port = p.fromPort;
   f.home = r.seas.includes(p.fromHome) ? p.fromHome : r.seas[0];
   delete f.lane;
-  // (Its beat in reach of the harbour it turns back to, as on any move of base: beatOnMove, beatReachOn.)
-  if (beatReachOn(g)) f.station = beatOnMove(g, f, beat, null);
+  // (Its beat in reach of the harbour it turns back to, as on any move of base: beatAfterMove.)
+  beatAfterMove(g, f, beat);
   if (way.length > NAVY.range) setOut(g, f, way, to, !p.back);
   else {
     delete f.passage;

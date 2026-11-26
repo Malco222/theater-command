@@ -159,9 +159,9 @@ export const SHADOWRELAY_STAGE: boolean = staged('TC_SHADOWRELAY', 'shadowRelay'
 /** True where new grand campaigns open with each fleet seeking battle at most once a month (stage.json 'seekOnce'). */
 export const SEEKONCE_STAGE: boolean = staged('TC_SEEKONCE', 'seekOnce');
 
-// A fleet moved for a withdrawal or a landing's cover keeps a beat in its new base's reach (release 2; the design
-// director's ruling of 25 November 2026, 20:02Z, 2; navy.ts beatReachOn): the grand campaigns opened while it is true
-// carry the flag 'beatReach'. Forced by TC_BEATREACH.
+// Every move of a fleet's base keeps its beat in its new base's reach (release 2; the design director's rulings of 25
+// November 2026, 20:02Z, 2, and 21:09Z (a); navy.ts beatReachOn): the grand campaigns opened while it is true carry
+// the flag 'beatReach'. Forced by TC_BEATREACH.
 /** True where new grand campaigns open with a moved fleet's beat kept within its new base's reach (stage.json 'beatReach'). */
 export const BEATREACH_STAGE: boolean = staged('TC_BEATREACH', 'beatReach');
 

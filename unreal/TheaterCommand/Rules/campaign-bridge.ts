@@ -7419,7 +7419,7 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     setBeatReach(s, part[1] === 'on');
     ok = true;
     note = beatReachOn(s)
-      ? 'A moved fleet\'s beat in reach is on: a fleet the admirals move to withdraw from a struck harbour, or to cover a landing and back, patrols a sea it can reach from its new base.'
+      ? 'A moved fleet\'s beat in reach is on: whenever a fleet\'s base moves, it patrols a sea it can reach from its new base.'
       : 'A moved fleet\'s beat in reach is off: a moved fleet keeps the beat it had, wherever its new base is.';
     return { ok, note, fly, flies, open, view: view() };
   }
