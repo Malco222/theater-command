@@ -166,7 +166,49 @@ if (d <= reach && d < score) { score = d; best = e; }
 }
 return best;
 }"
-  [ "$(body_of 'targetOf(u: LandUnit): LandUnit | null {')" = "$TARGET_WANT" ] || { echo "FAULT: sim.ts targetOf() is no longer, line for line, the rule the spotter's mark's words stand on (the block's whole reach; its given target tested against that reach; only then a hidden block's hold unless it is sent to attack; none struck that is itself hidden; the held reach put to use in the search and in firing on cover: MEN LYING IN WAIT, TROOPS IN PLAIN SIGHT, FULL RANGE), or the file's indent has changed. If the rule itself is unchanged bring this pin up to date; if it has changed, the mark's legend (LandBattleScreen.cpp) and LandSight.h must change with it"; STATUS=1; }
+  # (Two forms of targetOf are held, each whole. The second is the ground thread's since 25 November (support teams
+  # in battle, behind `teams`, off): two lines more before the search and six in it, by which a machine gun or
+  # mortar team takes, of the enemies ALREADY within its reach, the one its weapon harms most, where every other
+  # block takes the nearest. The reach, the given target, the hidden block's hold and the hidden never struck are
+  # the same lines in both, in the same places, so the mark's words stand on either. A tree has one or the other:
+  # the first goes from here once no tree to be merged still has it.)
+  TARGET_WANT_TEAMS="targetOf(u: LandUnit): LandUnit | null {
+const marching = u.order && u.order.kind !== 'attack' && u.path.length > 0;
+if (u.kind === 'art' && marching) return null;
+if (u.order?.kind === 'withdraw') return null;
+let reach = reachOf(u);
+if (u.aim !== undefined) { const a = this.unit(u.aim); if (a && live(a) && a.side !== u.side && !a.hid && this.gap(u, a) <= reach) return a; }
+if (u.hid && u.order?.kind !== 'attack') reach = Math.min(reach, this.ambushAt(u));
+let best: LandUnit | null = null, score = Infinity;
+const T = this.teamsRule && ownArm(u) ? LAND.teams[u.team] : null;
+let harm = 0;
+for (const e of this.units) {
+if (e.side === u.side || !live(e) || e.hid) continue;
+const d = this.gap(u, e);
+if (d > reach) continue;
+if (u.order?.kind === 'attack' && u.order.target === e.id) return e;
+const off = Math.abs(turn(u.face, bearing(u.x, u.y, e.x, e.y)));
+const s = d * (1 + off) * (e.state === 'routing' ? 2 : 1);
+if (T) {
+const h = (e.kind === 'arm' ? T.armour : 1) * (d < T.closeAt ? T.close : 1);
+if (h < harm - 1e-9 || (h <= harm + 1e-9 && s >= score)) continue;
+harm = h; score = s; best = e;
+continue;
+}
+if (s < score) { score = s; best = e; }
+}
+if (!best && u.search && this.hide) {
+const [sx, sy] = u.search, R = u.searchR ?? LAND.hide.search.reach;
+for (const e of this.units) {
+if (e.side === u.side || !live(e) || !e.hid || dist(e.x, e.y, sx, sy) > R + Math.max(e.w, e.d) / 2) continue;
+const d = this.gap(u, e);
+if (d <= reach && d < score) { score = d; best = e; }
+}
+}
+return best;
+}"
+  TARGET_IS="$(body_of 'targetOf(u: LandUnit): LandUnit | null {')"
+  [ "$TARGET_IS" = "$TARGET_WANT" ] || [ "$TARGET_IS" = "$TARGET_WANT_TEAMS" ] || { echo "FAULT: sim.ts targetOf() is no longer, line for line, the rule the spotter's mark's words stand on (the block's whole reach; its given target tested against that reach; only then a hidden block's hold unless it is sent to attack; none struck that is itself hidden; the held reach put to use in the search and in firing on cover: MEN LYING IN WAIT, TROOPS IN PLAIN SIGHT, FULL RANGE), or the file's indent has changed. If the rule itself is unchanged bring this pin up to date; if it has changed, the mark's legend (LandBattleScreen.cpp) and LandSight.h must change with it"; STATUS=1; }
   REACH_WANT="export const reachOf = (u: { kind: Kind; team?: Team }): number => (u.team ? LAND.teams[u.team].reach : LAND.reach[u.kind]);"
   [ "$(grep -cxF "$REACH_WANT" "$RULES" || true)" = "1" ] || { echo "FAULT: rules.ts reachOf() is no longer a block's whole reach by its kind and team alone (the spotter's mark's FULL RANGE)"; STATUS=1; }
   # (a hold is only the distance the mark's words give where the block's own reach is no less: men on foot and
@@ -210,7 +252,11 @@ fi
 # that this is the frame's length. Not held: the rest of ReadDark, and the frame grabber; how often, and from where,
 # StartDarkRead() is called (called from the tick each frame it would set the clock to nought each frame, as surely
 # as the three noughts written there); and what the engine's preprocessor makes of the lines, which are read here as
-# text: a write under an "#if" branch that is never compiled is counted, and one put in by a macro is not seen.)
+# text: a write under an "#if" branch that is never compiled is counted, in StartDarkRead() or ReadDark() as the held
+# write though the build has lost it; and a macro is read as its own text, so a "#define" whose text writes one of
+# the three is counted as a write where the define stands, and trips the pin even where it is used harmlessly,
+# while a write whose text only comes together where the macro is used (the name handed in, pasted together, or
+# stood for by another macro) is not seen.)
 code_of "$SRC/Battle/LandBattle.cpp" > "$CODE/LandBattle.cpp"
 DARK_BODY="$(sed -n '/^void ALandBattle::ReadDark(double Real)/,/^}/p' "$CODE/LandBattle.cpp" | sed -e 's/^[[:space:]]*//' | grep -v '^$' || true)"
 DARK_WANT="void ALandBattle::ReadDark(double Real)
