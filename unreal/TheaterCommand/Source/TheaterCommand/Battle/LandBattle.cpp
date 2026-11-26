@@ -22,6 +22,7 @@
 #include "Campaign/CampaignEnvironment.h"
 #include "Campaign/CampaignFlags.h"
 #include "Campaign/CampaignHUD.h"
+#include "Campaign/FilmCritic.h" // film critic: the development facts (-FilmCritic)
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignTextures.h"
 #include "Campaign/TheaterSpeed.h"
@@ -7226,6 +7227,8 @@ void ALandBattle::Tick(float DeltaSeconds)
 			S.Note.clear();
 		}
 	}
+	// film critic: the camera as drawn this frame (its jolt on), and the men, the vehicles, the look and the end
+	if (FilmCritic::On() && Eye) { FilmCritic::Land(this, S, *Eye, UnitsPerMetre, DeltaSeconds); }
 	LandFell::Phase("tick: the pictures taken");
 	TakeShots();
 	LandFell::Phase("tick: the 10 s log");
@@ -10196,6 +10199,7 @@ void ALandBattle::TakeShots()
 			// (and the village's still says so when no house is in it)
 			const bool bNoHouse = Shot.Name == TEXT("08-the-village") && !S.Eye.HouseInShot();
 			FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, Key + TEXT("-") + Shot.Name + (bNoHouse ? TEXT("-no-house") : TEXT("")) + (bUnfit ? TEXT("-unfit") : TEXT("")) + TEXT(".png")), true, false);
+			if (FilmCritic::On()) { FilmCritic::Still(Shot.Name); } // film critic: the still's camera (and a strip after it)
 			++ShotsTaken;
 			UE_LOG(LogTheater, Display, TEXT("Land battle: picture %s at %.1f s, %s shot on %d%s"), *Shot.Name, S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), S.Pose.Subject,
 				bUnfit ? TEXT(" (no fit place found for it: placed anyway; the film would have turned it away)") : TEXT(""));
@@ -10220,6 +10224,7 @@ void ALandBattle::TakeShots()
 			const TCHAR* SpName = Sp == LandEye::Special::Whistle ? TEXT("whistle") : Sp == LandEye::Special::Nick ? TEXT("nickname") : TEXT("last-stand");
 			const FString Name = FString::Printf(TEXT("sp-%s-%d"), SpName, ++SpStills);
 			FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, Key + TEXT("-") + Name + TEXT(".png")), true, false);
+			if (FilmCritic::On()) { FilmCritic::Still(Name); } // film critic: the still's camera (and a strip after it)
 			++ShotsTaken;
 			UE_LOG(LogTheater, Display, TEXT("Land battle: picture %s at %.1f s, %s shot on %d, card on block %d"), *Name, S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), S.Pose.Subject,
 				S.Pose.Card);
@@ -10238,6 +10243,7 @@ void ALandBattle::TakeShots()
 	{
 		CardShotAt = -1.0;
 		FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, Key + TEXT("-10-after-card.png")), true, false);
+		if (FilmCritic::On()) { FilmCritic::Still(TEXT("10-after-card")); } // film critic: the still's camera
 		++ShotsTaken;
 		QuitAt = RealT + 2.0;
 	}

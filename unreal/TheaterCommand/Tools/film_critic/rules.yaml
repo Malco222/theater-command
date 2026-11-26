@@ -1,0 +1,2831 @@
+# Film critic rules: what must always be true on screen. (Started as a stub of 4 rules to fix the format; the full list follows.)
+#
+# Each rule:
+#   id:       short-kebab name, never reused
+#   title:    a few plain words, as the morning report heads it
+#   words:    the rule in plain words, general enough to catch the same KIND of mistake anywhere
+#   from:     who found the bug it comes from (Brian first), when (YYYY-MM-DD), and what they said or saw
+#             (said: his words when quoted; "seen: ..." when it is what was seen); also: the other finds merged in
+#   tags:     the shot tags it applies to (scenes/shots.yaml gives each picture its tags); every-picture = all
+#   picture:  (optional) a question a vision judge answers from a still: PASS, FAIL or CAN'T TELL, saying where
+#   clip:     (optional) measures on film strips: list of {measure: jump|pop|freeze|flicker|blank|stutter|zoom, max: N}
+#             (max = most allowed in one strip; per_minute: true makes it a rate)
+#   facts:    (optional) the name of a check in check_facts.py run over critic-facts.jsonl
+#   later:    (only when none of picture, clip or facts can check it yet) what would be needed to measure it
+#   owner:    who fixes it (a key of owners below)
+#   weight:   high (Brian found it, or it breaks the film) or normal
+#   known:    open, fixed, "off" (quoted; a fix is built but switched off) or unknown, when the rule was written
+#             (a fixed bug that comes back is a regression); known_note: a short why
+
+owners:
+  navy:        {who: "the ships and sea thread", covers: "ships, fleets on the map, wakes, sea battles"}
+  air:         {who: "the 3D air thread", covers: "raids, air battles, pilots, aircraft, the air camera"}
+  ground:      {who: "the tank and land battle thread", covers: "tanks and vehicles, how units move and fight in land battles, battle size, deploy and ending"}
+  soldiers:    {who: "the soldiers thread", covers: "men in land battles: bodies, faces, uniforms, poses, gaits, falls, gun teams, snipers"}
+  ai:          {who: "the battle AI thread", covers: "how men and vehicles pick targets, routes and moments to act"}
+  models:      {who: "the model makers (warplanes and modeller threads)", covers: "aircraft, ship and tank models: shape, glass, detail, crew figures in them"}
+  camera:      {who: "the camera thread", covers: "battle cameras, cuts, framing"}
+  environment: {who: "the environments thread", covers: "ground, grass, trees, sky, weather, buildings and ruins in every theater"}
+  effects:     {who: "the effects thread", covers: "smoke, fire, explosions, splashes, tracer"}
+  map:         {who: "the campaign map look thread", covers: "the map's land, sea, cities, pieces"}
+  ui:          {who: "the UI director", covers: "words, cards, buttons on screen"}
+  speed:       {who: "the speed detective", covers: "frame rate, hitches, freezes"}
+  marks:       {who: "the markings and paint work", covers: "national markings and paint on every unit"}
+
+rules:
+
+  # ---------------------------------------------------------------- the camera and the whole picture
+
+  - id: camera-smooth
+    title: The camera moves smoothly
+    words: >
+      A camera never jumps, stutters, zooms in a jerk or flickers: between two frames that are not a cut the view
+      moves by about the same step as the frames around it (no lurch beyond about 20 px on a 1920-wide picture), the
+      lens or the distance to the subject never changes by more than about 10% in one frame, a move starts and ends
+      gently, and nothing blinks. This holds for every camera: battle overviews, chase views, the bombing film, land
+      cuts and the map.
+    from:
+      who: Brian
+      when: "2026-11-26 04:11Z"
+      said: "the bombing video camera is super choppy ... its flickers and itsn't smooth"
+      also:
+        - {who: Brian, when: "2026-11-25 14:59Z", said: "this air battle scene looks horrible. the video is jumping around (the overview camera jumped over 20 px about 100 times a minute)"}
+        - {who: Brian, when: "2026-11-25 21:11Z", said: "seen: what he called flickering was the overview zooming from 832 m to about 450 m and back in a few frames, 14-20 times a battle"}
+        - {who: camera director, when: "2026-11-25", said: "seen: land camera jolts and hitches between cuts (angular acceleration over 1200 degrees a second squared)"}
+        - {who: 3D air thread, when: "2026-11-26 02:40Z", said: "seen: the glide from the flyover into the overview jolts (3 frames of 120, 67 and 34 px) every battle"}
+    # strip: the clip part on every strip; the scene tags let check_night run the camera-smooth facts check
+    tags: [strip, map, map-raid, map-fleet-sailing, air-flyover, air-battle, air-chase, air-bombs, land-opening, land-advance, sea-battle, sea-close]
+    clip:
+      - {measure: jump, max: 0}
+      - {measure: stutter, max: 0}
+      - {measure: zoom, max: 0}
+      - {measure: flicker, max: 0}
+    facts: camera-smooth
+    owner: camera
+    weight: high
+    known: open
+    known_note: "air overview fix camera built (0 jumps a minute) but not on the Play icon; zoom drifts, the glide jolt, the bombing film and land cuts open"
+
+  - id: no-held-frames
+    title: No frozen or held frames
+    words: >
+      While a picture is on screen and moving, no frame is held: no frame takes over 100 ms (never over 250 ms), and
+      nothing stalls when a new aircraft type, effect or part of the scene first appears, while the map runs a raid,
+      or when the game comes back to the map from a battle. Heavy work is done under the opening black.
+    from:
+      who: Brian
+      when: "2026-11-24 16:33Z"
+      said: "seen: freezes at the start of raids (0.65-0.9 s stalls three times a raid); he asked for them to be patched"
+      also:
+        - {who: Brian, when: "2026-11-23", said: "seen: stutters of 200 to 550 ms in live land battles"}
+        - {who: 3D air thread, when: "2026-11-26 02:40Z", said: "seen: a 219 ms freeze and a 66 px lurch when the Swedes first appear, because their stand-in shape is built mid-battle"}
+        - {who: release lead, when: "2026-11-24", said: "seen: the map's smoke update costs 23-38 ms a frame during raids; coming back from a battle stalls about 330 ms"}
+    tags: [strip]
+    clip:
+      - {measure: freeze, max: 0}
+    owner: speed
+    weight: high
+    known: open
+    known_note: "raid-opening stalls fixed in 1.5.1 (one 314 ms left); the stand-in shape hitch and map raid hitches open"
+
+  - id: frame-rate-holds
+    title: Battles keep 45 frames a second
+    words: >
+      A battle, and the map during a raid, runs at 45 frames a second or more on the Mac all the way through (checked
+      at 20, 40 and 60 s) in every theater; a heavy look (jungle, a crowd of men) never drags it down.
+    from:
+      who: Brian
+      when: "2026-11-23"
+      said: "seen: stutters and slow frames in live land battles"
+      also:
+        - {who: art director, when: "2026-11-25 14:01Z", said: "seen: Normandy 55, 45, 44 frames a second (worst 41); jungle 33 to 50"}
+    tags: [land-opening, land-advance, land-close-men, land-vehicles, land-village, air-battle, sea-battle, map-raid]
+    later: "a check that fails a scene under 45 frames a second (check_night already reads the frame rate from steps.jsonl and the log's Speed lines; no rule reads that number yet)"
+    owner: speed
+    weight: high
+    known: open
+    known_note: "open on Normandy and jungle"
+
+  - id: picture-readable
+    title: Every picture can be seen
+    words: >
+      Every picture is readable: under 30% of it near black, and never a blank or flat frame of haze, white or one
+      colour where ground or a subject should be. The scene is in place and lit before the first picture shows.
+    from:
+      who: art director
+      when: "2026-11-25 14:01Z"
+      said: "seen: Normandy shot 0 was black (mean L 22, 86% under 40): the camera started inside a hedge"
+      also:
+        - {who: air scene thread, when: "2026-11-24 03:59Z", said: "seen: the flyover opened on plain haze because the ground was laid 9.3-9.8 s after the press and the flyover lasts 9.5 s"}
+    tags: [every-picture]
+    picture: >
+      Is this picture readable? FAIL if more than about a third of it is near black (so dark that nothing can be made
+      out there), or if it is almost all one flat colour (plain haze, white, grey or black) with no ground, horizon or
+      subject to be seen. A night picture that is dark but still shows shapes, lights or fire is a PASS.
+    clip:
+      - {measure: blank, max: 0}
+    owner: camera
+    weight: high
+    known: open
+    known_note: "the camera's dark reading is blind and switched off; the early ground for the flyover was reverted in 1.5"
+
+  - id: lens-clear
+    title: Nothing blocks the lens
+    words: >
+      The lens is always clear: no leaf, branch, smoke, burst, fireball, effect card, aerial, wire or part of the
+      camera's own tank, ship or aircraft sits close in front of it or crosses the frame in front of the subject,
+      unless the shot is meant to be from inside.
+    from:
+      who: Brian
+      when: "2026-11-25 16:35Z"
+      said: "seen (his screenshot): a thin dark line from the bottom to the top of the picture over a Sherman: the tank's aerial right in front of the lens"
+      also:
+        - {who: art director, when: "2026-11-20 14:43Z", said: "seen: Pearl Harbor shot 06's camera sat inside the smoke; muzzle-flash and burst cards within 4 m of the lens black the picture"}
+        - {who: camera director, when: "2026-11-23", said: "seen: hedge leaves over the lens in the bocage; the camera placed inside bursts and fuel balls at tank kills"}
+    tags: [every-picture]
+    picture: >
+      Is anything very close to the lens hiding part of the view: a big blurred leaf or branch, a soft blob of smoke or
+      fire filling a corner or more, a thin dark line (an aerial or a wire) running across most of the picture's height
+      or width, or a blurred piece of the camera's own vehicle or aircraft? FAIL naming it and where. Real things at a
+      normal distance (a tree behind a tank, smoke on the far side of the field) are a PASS.
+    owner: camera
+    weight: high
+    known: open
+    known_note: "the aerial was mended on the camera branch only (5d40c8f8); Pearl 06 fixed; hedge and burst cases open in part"
+
+  - id: subject-readable
+    title: Each shot shows its subject
+    words: >
+      Every named shot shows what its name says, big enough to read: the main aircraft about 45-70 px across on a
+      1920-wide picture and near the middle, a ship about a third of the width in a ship shot, the men or vehicles a
+      land shot is about in clear view; never specks in a void, and never empty sky, sea or hills where the subject
+      should be.
+    from:
+      who: art director
+      when: "2026-11-19"
+      said: "seen: planes 10-15 px specks in a white void; a carrier a small soft shape; 'the ships' picture framed hills with no ship"
+      also:
+        - {who: art director, when: "2026-11-24 03:04Z", said: "seen: the parachutes still showed empty sky (Bremen, as at Pearl Harbor)"}
+    tags: [air-battle, air-chase, air-bombs, sea-battle, sea-close, land-advance, land-close-men, land-vehicles, land-village, land-fall]
+    picture: >
+      The shot is meant to show what its description says. Does it, and is that subject big enough to read (an
+      aircraft at least about 2% of the picture's width, a ship about a third of the width in a ship shot, men or
+      vehicles clearly made out)? FAIL if the subject is missing (empty sky, sea or hills) or is only a speck. CAN'T
+      TELL if the picture has no description.
+    owner: camera
+    weight: normal
+    known: open
+    known_note: "air framing fixed by the framing laws; the Bremen parachutes still showed empty sky, carried to R2"
+
+  - id: camera-holds-subject
+    title: The camera holds its subject
+    words: >
+      A battle camera stays on one subject for at least about 8 s; to show something far away (over about 2 km) it
+      cuts instead of sweeping across the sky, and it never wanders from clump to clump every few seconds.
+    from:
+      who: 3D air thread
+      when: "2026-11-26 02:40Z"
+      said: "seen: with the fix camera the overview sweeps to another clump every 10-15 s: 22 fast pans a battle, median 2.8 km in 2 s"
+    tags: [air-battle]
+    later: "the cam lines' subject per frame and a check of how long each subject is held and how far the look travels a second (camera-smooth reads jumps, not holds)"
+    owner: air
+    weight: normal
+    known: open
+
+  - id: labels-move-with-subject
+    title: Labels stay with their units
+    words: >
+      A name tag or label on screen moves only with the thing it labels; it never hops on its own from one frame to
+      the next.
+    from:
+      who: 3D air thread
+      when: "2026-11-26 02:40Z"
+      said: "seen: formation name tags hop (6 hops of over 20 px a battle)"
+    tags: [air-battle]
+    later: "label screen boxes per frame in the facts file, or a strip measure that follows a label against its subject"
+    owner: air
+    weight: normal
+    known: open
+
+  - id: signs-never-cover
+    title: Labels never hide the action
+    words: >
+      On-screen tags, plates, boxes and route lines never cover the unit, flag, smoke or burst they are about: they sit
+      beside it, give way to the action, stay thin at close zoom, and never sit on roofs.
+    from:
+      who: art director
+      when: "2026-11-22"
+      said: "seen: unit tags drawn over smoke and over the action they label (land battle, general view)"
+      also:
+        - {who: art director, when: "2026-11-16", said: "seen (map): a gate's pointing box covered the flag on its plate; the raid's dashed route was 30 px cream slabs close up; a lamp sat on roofs; town plates cover flags in the Low Countries"}
+    tags: [land-opening, land-advance, map, map-army, map-city, map-raid]
+    picture: >
+      Does any on-screen label, name plate, box or drawn line cover a unit, its flag, smoke or a burst, so that the
+      thing it is about is partly hidden? Also FAIL if a route line is a thick slab instead of a thin line, or a sign
+      sits on top of houses. Say which label and what it hides.
+    owner: ui
+    weight: normal
+    known: open
+    known_note: "map route and lamp fixed (rounds 38-39); plates over flags and land tags over smoke open"
+
+  - id: film-catches-big-moments
+    title: The film shows the big moments
+    words: >
+      The battle film is on the big moments: every tank kill, barrage, bail-out and fall the battle books is seen on
+      screen, not left off camera.
+    from:
+      who: camera director
+      when: "2026-11-23 18:05Z"
+      said: "seen: the film missed tank kills (0 of 3 in Normandy before the fix); a radio barrage in the bocage finds no open place and is missed"
+    tags: [land-advance, land-vehicles, land-fall]
+    later: "director event lines (kill, barrage, bail-out) in the facts file, checked against the shot on screen at that moment"
+    owner: camera
+    weight: normal
+    known: open
+    known_note: "kills fixed (2341cbfe, 3 of 3); the barrage in the bocage open"
+
+  - id: pace-changes-eased
+    title: Speed-ups and slow-downs are eased
+    words: >
+      When the battle clock changes pace (fast forward to normal at first contact, and back at the wind-down) the
+      change is eased over at least about 1 s; the picture never brakes or races in one frame, and no aircraft leaves
+      its path when it does.
+    from:
+      who: 3D air thread
+      when: "2026-11-26 02:40Z"
+      said: "seen: the battle clock drops from x10 to x1 in one frame at first contact: everything brakes and every aircraft leaves its path once (median 7.8 m, up to 44 m)"
+    tags: [air-battle]
+    later: "the clock's pace per frame in the facts file (a change of at most 2x a frame); the picture jump it makes is already counted by camera-smooth"
+    owner: air
+    weight: normal
+    known: "off"
+    known_note: "fix part A built, row airSteady OFF"
+
+  - id: big-moments-at-normal-speed
+    title: Decisive moments play at normal speed
+    words: >
+      Bomb release, torpedo drop, hits and falls are always shown at normal speed (x1), never inside a fast-forward.
+    from:
+      who: air realism audit
+      when: "2026-11-22 04:42Z"
+      said: "seen: at Pearl Harbor and Midway the picture went to x20 two seconds after the torpedoes dropped; every bomb at Pearl and six of seven at Midway burst inside the fast-forward"
+    tags: [air-bombs, air-battle]
+    later: "the clock's pace at every bomb, torpedo, hit and fall in the facts file (fail when over 1)"
+    owner: air
+    weight: normal
+    known: unknown
+    known_note: "the build list says the strike is on; not confirmed"
+
+  # ---------------------------------------------------------------- air battles and raids
+
+  - id: raid-opening-shows-interceptors
+    title: The raid's opening shows the fighters
+    words: >
+      Every opening or establishing shot shows what it is about for most of its length: a raid's opening shows the
+      bombers and the fighters coming up to meet them, not empty ground and cloud. A shot whose subject is not there
+      yet is skipped or replaced, never shown empty.
+    from:
+      who: Brian
+      when: "2026-11-26 03:57Z"
+      said: "also in the begining of a raid it shows the ground and then clouds, I'm assuming its trying to show the interceptor planes coming but it never shows any planes"
+    tags: [air-flyover]
+    picture: >
+      Is at least one aircraft clearly visible in this picture (more than a speck: about 1% of the picture's width or
+      more)? If the shot's description names the fighters, the guard or the interceptors, are fighters (aircraft
+      smaller than the bombers) visible? FAIL if the picture is only ground, sea or cloud, or if the named fighters are
+      not there.
+    facts: opening-shows-both-sides
+    owner: air
+    weight: high
+    known: open
+    known_note: "the air thread is measuring it in his Epirus battle and Bremen (26 Nov 04:08Z)"
+
+  - id: aircraft-fly-smoothly
+    title: Aircraft fly without shaking
+    words: >
+      An aircraft's attitude changes smoothly: no trembling, rocking or wing kick from one frame to the next, its roll
+      and turn within what its type can do; a plane the camera follows holds steady on screen.
+    from:
+      who: Brian
+      when: "2026-11-24 22:30Z"
+      said: "seen: the planes shaking in the test video (fighters)"
+      also:
+        - {who: Brian, when: "2026-11-25 13:27Z", said: "the bomber is shaking in the video too like the fighter"}
+    tags: [air-chase, air-battle]
+    clip:
+      - {measure: stutter, max: 0}
+    owner: air
+    weight: high
+    known: open
+    known_note: "fighters fixed in 1.5.1 (trembling 74 of 143 to 0); boxed bombers open (R2). A shake on a strip also counts against camera-smooth: the fault's place (a part of the picture, not the whole view) says it is the plane"
+
+  - id: air-spacing-true
+    title: Aircraft keep real spacing
+    words: >
+      Aircraft keep their real spacing: no two groups share one point, pairs and fours fly at their real distances
+      (fighter pairs about 180-250 m apart), and only a few attackers wait round a bomber box, standing off; a fight
+      never looks like one packed swarm.
+    from:
+      who: Brian
+      when: "2026-11-25 14:59Z"
+      said: "the fighters are to close to each other ... they are to bunched together"
+    tags: [air-battle, air-chase]
+    picture: >
+      Are aircraft packed together unnaturally: two or more fighters overlapping or almost touching wingtip to wingtip,
+      or a tight swarm of ten or more fighters crowded round one bomber group? FAIL if so, saying where. Bombers in a
+      box with at least about one wingspan between them, and fighters spread out in pairs, are a PASS.
+    owner: air
+    weight: high
+    known: open
+
+  - id: planes-never-overlap
+    title: Aircraft never pass through each other
+    words: >
+      No two aircraft ever share space or pass through each other, and a formation never looks like one plane that
+      splits into several; a collision is at most a rare accident, shown with its result.
+    from:
+      who: Brian
+      when: "2026-11-25 13:39Z"
+      said: "the two british fighters clashed into each other and nothing happened"
+      also:
+        - {who: 3D air thread, when: "2026-11-26 02:40Z", said: "seen: nine Swedish wings drawn inside one another on two points (63 fighters shown as 14 places); they seem to split from one into several"}
+    tags: [air-battle, air-chase]
+    picture: >
+      Do any two aircraft overlap so that one is drawn inside or through the other (wings or bodies merged, two planes
+      in one spot)? FAIL saying where. Planes that only look close because one is far behind the other, with a clear
+      difference in size, are a PASS.
+    owner: air
+    weight: high
+    known: open
+    known_note: "pilot AI R2 open; the stacking fix (part A) is built with row airSteady OFF"
+
+  - id: aircraft-fly-under-power
+    title: Aircraft look like they fly forward
+    words: >
+      Every flying aircraft reads as moving forward under power: its airscrews show a turning disc or blur at every
+      range, it banks into its turns, its nose leads its path, something passes it (cloud, ground, flak, trails), and it
+      never seems to hang or glide on the spot.
+    from:
+      who: Brian
+      when: "2026-11-25 14:59Z"
+      said: "the fighters ... look like their gliding than moving forward"
+      also:
+        - {who: Brian, when: "2026-11-19 02:57Z", said: "seen (his reference clip): a plane outside not moving naturally, a fault the game must never show"}
+        - {who: feel design, when: "2026-11-25", said: "seen: no airscrew turns beyond 300 m; the overview rides along with the bombers so they barely move on screen"}
+    tags: [air-battle, air-chase, air-flyover, air-bombs]
+    picture: >
+      Look at each propeller-driven aircraft near enough to see its propellers. Are the running propellers drawn as a
+      spinning disc or blur? FAIL if a flying aircraft's propeller blades are drawn sharp and still, like a parked
+      plane's. (A jet, or one engine that is plainly dead and smoking, is not a fault.)
+    owner: air
+    weight: high
+    known: open
+    known_note: "fixed only in the fly-past of the preview; feel design steps 1-7 owed"
+
+  - id: dead-engine-smokes
+    title: A dead engine smokes
+    words: >
+      A dead engine stops or windmills and always trails dark smoke, far more than a light haze, from the engine and in
+      soot streaks along the tail; running engines keep turning.
+    from:
+      who: Brian
+      when: "2026-11-20 15:29Z"
+      said: "seen: he asked that an engine out trail much more dark smoke, from the engine and on the tail"
+      also:
+        - {who: air realism audit, when: "2026-11-22", said: "seen: dead engines' airscrews keep turning"}
+    tags: [air-chase, air-battle]
+    picture: >
+      Is there an aircraft with a damaged or dead engine (fire, a stopped propeller, a black hole or flames at an
+      engine)? If so, does that engine trail a dark stream of smoke at least as long as the plane? FAIL if a damaged
+      engine has no smoke or only a faint grey wisp. CAN'T TELL if no damaged engine can be seen.
+    owner: effects
+    weight: high
+    known: open
+    known_note: "engine-out soot built in the model files (B17EngineOut), not confirmed in the game; airscrews open"
+
+  - id: fighters-fire-on-attack
+    title: Attacking fighters open fire
+    words: >
+      A fighter making an attack pass fires (muzzle flash and tracer) in its last 1-2 s before it breaks away; no
+      fighter flies through or weaves among an enemy formation without firing.
+    from:
+      who: Brian
+      when: "2026-11-25 13:39Z"
+      said: "the spitfire in the video keeps weaving in and out of the bombers but doesnt actually shoot"
+    tags: [air-chase, air-battle]
+    picture: >
+      Is there a fighter plainly in an attack pass: close behind or diving at an enemy bomber, nose pointed at it,
+      within about five bomber lengths? If so, is it firing (flashes at its guns, or tracer lines from it)? FAIL if it
+      is in that pass and shows no fire. CAN'T TELL if no fighter is that close to an enemy.
+    owner: air
+    weight: high
+    known: "off"
+    known_note: "pilot AI R2 built with row smartPilots OFF"
+
+  - id: interceptors-approach-in-formation
+    title: Interceptors arrive in formation
+    words: >
+      Interceptors are seen approaching as a formation from their own direction before they break to attack, and they
+      and the escort react to each other: fighters choose between the escort and the bombers, never ignoring the
+      escort.
+    from:
+      who: Brian
+      when: "2026-11-25 13:39Z"
+      said: "when a bombing raid is intercepted I want the enemy fighters to come from a different direction towards them in formation and then break off to attack"
+      also:
+        - {who: Brian, when: "2026-11-25 13:40Z", said: "i also dont want the intercepting fighters to completely ignore the fighter escort"}
+    tags: [air-flyover, air-battle]
+    picture: >
+      Are fighters seen heading toward the bombers but not yet among them? If so, are they flying together in order
+      (pairs, fours or a line, evenly spaced) from one direction? FAIL if the approaching fighters are scattered singly
+      in every direction. CAN'T TELL if no approaching fighters are in view.
+    owner: air
+    weight: high
+    known: open
+    known_note: "pilot AI R2"
+
+  - id: aircraft-at-b17-standard
+    title: Every aircraft is the detailed model
+    words: >
+      Every aircraft drawn is the newest approved model of its type, at the new B-17's standard: framed glass, panel
+      lines, worn paint, real airscrews and markings; never an old low-detail copy.
+    from:
+      who: Brian
+      when: "2026-11-26 03:57Z"
+      said: "i want to see what it looks like? can we uplevel all the other aircraft to this bar now too?"
+      also:
+        - {who: Brian, when: "2026-11-15 03:56Z", said: "seen: he asked for aircraft with the same detail as the tanks"}
+        - {who: Brian, when: "2026-11-25 21:14Z", said: "seen: the game still draws the old B-17; the game's copies of seven types are 1.7-6.6x smaller than the workshop's"}
+    tags: [air-chase, air-battle]
+    picture: >
+      Look at the nearest aircraft, if it fills at least about a tenth of the picture's width. Does it show fine
+      detail: frames on its glass, panel lines on its skin, worn or chipped paint? FAIL if it is smooth and plain, with
+      flat untextured paint and blob-like windows. CAN'T TELL if no aircraft is that close.
+    owner: models
+    weight: high
+    known: "off"
+    known_note: "the fine B-17 is built (b17Fine) with its row OFF; the other aircraft open"
+
+  - id: aircraft-glass-and-windows-true
+    title: Aircraft glass and windows are right
+    words: >
+      An aircraft's shape and fittings match its type: a bomber's cockpit is flat framed panes (not a round bubble),
+      every window is there, and the B-17's tail gunner sits behind a squarish box of glass, not a round bubble.
+    from:
+      who: Brian
+      when: "2026-11-19 01:19Z"
+      said: "seen: the B-17's cockpit was round, windows were missing, and the tail gunner's window was a round bubble instead of a square box"
+      also:
+        - {who: Brian, when: "2026-11-20 15:29Z", said: "seen: more fittings of the B-17 that did not match its reference"}
+        - {who: Brian, when: "2026-11-21 20:31Z", said: "seen: the tail windows still wrong"}
+    tags: [air-chase]
+    picture: >
+      Is a bomber seen close? If so, is its cockpit glass made of flat framed panes, and are its side windows there? On
+      a B-17 (four engines, a tall fin) is the tail gunner's glass a squarish box at the very tail? FAIL if the cockpit
+      is a smooth round bubble, windows are missing (plain skin where the crew would look out), or the B-17's tail glass
+      is a round bubble. CAN'T TELL if no bomber is close.
+    owner: models
+    weight: high
+    known: "off"
+    known_note: "fixed in the model files (22 Nov); in the game only with b17Fine, which is OFF"
+
+  - id: aircrew-whole-at-stations
+    title: Air crews are whole, at their posts
+    words: >
+      Every crewman seen through glass or an opening is a whole figure (a head joined to his body by a neck, arms) at
+      his own station, wholly inside the aircraft, hands on his gun or sight; one gun and one man to an opening, and no
+      head cut off by a turret.
+    from:
+      who: Brian
+      when: "2026-11-19 02:57Z"
+      said: "seen (his reference clip): two gunners standing at one window, a fault the game must never show"
+      also:
+        - {who: Brian, when: "2026-11-19 01:20Z", said: "seen: a gunner's head cut off; it should be inside the turret with both hands on the guns"}
+        - {who: Brian, when: "2026-11-21 03:59Z", said: "make sure their necks connect to their heads"}
+        - {who: Brian, when: "2026-11-21 18:10Z", said: "the bombadier in the window doesnt have a body"}
+    tags: [air-chase]
+    picture: >
+      Through each window, opening and turret you can see into: does each crewman have a head joined by a neck to a
+      body, with arms reaching toward his gun or sight, and is he wholly inside the aircraft? FAIL if a man has no
+      body, a floating or cut-off head, sticks out through the skin, or two gunners share one window. CAN'T TELL if no
+      crew can be seen.
+    owner: models
+    weight: high
+    known: unknown
+    known_note: "bodies, necks and the B-17 crew are mended in the model files; whether the game's copies carry them was not found"
+
+  - id: no-inside-parts-through-skin
+    title: Nothing shows through a closed skin
+    words: >
+      No inside part (bomb load, engine, crew) shows through a closed skin: shut bomb doors, cowlings, hulls and turrets
+      are solid.
+    from:
+      who: 3D pre-check
+      when: "2026-11-21 13:15Z"
+      said: "seen: the Lancaster's racked bomb load shows through its shut bomb-bay doors"
+    tags: [air-chase, air-bombs]
+    picture: >
+      Can you see anything inside an aircraft through a part that should be solid: bombs showing through closed bomb
+      doors, an engine or crew seen through the skin? FAIL saying where. Open bomb doors with bombs in view are a PASS.
+    owner: models
+    weight: normal
+    known: unknown
+
+  - id: losses-look-varied
+    title: Aircraft go down in different ways
+    words: >
+      A battle shows several ways down (fire, a wing off, a spin, a break-up, ditching), no one way for over half the
+      losses, and some hit aircraft that do not go down.
+    from:
+      who: Brian
+      when: "2026-11-20 14:23Z"
+      said: "seen (after the Pearl Harbor film): every plane hit went down the same way with the same effects; not all planes that get hit should go down"
+    tags: [air-battle]
+    later: "a fall line per loss in the facts file (how it went down, and hits survived), counted per battle"
+    owner: air
+    weight: high
+    known: fixed
+    known_note: "ways down built and passed by the art director (21 Nov 04:00Z): a regression check"
+
+  - id: every-sides-losses-seen
+    title: Fighter losses are seen too
+    words: >
+      Every side's losses are seen: a falling fighter trails fire and smoke as plain as a falling bomber's, and the
+      camera shows some falls of every side that loses aircraft.
+    from:
+      who: Brian
+      when: "2026-11-21 05:43Z"
+      said: "seen (Bremen demo): he only saw bombers going down; the German fighters are never seen hit and falling with smoke"
+    tags: [air-battle, air-chase]
+    picture: >
+      Is an aircraft falling (nose down, on fire or breaking up)? If it is a fighter (smaller than the bombers, one
+      engine), does it trail fire or smoke at least as long as itself, as easy to see as a falling bomber's? FAIL if a
+      falling fighter shows no smoke or fire. CAN'T TELL if nothing is falling.
+    owner: air
+    weight: high
+    known: unknown
+
+  - id: tracer-streaks
+    title: Tracer is bright streaks
+    words: >
+      Tracer is short bright streaks along the line of fire from the gun, about one round in five, yellow to orange
+      (Brian's ask: yellow, about RGB 213,199,104; a nation palette may vary the hue), core brighter than its glow, at
+      least 4 times as long as it is wide; never round dots, pale lamps, cream lines (about 248,243,218) or hollow
+      tubes.
+    from:
+      who: Brian
+      when: "2026-11-18 15:00Z"
+      said: "seen: he asked for one round in five as yellow streaks"
+      also:
+        - {who: art director, when: "2026-11-16 15:18Z", said: "seen: map raid tracer drawn as round pale dots that read as stray lamps"}
+        - {who: art director, when: "2026-11-20", said: "seen: hollow tubes with a rim darker than the sky; all tracer the old yellow because the nation rows did not reach the game"}
+        - {who: art director, when: "2026-11-21 22:50Z", said: "seen: sea battle tracer cream (248,243,218), not yellow (Samar)"}
+    tags: [air-chase, air-battle, sea-battle, sea-close, map-raid]
+    picture: >
+      Are there bullets in flight (tracer)? If so, are they short bright streaks, clearly longer than they are wide,
+      yellow to orange, brightest in the middle? FAIL if tracer shows as round dots or blobs, as hollow tubes with a
+      darker rim, or as cream or white lines. CAN'T TELL if no tracer can be seen.
+    owner: effects
+    weight: high
+    known: open
+    known_note: "map tracer ruled 16 Nov; colours still to check; which colour ruling stands is to be settled"
+
+  - id: clouds-real
+    title: Clouds look like real clouds
+    words: >
+      Clouds have a lit side and a shaded side from one sun, crisp sunlit rims, flatter bases and shadows on the ground
+      or sea; never evenly shaded soft cotton balls, rows of one clump size, or a white fog for a sky.
+    from:
+      who: Brian
+      when: "2026-11-20 14:19Z"
+      said: "lets make the clouds look more real"
+      also:
+        - {who: art director, when: "2026-11-20", said: "seen (Pearl Harbor film): flat shading, soft blurry outlines like cotton, a white-fog sky, no cloud shadows on the sea"}
+    tags: [air-flyover, air-battle, air-chase, air-bombs, sea-battle]
+    picture: >
+      Look at the clouds. Do they have a bright sunlit side and a darker shaded side, crisp edges where the sun hits
+      them, and flatter bases? FAIL if they are evenly shaded soft blobs like cotton balls, rows of same-size clumps,
+      or the whole sky is a flat white fog. CAN'T TELL if no clouds show.
+    owner: air
+    weight: high
+    known: fixed
+    known_note: "rounds 15-18, passed 20 Nov 21:39Z: a regression check"
+
+  - id: hit-aircraft-show-damage
+    title: Hit aircraft show their damage
+    words: >
+      A hit aircraft shows its damage where it was hit (rows of bullet holes, flak tears, scorch), never a clean skin
+      under its smoke.
+    from:
+      who: Brian
+      when: "2026-11-18 19:33Z"
+      said: "if a plane gets hit show the bullet holes or flak holes"
+    tags: [air-chase, air-battle]
+    picture: >
+      Is there an aircraft close enough to see its skin that is plainly hit (smoking, burning, or with a dead engine)?
+      If so, does it show holes, tears or scorch on its skin? FAIL if a smoking or burning aircraft's skin is clean and
+      whole. CAN'T TELL if no hit aircraft is that close.
+    owner: air
+    weight: high
+    known: unknown
+    known_note: "damage layers built for 28 aircraft and handed over; not confirmed in the game"
+
+  - id: aircraft-paint-true-in-light
+    title: Aircraft keep their paint colours
+    words: >
+      An aircraft shows its true upper or lower camouflage from any view and against any background; no bloom or
+      cream wash over it, and the sun is kept out of the lens.
+    from:
+      who: art director
+      when: "2026-11-22 05:43Z"
+      said: "seen: strike aircraft seen from above over the sea glow cream instead of showing their upper paint; looking up-sun washes camouflage to cream"
+    tags: [air-battle, air-chase, air-bombs, sea-battle]
+    picture: >
+      Look at the aircraft. Can you see their paint colours (greens, greys, browns, blues or bare metal, with their
+      markings)? FAIL if an aircraft glows cream, white or pale yellow all over so its camouflage cannot be seen, or a
+      sun glare washes it out. CAN'T TELL if no aircraft is near enough to see colour.
+    owner: air
+    weight: normal
+    known: unknown
+
+  - id: air-ground-matches-place
+    title: Ground under air battles fits the place
+    words: >
+      The ground under an air battle matches the real place: inland targets over land, coastal ones on the right
+      coast, and the land in its region's colours under a neutral light (never a desert tan over green farm country).
+    from:
+      who: art director
+      when: "2026-11-24 02:17Z"
+      said: "seen: inland raids showed sea under the battle (Rhineland in France 1940, Dnepropetrovsk in 1942)"
+      also:
+        - {who: art director, when: "2026-11-20 23:27Z", said: "seen: the ground under an air battle rendered desert tan (saturation 0.40 against the ground thread's 0.06)"}
+    tags: [air-flyover, air-battle, air-bombs]
+    picture: >
+      The scene's place is given. FAIL if open sea fills the ground under the aircraft while the place named is inland
+      (for example the Rhineland, the Ruhr, Berlin or Dnepropetrovsk), or if the land is an even sandy desert tan while
+      the place is green farming country (England, northern France, Germany, the Low Countries). CAN'T TELL if the
+      ground cannot be seen.
+    owner: air
+    weight: normal
+    known: fixed
+    known_note: "sea under inland raids fixed in 1.5 (b413ae12); a neutral key light ruled: regression checks"
+
+  - id: flak-torn-not-balls
+    title: Flak looks like torn smoke
+    words: >
+      A flak burst is hanging smoke: torn, soft and see-through at its edges, dark grey to black, never a solid round
+      ball, disc or body; on the map and in 3D raids alike.
+    from:
+      who: Brian
+      when: "2026-11-16 03:15Z"
+      said: "dont like how the flak looks ... its solid ... and looks like a ball (he picked 'Hanging smoke' at 03:37Z)"
+      also:
+        - {who: art director, when: "2026-11-16 13:20Z", said: "seen: map raid flak drawn as 3-5 round soft discs (balls)"}
+    tags: [map-raid, air-flyover, air-battle, air-bombs]
+    picture: >
+      Are there flak bursts (dark puffs in the sky near the aircraft)? If so, are they ragged, torn smoke you can partly
+      see through? FAIL if they are solid round balls or discs with smooth edges. CAN'T TELL if no flak can be seen.
+    owner: effects
+    weight: high
+    known: fixed
+    known_note: "map flak fixed in round 37 (hanging smoke); 3D raid flak not yet judged"
+
+  - id: flak-in-number-and-hangs
+    title: Flak matches the guns and hangs
+    words: >
+      Flak comes in battery groups (about four bursts together) in number with the guns below (about 9-11 bursts at
+      once over heavy guns, 3-4 over light, at the map's playing height), and each burst hangs 25-40 s before it thins
+      away.
+    from:
+      who: art director
+      when: "2026-11-16 15:18Z"
+      said: "seen: only about 4-5 flak bursts over heavy guns from playing height (the brief says 9-11) and 1-2 over light (brief 3-4)"
+      also:
+        - {who: feel design, when: "2026-11-25", said: "seen: flak smoke in 3D raids lives only 9 s; over land it is thin and never in batteries of four"}
+    tags: [map-raid, air-battle, air-bombs]
+    later: "a flak line in the facts file: bursts alive against the target's gun level, each puff's age when it goes, and how they group"
+    owner: effects
+    weight: normal
+    known: open
+
+  - id: aa-guns-shown
+    title: Anti-aircraft guns can be seen
+    words: >
+      Defences the rules hold are visible: every city with anti-aircraft guns shows its gun pits round it on the map,
+      and flak and guns on the ground in its raids; guns and flak are never drawn where there are none.
+    from:
+      who: Brian
+      when: "2026-11-24 22:08Z"
+      said: "i also don't see any anti aircraft guns around the cities for flak"
+    tags: [map-city, air-bombs]
+    picture: >
+      Can you see anti-aircraft gun positions (small round gun pits or gun stands) round the city or the target? FAIL if
+      this is a near view of a capital or big city, or of a raid's target city, and none can be seen anywhere round it.
+      CAN'T TELL if the view is too far away to see small gun pits, or no city is in view.
+    owner: map
+    weight: high
+    known: open
+    known_note: "start-of-war guns ON in 1.5.1; guns on the ground in the 3D raid scene open (R2 flak brief)"
+
+  - id: air-nothing-pops
+    title: No aircraft pops in or out
+    words: >
+      No aircraft, cloud or effect appears or vanishes in sight in one frame, and no model visibly swaps its shape,
+      shadow or brightness between frames; new aircraft come in from off screen or fade in, and losses leave by
+      falling.
+    from:
+      who: air realism audit
+      when: "2026-11-22 04:42Z"
+      said: "seen: aircraft made and unmade in clear air, often within 100 m of another (79 within 300 m at Bremen)"
+      also:
+        - {who: 3D air thread, when: "2026-11-26 02:40Z", said: "seen: replacement fighters pop in (3 Swedes on screen); near, far and light shapes swap at 434 m (462 swaps a battle) and may flicker"}
+    tags: [air-flyover, air-battle, air-chase, air-bombs]
+    clip:
+      - {measure: pop, max: 0}
+    owner: air
+    weight: normal
+    known: open
+    known_note: "the shape swaps are not yet seen on the Mac"
+
+  - id: no-stand-in-aircraft
+    title: Every nation flies its own types
+    words: >
+      Every nation's aircraft are drawn as their own types; a generic stand-in model (a 'Fighter:' or 'Bomber:' shape)
+      never appears in a battle.
+    from:
+      who: 3D air thread
+      when: "2026-11-25 21:28Z"
+      said: "seen: Sweden is always one generic stand-in 'Fighter:SWE'; its type mix never reaches the 3D"
+      also:
+        - {who: air realism audit, when: "2026-11-22 04:42Z", said: "seen: at Midway the Wildcat and Devastator had no model and were drawn as a generic fighter and bomber"}
+    tags: [air-battle, air-chase]
+    later: "a check over the marks lines' type (or a model line per group) that fails on a stand-in type name"
+    owner: models
+    weight: normal
+    known: open
+    known_note: "the fighters need new models first"
+
+  - id: weapons-released-at-true-height
+    title: Torpedoes drop from wave-top height
+    words: >
+      Weapons are released from their real height: torpedoes from 10-25 m over the waves, dive bombers at the bottom
+      of their dive, level bombers from their bombing height.
+    from:
+      who: air realism audit
+      when: "2026-11-22 04:42Z"
+      said: "seen: torpedo planes dropped their torpedoes from about 4.2-4.5 km up instead of from wave-top height (Pearl Harbor, Midway)"
+    tags: [air-bombs]
+    picture: >
+      Is a torpedo being dropped, or just dropped, from an aircraft? If so, is that aircraft just above the waves (lower
+      than about two of its own wingspans)? FAIL if it is high above the sea with the ships small far below. CAN'T TELL
+      if no torpedo drop is shown.
+    owner: air
+    weight: normal
+    known: unknown
+
+  - id: heavy-bombers-bank-gently
+    title: Heavy bombers bank gently
+    words: >
+      Heavy bombers bank at most about 20 degrees, and after bombing a box turns for home as one body; they never bank
+      like fighters or scatter over kilometres.
+    from:
+      who: air realism audit
+      when: "2026-11-22 04:42Z"
+      said: "seen: heavy bombers banked 60 degrees like fighters, and after bombing the box fell apart (13 by 9 km)"
+    tags: [air-battle, air-bombs, air-chase]
+    picture: >
+      Is any four-engine bomber that is still flying under control banked steeply, its wings tilted more than about 20
+      degrees from level (a quarter of the way to upright is about 22)? FAIL saying which. A bomber falling out of
+      control does not count.
+    owner: air
+    weight: normal
+    known: open
+    known_note: "the bomb run is steadied; the box's turn for home open"
+
+  - id: contrails-on-high-raids
+    title: High raids leave vapour trails
+    words: >
+      High raids (about 7,200 m and up) draw white condensation trails behind the aircraft where the weather allows,
+      and raids fly at their true height.
+    from:
+      who: air realism audit
+      when: "2026-11-22 04:42Z"
+      said: "seen: no vapour trails are drawn (computed but never drawn); Bremen flies at about half its true height"
+    tags: [air-battle, air-flyover]
+    later: "the aircraft's height in the planes lines and a trails-drawn line (a still cannot tell the height)"
+    owner: effects
+    weight: normal
+    known: open
+
+  - id: falls-turn-at-followable-rate
+    title: Falling aircraft spin believably
+    words: >
+      A falling aircraft eases into its fall and turns at a rate the eye can follow (a fighter spins about 120-180
+      degrees a second, a heavy bomber 36-72), never snapping or spinning into a blur.
+    from:
+      who: air realism audit
+      when: "2026-11-22 04:42Z"
+      said: "seen: falling aircraft spin and roll 2-7x too fast (fighter median 360 degrees a second) and snap into the fall"
+    tags: [air-battle]
+    later: "each falling aircraft's spin and roll rate in the facts file (the planes lines carry no attitude)"
+    owner: air
+    weight: normal
+    known: unknown
+
+  - id: types-fly-own-speeds
+    title: Each aircraft type flies its own way
+    words: >
+      Each aircraft type flies at its own speeds and turns, and climbing costs speed; a battle never has every fighter
+      at one speed and every bomber at another.
+    from:
+      who: air realism audit
+      when: "2026-11-22 04:42Z"
+      said: "seen: every fighter flies at 120 m/s and every bomber at 85 m/s; climbing costs nothing"
+    tags: [air-battle]
+    later: "speed and turn per aircraft type in the facts file, with a spread check"
+    owner: air
+    weight: normal
+    known: open
+
+  - id: aircraft-first-seen-flying
+    title: Aircraft never hang still in the air
+    words: >
+      Every aircraft is first seen already flying, taking off or climbing; no aircraft stands still in the air, turns
+      about in one frame, or drops hundreds of metres between two views.
+    from:
+      who: 3D air thread
+      when: "2026-11-25 21:28Z"
+      said: "seen: a late-scrambled wing appears about 117 s after its scramble standing still on the target point at raid height, spins and lurches off"
+    tags: [air-battle]
+    later: "per group speed, heading and height per frame in the facts file (speed 0 while airborne, a heading change over 90 degrees or a height jump over 500 m between views)"
+    owner: air
+    weight: normal
+    known: open
+
+  - id: nose-art-on-us-bombers
+    title: American bombers carry nose art
+    words: >
+      Approved art reaches the game: American bombers show nose art from the painted set (about one in five bare),
+      never two alike in one group; other nations' bombers carry none.
+    from:
+      who: 3D air thread
+      when: "2026-11-25 01:10Z"
+      said: "seen: 200 nose arts were painted and passed but none is in the game"
+      also:
+        - {who: Brian, when: "2026-11-20 15:27Z", said: "seen: he asked for nose art; on 25 Nov 01:30Z: american only"}
+    tags: [air-chase]
+    picture: >
+      Are there American bombers (white star marking) close enough to see their noses? If three or more such noses can
+      be seen, does at least one carry a painted picture or name? FAIL if three or more visible American bomber noses
+      are all bare, or two side by side carry the same painting. CAN'T TELL if fewer than three such noses can be seen.
+    owner: air
+    weight: normal
+    known: open
+    known_note: "R2 wiring behind a switch"
+
+  - id: battle-end-agrees
+    title: The end agrees with the result
+    words: >
+      Everything a battle shows at its end (the bar, the music, the words) agrees with the booked result on the after
+      card.
+    from:
+      who: playtester
+      when: "2026-11-23 17:00Z"
+      said: "seen: the end bar and the music disagreed with the after card in 34 of 55 hand-overs to the staff, and in some unopposed fights"
+    tags: [air-after-card, land-after-card, sea-after-card]
+    picture: >
+      Does everything on this end card name the same result (the same winner, or the same draw, in its heading, its bar
+      and its words)? FAIL if one part names one side as the winner and another part names the other. CAN'T TELL if the
+      card does not say who won.
+    owner: ui
+    weight: normal
+    known: fixed
+    known_note: "fixed in 1.5 (72bcc46c): a regression check"
+
+  # ---------------------------------------------------------------- ships, fleets and sea battles
+
+  - id: wake-trails-behind
+    title: Wakes trail behind ships
+    words: >
+      A ship's wake always trails behind her along the way she actually sailed (within about 25 degrees of the back of
+      her track): never toward the same side of the screen by habit, never ahead of the bow or off her side, and it
+      never swings round when the camera turns. Only fleets seen to sail or arrive in the run can be judged: a fleet
+      only ever seen at rest has no known heading (headings are not saved on a new game or a load), and a fleet in
+      harbour faces the table on purpose and shows no wake in port, which is not a fault.
+    from:
+      who: Brian
+      when: "2026-11-26 03:50Z"
+      said: "the wake of the boats when moving don't follow the direction they came from (his screenshot of the North Sea '45 ships' fleet)"
+      also:
+        - {who: art director, when: "2026-11-26 05:18Z", said: "pass line: the wake at rest within 25 degrees of the back of her track (a short sail with a late corner can be about 20 degrees off); judge only fleets seen to sail or arrive"}
+    tags: [map-fleet-sailing, map-fleet-rest, sea-battle, sea-close]
+    picture: >
+      Judge only ships or fleets that the shot's description says sailed or arrived in this run, or that are plainly
+      under way in it; for any other fleet answer CAN'T TELL. For each of those with white foam or a pale trail on the
+      water: is the trail behind her stern, opposite her bow, and in line with her within about 25 degrees? FAIL if a
+      trail leaves from the bow or the side, or if three or more such fleets facing different ways all trail to the same
+      side of the screen. A fleet in harbour with no trail is not a fault.
+    facts: fleet-bow-on-course
+    owner: navy
+    weight: high
+    known: "off"
+    known_note: "fix tc.Map.FleetHeading built (Play top-up 93a117038), row fleetheading OFF until the Mac check (row P42) passes: flagged every night until then"
+
+  - id: wakes-widen-and-fade
+    title: Wakes widen and fade astern
+    words: >
+      A wake is sized to its ship and grows with her speed; it widens, breaks up and fades astern in two tones (bright
+      at the stern, greyer behind), never a flat white ribbon or a ruled stripe of even width. A ship in harbour,
+      stopped or sinking shows no passage wake, and a wake never runs across another ship's hull.
+    from:
+      who: Brian
+      when: "2026-11-15 03:57Z"
+      said: "seen: the map's ship wake looked like white paint: it did not widen, it was one tone, and the bow wave was a ruled dotted line"
+      also:
+        - {who: art director, when: "2026-11-21 22:50Z", said: "seen: sea battle wakes are crisp lines of constant width and, close up, flat white ribbons"}
+        - {who: art director, when: "2026-11-25", said: "seen (map): a wake ribbon runs under another fleet's hulls; no passage wake when a fleet comes into harbour"}
+    tags: [map-fleet-sailing, map-fleet-rest, sea-battle, sea-close]
+    picture: >
+      Look at each wake behind a moving ship. Does it widen and fade with distance behind the stern, breaking into foam?
+      FAIL if a wake is a flat white stripe of even width and brightness, a ruled dotted line, or runs over another
+      ship's hull; also FAIL if a ship tied up in harbour trails a long wake. CAN'T TELL if no wake can be seen.
+    owner: navy
+    weight: high
+    known: open
+    known_note: "map wake accepted (22e868e); the harbour passage wake open; the sea battle wake passed its own checks, Mac re-shoot owed"
+
+  - id: ships-detailed
+    title: Ships are as detailed as tanks
+    words: >
+      Ships carry tank-level detail: plating, fittings, weathering as streaks running down from fittings (never even
+      stripes, and light wear never reads as rust), hit marks where hit; they ride and heel in the sea.
+    from:
+      who: Brian
+      when: "2026-11-25 12:53Z"
+      said: "the ships to be more detailed like the tanks? I want to keep upleveling the graphics and smoothness of how they move and act"
+      also:
+        - {who: art director, when: "2026-11-25 20:28Z", said: "seen: the U-boat's weathering still read as stripes, and light wear read as rust"}
+    tags: [sea-close]
+    picture: >
+      Look at the nearest ship, if it fills at least about a quarter of the picture's width. Does its hull show plating
+      lines, deck fittings, and weathering that runs down in streaks from the fittings? FAIL if the hull is plain and
+      smooth like a toy, the weathering is even stripes, or light wear shows as rust-orange all over. CAN'T TELL if no
+      ship is that close.
+    owner: navy
+    weight: high
+    known: "off"
+    known_note: "R2 in progress behind switches that are OFF"
+
+  - id: hulls-never-overlap
+    title: Ships never sail through each other
+    words: >
+      No two hulls ever overlap or pass over each other; ships give way and slow down.
+    from:
+      who: Brian
+      when: "2026-11-22 05:31Z"
+      said: "ships are turning into each other and going over each other"
+    tags: [sea-battle, sea-close]
+    picture: >
+      Do any two ships overlap, one hull drawn into or over another? FAIL saying where. Ships close together with water
+      between them, or one plainly far behind the other, are a PASS.
+    owner: navy
+    weight: high
+    known: fixed
+    known_note: "the picture fixed in R2 (KeepClear, 0 hulls touching); the battle rules' side not built"
+
+  - id: ships-clear-own-torpedoes
+    title: Ships keep out of own torpedoes
+    words: >
+      Ships never sail into the running path of their own side's torpedoes, and tubes fire only on a clear line.
+    from:
+      who: Brian
+      when: "2026-11-25 12:52Z"
+      said: "the friendly ships would pass though right in front of torpedoes"
+    tags: [sea-battle]
+    later: "torpedo and ship positions in the facts file (any own ship inside a running torpedo's track ahead of it)"
+    owner: navy
+    weight: high
+    known: "off"
+    known_note: "R2 built with the own-water switch OFF"
+
+  - id: splashes-tall
+    title: Splashes are tall and dramatic
+    words: >
+      Every shell, bomb or torpedo that strikes the water raises a column sized to the weapon, with a dark ring at its
+      foot and mist that hangs; never a low cotton-wool mound. Misses are shown too.
+    from:
+      who: Brian
+      when: "2026-11-25 12:52Z"
+      said: "i want the water splashes mroe dramatic"
+      also:
+        - {who: art director, when: "2026-11-22 05:43Z", said: "seen: one Samar frame had no splashes at all"}
+    tags: [sea-battle, sea-close, air-bombs]
+    picture: >
+      Are there shell or bomb splashes on the water? If so, is each a tall white column of water, clearly taller than
+      it is wide? FAIL if the splashes are low rounded mounds like cotton wool. CAN'T TELL if no splash can be seen.
+    owner: navy
+    weight: high
+    known: "off"
+    known_note: "R2 splash rows built, OFF"
+
+  - id: sea-reads-real
+    title: The sea looks like real sea
+    words: >
+      The sea's brightness falls in bands by distance: near the horizon about 0.8-0.9 of the sky just above it, round
+      the ships about 0.55-0.7, nearest about 0.3-0.45; no long stripes in the far sea; whitecaps grow with the wind and
+      are never flat blotches; ships roll and pitch by class and sea, never bobbing like toys.
+    from:
+      who: Brian
+      when: "2026-11-21 23:37Z"
+      said: "make the water more realistic"
+      also:
+        - {who: art director, when: "2026-11-22 05:43Z", said: "seen: the far sea dropped to 60-80 under a sky of about 220, with 40-level stripes; near whitecaps flat blotches"}
+    tags: [sea-battle, sea-close]
+    picture: >
+      Look at the sea near the horizon. Is the far sea nearly as bright as the sky just above the horizon? FAIL if the
+      far sea is a dark band much darker than the sky above it (well under three quarters as bright), if the sea shows
+      long parallel stripes of light and dark, or if the near whitecaps are flat blotches. CAN'T TELL if no horizon is
+      in view.
+    owner: navy
+    weight: high
+    known: open
+    known_note: "built (bed9bb60); items still open"
+
+  - id: smoke-no-hard-edge
+    title: Smoke never ends in a hard line
+    words: >
+      Smoke never ends on a hard straight edge; columns thin, spread and fade out into the sky.
+    from:
+      who: art director
+      when: "2026-11-25 14:01Z"
+      said: "seen: a sinking U-boat's black smoke ends on a ruled straight line at the horizon"
+    tags: [sea-battle, sea-close, land-vehicles, land-village, land-fall, air-bombs, map-raid, map-city]
+    picture: >
+      Is there a column of smoke? Does it thin and fade out softly at its edges and top? FAIL if any smoke ends on a
+      sharp straight edge or line (for example cut off flat along the horizon). CAN'T TELL if there is no smoke.
+    owner: effects
+    weight: normal
+    known: open
+
+  - id: torpedo-salvo-fans
+    title: Torpedo salvos fan out
+    words: >
+      A torpedo salvo fans out; its tracks are short (about 100-200 m), widen and fade; never a parallel grid of long
+      even lines.
+    from:
+      who: art director
+      when: "2026-11-21 22:50Z"
+      said: "seen: torpedo tracks too long and even; one salvo ran in a parallel 3 by 3 grid (Samar)"
+    tags: [sea-battle]
+    picture: >
+      Are there torpedo tracks (thin pale lines on the water)? If so, do the tracks of one salvo spread apart like a fan
+      and fade behind? FAIL if they run as parallel rows in a grid, or as long even lines that do not fade. CAN'T TELL
+      if no torpedo track can be seen.
+    owner: navy
+    weight: normal
+    known: unknown
+
+  - id: ship-breaks-torn
+    title: Broken ships look torn
+    words: >
+      Destruction at sea looks broken, never cut: a ship that breaks shows torn plating, steam and smoke from the gap,
+      and boiling water and an oil sheen where she goes under; never a clean sawn cut.
+    from:
+      who: art director
+      when: "2026-11-21 22:50Z"
+      said: "seen: a ship breaking in two along a clean sawn cut, like a model sawn in half (Samar 'break')"
+    tags: [sea-close, sea-battle]
+    picture: >
+      Is a ship broken or breaking apart? If so, are the edges of the break ragged and torn, with smoke or steam? FAIL
+      if the break is a clean straight cut with smooth faces, like a model sawn in half. CAN'T TELL if no broken ship is
+      shown.
+    owner: navy
+    weight: normal
+    known: open
+
+  - id: fire-real
+    title: Fire looks like fire
+    words: >
+      Fire is ragged, flickering tongues with a yellow heart and deep orange (middle about RGB 218,129,36), rising from
+      the place that burns, under dark smoke; never cones, smooth balls or candles, and never peach, salmon or pink.
+    from:
+      who: Brian
+      when: "2026-11-23 14:44Z"
+      said: "the tank on fire doesnt look realistic"
+      also:
+        - {who: Brian, when: "2026-11-21 18:30Z", said: "the explosions should be bigger and more more realistic as well as the fire"}
+        - {who: art director, when: "2026-11-21 22:50Z", said: "seen: ship fires drawn as orange cones (Samar)"}
+        - {who: art director, when: "2026-11-18 12:48Z", said: "seen: flames read peach and as smooth balls in the model clips"}
+        - {who: art director, when: "2026-11-25", said: "seen: flames standing up like candles; a salmon flame in Normandy cut 5"}
+    tags: [land-vehicles, land-village, land-fall, sea-battle, sea-close, air-chase, air-battle]
+    picture: >
+      Is there fire? If so, is it ragged, uneven tongues of flame, yellow at the heart and deep orange, with dark smoke
+      rising? FAIL if the flames are smooth cones, round balls or upright candle shapes, or are peach, salmon or pink.
+      CAN'T TELL if there is no fire.
+    owner: effects
+    weight: high
+    known: open
+    known_note: "land film fire ON and passed by the art director; ship fire cones not judged since"
+
+  - id: light-matches-hour
+    title: Night battles are dark
+    words: >
+      The scene's light matches the battle's hour: a night battle is dark under a night sky, lit only by the moon,
+      flares, gun flashes and fire; dawn and dusk are low and warm; never a daylight sky at night.
+    from:
+      who: storms thread
+      when: "2026-11-25 04:00Z"
+      said: "seen: every sea battle was lit as day; the convoy fought by night had a daylight sky"
+      also:
+        - {who: art director, when: "2026-11-25 14:01Z", said: "seen: the night convoy lit as day on the Mac pass"}
+    tags: [sea-battle, sea-close]
+    picture: >
+      Does the shot's description say it is at night? If so, is the picture dark under a night sky? FAIL if a night shot
+      has a bright blue daytime sky or full sunlight. CAN'T TELL if the description gives no hour.
+    owner: navy
+    weight: normal
+    known: "off"
+    known_note: "R2 step 11 built, OFF"
+
+  - id: hits-burst-where-they-land
+    title: Hits burst where they land
+    words: >
+      Every hit is seen where it lands: a bomb or shell hit on a ship bursts on the ship at deck height, never hidden at
+      the waterline inside the hull.
+    from:
+      who: sea scene thread
+      when: "2026-11-21 13:49Z"
+      said: "seen: a bomb or shell hit on a ship laid its blast at the waterline inside the hull, so it was not seen"
+    tags: [air-bombs, sea-battle, sea-close]
+    picture: >
+      Is a ship being hit (a bomb or shell landing on her)? If so, is the explosion on the ship itself, at or above her
+      deck? FAIL if the burst is hidden inside the hull or shows only as a glow at the waterline. CAN'T TELL if no hit
+      is shown.
+    owner: air
+    weight: normal
+    known: open
+    known_note: "the deck fix is built but not wired in"
+
+  - id: ships-fly-flags
+    title: Ships fly their flags
+    words: >
+      Every surface ship in sight flies her nation's flag (an ensign at the stern or the mast), and keeps it while she
+      sinks until it goes under.
+    from:
+      who: sea scene thread
+      when: "2026-11-26 04:05Z"
+      said: "seen (audit for Brian's marks rule): no ship flies a flag; every ship file has a flag socket and nothing reads it"
+      also:
+        - {who: Brian, when: "2026-11-26 03:56Z", said: "same for plane, troops, and ships"}
+    tags: [sea-close]
+    picture: >
+      Look at each surface ship close enough to see her masts and stern (at least about a quarter of the picture's
+      width). Does she fly a flag? FAIL naming any that flies none. CAN'T TELL if no ship is that close.
+    owner: navy
+    weight: normal
+    known: "off"
+    known_note: "built OFF (ship flags lane)"
+
+  - id: ships-fire-back
+    title: Ships fire back at aircraft
+    words: >
+      A ship under air attack fires back: tracer streams and flak bursts rise from her guns, in every navy.
+    from:
+      who: Brian
+      when: "2026-11-21 18:06Z"
+      said: "they can fire machine gun fire and flak guns at them just like real life"
+    tags: [air-bombs, sea-battle]
+    picture: >
+      Are aircraft attacking ships in this picture? If so, are there tracer lines or flak bursts rising from the ships?
+      FAIL if ships under attack show no fire at all. CAN'T TELL if no attack on ships is shown.
+    owner: air
+    weight: high
+    known: unknown
+
+  - id: sinking-ships-shed-crew
+    title: Sinking ships shed their crew
+    words: >
+      A sinking ship sheds her crew: men jump, swim and cling to wreckage, and rafts appear, on the side away from her
+      list.
+    from:
+      who: Brian
+      when: "2026-11-22 05:32Z"
+      said: "sailors should jump in the water if the boat is going down"
+    tags: [sea-close]
+    picture: >
+      Is a ship sinking (listing, low in the water or going under)? If so, are there men in the water, jumping from her
+      or on rafts? FAIL if a sinking ship close enough to see people shows nobody. CAN'T TELL if no sinking ship is
+      close.
+    owner: navy
+    weight: high
+    known: unknown
+
+  # ---------------------------------------------------------------- the campaign map
+
+  - id: map-nothing-pops
+    title: Nothing on the map pops or jumps
+    words: >
+      Nothing on the map appears, vanishes or jumps in one frame: a piece that changes place travels there visibly, a
+      train at the end of its line turns back, carries on or fades, and fine ground detail fades in as the camera comes
+      down instead of popping.
+    from:
+      who: Brian
+      when: "2026-11-16 17:24Z"
+      said: "when they get to the end of the line they just vanish (the little trains)"
+      also:
+        - {who: Brian, when: "2026-11-24 18:13Z", said: "when i move a navy I want to see the boats sail to it (the ships jumped to the new sea)"}
+        - {who: 3D builder, when: "2026-11-17 12:05Z", said: "seen: the fine ground pops when the map pans fast"}
+    tags: [map, map-fleet-sailing, map-army, map-raid, map-city]
+    clip:
+      - {measure: pop, max: 0}
+    owner: map
+    weight: high
+    known: fixed
+    known_note: "trains and sailing ships fixed (regression checks); the fine ground pop not confirmed"
+
+  - id: map-ships-by-water
+    title: Ships stay on the water
+    words: >
+      Ships on the map are only ever on water and sail only by water; no ship sits on land or sails across it.
+    from:
+      who: Brian
+      when: "2026-11-24 18:13Z"
+      said: "when i move a navy I want to see the boats sail to it (the fix also stopped fleets sailing over land)"
+    tags: [map-fleet-sailing, map-fleet-rest]
+    picture: >
+      Is any ship or fleet piece sitting on land (on green, brown or snowy ground away from the water's edge)? FAIL
+      saying which. Ships in a harbour at the shore are a PASS.
+    owner: navy
+    weight: high
+    known: fixed
+    known_note: "no sailing over land since 96eba36b: a regression check"
+
+  - id: map-water-moves
+    title: Map water is alive
+    words: >
+      Open water on the map always moves, with swell and bright glints on the crests; lakes at about half the sea's
+      strength, and night at about half; never frozen still, never crawling like static.
+    from:
+      who: Brian
+      when: "2026-11-16 18:45Z"
+      said: "can we make the ocean and water ripple and move so its not stagment?"
+    tags: [map, map-fleet-sailing, map-fleet-rest]
+    picture: >
+      Look at the open sea. Does its surface show swell or ripples and small bright glints? FAIL if the open sea is one
+      flat even colour with no texture at all, or looks like grainy static. CAN'T TELL if no open sea is in view.
+    owner: map
+    weight: high
+    known: fixed
+    known_note: "built 1432 with mends, glints passed 1450; foam on stepped coasts and lakes at half strength not confirmed"
+
+  - id: every-map-region-detailed
+    title: Every map region as rich as Europe
+    words: >
+      Every theater's map is as detailed as Europe's at the same height: towns, rivers and fields of a natural size per
+      area, carved mountains; no region left as plain bare ground.
+    from:
+      who: Brian
+      when: "2026-11-17 15:20Z"
+      said: "make the world maps as detailed as the europe one"
+    tags: [map, map-city]
+    picture: >
+      Where land fills most of this map picture, does it show towns, rivers or roads, and field patterns or relief? FAIL
+      if the land is mostly plain bare ground with fewer than three towns and no rivers, or the mountains are flat
+      colour with no relief. CAN'T TELL if the view is mostly sea or too high to see towns.
+    owner: map
+    weight: high
+    known: open
+    known_note: "in progress (cities, rivers; Asia's cities built OFF)"
+
+  - id: own-units-seen-on-ally-fields
+    title: Your units show wherever based
+    words: >
+      The player's own units are visible wherever they are based: his aircraft on an ally's airfield show in his
+      colours with his pennant, and a field can be picked from working height.
+    from:
+      who: Brian
+      when: "2026-11-24 17:59Z"
+      said: "i cant click on the london airfield. when i have a unit on an allied airfield there is no way to know its there"
+    tags: [map-city]
+    picture: >
+      Does the shot's description say the player has aircraft on an ally's airfield here? If so, can parked planes in a
+      second colour or with a pennant be seen on that field? FAIL if all the parked planes look the same, in one
+      nation's colours. CAN'T TELL if the description says no such thing or no airfield is in view.
+    owner: map
+    weight: high
+    known: fixed
+    known_note: "fixed in 1.5.1 and R2: a regression check"
+
+  - id: map-no-ruled-lines
+    title: No ruled lines or grids on map
+    words: >
+      Fog, weather, coasts and ground on the map never show ruled lines, straight streaks, stripes or a chequer of
+      squares; the fog of war is haze over real ground whose border fades in over about 24 px, never a drawn edge.
+    from:
+      who: Brian
+      when: "2026-11-16 21:05Z"
+      said: "i dont like the lines across (the fog of war)"
+      also:
+        - {who: art director, when: "2026-11-25", said: "seen: a chequer of sand and green squares on the shore east of New York (likely an old still taken before the mend)"}
+        - {who: graphics thread, when: "2026-11-25 04:54Z", said: "seen: the winter sky's grain read as ruled dashes over France"}
+    tags: [map, map-city, map-army]
+    picture: >
+      Do you see straight parallel lines, stripes, rows of dashes, a chequer of squares, or a hard drawn line round the
+      dark fogged ground, anywhere on the land, sea or fog? FAIL saying where. Real roads, railways, borders and field
+      edges are a PASS.
+    owner: map
+    weight: high
+    known: fixed
+    known_note: "fog built 1454 and passed (a regression check); the New York chequer likely a false alarm; the winter grain mend awaits Mac frames"
+
+  - id: rivers-end-at-coast
+    title: Rivers end at the coast
+    words: >
+      Rivers end at the coast; no river line is drawn out over the sea.
+    from:
+      who: art director
+      when: "2026-11-17 16:33Z"
+      said: "seen: three river courses ran out over the sea (Sittang, Amazon, St Lawrence)"
+    tags: [map]
+    picture: >
+      Does any river line (a thin blue or dark line) carry on across the sea beyond the coast? FAIL saying where. CAN'T
+      TELL if no river mouth is in view.
+    owner: map
+    weight: normal
+    known: unknown
+    known_note: "a mend was asked"
+
+  - id: fleet-readable-day-night
+    title: Fleets read by day and night
+    words: >
+      What happens to a fleet reads from working height by day and by night: the fleet stands out from its own
+      selection mark, the seas in reach stay visible at night, and a sinking shows smoke and white water.
+    from:
+      who: art director
+      when: "2026-11-15 02:56Z"
+      said: "seen: by day the fleet in hand was lost in its own pale disc; by night the rings of the seas in reach went too dark; a sinking needed a cue"
+    tags: [map-fleet-sailing, map-fleet-rest]
+    picture: >
+      Can each fleet piece be made out clearly against the sea and against any pale disc or ring drawn round it? FAIL
+      if a fleet is lost inside its own pale selection disc, or at night the rings round the seas are too dark to see.
+      CAN'T TELL if no fleet is in view.
+    owner: map
+    weight: normal
+    known: unknown
+    known_note: "the sinking cue closed in round 19; the disc and rings asked as fixes"
+
+  - id: smoke-takes-scene-light
+    title: Smoke darkens with the light
+    words: >
+      Smoke takes the scene's light: at dusk and at night it is no brighter than the lit ground near it (only a flash or
+      a fire may glow), never pale and glowing like fog.
+    from:
+      who: art director
+      when: "2026-11-16 13:20Z"
+      said: "seen: at dusk and night the map's old smoke kept its day colour and glowed like fog"
+    tags: [map-raid, map-city]
+    picture: >
+      Is this a dusk or night picture with smoke in it? If so, is the smoke dark, no brighter than the ground near it
+      except where fire lights it? FAIL if smoke glows pale grey or white like fog against the dark. CAN'T TELL if it is
+      day or there is no smoke.
+    owner: map
+    weight: normal
+    known: fixed
+    known_note: "fixed in round 37: a regression check"
+
+  - id: map-weather-neutral
+    title: Map weather dims without a tint
+    words: >
+      Weather on the map dims the land neutrally (to about 70-85% of its clear brightness) with no colour cast: no cyan
+      or blue wash over the land, and the sea dimmed, not dyed.
+    from:
+      who: graphics thread
+      when: "2026-11-25 04:54Z"
+      said: "seen: the map's closed winter sky washed France cyan (red to green 0.67-0.76, blue to green 1.19-1.30)"
+    tags: [map, map-city, map-army]
+    picture: >
+      Is part of the map under cloud or weather? If so, does the land under it keep its own colours, only darker? FAIL
+      if the land under the weather is washed cyan, blue or another tint that the clear land beside it does not have.
+      CAN'T TELL if no weather is in view.
+    owner: map
+    weight: normal
+    known: unknown
+    known_note: "mend built by the city glance thread; Mac frames owed"
+
+  - id: map-night-not-fog
+    title: Night on the map is not fog
+    words: >
+      Night never reads as fog or any other sign: the player's own ground by night is about 0.6 of its day
+      brightness, at least 1.5 times as bright as the fog beside it, and on bare ground no bluer than the fog (snow may
+      be bluer).
+    from:
+      who: Brian
+      when: "2026-11-17"
+      said: "America looks fogged (he took the night for fog)"
+    tags: [map, map-city, map-army]
+    picture: >
+      Is this a night view of the map with fogged (unseen) ground beside the player's own ground? If so, is the
+      player's own ground clearly brighter than the fog beside it? FAIL if the two are equally dark, so the night looks
+      like fog. CAN'T TELL if it is day or no fog is in view.
+    owner: map
+    weight: high
+    known: fixed
+    known_note: "passed in builds 1584-1598: a regression check"
+
+  - id: agents-seen-in-chosen-look
+    title: Spies show, in the chosen look
+    words: >
+      Every piece the player owns or has uncovered shows at working height, in the look Brian picked: an agent is a
+      small figure in a trench coat behind an open newspaper, never one holding a lantern.
+    from:
+      who: Brian
+      when: "2026-11-24 04:16Z"
+      said: "i didnt see spies when i played"
+      also:
+        - {who: Brian, when: "2026-11-22 03:43Z", said: "make the spys look better. why are they holding lantern?"}
+    tags: [map-city]
+    picture: >
+      Is there a small standing agent (spy) figure near the city? If so, is it a man in a trench coat behind an open
+      newspaper? FAIL if an agent figure holds a lantern, or if the shot's description says agents are there and none
+      can be seen. CAN'T TELL otherwise.
+    owner: map
+    weight: high
+    known: "off"
+    known_note: "R2 network of agents built behind an OPTIONS switch; whether look C and the network are ON in the Play build not found"
+
+  - id: bombed-targets-smoke
+    title: Bombed targets keep smoking
+    words: >
+      Damage from a raid stays visible: black smoke rises over a bombed town or target from the raid through the next
+      month.
+    from:
+      who: Brian
+      when: "2026-11-16 00:55Z"
+      said: "if a city or target gets bombed, have it have black smoke for the next turn"
+    tags: [map-raid, map-city]
+    picture: >
+      Does the shot's description say this town or target was bombed (this month or last)? If so, is dark smoke rising
+      over it? FAIL if a bombed target shows no smoke. CAN'T TELL if the description does not say it was bombed.
+    owner: map
+    weight: high
+    known: fixed
+    known_note: "built in round 35: a regression check"
+
+  - id: signs-of-ww2
+    title: Signs belong to WW2
+    words: >
+      Every sign, badge and small figure reads as its own war at its drawn size: WW2 kit (steel helmet, rifle, field
+      uniform), nothing of another era (no bicorne or shako hats, muskets, plumes or Napoleonic coats).
+    from:
+      who: Brian
+      when: "2026-11-16 13:50Z"
+      said: "looks like napolean (the infantry corps' ready sign on the month card)"
+    tags: [ui, map-army]
+    picture: >
+      Look at soldier signs, badges and small figures on cards and on the map. Do they wear WW2 kit (steel helmets or
+      field caps, rifles)? FAIL if any looks like a soldier of another era (a bicorne or shako hat, a musket, a plume, a
+      long tailed coat). CAN'T TELL if no soldier sign can be seen.
+    owner: ui
+    weight: high
+    known: fixed
+    known_note: "redrawn by the art director (round steel helmet, rifle and bayonet): a regression check"
+
+  - id: menu-no-flicker
+    title: Menus never flicker on a click
+    words: >
+      A click never shows a half-laid card: no frame where the words draw at zero size or squashed onto one line, and no
+      jump in a card's height before it settles.
+    from:
+      who: Brian
+      when: "2026-11-22 17:35Z"
+      said: "when you click a something on the menu it flickers"
+      also:
+        - {who: Brian, when: "2026-11-24 02:56Z", said: "click on the country name on the home screen it flickers"}
+    tags: [ui]
+    clip:
+      - {measure: flicker, max: 0}
+      - {measure: pop, max: 0}
+    owner: ui
+    weight: high
+    known: unknown
+    known_note: "a fix was built 22 Nov, but he saw it again on 24 Nov; its Mac click test was skipped as it could not run unattended"
+
+  # ---------------------------------------------------------------- markings and paint
+
+  - id: marks-every-year
+    title: Markings in every year
+    words: >
+      Every tank, plane, ship and soldier wears its nation's markings and paint in every month of every year; no date,
+      theater or stand-in model leaves one bare, and the paint never switches with the calendar.
+    from:
+      who: Brian
+      when: "2026-11-26 03:55Z"
+      said: "have the paint be on it regardless of the year"
+      also:
+        - {who: Brian, when: "2026-11-26 03:53Z", said: "i did a tank battle in the cairo and the british tank didn't have any marketing"}
+        - {who: Brian, when: "2026-11-26 03:56Z", said: "those are the little things that shouldnt matter which year it is ... same for plane, troops, and ships"}
+    tags: [land-vehicles, land-close-men, air-battle, air-chase, air-bombs, sea-close, map-fleet-rest]
+    picture: >
+      Look at each tank, aircraft and ship close enough to see its sides or wings. Does each carry a national marking (a
+      cross, star, roundel, disc, flag or a nation's number)? FAIL naming any that is bare. CAN'T TELL if none is close
+      enough.
+    facts: marks-on-every-model
+    owner: marks
+    weight: high
+    known: open
+    known_note: "UK tanks mended in the ground thread's tree only; 33 nations have no ruled mark yet; aircraft liveries still change by month; ships' own marks audited clean (flags: ships-fly-flags)"
+
+  - id: marks-sit-right
+    title: Markings sit whole and in place
+    words: >
+      Every marking lies wholly and flat on its surface, solid and crisp against the paint, at its period place and
+      size: on wings, German crosses out toward the tips, RAF roundels about a sixth of the span in from the tip, US
+      stars about a third in; none overhangs an edge, floats off the surface, or lets the camouflage show through.
+    from:
+      who: Brian
+      when: "2026-11-25 03:01Z"
+      said: "seen: the German cross sat centred on the wings, too far inboard; marks on 11 models hung off the trailing edge (the Zero's 40% off), floating in the air"
+      also:
+        - {who: Brian, when: "2026-11-20 18:21Z", said: "seen: the B-17's tail decals were the wrong size"}
+        - {who: art director, when: "2026-11-24", said: "seen: the German tank cross let the camouflage show through it; the British flash was unreadable on sand"}
+        - {who: art director, when: "2026-11-24 02:17Z", said: "seen: French and Italian rudder marks stood off the tail, facing aft"}
+    tags: [air-chase, air-battle, land-vehicles]
+    picture: >
+      Look at each marking on an aircraft or tank close enough to see it. Is it whole, flat on the surface and solid (no
+      camouflage showing through)? FAIL if a marking hangs past the edge of a wing, tail or hull into the air, stands
+      off the surface, is see-through, or a German cross on a wing sits near the body instead of out toward the tip.
+      Say which. CAN'T TELL if no marking is close enough.
+    owner: marks
+    weight: high
+    known: fixed
+    known_note: "wing marks fixed and passed 25 Nov; fin decals fixed; tank marks fixed and passed 25 Nov: regression checks; the flash on sand still being judged"
+
+  - id: marks-real-national
+    title: Markings are real national marks
+    words: >
+      Every marking is a real, plain period national mark the game knows: never a placeholder (a white disc with a grey
+      middle), never a party emblem, and never one that can be taken for another nation's (a generic red disc in a
+      white ring reads as Japan's); one nation, one mark, on the map, in the air and on land.
+    from:
+      who: art director
+      when: "2026-11-16 15:18Z"
+      said: "seen: a generic unit's marking, a red disc in a white ring, reads as Japan's"
+      also:
+        - {who: art director, when: "2026-11-24 02:17Z", said: "seen: French and Italian rudder marks drew as a white disc with a grey middle because the game did not know their tags"}
+        - {who: art director, when: "2026-11-26 04:06Z", said: "seen: the map's own Portuguese and Chinese marks are barred as drawn"}
+    tags: [air-chase, air-battle, land-vehicles, sea-close, map-army, map-fleet-rest]
+    picture: >
+      Look at each national marking you can see. FAIL if any is a plain white or grey disc with none of a nation's
+      colours (a placeholder), a political party emblem used as the unit's mark, or a red disc in a white ring on a unit
+      the shot's description does not say is Japanese. Say which. CAN'T TELL if no marking is close enough.
+    owner: marks
+    weight: normal
+    known: open
+    known_note: "the placeholder disc fixed in 1.5 (8913978d); the Portuguese and Chinese map marks and the generic disc open"
+
+  # ---------------------------------------------------------------- men in land battles
+
+  - id: men-paces-vary
+    title: Men move at different paces
+    words: >
+      Men on the move always show more than one pace: walkers, runners and sprinters at clearly different speeds,
+      each man in his own stride; a squad never moves as one block at one jog.
+    from:
+      who: Brian
+      when: "2026-11-25 17:30Z"
+      said: "can we have different running animations for the soldiers? it looks like they are all jogging at the same speed"
+      also:
+        - {who: Brian, when: "2026-11-23 04:56Z", said: "seen: all the men running alike"}
+        - {who: Brian, when: "2026-11-26 04:24Z", said: "or the squads running at different speeds and directions (he still did not see it)"}
+    tags: [land-advance, land-close-men]
+    picture: >
+      Look at men running or walking in a group. Are their strides different (legs and arms at different points of the
+      step, some walking, some running)? FAIL if five or more moving men are in exactly the same pose at the same point
+      of the stride, like copies. CAN'T TELL if fewer than five men are moving in view.
+    facts: men-gait-variety
+    owner: soldiers
+    weight: high
+    known: "off"
+    known_note: "'runs' ON; 'gaits' and 'paces' built as pass 2 rows, not in the ship list; new run clips done 26 Nov"
+
+  - id: men-keep-own-line
+    title: Men don't zigzag in step
+    words: >
+      Every man keeps his own line: a squad never changes heading all together in the same second, and no man swings
+      back and forth on a straight route.
+    from:
+      who: Brian
+      when: "2026-11-25 16:24Z"
+      said: "the soldiers of a squad keep zig zaging at the same time"
+    tags: [land-advance]
+    later: "each man's heading in the facts file (the men lines give speeds only): heading reversals over 30 degrees within 2 s, and how alike a squad's turns are"
+    owner: ai
+    weight: high
+    known: open
+    known_note: "fix planned inside 'paces', not built"
+
+  - id: squads-of-individuals
+    title: Soldiers act as individuals
+    words: >
+      Men of one squad act as individuals: different targets, different moments to fire, some in cover, some reloading
+      or moving; never one mind turning, aiming and firing together.
+    from:
+      who: Brian
+      when: "2026-11-25 15:55Z"
+      said: "i dont see the soldiers acting as unique individuals when it comes to targeting and aiming"
+      also:
+        - {who: Brian, when: "2026-11-25 13:40Z", said: "seen: squads act as one mind (his firm rule: squads of individuals, every vehicle its own mind)"}
+    tags: [land-advance, land-close-men]
+    picture: >
+      Look at a group of five or more men fighting together. Are they in varied poses (some lying, some kneeling, some
+      moving or reloading) and aiming in somewhat different directions? FAIL if they all hold one identical pose and
+      point their rifles exactly the same way, like copies. CAN'T TELL if fewer than five men are in view.
+    owner: ai
+    weight: high
+    known: "off"
+    known_note: "'life' built (c25bad76), OFF"
+
+  - id: men-never-fade-out
+    title: Men never freeze and vanish
+    words: >
+      A living man is always moving or in a pose with a reason, and every man who leaves the field shows a fall or a
+      visible withdrawal: nobody stands frozen while his squad moves on, nobody fades out in sight, and the dead never
+      leave.
+    from:
+      who: Brian
+      when: "2026-11-25 17:11Z"
+      said: "some soldiers freeze and then disapear"
+    tags: [land-advance, land-close-men]
+    later: "a man-leaves line in the facts file (a fade that starts inside the view; a man standing over 2 s while his squad moves); a one-frame vanish is already counted by land-nothing-pops"
+    owner: ai
+    weight: high
+    known: "off"
+    known_note: "'leave' and 'exits' built, OFF; leaving men still walk through wrecks"
+
+  - id: mg-fired-from-rest
+    title: Machine guns fire from a rest
+    words: >
+      A machine gun is always fired from a set position: on its bipod or tripod, the gunner lying or sitting behind it
+      with the butt at his shoulder, his number two beside him; never fired standing like a rifle.
+    from:
+      who: Brian
+      when: "2026-11-25 16:06Z"
+      said: "a soldier would never shoot this like a rifle position which is shown"
+    tags: [land-close-men, land-advance]
+    picture: >
+      Is a machine gun being fired (a belt-fed gun, heavier than a rifle, with a bipod or tripod)? If so, is it resting
+      on its bipod or tripod with the gunner lying or sitting behind it? FAIL if the gunner fires it standing or
+      kneeling like a rifle, held up with no rest. CAN'T TELL if no machine gun can be seen.
+    owner: soldiers
+    weight: high
+    known: open
+    known_note: "German gunners passed and sent to the Mac; British, Soviet, Japanese, Italian and French owed"
+
+  - id: support-teams-on-field
+    title: Weapon teams are on the field
+    words: >
+      Every support weapon a unit holds is on the field as its own team with its weapon, in view and in action: machine
+      gun teams, mortars, anti-tank guns.
+    from:
+      who: Brian
+      when: "2026-11-25 14:14Z"
+      said: "Where are the machine gun teams and order teams in the inventory squad (machine gun and mortar teams in the infantry squad)"
+    tags: [land-deploy, land-opening, land-advance]
+    picture: >
+      Is this a wide view over an infantry company (20 or more men)? If so, can you see at least one heavy-weapon team:
+      two to four men working a machine gun on a tripod or bipod, a mortar, or an anti-tank gun? FAIL if 20 or more
+      infantry are in view and not one such team can be seen. CAN'T TELL if fewer men are in view.
+    owner: soldiers
+    weight: high
+    known: "off"
+    known_note: "'teamguns' and 'gunners' OFF; 'teams' fails its gate"
+
+  - id: crews-work-as-crews
+    title: Gun crews work as crews
+    words: >
+      A weapon crew works as a crew: the number two within about 1.5 m of the gun, feeding or spotting; the crew in
+      different poses; the guns of a line firing at different moments.
+    from:
+      who: builders
+      when: "2026-11-25"
+      said: "seen: crew men in the same pose (93% alike), every machine gun on the field firing at the same instant, the number two standing 4.5 m off his gun"
+    tags: [land-close-men, land-advance]
+    picture: >
+      Is there a machine gun or field gun with its crew? If so, is the second man close beside the gun (within about one
+      body length) and in a different pose from the gunner? FAIL if the helper stands several body lengths away doing
+      nothing, or the crew are posed as identical copies. CAN'T TELL if no crewed gun can be seen.
+    owner: soldiers
+    weight: normal
+    known: "off"
+    known_note: "'teamwork' built, OFF"
+
+  - id: hits-shown
+    title: A hit man shows the hit
+    words: >
+      A hit man shows the hit: a puff of dust or blood where he is struck, a flinch away from the shot, and a fall that
+      fits the weapon and his stance, different from man to man; never just dropping.
+    from:
+      who: Brian
+      when: "2026-11-25 16:37Z"
+      said: "soldier hit by a bullet: show him hit, right now they just drop"
+      also:
+        - {who: Brian, when: "2026-11-26 04:24Z", said: "or the gore (he still did not see it)"}
+    tags: [land-fall]
+    picture: >
+      Is a man being hit or falling? If so, is there a puff of dust, dirt or blood at him, or is his body twisting or
+      flinching away from the shot? FAIL if a falling man drops straight down stiffly with no puff and no reaction.
+      CAN'T TELL if no man is being hit or falling.
+    owner: soldiers
+    weight: high
+    known: "off"
+    known_note: "'hits' build 1 OFF"
+
+  - id: bursts-hit-everyone-near
+    title: A burst hits everyone near it
+    words: >
+      A shell or bomb burst among men touches everyone in its reach: several men down or thrown, others knocked flat
+      or wounded, those beyond going to ground; never one man falling while the rest stand untouched.
+    from:
+      who: Brian
+      when: "2026-11-25 16:14Z"
+      said: "multiple soldiers taken out by an explosion"
+      also:
+        - {who: Brian, when: "2026-11-23 05:04Z", said: "seen: a shell bursts among men and only one falls"}
+        - {who: Brian, when: "2026-11-26 04:24Z", said: "or the blast taking out multiple people or knocking others down and getting back up if they were close"}
+    tags: [land-fall, land-advance]
+    picture: >
+      Is a shell burst (a flash, dirt or smoke thrown up) in or right beside a group of men? If so, are several men
+      within a few metres of it down, falling or thrown? FAIL if only one man falls and the others close to the burst
+      stand on untouched. CAN'T TELL if no burst is among men.
+    owner: effects
+    weight: high
+    known: open
+    known_note: "'blast' ON; wounded and knocked-down men not built"
+
+  - id: dead-lie-where-fell
+    title: The dead stay down
+    words: >
+      A dead man lies where he fell, in a fall that fits his stance and the hit, for the rest of the battle; bodies lie
+      in different natural poses, never standing, floating or sunk into the ground.
+    from:
+      who: Brian
+      when: "2026-11-21 16:21Z"
+      said: "when a soldier gets hit have their body be on the ground dead (realistic)"
+    tags: [land-fall, land-advance]
+    picture: >
+      Are there fallen men on the ground? If so, do they lie flat on the ground in different natural poses? FAIL if
+      bodies hang above the ground, are sunk into it, stand upright, or all lie in the very same pose. CAN'T TELL if no
+      bodies can be seen.
+    owner: soldiers
+    weight: high
+    known: fixed
+    known_note: "33 death clips; a regression check"
+
+  - id: faces-human-and-varied
+    title: Faces look human and different
+    words: >
+      Every man seen up close has a natural human face (nothing stretched, sunken or broken), and men side by side look
+      like different people.
+    from:
+      who: Brian
+      when: "2026-11-20 23:27Z"
+      said: "Make different faces for the soldiers so it's all not the same looking person"
+      also:
+        - {who: Brian, when: "2026-11-23 01:12Z", said: "The faces need a lot of work"}
+    tags: [land-close-men]
+    picture: >
+      Are there men close enough to see their faces? If so, are the faces natural and human, and do men next to each
+      other look like different people? FAIL if a face is stretched, sunken, broken or smeared, or two or more men side
+      by side have the very same face. CAN'T TELL if no face is close enough.
+    owner: soldiers
+    weight: high
+    known: fixed
+    known_note: "8 faces and rebuilt near faces: a regression check"
+
+  - id: joints-bend-humanly
+    title: Limbs bend the human way
+    words: >
+      No joint ever bends past a human range: no knee or elbow bent backward, no neck or back folded at an impossible
+      angle, in any pose or move.
+    from:
+      who: Brian
+      when: "2026-11-18 12:39Z"
+      said: "seen: limbs bent in ways a body cannot bend"
+    tags: [land-close-men, land-fall, land-advance]
+    picture: >
+      Look at every man near enough to see his limbs. Is any arm, leg, neck or back bent at an impossible angle (a knee
+      or elbow bent backward, a head turned too far round, a body folded through itself)? FAIL saying which. CAN'T TELL
+      if no man is near enough.
+    owner: soldiers
+    weight: high
+    known: fixed
+    known_note: "a range-of-motion gate runs over every clip: a regression check"
+
+  - id: land-solids-apart
+    title: Men and vehicles never pass through things
+    words: >
+      No two solid things share space: men keep a body's width apart and never pass through each other, a vehicle, a
+      wreck, a wall or a tree; a vehicle never drives through a house, another vehicle or a man.
+    from:
+      who: Brian
+      when: "2026-11-23"
+      said: "seen (his live play list): vehicles drive through houses, through each other and through men"
+      also:
+        - {who: ground scene thread, when: "2026-11-21 21:17Z", said: "seen: men stand inside each other; men of neighbouring blocks overlap"}
+        - {who: seam review, when: "2026-11-26", said: "seen: leaving men walk through wrecks"}
+    tags: [land-close-men, land-advance, land-vehicles, land-village]
+    picture: >
+      Is any man partly inside another man, a vehicle, a wreck, a wall or a tree, or any vehicle partly inside a
+      building, another vehicle or a man? FAIL saying where. Men pressed close together, or a vehicle in front of a
+      house with a gap, are a PASS.
+    owner: ground
+    weight: high
+    known: open
+    known_note: "fixed within a block; open across blocks, at wrecks and for houses (the houses never reached the battle rules)"
+
+  - id: feet-on-ground
+    title: Feet stay on the ground
+    words: >
+      A man's feet always touch the ground he stands on and a planted foot stays planted: no man floats above the
+      ground or sinks into it, and feet never slide as he runs.
+    from:
+      who: builders
+      when: "2026-11-23"
+      said: "seen: feet slide over the ground as men run (0.38-0.40 m/s); bailing crewmen land with the hips 1.07 m up, as if standing on air"
+    tags: [land-close-men, land-vehicles]
+    picture: >
+      Look at the men near enough to see their feet. Is any man standing, walking or landing with his feet clearly above
+      the ground (a gap under them, his shadow apart from his feet), or sunk into hard ground to the ankles or more? FAIL
+      saying which. Feet hidden by grass or snow are CAN'T TELL.
+    owner: soldiers
+    weight: normal
+    known: fixed
+    known_note: "foot slide and bail landing fixed: a regression check (the gait play-rate cap is the known risk)"
+
+  - id: tank-commander-whole
+    title: Tank commanders look right
+    words: >
+      A tank commander in an open hatch reads as a man in his nation's uniform from the chest up, never cut by the hatch
+      or bare-backed, and at times uses binoculars.
+    from:
+      who: Brian
+      when: "2026-11-25 16:35Z"
+      said: "seen (his screenshot): the commander in his hatch reads wrong"
+      also:
+        - {who: art director, when: "2026-11-25", said: "seen: in Normandy cut 5 a bare back showed; he never holds binoculars"}
+    tags: [land-vehicles]
+    picture: >
+      Is there a man in an open tank hatch close enough to see? If so, is he a whole man in uniform from the chest up,
+      not cut through by the hatch rim, with clothes on his back? FAIL if he is cut by the hatch, shows a bare back or
+      skin where a uniform should be, or floats. CAN'T TELL if no man in a hatch can be seen.
+    owner: soldiers
+    weight: high
+    known: "off"
+    known_note: "bare back fixed; binoculars open; 'hatches' OFF (pass 2)"
+
+  - id: snipers-read-as-snipers
+    title: Snipers look like snipers
+    words: >
+      A sniper team reads as a sniper team: shooter and spotter apart from the squads, prone or in cover, a rifle with a
+      telescope sight, moving slowly and steadily, never rocking on the spot.
+    from:
+      who: builders
+      when: "2026-11-25"
+      said: "seen: snipers do not read as snipers (their models are owed); a stalking sniper rocks on the spot"
+    tags: [land-close-men, land-advance]
+    picture: >
+      Does the shot's description name a sniper, or is there a pair of men lying apart from the squads? If so, does one
+      of them hold a rifle with a telescope sight, lying down or in cover? FAIL if the named sniper is a standing
+      rifleman like any other. CAN'T TELL if no sniper is named or seen.
+    owner: soldiers
+    weight: normal
+    known: open
+    known_note: "models owed"
+
+  - id: uniforms-true-colour
+    title: Uniforms keep their cloth colour
+    words: >
+      Every uniform reads as its real cloth colour in the light it stands in (German field grey a mid grey-green, about
+      L 110-120 in sun, never mint), and a man keeps human proportions at every distance (no swollen chest).
+    from:
+      who: art director
+      when: "2026-11-25 14:01Z"
+      said: "seen: German field grey reads mint in open sun (RGB 135,151,140); at 1 m the torso reads inflated"
+    tags: [land-close-men, land-advance]
+    picture: >
+      Look at the soldiers' uniforms in sunlight. Do they look like real cloth colours (greys, olive, khaki, browns)?
+      FAIL if a uniform looks pale mint green or another sweet pastel, or a man's chest looks swollen like a balloon.
+      CAN'T TELL if no soldier is near enough.
+    owner: soldiers
+    weight: normal
+    known: unknown
+    known_note: "a mend was made; the art director's re-judge not found"
+
+  - id: soldiers-whole-at-every-range
+    title: Soldiers are whole at every range
+    words: >
+      A soldier's model is whole at every distance: no holes, no floating parts (helmet brim, buttons, pack), no flat
+      paper card where a body should be.
+    from:
+      who: art director
+      when: "2026-11-22"
+      said: "seen: faults in the soldier model: the helmet brim lip, buttons, and far figures drawn as flat sheets"
+    tags: [land-close-men, land-advance, land-opening]
+    picture: >
+      Look at the soldiers near and far. Is any part of them missing, floating off the body, or flat like paper (a
+      figure that is a thin sheet when seen edge-on)? FAIL saying which. CAN'T TELL if no soldier can be made out.
+    owner: soldiers
+    weight: normal
+    known: fixed
+    known_note: "mended: a regression check"
+
+  - id: drawn-numbers-true
+    title: Battles show the real numbers
+    words: >
+      The men and vehicles drawn match the strengths each side brings, at the stated ratio, so a big fight looks big.
+    from:
+      who: Brian
+      when: "2026-11-22 04:14Z"
+      said: "i want the battles to look epic so more units fighting the better as it makes it look real. I want it to reflect the actual number of units each side is bringing to the fight"
+    tags: [land-opening, land-deploy]
+    later: "a strength line per unit in the facts file (the card's strength against the men and vehicles drawn)"
+    owner: ground
+    weight: high
+    known: fixed
+    known_note: "battle scale built (about 2,000 men on the Mac): a regression check"
+
+  - id: riders-seated
+    title: Riders sit in their vehicles
+    words: >
+      Riders sit in a seat or on the load bed and move with the vehicle, and climb on and off visibly; never under it or
+      through it, never shimmering or popping on.
+    from:
+      who: Brian
+      when: "2026-11-23 14:10Z"
+      said: "troops are stuck under the truck"
+      also:
+        - {who: art director, when: "2026-11-24 14:59Z", said: "seen: riders shimmer and pop when they remount"}
+    tags: [land-vehicles]
+    picture: >
+      Are there soldiers riding a lorry, half-track or jeep? If so, is each sitting in a seat or on the load bed? FAIL if
+      any is below the vehicle, half through its floor or sides, or hanging in the air beside it. CAN'T TELL if no riders
+      can be seen.
+    owner: ground
+    weight: high
+    known: fixed
+    known_note: "seated riders passed 25 Nov; the remount pop not checked since"
+
+  - id: crews-bail-out
+    title: Tank crews bail out
+    words: >
+      When a crewed tank is knocked out but not blown apart, her crew climb out of the hatches, drop to the ground and
+      run for cover before she brews up.
+    from:
+      who: Brian
+      when: "2026-11-23 14:53Z"
+      said: "if a tank gets hit people try and get out before it explodes"
+    tags: [land-vehicles]
+    later: "a bail line in the facts file (hatch, men out, landing, time before the fire); no still has caught a bail-out yet"
+    owner: effects
+    weight: high
+    known: unknown
+    known_note: "'bailout' and 'bailsmoke' ON; not yet seen on the Mac"
+
+  # ---------------------------------------------------------------- vehicles in land battles
+
+  - id: vehicles-hold-still
+    title: Halted vehicles hold still
+    words: >
+      A vehicle (or a man) that is not going anywhere stands still and holds its heading: no rocking to and fro, no
+      reversing more than once in a few seconds without moving on, no twitch of a turn that starts and stops.
+    from:
+      who: art director
+      when: "2026-11-26 01:03Z"
+      said: "seen: units rock back and forth on the spot instead of standing or going on (tanks parking at bridges, snipers stalking)"
+      also:
+        - {who: pre-check, when: "2026-11-23 09:35Z", said: "seen: parked tanks twitch: a short turn on the spot starts and stops"}
+    tags: [land-vehicles, land-advance]
+    facts: vehicles-no-rocking
+    owner: ground
+    weight: normal
+    known: "off"
+    known_note: "'stand' OFF, on hold; the parked-turn hold fixed in R2"
+
+  - id: vehicles-drive-smooth-curves
+    title: Vehicles drive smooth curves
+    words: >
+      A vehicle drives along a smooth curve in the direction its hull points: no jerks in its heading and no sideways
+      crabbing.
+    from:
+      who: Brian
+      when: "2026-11-23 15:24Z"
+      said: "seen: tanks turn in jerks instead of rolling along curves; some crab sideways to their hull"
+    tags: [land-vehicles]
+    later: "a facts check on the vehicle lines for heading jerks and for the angle between hull and travel (the lines carry heading and speed but not the travel direction)"
+    owner: ground
+    weight: high
+    known: open
+    known_note: "'smoothtanks' ON (Mac look in the final pass); crabbing open"
+
+  - id: vehicles-own-minds
+    title: Every vehicle has its own mind
+    words: >
+      Every vehicle has its own mind: its own turret aim, its own moment to halt and fire, its own hatch and crew pose;
+      a company never moves, halts and aims as one.
+    from:
+      who: Brian
+      when: "2026-11-25 15:55Z"
+      said: "seen: tanks act alike: they halt together and aim alike (his rule: every vehicle its own mind)"
+      also:
+        - {who: Brian, when: "2026-11-21 18:29Z", said: "seen: hatch crews in one pose"}
+    tags: [land-vehicles]
+    picture: >
+      Are three or more tanks in view? If so, do their turrets and hatch crews differ (turrets at different angles,
+      hatches open or shut, men in different poses)? FAIL if three or more tanks are copies of each other in turret
+      angle and hatch pose, as if stamped. CAN'T TELL if fewer than three tanks can be seen.
+    owner: ai
+    weight: high
+    known: "off"
+    known_note: "'hatches' OFF (pass 2)"
+
+  - id: tank-mgs-fire-in-bursts
+    title: Tank machine guns fire in bursts
+    words: >
+      A tank's machine guns fire at enemy infantry in range, in bursts with pauses, and hold fire otherwise; never
+      silent at infantry, never firing without a pause.
+    from:
+      who: Brian
+      when: "2026-11-25 15:55Z"
+      said: "i never see the machine guns on the tanks firing ... i dont want it to be all the time as thats unrealistic with ammo"
+      also:
+        - {who: Brian, when: "2026-11-26 04:24Z", said: "i still dont see tanks shooting machine gunss"}
+    tags: [land-vehicles]
+    later: "a burst line per tank machine gun in the facts file (target kind, range, burst and pause lengths)"
+    owner: ground
+    weight: high
+    known: "off"
+    known_note: "'tankmg' OFF"
+
+  - id: bullets-glance-off-armour
+    title: Bullets glance off armour
+    words: >
+      Small arms never knock out armour: rifle and machine gun bullets striking a tank glance off with sparks.
+    from:
+      who: Brian
+      when: "2026-11-25 15:58Z"
+      said: "seen: rifle and machine gun fire knocks out armour"
+    tags: [land-vehicles]
+    later: "the weapon of every vehicle kill in the facts file (none by rifle or machine gun against armour)"
+    owner: ground
+    weight: high
+    known: "off"
+    known_note: "ricochet and 'pierce' OFF"
+
+  - id: tank-shots-land
+    title: Tank shots hit something
+    words: >
+      Every tank shot lands somewhere visible with a result: a kill, a hit, a ricochet or a burst near the target; kills
+      follow from fire.
+    from:
+      who: Brian
+      when: "2026-11-25 15:59Z"
+      said: "are tanks killing the enemy? i feel like a lot of it is just them shooting"
+    tags: [land-vehicles]
+    later: "each shot's fall point and effect in the facts file (an effect within 1 s of every shot)"
+    owner: ground
+    weight: high
+    known: open
+    known_note: "'aimed' not started"
+
+  - id: models-right-way-out
+    title: Vehicles are drawn right way out
+    words: >
+      Every model is drawn the right way out and solid, facing its way of travel; never hollow, inside out or back to
+      front.
+    from:
+      who: Brian
+      when: "2026-11-23"
+      said: "seen (live play): vehicles drawn inside out"
+    tags: [land-vehicles]
+    picture: >
+      Does any vehicle look hollow or inside out (you see its inner faces, or the far side through the near side), or
+      have parts in the wrong place? FAIL saying which. CAN'T TELL if no vehicle is near enough.
+    owner: ground
+    weight: high
+    known: fixed
+    known_note: "fixed: a regression check"
+
+  - id: track-marks-true
+    title: Track marks start under the tracks
+    words: >
+      Track marks start right under the tracks, are as wide as the tracks, and fade with age; never a gap behind the
+      tank, never thin pencil lines.
+    from:
+      who: Brian
+      when: "2026-11-23"
+      said: "seen: track marks start with a gap behind the tank"
+      also:
+        - {who: art director, when: "2026-11-23", said: "seen: in snow the ruts were thin pencil lines"}
+    tags: [land-vehicles]
+    picture: >
+      Is there a tank with track marks behind it? If so, do the marks begin right under its tracks and match the tracks'
+      width? FAIL if there is a clear gap between the tank and where its marks start, or the marks are thin lines much
+      narrower than the tracks. CAN'T TELL if no track marks can be seen.
+    owner: ground
+    weight: high
+    known: fixed
+    known_note: "fixed (snow lines mended); 'ruts' OFF: a regression check"
+
+  - id: vehicles-stand-out
+    title: Vehicles stand out from the ground
+    words: >
+      A vehicle always stands apart from the ground beside it: its sunlit side in a real paint range for its coat, at
+      least about 20 levels (of 255) brighter or darker than the ground, never near black in daylight, never the very
+      colour of the sand it stands on, and an olive coat never turns blue-grey.
+    from:
+      who: art director
+      when: "2026-11-23"
+      said: "seen: hulls near black in daylight (Normandy cut 4, L 13-26); desert coats the very colour of the ground (both L 207); the Sherman blue-grey"
+    tags: [land-vehicles, land-advance, land-opening]
+    picture: >
+      Look at each vehicle in daylight. Can it be told apart from the ground round it by colour or brightness, and does
+      its sunlit side show its paint colour? FAIL if a vehicle's sunlit side is near black, or it is the same colour and
+      brightness as the ground so that it almost vanishes. CAN'T TELL at night or if no vehicle is in view.
+    owner: ground
+    weight: normal
+    known: open
+    known_note: "snow hull fixed; desert coats open"
+
+  - id: no-mat-under-vehicles
+    title: No dark mat under vehicles
+    words: >
+      The ground under a vehicle looks like that ground: any shadow or wet patch has a soft edge, is no wider than about
+      1.2 hull lengths and, on snow, no darker than about L 100; never a near-black patch, a flat disc or a mat.
+    from:
+      who: art director
+      when: "2026-11-25 14:01Z"
+      said: "seen: on snow every wheeled vehicle stands in a near-black patch about twice its size; in the desert a flat yellow disc under a tank"
+    tags: [land-vehicles]
+    picture: >
+      Is there a dark or coloured patch under a vehicle? FAIL if a vehicle stands on a near-black patch much bigger than
+      itself (wider than about one and a quarter of its length), or on a flat even disc or mat with a hard edge. A soft
+      shadow on the side away from the sun is a PASS. CAN'T TELL if no vehicle is in view.
+    owner: ground
+    weight: normal
+    known: open
+
+  - id: no-identical-copies
+    title: No identical twins in one view
+    words: >
+      No two like things in one view are exact copies: vehicles, buildings, trees and tufts vary in pattern, size, turn
+      and wear.
+    from:
+      who: art director
+      when: "2026-11-22"
+      said: "seen: three Tigers in one camouflage, twin villas, one oak repeated, spruce as identical cones, tufts in rows"
+    tags: [land-vehicles, land-village, land-opening, land-advance]
+    picture: >
+      Are any two vehicles, buildings or trees in this picture exact copies (the same camouflage pattern, shape, turn and
+      wear), or are plants set in neat rows of identical tufts? FAIL saying which. Things of one type that differ in
+      pattern, wear or angle are a PASS.
+    owner: environment
+    weight: normal
+    known: open
+
+  - id: wrecks-burnt-and-stay
+    title: Wrecks look burnt and stay
+    words: >
+      A wreck looks burnt (soot, rust, ash, scorched paint, charred tyres) and stays where it died for the whole battle;
+      never fresh paint, never an even terracotta, never clean camouflage, never vanishing.
+    from:
+      who: art director
+      when: "2026-11-24"
+      said: "seen: old wrecks terracotta; the burnt coat reads as sprayed-on camouflage up close"
+      also:
+        - {who: seam review, when: "2026-11-26", said: "seen: wrecks vanish in the corner of the field"}
+    tags: [land-vehicles, land-advance]
+    picture: >
+      Is there a knocked-out vehicle (a wreck)? If so, does it look burnt: blackened, sooty, rusty brown? FAIL if a wreck
+      looks freshly painted, an even terracotta orange, or wears clean camouflage. CAN'T TELL if no wreck can be seen.
+    owner: ground
+    weight: normal
+    known: open
+    known_note: "'wrecks' ON; the burnt coat not yet passed; vanishing open"
+
+  - id: land-nothing-pops
+    title: Nothing on the field pops or jumps
+    words: >
+      Nothing on the battlefield appears, vanishes or jumps in one frame: detail and trees fade in with distance, riders
+      climb on, wrecks stay, smoke fades, and no unit moves further in a frame than its top speed allows.
+    from:
+      who: art director
+      when: "2026-11-23"
+      said: "seen: the aerial popping, a 90 m detail jump, a tree step, riders popping on as they remount, wrecks vanishing"
+      also:
+        - {who: builders, when: "2026-11-23", said: "seen: a tank jumps 14-58 m in one frame; units teleport at the ring"}
+    tags: [land-opening, land-advance, land-close-men, land-vehicles, land-village, land-fall]
+    clip:
+      - {measure: pop, max: 0}
+    owner: environment
+    weight: normal
+    known: open
+    known_note: "the tank jump fixed; detail, riders and wrecks open in part"
+
+  # ---------------------------------------------------------------- effects on land
+
+  - id: smoke-fades-slowly
+    title: Smoke fades away slowly
+    words: >
+      Smoke always fades gradually into the air and never vanishes at once; no cloud goes sooner than its set lifetime.
+    from:
+      who: Brian
+      when: "2026-11-21 18:00Z"
+      said: "have the smoke effects gradually fade away into the air not disappear right away"
+    tags: [land-advance, land-vehicles, land-fall, land-village]
+    later: "a long strip (about 60 s) from one burst to the end of its smoke, or a smoke line in the facts file (each cloud's age when it goes); a one-frame vanish is already counted by land-nothing-pops"
+    owner: effects
+    weight: high
+    known: fixed
+    known_note: "fixed 22 Nov: a regression check"
+
+  - id: bursts-sized-to-shell
+    title: Explosions are big and real
+    words: >
+      A burst is as big as its shell: a flash that lights the ground, a ring of dust, a dark crown of earth in the
+      ground's colour, falling debris and lingering charcoal-brown smoke.
+    from:
+      who: Brian
+      when: "2026-11-21 18:30Z"
+      said: "the explosions should be bigger and more more realistic as well as the fire"
+    tags: [land-advance, land-fall, land-vehicles]
+    picture: >
+      Is there a shell or bomb burst on the ground? If so, does it throw up a crown of earth and debris in the ground's
+      colour, with brown or grey smoke, several times a man's height? FAIL if a burst is a small clean puff or a bright
+      ball with no earth thrown up. CAN'T TELL if no burst can be seen.
+    owner: effects
+    weight: high
+    known: fixed
+    known_note: "passed by the art director 22 Nov: a regression check"
+
+  - id: craters-vary
+    title: Craters vary and look like earth
+    words: >
+      Craters vary in size and turn and are earth-coloured (scorched brown); never one black stamp repeated.
+    from:
+      who: Brian
+      when: "2026-11-23 14:45Z"
+      said: "make the explosion craters different varations so its not always the same"
+      also:
+        - {who: art director, when: "2026-11-25 14:01Z", said: "seen: from above every crater is the same black star"}
+    tags: [land-advance, land-fall, land-after-card]
+    picture: >
+      Are there shell craters on the ground? If so, do they differ in size and shape and look like brown, scorched
+      earth? FAIL if the craters are all the same black star shape, or all the same size and turn, like a stamp. CAN'T
+      TELL if no craters can be seen.
+    owner: effects
+    weight: high
+    known: open
+    known_note: "'craters' ON with a note; the mend owed: three sizes, each turned, scorched brown"
+
+  - id: burnt-ground-not-black-sheets
+    title: Burnt ground is not black sheets
+    words: >
+      Burnt ground reads as charred earth, ash and rubble with soft brown edges; never a flat black jagged sheet.
+    from:
+      who: Brian
+      when: "2026-11-25 17:11Z"
+      said: "seen (his screenshot): black jagged blobs on the steppe seen from above (the burnt cottages' skirts)"
+    tags: [land-village, land-opening, land-advance, land-after-card]
+    picture: >
+      Is there any flat jet-black shape with sharp jagged edges lying on the ground (often round burnt houses)? FAIL
+      saying where. Charred ground with soft brown or grey edges and rubble is a PASS.
+    owner: effects
+    weight: high
+    known: "off"
+    known_note: "'burntground' OFF"
+
+  - id: muzzle-flash-ragged
+    title: Gun flashes are brief and ragged
+    words: >
+      A gun's flash is a brief ragged ball of orange flame sized to the gun, gone in a frame or two into brown smoke;
+      never a long smooth cream jet like a rocket's exhaust.
+    from:
+      who: Brian
+      when: "2026-11-23 14:27Z"
+      said: "can we make the mussel flash realistic?"
+      also:
+        - {who: art director, when: "2026-11-23 17:06Z", said: "seen: the flash was a long smooth cream jet, like a rocket's exhaust"}
+    tags: [land-vehicles, land-advance, sea-battle, sea-close]
+    picture: >
+      Is a gun firing (a flash at a muzzle)? If so, is the flash a short ragged burst of orange flame? FAIL if it is a
+      long smooth cream or white jet stretching far from the muzzle, like a rocket's exhaust. CAN'T TELL if no gun flash
+      can be seen.
+    owner: effects
+    weight: high
+    known: fixed
+    known_note: "'gunflash' ON: a regression check"
+
+  - id: earth-clods-soil-coloured
+    title: Thrown earth is soil coloured
+    words: >
+      Thrown or lying earth is soil-coloured, mixed in size, half sunk and along the furrows; never dark cubes of one
+      size in lines.
+    from:
+      who: art director
+      when: "2026-11-24 07:30Z"
+      said: "seen: earth clods as dark same-size cubes (L 84 on soil of 116) in single-file wavy lines (Voronezh)"
+    tags: [land-close-men, land-vehicles, land-advance]
+    picture: >
+      Are there clods or lumps of earth on the ground? If so, are they the colour of the soil round them and of mixed
+      sizes? FAIL if they are dark cubes all of one size, or set in single-file lines. CAN'T TELL if none can be seen.
+    owner: ground
+    weight: normal
+    known: fixed
+    known_note: "fixed (d40cc95d): a regression check"
+
+  - id: dust-takes-ground-colour
+    title: Dust is the colour of the ground
+    words: >
+      Dust always takes the colour of the ground it rose from (pale sand in the desert, brown on soil); never mustard or
+      any colour the ground does not have.
+    from:
+      who: art director
+      when: "2026-11-24 03:04Z"
+      said: "seen: mustard dust in the desert"
+    tags: [land-vehicles, land-advance]
+    picture: >
+      Is there dust (raised by vehicles, men or bursts)? If so, is it the same colour as the ground under it, only paler?
+      FAIL if it is mustard yellow or another colour clearly unlike the ground. CAN'T TELL if no dust can be seen.
+    owner: effects
+    weight: normal
+    known: fixed
+    known_note: "fixed (7a76d496): a regression check"
+
+  # ---------------------------------------------------------------- the land, sky and buildings
+
+  - id: every-theatre-normandy-bar
+    title: Every theater looks as good as Normandy
+    words: >
+      Every theater's battlefield (desert, steppe, snow, Italy, jungle, islands, cities) looks as good as Normandy,
+      scored on the same Look Bible lines; none is left behind.
+    from:
+      who: Brian
+      when: "2026-11-22 14:19Z"
+      said: "Remember there will be ground battles in deserts and other areas outside of Normandy so let's not only focus on that"
+      also:
+        - {who: Brian, when: "2026-11-22 14:20Z", said: "I want the ground battle pass but be great for all battles"}
+    tags: [land-opening, land-advance]
+    later: "the Look Bible scores (shots.yaml look: true) kept per theater in history.json and compared with Normandy's line by line"
+    owner: environment
+    weight: high
+    known: open
+    known_note: "desert 9/16, island 10/16, jungle 11/16 against Normandy 14/16 when last scored"
+
+  - id: jungle-reads-as-jungle
+    title: Jungle looks like jungle
+    words: >
+      A jungle reads as jungle: a closed canopy overhead, undergrowth at knee height, deep shade and uneven spacing;
+      never evenly spaced poles and paper leaves on pale ground.
+    from:
+      who: art director
+      when: "2026-11-25 14:01Z"
+      said: "seen: jungle is thin: evenly spaced poles and paper banana leaves on pale ground, no canopy, undergrowth or shade (and 33-50 frames a second)"
+    tags: [land-opening, land-advance, land-close-men]
+    picture: >
+      Is this a jungle scene (the description or the plants say so)? If so, is there a canopy overhead, undergrowth at
+      knee height and deep shade on the ground? FAIL if the trees stand as evenly spaced poles with flat paper-like
+      leaves on bare pale ground. CAN'T TELL if it is not jungle.
+    owner: environment
+    weight: normal
+    known: open
+
+  - id: no-black-blobs-in-daylight
+    title: No black blobs in daylight
+    words: >
+      In daylight no plant, hedge or patch of ground renders as a solid near-black shape; only true deep shade is that
+      dark.
+    from:
+      who: art director
+      when: "2026-11-23"
+      said: "seen: hedges 75% black (Normandy cut 4); black tufts, grass stems and leaf backs; dark pond shadows; dark floating bush lumps in the bocage dust"
+    tags: [land-opening, land-advance, land-close-men, land-vehicles, land-village]
+    picture: >
+      Is this a daylight picture? If so, is any hedge, bush, plant or patch of ground a solid near-black shape with no
+      detail inside it while the sunlit things round it are bright? FAIL saying where. Deep shadow under a tree or inside
+      a doorway is a PASS.
+    owner: environment
+    weight: normal
+    known: open
+
+  - id: nature-shows-no-grid
+    title: Nature shows no grid lines
+    words: >
+      Nature never shows the grid: no field, wood, road or patch of colour with ruled straight edges, right-angle steps
+      or repeated square cells, unless it is man-made.
+    from:
+      who: Brian
+      when: "2026-11-25 17:11Z"
+      said: "seen (his screenshot): dark boxes and a kink in the road on the steppe seen from above"
+      also:
+        - {who: art director, when: "2026-11-24", said: "seen: map cells, rectangles and stair-steps in the fields and woods of the desert and dry steppe"}
+    tags: [land-opening, land-deploy, land-after-card, land-advance]
+    picture: >
+      Looking at the land, do you see square cells, stair-step edges, dark rectangles or ruled straight lines in woods,
+      grass or ground colour that real country would not have? FAIL saying where. Real roads, field edges, hedges and
+      walls are a PASS.
+    owner: environment
+    weight: high
+    known: open
+
+  - id: ground-has-relief
+    title: The ground is never a flat plate
+    words: >
+      Ground has relief and small detail at every range (dunes, wadis, stones, scrub, furrows, stalks); never a flat
+      plate of one colour.
+    from:
+      who: art director
+      when: "2026-11-23"
+      said: "seen: a plate of desert with no dune, wadi or scrub; paper-flat wheat (Normandy cut 4)"
+    tags: [land-opening, land-advance, land-close-men]
+    picture: >
+      Does the ground show bumps, stones, plants, furrows or other detail? FAIL if a large part of the ground is a flat
+      even plate of one colour with no detail, or a crop is a flat painted sheet. CAN'T TELL if little ground is in view.
+    owner: environment
+    weight: normal
+    known: open
+
+  - id: ground-colours-true
+    title: Ground has its real colours
+    words: >
+      Ground colours are the real colours of that place and season: sand warm (about RGB 214,198,160; never white like
+      snow under palms), soil brown (about 130,95,70; never near black), grass green but never pale mint, rock in its
+      true tone.
+    from:
+      who: art director
+      when: "2026-11-24"
+      said: "seen: island sand (226,231,226) reads as snow under palms; Normandy fields pale mint; Algiers soil near black, with white popcorn rocks"
+    tags: [land-opening, land-advance, land-close-men, land-village]
+    picture: >
+      Do the ground colours look natural for the place: warm sand, brown soil, green grass, grey or tan rock? FAIL if sand
+      looks white or blue-white like snow in a hot place, soil looks near black, grass is a pale mint green, or rocks are
+      bright white blobs. CAN'T TELL at night.
+    owner: environment
+    weight: normal
+    known: open
+    known_note: "Algiers passed; island sand open; Normandy mint not checked since"
+
+  - id: sky-brighter-than-ground
+    title: The sky is brighter than the ground
+    words: >
+      The sky is always brighter than the sunlit ground at the horizon, with lit cloud undersides in fair weather and a
+      blue that deepens toward the top; never a flat grey lid darker than the land.
+    from:
+      who: art director
+      when: "2026-11-25 05:00Z"
+      said: "seen: cloud undersides too dark (Normandy 103-142, Algiers 72-88); the desert sky a flat grey lid darker than the sand (150 against 213)"
+    tags: [land-opening, land-advance]
+    picture: >
+      Is the sky in view over sunlit ground? If so, is the sky just above the horizon brighter than the sunlit ground
+      below it? FAIL if the sky is a flat grey lid darker than the ground, or the cloud undersides are dark grey on a fair
+      day. CAN'T TELL if no sky shows, or it is night or a storm.
+    owner: environment
+    weight: normal
+    known: open
+
+  - id: trees-read-as-trees
+    title: Trees look like their kind
+    words: >
+      Every plant reads as its kind at every range: broken leafy crowns and trunks with bark and soft shading; never
+      balls, shards, striped poles, lollipops or flat cards.
+    from:
+      who: Brian
+      when: "2026-11-24"
+      said: "seen: lollipop trees"
+      also:
+        - {who: art director, when: "2026-11-25", said: "seen: crowns and hedges as balls and shards up close; birch trunks like black-and-white surveyor's poles; snow-laden spruce breaking into shards under 15 m; flat cut-out firs; cyan pollard limbs"}
+    tags: [land-opening, land-advance, land-close-men, land-village]
+    picture: >
+      Look at the trees and hedges. Do they look like real trees, with broken leafy crowns and trunks with bark? FAIL if
+      they look like round balls on sticks (lollipops), sharp shards, black-and-white striped poles, or flat cut-out
+      cards (thin sheets when seen edge-on). CAN'T TELL if no trees can be seen.
+    owner: environment
+    weight: high
+    known: open
+
+  - id: grass-not-through-solids
+    title: Grass never grows through things
+    words: >
+      Grass never pokes through a solid thing: no blades inside trunks, bushes, walls, hulls or men.
+    from:
+      who: Brian
+      when: "2026-11-25 16:35Z"
+      said: "the grass is blowing through tree"
+    tags: [land-close-men, land-advance, land-vehicles]
+    picture: >
+      Look where grass meets a tree trunk, bush, wall, vehicle or man. Do grass blades show through the solid thing
+      (drawn over a trunk or hull, poking out of it)? FAIL saying where. Grass growing in front of a trunk at its foot is
+      a PASS. CAN'T TELL if no grass meets anything solid.
+    owner: environment
+    weight: high
+    known: open
+    known_note: "a trial fix built; its Mac ticket waits at the assembler"
+
+  - id: rivers-filled
+    title: Rivers are full of water
+    words: >
+      Water fills its bed close to the banks; no dry trench or ditch where a river runs.
+    from:
+      who: Brian
+      when: "2026-11-24 17:29Z"
+      said: "seen: a huge ditch where the river runs (Monterrey)"
+    tags: [land-opening, land-advance]
+    picture: >
+      Is there a river or stream? If so, is its water near the top of its banks? FAIL if the river runs at the bottom of a
+      deep dry trench or ditch, the water far below the banks. CAN'T TELL if no river can be seen.
+    owner: ground
+    weight: high
+    known: fixed
+    known_note: "fixed in 1.5.1 (river bed): a regression check"
+
+  - id: horizon-real
+    title: The horizon shows real far land
+    words: >
+      The horizon shows believable far land (hills, tree lines, haze grading into the sky); never flat stripes of
+      colour.
+    from:
+      who: Brian
+      when: "2026-11-25 17:11Z"
+      said: "seen (his screenshot): the horizon is flat bands of colour (steppe)"
+    tags: [land-opening, land-advance]
+    picture: >
+      Is the horizon in view? If so, does the far land show hills, tree lines or haze? FAIL if the far land is flat
+      straight bands of colour with no shapes in them. CAN'T TELL if no horizon can be seen.
+    owner: environment
+    weight: high
+    known: open
+
+  - id: look-matches-place
+    title: The look fits the place and season
+    words: >
+      Every battle's look matches its real place and date: its trees, buildings, ground and sky belong to that region
+      (no Asian look in Panama), and its season fits the month (no snow or bare trees in high summer).
+    from:
+      who: Brian
+      when: "2026-11-23 05:27Z"
+      said: "seen: Panama is drawn with an Asian look"
+      also:
+        - {who: environments thread, when: "2026-11-25", said: "seen: North America and Asia lack their own looks"}
+    tags: [land-opening, land-advance, land-village, air-flyover]
+    picture: >
+      The scene's place and month are given. Does the land fit them? FAIL if it plainly belongs to another kind of
+      country or season: snow or bare trees in June to August north of the equator, pagoda roofs or rice terraces in the
+      Americas or Europe, palms and jungle in northern Europe or Russia, green meadows in a desert place such as Egypt or
+      Libya. CAN'T TELL if no land is in view.
+    facts: look-matches-place
+    owner: environment
+    weight: high
+    known: open
+
+  - id: objects-sit-on-ground
+    title: Things sit on the ground
+    words: >
+      Every object sits on the ground: no gap under a house, tree, rock or vehicle, and no part sunk in unnaturally,
+      even on a slope.
+    from:
+      who: Brian
+      when: "2026-11-24"
+      said: "seen: floating houses at Algiers"
+    tags: [land-village, land-opening, land-advance, land-vehicles]
+    picture: >
+      Is any building, tree, rock or vehicle floating above the ground (a gap or sky visible under it, its shadow apart
+      from it), or sunk into the ground up to its windows or wheels? FAIL saying which.
+    owner: ground
+    weight: high
+    known: fixed
+    known_note: "Algiers passed its reshoot: a regression check"
+
+  - id: wind-sway-gentle
+    title: Grass and trees sway gently
+    words: >
+      Grass and trees sway gently with the wind's strength (a light breeze by default), never whipping or shimmering.
+    from:
+      who: Brian
+      when: "2026-11-25 12:49Z"
+      said: "seen: the grass wind too strong (calmed to a light breeze at his setting)"
+    tags: [land-advance, land-close-men]
+    later: "a motion measure over plants on strips (how far and how fast they sway); the clip measures read the camera and pops, not sway"
+    owner: environment
+    weight: high
+    known: fixed
+    known_note: "'wind' ON at his setting"
+
+  - id: weather-varies
+    title: Weather differs from battle to battle
+    words: >
+      Weather varies by battle as its date, season and place give: across a night's battles the skies range from clear
+      to overcast and wet, with no one kind of day for over about 70% of them.
+    from:
+      who: Brian
+      when: "2026-11-20 21:53Z"
+      said: "make sure the weather is different and not always cloudy or some days more cloudy"
+    tags: [air-flyover, air-battle, land-opening, sea-battle]
+    later: "a check across the night's look lines (they carry the weather) that fails when one kind of weather is over 70% of the battles"
+    owner: environment
+    weight: high
+    known: fixed
+    known_note: "weather per battle built 21 Nov; falling weather in R2 work"
+
+  - id: wet-shows-on-everything
+    title: Wet weather shows on everything
+    words: >
+      In wet weather the wet shows on ground, plants and vehicles alike (darker ground, puddles, shine on hulls); never
+      a dry crop or dusty tanks under rain.
+    from:
+      who: art director
+      when: "2026-11-21"
+      said: "seen: wet corn judged wrong (the weather pass Brian asked for on 20 Nov)"
+    tags: [land-opening, land-advance, land-vehicles]
+    picture: >
+      Is it raining, or is the ground wet (puddles, dark mud, shine)? If so, do the vehicles and plants look wet too
+      (darker, with shine)? FAIL if it is raining or wet but vehicles or crops look dry and dusty. CAN'T TELL in dry
+      weather.
+    owner: environment
+    weight: normal
+    known: open
+
+  - id: ruins-broken-not-sliced
+    title: Ruins look broken, not sliced
+    words: >
+      A ruined building shows broken edges, rubble at its foot and charred timbers; never clean geometric cuts.
+    from:
+      who: art director
+      when: "2026-11-25"
+      said: "seen: city ruins look cut with clean slices, not broken"
+    tags: [land-village]
+    picture: >
+      Is there a ruined building? If so, are its broken walls ragged, with rubble heaped at its foot? FAIL if the walls
+      end in clean straight cuts or smooth slices with no rubble. CAN'T TELL if no ruin can be seen.
+    owner: environment
+    weight: normal
+    known: open
+
+  - id: buildings-have-parts
+    title: Buildings have doors and windows
+    words: >
+      Every building in view has its parts: walls of a material (boards, plaster, brick or stone), doors, windows, a
+      roof and wear; never a blank grey slab.
+    from:
+      who: art director
+      when: "2026-11-25 14:01Z"
+      said: "seen: beside the cottage in the village, a grey slab of a barn with no boards, door or wear (Prokhorovka)"
+    tags: [land-village, land-opening]
+    picture: >
+      Look at each building near enough to see its walls. FAIL if any is a plain block with no doors, no windows and no
+      wall material (boards, brick, plaster or stone), saying which. CAN'T TELL if no building is that near.
+    owner: environment
+    weight: normal
+    known: open
+
+  - id: shadows-at-every-height
+    title: Things cast shadows from high up
+    words: >
+      Every object casts its shadow at every camera height the game uses, the highest view included.
+    from:
+      who: art director
+      when: "2026-11-22"
+      said: "seen: shadows fade out from the high view; objects lose their shadows at height"
+    tags: [land-opening, land-deploy]
+    picture: >
+      Is this a sunny view from high up? If so, do the tanks and trees cast shadows on the ground? FAIL if they show no
+      shadows while the sun is out. CAN'T TELL on an overcast day or at night.
+    owner: ground
+    weight: normal
+    known: open
+
+  - id: field-keeps-scars
+    title: The field keeps the battle's marks
+    words: >
+      The field keeps the marks of this fight where they happened (craters, scorch, ruts), aged to the time since; shell
+      holes are scattered where the shells fell, never laid in bands.
+    from:
+      who: art director
+      when: "2026-11-25 19:00Z"
+      said: "seen: the scarred ground aged too far; shell holes in bands"
+    tags: [land-after-card, land-advance]
+    picture: >
+      Are there shell holes on the field? If so, are they scattered irregularly? FAIL if they lie in straight bands or
+      regular rows. CAN'T TELL if no shell holes can be seen.
+    owner: ground
+    weight: normal
+    known: "off"
+    known_note: "'scars' OFF (not yet passed)"
+
+  - id: no-motion-smear
+    title: Moving things stay sharp
+    words: >
+      A moving thing is drawn sharp or with smooth motion blur; never broken into square pixel blocks, never trailing a
+      ghost copy.
+    from:
+      who: art director
+      when: "2026-11-24"
+      said: "seen: near men break into pixel blocks as they move; a ghost of a lorry's tailboard; copied models smear"
+    tags: [land-close-men, land-vehicles, land-advance]
+    picture: >
+      Look at the men and vehicles in motion. Is any of them broken into square pixel blocks, or shown with a faint
+      second copy (a ghost) beside or behind it? FAIL saying which. A smooth blur along the way it moves is a PASS.
+    owner: ground
+    weight: normal
+    known: open
+
+  # ---------------------------------------------------------------- the land battle as a whole
+
+  - id: high-view-shows-both-sides
+    title: The high view shows both sides
+    words: >
+      The player can always see the whole fight from a high view that frames both sides' forces, and that view is easy
+      to aim and move.
+    from:
+      who: Brian
+      when: "2026-11-24 17:23Z"
+      said: "i dont love the camera angle of the battles ... its hard to move the angle of the camera to see a good troop movement from above"
+      also:
+        - {who: Brian, when: "2026-11-26 03:45Z", said: "seen: the battle camera still needs work: he wants the ground-level view zoomed out from higher"}
+    tags: [land-opening, land-deploy]
+    picture: >
+      Is this a high view over the battlefield? If so, can you see forces of both sides (two groups of units, usually
+      facing each other)? FAIL if only one side's units are in view, or the units are too small to make out. CAN'T TELL
+      if this is not a high view.
+    owner: camera
+    weight: high
+    known: open
+    known_note: "top view in 1.5.1; hill view being built (R2)"
+
+  - id: battle-end-not-abrupt
+    title: Battles don't end abruptly
+    words: >
+      A battle never cuts to the after card while the player has a choice: when the enemy breaks he is offered to
+      pursue or to end it, and the last moments play out first.
+    from:
+      who: Brian
+      when: "2026-11-26 03:53Z"
+      said: "also i feel like the battles end abruptly ... if the enemy retreats, i have the option to continue on with the battle or end it"
+    tags: [land-after-card]
+    facts: battle-end-not-abrupt
+    owner: ground
+    weight: high
+    known: open
+    known_note: "design ruled 03:58Z; not built"
+
+  - id: deploy-in-formation
+    title: Units deploy in formation
+    words: >
+      At the start, units deploy in a formation that fits their role, spread across their front; never one block.
+    from:
+      who: Brian
+      when: "2026-11-26 03:45Z"
+      said: "seen: units deploy as one block with no formation (and again at 03:51Z)"
+    tags: [land-deploy, land-opening]
+    picture: >
+      Is this the start of a battle seen from above? If so, are each side's units spread across a front in lines or
+      groups with gaps between them? FAIL if a side's units are bunched in one solid block. CAN'T TELL if units cannot be
+      seen from above.
+    owner: ground
+    weight: high
+    known: open
+
+  - id: land-battle-reads-as-land
+    title: A land battle looks like one
+    words: >
+      A land battle reads as a land battle at first sight: troops and vehicles of both sides in view on recognisable
+      ground; never a picture that looks like a bombing mission or empty country.
+    from:
+      who: Brian
+      when: "2026-11-24 17:19Z"
+      said: "a bombing mission (what attacking Panama City and San Jose looked like)"
+    tags: [land-opening, land-advance]
+    picture: >
+      Does this picture read as a land battle, with soldiers or vehicles on the ground clearly in view? FAIL if no troops
+      or vehicles can be made out and it looks like a view from an aircraft or empty country.
+    owner: ground
+    weight: high
+    known: open
+    known_note: "open in part (jungle look work)"
+
+  - id: units-seen-from-high
+    title: Units can be seen from high up
+    words: >
+      Every unit is visible from the highest camera: a tank at least about 14 by 7 px on screen with its barrel, a cast
+      shadow, and a coat that stands out from the ground.
+    from:
+      who: art director
+      when: "2026-11-22 18:27Z"
+      said: "seen: from the high camera units vanish into the ground: tanks blue-grey instead of olive, too small, no shadow"
+    tags: [land-opening, land-deploy]
+    picture: >
+      Is this a high view over the battlefield? If so, can each tank be told apart from the ground, with its gun barrel
+      visible? FAIL if tanks are so small, or so like the ground in colour, that they almost vanish. CAN'T TELL if no
+      tanks are in view.
+    owner: ground
+    weight: normal
+    known: fixed
+    known_note: "fixed (6ad87c8c): a regression check"

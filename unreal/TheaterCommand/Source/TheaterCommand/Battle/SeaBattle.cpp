@@ -15,6 +15,7 @@
 #include "Campaign/CampaignEnvironment.h"
 #include "Campaign/CampaignFlags.h"
 #include "Campaign/CampaignGameMode.h"
+#include "Campaign/FilmCritic.h" // film critic: the development facts (-FilmCritic)
 #include "Campaign/CampaignHUD.h"
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
@@ -6065,6 +6066,7 @@ void ASeaBattle::TakePictures()
 	{
 		const FString Path = FPaths::Combine(ShotFolder, RecordKey + TEXT("-") + Shot.Name + TEXT(".png"));
 		FScreenshotRequest::RequestScreenshot(Path, true, false); // (with the screen: the bar is in the picture)
+		if (FilmCritic::On()) { FilmCritic::Still(Shot.Name); } // film critic: the still's camera (and a strip after it)
 		// (and the funnels smoking, the shot's own ship's among them or not: the funnels picture of Samar r2e had none on
 		// its hero)
 		const uint8* Hers = Shot.Subject >= 0 ? FunnelsChosen.Find(Shot.Subject) : nullptr;
@@ -6499,6 +6501,8 @@ void ASeaBattle::Tick(float DeltaSeconds)
 		RoomCheckedAt = RealT;
 		LightTheBattle();
 	}
+	// film critic: the camera as drawn this frame (its shake on), its shot and whether it cut
+	if (FilmCritic::On() && Eye) { FilmCritic::Sea(this, *Eye, UnitsPerMetre, DeltaSeconds, S.BattleT, TicksSinceCut == 0, Shots.IsValidIndex(ShotNow) ? Shots[ShotNow].Name : FString(), Shots.IsValidIndex(ShotNow) ? Shots[ShotNow].Subject : -1); }
 	TakePictures();
 	if (!ShotFolder.IsEmpty() && RealT > 1500.0)
 	{

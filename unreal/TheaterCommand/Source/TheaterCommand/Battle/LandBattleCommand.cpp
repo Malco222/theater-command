@@ -15,6 +15,7 @@
 #include "Battle/LandLive.h"
 
 #include "Battle/LandBattleState.h"
+#include "Campaign/FilmCritic.h" // film critic: the development facts (-FilmCritic)
 #include "Battle/LandFell.h"
 #include "Battle/LandScript.h"
 #include "Camera/CameraActor.h"
@@ -1603,6 +1604,7 @@ void ALandBattle::ScriptStill(const TCHAR* Name)
 	IFileManager::Get().MakeDirectory(*ScriptFolder, true);
 	const FString File = FPaths::Combine(ScriptFolder, Key + TEXT("-general-") + Name + TEXT(".png"));
 	FScreenshotRequest::RequestScreenshot(File, true, false);
+	if (FilmCritic::On()) { FilmCritic::Still(FString(TEXT("general-")) + Name); } // film critic: the still's camera (and a strip after it)
 	++ScriptStills;
 	UE_LOG(LogTheater, Display, TEXT("Land battle (script): still %s at %.1f s of battle"), *File, State.IsValid() ? State->Battle : 0.0);
 }

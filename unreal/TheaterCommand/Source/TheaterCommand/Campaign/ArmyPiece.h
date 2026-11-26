@@ -132,6 +132,13 @@ public:
 	int32 GetFleetShips() const { return What == 1 ? Fleet.Ships() : 0; }
 	int32 GetFleetBase() const { return What == 1 ? Fleet.Base : INDEX_NONE; }
 	const FString& GetNationTag() const { return NationTag; }
+	/**
+	 * film critic (development only, -FilmCritic; FilmCritic.cpp's fleet facts): a fleet as it stands on the table now.
+	 * Its name; its wake shown (0 none, 1 patrol, 2 passage); while it sails, how far (0 to 1, else -1) and the way of
+	 * its route's leg now (else zero); the way its bows point (world); its bows' and its wake's far end's points
+	 * (world), bOutTail false with no wake shown. False when it is not a fleet. Reads only: nothing is changed.
+	 */
+	bool FilmFleet(FString& OutName, int32& OutWake, double& OutProgress, FVector& OutCourse, FVector& OutBow, FVector& OutBowAt, FVector& OutTailAt, bool& bOutTail) const;
 	/** Its colours, as a ball in the world: what a town's name plate must not be drawn across. False while the piece is hidden. */
 	bool GetColours(FVector& OutMiddle, double& OutRadius) const;
 

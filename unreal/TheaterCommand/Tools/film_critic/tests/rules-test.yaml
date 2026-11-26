@@ -1,0 +1,109 @@
+# Rules for the end-to-end test: the four stub rules of rules.yaml plus one for each other facts check and a
+# picture-only rule, in the same format.
+owners:
+  navy:        {who: "the ships and sea thread", covers: "ships, fleets on the map, wakes, sea battles"}
+  air:         {who: "the 3D air thread", covers: "raids, air battles, pilots, aircraft, the air camera"}
+  ground:      {who: "the tank and soldier thread", covers: "soldiers, tanks, vehicles in land battles"}
+  camera:      {who: "the camera thread", covers: "battle cameras, cuts, framing"}
+  environment: {who: "the environments thread", covers: "ground, grass, trees, sky, weather in every theater"}
+  ui:          {who: "the UI director", covers: "words, cards, buttons on screen"}
+  speed:       {who: "the speed detective", covers: "frame rate, hitches, freezes"}
+  marks:       {who: "the markings and paint work", covers: "national markings and paint on every unit"}
+
+rules:
+  - id: wake-trails-behind
+    title: Wakes trail behind ships
+    words: A ship's wake always trails behind it, along the way it is actually sailing.
+    from: {who: Brian, when: 2026-11-26, said: "fleet wakes on the campaign map always point left"}
+    tags: [map-fleet-sailing, map-fleet-rest, sea-battle, sea-close]
+    picture: >
+      Look at every ship that has white foam or a pale trail on the water near it. Is the trail behind the stern,
+      opposite the bow, and lined up with the way the ship is going? FAIL if any trail leaves from the bow or the
+      side, or if every ship's trail points to the same side of the screen whatever way the ships face.
+    facts: fleet-bow-on-course
+    owner: navy
+    weight: high
+    known: open
+  - id: raid-opening-shows-interceptors
+    title: The raid's opening shows the fighters
+    words: A raid's opening shows the bombers and the fighters coming up to meet them, not empty ground and cloud.
+    from: {who: Brian, when: 2026-11-26, said: "the raid's opening shot shows the ground then clouds but never the interceptors"}
+    tags: [air-flyover]
+    picture: >
+      Is there at least one aircraft clearly visible in this picture (not a speck), and if the shot is named as the
+      fighters' or the guard's, are fighters visible? FAIL if the picture is only ground, sea or cloud.
+    facts: opening-shows-both-sides
+    owner: air
+    weight: high
+    known: open
+  - id: camera-smooth
+    title: The camera moves smoothly
+    words: A camera never jumps, stutters or flickers.
+    from: {who: Brian, when: 2026-11-26, said: "the bombing video camera is super choppy ... it flickers and isn't smooth"}
+    tags: [strip]
+    clip:
+      - {measure: jump, max: 0}
+      - {measure: stutter, max: 0}
+      - {measure: flicker, max: 0}
+      - {measure: freeze, max: 0}
+    facts: camera-smooth
+    owner: camera
+    weight: high
+    known: open
+  - id: marks-every-year
+    title: Markings in every year
+    words: Every tank, plane, ship and soldier wears its nation's markings and paint in every month of every year.
+    from: {who: Brian, when: 2026-11-26, said: "markings and paint never depend on the year"}
+    tags: [land-vehicles, land-close-men, air-battle, air-chase, sea-close, map-fleet-rest]
+    picture: >
+      Look at each tank, aircraft and ship close enough to see its sides or wings. Does each carry a national marking
+      (cross, star, roundel, disc, flag or number)? FAIL naming any that is bare.
+    facts: marks-on-every-model
+    owner: marks
+    weight: high
+    known: open
+  - id: men-run-differently
+    title: Men run differently
+    words: A crowd of running men never moves as one clone; speeds and strides differ.
+    from: {who: the ground thread, when: 2026-11-20, said: "everyone runs at the same pace"}
+    tags: [land-close-men, land-advance]
+    facts: men-gait-variety
+    owner: ground
+    weight: normal
+    known: open
+  - id: tanks-stand-still
+    title: Standing tanks stand still
+    words: A tank that is not driving does not swing its nose back and forth.
+    from: {who: Brian, when: 2026-11-22, said: "the tanks wiggle when they stop"}
+    tags: [land-vehicles, land-battle]
+    facts: vehicles-no-rocking
+    owner: ground
+    weight: high
+    known: open
+  - id: battle-ends-gently
+    title: Battles end gently
+    words: When a side breaks the battle plays on for a while before the card, or offers to go on.
+    from: {who: Brian, when: 2026-11-24, said: "it just stops the moment they run"}
+    tags: [every-battle]
+    facts: battle-end-not-abrupt
+    owner: ui
+    weight: high
+    known: open
+  - id: look-fits-place
+    title: The look fits the place and date
+    words: The ground, trees and sky match the month, year and place of the battle.
+    from: {who: the look bible thread, when: 2026-11-24, said: "snow in July"}
+    tags: [every-battle]
+    facts: look-matches-place
+    owner: environment
+    weight: normal
+    known: unknown
+  - id: card-words-readable
+    title: The card's words can be read
+    words: Every card's words are readable at a glance.
+    from: {who: the UI director, when: 2026-11-21, said: "small grey words on the card"}
+    tags: [ui-card]
+    picture: Can every word on the card be read easily? FAIL naming any word too small, too faint or cut off.
+    owner: ui
+    weight: normal
+    known: unknown
