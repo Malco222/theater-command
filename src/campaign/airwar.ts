@@ -29,7 +29,7 @@ import {
 } from './air';
 import { damageRules } from './citydamage';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
-import { DEFENCE, allied, atWar, headline, worksOf } from './game';
+import { DEFENCE, allied, atWar, headline, placeName, worksOf } from './game';
 import { raidCardLines } from './fighters';
 import { SIGHT, corpsKnown, sightOf } from './intel';
 import { CLASSES, NAVY, aswKit, atSea, shipList, surfaceShips } from './navy';
@@ -45,7 +45,7 @@ import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneN
 import { whyNotField, wrecked } from './airversion';
 import { wayWords } from './ferry';
 import { strafeSection, type StrafeSection } from './strafers';
-import { lightsAt } from './citydefences';
+import { cityDefences, lightsAt } from './citydefences';
 import { fieldKnown, fieldRules, fieldView } from './fieldstate';
 import { band, bandNote, fogBits, fogged, knownDefence, knownLines, raidFogOn, rememberSkies, skyKnown } from './airfog';
 
@@ -1014,7 +1014,9 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   // Weather (ruling 127): the sky over the target, known before the order; under a closed sky the card cannot open.
   if (weatherOn(g)) {
     const z = skyZone(g, kind as AirMission, target);
-    const line = skyRaidLine(g, z, place);
+    // (City defences, the switch on: the place with its article, "Cloud over the Ruhr", as the card's Searchlights
+    // line names it; with the switch off the line prints as shipped. The UI director, 26 Nov 2026 04:10Z.)
+    const line = skyRaidLine(g, z, cityDefences(g) ? placeName(place) : place);
     if (line) plan.sky = line;
     if (skyOf(g, z) === 'closed') { plan.why = `Closed sky this month: nothing flies over ${zoneName(z)}.`; return plan; }
   }

@@ -2883,6 +2883,10 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   // on the Flak line. Seen at a level: "Level 2 guns ringed the factories of Rhineland when seen two months ago"; never
   // scouted: "Not scouted, so reckoned at the worst: level 3 guns round the factories of Rhineland". In sight, as before.
   // The searchlights' hedge below reads the same `known`.)
+  // (City defences, the switch on: the place takes its article as the news gives it, "the factories of the Ruhr",
+  // so that the card's lines agree with the Searchlights line below; with the switch off the line prints as shipped.
+  // The UI director, 26 Nov 2026 04:10Z.)
+  const named = cityDefences(g) ? placeName(place) : place;
   const aaLine = (round: string): string => !known ? `Level ${out.aa} guns ring ${round}`
     : (known.seen ?? -1) < 0 ? `Not scouted, so reckoned at the worst: level ${out.aa} guns round ${round}`
       : `Level ${out.aa} guns ringed ${round} when ${seenAgo(known.ago ?? 0)}`;
@@ -2894,8 +2898,8 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     const r = g.regions[target], gone = breachOf(g, r);
     out.lines.push({ label: 'The town', value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g, r) - 1) * 100)}% stronger${townWorksPhrase(g, r)}${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ''}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling('raid')}% in all` });
   }
-  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(place), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
-  else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(`the factories of ${place}`), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(named), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(`the factories of ${named}`), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   // City defences: the searchlights' line, a night raid with lights built and the switch on (the UI director's words,
   // section 2). One line, the reading that governs: cloud, then no guns, then no Fighter control, then too many bombers.
   // The clauses that rest on the guns' levels (none, some lit, every level lit) read the side's count under fog on raids,
