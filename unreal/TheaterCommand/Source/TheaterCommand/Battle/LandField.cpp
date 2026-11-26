@@ -91,6 +91,19 @@ namespace LandField
 		double Lerp(double A, double B, double T) { return A + (B - A) * T; }
 		double Sq(double X) { return X * X; }
 
+		/** Where across a furrow a place lies (LandField::Furrows' x: -0.5 to 0.5, 0 the trough's floor), the plough's
+		 * way DX, DY (unit), the line wandering as the specification has it; OutStrand (if asked) which furrow, counted
+		 * across the field (its n). */
+		double FurrowPhase(double X, double Y, double DX, double DY, double Period, double* OutStrand = nullptr)
+		{
+			const double Along = X * DX + Y * DY, Across = -X * DY + Y * DX;
+			const double Wobble = 0.05 * std::sin(2.0 * Pi * Along / 23.0 + 0.9 * Across) + 0.03 * std::sin(2.0 * Pi * Along / 8.7 - 0.4 * Across + 1.3)
+								+ 0.06 * std::sin(2.0 * Pi * (Across / 3.7 + Along / 31.0));
+			const double Turns = (Across + Wobble) / Period;
+			if (OutStrand) *OutStrand = std::floor(Turns);
+			return Turns - std::floor(Turns) - 0.5;
+		}
+
 		/** A lattice point's value, -1 to 1: one mix of its place and the seed (the noise is most of the build's time). */
 		double Lattice(int64_t I, int64_t J, uint64_t Seed)
 		{
@@ -106,6 +119,37 @@ namespace LandField
 			const double U = Fade(X - FX), V = Fade(Y - FY);
 			const double A = Lattice(I, J, Seed), B = Lattice(I + 1, J, Seed), C = Lattice(I, J + 1, Seed), D = Lattice(I + 1, J + 1, Seed);
 			return Lerp(Lerp(A, B, U), Lerp(C, D, U), V);
+		}
+
+		/**
+		 * Value noise read through the cubic B-spline over the sixteen lattice points round the place (ploughland, on
+		 * trial), its spread scaled to Noise's (about -1 to 1, mostly within a half). Noise's fade lies flat at every
+		 * lattice point and runs straight along the lattice's lines between them, so a share cut from it drew the lattice's
+		 * squares, right angles and stair-steps (the art director's mend 1); the spline has no flat at a point and its spread
+		 * is the same all across a cell, so a cut from it draws round blots.
+		 */
+		double RoundNoise(double X, double Y, uint64_t Seed)
+		{
+			const double FX = std::floor(X), FY = std::floor(Y);
+			const int64_t I = static_cast<int64_t>(FX), J = static_cast<int64_t>(FY);
+			const auto Spline = [](double T, double* W) {
+				const double T2 = T * T, T3 = T2 * T, S = 1.0 - T;
+				W[0] = S * S * S / 6.0;
+				W[1] = (3.0 * T3 - 6.0 * T2 + 4.0) / 6.0;
+				W[2] = (-3.0 * T3 + 3.0 * T2 + 3.0 * T + 1.0) / 6.0;
+				W[3] = T3 / 6.0;
+			};
+			double WX[4], WY[4];
+			Spline(X - FX, WX);
+			Spline(Y - FY, WY);
+			double Sum = 0.0;
+			for (int B = 0; B < 4; ++B)
+			{
+				double Row = 0.0;
+				for (int A = 0; A < 4; ++A) Row += WX[A] * Lattice(I - 1 + A, J - 1 + B, Seed);
+				Sum += WY[B] * Row;
+			}
+			return 1.5 * Sum;
 		}
 
 		/** A clutter square's nine points 4 m apart (ploughland, on trial), read between them at (FX, FY), 0 to 1 across it. */
@@ -980,10 +1024,12 @@ namespace LandField
 		LandSteppe::FallowSpot FallowAt(double X, double Y, double Edge, double N2, double Broad, bool bQuick = false) const;
 		/** FallowAt's two parts: the field's frame and its edge (cheap), then its weeds and its damp (the noises). */
 		LandSteppe::FallowSpot FallowEdge(double X, double Y, double Edge, const double* Wander = nullptr, bool bLands = true) const;
-		/** How far the plough's edge wanders in from where it would be (metres, -2 to 2), a noise of the place alone. */
+		/** How far the plough's edge wanders in from where it would be (metres, -2 to 2), a noise of the place alone (round,
+		 * its finest grain turned off the world's axes: no straight run along them). */
 		double FallowWander(double X, double Y) const
 		{
-			return 1.1 * Noise(X / 16.0, Y / 16.0, Seed ^ 0xF0A122ull) + 0.9 * Noise(X / 41.0, Y / 41.0, Seed ^ 0xF0A123ull);
+			return 1.0 * RoundNoise(X / 16.0, Y / 16.0, Seed ^ 0xF0A122ull) + 0.8 * RoundNoise(X / 41.0, Y / 41.0, Seed ^ 0xF0A123ull)
+				 + 0.5 * RoundNoise((0.809 * X + 0.588 * Y) / 7.0, (0.809 * Y - 0.588 * X) / 7.0, Seed ^ 0xF0A12Eull);
 		}
 		void FallowGrowth(double X, double Y, LandSteppe::FallowSpot& S, bool bQuick) const;
 		/** Whether the place is a steppe fallow's own ground (SteppeColour's ploughland branch). */
@@ -993,6 +1039,45 @@ namespace LandField
 			const size_t P = Pix(X, Y);
 			const ParcelInfo& Q = Parcels[static_cast<size_t>(Pid[P])];
 			return Rgn[P] == RgOpen && Q.Kind != RgRough && Q.Crop == CpFallow;
+		}
+		/**
+		 * Ploughland's furrows at a near ground point (LandField::Mesh::Uvs): the plan's way along the fallow's length (as
+		 * FallowEdge's frame has it: the plan's turn, its columns' way where the field is longer along them), one way round
+		 * in all the field (by its key), times LandSteppe::FurrowShare; zero off a fallow, and within 6.25 m (one and a
+		 * half of the inner mesh's squares, 4.17 m a side) and 4 m more of its edges, so no square has two fields' ways (the
+		 * band's squares, 8.33 m, are 11.8 m corner to corner, under twice 6.25). One reach for every tile, so a point two
+		 * tiles share has the same numbers in both (it was 1.45 squares of each tile's own, and the inner and the band's
+		 * tiles disagreed along their seam).
+		 */
+		void PloughWay(double X, double Y, float& OutX, float& OutY) const
+		{
+			OutX = OutY = 0.0f;
+			if (!bPlough || !FallowHere(X, Y)) return;
+			int Crop = LandSteppe::CropPasture;
+			double Side[4] = { 0.0, 0.0, 0.0, 0.0 };
+			bool bLong = true;
+			Sp->FieldFrame(X, Y, Crop, Side, bLong);
+			if (Crop != LandSteppe::CropFallow) return;
+			const double Edge = Bilinear(DistE, X, Y);
+			constexpr double Reach = 6.25;
+			const double Guard = Smooth(Reach, Reach + 4.0, std::min({ Side[0], Side[1], Side[2], Side[3], Edge }));
+			if (Guard <= 0.0) return;
+			LandSteppe::FallowSpot S = FallowEdge(X, Y, Edge);
+			FallowGrowth(X, Y, S, false);
+			const double Share = Guard * LandSteppe::FurrowShare(S);
+			if (Share <= 0.0) return;
+			double WX = 0.0, WY = 0.0;
+			PlanWay(bLong, S.Key, WX, WY);
+			OutX = static_cast<float>(WX * Share);
+			OutY = static_cast<float>(WY * Share);
+		}
+		/** The plough's way on a fallow (unit, the field's x, y): along the plan's columns where the field is longer along
+		 * them (bLong, Plan::FieldFrame's), else across; one way round in all the field, by its key. */
+		void PlanWay(bool bLong, uint64_t Key, double& OutX, double& OutY) const
+		{
+			const double Turn = Sp->Lay.Turn, Round = (Hash(Key, 11) & 1u) ? -1.0 : 1.0;
+			OutX = Round * (bLong ? -std::sin(Turn) : std::cos(Turn));
+			OutY = Round * (bLong ? std::cos(Turn) : std::sin(Turn));
 		}
 		/** A plan field's own key for its ploughland draws: the same field the same in the raster, the band and the ring. */
 		uint64_t FallowKey(int Id) const { return Hash(Seed ^ 0xF0A11Bull, static_cast<uint64_t>(static_cast<int64_t>(Id))); }
@@ -5746,18 +5831,36 @@ namespace LandField
 		case RgWorks:
 			if (bPlough)
 			{
-				// (ploughland: the earth dug and thrown up in heaps and scrapes, trodden grass between, its edge ragged, not
-				// the rules' cells dug out to a ruler)
-				// (the cells' 25 m squares not drawn: the dug ground's own outline wanders 5 m and more over 23 m and 9 m, and
-				// its heaps lie in patches of their own, so a row of cells reads as scrapes, not as windows on the grid)
-				const double Ragged = Edge + 5.0 * Noise(X / 23.0, Y / 23.0, Seed ^ 0xF0A121ull) + 2.0 * Noise(X / 9.0, Y / 9.0, Seed ^ 0xF0A129ull);
-				// (the heaps from a noise turned off the world's axes two ways and bent: the value noise's lattice, cut by a
-				// share unturned, drew squares)
-				const double BX = X + 6.0 * Noise(X / 19.0, Y / 19.0, Seed ^ 0xF0A12Bull), BY = Y + 6.0 * Noise(X / 19.0 - 4.1, Y / 19.0 + 6.3, Seed ^ 0xF0A12Cull);
-				const double Heaps = (Noise((0.857 * BX + 0.515 * BY) / 26.0, (0.857 * BY - 0.515 * BX) / 26.0, Seed ^ 0xF0A12Aull)
-									  + 0.5 * Noise((0.242 * BX + 0.970 * BY) / 11.0, (0.242 * BY - 0.970 * BX) / 11.0, Seed ^ 0xF0A12Dull)) / 1.5;
-				const double Dig = Smooth(-0.1, 0.2, Heaps + 0.2 * N2) * Smooth(0.0, 6.0, Ragged);
-				C = OfTone(LandSteppe::WorksColour(Dig, N1, N2, Broad));
+				// (ploughland: the earth dug and thrown up in heaps and scrapes, trodden grass between, its outline wandering
+				// and fading into the grass, not the rules' cells dug out to a ruler)
+				// (the art director's mend 1: the heaps were cut from the fine mottle N2, a value noise 7 m to its lattice
+				// on the world's axes, and drew its squares as a maze. Now every field cut here is a round noise turned off
+				// the axes and bent, and every cut is spread over 6.4 m whatever the noise's slope: one and a half of the near
+				// mesh's points, so no outline follows the mesh's squares and diagonals either)
+				const auto HeapsAt = [this](double PX, double PY) {
+					const double BX = PX + 7.0 * RoundNoise(PX / 19.0, PY / 19.0, Seed ^ 0xF0A12Bull);
+					const double BY = PY + 7.0 * RoundNoise(PX / 19.0 - 4.1, PY / 19.0 + 6.3, Seed ^ 0xF0A12Cull);
+					return (RoundNoise((0.857 * BX + 0.515 * BY) / 17.0, (0.857 * BY - 0.515 * BX) / 17.0, Seed ^ 0xF0A12Aull)
+							+ 0.7 * RoundNoise((0.242 * BX + 0.970 * BY) / 7.5, (0.242 * BY - 0.970 * BX) / 7.5, Seed ^ 0xF0A12Dull)) / 1.7;
+				};
+				const double Heaps = HeapsAt(X, Y);
+				const double Slope = std::hypot(HeapsAt(X + 1.5, Y) - Heaps, HeapsAt(X, Y + 1.5) - Heaps) / 1.5;
+				const double Metres = (Heaps - 0.05) / std::max(Slope, 0.004); // (in from the dug ground's edge, out of it under 0)
+				// The outline: 4 m in from the cells' edge, wandering 5 m and more over 23 m and 9 m, the works fading over 8 m
+				// from there into the steppe's grass round it (the pasture's own paint without its strip, so the cells' edge
+				// draws no line of its own: the grass round them has its strip, as every edge on the steppe has).
+				const double Ragged = Edge - 4.0 + 5.0 * RoundNoise(X / 23.0, Y / 23.0, Seed ^ 0xF0A121ull)
+									  + 2.5 * RoundNoise((0.809 * X - 0.588 * Y) / 9.0, (0.809 * Y + 0.588 * X) / 9.0, Seed ^ 0xF0A129ull);
+				const double Worn = Smooth(0.0, 8.0, Ragged);
+				// (the grass trodden and dusty in a ring 9 m round each scrape, not over the whole of the cells: no buff
+				// rectangle left round the works; the dug earth spread over 6.4 m of its edge)
+				const double Trodden = Worn * Smooth(-9.0, 0.0, Metres);
+				const double Dug = Worn * Smooth(-3.2, 3.2, Metres) / std::max(Trodden, 1e-6);
+				// (the dug earth's own mottle, round and turned, no cut: a spread of tone, not a pattern)
+				const double Mottle = RoundNoise((0.643 * X + 0.766 * Y) / 9.0, (0.643 * Y - 0.766 * X) / 9.0, Seed ^ 0xF0A12Full);
+				C = OfTone(LandSteppe::WorksColour(std::min(Dug, 1.0), N1, Mottle, Broad));
+				C = Mixed(OfTone(LandSteppe::FieldColour(LandSteppe::CropPasture, N1, N2, Broad, 0.0, 0.0, 99.0)), C, Trodden);
+				bStrip = false;
 				break;
 			}
 			C = Mixed(Rgb(82, 72, 58), Rgb(96, 84, 66), Smooth(0.0, 0.45, N1 + 0.3 * N2)); // black earth dug and thrown up
@@ -5802,7 +5905,10 @@ namespace LandField
 	{
 		LandSteppe::FallowSpot S = FallowEdge(X, Y, Edge);
 		FallowGrowth(X, Y, S, bQuick);
-		S.N2 = N2;
+		// (its fine mottle its own, round and turned: N2's lattice, 7 m on the world's axes, read through even 4% of the
+		// tone, drew faint squares; N2 itself is not asked)
+		(void)N2;
+		S.N2 = RoundNoise((0.927 * X + 0.375 * Y) / 7.0, (0.927 * Y - 0.375 * X) / 7.0, Seed ^ 0xF0A12Eull);
 		S.Broad = Broad;
 		return S;
 	}
@@ -5831,11 +5937,24 @@ namespace LandField
 		if (DU < Round && DV < Round) Gap = Round - std::hypot(Round - DU, Round - DV);
 		if (Crop != LandSteppe::CropFallow) Gap = 0.0; // (the raster's fallow over the plan's neighbour, a step of its edge: balk)
 		Gap = std::min(Gap, Edge + 2.0);
-		S.In = Gap - (3.0 + (Wander ? *Wander : FallowWander(X, Y)));
+		// (the plough began 5 m in, give or take its wander: the balk's grass full at the parcel's edge nearly everywhere,
+		// so the edge's straight line is the strip's, and the plough's own edge, spread over 6.4 m, wanders)
+		S.In = Gap - (5.0 + (Wander ? *Wander : FallowWander(X, Y)));
 		const double A = bLong ? Side[0] : Side[2];
 		const double Wide = bLong ? Side[0] + Side[1] : Side[2] + Side[3];
 		S.Side = A / std::max(1.0, Wide);
 		if (bLands) S.Lands = std::cos(2.0 * Pi * A / (1.6 * Lands)); // (the paint's alone)
+		// (the band's mesh has its points 8.3 m apart, not 4.17: its edges spread twice as far, from the field's edge
+		// over 25 m, so no seam where the two meshes meet)
+		S.Soft = 3.3 * Smooth(0.0, 25.0, std::max({ -X, X - FW, -Y, Y - FH }));
+		if (S.State >= 0.75)
+		{
+			// Half worked: the work line along the furrows, Line's way across, wandering a metre or two over 25 m and spread
+			// over 7 m (not a ruler's step the mesh draws in stairs).
+			const double Along = bLong ? Side[2] : Side[0];
+			const double Off = A - (0.3 + 0.4 * S.Line) * Wide + 1.5 * RoundNoise(Along / 25.0, 0.37 * static_cast<double>(S.Key & 0xFFu), Seed ^ 0xF0A130ull);
+			S.Worked = Smooth(3.5 + S.Soft, -3.5 - S.Soft, Off);
+		}
 		return S;
 	}
 
@@ -5850,18 +5969,30 @@ namespace LandField
 		const double Big = 28.0 + 20.0 * Unit(Hash(S.Key, 6));
 		const double Small = 10.0 + 8.0 * Unit(Hash(S.Key, 7));
 		const double FineShare = S.State < 0.35 ? 0.2 : S.State < 0.75 ? 0.3 : 0.4;
-		// (the value noise's lattice turned each field its own way, its two octaves two ways, and bent a little: a share cut
-		// from it unturned drew the lattice's squares, as windows and steps along the world's axes)
+		// (the noise turned each field its own way, its octaves other ways, and its lookup warped by a third of the
+		// patches' grain (9 to 16 m: two to four of the near mesh's points) over that grain: round noise, so no
+		// lattice's squares, and no straight run to its outline)
 		const double Turn = Pi * Unit(Hash(S.Key, 8));
 		const double C1 = std::cos(Turn), S1 = std::sin(Turn), C2 = std::cos(Turn + 1.1), S2 = std::sin(Turn + 1.1);
-		const double BX = X + 7.0 * Noise(X / 21.0, Y / 21.0, Seed ^ 0xF0A126ull);
-		const double BY = Y + 7.0 * Noise(X / 21.0 + 5.3, Y / 21.0 - 3.7, Seed ^ 0xF0A127ull);
-		const double U1 = BX * C1 + BY * S1, V1 = -BX * S1 + BY * C1;
-		const double U2 = BX * C2 + BY * S2, V2 = -BX * S2 + BY * C2;
-		const double Patch = (Noise(U1 / Big, V1 / Big, Seed ^ 0xF0A124ull) + 0.5 * Noise(U2 / (0.49 * Big) + 17.3, V2 / (0.49 * Big) - 9.1, Seed ^ 0xF0A128ull)) / 1.5;
-		const double Fine = Noise(V2 / Small, U2 / Small, Seed ^ 0xF0A125ull);
-		S.Weed = Patch + FineShare * Fine;
-		const double Swell = Fbm(X, Y, 80.0, 2, Seed ^ 0xA2);
+		const double C3 = std::cos(Turn + 2.3), S3 = std::sin(Turn + 2.3);
+		const double Warp = Big / 3.0;
+		const auto WeedAt = [&](double PX, double PY) {
+			const double BX = PX + Warp * RoundNoise(PX / Big + 5.3, PY / Big - 3.7, Seed ^ 0xF0A126ull);
+			const double BY = PY + Warp * RoundNoise(PX / Big - 2.9, PY / Big + 7.1, Seed ^ 0xF0A127ull);
+			const double U1 = BX * C1 + BY * S1, V1 = -BX * S1 + BY * C1;
+			const double U2 = BX * C2 + BY * S2, V2 = -BX * S2 + BY * C2;
+			const double Patch = (RoundNoise(U1 / Big, V1 / Big, Seed ^ 0xF0A124ull) + 0.5 * RoundNoise(U2 / (0.49 * Big) + 17.3, V2 / (0.49 * Big) - 9.1, Seed ^ 0xF0A128ull)) / 1.5;
+			return Patch + FineShare * RoundNoise(V2 / Small, U2 / Small, Seed ^ 0xF0A125ull);
+		};
+		// (how fast the weed noise changes a metre, so the paint spreads its cut over metres, not over a share of the noise)
+		constexpr double Step = 1.5;
+		S.Weed = WeedAt(X, Y);
+		S.Grade = std::hypot(WeedAt(X + Step, Y) - S.Weed, WeedAt(X, Y + Step) - S.Weed) / Step;
+		// (the weeds strewn between the patches: two fine round noises, 5 m to their lattices (some 6 to 13 m from one
+		// crossing to the next), turned two more ways; the higher of the two, so the earth bare only where both are low)
+		S.Sprig = std::max(RoundNoise((X * C3 + Y * S3) / 5.0 + 3.1, (Y * C3 - X * S3) / 5.0 - 8.7, Seed ^ 0xF0A131ull),
+						   RoundNoise((Y * C2 - X * S2) / 5.0 - 6.4, (X * C2 + Y * S2) / 5.0 + 1.9, Seed ^ 0xF0A134ull));
+		const double Swell = (RoundNoise(X / 80.0 + 1.7, Y / 80.0 - 6.2, Seed ^ 0xF0A132ull) + 0.5 * RoundNoise(X / 39.0 - 3.3, Y / 39.0 + 2.2, Seed ^ 0xF0A133ull)) / 1.5;
 		double Hollow = 0.0;
 		if (!bQuick)
 		{
@@ -5903,16 +6034,18 @@ namespace LandField
 				const uint64_t K = FallowKey(Id);
 				const double State = Unit(Hash(K, 1));
 				const double Line = Unit(Hash(K, 2));
-				const double Across = bLong ? Side[0] / std::max(1.0, Side[0] + Side[1]) : Side[2] / std::max(1.0, Side[2] + Side[3]);
+				const double Wide = std::max(1.0, bLong ? Side[0] + Side[1] : Side[2] + Side[3]);
+				const double Across = (bLong ? Side[0] : Side[2]) / Wide;
 				const double Out = Outside(X, Y) - Band;
-				C = OfTone(LandSteppe::FarFallowColour(State, Line, Across, N1, Broad, Gap));
+				// (the work line spread over 40 m: the ring's points are 12.5 m apart and more)
+				C = OfTone(LandSteppe::FarFallowColour(State, Line, Across, N1, Broad, Gap, 20.0 / Wide));
 				// (next the band, the near paint itself, into the mean over 400 m: no seam where the band's tiles meet the ring)
 				if (Out < 600.0)
 				{
 					const double NearBroad = Fbm(X, Y, 320.0, 2, Seed ^ 0x13);
-					// (its weed patches soft: the ring's points are 25 m and more apart, and would draw them as its grid's squares)
+					// (its edges spread over 20 m: the ring's points here are 12.5 m apart, and would draw them as its grid's squares)
 					LandSteppe::FallowSpot S = FallowAt(X, Y, 1e9, 0.0, NearBroad);
-					S.Soft = 0.3;
+					S.Soft = std::max(S.Soft, 6.8);
 					const Col Near = OfTone(LandSteppe::FallowColour(S));
 					C = Mixed(Near, C, Smooth(200.0, 600.0, Out));
 				}
@@ -6057,9 +6190,11 @@ namespace LandField
 
 		/**
 		 * A rectangle of ground as a grid: Height and Colour give each point; each quad split along its flatter diagonal;
-		 * a skirt hangs from its edges (Skirt metres) to hide the cracks between tiles of different spacing.
+		 * a skirt hangs from its edges (Skirt metres) to hide the cracks between tiles of different spacing. Way (if given:
+		 * ploughland's near tiles) gives each point its two numbers (Mesh::Uvs), the skirt's zero.
 		 */
-		void GridMesh(Mesh& M, const GridSpec& G, const std::function<double(double, double)>& Height, const std::function<Col(double, double)>& Colour)
+		void GridMesh(Mesh& M, const GridSpec& G, const std::function<double(double, double)>& Height, const std::function<Col(double, double)>& Colour,
+					  const std::function<void(double, double, float&, float&)>* Way = nullptr)
 		{
 			const int NX = G.NX, NY = G.NY, W = NX + 3;
 			const double StepX = G.SX / NX, StepY = G.SY / NY;
@@ -6075,6 +6210,13 @@ namespace LandField
 					const double X = G.X0 + I * StepX, Y = G.Y0 + J * StepY;
 					const V3 Nrm = Unit3({ -(ZAt(I + 1, J) - ZAt(I - 1, J)) / (2.0 * StepX), -(ZAt(I, J + 1) - ZAt(I, J - 1)) / (2.0 * StepY), 1.0 });
 					B.Vert({ X, Y, ZAt(I, J) }, Nrm, Colour(X, Y));
+					if (Way)
+					{
+						float WX = 0.0f, WY = 0.0f;
+						(*Way)(X, Y, WX, WY);
+						M.Uvs.push_back(WX);
+						M.Uvs.push_back(WY);
+					}
 				}
 			auto Id = [Base0, NX](int I, int J) { return Base0 + static_cast<uint32_t>(J * (NX + 1) + I); };
 			for (int J = 0; J < NY; ++J)
@@ -6107,6 +6249,7 @@ namespace LandField
 				const V3 P{ M.Positions[Up * 3], M.Positions[Up * 3 + 1], M.Positions[Up * 3 + 2] - G.Skirt };
 				const V3 Nrm{ M.Normals[Up * 3], M.Normals[Up * 3 + 1], M.Normals[Up * 3 + 2] };
 				Low[K] = B.Vert(P, Nrm, Col{ static_cast<double>(M.Colours[Up].R), static_cast<double>(M.Colours[Up].G), static_cast<double>(M.Colours[Up].B) });
+				if (Way) M.Uvs.insert(M.Uvs.end(), { 0.0f, 0.0f });
 			}
 			for (size_t K = 0; K < R; ++K)
 			{
@@ -7350,7 +7493,9 @@ namespace LandField
 				G.NX = G.NY = bInner ? NearQuads : BandQuads;
 				G.Skirt = 1.0;
 				T.Spacing = TileSize / G.NX;
-				GridMesh(T.Near, G, NearZ_, NearCol);
+				// (ploughland: the near ground carries the furrows' way and strength at every point; nothing else does)
+				const std::function<void(double, double, float&, float&)> Way = [this](double X, double Y, float& OutX, float& OutY) { PloughWay(X, Y, OutX, OutY); };
+				GridMesh(T.Near, G, NearZ_, NearCol, bPlough ? &Way : nullptr);
 				G.NX = G.NY = FarQuads;
 				const double Sub = TileSize / FarQuads / 3.0;
 				GridMesh(T.Far, G, FarZ, [this, Sub](double X, double Y) {
@@ -7358,13 +7503,16 @@ namespace LandField
 					Col Sum;
 					if (bPlough && FallowHere(X, Y))
 					{
-						// (ploughland: a fallow's weed patches, 15 to 60 m, read over the whole of the point's 17 m, five by
-						// five, or the far mesh draws them as the squares of its grid)
+						// (ploughland: a fallow's weed patches read over the point's own reach, five by five out to 13 m, weighed
+						// as the mesh weighs a point between its neighbours (a tent to the next point, 16.7 m), or the far mesh
+						// draws them as the squares of its grid)
+						static constexpr double Tent[5] = { 0.2 / 2.6, 0.6 / 2.6, 1.0 / 2.6, 0.6 / 2.6, 0.2 / 2.6 };
 						for (int B = -2; B <= 2; ++B)
 							for (int A = -2; A <= 2; ++A)
 							{
-								const Col C = GroundColour(X + A * 0.6 * Sub, Y + B * 0.6 * Sub);
-								Sum = { Sum.R + C.R / 25.0, Sum.G + C.G / 25.0, Sum.B + C.B / 25.0 };
+								const Col C = GroundColour(X + A * 1.2 * Sub, Y + B * 1.2 * Sub);
+								const double W = Tent[A + 2] * Tent[B + 2];
+								Sum = { Sum.R + C.R * W, Sum.G + C.G * W, Sum.B + C.B * W };
 							}
 						return Sum;
 					}
@@ -7627,6 +7775,8 @@ namespace LandField
 		}
 		for (Tile& T : TileList)
 		{
+			// (ploughland: what was swept into the near ground after its grid, the lanes, the banks, the railway, no furrows)
+			if (!T.Near.Uvs.empty()) T.Near.Uvs.resize(2 * T.Near.Points(), 0.0f);
 			Bounds(T);
 			Count.NearTris += T.Near.Tris();
 			Count.FarTris += T.Far.Tris();
@@ -10304,7 +10454,7 @@ namespace LandField
 				{
 					uint64_t Key = 0;
 					bool bSet = false, bWander = false;
-					double Weed[9] = {}, Wet[9] = {}, Wander[9] = {};
+					double Weed[9] = {}, Wet[9] = {}, Wander[9] = {}, Grade[9] = {}, Sprig[9] = {};
 				} FallowGrid;
 				for (int K = 0; K < Tries; ++K)
 				{
@@ -10345,6 +10495,8 @@ namespace LandField
 					}
 					// (ploughland, on trial: a fallow's weeds and grass where its paint is green, its earth bare where bare)
 					const bool bFallowPlough = G.bPlough && !G.Rg && Crop == CpFallow && What == Drawn::Pasture;
+					bool bLowWeed = false; // (ploughland: a low weed on a fallow's bare earth)
+					double BareGather = 0.5; // (and how thick the weeds gather there, 0 to 1)
 					LandSteppe::FallowSpot Fallow;
 					if (bFallowPlough)
 					{
@@ -10396,7 +10548,7 @@ namespace LandField
 						// (past the thickest a fallow's weeds could be, 1.4 times its growth, let go before the noises are asked;
 						// the mottle and the broad swell of colour are the paint's alone: FallowGreen does not ask them)
 						if (Keep >= Gr.Density * 1.4 / 2.0) continue;
-						if (Fallow.In > -1.2)
+						if (Fallow.In > -3.2 - Fallow.Soft)
 						{
 							if (!FallowGrid.bSet || FallowGrid.Key != Fallow.Key)
 							{
@@ -10409,12 +10561,62 @@ namespace LandField
 										G.FallowGrowth((I + 0.5 * A) * Square, (J + 0.5 * B) * Square, At, true);
 										FallowGrid.Weed[B * 3 + A] = At.Weed;
 										FallowGrid.Wet[B * 3 + A] = At.Wet;
+										FallowGrid.Grade[B * 3 + A] = At.Grade;
+										FallowGrid.Sprig[B * 3 + A] = At.Sprig;
 									}
 							}
-							Fallow.Weed = FallowLattice(FallowGrid.Weed, X / Square - I, Y / Square - J);
-							Fallow.Wet = FallowLattice(FallowGrid.Wet, X / Square - I, Y / Square - J);
+							const double FX = X / Square - I, FY = Y / Square - J;
+							Fallow.Weed = FallowLattice(FallowGrid.Weed, FX, FY);
+							Fallow.Wet = FallowLattice(FallowGrid.Wet, FX, FY);
+							Fallow.Grade = FallowLattice(FallowGrid.Grade, FX, FY);
+							Fallow.Sprig = FallowLattice(FallowGrid.Sprig, FX, FY);
 						}
-						Thick = 0.1 + 1.3 * LandSteppe::FallowGreen(Fallow);
+						// (bare earth never bare of everything: a low weed or a straw of last year's stubble at least every 3.5 m2
+						// of it (0.9 a square metre times 0.32), the weeds' and the balk's thick where green)
+						double Patch = 0.0;
+						const double Green = LandSteppe::FallowGreen(Fallow, &Patch);
+						// (the second review: a weed patch at a man's height read as a green floor with sparse tufts: a fifth thicker)
+						Thick = 0.32 + 1.1 * Green;
+						if (Patch < 0.3 && Green < 0.5 && Fallow.In > 0.0)
+						{
+							// (what stands on bare earth: nothing lush. Last year's stubble where the field was left in it, and on
+							// fresh plough some of the straw the plough turned in, else a low tuft of weeds, small and squat (no
+							// dock: the steppe's grass keeps none); no tall grass, no flowers)
+							const double StrawShare = Fallow.State > 0.875 && Fallow.Worked < 0.5 ? 0.6 : Fallow.State < 0.35 || Fallow.Worked > 0.5 ? 0.25 : 0.12;
+							bLowWeed = !(Unit(Hash(H, 9)) < StrawShare);
+							Gr.Kind = bLowWeed ? Base::Tuft : Base::Stubble;
+						}
+						else if (Fallow.State < 0.35 && (Gr.Kind == Base::Flowers || Gr.Kind == Base::TallGrass))
+						{
+							// (fresh plough's weed patches are this summer's seedlings come up since the plough, not a meadow: no
+							// flowers, no tall grass; the second review saw daisies standing in a fresh field)
+							Gr.Kind = Base::Tuft;
+						}
+						else if (Gr.Kind == Base::Flowers && Unit(Hash(H, 10)) < 0.6) Gr.Kind = Base::Tuft; // (an old fallow's few)
+						if (Patch < 0.6 && Fallow.In > 0.0)
+						{
+							// (the weeds on the earth, strewn or low, gathered, not strewn even (the art director's eye on the first furrows:
+							// an even sprinkle of one green dot read as a lawn): thick in clumps some 3 to 6 m across, a few between (a sixth
+							// as thick: no bare stretch of 10 m and more without one), and more of them down the furrows' troughs, where the
+							// harrow left the weeds' seed and the damp lies (the same furrows as the ground's surface draws,
+							// LandField::Furrows at its period); on the whole a little fewer than before, never under one to 4 m2. The weed
+							// patches as they were)
+							// (the second review still saw an even scatter: the clumps now some 5 to 9 m across, the mean a tenth more,
+							// and between them still one weed to some 4 m2 of bare earth)
+							const double Gather = Smooth(-0.2, 0.35, RoundNoise((0.731 * X + 0.682 * Y) / 6.5 + 2.3, (0.731 * Y - 0.682 * X) / 6.5 - 5.9, G.Seed ^ 0xF0A135ull)
+																			 + 0.45 * RoundNoise((0.139 * X - 0.990 * Y) / 1.7, (0.139 * Y + 0.990 * X) / 1.7, G.Seed ^ 0xF0A136ull));
+							int PlanCrop = LandSteppe::CropPasture;
+							double Side[4] = { 0.0, 0.0, 0.0, 0.0 };
+							bool bLong = true;
+							G.Sp->FieldFrame(X, Y, PlanCrop, Side, bLong);
+							double WX = 0.0, WY = 0.0;
+							G.PlanWay(bLong, Fallow.Key, WX, WY);
+							const double Down = Sq(FurrowPhase(X, Y, WX, WY, FurrowDial().Period) / 0.16);
+							Thick *= 1.0 + (1.0 - Smooth(0.0, 0.6, Patch)) * ((0.3 + 1.4 * Gather) * (0.6 + 0.8 * std::exp(-Down)) - 1.0);
+							// (and never thinner than some one weed to 4 m2 of earth, in the gaps between the clumps too: the art director's floor)
+							Thick = std::max(Thick, 0.28);
+							BareGather = Gather;
+						}
 					}
 					// (the short sward between the clumps; the tussocks and the flowers in them. The tall grass stays as it
 					// was, spread: the camera reads it as standing corn for its low shots)
@@ -10488,11 +10690,43 @@ namespace LandField
 						// same big tuft over and over read as rows of one model; the art director's cut 4, shot 08)
 						Scale = 0.55 + 0.95 * std::pow(U4, 1.6);
 						ScaleZ = Scale * (0.6 + 0.6 * U5);
+						if (bLowWeed)
+						{
+							// (on bare earth: small and squat, the bigger in the clumps, a seedling or a spread of goosefoot alone)
+							Scale *= 0.45 + 0.6 * BareGather * (0.5 + U6);
+							ScaleZ *= 0.4 + 0.35 * U6 + 0.2 * BareGather;
+						}
 						if (Crop == CpHayCut) ScaleZ *= 0.6;
 						const double Dry = Unit(Hash(H, 7));
 						TR = 0.92 + 0.2 * Dry;
 						TG = 0.97 + 0.07 * Dry;
 						TB = 0.88 + 0.18 * Dry;
+						if (bFallowPlough)
+						{
+							// (the second review: every tuft on a fallow was the same fresh green blade. Now a third dead and
+							// straw-coloured (last year's stalks, a weed the harrow cut), a fifth goosefoot's mealy grey, the rest
+							// green, each its own shade: the tuft is built 87, 101, 56 on the whole)
+							const double Which = Unit(Hash(H, 11));
+							if (Which < 0.33)
+							{
+								TR = 1.55 + 0.25 * U5;
+								TG = 1.22 + 0.15 * U5;
+								TB = 1.25 + 0.25 * U6;
+								ScaleZ *= 0.8;
+							}
+							else if (Which < 0.53)
+							{
+								TR = 1.2;
+								TG = 1.08;
+								TB = 1.6;
+							}
+							else
+							{
+								TR = 0.88 + 0.25 * Dry;
+								TG = 0.9 + 0.15 * Dry;
+								TB = 0.85 + 0.3 * Dry;
+							}
+						}
 						if (Crop == CpRoots && What == Drawn::Crop)
 						{
 							Scale *= 1.6;
@@ -10550,6 +10784,15 @@ namespace LandField
 						P.Yaw = static_cast<float>(RowAngle + (U6 < 0.5 ? 0.0 : Pi) + 0.06 * (U4 - 0.5));
 						Scale = 0.85 + 0.3 * U4;
 						ScaleZ = 0.8 + 0.4 * U5;
+						if (bFallowPlough)
+						{
+							// (on a fallow: a few straws the plough left standing, any way, short and greyed by the weather)
+							P.Yaw = static_cast<float>(2.0 * Pi * U6);
+							Scale *= 0.5 + 0.4 * U4;
+							ScaleZ *= 0.45 + 0.35 * U5;
+							TR = TG = 0.92;
+							TB = 0.95;
+						}
 						break;
 					default: break;
 					}
@@ -11243,6 +11486,34 @@ namespace LandField
 				Face(FootC, Waist[J], Waist[K]);
 			}
 		}
+		return Out;
+	}
+
+	FurrowLook Furrows(double X, double Y, double WayX, double WayY, double Depth, double RightX, double RightY, double DownX, double DownY, double Up, double Soil, double Clod,
+					   double Lie, const FurrowDial& Dial)
+	{
+		// (as LandField.h's specification, line for line)
+		FurrowLook Out;
+		const double S = std::hypot(WayX, WayY);
+		if (S < 1e-4) return Out;
+		const double DX = WayX / S, DY = WayY / S, CX = -DY, CY = DX;
+		double Strand = 0.0;
+		const double At = FurrowPhase(X, Y, DX, DY, Dial.Period, &Strand);
+		const double Along = X * DX + Y * DY;
+		// (each furrow's breaks its own: two draws of its number, not a step of it, so no two neighbours break in step)
+		const double Strand251 = std::floor(251.0 * (Strand / 251.0 - std::floor(Strand / 251.0)) + 0.5); // (a whole number, exact in a float too)
+		const double Draw = 97.13 * std::sin(1.7311 * Strand251 + 0.4), Draw1 = Draw - std::floor(Draw);
+		const double Draw2 = (13.7 * Draw1 + 0.31) - std::floor(13.7 * Draw1 + 0.31);
+		const double Broken = Clamp01(0.85 + 0.35 * std::sin(2.0 * Pi * (Along / (2.6 + 1.2 * Draw2) + Draw1)) + 0.25 * std::sin(2.0 * Pi * (Along / 1.3 + Draw2)));
+		const double Inside = Clamp01(1.0 - At * At / (Dial.Trough * Dial.Trough));
+		const double H = -Inside * Inside - 0.25 * std::cos(2.0 * Pi * At);
+		const double Q = (std::fabs(RightX * CX + RightY * CY) + std::fabs(DownX * CX + DownY * CY)) / Dial.Period;
+		const double K = std::min(S, 1.0) * Clamp01((Dial.FadeEnd - Depth) / (Dial.FadeEnd - Dial.FadeStart)) * Clamp01(2.0 - 5.0 * Q) * Up * Soil * Clamp01(1.0 + 2.5 * (Clod - 0.5)) * Clamp01(0.85 + 1.5 * Lie) * Broken;
+		Out.Times = 1.0 + Dial.Depth * K * (H + 16.0 / 15.0 * Dial.Trough);
+		const double Rise = 4.0 * At / (Dial.Trough * Dial.Trough) * Inside + 0.5 * Pi * std::sin(2.0 * Pi * At);
+		const double Slope = Dial.Lean * K * Rise / Dial.Period;
+		Out.LeanX = -Slope * CX;
+		Out.LeanY = -Slope * CY;
 		return Out;
 	}
 }

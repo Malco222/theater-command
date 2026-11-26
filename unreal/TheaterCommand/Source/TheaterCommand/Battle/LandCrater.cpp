@@ -2323,6 +2323,7 @@ namespace LandCrater
 		{
 			double P[3] = { 0.0, 0.0, 0.0 }, N[3] = { 0.0, 0.0, 1.0 }, C[3] = { 0.0, 0.0, 0.0 };
 			int64_t Own = -1;
+			double PloughUv[2] = { 0.0, 0.0 }; // (ploughland's two numbers, where the mesh carries them: LandField::Mesh::Uvs)
 		};
 
 		CutPt Between(const CutPt& A, const CutPt& B, double T)
@@ -2334,6 +2335,7 @@ namespace LandCrater
 				O.N[K] = A.N[K] + (B.N[K] - A.N[K]) * T;
 				O.C[K] = A.C[K] + (B.C[K] - A.C[K]) * T;
 			}
+			for (int K = 0; K < 2; ++K) O.PloughUv[K] = A.PloughUv[K] + (B.PloughUv[K] - A.PloughUv[K]) * T;
 			return O;
 		}
 
@@ -2410,6 +2412,11 @@ namespace LandCrater
 			O.C[1] = C.G;
 			O.C[2] = C.B;
 			O.Own = I;
+			if (M.Uvs.size() == 2 * M.Points())
+			{
+				O.PloughUv[0] = M.Uvs[static_cast<size_t>(I) * 2];
+				O.PloughUv[1] = M.Uvs[static_cast<size_t>(I) * 2 + 1];
+			}
 			return O;
 		};
 		std::vector<uint32_t> Kept;
@@ -2430,7 +2437,14 @@ namespace LandCrater
 					return Was.second;
 				}
 			}
+			// (a mesh with ploughland's two numbers a point keeps them on every point the cut makes, read between)
+			const bool bPloughUvs = !M.Uvs.empty() && M.Uvs.size() == 2 * M.Points();
 			const uint32_t I = Put(M, Q.P[0], Q.P[1], Q.P[2], Rgb(static_cast<int>(std::lround(Q.C[0])), static_cast<int>(std::lround(Q.C[1])), static_cast<int>(std::lround(Q.C[2]))));
+			if (bPloughUvs)
+			{
+				M.Uvs.push_back(static_cast<float>(Q.PloughUv[0]));
+				M.Uvs.push_back(static_cast<float>(Q.PloughUv[1]));
+			}
 			const double L = std::sqrt(Q.N[0] * Q.N[0] + Q.N[1] * Q.N[1] + Q.N[2] * Q.N[2]);
 			const size_t K = static_cast<size_t>(I) * 3;
 			M.Normals[K] = static_cast<float>(L > 1e-9 ? Q.N[0] / L : 0.0);
@@ -2564,6 +2578,13 @@ namespace LandCrater
 						Part.Normals.push_back(Near.Normals[static_cast<size_t>(Old) * 3 + static_cast<size_t>(D)]);
 					}
 					Part.Colours.push_back(Near.Colours[Old]);
+					// (ploughland's furrows, on trial: the tile's two numbers a point go with the point, so a shelled
+					// tile keeps its furrows; a tile without them keeps none)
+					if (Near.Uvs.size() == 2 * Near.Points())
+					{
+						Part.Uvs.push_back(Near.Uvs[static_cast<size_t>(Old) * 2]);
+						Part.Uvs.push_back(Near.Uvs[static_cast<size_t>(Old) * 2 + 1]);
+					}
 					float* B = &Box[Pk * 4];
 					const float Px = Near.Positions[static_cast<size_t>(Old) * 3], Py = Near.Positions[static_cast<size_t>(Old) * 3 + 1];
 					B[0] = std::min(B[0], Px);

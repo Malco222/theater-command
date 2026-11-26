@@ -218,7 +218,15 @@ namespace LandField
 		std::vector<float> Positions; // x, y, z a point, metres
 		std::vector<float> Normals;   // x, y, z a point, unit
 		std::vector<Rgb8> Colours;    // a point
-		/** u, v a point, on the leaves' picture (T_LandLeaves): a leaf card mesh's only; empty on every other. */
+		/**
+		 * Two numbers a point, where a mesh has them (empty on every other):
+		 * - a leaf card mesh: u, v on the leaves' picture (T_LandLeaves);
+		 * - a near ground tile, on trial "ploughland" on the steppe (Tile::Near, every point of it; its skirt, lanes and
+		 *   railway zero): the plough's way there, a unit vector in the field's own x, y (along the furrows; one way round
+		 *   in all a field), times how strongly its furrows show (0 to 1; zero where there are none, and on every point near
+		 *   a fallow's edge, so two fields' ways never mix across a square), for Furrows (the game: M_LandPlough reads them
+		 *   as its first texture coordinates, x and y swapped as the points are). Within -1 to 1, as a half float holds.
+		 */
 		std::vector<float> Uvs;
 		std::vector<uint32_t> Triangles;
 
@@ -429,6 +437,60 @@ namespace LandField
 	 * From is. The same axes, origin and winding as the field's own meshes.
 	 */
 	Mesh CrownOf(const Mesh& From);
+
+	/** Furrows' numbers (M_LandPlough's scalar parameters of the same names with "Furrow" before each). */
+	struct FurrowDial
+	{
+		double Period = 0.65;    // metres from one furrow to the next
+		double Trough = 0.28;    // the trough's half width, a share of the period (the ridge the rest: broad and round)
+		double Depth = 0.60;     // how far the paint is multiplied down and up (the trough 0.43, the ridge 1.33 at full)
+		double Lean = 0.022;     // the profile's height, metres (its flanks lean the normal up to some 19 degrees)
+		double FadeStart = 25.0; // metres of depth: full to here,
+		double FadeEnd = 70.0;   // gone by here
+	};
+	/** What the furrows do to a pixel: its base colour times Times, its normal leaned by LeanX, LeanY (the field's x, y)
+	 * added to it before it is made unit again. */
+	struct FurrowLook
+	{
+		double Times = 1.0;
+		double LeanX = 0.0, LeanY = 0.0;
+	};
+	/**
+	 * THE FURROWS ON PLOUGHLAND (the art director's mend 2, 25 November: "paint furrows along the plough line, 0.5 to 0.8
+	 * m apart, 8 to 12 L either way, gone by 60 to 80 m"), drawn by the ground's surface, not its paint (the near ground's
+	 * points are 4.17 m apart). The specification: M_LandPlough follows it node for node (build_content.py, furrow_term)
+	 * and the cloud painter draws it (LAND_FIELD_SURFACE). The field's frame here; the material works in the engine's (X
+	 * the field's y, Y its x), where c below is (d.Y, -d.X).
+	 *
+	 * In: X, Y the pixel's place (metres); WayX, WayY the mesh's two numbers there (Mesh::Uvs, between the corners); Depth
+	 * the pixel's depth (metres); RightX, RightY and DownX, DownY how far the place moves one pixel right and one down (the
+	 * material's ddx and ddy); Up how much it faces the sky (the surface's own up, 0..1); Soil 1 less the surface's grassy;
+	 * Clod the soil grain's brightness (0..1, 0.5 even); Lie the surface's broad lie (its patch value, about -0.3 to 0.3).
+	 * (Every number here but the dial's is fixed in the material too, and the clutter's weeds keep to the troughs at the
+	 * dial's own period: LandField's Clutter.)
+	 *   s = |way| (to 1); d = way / s; c = (-d.y, d.x); along l = (X, Y).d; across a = (X, Y).c
+	 *   wobble (m) = 0.05 sin(2 pi l / 23 + 0.9 a) + 0.03 sin(2 pi l / 8.7 - 0.4 a + 1.3) + 0.06 sin(2 pi (a / 3.7 + l / 31)):
+	 *     the ploughman's line wanders a hand's width over 20 m, each furrow a little its own way, and they lie a tenth
+	 *     closer or wider by turns
+	 *   x = frac((a + wobble) / Period) - 0.5: 0 the trough's floor, 0.5 the ridge's crown; n = floor((a + wobble) /
+	 *     Period), which furrow
+	 *   m = floor(251 frac(n / 251) + 0.5); h1 = frac(97.13 sin(1.7311 m + 0.4)); h2 = frac(13.7 h1 + 0.31): two draws of the
+	 *     furrow's own number (not a step of it: 0.618 n broke each furrow a fixed step on from its neighbour, and the
+	 *     breaks lined up across the furrows as rows of dashes, the second review's graph paper)
+	 *   b = sat(0.85 + 0.35 sin(2 pi (l / (2.6 + 1.2 h2) + h1)) + 0.25 sin(2 pi (l / 1.3 + h2))): each furrow broken
+	 *     along its length its own way (crumbled, filled by the harrow), so a low sun across them draws no ruled lines
+	 *   g = sat(1 - x^2 / Trough^2)^2 (the trough, narrow); H = -g - 0.25 cos(2 pi x) (the ridge broad and round); H's mean
+	 *     over a furrow -16/15 Trough
+	 *   q = (|Right.c| + |Down.c|) / Period, the furrows one pixel crosses
+	 *   k = s sat((FadeEnd - Depth) / (FadeEnd - FadeStart)) sat(2 - 5 q) Up Soil sat(1 + 2.5 (Clod - 0.5)) sat(0.85 + 1.5 Lie) b:
+	 *     gone by FadeEnd, and gone before a furrow is under 2.5 pixels (no moire); broken by the clods, shallower and
+	 *     deeper by stretches, and each furrow by its own breaks
+	 *   Times = 1 + Depth k (H + 16/15 Trough): its mean over a furrow 1, so it fades to the paint's own, never darker
+	 *   slope = Lean k dH/dx / Period, dH/dx = 4 x / Trough^2 sat(1 - x^2 / Trough^2) + 0.5 pi sin(2 pi x)
+	 *   (LeanX, LeanY) = -slope c: a sun across the furrows lights one flank and shades the other
+	 */
+	FurrowLook Furrows(double X, double Y, double WayX, double WayY, double Depth, double RightX, double RightY, double DownX, double DownY, double Up, double Soil, double Clod,
+					   double Lie, const FurrowDial& Dial = FurrowDial());
 
 	/**
 	 * A tree far off on trial "farcrowns" (the game's crown in CrownOf's place), sorted by what From shows: a broadleaf
