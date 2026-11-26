@@ -712,8 +712,10 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 		{
 			if (!Player.PickUpFleet(Fleet))
 			{
-				// (release 2: a name can now be another country's fleet, for order-unit; it is not picked up)
-				Note = TEXT("that fleet is not the player's: it is not picked up");
+				// (release 2: a name can now be another country's fleet, for order-unit; it is not picked up, and the step
+				// is MISSING as a name that answered nothing was)
+				bMissing = true;
+				Note = TEXT("no fleet of the player's of that name: another country's fleet is not picked up");
 			}
 		}
 		else

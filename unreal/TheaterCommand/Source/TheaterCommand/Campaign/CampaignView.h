@@ -429,6 +429,9 @@ struct FFleetHand
 	// (1.5.2) Cut off at sea beyond a shut strait: its card's line, and RETURN TO HARBOUR's tip where a harbour on its side
 	// can take it (empty with none). Both empty when it is not cut off.
 	FString Cut, HomeTip;
+	// (Release 2; Brian, 26 November 2026 03:51Z) The fleets of countries at peace with him that he could declare war on
+	// this month, each with the rules' reason it could not be sent at them even at war: empty where it could.
+	TMap<int32, FString> Peace;
 };
 
 /** What else came of something pressed in a room, beyond its words. */

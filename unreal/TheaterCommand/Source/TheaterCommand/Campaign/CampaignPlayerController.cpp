@@ -7339,11 +7339,14 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				Pointer = FleetHand.Attack.Contains(AimedPiece->GetForceId()) ? EMouseCursor::Crosshairs : EMouseCursor::SlashedCircle;
 			}
 			else if (Held && FleetHand.bFleetAttack && AimedPiece && AimedPiece->IsFleet() && AimedPiece->GetForceId() != INDEX_NONE
-				&& AimedPiece->GetNationTag() != Now->GetView().Human && Now->GetView().Declarable.Contains(AimedPiece->GetNationTag()))
+				&& AimedPiece->GetForceId() != FleetInHand && !AimedPiece->GetNationTag().IsEmpty() && AimedPiece->GetNationTag() != Now->GetView().Human
+				&& !Now->GetView().Allied.Contains(AimedPiece->GetNationTag()))
 			{
-				// (Release 2; Brian, 26 November 2026 03:51Z) Over the fleet of a country at peace that war can be declared on:
-				// the sights, as over a frontier at peace with an army in hand. Let go there, the question of war comes first.
-				Pointer = EMouseCursor::Crosshairs;
+				// (Release 2; Brian, 26 November 2026 03:51Z) Over the fleet of a country at peace: the sights where war can be
+				// declared on it and the fleet in hand could then be sent at it, as over a frontier at peace with an army in
+				// hand (let go there, the question of war comes first); the bar where it could not (let go, he is told why).
+				const FString* Why = FleetHand.Peace.Find(AimedPiece->GetForceId());
+				Pointer = (Why && Why->IsEmpty()) ? EMouseCursor::Crosshairs : EMouseCursor::SlashedCircle;
 			}
 			else if (Held && bPointerOnWater)
 			{
@@ -8475,17 +8478,24 @@ bool ACampaignPlayerController::FleetOnFleetAtPeace(const AArmyPiece* Piece)
 	{
 		return false;
 	}
-	// A country at peace with him: as an army set down across its frontier, the question of war first; nothing moves.
-	if (OfferWarOn(Tag, INDEX_NONE, Piece->GetForceId()))
+	// A country at peace with him that war can be declared on, and a fleet the one in hand could be sent at once it is
+	// declared (the rules' own reading, FleetHand.Peace): as an army set down across its frontier, the question of war
+	// first. Nothing moves.
+	const FString* Why = FleetHand.Peace.Find(Piece->GetForceId());
+	if (Why && Why->IsEmpty() && OfferWarOn(Tag, INDEX_NONE, Piece->GetForceId()))
 	{
 		return true;
 	}
-	// A country war cannot be declared on this month (his month not open, or one he neither borders nor can land on): he
-	// is told, and the drop is the sea order it always was.
+	// Otherwise he is told why, and nothing moves either, as an army set down where war cannot be declared: even at war
+	// the fleet could not be sent at those ships now (the rules' reason), or war cannot be declared on that country this
+	// month (his month not open, or one he neither borders nor can land on). A war is never offered for a battle the
+	// card would then refuse.
 	const FCampaignNation* Nation = Map->GetData().FindNation(Tag);
-	Notify(FString::Printf(TEXT("%s is not at war with you, so its fleet cannot be attacked, and war cannot be declared on it this month."),
-		Nation ? *HeadThe(Nation->Name) : *Tag), 8.0);
-	return false;
+	const FString Name = Nation ? HeadThe(Nation->Name) : Tag;
+	Notify(Why && !Why->IsEmpty()
+		? FString::Printf(TEXT("%s is at peace with you, and even at war your fleet could not be sent at those ships now. %s"), *Name, **Why)
+		: FString::Printf(TEXT("%s is not at war with you, so its fleet cannot be attacked, and war cannot be declared on it this month."), *Name), 9.0);
+	return true;
 }
 
 bool ACampaignPlayerController::FleetOrderOnFleet(const AArmyPiece* Aimed)
@@ -8952,6 +8962,13 @@ void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 			// (Release 2) With a fleet in hand, a click on an enemy fleet is the order to attack it: the card, odds first.
 			if (FleetInHand != INDEX_NONE && FleetInHand != Piece->GetForceId() && GetSession() && IsEnemyFleet(Piece, GetSession()->GetView())
 				&& AttackFleetWith(Piece->GetForceId()))
+			{
+				return;
+			}
+			// (Release 2; Brian, 26 November 2026 03:51Z) And on the fleet of a country at peace that the sights stand over:
+			// the question of war, as a drop there gives it. (Any other fleet is looked at, as before.)
+			const FString* PeaceWhy = FleetInHand != INDEX_NONE && FleetInHand != Piece->GetForceId() ? FleetHand.Peace.Find(Piece->GetForceId()) : nullptr;
+			if (PeaceWhy && PeaceWhy->IsEmpty() && FleetOnFleetAtPeace(Piece))
 			{
 				return;
 			}

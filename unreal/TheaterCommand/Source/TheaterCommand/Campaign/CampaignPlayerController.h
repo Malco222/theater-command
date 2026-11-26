@@ -1192,16 +1192,18 @@ public:
 	bool AttackFleetWith(int32 Target);
 	/**
 	 * (Release 2; Brian, 26 November 2026 03:51Z: "i can't drag my fleet on top of another fleet to start a battle".) The
-	 * fleet in hand set down, or right-clicked, on a fleet that is neither his nor an enemy's. A country at peace with him
-	 * that he could go to war with this month: the question of war, as an army set down across its frontier asks it, and
-	 * the attack card after a yes. True then, and nothing else is ordered. Otherwise (an ally's fleet, or a country war
-	 * cannot be declared on this month) false, and the caller gives the sea order as before; the second is told why first.
+	 * fleet in hand set down, right-clicked, or clicked on a fleet that is neither his nor an enemy's nor an ally's. Where
+	 * war can be declared on its country this month and the fleet in hand could then be sent at it (the rules' reading,
+	 * FleetHand.Peace): the question of war, as an army set down across a frontier at peace asks it, and the attack card
+	 * after a yes. Otherwise he is told why. True either way, and nothing else is ordered. False only for an ally's fleet
+	 * (or with fleet attacks off), where the caller gives the sea order as before.
 	 */
 	bool FleetOnFleetAtPeace(const AArmyPiece* Piece);
 	/**
 	 * (Release 2) The fleet in hand set down, or right-clicked, on another fleet's figure: an enemy's opens the attack
 	 * card (AttackFleetWith), any other country's goes to FleetOnFleetAtPeace. True where it was answered there, and the
-	 * caller orders nothing more; false where the caller gives the sea order (an ally's fleet, fleet attacks off).
+	 * caller orders nothing more; false where the caller gives the sea order (his own other fleet, an ally's, fleet
+	 * attacks off).
 	 */
 	bool FleetOrderOnFleet(const AArmyPiece* Aimed);
 	/** (Release 2: splitting a stack.) A ship's card in the fleet tray clicked: it is left behind, or comes along again. */
@@ -1471,8 +1473,9 @@ public:
 	bool RightClickOnFigure(int32 CorpsId, int32& OutAimed, int32& OutGround);
 	/**
 	 * (Release 2, for the step player.) A right-click on a fleet's figure with a fleet in hand, as the mouse gives it: an
-	 * enemy's opens the attack card, one at peace with him asks whether he means war, and an ally's sends the fleet in
-	 * hand to that fleet's sea. False, and nothing done, where that fleet has no figure or no other fleet is in hand.
+	 * enemy's opens the attack card, one at peace with him asks whether he means war (or he is told why not), and an
+	 * ally's sends the fleet in hand to that fleet's sea. False, and nothing done, where that fleet has no figure or no
+	 * other fleet is in hand.
 	 */
 	bool RightClickOnFleetFigure(int32 FleetId);
 	/** On the approach order's card: another way up is picked. */

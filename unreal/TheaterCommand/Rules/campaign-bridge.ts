@@ -122,7 +122,7 @@ import { scrambleCalls } from './scramble-demo'; // (release 2, the scramble off
 import { formationOffers, whyNotAnswerOffers, type RowOffer } from '../../../src/campaign/turn';
 import { DIV_WORD, askDecline, askForm, asideLines, cardRowOf, headOf, noteOf, offerCalls, offerLines, offersLook, type OffersLook } from './offers-look'; // (release 2, the whole world: formations offered out of the player's own corps, ruling B8)
 import { fleetOptions, fleetView, orderBombard, orderEscort, orderFleetAttackNow, orderMerge, orderSplit, previewBombard, previewFleetAttack, whyNotSplit } from '../../../src/campaign/turn';
-import { fleetAttackOn, setFleetAttack } from '../../../src/campaign/fleetattack';
+import { fleetAttackOn, setFleetAttack, whyNotFleetAttack } from '../../../src/campaign/fleetattack';
 import { breakUp as breakCorps, breakUpOn, rejoin as rejoinCorps, rejoinTargets, setBreakUp, whyNotBreakUp, whyNotRejoin } from '../../../src/campaign/breakup';
 import { setTaskForce, taskForceOn, taskLine } from '../../../src/campaign/taskforce';
 import { fleetWhy, fleetWhyOn, setFleetWhy } from '../../../src/campaign/fleetwhy';
@@ -5697,6 +5697,25 @@ function heroesPage(s: Game): Page | null {
 
 const SHIP_WORD: Record<string, [string, string]> = { bb: ['battleship', 'battleships'], cv: ['carrier', 'carriers'], ca: ['cruiser', 'cruisers'], dd: ['destroyer', 'destroyers'], ss: ['submarine', 'submarines'] };
 
+/**
+ * (Release 2; Brian, 26 November 2026 03:51Z: "i can't drag my fleet on top of another fleet to start a battle".) The
+ * fleets in sight of countries at peace with the player that he could declare war on this month (an ally's are not
+ * among them), each with the rules' reason fleet `id` could not be sent at it even once at war, or '' where it could.
+ */
+function peaceFleets(s: Game, id: number): { id: number; why: string }[] {
+  const me = s.human;
+  if (!me) return [];
+  const can = new Set(declarable(s));
+  if (!can.size) return [];
+  const out: { id: number; why: string }[] = [];
+  for (const k of fleetsInSight(s)) {
+    const t = s.fleets.find((x) => x.id === k.id);
+    if (!t || t.nat === me || !can.has(t.nat) || allied(s, me, t.nat) || atWar(s, me, t.nat)) continue;
+    out.push({ id: t.id, why: whyNotFleetAttack(s, id, t.id, true) ?? '' });
+  }
+  return out;
+}
+
 /** One of the player's fleets in hand: its card, and everything it could be told to do this month. Null where the rules keep no such navy. */
 function fleetInHand(id: number) {
   const s = game();
@@ -5723,6 +5742,10 @@ function fleetInHand(id: number) {
         const f = s.fleets.find((x) => x.id === id);
         return { cut: f ? cutOffLine(s, f) : '', homeTip: f ? cutOffHomeTip(s, f) : '' };
       })(),
+      // (Release 2; Brian, 26 November 2026 03:51Z) The fleets of countries at peace with him that he could declare war
+      // on this month, each with why it could not be sent at them even at war (empty where it could): set down on one,
+      // the question of war is asked first, and only where the attack could then be made.
+      peace: o && fleetAttackOn(s) ? peaceFleets(s, id) : [],
       wings: wingsOfFleet(s, id).map((w) => ({ id: w.id, label: w.label, aircraft: Math.round(w.aircraft), doing: w.doing, flew: w.flew })),
     };
   } catch {
