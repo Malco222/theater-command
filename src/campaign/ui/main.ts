@@ -95,7 +95,7 @@ import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../
 import { ON_CAMPAIGN, landTicket, staffOnly } from '../../battle/land';
 import { fieldOpen, fightOnField } from '../../battle/ui/page';
 import {
-  AIR, CARRIERS, MISSION, carrierRules, groupAt, moveTargets, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowdedFields, crowdedRow, crowding, forecastAir, isOffensive,
+  AIR, CARRIERS, MISSION, carrierRules, groupAt, harbourOf, moveTargets, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowdedFields, crowdedRow, crowding, forecastAir, isOffensive,
   km as airKm, overOcean, seaKm, seenAgo, skyOver, standingGuns, whyNotMoveAir, whyNotMission, type AirOrder,
 } from '../air';
 import { FIGHTERS, raidCardLines, setFighterTypes } from '../fighters';
@@ -5245,7 +5245,9 @@ function airVerdict(r: AirReport): { text: string; cls: string } {
 
 function airTitle(r: AirReport): string {
   if (r.mission === 'fleet') return `Air strike on the ${r.ships?.[0]?.fleet ?? 'fleet'}`;
-  if (r.mission === 'harbour') return `Raid on the harbour of ${r.place}`;
+  // (City defences, the switch on: the harbour by the news's name, "Raid on the harbour of the Cotentin", keeping
+  // harbourOf's "Pearl Harbor"; off, as shipped. The UI director, 26 Nov 2026 05:44Z, 3.)
+  if (r.mission === 'harbour') return cityDefences(g) ? `Raid on ${harbourOf(placeName(r.place))}` : `Raid on the harbour of ${r.place}`;
   if (r.mission === 'town') return `Bombing of the defences of ${r.region >= 0 ? townName(g.regions[r.region]) : r.place}`;
   return r.mission === 'superiority' ? `The sky over ${r.place}` : r.mission === 'bomb' ? `Bombing of ${r.place}` : r.mission === 'night' ? `Night raids on ${r.place}` : r.mission === 'ground' ? `Raid on the troops at ${r.place}` : r.mission === 'line' ? `Bombing of the line at ${r.place}` : `Air strikes, ${g.seas[r.zone]?.name ?? r.place.replace(/^the /, '')}`;
 }
@@ -6296,7 +6298,8 @@ function missionText(f: AirFleet): string {
     case 'ground': return `raiding the troops at ${where}`;
     case 'line': return `bombing the fieldworks at ${where}`;
     case 'fleet': return `striking ${where}`;
-    case 'harbour': return `raiding the harbour of ${where}`;
+    // (City defences, the switch on: "raiding the harbour of the Cotentin", as the report's title; off, as shipped.)
+    case 'harbour': return cityDefences(g) ? `raiding ${harbourOf(placeName(where))}` : `raiding the harbour of ${where}`;
     case 'town': return `bombing the defences of ${g.regions[f.target] ? townName(g.regions[f.target]) : where}`;
     case 'airfield': return `bombing the airfield at ${where}`;
     case 'seapatrol': return `patrolling ${g.seas[f.target] ? seaWhat(g.seas[f.target].name) : 'the sea'} against submarines`;
@@ -6748,6 +6751,8 @@ function airPlanCard(): string {
   const mission = m.mission as AirMission;
   const sea = mission === 'strike';
   const place = sea ? seaWhat(g.seas[m.target].name) : g.regions[m.target].name;
+  // (City defences, the switch on: the output and railway lines below name the place as the raid card's do, "the
+  // Rhineland's output", "through the Rhineland" (airwar.ts effectsOf); off, as shipped. The UI director, 26 Nov 2026 05:44Z, 3.)
   const title = mission === 'superiority' ? `The sky over ${place}` : mission === 'bomb' ? `Bombing ${place}` : mission === 'night' ? `Night raids on ${place}` : `Strikes on shipping ${seaWhere(g.seas[m.target].name)}`;
   const a = previewAirOrder(g, f.id, mission, m.target);
   const why = whyNotMission(g, f, mission, m.target) ?? a?.why ?? (a ? null : 'Nothing can reach the target.');
@@ -6769,7 +6774,7 @@ function airPlanCard(): string {
         <div class="sub">About ${lossPct}% of the bombers are likely to be lost. ${shippingWords(g, fc.cut, 'these')}</div>`;
     } else {
       head = `<div class="verdict ${lossPct <= 10 ? 'win' : lossPct <= 25 ? '' : 'loss'}" style="font-size:24px">${lossPct <= 10 ? 'Light losses expected' : lossPct <= 25 ? 'The fighters will take a toll' : 'Heavy losses are likely'}</div>
-        <div class="sub">About ${lossPct}% of the bombers are likely to be lost. ${g.regions[m.target].fac > 0 ? `The raids should stop about ${Math.round(fc.cut * 100)}% of ${esc(place)}'s output for a month: ${tenthPct(fc.nation)} of ${g.nations[g.regions[m.target].ctrl].adj} production.` : `There is no industry at ${esc(place)}: the bombers go for its rail yards and junctions.`}${fc.rail ? ` There is about a ${Math.round(fc.rail * 100)}% chance of cutting the railway through ${esc(place)}, which stays cut until engineers relay it.` : ''}${fc.ruin ? ` There is about a ${Math.round(fc.ruin * 100)}% chance of wrecking a factory outright.` : ''}</div>`;
+        <div class="sub">About ${lossPct}% of the bombers are likely to be lost. ${g.regions[m.target].fac > 0 ? `The raids should stop about ${Math.round(fc.cut * 100)}% of ${esc(cityDefences(g) ? theWords(`${place}'s`, 'of ') : `${place}'s`)} output for a month: ${tenthPct(fc.nation)} of ${g.nations[g.regions[m.target].ctrl].adj} production.` : `There is no industry at ${esc(place)}: the bombers go for its rail yards and junctions.`}${fc.rail ? ` There is about a ${Math.round(fc.rail * 100)}% chance of cutting the railway through ${esc(cityDefences(g) ? theWords(place, 'through ') : place)}, which stays cut until engineers relay it.` : ''}${fc.ruin ? ` There is about a ${Math.round(fc.ruin * 100)}% chance of wrecking a factory outright.` : ''}</div>`;
     }
     const flying = a.att.map((x) => `<div class="pickrow pick">${planeIcon(x.f)}<span class="grow"><b>${esc(x.f.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">from ${esc(g.regions[x.f.base].name)}, ${num(x.d)} km · ${esc(craft(mission === 'night' ? 0 : x.f.ftr, x.bmr > 0 ? x.f.bmr : 0))}${x.crowd < 1 ? ` · crowded airfields, ${Math.round(x.crowd * 100)}% can fly` : ''}</span></span></div>`).join('');
     const meeting = a.def.length ? a.def.map((x) => `<div class="pickrow">${planeIcon(x.f)}<span class="grow"><b>${esc(x.f.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${g.nations[x.f.nat].adj}, from ${esc(g.regions[x.f.base].name)} · ${num(x.f.ftr)} fighters, about ${num(x.f.ftr * x.w)} able to meet the raids</span></span></div>`).join('') : '<div class="empty">No enemy fighters are in reach.</div>';

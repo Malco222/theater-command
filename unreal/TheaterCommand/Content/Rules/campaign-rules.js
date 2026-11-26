@@ -52014,7 +52014,8 @@
     const kind = kindOf2(f);
     const away2 = f.flew === g2.turn && isOffensive(f.mission);
     const with_ = escorted(g2, f);
-    const place3 = placeOf4(g2, kindFlown(f.mission), f.target, viewer);
+    const bare = placeOf4(g2, kindFlown(f.mission), f.target, viewer);
+    const place3 = f.mission === "harbour" && cityDefences(g2) ? theWords(bare, "against ") : bare;
     const deck = afloat(f), at4 = groupAt(g2, f);
     const fleet = deck ? carrierOf(g2, f) : f.ashore !== void 0 ? g2.fleets.find((c) => c.id === f.ashore) ?? null : null;
     const own = f.nat === viewer;
@@ -52405,15 +52406,17 @@
       out.push(strikeWords(g2, nat, target));
       return out;
     }
+    const named7 = cityDefences(g2);
+    const where = () => named7 ? inOrAt(g2.regions[target]) : `at ${place3}`;
     if (kind === "bomb" || kind === "night") {
       const r = g2.regions[target];
-      out.push(r.fac > 0 ? `Should stop about ${pct5(fc.cut)} of ${place3}'s output for a month: ${tenthPct(fc.nation)} of ${g2.nations[r.ctrl].adj} production.` : `There is no industry at ${place3}: the bombers go for its rail yards.`);
-      if (fc.rail) out.push(`About a ${pct5(fc.rail)} chance of cutting the railway through ${place3}, which stays cut until engineers relay it.`);
+      out.push(r.fac > 0 ? `Should stop about ${pct5(fc.cut)} of ${named7 ? theWords(`${place3}'s`, "of ") : `${place3}'s`} output for a month: ${tenthPct(fc.nation)} of ${g2.nations[r.ctrl].adj} production.` : `There is no industry at ${place3}: the bombers go for its rail yards.`);
+      if (fc.rail) out.push(`About a ${pct5(fc.rail)} chance of cutting the railway through ${named7 ? theWords(place3, "through ") : place3}, which stays cut until engineers relay it.`);
       if (fc.ruin) out.push(`About a ${pct5(fc.ruin)} chance of wrecking a factory outright.`);
       if (fc.city) out.push(cityLine(g2, target, fc.city));
     } else if (kind === "superiority") {
       out.push(`Fighter odds ${fc.odds >= 9 ? "overwhelming" : `${fc.odds.toFixed(1)} to 1`} going in. The sky is won when your fighters end the month with ${AIR.sky.win} times what the defender can still put up.`);
-      if (fc.cut > 0) out.push(`The air groups based at ${place3} should lose about ${pct5(fc.cut)} of their readiness, and aircraft on the ground.`);
+      if (fc.cut > 0) out.push(`The air groups based ${where()} should lose about ${pct5(fc.cut)} of their readiness, and aircraft on the ground.`);
       if (fc.field) out.push(...fieldLines(fc.field));
     } else if (kind === "airfield") {
       if (fc.field) out.push(...fieldLines(fc.field));
@@ -52434,11 +52437,11 @@
     } else if (kind === "line") {
       const most = Math.max(0, ...g2.regions[target].units.filter((u) => !u.dead && atWar(g2, nat, u.nat)).map(worksOf2));
       const took = Math.min(fc.cut, most), left = Math.max(0, most - fc.cut);
-      out.push(took >= 0.05 ? `Should take about ${monthsOf2(took)} off the fieldworks at ${place3}, which would leave ${left < 0.05 ? "nothing of them" : `${monthsOf2(left)} of work in them`}. An army attacking this month meets that much less of a prepared line.` : `Too few bombers would get through to break up the works at ${place3}.`);
+      out.push(took >= 0.05 ? `Should take about ${monthsOf2(took)} off the fieldworks ${where()}, which would leave ${left < 0.05 ? "nothing of them" : `${monthsOf2(left)} of work in them`}. An army attacking this month meets that much less of a prepared line.` : `Too few bombers would get through to break up the works ${where()}.`);
       out.push("The men in the works are not hurt, and they dig the works back a month at a time: bomb in the month you attack.");
     } else if (kind === "ground") {
       const dug = g2.regions[target].units.some((u) => !u.dead && u.dug && atWar(g2, nat, u.nat));
-      out.push(`The troops at ${place3} should lose about ${pct5(fc.cut)} of their organisation${dug ? " (less where they are dug in)" : ""}, and some of their men and guns. They fight the weaker for it until they have rested: attack while it lasts.`);
+      out.push(`The troops ${where()} should lose about ${pct5(fc.cut)} of their organisation${dug ? " (less where they are dug in)" : ""}, and some of their men and guns. They fight the weaker for it until they have rested: attack while it lasts.`);
     }
     return out;
   }
@@ -52489,11 +52492,12 @@
     const row2 = kindRow(kind);
     const place3 = placeOf4(g2, kind, target, nat);
     const quarry = kind === "fleet" ? g2.fleets.find((x) => x.id === target) ?? null : null;
+    const titled = cityDefences(g2) && kind !== "strike" && kind !== "fleet" ? theWords(place3, `${row2.short}: `) : place3;
     const plan = {
       kind,
       target,
       place: place3,
-      title: `${row2.short}: ${place3}`,
+      title: `${row2.short}: ${titled}`,
       why: null,
       seats: [],
       picked: [],
@@ -52590,7 +52594,8 @@
       if (f.ftr > 0) plan.fighterLossN = Math.round(lost);
       else plan.bomberLossN = Math.round(lost);
       plan.bomberLoss = f.ftr > 0 ? 0 : risk;
-      plan.effects = [raidFogOn(g2) ? `Every army at ${place3} and in the provinces beside it is identified, corps by corps, and the fighters, guns and damage there are seen. The sight lasts this month and next month, and is remembered after.` : `Every army at ${place3} and in the provinces beside it is identified, corps by corps. The report is exact this month and goes stale after.`, `The ${f.name} still flies its raid and keeps its patrol: this takes only ${n} aircraft.`];
+      const army2 = cityDefences(g2) ? `Every army ${inOrAt(g2.regions[target])}` : `Every army at ${place3}`;
+      plan.effects = [raidFogOn(g2) ? `${army2} and in the provinces beside it is identified, corps by corps, and the fighters, guns and damage there are seen. The sight lasts this month and next month, and is remembered after.` : `${army2} and in the provinces beside it is identified, corps by corps. The report is exact this month and goes stale after.`, `The ${f.name} still flies its raid and keeps its patrol: this takes only ${n} aircraft.`];
       return plan;
     }
     const m = missionOf2(kind);
@@ -64107,7 +64112,7 @@
       };
       const seen2 = known ? known.seen ?? -1 : -1;
       const counts = m === "bomb" || night || m === "harbour" || m === "town";
-      const flakAt = m === "town" ? townName(g2.regions[target]) : m === "harbour" ? harbourOf(placeName2(place3)) : placeName2(place3);
+      const flakAt = m === "town" ? placeName2(townName(g2.regions[target])) : m === "harbour" ? harbourOf(placeName2(place3)) : placeName2(place3);
       const flakWords = () => {
         const not = m === "ground" ? "troops in the field" : m === "line" ? "the line" : m === "airfield" ? "the airfield" : m === "superiority" ? "the airfields" : "";
         if (!counts) return not && (known ? seen2 > 0 : gunsAt(g2, target) > 0) ? `Only the ${S3} light guns every target has: the guns built here guard the town, not ${not}.` : Only;
@@ -64129,7 +64134,9 @@
       const least = Math.min(...packed.map((f) => crowding(g2, f)));
       out.lines.push({
         label: "Airfields",
-        value: `The airfields of ${list5(bases)} are crowded`,
+        // (City defences, the switch on: each base by the news's name, "The airfields of Kent and the Ruhr are crowded";
+        // off, as shipped. The UI director, 26 Nov 2026 05:44Z, 3.)
+        value: `The airfields of ${list5(cityDefences(g2) ? bases.map((b) => placeName2(b)) : bases)} are crowded`,
         effect: `${list5(packed.map((f) => f.name))} can fly only ${Math.round(least * 100)}% of ${packed.length === 1 ? "its" : "their"} aircraft from there`
       });
     }
@@ -64141,7 +64148,7 @@
       const r = g2.regions[target], gone = breachOf(g2, r);
       out.lines.push({ label: "The town", value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g2, r) - 1) * 100)}% stronger${townWorksPhrase(g2, r)}${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ""}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling("raid")}% in all` });
     }
-    if (out.aa && m === "town") out.lines.push({ label: "Anti-aircraft guns", value: aaLine(townName(g2.regions[target])), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+    if (out.aa && m === "town") out.lines.push({ label: "Anti-aircraft guns", value: aaLine(cityDefences(g2) ? placeName2(townName(g2.regions[target])) : townName(g2.regions[target])), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
     else if (out.aa && !(m === "harbour" && cityDefences(g2))) out.lines.push({ label: "Anti-aircraft guns", value: aaLine(`the factories of ${place3}`), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
     if (cn && cn.lights > 0) {
       const where = placeName2(place3);
@@ -109104,13 +109111,14 @@
       ...Object.keys(bombers).length ? { bombers } : {}
     };
     const date2 = turnToDate(g2.turn).label;
+    const harbour2 = harbourOf2(m === "harbour" && cityDefences(g2) ? placeName2(a.place) : a.place);
     const ticket = {
       domain: "air",
       kind: "field",
       seed,
       turn: g2.turn,
       date: date2,
-      title: m === "superiority" ? `The fight for the sky over ${a.place}` : m === "ground" ? `The raid on the troops at ${a.place}` : m === "harbour" ? `The raid on ${harbourOf2(a.place)}` : quarry ? `The strike on the ${quarry.name}` : `The air battle over ${a.place}`,
+      title: m === "superiority" ? `The fight for the sky over ${a.place}` : m === "ground" ? `The raid on the troops at ${a.place}` : m === "harbour" ? `The raid on ${harbour2}` : quarry ? `The strike on the ${quarry.name}` : `The air battle over ${a.place}`,
       place: place3,
       att: side5(nat, att, g2.human === nat),
       def: side5(defNat, def, g2.human === defNat),

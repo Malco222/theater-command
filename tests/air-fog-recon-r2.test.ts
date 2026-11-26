@@ -3,6 +3,9 @@
 // war for that area for 2 turns"; the design director's ruling of 22:10Z). airfog.ts, behind g.flags.rfog, off as shipped.
 import { describe, expect, it } from 'vitest';
 import { AIRWAR, airAI, assessAir, fightersInReach, forecastAir } from '../src/campaign/air';
+import { groupRow, planRaid } from '../src/campaign/airwar';
+import { airTicket } from '../src/battle/air/ticket';
+import page from '../src/campaign/ui/main.ts?raw';
 import { bandAt, knownDefence, rememberSkies, setRaidFog, skyKnown, staffReads, staffWeigh, wantsLook, weighKnown } from '../src/campaign/airfog';
 import { START_LAID, setCityDefences } from '../src/campaign/citydefences';
 import { airPage } from '../src/campaign/airpages';
@@ -542,5 +545,159 @@ describe('a harbour card keeps the harbour\'s guns line alone under city defence
     expect(guns(card('Cotentin', 'bomb', 'UK', 'GER', true).sight.lines)).toHaveLength(1);
     expect(guns(card('Cotentin', 'bomb', 'UK', 'GER', true).sight.lines)[0].value.includes('the factories of')).toBe(true);
     expect(guns(card('Ruhr', 'town', 'UK', 'GER', true).sight.lines).map((l) => l.value)).toEqual(['Level 2 guns ring Essen']);
+  });
+});
+
+// The UI director, 26 Nov 2026 05:44Z, 3: "All six take the news's article (theWords, keeping harbourOf's exception).
+// They are shipped lines, so the article goes under the city defences switch, and with the switch off they stay as
+// shipped. With it on, one raid reads one way: the card, the report's title, the group's order line and the battle's
+// title all name the place as the news does." Her 06:13Z, A (a town that falls back to its province's name: that name
+// takes the article, always on the Flak line, under the switch on the guns line) and B (the troops', the works', the air
+// groups' and the reconnaissance lines: under the switch, "in" for a province, by the house rule), and 06:14Z (the plan's
+// title). Words only.
+describe('one raid names its place one way under city defences (the UI director, 26 Nov 2026 05:44Z, 06:13Z and 06:14Z)', () => {
+  type Lines = { label: string; value: string }[];
+  /** A war of seed 7 a year in, city defences off or on; level 2 guns at the target; 300 bombers in the first group. */
+  const war = (cd: boolean, att: string, def: string, place: string, o: { base?: string; fleet?: boolean } = {}) => {
+    const g = startOpen(createGame(7, null));
+    g.turn = 12;
+    if (cd) g.flags[START_LAID] = 1;
+    setCityDefences(g, cd);
+    setWar(g, att, def);
+    const f = g.airFleets.find((x) => x.nat === att && x.bmr > 0 && x.ship === undefined)!;
+    f.bmr = 300;
+    if (o.base) f.base = g.byName[o.base].id;
+    const t = g.byName[place].id;
+    if (o.fleet) g.fleets.find((x) => x.nat === def && !atSea(x))!.base = t;
+    g.flags[`wk:aa:${t}`] = 2;
+    return { g, f, t };
+  };
+  const plan = (cd: boolean, kind: Parameters<typeof planRaid>[1], place: string, att: string, def: string, o: { base?: string; fleet?: boolean; dig?: boolean; ids?: boolean } = {}) => {
+    const w = war(cd, att, def, place, o);
+    if (o.dig) for (const u of w.g.regions[w.t].units) if (!u.dead && u.nat === def) { u.dug = true; u.dugFor = 2; }
+    return { ...w, p: planRaid(w.g, kind, w.t, o.ids ? [w.f.id] : undefined, att) };
+  };
+
+  it('the output and railway lines: "the Rhineland\'s output", "through the Rhineland" with the switch on; as shipped off; "the Midlands\' output"; Bremen as it is', () => {
+    for (const [place, att, def, base, named] of [['Rhineland', 'UK', 'GER', undefined, true], ['Ruhr', 'UK', 'GER', undefined, true], ['Bremen', 'UK', 'GER', undefined, false], ['Midlands', 'GER', 'UK', 'Kent', true]] as const) {
+      const on = plan(true, 'bomb', place, att, def, { base }).p, off = plan(false, 'bomb', place, att, def, { base }).p;
+      expect([place, on.why, off.why]).toEqual([place, null, null]);
+      expect(off.effects[0]).toContain(` of ${place}'s output for a month: `);
+      const own = place === 'Midlands' ? "the Midlands' output" : `the ${place}'s output`;
+      expect(on.effects[0]).toBe(named ? off.effects[0].replace(`${place}'s output`, own) : off.effects[0]);
+      const rail = off.effects.find((e) => e.startsWith('About a '));
+      if (rail) {
+        expect(rail).toContain(` cutting the railway through ${place}, `);
+        expect(on.effects).toContain(named ? rail.replace(`through ${place}`, `through the ${place}`) : rail);
+      }
+    }
+    expect(plan(true, 'bomb', 'Rhineland', 'UK', 'GER').p.effects.slice(0, 2)).toEqual([
+      "Should stop about 0% of the Rhineland's output for a month: less than 0.1% of German production.",
+      'About a 0% chance of cutting the railway through the Rhineland, which stays cut until engineers relay it.',
+    ]);
+  });
+
+  it('the crowded airfields line names each base with its own article: "The airfields of Kent and the Ruhr are crowded"', () => {
+    const at = (cd: boolean): string => {
+      const w = war(cd, 'UK', 'GER', 'Ruhr');
+      w.f.base = w.g.byName.Kent.id; w.f.bmr = 4000; w.f.est.bmr = Math.max(w.f.est.bmr, 4000);
+      const d = w.g.airFleets.find((x) => x.nat === 'GER' && x.ftr > 0 && x.ship === undefined)!;
+      d.base = w.t; d.ftr = 4000; d.est.ftr = Math.max(d.est.ftr, 4000);
+      return (assessAir(w.g, [w.f], 'bomb', w.t).lines as Lines).find((l) => l.label === 'Airfields')!.value;
+    };
+    expect(at(true)).toBe('The airfields of Kent and the Ruhr are crowded');
+    expect(at(false)).toBe('The airfields of Kent and Ruhr are crowded');
+  });
+
+  it('a harbour raid: the plan\'s title, the group\'s order line and the battle\'s title name "the harbour of the Cotentin" with the switch on; off, as shipped', () => {
+    for (const [place, named] of [['Cotentin', true], ['Bremen', false]] as const) {
+      const read = (cd: boolean) => {
+        const { g, f, t, p } = plan(cd, 'harbour', place, 'UK', 'GER', { fleet: true });
+        expect(p.why).toBeNull();
+        const title = airTicket(g, 'harbour', t, p.picked, 'UK', { ships: true }).ticket!.title;
+        f.mission = 'harbour'; f.target = t;
+        return { plan: p.title, title, doing: groupRow(g, f, 'UK').doing };
+      };
+      const off = { plan: `Harbour raid: the harbour of ${place}`, title: `The raid on the harbour of ${place}`, doing: `Ordered against the harbour of ${place}: flies when the month ends` };
+      expect(read(false)).toEqual(off);
+      expect(read(true)).toEqual(named ? { plan: 'Harbour raid: the harbour of the Cotentin', title: 'The raid on the harbour of the Cotentin', doing: 'Ordered against the harbour of the Cotentin: flies when the month ends' } : off);
+    }
+  });
+
+  it('the plan\'s title of every kind names the place as the news does with the switch on; off, as shipped', () => {
+    const titles = (cd: boolean) => [
+      plan(cd, 'bomb', 'Ruhr', 'UK', 'GER').p.title, plan(cd, 'night', 'Ruhr', 'UK', 'GER').p.title, plan(cd, 'bomb', 'Bremen', 'UK', 'GER').p.title,
+      plan(cd, 'ground', 'Saar', 'FRA', 'GER').p.title, plan(cd, 'line', 'Vosges', 'GER', 'FRA', { dig: true }).p.title, plan(cd, 'superiority', 'Saar', 'FRA', 'GER').p.title,
+      plan(cd, 'recon', 'Saar', 'FRA', 'GER').p.title, plan(cd, 'recon', 'Lorraine', 'GER', 'FRA').p.title, plan(cd, 'town', 'Ruhr', 'UK', 'GER').p.title,
+      plan(cd, 'town', 'Valdai', 'GER', 'SOV', { base: 'Valdai', ids: true }).p.title, plan(cd, 'airfield', 'Ruhr', 'UK', 'GER').p.title,
+    ];
+    expect(titles(false)).toEqual(['Day bombing: Ruhr', 'Night bombing: Ruhr', 'Day bombing: Bremen', 'Raid on troops: Saar', 'Bombing the line: Vosges', 'Fight for the sky: Saar',
+      'Reconnaissance: Saar', 'Reconnaissance: Lorraine', 'Raid on a town: the defences of Essen', 'Raid on a town: the defences of Valdai', 'Airfield raid: the airfield at Ruhr']);
+    expect(titles(true)).toEqual(['Day bombing: the Ruhr', 'Night bombing: the Ruhr', 'Day bombing: Bremen', 'Raid on troops: the Saar', 'Bombing the line: the Vosges', 'Fight for the sky: the Saar',
+      'Reconnaissance: the Saar', 'Reconnaissance: Lorraine', 'Raid on a town: the defences of Essen', 'Raid on a town: the defences of the Valdai', 'Airfield raid: the airfield at the Ruhr']);
+  });
+
+  it('the troops\', the works\', the air groups\' and the reconnaissance lines say "in the Saar", "in Lorraine", "at Frankfurt" with the switch on; "at" as shipped off', () => {
+    const first = (cd: boolean, kind: Parameters<typeof planRaid>[1], place: string, att: string, def: string, o: { dig?: boolean; few?: boolean } = {}): string => {
+      const w = war(cd, att, def, place);
+      if (o.dig) for (const u of w.g.regions[w.t].units) if (!u.dead && u.nat === def) { u.dug = true; u.dugFor = 2; }
+      if (o.few) for (const x of w.g.airFleets) if (x.nat === att) x.bmr = Math.min(x.bmr, 3);
+      const p = planRaid(w.g, kind, w.t, undefined, att);
+      expect([kind, place, p.why]).toEqual([kind, place, null]);
+      return p.effects.find((e) => e.includes(place))!;
+    };
+    for (const [place, att, def, where] of [['Saar', 'FRA', 'GER', 'in the Saar'], ['Lorraine', 'GER', 'FRA', 'in Lorraine'], ['Frankfurt', 'FRA', 'GER', 'at Frankfurt'], ['Verdun', 'GER', 'FRA', 'at Verdun']] as const) {
+      const troops = (cd: boolean) => first(cd, 'ground', place, att, def), works = (cd: boolean) => first(cd, 'line', place, att, def, { dig: true });
+      expect(troops(false)).toMatch(new RegExp(`^The troops at ${place} should lose about `));
+      expect(troops(true)).toBe(troops(false).replace(`The troops at ${place}`, `The troops ${where}`));
+      expect(works(false)).toMatch(new RegExp(`^Should take about .* off the fieldworks at ${place}, which would leave `));
+      expect(works(true)).toBe(works(false).replace(`the fieldworks at ${place}`, `the fieldworks ${where}`));
+    }
+    for (const [place, att, def, where] of [['Saar', 'FRA', 'GER', 'in the Saar'], ['Lorraine', 'GER', 'FRA', 'in Lorraine']] as const) {
+      expect(first(false, 'line', place, att, def, { dig: true, few: true })).toBe(`Too few bombers would get through to break up the works at ${place}.`);
+      expect(first(true, 'line', place, att, def, { dig: true, few: true })).toBe(`Too few bombers would get through to break up the works ${where}.`);
+    }
+    for (const [place, att, def, where] of [['Vosges', 'GER', 'FRA', 'in the Vosges'], ['Lorraine', 'GER', 'FRA', 'in Lorraine'], ['Verdun', 'GER', 'FRA', 'at Verdun']] as const) {
+      const sky = (cd: boolean): string => {
+        const w = war(cd, att, def, place);
+        w.f.bmr = 1000;
+        const d = w.g.airFleets.find((x) => x.nat === def && x.ftr > 0 && x.ship === undefined)!;
+        d.base = w.t; d.ftr = 4000; d.est.ftr = Math.max(d.est.ftr, 4000);
+        return planRaid(w.g, 'superiority', w.t, undefined, att).effects.find((e) => e.startsWith('The air groups based '))!;
+      };
+      expect(sky(false)).toMatch(new RegExp(`^The air groups based at ${place} should lose about `));
+      expect(sky(true)).toBe(sky(false).replace(`based at ${place}`, `based ${where}`));
+    }
+    for (const [place, att, def, where] of [['Saar', 'FRA', 'GER', 'in the Saar'], ['Lorraine', 'GER', 'FRA', 'in Lorraine'], ['Bremen', 'UK', 'GER', 'at Bremen']] as const) {
+      expect(first(false, 'recon', place, att, def)).toMatch(new RegExp(`^Every army at ${place} and in the provinces beside it is identified`));
+      expect(first(true, 'recon', place, att, def)).toBe(first(false, 'recon', place, att, def).replace(`Every army at ${place}`, `Every army ${where}`));
+    }
+  });
+
+  it('a town with no name of its own takes its province\'s with the article: always on the Flak line, under the switch on the guns line', () => {
+    const lines = (cd: boolean) => {
+      const { g, f, t } = war(cd, 'GER', 'SOV', 'Valdai', { base: 'Valdai' });
+      const at = (k?: Parameters<typeof assessAir>[4]): Lines => assessAir(g, [f], 'town', t, k).lines;
+      const pick = (ls: Lines) => ls.filter((l) => l.label === 'Flak' || l.label === 'Anti-aircraft guns').map((l) => l.value);
+      return { sight: pick(at()), never: pick(at({ ...knownDefence(g, 'GER', t, 'high'), seen: -1, ago: 0, aa: 3 })), seen: pick(at({ ...knownDefence(g, 'GER', t, 'high'), seen: 2, ago: 2, aa: 2 })) };
+    };
+    const flakNever = 'Not scouted, so reckoned at the worst: about 1,080 guns built round the Valdai, 720 light and 360 heavy, and the 60 light guns every target has.';
+    const flakSeen = 'Seen two months ago: about 720 guns built round the Valdai, 480 light and 240 heavy, and the 60 light guns every target has.';
+    const sight = 'About 720 guns built here, 480 light and 240 heavy, and the 60 light guns every target has.';
+    expect(lines(true)).toEqual({ sight: [sight, 'Level 2 guns ring the Valdai'], never: [flakNever, 'Not scouted, so reckoned at the worst: level 3 guns round the Valdai'], seen: [flakSeen, 'Level 2 guns ringed the Valdai when seen two months ago'] });
+    expect(lines(false)).toEqual({ sight: [sight, 'Level 2 guns ring Valdai'], never: [flakNever, 'Not scouted, so reckoned at the worst: level 3 guns round Valdai'], seen: [flakSeen, 'Level 2 guns ringed Valdai when seen two months ago'] });
+    // A town's own name is as it is, on and off: the Ruhr's town is Essen.
+    const essen = (cd: boolean): string[] => { const w = war(cd, 'UK', 'GER', 'Ruhr'); return (assessAir(w.g, [w.f], 'town', w.t).lines as Lines).filter((l) => l.label === 'Anti-aircraft guns').map((l) => l.value); };
+    expect(essen(true)).toEqual(['Level 2 guns ring Essen']);
+    expect(essen(false)).toEqual(['Level 2 guns ring Essen']);
+  });
+
+  it('the browser\'s report title, order line and old order card take the article under the switch, off as shipped (ui/main.ts)', () => {
+    const lines = page.split('\n').map((l) => l.trim());
+    expect(lines).toContain("if (r.mission === 'harbour') return cityDefences(g) ? `Raid on ${harbourOf(placeName(r.place))}` : `Raid on the harbour of ${r.place}`;");
+    expect(lines).toContain("case 'harbour': return cityDefences(g) ? `raiding ${harbourOf(placeName(where))}` : `raiding the harbour of ${where}`;");
+    const card = page.slice(page.indexOf('function airPlanCard('), page.indexOf('\n}\n', page.indexOf('function airPlanCard(')));
+    expect(card).toContain("of ${esc(cityDefences(g) ? theWords(`${place}'s`, 'of ') : `${place}'s`)} output for a month: ");
+    expect(card).toContain("cutting the railway through ${esc(cityDefences(g) ? theWords(place, 'through ') : place)}, which stays cut");
   });
 });

@@ -9,6 +9,8 @@ import { AIR, AIRWAR, UD_ROLES, airWar, udRole, assessAir, bombLaw, carrierOf, f
 import { unitsDecide } from '../../campaign/units';
 import { planRaid, type RaidKind } from '../../campaign/airwar';
 import { armedAt } from '../../campaign/atom';
+import { cityDefences } from '../../campaign/citydefences';
+import { placeName } from '../../campaign/game';
 import { seatsOf } from '../../campaign/bombers';
 import { orderRaid } from '../../campaign/turn';
 import { weatherOn } from '../../campaign/weather';
@@ -263,11 +265,15 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     ...(Object.keys(bombers).length ? { bombers } : {}),
   };
   const date = turnToDate(g.turn).label;
+  // (City defences, the switch on: a harbour raid's title names the harbour as the news does, "The raid on the harbour of
+  // the Cotentin", so the 3D game prints the title it is sent and its C++ does not change; off, as shipped. The UI
+  // director, 26 Nov 2026 05:44Z, 3.)
+  const harbour = harbourOf(m === 'harbour' && cityDefences(g) ? placeName(a.place) : a.place);
   const ticket: FieldTicket<AirPlace> = {
     domain: 'air', kind: 'field',
     seed,
     turn: g.turn, date,
-    title: m === 'superiority' ? `The fight for the sky over ${a.place}` : m === 'ground' ? `The raid on the troops at ${a.place}` : m === 'harbour' ? `The raid on ${harbourOf(a.place)}` : quarry ? `The strike on the ${quarry.name}` : `The air battle over ${a.place}`,
+    title: m === 'superiority' ? `The fight for the sky over ${a.place}` : m === 'ground' ? `The raid on the troops at ${a.place}` : m === 'harbour' ? `The raid on ${harbour}` : quarry ? `The strike on the ${quarry.name}` : `The air battle over ${a.place}`,
     place,
     att: side(nat, att, g.human === nat),
     def: side(defNat, def, g.human === defNat),
