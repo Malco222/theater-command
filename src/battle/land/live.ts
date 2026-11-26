@@ -348,6 +348,11 @@ export interface LiveOpts {
   pursue?: boolean;
   /** With pursue: the pursuit's own clock, a day's length from the break at the latest (the rules' sim.pursueLate): on only where true. */
   pursueLate?: boolean;
+  /**
+   * Falling back round an enemy in the way (release 2, the row `wayround`; the rules' sim.roundRule): a block ordered
+   * to fall back steps round the nearer end of an enemy block standing in its line. On only where true.
+   */
+  wayround?: boolean;
   patrol?: boolean;
   /**
    * Looks the player can switch off on the Battle rules card (release 2; Brian, 23 November 01:11Z "Do all of these"):
@@ -572,6 +577,7 @@ export class LiveBattle {
     if (opts.bearers !== false) sim.bearers = true;
     if (opts.pursue === true) sim.pursue = true;
     if (opts.pursue === true && opts.pursueLate === true) sim.pursueLate = true;
+    if (opts.wayround === true) sim.roundRule = true;
     if (opts.stand === true) sim.standRule = true;
     // ("facing" works only with "stand" on: the design director, 26 November 01:02Z.)
     if (opts.facing === true && opts.stand === true) sim.faceRule = true;
