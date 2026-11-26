@@ -104,11 +104,20 @@ export interface SkyKnown {
   near: number;
 }
 
+/**
+ * True where this side sees a province's air defence as it is now: the fog on raids off, the land's fog off for it (the
+ * game's no-fog setting, or no intelligence rules), or the place in its full sight (its own ground and its allies' among
+ * it). skyKnown's `live`, read here alone, so that the build offer's guns note (arsenal.ts) and the raid card never part.
+ */
+export function skyLive(g: Game, nat: string, t: number, sight?: Uint8Array): boolean {
+  return !raidFogOn(g) || !fogOn(g, nat) || inSight(g, nat, t, sight);
+}
+
 /** What one side knows of one province now. */
 export function skyKnown(g: Game, nat: string, t: number, sight?: Uint8Array): SkyKnown {
   const by = g.intel?.scoutBy?.[nat]?.[t];
   const scouted = by !== undefined && g.turn - by < F().months;
-  if (!raidFogOn(g) || !fogOn(g, nat) || inSight(g, nat, t, sight)) {
+  if (skyLive(g, nat, t, sight)) {
     const [, fighters, groups, guns, ruin] = looked(g, nat, t);
     return { live: true, scouted, ago: 0, fighters, groups, guns, ruin: ruin / 100, near: fighters };
   }

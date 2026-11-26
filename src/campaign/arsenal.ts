@@ -10,6 +10,7 @@ import { byHand } from './depth';
 import data from '../../data/campaign/arsenal.json';
 import { worksName } from './rivers';
 import { AIR, AIRWAR, airFleetsOf, airPool, airRange, airWar, airfieldsHold, carrierRules, cover, foundAirFleet, hasAirfield, joinPilots, km, poolIn, standingGuns, whyNotBase } from './air';
+import { skyLive } from './airfog';
 import { fieldRules, fieldTier, setConcrete } from './fieldstate';
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
@@ -750,9 +751,10 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
   const FULL = { yard: 'The shipyard at % is as large as a yard can be.', aa: 'The guns at % are as heavy as they can be.', field: 'The airfields at % are as large as they can be.', lights: 'The searchlights at % are as many as they can be.' };
   const NONE = { yard: 'no shipyard', field: 'only rough landing grounds', lights: 'no searchlights' };
   // (The guns, the UI director's marks of 25 Nov 2026 21:22Z, case a: "None built" is the true form, and the light guns
-  // every province has are named last. With fog on raids on (g.flags.rfog, airfog.ts raidFogOn), on ground not in the
-  // nation's hands the note says nothing of the guns: it would tell the true level, which the fog hides on the raid card.)
-  const gunsNote = (x: Region, now: number, building: string): string => (g.flags.rfog === 1 && x.ctrl !== nat ? ''
+  // every province has are named last. Her answer of 22:29Z, question 2: the note is blank exactly where the raid card
+  // would not show the truth, the place out of the nation's sight under raid fog, as skyKnown's `live` reads it
+  // (airfog.ts skyLive). On an ally's ground, in sight, or with no fog set, it tells the level; the why stands either way.)
+  const gunsNote = (x: Region, now: number, building: string): string => (!skyLive(g, nat, x.id) ? ''
     : now ? `${x.name} has level ${now}${building}.` : `${x.name} has no guns built${building}: only the ${standingGuns().toLocaleString('en-US')} light guns every province has.`);
   const level = (what: 'yard' | 'aa' | 'field' | 'lights', spec: LevelSpec, now: number, upkeep: number, why: string | null): void => {
     const next = now + (r ? queued(g, nat, what, r.id) : 0) + 1;
