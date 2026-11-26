@@ -3,6 +3,7 @@
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { frontWatch, havenTakes, runAI } from '../src/campaign/ai';
 import { addCorps, createGame, declareWar, removeCorps } from '../src/campaign/game';
@@ -153,4 +154,26 @@ describe('a staging island for a hop', () => {
     const osaka = at(g, 'Osaka');
     expect([havenTakes(g, osaka, 'JAP', [first], second, 2), havenTakes(g, osaka, 'JAP', [first, second], half, 2)]).toEqual([true, false]);
   }, 300000);
+});
+
+describe("the islands' table and its stand-ins flagged G (the design director, 14:28Z, 25 November 2026, (c))", () => {
+  it("rates a stand-in that is a guess as low in its confidence column, never high, while its G stands", () => {
+    const text = readFileSync(new URL('../data/campaign/tables/islands-draft.csv', import.meta.url), 'utf8');
+    // (A small reader of the table's own form: commas, and quoted fields that hold commas.)
+    const rows = text.split('\n').filter((l) => l.trim()).map((l) => {
+      const out: string[] = []; let cur = '', q = false;
+      for (let i = 0; i < l.length; i++) {
+        const ch = l[i];
+        if (q) { if (ch === '"' && l[i + 1] === '"') { cur += '"'; i++; } else if (ch === '"') q = false; else cur += ch; }
+        else if (ch === '"') q = true; else if (ch === ',') { out.push(cur); cur = ''; } else cur += ch;
+      }
+      out.push(cur);
+      return out;
+    });
+    const [head, ...body] = rows, col = (nm: string): number => head.indexOf(nm);
+    const flagged = body.filter((r) => r[col('check')].startsWith('G ')).map((r) => [r[col('name')], r[col('confidence')]]);
+    expect(flagged.map((r) => r[0]).sort()).toEqual(['Formosa', 'Singapore']);
+    for (const [name, conf] of flagged) expect(conf, name).not.toBe('high');
+    expect(Object.fromEntries(flagged)).toEqual({ Formosa: 'medium', Singapore: 'low' });
+  });
 });
