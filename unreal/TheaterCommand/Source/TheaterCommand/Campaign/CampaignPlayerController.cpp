@@ -549,11 +549,13 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	// art director ships off, and is not left for him to switch on.) A grand war's rule row whose feature the ship list
 	// holds off is left out, as the list's own launch-word rows are (OptionRows), unless it is on in this war (so it can
 	// be turned off) or this is a test run: the step player, a picture run, kept options, or -TheaterR2Rows.
+	// -TheaterR2RowsAsShipped keeps the rows left out even in a test run, so a step run can show OPTIONS as Brian sees it.
 	{
 		const TCHAR* Cmd = FCommandLine::Get();
 		FString Run;
-		const bool bTestRun = FParse::Param(Cmd, TEXT("TheaterR2Rows")) || FParse::Param(Cmd, TEXT("TheaterKeepOptions"))
-			|| FParse::Value(Cmd, TEXT("TheaterSteps="), Run, false) || FParse::Value(Cmd, TEXT("TheaterShots="), Run, false);
+		const bool bTestRun = !FParse::Param(Cmd, TEXT("TheaterR2RowsAsShipped"))
+			&& (FParse::Param(Cmd, TEXT("TheaterR2Rows")) || FParse::Param(Cmd, TEXT("TheaterKeepOptions"))
+				|| FParse::Value(Cmd, TEXT("TheaterSteps="), Run, false) || FParse::Value(Cmd, TEXT("TheaterShots="), Run, false));
 		if (!bTestRun)
 		{
 			Out.RemoveAll([](const FGameOption& Option)
