@@ -78,19 +78,13 @@ namespace
 		return Next;
 	}
 
-	/**
-	 * (Release 2, carried from the 1.5.1 pre-check of 24 November 20:24Z, r15-151-fleetwar 3e098f1f.) A fleet the player's
-	 * fleet in hand may be set on: one of a nation at war with his, as an army is set only on an army he is at war with
-	 * (WhyNoAttackOn). An ally's or a neutral's fleet under the pointer is only sea: a drop or a right-click there sails his
-	 * fleet to it, as with fleet attacks off.
-	 */
-	bool IsEnemyFleet(const AArmyPiece* Piece, const FCampaignView& View)
+	/** Whether the nation Tag is at war with the player (View.Wars holds every pair at war, two by two). */
+	bool AtWarWithHuman(const FString& Tag, const FCampaignView& View)
 	{
-		if (!Piece || !Piece->IsFleet() || Piece->GetForceId() == INDEX_NONE || Piece->GetNationTag() == View.Human)
+		if (Tag.IsEmpty() || View.Human.IsEmpty() || Tag == View.Human)
 		{
 			return false;
 		}
-		const FString& Tag = Piece->GetNationTag();
 		for (int32 Index = 0; Index + 1 < View.Wars.Num(); Index += 2)
 		{
 			if ((View.Wars[Index] == View.Human && View.Wars[Index + 1] == Tag) || (View.Wars[Index + 1] == View.Human && View.Wars[Index] == Tag))
@@ -99,6 +93,22 @@ namespace
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * (Release 2, carried from the 1.5.1 pre-check of 24 November 20:24Z, r15-151-fleetwar 3e098f1f.) A fleet the player's
+	 * fleet in hand may be set on: one of a nation at war with his, as an army is set only on an army he is at war with
+	 * (WhyNoAttackOn). An ally's fleet under the pointer is only sea: a drop or a right-click there sails his fleet to it,
+	 * as with fleet attacks off. (Release 2; Brian, 26 November 2026 03:51Z) Any other country's goes to
+	 * FleetOnFleetAtPeace: the question of war, or why not.
+	 */
+	bool IsEnemyFleet(const AArmyPiece* Piece, const FCampaignView& View)
+	{
+		if (!Piece || !Piece->IsFleet() || Piece->GetForceId() == INDEX_NONE || Piece->GetNationTag() == View.Human)
+		{
+			return false;
+		}
+		return AtWarWithHuman(Piece->GetNationTag(), View);
 	}
 }
 
@@ -8067,6 +8077,33 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 							break;
 						}
 					}
+					// (Release 2; Brian, 26 November 2026 03:51Z) Or a fleet here of a country at peace with him: set down on it, the
+					// fleet does not sail. Where the sights stand over it, war is asked first and the attack card follows; over
+					// any other (the bar), he is told why and nothing moves. An ally's fleet is only sea, and is not named.
+					const FCampaignView& Seen = Session->GetView();
+					for (int32 Pass = 0; Pass < 2 && Attack.IsEmpty(); ++Pass)
+					{
+						for (const FViewFleet& Other : Seen.Fleets)
+						{
+							if (Other.Zone != Sea || Other.Id == Held->Id || Other.Nation.IsEmpty() || Other.Nation == Seen.Human || Seen.Allied.Contains(Other.Nation)
+								|| AtWarWithHuman(Other.Nation, Seen))
+							{
+								continue;
+							}
+							const FString* Why = FleetHand.Peace.Find(Other.Id);
+							const bool bSights = Why && Why->IsEmpty();
+							if (Pass == 0 && !bSights)
+							{
+								continue;
+							}
+							const FCampaignNation* Whose = Map->GetData().FindNation(Other.Nation);
+							const FString Country = Whose ? WithThe(Whose->Name) : Other.Nation;
+							Attack = bSights
+								? FString::Printf(TEXT("\nDrop %s on %s: %s is at peace with you, so war is asked first, then the attack card."), *Held->Name, *Other.Name, *Country)
+								: FString::Printf(TEXT("\nSet down on %s, %s does not sail: %s is at peace with you."), *Other.Name, *Held->Name, *Country);
+							break;
+						}
+					}
 				}
 				HoverTip = FText::FromString(!FleetHand.Held.IsEmpty() ? FString::Printf(TEXT("%s%s\n%s"), *Name, *Known, *FleetHand.Held)
 					: Held->Reach.Contains(Sea)
@@ -8546,11 +8583,24 @@ bool ACampaignPlayerController::RightClickOnFleetFigure(int32 FleetId)
 	{
 		return false;
 	}
-	if (!IsTableBusy() && !FleetOrderOnFleet(Figure))
+	// (a card already over the table takes no click: the step says so, as order-province does)
+	if (IsTableBusy())
 	{
-		// (what the mouse gives over a fleet that is only sea: the order to that fleet's sea)
+		return false;
+	}
+	if (!FleetOrderOnFleet(Figure))
+	{
+		// What the mouse gives over a fleet that is only sea: over one in harbour the pointer is on its port, so the port's
+		// order; over one at sea the order to that fleet's sea.
 		const FViewFleet* There = Now->GetView().Fleets.FindByPredicate([FleetId](const FViewFleet& Each) { return Each.Id == FleetId; });
-		RightClickOn(INDEX_NONE, There ? There->Zone : INDEX_NONE, true);
+		if (There && There->Stance == TEXT("port") && There->Base != INDEX_NONE)
+		{
+			RightClickOn(There->Base, INDEX_NONE, true);
+		}
+		else
+		{
+			RightClickOn(INDEX_NONE, There ? There->Zone : INDEX_NONE, true);
+		}
 	}
 	return true;
 }

@@ -1483,8 +1483,8 @@ public:
 	/**
 	 * (Release 2, for the step player.) A right-click on a fleet's figure with a fleet in hand, as the mouse gives it: an
 	 * enemy's opens the attack card, one at peace with him asks whether he means war (or he is told why not), and an
-	 * ally's sends the fleet in hand to that fleet's sea. False, and nothing done, where that fleet has no figure or no
-	 * other fleet is in hand.
+	 * ally's sends the fleet in hand to that fleet's sea (to its port, the port's order, where it lies in harbour). False,
+	 * and nothing done, where that fleet has no figure, no other fleet is in hand, or a card already lies over the table.
 	 */
 	bool RightClickOnFleetFigure(int32 FleetId);
 	/** On the approach order's card: another way up is picked. */

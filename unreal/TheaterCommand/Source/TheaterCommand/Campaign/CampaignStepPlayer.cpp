@@ -755,7 +755,8 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 			if (!Player.RightClickOnFleetFigure(Fleet))
 			{
 				bMissing = true;
-				Note = TEXT("that fleet has no figure on the table, or no other fleet is in hand");
+				Note = Player.IsTableBusy() ? TEXT("a card lies over the table: the click does not reach that fleet's figure")
+					: TEXT("that fleet has no figure on the table, or no other fleet is in hand");
 			}
 			else if (Player.IsTableBusy())
 			{
