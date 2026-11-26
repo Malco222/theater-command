@@ -119,7 +119,7 @@ struct FAirBattleState
 	 * SteadyEyeSky), and what they are judged from: its eye and look the last two frames, the last frame's real seconds,
 	 * the engine's frame and the fuel ball cuts when last measured, and how many frames in a row it has measured. */
 	int32 OverJumps = 0;
-	FVector JumpEye[2], JumpLook[2];
+	FVector JumpEye[2] = { FVector::ZeroVector, FVector::ZeroVector }, JumpLook[2] = { FVector::ZeroVector, FVector::ZeroVector };
 	double JumpDt = 0.0;
 	uint64 JumpFrame = 0;
 	int32 JumpBallCuts = 0, JumpRun = 0;
