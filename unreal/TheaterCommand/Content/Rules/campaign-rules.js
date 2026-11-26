@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b35b336f6 2026-11-25. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6def924b7 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -354,8 +354,10 @@
     ferry: false,
     _airNames: "Better air unit names (release 2; Brian 25 November 2026: 'can we come up with better names for the airforce squadrons?'; the design director's ruling of 03:18Z, design-director/air-names-1125.md; src/campaign/air.ts groupName, data/campaign/air-names.json '_airNames'). Words only: on, a new air group is named with the numbers its arm really used, the role in the name only where the arm put it there (else shown beside the name), in its arm's own plain form where no rung is near, and Japan's island groups by their airfield. (Italy's day-one names were dropped by Brian's answer of 03:31Z; its words are its earned list, under 'nicknames'.) Off: every name as ruling 220 gives it. A group keeps the name it was given for life, whatever the switch says later, and a saved war keeps its names. The grand campaigns opened while this is true carry the flag 'airNames'; it can be switched in any month from OPTIONS (new groups only). A run outside the browser can force it: TC_AIRNAMES=1 or TC_AIRNAMES=0.",
     airNames: false,
-    _cityDefences: "City defences (release 2; Brian 24 November 2026 22:08Z, card 22:11Z 'Both'; the design director's ruling of 25 November 2026 02:23Z; src/campaign/citydefences.ts, data/campaign/citydefences.json, arsenal.json works.lights). Searchlights to build beside the anti-aircraft guns; by night the guns fire by what they can see (dark, laid by Fighter control's radar, or lit as well), and the lights help the night fighters a little, under a clear sky only; a garrison fortifies the town it holds, a month at a time; and the town's heavy guns fire on attacking tanks. One rule for every country. Off: nothing of it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'cityDefences' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_CITYDEFENCES=1 or TC_CITYDEFENCES=0.",
-    cityDefences: false
+    _cityDefences: "City defences (release 2; Brian 24 November 2026 22:08Z, card 22:11Z 'Both'; the design director's ruling of 25 November 2026 02:23Z; src/campaign/citydefences.ts, data/campaign/citydefences.json, arsenal.json works.lights). Searchlights to build beside the anti-aircraft guns; by night the guns fire by what they can see (dark, laid by Fighter control's radar, or lit as well), and the lights help the night fighters a little, under a clear sky only; a garrison fortifies the town it holds, a month at a time; and, only with the sub-switch 'flakGround' as well (off, held back), the town's heavy guns fire on attacking tanks. One rule for every country. Off: nothing of it is read and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'cityDefences' (the player can also turn it on or off in a campaign under way). A run outside the browser can force it: TC_CITYDEFENCES=1 or TC_CITYDEFENCES=0.",
+    cityDefences: false,
+    _flakGround: "The town's guns against tanks, city defences' own sub-switch (the design director's ruling of 25 November 2026 22:10Z: city defences goes forward without guns against tanks; what fails stays off, and we say so; src/campaign/citydefences.ts flakGround, data/campaign/citydefences.json 'ground'). Off: held back, see the gate reading (rules-builder/release2/city-defences/readings/gate-reading-1125.md): with this part on, Britain is ashore in the west later at stops 4 and 5, by a path not yet traced. Off, no town's guns cut a storming tank's attack, no card or forecast carries their line, and no gun level is lost with a town that falls by storm; everything else of city defences plays as it does. On: the grand campaigns opened from now on with city defences carry the flag 'flakGround' as well (never one without city defences). No Options row offers it. A run outside the browser can force it: TC_CITYDEFENCES=1 TC_FLAKGROUND=1.",
+    flakGround: false
   };
 
   // ../../src/campaign/stage.ts
@@ -415,6 +417,7 @@
   var FERRY_STAGE = staged("TC_FERRY", "ferry");
   var AIRNAMES_STAGE = staged("TC_AIRNAMES", "airNames");
   var CITYDEFENCES_STAGE = staged("TC_CITYDEFENCES", "cityDefences");
+  var FLAKGROUND_STAGE = staged("TC_FLAKGROUND", "flakGround");
 
   // ../../data/campaign/grand.json
   var grand_default = {
@@ -30828,7 +30831,7 @@
 
   // ../../data/campaign/citydefences.json
   var citydefences_default = {
-    _about: "City defences (release 2; Brian 24 Nov 2026 22:08Z, card 22:11Z 'Both'; the design director's ruling of 25 Nov 2026 02:23Z; rules-builder/release2/city-defences/form.md, section 11 over sections 3 to 9). Read only with the switch 'cityDefences' (stage.json; src/campaign/citydefences.ts). Searchlights are a work of their own, levels 1 to 3 (arsenal.json works.lights: its label, cost, months, upkeep and blurb); by night and under a clear sky a level of them lights a level of the anti-aircraft guns, which count by night by what they can see; a garrison fortifies the town it holds, a month at a time; and the town's heavy guns fire on attacking tanks. One rule for every nation: the causes are works, the radar row (Fighter control), the sky, the bombers sent, a garrison and armour. Off: nothing here is read.",
+    _about: "City defences (release 2; Brian 24 Nov 2026 22:08Z, card 22:11Z 'Both'; the design director's ruling of 25 Nov 2026 02:23Z; rules-builder/release2/city-defences/form.md, section 11 over sections 3 to 9). Read only with the switch 'cityDefences' (stage.json; src/campaign/citydefences.ts). Searchlights are a work of their own, levels 1 to 3 (arsenal.json works.lights: its label, cost, months, upkeep and blurb); by night and under a clear sky a level of them lights a level of the anti-aircraft guns, which count by night by what they can see; a garrison fortifies the town it holds, a month at a time; and, only with the sub-switch 'flakGround' (stage.json, off: held back), the town's heavy guns fire on attacking tanks. One rule for every nation: the causes are works, the radar row (Fighter control), the sky, the bombers sent, a garrison and armour. Off: nothing here is read.",
     _night: "The share of a built gun level's day worth by night: 'dark' (no lights lit, no radar) 0.20 and 'radar' (Fighter control held) 0.45, form section 2 and ruling choice 1 (A); 'lit' (lit, no radar) ruled equal to dark, 0.20 (ruling choice 1, the changed cell: Pile 1940, F); 'both' (lit, radar) 0.75 (A).",
     night: { dark: 0.2, radar: 0.45, lit: 0.2, both: 0.75 },
     _saturation: "The bombers over the target one level of searchlights can hold: above it the lights' gain falls in proportion (form section 3, ruling choice 5 (A); 60 to 150 in the record, A).",
@@ -30837,7 +30840,7 @@
     fighters: [0, 2e-3, 3e-3, 4e-3],
     _works: "A garrison's town works: 'most' months of them at the most; 'worth' times the entrenching share for the months done (defence.json entrench.share) is their bonus inside the walls, the larger of it and the forts' (form section 5, +0.15 / +0.225 / +0.3; ruling choices 6 and 7 (A); mark A, a design figure matched to the fort levels, no record reading).",
     works: { most: 3, worth: 0.3 },
-    _ground: "The town's heavy guns against tanks in a storm, where it has a garrison: 'armour' off the tanks' attack a gun level, 'most' at the most, and 'lost' gun levels lost when such a town falls by storm (form section 6 as corrected in section 11, ruling choice 8 (A)).",
+    _ground: "The town's heavy guns against tanks in a storm, where it has a garrison: 'armour' off the tanks' attack a gun level, 'most' at the most, and 'lost' gun levels lost when such a town falls by storm (form section 6 as corrected in section 11, ruling choice 8 (A)). Read only with the sub-switch 'flakGround' as well (stage.json): off, held back by the design director's ruling of 25 November 2026 22:10Z, and these figures stand untouched.",
     ground: { armour: 0.07, most: 0.25, lost: 1 },
     _ai: "How many months a night raid on one of its provinces counts for the computer's order of searchlights (form section 7, 'the last two months'; the ruling's 'Also': lights before more guns only where they count; mark A, a design window, no record reading).",
     ai: { months: 2 },
@@ -34577,8 +34580,10 @@
     const months4 = `${m} month${m === 1 ? "" : "s"} of barricades and strongpoints`;
     return fort > townWorksWorth(g2, r) ? `, with ${months4}, though its forts count for more` : `, behind ${months4}`;
   }
+  var flakGround = (g2) => g2.flags.flakGround === 1;
+  var flakGroundOn = (g2) => cityDefences(g2) && flakGround(g2);
   function townFlak(g2, r) {
-    if (!cityDefences(g2)) return 0;
+    if (!flakGroundOn(g2)) return 0;
     if (!garrisonOf(r).some((c) => !c.dead)) return 0;
     return gunsAt(g2, r.id);
   }
@@ -34589,7 +34594,7 @@
   var isFlakLine = (l) => l.label === "Armor" && /^Heavy anti-aircraft guns dug in with the garrison$/.test(l.value);
   var flakFog = () => ({ label: "Armor", value: "The garrison may have heavy anti-aircraft guns dug in", effect: `Tank attack cut by as much as ${Math.round(flakCutMost() * 100)}% if it has` });
   function flakLostWithTown(g2, r, level, town) {
-    if (!cityDefences(g2) || level <= 0) return null;
+    if (!flakGroundOn(g2) || level <= 0) return null;
     const key7 = `wk:aa:${r.id}`;
     const left = Math.max(0, (g2.flags[key7] ?? 0) - CITYDEF.ground.lost);
     if (left > 0) g2.flags[key7] = left;
@@ -49045,6 +49050,7 @@
     if (WINGBYDATE_STAGE) g2.flags.wingByDate = 1;
     if (AIRNAMES_STAGE) g2.flags.airNames = 1;
     if (CITYDEFENCES_STAGE) g2.flags.cityDefences = 1;
+    if (CITYDEFENCES_STAGE && FLAKGROUND_STAGE) g2.flags.flakGround = 1;
     if (wide3) attachWorld(g2);
     openWinter(g2);
     if (g2.turn === 1) {
@@ -114533,8 +114539,8 @@
       settledTowns: settledTownsOn(s),
       // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
       townQueue: townQueueOn(s),
-      // (Release 2, citydefences.ts) Whether searchlights can be built, the guns fight by night by what they see, a
-      // garrison fortifies its town and the town's heavy guns fire on attacking tanks.
+      // (Release 2, citydefences.ts) Whether searchlights can be built, the guns fight by night by what they see and a
+      // garrison fortifies its town (the town's heavy guns fire on attacking tanks only under the sub-switch flakGround).
       cityDefences: cityDefencesOn(s),
       // (Release 2) The two switches as the options page shows them: whether this is a grand campaign that can carry them,
       // whether the columns run, and whether they can still be switched (in the campaign's opening month only).
@@ -115072,7 +115078,7 @@
   }
   function cityMarks(s, r) {
     const out = {};
-    const lt = lightsAt(s, r.id), tw = townWorksAt(s, s.regions[r.id]), lost = s.flags[`aal:${r.id}`];
+    const lt = lightsAt(s, r.id), tw = townWorksAt(s, s.regions[r.id]), lost = flakGroundOn(s) ? s.flags[`aal:${r.id}`] : void 0;
     if (lt > 0) out.lt = lt;
     if (tw > 0) out.tw = tw;
     if (lost !== void 0 && s.turn - lost >= 0 && s.turn - lost <= 1) out.gl = 1;
@@ -120892,7 +120898,7 @@ ${standing5}`,
     if (part[0] === "citydefencesrule") {
       setCityDefences(s, part[1] === "on");
       ok2 = true;
-      note4 = cityDefencesOn(s) ? "Searchlights to build beside the anti-aircraft guns. By night the guns fire almost blind unless Fighter control's radar lays them; searchlights help the radar-laid guns and the night fighters, and fail under cloud and against very large raids. A garrison digs in to the town it holds, a month at a time for up to three months, and the town's heavy guns fire on attacking tanks: if the town is stormed, one level of them is lost with it." : "Off, the guns are as good by night as by day, and a town is only as strong as its walls and forts.";
+      note4 = cityDefencesOn(s) ? "Searchlights to build beside the anti-aircraft guns. By night the guns fire almost blind unless Fighter control's radar lays them; searchlights help the radar-laid guns and the night fighters, and fail under cloud and against very large raids. A garrison digs in to the town it holds, a month at a time for up to three months" + (flakGroundOn(s) ? ", and the town's heavy guns fire on attacking tanks: if the town is stormed, one level of them is lost with it." : ".") : "Off, the guns are as good by night as by day, and a town is only as strong as its walls and forts.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
     if (part[0] === "settledtownsrule") {
