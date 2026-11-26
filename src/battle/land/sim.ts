@@ -127,7 +127,7 @@ export function coveredTanks(t: FieldTicket<LandPlace>, units: LandUnit[]): Set<
  * A block's way round ground it cannot enter: how it moves, the cell it was making for, the turning points, and whether
  * the way gets there or only as near as the block can go.
  */
-interface Way { m: Going; goal: number; pts: [number, number][]; whole: boolean; bars?: number; at?: number; fell?: boolean; stopped?: boolean }
+interface Way { m: Going; goal: number; pts: [number, number][]; whole: boolean; bars?: number; at?: number; fell?: boolean; stopped?: boolean; blind?: boolean }
 /**
  * How a block finds its way: as its kind moves; or, foot of a corps the card brings on over dry ground, as foot that
  * will not wade (b464(5)): sent at an enemy beyond where the river bends, it goes round the bend by dry ground, as the
@@ -402,8 +402,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    * goes on for the next point of its way; where the ground stops that step it falls back to the furthest point it
    * still has a straight line to and follows that line until it sees further than it fell back to; and while the point
    * it fell back to is under its own box it steps to it as it faces the one after, with no wheel to a way of a few
-   * metres. (Foot that will not wade and a tank held back by the hedges go as before: their way keeps them off ground
-   * their step could enter.)
+   * metres. (The ground is its way's own: foot that will not wade is stopped at the water and a tank held back by the
+   * hedges at the cells a hedge line bars, as a tank is at a river.)
    *
    * side: a block on the march slides a friend in its way aside and slides aside itself, by the side the friend lies
    * across its front. A friend dead ahead lies now a hair to its left and now a hair to its right as the block's own
@@ -1968,6 +1968,10 @@ export class LandBattle implements BattleSim<LandUnit> {
     return u.dry && MOTION[u.kind] === 'foot' && (u.joined === undefined || this.field.bend) ? 'ashore' : MOTION[u.kind];
   }
   private ashore: Record<Ground, number> | null = null;
+  /** Whether a block going this way may be at (x, y): ground it can enter, and for a tank held back by the hedges no cell a hedge line bars. */
+  private bears(m: Going, x: number, y: number): boolean {
+    return this.paceOf(m)[groundAt(this.field, x, y)] > 0 && !(m === 'hedged' && this.barrier()[this.cellAt(x, y)]);
+  }
   private paceOf(m: Going): Record<Ground, number> { return m === 'ashore' ? (this.ashore ??= { ...LAND.pace.foot, water: 0, blown: 0 }) : m === 'hedged' ? LAND.pace.tracks : LAND.pace[m]; }
   private route(u: LandUnit, x: number, y: number): [number, number][] {
     const m = this.going(u), f = this.field;
@@ -2000,12 +2004,13 @@ export class LandBattle implements BattleSim<LandUnit> {
       // built it kept the chosen point only within the march's 6 m of the one before, and fell back beyond: a tank a
       // step to one side of its way on a bridge then went on a metre, fell back a metre, and so on to the battle's
       // end, facing one way the while, so that no count of turns saw it. The art director's count of bridges did.)
-      // Only a block that goes as its kind goes: one whose way keeps off ground its kind could enter (foot that will
-      // not wade, a tank held back by the hedges) is stopped there by its way alone, never by the ground under its
-      // step, so it falls back as with the keep off.
-      if (this.standRule && this.standKeeps.way && m === MOTION[u.kind]) {
+      // "The ground" is its way's own: a block whose way keeps off ground its kind could enter (foot that will not
+      // wade, a tank held back by the hedges) is stopped at that ground too while it steps for a point it has no
+      // line to (blind; move).
+      if (this.standRule && this.standKeeps.way) {
+        w.blind = false;
         if (w.at !== undefined && k > w.at) w.fell = false;
-        else if (w.at !== undefined && k < w.at && !w.fell) { if (w.stopped || w.at >= pts.length) w.fell = true; else k = w.at; }
+        else if (w.at !== undefined && k < w.at && !w.fell) { if (w.stopped || w.at >= pts.length) w.fell = true; else { k = w.at; w.blind = true; } }
         w.stopped = false;
         w.at = k;
       }
@@ -3450,6 +3455,14 @@ export class LandBattle implements BattleSim<LandUnit> {
     const stepLen = Math.min(d, v * DT);
     const [ax, ay] = ahead(head);
     let nx = u.x + ax * stepLen, ny = u.y + ay * stepLen;
+    // (standKeeps.way) Stepping for a turning point it kept with no straight line to it (route), a block whose way
+    // keeps off ground its kind could enter (foot that will not wade, a tank held back by the hedges) is stopped where
+    // that ground begins, as its kind is below at ground it cannot enter: it stands this tick, and route falls back.
+    // Not while it is itself on such ground (walking out of it).
+    if (this.standRule && this.standKeeps.way && !run) {
+      const kept = this.ways.get(u.id);
+      if (kept?.blind && kept.m !== m && kept.m === this.going(u) && this.bears(kept.m, u.x, u.y) && !this.bears(kept.m, nx, ny)) { kept.stopped = true; u.speed = 0; u.act = 'idle'; return; }
+    }
     // Ground it cannot enter: try a little to either side, else stop. Not while it is still walking out of such ground.
     if (LAND.pace[m][groundAt(this.field, nx, ny)] <= 0 && LAND.pace[m][g] > 0 && !run) {
       // (standKeeps.way: the ground has stopped its straight step for the turning point it kept; route falls back.)

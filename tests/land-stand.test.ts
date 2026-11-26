@@ -463,6 +463,41 @@ describe('attackers stay where they stop to fight: whole battles, the rocking co
     }
   }, 480_000);
 
+  /**
+   * Seconds the tank blocks the hedges hold back (the bocage on, no cutters) spend in the cells a hedge line bars, a
+   * whole battle on Normandy's field with four hedge lines laid across it and a gateway every 400 m.
+   */
+  function inTheHedges(seed: number, rule: boolean): number {
+    const sim = new LandBattle(ticketOf(PIECES.find((x) => x.key === 'normandy-1944')!, seed, null));
+    const s = sim as unknown as { field: { w: number; h: number }; barrier(): Uint8Array; cellAt(x: number, y: number): number };
+    const W = s.field.w, H = s.field.h, hedges: { kind: string; points: [number, number][] }[] = [], gates: { x: number; y: number; yaw: number; width: number }[] = [];
+    for (const fy of [0.34, 0.42, 0.5, 0.58]) {
+      hedges.push({ kind: 'hedge', points: [[0, H * fy], [W, H * fy]] });
+      for (let x = 200 + 130 * (hedges.length % 3); x < W; x += 400) gates.push({ x, y: H * fy, yaw: 0, width: 12 });
+    }
+    expect(sim.hedgesOn(hedges, gates)).toBe(true);
+    sim.bocage = true;
+    sim.standRule = rule;
+    sim.ai.att = true; sim.ai.def = true;
+    const held = sim.units.filter((u) => sim.heldBack(u));
+    expect(held.length).toBeGreaterThan(0);
+    let ticks = 0, guard = 0;
+    while (!sim.over && guard++ < 400_000) {
+      sim.step();
+      const bar = s.barrier();
+      for (const u of held) if ((u.state === 'steady' || u.state === 'wavering') && bar[s.cellAt(u.x, u.y)]) ticks++;
+    }
+    return ticks / 10;
+  }
+
+  it('hedge country: a tank block the hedges hold back keeps its turning point no further than its own way lets it step', () => {
+    // (The keep trusted the mover to stop a step at ground the block cannot enter, and the mover reads the block's
+    // kind, never its way: a hedge-bound tank block stepping for a point it kept walked into the cells a hedge line
+    // bars and had to walk out again. 60 battles: 3,806 s in those cells against today's 1,570, and 1,525 s stuck
+    // against 97; these two seeds 72 s and 80 s against 6 s and 13 s. Stopped by its way's own ground: 1 s and none.)
+    for (const seed of [35, 40]) expect(inTheHedges(seed, true)).toBeLessThanOrEqual(inTheHedges(seed, false) + 5);
+  }, 480_000);
+
   it('the way over a river: a tank block shoved at the bridge\'s end turned to and fro between two turning points; kept, it does not', () => {
     // (the gate's river line, seed 5: one tank block rocked for 37 s at the bridge)
     const without = fought('normandy-1944', 5, true, { ...ALL, way: false }, true), kept = fought('normandy-1944', 5, true, ALL, true);
