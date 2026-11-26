@@ -308,10 +308,11 @@ describe('a cut-off island garrison withers and is never a free prize (ruling 17
   }, LONG);
 
   it('with the enemy ashore: on an atoll hunger is the siege\'s, as it always was; on a large island the garrison withers and holds', () => {
-    const story = (place: string, from: string) => {
+    const story = (place: string, from: string, str = 1) => {
       const g = war();
       const r = hold(g, place, 'JAP');
       const c = addCorps(g, 'JAP', `${place} garrison (a test row)`, 'inf', 1, place, {});
+      c.str = str;
       expect(garrison(g, c)).toBe(true);
       // An American division ashore, set there by hand: the field is its own and the town the garrison's.
       const base = hold(g, from, 'USA');
@@ -325,12 +326,15 @@ describe('a cut-off island garrison withers and is never a free prize (ruling 17
       return { g, r, c };
     };
     // Kwajalein: the rule does not answer, and the siege runs as it did: the town's stores, three hungry months, the fall.
-    const atoll = story('Kwajalein', 'Eniwetok');
+    // (The test row stands at 0.8, 12,000 men: since an island's room is counted in men (the design director, 14:28Z
+    // 25 November 2026), a test row of a full division would fill the atoll, and the record's own two rows for it in
+    // January 1942 (the 61st Guard Unit and the Maizuru landing force, 2,550 men) would wait for room at this stop.)
+    const atoll = story('Kwajalein', 'Eniwetok', 0.8);
     expect(witherAt(atoll.g, atoll.c, true)).toBeNull();
     expect(witherAt(atoll.g, atoll.c, false)).not.toBeNull();
     const seen: string[] = [];
     for (let m = 1; m <= 4; m++) { month(atoll.g); seen.push(atoll.c.dead ? 'gone' : state(atoll.c).join('/')); }
-    expect(seen).toEqual(['1/1', '0.6/0.85', '0.2/0.7225', 'gone']);
+    expect(seen).toEqual(['1/0.8', '0.6/0.68', '0.2/0.578', 'gone']);
     expect(atoll.r.ctrl).toBe('USA');
     expect(Object.keys(atoll.g.flags).filter((k) => k === `wither:${atoll.c.id}`)).toEqual([]);
     // Guadalcanal, large enough to feed itself: rider (o)(3) carries the rule to it with the enemy ashore.
