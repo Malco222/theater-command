@@ -1947,10 +1947,227 @@ namespace LandKit
 			return Kind == "red star" || Kind == "flash" || Kind == "red flash" || Kind == "rectangle" || Kind == "army star";
 		}
 
-		/** A mark's pieces, bottom layer first. */
-		void MarkPieces(const std::string& Kind, std::vector<MarkPiece>& Out)
+		/** A mark's real painted size: half its overall width in metres, as PaintMark's Radius (Dress::bRealMarks, the
+		 * trial word "realmarks"; Brian, 26 November 2026: "the tank markings are way to big"; the art director's rule
+		 * of 17:24Z the same day: a mark's size comes from the real mark, in metres, never from a share of the plate).
+		 * By her kind and role (her file's "kind" and "role"), her name, and whether the place looks up (a bonnet, a
+		 * deck). The figures, each looked up and then checked by a second reader, 26 November 2026; where no order or
+		 * table was found the figure is what photographs show, and says so:
+		 *   the German cross: 0.25 m, the figure commonly given for the black cross of 1940 on, on the Panzer III and IV
+		 *     ("about 10 inches or 25 cm tall"); 0.30 m on the Tiger's and the Panther's hull (photographs: none is
+		 *     recorded). The one order with sizes, of July 1939, gave 0.34 m on their sides for the solid white cross of
+		 *     the Polish campaign, which the order of October 1939 replaced without a size;
+		 *   the American star, by Wise's table of the 1942 to 1945 sizes, across its points: 15 in (0.38 m) on a medium
+		 *     tank's turret and hull sides and on an armoured car; 20 in (0.51 m) on a light tank's turret, a tank
+		 *     destroyer, a self-propelled gun and a half-track; a jeep's bonnet 15 in and her sides 6 in (0.15 m); a
+		 *     motorcycle's tank 6 in; a lorry's door 25 in (0.64 m); a towed gun wore none (0.25 m at most);
+		 *   the British flash: 18 in by 10 in (0.46 by 0.25 m), the flash of 1942 (the desert's of late 1941 was 18 in
+		 *     square; no size is recorded for the red, white, red one, taken as the same);
+		 *   the Red Army's star: no order found; 0.30 m, within what photographs show (0.2 to 0.6);
+		 *   the Japanese army's star on the front plate: no order found; about 0.12 m in photographs;
+		 *   the Italian company rectangle: 0.20 by 0.12 m, the figure commonly given;
+		 *   the French roundel: no order found; about 0.35 m in photographs;
+		 *   a nation with no record (the thirty-eight): 0.25 m (the documented figures nearest it are Finland's own, 0.325 m
+		 *     in 1941 and a cockade of 0.24 or 0.30 m in 1945), and never over half the height of the plate (PlateHigh,
+		 *     the caller's; the art director's ruling of 17:39Z: at a third a small army's mark sat at six tenths of
+		 *     France's on the same turret, "which says a small army is a lesser one").
+		 * 0: none known for the kind, her place's own. */
+		double MarkReal(const std::string& MarkKind, const std::string& VehicleKind, const std::string& Role, const std::string& ModelName, bool bOnTop)
+		{
+			const double Inch = 0.0254;
+			if (MarkKind == "cross")
+			{
+				return (ModelName.compare(0, 5, "Tiger") == 0 || ModelName.compare(0, 7, "Panther") == 0 ? 0.30 : 0.25) / 2.0;
+			}
+			if (MarkKind == "white star")
+			{
+				if (VehicleKind == "bike")
+				{
+					return 6.0 * Inch / 2.0;
+				}
+				if (Role == "light car")
+				{
+					return (bOnTop ? 15.0 : 6.0) * Inch / 2.0;
+				}
+				if (Role == "lorry" || Role == "anti-aircraft lorry")
+				{
+					return 25.0 * Inch / 2.0;
+				}
+				if (VehicleKind == "gun")
+				{
+					return 0.25 / 2.0;
+				}
+				if (Role == "medium tank" || Role == "heavy tank" || Role == "armoured car")
+				{
+					return 15.0 * Inch / 2.0;
+				}
+				return 20.0 * Inch / 2.0;
+			}
+			if (MarkKind == "flash" || MarkKind == "red flash")
+			{
+				return 18.0 * Inch / 2.0;
+			}
+			if (MarkKind == "red star")
+			{
+				return 0.30 / 2.0;
+			}
+			if (MarkKind == "army star")
+			{
+				return 0.12 / 2.0 / 0.7; // (its star is drawn at 0.7 of the mark's own size: MarkPieces)
+			}
+			if (MarkKind == "rectangle")
+			{
+				return 0.20 / 2.0;
+			}
+			if (MarkKind == "roundel" || MarkKind == "red roundel")
+			{
+				return 0.35 / 2.0;
+			}
+			if (MarkKind.compare(0, 5, "mark ") == 0)
+			{
+				return 0.25 / 2.0;
+			}
+			return 0.0;
+		}
+
+		/** How high the one face of her skin under a mark's place stands, metres: up and down from the place along the
+		 * mark's own up, a centimetre at a time, for as long as the outermost skin there still faces the mark's way and
+		 * does not step (a plate's edge, a lip, a hatch, a turret's ring). 0 where the place itself finds no skin. Only
+		 * her own first OwnPoints points are her skin (0: all of them): a mark laid on her before is not. With
+		 * Dress::bRealMarks a mark that has no record takes at most half of it (the art director, 26 November 2026).
+		 * ToMiddle: from the place to the middle of that height (a captor's big mark is laid there). */
+		double PlateHigh(const Mesh& Out, const V3& Pivot, const V3& At, const V3& Facing, size_t OwnPoints, V3* ToMiddle = nullptr)
+		{
+			const V3 F = Facing.Unit(V3(1.0, 0.0, 0.0));
+			const V3 Hint = std::fabs(F.Z) > 0.8 ? V3(1.0, 0.0, 0.0) : V3(0.0, 0.0, 1.0);
+			const V3 Up = (Hint - F * F.Dot(Hint)).Unit(V3(0.0, 0.0, 1.0));
+			const V3 Across = Up.Cross(F).Unit(V3(0.0, 1.0, 0.0));
+			const V3 Place = At - Pivot;
+			const double Front = 0.04, Back = 0.3, Reach = 1.0;
+			struct Tri
+			{
+				V3 A, E1, E2;
+				double Out;
+			};
+			std::vector<Tri> Near;
+			auto PointOf = [&Out](uint32_t I) { return V3(Out.Points[I * 3], Out.Points[I * 3 + 1], Out.Points[I * 3 + 2]); };
+			for (size_t T = 0; T + 2 < Out.Triangles.size(); T += 3)
+			{
+				const uint32_t I0 = Out.Triangles[T], I1 = Out.Triangles[T + 1], I2 = Out.Triangles[T + 2];
+				if (OwnPoints > 0 && std::max({ I0, I1, I2 }) >= OwnPoints)
+				{
+					continue;
+				}
+				const V3 A = PointOf(I0), B = PointOf(I1), C = PointOf(I2);
+				double Lo[3] = { 1e9, 1e9, 1e9 }, Hi[3] = { -1e9, -1e9, -1e9 };
+				for (const V3& P : { A, B, C })
+				{
+					const V3 D = P - Place;
+					const double Co[3] = { D.Dot(Across), D.Dot(Up), D.Dot(F) };
+					for (int K = 0; K < 3; ++K)
+					{
+						Lo[K] = std::min(Lo[K], Co[K]);
+						Hi[K] = std::max(Hi[K], Co[K]);
+					}
+				}
+				if (Hi[0] < -0.01 || Lo[0] > 0.01 || Hi[1] < -Reach || Lo[1] > Reach || Hi[2] < -Back || Lo[2] > Front)
+				{
+					continue;
+				}
+				const V3 Face = (B - A).Cross(C - A);
+				const V3 N0(Out.Normals[I0 * 3], Out.Normals[I0 * 3 + 1], Out.Normals[I0 * 3 + 2]);
+				Near.push_back({ A, B - A, C - A, (Face.Dot(N0) >= 0.0 ? Face : -Face).Unit(F).Dot(F) });
+			}
+			// (the ray in against the facing, as PaintMark's: the outermost skin that faces out; how far behind the place's
+			// own flat it lies and how squarely it faces the mark's way)
+			auto Cast = [&Near, &F, &Up, &Place, Front, Back](double U, double& Behind, double& Square)
+			{
+				const V3 From = Place + Up * U + F * Front;
+				const V3 Way = -F;
+				double Nearest = Front + Back;
+				bool bHit = false;
+				for (const Tri& T : Near)
+				{
+					if (T.Out < 0.2)
+					{
+						continue;
+					}
+					const V3 Pv = Way.Cross(T.E2);
+					const double Det = T.E1.Dot(Pv);
+					if (std::fabs(Det) < 1e-12)
+					{
+						continue;
+					}
+					const double Inv = 1.0 / Det;
+					const V3 Sv = From - T.A;
+					const double Bu = Sv.Dot(Pv) * Inv;
+					if (Bu < -1e-6 || Bu > 1.0 + 1e-6)
+					{
+						continue;
+					}
+					const V3 Qv = Sv.Cross(T.E1);
+					const double Bv = Way.Dot(Qv) * Inv;
+					if (Bv < -1e-6 || Bu + Bv > 1.0 + 1e-6)
+					{
+						continue;
+					}
+					const double Far = T.E2.Dot(Qv) * Inv;
+					if (Far < 0.0 || Far >= Nearest)
+					{
+						continue;
+					}
+					Nearest = Far;
+					Behind = Far - Front;
+					Square = T.Out;
+					bHit = true;
+				}
+				return bHit;
+			};
+			double Behind0 = 0.0, Square0 = 0.0;
+			if (!Cast(0.0, Behind0, Square0))
+			{
+				return 0.0;
+			}
+			double High = 0.0, Above = 0.0;
+			for (const double Way : { 1.0, -1.0 })
+			{
+				double Last = Behind0;
+				for (int K = 1; K <= 100; ++K)
+				{
+					double Behind = 0.0, Square = 0.0;
+					// (a step of more than 8 mm in a centimetre, or a face turned more than some 37 degrees from the mark's
+					// way: the plate has ended)
+					if (!Cast(Way * 0.01 * K, Behind, Square) || std::fabs(Behind - Last) > 0.008 || Square < 0.8)
+					{
+						break;
+					}
+					Last = Behind;
+					High += 0.01;
+					Above += Way * 0.01;
+				}
+			}
+			if (ToMiddle)
+			{
+				// (from the place to the middle of that height, along the mark's own up)
+				*ToMiddle = Up * (Above / 2.0);
+			}
+			return High;
+		}
+
+		/** A mark's pieces, bottom layer first. bReal (Dress::bRealMarks): the British flash in its real shape, 18 inches
+		 * by 10, in place of the shipped one's 1.2 to 1 and the campaign map's 1.6 to 1 (three equal bands either way). */
+		void MarkPieces(const std::string& Kind, std::vector<MarkPiece>& Out, bool bReal = false)
 		{
 			Out.clear();
+			if (bReal && (Kind == "flash" || Kind == "red flash"))
+			{
+				const double Tall = 10.0 / 18.0;
+				const MarkPaint Outer = Kind == "flash" ? MarkWhite : MarkRed, Inner = Kind == "flash" ? MarkRed : MarkWhite;
+				MarkBox(Out, -1.0, -Tall, -1.0 / 3.0, Tall, Outer, 0);
+				MarkBox(Out, -1.0 / 3.0, -Tall, 1.0 / 3.0, Tall, Inner, 0);
+				MarkBox(Out, 1.0 / 3.0, -Tall, 1.0, Tall, Outer, 0);
+				return;
+			}
 			if (Kind == "cross")
 			{
 				// The straight-armed beam cross (the art director: "the plain beam cross only"): a black cross over a
@@ -2050,6 +2267,14 @@ namespace LandKit
 		 *
 		 * bReadable (Dress::bAllMarks, the art director's rules of 26 November 2026): the mark takes at most half the dirt
 		 * of the coat round it, and on a light coat its white may rise to 20 levels brighter than the coat beside it.
+		 *
+		 * Clear and FlakeMost (Dress::bRealMarks, her rules of 17:24Z the same day): the mark fits only where it has Clear
+		 * metres of the same face beyond its own ends, each way (a plate's edge, a hatch, a slit); a flake of chipped
+		 * paint reaches at most FlakeMost of the mark's half-width from its own middle (0.085: a tenth of the mark across).
+		 * StepMost (metres; the British flash where it is painted larger than her file's place): the mark fits only where
+		 * the skin under it does not step by more than that between three samples in a row, across or up (a pistol
+		 * port's boss, a hatch's lip: a round turret's own curve is a few millimetres, a rivet's head under a
+		 * centimetre), so a mark made larger is moved clear of a fitting rather than laid over it.
 		 */
 		struct MarkSkin
 		{
@@ -2060,7 +2285,7 @@ namespace LandKit
 		};
 		size_t PaintMark(Mesh& Out, const V3& Pivot, const std::vector<MarkPiece>& Pieces, const V3& At, const V3& Facing, double Radius,
 			double Dust, double Step, double Lift, uint64_t Seed, const MarkSkin& Skin = MarkSkin(), bool bHand = false, bool bMustFit = false,
-			double* Moved = nullptr, double* Scale = nullptr, bool bReadable = false)
+			double* Moved = nullptr, double* Scale = nullptr, bool bReadable = false, double Clear = 0.0, double FlakeMost = 0.12, double StepMost = 0.0)
 		{
 			const V3 F = Facing.Unit(V3(1.0, 0.0, 0.0));
 			// (on a wall its top is toward the sky; on a roof, toward her front)
@@ -2077,7 +2302,8 @@ namespace LandKit
 					Reach = std::max(Reach, std::max(std::fabs(C.first), std::fabs(C.second)) * Radius);
 				}
 			}
-			const double Around = Reach + Shift + 0.02;
+			// (with room asked for round it, Clear: that much further each way; none asked, the sum is the same number)
+			const double Around = Reach + Shift + 0.02 + Clear;
 			// Her triangles about the place: within the mark's reach (and the most it may move) across and up, and Front
 			// before to Back behind it.
 			struct Tri
@@ -2169,6 +2395,7 @@ namespace LandKit
 			// Where it fits: the place, or the nearest move (then a smaller size) that has every sample of the mark on her
 			// skin, on one face of it (the depth under it spread no more than its round allows).
 			std::vector<std::pair<double, double>> Samples;
+			std::vector<int> Cells; // (each sample's place in the 13 by 13 grid: StepMost reads its neighbours)
 			for (int J = -6; J <= 6; ++J)
 			{
 				for (int I = -6; I <= 6; ++I)
@@ -2189,23 +2416,68 @@ namespace LandKit
 					if (bIn)
 					{
 						Samples.push_back({ A, U });
+						Cells.push_back((J + 6) * 13 + (I + 6));
 					}
 				}
+			}
+			// (Clear: each sample is pushed out from the mark's middle by that much at the mark's own ends, across and up,
+			// and by its share of the way there nearer in, so the mark's whole outline stands that far inside the face)
+			double EndA = 0.0, EndU = 0.0;
+			for (const auto& Sm : Samples)
+			{
+				EndA = std::max(EndA, std::fabs(Sm.first));
+				EndU = std::max(EndU, std::fabs(Sm.second));
 			}
 			auto Fits = [&](const V3& Middle, double Size)
 			{
 				double Lo = 1e9, Hi = -1e9;
-				for (const auto& Sm : Samples)
+				std::array<double, 169> Deep;
+				if (StepMost > 0.0)
 				{
-					const Hit H = Cast(Middle + Across * (Sm.first * Size) + Up * (Sm.second * Size));
+					Deep.fill(1e9);
+				}
+				for (size_t K = 0; K < Samples.size(); ++K)
+				{
+					const auto& Sm = Samples[K];
+					const Hit H = Clear > 0.0 ? Cast(Middle + Across * (Sm.first * Size + Clear * Sm.first / std::max(EndA, 1e-6))
+						+ Up * (Sm.second * Size + Clear * Sm.second / std::max(EndU, 1e-6)))
+						: Cast(Middle + Across * (Sm.first * Size) + Up * (Sm.second * Size));
 					if (!H.T)
 					{
 						return false;
 					}
 					Lo = std::min(Lo, H.Behind);
 					Hi = std::max(Hi, H.Behind);
+					if (StepMost > 0.0)
+					{
+						Deep[static_cast<size_t>(Cells[K])] = H.Behind;
+					}
 				}
-				return Hi - Lo <= 0.02 + 0.2 * Size;
+				if (Hi - Lo > 0.02 + 0.2 * Size)
+				{
+					return false;
+				}
+				// (StepMost: no step in the skin under it, by three samples in a row across and up)
+				for (int Cell = 0; StepMost > 0.0 && Cell < 169; ++Cell)
+				{
+					const int Col = Cell % 13, Row = Cell / 13;
+					const double Mid = Deep[static_cast<size_t>(Cell)];
+					if (Mid > 1e8)
+					{
+						continue;
+					}
+					if (Col > 0 && Col < 12 && Deep[static_cast<size_t>(Cell - 1)] < 1e8 && Deep[static_cast<size_t>(Cell + 1)] < 1e8
+						&& std::fabs(Deep[static_cast<size_t>(Cell - 1)] - 2.0 * Mid + Deep[static_cast<size_t>(Cell + 1)]) > StepMost)
+					{
+						return false;
+					}
+					if (Row > 0 && Row < 12 && Deep[static_cast<size_t>(Cell - 13)] < 1e8 && Deep[static_cast<size_t>(Cell + 13)] < 1e8
+						&& std::fabs(Deep[static_cast<size_t>(Cell - 13)] - 2.0 * Mid + Deep[static_cast<size_t>(Cell + 13)]) > StepMost)
+					{
+						return false;
+					}
+				}
+				return true;
 			};
 			V3 Middle = Place;
 			double Size = Radius;
@@ -2602,7 +2874,7 @@ namespace LandKit
 						continue;
 					}
 					// (an irregular six-sided flake, half a centimetre to one and a half from its middle, all of it on the mark)
-					const double Across1 = std::min(0.005 + 0.01 * Next(), 0.12 * Size) / Size, Squash = 0.6 + 0.4 * Next();
+					const double Across1 = std::min(0.005 + 0.01 * Next(), FlakeMost * Size) / Size, Squash = 0.6 + 0.4 * Next();
 					std::array<std::pair<double, double>, 6> Corner;
 					bool bOn = true;
 					for (int K = 0; K < 6; ++K)
@@ -3484,6 +3756,9 @@ namespace LandKit
 		// her file gives no place, each only if it fits whole on her near skin)
 		std::vector<uint8_t> PaintedMade;
 		Painted.clear();
+		// (a captured vehicle's captor marks at her file's places with Dress::bRealMarks: each one's size and place,
+		// settled on the near level and kept for the far one)
+		std::vector<std::pair<double, V3>> CaptorPlaces;
 
 		// Each level of detail painted and cut into the bodies.
 		for (int Level = 0; Level < 2; ++Level)
@@ -3909,9 +4184,50 @@ namespace LandKit
 						Quad(-Bar + Rim, -Size + Rim, Bar - Rim, Size - Rim, 0.016, 24, 24, 24);
 					}
 				};
-				for (const Mark& Mk : Marks)
+				// With marks at their real size (Dress::bRealMarks; the art director's ruling of 26 November 2026, 17:56Z:
+				// "the captor's mark stays LARGE. It is the one mark whose job was to stop a crew's own gunners, and both
+				// sides painted it oversize"): half as big again as the captor's mark at its real size (MarkReal), never
+				// over three quarters of the height of the plate it lies on, and laid at the middle of that height with
+				// 5 cm of the plate above and below it. Off: half as big again as her file's place, as before.
+				const std::string CaptorKind = D.Nation == "GER" ? "cross" : D.Nation == "USA" ? "white star" : "red star";
+				for (size_t I = 0; I < Marks.size(); ++I)
 				{
-					AddMark(Parts[static_cast<size_t>(Mk.Part)].Body, Mk.At, Mk.Facing, Mk.Radius * 1.5, V3(0.0, 0.0, 1.0));
+					const Mark& Mk = Marks[I];
+					const int BodyIx = Parts[static_cast<size_t>(Mk.Part)].Body;
+					double Size = Mk.Radius * 1.5;
+					V3 Place = Mk.At;
+					if (D.bRealMarks && Level == 0)
+					{
+						const double Real = MarkReal(CaptorKind, Kind, R["role"].Str(), Name, Mk.Facing.Z > 0.7);
+						Size = Real > 0.0 ? 1.5 * Real : Size;
+						if (BodyIx >= 0 && static_cast<size_t>(BodyIx) < Bodies.size())
+						{
+							const Body& Bo = Bodies[static_cast<size_t>(BodyIx)];
+							V3 ToMiddle;
+							const double Tall = PlateHigh(Bo.Near, Bo.Pivot, Mk.At, Mk.Facing, Members[static_cast<size_t>(BodyIx)].size(), &ToMiddle);
+							if (Tall > 0.0)
+							{
+								Size = std::min(Size, std::max(std::min(0.75 * Tall, Tall - 0.10), 0.0) / 2.0);
+								Place = Mk.At + ToMiddle;
+							}
+						}
+						CaptorPlaces.push_back({ Size, Place });
+						// (and where whoever reads her marks' places finds it: the picture sheet's ruler, the kit's test)
+						Mark Laid = Mk;
+						Laid.At = Place;
+						Laid.Radius = Size;
+						Painted.push_back(Laid);
+						PaintedMade.push_back(0);
+					}
+					else if (D.bRealMarks && I < CaptorPlaces.size())
+					{
+						Size = CaptorPlaces[I].first;
+						Place = CaptorPlaces[I].second;
+					}
+					if (!D.bRealMarks || Size > 0.0)
+					{
+						AddMark(BodyIx, Place, Mk.Facing, Size, V3(0.0, 0.0, 1.0));
+					}
 				}
 				// (her roof and her back: the biggest flat plate of her turret's top (else her hull's) and of her hull's
 				// back, by area, among those within half a metre of the very top or back, her files' fore being +X; only
@@ -3992,7 +4308,7 @@ namespace LandKit
 			{
 				const std::string MarkKind = MarkWorn(D.Nation, D.Year, D.Month, R["mark_months"], D.bAnyYear, D.bAllMarks, D.bNewMarks);
 				std::vector<MarkPiece> Pieces;
-				MarkPieces(MarkKind, Pieces);
+				MarkPieces(MarkKind, Pieces, D.bRealMarks);
 				if (Level == 0 && !Pieces.empty())
 				{
 					// Where her owner's army painted it (the art director's mends of 24 November): her file's places, but
@@ -4076,7 +4392,75 @@ namespace LandKit
 					const uint64_t MarkSeed = Mix(I + 1, static_cast<uint64_t>(Level) + 1, 0x4D41524Bull);
 					size_t Added = 0;
 					bool bSized = false;
-					if (D.bAllMarks && Level == 0 && !bCaptured)
+					if (D.bRealMarks && !bCaptured)
+					{
+						// Marks at their real size (Dress::bRealMarks; Brian, 26 November 2026: "the tank markings are way
+						// to big"; the art director's rules of 17:24Z). Her mark's kind has one real size (MarkReal): a
+						// place in her file that is larger takes it, a smaller one keeps its own, and none grows but the
+						// British flash on a tank, 18 inches by 10 wherever one plate takes the whole of it. One of the
+						// thirty-eight nations' own marks, which have no record, takes no more than half the height of
+						// the plate it lies on. Every mark stands 5 cm clear of its plate's edge or is moved or made
+						// smaller (PaintMark's Clear), and its flakes are a tenth of it at most. The sizes "allmarks"
+						// tried are not used with it. Settled on the near level; the far one and whoever reads her places
+						// take the size from there.
+						if (Level == 0)
+						{
+							const double Real = MarkReal(MarkKind, Kind, R["role"].Str(), Name, Mk.Facing.Z > 0.7);
+							double Want = Real > 0.0 ? std::min(Mk.Radius, Real) : Mk.Radius;
+							if (MarkKind.compare(0, 5, "mark ") == 0)
+							{
+								// (their marks are as high as they are wide: rings, a star, the chequer)
+								const double Tall = PlateHigh(Bo.Near, Bo.Pivot, Mk.At, Mk.Facing, Skin.Count);
+								if (Tall > 0.0)
+								{
+									Want = std::min(Want, Tall / 2.0 / 2.0);
+								}
+							}
+							if ((MarkKind == "flash" || MarkKind == "red flash") && Kind == "tank" && Real > Want)
+							{
+								double Sized = 1.0;
+								// (made larger than her file's place, so moved clear of a pistol port or a hatch's lip: StepMost)
+								Added = PaintMark(Bo.Near, Bo.Pivot, Pieces, Mk.At, Mk.Facing, Real, DustWord, 0.03, 0.004, MarkSeed, Skin, MarkByHand(MarkKind), true, nullptr, &Sized,
+									D.bAllMarks, 0.05, 0.085, 0.012);
+								if (Added > 0)
+								{
+									Want = Real * Sized;
+									bSized = true;
+								}
+							}
+							Painted[I].Radius = Want;
+						}
+						if (!bSized)
+						{
+							Added = PaintMark(Level == 0 ? Bo.Near : Bo.Far, Bo.Pivot, Pieces, Mk.At, Mk.Facing, Mk.Radius, DustWord, Level == 0 ? 0.03 : 0.12,
+								Level == 0 ? 0.004 : 0.012, MarkSeed, Skin, MarkByHand(MarkKind), Level == 0 && PaintedMade[I], nullptr, nullptr, D.bAllMarks, 0.05, 0.085);
+							bSized = true;
+						}
+					}
+					else if (D.bRealMarks)
+					{
+						// A captor the captured kit has no big mark for (the British, the Italians), with marks at their
+						// real size: his own mark stays large, half as big again as its real size and never over three
+						// quarters of the height of the plate it lies on, 5 cm clear of the plate's edge (the art
+						// director's ruling of 17:56Z). Settled on the near level, as above.
+						if (Level == 0)
+						{
+							const double Real = MarkReal(MarkKind, Kind, R["role"].Str(), Name, Mk.Facing.Z > 0.7);
+							double Want = 1.5 * (Real > 0.0 ? Real : Mk.Radius);
+							const double Tall = PlateHigh(Bo.Near, Bo.Pivot, Mk.At, Mk.Facing, Skin.Count);
+							if (Tall > 0.0)
+							{
+								// (the flash is ten eighteenths as high as it is wide; the others as high as wide)
+								const double Shape = MarkKind == "flash" || MarkKind == "red flash" ? 10.0 / 18.0 : 1.0;
+								Want = std::min(Want, 0.75 * Tall / 2.0 / Shape);
+							}
+							Painted[I].Radius = Want;
+						}
+						Added = PaintMark(Level == 0 ? Bo.Near : Bo.Far, Bo.Pivot, Pieces, Mk.At, Mk.Facing, Mk.Radius, DustWord, Level == 0 ? 0.03 : 0.12,
+							Level == 0 ? 0.004 : 0.012, MarkSeed, Skin, MarkByHand(MarkKind), Level == 0 && PaintedMade[I], nullptr, nullptr, D.bAllMarks, 0.05, 0.085);
+						bSized = true;
+					}
+					else if (D.bAllMarks && Level == 0 && !bCaptured)
 					{
 						// Marks that read (Dress::bAllMarks; the art director, 26 November 2026). The British flash is
 						// painted smaller than life at her files' places: tried at 1.4 times its true size (0.46 m wide
@@ -7338,6 +7722,7 @@ namespace LandKit
 		D.bAnyYear = bAnyYear;
 		D.bAllMarks = bAllMarks;
 		D.bNewMarks = bNewMarks;
+		D.bRealMarks = bRealMarks;
 		std::string Why;
 		if (!Looks[OutKey].Load(Text, D, Why))
 		{

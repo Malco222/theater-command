@@ -4742,6 +4742,15 @@ void ALandBattle::MakeArmour()
 	Armour->bNewMarks = Armour->bAllMarks && LandParts::OnTrial("newmarks");
 	UE_LOG(LogTheater, Log, TEXT("Land battle: every nation's mark %s%s"), Armour->bAllMarks ? TEXT("ON (-TheaterLandTrial=allmarks, release 2): thirty-eight more nations' marks, the flash red, white, red") : TEXT("off (as before)"),
 		Armour->bNewMarks ? TEXT("; the three new marks ON (newmarks)") : TEXT(""));
+	// Marks at their real size (release 2, on trial: "-TheaterLandTrial=realmarks", off until the art director and a
+	// Mac reading pass; Brian, 26 November 2026: "the tank markings are way to big"; the art director's rules of
+	// 17:24Z the same day; LandKit's Dress::bRealMarks). Each kind of mark has one real size in metres (the German
+	// cross 0.25 m, the American star 15 inches on a medium tank, the British flash 18 inches by 10, a nation with
+	// no record 0.25 m and never over half her plate's height); a place in her file that is larger takes it and
+	// none grows but the flash. On its own it sizes the marks already in the game; with "allmarks" the thirty-eight
+	// nations' too, in place of the sizes that word tried. "-TheaterLandNoRealMarks" off whatever the trial.
+	Armour->bRealMarks = LandParts::OnTrial("realmarks") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoRealMarks"));
+	UE_LOG(LogTheater, Log, TEXT("Land battle: marks at their real size %s"), Armour->bRealMarks ? TEXT("ON (-TheaterLandTrial=realmarks, release 2): each mark at its wartime size in metres") : TEXT("off (as before)"));
 	std::string Error;
 	{
 		// How a pierced tank ends by the face struck (the modeller's measured odds: a rear hit on a Tiger or a Panther

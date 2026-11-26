@@ -9,6 +9,10 @@
 # LAND_KIT_ALLMARKS=1 paints the trial word "allmarks"'s own sheet instead (release 2: the British flash as shipped and as
 # the map's, on the dark coat and on stone, then each of thirty-eight nations' marks close, on a dark and on a light
 # coat, and from the play eye's distance; lay it with LAND_SHEET_ACROSS=6 LAND_SHEET_WIDE=3200); =flash the flash alone.
+# LAND_KIT_REALMARKS=1 paints the trial word "realmarks"'s own sheet instead (release 2: six whole tanks before and after,
+# each with a man 1.8 m tall standing at the marked plate, then each of thirty-eight nations' marks on the whole light
+# tank at its real size; every caption ends with the painted width; lay it with LAND_SHEET_ACROSS=2 for the six alone,
+# LAND_KIT_REALMARKS=six, or LAND_SHEET_ACROSS=4 LAND_SHEET_WIDE=3200 for all).
 # LAND_KIT_HOUSE=1 paints the farmhouse's own sheet instead (release 2, -TheaterLandTrial=houses: the bocage's farmhouse built
 # to the vehicles' detail, whole and in its three hurts, near, middle and far, and stills across its 90 m and 300 m
 # switches as the game's lens shows them); LAND_KIT_HOUSE=farm the barn's and the byre's; LAND_KIT_HOUSE=church the
