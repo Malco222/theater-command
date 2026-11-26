@@ -160,6 +160,12 @@ namespace
 		// -TheaterAirCurtainFirst turns it on for a run, -TheaterAirNoCurtainFirst off. The air battle reads it as a battle
 		// opens; it is never sent to the land rules.)
 		{ TEXT("flyCurtainFirst"), TEXT("The black first, then the scene"), TEXT("An air battle puts up its black title card before it builds its sky, clouds and sound, so the map never stands frozen while the battle is made. Off: the battle is made first, then the card goes up."), TEXT("TheaterAirNoCurtainFirst"), false, TEXT("TheaterAirCurtainFirst") },
+		// (The air battle's hitch, release 2: under an air battle the hidden campaign map kept its per-frame update, 0.5 to
+		// 4 ms of every frame in the Mac's legs of 26 November, where the land battle holds it. On: held while the air battle
+		// is up and let go as the map comes back (AAirBattle::MapHoldBegin). Looks only: the map's lettering and smoke catch
+		// up in one update. Off until the Mac passes it; -TheaterAirMapHold turns it on for a run, -TheaterAirNoMapHold off.
+		// The air battle reads it as it hides the map; it is never sent to the land rules.)
+		{ TEXT("flyMapHold"), TEXT("The map rests under an air battle"), TEXT("While an air battle is up, the campaign map hidden under it stops redrawing its lettering, standards and smoke each frame, and catches up as it comes back. Off: the hidden map keeps working under the battle."), TEXT("TheaterAirNoMapHold"), false, TEXT("TheaterAirMapHold") },
 		// (Release 2, the scramble offer: Brian, 24 November 2026 22:21Z, "i want every air battle playable". In the enemy's
 		// month the campaign stops where an enemy raid on his ground meets his fighters and offers SCRAMBLE: taken, he flies
 		// the defence in the battle in the air (AAirBattle, his side 'def'), and the month runs on with what the battle

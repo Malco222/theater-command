@@ -1811,6 +1811,7 @@ void AAirBattle::HideTheTable()
 		{
 			Table = Map;
 			AirParts::PutAway(Map, true);
+			MapHoldBegin(Map); // (the row flyMapHold: its per-frame update held while the battle is up)
 		}
 		if (It->IsA<ACampaignMapActor>() || It->IsA<AArmyPiece>())
 		{
@@ -2281,6 +2282,7 @@ void AAirBattle::ShowTheTable()
 			Map->SetPiecesShown(false);
 			Map->SetPiecesShown(true);
 		}
+		MapHoldEnd(Map); // (the row flyMapHold: its held update run once, with the pieces back, before the frame is drawn)
 	}
 	else
 	{
@@ -5682,6 +5684,30 @@ bool AAirBattle::CurtainFirstHold(const FString& Why)
 	UE_LOG(LogTheater, Display, TEXT("Air battle: the black first, then the scene (the Battle rules card's row flyCurtainFirst, or -TheaterAirCurtainFirst): frame %lld."),
 		static_cast<long long>(GFrameCounter));
 	return true;
+}
+
+void AAirBattle::MapHoldBegin(ACampaignMapActor* Map)
+{
+	if (!Map || bMapHeld || !FLandLive::RuleNow(TEXT("flyMapHold")))
+	{
+		return;
+	}
+	bMapHeld = true;
+	Map->HoldUpdates(true); // (as the land battle holds it, LandBattle.cpp's MapUpdate)
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the hidden map's per-frame update held while the battle is up (the Battle rules card's row flyMapHold, or -TheaterAirMapHold)."));
+}
+
+void AAirBattle::MapHoldEnd(ACampaignMapActor* Map)
+{
+	if (!bMapHeld)
+	{
+		return;
+	}
+	bMapHeld = false;
+	if (Map)
+	{
+		Map->HoldUpdates(false);
+	}
 }
 
 bool AAirBattle::CurtainFirstWaits()

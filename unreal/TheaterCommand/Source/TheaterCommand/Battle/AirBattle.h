@@ -976,6 +976,15 @@ private:
 	uint64 CurtainShownFrame = 0;
 	FString CurtainWhy;
 	TFunction<void()> CurtainThen;
+	/**
+	 * (Release 2, the hitch: the Battle rules card's "The map rests under an air battle", row flyMapHold; on for a run
+	 * -TheaterAirMapHold, off -TheaterAirNoMapHold.) On, the hidden campaign map's per-frame update (its lettering,
+	 * standards and smoke, 0.5 to 4 ms a frame in the Mac's legs) is held while the air battle is up, as the land battle
+	 * holds it (ACampaignMapActor::HoldUpdates), and let go as the map comes back (ShowTheTable). Off, it runs, as before.
+	 */
+	void MapHoldBegin(ACampaignMapActor* Map);
+	void MapHoldEnd(ACampaignMapActor* Map);
+	bool bMapHeld = false;
 	/** The sun a hard small disc while the battle stands (the art director, build 1750); the lamp kept, put back with the table. */
 	void TheSun(UDirectionalLightComponent& Key);
 	/** Toward the battle's sun, a unit vector in the world: the set piece's own sun where its stage stands; over a raid with
