@@ -83,6 +83,8 @@ function gibraltar(human: string, place: (g: Game) => void): { g: Game; gib: num
   g.supplyDirty = true;
   return { g, gib: g.byName.Gibraltar.id, ninth };
 }
+/** The telling's own flags. */
+const OWN = /^(portTold|seaShut|portLost|portHad):/;
 const news = (g: Game, from = 0): string[] => g.headlines.slice(from).map((h) => h.text).filter((t) => /Malta|Gibraltar|stores/.test(t) && !/memorial|wireless|honour|ring broke|Rats of/.test(t));
 const texts = (ls: PortLine[]): string[] => ls.map((l) => l.text);
 
@@ -391,6 +393,26 @@ describe('the shutting side: a count only where the rule\'s clock runs, from its
   });
 });
 
+describe('what opens it, with several seas shut', () => {
+  it('Gibraltar with both seas held by Italian fleets: either sea opened lets the ships in, so the card names them joined by "or"', () => {
+    const run = (home: string | null): Game => {
+      const { g } = gibraltar('UK', (h) => { sail(h, 'ITA', 'wmed', ['1st Fleet']); sail(h, 'ITA', 'iberia', ['2nd Fleet']); });
+      month(g, 16);
+      month(g, 17);
+      if (home) { for (const f of g.fleets) if (f.nat === 'ITA' && f.name === home) f.stance = 'port'; g.supplyDirty = true; month(g, 18); }
+      return g;
+    };
+    const g = run(null), gib = g.byName.Gibraltar.id;
+    expect(texts(portCardLines(g, gib, 'UK'))[1]).toBe('A fleet of yours at sea there, strong enough to open the Western Mediterranean or the waters off the Iberian coast, lets the ships in and fills the stores: one such month feeds the garrison through March.');
+    // Either one sent home, the other sea still shut: the stores are filled at the next draw.
+    for (const home of ['1st Fleet', '2nd Fleet']) {
+      const h = run(home);
+      expect([home, h.regions[gib].seas.map((z) => closedTo(h, z, 'UK')).filter(Boolean).length, h.flags[`stores:${gib}`]]).toEqual([home, 1, 18]);
+      expect(texts(portCardLines(h, gib, 'UK'))).toEqual(['Cut off by sea, its stores would feed the garrison for two months.']);
+    }
+  });
+});
+
 describe('who is told', () => {
   it('a nation with corps in the port is told as the holder is, while it has corps there; a player with no part in it hears nothing', () => {
     const fr = malta('FRA', ['9th Corps'], 16, (g) => { declareWar(g, 'ITA', 'FRA'); sail(g, 'ITA', 'central'); });
@@ -401,14 +423,47 @@ describe('who is told', () => {
       'Malta\'s stores are spent and no ship has got through: the garrison goes hungry, and is lost at the start of May unless the sea is opened.',
       'Cut off on Malta, the 3rd Corps has starved and is lost.',
     ]);
-    // (France's month opens before Britain's: with its own corps struck off, France has no corps left there to be told
-    // of Britain's.)
+    // (France's month opens before Britain's, so Britain's corps is struck off after France's month has been told. France
+    // had corps there as the month opened, and hears of it as its next month opens.)
     expect([french.dead, fr.cs[0].dead]).toEqual([true, true]);
+    const h0 = fr.g.headlines.length;
+    month(fr.g, 22, ['FRA', 'UK']);
+    expect(news(fr.g, h0)).toEqual(['Cut off on Malta, the 9th Corps has starved and is lost.']);
+    expect(Object.keys(fr.g.flags).filter((k) => /^(portLost|portHad):/.test(k))).toEqual([]);
+    // Nothing more after that: France has no corps there now.
+    month(fr.g, 23, ['FRA', 'UK']);
+    expect(news(fr.g, h0)).toHaveLength(1);
     const us = malta('USA');
     for (let t = 17; t <= 21; t++) month(us.g, t);
     expect(news(us.g)).toEqual([]);
     expect(portCardLines(us.g, MALTA, 'USA')).toEqual([]);
-    expect(Object.keys(us.g.flags).filter((k) => /^(portTold|seaShut):/.test(k))).toEqual([]);
+    expect(Object.keys(us.g.flags).filter((k) => OWN.test(k))).toEqual([]);
+  });
+
+  it('corps of two nations struck off in one port in one month: one line to the holder, in the "Several" form, in the order they fell', () => {
+    const { g, cs: [ninth] } = malta('UK', ['9th Corps'], 16, (h) => { declareWar(h, 'ITA', 'FRA'); sail(h, 'ITA', 'central'); });
+    const french = addCorps(g, 'FRA', '3rd Corps', 'inf', 2, 'Malta', {});
+    for (let t = 17; t <= 20; t++) month(g, t, ['FRA', 'UK']);
+    const h0 = g.headlines.length;
+    month(g, 21, ['FRA', 'UK']);
+    expect([french.dead, ninth.dead]).toEqual([true, true]);
+    expect(news(g, h0)).toEqual(['Cut off on Malta, two corps have starved and are lost: the 3rd Corps and the 9th Corps.']);
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('portLost:'))).toEqual([]);
+    month(g, 22, ['FRA', 'UK']);
+    expect(news(g, h0)).toHaveLength(1);
+  });
+
+  it('a war watched with nobody at the table: no card and no corps line, and the rules\' own reading as it was', () => {
+    const { g, cs: [ninth] } = malta(null);
+    month(g, 17);
+    expect(g.human).toBeNull();
+    expect(portCardLines(g, MALTA, null)).toEqual([]);
+    expect(portCorpsLine(g, ninth)).toBeNull();
+    // (The news and the corps struck off read the holder's facts with no viewer: they stay.)
+    expect(portCutOff(g, MALTA, null)).toMatchObject({ side: 'holder', state: 'stores', cut: true, feedsTo: 18, lost: 21 });
+    for (let t = 18; t <= 21; t++) month(g, t);
+    expect(news(g)).toEqual([]);
+    expect(Object.keys(g.flags).filter((k) => OWN.test(k))).toEqual([]);
   });
 
   it('with the switch off nothing is said or written, and the war goes as it does with it on', () => {
@@ -419,7 +474,7 @@ describe('who is told', () => {
     expect(news(off.g)).toEqual([]);
     expect(portCardLines(off.g, MALTA, 'UK')).toEqual([]);
     expect(portCorpsLine(off.g, off.cs[0])).toBeNull();
-    expect(Object.keys(off.g.flags).filter((k) => /^(portStores|portTold|seaShut)/.test(k))).toEqual([]);
+    expect(Object.keys(off.g.flags).filter((k) => k === 'portStores' || OWN.test(k))).toEqual([]);
     expect([off.cs[0].dead, on.cs[0].dead]).toEqual([true, true]);
     expect(news(on.g)).toHaveLength(3);
     expect(PORTSTORES_ROW.id).toBe('portstores');
