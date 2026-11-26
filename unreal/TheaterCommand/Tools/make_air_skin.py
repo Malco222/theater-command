@@ -24,7 +24,9 @@ What it writes (one line, keys in a fixed order, no time stamp: the same inputs 
 Never marks, never anything by month or year: the game's own star and bar stays, and paint never depends on the date.
 
 It refuses (exit 2) unless the base's sha256 begins 5e1f39002423, the two files' points, facings, triangles, part and
-wear are equal in near and far, both have 46 colours and the same paint names, and every value is in range.
+wear are equal in near and far, both have 46 colours and the same paint names, and every value is in range; also when
+a file is not JSON, a colour is not hex, or the skin holds a dated scheme ("schemes", a key holding "month", a "from"),
+which is refused rather than quietly dropped.
 Stdlib only (json, hashlib).
 """
 import argparse
@@ -94,14 +96,45 @@ def ints_0_100(values, what):
     return out, worst
 
 
+def loads(data, what):
+    """The file's JSON; a file that is not JSON (cut short, or not text) is refused, not a traceback."""
+    try:
+        return json.loads(data)
+    except (ValueError, UnicodeDecodeError) as e:
+        raise Refused("the %s is not JSON (%s)" % (what, e))
+
+
+def dated_key(node, path=""):
+    """The first key that would date the paint: "schemes" at the top, any key holding "month", or a key "from". A key
+    "year" is not one (the model thread's file says the year it was made); the game's reader refuses all of them."""
+    stack = [(node, path)]
+    while stack:
+        x, at = stack.pop()
+        if isinstance(x, dict):
+            for k, v in x.items():
+                low = str(k).lower()
+                if (at == "" and low == "schemes") or "month" in low or low == "from":
+                    return "the key %s/%s" % (at, k)
+                if isinstance(v, (dict, list)):
+                    stack.append((v, at + "/" + str(k)))
+        elif isinstance(x, list):
+            for v in x:
+                if isinstance(v, (dict, list)):
+                    stack.append((v, at + "[]"))
+    return None
+
+
 def make(base_bytes, skin_bytes, with_gloss_metal=False, base_sha_prefix=BASE_SHA_PREFIX):
     """The overlay's text (and a few figures for the log) from the two files' bytes; raises Refused. (base_sha_prefix:
     the tool's test alone passes another, for its small made-up files.)"""
     base_sha = hashlib.sha256(base_bytes).hexdigest()
     if not base_sha.startswith(base_sha_prefix):
         raise Refused("the base is not the game's B17Fine.json (sha256 %s, wanted %s...)" % (base_sha[:16], base_sha_prefix))
-    base = json.loads(base_bytes)
-    skin = json.loads(skin_bytes)
+    base = loads(base_bytes, "base")
+    skin = loads(skin_bytes, "skin")
+    dated = dated_key(skin)
+    if dated:
+        raise Refused("the skin holds %s: paint never depends on the date, so a dated scheme is refused, not dropped" % dated)
     for name, d in (("base", base), ("skin", skin)):
         if len(d.get("colours") or []) != PAINTS:
             raise Refused("the %s has %d colours, not %d" % (name, len(d.get("colours") or []), PAINTS))
@@ -112,7 +145,8 @@ def make(base_bytes, skin_bytes, with_gloss_metal=False, base_sha_prefix=BASE_SH
         if not isinstance(c, str) or len(c.lstrip("#")) != 6:
             raise Refused("a colour that is not RRGGBB: %r" % (c,))
         c = c.lstrip("#").upper()
-        int(c, 16)
+        if any(ch not in "0123456789ABCDEF" for ch in c):
+            raise Refused("a colour that is not RRGGBB: %r" % (c,))
         colours.append(c)
     figures = {}
     levels = {}
