@@ -222,7 +222,9 @@ interface Reply { ok: boolean; u: ConvoyUnit; does?: [string, string]; says?: st
 interface Merchant { u: ConvoyUnit; dx: number; dy: number; armed: boolean; nextGun: number; lost: boolean }
 interface Torp { by: number; at: number; aims: number[]; escort: boolean; x: number; y: number }
 interface Burst { at: number; by: number; on: number; x: number; y: number; ahead: boolean; group: boolean; kit: ConvoyKit }
-interface Later { at: number; run: () => void }
+/** A thing to do at a later battle second. 'words': it only says something (a line, a sinking shown, the men in the
+ *  water), so it never holds the clock in a quiet spell (quiet). */
+interface Later { at: number; run: () => void; words?: true }
 
 const live = (u: ConvoyUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
 /** What an escort is about while she hunts a boat. */
@@ -439,7 +441,9 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
    */
   private quiet(): void {
     // (nor once the pack is gone: the night ends at the tick, not at dawn)
-    if (this.torps.length || this.bursts.length || this.later.length || this.packGone()) return;
+    // (a line still to be said holds nothing: said at its own second as the clock runs on, so neither the news window
+    // nor the lines' timing reaches the fight; the code audit of round 7)
+    if (this.torps.length || this.bursts.length || this.later.some((l) => !l.words) || this.packGone()) return;
     let next = Infinity;
     for (const b of this.boats) {
       if (b.doing === 'out') { if (b.arrive < next) next = b.arrive; } else if (b.doing !== 'left' && b.doing !== 'lost') return;
@@ -453,6 +457,11 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     for (const e of this.escorts) if (e.doing !== 'lost') e.u.y += shift;
     // (the seconds run on count as commanded by whoever commanded each side, as the ticks' own do)
     for (const side of ['att', 'def'] as const) if (!this.ai[side] && this.ticket[side].human) this.steered[side] += gap;
+    const said = this.later.filter((l) => l.words && l.at <= to);
+    if (said.length) {
+      this.later = this.later.filter((l) => !(l.words && l.at <= to));
+      for (const l of said.sort((a, b) => a.at - b.at)) { this.sec = Math.max(this.sec, Math.floor(l.at)); l.run(); }
+    }
     this.sec = to;
     if (this.t < this.sec) this.t = this.sec;
   }
@@ -1018,8 +1027,8 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     u.extra.ships = 0; u.extra.sunk = 1; u.extra.gun = undefined;
     u.speed = 0;
     const at = this.sec + 60 + Math.round(mix(m.u.id * 31 + this.ticket.seed) * 240);
-    this.later.push({ at, run: () => this.say('sea:sunk', u, `${u.name} goes down.`, { cls: 'mv', how, ship: 1 }, 'ship_sinking', 'def') });
-    this.later.push({ at: at - 30, run: () => this.say('sea:men', u, '', { ship: 1, men: CONVOY.crew.mv, dead: Math.round(CONVOY.crew.mv * mix(u.id * 13 + 7) * 0.6) }, undefined, 'def') });
+    this.later.push({ words: true, at, run: () => this.say('sea:sunk', u, `${u.name} goes down.`, { cls: 'mv', how, ship: 1 }, 'ship_sinking', 'def') });
+    this.later.push({ words: true, at: at - 30, run: () => this.say('sea:men', u, '', { ship: 1, men: CONVOY.crew.mv, dead: Math.round(CONVOY.crew.mv * mix(u.id * 13 + 7) * 0.6) }, undefined, 'def') });
   }
 
   // ---- The escorts ------------------------------------------------------------------------------------------------
@@ -1374,7 +1383,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
     const u = m.u;
     this.say('sea:abandon', u, '', { ship: 1 }, undefined, 'def');
     u.state = 'gone'; u.figures = 0; u.str = 0; u.extra.ships = 0; u.extra.sunk = 1; u.speed = 0; u.extra.gun = undefined;
-    this.later.push({ at: this.sec + 120, run: () => this.say('sea:sunk', u, `${u.name} goes down under the boat's gunfire.`, { cls: 'mv', how: 'shelled', ship: 1, from: by }, 'ship_sinking', 'att') });
+    this.later.push({ words: true, at: this.sec + 120, run: () => this.say('sea:sunk', u, `${u.name} goes down under the boat's gunfire.`, { cls: 'mv', how: 'shelled', ship: 1, from: by }, 'ship_sinking', 'att') });
   }
 
   // ---- Contacts -----------------------------------------------------------------------------------------------------
@@ -1515,7 +1524,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
           this.say('sea:lost', e.u, `${e.u.name} lost ${b.u.name}${why === 'deep' ? ' when she dived,' : ''} at ${clockOf(at)}, and no escort has found her again.`, { on, why, at }, undefined, 'def');
         };
         this.losing.set(on, tell);
-        this.later.push({ at: at + this.newsFor, run: tell });
+        this.later.push({ words: true, at: at + this.newsFor, run: tell });
       }
     }
     if (gone) this.known.def.delete(on);
@@ -1721,7 +1730,7 @@ export class ConvoySim implements BattleSim<ConvoyUnit> {
         if (!t || t.state !== 'gone') return no(`pick up survivors there: ${t ? `${t.name} is still afloat` : 'there is no wreck there'}`);
         const was = this.letGo(e);
         this.goBack(e); e.doing = 'rescue'; e.order = 'rescue'; e.tx = t.x; e.ty = t.y; e.until = this.sec + 600 + Math.round(dist(e.u.x, e.u.y, t.x, t.y) / E.top);
-        this.later.push({ at: e.until - 300, run: () => { if (e.doing === 'rescue') this.say('sea:rescue', e.u, `${e.u.name} picks up survivors.`, { on: t.id, by: e.u.id, wreck: { unit: t.id, ship: 1 } }, undefined, 'def', Math.round(e.u.x), Math.round(e.u.y)); } });
+        this.later.push({ words: true, at: e.until - 300, run: () => { if (e.doing === 'rescue') this.say('sea:rescue', e.u, `${e.u.name} picks up survivors.`, { on: t.id, by: e.u.id, wreck: { unit: t.id, ship: 1 } }, undefined, 'def', Math.round(e.u.x), Math.round(e.u.y)); } });
         return { ok: true, u, does: [`${was}goes to pick up survivors from ${t.name}`, `${was}go to pick up survivors from ${t.name}`] };
       }
       case 'convoy:starshell': {

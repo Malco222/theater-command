@@ -1728,6 +1728,20 @@ describe('round 7: the playtester\'s round 5 replay, the fixes that need no call
     expect(QUIET).toBe(300);
   }, 240_000);
 
+  it('R2 (a): a line still to be said never holds the clock, so no news window reaches the fight, however long', () => {
+    // (the code audit of round 7: the lost-contact line waits the window in the sim's later queue, and a quiet spell would
+    // not run the clock on while anything waited there; at a window of 3,000 s these two nights were fought otherwise)
+    for (const [night, seed] of [[3, 11], [4, 12], [4, 33]]) {
+      const fight = (window?: number): string => {
+        const sim = new ConvoySim(convoyPracticeTicket(CONVOY_PRACTICE[night], seed, null));
+        if (window !== undefined) (sim as unknown as { newsFor: number }).newsFor = window;
+        sim.runOut();
+        return JSON.stringify([sim.counts, sim.tally, sim.worked]);
+      };
+      expect(fight(3000)).toBe(fight());
+    }
+  }, 240_000);
+
   it('D (a): a boat\'s lookouts see nothing while her keel is below periscope depth\'s band', () => {
     let below = 0, seen = 0, added = 0;
     for (const night of [0, 1, 2]) for (const seed of [1, 2]) {
