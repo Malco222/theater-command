@@ -127,13 +127,16 @@ export function rowDone(g: Game, i: number): void {
   delete g.flags[toldKey(i)]; delete g.flags[atKey(i)]; delete g.flags[frontKey(i)];
 }
 
-/** What a row that waited on the front is formed from, read before its corps are taken (game.ts `expeditions`). */
-export interface WaitedOn { count: number; one: string | null; front: string[] }
+/**
+ * What a row that waited on the front is formed from, read before its corps are taken (game.ts `expeditions`): how many
+ * of its named corps stand, the one where it is one; and of the names that were at the front in any of its waiting
+ * months (`rowFront`), those that stand and have left the front (`left`) and those no longer on the board (`lost`).
+ */
+export interface WaitedOn { count: number; one: string | null; left: string[]; lost: string[] }
 
 /**
  * Read in `expeditions` once a row has passed both statements, before it takes its corps: null unless it waited on the
- * front in any of its waiting months (`rowFront`). How many of its named corps stand, the one where it is one, and the
- * names that were at the front.
+ * front in any of its waiting months (`rowFront`).
  */
 export function waitedOn(g: Game, i: number): WaitedOn | null {
   const mask = g.flags[frontKey(i)];
@@ -141,11 +144,16 @@ export function waitedOn(g: Game, i: number): WaitedOn | null {
   const row = ROWS()[i];
   const from = fromOf(row);
   const here = present(g, row[1], from);
-  return { count: here.length, one: here.length === 1 ? here[0].name : null, front: from.filter((_, k) => (mask & (1 << k)) !== 0) };
+  const front = from.filter((_, k) => (mask & (1 << k)) !== 0);
+  return {
+    count: here.length, one: here.length === 1 ? here[0].name : null,
+    left: front.filter((x) => here.some((c) => c.name === x)),
+    lost: front.filter((x) => !here.some((c) => c.name === x)),
+  };
 }
 
 /**
- * The words the month a row forms (sections 4 and 5), for game.ts's arrival headline: `alone` takes the place of
+ * The words the month a row forms (sections 4, 5 and 8), for game.ts's arrival headline: `alone` takes the place of
  * today's bare line ("{row} has landed at {place}."), `after` is said after a row's own news or its general's line.
  * Null where the telling has nothing to say and today's line stands. Clears the row's telling flags: it has formed.
  * `own` is true where the row came with men of its own while its corps were at the front, in the telling's scope.
@@ -168,19 +176,32 @@ export function formedLine(g: Game, i: number, was: WaitedOn | null, own: boolea
       : `${head} without ${join(front.map((x) => `your ${x.name}`))}, which are at the front in ${join([...new Set(front.map((x) => placeOf(g, x)))])} and stay corps of their own.`;
     return { alone, after: null };
   }
-  if (!was || !was.count || !was.front.length) return null;
-  const left = `now that ${join(was.front.map((x) => named(x)))} ${was.front.length === 1 ? 'has' : 'have'} left the front`;
-  if (was.count === 1 && was.one) {
-    const alone = was.one === c.name
-      ? `${head}, formed from your corps of that name, now that it has left the front.`
-      : `${head}, formed from your ${was.one}, now that it has left the front.`;
-    // (The same name after a general's line or news: the UI director's section 7, case 3.)
-    const after = was.one === c.name
-      ? 'The arrival is formed from your corps of that name, now that it has left the front.'
-      : `The arrival is formed from your ${was.one}, now that it has left the front.`;
-    return { alone, after };
+  if (!was) return null;
+  const tail = formedTail(was, c.name);
+  return tail ? { alone: `${head}, ${tail}`, after: `The arrival is ${tail}` } : null;
+}
+
+/**
+ * The words after "{Row} has arrived in {place}, " and after "The arrival is ": how the row is formed, true of the month
+ * it forms (sections 4 and 8), or null where nothing true is to be said and today's line stands. `name` is the formed
+ * row's own name, for "your corps of that name".
+ */
+function formedTail(was: WaitedOn, name: string): string | null {
+  const yours = (x: string): string => (x === name ? 'corps of that name' : x);
+  const fromYour = was.count === 1 && was.one ? `from your ${yours(was.one)}` : `from ${numberWord(was.count)} of your corps`;
+  if (was.lost.length) {
+    // (A corps at the front lost while the row waits: the UI director's section 8 point 1, 02:10Z, 26 November 2026.
+    // "formed without your {21st Army (18th Division)}, which has been lost"; same name, "formed without your corps of
+    // that name, which has been lost"; several, "formed from {three} of your corps, without {the 13th Tank Regiment},
+    // which has been lost".)
+    const been = `which ${was.lost.length === 1 ? 'has' : 'have'} been lost`;
+    return !was.count
+      ? `formed without ${join(was.lost.map((x) => `your ${yours(x)}`))}, ${been}.`
+      : `formed ${fromYour}, without ${join(was.lost.map((x) => named(x)))}, ${been}.`;
   }
-  return { alone: `${head}, formed from ${numberWord(was.count)} of your corps, ${left}.`, after: `The arrival is formed from ${numberWord(was.count)} of your corps, ${left}.` };
+  if (!was.count || !was.left.length) return null;
+  if (was.count === 1 && was.one) return `formed ${fromYour}, now that it has left the front.`;
+  return `formed ${fromYour}, now that ${join(was.left.map((x) => named(x)))} ${was.left.length === 1 ? 'has' : 'have'} left the front.`;
 }
 
 // ---- 2. While it waits: the cards' readers -------------------------------------------------------------------------
