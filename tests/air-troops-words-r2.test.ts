@@ -591,6 +591,16 @@ describe('what ended a group\'s strafing short: the forms and the order (the UI 
     // Too short of fuel to go down beside groups that did.
     expect(strafedLine(rep(['A'], { short: ['B', 'C'] }), 'FRA')).toBe(`A went down and strafed. B and C ${SHORT[1]}`);
   });
+  it('the k line alone: the line for nobody only where the line would otherwise say nothing (the UI director, 26 Nov 02:06Z, answer 2)', () => {
+    // "Each group that did not go down has its own line saying why, so "No fighter group went down to strafe." says it twice."
+    expect(strafedLine(rep([], { short: ['Groupement de Chasse 3'] }), 'FRA')).toBe(`Groupement de Chasse 3 ${SHORT[0]}`);
+    expect(strafedLine(rep([], { short: ['Groupement de Chasse 1', '3rd Fighter Group'] }), 'FRA')).toBe(`Groupement de Chasse 1 and the 3rd Fighter Group ${SHORT[1]}`);
+    expect(strafedLine(rep([], { short: ['A'], caught: ['C'] }), 'FRA')).toBe(`A ${SHORT[0]} C ${CAUGHT[0]}`);
+    // Nothing else to say: the line for nobody, as before (the settled raid with no group within reach says it too).
+    expect(strafedLine(rep([], {}), 'FRA')).toBe(NOBODY);
+    expect(strafedLine({ mission: 'ground', attNat: 'FRA', strafed: [] }, 'FRA')).toBe(NOBODY);
+    for (const line of [strafedLine(rep([], { short: ['B'] }), 'FRA'), strafedLine(rep(['A'], { short: ['B'] }), 'FRA')]) expect(line.includes(NOBODY)).toBe(false);
+  });
   it('the settled raid knows no fuel and no catch: none of these lines, and no field', () => {
     on();
     for (const n of [200, 646, 648]) {
