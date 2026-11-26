@@ -14,6 +14,7 @@ import { offers } from '../src/campaign/arsenal';
 import { createGame, setWar } from '../src/campaign/game';
 import { MANPOWER, comesWords, manpower, menPer, menScale, reserveWords } from '../src/campaign/manpower';
 import { RIFLES, inWords, levelOf, noRifles, riflesMonth, riflesSeen, riflesTakes, riflesView, riflesWait } from '../src/campaign/rifles';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { MEN_PER_DIV, type Game } from '../src/campaign/types';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
@@ -172,6 +173,22 @@ describe('the 3D game says what the page says', () => {
     expect(a.offers.find((o) => o.key === 'corps:inf')!.note).toContain("Takes three divisions' worth of men and 63,900 rifles.");
     expect(a.offers.find((o) => o.key === 'corps:inf')!.note).not.toContain('from the reserve');
     const v = TC().view() as { men: { tip: string } | null };
-    expect(v.men!.tip.split('\n').slice(0, 3)).toEqual(["About 495,800 men stand in reserve: about seven divisions' worth.", 'That is enough for about 7 divisions.', 'About 104,800 men come of age each month in the land you still hold.']);
+    // (Line 14 says the divisions' worth: the tip does not say it again in figures, the sceptic's S3.)
+    expect(v.men!.tip.split('\n').slice(0, 2)).toEqual(["About 495,800 men stand in reserve: about seven divisions' worth.", 'About 104,800 men come of age each month in the land you still hold.']);
+    expect(v.men!.tip.split('\n')[2]).toMatch(/^Drawn since the campaign opened: /);
+    expect(v.men!.tip).not.toContain('That is enough for');
+    // A reserve of 7.6 divisions' worth: line 14 says eight, and nothing beside it says seven.
+    const gg = loadGame((TC().save() as { text: string }).text)!;
+    gg.flags['mp:CHN'] = 7.6;
+    TC().load(saveGame(gg));
+    const t = (TC().view() as { men: { tip: string } }).men.tip;
+    expect(t.split('\n')[0]).toBe("About 509,200 men stand in reserve: about eight divisions' worth.");
+    expect(t).not.toContain('That is enough for');
+  });
+
+  it("a nation without a scale of its own keeps its men tip's second line", () => {
+    TC().start({ human: 'JAP', seed: 7, view: 'grand', world: true });
+    const tip = (TC().view() as { men: { tip: string } }).men.tip.split('\n');
+    expect(tip[1]).toMatch(/^That is enough for about \d+ divisions?\.$/);
   });
 });
