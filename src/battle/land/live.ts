@@ -377,6 +377,12 @@ export interface LiveOpts {
   mud?: boolean;
   /** Scarred ground (release 2, looks only): the campaign's earlier battles here, as old craters; off, none are sent. */
   scars?: boolean;
+  /**
+   * Only the hits that land shake a unit (release 2; the design director, 26 November 06:21Z; the UI director's row,
+   * 06:23Z; sim.hitsShake): each blow's nerve weighs only on its own harm. Off unless true; on whenever sniper teams are
+   * (they fight only with it).
+   */
+  hitsShake?: boolean;
   /** Shell blasts (release 2, looks only; sim.blast): one burst takes the men near it together. Off unless true. */
   blast?: boolean;
   /** Infantry with tanks (release 2, looks only; sim.escort): foot advance behind their tanks, never under them. Off unless true. */
@@ -530,6 +536,7 @@ export class LiveBattle {
     if (opts.bocage) sim.bocage = true;
     if (opts.phones !== false) sim.phones = true;
     if (opts.bearers !== false) sim.bearers = true;
+    if (opts.hitsShake === true || (opts.snipers === true && opts.hide !== false)) sim.hitsShake = true;
     if (opts.blast === true) sim.blast = true;
     if (opts.escort === true) sim.escort = true;
     if (opts.trucks === true) sim.trucks = true;

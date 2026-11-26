@@ -434,6 +434,16 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   escort = false;
   /**
+   * Only the hits that land shake a unit (release 2; the design director, 26 November 06:21Z, the sniper teams' gate
+   * tracing it; the UI director's row, 06:23Z): each blow's nerve weight prices only its own harm, so a block struck by
+   * several in a tick loses the sum of each weight times the harm it did, as the air's blows already are (bombs,
+   * strafing). Off, the old way: the tick's weights are
+   * summed and the sum laid on all its harm, so a blow that does no harm still multiplies the nerve of everyone else's.
+   * Off unless whoever opens the field turns it on (the bridge's { hitsShake: true }, and with sniper teams, which fight
+   * only with it).
+   */
+  hitsShake = false;
+  /**
    * Men in lorries (release 1.5, looks only; Brian, 23 November 14:10Z and 15:50Z, "soldiers in the back of a truck and
    * they then hop out"): each man aboard says his lorry and seat (MenOut.sv), and lorried men get down over the tailboard
    * one at a time (Drill.alight, hopOut), the lorries standing meanwhile. Off unless turned on (the bridge's
@@ -2824,7 +2834,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     for (const u of this.units) { u.pinned = false; if (live(u)) { u.still += DT; u.clear += DT; } }
     // Blows first, from where everyone stands, then nerve, then movement: no block gets to strike first by its place in the list.
-    const hurt = new Map<number, { dmg: number; nerve: number; from: [LandUnit, number][]; blind: boolean }>();
+    const hurt = new Map<number, { dmg: number; nerve: number; own: number; n: number; from: [LandUnit, number][]; blind: boolean }>();
     // What blows held back this tick for air strikes, by the block they fell on (air support).
     const kept = this.airOn.att || this.airOn.def ? new Map<number, number>() : null;
     for (const u of this.units) {
@@ -2880,8 +2890,8 @@ export class LandBattle implements BattleSim<LandUnit> {
         this.airLedger[u.side].withheld += raw;
         kept!.set(t.id, (kept!.get(t.id) ?? 0) + raw);
       }
-      const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true };
-      h.dmg += blow.dmg; h.nerve += blow.nerve;
+      const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, own: 0, n: 0, from: [], blind: true };
+      h.dmg += blow.dmg; h.nerve += blow.nerve; h.own += blow.nerve * blow.dmg; h.n++;
       if (!blind) h.blind = false;
       // Who struck it this tick, and how hard: whose blow a lost model goes to (suffer; shells.ts). Never read by the fight.
       h.from.push([u, blow.dmg]);
@@ -2894,8 +2904,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       }
     }
     // The nerve what was held back would have cost, as the tick's blows on that block cost it, owed with it.
-    if (kept) for (const [id, raw] of kept) { const h = hurt.get(id)!, side = other(this.unit(id)!.side); this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * h.nerve); }
-    for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.from, h.blind);
+    if (kept) for (const [id, raw] of kept) { const h = hurt.get(id)!, side = other(this.unit(id)!.side); this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * this.tickNerve(h)); }
+    for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, this.tickNerve(h), h.from, h.blind);
     // What waits' cover spared, being paid out at the pace it was spared (hold until relieved, release 2).
     if (this.repay.length) this.repayNow();
     if (this.airOn.att || this.airOn.def) this.flyAir();
@@ -3355,6 +3365,15 @@ export class LandBattle implements BattleSim<LandUnit> {
    * given a model lands a shell there. So guns are seen firing in their share of the harm, not only where they did the
    * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
    */
+  /**
+   * The nerve weight a tick's blows on one block lay on their harm (suffer): the weights summed (off), or with nerve by its
+   * own harm (hitsShake) each weight on its own harm, as a share of all of it; where no blow did harm, the weights' mean.
+   */
+  private tickNerve(h: { dmg: number; nerve: number; own: number; n: number }): number {
+    if (!this.hitsShake) return h.nerve;
+    return h.dmg > 0 ? h.own / h.dmg : h.n > 0 ? h.nerve / h.n : 0;
+  }
+
   private suffer(t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][] = [], blind = false, bare = false): void {
     // A hidden block struck (planes over the woods) is found (release 2); fire on cover alone finds it by its own odds.
     // Kept harm landing ('bare', hold until relieved) is no blow of anyone's that tick, and finds no one.
