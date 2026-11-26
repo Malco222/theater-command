@@ -237,6 +237,52 @@ int main(int Argc, char** Argv)
 		Check(Count(Miniatures, "Shade = FMath::Lerp(PlanePaints[0], PlanePaints[1], FMath::Min(Raw->Blend[K], 100) / 100.0f);") == 1
 			&& Count(Miniatures, "Shade = FMath::Lerp(Shade, PlanePaints[11], 0.72f * FMath::Min(Raw->Soot[K], 100) / 100.0f);") == 1,
 			"the law's blend and soot lines unchanged");
+		std::string Battle, BattleH, Rules, Colours2, Nose;
+		Check(ReadText(Src + "/Battle/AirBattle.cpp", Battle) && ReadText(Src + "/Battle/AirBattle.h", BattleH) && ReadText(Src + "/Battle/LandLive.cpp", Rules)
+			&& ReadText(Src + "/Battle/AirBattleUnitColours.cpp", Colours2) && ReadText(Src + "/Battle/AirBattleNoseArt.cpp", Nose), "the air battle's source read");
+		// (the row: once, off unless asked, its launch words, passed over by the land rules as every "fly" row is)
+		Check(Count(Rules, "{ TEXT(\"flyB17Skin\"), TEXT(\"Worn B-17 paint\"), ") == 1 && Count(Rules, "TEXT(\"TheaterAirNoB17Skin\"), false, TEXT(\"TheaterAirB17Skin\") }") == 1
+				&& Count(Rules, "RuleKey.StartsWith(TEXT(\"fly\")") == 1,
+			"the row: off unless asked, -TheaterAirB17Skin / -TheaterAirNoB17Skin, never sent to the land rules");
+		// (read in one place, as the battle begins, after the finer B-17's own row; nothing read or set with it off)
+		Check(Count(Battle, "\tB17SkinRead();") == 2 && Count(Battle, "\tB17FineRead();") == 2 && Count(BattleH, "void B17SkinRead();") == 1, "B17SkinRead called where B17FineRead is, both battle starts");
+		size_t AfterFine = 0;
+		bool bOrder = true;
+		for (size_t At = Battle.find("\tB17FineRead();"); At != std::string::npos; At = Battle.find("\tB17FineRead();", At + 1))
+		{
+			const size_t Skin = Battle.find("\tB17SkinRead();", At);
+			bOrder = bOrder && Skin != std::string::npos && Skin > At && Skin - At < 200 && Skin > AfterFine;
+			AfterFine = At;
+		}
+		Check(bOrder, "each B17SkinRead right after its B17FineRead");
+		const size_t Body = Battle.find("void AAirBattle::B17SkinRead()");
+		const size_t BodyEnd = Body == std::string::npos ? std::string::npos : Battle.find("\n}\n", Body);
+		const std::string Read = Body == std::string::npos || BodyEnd == std::string::npos ? std::string() : Battle.substr(Body, BodyEnd - Body);
+		const size_t Unset = Read.find("AirSkin::Set(nullptr);"), Rule = Read.find("FLandLive::RuleNow(TEXT(\"flyB17Skin\"))"), File = Read.find("FFileHelper::LoadFileToArray("),
+					 Said = Read.find("UE_LOG");
+		Check(!Read.empty() && Unset != std::string::npos && Rule != std::string::npos && File != std::string::npos && Unset < Rule && Rule < File && Rule < Said,
+			"off: unset first, then the row asked before any file is read or any line said");
+		Check(Count(Battle, "FLandLive::RuleNow(TEXT(\"flyB17Skin\"))") == 1 && Count(Battle + Colours2 + Nose + Miniatures, "AirSkin::Read(") == 1
+				&& Count(Battle, "AirSkin::Set(") == 2 && Count(Colours2 + Nose + Miniatures, "AirSkin::Set(") == 0,
+			"the overlay read and set in B17SkinRead alone");
+		// (every other reader asks AirSkin only once it holds an overlay; with the row off every key is what it was)
+		const std::string All = Battle + Colours2 + Nose + Miniatures;
+		int Asked = 0, Guarded = 0;
+		for (size_t At = All.find("AirSkin::For("); At != std::string::npos; At = All.find("AirSkin::For(", At + 1))
+		{
+			++Asked;
+			const size_t LineAt = All.rfind('\n', At);
+			const std::string Line = All.substr(LineAt + 1, At - LineAt - 1);
+			Guarded += Line.find("AirSkin::Active() ?") != std::string::npos ? 1 : 0;
+		}
+		Check(Asked == 4 && Guarded == 3 && Count(Battle, "\tif (AirSkin::Active())\n\t{\n\t\tFString SkinKind = Name, SkinWhose;") == 1,
+			"AirSkin::For asked four times, each behind AirSkin::Active()", std::to_string(Asked) + " asked, " + std::to_string(Guarded + 1) + " guarded");
+		Check(Count(Battle, "\tif (bSkin)\n\t{\n\t\tShapeKey += TEXT(\"|skin\");\n\t}") == 1 && Count(Miniatures, "+ (WornSkin ? TEXT(\"|skin\") : TEXT(\"\"))") == 1,
+			"her shape and her read kept apart under the skin ('|skin')");
+		Check(Count(Miniatures, "const int32 Livery = Raw->bAircraft && !Raw->bSkinned ? SchemeStanding(Raw->SchemeFrom) : 0;") == 1 && Count(Miniatures, "Raw->bSkinned = true;") == 1,
+			"never by date under the skin (her schemes stand aside)");
+		Check(Count(Colours2, "AirSkin::OntoModel(*WornSkin, Known.Model)") == 1 && Count(Nose, "ColourOf(WornSkin ? AirSkin::PanelUnder(*WornSkin) : Panel->Skin)") == 1,
+			"the earned colours and the nose-art panel take the overlay");
 	}
 	std::printf("air_b17_skin_test: %s\n", Bad ? "FAILED" : "ok");
 	return Bad ? 1 : 0;

@@ -1544,3 +1544,42 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    guess: ground smoke or rain behind a bomber may draw over its discs there, as over the air fight's tracers today);
    no ghost trail behind the haze when the camera pans with the formation (TSR, a guess); no grey checkered discs
    anywhere (M_ScrewHaze missing on a copy). Off: the picture exactly as before, compared with the branch's base.
+66. **Worn B-17 paint** (release 2; Brian, 26 November 2026: "why is the video showing the old b-17s again", "i want
+   the new ones in the game"; the studio pictures he approved on 25 November). The finer B-17 (item 60) keeps her
+   shape and wears the model thread's paint for that very shape: the one army olive 5B5A44 over 9A9EA1 (the art
+   director, 21:42Z on 26 November), panel to panel tone through the file's own blend, oil and exhaust stains, grime and
+   engine fronts through soot, darker glass (1E262D), the far shape's airscrew domes hub grey (160 points repainted from
+   engine). Never by the year or month. Looks only: nothing the rules count reads it, and no random draw is made.
+   How: AAirBattle::B17SkinRead, right after B17FineRead at both battle starts, reads the Battle rules card's **Worn
+   B-17 paint** (FLandLive's rule `flyB17Skin`, off by default; its key begins "fly" so FLandLive::Start passes it
+   over). It first unsets Battle/AirSkin; with the row off (or the finer B-17 off) it returns there: no file read, no
+   memory, no line said, every key as before. On, it reads Content/Data/AirSkin/B17Fine.json once a run (about 1.3 MB;
+   LandJson, some 60 to 80 ms and a passing 60 MB or so of parse nodes, as the battle begins, never in a frame; kept
+   as about 0.5 MB of bytes), refuses one not of her counts (143,899 / 15,534 / 46) or holding any key by month, year,
+   scheme, mark or "from", and sets it. Every reader of her file then asks AirSkin, only while it holds an overlay:
+   the miniature kit's reader (CampaignMiniatures.cpp: her read kept apart under "|skin"; her colours, blend and soot
+   replaced by the overlay's and the repaint laid, where the counts are the overlay's; the law itself unchanged; her
+   schemes, were there any, stand aside, Livery 0), ShapeFor (her shape kept apart under "|skin"), the earned colours'
+   model (AirSkin::OntoModel: their bands carry the new stains, her four spinners still found near and far) and the
+   nose-art panel (it fades into her worn coat, AirSkin::PanelUnder, 5C5B45, not panels-fine.json's 4C4B35). Her
+   markings (the star and bar at three places) are her file's, untouched.
+   The overlay is made by `python3 -I Tools/make_air_skin.py --base Content/Models/B17Fine.json --skin <the model
+   thread's file> --out Content/Data/AirSkin/B17Fine.json`: it EXTRACTS (computes no paint of its own), refuses a base
+   whose sha256 does not begin 5e1f39002423 or whose points, facings, triangles, part or wear differ from the skin's,
+   and gives the same bytes from the same files. First made from battle-models/air-bar-1126/issue-4/B17.json (sha256
+   f4d417ed0085e866...). A re-issued model file is one more run of that command and one commit. A re-export of
+   B17Fine.json itself fails the cloud test until the tool is run again.
+   Cost: none on the graphics chip (the same points, triangles, material and draws: only the colour bytes differ).
+   Her shapes are made once more under "|skin" the first battle it is on (a second read of her 10.3 MB file each
+   level, as with any first battle).
+   What the owner sees, honestly: alone it reads as "the same aircraft, darker and evener" (the sceptic's renders, 87%
+   of her pixels change, median 7 L* darker). The cues of the approved picture that are big at the riding eye are
+   her markings (the fin triangle and letter, the yellow serial, the side codes): this ships WITH those.
+   The cloud test: air_b17_skin_test in run.sh (g++ and clang++; the overlay made for B17Fine.json's very bytes, every
+   fault refused, the law's check colours, the earned colours and the panel under it, the guards read from the
+   source: counted lines, not behaviour) and Tools/air_skin/test_make_air_skin.py.
+   The Mac's run, each launch to its end: (1) `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=both -TheaterAirB17Fine
+   -TheaterAirNoB17Skin` must match a build of the branch's base frame for frame and line for line; (2) the same with
+   `-TheaterAirB17Skin`: the log says "worn B-17 paint: on", its "time eye" lines within 1 frame a second of run 1 and
+   the first window's worst frame no worse; (3) stills, the riding eye and a front quarter, with and without the row,
+   for the art director (dark against the cloud from the film's eye; panel tones one coat, not a patchwork).

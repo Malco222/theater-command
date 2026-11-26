@@ -14,6 +14,7 @@
 
 #include "Battle/AirBattleState.h"
 #include "Battle/AirShow.h"
+#include "Battle/AirSkin.h"
 #include "Battle/AirUnitColours.h"
 #include "Battle/LandLive.h"
 #include "Campaign/CampaignUnitTable.h"
@@ -124,6 +125,15 @@ bool AAirBattle::UnitColoursFor(int32 Key, const FString& Kind, FString& Look)
 		}
 		else
 		{
+			// (the finer B-17 under the Battle rules card's "Worn B-17 paint": her earned colours laid over her worn paint,
+			// its own stains in their bands; AirSkin holds nothing with the row off)
+			if (const AirSkin::Overlay* WornSkin = AirSkin::Active() ? AirSkin::For(Name) : nullptr)
+			{
+				if (!AirSkin::OntoModel(*WornSkin, Known.Model))
+				{
+					UE_LOG(LogTheater, Warning, TEXT("Air battle: earned colours: %s's worn paint is not of her counts, so her bands lie on her plain paint."), *Kind);
+				}
+			}
 			Known.Found = AirUnitColours::Find(Known.Model);
 			if (!Known.Found.Note.empty())
 			{
