@@ -34,7 +34,8 @@ import { SIEGE, besieged } from './siege';
 import { atomBill } from './atom';
 import { prizeIncome, prizeOut, prizeRules } from './prizes';
 import { govMul } from './government';
-import { MANPOWER, drawMen, menSpare, ownMen, raisable, returnMen } from './manpower';
+import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
+import { armOrder, binds, canArm, carved, riflesRaised, unarmOrder } from './rifles';
 import { raiseMorale } from './morale';
 import { WORLD_MAP, armyIdle, peaceFooting, shoreOf, warFooting, warWorkLeft } from './world';
 import { footLabel, footLineStays, footShare } from './footing';
@@ -80,14 +81,10 @@ export function corpsList(g: Game, nat: string, kind: string): number {
 }
 
 /**
- * True where this nation forms a corps of this kind from its own men (rider B of 20:45Z to ruling 234; manpower.ts,
- * ownMen): the fighting arms that need no industry. It is paid for in men from the reserve, as every corps is, and
- * in no points. Nobody with the far side off.
+ * What a corps of this kind costs this nation in points: its price. Where the nation's store of rifles binds, the
+ * price no longer charges for the rifles the store charges (rifles.ts carve).
  */
-export const paidInMen = (g: Game, nat: string, kind: string): boolean => ownMen(g, nat) && kind !== 'eng' && needsOf(g, kind) === 0;
-
-/** What a corps of this kind costs this nation in points: its price, or nothing where it is paid for in men. */
-export const corpsCost = (g: Game, nat: string, kind: string): number => (paidInMen(g, nat, kind) ? 0 : corpsList(g, nat, kind));
+export const corpsCost = (g: Game, nat: string, kind: string): number => carved(g, nat, corpsList(g, nat, kind), specOf(g, kind)?.divs ?? 0);
 
 /** How many factories a province must have for a corps of this kind to be raised there. None in a historical scenario. */
 export const needsOf = (g: Game, kind: string): number => (budgeted(g) ? (arsenalData.needs as Record<string, number>)[kind] ?? 0 : 0);
@@ -520,14 +517,17 @@ export function orderCorps(g: Game, nat: string, kind: Kind, region: number, rev
   if (locked(g, nat, `corps:${kind}`)) return null;
   // And every new corps is filled from the reserve of men: with none left, none is raised.
   if (raisable(g, nat, spec.divs) < 1) return null;
+  if (!canArm(g, nat, spec.divs)) return null;
   const old = revive !== undefined ? revivable(g, nat, kind).find((f) => f.id === revive) : undefined;
   if (revive !== undefined && !old) return null;
   n.pp -= cost;
   drawMen(g, nat, spec.divs);
+  const rifles = armOrder(g, nat, spec.divs);
   // A support team is numbered apart from the corps (release 2), so no corps' number, nor the computer's tank cadence, moves.
   const name = old ? old.name : isTeam({ kind }) ? teamName(g, nat, kind as TeamKind) : corpsName(nat, kind, n.corpsNo++);
   const b: Build = { id: g.nextBuild++, what: 'corps', kind, divs: spec.divs, name, region, ordered: g.turn, eta: g.turn + spec.months, cost };
   if (old) b.revive = old.id;
+  if (rifles > 0) b.rifles = rifles;
   n.queue.push(b);
   return b;
 }
@@ -540,12 +540,16 @@ export function orderElite(g: Game, nat: string, region: number): Build | null {
   const n = g.nations[nat];
   const u = eliteOf(nat);
   const r = g.regions[region];
-  if (!n.alive || !u || whyNoElite(g, nat) !== null || locked(g, nat, `corps:${u.kind}`) || !r || !canRaiseKind(g, nat, r, u.kind) || n.pp < u.cost || raisable(g, nat, u.divs) < 1) return null;
-  n.pp -= u.cost;
+  const cost = u ? carved(g, nat, u.cost, u.divs) : 0;
+  if (!n.alive || !u || whyNoElite(g, nat) !== null || locked(g, nat, `corps:${u.kind}`) || !r || !canRaiseKind(g, nat, r, u.kind) || n.pp < cost || raisable(g, nat, u.divs) < 1) return null;
+  if (!canArm(g, nat, u.divs)) return null;
+  n.pp -= cost;
   drawMen(g, nat, u.divs);
+  const rifles = armOrder(g, nat, u.divs);
   const no = (g.flags[`elite:${nat}`] ?? 0) + 1;
   g.flags[`elite:${nat}`] = no;
-  const b: Build = { id: g.nextBuild++, what: 'corps', kind: u.kind, divs: u.divs, name: `${roman(no)} ${u.word} Corps`, region, ordered: g.turn, eta: g.turn + u.months, cost: u.cost, elite: u.id };
+  const b: Build = { id: g.nextBuild++, what: 'corps', kind: u.kind, divs: u.divs, name: `${roman(no)} ${u.word} Corps`, region, ordered: g.turn, eta: g.turn + u.months, cost, elite: u.id };
+  if (rifles > 0) b.rifles = rifles;
   n.queue.push(b);
   return b;
 }
@@ -558,13 +562,16 @@ export function orderPara(g: Game, nat: string, region: number): Build | null {
   const n = g.nations[nat];
   const u = TECH.units.para;
   const r = g.regions[region];
-  const cost = priceOf(g, nat, 'para', u.cost);
+  const cost = carved(g, nat, priceOf(g, nat, 'para', u.cost), u.divs);
   if (!n.alive || whyNoPara(g, nat) !== null || !r || !canRaiseKind(g, nat, r, 'inf') || n.pp < cost || raisable(g, nat, u.divs) < 1) return null;
+  if (!canArm(g, nat, u.divs)) return null;
   n.pp -= cost;
   drawMen(g, nat, u.divs);
+  const rifles = armOrder(g, nat, u.divs);
   const no = (g.flags[`para:${nat}`] ?? 0) + 1;
   g.flags[`para:${nat}`] = no;
   const b: Build = { id: g.nextBuild++, what: 'corps', kind: 'inf', divs: u.divs, name: `${roman(no)} ${u.word} Corps`, region, ordered: g.turn, eta: g.turn + u.months, cost, airborne: true };
+  if (rifles > 0) b.rifles = rifles;
   n.queue.push(b);
   return b;
 }
@@ -580,7 +587,8 @@ export const cadresOf = (g: Game, nat: string): Corps[] => [...(g.nations[nat]?.
 export function cadreTerms(g: Game, nat: string, c: Corps): { cost: number; months: number; divs: number } {
   const u = c.elite ? eliteOf(nat) : null, p = TECH.units.para;
   const kind = specOf(g, c.kind) ? c.kind : 'inf';
-  const list = u ? u.cost : c.airborne ? priceOf(g, nat, 'para', p.cost) : corpsCost(g, nat, kind);
+  // (The elite's and the airborne's list prices are carved as their orders are; every other kind's through corpsCost.)
+  const list = u ? carved(g, nat, u.cost, u.divs) : c.airborne ? carved(g, nat, priceOf(g, nat, 'para', p.cost), p.divs) : corpsCost(g, nat, kind);
   // (A corps its row keeps small comes back at its own establishment, for that share of the price and of the men:
   // rider b594 to ruling 234. No corps has one with the far side off.)
   const size = c.full ?? 1;
@@ -603,11 +611,16 @@ export function orderCadre(g: Game, nat: string, id: number, region: number): Bu
   if (!n.alive || !c || !r || !canRaiseKind(g, nat, r, c.kind) || whyNoCadre(g, nat, c) !== null) return null;
   const t = cadreTerms(g, nat, c);
   if (n.pp < t.cost || raisable(g, nat, t.divs) < 1) return null;
+  // (A cadre comes back with new men, so it draws a new corps' rifles whole, and its old armed level is struck.)
+  if (!canArm(g, nat, t.divs)) return null;
   n.pp -= t.cost;
   drawMen(g, nat, t.divs);
+  const rifles = armOrder(g, nat, t.divs);
+  riflesRaised(g, c.id);
   const b: Build = { id: g.nextBuild++, what: 'corps', kind: c.kind, divs: c.divs, name: c.name, region, ordered: g.turn, eta: g.turn + t.months, cost: t.cost, cadre: c.id };
   if (c.elite) b.elite = c.elite;
   if (c.airborne) b.airborne = true;
+  if (rifles > 0) b.rifles = rifles;
   n.queue.push(b);
   return b;
 }
@@ -653,8 +666,10 @@ export function cancelBuild(g: Game, nat: string, id: number): boolean {
   const i = n.queue.findIndex((b) => b.id === id);
   if (i < 0 || n.queue[i].ordered !== g.turn) return false;
   n.pp += n.queue[i].cost;
-  // The men called up for a corps that was paid for go back to the reserve.
-  if (n.queue[i].what === 'corps' && n.queue[i].cost > 0) returnMen(g, nat, n.queue[i].divs ?? 0);
+  // The men called up for a corps that was paid for, or that drew its rifles from the store, go back to the reserve,
+  // and so do the rifles.
+  if (n.queue[i].what === 'corps' && (n.queue[i].cost > 0 || n.queue[i].rifles)) returnMen(g, nat, n.queue[i].divs ?? 0);
+  unarmOrder(g, nat, n.queue[i]);
   if (n.queue[i].cadre !== undefined) { /* the cadre keeps its own name and number: nothing to hand back */ }
   else if (n.queue[i].elite) g.flags[`elite:${nat}`] = (g.flags[`elite:${nat}`] ?? 1) - 1;
   else if (n.queue[i].airborne) g.flags[`para:${nat}`] = (g.flags[`para:${nat}`] ?? 1) - 1;
@@ -798,14 +813,16 @@ export function aiProduction(g: Game, nat: string): void {
   if (u && slots() < 2 && !n.queue.some((b) => b.elite) && whyNoElite(g, nat) === null && !locked(g, nat, `corps:${u.kind}`) && !(u.kind === 'arm' && shortOfOil(g, nat))) {
     const at = raiseSite(g, nat, u.kind, cap.id), cost = corpsUpkeep(u.kind, u.divs);
     // A staff never holds more than its bank allows, so a costly formation is ordered as soon as the bank is full.
-    const need = Math.min(u.cost + PRODUCTION.aiReserve, PRODUCTION.aiBank[1]);
+    const need = Math.min(carved(g, nat, u.cost, u.divs) + PRODUCTION.aiReserve, PRODUCTION.aiBank[1]);
     if (at >= 0 && n.pp >= need && spare >= cost * BUDGET.debt.aiMargin && menSpare(g, nat) >= u.divs && orderElite(g, nat, at)) spare -= cost;
   }
-  // A corps paid for in men asks nothing of the bank (rider B of 20:45Z to ruling 234; paidInMen, above), and its
-  // men are counted in the reserve itself. Such a nation's thin corps are its standing shape, not a want its
-  // drafts will ever meet, so by the other test it would never have a man to spare. Nobody with the far side off.
-  const bank = (kind: string, price: number): boolean => paidInMen(g, nat, kind) || n.pp >= price + PRODUCTION.aiReserve;
-  const men = (kind: string, divs: number): boolean => (paidInMen(g, nat, kind) ? raisable(g, nat, divs) >= 1 : menSpare(g, nat) >= divs);
+  // The bank: the price and the reserve kept back. Where the nation's store of rifles binds, a kind the carve makes
+  // free passes, read from the price the order pays (corpsCost), so a staff is not held by a bank for a corps that
+  // costs nothing (the design director's answer 6 of 25 November 2026, 19:08Z); any carved price left takes the test.
+  // The men: the reserve beyond what the corps in the field are short of, which for a binding nation counts only up to
+  // each corps' armed level (manpower.ts menSpare). The rifles' own test is the order's (canArm).
+  const bank = (kind: string, price: number): boolean => (binds(g, nat) && corpsCost(g, nat, kind) === 0) || n.pp >= price + PRODUCTION.aiReserve;
+  const men = (_kind: string, divs: number): boolean => menSpare(g, nat) >= divs;
   while (slots() < most) {
     // The wider world: a staff an ocean away from every enemy raises no more corps than it has a use for at home.
     if (armyIdle(g, nat)) break;

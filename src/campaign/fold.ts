@@ -11,10 +11,11 @@
 
 import { clamp } from '../core/math';
 import { MEN_PER_DIV, type Corps, type Game, type General } from './types';
-import { headline, removeCorps, worksOf } from './game';
+import { headline, men, removeCorps, worksOf } from './game';
 import { appoint, generalOf } from './commanders';
-import { MANPOWER, returnMen } from './manpower';
+import { MANPOWER, men1000, menScale, menWorth, returnMen } from './manpower';
 import { cadreTerms } from './economy';
+import { binds, inWords, riflesBack, riflesFold } from './rifles';
 import { noteCorps } from './stories';
 import { atItsPost, postWords } from './pacific';
 
@@ -64,6 +65,8 @@ export interface FoldView {
   str: number; men: number; xp: number; org: number; ap: number;
   /** Men over, who go back to the reserve. */
   back: number;
+  /** The same two in divisions' worth: what fills the kept corps, and what goes back to the reserve (for foldWords). */
+  fill: number; over: number;
   /** The general who commands the kept corps afterwards, and the one who goes to the list of generals waiting. */
   general: string | null; stepsDown: string | null;
   /** The kept corps takes over the other's fieldworks, better than its own: their months. */
@@ -84,12 +87,81 @@ export function foldView(g: Game, keep: Corps, gone: Corps): FoldView {
     keep: keep.id, gone: gone.id, keepName: keep.name, goneName: gone.name, why: whyNotFold(g, keep, gone),
     str: fill / keep.divs, men: Math.round(fill * MEN_PER_DIV), xp: mix(keep.xp, gone.xp),
     org: clamp(mix(keep.org, gone.org) - MANPOWER.fold.org, 0, 1), ap: Math.min(keep.ap, gone.ap),
-    back: Math.round((mine + theirs - fill) * MEN_PER_DIV),
+    back: Math.round((mine + theirs - fill) * MEN_PER_DIV), fill, over: Math.max(0, mine + theirs - fill),
     general: lead?.name ?? null, stepsDown: out?.name ?? null,
     cadreCost: t.cost, cadreMonths: t.months, cadreMen: t.divs * MEN_PER_DIV,
   };
   if (worksOf(gone) > worksOf(keep)) v.works = worksOf(gone);
   return v;
+}
+
+/** The fold's men in words, for each of its speakers: the news (foldCorps), the page's card and the 3D game's card. */
+export interface FoldWords {
+  /** The men in one corps: "30,000 men", or at a nation's own scale "about 134,000 men". */
+  men: string;
+  /** The news' clause for the men sent back, or null where none go back: "6,000 sent back to the reserve", and for a
+   * nation with a store "about 27,000 sent back to the reserve, and their rifles to the store". */
+  back: string | null;
+  /** The cards' line for the men sent back, or null: "6,000 men over go back to the reserve.", and for a nation with a
+   * store "About 27,000 men over go back to the reserve, and their rifles to the store." */
+  over: string | null;
+}
+
+/**
+ * The fold's men in words (the UI director's read of 26 November 2026, point 4): a nation's men at its own scale with
+ * "about", to the thousand, as the reserve line beside them counts them; for a nation with a store, the rifles as a
+ * clause on the men sent back ("..., about 27,000 sent back to the reserve, and their rifles to the store."). Every
+ * other nation as built, byte for byte. Where no men go back (or, at a nation's own scale, fewer than rounds to a
+ * thousand), nothing is said of men or rifles going back, even where the moved men's rifles pass the kept corps' full
+ * and go to the store: the clause belongs to the men sent back.
+ */
+export function foldWords(g: Game, nat: string, v: FoldView): FoldWords {
+  const per = menScale(nat), rifles = binds(g, nat) ? ', and their rifles to the store' : '';
+  const men = per === null ? `${v.men.toLocaleString('en-US')} men` : `about ${men1000(v.fill * per)} men`;
+  const n = per === null ? (v.back > 0 ? v.back.toLocaleString('en-US') : null) : Math.round((v.over * per) / 1000) > 0 ? `about ${men1000(v.over * per)}` : null;
+  if (n === null) return { men, back: null, over: null };
+  const up = n[0].toUpperCase() + n.slice(1);
+  return { men, back: `${n} sent back to the reserve${rifles}`, over: `${up} men over go back to the reserve${rifles}.` };
+}
+
+/** The fold card's own figures, for both cards (the page's foldCard and the 3D game's foldPage): see foldCardWords. */
+export interface FoldCardWords {
+  /** A corps' men, for the heading of each pair: "18,000 men", or at a nation's own scale "about 80,000 men". */
+  men: (c: Corps) => string;
+  /** What raising the cadre again takes, after "for", with the treasury's figure in the speaker's own dress: "0 from
+   * the treasury and 30,000 men from the reserve", or at a nation's own scale "two divisions' worth of men from the
+   * reserve" (with "1,700 from the treasury and " before it where the treasury's figure is not nothing). */
+  cadre: (v: FoldView, cost: string) => string;
+  /** A strength to show as "60% of its strength", for the heading of each pair and the kept corps' line: the corps'
+   * strength as it stands, or at a nation's own scale against the corps' own size, so a corps its row keeps small reads
+   * whole at its full, as whyNotFold reads it ("already at full strength for its size"). */
+  share: (str: number, c: Corps | undefined) => number;
+  /** The cadre's months, after "in": the speaker's own dress ('own', "5 months"), or at a nation's own scale in words
+   * to ten ("five months", "one month", "11 months"). */
+  months: (k: number, own: string) => string;
+}
+
+/**
+ * The fold card at one scale (the UI director's second read of 26 November 2026, 03:16Z, point 1). For a nation with a
+ * scale of its own, the heading of each pair says each corps' men with "about", to the thousand, the figure foldWords
+ * gives for that corps ("Central reserve: about 80,000 men, 60% of its strength."), and the cadre line says the men in
+ * divisions' worth as line 8 says them, the treasury clause dropped where it is nothing ("... can be raised again from
+ * the arsenal for two divisions' worth of men from the reserve"). Her third read (04:58Z, point A) keeps the months
+ * clause, in words to ten ("..., in five months."). Every other nation as built, byte for byte, each card's months in
+ * its own dress ("for 0 from the treasury" and ", in 5 months." there are shipped lines: her later-patch list).
+ */
+export function foldCardWords(nat: string): FoldCardWords {
+  const per = menScale(nat);
+  if (per === null) return { men: (c) => `${men(c).toLocaleString('en-US')} men`, cadre: (v, cost) => `${cost} from the treasury and ${Math.round(v.cadreMen).toLocaleString('en-US')} men from the reserve`, share: (str) => str, months: (_k, own) => own };
+  return {
+    men: (c) => `about ${men1000(c.divs * c.str * per)} men`,
+    share: (str, c) => str / (c?.full ?? 1),
+    months: (k) => `${inWords(k)} month${k === 1 ? '' : 's'}`,
+    cadre: (v, cost) => {
+      // (A cadre of a corps its row keeps small can come back as part of a division's worth: said in men at the scale.)
+      return `${v.cadreCost > 0 ? `${cost} from the treasury and ` : ''}${menWorth(per, v.cadreMen / MEN_PER_DIV)} from the reserve`;
+    },
+  };
 }
 
 /** Every way two of this nation's corps in a province could be folded together now: each allowed pair, both ways round. */
@@ -111,10 +183,12 @@ export function foldCorps(g: Game, keep: Corps, gone: Corps): boolean {
   const mine = keep.str * keep.divs, fill = v.str * keep.divs, from = Math.max(0, fill - mine);
   if (keep.mor !== undefined && gone.mor !== undefined && fill > 0) keep.mor = (keep.mor * mine + gone.mor * from) / fill;
   keep.xp = v.xp; keep.org = v.org; keep.str = v.str; keep.ap = v.ap;
+  riflesFold(g, keep, from);
   if (gone.fought) keep.fought = true;
   if (gone.pressed) keep.pressed = true;
   if ((gone.blows ?? 0) > (keep.blows ?? 0)) keep.blows = gone.blows;
   returnMen(g, keep.nat, gone.str * gone.divs - from);
+  riflesBack(g, keep.nat, gone.str * gone.divs - from);
   // The works the emptied corps stood in are the kept corps' own, where they are the better.
   if (v.works !== undefined) { keep.dug = true; keep.dugFor = gone.dugFor; if (keep.ap < keep.apMax) keep.relief = true; }
   // The better of the two generals commands; the other goes to the list of generals waiting for a corps.
@@ -133,6 +207,8 @@ export function foldCorps(g: Game, keep: Corps, gone: Corps): boolean {
   if (gone.rowed) { gone.name = gone.rowed.name; gone.hold = gone.rowed.hold; if (gone.rowed.stay) gone.stay = true; else delete gone.stay; }
   delete gone.drew; delete gone.rowed;
   (n.cadres ??= []).push(gone);
-  if (keep.nat === g.human) headline(g, 'info', `${lentAs ?? gone.name} is folded into ${keep.name} at ${g.regions[reg].name}: ${v.men.toLocaleString('en-US')} men in one corps${v.back > 0 ? `, ${v.back.toLocaleString('en-US')} sent back to the reserve` : ''}. Its cadre has gone home and can be raised again from the arsenal.`, keep.nat, reg);
+  // (The men in words from foldWords, which the page's card and the 3D game's card speak too.)
+  const w = foldWords(g, keep.nat, v);
+  if (keep.nat === g.human) headline(g, 'info', `${lentAs ?? gone.name} is folded into ${keep.name} at ${g.regions[reg].name}: ${w.men} in one corps${w.back ? `, ${w.back}` : ''}. Its cadre has gone home and can be raised again from the arsenal.`, keep.nat, reg);
   return true;
 }

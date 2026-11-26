@@ -89,7 +89,9 @@ import { PRIZES, type PrizeKind, type ScorchPolicy } from '../../../src/campaign
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, rankOf, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../../../src/campaign/commanders';
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
 import { KIND, TERRAIN_DEF } from '../../../src/campaign/types';
-import { MANPOWER } from '../../../src/campaign/manpower';
+import { MANPOWER, men1000, menScale } from '../../../src/campaign/manpower';
+import { foldCardWords, foldWords } from '../../../src/campaign/fold';
+import { arsenalTop } from '../../../src/campaign/rifles';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { airPiece } from '../../../src/campaign/airversion';
@@ -1036,8 +1038,10 @@ function drawView(step = false) {
         const words = (n: number): string => (n >= 1000000 ? `${(n / 1000000).toFixed(1).replace(/\.0$/, '')} million` : Math.round(n / 1000) * 1000 >= 1000 ? `${(Math.round(n / 1000) * 1000).toLocaleString('en-US')}` : `${Math.round(n)}`);
         return {
           share: Math.max(0, Math.min(1, m.share)), word: m.word, short: m.word === 'Short' || m.word === 'Spent',
-          tip: [m.line, `That is enough for about ${Math.floor(m.divs)} division${Math.floor(m.divs) === 1 ? '' : 's'}.`,
-            `Each month ${words(m.classMen)} more come of age${m.home < 0.995 ? `, from the ${Math.round(m.home * 100)}% of the homeland still in your hands` : ''}.`,
+          // (A nation with a scale of its own says its reserve in divisions' worth in its first line, the UI director's
+          // line 14: the second line, which said it again in figures, is left out for it.)
+          tip: [m.line, ...(m.comes ? [] : [`That is enough for about ${Math.floor(m.divs)} division${Math.floor(m.divs) === 1 ? '' : 's'}.`]),
+            m.comes ?? `Each month ${words(m.classMen)} more come of age${m.home < 0.995 ? `, from the ${Math.round(m.home * 100)}% of the homeland still in your hands` : ''}.`,
             `Drawn since the campaign opened: ${words(m.drawn)}.`, 'Every new corps and every replacement comes out of this reserve. When it is spent, nothing new can be raised.', 'Click for the count, and your say over the call-up.'].join('\n'),
         };
       } catch { return null; }
@@ -4892,11 +4896,16 @@ function arsenal(region = -1) {
     budget: budgeted(s),
     money: inHand(s.nations[me].pp),
     region: s.regions[region]?.name ?? '',
+    // (Release 2, China's rifles: for a nation whose store binds, the store's line, the sentence under it and, while it
+    // is true, the line on replacements held back, at the top of the arsenal: rifles.ts arsenalTop, the UI director's
+    // point 7 of 26 November 2026. Every other nation's arsenal has no such field, as before.)
+    ...((top) => (top ? { notes: top } : {}))(arsenalTop(s, me)),
     offers: arsenalOffers(s, region).map((o) => ({
       key: o.key, group: o.group, label: o.label, blurb: o.blurb, size: o.size, months: o.months, kind: (o as { kind?: string }).kind ?? '',
       cost: shown(o.cost), upkeep: shown(o.upkeep), at: o.at, where: s.regions[o.at]?.name ?? '',
-      // (Version 59: what it takes from the reserve of men, said with its note)
-      note: [o.note, (o as { men?: number }).men ? `Takes ${Math.round((o as { men?: number }).men!).toLocaleString('en-US')} men from the reserve.` : ''].filter(Boolean).join(' '),
+      // (Version 59: what it takes from the reserve of men, said with its note; a nation that keeps a store of rifles says
+      // what it takes in divisions' worth of men and rifles, rifles.ts riflesTakes)
+      note: [o.note, o.takes ?? ((o as { men?: number }).men ? `Takes ${Math.round((o as { men?: number }).men!).toLocaleString('en-US')} men from the reserve.` : '')].filter(Boolean).join(' '),
       // (Versions 65 and 67) where money is the only thing in the way, how far short the treasury is and what it holds
       why: up ? (o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString('en')} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString('en')}.` : o.why) : 'It is not your month.', poor: o.poor,
     })),
@@ -6963,6 +6972,9 @@ function menPage(s: Game): Page | null {
   if (!m || !s.human) return null;
   const up = humanUp(s) && !onEve(s);
   const short = (n: number): string => (Math.abs(n) >= 1e6 ? `${(n / 1e6).toFixed(Math.abs(n) >= 1e7 ? 0 : 1)} million` : Math.round(n).toLocaleString('en'));
+  // (The headline and THE COUNT, for a nation with a scale of its own, say its men to the thousand, as line 14 and the
+  // class line beside them do: the UI director's read of 26 November 2026, point 1. Every other nation's page is as it was.)
+  const count = (n: number): string => (menScale(s.human!) !== null && Math.abs(n) < 1e6 ? men1000(n) : short(n));
   const x = m as typeof m & { came?: number; gap?: number; start: number; drawn: number; classMen: number; men: number; line: string; word: string };
   const start = Math.round(x.men - (x.came ?? 0) + x.drawn);
   const c = callUpOf(s);
@@ -6978,11 +6990,11 @@ function menPage(s: Game): Page | null {
   }
   return {
     id: 'men', title: 'THE RESERVE OF MEN',
-    headline: `${short(x.men)} men in reserve  \u00B7  ${x.word}`,
+    headline: `${count(x.men)} men in reserve  \u00B7  ${x.word}`,
     note: `${x.line}${(x.gap ?? 0) > 0 ? ` A class was called up early: none comes of age for ${x.gap} more month${x.gap === 1 ? '' : 's'}.` : ''}`,
     top: [],
     sections: [
-      { heading: 'THE COUNT', text: [`At the start: ${short(start)}`, `Come of age since: +${short(x.came ?? 0)}`, `Called up so far: \u2212${short(x.drawn)}`, `In reserve today: ${short(x.men)}`, `Come of age each month: +${short(x.classMen)}`].join('\n'), rows: [] },
+      { heading: 'THE COUNT', text: [`At the start: ${count(start)}`, `Come of age since: +${count(x.came ?? 0)}`, `Called up so far: \u2212${count(x.drawn)}`, `In reserve today: ${count(x.men)}`, `Come of age each month: +${count(x.classMen)}`].join('\n'), rows: [] },
       ...(rows.length ? [{ heading: 'YOUR SAY OVER THE CALL-UP', text: '', rows }] : []),
     ],
   };
@@ -6998,22 +7010,24 @@ function foldPage(s: Game, reg: number): Page | null {
   let vs: ReturnType<typeof foldChoicesAt> = [];
   try { vs = foldChoicesAt(s, reg); } catch { vs = []; }
   const pct = (x: number): string => `${Math.round(x * 100)}%`;
-  const num = (n: number): string => Math.round(n).toLocaleString('en');
+  // (Each corps' men and the cadre's price at the nation's own scale, from fold.ts as the page says them: the UI director's second read of 26 November 2026, 03:16Z, point 1.)
+  const fw = foldCardWords(s.human);
   const corpsOfId = (id: number): Corps | undefined => s.corps.find((c) => c.id === id);
   const pairs = new Map<string, typeof vs>();
   for (const v of vs) { const k = [v.keep, v.gone].sort((a, b) => a - b).join(':'); (pairs.get(k) ?? pairs.set(k, []).get(k)!).push(v); }
   const sections = [...pairs.values()].map((p) => {
     const a = corpsOfId(p[0].keep), b = corpsOfId(p[0].gone);
     return {
-      heading: a && b ? `${a.name.toUpperCase()} AND ${b.name.toUpperCase()}` : 'TWO CORPS', text: a && b ? `${a.name}: ${num(men(a))} men, ${pct(a.str)} of its strength. ${b.name}: ${num(men(b))} men, ${pct(b.str)}.` : '',
+      heading: a && b ? `${a.name.toUpperCase()} AND ${b.name.toUpperCase()}` : 'TWO CORPS', text: a && b ? `${a.name}: ${fw.men(a)}, ${pct(fw.share(a.str, a))} of its strength. ${b.name}: ${fw.men(b)}, ${pct(fw.share(b.str, b))}.` : '',
       rows: p.map((v): PageRow => ({
         nat: s.human!, title: `Keep ${v.keepName}`,
         lines: [
-          `${num(v.men)} men in one corps at ${pct(v.str)} of its strength, ${grade(v.xp).toLowerCase()}.`,
+          `${upFirst(foldWords(s, s.human!, v).men)} in one corps at ${pct(fw.share(v.str, corpsOfId(v.keep)))} of its strength, ${grade(v.xp).toLowerCase()}.`,
           v.general ? `${v.general} commands${v.stepsDown ? `; ${v.stepsDown} goes to the list of generals waiting for a corps` : ''}.` : 'No general commands it.',
-          v.back > 0 ? `${num(v.back)} men over go back to the reserve.` : '',
+          // (The men in words from fold.ts foldWords, as the news and the page say them: the UI director's point 4 of 26 November 2026.)
+          foldWords(s, s.human!, v).over ?? '',
           v.works !== undefined ? `It takes over the fieldworks ${v.goneName} stands in.` : '',
-          `${v.goneName} goes home as a cadre: it can be raised again from the arsenal for ${shown(v.cadreCost).toLocaleString('en')} from the treasury and ${num(v.cadreMen)} men from the reserve, in ${v.cadreMonths} month${v.cadreMonths === 1 ? '' : 's'}.`,
+          `${v.goneName} goes home as a cadre: it can be raised again from the arsenal for ${fw.cadre(v, shown(v.cadreCost).toLocaleString('en'))}, in ${fw.months(v.cadreMonths, `${v.cadreMonths} month${v.cadreMonths === 1 ? '' : 's'}`)}.`,
           v.why ?? '',
         ].filter(Boolean),
         buttons: [{ label: `FOLD INTO ${v.keepName.toUpperCase()}`, act: `fold:${v.keep}:${v.gone}`, ok: !v.why, danger: true, tip: v.why ?? `${v.keepName} takes in the men of ${v.goneName}. It cannot be undone.` }],

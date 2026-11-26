@@ -22,6 +22,7 @@ import { farOn } from './world';
 import { corpsName } from './economy';
 import { DIPLOMACY, homeOpinion } from './diplomacy';
 import { enrol, small } from './league';
+import { riflesFormed } from './rifles';
 
 export const LIB = data as unknown as {
   gap: number;
@@ -240,6 +241,7 @@ export function liberate(g: Game, nat: string, by: string, after?: string): bool
     if (!at) break;
     const c = addCorps(g, nat, corpsName(nat, 'inf', X.corpsNo++), 'inf', LIB.army.divs, at.id, { xp: LIB.army.xp });
     c.str = LIB.army.str; c.org = LIB.army.org; c.ap = 0;
+    riflesFormed(g, c);
     corps++;
   }
   X.armyPeak = armySize(g, nat);

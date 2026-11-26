@@ -1,0 +1,74 @@
+{
+  "_about": "China's rifles on the whole world (the design director's rulings of 05:37Z and 05:44Z of 25 November 2026, on pacific-japan/dd-form-arms-1125.md, sections 3, 4, 14 and 15, and the historian's historian/china-arms-1125.md): the far side's rows for the stock of arms (src/campaign/arms.ts) and the rifles' rule (src/campaign/rifles.ts), laid over data/campaign/arms.json and data/campaign/rifles.json while the far side's switch is on (src/campaign/far-rows.ts). Kept by hand. China's rifles shelf stands at 0 on the first day (the historian's read: no rifles in depots and in no unit on 1 September 1939, D, U; China's call-up depot row reads 0, confirmed at 05:44Z). It fills from three arsenals, each while China holds its place, at rifles a month over 21,300 rifles to China's division's worth: Chungking 3,000, Hunan 1,000, Kweichow 500 (D; the places U), the 4,500 a month that is the record's own net rise, from the first day, no date laid. And from four roads, each a chain of places on the chart from where its cargoes start to Kunming or Lanchow or Canton, every step beside the last: the Burma Road, 1,250 tons a month at 2 rifles a ton (D); the Sinkiang road, 650 tons a month at 2 a ton, sold by the Soviet Union (D); the Haiphong railway and the road from Hong Kong, 0 tons (the record: a French embargo on munitions from 1938; Hong Kong and Canton shut by Japan's hold on Tungkun and Canton from the first day, the first of them in the road's order named). A road is cut by land only in this piece: the sea leg is the next slice's. With no rifles shelf of the Soviet Union's on this line, the seller's interim test stands in (G): a seller at war with a great power sends nothing; a seller that has fallen sends nothing, shelf or none. Stage B2 (the taps) reads from this file rifles.json's 'refit' (the rifles a draft draws for each man it brings) and 'binds' (the store refuses an order it cannot arm, carves the rifles out of the price of a corps and caps the drafts at each corps' armed level), and China's men ('manpower.json', below, see '_men'). Figures marked as the form marks them: L read, D derived, M memory, U uncertain, G a guess.",
+  "_men": "China's men by the record (the design director's 04:25Z and 04:31Z of 25 November 2026, \"China's men\"; pacific-japan/dd-form-china-men-1125.md, finding 43; the form's section 6), laid in the same change as the taps, as clause 9 of the arms form asks. pool 7.4 (D, U): about 0.5 million men in reserve (04:31Z) over about 67,000 men to China's division's worth (2.3 to 2.6 million men on paper over 36.44 divisions' worth at strength: 7.0 to 7.9; the arithmetic gives 7.46 and the form's table lays about 7.4). class 2.5 (D, U): about 105,000 men a month from the land China holds (04:31Z) over 67,000 is 1.56 divisions' worth a month, over 0.626, the share of its homeland China holds on the first day as manpower.ts homeShare weighs it: 2.50 with the whole homeland held. The rules are every nation's (manpower.ts): the class falls with the homeland lost, the reserve never holds more than it opened with. These rows replace ruling 216(b)'s (far-world.json manpower.pool.CHN 1.5 and manpower.class.CHN 0.025), which stay in that tool-written file and are never read while this file is laid after it, since a nation's key is replaced whole; and they retire rider B of 20:45Z, 20 November 2026, to ruling 234 (china-stop3.json's manpower.ownMen and the code that read it: China's foot corps now cost no points because the store charges their rifles, rifles.ts carve, and its staff's bank passes a kind whose carved price is 0). China's last levy (far-world.json traits, under 32, spent 0.5, men 6.5) stands: its trigger, half the reserve China opened with, moves from 0.75 to 3.7, and it brings men only, who wait in the reserve for rifles. A whole-world save made before this change keeps the reserve it opened with (its saved mps:CHN, 1.5, read before this table, manpower.ts poolAtStart): loaded, its China is stamped with its armed levels (rifles.ts) but plays on 216(b)'s pool and the levy's old trigger, so such a save is no measure of China's men.",
+  "_scale": "manpower.json 'scale': men to one of China's divisions' worth, for the sentences a player reads (the design director: \"each nation's own scale. The figure comes from the record with its mark, never fitted so a line reads a number\"; the UI director's lines 14 and 15 of 25 November 2026). 67,000 (D): the historian's figure, the army on paper, 2,257,000 to 2,600,000 men in 1939 (L), over the 36.44 divisions' worth China stands at on the first day. It is the whole army with its rear services, depots and men on the way, not the men at a place (about 40,000, kept off these lines). The men shown are rounded, never the scale. A nation with no scale of its own is shown at 15,000 men a division's worth, as before (manpower.ts menPer).",
+  "manpower.json": { "pool": { "CHN": 7.4 }, "class": { "CHN": 2.5 }, "scale": { "CHN": 67000 } },
+  "_fallen": "rifles.json 'fallen': the news, once, of a road's seller fallen (the design director's 18:30Z of 25 November 2026: a fallen seller is dry, \"but its fall is news once\"; a seller that still stands and sends nothing is no news). Placeholder words until the UI director gives hers; {seller} and {road} are filled with the names the road news already uses, each at the start of its sentence: \"The Soviet Union has fallen. The Sinkiang road carries no more rifles.\"",
+  "arms.json": {
+    "nations": {
+      "CHN": {
+        "_marks": "start G read as 0 (D, U). works: each gain is rifles a month / 21,300 (rifles.json perDiv): Chungking 3,000 (D, the 21st Arsenal and Gongxian's remnant, two thirds), Hunan 1,000 (D; the place M, Chenxi), Kweichow 500 (D; the place U). Hunan's works stood at Chenxi (about 27.99 N, 110.20 E; the historian's M), which is no province's name on the chart: that point lies inside the chart province of Changteh (its outline in src/generated/world-whole.json, by the far chart's own projection: x = (east + 11) * 40 * cos 50, y = (71.4 - north) * 40), which is China's on the first day, so Hunan's share stands at Changteh and does not stay with Chungking. Kweichow's share stands at Kweiyang, the province's own town on the chart (U).",
+        "_from": "historian/china-arms-1125.md, section 3; the design director's 05:44Z of 25 November 2026, point B.",
+        "rifles": {
+          "start": 0,
+          "works": [
+            { "place": "Chungking", "gain": 0.14084507042253522 },
+            { "place": "Changteh", "gain": 0.046948356807511735 },
+            { "place": "Kweiyang", "gain": 0.023474178403755867 }
+          ]
+        }
+      }
+    }
+  },
+  "rifles.json": {
+    "nations": {
+      "CHN": {
+        "_marks": "perDiv D: 775,520 rifles in June 1939 (L) over 36.44, China's first day at strength (rulings 209 and 216). refit D, U: about 0.05 of a rifle lost for each man lost (the historian's read; ruled at 05:44Z, point D). binds: China is the first nation the rule binds (05:37Z).",
+        "_from": "historian/china-arms-1125.md; pacific-japan/dd-form-arms-1125.md, sections 4 and 15.",
+        "perDiv": 21300,
+        "refit": 0.05,
+        "binds": true
+      }
+    },
+    "fallen": "{seller} has fallen. {road} carries no more rifles.",
+    "roads": [
+      {
+        "id": "burma-road",
+        "name": "the Burma Road",
+        "to": "CHN",
+        "past": ["Rangoon", "Prome", "Yenangyaung", "Mandalay", "Lashio", "Paoshan", "Tali", "Kunming"],
+        "tons": 1250,
+        "perTon": 2,
+        "_marks": "tons D from L: 24,911 long tons of arms and ammunition, February 1939 to October 1940. perTon D (1 to 3): the Soviet aid's 50,000 to 110,000 rifles in about 40,000 tons. The sellers and the monsoon are the next slice's."
+      },
+      {
+        "id": "sinkiang-road",
+        "name": "the Sinkiang road",
+        "to": "CHN",
+        "seller": "SOV",
+        "past": ["Ayaguz", "Tihwa", "Turfan", "Hami", "Anhsi", "Yumen", "Changyeh", "Liangchow", "Lanchow"],
+        "tons": 650,
+        "perTon": 2,
+        "_marks": "tons D from L: about 40,000 tons over 1937 to 1941 (500 to 800 a month). perTon D. The chain past Tihwa (Turfan, Hami, Anhsi, Yumen, Changyeh, Liangchow) is the builder's, along the old road by the chart's own neighbours, each step beside the last."
+      },
+      {
+        "id": "haiphong-rail",
+        "name": "the Haiphong railway",
+        "to": "CHN",
+        "past": ["Haiphong", "Hanoi", "Lao Kay", "Mengtsz", "Kunming"],
+        "tons": 0,
+        "perTon": 2,
+        "_marks": "0 tons is the record (L): a French embargo on munitions from February and March 1938."
+      },
+      {
+        "id": "hongkong-canton",
+        "name": "the road from Hong Kong",
+        "to": "CHN",
+        "past": ["Hong Kong", "Tungkun", "Canton"],
+        "tons": 0,
+        "perTon": 2,
+        "_marks": "0 tons: shut by Japan's hold on Tungkun and Canton from the first day (L, October 1938); the cut names Tungkun, the first in the road's order."
+      }
+    ]
+  }
+}

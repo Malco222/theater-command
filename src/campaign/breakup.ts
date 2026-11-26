@@ -13,6 +13,7 @@
 import data from '../../data/campaign/breakup.json';
 import { removeCorps } from './game';
 import { divisionsOf } from './armies';
+import { riflesJoin, riflesSplit } from './rifles';
 import { MEN_PER_DIV, type Corps, type Game } from './types';
 
 export const BREAKUP = data as unknown as { detached: string };
@@ -95,6 +96,7 @@ export function breakUp(g: Game, c: Corps, slots: number[]): Corps | null {
   // It stands next to the corps it came from, in the province's order.
   const r = g.regions[c.reg];
   r.units.splice(r.units.indexOf(c) + 1, 0, p);
+  riflesSplit(g, c, p);
   g.supplyDirty = true;
   return p;
 }
@@ -141,6 +143,7 @@ export function rejoin(g: Game, part: Corps, into: Corps): boolean {
   const at = (no: number): number => { const i = seq.indexOf(no); return i < 0 ? seq.length + no : i; };
   all.sort((x, y) => at(x.no) - at(y.no));
   const nos = all.map((d) => d.no);
+  riflesJoin(g, part, into);
   into.divs = all.length;
   into.str = Math.max(0, Math.min(1, men / into.divs));
   into.xp = Math.max(0, Math.min(1, xp));
