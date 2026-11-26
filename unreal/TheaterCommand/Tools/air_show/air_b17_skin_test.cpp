@@ -6,7 +6,8 @@
 //   S1 the overlay reads with her counts (143,899 near points, 15,534 far, 46 paints) and is made for these very bytes
 //      (the base's size and FNV-1a 64 as the tool wrote them: a re-export of B17Fine.json without the tool fails here);
 //      each fault refused: a key naming a month, a year, a scheme, a mark or a "from"; a blend of 101; a soot of -1;
-//      45 colours; one point short; a repaint past the points; a fractional number;
+//      45 colours; one point short; a repaint past the points; a fractional number; a base size or a check point
+//      negative, fractional or past 2^53 (refused before any cast);
 //   S2 the law: Battle/AirSkin's copy of the game's aircraft law (CampaignMiniatures.cpp's aircraft branch, quoted in S5)
 //      gives every check point the tool wrote within one level a channel, unshaded and shaded;
 //   S3 the earned colours' model (Battle/AirUnitColours) under the skin: its colours, blend and soot are the overlay's,
@@ -141,6 +142,12 @@ int main(int Argc, char** Argv)
 		{ "a repaint past the paints", Swapped(SkinText, "\"repaint\":[]", "\"repaint\":[0,46]"), NearN, FarN, PaintN },
 		{ "no shade", Swapped(SkinText, "\"shade\":[", "\"shadow\":["), NearN, FarN, PaintN },
 		{ "no source sha", Swapped(SkinText, "\"source_sha256\"", "\"source\""), NearN, FarN, PaintN },
+		{ "a base_bytes of -1", Swapped(SkinText, "\"base_bytes\":", "\"base_bytes\":-1,\"was\":"), NearN, FarN, PaintN },
+		{ "a base_bytes of 1e300", Swapped(SkinText, "\"base_bytes\":", "\"base_bytes\":1e300,\"was\":"), NearN, FarN, PaintN },
+		{ "a fractional base_bytes", Swapped(SkinText, "\"base_bytes\":", "\"base_bytes\":0.5,\"was\":"), NearN, FarN, PaintN },
+		{ "a check point of -1", Swapped(SkinText, "\"point\":", "\"point\":-1,\"was\":"), NearN, FarN, PaintN },
+		{ "a check point of 1e300", Swapped(SkinText, "\"point\":", "\"point\":1e300,\"was\":"), NearN, FarN, PaintN },
+		{ "a fractional check point", Swapped(SkinText, "\"point\":", "\"point\":2.5,\"was\":"), NearN, FarN, PaintN },
 	};
 	for (const Fault& F : Faults)
 	{
