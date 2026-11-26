@@ -1965,11 +1965,11 @@ bool ALandBattle::Open()
 			UE_LOG(LogTheater, Log, TEXT("Land battle: the film cards earned names (-TheaterLandNickCard): %d blocks carry one"), S.NickOfBlock.Num());
 		}
 		// (the dark rule's reading of the drawn frame, when the game has its viewport to read)
-		StartDarkRead();
+		StartDarkRead(Set);
 		if (DarkGrab.IsValid())
 		{
 			TWeakObjectPtr<ALandBattle> Self(this);
-			EyeWorld.DarkNow = [Self]() { return Self.IsValid() ? Self->DarkShare : -1.0; };
+			EyeWorld.DarkLast = [Self]() { return Self.IsValid() ? Self->DarkReader.Last() : LandEye::DarkReading(); };
 		}
 		S.EyeWorld = EyeWorld;
 		S.Eye.Begin(Rec, EyeWorld, Set);
@@ -6853,7 +6853,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 		GeneralViewMs += GenFrameMs;
 	}
 	WalkPan(Real);
-	ReadDark(Real);
+	ReadDark();
 	LandFell::Phase("tick: the dispatches");
 	if (!bNight)
 	{
@@ -7043,7 +7043,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 			UE_LOG(LogTheater, Display, TEXT("Land battle: %s %s at %.2f s of battle: a %s shot of %d, the film's last left for %s; the lens at %.2f %.2f %.2f looks at %.2f %.2f %.2f through %.1f degrees high, looked aside %.1f %.1f; the picture last read %.2f dark; the rules %.1f s ahead"),
 				bOwnView ? TEXT("the general's view") : TEXT("the film"), bFilmCut ? TEXT("cuts") : bStillAsked ? TEXT("has a still asked of it") : TEXT("stands"),
 				S.Battle, ANSI_TO_TCHAR(LandEye::NameOf(S.Pose.Shot)), S.Pose.Subject, ANSI_TO_TCHAR(LandEye::NameOf(S.Eye.LastWhy())),
-				S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, S.Pose.Look.X, S.Pose.Look.Y, S.Pose.Look.Z, S.Pose.Fov, LookAside.X, LookAside.Y, DarkShare,
+				S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, S.Pose.Look.X, S.Pose.Look.Y, S.Pose.Look.Z, S.Pose.Fov, LookAside.X, LookAside.Y, DarkReader.Last().Share,
 				Live.IsValid() ? Live->Fought() - S.Battle : -999.0);
 		}
 	}
@@ -7191,116 +7191,163 @@ void ALandBattle::WalkPan(double Real)
 	}
 }
 
-void ALandBattle::StartDarkRead()
+namespace
+{
+	/** What goes to the frame grabber with an ask for a copy of the frame, and comes back with that frame: when it was
+	 * asked for, on the screen's clock. LandEye::DarkReader tells the frames apart by it; none is matched by counting. */
+	struct FDarkAsk : IFramePayload
+	{
+		double At = 0.0;
+		explicit FDarkAsk(double InAt) : At(InAt) {}
+	};
+}
+
+void ALandBattle::StartDarkRead(const LandEye::Settings& Rule)
 {
 	StopDarkRead();
-	DarkShare = -1.0;
-	DarkReads = 0;
-	DarkAsks = 0;
-	DarkBacks = 0;
+	// (the reader's pace turns on the rule's own two lines)
+	LandEye::DarkReader::Settings Pace;
+	Pace.Leave = Rule.DarkLeave;
+	Pace.Light = Rule.DarkLight;
+	// (for the Mac's trials: "-TheaterLandDarkIdle=2" the seconds between asks while there is nothing to decide;
+	// "-TheaterLandDarkEvery=0.25" a fixed pace whatever is on the picture, as the reading had until 26 November, and
+	// "-TheaterLandDarkEvery=0" the grabber bound and never asked)
+	float Idle = static_cast<float>(Pace.Idle), Fixed = -1.0f;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandDarkIdle="), Idle))
+	{
+		Pace.Idle = FMath::Clamp(static_cast<double>(Idle), Pace.Often, 30.0);
+	}
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandDarkEvery="), Fixed))
+	{
+		Pace.Fixed = FMath::Clamp(static_cast<double>(Fixed), 0.0, 30.0);
+	}
+	DarkReader.Begin(Pace);
 	// (1.5.2: off unless "-TheaterLandDarkRead" asks for it. Brian's Mac, B3 Normandy, 25 Nov: the reading cost 1 to
 	// 2 fps at 40 and 60 s against a run without it, over the patch's bar of under 1, and the rule left no shot dark
-	// in that day battle. "-TheaterLandNoDarkRead" still leaves it off.)
+	// in that day battle. "-TheaterLandNoDarkRead" still leaves it off. Since 26 November the reader paces itself,
+	// about an ask a second in a day's film where there were four; off still, until the Mac has timed it.)
 	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandDarkRead")) || FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoDarkRead")))
 	{
 		UE_LOG(LogTheater, Display, TEXT("Land battle: the dark reading off (on only with -TheaterLandDarkRead): the camera's dark rule not asked"));
 		return;
 	}
-	// (the game's own viewport: a packaged game or -game; none in the editor's play, where the rule is not asked)
-	UGameEngine* Game = Cast<UGameEngine>(GEngine);
-	if (!Game || !Game->SceneViewport.IsValid())
+	BindDark();
+	if (!DarkGrab.IsValid())
 	{
 		UE_LOG(LogTheater, Display, TEXT("Land battle: the dark reading off (no game viewport to read): the camera's dark rule not asked"));
 		return;
 	}
-	DarkGrab = MakeShared<FFrameGrabber>(Game->SceneViewport.ToSharedRef(), FIntPoint(64, 36), PF_B8G8R8A8, 3);
-	DarkGrab->StartCapturingFrames();
-	DarkClock = 0.0;
-	DarkAskAt = 0.0;
-	DarkGotAt = 0.0;
-	UE_LOG(LogTheater, Display, TEXT("Land battle: the dark reading on: the drawn frame at 64 x 36 four times a second, its share under L 25 for the camera's dark rule"));
+	if (Pace.Fixed >= 0.0)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the dark reading on, at a trial's fixed pace (-TheaterLandDarkEvery=%.4f: %s): the drawn frame at 64 x 36, its share under L 25 for the camera's dark rule"),
+			Pace.Fixed, Pace.Fixed > 0.0 ? TEXT("asked for every so many seconds whatever is on the picture") : TEXT("never asked for"));
+	}
+	else
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the dark reading on: the drawn frame at 64 x 36, its share under L 25 for the camera's dark rule; asked for every %.2f s while there is a shot to decide on and every %.2f s otherwise, never while his own view, a card or the night is the picture"),
+			Pace.Often, Pace.Idle);
+	}
 }
 
-void ALandBattle::ReadDark(double Real)
+void ALandBattle::BindDark()
+{
+	if (DarkGrab.IsValid())
+	{
+		DarkGrab->StopCapturingFrames();
+		DarkGrab->Shutdown();
+		DarkGrab.Reset();
+	}
+	// (the game's own viewport: a packaged game or -game; none in the editor's play, where the rule is not asked)
+	UGameEngine* Game = Cast<UGameEngine>(GEngine);
+	if (!Game || !Game->SceneViewport.IsValid())
+	{
+		return;
+	}
+	// (the grabber copies the rectangle of the picture it is bound to here, and goes on copying that one: ReadDark
+	// binds it again when the picture's size has changed. It stays capturing all battle: a frame that is not asked
+	// for costs nothing, and stopping it between asks would not start again.)
+	const FIntPoint Size = Game->SceneViewport->GetSizeXY();
+	DarkGrab = MakeShared<FFrameGrabber>(Game->SceneViewport.ToSharedRef(), FIntPoint(64, 36), PF_B8G8R8A8, 3);
+	DarkGrab->StartCapturingFrames();
+	DarkReader.Built(Size.X, Size.Y);
+}
+
+void ALandBattle::ReadDark()
 {
 	LAND_SCOPE(ReadDark);
-	if (!DarkGrab.IsValid())
+	if (!DarkGrab.IsValid() || !State.IsValid())
 	{
 		return;
 	}
-	// (the reading's own clock, from this frame's length. Until 25 November the asks and the staleness below were
-	// measured against the frame's length itself, at most a tenth of a second: one frame was asked for as the battle
-	// began, the next ask's time was never reached, and the camera's dark rule saw nothing all battle.)
-	DarkClock += Real;
-	const double Now = DarkClock;
-	// Ask for a copy of the frame now and then; take what has come back (a frame or two later), the newest.
-	if (Now >= DarkAskAt && DarkGrab->IsCapturingFrames())
+	const FLandBattleState& S = *State;
+	// (the picture's size changed and stood: bound again, or the copy would go on being cut from the old rectangle)
+	UGameEngine* Game = Cast<UGameEngine>(GEngine);
+	const FIntPoint Size = Game && Game->SceneViewport.IsValid() ? Game->SceneViewport->GetSizeXY() : FIntPoint::ZeroValue;
+	if (DarkReader.Resized(Size.X, Size.Y))
 	{
-		DarkAskAt = Now + 0.25;
-		DarkGrab->CaptureThisFrame(FFramePayloadPtr());
-		++DarkAsks;
-	}
-	// (no frame read for six tenths of a second: the last reading is stale, so the rule is told there is none;
-	// pre-check's note. Before the frames are taken, so that it holds on every way out below: a frame come back empty
-	// too. And under the rule's own quarter second and half second together (LandEye: a shot's reading counts from
-	// its first quarter second and must hold DarkHold), so that a reading of the last shot, read as the shot was cut
-	// and the frames then stopped, cannot by itself have the next one left or the run of dark cuts started again.
-	// The age is counted from when the frame was read, not from when it was drawn: one read a frame or two into the
-	// next shot stands that much longer, past the rule's three quarters of a second only where those frames and one
-	// more come to over 0.15 s (under some twenty frames a second), and then for one cut. It was a second, 25 November.)
-	if (DarkShare >= 0.0 && Now - DarkGotAt > 0.6)
-	{
-		DarkShare = -1.0;
-	}
-	TArray<FCapturedFrameData> Frames = DarkGrab->GetCapturedFrames();
-	if (Frames.Num() == 0)
-	{
-		return;
-	}
-	DarkBacks += Frames.Num();
-	// (a result card up: the whole picture dimmed under it, so no reading till it goes; nor while the night's light is
-	// on the picture, the night before the attack and its dawn; nor while the general's own view is the picture drawn
-	// (his eye begun and the film not given the camera): the film goes on being directed behind it, for its corner
-	// and for his return to it, and a dark reading of HIS view, a wood from above, would have the film leave shots
-	// that are not dark at all; nor while a drag has the lens looking aside from the shot (AimEye; more than a degree
-	// either way): what he turns the lens to, a hedge, a crown, an open field, is not the shot's picture, and the
-	// film would leave the shot he is looking about in and bar its place, or take the field for the light come back.
-	// Until the reading had a clock of its own, 25 November, nothing was read and none of this could show.
-	// These are asked as the frame comes back, a frame or two after it was drawn: one frame already on its way at
-	// a change is read as the new picture's. One reading cannot act alone: the rule wants half a second of dark to
-	// leave a shot and half a second of light to start its run again.)
-	if (FMath::Abs(LookAside.X) > 1.0 || FMath::Abs(LookAside.Y) > 1.0
-		|| (State.IsValid() && (State->bCard || (State->bGeneralEye && !State->General.bFilm) || State->NightNow.Dark > 0.0 || State->NightNow.Black > 0.0)))
-	{
-		DarkShare = -1.0;
-		return;
-	}
-	const FCapturedFrameData& Last = Frames.Last();
-	const TArray<FColor>& Pixels = Last.ColorBuffer;
-	const int32 Wd = Last.BufferSize.X, Ht = Last.BufferSize.Y;
-	if (Pixels.Num() == 0 || Wd <= 0 || Ht <= 0 || Pixels.Num() < Wd * Ht)
-	{
-		return;
-	}
-	// The top bar's rows left out (the art director's 30% is read on the picture under the words, not the leather bar).
-	const int32 Skip = Screen.IsValid() ? FMath::Clamp(FMath::CeilToInt32(Screen->TopShare() * Ht), 0, Ht - 1) : 0;
-	// L 25 of 255: the picture's own brightness, as the art director reads a still (Rec. 709 weights on its sRGB values).
-	int32 Dark = 0;
-	for (int32 Y = Skip; Y < Ht; ++Y)
-	{
-		for (int32 X = 0; X < Wd; ++X)
+		BindDark();
+		if (!DarkGrab.IsValid())
 		{
-			const FColor& P = Pixels[Y * Wd + X];
-			if (0.2126f * P.R + 0.7152f * P.G + 0.0722f * P.B < 25.0f)
-			{
-				++Dark;
-			}
+			return;
 		}
 	}
-	DarkShare = static_cast<double>(Dark) / static_cast<double>((Ht - Skip) * Wd);
-	// (only a frame that was read keeps the reading fresh: one that comes back empty leaves the last to go stale)
-	DarkGotAt = Now;
-	++DarkReads;
+	// Whether a reading is wanted at all: the film's own shot is the picture drawn, and the rule judges it. Not under
+	// a result card (the whole picture dimmed under it); nor while the night's light is on the picture, the night
+	// before the attack and its dawn; nor while the general's own view is the picture drawn (his eye begun and the
+	// film not given the camera): the film goes on being directed behind it, for its corner and for his return to
+	// it, and a dark reading of HIS view, a wood from above, would have the film leave shots that are not dark at
+	// all; nor while a drag has the lens looking aside from the shot (AimEye; more than a degree either way): what
+	// he turns the lens to, a hedge, a crown, an open field, is not the shot's picture, and the film would leave the
+	// shot he is looking about in and bar its place, or take the field for the light come back; nor while the stills'
+	// walk has the lens; nor in an opening or a wide, which the rule never judges. While it is not wanted no frame is
+	// asked for (every ask costs: LandEye::DarkReader), and when it is wanted again the reader begins afresh, as at a
+	// cut: nothing asked for before then is read.
+	const bool bWanted = FMath::Abs(LookAside.X) <= 1.0 && FMath::Abs(LookAside.Y) <= 1.0 && !bWalkPanOn
+		&& !S.bCard && !(S.bGeneralEye && !S.General.bFilm) && !S.NightNow.bNight && S.NightNow.Dark <= 0.0 && S.NightNow.Black <= 0.0
+		&& S.Eye.DarkJudged();
+	// The reader's order, each frame, after the film's eye has been updated: its clock, then every frame come back,
+	// then whether to ask. (The clock is the screen's, S.Real, the one the director was just given: both of the
+	// rule's holds are timed on when each frame was asked for by it.)
+	DarkReader.Tick(S.Real, LandParts::Seconds(), bWanted, S.Eye.ShotBegan(), S.Eye.DarkCanLeave(), S.Eye.DarkRun() > 0);
+	// The top bar's rows left out (the art director's 30% is read on the picture under the words, not the leather bar).
+	const double TopShare = Screen.IsValid() ? Screen->TopShare() : 0.0;
+	TArray<FCapturedFrameData> Frames = DarkGrab->GetCapturedFrames();
+	for (FCapturedFrameData& Frame : Frames)
+	{
+		const FDarkAsk* Asked = Frame.Payload.IsValid() ? Frame.GetPayload<FDarkAsk>() : nullptr;
+		if (!Asked)
+		{
+			continue;
+		}
+		const TArray<FColor>& Pixels = Frame.ColorBuffer;
+		const int32 Wd = Frame.BufferSize.X, Ht = Frame.BufferSize.Y;
+		// (a frame come back empty is told so: counted, never read)
+		double Share = -1.0;
+		if (Pixels.Num() > 0 && Wd > 0 && Ht > 0 && Pixels.Num() >= Wd * Ht)
+		{
+			const int32 Skip = FMath::Clamp(FMath::CeilToInt32(TopShare * Ht), 0, Ht - 1);
+			// L 25 of 255: the picture's own brightness, as the art director reads a still (Rec. 709 weights on its sRGB values).
+			int32 Under = 0;
+			for (int32 Y = Skip; Y < Ht; ++Y)
+			{
+				for (int32 X = 0; X < Wd; ++X)
+				{
+					const FColor& P = Pixels[Y * Wd + X];
+					if (0.2126f * P.R + 0.7152f * P.G + 0.0722f * P.B < 25.0f)
+					{
+						++Under;
+					}
+				}
+			}
+			Share = static_cast<double>(Under) / static_cast<double>((Ht - Skip) * Wd);
+		}
+		DarkReader.Back(Asked->At, Share);
+	}
+	// Ask for a copy of the frame when the reader says so, stamped with the screen's clock now.
+	if (DarkGrab->IsCapturingFrames() && DarkReader.Ask())
+	{
+		DarkGrab->CaptureThisFrame(MakeShared<FDarkAsk, ESPMode::ThreadSafe>(S.Real));
+	}
 }
 
 void ALandBattle::StopDarkRead()
@@ -7311,7 +7358,6 @@ void ALandBattle::StopDarkRead()
 		DarkGrab->Shutdown();
 		DarkGrab.Reset();
 	}
-	DarkShare = -1.0;
 }
 
 void ALandBattle::StartNight()
@@ -9912,12 +9958,12 @@ void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 	if (State.IsValid())
 	{
 		const FLandBattleState& S = *State;
-		UE_LOG(LogTheater, Display, TEXT("Land battle: ended at %.0f s: %d rounds played, %d blasts paired; shots heard %d, takes %d, out of hearing %d, dropped %d (on the screen %d); cracks %d, landings %d, falls %d; %d cuts (%d left for a dark picture; the picture read %d times, %d frames back of %d asked)"),
+		UE_LOG(LogTheater, Display, TEXT("Land battle: ended at %.0f s: %d rounds played, %d blasts paired; shots heard %d, takes %d, out of hearing %d, dropped %d (on the screen %d); cracks %d, landings %d, falls %d; %d cuts (%d left for a dark picture; the picture read %d times, %d frames back of %d asked, an ask about %.1f ms by %d of them)"),
 			S.Battle, S.Play.RoundsPlayed(), S.Play.BlastsPaired(), S.Mix.ShotsHeard, S.Mix.ShotTakes, S.Mix.ShotsOutOfHearing, S.Mix.ShotsDropped, S.Mix.ShotsOnScreenDropped,
-			S.Mix.Cracks, S.Mix.Landings, S.Mix.Falls, S.Eye.Cuts(), S.Eye.DarkCuts(), DarkReads, DarkBacks, DarkAsks);
-		if (DarkAsks >= 8 && DarkBacks * 2 < DarkAsks)
+			S.Mix.Cracks, S.Mix.Landings, S.Mix.Falls, S.Eye.Cuts(), S.Eye.DarkCuts(), DarkReader.Reads(), DarkReader.Backs(), DarkReader.Asks(), DarkReader.AskCostMs(), DarkReader.AskCostSamples());
+		if (DarkReader.Asks() >= 8 && DarkReader.Backs() * 2 < DarkReader.Asks())
 		{
-			UE_LOG(LogTheater, Warning, TEXT("Land battle: the dark reading was all but blind: %d frames back of %d asked, so the camera's dark rule had little or nothing to go on"), DarkBacks, DarkAsks);
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: the dark reading was all but blind: %d frames back of %d asked, so the camera's dark rule had little or nothing to go on"), DarkReader.Backs(), DarkReader.Asks());
 		}
 		LogSound();
 	}

@@ -162,6 +162,156 @@ namespace LandEye
 		return P.Shot == Kind::Tank ? P.Subject : -1;
 	}
 
+	void DarkReader::Begin(const Settings& InSet)
+	{
+		*this = DarkReader();
+		Set = InSet;
+	}
+
+	double DarkReader::Every() const
+	{
+		if (Set.Fixed > 0.0) return Set.Fixed;
+		// (something to decide: no reading of this span yet; a dark picture the rule may still leave; a plainly light
+		// one while a run of dark cuts waits on it)
+		if (Read.Share < 0.0) return Set.Often;
+		if (Read.Share > Set.Leave && bCanLeave) return Set.Often;
+		if (Read.Share <= Set.Light && bRunOn) return Set.Often;
+		return Set.Idle;
+	}
+
+	void DarkReader::Tick(double InNow, double Wall, bool bInWanted, double ShotAt, bool bInCanLeave, bool bInRunOn)
+	{
+		// (what an ask costs: the four frames after it against the four before)
+		if (bTicked)
+		{
+			const double Long = Wall - WallWas;
+			SinceAsk = std::min(SinceAsk + 1, 1000);
+			if (bSample)
+			{
+				After += Long;
+				if (SinceAsk >= 4)
+				{
+					if (Costs.size() < 20000) Costs.push_back(static_cast<float>((After - Before) * 1000.0));
+					bSample = false;
+				}
+			}
+			Ring[RingN % 4] = Long;
+			RingN = RingN < 4 ? RingN + 1 : 4 + (RingN + 1) % 4;
+		}
+		WallWas = Wall;
+		Step = bTicked ? std::max(0.0, InNow - Now) : 0.0;
+		Now = InNow;
+		bTicked = true;
+		bCanLeave = bInCanLeave;
+		bRunOn = bInRunOn;
+		if (!bInWanted)
+		{
+			bWanted = false;
+			Read.Share = -1.0;
+			OpenAt = -1.0;
+			return;
+		}
+		if (!bWanted || ShotAt != SpanShot)
+		{
+			// (a new span: another shot, or the reading wanted again)
+			bWanted = true;
+			SpanShot = ShotAt;
+			SpanAt = Now;
+			SpanFrames = 0;
+			OpenAt = -1.0;
+			NewestAt = -1e30;
+			Read.Share = -1.0;
+		}
+		else
+		{
+			SpanFrames = std::min(SpanFrames + 1, 1000000);
+		}
+		if (OpenAt < 0.0 && Now - SpanAt >= Set.First - 1e-9 && SpanFrames >= Set.FirstFrames)
+		{
+			OpenAt = Now;
+		}
+		if (Read.Share >= 0.0 && Now - Read.At > Every() + std::max(Set.Late, 4.0 * Step))
+		{
+			Read.Share = -1.0;
+		}
+	}
+
+	void DarkReader::Back(double InAskedAt, double Share)
+	{
+		++BackN;
+		// (not this span's to read: asked for before it was open, or no newer than the last read; or it came back empty)
+		if (!bWanted || OpenAt < 0.0 || Share < 0.0 || InAskedAt < OpenAt - 1e-9 || InAskedAt <= NewestAt)
+		{
+			return;
+		}
+		NewestAt = InAskedAt;
+		Read.Share = Share;
+		Read.At = InAskedAt;
+		Read.Serial = ++Serial;
+		++ReadN;
+	}
+
+	bool DarkReader::Ask()
+	{
+		if (!bTicked) return false;
+		bool bDue = false;
+		if (Set.Fixed >= 0.0)
+		{
+			bDue = Set.Fixed > 0.0 && Now - AskedAt >= Set.Fixed - 1e-6;
+		}
+		else
+		{
+			bDue = bWanted && OpenAt >= 0.0 && (AskedAt < OpenAt || Now - AskedAt >= Every() - 1e-6);
+		}
+		if (!bDue) return false;
+		// (a sample of the ask's cost where the last ask is eight frames gone: its four after, then four clean before)
+		bSample = RingN >= 4 && SinceAsk >= 8;
+		Before = Ring[0] + Ring[1] + Ring[2] + Ring[3];
+		After = 0.0;
+		SinceAsk = 0;
+		AskedAt = Now;
+		++AskN;
+		return true;
+	}
+
+	bool DarkReader::Resized(int Wide, int High)
+	{
+		if (Wide <= 0 || High <= 0 || (Wide == BuiltWide && High == BuiltHigh))
+		{
+			SeenWide = SeenHigh = 0;
+			return false;
+		}
+		if (Wide != SeenWide || High != SeenHigh)
+		{
+			SeenWide = Wide;
+			SeenHigh = High;
+			SeenAt = Now;
+			return false;
+		}
+		return Now - SeenAt >= Set.SizeHold;
+	}
+
+	void DarkReader::Built(int Wide, int High)
+	{
+		BuiltWide = Wide;
+		BuiltHigh = High;
+		SeenWide = SeenHigh = 0;
+		// (what the old binding was asked for never comes back: a new span at the next Tick)
+		bWanted = false;
+		Read.Share = -1.0;
+		OpenAt = -1.0;
+		AskedAt = -1e30;
+		bSample = false;
+	}
+
+	double DarkReader::AskCostMs() const
+	{
+		if (Costs.empty()) return 0.0;
+		std::vector<float> Sorted = Costs;
+		std::nth_element(Sorted.begin(), Sorted.begin() + Sorted.size() / 2, Sorted.end());
+		return Sorted[Sorted.size() / 2];
+	}
+
 	double Director::Roll()
 	{
 		Dice += 0x9E3779B97F4A7C15ull;
@@ -387,7 +537,9 @@ namespace LandEye
 		SinceSquad = 0;
 		UsedSpots.clear();
 		DarkSpots.clear();
-		DarkSince = LightSince = -1.0;
+		DarkSince = DarkTill = LightSince = LightTill = -1.0;
+		DarkN = LightN = 0;
+		DarkSerial = 0;
 		DarkLeft = DarkRunNow = 0;
 		bAskedUnfit = false;
 		bAsked = bAskedBuilding = bShotAsked = false;
@@ -2970,7 +3122,8 @@ namespace LandEye
 		BadSince = -1.0;
 		BurstCutAt = -1.0;
 		LostSince = -1.0;
-		DarkSince = LightSince = -1.0;
+		DarkSince = DarkTill = LightSince = LightTill = -1.0;
+		DarkN = LightN = 0;
 		ShotLength = Set.ShotMin + Roll() * (Set.ShotMax - Set.ShotMin);
 		if (Shot == Kind::Wide) ShotLength *= 0.7;
 		// (under shelling the holds are short and nervous: heavy rounds landing round its man in its time)
@@ -4034,20 +4187,42 @@ namespace LandEye
 		// past its first quarter second, the shot is left, and the next stands clear of where it stood (a hedge's shaded
 		// face, a crown's shade). After DarkRunMost such cuts running, the light is to blame, not the place: it rests,
 		// until a picture has read no darker than DarkLight for as long, which shows that the light is not.
-		if (!bChoosing && Here.DarkNow && Shot != Kind::Open && Shot != Kind::Wide)
+		if (!bChoosing && Here.DarkLast && Shot != Kind::Open && Shot != Kind::Wide)
 		{
-			const double Dark = Here.DarkNow();
-			if (Dark <= Set.DarkLeave || Held < 0.25) DarkSince = -1.0;
-			else if (DarkSince < 0.0) DarkSince = Real;
-			// (light as plainly as dark is dark: a reading there is, no darker than DarkLight, for DarkHold seconds on end
-			// past the shot's first quarter second. One light reading is not enough. The scene's reading is of a frame
-			// asked for up to a quarter of a second ago and come back later still, so the first a shot is given may be
-			// the last shot's picture, an opening's or a wide's among them, which this rule never judges; and one frame
-			// may be a shell's flash. A reading that stands half a second is this shot's own, and no flash.)
-			if (Dark < 0.0 || Dark > Set.DarkLight || Held < 0.25) LightSince = -1.0;
-			else if (LightSince < 0.0) LightSince = Real;
-			if (LightSince >= 0.0 && Real - LightSince >= Set.DarkHold) DarkRunNow = 0;
-			if (!bCut && !bHeld && DarkSince >= 0.0 && Real - DarkSince >= Set.DarkHold && DarkRunNow < Set.DarkRunMost)
+			const DarkReading Read = Here.DarkLast();
+			// (A reading counts once, by its number, and its time is when its frame was ASKED for, the reader's stamp,
+			// not when it came back or how long it has stood since: readings come a quarter of a second apart while a
+			// verdict is being timed and a second apart or more otherwise, a frame may be lost, and a slow machine has
+			// one back half a second late. Timed by its standing, one dark reading with the next one late would leave
+			// a shot, and one light reading, a shell's flash, would start the run again. No reading, or one asked for
+			// before this shot's first quarter second, the last shot's picture however late it comes, an opening's or
+			// a wide's among them: nothing is counted, and what was counted is let go.)
+			if (Read.Share < 0.0 || Read.At < ShotStarted + 0.25 - 1e-6)
+			{
+				DarkSince = DarkTill = LightSince = LightTill = -1.0;
+				DarkN = LightN = 0;
+			}
+			else if (Read.Serial != DarkSerial)
+			{
+				DarkSerial = Read.Serial;
+				if (Read.Share > Set.DarkLeave)
+				{
+					if (DarkSince < 0.0) { DarkSince = Read.At; DarkN = 0; }
+					DarkTill = Read.At;
+					++DarkN;
+				}
+				else { DarkSince = DarkTill = -1.0; DarkN = 0; }
+				// (light as plainly as dark is dark: no darker than DarkLight, in as many readings, over as long)
+				if (Read.Share <= Set.DarkLight)
+				{
+					if (LightSince < 0.0) { LightSince = Read.At; LightN = 0; }
+					LightTill = Read.At;
+					++LightN;
+				}
+				else { LightSince = LightTill = -1.0; LightN = 0; }
+			}
+			if (LightSince >= 0.0 && LightN >= Set.DarkReads && LightTill - LightSince >= Set.DarkHold - 1e-6) DarkRunNow = 0;
+			if (!bCut && !bHeld && DarkSince >= 0.0 && DarkN >= Set.DarkReads && DarkTill - DarkSince >= Set.DarkHold - 1e-6 && DarkRunNow < Set.DarkRunMost)
 			{
 				bCut = true;
 				Reason = Why::Dark;

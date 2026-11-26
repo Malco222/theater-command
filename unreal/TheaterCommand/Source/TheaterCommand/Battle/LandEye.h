@@ -111,6 +111,120 @@ namespace LandEye
 	/** The track the film's ride is on in a pose (its Tank shot's subject), -1 in any other shot: AerialShown's bRidden. */
 	int RiddenBy(const Pose& P);
 
+	/**
+	 * One reading of how dark the drawn picture is (the dark rule, Settings::DarkLeave). Share: the share of the frame
+	 * darker than L 25 of 255, -1 where there is none to go by. At: when that frame was ASKED for, on the screen's
+	 * clock (the one Director::Update is given), not when it came back. Serial: the reading's number, one more with
+	 * every frame read, so that the rule counts a reading once however many frames it stands.
+	 */
+	struct DarkReading
+	{
+		double Share = -1.0, At = 0.0;
+		long Serial = 0;
+	};
+
+	/**
+	 * The dark reading's clock: WHEN the scene asks for a copy of its drawn frame, and which of the frames that come
+	 * back are a reading of the shot now held. There is no engine in it: the scene (LandBattle.cpp, ReadDark) asks
+	 * the engine's frame grabber when Ask() says so and hands every frame come back to Back(), and the cloud test
+	 * drives this same reader with a stand-in for the grabber, so the pace and the rule are tested as they run.
+	 *
+	 * It paces itself because an ask is what costs, however small the copy: as the engine's own code reads, on the
+	 * Mac it waits for the graphics card to finish all it has in hand before it gives the frame over, and a frame
+	 * that is not asked for costs nothing (Brian's Mac, B3 Normandy, 25 November: four to five asks a second cost
+	 * 1 to 2 frames a second; what one ask costs is measured as it runs, AskCostMs, for the Mac's trials to show).
+	 * So it asks as a smoke alarm sniffs. Closely (Often) while there is something to decide: a shot is new and has
+	 * no reading yet; or its picture reads over the leaving line and the rule may still leave it; or it reads
+	 * plainly light while a run of dark cuts waits to be ended. Otherwise now and then (Idle), so that a shot which
+	 * turns dark as it goes is still found. And not at all while the reading is not wanted (Tick's bWanted: the
+	 * general's own view on the picture, a card, the night's light, a look aside, an opening or a wide).
+	 *
+	 * A span is one unbroken stretch of one shot with the reading wanted. Every cut, and every return of the
+	 * reading from not wanted, begins a new one: the last reading is dropped, and no frame asked for before the
+	 * span is First seconds and FirstFrames frames old is ever read (the frame a copy shows may have been drawn up
+	 * to two frames before it was asked for, so it may be the last shot's, or the picture under the card just gone).
+	 * Frames are told apart by the time each was asked for, which the scene sends with the ask and gets back with
+	 * the frame; none is matched by counting.
+	 *
+	 * Each frame of the game, in this order, after Director::Update: Tick, then Back for every frame come back,
+	 * then Ask.
+	 */
+	class DarkReader
+	{
+	public:
+		struct Settings
+		{
+			/** Seconds between asks while there is something to decide, and while there is not. */
+			double Often = 0.25, Idle = 1.0;
+			/** A span's first ask: not before it is so many seconds and so many frames old. */
+			double First = 0.25;
+			int FirstFrames = 3;
+			/** The rule's own two lines (LandEye::Settings::DarkLeave, DarkLight): over the first a picture is dark,
+			 * at or under the second plainly light. */
+			double Leave = 0.30, Light = 0.15;
+			/** A reading is stale, and dropped, once it is older than the pace then kept and this (or four frames,
+			 * if they are longer): the frames have stopped coming back. */
+			double Late = 0.35;
+			/** For a trial on the Mac: over 0, ask every so many seconds whatever is on the picture, as the reading
+			 * did until 26 November; 0, never ask (the grabber bound and idle); under 0, the reader's own pace. */
+			double Fixed = -1.0;
+			/** A picture's new size must have stood so long before Resized says to bind the grabber again. */
+			double SizeHold = 0.5;
+		};
+
+		void Begin(const Settings& InSet);
+		/** Now: the screen's clock, the one Director::Update was just given. Wall: any clock of real seconds (for
+		 * what an ask costs). bWanted: the film's shot is the picture drawn and the rule judges it. ShotAt: when
+		 * the shot now held began (Director::ShotBegan). bCanLeave, bRunOn: the rule may still leave a shot for a
+		 * dark picture (Director::DarkCanLeave), and a run of dark cuts is on (Director::DarkRun() > 0). */
+		void Tick(double Now, double Wall, bool bWanted, double ShotAt, bool bCanLeave, bool bRunOn);
+		/** A frame come back: when it was asked for (the time Ask() was true at), and the share of it that is dark
+		 * (under 0: it came back empty). */
+		void Back(double AskedAt, double Share);
+		/** Whether to ask for a copy of the frame now; counted as asked, at Tick's Now. */
+		bool Ask();
+		/** The size of the picture now, every frame: true once a size other than the one last told to Built has
+		 * stood SizeHold seconds (the grabber copies the rectangle it was bound to, so it is to be bound again). */
+		bool Resized(int Wide, int High);
+		/** The grabber bound, or bound again, to a picture of this size: a new span, and asks not yet answered are
+		 * written off. */
+		void Built(int Wide, int High);
+
+		DarkReading Last() const { return Read; }
+		/** Seconds between asks as things stand. */
+		double Every() const;
+		int Asks() const { return AskN; }
+		int Backs() const { return BackN; }
+		int Reads() const { return ReadN; }
+		/** What an ask costs, milliseconds: the four frames after each ask against the four before it, wherever no
+		 * other ask stood within eight frames before or four after; the middle one of those differences (the cost
+		 * may be spread over more than one frame, and a frame's length is uneven by itself; AskCostSamples of them,
+		 * 0 where there is none). */
+		double AskCostMs() const;
+		int AskCostSamples() const { return static_cast<int>(Costs.size()); }
+
+	private:
+		Settings Set;
+		DarkReading Read;
+		long Serial = 0;
+		double Now = 0.0, Step = 0.0;
+		bool bTicked = false, bWanted = false, bCanLeave = true, bRunOn = false;
+		/** The span: the shot it is of, when it began, how many frames old it is, and from when its frames may be
+		 * asked for (-1 not yet); when the newest frame read in it was asked for. */
+		double SpanShot = -1e30, SpanAt = 0.0, OpenAt = -1.0, NewestAt = -1e30;
+		int SpanFrames = 0;
+		double AskedAt = -1e30;
+		int AskN = 0, BackN = 0, ReadN = 0;
+		int BuiltWide = 0, BuiltHigh = 0, SeenWide = 0, SeenHigh = 0;
+		double SeenAt = 0.0;
+		/** What an ask costs: the wall clock at the last frame, the last four frames' lengths, the frames since the
+		 * last ask, and the sample being taken. */
+		double WallWas = 0.0, Ring[4] = { 0.0, 0.0, 0.0, 0.0 }, Before = 0.0, After = 0.0;
+		int RingN = 0, SinceAsk = 1000;
+		bool bSample = false;
+		std::vector<float> Costs;
+	};
+
 	struct World
 	{
 		std::function<double(double X, double Y)> Height;
@@ -139,11 +253,12 @@ namespace LandEye
 		 * fall or knock-out, and leaves a shot whose subject becomes hidden; his own hidden blocks are not his enemy's and
 		 * are filmed as ever. Unset: nothing hidden. */
 		std::function<bool(int Block)> Hidden;
-		/** The share of the picture last drawn that is darker than L 25 of 255 (0 to 1; below 0 not known yet), read by
-		 * the scene from its own frame a few times a second. The art director's dark rule (cut 4 fix 6: a hedge's shaded
-		 * face filled 75% of a still): a shot whose picture stays over Settings::DarkLeave is left, and the next stands
-		 * clear of where it stood. Unset: never asked (the rays cannot see light). */
-		std::function<double()> DarkNow;
+		/** The last reading of how dark the drawn picture is (DarkReading: the share of the frame darker than L 25 of
+		 * 255, when that frame was asked for, and the reading's number), read by the scene from its own frame now and
+		 * then (DarkReader keeps its clock). The art director's dark rule (cut 4 fix 6: a hedge's shaded face filled
+		 * 75% of a still): a shot whose picture stays over Settings::DarkLeave is left, and the next stands clear of
+		 * where it stood. Unset: never asked (the rays cannot see light). */
+		std::function<DarkReading()> DarkLast;
 		/** Whether a vehicle's crew may get out at her end (the effects thread's bail-out, release 2, -TheaterLandBailOut:
 		 * a tank or an armoured car with a fates row and a soldier file for her crew). Asked before her kill, as the film
 		 * goes to a tank's end 1 to 3 s ahead; Director::BailOut then says at the kill whether anyone did. Unset: none,
@@ -332,7 +447,7 @@ namespace LandEye
 		double Climb = 0.6;
 		/** The most a following shot's operator turns with his man, degrees a second. */
 		double TurnMost = 45.0;
-		/** The dark rule (World::DarkNow; the art director, cut 4 fix 6: reject a shot over 30% under L 25): a shot whose
+		/** The dark rule (World::DarkLast; the art director, cut 4 fix 6: reject a shot over 30% under L 25): a shot whose
 		 * drawn picture stays over DarkLeave for DarkHold seconds, past its first quarter second (the frame drawn lags the
 		 * cut), is left, and no later shot stands within DarkClear metres of where it stood. After DarkRunMost such cuts
 		 * running the light is to blame, not the place: the rule rests until a picture has read no darker than DarkLight
@@ -343,9 +458,14 @@ namespace LandEye
 		 * shot's picture (an opening's or a wide's too, which the rule never judges), and one frame may be a shell's
 		 * flash. (Until 25 November the run started again at every cut made for another reason: under a light dark
 		 * everywhere, a dusk or a storm, two shots of three quarters of a second followed nearly every ordinary cut all
-		 * battle long. It never showed because the scene's reading was blind: LandBattle.cpp ReadDark.) */
+		 * battle long. It never showed because the scene's reading was blind: LandBattle.cpp ReadDark.)
+		 * Both holds are timed on the readings themselves, by when each frame was ASKED for, not by how long a reading
+		 * has stood since it came back: dark (or light) from one reading to another DarkHold seconds or more after
+		 * it, in DarkReads readings or more with none between them that says otherwise. So a reading never acts alone,
+		 * however long the next one is in coming (a frame lost, a slow machine, the reader's idle pace); and a reading
+		 * asked for before the shot's first quarter second is not that shot's to be judged by, however late it comes. */
 		double DarkLeave = 0.30, DarkHold = 0.5, DarkClear = 6.0, DarkLight = 0.15;
-		int DarkRunMost = 2;
+		int DarkRunMost = 2, DarkReads = 3;
 		/** The whole mass (the production lead's plan for battles of thousands, 22 November: CD1): once a battle, between
 		 * MassFrom and MassTo battle seconds (in a battle too short for them, between 55% and 72% of it), one wide shot
 		 * high over the own side's rear holding MassShare of the men drawn in its picture (every man on the field the
@@ -482,9 +602,16 @@ namespace LandEye
 		int Cuts() const { return CutCount; }
 		/** The most frames a cut's choice has taken (Settings::ChooseSteps). */
 		int LongestChoice() const { return ChoiceFramesMost; }
-		/** Shots left for a dark picture (World::DarkNow), and those running now (the rule rests at DarkRunMost). */
+		/** Shots left for a dark picture (World::DarkLast), and those running now (the rule rests at DarkRunMost). */
 		int DarkCuts() const { return DarkLeft; }
 		int DarkRun() const { return DarkRunNow; }
+		/** For the reading's clock (DarkReader::Tick, after Update): when the shot now held began, on the screen
+		 * clock Update is given; whether the dark rule judges it (not an opening, not a wide); and whether the rule
+		 * may leave a shot for a dark picture as things stand (it is not resting, and his hand does not hold the
+		 * shot: Hold). */
+		double ShotBegan() const { return ShotStarted; }
+		bool DarkJudged() const { return Shot != Kind::Open && Shot != Kind::Wide; }
+		bool DarkCanLeave() const { return DarkRunNow < Set.DarkRunMost && !bHeld; }
 		/** Whether the last asked shot found no fit place and was placed anyway (its kind kept for the picture run): a
 		 * still the film's own rules would have turned away. */
 		bool AskedUnfit() const { return bAskedUnfit; }
@@ -666,11 +793,14 @@ namespace LandEye
 		int HeroBlock = -1, HeroK = -1, SinceSquad = 0;
 		/** Where the shots among the men stood (Settings::SpotOnce). */
 		std::vector<Vec> UsedSpots;
-		/** Where shots left for a dark picture stood (Settings::DarkClear), the latest 32; since when the picture has been
-		 * dark, and since when plainly light (Settings::DarkLight; -1 not, either), the shots left for it in all and
-		 * running, and whether the last asked shot was placed unfit. */
+		/** Where shots left for a dark picture stood (Settings::DarkClear), the latest 32; the readings on end that
+		 * have said dark, and those that have said plainly light (Settings::DarkLight): when the first of them and the
+		 * last were asked for (-1 none) and how many they are; the number of the last reading counted; the shots left
+		 * for a dark picture in all and running, and whether the last asked shot was placed unfit. */
 		std::vector<Vec> DarkSpots;
-		double DarkSince = -1.0, LightSince = -1.0;
+		double DarkSince = -1.0, DarkTill = -1.0, LightSince = -1.0, LightTill = -1.0;
+		int DarkN = 0, LightN = 0;
+		long DarkSerial = 0;
 		int DarkLeft = 0, DarkRunNow = 0;
 		bool bAskedUnfit = false;
 		/** A cut's second, less choosy pass (no fit found in the middle of the battle). */

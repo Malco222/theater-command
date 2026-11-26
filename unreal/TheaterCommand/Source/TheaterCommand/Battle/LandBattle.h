@@ -687,26 +687,28 @@ private:
 	bool bWalkPanOn = false, bTankPan = false;
 	FVector WalkPanLook = FVector::ZeroVector;
 	void WalkPan(double Real);
-	/** The dark reading for the camera director's dark rule (LandEye::World::DarkNow; the art director, cut 4 fix 6 and
-	 * cut 5: a shot over 30% darker than L 25 of 255 is left): the drawn frame copied at 64 x 36 four times a real second
-	 * by the engine's frame grabber, which waits on nothing, and the share of it under L 25 (-1 until the first comes
-	 * back, or with no game viewport, as in the editor). Off unless "-TheaterLandDarkRead" asks for it (1.5.2: its cost on
-	 * the Mac was over the patch's bar); "-TheaterLandNoDarkRead" leaves it off either way (the rule never asked).
-	 * ReadDark takes the frame's length, as its neighbours do, and keeps the reading's own clock from it (DarkClock,
-	 * against which the next ask and the last reading's age are measured: a reading is stale, and the rule told
-	 * there is none, once no frame has been read for six tenths of a second). DarkAsks and DarkBacks count the
-	 * frames asked for and those that came back, DarkReads those read (none under a result card or the night's
-	 * light, nor while the general's own view is the picture drawn and not the film, nor while a drag has the lens
-	 * looking aside from the shot): the battle's end line says all three, and warns where under half of those
-	 * asked for came back. */
+	/** The dark reading for the camera director's dark rule (LandEye::World::DarkLast; the art director, cut 4 fix 6 and
+	 * cut 5: a shot over 30% darker than L 25 of 255 is left): the drawn frame copied at 64 x 36 by the engine's frame
+	 * grabber and the share of it under L 25. Off unless "-TheaterLandDarkRead" asks for it (1.5.2: its cost on the Mac
+	 * was over the patch's bar); "-TheaterLandNoDarkRead" leaves it off either way (the rule never asked); no game
+	 * viewport, as in the editor, the same. WHEN a frame is asked for, and which of those come back are a reading of
+	 * the shot now held, is LandEye::DarkReader's (DarkReader), which the cloud test drives as the scene does: every ask
+	 * costs the same on the Mac however small the copy, so it asks closely only while there is a shot to decide on,
+	 * about once a second otherwise, and not at all while the film's shot is not the picture drawn (a result card,
+	 * the night's light, the general's own view, a look aside, the stills' walk) or the rule does not judge it (an
+	 * opening, a wide). ReadDark is its three calls in their order, each frame after the film's eye: Tick with the
+	 * screen's clock, Back for every frame come back with the time it was asked for (FDarkAsk, sent with the ask),
+	 * then Ask. BindDark binds the grabber to the picture, again when its size has changed and stood. The battle's
+	 * end line says the frames asked for, come back and read, and what an ask cost, and warns where under half of
+	 * those asked for came back. "-TheaterLandDarkIdle=" and "-TheaterLandDarkEvery=" are the Mac's trials. */
 	TSharedPtr<FFrameGrabber> DarkGrab;
-	double DarkShare = -1.0, DarkClock = 0.0, DarkAskAt = 0.0, DarkGotAt = 0.0;
-	int32 DarkReads = 0, DarkAsks = 0, DarkBacks = 0;
+	LandEye::DarkReader DarkReader;
 	/** The film's log (the tick's, after its stills are asked for): when its last line was written, on the tick's real
 	 * clock, for the four a second of "-TheaterLandPoseLog". */
 	double PoseLogAt = 0.0;
-	void StartDarkRead();
-	void ReadDark(double Real);
+	void StartDarkRead(const LandEye::Settings& Rule);
+	void BindDark();
+	void ReadDark();
 	void StopDarkRead();
 	/**
 	 * The night before the attack (LandNight, release 2's patrol, behind the player's patrol switch): a recording that
