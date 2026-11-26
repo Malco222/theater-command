@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 3b3524d19 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 41adcf00b 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -46644,7 +46644,7 @@
     const n = Math.round(cut2 * 100);
     return shipRule(g2, "dc") ? `should lose ${n > 0 ? `about ${n}%` : "almost none"}` : `could lose up to ${n}%`;
   }
-  function placeOf4(g2, kind, target, viewer = null) {
+  function placeOf4(g2, kind, target, viewer = null, bare = false) {
     if (kind === "strike") return g2.seas[target] ? seaWhat(g2.seas[target].name) : "the sea";
     if (kind === "fleet") {
       const t = g2.fleets.find((x) => x.id === target);
@@ -46653,10 +46653,10 @@
     }
     if (kind === "harbour") {
       const p = g2.regions[target]?.name ?? "";
-      return /\bHarbou?r$/.test(p) ? p : `the harbour of ${placeName2(p)}`;
+      return /\bHarbou?r$/.test(p) ? p : `the harbour of ${bare ? p : placeName2(p)}`;
     }
-    if (kind === "town") return g2.regions[target] ? `the defences of ${placeName2(townName(g2.regions[target]))}` : "";
-    if (kind === "airfield") return g2.regions[target] ? `the airfield at ${placeName2(g2.regions[target].name)}` : "";
+    if (kind === "town") return g2.regions[target] ? `the defences of ${bare ? townName(g2.regions[target]) : placeName2(townName(g2.regions[target]))}` : "";
+    if (kind === "airfield") return g2.regions[target] ? `the airfield at ${bare ? g2.regions[target].name : placeName2(g2.regions[target].name)}` : "";
     return g2.regions[target]?.name ?? "";
   }
   var kindFlown = (m) => m === "strike" || m === "fleet" || m === "harbour" || m === "town" || m === "airfield" ? m : "bomb";
@@ -47252,7 +47252,9 @@
     if (weatherOn(g2)) {
       const z = skyZone(g2, kind, target);
       const shipped = skyRaidLine(g2, z, place3);
-      const line = shipped && cityDefences(g2) ? shipped.replace(`over ${place3}`, () => `over ${theWords(place3, "over ")}`) : shipped;
+      const bare = cityDefences(g2) ? placeOf4(g2, kind, target, nat, true) : place3;
+      const roomy = cityDefences(g2) ? skyRaidLine(g2, z, bare) : shipped;
+      const line = roomy && cityDefences(g2) ? roomy.replace(`over ${bare}`, () => `over ${theWords(bare, "over ")}`) : shipped;
       if (line) plan.sky = line;
       if (skyOf(g2, z) === "closed") {
         plan.why = `Closed sky this month: nothing flies over ${zoneName(z)}.`;
