@@ -3835,6 +3835,7 @@ FArsenal FCampaignSession::Arsenal(int32 RegionId)
 	Object->TryGetBoolField(TEXT("budget"), Out.bBudget);
 	Object->TryGetNumberField(TEXT("money"), Out.Money);
 	Object->TryGetStringField(TEXT("region"), Out.Region);
+	Object->TryGetStringArrayField(TEXT("notes"), Out.Notes); // absent unless the nation's rifle store binds
 	const TArray<TSharedPtr<FJsonValue>>* Offers = nullptr;
 	if (Object->TryGetArrayField(TEXT("offers"), Offers))
 	{
