@@ -68,6 +68,7 @@ import { TECH, idleTeams, techView, type TechNode } from '../tech';
 import { GOOD_NAME, RES, fieldCard, fieldOverseas, fieldYield, keepsStores, laneKey, laneNotCounted, resRules, seaLanes, standing as depotState, stores, type Book, type Lane, type ResLine } from '../resources';
 import { LEAGUE, leagueFounded, leagueMembers, ownPath, small as isSmall, type PathId, type PathOption } from '../league';
 import { ARSENAL, canLay, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel, worksOpening, yardLevel, type Hull, type Offer } from '../arsenal';
+import { riflesWait } from '../rifles';
 import { PLANS, buildsOwn, planRules } from '../plans';
 import { GUARD_TOP, guardSays, guardTabs, type GuardTab } from '../guard';
 import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf, type Trait } from '../traits';
@@ -120,7 +121,7 @@ import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, court
 import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, placeName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoRoom, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { roomSays } from '../islands';
 import { setTeams, TEAMS_RELEASE } from '../teams';
-import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance, type CrewOrder, type Hero } from '../types';
+import { KIND, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance, type CrewOrder, type Hero } from '../types';
 import { tenthPct } from '../../core/math';
 import { BOMBERS, bomberCard, bomberMark, carriesNames, countWord, flownWord, headStart, tourOf } from '../bombers';
 import { VALOUR, awardTitleOf, heroesOf, heroesWaiting, sendWorth, whyNotSend } from '../valour';
@@ -3349,7 +3350,7 @@ function offerCard(o: Offer, r: Region): string {
   // Money the only thing in the way: the card says how much is wanting.
   const short = shortBy(o);
   const why = o.tech ? 'Needs research' : works ?? (!here ? need : o.why && !o.poor ? o.why : short);
-  return `<button class="rcard${o.tech ? ' held' : ''}" ${o.tech ? `data-act="tech" data-id="${o.tech}"` : `data-act="arsenal" data-key="${o.key}" ${ok ? '' : 'disabled'}`} title="${esc(offerLabel(o))}, ${esc(o.size)}: ${esc(o.blurb)}${o.men ? ` Takes ${menWords(o.men)} men from the reserve.` : ''}${keep > 0 ? ` Upkeep ${cash(keep)} a month.` : ''}${why ? ` ${esc(why)}.` : ''}">${offerIcon(o)}<b>${esc(name)}</b><small>${why ? esc(why) : [size, months(o.months)].filter(Boolean).join(' · ')}</small><span class="cost${here && !o.poor && o.why === null ? '' : ' short'}">${money(o.cost)}</span></button>`;
+  return `<button class="rcard${o.tech ? ' held' : ''}" ${o.tech ? `data-act="tech" data-id="${o.tech}"` : `data-act="arsenal" data-key="${o.key}" ${ok ? '' : 'disabled'}`} title="${esc(offerLabel(o))}, ${esc(o.size)}: ${esc(o.blurb)}${o.takes ? ` ${esc(o.takes)}` : o.men ? ` Takes ${menWords(o.men)} men from the reserve.` : ''}${keep > 0 ? ` Upkeep ${cash(keep)} a month.` : ''}${why ? ` ${esc(why)}.` : ''}">${offerIcon(o)}<b>${esc(name)}</b><small>${why ? esc(why) : [size, months(o.months)].filter(Boolean).join(' · ')}</small><span class="cost${here && !o.poor && o.why === null ? '' : ' short'}">${money(o.cost)}</span></button>`;
 }
 
 /** A region's holdings as slots: industry, works, harbour, airfields and air defence. In the grand campaign each slot the player can build on is a button. */
@@ -4151,6 +4152,9 @@ function buildPane(): string {
     : `Your factories pay into the treasury every month. Losses in the field are made good first, at ${perDiv} a division, as fast as the depots can train men: about ${depots}% of the army a month. What is left is yours to spend.`}</p>
     <div class="facts"><div class="fact"><span>In the treasury</span><b${L.treasury < 0 ? ' style="color:var(--red)"' : ''}>${inHand(L.treasury)}</b></div><div class="fact"><span>${L.budget ? 'After upkeep, a month' : 'Each month'}</span><b${L.net < 0 ? ' style="color:var(--red)"' : ''}>${cash(L.net, true)}</b></div><div class="fact"><span>On order</span><b>${n.queue.length}</b></div></div>
     <div class="acts"><button class="btn small" data-act="ledger">Open the ledger</button>${L.budget && hasTraits(me) ? '<button class="btn small" data-act="traits">National abilities</button>' : ''}</div>`;
+  // (A store of rifles that holds back the month's replacements says so: rifles.ts riflesWait, the UI director's line 12.)
+  const wait = riflesWait(g, me);
+  if (wait) out += `<div class="note">${esc(wait)}</div>`;
   if (L.treasury < 0) out += `<div class="note"><b>The treasury is in debt.</b> Nothing new can be ordered and no replacements go out until the books balance. Unpaid troops rest badly and men drift away.</div>`;
   const footing = n.atWar.length ? null : peaceFooting(g, me), fv = footingOf(g, me);
   // (With the nation's footing switched on, its strip stands here in every month: ruling 172. A tip shows in its first month.)
@@ -8153,7 +8157,7 @@ function menGauge(me: string): string {
   const v = manpowerOf(g, me);
   if (!v) return '';
   const spent = v.word === 'Spent', short = v.word === 'Short';
-  const tip = `${v.line} ${menWords(v.classMen)} men come of age each month${v.home < 0.995 ? `, from the ${Math.round(v.home * 100)}% of the homeland you still hold` : ''}. Replacements and every new corps are drawn from the reserve. Click to see the count.`;
+  const tip = `${v.line} ${v.comes ?? `${menWords(v.classMen)} men come of age each month${v.home < 0.995 ? `, from the ${Math.round(v.home * 100)}% of the homeland you still hold` : ''}.`} Replacements and every new corps are drawn from the reserve. Click to see the count.`;
   return `<button class="purse store men${spent ? ' debt' : short ? ' low' : ''}" data-act="ledger" data-part="men" title="${esc(tip)}"><span class="pl">Men</span><b>${menShort(v.men)}</b><i class="${spent || short ? 'down' : 'up'}">${spent ? 'reserve spent' : `+${menShort(v.classMen)} a month`}</i></button>`;
 }
 
@@ -8176,13 +8180,13 @@ function menBlock(nat: string): string {
   if (!v) return '';
   const fill = Math.max(0, Math.min(100, v.share * 100));
   const inf = specOf(g, 'inf')?.divs ?? 3;
-  const months = v.classMen > 0 ? Math.ceil((inf * MEN_PER_DIV) / v.classMen) : 0;
+  const months = v.classMen > 0 ? Math.ceil((inf * v.per) / v.classMen) : 0;
   const home = v.home < 0.995 ? ` You hold ${Math.round(v.home * 100)}% of the homeland, counted by the worth of its provinces, so the class is that much smaller.` : '';
   return `<h3 id="lmen">Men fit to bear arms <span class="inhand">${esc(v.word.toLowerCase())}</span></h3>
       <div class="menbar ${v.word.toLowerCase()}" role="img" aria-label="${Math.round(v.share * 100)}% of the reserve this campaign opened with is still in hand."><i style="width:${fill.toFixed(1)}%"></i><u style="left:${MANPOWER.warn[0] * 100}%"></u><u style="left:${MANPOWER.warn[1] * 100}%"></u></div>
-      <div class="lfacts men sum"><div class="lfact"><span>At the start</span><b>${menShort(v.start * MEN_PER_DIV)}</b></div><div class="lfact"><span>Come of age since</span><b class="pos">+${menShort(v.came)}</b></div><div class="lfact"><span>Called up so far</span><b class="neg">−${menShort(v.drawn)}</b></div><div class="lfact eq"><span>In reserve today</span><b>${menShort(v.men)}</b></div></div>
-      <p class="sub mennow">${v.gap > 0 ? `No class comes of age for ${v.gap === 1 ? 'another month' : `another ${v.gap} months`}: it was called up early.` : `${upFirst(menWords(v.classMen))} men come of age each month.`}</p>${menOrders(nat)}
-      <p class="sub">${esc(v.line)} Think of it as a reservoir behind a dam. Replacements for worn corps and every new corps are drawn off it, and each month's class of young men is the river that refills it.${home} A new infantry corps takes ${menWords(inf * MEN_PER_DIV)} men${months > 1 ? `, about ${months} months of the class` : ''}. With the reserve spent, only the month's class reaches the armies and no new corps can be raised.</p>`;
+      <div class="lfacts men sum"><div class="lfact"><span>At the start</span><b>${menShort(v.start * v.per)}</b></div><div class="lfact"><span>Come of age since</span><b class="pos">+${menShort(v.came)}</b></div><div class="lfact"><span>Called up so far</span><b class="neg">−${menShort(v.drawn)}</b></div><div class="lfact eq"><span>In reserve today</span><b>${menShort(v.men)}</b></div></div>
+      <p class="sub mennow">${v.gap > 0 ? `No class comes of age for ${v.gap === 1 ? 'another month' : `another ${v.gap} months`}: it was called up early.` : v.comes ?? `${upFirst(menWords(v.classMen))} men come of age each month.`}</p>${menOrders(nat)}
+      <p class="sub">${esc(v.line)} Think of it as a reservoir behind a dam. Replacements for worn corps and every new corps are drawn off it, and each month's class of young men is the river that refills it.${home} A new infantry corps takes ${menWords(inf * v.per)} men${months > 1 ? `, about ${months} months of the class` : ''}. With the reserve spent, only the month's class reaches the armies and no new corps can be raised.</p>`;
 }
 
 /** The gauges for a power that keeps stocks; nothing for a small country, which buys what it needs abroad. */

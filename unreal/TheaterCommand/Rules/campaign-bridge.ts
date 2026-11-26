@@ -1025,7 +1025,7 @@ function drawView(step = false) {
         return {
           share: Math.max(0, Math.min(1, m.share)), word: m.word, short: m.word === 'Short' || m.word === 'Spent',
           tip: [m.line, `That is enough for about ${Math.floor(m.divs)} division${Math.floor(m.divs) === 1 ? '' : 's'}.`,
-            `Each month ${words(m.classMen)} more come of age${m.home < 0.995 ? `, from the ${Math.round(m.home * 100)}% of the homeland still in your hands` : ''}.`,
+            m.comes ?? `Each month ${words(m.classMen)} more come of age${m.home < 0.995 ? `, from the ${Math.round(m.home * 100)}% of the homeland still in your hands` : ''}.`,
             `Drawn since the campaign opened: ${words(m.drawn)}.`, 'Every new corps and every replacement comes out of this reserve. When it is spent, nothing new can be raised.', 'Click for the count, and your say over the call-up.'].join('\n'),
         };
       } catch { return null; }
@@ -4769,8 +4769,9 @@ function arsenal(region = -1) {
     offers: arsenalOffers(s, region).map((o) => ({
       key: o.key, group: o.group, label: o.label, blurb: o.blurb, size: o.size, months: o.months, kind: (o as { kind?: string }).kind ?? '',
       cost: shown(o.cost), upkeep: shown(o.upkeep), at: o.at, where: s.regions[o.at]?.name ?? '',
-      // (Version 59: what it takes from the reserve of men, said with its note)
-      note: [o.note, (o as { men?: number }).men ? `Takes ${Math.round((o as { men?: number }).men!).toLocaleString('en-US')} men from the reserve.` : ''].filter(Boolean).join(' '),
+      // (Version 59: what it takes from the reserve of men, said with its note; a nation that keeps a store of rifles says
+      // what it takes in divisions' worth of men and rifles, rifles.ts riflesTakes)
+      note: [o.note, o.takes ?? ((o as { men?: number }).men ? `Takes ${Math.round((o as { men?: number }).men!).toLocaleString('en-US')} men from the reserve.` : '')].filter(Boolean).join(' '),
       // (Versions 65 and 67) where money is the only thing in the way, how far short the treasury is and what it holds
       why: up ? (o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString('en')} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString('en')}.` : o.why) : 'It is not your month.', poor: o.poor,
     })),

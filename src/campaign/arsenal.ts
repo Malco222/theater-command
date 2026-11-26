@@ -13,7 +13,7 @@ import { AIR, AIRWAR, airFleetsOf, airPool, airRange, airWar, airfieldsHold, car
 import { fieldRules, fieldTier, setConcrete } from './fieldstate';
 import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
-import { carved, noRifles as riflesShort, riflesFor as riflesOf } from './rifles';
+import { carved, noRifles as riflesShort, riflesFor as riflesOf, riflesTakes } from './rifles';
 import { govMul } from './government';
 import { settledFor, settledTownsOn, whyNotWorksHere } from './buildings';
 import { BUDGET, PRODUCTION, budgeted, cadreTerms, income, upkeepTotal, cadresOf, canRaise, corpsCost, corpsKinds, corpsList, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
@@ -593,6 +593,8 @@ export interface Offer {
   men?: number;
   /** The rifles it takes from the store, whole rifles (rifles.ts): set for a new corps of a nation that keeps a store. */
   rifles?: number;
+  /** What it takes, in a sentence, for a nation that keeps a store (rifles.ts riflesTakes): said in place of "Takes 45,000 men from the reserve." */
+  takes?: string;
   /** A wing bought abroad: the great power that sells it. */
   from?: string;
 }
@@ -616,7 +618,7 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
   const menFor = (divs: number): { men?: number } => (menRules(g) ? { men: divs * MEN_PER_DIV } : {});
   // And armed from the store of rifles, where the nation keeps one (rifles.ts): a store too short refuses the order.
   const noRifles = (divs: number): string | null => riflesShort(g, nat, divs);
-  const riflesFor = (divs: number): { rifles?: number } => riflesOf(g, nat, divs);
+  const riflesFor = (divs: number): { rifles?: number; takes?: string } => { const t = riflesTakes(g, nat, divs); return t ? { ...riflesOf(g, nat, divs), takes: t } : riflesOf(g, nat, divs); };
   const r = g.regions[sel] as Region | undefined;
   // What the technology tree still holds back (the grand campaign): the order is listed, and says what it waits on.
   const gate = (key: string): { why: string; tech: string } | null => { const t = locked(g, nat, key); return t ? { why: `Needs the technology ${t.name}. Open Research to begin it.`, tech: t.id } : null; };

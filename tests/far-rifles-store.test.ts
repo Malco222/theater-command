@@ -365,7 +365,7 @@ describe('the views', () => {
     expect(text).not.toContain(String(4 * 8300));
     expect(text).not.toContain((4 * 8300).toLocaleString('en-US'));
     expect(Math.round(s.inflow.total)).toBe(8300);
-    expect(s.card).toBe('China arms its new corps from its arsenals, the Burma Road and the Sinkiang road: about 8,300 rifles a month, a new infantry corps about every 8 months.');
+    expect(s.card).toBe('China arms its new corps from its arsenals, the Burma Road and the Sinkiang road: about 8,300 rifles a month, a new infantry corps about every eight months.');
     expect(riflesSeen(g, 'JAP', 'CHN')).toBeNull();
     // (Only the known fields, so no figure of the stock can ride in under another name.)
     expect(Object.keys(s).sort()).toEqual(['card', 'inflow', 'line', 'nat']);

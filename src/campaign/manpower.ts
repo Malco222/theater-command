@@ -20,7 +20,7 @@ import data from '../../data/campaign/manpower.json';
 import { turnToDate } from '../core/ticket';
 import { MEN_PER_DIV, type Corps, type Game } from './types';
 import { farShare } from './economy';
-import { binds, levelOf } from './rifles';
+import { binds, inWords, levelOf } from './rifles';
 
 export const MANPOWER = data as unknown as {
   /** The reserve a great power opens a campaign of September 1939 with, in divisions' worth. */
@@ -42,6 +42,8 @@ export const MANPOWER = data as unknown as {
   early: { months: number; gap: number };
   /** Folding two worn corps into one: see the note in the data. */
   fold: { worn: number; org: number; price: number; xp: number };
+  /** Men to one of the nation's divisions' worth, for its sentences, where the rows lay a scale of its own (the far side's China, data/campaign/far-arms.json '_scale'); any other nation's men are MEN_PER_DIV a division's worth. */
+  scale?: Record<string, number>;
 };
 
 const KP: Record<string, string> = {}, KX: Record<string, string> = {}, KL: Record<string, string> = {}, KS: Record<string, string> = {};
@@ -242,10 +244,49 @@ export interface MenView {
   word: string;
   /** How it stands, in a sentence. */
   line: string;
+  /** Men to one of the nation's divisions' worth, as the men above are counted: its own scale, else MEN_PER_DIV. */
+  per: number;
+  /** The month's class in a sentence, for a nation with a scale of its own (comesWords); null for any other, whose pages say it as before. */
+  comes: string | null;
 }
 
 // (1.5.2, playtest #48: under a thousand men the figure is given whole, so a small nation's 235 a month never reads as 0.)
 const round = (men: number): number => (men >= 100000 ? Math.round(men / 10000) * 10000 : men >= 1000 ? Math.round(men / 1000) * 1000 : Math.round(men));
+
+/** The nation's own scale, men to one of its divisions' worth, where the rows lay one; else null. */
+export function menScale(nat: string): number | null {
+  const x = MANPOWER.scale?.[nat];
+  return typeof x === 'number' && Number.isFinite(x) && x > 0 ? x : null;
+}
+
+/** Men to one of the nation's divisions' worth, for what it is shown: its own scale, else MEN_PER_DIV. */
+export const menPer = (nat: string): number => menScale(nat) ?? MEN_PER_DIV;
+
+/** Men to the hundred, for a nation with a scale of its own (the UI director: men and rifles to the hundred everywhere). */
+const men100 = (men: number): string => (Math.round(Math.max(0, men) / 100) * 100).toLocaleString('en-US');
+
+/**
+ * The reserve in a sentence, for a nation with a scale of its own (the UI director's line 14 of 25 November 2026:
+ * "About 500,000 men stand in reserve: about seven divisions' worth."; the men shown rounded, not the scale), or null
+ * for any other, whose line stays as it was.
+ */
+export function reserveWords(nat: string, divs: number): string | null {
+  const per = menScale(nat);
+  if (per === null) return null;
+  const d = Math.round(Math.max(0, divs));
+  return `About ${men100(divs * per)} men stand in reserve: about ${inWords(d)} ${d === 1 ? "division's" : "divisions'"} worth.`;
+}
+
+/**
+ * The month's class in a sentence, for a nation with a scale of its own (the UI director's line 15 of 25 November
+ * 2026: "About 105,000 men come of age each month in the land you still hold."; where a page shows the class before
+ * the share of the homeland held, 'whole', "with all your homeland held"), or null for any other.
+ */
+export function comesWords(nat: string, cls: number, whole = false): string | null {
+  const per = menScale(nat);
+  if (per === null) return null;
+  return `About ${men100(cls * per)} men come of age each month ${whole ? 'with all your homeland held' : 'in the land you still hold'}.`;
+}
 
 /** Men, in words: "1.2 million", "340,000". */
 export function menWords(men: number): string {
@@ -271,11 +312,13 @@ export function manpower(g: Game, nat: string | null = g.human, callUp = 1): Men
   const level = menLevel(g, nat);
   const months = cls > 0 ? Math.ceil(3 / cls) : 0;
   const gap = Math.max(0, classGapUntil(g, nat) - g.turn), drawnDivs = g.flags[kx(nat)] ?? 0;
-  const line = level === 3 ? `The reserve is spent. Only the ${menWords(cls * MEN_PER_DIV)} men who come of age each month reach the armies, and no new corps can be raised${months ? `: a new infantry corps is about ${months === 1 ? 'a month' : `${months} months`} of them` : ''}.`
-    : level === 2 ? `The reserve is running short: ${menWords(divs * MEN_PER_DIV)} men are left. Every loss made good and every new corps is taken from it.`
-    : level === 1 ? `The reserve is thinning: ${menWords(divs * MEN_PER_DIV)} men are left of ${menWords(start * MEN_PER_DIV)}.`
-    : `${menWords(divs * MEN_PER_DIV)} men stand in reserve.`;
-  return { nat, divs, men: Math.round(divs * MEN_PER_DIV), start, share: start > 0 ? divs / start : 0, classMen: Math.round(cls * MEN_PER_DIV), home, drawn: Math.round(drawnDivs * MEN_PER_DIV), came: Math.round(Math.max(0, divs - start + drawnDivs) * MEN_PER_DIV), gap, word: WORDS[level], line };
+  // (Men at the nation's own scale where the rows lay one, China's; every other nation's at MEN_PER_DIV, as before.)
+  const per = menPer(nat);
+  const line = level === 3 ? `The reserve is spent. Only the ${menWords(cls * per)} men who come of age each month reach the armies, and no new corps can be raised${months ? `: a new infantry corps is about ${months === 1 ? 'a month' : `${months} months`} of them` : ''}.`
+    : level === 2 ? `The reserve is running short: ${menWords(divs * per)} men are left. Every loss made good and every new corps is taken from it.`
+    : level === 1 ? `The reserve is thinning: ${menWords(divs * per)} men are left of ${menWords(start * per)}.`
+    : reserveWords(nat, divs) ?? `${menWords(divs * per)} men stand in reserve.`;
+  return { nat, divs, men: Math.round(divs * per), start, share: start > 0 ? divs / start : 0, classMen: Math.round(cls * per), home, drawn: Math.round(drawnDivs * per), came: Math.round(Math.max(0, divs - start + drawnDivs) * per), gap, word: WORDS[level], line, per, comes: comesWords(nat, cls) };
 }
 
 /**

@@ -243,14 +243,15 @@ describe('the draw at the orders', () => {
     expect(inflow).toBeCloseTo(8300, -2);
     expect(months).toBe(6);
     const hundred = (Math.round(inflow / 100) * 100).toLocaleString('en-US');
-    expect(offer('corps:inf').why).toBe(`Not rifles enough: this corps takes 64,000 and 21,000 are in store. ${hundred} come in each month, so it can be ordered in ${months} months.`);
+    // (The UI director's line 9: the rifles to the hundred, the months in words.)
+    expect(offer('corps:inf').why).toBe(`Not enough rifles: this corps takes 63,900 and 21,000 are in store. ${hundred} come in each month, so it can be ordered in six months.`);
     expect(noRifles(g, 'CHN', 3)).toBe(offer('corps:inf').why);
-    // Every road and works stopped: the clause after "store." is gone.
+    // Every road and works stopped: it closes with the way out.
     const kept = RIFLES.roads.splice(0);
     undo.push(() => { RIFLES.roads.splice(0, RIFLES.roads.length, ...kept); });
     for (const place of ['Chungking', 'Changteh', 'Kweiyang']) g.byName[place].ctrl = 'JAP';
     expect(riflesView(g, 'CHN')!.inflow.total).toBe(0);
-    expect(offer('corps:inf').why).toBe('Not rifles enough: this corps takes 64,000 and 21,000 are in store.');
+    expect(offer('corps:inf').why).toBe('Not enough rifles: this corps takes 63,900 and 21,000 are in store. No rifles are coming in: it can be ordered only once a road runs again or an arsenal is back in your hands.');
     // A cadre waiting (2 divisions): its offer says the same, for its own divisions, and carries its rifles whole.
     const capName = g.regions[n.capital].name;
     const ka = addCorps(g, 'CHN', 'Kept corps', 'inf', 2, capName, {}), kc = addCorps(g, 'CHN', 'Folded corps', 'inf', 2, capName, {});
@@ -260,7 +261,7 @@ describe('the draw at the orders', () => {
     expect(foldCorps(g, ka, kc)).toBe(true);
     expect(offer(`cadre:${kc.id}`).rifles).toBe(2 * PER);
     expect(offer(`cadre:${kc.id}`).why).toBe(noRifles(g, 'CHN', 2));
-    expect(offer(`cadre:${kc.id}`).why).toBe('Not rifles enough: this corps takes 43,000 and 21,000 are in store.');
+    expect(offer(`cadre:${kc.id}`).why).toBe('Not enough rifles: this corps takes 42,600 and 21,000 are in store. No rifles are coming in: it can be ordered only once a road runs again or an arsenal is back in your hands.');
     // A store that holds the corps: no refusal.
     store(g, 3);
     expect(offer('corps:inf').why).toBeNull();
@@ -367,7 +368,7 @@ describe('the carve', () => {
     // Short of the elite's rifles, its offer says so in the store's words.
     store(g, u.divs - 0.01, 'UK');
     expect(offers(g, 'UK', g.nations.UK.capital).find((o) => o.key === 'elite')!.why).toBe(noRifles(g, 'UK', u.divs));
-    expect(noRifles(g, 'UK', u.divs)).toMatch(/^Not rifles enough/);
+    expect(noRifles(g, 'UK', u.divs)).toMatch(/^Not enough rifles/);
     store(g, 10, 'UK');
     // The order's money test reads the carved price: a treasury of exactly it is enough.
     expect(elite).toBeLessThan(u.cost);

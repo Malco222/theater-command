@@ -280,26 +280,46 @@ export function carved(g: Game, nat: string, list: number, divs: number): number
 
 // ---- The offer (stage B2) ---------------------------------------------------------------------------------------------
 
-/**
- * The rifles an order of this many divisions takes, for the offer a page reads: set only where the nation carries.
- * Words to the UI director, not wired (the offer's note is made in campaign-bridge.ts for the 3D game and in ui/main.ts
- * for the page, from Offer.men): "Takes 3 divisions' worth of men and 64,000 rifles." in place of "Takes 45,000 men
- * from the reserve.", the rifles to the thousand.
- */
+/** The rifles an order of this many divisions takes, for the offer a page reads: set only where the nation carries. */
 export const riflesFor = (g: Game, nat: string, divs: number): { rifles?: number } => (carries(g, nat) ? { rifles: Math.round(divs * riflesRow(g, nat)!.perDiv) } : {});
 
 /**
- * Why the store refuses an order of this many divisions, or null where it does not. Words to the UI director (the
- * form's section 7): "Not rifles enough: this corps takes 64,000 and 21,000 are in store. 8,300 come in each month, so
- * it can be ordered in 6 months." The corps' rifles to the thousand, the store and the inflow to the hundred, the
- * months from the live inflow; with nothing coming in, the clause after "store." is left out (words owed).
+ * The order's note for a nation that keeps a store, or null for any other (whose note stays "Takes 45,000 men from the
+ * reserve."): the UI director's line 8 of 25 November 2026, "Takes three divisions' worth of men and 64,000 rifles.",
+ * the men in divisions' worth (her line 16) and the rifles to the hundred, so a cost and the store add up (a mountain
+ * corps exact: 42,600). Spoken by the offer (arsenal.ts Offer.takes), on the page (ui/main.ts) and on the 3D game's
+ * card (campaign-bridge.ts).
+ */
+export function riflesTakes(g: Game, nat: string, divs: number): string | null {
+  if (!carries(g, nat)) return null;
+  return `Takes ${inWords(divs)} ${divs === 1 ? "division's" : "divisions'"} worth of men and ${n100(divs * riflesRow(g, nat)!.perDiv)} rifles.`;
+}
+
+/**
+ * Why the store refuses an order of this many divisions, or null where it does not. The UI director's line 9 of 25
+ * November 2026: "Not enough rifles: this corps takes 64,000 and 21,000 are in store. 8,300 come in each month, so it
+ * can be ordered in six months." The rifles to the hundred, the months from the live inflow, in words from one to ten.
+ * With nothing coming in (an inflow that reads 0 to the hundred), it closes with the way out: "No rifles are coming
+ * in: it can be ordered only once a road runs again or an arsenal is back in your hands."
  */
 export function noRifles(g: Game, nat: string, divs: number): string | null {
   if (canArm(g, nat, divs)) return null;
   const per = riflesRow(g, nat)!.perDiv, need = divs * per, stock = stockOf(g, nat, 'rifles') * per, inflow = inflowOf(g, nat).total;
-  const months = inflow > 0 ? Math.ceil((need - stock) / inflow) : 0;
-  const when = inflow > 0 ? ` ${n100(inflow)} come in each month, so it can be ordered in ${months} month${months === 1 ? '' : 's'}.` : '';
-  return `Not rifles enough: this corps takes ${n0(Math.round(need / 1000) * 1000)} and ${n100(stock)} are in store.${when}`;
+  const comes = Math.round(inflow / 100) > 0, months = comes ? Math.ceil((need - stock) / inflow) : 0;
+  const when = comes ? ` ${n100(inflow)} come in each month, so it can be ordered in ${inWords(months)} month${months === 1 ? '' : 's'}.` : ' No rifles are coming in: it can be ordered only once a road runs again or an arsenal is back in your hands.';
+  return `Not enough rifles: this corps takes ${n100(need)} and ${n100(stock)} are in store.${when}`;
+}
+
+/**
+ * The arsenal page's line while the month's replacements are held back by an empty store, or null: the UI director's
+ * line 12 of 25 November 2026 ("a line, not silence: corps that do not fill look like a fault"). Said for a nation
+ * whose store binds, while the store reads 0 to the hundred and a corps that its foot replacements would arm stands
+ * below its armed level.
+ */
+export function riflesWait(g: Game, nat: string): string | null {
+  if (!binds(g, nat) || Math.round((stockOf(g, nat, 'rifles') * riflesRow(g, nat)!.perDiv) / 100) > 0) return null;
+  const waits = g.corps.some((c) => c.nat === nat && !c.dead && isFoot(g, c) && c.str < levelOf(g, c) - 1e-9);
+  return waits ? "No rifles for this month's replacements: your corps wait for the store to fill." : null;
 }
 
 // ---- What a seller's own arming asks ----------------------------------------------------------------------------------
@@ -415,6 +435,9 @@ export const roadsNow = (g: Game, nat: string): RoadNow[] => rifleRoads(g, nat).
 const n0 = (x: number): string => Math.round(x).toLocaleString('en-US');
 /** Rifles rounded to the hundred, as a figure for a sentence. */
 const n100 = (x: number): string => n0(Math.round(x / 100) * 100);
+const SMALL = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+/** A count for a sentence, by the UI director's rule of 25 November 2026: one to ten in words, any other in figures. */
+export const inWords = (x: number): string => (Number.isInteger(x) && x >= 1 && x <= 10 ? SMALL[x - 1] : n0(x));
 
 /**
  * The month's rifles for a nation, once a month (a second call adds nothing), from game.ts startPhase beside the oil
@@ -508,7 +531,8 @@ function fallWords(g: Game, road: RoadRow): string {
  * 5,000 fewer rifles reach your store each month."), figures from the data.
  */
 function cutWords(g: Game, road: RoadRow, now: RoadNow, wasDry = false): string {
-  const why = now.by === 'place' ? `${nameOf(g, now.who!, true)} holds ${now.at}.` : now.why;
+  // (The UI director's line 4: a cut by the seller's war is told to the receiver's own seat as "you are at war with".)
+  const why = now.by === 'place' ? `${nameOf(g, now.who!, true)} holds ${now.at}.` : now.by === 'seller' ? `you are at war with ${nameOf(g, now.who!)}, which sold you its rifles.` : now.why;
   // (A road that was running dry brought nothing, so nothing is counted lost.)
   const lost = now.full > 0 && !wasDry ? ` ${n100(now.full)} fewer rifles reach your store each month.` : ' It carried no rifles to your store.';
   return `${cap(road.name)} is cut: ${why}${lost}`;
@@ -566,8 +590,8 @@ export function riflesView(g: Game, nat: string): RiflesView | null {
   // Words to the UI director (the form's section 7): "Rifles in store ■■■□□□□□□□ 21,000 of the 64,000 an infantry
   // corps takes · +9,500 a month: Chungking's arsenals 4,500 · the Burma Road 5,000".
   const line = `Rifles in store ${bar} ${n100(stock)} of the ${n0(Math.round(corps / 1000) * 1000)} an infantry corps takes · +${n100(inflow.total)} a month${parts.length ? `: ${parts.map((p) => `${p.label} ${n100(p.rifles)}`).join(' · ')}` : ''}`;
-  // Words to the UI director (the form's section 7): the arsenal page.
-  const says = 'Your new corps and your drafts are armed from this store. It fills from your arsenals and from the roads you still hold.';
+  // The UI director's line 2: the arsenal page ("replacements", the game's one word).
+  const says = 'Your new corps and your replacements are armed from this store. It fills from your arsenals and from the roads you still hold.';
   return { nat, perDiv: per, refit: num(row.refit), binds: row.binds !== false, stock, inflow, picture: { bar, stock, corps, total: inflow.total, parts, line }, says };
 }
 
@@ -597,7 +621,8 @@ export function riflesSeen(g: Game, nat: string, by: string | null): RiflesSeen 
   const from = ['its arsenals', ...roads.map((r) => r.name)];
   const list = from.length === 1 ? from[0] : `${from.slice(0, -1).join(', ')} and ${from[from.length - 1]}`;
   const every = inflow.total > 0 && corps > 0 ? Math.round(corps / inflow.total) : 0;
-  const card = `${who} arms its new corps from ${list}: about ${n100(inflow.total)} rifles a month${every > 0 ? `, a new infantry corps about every ${every} month${every === 1 ? '' : 's'}` : ''}.`;
+  // (The UI director's line 7: "about every eight months", the months in words from one to ten.)
+  const card = `${who} arms its new corps from ${list}: about ${n100(inflow.total)} rifles a month${every > 0 ? `, a new infantry corps about every ${every === 1 ? 'month' : `${inWords(every)} months`}` : ''}.`;
   void by;
   return { nat, inflow, line, card };
 }
