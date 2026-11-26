@@ -407,6 +407,13 @@ public:
 	 */
 	FString GetSubScene() const;
 	void SetSubScene(const FString& Setting);
+	/**
+	 * (Release 2, teamfire.ts) The Battle rules card's rows the campaign's battle card must follow. Every infantry force's
+	 * own teams are on the field only with the rows `teams` and `facing` both on (FLandLive::RuleNow), and the card prices
+	 * them only then (TC.teamFire): told to the rules after every start and every load, and here when a row is clicked
+	 * with a war running. Off, the rules delete their key, so the saved war is the one it always was.
+	 */
+	void SyncBattleRules();
 	/** TC.subScene(mark, view) asked on the rules' thread beside the war (it reads the war and changes nothing in it): not
 	 * an order, so IsAnswering stays false and the table takes its keys and orders meanwhile; anything else asked of the
 	 * rules waits for it first (Settle). Then, run on the game thread by Deliver, is given the mark to count from next
@@ -458,6 +465,8 @@ private:
 	bool bLessonPageOpen = false;
 	/** (D1) TC.subSceneOn as the viewer's setting says (GetSubScene), on the rules as they stand, war or none. */
 	void TellSubScene();
+	/** (Release 2) TC.teamFire as the Battle rules card stands, on the war the rules hold: see SyncBattleRules. */
+	void TellBattleRules();
 	/** The setting's file, and the setting as read (empty until GetSubScene first reads it). */
 	static FString SubSceneFile();
 	mutable FString SubScene;

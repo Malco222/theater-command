@@ -20423,9 +20423,14 @@ namespace
 				[
 					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(6.0f, 4.0f)).IsFocusable(false)
 					.ToolTipText(FText::FromString(Rule.Tip))
-					.OnClicked_Lambda([Index]()
+					.OnClicked_Lambda([this, Index]()
 					{
 						FLandLive::FlipRule(Index);
+						// (release 2, teamfire.ts: the campaign's battle card follows the rows `teams` and `facing` at once)
+						if (FCampaignSession* Rules = Controller.IsValid() ? Controller->GetSession() : nullptr)
+						{
+							Rules->SyncBattleRules();
+						}
 						return FReply::Handled();
 					})
 					[

@@ -1,5 +1,6 @@
 #include "Campaign/CampaignSession.h"
 
+#include "Battle/LandLive.h"
 #include "Campaign/CampaignMapData.h"
 #include "Campaign/TheaterSpeed.h"
 #include "Release2Ship.h"
@@ -432,6 +433,7 @@ bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& Vi
 		return false;
 	}
 	ShipWarSwitches(*Host, ViewJson);
+	TellBattleRules(); // (release 2: the battle card follows the Battle rules card from the war's first month)
 	// (Speed: the same call takes about 0.25 to 0.6 s in a fast JavaScript engine on a laptop, and two or three times
 	// that where the engine cannot compile the rules as it runs them. This line says which the game has.)
 	UE_LOG(LogTheater, Display, TEXT("Rules: the campaign was set up in %.0f ms (%d characters of picture)"), (FPlatformTime::Seconds() - Began) * 1000.0, ViewJson.Len());
@@ -497,6 +499,7 @@ bool FCampaignSession::Load(const FString& SaveText)
 	if (bRead)
 	{
 		ShipWarSwitches(*Host, Json);
+		TellBattleRules(); // (release 2: a war read in follows the Battle rules card as it stands now, not as it stood when saved)
 	}
 	if (!bRead || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
 	{
@@ -6048,6 +6051,37 @@ void FCampaignSession::SetSubScene(const FString& Setting)
 	FFileHelper::SaveStringToFile(FString::Printf(TEXT("{\"view\":\"%s\"}\n"), *Word), *SubSceneFile(), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 	Settle(); // (an order still being answered is answered first: the rules are told on this thread)
 	TellSubScene();
+}
+
+void FCampaignSession::SyncBattleRules()
+{
+	if (!bRunning || !Host.IsValid())
+	{
+		return; // (no war in hand: the next start or load tells the rules)
+	}
+	Settle(); // (an order still being answered is answered first: the rules are told on this thread)
+	TellBattleRules();
+	RulesMemo.Reset(); // (a battle card asked before the click was priced as the rows stood then)
+}
+
+void FCampaignSession::TellBattleRules()
+{
+	if (!Host.IsValid())
+	{
+		return;
+	}
+	// (the field brings every infantry force its own teams only with both rows on, so the card prices them only then)
+	const bool bOn = FLandLive::RuleNow(TEXT("teams")) && FLandLive::RuleNow(TEXT("facing"));
+	FString Json, Error;
+	if (!Host->Call(TEXT("teamFire"), bOn ? TEXT("[true]") : TEXT("[false]"), Json, Error))
+	{
+		UE_LOG(LogTheater, Display, TEXT("Battle rules card: these rules do not price support teams on the battle card (%s)"), *Error); // (the stand-in rules, or rules before it)
+		return;
+	}
+	if (bOn)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Battle rules card: support teams are priced on the battle card (teams and facing both on)"));
+	}
 }
 
 void FCampaignSession::TellSubScene()

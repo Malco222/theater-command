@@ -43,6 +43,7 @@
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
 import { setTeams, teamsOn, TEAMS_RELEASE } from '../../../src/campaign/teams';
+import { setTeamFire, teamFireOn } from '../../../src/campaign/teamfire';
 import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, ensureSupply, fieldArmy, frontage, hostileUnits, keepSupply, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoTrain, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
@@ -8897,6 +8898,12 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, scrambleCall
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fleetWhy = (on: boolean) => { const s = game(); setFleetWhy(s, !!on); return { on: fleetWhyOn(s) }; };
 // (Release 2, teams.ts) Machine-gun and mortar brigades: TC.supportTeams(on) at any time; the options page uses act('teamsrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).supportTeams = (on: boolean) => { const s = game(); setTeams(s, !!on); return { on: teamsOn(s) }; };
+// (Release 2, teamfire.ts) Every infantry force's own teams on the battle card: TC.teamFire(on). The 3D game tells it as its
+// Battle rules card stands (the rows `teams` and `facing` both on) when a war opens, when one is read in and when a row is
+// clicked (FCampaignSession::SyncBattleRules), so the card prices the teams exactly when the field brings them. Its own key,
+// never the brigades' above. Silent: no note and no picture; off deletes the key, so a war played with either row off is
+// saved as it always was.
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).teamFire = (on: boolean) => { const s = game(); setTeamFire(s, !!on); return { on: teamFireOn(s) }; };
 // (Release 2, taskforce.ts) Task forces: TC.taskForce(on) at any time; the options page uses act('taskforcerule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).taskForce = (on: boolean) => { const s = game(); setTaskForce(s, !!on); return { on: taskForceOn(s) }; };
 // (Release 2, breakup.ts) Breaking corps up: TC.breakUp(on) at any time; the options page uses act('breakuprule:on' / ':off').
