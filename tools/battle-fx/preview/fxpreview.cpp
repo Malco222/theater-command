@@ -2209,12 +2209,13 @@ namespace
 	}
 
 	/** The sea's dramatic moments of release 2 (deck...): "drench", a 16-inch column 8 m off a battleship's starboard side
-	 * and its head falling across her deck (SeaSplash, DeckDrench); "wash", runoff over her starboard edge as she rolls
+	 * and its head falling across her deck (SeaSplash, DeckDrench; FX_MPS m/s under way, 0, the column then laid as far
+	 * ahead as she steams in 7 s); "wash", runoff over her starboard edge as she rolls
 	 * and turns (ShipRide, DeckWash; FX_KIND=awash: the sea over her low edge, listed FX_LIST degrees, 12); "lane", a
 	 * holed ship's oil lane after FX_SINCE s (300) at 10 m/s, seen from FX_EYE_H m (120) up astern (OilLeak, OilLane: the
 	 * kit draws nothing, so the strip is laid here as the sea scene's patch lays it, in the slicks' paint); "brass", a twin
 	 * 40 mm on her deck firing FX_RUN s (40), seen from FX_DIST m (9) (AirGunShip, AirGun, the deck's brass; listed
-	 * FX_LIST degrees, 3, with a FX_COAMING m coaming, 0.3); "haze", FX_FLEET ships (6) 450 m apart firing every light and
+	 * FX_LIST degrees, 3, with a FX_COAMING m coaming, 0.3); "haze", FX_FLEET ships (6, up to 24) 450 m apart firing every light and
 	 * heavy AA gun for FX_RUN s (40), seen from FX_DIST m (700) off: lay battle-fx-sea-haze.json over the recipe for the
 	 * haze. Any shot: FX_EYE=x,y,z and FX_AT=x,y,z put the eye and where it looks in her frame (X to her bow, Y to port,
 	 * Z up from her waterline; the haze's middle ship). */
@@ -2247,6 +2248,7 @@ namespace
 			P.Long = 250.0;
 			P.HalfBeam = 16.5;
 			P.Coaming = Kind == "brass" ? EnvNum("FX_COAMING", 0.3) : 0.0;
+			P.Deck = 8.0; // (her deck, as drawn below: the deck's brass lies on it)
 			return P;
 		};
 		auto ToWorld = [](const Battle::ShipPose& P, const Vec& L) { return P.At + P.Fore * L.X + P.Left * L.Y + P.Up * L.Z; };
@@ -2317,13 +2319,20 @@ namespace
 		};
 		// (the fleet of the haze shot: six ships 450 m apart along +X, steaming at 10 m/s; four twin 40 mm a side and four
 		// 5-inch mounts each, firing up at a raid passing over)
-		const int Fleet = Kind == "haze" ? std::clamp(static_cast<int>(EnvNum("FX_FLEET", 6.0)), 1, 6) : 1;
+		const int Fleet = Kind == "haze" ? std::clamp(static_cast<int>(EnvNum("FX_FLEET", 6.0)), 1, 24) : 1;
 		const double RunS = EnvNum("FX_RUN", 40.0);
 		auto FleetPose = [&](int S, double T) { Battle::ShipPose P = Pose(T, Vec(450.0 * S, 0.0, 0.0)); return P; };
-		const Vec Breech(-20.0, -8.0, 12.5);
-		const Vec Column(0.0, -(16.5 + 8.0), 0.0);
+		// (the twin 40 mm on her starboard side, abaft her works and clear of them, its breech 2 m over her deck)
+		const Vec Breech(-45.0, -12.0, 10.0);
+		// (the 16-inch's column 8 m off her starboard side; with her under way (FX_MPS), as far ahead as she steams in the
+		// 6 s its head takes to come down, so it lands amidships)
+		const Vec Column(Mps * 7.0, -(16.5 + 8.0), 0.0);
 		bool bDrenched = false, bWashed = false;
-		double NextHeavy[6] = { 0.0, 0.7, 1.3, 2.1, 2.9, 3.4 };
+		std::vector<double> NextHeavy;
+		for (int S = 0; S < Fleet; ++S)
+		{
+			NextHeavy.push_back(std::fmod(0.7 * S, 4.0));
+		}
 		auto Play = [&](double T)
 		{
 			for (int S = 0; S < Fleet; ++S)
@@ -2334,7 +2343,7 @@ namespace
 			{
 				bDrenched = true;
 				Fx.SeaSplash(1.0, Column, 406.0, "");
-				Fx.DeckDrench(1.0, Column, 406.0, Vec(0.0, 8.0, 0.0), 8.0, 1);
+				Fx.DeckDrench(1.0, Column, 406.0, Vec(0.0, 8.0, 0.0), 8.0, 1, 33.0);
 			}
 			if (Kind == "wash" && !bWashed)
 			{
@@ -2371,14 +2380,14 @@ namespace
 					}
 					if (Kind == "haze")
 					{
-						while (NextHeavy[S] <= T)
+						while (NextHeavy[static_cast<size_t>(S)] <= T)
 						{
 							for (int M = 0; M < 4; ++M)
 							{
 								const double Side = M % 2 == 0 ? -1.0 : 1.0;
-								Fx.Muzzle(NextHeavy[S], ToWorld(Q, Vec(-10.0 + 20.0 * (M / 2), 11.0 * Side, 14.0)), (Q.Left * (0.5 * Side) + Vec(0.0, 0.0, 0.85)).Unit(), "ship_aa", "water");
+								Fx.Muzzle(NextHeavy[static_cast<size_t>(S)], ToWorld(Q, Vec(-10.0 + 20.0 * (M / 2), 11.0 * Side, 14.0)), (Q.Left * (0.5 * Side) + Vec(0.0, 0.0, 0.85)).Unit(), "ship_aa", "water");
 							}
-							NextHeavy[S] += 4.0;
+							NextHeavy[static_cast<size_t>(S)] += 4.0;
 						}
 					}
 				}
@@ -2420,7 +2429,7 @@ namespace
 			else if (Kind == "brass")
 			{
 				const double D = EnvNum("FX_DIST", 9.0);
-				LookFromTo(ToWorld(P, Breech + Vec(-0.9 * D, -0.25 * D, 0.35 * D - 4.5)), ToWorld(P, Breech + Vec(-1.0, -4.0, -4.5)));
+				LookFromTo(ToWorld(P, Breech + Vec(-0.9 * D, -0.25 * D, 0.35 * D - 2.0)), ToWorld(P, Breech + Vec(-1.0, -1.5, -2.0)));
 			}
 			else
 			{
@@ -2464,29 +2473,40 @@ namespace
 			if (Kind == "brass")
 			{
 				const Battle::ShipPose P = Pose(Now, Vec());
-				HullBox(C, Cam, P, Breech + Vec(-1.6, -1.6, -4.5), Breech + Vec(1.6, 1.6, -3.4), Works); // (its tub)
-				HullBox(C, Cam, P, Breech + Vec(-0.6, -0.5, -3.4), Breech + Vec(1.2, 0.8, 0.2), Works);
+				// (its tub: a low ring of plate round it, open inside, so what lies on her deck there is seen; and the gun)
+				HullBox(C, Cam, P, Breech + Vec(-1.6, -1.6, -2.0), Breech + Vec(1.6, -1.5, -1.1), Works);
+				HullBox(C, Cam, P, Breech + Vec(-1.6, 1.5, -2.0), Breech + Vec(1.6, 1.6, -1.1), Works);
+				HullBox(C, Cam, P, Breech + Vec(1.5, -1.6, -2.0), Breech + Vec(1.6, 1.6, -1.1), Works);
+				HullBox(C, Cam, P, Breech + Vec(-0.4, -0.3, -2.0), Breech + Vec(0.9, 0.6, 0.2), Works);
 			}
 			if (Kind == "lane")
 			{
-				// (the strip, as the sea scene's patch 04 lays it: five across, the slicks' paint, a hand's breadth up)
+				// (the strip, as the sea scene's patch 04 lays it: five across, a brown-black film written to land about
+				// 28,25,20 in its middle (game_curve), browner toward its ragged edges, its sheen a dull lighter band (toward
+				// 96,92,84, landing about 78,78,68), never more black; no narrower on the screen than 1.5 pixels, a lane under
+				// that widened to it and as much fainter, so a far lane fades and never breaks into dashes; a hand's breadth up)
 				std::vector<Battle::LanePoint> Strip;
 				const int Got = Fx.OilLane(Now, 1, Strip);
-				static const unsigned char Paints[5][3] = { { 58, 50, 38 }, { 20, 17, 13 }, { 12, 11, 10 }, { 20, 17, 13 }, { 58, 50, 38 } };
+				static const unsigned char Paints[5][3] = { { 66, 62, 56 }, { 66, 62, 56 }, { 59, 56, 50 }, { 66, 62, 56 }, { 66, 62, 56 } };
+				static const unsigned char SheenPaint[3] = { 96, 92, 84 };
 				std::vector<std::array<unsigned char, 4>> Cols;
 				std::vector<Vec> Pts;
 				for (int K = 0; K < Got; ++K)
 				{
 					const Battle::LanePoint& L = Strip[static_cast<size_t>(K)];
-					const Vec Left = L.At + L.Across * L.Left, Right = L.At - L.Across * L.Right;
+					const double Off = std::max((L.At - Cam.Eye).Length(), 1.0);
+					const double Wide = (L.Left + L.Right) * Cam.Ppr / Off;
+					const double Floor = Wide < 1.5 ? 1.5 / std::max(Wide, 1e-3) : 1.0;
+					const Vec Left = L.At + L.Across * (L.Left * Floor), Right = L.At - L.Across * (L.Right * Floor);
 					const Vec Across[5] = { Left, L.At + (Left - L.At) * 0.55, L.At, L.At + (Right - L.At) * 0.55, Right };
-					const double Alphas[5] = { 0.0, L.Dark * 0.85, L.Dark, L.Dark * 0.85, 0.0 };
+					const double Dark = L.Dark / Floor;
+					const double Alphas[5] = { 0.0, Dark * 0.85, Dark, Dark * 0.85, 0.0 };
 					for (int A = 0; A < 5; ++A)
 					{
 						std::array<unsigned char, 4> Px;
 						for (int Ch = 0; Ch < 3; ++Ch)
 						{
-							Px[static_cast<size_t>(Ch)] = static_cast<unsigned char>(Paints[A][Ch] + (Paints[0][Ch] - Paints[A][Ch]) * L.Sheen);
+							Px[static_cast<size_t>(Ch)] = static_cast<unsigned char>(Paints[A][Ch] + (SheenPaint[Ch] - Paints[A][Ch]) * L.Sheen + 0.5);
 						}
 						Px[3] = static_cast<unsigned char>(std::clamp(Alphas[A], 0.0, 1.0) * 255.0 + 0.5);
 						Cols.push_back(Px);
