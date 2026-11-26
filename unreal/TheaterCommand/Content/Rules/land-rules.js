@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of cc813b9dc 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 4558ca549 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -2194,9 +2194,12 @@
     if (u.order?.kind === "withdraw" || u.waits && !u.waits.free) return;
     const K = LAND.snipers.keep, dir = side === "att" ? 1 : -1, near = foes.filter((f) => f.kind !== "fort" && b.gap(u, f) < K);
     if (u.slipTo !== void 0) {
-      if (u.order) return;
+      if (u.order || u.slipAt) return;
       const spot2 = b.slipSpot(u);
-      if (spot2) b.command({ do: "move", units: [u.id], x: spot2[0], y: spot2[1] }, side);
+      if (spot2) {
+        u.slipAt = spot2;
+        b.command({ do: "move", units: [u.id], x: spot2[0], y: spot2[1] }, side);
+      }
       return;
     }
     if (near.length) {
@@ -10762,9 +10765,12 @@
         u.aim = t.id;
       };
       if (u.slipTo !== void 0) {
-        if (u.order) return;
+        if (u.order || u.slipAt) return;
         const spot2 = this.slipSpot(u);
-        if (spot2) go(spot2[0], spot2[1]);
+        if (spot2) {
+          u.slipAt = spot2;
+          go(spot2[0], spot2[1]);
+        }
         return;
       }
       const K = LAND.snipers.keep, dir = u.side === "att" ? 1 : -1;
@@ -10793,6 +10799,7 @@
       this.send(u, { kind: "withdraw", x: u.x, y: u.side === "att" ? 0 : this.field.h });
       u.engaged = void 0;
       delete u.slipTo;
+      delete u.slipAt;
       delete u.search;
       delete u.searchR;
       if (this.ticket[u.side].human) this.say({ what: "land:snipersBack", unit: u.id, side: u.side, text: `${this.named(u)} has lost too many men and pulls back.`, x: u.x, y: u.y });
@@ -10811,13 +10818,14 @@
         if (u.slipTo !== void 0) {
           if (this.t < u.slipTo - 1e-9) continue;
           delete u.slipTo;
+          delete u.slipAt;
           if (clear()) {
             u.hid = true;
             delete u.unloc;
           }
           continue;
         }
-        if ((u.slips ?? 0) >= S.most || u.str < S.str * u.str0 || u.still < S.after || !clear()) continue;
+        if ((u.slips ?? 0) >= S.most || u.str < S.str * u.str0 || u.still < S.after || u.order?.kind === "move" || !clear()) continue;
         u.slipTo = Math.round((this.t + S.secs) * 1e3) / 1e3;
         u.slips = (u.slips ?? 0) + 1;
       }
@@ -11590,6 +11598,7 @@
       if (t.team === "snp") {
         t.quietTo = Math.round((this.t + LAND.snipers.quiet) * 1e3) / 1e3;
         delete t.slipTo;
+        delete t.slipAt;
       }
       t.still = 0;
       t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
