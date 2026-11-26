@@ -29,7 +29,7 @@ import {
 } from './air';
 import { damageRules } from './citydamage';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
-import { DEFENCE, allied, atWar, headline, placeName, worksOf } from './game';
+import { DEFENCE, allied, atWar, headline, theWords, worksOf } from './game';
 import { raidCardLines } from './fighters';
 import { SIGHT, corpsKnown, sightOf } from './intel';
 import { CLASSES, NAVY, aswKit, atSea, shipList, surfaceShips } from './navy';
@@ -1014,9 +1014,14 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   // Weather (ruling 127): the sky over the target, known before the order; under a closed sky the card cannot open.
   if (weatherOn(g)) {
     const z = skyZone(g, kind as AirMission, target);
-    // (City defences, the switch on: the place with its article, "Cloud over the Ruhr", as the card's Searchlights
-    // line names it; with the switch off the line prints as shipped. The UI director, 26 Nov 2026 04:10Z.)
-    const line = skyRaidLine(g, z, cityDefences(g) ? placeName(place) : place);
+    // (City defences, the switch on: the place takes its article as the news gives it, "Cloud over the Ruhr", as the
+    // card's Searchlights line names it; with the switch off the line prints as shipped. The UI director, 26 Nov 2026
+    // 04:10Z. The line is made on the shipped place, so its room is judged as shipped and the switch never turns a
+    // named place into "the target"; then the place inside it is read by the news's own rule (theWords), which
+    // reaches a name inside a phrase, "Clear sky over the harbour of the Cotentin.", "Cloud over the airfield at
+    // the Ruhr", where a bare name's article could not: the independent read of 26 Nov 2026.)
+    const shipped = skyRaidLine(g, z, place);
+    const line = shipped && cityDefences(g) ? shipped.replace(`over ${place}`, () => `over ${theWords(place, 'over ')}`) : shipped;
     if (line) plan.sky = line;
     if (skyOf(g, z) === 'closed') { plan.why = `Closed sky this month: nothing flies over ${zoneName(z)}.`; return plan; }
   }
