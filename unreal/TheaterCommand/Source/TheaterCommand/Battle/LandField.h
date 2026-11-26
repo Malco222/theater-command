@@ -425,6 +425,22 @@ namespace LandField
 	Mesh CrownOf(const Mesh& From);
 
 	/**
+	 * A tree far off on trial "farcrowns" (the game's crown in CrownOf's place), sorted by what From shows: a broadleaf
+	 * (its leaves at least 0.65 as wide as they are tall) as four or five lobes of 12 triangles where its leaf masses
+	 * are, lit caps and dark, cooler undersides (each lobe's foot half its cap, never under 0.40 of the lightest cap), on
+	 * a trunk stub to the lobes' foot (48 to 66 triangles); a column (a cypress, a poplar, a birch: narrower than that,
+	 * not a conifer) as two to four lobes stacked up its whole height on its stem (30 to 54); a conifer (tall and narrow,
+	 * its boughs widest at its foot) as two stacked eight-sided skirts as wide as its lowest boughs, tapering to its tip,
+	 * its own dark green with snow on its tip and a few rim corners, some half the far mesh's own share (38 triangles);
+	 * a palm (its leaves only high on a long bare stem) as CrownOf makes it. Empty if From is. The same axes, origin and
+	 * winding as CrownOf's.
+	 */
+	Mesh CrownLobed(const Mesh& From);
+	/** Which way CrownLobed reads From: 0 a broadleaf, 1 a conifer, 2 a palm, 3 a column; -1 nothing to read. Narrow:
+	 * its leaves' width over their height; Taper: how much wider its leaves reach in their lowest third than their top. */
+	int CrownClass(const Mesh& From, double* Narrow = nullptr, double* Taper = nullptr);
+
+	/**
 	 * One instance: the base mesh scaled (X and Y by Scale, Z by ScaleZ), turned Yaw radians counter-clockwise about
 	 * z (seen from above, from +x toward +y), its origin at X, Y, Z. Tint multiplies the base's colours (Tint / 128:
 	 * 128 is as built) where the material can take a per-instance colour; the bases already vary among themselves.

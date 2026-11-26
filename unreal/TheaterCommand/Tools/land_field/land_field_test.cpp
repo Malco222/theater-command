@@ -1355,6 +1355,151 @@ int main(int Argc, char** Argv)
 		}
 		std::printf("  far crowns (GS9), triangles:%s\n", Line.c_str());
 		Check(Crowns > 0 && Bad.empty(), "the trees far off as crowns of 30 to 48 triangles, inside the tree, faces out, darker beneath", Bad.empty() ? Fmt("%.0f trees", Crowns) : "wrong:" + Bad);
+		// (on trial "farcrowns": the crown CrownLobed makes in CrownOf's place, by the class it reads from the far mesh:
+		// a broadleaf in lobes, 48 to 66 triangles; a conifer in two skirts, 30 to 40; a palm as CrownOf's)
+		if (F.Tried("farcrowns"))
+		{
+			std::string Lobed, Wrong;
+			for (const LandField::Base B : Trees)
+			{
+				const LandField::BaseMesh& Bm = G.BaseOf(B);
+				const LandField::Mesh& From = Bm.Far.Empty() ? Bm.Near : Bm.Far;
+				if (From.Empty()) continue;
+				double Narrow = 0.0, Taper = 0.0;
+				const int Class = LandField::CrownClass(From, &Narrow, &Taper);
+				const LandField::Mesh C = LandField::CrownLobed(From);
+				const size_t Was = LandField::CrownOf(From).Tris(), Now = C.Tris();
+				// (GS9's shape checks on it too: every corner a number, inside the tree (a conifer's skirts may reach 15%
+				// past the far mesh's boughs, the near tree's own reach), each face out the way its corners' normals point,
+				// darker beneath than on top; a lobed crown's dark heart, each lobe's foot against its own cap, 0.40 to 0.55
+				// and the darkest foot no less than 0.40 of the lightest cap; and at least 80% of the far mesh's leafy
+				// points at a height its lobes span)
+				double High = 0.0, Reach = 0.0;
+				int LeafN = 0;
+				for (size_t K = 0; K < From.Points(); ++K)
+				{
+					const float* P = &From.Positions[K * 3];
+					High = std::max(High, static_cast<double>(P[2]));
+					Reach = std::max(Reach, std::hypot(static_cast<double>(P[0]), static_cast<double>(P[1])));
+					if (From.Colours[K].G > From.Colours[K].R + 6) ++LeafN;
+				}
+				bool bFinite = true, bInside = true, bOut = true;
+				for (size_t K = 0; K < C.Points(); ++K)
+				{
+					const float* P = &C.Positions[K * 3];
+					if (!std::isfinite(P[0]) || !std::isfinite(P[1]) || !std::isfinite(P[2])) bFinite = false;
+					if (P[2] < -0.01 || P[2] > High * 1.02 + 0.05 || std::hypot(static_cast<double>(P[0]), static_cast<double>(P[1])) > Reach * (Class == 1 ? 1.15 : 1.02) + 0.05) bInside = false;
+				}
+				double UpL = 0.0, DownL = 0.0;
+				int UpN = 0, DownN = 0;
+				auto Lum = [&C](size_t K) { return 0.299 * C.Colours[K].R + 0.587 * C.Colours[K].G + 0.114 * C.Colours[K].B; };
+				for (size_t K = 0; K + 2 < C.Triangles.size(); K += 3)
+				{
+					const uint32_t I0 = C.Triangles[K], I1 = C.Triangles[K + 1], I2 = C.Triangles[K + 2];
+					const float* A = &C.Positions[I0 * 3];
+					const float* Bp = &C.Positions[I1 * 3];
+					const float* Cp = &C.Positions[I2 * 3];
+					const double UX = Bp[0] - A[0], UY = Bp[1] - A[1], UZ = Bp[2] - A[2], VX = Cp[0] - A[0], VY = Cp[1] - A[1], VZ = Cp[2] - A[2];
+					const double NX = UY * VZ - UZ * VY, NY = UZ * VX - UX * VZ, NZ = UX * VY - UY * VX;
+					double MX = 0.0, MY = 0.0, MZ = 0.0;
+					for (const uint32_t I : { I0, I1, I2 })
+					{
+						MX += C.Normals[I * 3];
+						MY += C.Normals[I * 3 + 1];
+						MZ += C.Normals[I * 3 + 2];
+					}
+					// (a palm's crown is CrownOf's own, unchanged, which GS9 above already holds to its faces by its own test;
+					// its head's corner normals do not follow its faces, so it is not judged by them here)
+					if (Class != 2 && NX * MX + NY * MY + NZ * MZ <= 0.0) bOut = false;
+				}
+				for (size_t K = 6; K < C.Points(); ++K)
+				{
+					const double Nz = C.Normals[K * 3 + 2];
+					if (Nz > 0.3) UpL += Lum(K), ++UpN;
+					else if (Nz < -0.3) DownL += Lum(K), ++DownN;
+				}
+				const bool bDark = UpN > 0 && DownN > 0 && DownL / DownN < UpL / UpN;
+				// (the lobes: after the stub's six corners, eight a lobe, its top first and its foot second)
+				double Heart = 0.5, HeartLeast = 0.5, CapMost = 0.0, FootLeast = 1e9, Cover = 1.0;
+				bool bMeasured = false;
+				if ((Class == 0 || Class == 3) && C.Points() > 6 && (C.Points() - 6) % 8 == 0 && LeafN >= 8)
+				{
+					bMeasured = true;
+					const size_t Lobes = (C.Points() - 6) / 8;
+					std::vector<std::pair<double, double>> Spans;
+					Heart = 0.0;
+					for (size_t L = 0; L < Lobes; ++L)
+					{
+						const size_t T0 = 6 + 8 * L;
+						const double Own = Lum(T0 + 1) / std::max(1.0, Lum(T0));
+						Heart = std::max(Heart, Own);
+						HeartLeast = std::min(HeartLeast, Own);
+						CapMost = std::max(CapMost, Lum(T0));
+						FootLeast = std::min(FootLeast, Lum(T0 + 1));
+						double Z0 = 1e9, Z1 = -1e9;
+						for (size_t K = T0; K < T0 + 8; ++K)
+						{
+							Z0 = std::min(Z0, static_cast<double>(C.Positions[K * 3 + 2]));
+							Z1 = std::max(Z1, static_cast<double>(C.Positions[K * 3 + 2]));
+						}
+						Spans.push_back({ Z0, Z1 });
+					}
+					// (the share of the far mesh's leafy points at a height some lobe spans: a jungle tree's few green
+					// points at its foot do not count against it as a share of the height would)
+					int Hit = 0;
+					for (size_t K = 0; K < From.Points(); ++K)
+					{
+						if (From.Colours[K].G <= From.Colours[K].R + 6) continue;
+						const double Z = From.Positions[K * 3 + 2];
+						for (const auto& [Z0, Z1] : Spans)
+							if (Z >= Z0 && Z <= Z1)
+							{
+								++Hit;
+								break;
+							}
+					}
+					Cover = Hit / static_cast<double>(LeafN);
+				}
+				const double Whole = CapMost > 0.0 ? FootLeast / CapMost : 1.0;
+				const bool bHeart = Class == 1 || Class == 2 || (HeartLeast >= 0.40 && Heart <= 0.55 && Whole >= 0.40);
+				Lobed += std::string(" ") + BaseNames[static_cast<int>(B)] + " (" + Bm.Name + ", " + (Class == 0 ? "broadleaf" : Class == 1 ? "conifer" : Class == 2 ? "palm" : Class == 3 ? "column" : "none") +
+					Fmt(", width/height %.2f,", Narrow) + Fmt(" foot/top %.2f)", Taper) + Fmt(" far %.0f,", static_cast<double>(Bm.Far.Tris())) + Fmt(" crown %.0f ->", static_cast<double>(Was)) + Fmt(" %.0f", static_cast<double>(Now)) +
+					(bMeasured ? Fmt(", heart %.2f", HeartLeast) + Fmt("-%.2f of cap", Heart) + Fmt(" (%.2f of the lightest),", Whole) + Fmt(" lobes span %.0f%% of its leaves", 100.0 * Cover) : std::string()) + ";";
+				const bool bFits = Class == 0 ? Now >= 48 && Now <= 66 : Class == 1 ? Now >= 30 && Now <= 40 : Class == 3 ? Now >= 30 && Now <= 66 : Now == Was;
+				if (!bFits || !bFinite || !bInside || !bOut || !bDark || !bHeart || Cover < 0.8)
+					Wrong += std::string(" ") + BaseNames[static_cast<int>(B)] + (!bFits ? " (triangles)" : "") + (!bFinite ? " (not finite)" : "") + (!bInside ? " (outside the tree)" : "") + (!bOut ? " (a face in)" : "") +
+						(!bDark ? " (not darker beneath)" : "") + (!bHeart ? " (heart)" : "") + (Cover < 0.8 ? " (cover)" : "");
+			}
+			std::printf("  far crowns on trial \"farcrowns\" (CrownLobed), triangles:%s\n", Lobed.c_str());
+			// (LAND_FIELD_DUMP_CROWNS=<dir>: each tree's near, far and both crowns as .obj with their colours, and its
+			// instances' mean scales, for measuring their outlines from any side)
+			if (const char* Dump = std::getenv("LAND_FIELD_DUMP_CROWNS"))
+				for (const LandField::Base B : Trees)
+				{
+					const LandField::BaseMesh& Bm = G.BaseOf(B);
+					const LandField::Mesh& From = Bm.Far.Empty() ? Bm.Near : Bm.Far;
+					if (From.Empty() || G.Instances(B).empty()) continue;
+					const LandField::Mesh Old = LandField::CrownOf(From), New = LandField::CrownLobed(From);
+					const std::pair<const char*, const LandField::Mesh*> Levels[] = { { "near", &Bm.Near }, { "far", &Bm.Far }, { "crownof", &Old }, { "crownlobed", &New } };
+					for (const auto& [Word, Me] : Levels)
+					{
+						std::ofstream Obj(std::string(Dump) + "/" + BaseNames[static_cast<int>(B)] + "-" + Word + ".obj");
+						for (size_t K = 0; K < Me->Points(); ++K)
+							Obj << "v " << Me->Positions[K * 3] << " " << Me->Positions[K * 3 + 1] << " " << Me->Positions[K * 3 + 2] << " " << static_cast<int>(Me->Colours[K].R) << " "
+								<< static_cast<int>(Me->Colours[K].G) << " " << static_cast<int>(Me->Colours[K].B) << "\n";
+						for (size_t K = 0; K + 2 < Me->Triangles.size(); K += 3) Obj << "f " << Me->Triangles[K] + 1 << " " << Me->Triangles[K + 1] + 1 << " " << Me->Triangles[K + 2] + 1 << "\n";
+					}
+					double Sc = 0.0, Sz = 0.0;
+					for (const LandField::Placed& P : G.Instances(B))
+					{
+						Sc += P.Scale;
+						Sz += P.ScaleZ;
+					}
+					const double Nb = static_cast<double>(G.Instances(B).size());
+					std::printf("    dumped %s (%s): %zu standing, mean scale %.3f across, %.3f up\n", BaseNames[static_cast<int>(B)], Bm.Name.c_str(), G.Instances(B).size(), Sc / Nb, Sz / Nb);
+				}
+			Check(Wrong.empty(), "the trial \"farcrowns\": each tree's crown by its class (lobes 48 to 66 triangles, a column's 30 to 66, a conifer's skirts 30 to 40, a palm as before), finite, inside the tree, faces out, darker beneath, its heart 0.40 to 0.55 of its cap, its lobes at the height of 80% of its leaves", Wrong.empty() ? std::string("all") : "wrong:" + Wrong);
+		}
 	}
 	Check(BadCards.empty() && Carded == 10, "the hedge shrubs and the trees have their leaf cards, each point its place on the leaves' picture, and no other mesh has any",
 	      Fmt("%.0f bases with cards", Carded) + (BadCards.empty() ? std::string() : ", wrong:" + BadCards));

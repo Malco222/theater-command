@@ -2862,7 +2862,8 @@ void ALandBattle::LayThings()
 			}
 			if (bTree && CrownFrom > 0.0f && (TreesTo <= 0.0f || CrownFrom < TreesTo))
 			{
-				Crown = LandField::CrownOf(Last);
+				// (on trial "farcrowns": lobes, a conifer's skirts or a palm's head, by what the tree's last level shows)
+				Crown = LandParts::OnTrial("farcrowns") ? LandField::CrownLobed(Last) : LandField::CrownOf(Last);
 				if (!Crown.Empty())
 				{
 					Further.Add({ &Crown, FMath::Max(static_cast<double>(CrownFrom), Plain * 1.2), false });

@@ -7310,12 +7310,124 @@ namespace LandField
 		};
 
 		/**
+		 * The far tree's leaves on trial "farcrowns": its sprays gathered by their bearing round the crown's middle into four
+		 * to six lobes (cut first at the widest gap between neighbouring sprays), each lobe one or two soft squashed lumps
+		 * round the sprays that hang there, its lower and its upper ones, so that far off the tree keeps the near tree's own
+		 * uneven outline, with sky between its lobes, and not a heap of diamonds. Each lump an icosahedron (20 triangles)
+		 * stretched to the box round its sprays along the lobe's bearing, across it and up, a little ragged; its top lit, its
+		 * underside dark and a little cooler (the lobes' shade, the crown's dark heart where they meet), its normals bent to
+		 * the lump so the sun rounds it. Nothing drawn at random: its raggedness is hashed from Seed and the lump's place.
+		 */
+		void FarLobes(Mesh& Far, const TreeSpec& T, uint64_t Seed, V3 Hub, const std::vector<V3>& C, const std::vector<double>& Rad)
+		{
+			const size_t N = C.size();
+			if (N == 0) return;
+			const size_t Lobes = static_cast<size_t>(std::clamp(static_cast<int>(N + 1) / 3, 4, 6));
+			std::vector<std::pair<double, size_t>> By;
+			for (size_t K = 0; K < N; ++K) By.push_back({ std::atan2(C[K].Y - Hub.Y, C[K].X - Hub.X), K });
+			std::sort(By.begin(), By.end());
+			size_t Cut = 0;
+			double Gap = -1.0;
+			for (size_t K = 0; K < N; ++K)
+			{
+				const size_t J = (K + 1) % N;
+				const double D = By[J].first - By[K].first + (J == 0 ? 2.0 * Pi : 0.0);
+				if (D > Gap)
+				{
+					Gap = D;
+					Cut = J;
+				}
+			}
+			std::rotate(By.begin(), By.begin() + static_cast<std::ptrdiff_t>(Cut), By.end());
+			const double Zb = T.CZ - T.CV, Zt = T.CZ + T.CV;
+			const Col Dark = Varied(T.Leaf, 0.6, -0.07); // (the lobes' undersides: about half the lit cap, a few degrees cooler; its own shade darkens it more)
+			auto CrownOut = [&T, Hub](V3 P) { return Unit3(V3{ (P.X - Hub.X) / T.CR, (P.Y - Hub.Y) / T.CR, (P.Z - Hub.Z) / T.CV }); };
+			std::vector<V3> S;
+			std::vector<std::array<uint32_t, 3>> F;
+			Icosphere(0, S, F);
+			for (size_t L = 0; L < Lobes; ++L)
+			{
+				const size_t A = N * L / Lobes, B = N * (L + 1) / Lobes;
+				if (B <= A) continue;
+				std::vector<size_t> Of;
+				for (size_t K = A; K < B; ++K) Of.push_back(By[K].second);
+				std::sort(Of.begin(), Of.end(), [&C](size_t X, size_t Y) { return C[X].Z < C[Y].Z; });
+				const size_t Parts = Of.size() >= 3 ? 2 : 1;
+				for (size_t Pt = 0; Pt < Parts; ++Pt)
+				{
+					const size_t P0 = Of.size() * Pt / Parts, P1 = Of.size() * (Pt + 1) / Parts;
+					const uint64_t Lump = Hash(Seed ^ 0xFA5, L, Pt);
+					// (each lump its own size, some large, more small, so a wood of them is not a bed of cobbles; all of them
+					// held inside the near tree's own leaves, with the sky between them, as the near tree shows)
+					const double Size = 0.7 + 0.3 * Unit(Hash(Lump, 9));
+					V3 Mean;
+					for (size_t Q = P0; Q < P1; ++Q) Mean = Mean + C[Of[Q]];
+					Mean = Mean * (1.0 / static_cast<double>(P1 - P0));
+					// (the lump's frame: out along its bearing, across it, up)
+					const V3 U = Unit3(V3{ Mean.X - Hub.X, Mean.Y - Hub.Y, 0.0 }, V3{ 1, 0, 0 }), Vx{ -U.Y, U.X, 0.0 }, Up{ 0, 0, 1 };
+					double Lo[3] = { 1e9, 1e9, 1e9 }, Hi[3] = { -1e9, -1e9, -1e9 };
+					for (size_t Q = P0; Q < P1; ++Q)
+					{
+						const V3 D = C[Of[Q]] - Mean;
+						const double R = Size * (0.8 * Rad[Of[Q]] + 0.25 * T.LumpHi);
+						const double At[3] = { Dot3(D, U), Dot3(D, Vx), D.Z };
+						for (int Ax = 0; Ax < 3; ++Ax)
+						{
+							Lo[Ax] = std::min(Lo[Ax], At[Ax] - R);
+							Hi[Ax] = std::max(Hi[Ax], At[Ax] + R);
+						}
+					}
+					const double RU = 0.5 * (Hi[0] - Lo[0]), RV = 0.5 * (Hi[1] - Lo[1]);
+					const double RZ = std::min(0.5 * (Hi[2] - Lo[2]), 0.72 * std::max(RU, RV));
+					V3 O = Mean + U * (0.5 * (Hi[0] + Lo[0])) + Vx * (0.5 * (Hi[1] + Lo[1])) + Up * (0.5 * (Hi[2] + Lo[2]));
+					O.Z = std::min(O.Z, T.High - RZ);
+					const double Turn = 2.0 * Pi * Unit(Hash(Lump, 7)), Ct = std::cos(Turn), St = std::sin(Turn);
+					const double Tip = 0.5 * Pi * Unit(Hash(Lump, 8)), Cp = std::cos(Tip), Stip = std::sin(Tip);
+					Builder Bd(Far);
+					const uint32_t Base0 = static_cast<uint32_t>(Far.Points());
+					for (size_t K = 0; K < S.size(); ++K)
+					{
+						// (the icosahedron turned about the upright, then each corner pushed in or out a little)
+						// (and tipped about its own x, so no two lumps show the same six-sided outline)
+						const V3 Q0{ S[K].X, S[K].Y * Cp - S[K].Z * Stip, S[K].Y * Stip + S[K].Z * Cp };
+						const V3 Q{ Q0.X * Ct - Q0.Y * St, Q0.X * St + Q0.Y * Ct, Q0.Z };
+						const double J = 1.0 + 0.3 * (2.0 * Unit(Hash(Lump, K)) - 1.0);
+						const V3 P = O + U * (Q.X * RU * J) + Vx * (Q.Y * RV * J) + Up * (Q.Z * RZ * J);
+						const V3 Own = Unit3(U * (Q.X / RU) + Vx * (Q.Y / RV) + Up * (Q.Z / RZ), Up);
+						const V3 Nrm = Unit3(Own * 0.7 + CrownOut(P) * 0.3, Own);
+						const double Height = Clamp01((P.Z - Zb) / std::max(1.0, Zt - Zb));
+						const double Outward = Clamp01(std::hypot(P.X - Hub.X, P.Y - Hub.Y) / std::max(0.5, T.CR));
+						const double Grain = Noise3(P.X * 1.7, P.Y * 1.7, P.Z * 1.7, 0x7EAF);
+						// (lit by the crown's height first, the whole crown's top over its underside, then by the lump's own)
+						const double Lit = 0.58 + 0.36 * Height + 0.08 * Outward + 0.14 * Clamp01(Q.Z);
+						Col Cc = Varied(T.Leaf, Lit * (1.0 + 0.06 * Grain), 0.02 * Grain);
+						Cc = Mixed(Cc, Dark, 0.55 * Clamp01(-1.1 * Q.Z) * (1.0 - 0.5 * Height) + 0.25 * std::pow(1.0 - Height, 1.5));
+						// (its sunlit tops lighter in the leaves' own hue, not toward a yellow: the near tree's leaves on their
+						// cards read cooler and greyer than their paint, so the far tree, which has no cards, is taken a little
+						// cooler and a third of the way to its grey, and stays no warmer, no more saturated and no fatter than the
+						// near tree it follows at the switch, nor more saturated than the grass)
+						Cc = Mixed(Cc, Scaled(T.Leaf, 1.3), 0.5 * T.Light * Clamp01(Q.Z) * (0.4 + 0.6 * Height));
+						Cc = Varied(Cc, 0.95, -0.05);
+						const double Grey = 0.299 * Cc.R + 0.587 * Cc.G + 0.114 * Cc.B;
+						Cc = Mixed(Cc, Rgb(Grey, Grey, Grey), 0.33);
+						Bd.Vert(P, Nrm, Cc);
+					}
+					for (const auto& Fc : F)
+					{
+						const V3 Mid = (PointOf(Far, Base0 + Fc[0]) + PointOf(Far, Base0 + Fc[1]) + PointOf(Far, Base0 + Fc[2])) * (1.0 / 3.0);
+						TriFacing(Far, Base0 + Fc[0], Base0 + Fc[1], Base0 + Fc[2], Mid - O);
+					}
+				}
+			}
+		}
+
+		/**
 		 * A broadleaf tree: a trunk (crooked as its kind grows), its main limbs arching out and a branch to each spray of
 		 * leaves; each spray a dozen clusters of leaves heaped on its top and outer side, the sprays apart enough that the
 		 * sky and the limbs show between them. Painted dark and cool beneath each spray and inside the crown, light and warm
 		 * on its sunlit tops. The far tree: its trunk, three limbs, and two big sprigs for each spray, where the spray hangs.
 		 */
-		void BuildTree(BaseMesh& Bm, const TreeSpec& T, uint64_t Seed)
+		void BuildTree(BaseMesh& Bm, const TreeSpec& T, uint64_t Seed, bool bLobed = false)
 		{
 			Rng R(Seed);
 			auto Env = [&T](double V) { // the crown's half-width at V (-1 its bottom, 1 its top), over CR
@@ -7511,6 +7623,18 @@ namespace LandField
 			for (int Lm = 0; Lm < std::min(L, 3); ++Lm) Limb(Bm.Far, LimbFrom[static_cast<size_t>(Lm)], LimbTo[static_cast<size_t>(Lm)], T.Trunk * 0.5, T.Trunk * 0.18, 4, T.Bark, Dark);
 			if (T.bPollard) Cluster(Bm.Far, Fork + V3{ 0, 0, 0.1 }, T.Trunk * 1.45, 0.75, 0.2, RF, NoSoft, 0.0, Bark);
 			auto CrownOut = [&T, Hub](V3 P) { return Unit3(V3{ (P.X - Hub.X) / T.CR, (P.Y - Hub.Y) / T.CR, (P.Z - Hub.Z) / T.CV }); };
+			if (bLobed)
+			{
+				std::vector<V3> At;
+				std::vector<double> Across;
+				for (const Spray& S : Sp)
+				{
+					At.push_back(S.C);
+					Across.push_back(S.Rad);
+				}
+				FarLobes(Bm.Far, T, Seed, Hub, At, Across);
+				return;
+			}
 			for (const Spray& S : Sp)
 			{
 				// Two big sprigs a spray, side by side across it, lit as the crown is, one soft mass, so that far off a
@@ -7658,12 +7782,14 @@ namespace LandField
 		// crown pulled in at the waist; the ash airy, small sprays far apart and pale; the beech dense and domed; the pollard
 		// a thick stub, a knobbly knuckle and a bushy head of straight sprouts; the orchard apple low and wide on a short,
 		// crooked, leaning trunk.
-		BuildTree(At(Base::Oak), { 15.0, 3.4, 0.45, 0.15, 0.5, 9.0, 6.3, 4.6, 0.0, 6, 16, 4, 22, 2.2, 0.62, 1.12, 0.72, 0.38, 0.45, 0.2, Rgb(62, 84, 38), Rgb(88, 82, 70), true, false, LeafOak }, S + 10);
-		BuildTree(At(Base::Elm), { 18.0, 4.5, 0.42, 0.1, 0.3, 11.8, 4.8, 5.8, 0.3, 4, 16, 3, 24, 1.9, 0.5, 0.95, 0.75, 0.35, 0.35, 0.16, Rgb(56, 78, 36), Rgb(78, 70, 60), true, false, LeafOval }, S + 11);
-		BuildTree(At(Base::Ash), { 15.0, 4.0, 0.36, 0.1, 0.3, 10.0, 5.3, 4.4, 0.0, 5, 16, 2, 20, 1.7, 0.42, 0.75, 0.65, 0.4, 0.15, 0.26, Rgb(80, 100, 46), Rgb(118, 114, 102), true, false, LeafOval }, S + 12);
-		BuildTree(At(Base::Beech), { 18.0, 3.6, 0.42, 0.05, 0.15, 11.2, 6.8, 5.8, 0.0, 5, 16, 4, 24, 2.2, 0.65, 1.1, 0.72, 0.3, 0.5, 0.18, Rgb(66, 92, 38), Rgb(128, 126, 116), true, false, LeafOval }, S + 13);
-		BuildTree(At(Base::Pollard), { 8.0, 2.8, 0.5, 0.0, 0.6, 5.5, 3.0, 2.3, 0.0, 0, 14, 2, 16, 1.25, 0.4, 0.7, 0.8, 0.4, 0.35, 0.18, Rgb(68, 90, 40), Rgb(86, 80, 68), false, true, LeafOval }, S + 14);
-		BuildTree(At(Base::Apple), { 5.5, 1.2, 0.17, 0.8, 1.0, 3.6, 3.2, 1.45, 0.0, 4, 12, 3, 18, 1.3, 0.4, 0.68, 0.72, 0.38, 0.3, 0.22, Rgb(72, 96, 44), Rgb(92, 82, 70), false, false, LeafOval }, S + 15);
+		// (on trial "farcrowns": their far level in lobes where their leaf masses hang, BuildTree's FarLobes)
+		const bool bLobed = !Fd.Trial.empty() && Fd.Tried("farcrowns");
+		BuildTree(At(Base::Oak), { 15.0, 3.4, 0.45, 0.15, 0.5, 9.0, 6.3, 4.6, 0.0, 6, 16, 4, 22, 2.2, 0.62, 1.12, 0.72, 0.38, 0.45, 0.2, Rgb(62, 84, 38), Rgb(88, 82, 70), true, false, LeafOak }, S + 10, bLobed);
+		BuildTree(At(Base::Elm), { 18.0, 4.5, 0.42, 0.1, 0.3, 11.8, 4.8, 5.8, 0.3, 4, 16, 3, 24, 1.9, 0.5, 0.95, 0.75, 0.35, 0.35, 0.16, Rgb(56, 78, 36), Rgb(78, 70, 60), true, false, LeafOval }, S + 11, bLobed);
+		BuildTree(At(Base::Ash), { 15.0, 4.0, 0.36, 0.1, 0.3, 10.0, 5.3, 4.4, 0.0, 5, 16, 2, 20, 1.7, 0.42, 0.75, 0.65, 0.4, 0.15, 0.26, Rgb(80, 100, 46), Rgb(118, 114, 102), true, false, LeafOval }, S + 12, bLobed);
+		BuildTree(At(Base::Beech), { 18.0, 3.6, 0.42, 0.05, 0.15, 11.2, 6.8, 5.8, 0.0, 5, 16, 4, 24, 2.2, 0.65, 1.1, 0.72, 0.3, 0.5, 0.18, Rgb(66, 92, 38), Rgb(128, 126, 116), true, false, LeafOval }, S + 13, bLobed);
+		BuildTree(At(Base::Pollard), { 8.0, 2.8, 0.5, 0.0, 0.6, 5.5, 3.0, 2.3, 0.0, 0, 14, 2, 16, 1.25, 0.4, 0.7, 0.8, 0.4, 0.35, 0.18, Rgb(68, 90, 40), Rgb(86, 80, 68), false, true, LeafOval }, S + 14, bLobed);
+		BuildTree(At(Base::Apple), { 5.5, 1.2, 0.17, 0.8, 1.0, 3.6, 3.2, 1.45, 0.0, 4, 12, 3, 18, 1.3, 0.4, 0.68, 0.72, 0.38, 0.3, 0.22, Rgb(72, 96, 44), Rgb(92, 82, 70), false, false, LeafOval }, S + 15, bLobed);
 		for (const Base B : { Base::Oak, Base::Elm, Base::Ash, Base::Beech, Base::Pollard, Base::Apple }) At(B).FarFrom = 140.0f;
 
 		// A five-bar field gate on its hinge post, weathered silver-grey: the hinge at the origin, the gate along +x 3.6 m.
@@ -9439,6 +9565,470 @@ namespace LandField
 				Face(Ring[B][K], Ring[B + 1][J], Ring[B][J], CX, CY, CZ);
 			}
 			Face(South, Ring[Bands - 2][J], Ring[Bands - 2][K], CX, CY, CZ);
+		}
+		return Out;
+	}
+
+	namespace
+	{
+		/** What CrownLobed reads from a tree's far mesh: which points are its crown (its leafy points, green over red, and
+		 * its snow; if it has fewer than eight leafy points, those above a third of its height), their box, their colours,
+		 * the trunk's girth, and how much of the crown's upward face is snow. */
+		struct CrownRead
+		{
+			bool bOk = false;
+			double High = 0.5, Lo[3] = { 1e9, 1e9, 1e9 }, Hi[3] = { -1e9, -1e9, -1e9 };
+			double Leaf[3] = { 0, 0, 0 }, Bark[3] = { 92, 80, 66 }, Snow[3] = { 235, 238, 242 }, TrunkR = 0.0, SnowUp = 0.0;
+			double Stem[3] = { 92, 80, 66 }; // the trunk's own colour, below the crown (a birch's white), else the bark's
+			double Reach = 0.0;              // the furthest any of its points stands from its stem
+			std::vector<size_t> In;
+			// 0 a broadleaf, 1 a conifer (tall and narrow, widest at its foot), 2 a palm (a head on a bare stem), 3 a column
+			// (a cypress, a poplar, a birch: leaves under 0.65 as wide as they are tall, not a conifer's skirts)
+			int Class = 0;
+			double Narrow = 1.0, Taper = 1.0; // its leaves' width over their height; its foot's reach over its top's
+		};
+		/** C turned Degrees round the colour wheel (its hue in HSV, its saturation and value kept), then brought to Share of
+		 * C's own brightness (luma): a leaf's colour turned a few degrees toward blue is cooler, whatever its green. */
+		Col Turned(const Col& C, double Degrees, double Share)
+		{
+			const double Mx = std::max({ C.R, C.G, C.B }), Mn = std::min({ C.R, C.G, C.B }), D = Mx - Mn;
+			double H = 0.0;
+			if (D > 1e-9)
+			{
+				if (Mx == C.R) H = 60.0 * std::fmod((C.G - C.B) / D + 6.0, 6.0);
+				else if (Mx == C.G) H = 60.0 * ((C.B - C.R) / D + 2.0);
+				else H = 60.0 * ((C.R - C.G) / D + 4.0);
+			}
+			H = std::fmod(H + Degrees + 720.0, 360.0);
+			const double X = D * (1.0 - std::fabs(std::fmod(H / 60.0, 2.0) - 1.0));
+			const int Sector = std::clamp(static_cast<int>(H / 60.0), 0, 5);
+			const double Rs[6] = { D, X, 0, 0, X, D }, Gs[6] = { X, D, D, X, 0, 0 }, Bs[6] = { 0, 0, X, D, D, X };
+			const Col T{ Rs[Sector] + Mn, Gs[Sector] + Mn, Bs[Sector] + Mn };
+			const double L0 = 0.299 * C.R + 0.587 * C.G + 0.114 * C.B, L1 = 0.299 * T.R + 0.587 * T.G + 0.114 * T.B;
+			return Scaled(T, L1 > 1e-9 ? Share * L0 / L1 : Share);
+		}
+
+		CrownRead ReadCrown(const Mesh& From)
+		{
+			CrownRead R;
+			const size_t N = From.Points();
+			if (N == 0 || From.Positions.size() < N * 3 || From.Colours.size() < N) return R;
+			for (size_t K = 0; K < N; ++K)
+			{
+				R.High = std::max(R.High, static_cast<double>(From.Positions[K * 3 + 2]));
+				R.Reach = std::max(R.Reach, std::hypot(static_cast<double>(From.Positions[K * 3]), static_cast<double>(From.Positions[K * 3 + 1])));
+			}
+			auto Leafy = [&From](size_t K) { return static_cast<int>(From.Colours[K].G) > static_cast<int>(From.Colours[K].R) + 6; };
+			auto Snowy = [&From](size_t K) {
+				const Rgb8& C = From.Colours[K];
+				const int Lo = std::min({ C.R, C.G, C.B }), Hi = std::max({ C.R, C.G, C.B });
+				return Lo > 160 && Hi - Lo < 48;
+			};
+			size_t LeafN = 0;
+			for (size_t K = 0; K < N; ++K) LeafN += Leafy(K) ? 1 : 0;
+			const bool bByColour = LeafN >= 8;
+			const bool bNormals = From.Normals.size() >= N * 3;
+			// (snow only as high as the leaves hang, or higher: a birch's white stem under its crown is not snow)
+			double LeafFoot = 1e9;
+			for (size_t K = 0; K < N; ++K)
+				if (Leafy(K)) LeafFoot = std::min(LeafFoot, static_cast<double>(From.Positions[K * 3 + 2]));
+			double LeafSum[3] = { 0, 0, 0 }, BarkSum[3] = { 0, 0, 0 }, SnowSum[3] = { 0, 0, 0 };
+			size_t LeafK = 0, BarkK = 0, SnowK = 0, UpK = 0, UpSnow = 0;
+			for (size_t K = 0; K < N; ++K)
+			{
+				const float* P = &From.Positions[K * 3];
+				const Rgb8& C = From.Colours[K];
+				const bool bSnow = bByColour && Snowy(K) && P[2] >= LeafFoot;
+				const bool bIn = bByColour ? (Leafy(K) || bSnow) : P[2] > R.High / 3.0;
+				if (!bIn)
+				{
+					BarkSum[0] += C.R;
+					BarkSum[1] += C.G;
+					BarkSum[2] += C.B;
+					++BarkK;
+					if (P[2] < R.High * 0.2) R.TrunkR = std::max(R.TrunkR, std::hypot(static_cast<double>(P[0]), static_cast<double>(P[1])));
+					continue;
+				}
+				R.In.push_back(K);
+				for (int A = 0; A < 3; ++A)
+				{
+					R.Lo[A] = std::min(R.Lo[A], static_cast<double>(P[A]));
+					R.Hi[A] = std::max(R.Hi[A], static_cast<double>(P[A]));
+				}
+				double* Sum = bSnow ? SnowSum : LeafSum;
+				Sum[0] += C.R;
+				Sum[1] += C.G;
+				Sum[2] += C.B;
+				++(bSnow ? SnowK : LeafK);
+				if (!bNormals || From.Normals[K * 3 + 2] > 0.35f)
+				{
+					++UpK;
+					UpSnow += bSnow ? 1 : 0;
+				}
+			}
+			if (R.In.empty()) return R;
+			for (int A = 0; A < 3; ++A)
+			{
+				R.Leaf[A] = LeafK ? LeafSum[A] / static_cast<double>(LeafK) : SnowSum[A] / static_cast<double>(std::max<size_t>(1, SnowK));
+				if (BarkK) R.Bark[A] = BarkSum[A] / static_cast<double>(BarkK);
+				if (SnowK) R.Snow[A] = SnowSum[A] / static_cast<double>(SnowK);
+			}
+			R.SnowUp = UpK ? static_cast<double>(UpSnow) / static_cast<double>(UpK) : 0.0;
+			const double Wide = std::max(R.Hi[0] - R.Lo[0], R.Hi[1] - R.Lo[1]), Tall = R.Hi[2] - R.Lo[2];
+			// (how it tapers: the reach of its lowest third's leaves round its middle over its top third's, the ninth
+			// tenth of each; a spruce's or a cypress's boughs widest at its foot, a narrow broadleaf's, a birch's, not)
+			const double CX = 0.5 * (R.Lo[0] + R.Hi[0]), CY = 0.5 * (R.Lo[1] + R.Hi[1]);
+			std::vector<double> Low, Top;
+			for (const size_t K : R.In)
+			{
+				const double Z = From.Positions[K * 3 + 2], D = std::hypot(From.Positions[K * 3] - CX, From.Positions[K * 3 + 1] - CY);
+				if (Z < R.Lo[2] + Tall / 3.0) Low.push_back(D);
+				else if (Z > R.Hi[2] - Tall / 3.0) Top.push_back(D);
+			}
+			auto Reach = [](std::vector<double>& V) {
+				if (V.empty()) return 0.0;
+				std::sort(V.begin(), V.end());
+				return V[std::min(V.size() - 1, V.size() * 9 / 10)];
+			};
+			const double LowReach = Reach(Low), TopReach = Reach(Top);
+			R.Narrow = Wide / std::max(0.1, Tall);
+			R.Taper = LowReach / std::max(0.1, TopReach);
+			R.Class = R.Lo[2] > 0.6 * R.High && Tall < 0.4 * R.High ? 2 : R.Narrow < 0.5 && R.Taper > 1.8 ? 1 : R.Narrow < 0.65 ? 3 : 0;
+			// (the stem's colour from the points below the crown's foot that are not crown, the lighter half of them: a
+			// birch's white trunk stays white, not the grey mean of its white and its dark bands; a plain bark is as it was)
+			std::vector<char> Crown(N, 0);
+			for (const size_t K : R.In) Crown[K] = 1;
+			std::vector<std::pair<double, size_t>> Stems;
+			for (size_t K = 0; K < N; ++K)
+				if (!Crown[K] && From.Positions[K * 3 + 2] < std::max(R.Lo[2], 0.25 * R.High))
+				{
+					const Rgb8& C = From.Colours[K];
+					Stems.push_back({ 0.299 * C.R + 0.587 * C.G + 0.114 * C.B, K });
+				}
+			std::sort(Stems.begin(), Stems.end());
+			double StemSum[3] = { 0, 0, 0 };
+			const size_t StemFrom = Stems.size() / 2;
+			for (size_t I = StemFrom; I < Stems.size(); ++I)
+			{
+				const Rgb8& C = From.Colours[Stems[I].second];
+				StemSum[0] += C.R;
+				StemSum[1] += C.G;
+				StemSum[2] += C.B;
+			}
+			const size_t StemK = Stems.size() - StemFrom;
+			for (int A = 0; A < 3; ++A) R.Stem[A] = StemK ? StemSum[A] / static_cast<double>(StemK) : R.Bark[A];
+			R.bOk = true;
+			return R;
+		}
+	}
+
+	int CrownClass(const Mesh& From, double* Narrow, double* Taper)
+	{
+		const CrownRead R = ReadCrown(From);
+		if (Narrow) *Narrow = R.Narrow;
+		if (Taper) *Taper = R.Taper;
+		return R.bOk ? R.Class : -1;
+	}
+
+	Mesh CrownLobed(const Mesh& From)
+	{
+		const CrownRead R = ReadCrown(From);
+		if (!R.bOk) return Mesh();
+		if (R.Class == 2) return CrownOf(From); // (a palm: a small head on its long stem is true)
+		Mesh Out;
+		Builder Bd(Out);
+		const Col Leaf = Rgb(R.Leaf[0], R.Leaf[1], R.Leaf[2]), Stem = Rgb(R.Stem[0], R.Stem[1], R.Stem[2]);
+		const double CX = 0.5 * (R.Lo[0] + R.Hi[0]), CY = 0.5 * (R.Lo[1] + R.Hi[1]);
+		const double Wide = std::max(R.Hi[0] - R.Lo[0], R.Hi[1] - R.Lo[1]), Tall = std::max(0.3, R.Hi[2] - R.Lo[2]);
+		const uint64_t Seed = Hash(static_cast<uint64_t>(From.Points()), static_cast<uint64_t>(std::lround(R.High * 100.0)), 0xC40);
+		auto PointAt = [&From](size_t K) { return V3{ From.Positions[K * 3], From.Positions[K * 3 + 1], From.Positions[K * 3 + 2] }; };
+		// The trunk: a three-sided stub from the ground to the crown's foot, a little into it, no higher; the stem's own
+		// colour (a birch's white).
+		auto Stub = [&](double Top) {
+			const double Rt = std::clamp(R.TrunkR * 0.8, 0.12, 0.6);
+			uint32_t Foot[3], Head[3];
+			for (int K = 0; K < 3; ++K)
+			{
+				const double A = 2.0 * Pi * K / 3.0;
+				const V3 D{ std::cos(A), std::sin(A), 0.0 };
+				Foot[K] = Bd.Vert(D * Rt, D, Scaled(Stem, 0.85));
+				Head[K] = Bd.Vert(D * Rt + V3{ 0, 0, Top }, D, Stem);
+			}
+			for (int K = 0; K < 3; ++K)
+			{
+				const int J = (K + 1) % 3;
+				const double A = 2.0 * Pi * (K + 0.5) / 3.0;
+				const V3 D{ std::cos(A), std::sin(A), 0.0 };
+				TriFacing(Out, Foot[K], Foot[J], Head[J], D);
+				TriFacing(Out, Foot[K], Head[J], Head[K], D);
+			}
+		};
+		if (R.Class == 1)
+		{
+			// A conifer: two stacked skirts of eight sides, the lower as wide as the far mesh's lowest boughs, tapering to
+			// the tip. Seen from above a round dark crown with snow on its upper side: some of each skirt's eight upward faces
+			// snow and the rest dark bough, so that the snow's share of the crown's upward face is some 0.7 of the near
+			// firs' (the far mesh's own share is about 1.4 times the near tree's, so about half the far mesh's), and the
+			// dark green of the boughs between and the darker underside show through, as on the near tree.
+			std::vector<double> Foot;
+			for (const size_t K : R.In)
+				if (From.Positions[K * 3 + 2] < R.Lo[2] + 0.4 * Tall) Foot.push_back(std::hypot(From.Positions[K * 3] - CX, From.Positions[K * 3 + 1] - CY));
+			std::sort(Foot.begin(), Foot.end());
+			// (as wide as the far mesh's lowest boughs reach, and a little more: the far mesh's boughs are a little
+			// narrower than the near tree's, some 0.85 of them on the winter spruce)
+			const double Rb = std::min(1.08 * R.Reach - std::hypot(CX, CY), std::max(0.3, Foot.empty() ? 0.25 * Wide : 1.08 * Foot.back()));
+			const Col Snow = Rgb(R.Snow[0], R.Snow[1], R.Snow[2]);
+			// (its boughs darker than the far mesh's paint, its underside darker still: the near fir is dark inside from
+			// its own shade, which a crown, casting none, has not; so that a far fir in a picture is within a tenth of the
+			// near firs' brightness and shows their dark green between its snow)
+			const Col Bough = Scaled(Leaf, 0.7), Under = Varied(Leaf, 0.45, -0.06);
+			// (from the ground up: a far mesh's lowest boughs may dip under it)
+			const double Z0 = std::max(0.0, R.Lo[2]);
+			Stub(Z0 + 0.05 * Tall);
+			struct Skirt
+			{
+				double Rim, Radius, Apex, Hollow;
+				int SnowRim;
+			};
+			// (the share of each skirt's upward faces under snow, by count: on the lower some 0.6 of the far mesh's own share,
+			// on the upper, which the snow lies on more, 0.8 of it; seen from above, weighed by how much of each face shows,
+			// some 0.5 of the far mesh's share, 0.7 of the near firs')
+			const Skirt Skirts[2] = { { Z0 + 0.03 * Tall, Rb, Z0 + 0.66 * Tall, Z0 + 0.2 * Tall, static_cast<int>(std::lround(8.0 * 0.6 * R.SnowUp)) },
+				{ Z0 + 0.42 * Tall, 0.64 * Rb, R.Hi[2], Z0 + 0.55 * Tall, static_cast<int>(std::lround(8.0 * 0.8 * R.SnowUp)) } };
+			constexpr int Sides = 8;
+			for (int Sk = 0; Sk < 2; ++Sk)
+			{
+				const Skirt& S = Skirts[Sk];
+				const double Turn = 2.0 * Pi * Unit(Hash(Seed, static_cast<uint64_t>(Sk)));
+				const double Slope = S.Radius / std::max(0.1, S.Apex - S.Rim);
+				const V3 Apex{ CX, CY, S.Apex }, Hollow{ CX, CY, S.Hollow };
+				const uint32_t HollowI = Bd.Vert(Hollow, { 0, 0, -1 }, Scaled(Under, 0.85));
+				uint32_t Down[Sides];
+				V3 Ring[Sides], Out8[Sides];
+				for (int K = 0; K < Sides; ++K)
+				{
+					const double A = Turn + 2.0 * Pi * K / Sides;
+					// (each rim corner a little in or out and up or down, so the skirt's edge is not one ruled line)
+					const double J = 1.0 + 0.06 * (2.0 * Unit(Hash(Seed, static_cast<uint64_t>(Sk), static_cast<uint64_t>(K))) - 1.0);
+					const double Dz = 0.04 * Tall * (2.0 * Unit(Hash(Seed ^ 0x5C1, static_cast<uint64_t>(Sk), static_cast<uint64_t>(K))) - 1.0);
+					Out8[K] = V3{ std::cos(A), std::sin(A), 0.0 };
+					Ring[K] = V3{ CX, CY, std::max(S.Rim + Dz, Z0) } + Out8[K] * (S.Radius * J);
+					Down[K] = Bd.Vert(Ring[K], Unit3(Out8[K] * 0.4 + V3{ 0, 0, -1 }), Under);
+				}
+				for (int K = 0; K < Sides; ++K)
+				{
+					const int J = (K + 1) % Sides;
+					const V3 Mid = (Ring[K] + Ring[J]) * 0.5;
+					// (each upward face one colour, snow or dark bough, its corners its own: the snow's corners shared with the
+					// boughs' would spread a pale wash over every face, and the dark green would not show from any side)
+					const bool bSnow = (K + 1) * S.SnowRim / Sides > K * S.SnowRim / Sides;
+					const Col Face = bSnow ? Mixed(Snow, Leaf, 0.12) : Bough;
+					const uint32_t ApexI = Bd.Vert(Apex, { 0, 0, 1 }, Face);
+					const uint32_t UpK = Bd.Vert(Ring[K], Unit3(Out8[K] + V3{ 0, 0, Slope }), Face), UpJ = Bd.Vert(Ring[J], Unit3(Out8[J] + V3{ 0, 0, Slope }), Face);
+					TriFacing(Out, ApexI, UpK, UpJ, Unit3(Mid - V3{ CX, CY, Mid.Z }) + V3{ 0, 0, 0.2 });
+					TriFacing(Out, HollowI, Down[J], Down[K], V3{ 0, 0, -1 });
+				}
+			}
+			return Out;
+		}
+		struct Lobe
+		{
+			V3 O;
+			double RU, RV, RZ;
+			V3 U, V;
+		};
+		std::vector<Lobe> Lobes;
+		if (R.Class == 3)
+		{
+			// A column (a cypress, a poplar, a birch): two to four lobes stacked up its height from the crown's foot to its
+			// top, each as wide as the crown's points at its own height, and each 1.2 times as tall as the step between
+			// them, so that they overlap: one narrow column with a gently waved edge and a pointed tip, not a string of
+			// beads, and the white stem below it.
+			const int Stack = std::clamp(static_cast<int>(std::lround(Tall / std::max(0.3, 0.9 * Wide))), 2, 4);
+			const double RZ = Tall / (1.6 + (Stack - 1) / 1.2), Step = (Tall - 1.6 * RZ) / (Stack - 1);
+			double LastRU = 0.25 * Wide, LastRV = 0.25 * Wide;
+			for (int L = 0; L < Stack; ++L)
+			{
+				const double Z = R.Lo[2] + 0.78 * RZ + Step * L;
+				std::vector<V3> Pts;
+				for (const size_t K : R.In)
+				{
+					const V3 P = PointAt(K);
+					if (std::fabs(P.Z - Z) <= 0.6 * RZ) Pts.push_back(P);
+				}
+				V3 Mid{ CX, CY, 0.0 };
+				double Lo[2] = { 1e9, 1e9 }, Hi[2] = { -1e9, -1e9 };
+				if (Pts.size() >= 3)
+				{
+					Mid = V3{};
+					for (const V3& P : Pts) Mid = Mid + P;
+					Mid = Mid * (1.0 / static_cast<double>(Pts.size()));
+					for (const V3& P : Pts)
+					{
+						Lo[0] = std::min(Lo[0], P.X - Mid.X);
+						Hi[0] = std::max(Hi[0], P.X - Mid.X);
+						Lo[1] = std::min(Lo[1], P.Y - Mid.Y);
+						Hi[1] = std::max(Hi[1], P.Y - Mid.Y);
+					}
+					LastRU = std::max(0.25, 0.55 * (Hi[0] - Lo[0]));
+					LastRV = std::max(0.25, 0.55 * (Hi[1] - Lo[1]));
+				}
+				Lobe Lb;
+				Lb.U = V3{ 1, 0, 0 };
+				Lb.V = V3{ 0, 1, 0 };
+				Lb.RU = LastRU;
+				Lb.RV = LastRV;
+				Lb.RZ = RZ;
+				Lb.O = V3{ Mid.X, Mid.Y, Z };
+				Lb.O.Z = std::min(Lb.O.Z, R.High - 0.82 * Lb.RZ);
+				Lobes.push_back(Lb);
+			}
+		}
+		else
+		{
+			// A broadleaf: its crown's points gathered into five lobes (four round its middle, one over it; a lobe with too
+			// few points dropped), each a lump of twelve faces on the box round its own points, a little wider than it.
+			constexpr int Most = 5;
+			V3 Seat[Most];
+			double Far = 0.0, Bear = 0.0;
+			for (const size_t K : R.In)
+			{
+				const double D = std::hypot(From.Positions[K * 3] - CX, From.Positions[K * 3 + 1] - CY);
+				if (D > Far)
+				{
+					Far = D;
+					Bear = std::atan2(From.Positions[K * 3 + 1] - CY, From.Positions[K * 3] - CX);
+				}
+			}
+			for (int L = 0; L < 4; ++L)
+			{
+				const double A = Bear + 0.5 * Pi * L;
+				Seat[L] = V3{ CX + 0.3 * Wide * std::cos(A), CY + 0.3 * Wide * std::sin(A), R.Lo[2] + 0.45 * Tall };
+			}
+			Seat[4] = V3{ CX, CY, R.Lo[2] + 0.85 * Tall };
+			std::vector<int> Mine(R.In.size(), 0);
+			for (int Pass = 0; Pass < 8; ++Pass)
+			{
+				V3 Sum[Most];
+				int Count[Most] = { 0, 0, 0, 0, 0 };
+				for (size_t I = 0; I < R.In.size(); ++I)
+				{
+					const V3 P = PointAt(R.In[I]);
+					double Best = 1e18;
+					for (int L = 0; L < Most; ++L)
+					{
+						const double D = Dot3(P - Seat[L], P - Seat[L]);
+						if (D < Best)
+						{
+							Best = D;
+							Mine[I] = L;
+						}
+					}
+					Sum[Mine[I]] = Sum[Mine[I]] + P;
+					++Count[Mine[I]];
+				}
+				for (int L = 0; L < Most; ++L)
+					if (Count[L] > 0) Seat[L] = Sum[L] * (1.0 / Count[L]);
+			}
+			for (int L = 0; L < Most; ++L)
+			{
+				const V3 U = Unit3(V3{ Seat[L].X - CX, Seat[L].Y - CY, 0.0 }, V3{ std::cos(Bear), std::sin(Bear), 0.0 }), V{ -U.Y, U.X, 0.0 };
+				double Lo[3] = { 1e9, 1e9, 1e9 }, Hi[3] = { -1e9, -1e9, -1e9 };
+				int Count = 0;
+				for (size_t I = 0; I < R.In.size(); ++I)
+					if (Mine[I] == L)
+					{
+						const V3 D = PointAt(R.In[I]) - Seat[L];
+						const double At[3] = { Dot3(D, U), Dot3(D, V), D.Z };
+						for (int A = 0; A < 3; ++A)
+						{
+							Lo[A] = std::min(Lo[A], At[A]);
+							Hi[A] = std::max(Hi[A], At[A]);
+						}
+						++Count;
+					}
+				if (Count < 4) continue;
+				Lobe Lb;
+				Lb.U = U;
+				Lb.V = V;
+				// (a little wider than its points' box, so that the lobes meet and overlap as the far lumps do; never
+				// narrower one way than 0.65 of the other, nor flatter than 0.75 of its width: a lump, not a plate on edge,
+				// whatever the size of the crown)
+				Lb.RU = std::max(0.3, 0.6 * (Hi[0] - Lo[0]));
+				Lb.RV = std::max(0.3, 0.6 * (Hi[1] - Lo[1]));
+				const double Big = std::max(Lb.RU, Lb.RV);
+				Lb.RU = std::max(Lb.RU, 0.65 * Big);
+				Lb.RV = std::max(Lb.RV, 0.65 * Big);
+				Lb.RZ = std::clamp(0.55 * (Hi[2] - Lo[2]), 0.75 * Big, 0.95 * Big);
+				Lb.O = Seat[L] + U * (0.5 * (Hi[0] + Lo[0])) + V * (0.5 * (Hi[1] + Lo[1])) + V3{ 0, 0, 0.5 * (Hi[2] + Lo[2]) };
+				// (its top at most the tree's: the crown as tall as the far level it follows, not lower)
+				Lb.O.Z = std::min(Lb.O.Z, R.High - 0.82 * Lb.RZ);
+				Lobes.push_back(Lb);
+			}
+		}
+		if (Lobes.empty()) return CrownOf(From);
+		// (every lobe inside the far tree it follows, out to its furthest point and no higher than its top, so that the
+		// crown never stands wider than the tree did a step nearer: smaller first, then drawn in toward the stem)
+		for (Lobe& Lb : Lobes)
+		{
+			const double Most = 1.08 * std::max(Lb.RU, Lb.RV), Off = std::hypot(Lb.O.X, Lb.O.Y);
+			if (Off + Most > R.Reach && Most > 1e-9)
+			{
+				const double K = std::max(0.6, (R.Reach - Off) / Most);
+				Lb.RU *= K;
+				Lb.RV *= K;
+				const double Left = 1.08 * std::max(Lb.RU, Lb.RV);
+				if (Off + Left > R.Reach && Off > 1e-9)
+				{
+					const double In = std::max(0.0, R.Reach - Left) / Off;
+					Lb.O.X *= In;
+					Lb.O.Y *= In;
+				}
+			}
+			Lb.O.Z = std::max(Lb.O.Z, 0.78 * Lb.RZ);
+		}
+		double FootZ = 1e9;
+		for (const Lobe& Lb : Lobes) FootZ = std::min(FootZ, Lb.O.Z - 0.55 * Lb.RZ);
+		Stub(std::max(0.3, FootZ));
+		// (a little greyer than the far mesh's, never more saturated than the grass beside it)
+		auto Greyer = [](const Col& C) { const double G = 0.299 * C.R + 0.587 * C.G + 0.114 * C.B; return Mixed(C, Rgb(G, G, G), 0.06); };
+		for (size_t L = 0; L < Lobes.size(); ++L)
+		{
+			const Lobe& Lb = Lobes[L];
+			// (lit by its height in the crown: its cap 1.12 to 1.32 of the leaves' own colour, the top lobe's the lightest;
+			// its underside, the crown's dark heart, half its own cap and 7 degrees cooler, so 0.42 of the top lobe's
+			// cap at the darkest, never under 0.40)
+			const double Up = Clamp01((Lb.O.Z - R.Lo[2]) / Tall);
+			const Col CapLit = Mixed(Scaled(Leaf, 1.12 + 0.2 * Up), Rgb(126, 142, 66), 0.06 * Up);
+			const Col Cap = Greyer(CapLit), Heart = Greyer(Turned(CapLit, 7.0, 0.5));
+			const double Turn = 2.0 * Pi * Unit(Hash(Seed, L));
+			// (its normals bent a little out from the crown's middle, the more the further the lobe stands from it: a
+			// column's lobes, on its middle, are not bent at all, so their tops face up and not all one way)
+			const double OffMid = std::hypot(Lb.O.X - CX, Lb.O.Y - CY);
+			const V3 Out0 = Unit3(V3{ Lb.O.X - CX, Lb.O.Y - CY, 0.0 }, Lb.U) * (0.25 * Clamp01(OffMid / std::max(Lb.RU, Lb.RV)));
+			auto Corner = [&](double A, double Z, double Wide0, uint64_t K, const Col& C) {
+				const double J = 1.0 + 0.08 * (2.0 * Unit(Hash(Seed, L, K)) - 1.0), Wd = Wide0 * J;
+				const double Cu = std::cos(A) * Wd, Sv = std::sin(A) * Wd;
+				const V3 P = Lb.O + Lb.U * (Cu * Lb.RU) + Lb.V * (Sv * Lb.RV) + V3{ 0, 0, Z * Lb.RZ };
+				const V3 N = Unit3(Lb.U * (Cu / Lb.RU) + Lb.V * (Sv / Lb.RV) + V3{ 0, 0, 1.3 * Z / Lb.RZ } + Out0 * (1.0 / std::max(Lb.RU, Lb.RV)));
+				return std::make_pair(Bd.Vert(P, N, C), P);
+			};
+			// (eight corners near a ball's skin, twelve faces: a blunt lit top, a dark foot, and six corners round its middle,
+			// by turns a little above it and a little below, so that from any side its outline has six or more corners
+			// about evenly round it: a lump, not a diamond and not a slab tipped one way)
+			const auto TopC = Corner(0.0, 0.82, 0.0, 0, Cap), FootC = Corner(0.0, -0.78, 0.0, 1, Heart);
+			std::pair<uint32_t, V3> Waist[6];
+			for (int K = 0; K < 6; ++K)
+				Waist[K] = Corner(Turn + 2.0 * Pi * K / 6.0, K % 2 == 0 ? 0.28 : -0.28, 1.0, 2 + static_cast<uint64_t>(K), Mixed(Cap, Heart, K % 2 == 0 ? 0.3 : 0.72));
+			auto Face = [&](const std::pair<uint32_t, V3>& A, const std::pair<uint32_t, V3>& B, const std::pair<uint32_t, V3>& C) {
+				TriFacing(Out, A.first, B.first, C.first, (A.second + B.second + C.second) * (1.0 / 3.0) - Lb.O);
+			};
+			for (int K = 0; K < 6; ++K)
+			{
+				const int J = (K + 1) % 6;
+				Face(TopC, Waist[K], Waist[J]);
+				Face(FootC, Waist[J], Waist[K]);
+			}
 		}
 		return Out;
 	}
