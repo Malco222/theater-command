@@ -351,7 +351,9 @@ namespace LandKit
 		 * door's), and no mark is made larger than its place but the British flash, which is 18 inches by 10 wherever one
 		 * plate takes the whole of it. With it the sizes "allmarks" tried (the flash at up to 1.4 times true, a ring mark
 		 * at 0.22 m) are not used: a ring mark is a quarter of a metre across and never over half the height of the
-		 * plate it lies on. A flake of chipped paint is at most a tenth of the mark. Off: as before, point for point. */
+		 * plate it lies on. A flake of chipped paint is at most a tenth of the mark. A captured vehicle's captor mark
+		 * stays large, as crews painted it so their own gunners would hold their fire (her ruling of 17:56Z): half as
+		 * big again as its real size, never over three quarters of its plate's height. Off: as before, point for point. */
 		bool bRealMarks = false;
 	};
 

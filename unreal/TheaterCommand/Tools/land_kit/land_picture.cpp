@@ -253,6 +253,8 @@ namespace
 		// tall standing at her marked plate, the honest ruler for a mark's size (the art director, 26 November 2026);
 		// bSayMark: her caption ends with what the mark facing the camera measures.
 		bool bRealMarks = false, bMan = false, bSayMark = false;
+		// A captured vehicle (LandKit's Dress::Captured): the nation she was taken from; Nation is then her captor.
+		std::string Captured;
 		struct Other
 		{
 			std::string ModelName, Nation;
@@ -842,7 +844,7 @@ int main(int argc, char** argv)
 		// panels a year apart were being painted from whichever was loaded first)
 		const std::string Key = Name + "|" + Nation + "|" + std::to_string(For.Year * 100 + For.Month) + (For.bMarks ? "|marks" : "") + (For.Coat.empty() ? "" : "|coat " + For.Coat)
 			+ (For.bBurntCoat ? "|burnt" : "") + (For.bAnyYear ? "|anyyear" : "") + (For.bAllMarks ? "|allmarks" : "") + (For.bNewMarks ? "|newmarks" : "")
-			+ (For.bRealMarks ? "|realmarks" : "");
+			+ (For.bRealMarks ? "|realmarks" : "") + (For.Captured.empty() ? "" : "|captured " + For.Captured);
 		if (!Models.count(Key))
 		{
 			std::string Text, Error;
@@ -863,6 +865,7 @@ int main(int argc, char** argv)
 			D.bAllMarks = For.bAllMarks;
 			D.bNewMarks = For.bNewMarks;
 			D.bRealMarks = For.bRealMarks;
+			D.Captured = For.Captured;
 			if (!M->Load(Text, D, Error))
 			{
 				std::printf("%s: %s\n", Name.c_str(), Error.c_str());
@@ -1126,6 +1129,27 @@ int main(int argc, char** argv)
 				P.Caption = std::string(K.Words) + (After ? ", REAL SIZE" : ", as it was");
 				Panels.push_back(P);
 			}
+		}
+		// (a captured tank: her captor's mark stays large, at half as big again as its real size; the art director's
+		// ruling of 17:56Z, with the reason in the caption)
+		for (int After = 0; After < 2; ++After)
+		{
+			Panel P;
+			P.File = std::string("realmarks_h_captured") + (After ? "_2_real" : "_1_was");
+			P.ModelName = "T34";
+			P.Nation = "GER";
+			P.Captured = "SOV";
+			P.Year = 1943;
+			P.Month = 7;
+			P.bMarks = true;
+			P.bRealMarks = After == 1;
+			P.bMan = true;
+			P.bSayMark = true;
+			P.CameraBearing = 62.0;
+			P.CameraUp = 9.0;
+			P.bDay = true;
+			P.Caption = std::string("captured T-34 in German hands") + (After ? ", REAL SIZE (kept large on purpose: crews painted a captured tank's mark oversize so their own gunners held fire)" : ", as it was");
+			Panels.push_back(P);
 		}
 		// (two close looks at marks at their real size, for their wear: a flake of chipped paint is a tenth of the mark
 		// at most)
@@ -2056,7 +2080,9 @@ int main(int argc, char** argv)
 			if (P.bSayMark && Seen)
 			{
 				char Words[96];
-				std::snprintf(Words, sizeof(Words), ": the mark is %.2f m across (%.0f in)", 2.0 * Seen->Radius, 2.0 * Seen->Radius / 0.0254);
+				// (a captor's mark as shipped is laid half as big again as her file's place, which is what is read here)
+				const double Half = Seen->Radius * (!P.Captured.empty() && !P.bRealMarks ? 1.5 : 1.0);
+				std::snprintf(Words, sizeof(Words), ": the mark is %.2f m across (%.0f in)", 2.0 * Half, 2.0 * Half / 0.0254);
 				P.Caption += Words;
 			}
 			else if (P.bSayMark)

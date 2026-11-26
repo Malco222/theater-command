@@ -561,9 +561,11 @@ namespace
 			Cases.push_back({ "LightTank", Nation, 1942, 6, "own", false, true, bNew });
 			Cases.push_back({ "Truck", Nation, 1942, 6, "own", false, true, bNew });
 			Cases.push_back({ "LightTank", Nation, 1942, 6, "own", false, true, bNew, "stone" });
-			// (at her real size: a quarter of a metre at most, and half her plate's height)
-			Cases.push_back({ "LightTank", Nation, 1942, 6, "own", false, true, bNew, "", true, 0.25 });
-			Cases.push_back({ "Truck", Nation, 1942, 6, "own", false, true, bNew, "", true, 0.25 });
+			// (at her real size: a quarter of a metre at most, and half her plate's height; Vichy's is the French
+			// roundel, which keeps its place's size with France's, 0.35 m at most: the art director, 17:56Z)
+			const double Wide = Nation == "VIC" ? 0.35 : 0.25;
+			Cases.push_back({ "LightTank", Nation, 1942, 6, "own", false, true, bNew, "", true, Wide });
+			Cases.push_back({ "Truck", Nation, 1942, 6, "own", false, true, bNew, "", true, Wide });
 		}
 		// (marks at their real size, LandKit.cpp's MarkReal: the cross a quarter of a metre, 0.30 m on the Tiger and the
 		// Panther; the American star 15 inches on a medium tank and an armoured car, 20 on a tank destroyer and a
@@ -910,6 +912,73 @@ namespace
 				C.Model.c_str(), C.Nation.c_str(), C.Year, C.Month, C.Expect.c_str(), AddedTris[0], Share * 100.0, Worst[0] * 1000.0, AddedTris[1], FarShare * 100.0,
 				Worst[1] * 1000.0, Wh * 100.0, Bl * 100.0, Rd * 100.0, Ye * 100.0, Ms(T1, T2) - Ms(T0, T1), (Why.empty() ? "ok" + Read : "FAIL " + Why + Read).c_str());
 			Failures += Why.empty() ? 0 : 1;
+		}
+		// A captured vehicle's captor mark with marks at their real size (Dress::bRealMarks; the art director's ruling of
+		// 26 November 2026, 17:56Z): it stays large, half as big again as the captor's mark at its real size at most,
+		// and with the word off she is laid as before (no place of her own kept, as ever).
+		{
+			struct Taken
+			{
+				const char* Model;
+				const char* Captor;
+				const char* From;
+				double Wide; // (half as big again as the captor's mark at its real size, metres across)
+			};
+			for (const Taken& K : { Taken{ "T34", "GER", "SOV", 0.375 }, Taken{ "Sherman", "GER", "USA", 0.375 }, Taken{ "PanzerIV", "USA", "GER", 0.5715 },
+					 Taken{ "PanzerIV", "SOV", "GER", 0.45 }, Taken{ "Tiger", "USA", "GER", 0.5715 }, Taken{ "LightTank", "GER", "UK", 0.375 } })
+			{
+				std::string Text, Error;
+				if (!ReadFile(Content + "/Models/Battle/" + K.Model + ".json", Text))
+				{
+					std::printf("  FAIL cannot read %s.json\n", K.Model);
+					++Failures;
+					continue;
+				}
+				Dress D;
+				D.Nation = K.Captor;
+				D.Captured = K.From;
+				D.Year = 1943;
+				D.Month = 7;
+				D.bMarks = true;
+				Model Was, Real;
+				const bool bWas = Was.Load(Text, D, Error);
+				D.bRealMarks = true;
+				const bool bReal = bWas && Real.Load(Text, D, Error);
+				std::string Why;
+				double Least = 1e9, Most = 0.0, FileMost = 0.0;
+				if (!bReal)
+				{
+					Why = "did not load: " + Error;
+				}
+				else
+				{
+					for (const Mark& Mk : Real.Painted)
+					{
+						Least = std::min(Least, Mk.Radius);
+						Most = std::max(Most, Mk.Radius);
+					}
+					for (const Mark& Mk : Real.Marks)
+					{
+						FileMost = std::max(FileMost, Mk.Radius);
+					}
+					if (!Was.Painted.empty())
+					{
+						Why = "with the word off a captor's mark is kept as a place of her own";
+					}
+					else if (Real.Painted.empty() || Least <= 0.0)
+					{
+						Why = "no captor's mark at its real size";
+					}
+					else if (2.0 * Most > K.Wide + 0.002)
+					{
+						Why = "a captor's mark wider than half as big again as its real size";
+					}
+				}
+				++AllCases;
+				std::printf("  %-11s taken by %-3s from %-3s  her captor's mark %.3f to %.3f m across (at most %.3f; as it was %.3f)  %s\n", K.Model, K.Captor, K.From,
+					Real.Painted.empty() ? 0.0 : 2.0 * Least, 2.0 * Most, K.Wide, 3.0 * FileMost, Why.empty() ? "ok" : ("FAIL " + Why).c_str());
+				Failures += Why.empty() ? 0 : 1;
+			}
 		}
 		std::printf("  %zu looks checked, %zu mark triangles near in all: %s\n", AllCases, AllAdded, Failures ? "FAIL" : "ok");
 		return Failures;
