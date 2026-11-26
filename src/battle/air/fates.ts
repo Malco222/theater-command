@@ -62,6 +62,12 @@ export interface Scene {
   crew: number;
   /** Release 2's 'bailouts' (sim.ts airLooks), on for this battle; absent means off, and the fall is as it always was. */
   bailouts?: boolean;
+  /**
+   * Release 2, 'bailouts', a fighter only: the count's share of this side's pilots brought back, the very figure the
+   * pilots-back stream drew 'back' at for this fall (sim.ts fall: the ticket's saved, by side). The look reads it to
+   * price who got out once (backOf; the design director, 26 November 2026 18:47Z). Never a count.
+   */
+  backShare?: number;
   /** A loss of its own tight box moments before, close by, or a fighter that was attacking the box ('foe'), that may strike it. */
   near: { fid: number; how: FallHow; foe?: boolean } | null;
 }
@@ -206,6 +212,35 @@ export function jumps(G: Rng, crew: number, p: number, how: FallHow, upTo: numbe
 }
 
 /**
+ * Release 2, 'bailouts' (the design director, 26 November 2026 18:47Z, "price it once"): the share of the men of
+ * falls like this one, by this way down, whom the count brings back (B). Only a fighter's pilot is ever brought back
+ * (falls.ts drawFall: a bomber's men never), at the count's own share for this fall (sc.backShare, passed in), and a
+ * pilot brought back comes down only in a way he can get out of; so B is read from this scene's own weights
+ * (weightsOf, called with 'back' both ways, the never-twice memory included): the same for every way he can get out
+ * of, 0 for every other. (A collision is paired outside this scene, sim.ts fated: not read here.)
+ */
+export function backOf(sc: Scene, mem: FateMemory, how: FallHow): number {
+  if (sc.air !== 'ftr') return 0;
+  if (sc.backShare === undefined) throw new Error('fateOf: a fighter\'s fall with \'bailouts\' needs the count\'s share back (Scene.backShare)');
+  const i = (HOWS as readonly string[]).indexOf(how);
+  if (i < 0) throw new Error(`backOf: no share back is read for '${how}'`);
+  const s = sc.backShare, sum = (w: number[]): number => w.reduce((a, b) => a + b, 0);
+  const wB = weightsOf({ ...sc, back: true }, mem), wN = weightsOf({ ...sc, back: false }, mem);
+  const b = sum(wB) > 0 ? (s * wB[i]) / sum(wB) : 0, n = sum(wN) > 0 ? ((1 - s) * wN[i]) / sum(wN) : 0;
+  return b + n > 0 ? b / (b + n) : 0;
+}
+
+/**
+ * Release 2, 'bailouts' (the design director, 18:47Z): the rule's share S is the share of ALL the men of such falls
+ * shown getting out, the men counted back (B of them, K of those shown out) inside it, never on top. So a man not
+ * counted back is drawn out at the rest, R = (S - B x K) / (1 - B), floored at 0. Where every man is counted back
+ * there is no man to draw.
+ */
+export function restOut(S: number, B: number, K: number): number {
+  return B >= 1 ? 0 : Math.max(0, (S - B * K) / (1 - B));
+}
+
+/**
  * The crew's one rule: each man's share of getting out under a parachute, by the way down, times 'outBand' by height
  * (book.ts SKY.fate.out), at most 0.95; from a glide over the sea nobody jumps (hole H-GLIDE-SEA). A bomber's men read
  * it, and so, with 'bailouts', does a fighter's crew past its pilot (the Fulmar's observer: the design director, 26
@@ -219,13 +254,19 @@ export function manOut(sc: Scene, how: FallHow): number {
 export const landLost = (R: Rng, crew: number): number => R.int(Math.max(1, Math.ceil(crew / 3)));
 
 /**
+ * A share S priced once (restOut): a man the count brought back is always shown out (fateOf: a pilot brought back
+ * under his parachute, his crew as he shows), so K is 1. B absent: the collision, whose B is not read (backOf).
+ */
+const priced = (S: number, B: number | undefined): number => (B === undefined ? S : restOut(S, B, 1));
+
+/**
  * Release 2, 'bailouts': one man of a fighter's crew past its pilot (the two-seat Fulmar's observer, crew 2, D8), his
  * pilot not brought back by the rules. He is crew, so he gets out by the crew's one rule, the bomber men's (manOut,
  * landLost, called), pilot killed included (the design director, 26 November 2026 18:44Z, item 1), on G after the
  * pilot's draws: from a glide he jumps at the rule's share, else the landing keeps him less the men it loses.
  */
-function crewOut(G: Rng, sc: Scene, how: FallHow): 'chute' | 'out' | null {
-  const p = manOut(sc, how);
+function crewOut(G: Rng, sc: Scene, how: FallHow, B?: number): 'chute' | 'out' | null {
+  const p = priced(manOut(sc, how), B);
   if (p > 0 && G.chance(p)) return 'chute';
   if (how !== 'glide') return null;
   return Math.max(0, 1 - landLost(G, sc.crew)) > 0 ? 'out' : null;
@@ -241,15 +282,15 @@ function crewOut(G: Rng, sc: Scene, how: FallHow): 'chute' | 'out' | null {
  * the switch off): it stands for him if he does not jump (the design's section 4.3), so only over his own ground is the
  * climb-out drawn on G. (A fighter's second man is crew, and reads the crew's rule: crewOut.)
  */
-function oneOut(G: Rng, sc: Scene, how: FallHow, landed?: boolean): 'chute' | 'out' | null {
+function oneOut(G: Rng, sc: Scene, how: FallHow, landed?: boolean, B?: number): 'chute' | 'out' | null {
   const F = SKY.fate, band = F.outBand[sc.band];
   if (how === 'glide') {
-    const jump = sc.sea ? 0 : Math.min(0.95, (F.out.glide ?? 0) * band);
+    const jump = priced(sc.sea ? 0 : Math.min(0.95, (F.out.glide ?? 0) * band), B);
     if (jump > 0 && G.chance(jump)) return 'chute';
-    return (landed ?? G.chance(F.ftrLand)) ? 'out' : null;
+    return (landed ?? G.chance(priced(F.ftrLand, B))) ? 'out' : null;
   }
   const p = SAVED(how) ? F.pilotOut[how as keyof typeof F.pilotOut] : how === 'breakup' || how === 'collide' ? F.out[how] ?? 0 : 0;
-  const q = Math.min(0.95, p * band);
+  const q = priced(Math.min(0.95, p * band), B);
   return q > 0 && G.chance(q) ? 'chute' : null;
 }
 
@@ -328,11 +369,15 @@ export function fateOf(rng: Rng, sc: Scene, mem: FateMemory, pair?: { fid: numbe
       // brings his pilot back he shows as his pilot shows, so the crew's fate is one fate and the look never shows him
       // lost or taken where the count brought the crew back; otherwise he gets out by the crew's rule (crewOut), after
       // the pilot's draws.
+      // Priced once (the design director, 18:47Z): a man not brought back is drawn out at the rest of the share once
+      // the men the count brings back, all shown out, are inside it (backOf, restOut), on either ground. A collision
+      // keeps the full share: its B is made by the pairing outside the scene and is not read (an open reading).
+      const B = how === 'collide' ? undefined : backOf(sc, mem, how);
       const G = rng.fork(GOT);
       // Over the enemy's ground a pilot who rides a glide down keeps the look stream's climb-out die thrown above.
-      const pilot = sc.back ? 'chute' as const : oneOut(G, sc, how, how === 'glide' && sc.over === 'enemy' ? out === 1 : undefined);
+      const pilot = sc.back ? 'chute' as const : oneOut(G, sc, how, how === 'glide' && sc.over === 'enemy' ? out === 1 : undefined, B);
       const men = sc.back ? [] : [pilot];
-      for (let i = 1; i < sc.crew; i++) men.push(sc.back ? pilot : crewOut(G, sc, how));
+      for (let i = 1; i < sc.crew; i++) men.push(sc.back ? pilot : crewOut(G, sc, how, B));
       const kept = sc.back ? chuteAt : [];
       const up = men.filter((m) => m === 'chute').length;
       chutes = kept.length + up;

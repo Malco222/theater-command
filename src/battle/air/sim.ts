@@ -30,6 +30,8 @@ const C = SKY.cues;
 /** One of a tick's losses, before how it goes is drawn (AirSim.fated). */
 interface Loss {
   u: AirUnit; fall: Fall; by: number | 'flak' | null | undefined; s: Straggler | null; alt: number; fid: number;
+  /** The count's share of this side's pilots brought back, as the pilots-back stream drew 'back' at it (release 2's 'bailouts' reads it, a look only). */
+  saved: number;
   /** The models this loss brings down in the picture (AR1: a model falls only for its share of the losses): 0, 1, or the rest at the last. */
   models: number;
   /** A bomber known by name: its seat in its group's list (-1: none). A fighter that fell to a named box's gunners: that box and the seat of the bomber that got it. */
@@ -1332,12 +1334,13 @@ export class AirSim implements BattleSim<AirUnit> {
         u.n--;
         u.mor = clamp01(u.mor - SKY.morale.perLoss / u.n0);
         const over = u.side === 'att' ? 'enemy' : 'own';
-        const fall = drawFall(this.fallRng, u.air, over, P.saved[u.side]);
+        const saved = P.saved[u.side];
+        const fall = drawFall(this.fallRng, u.air, over, saved);
         if (fall.back) u.back++;
         const alt = s ? Math.max(0, this.shownAlt(u) - s.down) : this.shownAlt(u);
         const before = u.figures;
         u.figures = this.modelsAfter(u, s);
-        lost.push({ u, fall, by, s, alt, fid: this.fid++, seat, gun, models: before - u.figures });
+        lost.push({ u, fall, by, s, alt, fid: this.fid++, seat, gun, models: before - u.figures, saved });
       }
       if (this.show && owed > 0 && u.n > 0) hit.push([u, owed, due]);
     }
@@ -1465,6 +1468,8 @@ export class AirSim implements BattleSim<AirUnit> {
       crew: u.air === 'bmr' ? crewOf(u.model, this.when, this.bailouts ? this.kitOf(u) : undefined) : this.bailouts ? SKY.fall.fighterCrews[u.model] ?? 1 : 1,
       near: near ? { fid: near.fid, how: near.how, ...(near.foe ? { foe: true } : {}) } : null,
       ...(this.bailouts ? { bailouts: true } : {}),
+      // With 'bailouts' a fighter's fall carries the share the count drew its pilot back at, to price who got out once.
+      ...(this.bailouts && u.air === 'ftr' ? { backShare: L.saved } : {}),
     };
   }
 

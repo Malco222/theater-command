@@ -21,7 +21,8 @@ import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
 import type { FieldEvent } from '../src/battle/core/types';
 import { SKY } from '../src/battle/air/book';
-import { crewOf, fateOf, freshMemory, GOT, HOWS, type Scene } from '../src/battle/air/fates';
+import { backOf, crewOf, fateOf, freshMemory, GOT, HOWS, restOut, type Scene } from '../src/battle/air/fates';
+import { AIR } from '../src/campaign/air';
 import { bomberGuns } from '../src/battle/air/guns';
 import { airBattle, airLooks, AirSim, MORE_LOOKS } from '../src/battle/air/sim';
 import { airTicket, raidGroups } from '../src/battle/air/ticket';
@@ -242,7 +243,8 @@ const scene = (o: Partial<Scene> = {}): Scene => ({
   air: 'bmr', engines: 2, nat: 'USA', model: 'Bomber:USA', when: { year: 1942, month: 6 }, gun: 'hmg', flak: null, pass: null,
   band: 1, alt: 4_500, loaded: false, strag: null, sea: false, night: false, back: false, over: 'enemy', crew: 5, near: null, bailouts: true, ...o,
 });
-const fighter = (o: Partial<Scene> = {}): Scene => scene({ air: 'ftr', engines: 1, nat: 'UK', model: 'Hurricane', gun: 'cannon20', crew: 1, ...o });
+/** A fighter's scene, with the count's own share back for its ground (the ticket's saved by side, ticket.ts: AIR.pilots home and away). */
+const fighter = (o: Partial<Scene> = {}): Scene => scene({ air: 'ftr', engines: 1, nat: 'UK', model: 'Hurricane', gun: 'cannon20', crew: 1, backShare: o.over === 'own' ? AIR.pilots.home : AIR.pilots.away, ...o });
 /** Book figures a test sets, put back after it. */
 function withBook<T>(set: () => void, go: () => T): T {
   const was = { glide: SKY.fate.out.glide, base: structuredClone(SKY.fate.base), crews: SKY.fall.crews, dated: SKY.fall.crewsDated, byKit: SKY.fall.crewsByKit };
@@ -605,32 +607,34 @@ describe('(e) switch-on twins of the shipped lines (none of which is edited)', (
 });
 
 describe('(f) each ruling seen to bite, switch on', () => {
-  const share = (n: number, d: number) => Math.round((1000 * n) / Math.max(1, d)) / 10;
-  it('D1: a fighter pilot not brought back shows a parachute over his own ground too, where with the switch off he never does; the shares by side, reported', () => {
-    const c = { off: { def: [0, 0], att: [0, 0], defNot: 0 }, on: { def: [0, 0], att: [0, 0], defNot: 0 } };
+  it('D1, priced once (18:47Z): fighter losses with a parachute by side, switch off and on, split by brought back and not; a pilot brought back always under his parachute, and over his own ground a pilot not brought back now rarely (the men brought back are inside the share)', () => {
+    type Row = { n: number; c: number };
+    const z = (): Row => ({ n: 0, c: 0 });
+    const c = { off: { def: z(), att: z(), defBack: z(), defNot: z(), attBack: z(), attNot: z() }, on: { def: z(), att: z(), defBack: z(), defNot: z(), attBack: z(), attNot: z() } };
     for (const p of allPairs()) for (const k of ['off', 'on'] as const) for (const e of p[k].lost) {
       const f = fallOf(e);
       if (f.air !== 'ftr' || p.models[e.unit!] === 'Fulmar') continue;
-      const side = e.side as 'att' | 'def';
-      c[k][side][0]++; if (f.chutes) c[k][side][1]++;
-      if (side === 'def' && !f.back && f.chutes) c[k].defNot++;
+      const side = e.side as 'att' | 'def', add = (r: Row) => { r.n++; if (f.chutes) r.c++; };
+      add(c[k][side]); add(c[k][`${side}${f.back ? 'Back' : 'Not'}`]);
     }
-    expect(c.off.defNot).toBe(0);
-    expect(c.on.defNot).toBeGreaterThan(50);
-    expect(c.on.def[1]).toBeGreaterThan(c.off.def[1]);
-    // The design's expectation (section 4.4: about 66% of defender fighter losses with a parachute at middle height; height now read too).
-    const rows = { off: { def: share(c.off.def[1], c.off.def[0]), att: share(c.off.att[1], c.off.att[0]) }, on: { def: share(c.on.def[1], c.on.def[0]), att: share(c.on.att[1], c.on.att[0]) } };
-    console.log(`fighter losses with a parachute, % (falls): defender off ${rows.off.def} (${c.off.def[0]}), on ${rows.on.def} (${c.on.def[0]}); attacker off ${rows.off.att} (${c.off.att[0]}), on ${rows.on.att} (${c.on.att[0]})`);
-    expect(rows.on.def).toBeGreaterThan(55);
-    expect(rows.on.def).toBeLessThan(75);
+    const pc = (r: Row) => `${Math.round((1000 * r.c) / Math.max(1, r.n)) / 10}% (${r.c}/${r.n})`;
+    for (const k of ['off', 'on'] as const) console.log(`fighter losses with a parachute, switch ${k}: defender ${pc(c[k].def)} [brought back ${pc(c[k].defBack)}, not ${pc(c[k].defNot)}]; attacker ${pc(c[k].att)} [brought back ${pc(c[k].attBack)}, not ${pc(c[k].attNot)}]`);
+    // The count is the same off and on, and every pilot brought back is under his parachute either way.
+    for (const r of ['def', 'att', 'defBack', 'defNot', 'attBack', 'attNot'] as const) expect(c.on[r].n).toBe(c.off[r].n);
+    expect([c.on.defBack.c, c.on.attBack.c]).toEqual([c.on.defBack.n, c.on.attBack.n]);
+    // Switch off a defender not brought back never shows one; on, a few do (where the share outruns the men brought back: high spins, glides' jumps, breakups).
+    expect(c.off.defNot.c).toBe(0);
+    expect(c.on.defNot.c).toBeGreaterThan(0);
+    // No longer "did he get out" read twice: the defender's share stays near what the count alone makes (52.4% off, 65.5% at 7033d0bbf).
+    expect(c.on.def.c / c.on.def.n).toBeLessThan(0.56);
   });
-  it('D1 and D3: in unit draws the pilot not brought back gets out at the share by the way down times outBand, the same on either ground; a forced landing climbs out at 0.6 on either ground', () => {
+  it('D1 and D3: in unit draws the pilot not brought back gets out at the share by the way down times outBand, the same on either ground; a forced landing climbs out at 0.6 on either ground (on a side none of whose pilots come back, backShare 0, so that B is 0 and R is S: the 18:47Z pricing is part i)', () => {
     const SV = ['flamer', 'burn', 'wing', 'tail', 'spin'] as const;
     for (const over of ['own', 'enemy'] as const) {
       for (const band of [0, 1, 2] as const) {
         const rng = new Rng(31 + band), got: Record<string, [number, number]> = {};
         for (let i = 0; i < 20_000; i++) {
-          const f = fateOf(rng, fighter({ over, band, alt: SKY.bands.alt[band] }), freshMemory());
+          const f = fateOf(rng, fighter({ over, band, alt: SKY.bands.alt[band], backShare: 0 }), freshMemory());
           const r = (got[f.how] ??= [0, 0]); r[0]++; if (f.chutes) r[1]++;
           if (f.how === 'glide') { expect(f.chutes).toBe(0); }
         }
@@ -854,15 +858,16 @@ describe('(h) the design director\'s 18:44Z, item 1: the Fulmar\'s second man is
   /** Within 4 standard errors of a share (exactly none where the share is 0). */
   const near = (k: number, n: number, want: number, what: string) =>
     expect(Math.abs(k / n - want), `${what}: ${k}/${n} against ${want}`).toBeLessThanOrEqual(4 * Math.sqrt((want * (1 - want)) / n) + 1e-12);
-  it('his pilot not brought back, he gets out by the crew\'s rule for each way down, pilot killed included (out[how] x outBand, the bomber men\'s), at each band on either ground; a bomber\'s men read the same', () => {
+  for (const how of WAYS) it(`his pilot not brought back, he gets out by the crew's rule, way down ${how} (out[how] x outBand, the bomber men's; pilot killed included), at each band on either ground; a bomber's men read the same`, () => {
     let cells = 0;
-    for (const how of WAYS) for (const over of ['own', 'enemy'] as const) for (const band of [0, 1, 2] as const) {
+    for (const over of ['own', 'enemy'] as const) for (const band of [0, 1, 2] as const) {
       const pair = how === 'collide' ? { fid: 1, cause: 'ram' as const } : undefined;
       const want = Math.min(0.95, SKY.fate.out[how] * SKY.fate.outBand[band]);
       withBook(() => { if (how !== 'collide') { SKY.fate.base.ftr = only(how); SKY.fate.base.bmr = only(how); } }, () => {
         let chute = 0, climb = 0;
         for (let seed = 1; seed <= N; seed++) {
-          const go = (crew: number) => fateOf(new Rng(seed * 31 + band), fighter({ model: 'Fulmar', crew, over, band, alt: SKY.bands.alt[band] }), freshMemory(), pair);
+          // (A side none of whose pilots come back, backShare 0: then B is 0 and R is S, so the crew's rule is seen alone; part i prices it.)
+          const go = (crew: number) => fateOf(new Rng(seed * 31 + band), fighter({ model: 'Fulmar', crew, over, band, alt: SKY.bands.alt[band], backShare: 0 }), freshMemory(), pair);
           const one = go(1), two = go(2);
           expect(two.how).toBe(how);
           expect(two.chutes + (two.out ?? 0)).toBeLessThanOrEqual(2);
@@ -882,7 +887,7 @@ describe('(h) the design director\'s 18:44Z, item 1: the Fulmar\'s second man is
       });
       cells++;
     }
-    expect(cells).toBe(60);
+    expect(cells).toBe(6);
   });
   it('his pilot brought back, his way out is his pilot\'s on every draw: under a parachute, his canopy after the pilot\'s, and the pilot\'s canopy where it was', () => {
     let n = 0;
@@ -911,5 +916,120 @@ describe('(h) the design director\'s 18:44Z, item 1: the Fulmar\'s second man is
     }
     console.log(`(h) falls ${falls}; brought back ${back}, of them Fulmars ${fulmarBack}`);
     expect(back).toBeGreaterThan(500);
+  });
+});
+
+// The design director, 26 November 2026 18:47Z, item 2: "D3's share times the band is the share of men shown getting
+// out of such falls IN ALL, with the men counted back inside it, never on top. So fork 83 draws a not-back man out at
+// the remainder: (D3 x band - share back x share of the back shown out) / (1 - share back), floored at 0." Built for
+// every way down by that principle (S the rule's share by way down and height; B the share of such falls' men the
+// count brings back, read from the count's own share for the fall and the scene's weights; K 1; R the rest). A
+// collision is left as built (its B is made by the pairing outside the scene: an open reading). Sizes fixed before
+// running: 90,000 draws for each way down, band and ground (each cell asserted to hold 20,000 falls or more); the
+// Fulmar's second man 20,000 a cell.
+describe('(i) the design director\'s 18:47Z, item 2: priced once', () => {
+  const near = (k: number, n: number, want: number, what: string) =>
+    expect(Math.abs(k / n - want), `${what}: ${k}/${n} against ${want}`).toBeLessThanOrEqual(4 * Math.sqrt((want * (1 - want)) / n) + 1e-12);
+  const F = SKY.fate;
+  /** The rule's share S of a fighter pilot getting out, by the way down and band, over land (book.ts): D3, D11, the forced landing. */
+  const S = (how: string, band: 0 | 1 | 2): number => {
+    const b = F.outBand[band];
+    if (how === 'glide') { const j = Math.min(0.95, F.out.glide * b); return j + (1 - j) * F.ftrLand; }
+    if ((F.saved as readonly string[]).includes(how)) return Math.min(0.95, F.pilotOut[how as keyof typeof F.pilotOut] * b);
+    return how === 'breakup' ? Math.min(0.95, F.out.breakup * b) : 0;
+  };
+  const ROW = F.base.ftr;
+  for (const over of ['own', 'enemy'] as const) for (const band of [0, 1, 2] as const) {
+    it(`the pilot, over ${over === 'own' ? 'his own' : 'the enemy\'s'} ground at band ${band}: for every way down, all the men of such falls shown out at S (B where the men brought back outrun it), the men not brought back at R, the share brought back B`, () => {
+      const s = over === 'own' ? AIR.pilots.home : AIR.pilots.away;
+      for (const [i, how] of HOWS.entries()) {
+        // A test row (the book's fighter row with this way down thirty times as likely), so each cell is well filled; B is the scene's own reading of it.
+        withBook(() => { SKY.fate.base.ftr = ROW.map((w, j) => (j === i ? w * 30 : w)); }, () => {
+          const sc = (back: boolean) => fighter({ over, band, alt: SKY.bands.alt[band], back });
+          const B = backOf(sc(false), freshMemory(), how), want = S(how, band), R = restOut(want, B, 1);
+          const E = B + (1 - B) * R;
+          if (R > 0) expect(Math.abs(E - want)).toBeLessThan(1e-12);
+          const rng = new Rng(7_000 + 10 * i + band), die = new Rng(8_000 + 10 * i + band);
+          let n = 0, shown = 0, back = 0, not = 0, notShown = 0;
+          for (let d = 0; d < 90_000; d++) {
+            const isBack = die.chance(s);
+            const f = fateOf(rng, sc(isBack), freshMemory());
+            if (f.how !== how) continue;
+            const o = f.chutes + (f.out ?? 0);
+            expect(o).toBeLessThanOrEqual(1);
+            n++; shown += o;
+            if (isBack) { back++; expect(f.chutes).toBe(1); } else { not++; notShown += o; }
+          }
+          const what = `${over} band ${band} ${how} (S ${want.toFixed(3)}, B ${B.toFixed(4)}, R ${R.toFixed(3)})`;
+          expect(n, what).toBeGreaterThanOrEqual(20_000);
+          near(back, n, B, `${what}, share brought back`);
+          near(shown, n, E, `${what}, all men shown out`);
+          if (not) near(notShown, not, R, `${what}, men not brought back shown out`);
+        });
+      }
+    });
+  }
+  it('the Fulmar\'s second man, each way his pilot can get out of, each band and ground: all such men shown out at his crew\'s S2 (B where the men brought back outrun it), those not brought back at R2 (a one-way test row: there B is the count\'s share itself)', () => {
+    let cells = 0;
+    for (const over of ['own', 'enemy'] as const) for (const band of [0, 1, 2] as const) for (const how of F.saved) {
+      const s = over === 'own' ? AIR.pilots.home : AIR.pilots.away;
+      withBook(() => { SKY.fate.base.ftr = HOWS.map((x) => (x === how ? 1 : 0)); }, () => {
+        const sc = (crew: number, back: boolean) => fighter({ model: 'Fulmar', crew, over, band, alt: SKY.bands.alt[band], back });
+        const B = backOf(sc(2, false), freshMemory(), how), S2 = Math.min(0.95, F.out[how] * F.outBand[band]), R2 = restOut(S2, B, 1);
+        expect(Math.abs(B - s)).toBeLessThan(1e-12);
+        let n = 0, shown = 0, not = 0, notShown = 0;
+        for (let seed = 1; seed <= 20_000; seed++) {
+          const isBack = new Rng(50_000 + seed).chance(s);
+          const one = fateOf(new Rng(seed), sc(1, isBack), freshMemory()), two = fateOf(new Rng(seed), sc(2, isBack), freshMemory());
+          const man = two.chutes + (two.out ?? 0) - one.chutes - (one.out ?? 0);
+          expect(man === 0 || man === 1).toBe(true);
+          n++; shown += man;
+          if (isBack) expect(man).toBe(1); else { not++; notShown += man; }
+        }
+        const what = `Fulmar's second man, ${over} band ${band} ${how} (S2 ${S2.toFixed(3)}, B ${B}, R2 ${R2.toFixed(3)})`;
+        near(shown, n, B + (1 - B) * R2, `${what}, all`);
+        near(notShown, not, R2, `${what}, not brought back`);
+      });
+      cells++;
+    }
+    expect(cells).toBe(30);
+  });
+  it('the floor at 0: on the book as it stands, wherever the men brought back outrun the share (S < B x K), R is 0, never below; elsewhere (S - B) / (1 - B)', () => {
+    let floored = 0, open = 0;
+    for (const over of ['own', 'enemy'] as const) for (const band of [0, 1, 2] as const) for (const how of HOWS) {
+      const B = backOf(fighter({ over, band }), freshMemory(), how), want = S(how, band), R = restOut(want, B, 1);
+      expect(R, `${over} ${band} ${how}`).toBeGreaterThanOrEqual(0);
+      if (want < B) { floored++; expect(R).toBe(0); } else { open++; expect(Math.abs(R - (want - B) / (1 - B))).toBeLessThan(1e-12); }
+      // A way a pilot brought back never takes: B 0, R is S.
+      if (!(F.saved as readonly string[]).includes(how)) expect([B, R]).toEqual([0, want]);
+    }
+    console.log(`(i) the floor: ${floored} cells floored at 0, ${open} not (fighter book row, cannon20, 54 cells)`);
+    expect(floored).toBeGreaterThan(0);
+    expect(restOut(0.2, 1, 1)).toBe(0);
+    expect(() => fateOf(new Rng(1), { ...fighter(), backShare: undefined }, freshMemory())).toThrow(/share back/);
+  });
+  it('B follows the count\'s own share for the fall, never a pasted one: Kent flown with the defender\'s share back set to 0 and to 0.9 (test figures on the ticket): at 0 the defender\'s pilots get out at the full share, at 0.9 not one not brought back in a way a pilot can get out of', () => {
+    const kent = (def: number, k: number): Battle => {
+      const t = structuredClone(TK[1]);
+      t.place.saved = { ...t.place.saved, def };
+      return at(`kent-saved-${def}`, t, k);
+    };
+    const tally = (def: number) => {
+      let n = 0, c = 0, back = 0;
+      for (const k of [0, 1, 2, 3]) for (const e of lostOf(flown(kent(def, k), true).history())) {
+        const f = fallOf(e);
+        if (f.air !== 'ftr' || e.side !== 'def' || !(F.saved as readonly string[]).includes(f.how)) continue;
+        if (f.back) { back++; continue; }
+        n++; if (f.chutes) c++;
+      }
+      return { n, c, back };
+    };
+    const none = tally(0), most = tally(0.9);
+    console.log(`(i) Kent, defenders not brought back in a way a pilot can get out of: share back 0, ${none.c}/${none.n} under a parachute (${none.back} back); share back 0.9, ${most.c}/${most.n} (${most.back} back)`);
+    expect(none.back).toBe(0);
+    expect(none.n).toBeGreaterThan(40);
+    expect(none.c / none.n).toBeGreaterThan(0.25);
+    expect(most.n).toBeGreaterThan(0);
+    expect(most.c).toBe(0);
   });
 });
