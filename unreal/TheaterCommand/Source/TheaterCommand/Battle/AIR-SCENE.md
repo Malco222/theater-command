@@ -1421,7 +1421,8 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    `-TheaterAirNoSteadyEye` off; FAirBattleState::bSteadyEye). On, and flying smooth: the strategy camera is
    AirDesk::Overview's (soft rings, the look carried with the knot it is on, the framing eased; AimEye's three places:
    the start afresh after a ride, the crowd and framing, the look); a scroll of the wheel or trackpad glides to its zoom
-   over about a second (AirDesk::Overview::ZoomEase, the framing's own ease) instead of stepping 15% in one frame; in a
+   instead of stepping 15% in one frame (AirDesk::Overview::ZoomEase: its own ease, ZoomEaseS 0.3 s, in the distance's
+   logarithm and never faster than ZoomMost; a notch 95% there in 0.7 s, under 0.7% of the distance a frame); in a
    picture run only (`-TheaterAirBattleShots`) the two frames after a picture is asked for step no more than a
    sixtieth of a second (not yet seen on the Mac). Off: AimEye's hard rings and Zoom as they were, to the byte. Over
    Bremen's B-17s at x1 the old camera's look jumped 20 px and more 92.6 times a real minute through the battle (106.6
@@ -1432,11 +1433,12 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    her place is eased on to her slot's; every bomber in her box banks no more than RallyBankMost and rolls eased; a
    straggler drops back from where she fell out. Off: the bombers fly as 30899121 flew them, to the byte (the He 111s
    weaving 0.94 times a bomber's air minute, banked over 5 degrees 9.8% of the time; on, 0.00 and 0.0%).
-   The log: as a battle opens, "Air battle: the strategy camera is ..." names the camera in use and each row on or off;
-   with the camera's row on, the 5 s "Air battle sky" line ends "The raid camera: the zoom N m, the eye N m off, N jumps
+   The log: as a battle opens, with either row on, "Air battle: the strategy camera is ..." names the camera in use and
+   each row on or off (with both off the log is as it was); with the camera's row on, the 5 s "Air battle sky" line ends "The raid camera: the zoom N m, the eye N m off, N jumps
    of the picture over 20 px." The cloud tests (run.sh): air_smooth_probe's report and air_eye_probe's strategy camera,
    frame by frame, to the byte with both rows off (30899121's), each alone on and both on (2464374bb's for that half);
    air_zoom_test, the zoom's glide.
    Look for (`-TheaterAirSteadyEye -TheaterAirBoxKeep`, then each alone, then neither): a raid watched as a player
    watches it, no zooming and no resizing of the window, the picture going with the bombers without a jump; the
-   bombers holding their boxes level; then a scroll of the zoom gliding; the opening log line and the sky line's jumps.
+   bombers holding their boxes level; then a scroll of the zoom gliding; the opening log line and the sky line's jumps
+   (only with the camera's row on: judge them near 0 by themselves, there is no count with the row off to set beside).
