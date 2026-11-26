@@ -3288,11 +3288,12 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
       divs += c.divs;
     }
     value += cut * divs * G.value;
-    // (The strafers' rule, the UI director 19:17Z: where the raid as a whole did no harm worth a figure, the cut printing
-    // as 0%, the sentence for no harm in place of "by 0%". Off, as shipped.)
+    // (The strafers' rule, the UI director 19:17Z and 21:22Z, i: where the harm rounds to nothing, a line that says the
+    // outcome only, true beside any report and on either side: the cut printing as 0%, "The raids did the troops little
+    // harm."; the cut nothing at all, "The raids did the troops no harm.". Off, as shipped.)
     result = (rule ? Math.round(cut * 100) > 0 : cut > 0)
       ? `The raids cut the organisation of ${foes.length === 1 ? foes[0].name : `the ${foes.length} corps`} at ${r.name} by ${Math.round(cut * 100)}%${foes.some((c) => c.dug) ? ', less where they are dug in' : ''}. They fight the weaker for it until they have rested.`
-      : 'The aircraft found little to hit.';
+      : !rule ? 'The aircraft found little to hit.' : cut > 0 ? 'The raids did the troops little harm.' : 'The raids did the troops no harm.';
   } else {
     const S = AIR.damage.shipping;
     const frac = Math.min(S.maxSink, S.sink * (through / (through + S.scale)));

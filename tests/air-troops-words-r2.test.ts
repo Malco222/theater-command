@@ -457,3 +457,44 @@ describe('the report lines name their groups by the lane\'s one rule (the UI dir
     expect(r.strafed).toContain('1st Fighter Group');
   });
 });
+
+// The UI director, 25 November 2026 21:22Z, i: "a line that says the outcome only, true beside any report and on either
+// side. Under the lane: The cut rounds to 0%: The raids did the troops little harm. ... The cut is nothing at all: The
+// raids did the troops no harm. Off, the base's "The aircraft found little to hit." stands as shipped."
+describe('the line where the harm rounds to nothing (the UI director, 21:22Z, i)', () => {
+  const HARM_LITTLE = 'The raids did the troops little harm.', HARM_NONE = 'The raids did the troops no harm.';
+  it('under the lane: little harm where the cut prints as 0%, no harm where it is nothing at all; the same sentence to both sides', () => {
+    on();
+    // 646 German fighters (round seven's edge raid): a cut above nothing that prints as 0%.
+    const a = saar(0, 'three');
+    const d = a.g.airFleets.find((f) => f.id === 3)!;
+    d.ftr = 646; d.est.ftr = Math.max(d.est.ftr, 646);
+    heard = [];
+    const r1 = launchRaid(a.g, 'ground', a.target, a.ids, 'FRA')!;
+    const cut1 = heard.find((x) => x.route === 'settled')!.cut!;
+    expect(cut1).toBeGreaterThan(0);
+    expect(Math.round(cut1 * 100)).toBe(0);
+    expect(r1.result).toBe(HARM_LITTLE);
+    expect(resultFor(r1, 'FRA')).toBe(HARM_LITTLE);
+    expect(resultFor(r1, 'GER')).toBe(HARM_LITTLE);
+    // Groupement de Chasse 1 alone at Namur, beyond its reach to strafe, no bombers: nothing reaches the troops.
+    const b = saar(0, 'far');
+    heard = [];
+    const r2 = launchRaid(b.g, 'ground', b.target, [GC1], 'FRA')!;
+    expect(heard.find((x) => x.route === 'settled')!.cut).toBe(0);
+    expect(r2.result).toBe(HARM_NONE);
+    expect(resultFor(r2, 'GER')).toBe(HARM_NONE);
+    // As built (200 German fighters): the cut prints, as before.
+    const c = saar(0, 'three');
+    const r3 = launchRaid(c.g, 'ground', c.target, c.ids, 'FRA')!;
+    expect(r3.result.startsWith('The raids cut the organisation of')).toBe(true);
+  });
+  it('off: "The aircraft found little to hit." as shipped, where nothing came through', () => {
+    flyKinds([]);
+    // (Setup: the German corps at the Saar counted as no divisions, so the weight falls on nothing: troopCut is 0.)
+    const b = saar(0, 'far');
+    for (const c of b.g.regions[b.target].units) if (c.nat === 'GER') c.divs = 0;
+    const r2 = launchRaid(b.g, 'ground', b.target, [GC1], 'FRA')!;
+    expect(r2.result).toBe(FOUND_LITTLE);
+  });
+});
