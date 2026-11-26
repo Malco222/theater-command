@@ -1595,11 +1595,14 @@ describe('city defences on the 3D cards: the searchlights where a still can see 
     return page.card.ways.gunsTail;
   };
 
-  it('a raid planned by night on a target with searchlights: the guns\' tail ends with their level', () => {
-    expect(tail({ guns: 3, lights: 2 })).toBe(`\u00B7 and ${S} light \u00B7 searchlights level 2`);
-    expect(tail({ guns: 1, lights: 3 })).toBe(`\u00B7 and ${S} light \u00B7 searchlights level 3`);
-    // Searchlights and no guns built: the tail's own words for a bare target, then the lights.
-    expect(tail({ lights: 1 })).toBe(`\u00B7 only ${S} light \u00B7 searchlights level 1`);
+  it('a raid planned by night on a target in sight with searchlights: the guns\' tail says their level, in place of the standing guns\' words', () => {
+    // (The UI director, 26 Nov 2026 03:53Z: the tip already says the standing guns, and the tail is short.)
+    expect(tail({ guns: 3, lights: 2 })).toBe('\u00B7 searchlights level 2');
+    expect(tail({ guns: 1, lights: 3 })).toBe('\u00B7 searchlights level 3');
+    // Searchlights and no guns built, a bare target: the same.
+    expect(tail({ lights: 1 })).toBe('\u00B7 searchlights level 1');
+    // It fits the 25 characters the tail holds.
+    expect(tail({ guns: 3, lights: 3 }).length).toBeLessThanOrEqual(25);
   });
 
   it('by day, with no searchlights, and with the switch off, the tail is as it was', () => {
