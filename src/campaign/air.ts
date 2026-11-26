@@ -21,7 +21,7 @@ import qualityData from '../../data/campaign/air-quality.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp, tenthPct } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
-import { allied, atWar, ensureSupply, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
+import { allied, atWar, ensureSupply, headline, newsWeek, placeName, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { fighterMonth, fighterTypesOn, lawK, typeEdge } from './fighters';
 import { armsOf, intoPool, unitsDecide, wayNow } from './units';
@@ -2905,17 +2905,20 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   // ruled one hedge for both lines (25 Nov 2026 22:24Z), and the words are the UI director's (22:27Z and 22:30Z): the
   // guns are "built here", or "can be built here" where never scouted, and counts are in words.
   if (cn && cn.lights > 0) {
-    const over = `Level ${cn.lights} searchlights over ${place}`, few = 'they help the night fighters a little.';
+    // (The place takes its article as the news gives it, "over the Ruhr", "over the Saar"; a name without one stays
+    // bare, "over Kent": the UI director, 26 Nov 2026 03:59Z.)
+    const where = placeName(place);
+    const over = `Level ${cn.lights} searchlights over ${where}`, few = 'they help the night fighters a little.';
     const never = !!known && (known.seen ?? -1) < 0;
     const when = known && !never ? ` when ${seenAgo(known.ago ?? 0)}` : '';
     const none = !known ? 'There are no guns built here for them to light.' : never ? 'No guns are reckoned built here for them to light.' : `There were no guns built here for them to light${when}.`;
     const radar = never ? 'Not scouted, so reckoned at the worst: with radar laying the guns' : 'With radar laying the guns';
     const built = never ? 'guns that can be built here' : `guns built here${when}`;
     out.lines.push(cn.cloud
-      ? { label: 'Searchlights', value: `Cloud over ${place}`, effect: 'The searchlights cannot see the bombers through it.' }
+      ? { label: 'Searchlights', value: `Cloud over ${where}`, effect: 'The searchlights cannot see the bombers through it.' }
       : !cn.guns ? { label: 'Searchlights', value: over, effect: `${none} They help the night fighters a little.` }
         : !cn.radar ? { label: 'Searchlights', value: over, effect: "Without Fighter control's radar to lay the guns, they help only the night fighters, a little." }
-          : cn.sat < 1 ? { label: 'Searchlights', value: 'More bombers than the lights can hold', effect: `About ${Math.round(out.B).toLocaleString('en-US')} bombers over ${place}, and a beam holds one at a time: the lights do about ${Math.round(cn.sat * 100)}% of their work.` }
+          : cn.sat < 1 ? { label: 'Searchlights', value: 'More bombers than the lights can hold', effect: `About ${Math.round(out.B).toLocaleString('en-US')} bombers over ${where}, and a beam holds one at a time: the lights do about ${Math.round(cn.sat * 100)}% of their work.` }
             : { label: 'Searchlights', value: over, effect: cn.lit >= cn.guns ? `${radar}, they light every level of ${never ? '' : 'the '}${built}, and ${few}` : `${radar}, they light ${upToTen(cn.lit)} of the ${upToTen(cn.guns)} levels of ${built}, and ${few}` });
   }
   if (out.ships.length) {

@@ -310,7 +310,7 @@ describe('city defences: the guns by night (slice 2)', () => {
     expect(cityNight(r.g, r.t, 400, 'clear').share).toBeCloseTo((1 * 0.45 + 2 * (0.45 + 0.3 * 0.5)) / 3, 12);
     expect(cityNight(r.g, r.t, 400, 'clear').litShare).toBeCloseTo((2 * 0.5) / 3, 12);
     const a = ruhrByNight({ guns: 3, lights: 3, radar: true, bombers: 900 }).a();
-    expect(line(a, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'More bombers than the lights can hold', effect: 'About 900 bombers over Ruhr, and a beam holds one at a time: the lights do about 33% of their work.' });
+    expect(line(a, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'More bombers than the lights can hold', effect: 'About 900 bombers over the Ruhr, and a beam holds one at a time: the lights do about 33% of their work.' });
     expect(a.lights).toEqual({ level: 3, cloud: false, lit: 1 / 3 });
     expect(line(a, 'Anti-aircraft guns')!.effect).toBe('They stop 45% of the bombing. By night they fire by radar and searchlight, and bring down about 55% as many bombers as they would by day.');
   });
@@ -321,7 +321,7 @@ describe('city defences: the guns by night (slice 2)', () => {
     expect(a.lights).toEqual({ level: 3, cloud: true, lit: 0 });
     // Cloud keeps its own price beside the table (weather, ruling 127: 0.5 by night).
     expect(gunsTerm(a, 0.5)).toBeCloseTo(3 * 0.012 * 0.7 * 0.5 * 0.45, 12);
-    expect(line(a, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Cloud over Ruhr', effect: 'The searchlights cannot see the bombers through it.' });
+    expect(line(a, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Cloud over the Ruhr', effect: 'The searchlights cannot see the bombers through it.' });
     expect(line(a, 'Anti-aircraft guns')!.effect).toBe('They stop 45% of the bombing. By night they fire by radar, and bring down about 45% as many bombers as they would by day.');
     // No floor for the night fighters under cloud: the same fighters meet the raid, lights or none.
     const lit = ruhrByNight({ lights: 3, cloud: true, fighters: true, ac: true }).a(), dark = ruhrByNight({ cloud: true, fighters: true, ac: true }).a();
@@ -342,7 +342,7 @@ describe('city defences: the guns by night (slice 2)', () => {
     // Release 1's flat 0.03 likewise.
     expect(ruhrByNight({ lights: 3, fighters: true }).a().D).toBe(ruhrByNight({ fighters: true }).a().D);
     // And with no guns the card says what they do.
-    expect(line(lit, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 3 searchlights over Ruhr', effect: 'There are no guns built here for them to light. They help the night fighters a little.' });
+    expect(line(lit, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 3 searchlights over the Ruhr', effect: 'There are no guns built here for them to light. They help the night fighters a little.' });
     expect(line(lit, 'Anti-aircraft guns')).toBeUndefined();
     expect(lit.lights).toEqual({ level: 3, cloud: false, lit: 0 });
   });
@@ -361,14 +361,14 @@ describe('city defences: the guns by night (slice 2)', () => {
 
   it('words the searchlights line in each of its forms, and the guns by night in theirs', () => {
     const some = ruhrByNight({ guns: 3, lights: 2, radar: true, bombers: 200 }).a();
-    expect(line(some, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 2 searchlights over Ruhr', effect: 'With radar laying the guns, they light two of the three levels of guns built here, and they help the night fighters a little.' });
+    expect(line(some, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 2 searchlights over the Ruhr', effect: 'With radar laying the guns, they light two of the three levels of guns built here, and they help the night fighters a little.' });
     expect(line(some, 'Anti-aircraft guns')).toEqual({ label: 'Anti-aircraft guns', value: 'Level 3 guns ring the factories of Ruhr', effect: `They stop 45% of the bombing. By night they fire by radar and searchlight, and bring down about ${Math.round(((1 * 0.45 + 2 * 0.75) / 3) * 100)}% as many bombers as they would by day.` });
     expect(some.lights).toEqual({ level: 2, cloud: false, lit: 2 / 3 });
     const all = ruhrByNight({ guns: 2, lights: 3, radar: true }).a();
     expect(line(all, 'Searchlights')!.effect).toBe('With radar laying the guns, they light every level of the guns built here, and they help the night fighters a little.');
     expect(all.lights!.lit).toBe(1);
     const blind = ruhrByNight({ guns: 3, lights: 3 }).a();
-    expect(line(blind, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 3 searchlights over Ruhr', effect: "Without Fighter control's radar to lay the guns, they help only the night fighters, a little." });
+    expect(line(blind, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 3 searchlights over the Ruhr', effect: "Without Fighter control's radar to lay the guns, they help only the night fighters, a little." });
     expect(line(blind, 'Anti-aircraft guns')!.effect).toBe('They stop 45% of the bombing. By night they fire blind, and bring down about 20% as many bombers as they would by day.');
     expect(blind.lights).toEqual({ level: 3, cloud: false, lit: 0 });
     // No lights: no searchlights line, the guns' night clause, and the reading at level 0.
@@ -1372,7 +1372,7 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
     const r = ruhrByNight({ guns: 3, lights: 1, radar: true, bombers: 100 });
     const fog = assessAir(r.g, [r.f], 'night', r.t, knownAs(1));
     expect(fog.lights).toEqual({ level: 1, cloud: false, lit: 1 });
-    expect(line(fog, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 1 searchlights over Ruhr', effect: 'Not scouted, so reckoned at the worst: with radar laying the guns, they light every level of guns that can be built here, and they help the night fighters a little.' });
+    expect(line(fog, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Level 1 searchlights over the Ruhr', effect: 'Not scouted, so reckoned at the worst: with radar laying the guns, they light every level of guns that can be built here, and they help the night fighters a little.' });
     // The guns keep their fog hedge, for the guns are what the side counts.
     expect(line(fog, 'Anti-aircraft guns')).toEqual({ label: 'Anti-aircraft guns', value: 'Not scouted, so reckoned at the worst: level 1 guns round the factories of Ruhr', effect: 'They stop 15% of the bombing. By night they fire by radar and searchlight, and bring down about 75% as many bombers as they would by day.' });
     expect(gunsTerm(fog)).toBeCloseTo(1 * 0.012 * 0.7 * 0.75, 12);
@@ -1403,7 +1403,7 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
     for (const end of [w.lo, w.hi]) {
       expect(end.a.known).toBeDefined();
       expect(end.a.lights!.level).toBe(3);
-      expect(line(end.a, 'Searchlights')!.value).toBe('Level 3 searchlights over Ruhr');
+      expect(line(end.a, 'Searchlights')!.value).toBe('Level 3 searchlights over the Ruhr');
     }
     // The low end counts no guns where none were seen: the lights have none of its guns to light, and none are reckoned.
     expect(line(w.lo.a, 'Searchlights')!.effect).toBe('No guns are reckoned built here for them to light. They help the night fighters a little.');
@@ -1424,7 +1424,7 @@ describe('city defences under fog on raids (the design director, 19:44Z: radar a
     const cloud = ruhrByNight({ guns: 3, lights: 3, radar: true, bombers: 100, cloud: true });
     const fog = assessAir(cloud.g, [cloud.f], 'night', cloud.t, knownAs(3));
     expect(fog.lights).toEqual({ level: 3, cloud: true, lit: 0 });
-    expect(line(fog, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Cloud over Ruhr', effect: 'The searchlights cannot see the bombers through it.' });
+    expect(line(fog, 'Searchlights')).toEqual({ label: 'Searchlights', value: 'Cloud over the Ruhr', effect: 'The searchlights cannot see the bombers through it.' });
     // With the switch off a forecast under fog names no lights and prices the guns as it always did.
     const off = ruhrByNight({ guns: 3, lights: 3, radar: true, bombers: 100, on: false });
     const offFog = assessAir(off.g, [off.f], 'night', off.t, knownAs(3));
