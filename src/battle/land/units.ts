@@ -422,7 +422,7 @@ export function joinBlocks(t: { att: SideTicket; def: SideTicket; turn?: number 
 const FRONT: Kind[] = ['inf', 'mtn', 'eng', 'fort', 'cav'];
 const MOBILE: Kind[] = ['arm', 'mot'];
 /** Metres between blocks drawn up side by side in a row. */
-const GAP = 40;
+export const GAP = 40;
 
 /** A side's rows: foot in the front line, tanks and lorries next (half of them in front where there is no foot), guns. */
 function rowsOf(mine: LandUnit[]): LandUnit[][] {

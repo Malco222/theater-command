@@ -1769,6 +1769,18 @@ export class LandBattle implements BattleSim<LandUnit> {
         // 'land:begin' } ends the step, and the clock may run.
         // { do: 'land:place', ..., face } turns it that way (release 2, radians as the core's).
         if (c.do === 'land:place') {
+          // Several blocks as one act (release 2; Brian, 26 November 2026: "move my units in a formation before the
+          // battle begins"; the design director, 03:50Z: a control, no battle rule): { do: 'land:place', units: [ids],
+          // places: [[x, y, face?], ...] } stands each block of the placing side at its own place, each by its own
+          // checks, the others of the act counted where they will stand and not where they stood. All of them or
+          // none (placeManyWhy names the block that cannot go).
+          const many = (c as { places?: unknown }).places;
+          if (Array.isArray(many)) {
+            const us = ((c.units ?? []) as number[]).map((id) => this.unit(Number(id))), at = many.map((p) => (Array.isArray(p) ? p.map(Number) : []));
+            if (by !== this.setup || us.some((v) => !v) || this.placeManyWhy(us as LandUnit[], at) !== null) return false;
+            (us as LandUnit[]).forEach((v, i) => { const f = at[i][2]; this.place(v, at[i][0], at[i][1], f !== undefined && Number.isFinite(f) ? f : undefined); });
+            return true;
+          }
           const u = this.unit(Number((c.units as number[] | undefined)?.[0])), x = Number(c.x), y = Number(c.y);
           if (!u || this.placeWhy(u, x, y) !== null || by !== this.setup) return false;
           const f = c.face === undefined ? undefined : Number(c.face);
@@ -2207,17 +2219,46 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** Where the placing side may put its guns and teams, [x0, y0, x1, y1] metres; null outside the setup step. */
   setupRoom(): [number, number, number, number] | null { return this.room ? [...this.room] as [number, number, number, number] : null; }
 
-  /** Why a block may not stand there in the setup step, or null where it may (release 2). */
-  placeWhy(u: LandUnit, x: number, y: number): string | null {
+  /**
+   * Why a block may not stand there in the setup step, or null where it may (release 2). 'but': blocks placed in the
+   * same act, which are not counted where they stand now (placeManyWhy counts them where they will stand).
+   */
+  placeWhy(u: LandUnit, x: number, y: number, but?: ReadonlySet<LandUnit>): string | null {
+    return this.placeable(u) ?? this.standWhy(u, x, y, this.room!, but);
+  }
+
+  /** Why a block may not be placed at all in the setup step, wherever it would stand, or null where it may be (release 2). */
+  placeable(u: LandUnit): string | null {
     if (!this.setup || u.side !== this.setup) return 'The battle has begun.';
     if (this.placeAll ? u.kind === 'fort' || !fighting(u) : u.kind !== 'art' || !fighting(u)) return this.placeAll ? 'Fortifications stay where they are built.' : 'Only guns and support teams are placed.';
     // (A block waiting for help is dug in where it was told to wait.)
     if (u.dug || u.waits) return 'It is dug in where it stands.';
-    return this.standWhy(u, x, y, this.room!);
+    return null;
+  }
+
+  /**
+   * Why several blocks may not be placed as one act in the setup step (release 2), or null where they all may: each
+   * block by its own checks (placeWhy), the others of the act counted where they would stand and not where they stand
+   * now. Names the first block that cannot go. A control of the setup step: nothing in the fight reads it.
+   */
+  placeManyWhy(us: LandUnit[], at: readonly (readonly number[])[]): { id: number; why: string } | null {
+    if (!us.length || us.length !== at.length) return { id: us[0]?.id ?? -1, why: 'Nothing to place.' };
+    const act = new Set(us);
+    if (act.size !== us.length) return { id: us[0].id, why: 'A block stands in one place only.' };
+    for (let i = 0; i < us.length; i++) {
+      const u = us[i], x = Number(at[i][0]), y = Number(at[i][1]);
+      const why = this.placeWhy(u, x, y, act);
+      if (why !== null) return { id: u.id, why };
+      for (let j = 0; j < i; j++) {
+        const o = us[j];
+        if (Math.abs(at[j][0] - x) < (o.w + u.w) / 2 + LAND.placeClear && Math.abs(at[j][1] - y) < (o.d + u.d) / 2 + LAND.placeClear) return { id: u.id, why: 'Another block stands there.' };
+      }
+    }
+    return null;
   }
 
   /** Why a block may not stand there inside its side's ground 'r' (the setup step's own checks), or null where it may. */
-  private standWhy(u: LandUnit, x: number, y: number, r: [number, number, number, number]): string | null {
+  private standWhy(u: LandUnit, x: number, y: number, r: [number, number, number, number], but?: ReadonlySet<LandUnit>): string | null {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return 'Off the field.';
     const hw = u.w / 2, hd = u.d / 2;
     if (x - hw < r[0] || x + hw > r[2] || y - hd < r[1] || y + hd > r[3]) return 'Outside your ground.';
@@ -2233,7 +2274,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     // Clear of every block by a few metres, so neither is shoved off its place as they turn to fire (spread).
     for (const o of this.units) {
-      if (o === u || !live(o)) continue;
+      if (o === u || !live(o) || but?.has(o)) continue;
       if (Math.abs(o.x - x) < (o.w + u.w) / 2 + LAND.placeClear && Math.abs(o.y - y) < (o.d + u.d) / 2 + LAND.placeClear) return 'Another block stands there.';
     }
     return null;

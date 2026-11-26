@@ -39,6 +39,10 @@
 //                                             it may); with no point or line, whether it may at all
 //   TC.landCanPlace(id, x, y)              -> { ok, why }: whether a block may stand there in the setup step
 //   TC.landPlace(id, x, y, face)           -> { ok, why }: places it; the next delta starts the men again (reset)
+//   TC.landPlaceMany([[id, x, y, face], ...]) -> { ok, why, id?, who? }: places several as one act, all or none; a
+//                                             refusal names the block that cannot go (release 2: drawing up together)
+//   TC.landDrawUp(kind, ids?)              -> { ok, why, id?, who?, placed }: draws those blocks (none named: all of his)
+//                                             up in a 'line', 'two' lines, a 'wedge' or a 'column', facing the enemy
 //   TC.landBegin()                         -> { ok }: ends the setup step; the clock runs
 //   TC.landHedges(hedges, gates)           -> { ok, hedges, gates }: the 3D field's hedge lines [{ kind, points: [[x, y], ...] }]
 //                                             and gateways [{ x, y, yaw, width, kind: 'gate' }], metres from the field's
@@ -51,6 +55,7 @@
 import type { Command, FieldTicket, Side } from '../../../src/battle/core/types';
 import { LiveBattle, livePiece, liveTicket, type LiveDelta, type LiveOpts, type LiveSky } from '../../../src/battle/land/live';
 import type { LandPlace } from '../../../src/battle/land/field';
+import { FORMATIONS } from '../../../src/battle/land/formation';
 import { PIECES } from '../../../src/battle/land/pieces';
 import { ownTeamsLook } from '../../../src/battle/land/own-teams';
 import type { Gate, Hedge } from '../../../src/battle/land/sim';
@@ -160,6 +165,20 @@ function need(): LiveBattle {
     const why = need().canPlace(id, x, y);
     const ok = need().place(id, x, y, face ?? undefined);
     return { ok, why: ok ? '' : why ?? 'Not now: the battle has begun.' };
+  },
+
+  landPlaceMany(list: number[][]) {
+    const l = need(), rows = Array.isArray(list) ? list.filter((p) => Array.isArray(p)).map((p) => p.map(Number)) : [];
+    const no = l.canPlaceMany(rows);
+    const ok = no === null && l.placeMany(rows);
+    return { ok, why: ok ? '' : no?.why ?? 'Not now: the battle has begun.', ...(no && no.id >= 0 ? { id: no.id, who: no.who } : {}) };
+  },
+
+  landDrawUp(kind: string, ids?: number[] | null) {
+    const k = FORMATIONS.find((f) => f === kind);
+    if (!k) return { ok: false, why: 'No such formation.', placed: 0 };
+    const r = need().drawUp(k, Array.isArray(ids) ? ids.map(Number) : []);
+    return { ok: r.ok, why: r.why, ...(r.id !== undefined ? { id: r.id, who: r.who ?? '' } : {}), placed: r.placed.length };
   },
 
   landBegin() {

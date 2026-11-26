@@ -23,6 +23,7 @@ import { DT } from '../core/types';
 import { DROPS, LOOPS, TOWN } from '../core/cues';
 import { GROUNDS, groundAt, type LandPlace } from './field';
 import { LandBattle, type Gate, type Hedge } from './sim';
+import { drawnUp, type Formation } from './formation';
 import { LAND, MOTION, type Kind } from './rules';
 import { calFor } from './shells';
 import type { LandUnit } from './units';
@@ -474,6 +475,9 @@ export function ticketSky(t: FieldTicket<LandPlace>): LiveSky {
   return { cover: c(0.45), base: 1000, kind: 'cumulus', hour: 10 };
 }
 
+/** Drawing up (drawUp): how far to every side a formation is tried when a place of it is barred, and in what steps, metres. */
+const DRAW = { reach: 400, step: 20 };
+
 /** The live battle: a set piece (or any land ticket) fought step by step, written as the recording's pieces. */
 export class LiveBattle {
   readonly sim: LandBattle;
@@ -775,6 +779,68 @@ export class LiveBattle {
     const ok = this.sim.hedgesOn(hedges, gates);
     if (ok) this.replace();
     return ok;
+  }
+
+  /**
+   * Why several of his blocks, each [id, x, y, face?], may not be placed as one act in the setup step: the block that
+   * cannot go (its id and name) and why, or null where they all may.
+   */
+  canPlaceMany(list: readonly (readonly number[])[]): { id: number; who: string; why: string } | null {
+    if (!this.me || !this.sim.setup) return { id: -1, who: '', why: 'Not now: the battle has begun.' };
+    if (!list.length) return { id: -1, who: '', why: 'Nothing to place.' };
+    const us = list.map((p) => this.sim.units.find((v) => v.id === Number(p[0])));
+    const lost = us.findIndex((u) => !u || u.side !== this.me);
+    if (lost >= 0) return { id: Number(list[lost][0]), who: '', why: us[lost] ? 'Only your own troops take your orders.' : 'No such block.' };
+    const no = this.sim.placeManyWhy(us as LandUnit[], list.map((p) => p.slice(1)));
+    return no ? { ...no, who: this.whoIs(no.id) } : null;
+  }
+
+  /** Places several of the player's blocks as one act in the setup step, each [id, x, y, face?]: all of them or none. */
+  placeMany(list: readonly (readonly number[])[]): boolean {
+    if (this.canPlaceMany(list) !== null) return false;
+    const ok = this.sim.command({ do: 'land:place', units: list.map((p) => Number(p[0])), places: list.map((p) => p.slice(1)) } as unknown as Command, this.me!);
+    if (ok) this.replace();
+    return ok;
+  }
+
+  /**
+   * Draws his blocks up in the setup step (formation.ts; Brian, 26 November 2026): those named, or with none named
+   * every block of his that may be placed, in a line, two lines, a wedge or a column about the middle of where they
+   * stand, facing the enemy, guns and support teams behind. Where a place of it is barred (water, a block that stays, a
+   * fort), the whole formation is tried a little to every side, the nearest first, and stands on the first ground that
+   * takes all of it: never outside his own ground. Says where each was placed, or the block that cannot go and why.
+   */
+  drawUp(kind: Formation, ids: readonly number[] = []): { ok: boolean; why: string; id?: number; who?: string; placed: number[][] } {
+    const none = (why: string, id?: number): { ok: boolean; why: string; id?: number; who?: string; placed: number[][] } => ({ ok: false, why, ...(id !== undefined && id >= 0 ? { id, who: this.whoIs(id) } : {}), placed: [] });
+    const room = this.sim.setupRoom();
+    if (!this.me || !this.sim.setup || !room) return none('Not now: the battle has begun.');
+    const me = this.me, mine = this.sim.units.filter((u) => u.side === me);
+    const named = ids.length ? mine.filter((u) => ids.includes(u.id)) : mine;
+    const us = named.filter((u) => this.sim.placeable(u) === null);
+    if (!us.length) return none(named.length ? this.sim.placeable(named[0])! : 'Nothing to draw up.', named[0]?.id);
+    const dir = me === 'att' ? 1 : -1, face = me === 'att' ? 0 : Math.PI;
+    const slots = drawnUp(kind, us.map((u) => ({ id: u.id, x: u.x, y: u.y, w: u.w, d: u.d, rear: u.kind === 'art' })), dir, room);
+    if (!slots) return none('Your ground has no room to draw them up so.');
+    const order = slots.map((s) => us.find((u) => u.id === s.id)!);
+    // The formation as worked out, then a little to every side of it, the nearest first.
+    const shifts: [number, number][] = [];
+    for (let dx = -DRAW.reach; dx <= DRAW.reach; dx += DRAW.step) for (let dy = -DRAW.reach; dy <= DRAW.reach; dy += DRAW.step) shifts.push([dx, dy]);
+    shifts.sort((a, b) => Math.hypot(a[0], a[1]) - Math.hypot(b[0], b[1]) || a[1] - b[1] || a[0] - b[0]);
+    let first: { id: number; why: string } | null = null;
+    for (const [dx, dy] of shifts) {
+      const at = slots.map((s) => [s.x + dx, s.y + dy, face]);
+      const no = this.sim.placeManyWhy(order, at);
+      if (no) { first ??= no; continue; }
+      const list = slots.map((s, i) => [s.id, at[i][0], at[i][1], face]);
+      return this.placeMany(list) ? { ok: true, why: '', placed: list } : none('Not now: the battle has begun.');
+    }
+    return none(first?.why ?? 'Your ground has no room to draw them up so.', first?.id);
+  }
+
+  /** A block's name as the player reads it ('' for none). */
+  private whoIs(id: number): string {
+    const u = this.sim.units.find((v) => v.id === id);
+    return u ? this.sim.named(u) : '';
   }
 
   /** Ends the setup step: the clock may run. */
