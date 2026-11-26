@@ -1417,9 +1417,9 @@ void FMiniatureMesh::Submarine(const FVector& Where, double Length, const FLinea
 
 void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FString& TagAsked, double Turn)
 {
-	// (One look for the whole war: a mark that came in with a date is drawn as the one it followed, where the art
-	// director's table says so. The American star and bar is the star in its disc, with its red centre and no bars,
-	// on every machine and in every year. See UnitTable::OneLook.)
+	// (One look for the whole war: a mark is drawn as the one mark its nation's machines wear, where the art
+	// director's table says so. The American star in its disc is drawn as the star and bar, with no red centre,
+	// on every machine and in every year: the mark of the B-17 Brian approved. See UnitTable::OneLook.)
 	const FString Tag = UnitTable::OneLookMark(TagAsked);
 	auto Paint = [](const TCHAR* Hex) { return FLinearColor(FColor::FromHex(Hex)); };
 	const FLinearColor White = Paint(TEXT("F2F0E8")), Red = Paint(TEXT("C8102E")), Blue = Paint(TEXT("1F3A93")), Black = Paint(TEXT("141414")),

@@ -72,7 +72,7 @@ namespace UnitTable
 	 * tc.Map.OneLook (or "-TheaterOneLook") nothing the table paints changes with the date: a country whose mark the
 	 * table dates wears the last of its dated marks from the first month to the last, and its own rudder stripes with
 	 * it (MarkEra then answers that one in every month); a machine that comes into service later wears the coat of
-	 * the one it follows; and a mark that came in with a date is drawn as the one it followed. The table's "one_look"
+	 * the one it follows; and a mark the table names is drawn as the one mark its nation wears. The table's "one_look"
 	 * says which coats and which marks. Off as it comes: the looks change by the month, as before.
 	 */
 	bool OneLook();
