@@ -406,6 +406,16 @@ Step 11 wired (the storms' thread, 25 November 2026, on 7df10413: the light core
   Tools/sea_waves/run_sea_field.sh, run_night.sh, run_storm.sh and run_weather.sh: each ALL PASSED
   Tools/sea_show/run.sh: the 12 each ALL CHECKS PASSED, the frame budget among them (load 1 to 3); sea_under_test 590
     checks, 0 failed. Tools/convoy_looks/run.sh: passed; against the show 741 checks, 0 failed
+  Fitted to the release 2 build (the assembler's pass 2 run, 21:58Z; the sea scene's ruling 22:25Z): the runners link
+    AirShowTroops.cpp and AirMarks.cpp where present (none here: every count as above); graph_pin reads a lambda
+    builder on an unpinned entry (72 checks); pearl_pin's campaign check takes PEARL_CAMPAIGN=report on an assembled
+    build (here, by default: 38 pins, 0 changed, the three files as at 2f89c8e5); pearl_pin_test 13 checks, 0 failed
+  The effects kit's sea lamps (effects head 884c03b7) asked in field mode, where the kit has them (none on this branch:
+    today's rows and lamps): sea_day_test 83 checks, 0 failed (g++ and clang++; the new pin holds today's turret rows,
+    howitzer from 180 mm and tank_gun below, and the lamp rule asked only in field mode)
+  The sea scene's two mends to it (00:39Z): the 127 to 149 mm cruiser band for cruisers ("ca") only, and the setter read
+    in any shape: lamps_extract cuts SeaParts' sea lamps (59 lines); sea_lamps_test 10 kit shapes (by reference, by
+    value, noexcept, returning; const, wrong type, overloaded, none read as none) and 11 guns, 0 failed (g++, clang++)
 
 Tools/air_show/run.sh (Pearl's guard beside pearl_pin): 3 recordings ALL CHECKS PASSED; airscrews 18 aircraft, 0 failed; sea face all checks pass
 

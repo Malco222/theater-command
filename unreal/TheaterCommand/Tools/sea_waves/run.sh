@@ -7,7 +7,8 @@
 #   - graph_pin: the 15 materials Tools/build_content.py builds today, graph for graph, against graphs.sha, through the
 #     stand-in Unreal module (fake_unreal.py);
 #   - pearl_pin: Pearl Harbor's and Midway's sea, the battle look, the convoy looks' core and the byte copies, against
-#     pearl.sha; and bUseUnity, and the campaign's three that take no new line, against 2f89c8e5 (the release 2 join);
+#     pearl.sha; and bUseUnity, and the campaign's three that take no new line, against 2f89c8e5 (the release 2 join;
+#     on an assembled release build the assembler sets PEARL_CAMPAIGN=report, and pearl_pin_test holds both modes);
 #   - room_scan: every lamp, sky light, fog and air setter the sea's code calls, given back when the scene ends;
 #   - switches_scan: the plan's switch table, against the "Sea look:" line's and every switch the game reads;
 #   - bench_table's self-test: the Mac bench's reader (Tools/sea_bench.sh) held to the game's own lines;
@@ -37,12 +38,21 @@
 #     against them through day_shim.h, holds seed mode to them bit for bit and field mode to the plan's section 6 (the
 #     sun or the moon as the key, the exposure, the night grade, no step over a tenth for a minute of sun, the engine's fog
 #     line integral, the vis fit from every planned eye, every lookout's sighting in every recording and stand-in, the
-#     night met by light, the day colours, the water), its log in OUT/day.
+#     night met by light, the day colours, the water), its log in OUT/day;
+#   - step 11, the effects kit's sea lamps: lamps_extract cuts the sea battle's detection of them (SeaParts' RuleOf,
+#     HasSeaLamps, AskSeaLamps and NavalRow) out of SeaBattle.cpp, and sea_lamps_test runs it on a mock kit of every
+#     setter shape and on the naval rows by calibre and kind, in OUT/lamps.
 # Usage: Tools/sea_waves/run.sh   (SEA_WAVES_OUT: where the test writes; default $TMPDIR/sea_waves)
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 SRC="$ROOT/Source/TheaterCommand"
+# (release 2's air troops join: AirFeed.cpp and AirShow.cpp call AirMarks and the column code, so where those files are
+# present they are linked beside them, as sea_show's run.sh does; a branch from before that join has neither)
+AIR_TROOPS=()
+for AIR_PART in AirShowTroops.cpp AirMarks.cpp; do
+  if [ -f "$SRC/Battle/$AIR_PART" ]; then AIR_TROOPS+=("$SRC/Battle/$AIR_PART"); fi
+done
 OUT="${SEA_WAVES_OUT:-${TMPDIR:-/tmp}/sea_waves}"
 mkdir -p "$OUT"
 CXX="${CXX:-g++}"
@@ -69,6 +79,7 @@ if [ -x "$OUT/measure_test" ]; then
 fi
 step "graph_pin" python3 -I -B "$HERE/graph_pin.py" --out "$OUT"
 step "pearl_pin" bash "$HERE/pearl_pin.sh"
+step "pearl_pin_test (the campaign files' check, by default and in the assembler's report mode)" bash "$HERE/pearl_pin_test.sh"
 step "room_scan (self-test)" python3 -I -B "$HERE/room_scan.py" --self-test
 step "room_scan" python3 -I -B "$HERE/room_scan.py"
 step "switches_scan (self-test)" python3 -I -B "$HERE/switches_scan.py" --self-test
@@ -84,7 +95,7 @@ mkdir -p "$MARKS"
 step "marks_extract (DrawMarks cut out of the game's source)" python3 -I -B "$HERE/marks_extract.py" "$SRC" "$MARKS"
 if [ -f "$MARKS/marks_bodies.inc" ]; then
   step "marks_pool_test (build)" $CXX ${SEA_WAVES_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" -I"$MARKS" -I"$HERE" "$HERE/marks_pool_test.cpp" \
-    "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/AirSky.cpp" \
+    "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" ${AIR_TROOPS[@]+"${AIR_TROOPS[@]}"} "$SRC/Battle/AirSky.cpp" \
     "$SRC/Effects/TheaterFxCore.cpp" -o "$OUT/marks_pool_test"
 fi
 if [ -x "$OUT/marks_pool_test" ]; then
@@ -124,7 +135,7 @@ if [ -x "$OUT/fold_table" ]; then
   step "fold_table (written again, byte for byte Battle/FleetWavesFold.inl)" fold_again
 fi
 step "sea_waves_test (build)" $CXX ${SEA_WAVES_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" "$HERE/sea_waves_test.cpp" "$SRC/Battle/FleetWaves.cpp" "$SRC/Battle/SeaFace.cpp" \
-  "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/AirSky.cpp" \
+  "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" ${AIR_TROOPS[@]+"${AIR_TROOPS[@]}"} "$SRC/Battle/AirSky.cpp" \
   "$SRC/Effects/TheaterFxCore.cpp" -o "$OUT/sea_waves_test"
 if [ -x "$OUT/sea_waves_test" ]; then
   # (the ride's cost on the battles' own recorded actions; none found is a failure, not a skip)
@@ -179,7 +190,7 @@ mkdir -p "$DAY"
 step "day_extract (today's light and haze cut out of the game's source)" python3 -I -B "$HERE/day_extract.py" "$SRC" "$DAY"
 if [ -f "$DAY/day_cut.inc" ]; then
   step "sea_day_test (build)" $CXX ${SEA_WAVES_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" -I"$DAY" -I"$HERE" "$HERE/sea_day_test.cpp" "$SRC/Battle/SeaDayCore.cpp" \
-    "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/AirSky.cpp" \
+    "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" ${AIR_TROOPS[@]+"${AIR_TROOPS[@]}"} "$SRC/Battle/AirSky.cpp" \
     "$SRC/Effects/TheaterFxCore.cpp" "$SRC/Battle/SeaUnderCore.cpp" "$SRC/Battle/ConvoyLooksCore.cpp" -o "$OUT/sea_day_test"
 fi
 if [ -x "$OUT/sea_day_test" ]; then
@@ -196,6 +207,17 @@ if [ -x "$OUT/sea_day_test" ]; then
     return "${PIPESTATUS[0]}"
   }
   step "sea_day_test (${#DAYS[@]} recordings and stand-ins)" day_test
+fi
+# Step 11: the effects kit's sea lamps, as the sea battle detects them (Battle/SeaBattle.cpp's SeaParts), on a mock kit of
+# every setter shape, cut from the game's own lines
+LAMPS="$OUT/lamps"
+rm -rf "$LAMPS"
+step "lamps_extract (the sea lamps' detection cut out of SeaBattle.cpp)" python3 -I -B "$HERE/lamps_extract.py" "$SRC" "$LAMPS"
+if [ -f "$LAMPS/lamps_cut.inc" ]; then
+  step "sea_lamps_test (build)" $CXX ${SEA_WAVES_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$LAMPS" "$HERE/sea_lamps_test.cpp" -o "$LAMPS/sea_lamps_test"
+fi
+if [ -x "$LAMPS/sea_lamps_test" ]; then
+  step "sea_lamps_test (10 kit shapes, 11 guns)" "$LAMPS/sea_lamps_test"
 fi
 echo "written in $OUT"
 if [ "$STATUS" -eq 0 ]; then

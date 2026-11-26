@@ -12,6 +12,12 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 SRC="$ROOT/Source/TheaterCommand"
+# (release 2's air troops join: AirFeed.cpp and AirShow.cpp call AirMarks and the column code, so where those files are
+# present they are linked beside them, as sea_show's run.sh does; a branch from before that join has neither)
+AIR_TROOPS=()
+for AIR_PART in AirShowTroops.cpp AirMarks.cpp; do
+  if [ -f "$SRC/Battle/$AIR_PART" ]; then AIR_TROOPS+=("$SRC/Battle/$AIR_PART"); fi
+done
 OUT="${SEA_FIELD_OUT:-${TMPDIR:-/tmp}/sea_field}"
 mkdir -p "$OUT"
 cd "$ROOT" || exit 1
@@ -51,7 +57,7 @@ for CXX in g++ clang++; do
   fi
   rm -f "$OUT/sea_field_test_$CXX"
   step "sea_field_test (build, $CXX)" $CXX $FLAGS -I"$SRC" "$HERE/sea_field_test.cpp" "$SRC/Battle/SeaLookField.cpp" "$SRC/Battle/SeaNightSky.cpp" "$SRC/Battle/SeaFeed.cpp" \
-    "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" \
+    "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" ${AIR_TROOPS[@]+"${AIR_TROOPS[@]}"} "$SRC/Battle/AirSky.cpp" "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" \
     "$SRC/Effects/TheaterFxCore.cpp" -o "$OUT/sea_field_test_$CXX"
   if [ -x "$OUT/sea_field_test_$CXX" ]; then
     step "sea_field_test ($CXX, ${#PLAYED[@]} recordings and stand-ins)" "$OUT/sea_field_test_$CXX" "${PLAYED[@]}"

@@ -65,6 +65,7 @@
 #include <cctype>
 #include <map>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -1516,6 +1517,74 @@ namespace SeaParts
 	{
 		SetSky(Kit, SkyColour());
 	}
+
+	/** The effects kit's lamps at sea (the effects head 884c03b7, effects-lamps-for-sea.md): a lamp rule for the sea
+	 * (SetLampRule(LampRule::Sea()): three lamps, by the eye, a salvo one lamp) and the naval guns' muzzle rows, which
+	 * light her own hull. Where the kit has them: a kit from before that head has neither, and the scene keeps today's
+	 * rows and lamps; field mode asks for them (the release 2 ocean plan, step 11), so by default nothing changes. The
+	 * rule's type is read off the kit's own SetLampRule, whether it takes the rule by reference or by value, is noexcept
+	 * or returns something, and the kit counts as having the lamps only when that setter takes the type's own Sea():
+	 * a setter of any other shape reads as none, and the scene keeps today's, so this builds on the kit before and
+	 * after. */
+	template <typename TSetter>
+	struct RuleOf
+	{
+		using Type = void;
+	};
+	template <typename TOwner, typename TResult, typename TRule>
+	struct RuleOf<TResult (TOwner::*)(TRule)>
+	{
+		using Type = std::remove_cvref_t<TRule>;
+	};
+	template <typename TOwner, typename TResult, typename TRule>
+	struct RuleOf<TResult (TOwner::*)(TRule) noexcept>
+	{
+		using Type = std::remove_cvref_t<TRule>;
+	};
+
+	template <typename TKit>
+	static constexpr bool HasSeaLamps()
+	{
+		if constexpr (requires { &TKit::SetLampRule; })
+		{
+			using FRule = typename RuleOf<decltype(&TKit::SetLampRule)>::Type;
+			if constexpr (!std::is_void_v<FRule>)
+			{
+				return requires(TKit* K) { K->SetLampRule(FRule::Sea()); };
+			}
+		}
+		return false;
+	}
+
+	template <typename TKit>
+	static void AskSeaLamps(TKit* Kit)
+	{
+		if constexpr (HasSeaLamps<TKit>())
+		{
+			using FRule = typename RuleOf<decltype(&TKit::SetLampRule)>::Type;
+			if (Kit)
+			{
+				Kit->SetLampRule(FRule::Sea());
+			}
+		}
+		else
+		{
+			(void)Kit;
+		}
+	}
+
+	/** A ship's main guns' muzzle row by calibre (mm), as the effects head sets its bands: 280 mm and up a capital
+	 * ship's, 150 mm and up a cruiser's, a destroyer's below; a cruiser ("ca") whose guns are 127 to 149 mm (a light
+	 * cruiser's 5.25-inch or 14 cm) takes the cruiser's row, so the flash's reach fits her hull. Every other small gun,
+	 * a destroyer escort's 5-inch, a carrier's 5-inch or a boat's deck gun, takes the destroyer's. */
+	static const TCHAR* NavalRow(double CalibreMm, const std::string& What)
+	{
+		if (CalibreMm >= 280.0)
+		{
+			return TEXT("naval_heavy");
+		}
+		return CalibreMm >= 150.0 || (What == "ca" && CalibreMm >= 127.0) ? TEXT("naval_medium") : TEXT("naval_light");
+	}
 }
 
 ASeaBattle::ASeaBattle()
@@ -1775,6 +1844,10 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 	if (Effects)
 	{
 		Effects->SetSun(bFieldDay ? DayKeyWay() : Stage->TowardSun()); // (step 11: field mode's key body, unclamped)
+		if (bFieldDay)
+		{
+			SeaParts::AskSeaLamps(Effects.Get()); // (step 11: the kit's sea lamps, where it has them; see SeaParts::HasSeaLamps)
+		}
 	}
 	// S6 hook (ship ice): the frost of the battle's place, month and wind set on the stage, which glazes each hull's colours
 	// as LayShip lays her (Battle/ShipIce; -TheaterSeaIce=1 only, so by default the hulls are laid as made).
@@ -2866,7 +2939,9 @@ void ASeaBattle::PlayEffects(bool bSkip)
 				const FVector2D ToAim = (FVector2D(E.Aim.X, E.Aim.Y) - FVector2D(From->At.X, From->At.Y)).GetSafeNormal();
 				const FVector Facing = (WorldVector(ToAim.X, ToAim.Y, 0.0).GetSafeNormal() + FVector(0.0, 0.0, 0.3)).GetSafeNormal();
 				const double Long = DrawnLong.Contains(E.Key) ? DrawnLong[E.Key] : From->Long;
-				const TCHAR* Gun = E.Size >= 180.0 ? TEXT("howitzer") : TEXT("tank_gun");
+				// (in field mode, with a kit that has the sea's lamps, the naval rows by calibre; otherwise today's)
+				const TCHAR* Gun = bFieldDay && SeaParts::HasSeaLamps<FBattleEffects>() ? SeaParts::NavalRow(E.Size, E.What) :
+					E.Size >= 180.0 ? TEXT("howitzer") : TEXT("tank_gun");
 				TArray<double> Turrets;
 				if (E.What == "bb")
 				{
