@@ -7144,13 +7144,16 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
           // (the guns round the target, common to both ways: the level for the pips, and Brian's own words for them; the
           // tail short, the built guns' count in the tip with the light guns every target has named apart)
           guns: dn.guns, gunsFigure: unknown ? 'Unknown' : dn.guns > 0 ? `Level ${dn.guns}` : 'No', gunsNoun: unknown || dn.guns > 0 ? 'AA guns' : 'AA guns built',
-          // (City defences, the switch on, the raid planned by night: the UI director, 26 Nov 2026, 03:34Z and 03:36Z.
-          // No still can read a tip, so where the target has searchlights the tail ends with their level, after the
-          // guns' own words whatever they are, "seen two months ago" and "not scouted" among them: the lights are read
-          // as they truly are in every state of the fog (the design director, 25 Nov 2026 19:44Z), so they take no
-          // hedge. By day, with no lights and with the switch off, lightsAt reads none and the tail is as it was.)
-          gunsTail: (unknown ? `\u00B7 ${dn.gunsTail}` : when ? `\u00B7 ${when}` : dn.guns > 0 ? `\u00B7 and ${S} light` : `\u00B7 only ${S} light`)
-            + (kind === 'night' && lightsAt(s, target) > 0 ? ` \u00B7 searchlights level ${lightsAt(s, target)}` : ''), gunsTip,
+          // (City defences, the switch on, the raid planned by night: the UI director, 26 Nov 2026, 03:34Z, 03:36Z and
+          // 03:53Z. No still can read a tip, so where the target has searchlights the tail says their level. In sight
+          // they stand in place of the standing guns' words, which the tip already says, on a bare target too: the tail
+          // holds about 25 characters. Under fog both stay, since the hedge must stand beside the figure: "seen two
+          // months ago" or "not scouted", then the lights, which are read as they truly are in every state of the fog
+          // (the design director, 25 Nov 2026 19:44Z) and take no hedge. By day, with no lights and with the switch
+          // off, lightsAt reads none and the tail is as it was.)
+          gunsTail: ((hedge: string, lights: string): string => (hedge && lights ? `${hedge} ${lights}` : hedge || lights || (dn.guns > 0 ? `\u00B7 and ${S} light` : `\u00B7 only ${S} light`)))(
+            unknown ? `\u00B7 ${dn.gunsTail}` : when ? `\u00B7 ${when}` : '',
+            kind === 'night' && lightsAt(s, target) > 0 ? `\u00B7 searchlights level ${lightsAt(s, target)}` : ''), gunsTip,
           day: one(dn.day), night: one(dn.night),
           // (new for the 3D card to draw, where it will: what the side knows, a line each, and the band)
           ...(dn.fog ? { fog: { live: dn.fog.live, fighters: dn.fog.fighters, guns: dn.fog.guns, damage: dn.fog.damage, band: dn.fog.band } } : {}),
