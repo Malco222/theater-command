@@ -272,7 +272,8 @@ export const fromWaitOn = (g: Game): boolean => g.flags.open === 1 && g.flags.fr
 
 /**
  * Switches 'fromWait' on or off in any month of a grand campaign; outside one it does nothing and answers false. On,
- * a row that takes named corps whole waits from the next month it comes due (`expeditions` reads the flag each month).
+ * a row that takes named corps whole waits from the next `startPhase` that reads it (`expeditions` reads the flag there,
+ * nation by nation): this month for the nations still to move after the player, the next month for his own.
  * Off deletes the flag, as a war that never had it: a row waiting this month forms next month wherever its corps
  * stand, with today's headline, and from the moment it is off nothing of the telling is shown (every reader here reads
  * the switch). The telling's own flags (`rowTold:`, `rowAt:`, `rowFront:`) are NOT cleared here: they go where the row
