@@ -337,6 +337,15 @@ export class LandBattle implements BattleSim<LandUnit> {
    * the last of them has left the field, when the winner calls the pursuit off, or with the day's clock.
    */
   pursue = false;
+  /**
+   * With `pursue`, the pursuit's latest end (the design director, 26 November 2026, 17:41Z (c) and 18:04Z; Brian's
+   * card of 17:54Z on what ends a pursuit). Off, as first built: the day's own clock, which in the gate's 2,535
+   * pursuits ended 2,523 of them, at a median of 93 seconds. On: the break plus the ticket's own limit, the day's
+   * length again, both sides alike, so the field ends a pursuit (the last of the broken army off it, the winner's call,
+   * the pursuers spent) and the clock only closes a battle that a block stuck on the field would hold open. No figure
+   * is new.
+   */
+  pursueLate = false;
   /** The break as it stood, with `pursue` on and the winner still to choose or fighting on: null otherwise. */
   aftermath: Aftermath | null = null;
   /**
@@ -4633,8 +4642,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   //     sends each after the nearest block of theirs it can catch, and halts those that can catch none.
   //   - The pursuit ends when the last of the broken army has left the field, when the winner calls it off (the
   //     player's { do: 'land:end' }; a computer general when nothing more can be caught), when the winner's own bar
-  //     fills, or with the day's clock. Neither side may hand the day to the staff or pull its whole army out: the day
-  //     is decided.
+  //     fills, or with the day's clock (with `pursueLate`: a day's length from the break at the latest). Neither side
+  //     may hand the day to the staff or pull its whole army out: the day is decided.
   //   - The bill (kept): each block of the broken army on the field at the break counts what it has when it leaves or
   //     the day ends, with no flat share on top; one that had left before the break keeps its share as under END. So
   //     the rout is priced once, by the field that fought it. R follows from the shares as ever and stays on the side
@@ -4648,19 +4657,23 @@ export class LandBattle implements BattleSim<LandUnit> {
    * or a computer general pursues); false where it ends here as with the switch off: none of the broken army is left on
    * the field, the winner's own bar is full, or its computer general sees nothing it can catch.
    */
-  private breakOpens(s: Side, how: 'rout' | 'destroyed', why: BreakCause): boolean {
+  private breakOpens(s: Side, how: 'rout' | 'destroyed', why: BreakCause, line?: string): boolean {
     const winner = other(s), on = new Map<number, number>();
     for (const u of this.units) if (u.side === s && live(u)) on.set(u.id, u.str);
     if (!on.size || this.brink(winner).bar >= 1) return false;
     this.aftermath = { side: s, winner, how, why, t: this.t, phase: 'ask', on };
-    // (no dispatch of its own: the break's line stands, and the screen asks; the UI director, 13:32Z)
-    if (this.ticket[winner].human) return true;
+    // (no dispatch of its own: the break's line stands, and the screen asks; the UI director, 13:32Z. An army driven
+    // from the field has no line of its own with the switch off, so where the battle goes on it is given one here,
+    // `line`, and the screen never asks on a silent break: her words of 17:20Z.)
+    const tell = (): void => { if (line) this.say({ what: 'broken', side: s, text: line, brokeBy: { ...why } }); };
+    if (this.ticket[winner].human) { tell(); return true; }
     if (!this.units.some((u) => this.quarry(u))) {
       this.aftermath = null;
       // Said only to a player it beat (with nobody playing, nothing is said: the day then is today's to the byte).
       if (this.ticket[s].human) this.say({ what: 'land:pursuit', side: winner, text: `${this.army(winner)} does not pursue, and the battle ends.` });
       return false;
     }
+    tell();
     this.pursueOn();
     return true;
   }
@@ -4777,8 +4790,13 @@ export class LandBattle implements BattleSim<LandUnit> {
     const ended = !this.units.some((u) => u.side === A.side && live(u)) ? 'left'
       : A.off ? 'off'
         : b.bar >= 1 || !this.units.some((u) => u.side === A.winner && fighting(u)) ? 'spent'
-          : this.t >= this.ticket.limit ? 'time' : null;
+          : this.t >= this.afterLimit() ? 'time' : null;
     if (ended) this.endAfter(ended);
+  }
+
+  /** The battle second at which a pursuit ends at the latest: the day's own clock, or with `pursueLate` the day's length again from the break. */
+  private afterLimit(): number {
+    return this.pursueLate && this.aftermath ? this.aftermath.t + this.ticket.limit : this.ticket.limit;
   }
 
   /** The day ends after the break: END at the break (a player's answer) exactly as with the switch off; else by the pursuit's own count. */
@@ -4787,12 +4805,14 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (A.phase === 'ask') this.aftermath = null;
     else {
       A.ended = ended;
-      // How the pursuit ended, in one dispatch (the UI director's words, 13:32Z; none where the pursuers were spent).
+      // How the pursuit ended, in one dispatch (the UI director's words, 13:32Z; the pursuers spent, hers of 17:20Z).
       const low = (t: string): string => t[0].toLowerCase() + t.slice(1);
       const text = ended === 'off' ? `${this.whose(A.winner)} calls off the pursuit.`
         : ended === 'left' ? `The last of ${low(this.whose(A.side))} has left the field.`
-          : ended === 'time' ? 'The day is done, and the pursuit with it.' : '';
-      if (text) this.say({ what: 'land:pursuit', side: A.winner, text });
+          // (the pursuit's own clock, pursueLate: her words of 18:12Z; the day's clock: as first built)
+          : ended === 'time' ? (this.pursueLate ? 'The pursuit has run its course.' : 'The day is done, and the pursuit with it.')
+            : `${this.whose(A.winner)} can pursue no further, and the pursuit ends.`;
+      this.say({ what: 'land:pursuit', side: A.winner, text });
     }
     this.finish(A.winner, A.how, undefined, A.why);
   }
@@ -4809,7 +4829,7 @@ export class LandBattle implements BattleSim<LandUnit> {
         // Ordered back, it withdrew while any block of it got out: those caught running on the way are its losses (b474).
         const how = out && (fall || !this.units.some((u) => u.side === s && u.state === 'routing')) ? 'withdrew' : 'destroyed';
         // After the break (release 2, pursue): driven from the fight with runners still on the field, the winner chooses.
-        if (this.pursue && how === 'destroyed' && this.breakOpens(s, 'destroyed', this.breakCause(s))) return;
+        if (this.pursue && how === 'destroyed' && this.breakOpens(s, 'destroyed', this.breakCause(s), `${this.whose(s)} is driven from the field.`)) return;
         // Driven from the field, it broke: why, as it stood when the last block left the fight (b496(2)).
         this.finish(other(s), how, undefined, how === 'destroyed' ? this.breakCause(s) : undefined);
         return;
@@ -5514,10 +5534,10 @@ export class LandBattle implements BattleSim<LandUnit> {
     return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.shownBar('att', as), def: this.shownBar('def', as) }, breakingBy: { att: this.causeAs('att', as), def: this.causeAs('def', as) }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...(this.falling.att !== null || this.falling.def !== null ? { fallBack: { att: this.falling.att !== null, def: this.falling.def !== null } } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as), ...this.afterView() };
   }
 
-  /** After the break (pursue): who broke, who chooses or pursues, the break's second and the phase; nothing before it, nor with the switch off. */
+  /** After the break (pursue): who broke, who chooses or pursues, the break's second and the phase; with `pursueLate`, `until`, the second the pursuit ends at the latest. Nothing before it, nor with the switch off. */
   afterView(): Pick<BattleView, 'after'> {
     const A = this.aftermath;
-    return A ? { after: { side: A.side, winner: A.winner, t: Math.ceil(A.t * 100) / 100, phase: A.phase, broke: this.army(A.side), by: this.army(A.winner) } } : {};
+    return A ? { after: { side: A.side, winner: A.winner, t: Math.ceil(A.t * 100) / 100, phase: A.phase, broke: this.army(A.side), by: this.army(A.winner), ...(this.pursueLate ? { until: Math.round(this.afterLimit() * 100) / 100 } : {}) } } : {};
   }
 
   /** Air support's part of the view, only where a side has fighters on call. */
