@@ -4822,6 +4822,13 @@ export function rowHolds(g: Game, nat: string, from: string[], at: number | unde
 }
 
 /**
+ * A corps at the front as the rule reads it, wherever it stands, the province a row forms in not set apart: on a live
+ * front of its staff's plan, on the far side, or in contact (an enemy at war on its province or beside it). Read for
+ * the telling's words the month a row forms (arrivalwaits.ts `waitedOn`), never by the rule itself. Changes nothing.
+ */
+export const atFrontNow = (g: Game, nat: string, x: Corps): boolean => (farOn(g) && onLiveFront(g, nat, x)) || corpsInContact(g, nat, x);
+
+/**
  * The article the general's line gives the row's name ("{general} arrives in {place} with the {row}."): none where the
  * name opens with "the", is an "X Force" or is Creforce, else "the ". Exactly the rule of 70d6f6a1f, and never widened:
  * the line exists with the switch 'fromWait' off, and with it off every sentence is the base's, byte for byte. The UI
@@ -5764,7 +5771,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // a row the rule no longer holds, the dial turned to a book stop whose book is open, forms with today's bare line, as
     // section 4 gives for every row outside the rule (the marks' preamble, "only where the rule acts"), and as
     // setFromWait does for the switch turned off. Without this a corps still in the line was said to have left it.)
-    const was = inFight ? waitedOn(g, i) : null;
+    const was = inFight ? waitedOn(g, i, reg?.id) : null;
     const waited = g.flags[`wait:${i}`];
     if (waited !== undefined) due = Math.max(due, waited + 1);
     // (An offer the player takes is not struck for the months he took to answer: it stood open. Ruling B8.)

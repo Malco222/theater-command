@@ -20,7 +20,7 @@
  */
 import setup from '../../data/campaign/setup-1939.json';
 import { turnToDate } from '../core/ticket';
-import { headline, rowHolds, theWords } from './game';
+import { atFrontNow, headline, rowHolds, theWords } from './game';
 import { contactRuleActs, stopOf } from './history';
 import type { Corps, Game, Region } from './types';
 
@@ -130,26 +130,33 @@ export function rowDone(g: Game, i: number): void {
 /**
  * What a row that waited on the front is formed from, read before its corps are taken (game.ts `expeditions`): how many
  * of its named corps stand, the one where it is one; and of the names that were at the front in any of its waiting
- * months (`rowFront`), those that stand and have left the front (`left`) and those no longer on the board (`lost`).
+ * months (`rowFront`), those that stand and have left the front (`left`), those at the front in the very province the
+ * row forms in (`stands`), and those no longer on the board (`lost`).
  */
-export interface WaitedOn { count: number; one: string | null; left: string[]; lost: string[] }
+export interface WaitedOn { count: number; one: string | null; left: string[]; stands: string[]; lost: string[] }
 
 /**
  * Read in `expeditions` once a row has passed both statements, before it takes its corps: null unless it waited on the
- * front in any of its waiting months (`rowFront`).
+ * front in any of its waiting months (`rowFront`), or where a corps of those is still at the front away from `at`, the
+ * province the row forms in (nothing true to say of it: today's line stands).
  */
-export function waitedOn(g: Game, i: number): WaitedOn | null {
+export function waitedOn(g: Game, i: number, at: number | undefined): WaitedOn | null {
   const mask = g.flags[frontKey(i)];
   if (!mask) return null;
   const row = ROWS()[i];
   const from = fromOf(row);
   const here = present(g, row[1], from);
   const front = from.filter((_, k) => (mask & (1 << k)) !== 0);
-  return {
-    count: here.length, one: here.length === 1 ? here[0].name : null,
-    left: front.filter((x) => here.some((c) => c.name === x)),
-    lost: front.filter((x) => !here.some((c) => c.name === x)),
-  };
+  const out: WaitedOn = { count: here.length, one: here.length === 1 ? here[0].name : null, left: [], stands: [], lost: [] };
+  for (const name of front) {
+    const x = here.find((c) => c.name === name);
+    // (The rule's own test for the front, the forming place not set apart: game.ts `atFrontNow`.)
+    if (!x) out.lost.push(name);
+    else if (!atFrontNow(g, row[1], x)) out.left.push(name);
+    else if (x.reg === at) out.stands.push(name);
+    else return null;
+  }
+  return out;
 }
 
 /**
@@ -199,9 +206,14 @@ function formedTail(was: WaitedOn, name: string): string | null {
       ? `formed without ${join(was.lost.map((x) => `your ${yours(x)}`))}, ${been}.`
       : `formed ${fromYour}, without ${join(was.lost.map((x) => named(x)))}, ${been}.`;
   }
-  if (!was.count || !was.left.length) return null;
-  if (was.count === 1 && was.one) return `formed ${fromYour}, now that it has left the front.`;
-  return `formed ${fromYour}, now that ${join(was.left.map((x) => named(x)))} ${was.left.length === 1 ? 'has' : 'have'} left the front.`;
+  if (!was.count || !(was.left.length + was.stands.length)) return null;
+  // (A corps at the front in the province the row forms in: the UI director's section 8 point 2, 02:10Z, 26 November
+  // 2026. "formed from your {21st Army (18th Division)}, now that it stands there"; several, "now that {the 13th Tank
+  // Regiment} stands there"; mixed, "now that {A} has left the front and {B} stands there".)
+  if (was.count === 1 && was.one) return `formed ${fromYour}, now that it ${was.stands.length ? 'stands there' : 'has left the front'}.`;
+  const left = was.left.length ? `${join(was.left.map((x) => named(x)))} ${was.left.length === 1 ? 'has' : 'have'} left the front` : '';
+  const stands = was.stands.length ? `${join(was.stands.map((x) => named(x)))} ${was.stands.length === 1 ? 'stands' : 'stand'} there` : '';
+  return `formed ${fromYour}, now that ${[left, stands].filter(Boolean).join(' and ')}.`;
 }
 
 // ---- 2. While it waits: the cards' readers -------------------------------------------------------------------------
