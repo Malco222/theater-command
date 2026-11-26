@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c8d4f78f3 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 69037e66f 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -74831,7 +74831,9 @@
   }
   function keptStoresHis(g2, r) {
     const last = g2.flags[storesKey(r.id)];
-    return last !== void 0 && (last > r.since || g2.flags[storesHeldKey(r.id)] === r.since) && Object.keys(g2.nations)[g2.flags[storesByKey(r.id)] ?? -1] === r.ctrl;
+    if (last === void 0 || Object.keys(g2.nations)[g2.flags[storesByKey(r.id)] ?? -1] !== r.ctrl) return false;
+    const at4 = g2.flags[storesAtKey(r.id)];
+    return (at4 !== void 0 ? at4 === r.since : last > r.since) || g2.flags[storesHeldKey(r.id)] === r.since;
   }
   function keptStoresHolder(g2, r, to) {
     if (trueReach(g2) && r.ctrl === to && keptStoresHis(g2, r)) g2.flags[storesHeldKey(r.id)] = g2.turn;
@@ -75023,6 +75025,8 @@
   var storesKey = (id) => storesKeys[id] ?? (storesKeys[id] = `stores:${id}`);
   var storesByKey = (id) => storesByKeys[id] ?? (storesByKeys[id] = `stores:by:${id}`);
   var storesHeldKey = (id) => `stores:held:${id}`;
+  var storesAtKeys = [];
+  var storesAtKey = (id) => storesAtKeys[id] ?? (storesAtKeys[id] = `stores:at:${id}`);
   function drawSupply(g2, id, pass, seeds, heads, wide3, long, deep, sand, rail2) {
     const size = g2.regions.length;
     const ok2 = new Uint8Array(size);
@@ -75288,6 +75292,7 @@
             else if (by2 === 1 ? forHolder(id, r) : by2 === 2 || mates.some((a) => feeds(a, id, r) && forHolder(a, r))) {
               g2.flags[storesKey(r.id)] = g2.turn;
               g2.flags[storesByKey(r.id)] = (places ?? (places = new Map(Object.keys(g2.nations).map((n, i) => [n, i])))).get(r.ctrl);
+              g2.flags[storesAtKey(r.id)] = r.since;
             }
           } else if (g2.turn - (g2.flags[storesKey(r.id)] ?? -99) <= portKeep(g2, r) && (!truly || keptStoresHis(g2, r))) quay = true;
         }
@@ -77008,6 +77013,7 @@
     const owner = g2.nations[r.owner];
     r.ctrl = owner.alive && allied(g2, nat, r.owner) ? r.owner : nat;
     r.since = g2.turn;
+    if (g2.flags[storesAtKey(r.id)] !== void 0) delete g2.flags[storesAtKey(r.id)];
     g2.flags[`fellP:${r.id}`] = g2.phase;
     moraleCapital(g2, r, old);
     r.prev = old;
