@@ -19495,6 +19495,17 @@ namespace
 					.Text(FText::FromString(TEXT("How the game looks, sounds and handles. What you choose here is remembered the next time you play."))))
 				];
 				const TArray<FGameOption> Options = Controller.IsValid() ? Controller->GetOptions() : TArray<FGameOption>();
+				// (Release 2 assembly, 26 November 2026: the Mac's OPTIONS check reads the rows from the log, since a row's title
+				// is not a button a step can find. One line each time the page is laid out: its id, its title and what its
+				// button reads, in the order shown.)
+				{
+					FString Shown;
+					for (const FGameOption& Option : Options)
+					{
+						Shown += FString::Printf(TEXT("%s%s \"%s\" %s"), Shown.IsEmpty() ? TEXT("") : TEXT(" | "), *Option.Id, *Option.Name.ToString(), *Option.State.ToString());
+					}
+					UE_LOG(LogTemp, Log, TEXT("Options page: %d rows: %s"), Options.Num(), *Shown);
+				}
 				TArray<TSharedRef<SWidget>> Cells;
 				for (const FGameOption& Option : Options)
 				{
