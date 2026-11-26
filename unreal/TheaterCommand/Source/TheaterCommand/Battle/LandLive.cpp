@@ -153,6 +153,13 @@ namespace
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)
 		{ TEXT("wrecks"), TEXT("Old wrecks"), TEXT("A field fought over before keeps the burnt-out tanks and armoured vehicles those battles left on it. Off: the field is cleared between battles."), TEXT("TheaterLandNoOldWrecks"), false, TEXT("TheaterLandRuleOldWrecks") },
+		// (The air battle's hitch, release 2: the Mac's timing legs of 26 November, build 172f19ae0, every leg's press a
+		// frame of 174 to 368 ms on the campaign's last picture, frozen, before the opening's black was up. On: the black is
+		// put up first and shown two frames, and the scene is made behind it (AAirBattle::CurtainFirstHold). Looks only:
+		// the battle's clock is held while the black stands, so nothing the rules count changes. Off until the Mac passes it;
+		// -TheaterAirCurtainFirst turns it on for a run, -TheaterAirNoCurtainFirst off. The air battle reads it as a battle
+		// opens; it is never sent to the land rules.)
+		{ TEXT("flyCurtainFirst"), TEXT("The black first, then the scene"), TEXT("An air battle puts up its black title card before it builds its sky, clouds and sound, so the map never stands frozen while the battle is made. Off: the battle is made first, then the card goes up."), TEXT("TheaterAirNoCurtainFirst"), false, TEXT("TheaterAirCurtainFirst") },
 		// (Release 2, the scramble offer: Brian, 24 November 2026 22:21Z, "i want every air battle playable". In the enemy's
 		// month the campaign stops where an enemy raid on his ground meets his fighters and offers SCRAMBLE: taken, he flies
 		// the defence in the battle in the air (AAirBattle, his side 'def'), and the month runs on with what the battle

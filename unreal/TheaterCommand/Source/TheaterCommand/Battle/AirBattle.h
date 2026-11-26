@@ -142,6 +142,8 @@ public:
 
 	// What the battle screen reads and asks.
 	const FAirBattleState* GetState() const { return State.Get(); }
+	/** (the row flyCurtainFirst) The black is up and the scene not yet made: the screen takes no press until it is. */
+	bool AwaitsOpen() const { return bCurtainWaiting; }
 	/** Drag with the left button: the camera turns round what it looks at (pixels of the viewport). */
 	void Orbit(const FVector2D& DeltaPixels);
 	/** The wheel: nearer or farther. */
@@ -960,6 +962,20 @@ private:
 	FString LandPhaseName() const;
 	static void NoteLoad(const TCHAR* What, double Began);
 	bool bHitchLastLong = false;
+	/**
+	 * (Release 2, the hitch: the Battle rules card's "The black first, then the scene", row flyCurtainFirst; on for a run
+	 * -TheaterAirCurtainFirst, off -TheaterAirNoCurtainFirst.) On, Open's first call only puts up the black (the clock held,
+	 * the screen shown) and returns; Tick runs Open itself once the black has been shown two frames (CurtainFirstWaits),
+	 * so the press's frame of 174 to 368 ms is spent behind the black, not on the campaign's last picture. A live battle's
+	 * ships are laid then (CurtainThen). Off (the default), Open runs at once, as before.
+	 */
+	bool CurtainFirstHold(const FString& Why);
+	bool CurtainFirstWaits();
+	bool bCurtainWaiting = false;
+	bool bCurtainOpening = false;
+	uint64 CurtainShownFrame = 0;
+	FString CurtainWhy;
+	TFunction<void()> CurtainThen;
 	/** The sun a hard small disc while the battle stands (the art director, build 1750); the lamp kept, put back with the table. */
 	void TheSun(UDirectionalLightComponent& Key);
 	/** Toward the battle's sun, a unit vector in the world: the set piece's own sun where its stage stands; over a raid with

@@ -761,6 +761,30 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	return Open(Key);
 }
 
+namespace AirParts
+{
+	namespace Hitch
+	{
+		/** (the row flyCurtainFirst) A live battle's ships laid on its stage, as BeginLiveCall lays them, once the scene is made. */
+		static void LayShips(AAirStage* OnStage, const std::vector<AirFeed::ShipRow>& Rows)
+		{
+			TArray<FStageShip> Ships;
+			for (const AirFeed::ShipRow& Row : Rows)
+			{
+				FStageShip& Ship = Ships.AddDefaulted_GetRef();
+				Ship.Id = Row.Id;
+				Ship.Class = Wide(Row.Class);
+				Ship.Nation = Wide(Row.Nation);
+				Ship.Name = Wide(Row.Name);
+				Ship.At = FVector2D(Row.X, Row.Y);
+				Ship.Face = Row.Face;
+				Ship.bDock = Row.bDock;
+			}
+			OnStage->SetShips(Ships);
+		}
+	}
+}
+
 bool AAirBattle::BeginLive(FCampaignSession* InSession, const FString& Kind, int32 Target, const TArray<int32>& Ids)
 {
 	TArray<FString> Numbers;
@@ -829,6 +853,12 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	{
 		return false;
 	}
+	if (bCurtainWaiting)
+	{
+		// (the row flyCurtainFirst: the scene is made a frame or two on, under the black, and its ships are laid then)
+		CurtainThen = [this, Rows = First.ShipRows]() { if (Stage && !Rows.empty()) { AirParts::Hitch::LayShips(Stage.Get(), Rows); } };
+		return true;
+	}
 	if (Stage && !First.ShipRows.empty())
 	{
 		TArray<FStageShip> Ships;
@@ -856,6 +886,10 @@ bool AAirBattle::Open(const FString& Why)
 		return false;
 	}
 	FAirBattleState& S = *State;
+	if (CurtainFirstHold(Why))
+	{
+		return true; // (the row flyCurtainFirst: the black first; Tick runs this once it has been shown, CurtainFirstWaits)
+	}
 	AirParts::Hitch::FSteps PressSteps; // (the hitch's naming lines: each step's ms, said at the end while the speed log is written)
 	// (the sheet of cloud shapes begun on the pool now, for LaySky; once a run)
 	AirParts::BeginSheet();
@@ -3717,6 +3751,10 @@ void AAirBattle::Tick(float DeltaSeconds)
 	}
 	KeepTheTableHidden();
 	HitchNote(DeltaSeconds); // (release 2, the hitch's naming lines: only while the speed log is written)
+	if (CurtainFirstWaits())
+	{
+		return; // (the row flyCurtainFirst: the black up, the scene not yet made or just made in this frame)
+	}
 	if (LandPainting.IsValid() && LandPainting.IsReady())
 	{
 		LandPainting.Wait();
@@ -5624,6 +5662,63 @@ void AAirBattle::NoteLoad(const TCHAR* What, double Began)
 	{
 		UE_LOG(LogTheater, Display, TEXT("Air hitch: loaded %s in %.1f ms (frame %lld)."), What, 1000.0 * (FPlatformTime::Seconds() - Began), static_cast<long long>(GFrameCounter));
 	}
+}
+
+bool AAirBattle::CurtainFirstHold(const FString& Why)
+{
+	// (Open's second call, from CurtainFirstWaits; the old opening with no black; or the row off: Open runs now, as before)
+	if (bCurtainOpening || NoCurtain() || !FLandLive::RuleNow(TEXT("flyCurtainFirst")))
+	{
+		return false;
+	}
+	FAirBattleState& S = *State;
+	S.bWarming = true; // (the clock held, as WarmUp holds it; WarmUp sets both again when Open runs)
+	S.Curtain = 1.0;
+	ShowScreen(); // (the black, with no words yet: the title and the clock's tag are written once the scene runs)
+	bCurtainWaiting = true;
+	CurtainShownFrame = GFrameCounter;
+	CurtainWhy = Why;
+	SetActorTickEnabled(true);
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the black first, then the scene (the Battle rules card's row flyCurtainFirst, or -TheaterAirCurtainFirst): frame %lld."),
+		static_cast<long long>(GFrameCounter));
+	return true;
+}
+
+bool AAirBattle::CurtainFirstWaits()
+{
+	if (!bCurtainWaiting)
+	{
+		return false;
+	}
+	if (!State.IsValid())
+	{
+		bCurtainWaiting = false;
+		return false;
+	}
+	// (shown two frames: the frame it was put up in and the next have been painted, and the draw thread holds no frame
+	// from before it, so the press's long frame is spent with the black on screen)
+	if (GFrameCounter < CurtainShownFrame + 2)
+	{
+		return true;
+	}
+	bCurtainWaiting = false;
+	bCurtainOpening = true;
+	const bool bOpened = Open(CurtainWhy);
+	bCurtainOpening = false;
+	if (!bOpened)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: the scene could not be made under the black (row flyCurtainFirst)."));
+		HideScreen();
+		return true;
+	}
+	if (CurtainThen)
+	{
+		CurtainThen();
+		CurtainThen = nullptr;
+	}
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the scene made under the black, %lld frames after it was put up (row flyCurtainFirst)."),
+		static_cast<long long>(GFrameCounter - CurtainShownFrame));
+	return true;
 }
 
 void AAirBattle::Draw(double Real)
