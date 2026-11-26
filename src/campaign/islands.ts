@@ -1,17 +1,19 @@
 // The Pacific's islands as the historian's table sets them out (rulings 173 and 179; the design director, 25 November
-// 2026, form B3). An island has room for so many corps and no more (an atoll for one), and a garrison cut off there
-// withers to a floor, a quarter on an atoll and a half on an island large enough to feed itself (173(e), rider (o)).
+// 2026, form B3; counted in men at 14:28Z). An island has room for so many divisions' worth of men and no more (an
+// atoll for one), and a garrison cut off there withers to a floor, a quarter on an atoll and a half on an island large
+// enough to feed itself (173(e), rider (o)).
 // The rows are data/campaign/far-islands.json, written from data/campaign/tables/islands-draft.csv by
 // tools/make-far-islands.mjs. They are read on the whole-world chart alone: with the far side off, and for ground
 // that is no island of the table, nothing here answers, and every rule that asks reads as it always did.
 // (This file and game.ts read each other's functions, as world.ts and game.ts do: nothing of either runs as they load.)
 import data from '../../data/campaign/far-islands.json';
 import { FAR_STAGE } from './stage';
-import { allied, placed, roomless } from './game';
-import { STACK, type Corps, type Game, type Region } from './types';
+import { allied, men, placed, roomless } from './game';
+import { whyNotBreakUp } from './breakup';
+import { MEN_PER_DIV, STACK, type Corps, type Game, type Region } from './types';
 import { farOn } from './world';
 
-/** An island's row: its room in corps, the floor a cut-off garrison withers to, and whether it is an islet. */
+/** An island's row: its room in divisions' worth of men, the floor a cut-off garrison withers to, and whether it is an islet. */
 export interface Island { room: number; floor: number; islet: boolean }
 
 // (the 4th element is the look of the island's field in the 3D ground battle, read by islandLook below and by no rule)
@@ -26,86 +28,271 @@ export function islandOf(g: Game, r: Region | undefined | null): Island | null {
 }
 
 /**
- * How many corps of a side a province has room for in its field (ruling 173(b): each island carries "its room, in
- * corps"; ruling 179, rider (s): "the limit of an open beach is the island's room of one corps and what the corps
- * carries"). An island of the table on the whole-world chart: its room, less the corps of that side already inside
- * its town, who stand on the island as much as those outside it (an atoll with its corps in the town has room for
- * nobody more of that side; the enemy who lands counts only his own). All other ground, and every province with the
- * far side off: the five a province has always held (STACK).
+ * The corps of a side an island holds are counted in men, its room in divisions' worth of men (the design director,
+ * 25 November 2026, 14:28Z, (a): "An island's room is its table figure in divisions' worth of men; a side's corps fit
+ * while their men together are within it"; ruling 173(b), 179 rider (s)). A division's worth is the game's own
+ * division, 15,000 men at full strength (MEN_PER_DIV), for every nation, and a corps' men are the corps card's own
+ * measure, game.ts `men` (divisions x strength x 15,000; breakup.ts `menOf` is the same function). (Q1 of the map of
+ * 26 November 2026, read as the mapper recommends until the UI director rules: China's corps are counted at 15,000 a
+ * division here, as their corps cards count them, not at the 67,000 of China's reserve sentences.)
  *
- * This is the one count every rule of room reads where a province is at hand: a march, a train, a ship, a landing,
- * a new corps, the winners of a fight, and the staffs' own placing. It is counted as the five are: a side's corps,
- * engineers apart where the rule already sets them apart, fortress crews apart under the fortress rows. Nobody is
- * ever moved or struck off to keep it: corps over an island's room (a beaten army fallen back on it, a row the
- * record put there) stand until their side moves them.
+ * What counts is as ruled at 13:58Z: the corps of the side on the island's ground and in its town, for their own side
+ * only; engineers apart, still in corps, up to `engRoom`; fortress crews apart under the fortress rows; a retreat onto
+ * an island at room plus two, now two divisions' worth (`fits` with `slack` 2). Men are read as they stand: a worn
+ * corps takes less room than a full one, and drafts that raise the men on an island over its room move nobody (Q5, read
+ * as recommended: drafts are never refused for room; an island over its room refuses only new corps of that side).
+ * Nobody is ever moved or struck off to keep it.
  *
- * The record's own hand is the one thing that does not read it: a dated row is put down at the record's place, and
- * the book's station taken, counted against five as before (game.ts roomNear and expeditions, stations.ts). The
- * record was written before this table; where the two disagree the row is not sent away, kept waiting or struck,
- * and the historian mends the one or the other (form B3 of 25 November 2026, (c)).
- * (This is one reading of (c). The other, a row for a full island sent on or kept waiting at the island's own room
- * and the book's stations counted against it, was built and measured on 25 November 2026 and left out: by the book,
- * at stop 1 of the history dial, the British divisions of Malaya could not step back onto Singapore Island, which
- * has room for two, so Johore held and Singapore still stood in month 40 where it had fallen in month 31; the guard
- * rows of Kwajalein, Yap and Chichi Jima waited two months for their landing forces to sail; and the standing tests
- * of the islands' garrisons, the lent rows, Oahu's rows and the book's stations failed. The record is to be mended,
- * or the reading ruled, before the record's hand reads the table.)
+ * (b) A corps larger than the island's whole room does not fit, for every seat: it falls out of `fits` with nothing
+ * more, since its men alone exceed the room on an empty island. It may split to fit where the split rules allow
+ * (breakup.ts), which no computer nation does (Q3, read as recommended: a computer staff's wave for an island is the
+ * corps of its force that fit, in plan order, passing over any too large for the whole room; where none fits the shore
+ * is read as full and the plan goes on to its next shore). One already there at the start is the record's hand and
+ * stays: nothing here moves anybody.
+ *
+ * The record's own hand: at stops 1 and 2 of the dial (the stops that keep the book) a dated row is put down at the
+ * record's place counted against five as before, and the book's stations taken (game.ts roomNear and the row offer,
+ * stations.ts). At stops 3 to 5 the record's place reads `fits` like every other placing (Q2 of the map, read as
+ * recommended: the design director's 13:58Z "room binds everyone there"). The other reading, the record's hand reading
+ * the islands' room at stops 1 and 2 as well, was built and measured on 25 November 2026 with room counted in corps and
+ * Singapore at room 2, and left out: by the book the British divisions of Malaya could not step back onto Singapore
+ * Island, and the guard rows of Kwajalein, Yap and Chichi Jima waited two months for their landing forces.
+ *
+ * With the far side off, and for ground that is no island of the table, nothing here answers in men: a province holds
+ * five corps (STACK) and every reader's own count is compared with five exactly as it always was (`rows`).
  */
-export function roomAt(g: Game, r: Region | undefined | null, nat: string): number {
-  if (!ROWS || !r || !farOn(g)) return STACK;
-  const row = ROWS[r.name];
-  if (!row) return STACK;
-  // (Each corps in the town is asked for itself: only those of this side take this side's room.)
-  const inTown = r.garr ? r.garr.filter((c) => allied(g, nat, c.nat) && !roomless(g, c)).length : 0;
-  return Math.max(0, row[0] - inTown);
-}
 
-/** How a room is said: "one corps", "4 corps". */
-const corpsWord = (n: number): string => (n === 1 ? 'one corps' : `${n} corps`);
+/** The men of a corps, as its card shows them (game.ts `men`). */
+const menOfCorps = (c: Corps): number => men(c);
 
 /**
- * What a full island tells the player who orders one more corps onto it: "Wake has room for one corps." Null for
- * ground that is no island of the table (and with the far side off), where each rule keeps the sentence it had.
+ * The men of nat's side standing on an island, in the field and in the town, engineers and fortress crews left out,
+ * and the corps in `going` left out (they are counted as going, not as there).
+ */
+function menOn(g: Game, r: Region, nat: string, going: readonly Corps[]): number {
+  let n = 0;
+  for (const u of placed(g, r, nat)) if (u.kind !== 'eng' && !going.includes(u)) n += menOfCorps(u);
+  for (const u of r.garr ?? []) if (allied(g, nat, u.nat) && !roomless(g, u) && u.kind !== 'eng' && !going.includes(u)) n += menOfCorps(u);
+  return n;
+}
+
+/** Whether only nat's own corps (none of an ally's) stand on an island, field and town, `going` left out. */
+function onlyMine(g: Game, r: Region, nat: string, going: readonly Corps[]): boolean {
+  const there = [...placed(g, r, nat), ...(r.garr ?? []).filter((u) => allied(g, nat, u.nat) && !roomless(g, u))];
+  return there.every((u) => going.includes(u) || u.kind === 'eng' || u.nat === nat);
+}
+
+/** Engineer corps of nat's side in the field of r, `going` left out. */
+const engThere = (g: Game, r: Region, nat: string, going: readonly Corps[]): number =>
+  placed(g, r, nat).filter((u) => u.kind === 'eng' && !going.includes(u)).length;
+
+/** How a fit is asked. */
+export interface FitAsk {
+  /**
+   * The reader's own count of corps there, on ground that is no island (and with the far side off): the comparison is
+   * then `rows + going.length <= STACK + slack`, the one the reader always made. Left out, the shared count is used:
+   * the side's corps in the field, engineers apart (`roomForAll`'s). An island never reads it: there the men decide.
+   */
+  rows?: number;
+  /** With `rows`: the engineers there by the reader's count, engineers then counted apart (`hasRoom`'s). */
+  eng?: number;
+  /** Room over the island's (in divisions' worth) or the five (in corps): 2 for a retreat. */
+  slack?: number;
+  /**
+   * Corps a plan counts as there already though they stand elsewhere (a staff's copies, weighed and not moved). On an
+   * island they are added to the side's men there; elsewhere the reader's own `rows` count them already.
+   */
+  with?: readonly Corps[];
+  /**
+   * Corps of the side there that leave as these come (a row made from them, which strikes them as it forms; the corps a
+   * swap sends out): on an island they are left out of those there. Elsewhere the reader's own count stands.
+   */
+  out?: readonly Corps[];
+}
+
+/**
+ * THE answer to "do these corps of one side fit at r, beside those of their side already there": every rule of room
+ * reads it, a march, a train, a ship, a landing, a new corps, the winners of a fight, a retreat, the record's rows at
+ * stops 3 to 5 and the staffs' own placing. On an island of the table: the side's men there (`menOn`) and the men of
+ * the fighting corps going must be within (room + slack) x 15,000, and engineers going must be within `engRoom` in
+ * corps. On all other ground, and with the far side off: the count of corps against five, as it always was.
+ */
+export function fits(g: Game, r: Region | undefined | null, nat: string, going: readonly Corps[], o: FitAsk = {}): boolean {
+  if (!r) return false;
+  const slack = o.slack ?? 0;
+  const riding = going.filter((c) => c.kind === 'eng').length, line = going.length - riding;
+  const isle = islandOf(g, r);
+  if (isle) {
+    const plan = o.with ?? [], gone = [...going, ...(o.out ?? [])];
+    if (riding && engThere(g, r, nat, gone) + plan.filter((c) => c.kind === 'eng').length + riding > engRoom(g, r)) return false;
+    if (!line) return true;
+    let sending = 0;
+    for (const c of [...plan, ...going]) if (c.kind !== 'eng') sending += menOfCorps(c);
+    return menOn(g, r, nat, gone) + sending <= (isle.room + slack) * MEN_PER_DIV;
+  }
+  if (o.rows === undefined) {
+    const here = placed(g, r, nat).filter((u) => !going.includes(u));
+    const eng = here.filter((u) => u.kind === 'eng').length;
+    // (Engineers apart: two. Engineers already there over that, the record's or a beaten army's, bar more engineers.)
+    return (riding === 0 ? eng <= Math.max(2, engRoom(g, r)) : eng + riding <= engRoom(g, r)) && here.length - eng + line <= STACK + slack;
+  }
+  if (o.eng !== undefined) return riding ? o.eng + riding <= engRoom(g, r) : o.rows + line <= STACK + slack;
+  return o.rows + going.length <= STACK + slack;
+}
+
+/**
+ * THE room left at r for nat's side: on an island of the table, in divisions' worth of men (men / 15,000, not
+ * rounded, never below none); on all other ground and with the far side off, five less the reader's own count
+ * (`rows`, or the side's corps in the field, engineers apart). "Full" is `roomLeft(...) < 1` where no corps is at hand.
+ * `without`: corps of the side left out of those there on an island (a staff's own corps, when it asks what room its
+ * allies and the town leave it); the reader's `rows` leave them out elsewhere.
+ */
+export function roomLeft(g: Game, r: Region | undefined | null, nat: string, rows?: number, without: readonly Corps[] = []): number {
+  if (!r) return 0;
+  const isle = islandOf(g, r);
+  if (isle) return Math.max(0, isle.room * MEN_PER_DIV - menOn(g, r, nat, without)) / MEN_PER_DIV;
+  return STACK - (rows ?? placed(g, r, nat).filter((u) => u.kind !== 'eng').length);
+}
+
+/**
+ * The corps of `list`, in plan order, that still go to r: each that fits beside those of its side there and those of
+ * the list taken before it; a corps too large for what is left (or for the whole room) is passed over and the next
+ * one asked (Q3, read as recommended). A helper over `fits`, not a second count. On ground that is no island, the
+ * whole list, as a landing was always counted there (callers cap it by their own lift and five).
+ */
+export function fitWave<C extends Corps>(g: Game, r: Region | undefined | null, nat: string, list: readonly C[]): C[] {
+  if (!r || !islandOf(g, r)) return [...list];
+  const out: C[] = [];
+  for (const c of list) if (fits(g, r, nat, [...out, c])) out.push(c);
+  return out;
+}
+
+/** How many of `list` still go to r (`fitWave`'s length); Infinity on ground that is no island, as `shoreRoom` was. */
+export const fitCount = (g: Game, r: Region | undefined | null, nat: string, list: readonly Corps[]): number =>
+  r && islandOf(g, r) ? fitWave(g, r, nat, list).length : Infinity;
+
+/**
+ * The too-large line (b), said before anything of how full the island is today (the UI director, 15:02Z, section 3):
+ * the first corps of the order larger than the island's whole room, at its card's own figure, with "split it and send
+ * a part" where the split rules let him split it; where more than one is too large, a sentence counts the rest so he
+ * is not refused again for the next (his answer of 21:37Z 26 November 2026). Null where none is too large.
+ */
+function tooLarge(g: Game, r: Region, line: readonly Corps[]): string | null {
+  const isle = islandOf(g, r);
+  if (!isle) return null;
+  const all = line.filter((c) => menOfCorps(c) > isle.room * MEN_PER_DIV);
+  if (!all.length) return null;
+  const big = all[0], head = `${r.name} has ${roomWords(isle.room)}. ${big.name} has ${cardMen(big)}`;
+  const first = whyNotBreakUp(g, big, [0]) === null ? `${head}, too many to go there whole: split it and send a part.` : `${head}: too many for the island.`;
+  const more = all.length - 1;
+  return more ? `${first} ${Count(more)} more of the corps you are sending ${more === 1 ? 'is' : 'are'} too large for ${r.name} as well.` : first;
+}
+
+/**
+ * What the swap card says where two corps cannot change places onto an island for want of room (the UI director's
+ * answer of 21:37Z 26 November 2026 on the mapper's Q6): the too-large line first; else the section 3 sentence with
+ * "there" counting only the men who stay after the swap. Null where the swap fits, to the last man.
+ */
+export function swapRefusal(g: Game, r: Region, c: Corps, out: Corps): string | null {
+  const isle = islandOf(g, r);
+  if (!isle || swapFits(g, r, c, out)) return null;
+  const big = tooLarge(g, r, [c]);
+  if (big) return big;
+  const room = isle.room * MEN_PER_DIV, stay = menOn(g, r, c.nat, [c, out]);
+  const yours = onlyMine(g, r, c.nat, [c, out]) ? ' of yours' : '';
+  return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(stay, 'up')}${yours} stay there after the swap: only ${roomMen(room - stay, 'down')} more can go, and ${c.name} has ${cardMen(c)}.`;
+}
+
+/**
+ * Whether corps `c` may change places with `out` onto island r (the swap, game.ts whyNoSwap): Q6 of the island-room
+ * map, read as recommended until the design director rules. A corps larger than the island's whole room never swaps
+ * on; otherwise the swap stands while the side's men there after it fit (the corps going out left out), or are no more
+ * than before. Engineers change places only with engineers, so their count does not change. True on all other ground.
+ */
+export function swapFits(g: Game, r: Region, c: Corps, out: Corps): boolean {
+  const isle = islandOf(g, r);
+  if (!isle || c.kind === 'eng') return true;
+  if (menOfCorps(c) > isle.room * MEN_PER_DIV) return false;
+  return menOfCorps(c) <= menOfCorps(out) || fits(g, r, c.nat, [c], { out: [out] });
+}
+
+/** The island's room said once: "room for 4 divisions, about 60,000 men", "room for one division, about 15,000 men". */
+const roomWords = (room: number): string =>
+  `room for ${room === 1 ? 'one division' : `${room} divisions`}, about ${(room * MEN_PER_DIV).toLocaleString('en-US')} men`;
+
+/**
+ * A figure of men in the room's sentences (the UI director's marks of 15:02Z 25 November 2026, section 1, and his
+ * answer of 21:37Z 26 November 2026 on the mapper's Q8): thousands with the comma, under 1,000 the figure whole.
+ * 'down' for "more can go", worked from the true figures and rounded DOWN, so the line never promises room that is not
+ * there; 'up' for the men there, so that there and more add up to the room the line shows; 'near' (the nearest
+ * thousand) for what he is sending and for a shortfall.
+ */
+export function roomMen(n: number, how: 'down' | 'up' | 'near' = 'near'): string {
+  const m = Math.max(0, Math.round(n));
+  return roomFigure(m, how).toLocaleString('en-US');
+}
+const roomFigure = (m: number, how: 'down' | 'up' | 'near'): number =>
+  (m < 1000 ? m : (how === 'down' ? Math.floor(m / 1000) : how === 'up' ? Math.ceil(m / 1000) : Math.round(m / 1000)) * 1000);
+/** A corps' men as its card shows them: the exact figure (ui/main.ts `num(men(c))`). */
+const cardMen = (c: Corps): string => menOfCorps(c).toLocaleString('en-US');
+/** "Two", "One": a count opening a sentence. */
+const Count = (k: number): string => { const w = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'][k - 1]; return w ?? `${k}`; };
+
+/**
+ * The head of the swap card on an island (the UI director, 15:02Z, section 2): "Okinawa has room for 4 divisions, about
+ * 60,000 men." Null for ground that is no island of the table (and with the far side off), where each rule keeps the
+ * sentence it had.
  */
 export function roomSays(g: Game, r: Region | undefined | null): string | null {
   const isle = islandOf(g, r);
-  return isle && r ? `${r.name} has room for ${corpsWord(isle.room)}.` : null;
+  return isle && r ? `${r.name} has ${roomWords(isle.room)}.` : null;
 }
 
 /**
  * How many engineer corps a province takes apart from its fighting corps: two, or on an island of the table the
  * lesser of two and the island's room (the design director, 13:58Z 25 November 2026: "Wake, a room of one, takes one
- * engineer corps apart; a room of two or more takes two, as anywhere"). Two with the far side off.
+ * engineer corps apart; a room of two or more takes two, as anywhere"). Two with the far side off. Counted in corps.
  */
 export const engRoom = (g: Game, r: Region | undefined | null): number => Math.min(2, islandOf(g, r)?.room ?? 2);
 
 /**
- * What an island tells the player whose order it has no room for: how many more can go, since that is the number he
- * must change his order to (the UI director's words of 14:00Z 25 November 2026; the head of the swap card keeps the
- * whole room, `roomSays`). `corps` are the corps ordered there; those of them already on the island are not counted
- * as there, and the corps in its town are. "Of yours" is dropped where an ally's corps fill the room too. Engineers
- * are told their own count in the same words (the builder's, for the UI director to mark). Null for ground that is no
+ * What an island tells the player whose order it has no room for, in the UI director's words of 15:02Z 25 November
+ * 2026 (section 3): the room, what is there, how much more fits and what he is sending, in that order, in men. A corps
+ * larger than the island's whole room is told first and alone (Q9, read as recommended): the first such corps of the
+ * order, with "split it and send a part" where the split rules let him split it. `corps` are the corps ordered there;
+ * those already on the island are not counted as there, and the corps in its town are. "Of yours" is dropped where an
+ * ally's corps stand there too. Engineers are told their own count in corps (section 4). Null for ground that is no
  * island of the table, with the far side off, and where room is not what stops the order.
  */
 export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[]): string | null {
   const isle = islandOf(g, r);
   if (!isle || !r || !corps.length) return null;
-  const nat = corps[0].nat;
-  const here = placed(g, r, nat).filter((u) => !corps.includes(u));
-  const town = (r.garr ?? []).filter((c) => allied(g, nat, c.nat) && !roomless(g, c) && !corps.includes(c));
+  const nat = corps[0].nat, room = isle.room * MEN_PER_DIV, line = corps.filter((c) => c.kind !== 'eng');
+  const big = tooLarge(g, r, line);
+  if (big) return big;
+  if (line.length && !fits(g, r, nat, line)) {
+    const there = menOn(g, r, nat, corps), sending = line.reduce((n, c) => n + menOfCorps(c), 0), left = room - there;
+    const yours = onlyMine(g, r, nat, corps) ? ' of yours' : '';
+    // (What he sends would read at or under what can go once rounded: say the shortfall instead, the UI director's
+    // answer of 21:37Z 26 November 2026, as the rifles' fifth read.)
+    const short = roomFigure(Math.round(sending), 'near') <= roomFigure(Math.max(0, Math.round(left)), there === 0 ? 'near' : 'down');
+    const sends = short ? `you are sending ${roomMen(sending - left)} men more than fit` : `you are sending ${roomMen(sending)}`;
+    if (there === 0) return `${r.name} has ${roomWords(isle.room)}: ${sends}.`;
+    if (left < 1000) return `${r.name} is full: it has room for about ${roomMen(room)} men and ${roomMen(there, 'up')}${yours} are there.`;
+    if (short) return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(there, 'up')}${yours} are there: ${sends}.`;
+    return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(there, 'up')}${yours} are there: only ${roomMen(left, 'down')} more can go, and ${sends}.`;
+  }
+  const riding = corps.length - line.length;
+  if (!riding) return null;
+  const most = engRoom(g, r), here = placed(g, r, nat).filter((u) => u.kind === 'eng' && !corps.includes(u));
+  const n = here.length, left = Math.max(0, most - n);
+  if (riding <= left) return null;
   const count = (k: number): string => (k === 1 ? 'one' : `${k}`);
-  const say = (room: number, there: Corps[], what: string, asked: number): string | null => {
-    const n = there.length, left = Math.max(0, room - n);
-    if (asked <= left) return null;
-    const has = `has room for ${count(room)} ${what}`, mine = there.every((u) => u.nat === nat);
-    if (n === 0) return `${r.name} ${has}: only ${count(room)} can go.`;
-    const are = n === 1 ? (mine ? 'one of yours is there' : 'one is there') : `${n}${mine ? ' of yours' : ''} are there`;
-    if (left > 0) return `${r.name} ${has} and ${are}: only ${count(left)} more can go.`;
-    return `${r.name} is full: it ${has} and ${room === 1 && n === 1 && mine ? 'yours is there' : are}.`;
-  };
-  const line = corps.filter((c) => c.kind !== 'eng').length;
-  return (line ? say(isle.room, [...here.filter((u) => u.kind !== 'eng'), ...town], 'corps', line) : null)
-    ?? (corps.length > line ? say(engRoom(g, r), here.filter((u) => u.kind === 'eng'), 'engineer corps beside its troops', corps.length - line) : null);
+  const has = `room for ${count(most)} engineer corps as well as its troops`, mine = here.every((u) => u.nat === nat);
+  if (n === 0) return `${r.name} has ${has}: only ${count(most)} can go.`;
+  const are = n === 1 ? (mine ? 'one of yours is there' : 'one is there') : `${n}${mine ? ' of yours' : ''} are there`;
+  if (left > 0) return `${r.name} has ${has} and ${are}: only ${count(left)} more can go.`;
+  return `${r.name} can take no more engineers: it has ${has}, and ${most === 1 && n === 1 && mine ? 'yours is there' : are}.`;
 }
 
 /** Every island of the table, by its province's name (for the lists an interface or a test draws). */

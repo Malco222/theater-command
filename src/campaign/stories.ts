@@ -25,7 +25,7 @@ import { moraleRules, restedMonth } from './morale';
 import { seaWhat, seaWhere } from './sea-words';
 import { NICKNAMES, earnedName, hardWin, nicknamesOn, roomForName } from './nicknames';
 import { markBattle, markFallen, marksMonth } from './marked';
-import { roomAt } from './islands';
+import { fits } from './islands';
 import {
   type AirFleet, type Award, type BattleReport, type BomberRow, type BomberShot, type Cash, type Corps, type DiaryLine, type Fallen, type Fleet, type Game, type Moment,
   type Region, type Rivalry, type Storied, type Stories, type UnitKind,
@@ -896,7 +896,7 @@ export function storyConvoy(g: Game, raiders: Fleet[], escorts: Fleet[], tons: n
 /** Where a corps sent home goes: the capital if there is room, or else the nearest of its own country's towns with room. */
 function homeFor(g: Game, c: Corps): Region | null {
   const n = g.nations[c.nat];
-  const room = (r: Region): boolean => r.owner === c.nat && r.ctrl === c.nat && !r.overseas && (r.id === c.reg || r.units.filter((u) => allied(g, u.nat, c.nat) && !roomless(g, u)).length < roomAt(g, r, c.nat));
+  const room = (r: Region): boolean => r.owner === c.nat && r.ctrl === c.nat && !r.overseas && (r.id === c.reg || fits(g, r, c.nat, [c], { rows: r.units.filter((u) => allied(g, u.nat, c.nat) && !roomless(g, u)).length }));
   if (n.capital >= 0 && room(g.regions[n.capital])) return g.regions[n.capital];
   const here = g.regions[c.reg];
   let best: Region | null = null, bd = Infinity;

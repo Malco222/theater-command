@@ -11,11 +11,11 @@
 // put back, but no road is ever packed with a corps bigger than the one that was raised. No computer nation does either.
 
 import data from '../../data/campaign/breakup.json';
-import { removeCorps } from './game';
+import { men, removeCorps } from './game';
 import { divisionsOf } from './armies';
 import { riflesJoin, riflesSplit } from './rifles';
 import { FAR_STAGE } from './stage';
-import { MEN_PER_DIV, type Corps, type Game } from './types';
+import { type Corps, type Game } from './types';
 
 export const BREAKUP = data as unknown as { detached: string };
 
@@ -183,4 +183,5 @@ export function rejoin(g: Game, part: Corps, into: Corps): boolean {
 }
 
 /** (For the men a card counts: what the two parts add up to.) */
-export const menOf = (c: Corps): number => Math.round(c.str * c.divs * MEN_PER_DIV);
+/** A corps' men: the corps card's own measure, game.ts `men` (one measure of a corps' men, never a second). */
+export const menOf = (c: Corps): number => men(c);

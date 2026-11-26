@@ -146,9 +146,11 @@ function shipping(g: Game, nat: string): void {
   const plan = plannedCrossing(g, nat);
   if (!plan) return;
   const lift = liftView(g, nat);
-  const force = plan.from.units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne).length;
-  // (An island of the Pacific takes its room and no more: no troopship is laid down for a corps that could not land. game.ts shoreRoom.)
-  const want = Math.min(STACK, shoreRoom(g, plan.to, nat), Math.max(landingForce(), force));
+  const quay = plan.from.units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne);
+  const force = quay.length;
+  // (An island of the Pacific takes its room in men and no more: no troopship is laid down for a corps that could not
+  // land, those of the quay that fit counted in their order. game.ts shoreRoom, islands.ts `fitWave`.)
+  const want = Math.min(STACK, shoreRoom(g, plan.to, nat, quay), Math.max(landingForce(), force));
   if (lift.room <= 0 || lift.lift + lift.building.length >= want) return;
   const o = offers(g, nat).find((x) => x.key === 'ship:tp');
   if (o && o.why === null && o.at >= 0 && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g, nat, o.key, o.at);

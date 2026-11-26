@@ -25,8 +25,8 @@
 import data from '../../data/campaign/capitulations.json';
 import { reliefBar } from './ai';
 import { skyDenies } from './air';
-import { allied, annexMonth, assess, atWar, capitulate, corpsBase, ensureSupply, fights, friendlyUnits, gunsRule, headline, homeOf, hostileUnits, limitAttackers, overseasRead, railReachFor, shoreRoom, theName, thornGround, victorOf } from './game';
-import { engRoom, roomAt } from './islands';
+import { allied, annexMonth, assess, atWar, capitulate, corpsBase, ensureSupply, fights, friendlyUnits, gunsRule, headline, homeOf, hostileUnits, limitAttackers, overseasRead, railReachFor, theName, thornGround, victorOf } from './game';
+import { fitWave, fits } from './islands';
 import { FIT_ORG } from './staff';
 import { stopDef, stopOf } from './history';
 import { whyBarred } from './ground';
@@ -166,7 +166,7 @@ const PLANS = 64;
 
 /**
  * The corps that come by land, each put on a province it could attack from while that province has room (hasRoom's:
- * the province's room in corps, islands.ts roomAt; engineers apart up to 2, its side's corps already there counted,
+ * five corps, or an island's room in men, islands.ts `fits`; engineers apart up to 2, its side's corps already there counted,
  * those that stay where they stand first), the strongest first and each where the fewest stand: copies of them
  * standing there, so the attack is weighed from where it would go in (limitAttackers' roads, its sides, assess's
  * rivers and flanks), and nothing in the war is moved.
@@ -187,12 +187,14 @@ function standThem(g: Game, ally: string, cs: Stand[]): Corps[] {
     }
     return l;
   };
-  const fits = (c: Corps, id: number): boolean => (c.kind === 'eng' ? at(id).eng < engRoom(g, g.regions[id]) : at(id).line < roomAt(g, g.regions[id], ally));
+  const sent = new Map<number, Corps[]>();
+  const room = (c: Corps, id: number): boolean => fits(g, g.regions[id], ally, [c], { rows: at(id).line, eng: at(id).eng, with: sent.get(id) });
   const out: Corps[] = cs.filter(stays).map((x) => x.c);
   for (const { c, from } of cs.filter((x) => !stays(x)).sort((a, b) => weight(g, b.c) - weight(g, a.c) || a.c.id - b.c.id)) {
-    const open = from.filter((id) => fits(c, id)).sort((a, b) => at(a).line - at(b).line || a - b);
+    const open = from.filter((id) => room(c, id)).sort((a, b) => at(a).line - at(b).line || a - b);
     if (!open.length) continue;
     if (c.kind === 'eng') at(open[0]).eng++; else at(open[0]).line++;
+    sent.set(open[0], [...(sent.get(open[0]) ?? []), c]);
     out.push({ ...c, reg: open[0] });
   }
   return out;
@@ -223,25 +225,26 @@ function sailingPlans(g: Game, shipped: Stand[]): Map<number, number>[] {
 
 /**
  * The corps a plan of sailings ships, sharing the lift (a corps each): the strongest first, each into its quay's
- * harbour of the plan while that harbour has room as whyNotShip counts it (roomAt of its side's units of every kind),
+ * harbour of the plan while that harbour has room as whyNotShip counts it (its side's units of every kind against five,
+ * or an island's room in men: islands.ts `fits`),
  * none twice; under the guns rule a sailing of guns alone takes the strongest corps that fights in its last place.
  */
 function shipFor(g: Game, ally: string, shipped: Stand[], plan: Map<number, number>, lift: number, skip: Set<number>): Stand[] {
-  const room = new Map<number, number>();
-  const left = (id: number): number => room.get(id) ?? roomAt(g, g.regions[id], ally) - friendlyUnits(g, g.regions[id], ally).length;
+  const sent = new Map<number, Corps[]>();
+  const left = (id: number, c: Corps): boolean => { const s = sent.get(id) ?? []; return fits(g, g.regions[id], ally, [c], { rows: friendlyUnits(g, g.regions[id], ally).length + s.length, with: s }); };
   const can = shipped.filter((x) => !skip.has(x.c.id) && x.from.includes(plan.get(x.quay!)!)).sort((a, b) => weight(g, b.c) - weight(g, a.c) || a.c.id - b.c.id);
   const pick: Stand[] = [];
   for (const x of can) {
     if (pick.length >= lift) break;
     const to = plan.get(x.quay!)!;
-    if (left(to) <= 0) continue;
-    room.set(to, left(to) - 1);
+    if (!left(to, x.c)) continue;
+    sent.set(to, [...(sent.get(to) ?? []), x.c]);
     pick.push({ c: x.c, from: [to] });
   }
   if (pick.length && gunsRule(g) && !pick.some((x) => fights(x.c))) {
     const last = pick[pick.length - 1];
-    room.set(last.from[0], left(last.from[0]) + 1);
-    const f = can.find((x) => fights(x.c) && left(plan.get(x.quay!)!) > 0);
+    sent.set(last.from[0], (sent.get(last.from[0]) ?? []).filter((c) => c !== last.c));
+    const f = can.find((x) => fights(x.c) && left(plan.get(x.quay!)!, x.c));
     if (f) pick[pick.length - 1] = { c: f.c, from: [plan.get(f.quay!)!] };
   }
   return pick;
@@ -345,7 +348,7 @@ function reliefFrom(g: Game, nat: string, friends: string[], may: (c: Corps) => 
       }
       // Or a landing on the place from one port.
       for (const [, cs] of [...ports].sort(([a], [b]) => a - b)) {
-        const group = strongest(g, cs, Math.min(lift, STACK, shoreRoom(g, t, ally)), (c) => c);
+        const group = strongest(g, fitWave(g, t, ally, cs), Math.min(lift, STACK), (c) => c);
         if (!group.length || (gunsRule(g) && !group.some(fights))) continue;
         const odds = assess(g, group, t, landingOpts(g, group, t)).odds;
         if (odds >= bar) return { by: ally, target: t.id, odds, corps: group.map((c) => c.id) };

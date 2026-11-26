@@ -76,7 +76,7 @@ import { chargeDelay, isRearguard, rearguardWeeks, rearguardsAt, rearguardsLapse
 import { clientWar, tiedPair } from './far';
 import { atomFallen, atomMonth, atomPress } from './atom';
 import { demandInstead, keepersOf, keptForces, pacificWar } from './pacific';
-import { engRoom, islandOf, roomAt, roomRefusal, roomSays } from './islands';
+import { fits, fitCount, islandOf, roomLeft, roomRefusal, roomSays, swapFits, swapRefusal } from './islands';
 import { frontOfRow, onLiveFront } from './planfronts';
 import { bookKept } from './stations';
 import { floorWords, witherAt, witherDrop, witherFed, witherMonth, withered } from './wither';
@@ -585,7 +585,7 @@ function reactionMoves(g: Game, aggressor: string, victim: string): void {
     if (!c.dyle || c.nat === g.human || !atWar(g, c.nat, aggressor)) continue;
     const to = g.byName[c.dyle];
     if (!to || to.owner !== victim || !allied(g, c.nat, to.ctrl)) continue;
-    if (hostileUnits(g, to, c.nat).length || placed(g, to, c.nat).length >= roomAt(g, to, c.nat)) continue;
+    if (hostileUnits(g, to, c.nat).length || !fits(g, to, c.nat, [c], { rows: placed(g, to, c.nat).length })) continue;
     place(g, c, to);
     c.dyle = null;
     moved++;
@@ -2552,8 +2552,10 @@ function leaveWorks(g: Game, c: Corps): void {
   const old = groundWorks(g, from.id);
   const n = old ? old.corps : 0;
   g.flags[`fw:${from.id}`] = Math.round(((old ? old.months * n : 0) + months) / (n + 1) * 100) / 100;
-  // (Works hold no more corps than the ground has room for: five, or an island's own room. islands.ts.)
-  g.flags[`fwk:${from.id}`] = Math.min(islandOf(g, from)?.room ?? STACK, n + 1);
+  // (Works hold no more corps than five, an island's as any ground's: the room in men already bounds who can stand
+  // there, and counting corps against a room in divisions would be a second count of room. Q7 of the island-room map
+  // of 26 November 2026, read as the mapper recommends until the design director rules.)
+  g.flags[`fwk:${from.id}`] = Math.min(STACK, n + 1);
   g.flags[`fwn:${from.id}`] = Object.keys(g.nations).indexOf(c.nat);
 }
 
@@ -2639,8 +2641,10 @@ export function retreatTarget(g: Game, c: Corps, from: Region, banned: Set<numbe
     const r = g.regions[j];
     // (In the grand campaign an army also falls back on the lines of its own side round a town it is besieging.)
     if (!fallsOn(g, c, r, banned)) continue;
-    // (An island of the Pacific takes a beaten army two over its room, as any ground takes two over its five: islands.ts.)
-    if (placed(g, r, c.nat).length >= roomAt(g, r, c.nat) + 2) continue;
+    // (An island of the Pacific takes a beaten army two divisions' worth of men over its room, as any ground takes two
+    // over its five: islands.ts `fits`, slack 2. Q4 of the island-room map, read as recommended: (b) binds orders and
+    // placings, and the retreat reads its own allowance.)
+    if (!fits(g, r, c.nat, [c], { rows: placed(g, r, c.nat).length, slack: 2 })) continue;
     const s = fallScore(g, c, from, r, banned);
     if (s < bs) { bs = s; best = r; }
   }
@@ -2689,7 +2693,7 @@ function fallThrough(g: Game, c: Corps, from: Region, banned: Set<number>): Regi
   for (const n of full) {
     for (const k of n.nb) {
       const m = g.regions[k];
-      if (k === from.id || !fallsOn(g, c, m, banned) || placed(g, m, c.nat).length >= roomAt(g, m, c.nat) + 2) continue;
+      if (k === from.id || !fallsOn(g, c, m, banned) || !fits(g, m, c.nat, [c], { rows: placed(g, m, c.nat).length, slack: 2 })) continue;
       const s = fallScore(g, c, n, m, banned, from);
       if (s < bs) { bs = s; best = m; }
     }
@@ -3595,23 +3599,22 @@ function ownNearest(g: Game, c: Corps): Region | null {
 
 /**
  * Room for this corps in a region. Engineers work among the other troops: they are not counted against the
- * corps a province holds, and it takes two engineer corps at most. (How many corps a province holds is `roomAt`'s
- * to say: five, or on the whole-world chart an island's own room. islands.ts.)
+ * corps a province holds, and it takes two engineer corps at most. (How many a province holds is islands.ts `fits`'s
+ * to say: five corps, or on the whole-world chart an island's own room in men.)
  */
 export function hasRoom(g: Game, to: Region, c: Corps): boolean {
-  const here = placed(g, to, c.nat);
-  const eng = here.filter((u) => u.kind === 'eng').length;
-  return c.kind === 'eng' ? eng < engRoom(g, to) : here.length - eng < roomAt(g, to, c.nat);
+  const here = placed(g, to, c.nat), eng = here.filter((u) => u.kind === 'eng').length;
+  return fits(g, to, c.nat, [c], { rows: here.length - eng, eng });
 }
 
 /**
- * How many more corps of a side an island of the Pacific takes ashore: its room less the side's corps already on it,
- * engineers apart as `hasRoom` counts them, and never less than none (rulings 173(b) and 179(s): a landing force for
- * an atoll is one corps). Infinity for ground that is no island of the table, and with the far side off, where a
- * landing is counted as it always was.
+ * How many of a landing force, in plan order, an island of the Pacific takes ashore: each corps that still fits in
+ * men beside its side's already there and those of the force before it, one too large for what is left passed over
+ * (rulings 173(b) and 179(s); islands.ts `fitWave`). Infinity for ground that is no island of the table, and with the
+ * far side off, where a landing is counted as it always was.
  */
-export function shoreRoom(g: Game, to: Region, nat: string): number {
-  return islandOf(g, to) ? Math.max(0, roomAt(g, to, nat) - placed(g, to, nat).filter((u) => u.kind !== 'eng').length) : Infinity;
+export function shoreRoom(g: Game, to: Region, nat: string, force: readonly Corps[]): number {
+  return fitCount(g, to, nat, force);
 }
 
 /**
@@ -3664,6 +3667,9 @@ export function whyNoSwap(g: Game, a: Corps, b: Corps): string | null {
   if (blocked(g, a, rb) || blocked(g, b, ra)) return 'The way between them is closed to one of them.';
   if ((a.kind === 'eng') !== (b.kind === 'eng')) return 'Engineers change places only with engineers.';
   for (const [c, to] of [[a, rb], [b, ra]] as [Corps, Region][]) { const cost = moveCost(g, c, to); if (c.ap < Math.min(cost, 4) || c.ap <= 0) return `${c.name} has not the moves left for the march.`; }
+  // (An island of the Pacific: the side's men there after the swap must fit, or be no more than before, and a corps
+  // larger than its whole room never swaps on. islands.ts swapFits; Q6 of the island-room map, read as recommended.)
+  for (const [c, to, out] of [[a, rb, b], [b, ra, a]] as [Corps, Region, Corps][]) if (!swapFits(g, to, c, out)) return swapRefusal(g, to, c, out) ?? `${to.name} has no room for ${c.name}.`;
   return null;
 }
 
@@ -3856,12 +3862,7 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
 
 /** Room in a region for all of these corps at once: engineers apart, as `hasRoom` counts them. */
 export function roomForAll(g: Game, to: Region, corps: Corps[]): boolean {
-  if (!corps.length) return true;
-  const here = placed(g, to, corps[0].nat).filter((u) => !corps.includes(u));
-  const eng = here.filter((u) => u.kind === 'eng').length, riding = corps.filter((c) => c.kind === 'eng').length;
-  // (Engineers apart: two, or on an island of the Pacific the lesser of two and its room. Engineers already there over
-  // that, the record's or a beaten army's, bar more engineers and nobody else. islands.ts engRoom.)
-  return (riding === 0 ? eng <= Math.max(2, engRoom(g, to)) : eng + riding <= engRoom(g, to)) && here.length - eng + (corps.length - riding) <= roomAt(g, to, corps[0].nat);
+  return !corps.length || fits(g, to, corps[0].nat, corps);
 }
 
 /**
@@ -4520,7 +4521,7 @@ function mobilise(g: Game, nat: string): void {
     // Form up in the industrial towns still held, emptiest first, away from the fighting.
     let best: Region | null = null, bs = 1e9;
     for (const r of g.regions) {
-      if (r.owner !== nat || r.ctrl !== nat || r.fac < 1 || r.units.filter((u) => !roomless(g, u)).length >= roomAt(g, r, nat) || enemyNear(r) || besieged(g, r)) continue;
+      if (r.owner !== nat || r.ctrl !== nat || r.fac < 1 || roomLeft(g, r, nat, r.units.filter((u) => !roomless(g, u)).length) < 1 || enemyNear(r) || besieged(g, r)) continue;
       const s = r.units.length * 10 - r.fac - (r.cap ? 3 : 0);
       if (s < bs) { bs = s; best = r; }
     }
@@ -4599,7 +4600,7 @@ function liftedOut(c: Corps, from: Region, to: Region): void {
 export function refuge(g: Game, c: Corps, from: Region): Region {
   for (const nm of havensOf(from)) {
     const r = g.byName[nm];
-    if (r && r.id !== from.id && allied(g, c.nat, r.ctrl) && !hostileUnits(g, r, c.nat).length && placed(g, r, c.nat).length < roomAt(g, r, c.nat) && seaOpenAt(g, c.nat, r)) return r;
+    if (r && r.id !== from.id && allied(g, c.nat, r.ctrl) && !hostileUnits(g, r, c.nat).length && fits(g, r, c.nat, [c], { rows: placed(g, r, c.nat).length }) && seaOpenAt(g, c.nat, r)) return r;
   }
   // Ruling 221 (F): troops lifted off the coast of a country their own is fighting are landed at the nearest harbour
   // their country holds on that country's ground, with no enemy in it, room and the sea open: the war they came for
@@ -4630,9 +4631,9 @@ export function refugeHeld(g: Game, c: Corps, from: Region): Region | null {
  * The nearest harbour a nation holds on the ground of the country it stands in, other than where it stands, with no
  * enemy in it, room for one more corps and the sea open to its ships (ruling 221, F); 'fits' narrows the choice.
  */
-export function nearHarbour(g: Game, nat: string, from: Region, fits: (r: Region) => boolean = () => true): Region | null {
+export function nearHarbour(g: Game, nat: string, from: Region, narrow: (r: Region) => boolean = () => true): Region | null {
   return g.regions
-    .filter((r) => r.port && r.id !== from.id && r.owner === from.owner && r.ctrl === nat && !hostileUnits(g, r, nat).length && placed(g, r, nat).length < roomAt(g, r, nat) && seaOpenAt(g, nat, r) && fits(r))
+    .filter((r) => r.port && r.id !== from.id && r.owner === from.owner && r.ctrl === nat && !hostileUnits(g, r, nat).length && roomLeft(g, r, nat, placed(g, r, nat).length) >= 1 && seaOpenAt(g, nat, r) && narrow(r))
     .sort((a, b) => chartDist(g, a, from) - chartDist(g, b, from) || a.id - b.id)[0] ?? null;
 }
 
@@ -4779,9 +4780,12 @@ const sharesWar = (g: Game, nat: string, friend: string): boolean => !!g.nations
  * struck for it: the historian mends the rows (form B3 of 25 November 2026, (c)). The ground a row is sent on to is
  * counted by its own room, an island's among it, as is a corps come in from the sea.)
  */
-function roomNear(g: Game, nat: string, at: Region, record = false): Region | null {
-  const full = (r: Region, most = roomAt(g, r, nat)): boolean => placed(g, r, nat).filter((u) => u.kind !== 'eng').length >= most;
-  if (!full(at, record ? STACK : undefined)) return at;
+function roomNear(g: Game, nat: string, at: Region, record = false, going: readonly Corps[] = [], out: readonly Corps[] = []): Region | null {
+  const rows = (r: Region): number => placed(g, r, nat).filter((u) => u.kind !== 'eng').length;
+  const full = (r: Region): boolean => (going.length ? !fits(g, r, nat, going, { rows: rows(r), out }) : roomLeft(g, r, nat, rows(r)) < 1);
+  // (The record's hand: at stops 1 and 2 its own place against five, island or not; record's hand. At stops 3 to 5 it
+  // reads the room as every placing does: Q2 of the island-room map, read as recommended.)
+  if (record && stopDef(g).book ? rows(at) < STACK : !full(at)) return at;
   const seen = new Uint8Array(g.regions.length);
   const q = [at.id];
   seen[at.id] = 1;
@@ -4955,7 +4959,7 @@ function fallbackHarbour(g: Game, nat: string, at: Region): Region | null {
   let best: Region | null = null, bd = Infinity;
   for (const r of g.regions) {
     if (!r.port || r.id === at.id || THEATRE_OF.get(r.name) !== k) continue;
-    if (!allied(g, nat, r.ctrl) || hostileUnits(g, r, nat).length || placed(g, r, nat).filter((u) => u.kind !== 'eng').length >= roomAt(g, r, nat)) continue;
+    if (!allied(g, nat, r.ctrl) || hostileUnits(g, r, nat).length || roomLeft(g, r, nat, placed(g, r, nat).filter((u) => u.kind !== 'eng').length) < 1) continue;
     const d = chartDist(g, r, at);
     if (d < bd || (d === bd && best && r.id < best.id)) { bd = d; best = r; }
   }
@@ -5004,8 +5008,8 @@ function landVoyages(g: Game, nat: string): void {
     if (v.nat !== nat || v.due > g.turn) continue;
     let reg: Region | null = g.regions[v.to];
     if (!allied(g, nat, reg.ctrl) || hostileUnits(g, reg, nat).length) reg = atWar(g, nat, reg.ctrl) || allied(g, nat, reg.ctrl) ? fallbackHarbour(g, nat, reg) : null;
-    if (reg) reg = roomNear(g, nat, reg) ?? reg;
-    if (!reg || !allied(g, nat, reg.ctrl) || hostileUnits(g, reg, nat).length || placed(g, reg, nat).filter((u) => u.kind !== 'eng').length >= roomAt(g, reg, nat)) continue;
+    if (reg) reg = roomNear(g, nat, reg, false, [v.corps]) ?? reg;
+    if (!reg || !allied(g, nat, reg.ctrl) || hostileUnits(g, reg, nat).length || !fits(g, reg, nat, [v.corps], { rows: placed(g, reg, nat).filter((u) => u.kind !== 'eng').length })) continue;
     g.atSea = g.atSea.filter((x) => x !== v);
     const c = v.corps;
     c.reg = reg.id;
@@ -5045,7 +5049,7 @@ export function ashoreFor(g: Game, nat: string, row: any[], reg: Region | undefi
     // (Where the book dates this country's rows, stops 1 and 2 of the dial, the record's hand stands over an island's
     // room: its port is counted against five, as it always was. The design director, 13:58Z 25 November 2026, island
     // room 1. Elsewhere the island's own room binds the row, as it binds everyone.)
-    if (!r.port || !mine(r) || hostileUnits(g, r, nat).length || friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= (bookKept(g, nat) ? STACK : roomAt(g, r, nat))) continue;
+    if (!r.port || !mine(r) || hostileUnits(g, r, nat).length || (bookKept(g, nat) ? friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= STACK /* record's hand */ : !fits(g, r, nat, rowCorps(nat, row, o), { rows: friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length }))) continue;
     const d = chartDist2(g, r, posting);
     if (d < bd) { bd = d; best = r; }
   }
@@ -5142,7 +5146,7 @@ export function postedFor(g: Game, nat: string, row: any[], reg: Region | undefi
   if (takes && !(nat === g.human && rowTakes(g, nat, o).length > 0)) return null;
   if (!o.war && !atWar(g, nat, posting.ctrl)) return { at: null, adds: null, waits: true, takes };
   const ground = stretchOf(g, posting), cap = g.nations[nat].capital;
-  const home = cap >= 0 && g.regions[cap].ctrl === nat ? roomNear(g, nat, g.regions[cap]) ?? g.regions[cap] : null;
+  const home = cap >= 0 && g.regions[cap].ctrl === nat ? roomNear(g, nat, g.regions[cap], false, rowCorps(nat, row, o)) ?? g.regions[cap] : null;
   return { at: nearHarbour(g, nat, posting, (r) => ground.has(r.id)) ?? home, adds: body ? o.adds : null, waits: false, takes };
 }
 
@@ -5153,6 +5157,14 @@ export function postedFor(g: Game, nat: string, row: any[], reg: Region | undefi
  * (`ashore`), and, on the far side, whether its war has not begun (`waits`) and whether it is the player's row that
  * takes his corps, formed away from its posting (`shifted`): `postedFor`.
  */
+/** A dated row as the corps it forms, for the room it will take: its divisions at its strength (`men`). */
+const rowCorps = (nat: string, row: any[], o: any): Corps[] => [{ nat, kind: row[3], divs: typeof row[4] === 'number' ? row[4] : 1, str: o?.str ?? 1 } as unknown as Corps];
+/** The corps on the board a row is made from (`from`), struck as it forms: they leave the room it takes. */
+const rowOut = (g: Game, nat: string, o: any): Corps[] => {
+  const names: string[] = Array.isArray(o?.from) ? o.from : typeof o?.from === 'string' ? [o.from] : [];
+  return names.length ? g.corps.filter((c) => c.nat === nat && !c.dead && names.includes(c.name)) : [];
+};
+
 function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: Region; fell: boolean; ashore: { at: Region; adds: number | null } | null; waits: boolean; shifted: boolean; home: boolean } {
   let reg = at, fell = false, shifted = false;
   // (It has fallen back to forming at home, its own place lost or at peace: a division is laid once, drawn.ts.)
@@ -5177,14 +5189,14 @@ function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: 
     if (posted.waits) return { reg, fell, ashore, waits: true, shifted, home };
     if (posted.at && posted.takes) { reg = posted.at; fell = true; shifted = true; }
     else if (posted.at) { ashore = { at: posted.at, adds: posted.adds }; reg = posted.at; fell = true; }
-    return { reg: reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl) ? roomNear(g, nat, reg, true) ?? reg : reg, fell, ashore, waits: false, shifted, home };
+    return { reg: reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl) ? roomNear(g, nat, reg, true, rowCorps(nat, row, o), rowOut(g, nat, o)) ?? reg : reg, fell, ashore, waits: false, shifted, home };
   }
   // The wider world: a player whose homeland lies across the ocean has such an army form at home, and shipping
   // it is his business. (A computer's staff ships the corps it raises itself, and is sent none of these: above.)
   // (The far side: never a row posted on ground he holds himself, whoever owns it: it forms there. Ruling B7: Japan's
   // rows for Canton and Hainan, which stood at Tokyo. An ally's ground is as it was: his army is his to ship.)
   if (worldOn(g) && nat === g.human && cap >= 0 && beyondEurope(cap) && g.regions[cap].ctrl === nat && reg && reg.owner !== nat && !(reg.ctrl === nat && farOn(g)) && !o.from && !o.joins && row[3] !== 'fort')
-    reg = roomNear(g, nat, g.regions[cap]) ?? g.regions[cap];
+    reg = roomNear(g, nat, g.regions[cap], false, rowCorps(nat, row, o)) ?? g.regions[cap];
   // (The far side: a division raised at home and posted abroad is not struck for a lost posting. On its date it
   // comes ashore at its country's nearest held port to the posting and the staff posts it: rider b642 part 2 to
   // ruling 234, `ashoreFor`. Nobody is brought ashore with the far side off. Since ruling B7 it is the rule of the
@@ -5194,8 +5206,9 @@ function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: 
     if (ashore) { reg = ashore.at; fell = true; }
   }
   // A full province sends it on to the nearest ground with room. (The record's own place is counted against five on
-  // an island of the Pacific too, `roomNear`'s `record`: form B3 (c). So is it above, for a row `postedFor` places.)
-  if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = roomNear(g, nat, reg, true) ?? reg;
+  // an island of the Pacific too at stops 1 and 2, `roomNear`'s `record`: form B3 (c). So is it above, for a row
+  // `postedFor` places. At stops 3 to 5 the island's room in men binds it: Q2.)
+  if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = roomNear(g, nat, reg, true, rowCorps(nat, row, o), rowOut(g, nat, o)) ?? reg;
   return { reg, fell, ashore, waits: false, shifted, home };
 }
 
@@ -5446,6 +5459,16 @@ export interface RowOffer {
   lent: { to: string; division: string; goes: 'into' | 'later' | 'lost' } | null;
 }
 
+/**
+ * Whether a dated row has room at its place: at stops 1 and 2 (the record's hand) against five, island or not, as it
+ * always was; at stops 3 to 5 the island's room in men binds it as it binds every placing (Q2 of the island-room map
+ * of 26 November 2026, read as recommended). Engineers take none. Ground that is no island: five, as before.
+ */
+function rowFits(g: Game, nat: string, reg: Region, row: any[], o: any): boolean {
+  const rows = placed(g, reg, nat).filter((u) => u.kind !== 'eng').length;
+  return stopDef(g).book ? rows < STACK /* record's hand */ : fits(g, reg, nat, rowCorps(nat, row, o), { rows, out: rowOut(g, nat, o) });
+}
+
 /** One open offer of the player's, read with nothing changed. */
 function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
   const o = row[6] ?? {}, posting = g.byName[row[5]];
@@ -5463,7 +5486,7 @@ function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
     if (o.cut && !(Array.isArray(o.cut) ? (o.cut as string[]) : [o.cut as string]).some((nm) => rowLanded(g, nm))) return 'The formation its men are released from has not been formed.';
     if (old) return null;
     if (!reg) return `There is nowhere for it to form: ${posting?.name ?? row[5]} is not yours, and you hold no harbour on that ground, nor your capital.`;
-    if (!o.join && placed(g, reg, nat).filter((u) => u.kind !== 'eng').length >= STACK) return `There is no room for another corps at ${reg.name}, or near it.`;
+    if (!o.join && !rowFits(g, nat, reg, row, o)) return `There is no room for another corps at ${reg.name}, or near it.`;
     return null;
   })();
   // His rows still to come at this stop of the dial that are made out of this formation: cut from it, or made from
@@ -5988,7 +6011,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // Troops sent to take over a stretch of an ally's line ('join') go in whatever already stands there.
     // (Room is counted as everywhere else: engineers take none. The record's own place is counted against five on an
     // island of the Pacific too, as `roomNear` counts it: a row is not kept waiting, and so struck, by the islands' table.)
-    if (!o.join && placed(g, reg, nat).filter((u) => u.kind !== 'eng').length >= STACK) return;
+    if (!o.join && !rowFits(g, nat, reg, row, o)) return;
     if (asks) { offerMade(g, nat, i, o); return; }
     g.flags[`sent:${i}`] = 1;
     // (The telling's three flags go once the formed headline below has read them: `formedLine` calls arrivalwaits.ts
@@ -6241,8 +6264,9 @@ function formPlace(g: Game, nat: string, row: any[], made: Corps[] | null): Regi
   if (g.flags.open === 1 && row[3] !== 'fort') {
     // Free play: not on the ground of a friend who is at peace, and never a sixth corps in one province.
     if (reg.ctrl !== nat && !sharesWar(g, nat, reg.ctrl) && n.capital >= 0 && g.regions[n.capital].ctrl === nat) reg = g.regions[n.capital];
-    // (The record's own hand: a row by date is counted against five, an island's room or no: form B3, (c).)
-    reg = roomNear(g, nat, reg, true) ?? reg;
+    // (The record's own hand: a row by date is counted against five, an island's room or no, at stops 1 and 2: form
+    // B3, (c). At stops 3 to 5 the island's room in men: Q2.)
+    reg = roomNear(g, nat, reg, true, rowCorps(nat, row, row[6] ?? {}), rowOut(g, nat, row[6] ?? {})) ?? reg;
   }
   return reg;
 }

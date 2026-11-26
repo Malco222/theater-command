@@ -35,7 +35,7 @@ import { FAR_FIRST, farOn } from './world';
 import { addCorps, armySize, atWar, bloc, capture, headline, relocate, removeCorps, sameSide, setWar, theName, roomless } from './game';
 import { signPeace } from './diplomacy';
 import { chartDist2 } from './wrap';
-import { roomAt } from './islands';
+import { fits } from './islands';
 import type { Corps, Game, Region } from './types';
 
 interface ClientRow { patron: string; wars: string[] }
@@ -272,7 +272,7 @@ function parts(g: Game, client: string, patron: string): void {
     for (const c of g.corps.filter((x) => x.nat === client && x.reg === from.id && !x.dead)) {
       let best: Region | null = null, bd = Infinity;
       for (const r of g.regions) {
-        if (r === from || r.ctrl !== client || r.units.filter((u) => !roomless(g, u)).length >= roomAt(g, r, client) || r.units.some((u) => u.nat !== client)) continue;
+        if (r === from || r.ctrl !== client || !fits(g, r, client, [c], { rows: r.units.filter((u) => !roomless(g, u)).length }) || r.units.some((u) => u.nat !== client)) continue;
         const d = chartDist2(g, r, from);
         if (d < bd) { bd = d; best = r; }
       }

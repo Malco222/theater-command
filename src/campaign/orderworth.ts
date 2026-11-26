@@ -38,8 +38,9 @@ import { SIGHT, sightOf } from './intel';
 import { raiseMorale } from './morale';
 import { planAt } from './plannow';
 import { raisedXp } from './stories';
+import { roomLeft } from './islands';
 import { TEAMS, isTeam } from './teams';
-import { STACK, type Corps, type Game, type Kind, type Region } from './types';
+import { type Corps, type Game, type Kind, type Region } from './types';
 
 /** The card a front sector is read on: its plan's attack, or its defence. */
 export type Card = 'atk' | 'def';
@@ -135,7 +136,8 @@ export class Reckoning {
     const queued = g.nations[nat].queue.filter((b) => b.what === 'corps' && b.kind === kind && b.divs).map((b) => b.divs!);
     let best = 0;
     for (const f of this.fronts) {
-      if (friendlyUnits(g, f.r, nat).length >= STACK) continue;
+      // (Room as every rule counts it: five corps, or an island's room in men. islands.ts `roomLeft`.)
+      if (roomLeft(g, f.r, nat, friendlyUnits(g, f.r, nat).length) < 1) continue;
       if (isTeam({ kind }) && f.mine.filter(isTeam).length >= TEAMS.frontage) continue;
       const before = queued.map((d) => this.standIn(kind, d, f));
       best = Math.max(best, this.gain(f, before, [...before, this.standIn(kind, divs, f)]));
