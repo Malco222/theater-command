@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 82ea60ce5 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 8e585b9e4 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -51209,6 +51209,7 @@
     const since = g2.flags[`amb:held:${a.id}`] ?? (g2.flags[`amb:held:${a.id}`] = g2.turn);
     if (g2.turn - since + 1 < C2.treaty) return false;
     for (const r of ground) {
+      keptStoresHolder(g2, r, a.nat);
       r.owner = a.nat;
       r.since = g2.turn;
     }
@@ -69735,6 +69736,7 @@
     return true;
   }
   function transfer(g2, r, to) {
+    keptStoresHolder(g2, r, to);
     r.owner = to;
     r.ctrl = to;
     r.cap = false;
@@ -73959,7 +73961,10 @@
   }
   function keptStoresHis(g2, r) {
     const last = g2.flags[storesKey(r.id)];
-    return last !== void 0 && last > r.since && Object.keys(g2.nations)[g2.flags[storesByKey(r.id)] ?? -1] === r.ctrl;
+    return last !== void 0 && (last > r.since || g2.flags[storesHeldKey(r.id)] === r.since) && Object.keys(g2.nations)[g2.flags[storesByKey(r.id)] ?? -1] === r.ctrl;
+  }
+  function keptStoresHolder(g2, r, to) {
+    if (trueReach(g2) && r.ctrl === to && keptStoresHis(g2, r)) g2.flags[storesHeldKey(r.id)] = g2.turn;
   }
   function onPortStores(g2, c) {
     if (!fortRow(g2, c) || !c.supplied) return false;
@@ -74147,6 +74152,7 @@
   var depotKey = (id) => depotKeys[id] ?? (depotKeys[id] = "depot:" + id);
   var storesKey = (id) => storesKeys[id] ?? (storesKeys[id] = `stores:${id}`);
   var storesByKey = (id) => storesByKeys[id] ?? (storesByKeys[id] = `stores:by:${id}`);
+  var storesHeldKey = (id) => `stores:held:${id}`;
   function drawSupply(g2, id, pass, seeds, heads, wide3, long, deep, sand, rail2) {
     const size = g2.regions.length;
     const ok2 = new Uint8Array(size);
