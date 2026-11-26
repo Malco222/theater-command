@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 852f0b416 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of b316a3a7f 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -3053,6 +3053,13 @@
       }
       return false;
     };
+    const pairsUp = () => {
+      if (!pairs2.length) return;
+      const rear = Math.max(0, ...mine.filter((u) => u.team !== "snp").map((u) => dir * (front - u.y) + u.d / 2));
+      const deep2 = Math.max(...pairs2.map((u) => u.d));
+      const y = front - dir * Math.max(230, rear + GAP + deep2 / 2);
+      place(pairs2, Math.min(f.h - deep2 / 2, Math.max(deep2 / 2, y)), false);
+    };
     const held = [];
     if (side === "def" && lines[0].length >= 4) {
       for (let n2 = Math.max(1, Math.floor(lines[0].length / 4)); n2 > 0; n2--) {
@@ -3070,7 +3077,7 @@
         for (const u of held) u.reserve = "held";
       }
       place(lines[2], front - dir * 230, false);
-      if (pairs2.length) place(pairs2, front - dir * 290, false);
+      pairsUp();
       return;
     }
     const rows = [];
@@ -3086,7 +3093,6 @@
     cut2(held, wide || !lines[1].length ? 110 : 170);
     for (const u of held) u.reserve = "held";
     cut2(lines[2], 230);
-    cut2(pairs2, 290);
     const deep = (us) => Math.max(...us.map((u) => u.d));
     const steps = (gap) => {
       const ys2 = [];
@@ -3101,6 +3107,7 @@
     let ys = steps(GAP);
     for (let gap = GAP - 5; gap >= 10 && past(ys); gap -= 5) ys = steps(gap);
     rows.forEach((r, i) => place(r.us, ys[i], r.wings));
+    pairsUp();
   }
 
   // ../../data/battle/drill.json
