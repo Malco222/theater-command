@@ -278,6 +278,222 @@ def turn_between(a, b, f=1.0):
     return fc.R_axis(ax / s, math.degrees(math.atan2(s, c)) * f)
 
 
+# ---- his body as a solid, to keep the gun out of him
+# (each bone's own part of him (his near points and triangles, not his forearms and hands, which hold the gun) as a
+# solid round the bone: how far out his outside lies from the bone's line, at each height along it and each way round
+# it, the most of anything there (his clothes, his kit). A point nearer the line than that is inside him, as deep as
+# the difference, or as near a free end (the top of his helmet, the soles of his boots) if that is nearer.)
+SOLID_AXIS = {"pelvis": "spine_01", "spine_01": "spine_02", "spine_02": "chest", "chest": "neck", "neck": "head",
+              "head": None, "clavicle_l": "upperarm_l", "clavicle_r": "upperarm_r", "upperarm_l": "lowerarm_l",
+              "upperarm_r": "lowerarm_r", "thigh_l": "calf_l", "thigh_r": "calf_r", "calf_l": "foot_l",
+              "calf_r": "foot_r", "foot_l": "ball_l", "foot_r": "ball_r", "pouch_l": None, "pouch_r": None}
+SOLID_JOIN = {"pelvis": "spine_01 thigh_l thigh_r", "spine_01": "pelvis spine_02", "spine_02": "spine_01 chest",
+              "chest": "spine_02 neck clavicle_l clavicle_r", "neck": "chest head", "head": "neck",
+              "clavicle_l": "chest upperarm_l", "clavicle_r": "chest upperarm_r", "upperarm_l": "clavicle_l",
+              "upperarm_r": "clavicle_r", "thigh_l": "pelvis calf_l", "thigh_r": "pelvis calf_r",
+              "calf_l": "thigh_l foot_l", "calf_r": "thigh_r foot_r", "foot_l": "calf_l", "foot_r": "calf_r",
+              "pouch_l": "", "pouch_r": ""}
+SOLID_FOLD = {"ball_l": "foot_l", "ball_r": "foot_r"}     # (the toes go with the foot)
+SOLID_DS, SOLID_NT = 0.015, 36                            # (heights 1.5 cm apart, 36 ways round)
+SOLID_GAP = 0.012                                         # (kit this far clear of him is kit, not him)
+# (which clips keep the gun out of him, and how: the turns about the bore tried (every 15 degrees) and the set-offs
+# (8 ways round the bore, these far); what a turn and a set-off cost against a centimetre inside him (CLEAR_ROLL
+# degrees, CLEAR_OFF metres cost as much as 4 mm inside him); a wrist reaches this share of his arm's two bones; the
+# depth inside him (his solid errs outward) let pass; the most the gun turns, and its set-off moves, from one key to
+# the next; and how near another clip's first pose a clip's first or last must be to hand on to it)
+CLEAR_NAMES = ("crawl", "cower", "flee", "car_ride", "car_ride_back", "kneel_down", "stand_up", "go_prone")
+CLEAR_PREFIXES = ("bench_", "out_")
+CLEAR_OFFS = (0.03, 0.06, 0.10, 0.15, 0.21, 0.30)
+CLEAR_ROLL, CLEAR_OFF = 60.0, 0.05
+CLEAR_REACH = 0.99
+CLEAR_TOL = 0.005
+CLEAR_STEP, CLEAR_MOVE = 22.0, 0.05
+CLEAR_HANDON = 0.10
+# (an end of a clip where his own carry lies this much less deep in him than the gun as the rifle has it is carried,
+# eased into the clip's own over CLEAR_EASE seconds; and where the gun as the clip has it lies deeper in him than
+# CLEAR_DEEP, the rifle's path is given up for a straight one from the clip's first hold to its last)
+CLEAR_PORT = 0.02
+CLEAR_EASE = 0.5
+CLEAR_DEEP = 0.05
+CLEAR_SAME = (10.0, 40.0, 0.03, 0.15)   # (the rifle held as at a carried end: within 10 degrees and 3 cm, not by 40, 15)
+CLEAR_STEER = (20.0, 0.10)    # (a straight path only from one hold to another this different: degrees, metres)
+
+
+def clears(name):
+    return name in CLEAR_NAMES or name.startswith(CLEAR_PREFIXES)
+
+
+class Solid:
+    """His body (bar his forearms and hands) as a solid round each bone (see SOLID_AXIS): `depth` says how deep points
+    of the world lie inside him in a pose."""
+
+    def __init__(self, man):
+        self.man = man
+        M = man.D["near"]
+        P = np.array(M["points"], float).reshape(-1, 3)
+        a, b, w = np.array(M["part"]), np.array(M["part2"]), np.array(M["w2"], float)
+        T = np.array(M["triangles"]).reshape(-1, 3)
+        dom = np.where(w >= 0.5, b, a)
+        name = [man.rig.names[i] for i in range(man.nb)]
+        bone = np.array([SOLID_FOLD.get(name[i], name[i]) for i in dom])
+        gun = np.isin(a, [man.b(n) for n in GUN_BONES if n in man.ix])
+        T = T[~np.any(gun[T], 1)]
+        # (his outside sampled over every triangle, at least every centimetre, each sample with its triangle's bone)
+        smp, sb = [], []
+        A, B, C = P[T[:, 0]], P[T[:, 1]], P[T[:, 2]]
+        edge = np.maximum(np.maximum(np.linalg.norm(B - A, axis=1), np.linalg.norm(C - B, axis=1)),
+                          np.linalg.norm(A - C, axis=1))
+        nseg = np.clip(np.ceil(edge / 0.01).astype(int), 1, 12)
+        tb = bone[T]
+        tbone = np.where(tb[:, 1] == tb[:, 2], tb[:, 1], tb[:, 0])
+        tn = -np.cross(B - A, C - A)                               # (the files' winding is against the facing)
+        tn = tn / np.maximum(np.linalg.norm(tn, axis=1), 1e-12)[:, None]
+        sn = []
+        for n in np.unique(nseg):
+            sel = np.where(nseg == n)[0]
+            for i in range(n + 1):
+                for j in range(n + 1 - i):
+                    u, v = i / n, j / n
+                    smp.append(A[sel] + u * (B[sel] - A[sel]) + v * (C[sel] - A[sel]))
+                    sb.append(tbone[sel])
+                    sn.append(tn[sel])
+        smp, sb, sn = np.concatenate(smp), np.concatenate(sb), np.concatenate(sn)
+        self.parts = []
+        for bn, child in SOLID_AXIS.items():
+            if bn not in man.ix:
+                continue
+            S = smp[sb == bn]
+            Sn = sn[sb == bn]
+            if len(S) < 20:
+                continue
+            bi = man.b(bn)
+            o = man.H[bi].copy()
+            if child and child in man.ix:
+                u = unit(man.H[man.b(child)] - o)
+            else:
+                u = np.array((0.0, 0.0, 1.0))
+                c = S.mean(0)
+                o = c - u * (u @ (c - o))                       # (a line up through the middle of it)
+            e1 = unit(np.cross(u, (1.0, 0.0, 0.0)) if abs(u[0]) < 0.9 else np.cross(u, (0.0, 1.0, 0.0)))
+            e2 = np.cross(u, e1)
+            d = S - o
+            s = d @ u
+            rv = d - np.outer(s, u)
+            r = np.linalg.norm(rv, axis=1)
+            th = np.arctan2(rv @ e2, rv @ e1)
+            out_ = np.einsum("ij,ij->i", Sn, rv) / np.maximum(r, 1e-9)    # (the outside facing away from the line)
+            s0, s1 = float(s.min()), float(s.max())
+            ns = int(math.ceil((s1 - s0) / SOLID_DS)) + 1
+            si = np.clip(((s - s0) / SOLID_DS).astype(int), 0, ns - 1)
+            ti = ((th + math.pi) / (2 * math.pi) * SOLID_NT).astype(int) % SOLID_NT
+            # (each bin: his outside nearest the line out to the first gap of more than SOLID_GAP (R), and kit
+            # hanging clear of him beyond it (KA to KB), or none)
+            R = np.full((ns, SOLID_NT), -1.0)
+            KA = np.full((ns, SOLID_NT), 9.0)
+            KB = np.full((ns, SOLID_NT), -9.0)
+            key = si * SOLID_NT + ti
+            # (the nearest outside of any other bone of his, facing out, in each bin: his own outside lies nearer the
+            # line there, so this bone's samples beyond it are kit hanging on him)
+            dA = smp - o
+            sA = dA @ u
+            okA = (sb != bn) & (sA > s0) & (sA < s1)
+            rvA = dA[okA] - np.outer(sA[okA], u)
+            rA = np.linalg.norm(rvA, axis=1)
+            fA = np.einsum("ij,ij->i", sn[okA], rvA) / np.maximum(rA, 1e-9) > 0.3
+            siA = np.clip(((sA[okA] - s0) / SOLID_DS).astype(int), 0, ns - 1)
+            tiA = ((np.arctan2(rvA @ e2, rvA @ e1) + math.pi) / (2 * math.pi) * SOLID_NT).astype(int) % SOLID_NT
+            RO = np.full((ns, SOLID_NT), 9.0)
+            np.minimum.at(RO, (siA[fA], tiA[fA]), rA[fA])
+            order = np.lexsort((r, key))
+            ks, rs_, os_ = key[order], r[order], out_[order]
+            cut = np.concatenate([[0], np.where(np.diff(ks) != 0)[0] + 1, [len(ks)]])
+            for a0, a1 in zip(cut[:-1], cut[1:]):
+                rr, oo = rs_[a0:a1], os_[a0:a1]
+                k_, j_ = divmod(int(ks[a0]), SOLID_NT)
+                gap = list(np.where(np.diff(rr) > SOLID_GAP)[0]) if bn != "head" else []
+                first = gap[0] + 1 if gap else len(rr)
+                if oo[:first].mean() < -0.2 or rr[0] > RO[k_, j_] + SOLID_GAP:
+                    # (the nearest outside here faces the line: the inside of kit hanging off him, his own outside
+                    # (another bone's) lying nearer the line; this bone has none of him this way)
+                    R[k_, j_] = 0.0
+                    KA[k_, j_], KB[k_, j_] = rr[0], rr[-1]
+                elif gap:
+                    R[k_, j_] = rr[gap[0]]
+                    KA[k_, j_], KB[k_, j_] = rr[gap[0] + 1], rr[-1]
+                else:
+                    R[k_, j_] = rr[-1]
+            # (a height with no sample round some way takes its neighbours' round it, then the nearest height's)
+            for k in range(ns):
+                row = R[k]
+                ok = row >= 0
+                if ok.all() or not ok.any():
+                    continue
+                idx = np.where(ok)[0]
+                allx = np.arange(SOLID_NT)
+                R[k] = np.interp(allx, np.concatenate([idx - SOLID_NT, idx, idx + SOLID_NT]),
+                                 np.concatenate([row[idx]] * 3))
+            filled = np.where((R >= 0).all(1))[0]
+            for k in range(ns):
+                if not (R[k] >= 0).all():
+                    R[k] = R[filled[np.argmin(np.abs(filled - k))]]
+            joins = SOLID_JOIN.get(bn, "").split()
+            # (an end of the bone's solid is free unless the next bone's solid carries on from it)
+            ends = [all(j not in man.ix or (man.H[man.b(j)] - o) @ u > s0 + 0.03 for j in joins),
+                    all(j not in man.ix or (man.H[man.b(j)] - o) @ u < s1 - 0.03 for j in joins)]
+            far = float(np.max(np.linalg.norm(S - man.H[bi], axis=1))) + 0.02
+            self.parts.append({"bone": bn, "i": bi, "o": o, "u": u, "e1": e1, "e2": e2, "s0": s0, "s1": s1,
+                               "R": R, "KA": KA, "KB": KB, "ends": ends, "far": far})
+
+    def depth(self, G, X, Q, by_bone=False):
+        """How deep each point of Q (n x 3, the world) lies inside him in the pose G, X (0 outside): the most over his
+        bones' solids."""
+        H = self.man.H
+        out = np.zeros(len(Q))
+        which = np.full(len(Q), -1)
+        # (which points lie near which bone at all, for all of them at once)
+        cen = X[[pt["i"] for pt in self.parts]]
+        D2 = np.einsum("ij,ij->i", Q, Q)[:, None] - 2.0 * Q @ cen.T + np.einsum("ij,ij->i", cen, cen)[None, :]
+        for k, pt in enumerate(self.parts):
+            bi = pt["i"]
+            idx = np.where(D2[:, k] < pt["far"] ** 2)[0]
+            if not len(idx):
+                continue
+            d = (Q[idx] - X[bi]) @ G[bi] + H[bi] - pt["o"]   # (in the bone's own frame, as it lies at rest)
+            s = d @ pt["u"]
+            inr = (s > pt["s0"]) & (s < pt["s1"])
+            if not inr.any():
+                continue
+            idx, d, s = idx[inr], d[inr], s[inr]
+            rv = d - np.outer(s, pt["u"])
+            r = np.linalg.norm(rv, axis=1)
+            th = np.arctan2(rv @ pt["e2"], rv @ pt["e1"])
+            fs = (s - pt["s0"]) / SOLID_DS
+            ft = (th + math.pi) / (2 * math.pi) * SOLID_NT - 0.5
+            R = pt["R"]
+            i0 = np.clip(np.floor(fs).astype(int), 0, len(R) - 1)
+            i1 = np.clip(i0 + 1, 0, len(R) - 1)
+            a_ = np.clip(fs - np.floor(fs), 0, 1)
+            j0 = np.floor(ft).astype(int) % SOLID_NT
+            j1 = (j0 + 1) % SOLID_NT
+            b_ = ft - np.floor(ft)
+            rs = ((1 - a_) * ((1 - b_) * R[i0, j0] + b_ * R[i0, j1]) + a_ * ((1 - b_) * R[i1, j0] + b_ * R[i1, j1]))
+            dep = rs - r
+            # (in kit hanging clear of him: as deep as its nearer face)
+            ka = np.where(b_ < 0.5, np.where(a_ < 0.5, pt["KA"][i0, j0], pt["KA"][i1, j0]),
+                          np.where(a_ < 0.5, pt["KA"][i0, j1], pt["KA"][i1, j1]))
+            kb = np.where(b_ < 0.5, np.where(a_ < 0.5, pt["KB"][i0, j0], pt["KB"][i1, j0]),
+                          np.where(a_ < 0.5, pt["KB"][i0, j1], pt["KB"][i1, j1]))
+            dep = np.maximum(dep, np.minimum(r - ka, kb - r))
+            if pt["ends"][0]:
+                dep = np.minimum(dep, s - pt["s0"])
+            if pt["ends"][1]:
+                dep = np.minimum(dep, pt["s1"] - s)
+            better = dep > out[idx]
+            out[idx[better]] = dep[better]
+            which[idx[better]] = k
+        return (out, which) if by_bone else out
+
+
 class Fit:
     """Moves each hand that held the rifle onto the gun, clip by clip, on one file's rig."""
 
@@ -854,6 +1070,504 @@ class Fit:
         out["tracks"] = tracks
         return out, 2 * min(reach)
 
+    def carried(self, clip, ref, wfn):
+        """The rifleman's clip with his rifle, and his arms to it, where `ref` (his idle) has them at its start, carried
+        with his chest, as much as 1 - wfn(t) (blended from the clip's own). Where the rifleman's clip starts or ends
+        with his rifle across him at the port (kneel_down's start, stand_up's end), the gunner's comes from, or goes
+        to, his own carry: so it hands on from and to idle as idle starts, and the pistol grip is not in his belly."""
+        man = self.man
+        ch = man.b("chest")
+        lqI, mvI = man.locals_of(ref, 0.0)
+        GI, XI = man.fk(lqI, mvI)
+        rel_R = GI[ch].T @ GI[self.wi]
+        rel_X = GI[ch].T @ (XI[self.wi] - XI[ch])
+        arms = [man.b(n + s) for s in ("l", "r") for n in ("upperarm_", "lowerarm_", "hand_", "fingers_", "thumb_")]
+
+        def fn(t, lq, mv):
+            w = 1.0 - float(wfn(t))
+            if w <= 0.0:
+                return lq, mv
+            for i in arms:
+                lq[i] = fc.qpow(lqI[i] @ lq[i].T, w) @ lq[i]
+            G, X = man.fk(lq, mv)
+            Gw = fc.qpow(G[ch] @ rel_R @ G[self.wi].T, w) @ G[self.wi]
+            Xw = (1.0 - w) * X[self.wi] + w * (X[ch] + G[ch] @ rel_X)
+            return self.place_weapon(lq, mv, Gw, Xw)
+        return self.rebake(clip, fn)
+
+    def depth_at(self, clip, t, ref=None):
+        """How deep the gun lies inside him (his solid) at t of the clip: placed as the clip has it, or (ref) as ref
+        carries it at its start, carried with his chest."""
+        man = self.man
+        sol = self.solid
+        G, X = man.fk(*man.locals_of(clip, t))
+        Gw, Xw = G[self.wi], X[self.wi]
+        if ref is not None:
+            ch = man.b("chest")
+            GI, XI = man.fk(*man.locals_of(ref, 0.0))
+            Gw = G[ch] @ GI[ch].T @ GI[self.wi]
+            Xw = X[ch] + G[ch] @ GI[ch].T @ (XI[self.wi] - XI[ch])
+        return float(sol.depth(G, X, Xw + self._probe @ Gw.T).max())
+
+    def carry_ends(self, clip, ref, skip=()):
+        """Where the rifleman's clip starts or ends with his rifle across him at the port, or anywhere else the gun
+        would lie inside him, and his own carry (ref: idle's first pose, carried with his chest) would lie CLEAR_PORT
+        less deep, the gunner holds the gun there as he carries it, eased into the clip's own over CLEAR_EASE (as
+        `carried`): so he gets up from the bench, climbs out of a door, goes down to the ground from his carry, and
+        the clip hands on to and from idle. `skip`: ends (0, -1) that hand on to another hold. Returns the clip and
+        which ends (start, end) are carried."""
+        L = float(clip["long"])
+        if ref is None or clip.get("loop"):
+            return clip, (False, False)
+        ends = []
+        for k, t in ((0, 0.0), (-1, L)):
+            ends.append(k not in skip and self.depth_at(clip, t, ref) + CLEAR_PORT < self.depth_at(clip, t))
+        if not any(ends):
+            return clip, (False, False)
+        ez = min(CLEAR_EASE, 0.45 * L)
+        # (and wherever else in the clip the rifle is held as at that end, at the port all the way through (climbing
+        # out of a door), he carries it so too)
+        man = self.man
+        ch = man.b("chest")
+
+        def rel(t):
+            G, X = man.fk(*man.locals_of(clip, t))
+            return G[ch].T @ G[self.wi], G[ch].T @ (X[self.wi] - X[ch])
+        at = {0: rel(0.0), -1: rel(L)}
+        ts = fc.times_of(L)
+        near = {}
+        for k in (0, -1):
+            v = []
+            for t in ts:
+                R, x = rel(t)
+                a = math.degrees(math.acos(float(np.clip((np.trace(R @ at[k][0].T) - 1.0) / 2.0, -1.0, 1.0))))
+                d = max((a - CLEAR_SAME[0]) / (CLEAR_SAME[1] - CLEAR_SAME[0]),
+                        (float(np.linalg.norm(x - at[k][1])) - CLEAR_SAME[2]) / (CLEAR_SAME[3] - CLEAR_SAME[2]))
+                v.append(1.0 - fc.sm(d))
+            near[k] = v
+        k_of = {round(t, 4): i for i, t in enumerate(ts)}
+
+        def wfn(t):
+            i = k_of.get(round(t, 4))
+            k = 0.0
+            if ends[0]:
+                k = max(k, 1.0 - fc.sm(t / ez), near[0][i] if i is not None else 0.0)
+            if ends[1]:
+                k = max(k, fc.sm((t - (L - ez)) / ez), near[-1][i] if i is not None else 0.0)
+            return 1.0 - k
+        return self.carried(clip, ref, wfn), tuple(ends)
+
+    def steer(self, clip, deep_at=CLEAR_DEEP, held=None, hold=None):
+        """Where the gun as the clip has it lies deeper inside him than `deep_at` (the rifleman takes his rifle
+        through himself as he sits down on a lorry's bench or gets up from it, where a gun twice its bulk cannot go;
+        the gun swung from his carry into the hip hold through his hip), it goes instead straight from where it is at
+        the clip's start to where it is at its end, relative to his hips (their place and the way they face, not
+        their tilt), as his body goes from its first pose to its last; eased in and out over the keys either side;
+        each holding hand turned with it (`held`: the clip his fists are read from, default this one; `hold` as in
+        grasps). `clear` then keeps it out of him on that path."""
+        man = self.man
+        L = float(clip["long"])
+        ts = fc.times_of(L)
+        n = len(ts)
+        dep = np.array([self.depth_at(clip, t) for t in ts])
+        if dep.max() <= deep_at:
+            return clip
+        deep = (dep > deep_at).astype(float)
+        wide = np.array([deep[max(0, i - 3):i + 4].max() for i in range(n)])
+        bw = np.array([wide[max(0, i - 2):i + 3].mean() for i in range(n)])
+        # (how far his body has gone from its first pose to its last, his root aside)
+        pv = man.b("pelvis")
+        bones = [man.b(b_) for b_ in ("pelvis", "chest", "head", "calf_l", "calf_r", "foot_l", "foot_r")]
+
+        def sig(t):
+            G, X = gore.pose(man.rig, clip, t)
+            return ((X[bones] - X[0]) @ G[0]).ravel()
+        s0, s1 = sig(0.0), sig(L)
+        prog = []
+        for t in ts:
+            s = sig(t)
+            a, b = float(np.linalg.norm(s - s0)), float(np.linalg.norm(s - s1))
+            prog.append(a / max(a + b, 1e-9))
+        prog = np.maximum.accumulate(np.array(prog))
+        prog = prog / max(prog[-1], 1e-9)
+        Gs, Xs = man.fk(*man.locals_of(clip, 0.0))
+        Rs = Gs[pv]
+
+        def frame(G, X):
+            f = (G[pv] @ Rs.T)[:, 0]
+            yaw = math.degrees(math.atan2(f[1], f[0])) if math.hypot(f[0], f[1]) > 0.2 else 0.0
+            return fc.R_axis((0.0, 0.0, 1.0), yaw), X[pv]
+        G1, X1 = man.fk(*man.locals_of(clip, L))
+        F0, F1 = frame(Gs, Xs), frame(G1, X1)
+        A0 = (F0[0].T @ Gs[self.wi], F0[0].T @ (Xs[self.wi] - F0[1]))
+        A1 = (F1[0].T @ G1[self.wi], F1[0].T @ (X1[self.wi] - F1[1]))
+        turn = math.degrees(math.acos(float(np.clip((np.trace(A1[0] @ A0[0].T) - 1.0) / 2.0, -1.0, 1.0))))
+        if turn < CLEAR_STEER[0] and float(np.linalg.norm(A1[1] - A0[1])) < CLEAR_STEER[1]:
+            # (a clip that ends with the gun held as it started (climbing out of a door, at the port both ends)
+            # keeps the rifle's own path: the search keeps it out of him)
+            return clip
+        base, extra = self.grasps(held or clip, ("l", "r"), hold)
+        base = {s_: np.maximum(base[s_], extra[s_]) for s_ in base}
+        k_of = {round(t, 4): i for i, t in enumerate(ts)}
+
+        def fn(t, lq, mv):
+            i = k_of[round(t, 4)]
+            w = float(bw[i])
+            if w <= 0.0:
+                return lq, mv
+            G, X = man.fk(lq, mv)
+            Fr = frame(G, X)
+            r = (Fr[0].T @ G[self.wi], Fr[0].T @ (X[self.wi] - Fr[1]))
+            p = float(prog[i])
+            a = (fc.qpow(A1[0] @ A0[0].T, p) @ A0[0], (1.0 - p) * A0[1] + p * A1[1])
+            Gw2 = Fr[0] @ fc.qpow(a[0] @ r[0].T, w) @ r[0]
+            Xw2 = Fr[1] + Fr[0] @ ((1.0 - w) * r[1] + w * a[1])
+            lq, mv = self.place_weapon(lq, mv, Gw2, Xw2)
+            Rc = Gw2 @ G[self.wi].T
+            G2, _ = man.fk(lq, mv)
+            for s in ("l", "r"):
+                if base[s][i] > 0.0:
+                    h = man.b("hand_" + s)
+                    lq[h] = G2[man.par[h]].T @ fc.qpow(Rc, min(base[s][i], 1.0)) @ G[h]
+            return lq, mv
+        return self.rebake(clip, fn)
+
+    # ---- the gun kept out of him
+    @property
+    def solid(self):
+        if getattr(self, "_solid", None) is None:
+            self._solid = Solid(self.man)
+            # (the gun's points to test, one in each 2 cm cube of it, the weapon's frame)
+            Pw = self.man.weapon_pts - self.man.H[self.wi]
+            _, first = np.unique(np.floor(Pw / 0.02).astype(int), axis=0, return_index=True)
+            self._probe = Pw[np.sort(first)]
+        return self._solid
+
+    def turned(self, c):
+        """A candidate (turn about the bore, then a swing about the pistol grip across and up and down (yaw, pitch),
+        degrees; then a set-off (y, z) in the gun's frame) as a turn and a move of the gun in its own frame."""
+        b = np.array((0.0, 0.0, self.bore))
+        Rx = fc.R_axis((1.0, 0.0, 0.0), c[0])
+        Ryp = fc.R_axis((0.0, 0.0, 1.0), c[1]) @ fc.R_axis((0.0, 1.0, 0.0), c[2])
+        return Ryp @ Rx, Ryp @ (b - Rx @ b - self.pg) + self.pg + np.array((0.0, c[3], c[4]))
+
+    def clear_cost(self, poses, cands, floor, low0, aims, w_hand):
+        """Each candidate (see `turned`) at one key: how deep the gun goes into him, its lowest point; and its cost:
+        the depth inside him, below the floor (and up off it where it lay on it), past the reach of a holding arm,
+        and the size of the turn and set-off. `poses` are his pose (G, X) at the key and half a key either side, the
+        gun as the clip has it there: the candidate holds for all of them, so the gun stays out of him between keys."""
+        sol = self.solid
+        S = self._probe
+        Ts = [self.turned(c) for c in cands]
+        Rs = np.array([t_[0] for t_ in Ts])
+        tr = np.array([t_[1] for t_ in Ts])
+        pen, low = np.zeros(len(cands)), np.full(len(cands), 9.0)
+        for k, (G, X) in enumerate(poses):
+            Gw, Xw = G[self.wi], X[self.wi]
+            Gc = np.einsum("ij,cjk->cik", Gw, Rs)
+            Xc = Xw + tr @ Gw.T
+            Q = Xc[:, None, :] + np.einsum("cij,nj->cni", Gc, S)
+            pen = np.maximum(pen, sol.depth(G, X, Q.reshape(-1, 3)).reshape(len(cands), -1).max(1))
+            low = np.minimum(low, Q[:, :, 2].min(1))
+            if k == 0:
+                G0, X0, Gc0, Xc0 = G, X, Gc, Xc
+        below = np.maximum(0.0, floor - low)
+        up = np.maximum(0.0, low - low0 - 0.03) if low0 - floor < 0.02 else np.zeros(len(cands))
+        cost = 20.0 * (np.maximum(0.0, pen - CLEAR_TOL) / 0.01) ** 2 + 4.0 * (below / 0.01) ** 2 + (up / 0.02) ** 2
+        for s, (v, reach) in aims.items():
+            wr = Xc0 + np.einsum("cij,j->ci", Gc0, v)
+            ex = np.maximum(0.0, np.linalg.norm(wr - X0[self.man.b("upperarm_" + s)], axis=1) - reach)
+            cost = cost + 4.0 * w_hand[s] * (ex / 0.01) ** 2
+        C = np.array(cands)
+        cost = cost + ((C[:, :3] / CLEAR_ROLL) ** 2).sum(1) + (np.linalg.norm(C[:, 3:], axis=1) / CLEAR_OFF) ** 2
+        return cost, pen, low
+
+    def clear_marks(self, cands):
+        """Where the gun's ends (its farthest points each way, and the pistol grip) lie under each candidate, in the
+        gun's frame: how far one candidate is from another is how far these move."""
+        S = self._probe
+        M = np.vstack([S[np.argmin(S, 0)], S[np.argmax(S, 0)], self.pg[None, :]])
+        out = []
+        for c in cands:
+            R, tr = self.turned(c)
+            out.append(M @ R.T + tr)
+        return np.array(out)
+
+    def clear(self, clip, wc, hold=None, pins=None, loop=False):
+        """The gun kept out of him (CLEAR_NAMES): wherever the gun, placed as `wc` has it (where the rifleman's rifle
+        was, or the hold it is coming into), would lie inside his body, it is turned about its bore, swung about its
+        pistol grip and set off from him by the least that clears it, key by key (15 a second): a search over such
+        turns and set-offs for the least depth inside him (Solid), not below the floor the rifle kept to, with each
+        holding wrist within reach of its shoulder, then the least change; chosen together over the whole clip (a
+        shortest path, so the gun turns no more than CLEAR_STEP a key and moves no more than CLEAR_MOVE, and a loop
+        ends as it starts) and eased. `pins` {key index: candidate} holds the choice at a key (none where the gun hands
+        on to a hold, as another clip has it where it hands on to that one). Each hand that holds the gun turns with it
+        (refit then brings the arms). Returns the clip and what was done (or wc itself where nothing needed doing)."""
+        man = self.man
+        _ = self.solid
+        ts = fc.times_of(wc["long"])
+        n = len(ts)
+        base, extra = self.grasps(clip, ("l", "r"), hold)
+        rp = self.rifle + man.H[self.wi]
+        rl = self.lows(clip, rp, np.full(len(rp), self.wi))
+        Z = (0.0, 0.0, 0.0, 0.0, 0.0)
+        rolls = [float(a) for a in range(-165, 181, 15) if a]
+        swings = [-45.0, -30.0, -15.0, 15.0, 30.0, 45.0]
+        dirs = [(math.cos(math.radians(a)), math.sin(math.radians(a))) for a in range(0, 360, 45)]
+        fam = {"roll": [(r_, 0.0, 0.0, 0.0, 0.0) for r_ in rolls],
+               "yaw": [(0.0, y_, 0.0, 0.0, 0.0) for y_ in swings],
+               "pitch": [(0.0, 0.0, p_, 0.0, 0.0) for p_ in swings],
+               "off": [(0.0, 0.0, 0.0, m * dy, m * dz) for (dy, dz) in dirs for m in CLEAR_OFFS]}
+        cands = [Z] + [c for v in fam.values() for c in v]
+        poses, aims_k, hands_k = [], [], []
+        for i, t in enumerate(ts):
+            lq, mv = man.locals_of(wc, t)
+            G, X = man.fk(lq, mv)
+            lq0, mv0 = man.locals_of(clip, t)
+            G0, X0 = man.fk(lq0, mv0)
+            aims, wh = {}, {}
+            for s in ("l", "r"):
+                w = max(base[s][i], extra[s][i])
+                if w <= 0.0:
+                    continue
+                A = man.side[s]
+                f = man.grip(G0, X0, s)
+                p = G0[self.wi].T @ (f - X0[self.wi])
+                h = man.b("hand_" + s)
+                thumb = G0[self.wi].T @ G0[h] @ A["t0"]
+                _, q, Rl = self.target(s, p, thumb, w0=1.0)
+                # (his wrist, where refit will put it for the fist to hold there with the hand turned with the gun,
+                # in the gun's frame: it must stay within his arm's reach of his shoulder)
+                Gw = G[self.wi]
+                Gh = Gw @ Rl @ Gw.T @ G[h]
+                v = q - Gw.T @ Gh @ (A["d0"] * 0.075 + A["n0"] * 0.022)
+                aims[s] = (v, (A["l1"] + A["l2"]) * CLEAR_REACH)
+                wh[s] = w
+            smp = [(G, X)]
+            for t2 in (t - 0.5 / fc.RATE, t + 0.5 / fc.RATE):
+                if 0.0 < t2 < wc["long"]:
+                    smp.append(man.fk(*man.locals_of(wc, t2)))
+            poses.append(smp)
+            aims_k.append(aims)
+            hands_k.append(wh)
+
+        def costs(cs, i, low0, full=True):
+            # (the search over many candidates looks at the key alone; the choice is then nudged, and checked, at the
+            # half keys either side too)
+            return self.clear_cost(poses[i] if full else poses[i][:1], cs, min(float(rl[i]), 0.0), low0, aims_k[i],
+                                   hands_k[i])
+        # (first each kind of change alone at every key; then the turns, swings and ways of setting off that did best
+        # somewhere, together)
+        U1, P1, L1, P0 = [], [], [], []
+        for i in range(n):
+            _, p0_, l_ = costs([Z], i, 9.0)
+            L1.append(float(l_[0]))
+            P0.append(float(p0_[0]))
+            c_, p_, _ = costs(cands, i, L1[i], full=False)
+            U1.append(c_)
+            P1.append(p_)
+        U1, P1 = np.array(U1), np.array(P1)
+        before = max(P0)
+        if before <= CLEAR_TOL and not pins:
+            return wc, {"before": before, "after": before, "turn": 0.0, "off": 0.0}
+        idx = {}
+        k0 = 1
+        for nm, v in fam.items():
+            idx[nm] = list(range(k0, k0 + len(v)))
+            k0 += len(v)
+        votes = {nm: {} for nm in fam}
+        for i in range(n):
+            if P1[i, 0] <= CLEAR_TOL:
+                continue
+            for nm in ("roll", "yaw", "pitch"):
+                for j in np.array(idx[nm])[np.argsort(U1[i, idx[nm]])[:3]]:
+                    votes[nm][cands[j][:3]] = votes[nm].get(cands[j][:3], 0) + 1
+            od = U1[i, idx["off"]].reshape(len(dirs), len(CLEAR_OFFS)).min(1)
+            for d in np.argsort(od)[:2]:
+                votes["off"][int(d)] = votes["off"].get(int(d), 0) + 1
+        top = {nm: [k for k, _ in sorted(v.items(), key=lambda kv: -kv[1])[:(6 if nm == "roll" else 4)]]
+               for nm, v in votes.items()}
+        turns = top["roll"] + top["yaw"] + top["pitch"]
+        more = []
+        for tt in turns:
+            for d in top["off"]:
+                for m in CLEAR_OFFS:
+                    more.append(tt + (m * dirs[d][0], m * dirs[d][1]))
+        for r_ in top["roll"]:
+            for sw in top["yaw"] + top["pitch"]:
+                more.append((r_[0], sw[1], sw[2], 0.0, 0.0))
+        pin_c = [tuple(float(v) for v in p) for p in (pins or {}).values()]
+        seen = set(cands)
+        extra_c = []
+        for c in more + pin_c:
+            if c not in seen:
+                seen.add(c)
+                extra_c.append(c)
+        allc = cands + extra_c
+        U = np.zeros((n, len(allc)))
+        for i in range(n):
+            U[i, :len(cands)] = U1[i]
+            if extra_c:
+                U[i, len(cands):] = costs(extra_c, i, L1[i], full=False)[0]
+        for k_, p in (pins or {}).items():
+            k_ = k_ % n
+            j = allc.index(tuple(float(v) for v in p))
+            keep = U[k_, j]
+            U[k_, :] = np.inf
+            U[k_, j] = keep
+        # (the step from one key to the next: a turn of more than CLEAR_STEP degrees, or a set-off moving more than
+        # CLEAR_MOVE, is barred; less is costed by how much)
+        C = np.array(allc)
+        da = np.abs((C[:, None, :3] - C[None, :, :3] + 180.0) % 360.0 - 180.0)
+        MK = self.clear_marks(allc)
+        dm = np.zeros((len(allc), len(allc)))
+        for k in range(MK.shape[1]):
+            dm = np.maximum(dm, np.linalg.norm(MK[:, None, k] - MK[None, :, k], axis=2))
+        Pair = 0.5 * (dm / 0.02) ** 2 + np.where((da.max(2) > CLEAR_STEP) | (dm > CLEAR_MOVE), 1e6, 0.0)
+
+        def path(U, first=None):
+            cost = U[0].copy()
+            if first is not None:
+                cost = np.where(np.arange(len(cost)) == first, cost, np.inf)
+            back = np.zeros((n, len(cost)), dtype=int)
+            for i in range(1, n):
+                tot = cost[:, None] + Pair
+                back[i] = np.argmin(tot, 0)
+                cost = tot[back[i], np.arange(len(cost))] + U[i]
+            if first is not None:
+                cost = np.where(np.arange(len(cost)) == first, cost, np.inf)
+            j = int(np.argmin(cost))
+            best = float(cost[j])
+            out = [j]
+            for i in range(n - 1, 0, -1):
+                j = int(back[i][j])
+                out.append(j)
+            return best, out[::-1]
+        if loop:
+            starts = sorted(set([0] + [int(j) for j in np.argsort(U[0])[:12]]))
+            best, pth = min((path(U, s0) for s0 in starts), key=lambda r: r[0])
+        else:
+            best, pth = path(U)
+        raw = C[pth].copy()
+        raw[:, 0] = np.degrees(np.unwrap(np.radians(raw[:, 0])))
+        # (then each key's choice nudged, finer and finer, to the least cost with its neighbours' as they stand)
+        pinned = {k_ % n for k_ in (pins or {})}
+
+        def pair(a, b):
+            da_ = np.abs(a[:3] - b[:3])
+            ma, mb = self.clear_marks([tuple(a), tuple(b)])
+            dm_ = float(np.linalg.norm(ma - mb, axis=1).max())
+            return 0.5 * (dm_ / 0.02) ** 2 + (1e6 if da_.max() > CLEAR_STEP or dm_ > CLEAR_MOVE else 0.0)
+
+        def nbrs(i):
+            if loop:
+                return [(i - 1) % (n - 1), (i + 1) % (n - 1)]
+            return [k_ for k_ in (i - 1, i + 1) if 0 <= k_ < n]
+        for st_a, st_m in ((7.5, 0.02), (3.75, 0.01), (1.875, 0.005)):
+            for _ in range(2):
+                for i in range(n - 1 if loop else n):
+                    if i in pinned:
+                        continue
+                    cs = [raw[i]]
+                    for d in range(5):
+                        for sg in (-1.0, 1.0):
+                            v = raw[i].copy()
+                            v[d] += sg * (st_a if d < 3 else st_m)
+                            cs.append(v)
+                    u = costs([tuple(v) for v in cs], i, L1[i])[0]
+                    tot = [u[j] + sum(pair(cs[j], raw[k_]) for k_ in nbrs(i)) for j in range(len(cs))]
+                    raw[i] = cs[int(np.argmin(tot))]
+                    if loop and i == 0:
+                        raw[n - 1] = raw[0]
+
+        def pens(P):
+            return np.array([float(costs([tuple(P[i])], i, 9.0)[1][0]) for i in range(n)])
+
+        def eased(P, keep):
+            for _ in range(2):
+                sm_ = P.copy()
+                if loop:
+                    m_ = n - 1
+                    sm_[:m_] = (np.roll(P[:m_], 1, 0) + 2 * P[:m_] + np.roll(P[:m_], -1, 0)) / 4.0
+                    sm_[-1] = sm_[0]
+                else:
+                    sm_[1:-1] = (P[:-2] + 2 * P[1:-1] + P[2:]) / 4.0
+                for k_ in keep:
+                    sm_[k_] = P[k_]
+                P = sm_
+            return P
+        # (eased: smoothed over a key either side, a loop round its seam, pinned keys kept, and any key the easing
+        # would put back into him kept as chosen)
+        raw_pen = pens(raw)
+        keep = {k_ % n for k_ in (pins or {})}
+        for _ in range(4):
+            par = eased(raw, keep)
+            after = pens(par)
+            bad = {i for i in range(n) if after[i] > max(raw_pen[i], CLEAR_TOL) + 0.003} - keep
+            if not bad:
+                break
+            keep |= bad
+            if loop and (0 in bad or n - 1 in bad):
+                keep |= {0, n - 1}
+        if np.abs(par).max() < 1e-6:
+            return wc, {"before": before, "after": before, "turn": 0.0, "off": 0.0}
+        hs = {s: man.b("hand_" + s) for s in ("l", "r")}
+        k_of = {round(t, 4): i for i, t in enumerate(ts)}
+
+        def fn(t, lq, mv):
+            i = k_of[round(t, 4)]
+            G, X = man.fk(lq, mv)
+            Gw, Xw = G[self.wi], X[self.wi]
+            R, tr = self.turned(par[i])
+            Gw2 = Gw @ R
+            Xw2 = Xw + Gw @ tr
+            lq, mv = self.place_weapon(lq, mv, Gw2, Xw2)
+            # (a hand that holds the gun turns with it, as much as it holds)
+            Rc = Gw2 @ Gw.T
+            G2, _ = man.fk(lq, mv)
+            for s, h in hs.items():
+                w = hands_k[i].get(s, 0.0)
+                if w > 0.0:
+                    lq[h] = G2[man.par[h]].T @ fc.qpow(Rc, min(w, 1.0)) @ G[h]
+            return lq, mv
+        out = self.rebake(wc, fn)
+        return out, {"before": before, "after": float(max(after)), "turn": float(np.abs(par[:, :3]).max()),
+                     "off": float(np.linalg.norm(par[:, 3:], axis=1).max()), "par": par,
+                     "keys": (P1[:, 0], raw_pen, np.array(after))}
+
+    def clear_log_add(self, name, clip, rep):
+        if not hasattr(self, "clear_log"):
+            self.clear_log = []
+        if rep.get("par") is not None:
+            self.cleared = getattr(self, "cleared", {})
+            self.cleared[name] = rep["par"]
+        self.clear_log.append((name, rep))
+        return clip
+
+    def hand_on(self, clip, done, clips):
+        """Pins for `clear`: where this clip's first or last pose is (within CLEAR_HANDON, his body about his root)
+        a looping clip's first pose, and that clip has had the gun kept out of him, this clip starts or ends with the
+        gun turned and set off as that one starts."""
+        man = self.man
+        done_par = getattr(self, "cleared", {})
+        bones = [man.b(n) for n in ("pelvis", "chest", "head", "hand_l", "hand_r", "calf_l", "calf_r", "foot_l",
+                                    "foot_r")]
+
+        def sig(c, t):
+            G, X = gore.pose(man.rig, c, t)
+            return (X[bones] - X[0]) @ G[0]
+        pins = {}
+        ends = {0: sig(clip, 0.0), -1: sig(clip, clip["long"])}
+        for nm, par in done_par.items():
+            other = clips.get(nm)
+            if other is None or not other.get("loop") or other is clip:
+                continue
+            s0 = sig(other, 0.0)
+            for k, sg in ends.items():
+                if float(np.abs(sg - s0).max()) < CLEAR_HANDON:
+                    pins[k] = tuple(round(float(v), 4) for v in par[0])
+        return pins or None
+
     def kick(self, clip, shots, deg=1.4, back=0.006):
         """The gun's jump at each shot of a burst: a little up about the butt and back into his shoulder, settling
         before the next (on top of the clip's own weapon keys, 15 a second)."""
@@ -949,7 +1663,11 @@ def gun_clips(fit, clips, log):
     out = {}
     clips = {k: bare(c) for k, c in clips.items()}
     prone = None
-    for name, c in clips.items():
+    # (the looping clips that keep the gun out of him first, so a clip that hands on to one of them (sitting down on
+    # the bench, getting up from it) can start or end with the gun as that one has it)
+    order = sorted(clips, key=lambda k: 0 if (clears(k) and clips[k].get("loop")) else 1)
+    for name in order:
+        c = clips[name]
         wpn = c.get("weapon")
         if name in ("fire_stand", "fire_kneel"):
             H = HIP if name == "fire_stand" else KNEEL
@@ -989,7 +1707,18 @@ def gun_clips(fit, clips, log):
             if e == "prone" and s != "prone" and not name.startswith("die_"):
                 # (coming down behind the gun: up on his elbows, the gun level, its legs swinging down, as lmg_burst)
                 wfn = lambda t, L=L: fc.sm((t - (L - 0.6)) / 0.5)
-                wc, up = fit.lift(fit.prone_up(c, PRONE_UP, weight=wfn), c)
+                ends = (False, False)
+                if clears(name):
+                    # (going down from his own carry where the rifleman's rifle would put the gun in his thigh)
+                    c, ends = fit.carry_ends(c, clips.get("idle"), skip=(-1,))
+                pu = fit.prone_up(c, PRONE_UP, weight=wfn)
+                if clears(name):
+                    # (kept out of him on the way down; behind the gun at the end as lmg_burst has it)
+                    pins = {-1: (0.0,) * 5}
+                    if ends[0]:
+                        pins[0] = (0.0,) * 5
+                    pu = fit.clear_log_add(name, *fit.clear(c, pu, pins=pins))
+                wc, up = fit.lift(pu, c)
                 c2, worst, used = fit.refit(c, wclip=wc, poles={k: (lambda t, v=v, wfn=wfn: (np.array(v), wfn(t)))
                                                                 for k, v in PRONE_POLES.items()})
                 c2, _ = fit.legs_down(c2, weight=wfn)
@@ -1001,8 +1730,19 @@ def gun_clips(fit, clips, log):
                 H = HOLDS[e if at_end else s]
                 wfn = ((lambda t, L=L, ez=ez: fc.sm((t - (L - ez)) / ez)) if at_end else
                        (lambda t, ez=ez: 1.0 - fc.sm(t / ez)))
+                if clears(name) and "idle" in clips:
+                    # (standing, he carries the gun as idle starts, not across him at the port like the rifle)
+                    c = fit.carried(c, clips["idle"], wfn)
                 hp = fit.hip(c, H["lean"], H["heel"], H["side"] + fit.gun.grips.get("hip_side", 0.0), H["bore_z"],
                              weight=wfn, t_ref=(L if at_end else 0.0), delta=True)
+                if clears(name):
+                    # (kept out of him between the carry and the hold, neither of which changes: where the blend would
+                    # swing the gun through his hip, straight from the one to the other relative to his hips)
+                    hold = {k: (lambda t, k=k, wfn=wfn, c=c: wfn(t) * fit.by_rifle(c, k, t)) for k in ("l", "r")}
+                    hp = fit.steer(hp, deep_at=CLEAR_TOL + 0.01, held=c, hold=hold)
+                    hp = fit.clear_log_add(name, *fit.clear(
+                        c, hp, hold={k: (lambda t, k=k, wfn=wfn, c=c: wfn(t) * fit.by_rifle(c, k, t)) for k in ("l", "r")},
+                        pins={0: (0.0,) * 5, -1: (0.0,) * 5}))
                 wc, up = fit.lift(hp, c)
                 la = fit.gun.grips.get("hip_l_at", H["l_at"])
                 c2, worst, used = fit.refit(c, wclip=wc, poles={k: (lambda t, v=v, wfn=wfn: (np.array(v), wfn(t)))
@@ -1020,7 +1760,19 @@ def gun_clips(fit, clips, log):
                         c2, worst, used, up = p2, worst0, used0, up0
                         kind = "held (too violent a fall for the hip start) "
             else:
-                wc, up = fit.lift(c, c)
+                wc = c
+                if clears(name):
+                    # (a clip that sits him down on the bench or gets him up from it starts or ends with the gun as
+                    # bench_ride has it; one that starts or ends with the rifle at the port, with his own carry; between,
+                    # where the rifle went through him, straight from the one to the other; and kept out of him)
+                    pins = fit.hand_on(c, out, clips) or {}
+                    c, ends = fit.carry_ends(c, clips.get("idle"), skip=tuple(pins))
+                    for k_, e_ in zip((0, -1), ends):
+                        if e_:
+                            pins[k_] = (0.0,) * 5
+                    wc = c if c.get("loop") else fit.steer(c)
+                    wc = fit.clear_log_add(name, *fit.clear(c, wc, pins=pins or None, loop=bool(c.get("loop"))))
+                wc, up = fit.lift(wc, c)
                 c2, worst, used = fit.refit(c, wclip=wc, final=name.startswith("die_"))
             out[name] = c2
             log.append((name, kind + "".join(s_ for s_ in used if used[s_]), round(worst * 100, 1), round(up * 100, 1)))
@@ -1032,7 +1784,7 @@ def gun_clips(fit, clips, log):
             log.append((name, "laid", 0.0, 0.0))
         else:
             out[name] = c
-    return out
+    return {k: out[k] for k in clips}
 
 
 # ================================================================================================ checks
@@ -1186,6 +1938,9 @@ def checks(D, Tw, fit, notes, tw_notes, D0, log=print):
     log("gun raised off the ground (cm, most): " + ", ".join(f"{n} {u}" for n, _, _, u in lifts))
     if worst and worst[0][2] > 2.0:
         bad.append(f"fist misses up to {worst[0][2]} cm")
+    for name, rep in getattr(fit, "clear_log", []):
+        log(f"kept out of him: {name:18s} {rep['before'] * 100:5.1f} -> {rep['after'] * 100:5.1f} cm inside (his solid), "
+            f"turned up to {rep['turn']:.0f} deg, set off up to {rep['off'] * 100:.0f} cm")
     lo, hi, a0, a1 = bipod_feet(fit, D["clips"]["lmg_burst"])
     log(f"lmg_burst: the bipod's feet {lo * 100:.1f} to {hi * 100:.1f} cm over the ground, {a0 * 100:.0f} to "
         f"{a1 * 100:.0f} cm apart")
