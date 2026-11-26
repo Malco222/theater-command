@@ -915,7 +915,9 @@ namespace
 		}
 		// A captured vehicle's captor mark with marks at their real size (Dress::bRealMarks; the art director's ruling of
 		// 26 November 2026, 17:56Z): it stays large, half as big again as the captor's mark at its real size at most,
-		// and with the word off she is laid as before (no place of her own kept, as ever).
+		// and with the word off she is laid as before (no place of her own kept, as ever). Her rulings of 18:22Z: her
+		// back plate's mark by her sides' rule ("one tank, one size on her upright plates"), her roof's an air mark of
+		// 0.6 m across at most; and each is painted onto her skin, not laid flat before it.
 		{
 			struct Taken
 			{
@@ -923,9 +925,12 @@ namespace
 				const char* Captor;
 				const char* From;
 				double Wide; // (half as big again as the captor's mark at its real size, metres across)
+				bool bBack;  // (her back plate takes a captor's mark by her sides' rule)
+				bool bRoof;  // (her roof takes an air mark)
 			};
-			for (const Taken& K : { Taken{ "T34", "GER", "SOV", 0.375 }, Taken{ "Sherman", "GER", "USA", 0.375 }, Taken{ "PanzerIV", "USA", "GER", 0.5715 },
-					 Taken{ "PanzerIV", "SOV", "GER", 0.45 }, Taken{ "Tiger", "USA", "GER", 0.5715 }, Taken{ "LightTank", "GER", "UK", 0.375 } })
+			for (const Taken& K : { Taken{ "T34", "GER", "SOV", 0.375, true, true }, Taken{ "Sherman", "GER", "USA", 0.375, true, true },
+					 Taken{ "PanzerIV", "USA", "GER", 0.5715, true, true }, Taken{ "PanzerIV", "SOV", "GER", 0.45, true, true },
+					 Taken{ "Tiger", "USA", "GER", 0.5715, false, true }, Taken{ "LightTank", "GER", "UK", 0.375, true, true } })
 			{
 				std::string Text, Error;
 				if (!ReadFile(Content + "/Models/Battle/" + K.Model + ".json", Text))
@@ -945,7 +950,8 @@ namespace
 				D.bRealMarks = true;
 				const bool bReal = bWas && Real.Load(Text, D, Error);
 				std::string Why;
-				double Least = 1e9, Most = 0.0, FileMost = 0.0;
+				double Least = 1e9, Most = 0.0, FileMost = 0.0, Roof = 0.0, Back = 0.0;
+				size_t Sides = 0;
 				if (!bReal)
 				{
 					Why = "did not load: " + Error;
@@ -954,6 +960,17 @@ namespace
 				{
 					for (const Mark& Mk : Real.Painted)
 					{
+						if (Mk.Tag == "_roof")
+						{
+							Roof = std::max(Roof, Mk.Radius);
+							continue;
+						}
+						if (Mk.Tag == "_back")
+						{
+							Back = std::max(Back, Mk.Radius);
+							continue;
+						}
+						++Sides;
 						Least = std::min(Least, Mk.Radius);
 						Most = std::max(Most, Mk.Radius);
 					}
@@ -965,18 +982,34 @@ namespace
 					{
 						Why = "with the word off a captor's mark is kept as a place of her own";
 					}
-					else if (Real.Painted.empty() || Least <= 0.0)
+					else if (Sides == 0 || Least <= 0.0)
 					{
-						Why = "no captor's mark at its real size";
+						Why = "no captor's mark at its real size on her sides";
 					}
-					else if (2.0 * Most > K.Wide + 0.002)
+					else if (2.0 * std::max(Most, Back) > K.Wide + 0.002)
 					{
-						Why = "a captor's mark wider than half as big again as its real size";
+						Why = "a captor's mark on an upright plate wider than half as big again as its real size";
+					}
+					else if (2.0 * Roof > 0.6 + 0.002)
+					{
+						Why = "a captor's roof mark over 0.6 m across";
+					}
+					else if ((Back > 0.0 && Back <= 0.05) || (Roof > 0.0 && Roof <= 0.05))
+					{
+						Why = "a captor's back or roof mark that is a speck (10 cm across or less)";
+					}
+					else if (K.bBack && Back <= 0.0)
+					{
+						Why = "her back plate carries no captor's mark";
+					}
+					else if (K.bRoof && Roof <= 0.0)
+					{
+						Why = "her roof carries no air mark";
 					}
 				}
 				++AllCases;
-				std::printf("  %-11s taken by %-3s from %-3s  her captor's mark %.3f to %.3f m across (at most %.3f; as it was %.3f)  %s\n", K.Model, K.Captor, K.From,
-					Real.Painted.empty() ? 0.0 : 2.0 * Least, 2.0 * Most, K.Wide, 3.0 * FileMost, Why.empty() ? "ok" : ("FAIL " + Why).c_str());
+				std::printf("  %-11s taken by %-3s from %-3s  her captor's mark on her sides %.3f to %.3f m across (at most %.3f; as it was %.3f); her back %.3f (was 0.500), her roof %.3f (was 0.600)  %s\n",
+					K.Model, K.Captor, K.From, Least > 1e8 ? 0.0 : 2.0 * Least, 2.0 * Most, K.Wide, 3.0 * FileMost, 2.0 * Back, 2.0 * Roof, Why.empty() ? "ok" : ("FAIL " + Why).c_str());
 				Failures += Why.empty() ? 0 : 1;
 			}
 		}

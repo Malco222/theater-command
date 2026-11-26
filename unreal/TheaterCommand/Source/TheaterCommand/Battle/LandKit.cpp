@@ -2035,13 +2035,17 @@ namespace LandKit
 		 * does not step (a plate's edge, a lip, a hatch, a turret's ring). 0 where the place itself finds no skin. Only
 		 * her own first OwnPoints points are her skin (0: all of them): a mark laid on her before is not. With
 		 * Dress::bRealMarks a mark that has no record takes at most half of it (the art director, 26 November 2026).
-		 * ToMiddle: from the place to the middle of that height (a captor's big mark is laid there). */
-		double PlateHigh(const Mesh& Out, const V3& Pivot, const V3& At, const V3& Facing, size_t OwnPoints, V3* ToMiddle = nullptr)
+		 * ToMiddle: from the place to the middle of that height (a captor's big mark is laid there). bSideways: the same
+		 * read across the mark's up in place of along it (how wide the face is: a captor's roof mark is bounded by the
+		 * shorter of the two). */
+		double PlateHigh(const Mesh& Out, const V3& Pivot, const V3& At, const V3& Facing, size_t OwnPoints, V3* ToMiddle = nullptr, bool bSideways = false)
 		{
 			const V3 F = Facing.Unit(V3(1.0, 0.0, 0.0));
 			const V3 Hint = std::fabs(F.Z) > 0.8 ? V3(1.0, 0.0, 0.0) : V3(0.0, 0.0, 1.0);
-			const V3 Up = (Hint - F * F.Dot(Hint)).Unit(V3(0.0, 0.0, 1.0));
-			const V3 Across = Up.Cross(F).Unit(V3(0.0, 1.0, 0.0));
+			const V3 Up0 = (Hint - F * F.Dot(Hint)).Unit(V3(0.0, 0.0, 1.0));
+			const V3 Across0 = Up0.Cross(F).Unit(V3(0.0, 1.0, 0.0));
+			const V3 Up = bSideways ? Across0 : Up0;
+			const V3 Across = bSideways ? Up0 : Across0;
 			const V3 Place = At - Pivot;
 			const double Front = 0.04, Back = 0.3, Reach = 1.0;
 			struct Tri
@@ -3744,6 +3748,13 @@ namespace LandKit
 		// (a captured vehicle's captor marks at her file's places with Dress::bRealMarks: each one's size and place,
 		// settled on the near level and kept for the far one)
 		std::vector<std::pair<double, V3>> CaptorPlaces;
+		// (and her roof's and her back plate's: size, place, and the plate's own facing; size 0, none)
+		struct CaptorPlate
+		{
+			double Size = 0.0;
+			V3 At, Facing;
+		};
+		CaptorPlate CaptorRoof, CaptorBack;
 
 		// Each level of detail painted and cut into the bodies.
 		for (int Level = 0; Level < 2; ++Level)
@@ -4144,6 +4155,32 @@ namespace LandKit
 				// over three quarters of the height of the plate it lies on, and laid at the middle of that height with
 				// 5 cm of the plate above and below it. Off: half as big again as her file's place, as before.
 				const std::string CaptorKind = D.Nation == "GER" ? "cross" : D.Nation == "USA" ? "white star" : "red star";
+				// With marks at their real size her captor's marks are also painted onto her own skin, as her own army's
+				// are below (PaintMark), in place of the flat mark laid before it: on a sloped or rounded plate the flat
+				// one stood off the armour and threw a shadow of itself (the art director, 26 November 2026, 18:22Z:
+				// "lay it at the others' depth"). Off: the flat mark, as before.
+				std::vector<MarkPiece> CaptorPieces;
+				if (D.bRealMarks)
+				{
+					MarkPieces(CaptorKind, CaptorPieces, true);
+				}
+				double CaptorDust = 0.0;
+				for (const Mark& Mk : Marks)
+				{
+					CaptorDust = std::max(CaptorDust, Mk.Dust);
+				}
+				auto PaintCaptor = [&](int BodyIx, const V3& Place, const V3& Facing, double Size, double DustWord, uint64_t Which, double* Sized) -> size_t {
+					if (BodyIx < 0 || static_cast<size_t>(BodyIx) >= Bodies.size() || CaptorPieces.empty() || Bodies[static_cast<size_t>(BodyIx)].bTrack) return 0;
+					Body& Bo = Bodies[static_cast<size_t>(BodyIx)];
+					MarkSkin Skin;
+					Skin.Raw = &Members[static_cast<size_t>(BodyIx)];
+					Skin.Dirt = &Dirt;
+					Skin.Count = Members[static_cast<size_t>(BodyIx)].size();
+					Skin.DustColour = bFileDust ? DustColour : Dust;
+					const uint64_t CaptorSeed = Mix(Which + 1, static_cast<uint64_t>(Level) + 1, 0x43415054ull);
+					return PaintMark(Level == 0 ? Bo.Near : Bo.Far, Bo.Pivot, CaptorPieces, Place, Facing, Size, DustWord > 0.0 ? DustWord : 45.0, Level == 0 ? 0.03 : 0.12,
+						Level == 0 ? 0.004 : 0.012, CaptorSeed, Skin, MarkByHand(CaptorKind), false, nullptr, Sized, false, 0.05, 0.085);
+				};
 				for (size_t I = 0; I < Marks.size(); ++I)
 				{
 					const Mark& Mk = Marks[I];
@@ -4165,20 +4202,36 @@ namespace LandKit
 								Place = Mk.At + ToMiddle;
 							}
 						}
+						// (painted here, on the near level: where the skin made it smaller to lie whole on one face, that
+						// is its size for the far level and for whoever reads her marks' places: the picture sheet's
+						// ruler, the kit's test)
+						double Sized = 1.0;
+						if (Size > 0.0 && PaintCaptor(BodyIx, Place, Mk.Facing, Size, Mk.Dust, I, &Sized) > 0)
+						{
+							Size *= Sized;
+						}
+						else
+						{
+							Size = 0.0;
+						}
 						CaptorPlaces.push_back({ Size, Place });
-						// (and where whoever reads her marks' places finds it: the picture sheet's ruler, the kit's test)
-						Mark Laid = Mk;
-						Laid.At = Place;
-						Laid.Radius = Size;
-						Painted.push_back(Laid);
-						PaintedMade.push_back(0);
+						if (Size > 0.0)
+						{
+							Mark Laid = Mk;
+							Laid.At = Place;
+							Laid.Radius = Size;
+							Painted.push_back(Laid);
+							PaintedMade.push_back(0);
+						}
 					}
-					else if (D.bRealMarks && I < CaptorPlaces.size())
+					else if (D.bRealMarks)
 					{
-						Size = CaptorPlaces[I].first;
-						Place = CaptorPlaces[I].second;
+						if (I < CaptorPlaces.size() && CaptorPlaces[I].first > 0.0)
+						{
+							PaintCaptor(BodyIx, CaptorPlaces[I].second, Mk.Facing, CaptorPlaces[I].first, Mk.Dust, I, nullptr);
+						}
 					}
-					if (!D.bRealMarks || Size > 0.0)
+					else
 					{
 						AddMark(BodyIx, Place, Mk.Facing, Size, V3(0.0, 0.0, 1.0));
 					}
@@ -4187,14 +4240,16 @@ namespace LandKit
 				// back, by area, among those within half a metre of the very top or back, her files' fore being +X; only
 				// where nothing of hers (any part: a hatch, a cupola, an exhaust) stands proud of the plate within the
 				// mark's reach)
-				auto Plate = [&](int PartIx, int Axis, double Sign, double Size, V3& OutAt) {
+				// (Room: how far beyond the mark's own reach nothing may stand proud, 3 cm as shipped; OutFacing: the
+				// plate's own facing, by area, for a mark painted onto it)
+				auto Plate = [&](int PartIx, int Axis, double Sign, double Size, V3& OutAt, double Room, V3* OutFacing) {
 					if (PartIx < 0 || Parts[static_cast<size_t>(PartIx)].Body < 0) return false;
 					auto Along = [Axis, Sign](const V3& P) { return Sign * (Axis == 0 ? P.X : P.Z); };
 					auto Apart2 = [Axis](const V3& P, const V3& Q) {
 						const double D1 = Axis == 0 ? P.Z - Q.Z : P.X - Q.X, D2 = P.Y - Q.Y;
 						return D1 * D1 + D2 * D2;
 					};
-					struct Bit { V3 Mid; double Area, Height; };
+					struct Bit { V3 Mid; double Area, Height; V3 Facing; };
 					std::vector<Bit> Bits;
 					double Top = -1e9;
 					for (size_t T = 0; T + 2 < Raw.Triangles.size(); T += 3)
@@ -4210,7 +4265,7 @@ namespace LandKit
 						const V3 Nm = Cr * (0.5 / Area);
 						if (Sign * (Axis == 0 ? Nm.X : Nm.Z) < 0.8) continue;
 						const V3 Mid = (A + B + C) * (1.0 / 3.0);
-						Bits.push_back({ Mid, Area, Along(Mid) });
+						Bits.push_back({ Mid, Area, Along(Mid), Nm });
 						Top = std::max(Top, Along(Mid));
 					}
 					Bits.erase(std::remove_if(Bits.begin(), Bits.end(), [Top](const Bit& Bt) { return Bt.Height < Top - 0.5; }), Bits.end());
@@ -4220,8 +4275,8 @@ namespace LandKit
 						const V3 P(Raw.Points[K * 3], Raw.Points[K * 3 + 1], Raw.Points[K * 3 + 2]);
 						if (Along(P) > Top - 0.44) Proud.push_back(P);
 					}
-					const double Reach2 = (Size + 0.03) * (Size + 0.03);
-					std::map<long, std::array<double, 4>> Bins; // (area, then the area-weighted sums of x, y, z)
+					const double Reach2 = (Size + Room) * (Size + Room);
+					std::map<long, std::array<double, 7>> Bins; // (area, then the area-weighted sums of x, y, z, and of the facing's)
 					for (const Bit& Bt : Bits)
 					{
 						bool bClear = true;
@@ -4234,25 +4289,162 @@ namespace LandKit
 							}
 						}
 						if (!bClear) continue;
-						std::array<double, 4>& Bin = Bins[static_cast<long>(std::floor(Bt.Height / 0.06))];
+						std::array<double, 7>& Bin = Bins[static_cast<long>(std::floor(Bt.Height / 0.06))];
 						Bin[0] += Bt.Area;
 						Bin[1] += Bt.Area * Bt.Mid.X;
 						Bin[2] += Bt.Area * Bt.Mid.Y;
 						Bin[3] += Bt.Area * Bt.Mid.Z;
+						Bin[4] += Bt.Area * Bt.Facing.X;
+						Bin[5] += Bt.Area * Bt.Facing.Y;
+						Bin[6] += Bt.Area * Bt.Facing.Z;
 					}
-					const std::array<double, 4>* Best = nullptr;
+					const std::array<double, 7>* Best = nullptr;
 					for (const auto& Bin : Bins)
 						if (!Best || Bin.second[0] > (*Best)[0]) Best = &Bin.second;
 					if (!Best || (*Best)[0] < 0.02) return false;
 					OutAt = V3((*Best)[1] / (*Best)[0], (*Best)[2] / (*Best)[0], (*Best)[3] / (*Best)[0]);
+					if (OutFacing)
+					{
+						*OutFacing = V3((*Best)[4], (*Best)[5], (*Best)[6]).Unit(Axis == 0 ? V3(Sign, 0.0, 0.0) : V3(0.0, 0.0, Sign));
+					}
 					return true;
 				};
 				int RoofPart = PartIndex("turret");
 				if (RoofPart < 0 || Parts[static_cast<size_t>(RoofPart)].Body < 0) RoofPart = PartIndex("hull");
-				V3 At;
-				if (Plate(RoofPart, 2, 1.0, 0.3, At)) AddMark(Parts[static_cast<size_t>(RoofPart)].Body, At, V3(0.0, 0.0, 1.0), 0.3, V3(1.0, 0.0, 0.0));
 				const int BackPart = PartIndex("hull");
-				if (Plate(BackPart, 0, -1.0, 0.25, At)) AddMark(Parts[static_cast<size_t>(BackPart)].Body, At, V3(-1.0, 0.0, 0.0), 0.25, V3(0.0, 0.0, 1.0));
+				V3 At;
+				if (!D.bRealMarks)
+				{
+					if (Plate(RoofPart, 2, 1.0, 0.3, At, 0.03, nullptr)) AddMark(Parts[static_cast<size_t>(RoofPart)].Body, At, V3(0.0, 0.0, 1.0), 0.3, V3(1.0, 0.0, 0.0));
+					if (Plate(BackPart, 0, -1.0, 0.25, At, 0.03, nullptr)) AddMark(Parts[static_cast<size_t>(BackPart)].Body, At, V3(-1.0, 0.0, 0.0), 0.25, V3(0.0, 0.0, 1.0));
+				}
+				else
+				{
+					// With marks at their real size (the art director's rulings of 26 November 2026, 18:22Z), settled on
+					// the near level and kept for the far one, each painted onto her skin as her side marks are above:
+					// her BACK plate's mark comes down by her sides' rule ("one tank, one size on her upright plates"):
+					// half as big again as her captor's mark at its real size, never over three quarters of the plate's
+					// height, 5 cm clear of its edges and of anything that stands proud of it. Her ROOF's stays large,
+					// bounded: it is an air mark, and a captured vehicle is the one whose shape lies to whoever looks
+					// down on her. At most 0.6 m across, never over three quarters of the clear plate's shorter side,
+					// 5 cm clear of hatches and edges. Where the plate takes no mark of the size wanted, the largest of
+					// a few smaller ones it does take.
+					if (Level == 0)
+					{
+						// (her plate's whole run through a place, along the mark's up or across it, and the way from the place
+						// to that run's middle; 0 where the place finds no skin under it)
+						auto CaptorRun = [&](int BodyIx, const V3& Place, const V3& Facing, bool bSideways, V3& ToMiddle) {
+							const Body& Bo = Bodies[static_cast<size_t>(BodyIx)];
+							ToMiddle = V3(0.0, 0.0, 0.0);
+							return PlateHigh(Bo.Near, Bo.Pivot, Place, Facing, Members[static_cast<size_t>(BodyIx)].size(), &ToMiddle, bSideways);
+						};
+						// (what a run of plate takes, by her sides' rule above: three quarters of it, and 5 cm clear at each end)
+						auto CaptorTakes = [](double Run) { return std::max(std::min(0.75 * Run, Run - 0.10), 0.0) / 2.0; };
+						CaptorRoof = CaptorPlate();
+						CaptorBack = CaptorPlate();
+						// Each is laid at the middle of the plate's run, as her side marks are, and sized by that run. Every size of
+						// the few is tried until one is taken whole, and the largest any of them gets is kept: a smaller mark may
+						// find a clearer place on the plate, so a place that takes next to nothing does not end the looking; and a
+						// place that finds no skin under it (the gap between two plates) takes no mark at all.
+						for (const double Try : { 1.0, 0.85, 0.7, 0.55, 0.4 })
+						{
+							V3 Facing;
+							if (!Plate(RoofPart, 2, 1.0, 0.3 * Try, At, 0.05, &Facing))
+							{
+								continue;
+							}
+							const int BodyIx = Parts[static_cast<size_t>(RoofPart)].Body;
+							V3 ToLongMid, ToWideMid, NotUsed;
+							if (CaptorRun(BodyIx, At, Facing, false, ToLongMid) <= 0.0)
+							{
+								continue;
+							}
+							if (CaptorRun(BodyIx, At, Facing, true, ToWideMid) <= 0.0)
+							{
+								continue;
+							}
+							// (the shorter of the plate's two runs through its middle bounds an air mark)
+							const V3 PlateMid = At + ToLongMid + ToWideMid;
+							const double LongRun = CaptorRun(BodyIx, PlateMid, Facing, false, NotUsed);
+							const double WideRun = CaptorRun(BodyIx, PlateMid, Facing, true, NotUsed);
+							const double Size = std::min(0.3 * Try, CaptorTakes(std::min(LongRun, WideRun)));
+							if (Size > CaptorRoof.Size)
+							{
+								CaptorRoof.Size = Size;
+								CaptorRoof.At = PlateMid;
+								CaptorRoof.Facing = Facing;
+							}
+							if (Size >= 0.3 * Try)
+							{
+								break;
+							}
+						}
+						const double Real = MarkReal(CaptorKind, Kind, R["role"].Str(), Name, false);
+						const double Want = Real > 0.0 ? 1.5 * Real : 0.25;
+						for (const double Try : { 1.0, 0.85, 0.7, 0.55, 0.4 })
+						{
+							V3 Facing;
+							if (!Plate(BackPart, 0, -1.0, Want * Try, At, 0.05, &Facing))
+							{
+								continue;
+							}
+							const int BodyIx = Parts[static_cast<size_t>(BackPart)].Body;
+							V3 ToTallMid;
+							const double Tall = CaptorRun(BodyIx, At, Facing, false, ToTallMid);
+							if (Tall <= 0.0)
+							{
+								continue;
+							}
+							const double Size = std::min(Want * Try, CaptorTakes(Tall));
+							if (Size > CaptorBack.Size)
+							{
+								CaptorBack.Size = Size;
+								CaptorBack.At = At + ToTallMid;
+								CaptorBack.Facing = Facing;
+							}
+							if (Size >= Want * Try)
+							{
+								break;
+							}
+						}
+						// (a mark no wider than the clear it must keep each side is a speck, not a mark: none)
+						for (CaptorPlate* Speck : { &CaptorRoof, &CaptorBack })
+						{
+							if (Speck->Size <= 0.05)
+							{
+								*Speck = CaptorPlate();
+							}
+						}
+						for (int Which = 0; Which < 2; ++Which)
+						{
+							CaptorPlate& Pl = Which == 0 ? CaptorRoof : CaptorBack;
+							const int PartIx = Which == 0 ? RoofPart : BackPart;
+							double Sized = 1.0;
+							if (Pl.Size > 0.0 && PaintCaptor(Parts[static_cast<size_t>(PartIx)].Body, Pl.At, Pl.Facing, Pl.Size, CaptorDust, 1000 + static_cast<uint64_t>(Which), &Sized) > 0)
+							{
+								Pl.Size *= Sized;
+								Mark Laid;
+								Laid.Tag = Which == 0 ? "_roof" : "_back";
+								Laid.At = Pl.At;
+								Laid.Facing = Pl.Facing;
+								Laid.Radius = Pl.Size;
+								Laid.Part = PartIx;
+								Laid.Dust = CaptorDust;
+								Painted.push_back(Laid);
+								PaintedMade.push_back(0);
+							}
+							else
+							{
+								Pl.Size = 0.0;
+							}
+						}
+					}
+					else
+					{
+						if (CaptorRoof.Size > 0.0) PaintCaptor(Parts[static_cast<size_t>(RoofPart)].Body, CaptorRoof.At, CaptorRoof.Facing, CaptorRoof.Size, CaptorDust, 1000, nullptr);
+						if (CaptorBack.Size > 0.0) PaintCaptor(Parts[static_cast<size_t>(BackPart)].Body, CaptorBack.At, CaptorBack.Facing, CaptorBack.Size, CaptorDust, 1001, nullptr);
+					}
+				}
 			}
 
 			// National marks (release 2, Dress::bMarks, "-TheaterLandMarks"; Brian, 24 November, the tanks' country
