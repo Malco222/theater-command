@@ -1512,4 +1512,23 @@ namespace LandFieldPicture
 		}
 		return bOk;
 	}
+
+	bool PaintView(const LandField::Ground& G, const LandField::Field& F, const Sky& Sk, const double Eye[3], const double At[3], double FovDeg, int W, int H, bool bHaze, double ClutterReach, const std::string& Path)
+	{
+		for (int K = 0; K < 256; ++K) LinearOf[K] = static_cast<float>(Linear(K));
+		Light Lamp = Morning(Sk);
+		{
+			const double MidX = 0.5 * F.Width(), MidY = 0.5 * F.Depth(), MidZ = G.At(MidX, MidY).Z;
+			const double Climb = (Lamp.Base - MidZ) / std::max(Lamp.Sun.Z, 0.15);
+			const double UX = MidX + Lamp.Sun.X * Climb, UY = MidY + Lamp.Sun.Y * Climb;
+			Lamp.AnchorU = 0.5 - (UY / 4000.0 - std::floor(UY / 4000.0));
+			Lamp.AnchorV = 0.5 - (UX / 4000.0 - std::floor(UX / 4000.0));
+		}
+		const V3 E{ Eye[0], Eye[1], Eye[2] }, T{ At[0], At[1], At[2] };
+		const V3 D = T - E;
+		const double Far = std::sqrt(Dot(D, D));
+		const View V = Looking(E, std::atan2(D.Y, D.X), std::asin(std::clamp(D.Z / std::max(Far, 1e-6), -1.0, 1.0)), FovDeg, 2 * W, 2 * H);
+		const double Wide = std::max(60.0, 2.5 * Far * std::tan(0.5 * FovDeg * Pi / 180.0));
+		return Picture(G, Lamp, V, T, Wide, T, std::max(1400.0, 6.0 * Wide), ClutterReach, bHaze, Path);
+	}
 }

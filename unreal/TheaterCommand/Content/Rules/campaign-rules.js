@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c5c474cfa 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ac185a037 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -102085,6 +102085,11 @@
       __publicField(this, "falling", { att: null, def: null });
       /** The highest each falling army's bar stood from the order until its last block was out: what it pays by (DD 14:54Z, b474). */
       __publicField(this, "fallBar", { att: 0, def: 0 });
+      /**
+       * The blocks all fall back itself took into its player's hand (direct command: the blocks he orders are his), not
+       * those already his when he gave it: PURSUE, the order that replaces it, gives them back to his staff (pursueOn).
+       */
+      __publicField(this, "fallHands", { att: [], def: [] });
       /** Seconds of battle time the fresh hold has kept each army at the brink, as judged: for the words on why it broke (b496(2)). */
       __publicField(this, "heldFor", { att: 0, def: 0 });
       /**
@@ -103616,7 +103621,7 @@
         const done = this.afterCommand(c, by2);
         if (done !== null) return done;
       }
-      if (this.falling[by2] !== null && c.do !== "auto" && c.do !== "dice" && c.do !== "withdrawAll") return false;
+      if (this.falling[by2] !== null && !this.aftermath && c.do !== "auto" && c.do !== "dice" && c.do !== "withdrawAll") return false;
       const mine4 = (ids2) => ids2.map((i) => this.unit(i)).filter((u) => !!u && u.side === by2 && fighting2(u) && u.kind !== "fort" && !(this.staffing && u.waits && !u.waits.free));
       const player = !this.staffing && this.ticket[by2].human;
       const hands = (us) => {
@@ -103770,6 +103775,7 @@
             this.falling[by2] = this.t;
             this.fallBar[by2] = this.breaking(by2);
             this.coming = this.coming.filter((k) => k.u.side !== by2);
+            this.fallHands[by2] = us.filter((u) => !u.taken).map((u) => u.id);
             hands(us);
             for (const u of us) give(u, () => this.send(u, { kind: "withdraw", x: u.x, y: by2 === "att" ? 0 : this.field.h }));
             this.say({ what: "land:fallBack", side: by2, text: `${this.army(by2)} falls back.` });
@@ -106529,6 +106535,29 @@
     pursueOn() {
       const A = this.aftermath;
       A.phase = "pursue";
+      if (this.falling[A.winner] !== null) {
+        this.falling[A.winner] = null;
+        this.pending = this.pending.filter((p) => {
+          const u = this.unit(p.id);
+          if (!u || u.side !== A.winner || p.smoke) return true;
+          delete u.orderAt;
+          return false;
+        });
+        for (const id of this.fallHands[A.winner]) {
+          const u = this.unit(id);
+          if (u) {
+            delete u.taken;
+            delete u.cut;
+          }
+        }
+        this.fallHands[A.winner] = [];
+        for (const u of this.units) {
+          if (u.side !== A.winner || !fighting2(u) || u.kind === "fort" || u.order?.kind !== "withdraw" || !this.quarry(u)) continue;
+          u.order = null;
+          u.path = [];
+          u.keepFace = null;
+        }
+      }
       this.broke[A.side] = true;
       this.pending = this.pending.filter((p) => this.unit(p.id)?.side !== A.side);
       for (const u of this.units) if (u.side === A.side && u.waits) this.endWait(u, "gives");
@@ -106699,6 +106728,11 @@
     fallBackWhy(s) {
       if (this.over) return "The battle is over.";
       if (this.setup !== null) return "The battle has not begun.";
+      const A = this.aftermath;
+      if (A) {
+        if (s === A.side) return "Your army has broken and is already falling back.";
+        return A.phase === "ask" ? `${this.army(A.side)} has broken: pursue it, or end the battle.` : "Your army is pursuing: to stop, call off the pursuit.";
+      }
       if (this.falling[s] !== null) return "Your army is already falling back.";
       if (!this.units.some((u) => u.side === s && fighting2(u) && u.kind !== "fort")) return "No unit of yours can fall back.";
       return null;

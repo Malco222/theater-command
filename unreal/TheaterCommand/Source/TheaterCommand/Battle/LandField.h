@@ -39,6 +39,8 @@
  * Instances (Near close, Far beyond FarFrom); each frame ask Clutter for the squares round the eye; and stand men,
  * tanks, guns and shell bursts on At(), which is the surface drawn, banks and lanes included.
  */
+namespace LandScorch { struct Mark; }
+
 namespace LandField
 {
 	/** A vertex colour: 8-bit sRGB. */
@@ -126,7 +128,7 @@ namespace LandField
 		 * frame rate: words between commas ("houses": the bocage's farmhouses, barns and byres built to the vehicles' detail, LandHouse, kit
 		 * models drawn by level in place of their plain built boxes; "church": a church in the farmland's villages; "walltop": Italy's walls
 		 * broken along their tops; "spruce": the winter spruce dark from above; "edge": the woods beyond the field held
-		 * back from its edge along a wandering line; "kunai": a plume on one kunai clump in six; "wet": the thaw's wet ground where Weather lays the mud; "worn" and "captured": LandMen's uniforms that age and LandKit's captured kit, set by LandBattle; "runs": LandMen's run styles, each man his own runner; "city": LandScape's ruined city look where the rules laid a town or a city with streets), or "all". The game's "-TheaterLandTrial=", the cloud test's LAND_FIELD_TRIAL. Empty:
+		 * back from its edge along a wandering line; "kunai": a plume on one kunai clump in six; "wet": the thaw's wet ground where Weather lays the mud; "worn" and "captured": LandMen's uniforms that age and LandKit's captured kit, set by LandBattle; "runs": LandMen's run styles, each man his own runner; "city": LandScape's ruined city look where the rules laid a town or a city with streets; "burntground": the burnt-out cottages each on soft brown burnt ground of its own, LandScorch, in place of the kit's flat dark skirt, the clutter on it thinned), or "all". The game's "-TheaterLandTrial=", the cloud test's LAND_FIELD_TRIAL. Empty:
 		 * every ground as passed.
 		 */
 		std::string Trial;
@@ -701,8 +703,15 @@ namespace LandField
 		/** The shell holes' earth for this ground (LandCrater::SetEarth), empty for the bocage's own. */
 		const char* EarthWord() const;
 
+		/** ColourAt with the burnt cottages' burnt ground over it (LandScorch, release 2, on trial: ColourAt exactly where
+		 * there is none, and everywhere without the trial word "burntground"): for what is laid over that ground, a rut, a
+		 * shell hole's skin, to fade into it. Any thread. */
+		Rgb8 BurntColourAt(double X, double Y) const;
+
 	private:
 		struct Impl;
 		std::unique_ptr<Impl> In;
+		/** The burnt cottages' marks as laid (LandScorch; null without the trial word "burntground"): BurntColourAt. */
+		std::shared_ptr<const std::vector<LandScorch::Mark>> ScorchMarks;
 	};
 }

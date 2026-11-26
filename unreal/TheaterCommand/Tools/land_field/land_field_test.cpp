@@ -11,11 +11,13 @@
 #include "Battle/LandCrater.h"
 #include "Battle/LandField.h"
 #include "Battle/LandScape.h"
+#include "Battle/LandScorch.h"
 #include "land_field_picture.h"
 #include "Battle/LandWeather.h"
 #include "weather_fall_picture.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cctype>
 #include <cmath>
@@ -741,6 +743,1069 @@ namespace
 		OwnShare = Own / Rays;
 		return Pctl(Sight, 0.5);
 	}
+
+	// ------------------------------------------------------------------ the burnt cottages (LandScorch, release 2)
+
+	/** The digest of everything laid (as LAND_FIELD_DIGEST's): the tiles' three meshes, the ring, every base's levels,
+	 * every instance. */
+	struct Digest
+	{
+		uint64_t Tiles = 1469598103934665603ull, Ring = 1469598103934665603ull, Bases = 1469598103934665603ull, Things = 1469598103934665603ull;
+	};
+	uint64_t DigestMix(uint64_t H, const void* P, size_t N)
+	{
+		const unsigned char* C = static_cast<const unsigned char*>(P);
+		for (size_t I = 0; I < N; ++I) H = (H ^ C[I]) * 1099511628211ull;
+		return H;
+	}
+	uint64_t DigestOf(uint64_t H, const LandField::Mesh& M)
+	{
+		H = DigestMix(H, M.Positions.data(), M.Positions.size() * sizeof(float));
+		H = DigestMix(H, M.Normals.data(), M.Normals.size() * sizeof(float));
+		H = DigestMix(H, M.Colours.data(), M.Colours.size() * sizeof(LandField::Rgb8));
+		H = DigestMix(H, M.Uvs.data(), M.Uvs.size() * sizeof(float));
+		return DigestMix(H, M.Triangles.data(), M.Triangles.size() * sizeof(uint32_t));
+	}
+	Digest DigestOf(const LandField::Ground& G)
+	{
+		Digest D;
+		for (const LandField::Tile& Tl : G.Tiles()) D.Tiles = DigestOf(DigestOf(DigestOf(D.Tiles, Tl.Near), Tl.Far), Tl.Built);
+		for (const LandField::Tile& Tl : G.Ring()) D.Ring = DigestOf(DigestOf(DigestOf(D.Ring, Tl.Near), Tl.Far), Tl.Built);
+		for (int B = 0; B < static_cast<int>(LandField::Base::Count); ++B)
+		{
+			const LandField::BaseMesh& Bm = G.BaseOf(static_cast<LandField::Base>(B));
+			for (const LandField::Mesh* M : { &Bm.Near, &Bm.Mid, &Bm.Far, &Bm.Cards, &Bm.Sprigs }) D.Bases = DigestOf(D.Bases, *M);
+			for (const LandField::Placed& P : G.Instances(static_cast<LandField::Base>(B)))
+			{
+				const float Pose[6] = { P.X, P.Y, P.Z, P.Yaw, P.Scale, P.ScaleZ };
+				D.Things = DigestMix(DigestMix(D.Things, Pose, sizeof(Pose)), &P.Tint, sizeof(P.Tint));
+			}
+		}
+		return D;
+	}
+	void PrintDigest(const char* What, const Digest& D)
+	{
+		std::printf("  digest%s: tiles %016llx, ring %016llx, bases %016llx, instances %016llx\n", What, static_cast<unsigned long long>(D.Tiles), static_cast<unsigned long long>(D.Ring),
+		            static_cast<unsigned long long>(D.Bases), static_cast<unsigned long long>(D.Things));
+	}
+	bool SameMesh(const LandField::Mesh& A, const LandField::Mesh& B)
+	{
+		return A.Positions == B.Positions && A.Normals == B.Normals && A.Uvs == B.Uvs && A.Triangles == B.Triangles && A.Colours.size() == B.Colours.size() &&
+		       (A.Colours.empty() || std::memcmp(A.Colours.data(), B.Colours.data(), A.Colours.size() * sizeof(LandField::Rgb8)) == 0);
+	}
+	/** Whether Old is the first part of New, point for point and triangle for triangle (New's near level: the ground's own,
+	 * then the burnt ground laid after it). */
+	bool Starts(const LandField::Mesh& New, const LandField::Mesh& Old)
+	{
+		if (New.Points() < Old.Points() || New.Triangles.size() < Old.Triangles.size()) return false;
+		return std::equal(Old.Positions.begin(), Old.Positions.end(), New.Positions.begin()) && std::equal(Old.Normals.begin(), Old.Normals.end(), New.Normals.begin()) &&
+		       std::equal(Old.Triangles.begin(), Old.Triangles.end(), New.Triangles.begin()) && Old.Uvs == New.Uvs &&
+		       (Old.Colours.empty() || std::memcmp(Old.Colours.data(), New.Colours.data(), Old.Colours.size() * sizeof(LandField::Rgb8)) == 0);
+	}
+
+	bool SamePlaced(const std::vector<LandField::Placed>& A, const std::vector<LandField::Placed>& B)
+	{
+		if (A.size() != B.size()) return false;
+		for (size_t K = 0; K < A.size(); ++K)
+		{
+			const LandField::Placed &P = A[K], &Q = B[K];
+			if (P.Kind != Q.Kind || P.X != Q.X || P.Y != Q.Y || P.Z != Q.Z || P.Yaw != Q.Yaw || P.Scale != Q.Scale || P.ScaleZ != Q.ScaleZ || P.Tint.R != Q.Tint.R || P.Tint.G != Q.Tint.G || P.Tint.B != Q.Tint.B) return false;
+		}
+		return true;
+	}
+
+	/** The clutter with the burnt ground's rounds (B, Ground::AddBurn fed by LandScorch::FeedBurn) against the clutter without them (A): every
+	 * piece out past every round's Outer the same in both, in the same order; every piece with them one of those
+	 * without, in its place (its tint may be dried). Counts the pieces that differ. */
+	size_t ClutterOffBurn(const std::vector<LandField::Placed>& A, const std::vector<LandField::Placed>& B, const std::vector<LandScorch::Round>& Rounds)
+	{
+		auto On = [&Rounds](const LandField::Placed& P) {
+			for (const LandScorch::Round& Rd : Rounds)
+				if (std::hypot(P.X - Rd.X, P.Y - Rd.Y) <= Rd.Outer + 0.01) return true;
+			return false;
+		};
+		std::vector<LandField::Placed> Ao, Bo;
+		for (const LandField::Placed& P : A)
+			if (!On(P)) Ao.push_back(P);
+		for (const LandField::Placed& P : B)
+			if (!On(P)) Bo.push_back(P);
+		size_t Off = SamePlaced(Ao, Bo) ? 0 : std::max<size_t>(1, Ao.size() > Bo.size() ? Ao.size() - Bo.size() : Bo.size() - Ao.size());
+		size_t K = 0;
+		for (const LandField::Placed& P : B)
+		{
+			while (K < A.size() && !(A[K].Kind == P.Kind && A[K].X == P.X && A[K].Y == P.Y && A[K].Z == P.Z && A[K].Yaw == P.Yaw && A[K].Scale == P.Scale && A[K].ScaleZ == P.ScaleZ)) ++K;
+			if (K == A.size())
+			{
+				++Off;
+				break;
+			}
+			++K;
+		}
+		return Off;
+	}
+
+	/** The burnt cottage's base: the steppe's Chimney, or a region's kit slot that holds the burnt-out house. */
+	LandField::Base RuinBase(const LandField::Ground& G, const LandField::Field& F)
+	{
+		if (F.Steppe.bOn) return LandField::Base::Chimney;
+		for (int K = 0; K < LandField::KitSlots; ++K)
+		{
+			const LandField::Base B = static_cast<LandField::Base>(static_cast<int>(LandField::Base::Kit0) + K);
+			if (G.BaseOf(B).Name == "BurntChimney") return B;
+		}
+		return LandField::Base::Count;
+	}
+
+	/** The burnt cottages' pictures (LAND_FIELD_SCORCH_PICTURES=<folder>, LAND_FIELD_SCORCH_KEY its files' first word,
+	 * LAND_FIELD_SCORCH_FROM the way the eye looks from, degrees from east): a farm's burnt corner from 150 m, 35 degrees up,
+	 * in the haze; one from 15 m; eight of them, each from 40 m. */
+	void ScorchPictures(const LandField::Ground& G, const LandField::Field& F, const LandFieldPicture::Sky& SkIn, LandField::Base RB)
+	{
+		if (RB == LandField::Base::Count || G.Instances(RB).empty()) return;
+		if (const char* Dir = std::getenv("LAND_FIELD_SCORCH_PICTURES"))
+		{
+			// (LAND_FIELD_SCORCH_HOUR: the battle clock's hour for a low sun's grazing light)
+			LandFieldPicture::Sky Sk = SkIn;
+			if (const char* Hr = std::getenv("LAND_FIELD_SCORCH_HOUR")) Sk.Hour = std::atof(Hr);
+			// (LAND_FIELD_SCORCH_BARE without the trial word, the old look: its flat skirt and oval taken out, the ground bare under the ruin,
+			// the reference the before and after pictures are measured against)
+			if (!F.Tried("burntground") && std::getenv("LAND_FIELD_SCORCH_BARE"))
+			{
+				const std::map<std::string, std::string>& Kit = F.Steppe.bOn ? F.Steppe.Kit : F.Kit;
+				const auto Found = Kit.find("BurntChimney");
+				LandJson::Json Root;
+				std::string Error;
+				if (Found != Kit.end() && LandJson::Parse(Found->second, Root, Error))
+				{
+					std::vector<std::string> Names;
+					for (size_t K = 0; K < Root["paint_names"].Count(); ++K) Names.push_back(Root["paint_names"].At(K).Str("?"));
+					LandField::BaseMesh& Bm = const_cast<LandField::BaseMesh&>(G.BaseOf(RB));
+					const char* Lv[3] = { "near", "mid", "far" };
+					LandField::Mesh* Ms[3] = { &Bm.Near, &Bm.Mid, &Bm.Far };
+					for (int V = 0; V < 3; ++V)
+					{
+						const std::vector<double> Paint = LandJson::Numbers(Root[Lv[V]]["paints"]);
+						if (Paint.size() != Ms[V]->Points()) continue;
+						std::vector<uint32_t> Kept;
+						for (size_t T = 0; T + 2 < Ms[V]->Triangles.size(); T += 3)
+						{
+							const size_t I = static_cast<size_t>(Paint[Ms[V]->Triangles[T]]);
+							const std::string N = I < Names.size() ? Names[I] : std::string();
+							if (N == "melt" || N == "ash") continue;
+							Kept.insert(Kept.end(), { Ms[V]->Triangles[T], Ms[V]->Triangles[T + 1], Ms[V]->Triangles[T + 2] });
+						}
+						Ms[V]->Triangles = std::move(Kept);
+					}
+				}
+			}
+			const std::string Key = std::string(Dir) + "/" + (std::getenv("LAND_FIELD_SCORCH_KEY") ? std::getenv("LAND_FIELD_SCORCH_KEY") : "scorch");
+			const std::vector<LandField::Placed>& Rs = G.Instances(RB);
+			// (the cottage with most other burnt ones within 45 m: the farm's burnt corner)
+			size_t Best = 0;
+			int Most = -1;
+			for (size_t A = 0; A < Rs.size(); ++A)
+			{
+				int Near = 0;
+				for (size_t B = 0; B < Rs.size(); ++B)
+					if (std::hypot(Rs[A].X - Rs[B].X, Rs[A].Y - Rs[B].Y) < 45.0) ++Near;
+				if (Near > Most)
+				{
+					Most = Near;
+					Best = A;
+				}
+			}
+			double MX = 0.0, MY = 0.0;
+			int MN = 0;
+			for (const LandField::Placed& P : Rs)
+				if (std::hypot(Rs[Best].X - P.X, Rs[Best].Y - P.Y) < 45.0)
+				{
+					MX += P.X;
+					MY += P.Y;
+					++MN;
+				}
+			MX /= MN;
+			MY /= MN;
+			const double Look = std::getenv("LAND_FIELD_SCORCH_FROM") ? std::atof(std::getenv("LAND_FIELD_SCORCH_FROM")) * 3.14159265358979323846 / 180.0 : -0.5 * 3.14159265358979323846;
+			auto View = [&](double X, double Y, double Dist, double Up, double Fov, int W, int H, double Clutter, const std::string& Path) {
+				const double At[3] = { X, Y, G.HeightAt(X, Y) + 0.5 };
+				const double Out = Dist * std::cos(Up * 3.14159265358979323846 / 180.0);
+				const double Eye[3] = { X + Out * std::cos(Look), Y + Out * std::sin(Look), At[2] + Dist * std::sin(Up * 3.14159265358979323846 / 180.0) };
+				std::printf("    picture %s: %.0f m off, %.0f degrees up\n", Path.c_str(), Dist, Up);
+				LandFieldPicture::PaintView(G, F, Sk, Eye, At, Fov, W, H, true, Clutter, Path);
+			};
+			View(MX, MY, 150.0, 35.0, 42.0, 1120, 630, 60.0, Key + "-farm.png");
+			View(MX, MY, 300.0, 25.0, 30.0, 1120, 630, 60.0, Key + "-far.png");
+			View(Rs[Best].X, Rs[Best].Y, 15.0, 30.0, 70.0, 1120, 630, 30.0, Key + "-close.png");
+			// (one by one, the cottages least hidden by what stands tall round them first: a winter farm's orchards)
+			std::vector<std::pair<int, size_t>> Open;
+			for (size_t A = 0; A < Rs.size(); ++A)
+			{
+				int Tall = 0;
+				for (int B = 0; B < static_cast<int>(LandField::Base::Count); ++B)
+				{
+					const LandField::Base Bs = static_cast<LandField::Base>(B);
+					if (Bs == RB || G.BaseOf(Bs).Height < 3.0f) continue;
+					for (const LandField::Placed& P : G.Instances(Bs))
+						if (std::hypot(P.X - Rs[A].X, P.Y - Rs[A].Y) < 16.0) ++Tall;
+				}
+				Open.push_back({ Tall, A });
+			}
+			std::sort(Open.begin(), Open.end());
+			for (size_t K = 0; K < std::min<size_t>(8, Rs.size()); ++K)
+			{
+				const size_t P = Open[K].second;
+				View(Rs[P].X, Rs[P].Y, 40.0, 40.0, 48.0, 560, 400, 0.0, Key + "-one" + std::to_string(K) + ".png");
+			}
+		}
+	}
+
+	/** The field with the trial word "burntground" put in (bWord) or taken out of its Trial (Field::Tried). */
+	LandField::Field WithBurntGround(const LandField::Field& F, bool bWord)
+	{
+		LandField::Field Out = F;
+		if (bWord)
+		{
+			if (!F.Tried("burntground")) Out.Trial = F.Trial.empty() ? std::string("burntground") : F.Trial + ",burntground";
+			return Out;
+		}
+		std::string Kept;
+		for (size_t P = 0; P <= F.Trial.size();)
+		{
+			size_t E = F.Trial.find(',', P);
+			if (E == std::string::npos) E = F.Trial.size();
+			const std::string W = F.Trial.substr(P, E - P);
+			if (!W.empty() && W != "burntground") Kept += (Kept.empty() ? "" : ",") + W;
+			P = E + 1;
+		}
+		Out.Trial = Kept;
+		return Out;
+	}
+
+	/** The burnt house's flat 'melt' skirt and 'ash' oval: their triangles drawn at its three levels (found by their
+	 * paint names in the kit's own file); -1 where the kit holds no BurntChimney file or the levels do not match it. */
+	long FlatTris(const LandField::Ground& G, const LandField::Field& F, LandField::Base RB)
+	{
+		if (RB == LandField::Base::Count) return -1;
+		const std::map<std::string, std::string>& Kit = F.Steppe.bOn ? F.Steppe.Kit : F.Kit;
+		const auto Found = Kit.find("BurntChimney");
+		if (Found == Kit.end()) return -1;
+		LandJson::Json Root;
+		std::string Error;
+		LandJson::Parse(Found->second, Root, Error);
+		std::vector<std::string> Names;
+		for (size_t K = 0; K < Root["paint_names"].Count(); ++K) Names.push_back(Root["paint_names"].At(K).Str("?"));
+		const LandField::BaseMesh& Bm = G.BaseOf(RB);
+		const char* Lv[3] = { "near", "mid", "far" };
+		const LandField::Mesh* Ms[3] = { &Bm.Near, &Bm.Mid, &Bm.Far };
+		long Flat = 0;
+		bool bAny = false;
+		for (int V = 0; V < 3; ++V)
+		{
+			const std::vector<double> Paint = LandJson::Numbers(Root[Lv[V]]["paints"]);
+			const LandField::Mesh& M = *Ms[V];
+			if (M.Points() != Paint.size()) continue;
+			bAny = true;
+			for (size_t T = 0; T + 2 < M.Triangles.size(); T += 3)
+			{
+				const uint32_t P = M.Triangles[T];
+				const size_t I = P < Paint.size() ? static_cast<size_t>(Paint[P]) : Names.size();
+				if (I < Names.size() && (Names[I] == "melt" || Names[I] == "ash")) ++Flat;
+			}
+		}
+		return bAny ? Flat : -1;
+	}
+
+	/**
+	 * The burnt cottages (Brian's steppe screenshot of 25 November, 17:11Z: black jagged mats; the art director's gate
+	 * note of 14:01Z), on trial behind the word "burntground" (Field::Tried: the game's -TheaterLandTrial=burntground, the
+	 * cloud test's LAND_FIELD_TRIAL=burntground). The field as laid (Asked, from F) and the same field with the word the
+	 * other way are built side by side. Always: without the word nothing of LandScorch is in the field (the kit's flat
+	 * skirt drawn, no burnt ground in the near tiles); with it the marks are laid, one a cottage, and the skirt is gone.
+	 * With the word asked, also: the model's chimney warm; each cottage's own burnt ground brown, soft-edged and its own,
+	 * against the targets as numbers; the darker of two where they meet; and everything else in the field as the old look
+	 * (no word) lays it, which is the field before the change. Pictures (LAND_FIELD_SCORCH_PICTURES=<folder>, with the
+	 * word): a farm's burnt cottages from 150 m, 35 degrees up, in the haze; one from 15 m; eight of them, each from 40 m.
+	 */
+	void ScorchChecks(const LandField::Ground& Asked, const LandField::Field& F, const LandFieldPicture::Sky& Sk)
+	{
+		using LandScorch::Detail::Light;
+		const bool bWord = F.Tried("burntground");
+		if (F.Trial == "all")
+		{
+			std::printf("  burnt cottages: on trial with every other look (\"all\"), so the old look cannot be laid beside them; their checks run under LAND_FIELD_TRIAL=burntground\n");
+			return;
+		}
+		const LandField::Field FN = WithBurntGround(F, true), FO = WithBurntGround(F, false);
+		const auto T0 = std::chrono::steady_clock::now();
+		const LandField::Ground Other(bWord ? FO : FN);
+		const double OldBuild = Seconds(T0);
+		const LandField::Ground& G = bWord ? Asked : Other; // (with the word: the burnt ground of release 2)
+		const LandField::Ground& GO = bWord ? Other : Asked; // (without it: the old look, the field before the change)
+		const LandField::Base RB = RuinBase(G, FN);
+		const size_t Ruins = RB == LandField::Base::Count ? 0 : G.Instances(RB).size();
+		std::printf("  burnt cottages: %zu (%s), snow lying %.2f, the trial word \"burntground\" %s\n", Ruins, RB == LandField::Base::Count ? "none" : BaseNames[static_cast<int>(RB)], G.SnowLying(),
+		            bWord ? "asked (LAND_FIELD_TRIAL)" : "not asked: the field as laid is the old look, the new one laid beside it only to compare");
+		const Digest DN = DigestOf(G), DO = DigestOf(GO);
+		PrintDigest(" (with the trial word burntground)", DN);
+		PrintDigest(" (without it, the old look)", DO);
+		if (Ruins == 0)
+		{
+			Check(DN.Tiles == DO.Tiles && DN.Ring == DO.Ring && DN.Bases == DO.Bases && DN.Things == DO.Things, "no burnt cottage: the field laid the same with the trial word burntground or without, byte for byte", "");
+			return;
+		}
+		const LandScorch::Laid L = LandScorch::Lay(G, FN);
+		// ---- the trial word: without it nothing of LandScorch in the field; with it the marks laid and the skirt gone
+		{
+			size_t NearNew = 0, NearOld = 0;
+			for (const LandField::Tile& Tl : G.Tiles()) NearNew += Tl.Near.Tris();
+			for (const LandField::Tile& Tl : GO.Tiles()) NearOld += Tl.Near.Tris();
+			const long FlatOld = FlatTris(GO, FO, RB), FlatNew = FlatTris(G, FN, RB);
+			Check(FlatOld != 0 && NearNew == NearOld + L.Tris && !SameMesh(G.BaseOf(RB).Near, GO.BaseOf(RB).Near),
+			      "without the trial word burntground nothing of LandScorch is laid: the burnt house's model as the kit's (its flat 'melt' skirt and 'ash' oval drawn), no burnt ground in the near tiles",
+			      Fmt("%.0f skirt and oval triangles drawn (-1: no kit file to count them by); the near tiles %.0f triangles fewer than with the word", static_cast<double>(FlatOld), static_cast<double>(NearNew) - static_cast<double>(NearOld)));
+			Check(L.Marks.size() == Ruins && L.Tris > 0 && FlatNew <= 0 && NearNew == NearOld + L.Tris, "with the trial word burntground the burnt ground is laid, one mark a cottage, and the flat skirt and oval are gone",
+			      Fmt("%.0f marks for %.0f cottages, %.0f triangles of burnt ground; %.0f skirt and oval triangles drawn", static_cast<double>(L.Marks.size()), static_cast<double>(Ruins), static_cast<double>(L.Tris), static_cast<double>(FlatNew)));
+		}
+		// (the look itself is checked with the word asked: LAND_FIELD_TRIAL=burntground)
+		if (!bWord)
+		{
+			// (for the neighbours: without the word no marks, so no burn's share of light and no rounds for the clutter)
+			const std::vector<LandScorch::Mark> None = LandScorch::MarksOf(Asked, F);
+			bool bOne = true;
+			for (const LandScorch::Mark& M : L.Marks)
+				if (LandScorch::ShareAt(None, M.X, M.Y) != 1.0) bOne = false;
+			Check(None.empty() && bOne, "without the trial word burntground MarksOf gives no marks: ShareAt is 1 on every cottage and no round is given the clutter",
+			      Fmt("%.0f marks without the word, %.0f with it", static_cast<double>(None.size()), static_cast<double>(L.Marks.size())));
+			// (and Ground::BurntColourAt is ColourAt exactly, on every cottage's burnt ground as the word would lay it)
+			size_t Pts = 0, Off = 0;
+			for (const LandScorch::Mark& M : L.Marks)
+				for (int K = 0; K < 40; ++K)
+				{
+					const double R = M.Out * (K % 8 + 0.5) / 8.0, Th = K * 2.39996;
+					const LandField::Rgb8 Cb = Asked.BurntColourAt(M.X + R * std::cos(Th), M.Y + R * std::sin(Th)), Cu = Asked.ColourAt(M.X + R * std::cos(Th), M.Y + R * std::sin(Th));
+					++Pts;
+					if (Cb.R != Cu.R || Cb.G != Cu.G || Cb.B != Cu.B) ++Off;
+				}
+			Check(Off == 0, "without the trial word burntground Ground::BurntColourAt is ColourAt exactly", Fmt("%.0f of %.0f points differ", static_cast<double>(Off), static_cast<double>(Pts)));
+			return;
+		}
+		// ---- nothing else moves: everything but the ruin's model and the near tiles' burnt ground as the old look lays it
+		{
+			size_t BadTiles = 0, BadBases = 0, BadThings = 0, Extra = 0, ExtraWrong = 0, BadClutter = 0, BadAt = 0;
+			std::vector<LandScorch::Round> Rounds;
+			for (const LandScorch::Mark& M : L.Marks)
+				for (const LandScorch::Round& Rd : LandScorch::RoundsOf(M)) Rounds.push_back(Rd);
+			for (size_t T = 0; T < G.Tiles().size(); ++T)
+			{
+				const LandField::Tile &A = G.Tiles()[T], &B = GO.Tiles()[T];
+				if (!SameMesh(A.Far, B.Far) || !SameMesh(A.Built, B.Built) || !Starts(A.Near, B.Near)) ++BadTiles;
+				const size_t Added = A.Near.Tris() - B.Near.Tris();
+				Extra += Added;
+				if (Added != L.PerTile[T].Tris()) ++ExtraWrong;
+			}
+			for (size_t T = 0; T < G.Ring().size(); ++T)
+				if (!SameMesh(G.Ring()[T].Near, GO.Ring()[T].Near) || !SameMesh(G.Ring()[T].Far, GO.Ring()[T].Far) || !SameMesh(G.Ring()[T].Built, GO.Ring()[T].Built)) ++BadTiles;
+			for (int B = 0; B < static_cast<int>(LandField::Base::Count); ++B)
+			{
+				const LandField::Base Bs = static_cast<LandField::Base>(B);
+				const LandField::BaseMesh &Mn = G.BaseOf(Bs), &Mo = GO.BaseOf(Bs);
+				if (Bs != RB && (!SameMesh(Mn.Near, Mo.Near) || !SameMesh(Mn.Mid, Mo.Mid) || !SameMesh(Mn.Far, Mo.Far) || !SameMesh(Mn.Cards, Mo.Cards) || !SameMesh(Mn.Sprigs, Mo.Sprigs))) ++BadBases;
+				if (Mn.Radius != Mo.Radius || Mn.Height != Mo.Height || Mn.FarFrom != Mo.FarFrom || Mn.bSight != Mo.bSight || Mn.Class != Mo.Class) ++BadBases;
+				const std::vector<LandField::Placed> &Pn = G.Instances(Bs), &Po = GO.Instances(Bs);
+				if (!SamePlaced(Pn, Po)) ++BadThings;
+			}
+			for (const LandField::Placed& P : G.Instances(RB))
+			{
+				std::vector<LandField::Placed> Cn, Co;
+				G.Clutter(P.X - 24.0, P.Y - 24.0, P.X + 24.0, P.Y + 24.0, Cn);
+				GO.Clutter(P.X - 24.0, P.Y - 24.0, P.X + 24.0, P.Y + 24.0, Co);
+				if (ClutterOffBurn(Co, Cn, Rounds) != 0) ++BadClutter; // (on the burnt ground itself thinned: checked below)
+				for (int K = 0; K < 40; ++K)
+				{
+					const double X = P.X + 1.37 * (K % 7) - 4.0, Y = P.Y + 1.91 * (K / 7) - 5.0;
+					const LandField::Surface Sa = G.At(X, Y), Sb = GO.At(X, Y);
+					const LandField::Rgb8 Ca = G.ColourAt(X, Y), Cb = GO.ColourAt(X, Y);
+					if (Sa.Z != Sb.Z || Sa.What != Sb.What || Sa.NZ != Sb.NZ || G.DrawnZ(X, Y) != GO.DrawnZ(X, Y) || Ca.R != Cb.R || Ca.G != Cb.G || Ca.B != Cb.B) ++BadAt;
+				}
+			}
+			Check(BadTiles == 0 && BadBases == 0 && BadThings == 0 && ExtraWrong == 0 && BadClutter == 0 && BadAt == 0,
+			      "the burnt cottages change nothing else: every instance, every other base, the far and built levels, the ring, the clutter round them (off their burnt ground) and At() as the old look lays them; the near levels the old ones with only the burnt ground after them",
+			      Fmt("%.0f tiles, %.0f bases, %.0f instance lists, %.0f clutter boxes differ", static_cast<double>(BadTiles), static_cast<double>(BadBases), static_cast<double>(BadThings), static_cast<double>(BadClutter)) +
+			          Fmt(", %.0f At() points; %.0f triangles added", static_cast<double>(BadAt), static_cast<double>(Extra)));
+		}
+		// ---- the cost
+		std::printf("    burnt ground: %zu marks, %zu points and %zu triangles (%.0f and %.0f a cottage), %zu grid points held off a lane, bank or floor; laid in %.3f s (the old look's field beside it built in %.2f s)\n",
+		            L.Marks.size(), L.Points, L.Tris, static_cast<double>(L.Points) / static_cast<double>(L.Marks.size()), static_cast<double>(L.Tris) / static_cast<double>(L.Marks.size()), L.Held, L.Seconds, OldBuild);
+		// (its time against the old look's whole field, built in the same run on the same machine, not a fixed bound a
+		// busy shared machine breaks)
+		Check(L.Seconds < 0.35 * OldBuild && L.Tris <= 2600 * L.Marks.size() && L.Points <= 1500 * L.Marks.size(), "the burnt ground is cheap: under 2,600 triangles and 1,500 points a cottage, laid in under a third of the old field's own build",
+		      Fmt("%.0f triangles and %.0f points a cottage; ", static_cast<double>(L.Tris) / static_cast<double>(L.Marks.size()), static_cast<double>(L.Points) / static_cast<double>(L.Marks.size())) +
+		          Fmt("%.1f ms a cottage, %.2f of the old field's build", 1000.0 * L.Seconds / static_cast<double>(L.Marks.size()), L.Seconds / std::max(1e-6, OldBuild)));
+		// ---- the grass, flowers and corn on it (Ground::AddBurn, fed the marks' rounds by LandScorch::FeedBurn): in the
+		// rounds' cores 3 in 10 stay and are dried toward straw; their colour as drawn (each base's own mean colour times
+		// its tint), against the burnt ground's under them (Ground::BurntColourAt) and the ground's own (ColourAt)
+		{
+			std::vector<std::array<double, 3>> MeanOf(static_cast<size_t>(LandField::Base::Count), std::array<double, 3>{ 128.0, 128.0, 128.0 });
+			for (int B = 0; B < static_cast<int>(LandField::Base::Count); ++B)
+			{
+				const std::vector<LandField::Rgb8>& Cs = G.BaseOf(static_cast<LandField::Base>(B)).Near.Colours;
+				if (Cs.empty()) continue;
+				double Su[3] = { 0.0, 0.0, 0.0 };
+				for (const LandField::Rgb8& C : Cs)
+				{
+					Su[0] += C.R;
+					Su[1] += C.G;
+					Su[2] += C.B;
+				}
+				for (int K = 0; K < 3; ++K) MeanOf[static_cast<size_t>(B)][static_cast<size_t>(K)] = Su[K] / static_cast<double>(Cs.size());
+			}
+			double Was = 0.0, Is = 0.0, Drawn[2][3] = { { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 0.0 } }, Burnt[3] = { 0.0, 0.0, 0.0 }, Bare[3] = { 0.0, 0.0, 0.0 };
+			for (const LandScorch::Mark& M : L.Marks)
+			{
+				const std::vector<LandScorch::Round> Rs = LandScorch::RoundsOf(M);
+				auto InCore = [&Rs](const LandField::Placed& P) {
+					for (const LandScorch::Round& Rd : Rs)
+						if (std::hypot(P.X - Rd.X, P.Y - Rd.Y) < Rd.Core) return true;
+					return false;
+				};
+				std::vector<LandField::Placed> Cn, Co;
+				const double R = Rs[0].Outer;
+				G.Clutter(M.X - R, M.Y - R, M.X + R, M.Y + R, Cn);
+				GO.Clutter(M.X - R, M.Y - R, M.X + R, M.Y + R, Co);
+				for (int Side = 0; Side < 2; ++Side)
+					for (const LandField::Placed& P : Side ? Cn : Co)
+					{
+						if (P.Kind == LandField::Base::Stone || !InCore(P)) continue;
+						(Side ? Is : Was) += 1.0;
+						const std::array<double, 3>& Mn = MeanOf[static_cast<size_t>(P.Kind)];
+						const double Tn[3] = { P.Tint.R / 128.0, P.Tint.G / 128.0, P.Tint.B / 128.0 };
+						for (int K = 0; K < 3; ++K) Drawn[Side][K] += Mn[static_cast<size_t>(K)] * Tn[K];
+						if (!Side) continue;
+						const LandField::Rgb8 Cb = G.BurntColourAt(P.X, P.Y), Cu = G.ColourAt(P.X, P.Y);
+						Burnt[0] += Cb.R;
+						Burnt[1] += Cb.G;
+						Burnt[2] += Cb.B;
+						Bare[0] += Cu.R;
+						Bare[1] += Cu.G;
+						Bare[2] += Cu.B;
+					}
+			}
+			for (int K = 0; K < 3; ++K)
+			{
+				Drawn[0][K] /= std::max(1.0, Was);
+				Drawn[1][K] /= std::max(1.0, Is);
+				Burnt[K] /= std::max(1.0, Is);
+				Bare[K] /= std::max(1.0, Is);
+			}
+			std::printf("    the clutter in the rounds' cores: %.0f of %.0f kept; drawn %.0f,%.0f,%.0f (lightness %.0f; ", Is, Was, Drawn[1][0], Drawn[1][1], Drawn[1][2], Light(Drawn[1][0], Drawn[1][1], Drawn[1][2]));
+			std::printf("without the word %.0f,%.0f,%.0f), the burnt ground under them %.0f,%.0f,%.0f (lightness %.0f), ", Drawn[0][0], Drawn[0][1], Drawn[0][2], Burnt[0], Burnt[1], Burnt[2], Light(Burnt[0], Burnt[1], Burnt[2]));
+			std::printf("the ground there unburnt %.0f,%.0f,%.0f\n", Bare[0], Bare[1], Bare[2]);
+			Check(Was < 20.0 || (Is >= 0.15 * Was && Is <= 0.5 * Was && Drawn[1][0] >= Drawn[1][1] && Drawn[1][1] >= Drawn[1][2]),
+			      "the grass, flowers and corn standing in the burn's cores thinned to some 30% and dried toward straw, R >= G >= B (Ground::AddBurn; stones left)",
+			      Fmt("%.0f of %.0f kept, ", Is, Was) + Fmt("drawn %.0f,%.0f,%.0f", Drawn[1][0], Drawn[1][1], Drawn[1][2]) + Fmt(" (was %.0f,%.0f,%.0f)", Drawn[0][0], Drawn[0][1], Drawn[0][2]));
+		}
+		// ---- the model: no flat skirt or oval drawn (found by their paint names), the chimney warm
+		{
+			const std::map<std::string, std::string>& Kit = F.Steppe.bOn ? F.Steppe.Kit : F.Kit;
+			const auto Found = Kit.find("BurntChimney");
+			if (Found != Kit.end())
+			{
+				LandJson::Json Root;
+				std::string Error;
+				LandJson::Parse(Found->second, Root, Error);
+				std::vector<std::string> Names;
+				for (size_t K = 0; K < Root["paint_names"].Count(); ++K) Names.push_back(Root["paint_names"].At(K).Str("?"));
+				const LandField::BaseMesh &Mn = G.BaseOf(RB), &Mo = GO.BaseOf(RB);
+				size_t FlatNew = 0, FlatOld = 0, Stack = 0;
+				double Sum[3] = { 0.0, 0.0, 0.0 }, SumOld[3] = { 0.0, 0.0, 0.0 }, Low[4] = { 0.0, 0.0, 0.0, 0.0 }, Top[4] = { 0.0, 0.0, 0.0, 0.0 };
+				const char* Lv[3] = { "near", "mid", "far" };
+				const LandField::Mesh* Ln[3] = { &Mn.Near, &Mn.Mid, &Mn.Far };
+				const LandField::Mesh* Lo[3] = { &Mo.Near, &Mo.Mid, &Mo.Far };
+				for (int V = 0; V < 3; ++V)
+				{
+					const std::vector<double> Paint = LandJson::Numbers(Root[Lv[V]]["paints"]);
+					auto NameOf = [&](uint32_t P) { const size_t I = P < Paint.size() ? static_cast<size_t>(Paint[P]) : Names.size(); return I < Names.size() ? Names[I] : std::string(); };
+					for (int Side = 0; Side < 2; ++Side)
+					{
+						const LandField::Mesh& M = Side ? *Lo[V] : *Ln[V];
+						if (M.Points() != Paint.size()) continue;
+						for (size_t T = 0; T + 2 < M.Triangles.size(); T += 3)
+						{
+							const std::string N = NameOf(M.Triangles[T]);
+							if (N == "melt" || N == "ash") ++(Side ? FlatOld : FlatNew);
+							if (V == 0 && (N == "soot" || N == "brick_burnt"))
+								for (int K = 0; K < 3; ++K)
+								{
+									// (its sides only: on what faces up the field's snow lies, when it lies, on the old as on the new)
+									if (std::fabs(M.Normals[3 * M.Triangles[T + static_cast<size_t>(K)] + 2]) > 0.5f) continue;
+									const LandField::Rgb8 C = M.Colours[M.Triangles[T + static_cast<size_t>(K)]];
+									double* S = Side ? SumOld : Sum;
+									S[0] += C.R;
+									S[1] += C.G;
+									S[2] += C.B;
+									if (Side) continue;
+									++Stack;
+									// (the stack's lower part, above the stove, and its top: soot toward the top)
+									const float Z = M.Positions[3 * M.Triangles[T + static_cast<size_t>(K)] + 2];
+									double* Part = Z > 1.8f && Z < 2.9f ? Low : Z > 3.6f ? Top : nullptr;
+									if (!Part) continue;
+									Part[0] += C.R;
+									Part[1] += C.G;
+									Part[2] += C.B;
+									Part[3] += 1.0;
+								}
+						}
+					}
+				}
+				for (int C = 0; C < 3; ++C)
+				{
+					Sum[C] /= static_cast<double>(std::max<size_t>(1, Stack));
+					SumOld[C] /= static_cast<double>(std::max<size_t>(1, Stack));
+					Low[C] /= std::max(1.0, Low[3]);
+					Top[C] /= std::max(1.0, Top[3]);
+				}
+				Check(FlatNew == 0 && FlatOld > 0, "the burnt house's flat 'melt' skirt and 'ash' oval are not drawn (by their paint names, every level)", Fmt("%.0f of their triangles drawn, the old look %.0f", static_cast<double>(FlatNew), static_cast<double>(FlatOld)));
+				Check(Sum[0] >= Sum[1] && Sum[1] >= Sum[2] && Sum[0] - Sum[2] >= 15.0 && Light(Sum[0], Sum[1], Sum[2]) >= 0.9 * Light(SumOld[0], SumOld[1], SumOld[2]) && Light(Low[0], Low[1], Low[2]) >= 1.3 * Light(SumOld[0], SumOld[1], SumOld[2]) && Low[0] - Low[2] >= 30.0 && Low[0] - Low[2] <= 50.0 && Light(Top[0], Top[1], Top[2]) <= 0.6 * Light(Low[0], Low[1], Low[2]),
+				      "its chimney dull burnt brick, its top black with soot, not a black pillar nor new terracotta: its mean warm and about as light as the old (0.9 of it at least), its lower stack 1.3 times the old's lightness and brick red but dulled (R - B 30 to 50), its top at most 0.6 of the lower's lightness (its sides: the snow lies on what faces up)",
+				      Fmt("mean %.0f,%.0f,%.0f", Sum[0], Sum[1], Sum[2]) + Fmt(" (the old %.0f,%.0f,%.0f)", SumOld[0], SumOld[1], SumOld[2]) + Fmt("; lower %.0f,%.0f,%.0f", Low[0], Low[1], Low[2]) + Fmt(", top %.0f,%.0f,%.0f", Top[0], Top[1], Top[2]));
+			}
+		}
+		// ---- each mark against the targets, alone (its own colours over the ground's own as drawn)
+		LandScorch::Drawn Under(G);
+		struct Stats
+		{
+			double Area = 0.0, MeanRel = 0.0, DarkShare = 0.0, MinRel = 9.0, Hue[3] = { 0.0, 0.0, 0.0 }, BiggestDark = 0.0;
+			double Touched = 0.0, Cold = 0.0; // (its points a quarter burnt or more, and those of them not R >= G >= B)
+			std::vector<double> Outline; // its reach (A over a half) every 10 degrees, its own frame
+			double Past = 0.0;           // how far past its walls it shows (A at least 0.25), the mean of every 10 degrees
+			std::vector<double> Inside;  // its colour's share of the ground's lightness, on a 4 x 3 grid over its walls
+		};
+		std::vector<Stats> All;
+		const double S = 0.3;
+		for (const LandScorch::Mark& M : L.Marks)
+		{
+			Stats St;
+			const int N = static_cast<int>(std::ceil(M.Out / S));
+			std::vector<int> Dark;
+			const int W = 2 * N + 1;
+			Dark.assign(static_cast<size_t>(W) * static_cast<size_t>(W), 0);
+			double SumRel = 0.0, SumC[3] = { 0.0, 0.0, 0.0 };
+			size_t Count = 0, DarkCount = 0;
+			for (int J = -N; J <= N; ++J)
+				for (int I = -N; I <= N; ++I)
+				{
+					const double X = M.X + I * S, Y = M.Y + J * S;
+					const LandScorch::Burn B = LandScorch::BurnAt(M, X, Y);
+					if (B.A < 0.25) continue;
+					double Gc[3], C[3];
+					if (!Under.Colour(X, Y, Gc)) continue;
+					LandScorch::Paint(B, Gc, C);
+					St.Touched += 1.0;
+					if (!(C[0] >= C[1] && C[1] >= C[2])) St.Cold += 1.0;
+					if (B.A < 0.5) continue;
+					const double Rel = Light(C[0], C[1], C[2]) / std::max(1.0, Light(Gc[0], Gc[1], Gc[2]));
+					++Count;
+					SumRel += Rel;
+					for (int K = 0; K < 3; ++K) SumC[K] += C[K];
+					St.MinRel = std::min(St.MinRel, Rel);
+					if (Rel < 0.5)
+					{
+						++DarkCount;
+						Dark[static_cast<size_t>(J + N) * static_cast<size_t>(W) + static_cast<size_t>(I + N)] = 1;
+					}
+				}
+			St.Area = static_cast<double>(Count) * S * S;
+			St.MeanRel = SumRel / static_cast<double>(std::max<size_t>(1, Count));
+			St.DarkShare = static_cast<double>(DarkCount) / static_cast<double>(std::max<size_t>(1, Count));
+			for (int K = 0; K < 3; ++K) St.Hue[K] = SumC[K] / static_cast<double>(std::max<size_t>(1, Count));
+			// (its darkest pieces: the biggest, four ways joined)
+			std::vector<int> Stack;
+			for (size_t P = 0; P < Dark.size(); ++P)
+			{
+				if (Dark[P] != 1) continue;
+				size_t Size = 0;
+				Stack.push_back(static_cast<int>(P));
+				Dark[P] = 2;
+				while (!Stack.empty())
+				{
+					const int Q = Stack.back();
+					Stack.pop_back();
+					++Size;
+					const int QI = Q % W, QJ = Q / W;
+					const int Nb[4][2] = { { QI - 1, QJ }, { QI + 1, QJ }, { QI, QJ - 1 }, { QI, QJ + 1 } };
+					for (const auto& Nn : Nb)
+					{
+						if (Nn[0] < 0 || Nn[1] < 0 || Nn[0] >= W || Nn[1] >= W) continue;
+						const size_t R = static_cast<size_t>(Nn[1]) * static_cast<size_t>(W) + static_cast<size_t>(Nn[0]);
+						if (Dark[R] != 1) continue;
+						Dark[R] = 2;
+						Stack.push_back(static_cast<int>(R));
+					}
+				}
+				St.BiggestDark = std::max(St.BiggestDark, static_cast<double>(Size) * S * S);
+			}
+			const double C = std::cos(M.Yaw), Sn = std::sin(M.Yaw);
+			for (int K = 0; K < 36; ++K)
+			{
+				const double Th = K * 10.0 * 3.14159265358979323846 / 180.0;
+				const double DX = std::cos(Th) * C - std::sin(Th) * Sn, DY = std::cos(Th) * Sn + std::sin(Th) * C;
+				double Last = 0.0, Shows = 0.0;
+				for (double R = 0.0; R < M.Out; R += 0.1)
+				{
+					const LandScorch::Burn B = LandScorch::BurnAt(M, M.X + DX * R, M.Y + DY * R);
+					if (B.A >= 0.5) Last = R;
+					if (B.A >= 0.25) Shows = std::max(Shows, B.D);
+				}
+				St.Outline.push_back(Last);
+				St.Past += Shows / 36.0;
+			}
+			for (int J = 0; J < 3; ++J)
+				for (int I = 0; I < 4; ++I)
+				{
+					const double U = (-0.75 + 0.5 * I) * M.WallA, V = (-0.667 + 0.667 * J) * M.WallB;
+					const LandScorch::Burn B = LandScorch::BurnAt(M, M.X + U * C - V * Sn, M.Y + U * Sn + V * C);
+					St.Inside.push_back(B.Rel);
+				}
+			All.push_back(St);
+		}
+		{
+			double WorstMean = 9.0, WorstDark = 0.0, WorstMin = 9.0, WorstPiece = 0.0, MeanAll = 0.0, Touched = 0.0, ColdPts = 0.0;
+			int Cold = 0;
+			double ColdHue[3] = { 0.0, 0.0, 0.0 };
+			for (const Stats& St : All)
+			{
+				WorstMean = std::min(WorstMean, St.MeanRel);
+				WorstDark = std::max(WorstDark, St.DarkShare);
+				WorstMin = std::min(WorstMin, St.MinRel);
+				WorstPiece = std::max(WorstPiece, St.BiggestDark);
+				MeanAll += St.MeanRel / static_cast<double>(All.size());
+				Touched += St.Touched;
+				ColdPts += St.Cold;
+				if (!(St.Hue[0] >= St.Hue[1] && St.Hue[1] >= St.Hue[2]))
+				{
+					++Cold;
+					for (int K = 0; K < 3; ++K) ColdHue[K] = St.Hue[K];
+				}
+			}
+			Check(Cold == 0, "every mark warm over its burnt ground (its mean R >= G >= B where it is more than half burnt)", Cold ? Fmt("%.0f not, e.g. %.0f,%.0f,", Cold, ColdHue[0], ColdHue[1]) + Fmt("%.0f", ColdHue[2]) : Fmt("%.0f of %.0f", static_cast<double>(All.size()), static_cast<double>(All.size())));
+			Check(ColdPts <= 0.12 * Touched, "warm point by point too: of its points a quarter burnt or more at most 12% not R >= G >= B (the grass islands left in it)",
+			      Fmt("%.1f%% of %.0f", 100.0 * ColdPts / std::max(1.0, Touched), Touched));
+			// (under snow the art director's ask is the other way: char black on the snow, a thawed wet ring round it; so
+			// there its mean no darker than 45%, its char down to 30%, a third of it at most, in pieces of up to 20 m2)
+			const bool bSnowy = !L.Marks.empty() && L.Marks[0].bSnow;
+			Check(WorstMean >= (bSnowy ? 0.45 : 0.6), bSnowy ? "no mark darker on the mean than 45% of the snow's lightness" : "no mark darker on the mean than 60% of the ground's own lightness",
+			      Fmt("darkest mark's mean %.2f (all marks' %.2f; the old skirt about 0.45 on the Mac)", WorstMean, MeanAll));
+			Check(bSnowy ? WorstDark < 0.33 && WorstMin >= 0.3 && WorstPiece <= 20.0 : WorstDark < 0.15 && WorstMin >= 0.38 && WorstPiece <= 6.0,
+			      bSnowy ? "its char (under half the snow's lightness) under a third of a mark, never under 0.3, in broken pieces" : "its darkest (under half the ground's lightness) under 15% of a mark, never under 0.38, in broken pieces",
+			      Fmt("darkest share %.1f%%, darkest %.2f, the biggest dark piece %.1f m2", 100.0 * WorstDark, WorstMin, WorstPiece));
+		}
+		// ---- the edge: soft (no step of more than 8% of the ground's lightness between neighbouring points out past
+		// the walls), the ground's own colour all round the mesh's own edge
+		{
+			double WorstStep = 0.0;
+			std::vector<double> Inner; // (the steps inside its edge, past the walls: islands, drifts, bare patches)
+			size_t Steps = 0, Over = 0, EdgePoints = 0, EdgeOff = 0;
+			int WorstOff = 0;
+			for (size_t T = 0; T < L.PerTile.size(); ++T)
+			{
+				const LandField::Mesh& M = L.PerTile[T];
+				if (M.Empty()) continue;
+				const LandField::Tile& Tl = G.Tiles()[T];
+				std::map<std::pair<uint32_t, uint32_t>, int> Uses;
+				for (size_t K = 0; K + 2 < M.Triangles.size(); K += 3)
+					for (int E = 0; E < 3; ++E)
+					{
+						const uint32_t A = M.Triangles[K + static_cast<size_t>(E)], B = M.Triangles[K + static_cast<size_t>((E + 1) % 3)];
+						++Uses[{ std::min(A, B), std::max(A, B) }];
+					}
+				for (const auto& [Edge, Used] : Uses)
+				{
+					const uint32_t Pt[2] = { Edge.first, Edge.second };
+					double Lp[2], Lg[2], D[2] = { -9.0, -9.0 }, Rim[2] = { 1.0, 1.0 };
+					bool bOk = true;
+					for (int K = 0; K < 2; ++K)
+					{
+						const double X = M.Positions[3 * Pt[K]], Y = M.Positions[3 * Pt[K] + 1];
+						double Gc[3];
+						if (!Under.Colour(X, Y, Gc)) bOk = false;
+						Lp[K] = Light(M.Colours[Pt[K]]);
+						Lg[K] = Light(Gc[0], Gc[1], Gc[2]);
+						double Best = 0.0;
+						for (const LandScorch::Mark& Mk : L.Marks)
+						{
+							const LandScorch::Burn B = LandScorch::BurnAt(Mk, X, Y);
+							if (B.A > Best)
+							{
+								Best = B.A;
+								D[K] = B.D;
+								Rim[K] = B.Rim;
+							}
+						}
+					}
+					if (!bOk) continue;
+					// (the mark's own step, its share of the ground's lightness, the ground's own steps under it left out; per 0.6 m)
+					const double Apart = std::hypot(M.Positions[3 * Pt[0]] - M.Positions[3 * Pt[1]], M.Positions[3 * Pt[0] + 1] - M.Positions[3 * Pt[1] + 1]);
+					const double Step = std::fabs(Lp[0] / std::max(1.0, Lg[0]) - Lp[1] / std::max(1.0, Lg[1])) * 0.6 / std::max(0.6, Apart);
+					if (std::min(D[0], D[1]) > 0.0 && std::max(Rim[0], Rim[1]) <= 0.0) Inner.push_back(Step);
+					if (std::max(Rim[0], Rim[1]) > 0.0 || (D[0] < -8.0 && D[1] < -8.0))
+					{
+						++Steps;
+						if (Step > WorstStep && std::getenv("LAND_FIELD_SCORCH_WORST"))
+						{
+							std::printf("    step %.3f at %.1f, %.1f: %.0f to %.0f over %.0f, %.0f (past the walls %.2f, %.2f)\n", Step, M.Positions[3 * Pt[0]], M.Positions[3 * Pt[0] + 1], Lp[0], Lp[1], Lg[0], Lg[1], D[0], D[1]);
+							for (const LandScorch::Mark& Mk : L.Marks)
+							{
+								const LandScorch::Burn B0 = LandScorch::BurnAt(Mk, M.Positions[3 * Pt[0]], M.Positions[3 * Pt[0] + 1]), B1 = LandScorch::BurnAt(Mk, M.Positions[3 * Pt[1]], M.Positions[3 * Pt[1] + 1]);
+								if (B0.A > 0.0 || B1.A > 0.0) std::printf("      mark at %.1f, %.1f (out %.1f): A %.3f %.3f, D %.2f %.2f, rim %.2f %.2f, dist %.2f %.2f\n", Mk.X, Mk.Y, Mk.Out, B0.A, B1.A, B0.D, B1.D, B0.Rim, B1.Rim, std::hypot(M.Positions[3 * Pt[0]] - Mk.X, M.Positions[3 * Pt[0] + 1] - Mk.Y), std::hypot(M.Positions[3 * Pt[1]] - Mk.X, M.Positions[3 * Pt[1] + 1] - Mk.Y));
+							}
+						}
+						WorstStep = std::max(WorstStep, Step);
+						if (Step > 0.08) ++Over;
+					}
+					if (Used != 1) continue;
+					// (the mesh's own edge, not where it runs on into the next tile)
+					for (int K = 0; K < 2; ++K)
+					{
+						const double X = M.Positions[3 * Pt[K]], Y = M.Positions[3 * Pt[K] + 1];
+						if (std::fabs(X - Tl.X0) < 0.61 || std::fabs(X - Tl.X1) < 0.61 || std::fabs(Y - Tl.Y0) < 0.61 || std::fabs(Y - Tl.Y1) < 0.61) continue;
+						double Gc[3];
+						Under.Colour(X, Y, Gc);
+						const LandField::Rgb8 C = M.Colours[Pt[K]];
+						const int Off = std::max({ std::abs(C.R - static_cast<int>(std::lround(Gc[0]))), std::abs(C.G - static_cast<int>(std::lround(Gc[1]))), std::abs(C.B - static_cast<int>(std::lround(Gc[2]))) });
+						++EdgePoints;
+						if (Off > 1) ++EdgeOff;
+						WorstOff = std::max(WorstOff, Off);
+					}
+				}
+			}
+			std::sort(Inner.begin(), Inner.end());
+			Check(WorstStep <= 0.085, "soft-edged: across its fading edge (and the flecks past it) no step between neighbouring points (0.6 m) of more than about 8% of the ground's lightness",
+			      Fmt("the biggest %.1f%%; %.0f of %.0f over 8%%", 100.0 * WorstStep, static_cast<double>(Over), static_cast<double>(Steps)) +
+			          Fmt(" (inside its edge, past the walls: half the steps under %.1f%%, 99%% under %.1f%%, the biggest %.1f%%)", Inner.empty() ? 0.0 : 100.0 * Inner[Inner.size() / 2], Inner.empty() ? 0.0 : 100.0 * Inner[Inner.size() * 99 / 100], Inner.empty() ? 0.0 : 100.0 * Inner.back()));
+			Check(EdgeOff == 0, "the burnt ground reaches the ground's own colour before its mesh's own edge, all round", Fmt("%.0f of %.0f edge points off it (the most by %.0f of 255)", static_cast<double>(EdgeOff), static_cast<double>(EdgePoints), WorstOff));
+		}
+		// ---- varied: three sizes, no two alike in outline or inside
+		{
+			int Sizes[3] = { 0, 0, 0 };
+			double AreaOf[3] = { 0.0, 0.0, 0.0 }, PastOf[3] = { 0.0, 0.0, 0.0 };
+			for (size_t K = 0; K < L.Marks.size(); ++K)
+			{
+				++Sizes[L.Marks[K].Size];
+				AreaOf[L.Marks[K].Size] += All[K].Area;
+				PastOf[L.Marks[K].Size] += All[K].Past;
+			}
+			for (int K = 0; K < 3; ++K)
+			{
+				AreaOf[K] /= std::max(1, Sizes[K]);
+				PastOf[K] /= std::max(1, Sizes[K]);
+			}
+			double LeastOutline = 1e9, LeastInside = 1e9;
+			for (size_t A = 0; A < All.size(); ++A)
+				for (size_t B = A + 1; B < All.size(); ++B)
+				{
+					double O = 0.0, I = 0.0;
+					for (size_t K = 0; K < All[A].Outline.size(); ++K) O += std::fabs(All[A].Outline[K] - All[B].Outline[K]) / static_cast<double>(All[A].Outline.size());
+					for (size_t K = 0; K < All[A].Inside.size(); ++K) I += std::fabs(All[A].Inside[K] - All[B].Inside[K]) / static_cast<double>(All[A].Inside.size());
+					LeastOutline = std::min(LeastOutline, O);
+					if (I < LeastInside && std::getenv("LAND_FIELD_SCORCH_WORST"))
+					{
+						std::printf("    likest insides %.3f: marks at %.1f, %.1f (size %d) and %.1f, %.1f (size %d):", I, L.Marks[A].X, L.Marks[A].Y, L.Marks[A].Size, L.Marks[B].X, L.Marks[B].Y, L.Marks[B].Size);
+						for (size_t K = 0; K < All[A].Inside.size(); ++K) std::printf(" %.2f/%.2f", All[A].Inside[K], All[B].Inside[K]);
+						std::printf("\n");
+					}
+					LeastInside = std::min(LeastInside, I);
+				}
+			const bool bThree = L.Marks.size() < 6 || (Sizes[0] > 0 && Sizes[1] > 0 && Sizes[2] > 0);
+			// (by how far each shows past its walls, the target's own measure: the half-burnt area also follows the
+			// cottage's own scale, 0.7 in the east village, where the small's and middle's come close)
+			Check(bThree && (Sizes[0] == 0 || Sizes[1] == 0 || PastOf[1] > 1.3 * PastOf[0]) && (Sizes[1] == 0 || Sizes[2] == 0 || PastOf[2] > 1.3 * PastOf[1]), "three clearly different sizes of burnt ground (about 1.5, 3 and 5 m past the walls, with the fade on top)",
+			      Fmt("small %.0f (shows %.1f m past its walls, ", Sizes[0], PastOf[0]) + Fmt("%.0f m2 half burnt), ", AreaOf[0]) + Fmt("middle %.0f (%.1f m, ", Sizes[1], PastOf[1]) + Fmt("%.0f m2), ", AreaOf[1]) + Fmt("large %.0f (%.1f m, ", Sizes[2], PastOf[2]) + Fmt("%.0f m2)", AreaOf[2]));
+			Check(All.size() < 2 || (LeastOutline >= 0.3 && LeastInside >= 0.03), "no two cottages' marks alike in outline or inside",
+			      Fmt("the likest two differ by %.2f m in reach on the mean, the likest insides by %.3f of the ground's lightness", LeastOutline, LeastInside));
+		}
+		// ---- where two meet, the darker of the two (never the two piled up); under a tank's shade
+		{
+			size_t Both = 0, Wrong = 0;
+			double DarkestBoth = 9.0, ProductThere = 9.0;
+			for (size_t T = 0; T < L.PerTile.size(); ++T)
+			{
+				const LandField::Mesh& M = L.PerTile[T];
+				for (size_t P = 0; P < M.Points(); ++P)
+				{
+					const double X = M.Positions[3 * P], Y = M.Positions[3 * P + 1];
+					double Gc[3];
+					if (!Under.Colour(X, Y, Gc)) continue;
+					int In = 0;
+					double Least = 1e9, Product = 1.0;
+					for (const LandScorch::Mark& Mk : L.Marks)
+					{
+						const LandScorch::Burn B = LandScorch::BurnAt(Mk, X, Y);
+						if (B.A <= 0.2) continue;
+						double C[3];
+						LandScorch::Paint(B, Gc, C);
+						const double Rel = Light(C[0], C[1], C[2]) / std::max(1.0, Light(Gc[0], Gc[1], Gc[2]));
+						Least = std::min(Least, Rel);
+						Product *= Rel;
+						++In;
+					}
+					if (In < 2) continue;
+					++Both;
+					const double Laid = Light(M.Colours[P]) / std::max(1.0, Light(Gc[0], Gc[1], Gc[2]));
+					if (Laid < Least - 0.012) ++Wrong; // (darker than the darker of the two: piled up)
+					if (Laid < DarkestBoth)
+					{
+						DarkestBoth = Laid;
+						ProductThere = Product;
+					}
+				}
+			}
+			double Mean = 0.0, Least = 9.0;
+			for (const Stats& St : All)
+			{
+				Mean += St.MeanRel / static_cast<double>(All.size());
+				Least = std::min(Least, St.MinRel);
+			}
+			Check(Wrong == 0, "where two marks meet never darker than the darker of the two, never both piled up",
+			      Both ? Fmt("%.0f points under two or more; the darkest %.2f of the ground's lightness, where the two multiplied would be %.2f", static_cast<double>(Both), DarkestBoth, ProductThere) + Fmt(" (%.0f off)", static_cast<double>(Wrong))
+			           : std::string("no two meet on this field"));
+			std::printf("    under a tank's footprint shade as it is (LandShade, belly 0.35, edge 0.5, multiplying what is behind it): grass 0.35 and 0.50; the burnt ground's mean %.2f gives %.2f and %.2f; its darkest %.2f gives %.2f and %.2f (the old skirt, about 0.45, gave 0.16 and 0.23)\n",
+			            Mean, Mean * 0.35, Mean * 0.5, Least, Least * 0.35, Least * 0.5);
+			// The shade lifted over the burn (LandScorch::ShadeOver, for the shade's own lane to take): at every laid point
+			// the result the darker of the burnt ground and the unburnt ground shaded, never their product.
+			size_t ShadeWrong = 0, ShadePts = 0;
+			double ShadeDark[2] = { 9.0, 9.0 };
+			const double Shades[2] = { 0.35, 0.5 };
+			for (const LandField::Mesh& M : L.PerTile)
+				for (size_t P = 0; P < M.Points(); ++P)
+				{
+					double Gc[3];
+					if (!Under.Colour(M.Positions[3 * P], M.Positions[3 * P + 1], Gc)) continue;
+					const double Lu = std::max(1.0, Light(Gc[0], Gc[1], Gc[2])), Lb = Light(M.Colours[P]);
+					++ShadePts;
+					for (int K = 0; K < 2; ++K)
+					{
+						const double Got = Lb * LandScorch::ShadeOver(Shades[K], Lb / Lu), Want = std::min(Lb, Lu * Shades[K]);
+						if (std::fabs(Got - Want) > 0.01 * Lu) ++ShadeWrong;
+						ShadeDark[K] = std::min(ShadeDark[K], Got / Lu);
+					}
+				}
+			Check(ShadeWrong == 0 && ShadeDark[0] >= std::min(0.35, Least) - 0.01 && ShadeDark[1] >= std::min(0.5, Least) - 0.01, "under a tank's shade lifted by LandScorch::ShadeOver: the darker of the burnt ground and the shaded grass, never their product",
+			      Fmt("%.0f points; the darkest under the belly %.2f, under the edge %.2f of the unburnt ground's lightness", static_cast<double>(ShadePts), ShadeDark[0], ShadeDark[1]) +
+			          Fmt(" (multiplied as now: %.2f and %.2f)", Least * 0.35, Least * 0.5));
+		}
+		// ---- for the neighbours: the clutter thinned on the burnt ground (Ground::AddBurn, fed the rounds by
+		// LandScorch::FeedBurn), and the share of light the burn leaves (LandScorch::ShareAt, for the vehicles' footprint shade)
+		{
+			size_t CoreOld = 0, CoreNew = 0, FirstOld = 0, FirstNew = 0, Rounds = 0, BadRounds = 0;
+			double FirstCore = 0.0, FirstOuter = 0.0, BiggestOuter = 0.0, LeastGap = 1e9;
+			for (size_t K = 0; K < L.Marks.size(); ++K)
+			{
+				const std::vector<LandScorch::Round> Rs = LandScorch::RoundsOf(L.Marks[K]);
+				for (const LandScorch::Round& Rd : Rs)
+				{
+					++Rounds;
+					if (!(Rd.Core >= 0.0 && Rd.Core < Rd.Outer && Rd.Outer <= 60.0) || !std::isfinite(Rd.X) || !std::isfinite(Rd.Y)) ++BadRounds;
+					BiggestOuter = std::max(BiggestOuter, Rd.Outer);
+					LeastGap = std::min(LeastGap, Rd.Outer - Rd.Core);
+				}
+				if (Rs.size() != 1 + static_cast<size_t>(L.Marks[K].Pieces)) ++BadRounds;
+				// (the whole mark's round, the first: what stands in its core with the word and without)
+				const LandScorch::Round& Rd = Rs[0];
+				std::vector<LandField::Placed> Cn, Co;
+				G.Clutter(Rd.X - Rd.Core, Rd.Y - Rd.Core, Rd.X + Rd.Core, Rd.Y + Rd.Core, Cn);
+				GO.Clutter(Rd.X - Rd.Core, Rd.Y - Rd.Core, Rd.X + Rd.Core, Rd.Y + Rd.Core, Co);
+				size_t On = 0, Oo = 0;
+				for (const LandField::Placed& P : Cn) On += std::hypot(P.X - Rd.X, P.Y - Rd.Y) < Rd.Core ? 1 : 0;
+				for (const LandField::Placed& P : Co) Oo += std::hypot(P.X - Rd.X, P.Y - Rd.Y) < Rd.Core ? 1 : 0;
+				CoreNew += On;
+				CoreOld += Oo;
+				if (K == 0)
+				{
+					FirstOld = Oo;
+					FirstNew = On;
+					FirstCore = Rd.Core;
+					FirstOuter = Rd.Outer;
+				}
+			}
+			std::printf("    rounds for the clutter (LandScorch::RoundsOf): %zu for %zu marks (one for the whole mark and one for each char piece), the largest Outer %.1f m, the least Outer - Core %.2f m\n", Rounds, L.Marks.size(), BiggestOuter, LeastGap);
+			Check(BadRounds == 0, "every mark's rounds for the clutter: one for the whole mark and one for each char piece, each its Core under its Outer and its Outer no more than 60 m",
+			      Fmt("%.0f rounds, %.0f wrong; ", static_cast<double>(Rounds), static_cast<double>(BadRounds)) + Fmt("the largest Outer %.1f m", BiggestOuter));
+			std::printf("    clutter on the burnt ground: the first mark at %.1f, %.1f (its core %.1f m round, faded out by %.1f m): %zu pieces in its core without the word, %zu with it; all %zu marks' cores %zu and %zu\n",
+			            L.Marks.empty() ? 0.0 : L.Marks[0].X, L.Marks.empty() ? 0.0 : L.Marks[0].Y, FirstCore, FirstOuter, FirstOld, FirstNew, L.Marks.size(), CoreOld, CoreNew);
+			Check(CoreOld == 0 || static_cast<double>(CoreNew) <= 0.5 * static_cast<double>(CoreOld), "the clutter thinned on the burnt ground: in the marks' cores under half of it stays (3 things in 10, and the stones)",
+			      CoreOld ? Fmt("%.0f of %.0f stay (%.0f%%)", static_cast<double>(CoreNew), static_cast<double>(CoreOld), 100.0 * static_cast<double>(CoreNew) / static_cast<double>(CoreOld)) : std::string("no clutter in the marks' cores to thin on this field"));
+		}
+		{
+			const std::vector<LandScorch::Mark> Marks = LandScorch::MarksOf(G, FN);
+			// Each mark's own darkest share, alone (a 0.3 m grid over its box).
+			std::vector<double> Darkest(Marks.size(), 1.0);
+			for (size_t K = 0; K < Marks.size(); ++K)
+			{
+				const LandScorch::Mark& M = Marks[K];
+				for (double Y = M.Y - M.Out; Y <= M.Y + M.Out; Y += 0.3)
+					for (double X = M.X - M.Out; X <= M.X + M.Out; X += 0.3) Darkest[K] = std::min(Darkest[K], LandScorch::ShareOf(LandScorch::BurnAt(M, X, Y)));
+			}
+			// Far from every cottage 1; inside each mark below 1; never under the darkest share of the marks over a
+			// point (a little slack: that darkest is found on a grid); between neighbouring points of the laid grid (0.6 m)
+			// across a mark's fading edge no step over the soft edge's own bound (0.09, its check above).
+			size_t Far = 0, FarOff = 0, Below = 0, Steps = 0, Over = 0, Inside = 0;
+			double FarWorst = 1.0, UnderWorst = 9.0, WorstStep = 0.0, WorstAll = 0.0, Deepest = 1.0;
+			for (size_t K = 0; K < Marks.size(); ++K)
+			{
+				const LandScorch::Mark& M = Marks[K];
+				for (int A = 0; A < 16; ++A)
+				{
+					const double Th = A * 3.14159265358979323846 / 8.0;
+					const double X = M.X + (M.Out + 1.0) * std::cos(Th), Y = M.Y + (M.Out + 1.0) * std::sin(Th);
+					bool bNear = false;
+					for (const LandScorch::Mark& Mo : Marks) bNear = bNear || std::hypot(X - Mo.X, Y - Mo.Y) <= Mo.Out;
+					if (bNear) continue;
+					++Far;
+					const double Sh = LandScorch::ShareAt(Marks, X, Y);
+					if (Sh != 1.0) ++FarOff;
+					FarWorst = std::min(FarWorst, Sh);
+				}
+				const double Mid = LandScorch::ShareAt(Marks, M.X, M.Y);
+				if (Mid < 1.0) ++Inside;
+				// (on the grid the burnt ground is laid on, LandScorch::Step, the same everywhere: the points the soft
+				// edge's own check reads)
+				const double Sp = LandScorch::Step;
+				const int N = static_cast<int>(std::ceil(M.Out / Sp));
+				const double GX = std::round(M.X / Sp), GY = std::round(M.Y / Sp);
+				for (int J = -N; J <= N; ++J)
+					for (int I = -N; I <= N; ++I)
+					{
+						const double X = (GX + I) * Sp, Y = (GY + J) * Sp;
+						const double Sh = LandScorch::ShareAt(Marks, X, Y);
+						Deepest = std::min(Deepest, Sh);
+						// (the fading edge as the soft edge's check above reads it: the rim of the mark most burnt there)
+						double Floor = 1.0, Rim = 0.0, Most = 0.0;
+						for (size_t Q = 0; Q < Marks.size(); ++Q)
+						{
+							const LandScorch::Burn B = LandScorch::BurnAt(Marks[Q], X, Y);
+							if (B.A <= 0.0) continue;
+							Floor = std::min(Floor, Darkest[Q]);
+							if (B.A > Most)
+							{
+								Most = B.A;
+								Rim = B.Rim;
+							}
+						}
+						if (Sh < Floor - 0.02) ++Below;
+						UnderWorst = std::min(UnderWorst, Sh - Floor);
+						for (int Dir = 0; Dir < 2; ++Dir)
+						{
+							const double X2 = X + (Dir == 0 ? Sp : 0.0), Y2 = Y + (Dir == 1 ? Sp : 0.0);
+							const double S2 = LandScorch::ShareAt(Marks, X2, Y2);
+							double Rim2 = 0.0, Most2 = 0.0;
+							for (const LandScorch::Mark& Mo : Marks)
+							{
+								const LandScorch::Burn B = LandScorch::BurnAt(Mo, X2, Y2);
+								if (B.A > Most2)
+								{
+									Most2 = B.A;
+									Rim2 = B.Rim;
+								}
+							}
+							const double Step = std::fabs(S2 - Sh);
+							WorstAll = std::max(WorstAll, Step);
+							if (!(Rim > 0.0 || Rim2 > 0.0)) continue;
+							++Steps;
+							WorstStep = std::max(WorstStep, Step);
+							if (Step > 0.09) ++Over;
+						}
+					}
+			}
+			double DarkestAll = 1.0;
+			for (const double D : Darkest) DarkestAll = std::min(DarkestAll, D);
+			std::printf("    share of light the burn leaves (LandScorch::ShareAt, for the footprint shade): %.0f marks, the darkest of a mark alone %.2f, the darkest sampled %.2f\n", static_cast<double>(Marks.size()), DarkestAll, Deepest);
+			Check(Marks.size() == L.Marks.size() && Far > 0 && FarOff == 0, "ShareAt is 1 far from every cottage (16 points round each mark, a metre past its box)",
+			      Fmt("%.0f points, %.0f not 1 (the least %.3f)", static_cast<double>(Far), static_cast<double>(FarOff), FarWorst));
+			Check(Inside == Marks.size(), "ShareAt is below 1 inside every mark (at its middle)", Fmt("%.0f of %.0f", static_cast<double>(Inside), static_cast<double>(Marks.size())));
+			Check(Below == 0, "ShareAt never below the darkest share of the marks over a point (where marks meet the darker, never the two multiplied)",
+			      Fmt("%.0f points under it; the closest %.3f over it", static_cast<double>(Below), UnderWorst));
+			Check(Over == 0, "ShareAt soft across a mark's fading edge: no step between neighbouring points 0.6 m apart over 0.09 (the soft edge's bound)",
+			      Fmt("the biggest %.3f; %.0f of %.0f steps over (inside the edge, the biggest anywhere %.3f)", WorstStep, static_cast<double>(Over), static_cast<double>(Steps), WorstAll));
+			// ShareAt is the burnt ground's lightness over the unburnt ground's as laid: at every laid point, its colour's
+			// lightness over the ground's own as drawn there, within 0.01 (the bytes' rounding), held back toward a lane, a
+			// bank, a floor, a wall or water as Lay holds it (the points within nine steps of 0.6 m of one counted apart too).
+			std::unordered_map<uint64_t, bool> HeldAt;
+			auto HeldHere = [&](int64_t I, int64_t J) {
+				const uint64_t Key = (static_cast<uint64_t>(I) << 32) ^ static_cast<uint64_t>(J & 0xFFFFFFFF);
+				const auto Found = HeldAt.find(Key);
+				if (Found != HeldAt.end()) return Found->second;
+				const double X = static_cast<double>(I) * LandScorch::Step, Y = static_cast<double>(J) * LandScorch::Step;
+				LandField::Drawn What = LandField::Drawn::Pasture;
+				G.HeightAt(X, Y, &What);
+				using LandField::Drawn;
+				const bool bHeld = What == Drawn::Lane || What == Drawn::Bank || What == Drawn::Floor || What == Drawn::Wall || What == Drawn::Water || What == Drawn::Marsh || Under.TileOf(X, Y) < 0;
+				HeldAt.emplace(Key, bHeld);
+				return bHeld;
+			};
+			const double Shades[5] = { 0.2, 0.35, 0.5, 0.7, 0.9 };
+			size_t Laid = 0, LaidOff = 0, NearHeld = 0, NearOff = 0, ShadeOff = 0;
+			double LaidWorst = 0.0, NearWorst = 0.0, ShadeWorst = 0.0;
+			for (const LandField::Mesh& Me : L.PerTile)
+				for (size_t P = 0; P < Me.Points(); ++P)
+				{
+					const double X = Me.Positions[3 * P], Y = Me.Positions[3 * P + 1];
+					double Gc[3];
+					if (!Under.Colour(X, Y, Gc)) continue;
+					const double Lu = std::max(1.0, Light(Gc[0], Gc[1], Gc[2])), Lb = Light(Me.Colours[P]);
+					const double Sh = LandScorch::ShareAt(Marks, X, Y), Got = Lb / Lu;
+					++Laid;
+					const int64_t I = std::llround(X / LandScorch::Step), J = std::llround(Y / LandScorch::Step);
+					bool bNear = false;
+					for (int64_t B = J - 9; B <= J + 9 && !bNear; ++B)
+						for (int64_t A = I - 9; A <= I + 9 && !bNear; ++A) bNear = HeldHere(A, B);
+					const double D = std::fabs(Got - Sh);
+					if (D > 0.01) ++LaidOff;
+					LaidWorst = std::max(LaidWorst, D);
+					if (bNear)
+					{
+						++NearHeld;
+						if (D > 0.01) ++NearOff;
+						NearWorst = std::max(NearWorst, D);
+					}
+					// (the footprint shade over it: the ground drawn, Lb x ShadeOver(S, ShareAt), against unburnt x min(ShareAt, S))
+					for (const double Sd : Shades)
+					{
+						const double Want = Lu * std::min(Sh, Sd), Is = Lb * LandScorch::ShadeOver(Sd, Sh);
+						const double Off = std::fabs(Is - Want) / Lu;
+						if (Off > 0.01) ++ShadeOff;
+						ShadeWorst = std::max(ShadeWorst, Off);
+					}
+				}
+			std::printf("    ShareAt against the burnt ground as laid: %zu points, the most off %.4f; %zu of them within 5.4 m of what Lay holds back (%zu off by over 0.01, the most %.4f)\n", Laid, LaidWorst, NearHeld, NearOff, NearWorst);
+			Check(LaidOff == 0, "ShareAt is the burnt ground's lightness over the unburnt ground's as laid, within 0.01 at every laid point (held back toward a lane, bank, floor, wall or water as Lay holds it)",
+			      Fmt("%.0f of %.0f points off by over 0.01, ", static_cast<double>(LaidOff), static_cast<double>(Laid)) + Fmt("the most %.4f (", LaidWorst) + Fmt("%.0f of them near what is held, the most there %.4f)", static_cast<double>(NearHeld), NearWorst));
+			Check(ShadeOff == 0, "a footprint shade S over the burn: the laid ground times ShadeOver(S, ShareAt) is the unburnt ground times min(ShareAt, S), within 0.01 of its lightness (S 0.2, 0.35, 0.5, 0.7, 0.9, at every laid point)",
+			      Fmt("%.0f of %.0f off, ", static_cast<double>(ShadeOff), static_cast<double>(5 * Laid)) + Fmt("the most %.4f", ShadeWorst));
+			// Ground::BurntColourAt: ColourAt off every mark, and over a mark its lightness ShareAt times ColourAt's.
+			size_t Off = 0, OffMark = 0, Pts = 0;
+			double OffWorst = 0.0;
+			for (const LandScorch::Mark& M : Marks)
+				for (int K = 0; K < 64; ++K)
+				{
+					const double R = M.Out * (K % 8 + 0.5) / 8.0 + (K >= 56 ? 2.0 : 0.0), Th = K * 2.39996;
+					const double X = M.X + R * std::cos(Th), Y = M.Y + R * std::sin(Th);
+					const LandField::Rgb8 Cb = G.BurntColourAt(X, Y), Cu = G.ColourAt(X, Y);
+					const double Sh = LandScorch::ShareAt(Marks, X, Y);
+					++Pts;
+					if (Sh >= 1.0)
+					{
+						if (Cb.R != Cu.R || Cb.G != Cu.G || Cb.B != Cu.B) ++OffMark;
+						continue;
+					}
+					const double D = std::fabs(Light(Cb) / std::max(1.0, Light(Cu)) - Sh);
+					OffWorst = std::max(OffWorst, D);
+					if (D > 0.015) ++Off;
+				}
+			Check(Off == 0 && OffMark == 0, "Ground::BurntColourAt is ColourAt off every mark, and over a mark its lightness ShareAt times ColourAt's (within 0.015, the bytes' rounding)",
+			      Fmt("%.0f points; %.0f off a mark not ColourAt, ", static_cast<double>(Pts), static_cast<double>(OffMark)) + Fmt("%.0f over a mark off, the most %.4f", static_cast<double>(Off), OffWorst));
+		}
+		ScorchPictures(G, FN, Sk, RB);
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -1044,6 +2109,39 @@ int main(int Argc, char** Argv)
 		const auto& Ru = T.StandardRunsOf;
 		std::printf("  bocage hedge trees, spacing to the next: under 6 m %d, 6-12 m %d, 12-25 m %d, 25-60 m %d, over 60 m %d; runs (12 m apart at most) of 1 tree %d, 2 %d, 3 %d, 4 %d, 5 %d, 6 or more %d\n",
 		            Sp[0], Sp[1], Sp[2], Sp[3], Sp[4], Ru[0], Ru[1], Ru[2], Ru[3], Ru[4], Ru[5]);
+	}
+	// The burnt cottages (LandScorch, release 2): their look and burnt ground against the targets, the rest of the field
+	// as the old look lays it; their pictures where asked (LAND_FIELD_SCORCH_PICTURES), under the recording's sky.
+	{
+		LandFieldPicture::Sky Sk;
+		if (const Json* S = Rec.Get("sky"))
+		{
+			Sk.Hour = S->Num("hour", Sk.Hour);
+			Sk.Cover = S->Num("cover", Sk.Cover);
+			Sk.Base = S->Num("base", Sk.Base);
+			if (const Json* Ll = S->Get("latLon"); Ll && Ll->A.size() == 2)
+			{
+				Sk.Lat = Ll->A[0].N;
+				Sk.Lon = Ll->A[1].N;
+			}
+		}
+		Sk.Day = 15 + static_cast<int>((F.Month - 1) * 30.44);
+		if (std::getenv("LAND_FIELD_LATLON"))
+		{
+			Sk.Lat = F.Lat;
+			Sk.Lon = F.Lon;
+			Sk.Zone = std::round(F.Lon / 15.0) + 1.0;
+		}
+		const LandScape::Air Air = LandScape::AirOf(LandScape::LookOf(G.LookWord()), G.SnowLying());
+		if (Air.bSet)
+		{
+			const double Bocage[3] = { 0.62, 0.66, 0.70 };
+			for (int C = 0; C < 3; ++C) Sk.HazeTint[C] = Air.HazeInk[C] / Bocage[C];
+			Sk.HazeThick = Air.HazeDensity / 0.0069;
+			if (Air.Cover >= 0.0) Sk.Cover = Air.Cover;
+		}
+		ScorchChecks(G, F, Sk);
+		if (std::getenv("LAND_FIELD_SCORCH_ONLY")) return Failures ? 1 : 0; // (the burnt cottages' checks alone)
 	}
 	size_t NearMax = 0, FarMax = 0, BuiltMax = 0, NearSum = 0, FarSum = 0;
 	for (const LandField::Tile& Tl : G.Tiles())

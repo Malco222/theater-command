@@ -2412,3 +2412,96 @@ Stage `Content/Data` (LandBattles, Battle, Sound) and `Content/Models` (Soldiers
    They are laid 3 cm over the ground's height, and a far tile's coarser mesh may differ from that by more. Their
    browns should read as earth beside the field's grass under the scene's light. Look also at picture 03 at the same
    moment as before: no dark disc, the 105 mm smoke beside the camera thinning as it passes the lens.
+
+## The burnt cottages' ground (release 2, LandScorch)
+
+Brian's steppe shot of 25 November showed black jagged blobs round the burnt cottages. They were the kit's
+BurntChimney: its 'melt' skirt (one flat 143 m2 mat), its 'ash' oval and its black 'soot' chimney, drawn over the
+grass, piling up into black where two met. `Battle/LandScorch.h` (header only, its own hash, no dice from any shared
+stream) does this instead, but only on trial.
+
+**It is on trial and off by default.** The new look is behind the trial word `burntground`. Without that word the
+game and the test lay the burnt cottages exactly as before, with the kit's flat dark skirt, byte for byte the same
+as release 2 pass 2 (its head bdc185a9f) on both compilers. To turn it on, start the game with
+`-TheaterLandTrial=burntground` (or `=all`), or run the cloud test with `LAND_FIELD_TRIAL=burntground`. It goes on
+for good only from the ship list, after the Mac test and the art director's pass. With the word on:
+
+- **The model** (`Look`, from LandField's two kit hooks: the steppe's `Base::Chimney` and a region kit's
+  "BurntChimney", the east village): the 'melt' and 'ash' triangles are dropped by paint name at every level, the
+  paints checked against the points first. The stack is dull burnt brick (106,70,56 sooted to about 93,62,50 low
+  down), its top third and mouth black with soot and streaked down; the beams char brown to black; the stove a burnt
+  buff. A file that does not match falls back to `Plain`: a brick stack with a black top, the stove, a small brown slab.
+- **The ground** (`Lay`/`Into`, from `Ground::Ground`): each cottage its own mark, laid as an extra piece of its near
+  tile's mesh, a 0.6 m grid draped on the drawn ground 8 mm over it (under ruts, shell holes' skins and the
+  footprint shade), its edge points 3 cm under it. From a hash of its place: one of three sizes (showing 1.5, 3.2
+  or 5.6 m past its walls), out of round (lobes in metres), a tongue down the field's wind and often a second (each
+  a capsule narrowing no faster than 0.5 m a metre, joined smoothly), a ragged edge falling straight to the ground
+  over 2.5 to 3.5 m from a ring of 0.70 to 0.77 of the ground's lightness, grass islands, faint flecks past it.
+  Inside, 1 to 3 m drifts of ash-grey, burnt brown and black earth, and 2 to 4 broken char pieces off its middle
+  (its darkest, 0.46). Hues umber and ochre (G - B no less than R - G) so a blue haze does not turn them mauve; the
+  ground's hue is turned to the burn's before it darkens, so a little burnt is singed straw, not olive. Under snow:
+  char in broken pieces on the walls' floor and a metre past, a thawed wet-earth ring, dirty snow at its edge.
+  Where two marks meet the darker is drawn, never the product. Held off lanes, banks, floors, walls, water and
+  marsh, fading over 4.5 m toward them (the lesser of that and its own fall, not the product). Where it is held back
+  is worked out once, by `MarksOf`, and carried by each mark (`Hold`), so the laid sheet, `BurntColourAt` and
+  `ShareAt` all hold it back alike.
+- **The switch**: the trial word `burntground` (`Field::Tried("burntground")`, read in LandField's three hooks). The
+  test always lays the same field the other way beside it and checks both sides: without the word the kit's skirt
+  is still drawn, no burnt ground is laid, `MarksOf` gives no marks and `Ground::BurntColourAt` is `ColourAt`
+  exactly; with it there is one mark for each cottage and the skirt is gone. The checks of the look itself run only
+  with the word.
+
+For the neighbours (a marked block at the end of `LandScorch.h`, so the look above can change without it moving):
+- **The clutter on the burn** is thinned and dried by the environments thread's `Ground::AddBurn` (its own grass
+  filter; nothing of LandScorch is in `Ground::Clutter`). `RoundsOf(Mark)` gives a mark's rounds: first one for the
+  whole mark round its middle, a Core (how far out, on the mean of 24 ways, it is still at least 0.85 burnt, about
+  2.5 to 6 m) and an Outer (where its fading edge is through, at least half a metre past the Core, at most 12 m);
+  then one small round for each of its 2 to 4 char pieces (Core half the piece's radius, Outer its radius and a
+  metre), so the thinning follows the new shapes. `FeedBurn` hands every round to `AddBurn` from the hook in
+  `Ground::Ground`, only with the word: after the bases are built, before any clutter is asked for, on one thread.
+  Without the word `AddBurn` is never called.
+- **The share of light** the burn leaves, for the ground thread's footprint shade: `MarksOf(Ground, Field)` (empty
+  without the word) and `ShareAt(Marks, X, Y)`: the burnt ground's lightness over the unburnt ground's there, as
+  `Paint` draws it (its hue turned first, at an even lightness, so the share is the same on any ground), held back
+  toward lanes as laid, never above 1, 1 off every mark, and where marks meet the smallest of theirs. The ground
+  thread multiplies a vehicle's shade S by min(1, S / share), which is `ShadeOver(S, share)`: the ground drawn is then
+  the unburnt ground times min(share, S), the darker of the burn and the shaded grass, never their product. The test
+  checks at every laid point that `ShareAt` is the laid colour's lightness over the ground's within 0.01, and that
+  the shaded result equals unburnt x min(share, S) within 0.01 for S of 0.2, 0.35, 0.5, 0.7 and 0.9; also that it is 1
+  far from every cottage, below 1 inside each mark, never under the darkest share of the marks over a point, and
+  that it has no step over 0.09 between neighbouring points of the laid grid across a fading edge.
+- **Ground::BurntColourAt**: `ColourAt` with the burn over it, for ruts and shell holes' skins to fade into; it is
+  `ColourAt` exactly without the word and off every mark.
+
+Numbers (land_field_test with LAND_FIELD_TRIAL=burntground, g++ and clang++ alike; Prokhorovka, 21 cottages; the
+winter east village, normandy-1944 with LAND_FIELD_LOOK=farmland LATLON="51.0 36.5" SNOW=0.9 MONTH=1, 15 cottages):
+
+| | Prokhorovka | winter |
+|---|---|---|
+| cost a cottage | 1,835 triangles, 1,037 points | 1,651 triangles, 944 points |
+| mark's mean lightness (share of the ground's) | 0.77 (darkest mark 0.74); the old skirt about 0.45 | 0.68 (0.62) |
+| darkest share / darkest / biggest dark piece | 0.4% / 0.46 / 0.9 m2 | char 9.9% / 0.32 / 14.5 m2 |
+| points a quarter burnt or more not R >= G >= B | 0.6% | 0.0% |
+| biggest step across the fall (0.6 m) | 7.6%, none over 8% | 7.5% |
+| shows past its walls, small / middle / large | 1.7 / 3.7 / 6.2 m | 3.1 / 4.3 / 6.8 m |
+| where two meet | darkest 0.80 against a product of 0.75 | 0.41 against 0.38 |
+| rounds for the clutter / the largest Outer | 89 / 11.9 m | 60 / 11.7 m |
+| clutter in the whole marks' cores, without the word and with it | 1,182 and 356 (30%) | 67 and 16 |
+| what stays in the cores, as drawn, over the burnt ground under it | 141,122,76 over 86,76,54 | 145,133,113 over 132,118,100 |
+| darkest share any mark gives (ShareAt) | 0.46 | 0.32 |
+| ShareAt against the laid sheet, the most off | 0.006 | 0.003 |
+| chimney's sides | mean 58,42,36 (old 56,45,41), lower 93,62,50, top 38,31,27 | the same |
+
+Not done here:
+- What `AddBurn` leaves standing on the burn reads pale: drawn at 141,122,76 (lightness 122) over burnt ground of
+  lightness 77, where the green grass it replaces was as light as its own ground. Straw nearer 105,84,54 (lightness
+  about 87) would sit on the umber as scorched stubble; that is the environments thread's one line in `Ground::Clutter`.
+- The steppe under full snow (Prokhorovka with LAND_FIELD_SNOW=1 MONTH=1) fails the char check: a grey sheet of some
+  20 m2 is counted as one dark piece. The look's own thread is mending it.
+- The east village in summer (normandy-1944 with LAND_FIELD_LOOK=farmland LATLON="51.0 36.5" MONTH=7) fails "no two
+  cottages' marks alike": the likest two differ by 0.19 m in reach on the mean (the bound is 0.3). The marks' shapes are
+  the look's own (MarkOf and BurnAt, unchanged here).
+- The model file still carries the skirt: the models thread is asked to drop 'melt' (or keep it for snow only) and
+  to colour the 'soot' shell as dull brick sooted at its top.
+- Ruts and shell holes' skins fade to `ColourAt`; over a burn they should fade to `BurntColourAt` (LandCrater, the
+  track marks: their lanes).

@@ -7971,6 +7971,8 @@ namespace LandField
 	}
 }
 
+#include "Battle/LandScorch.h" // (the burnt cottages' look and ground, release 2)
+
 namespace LandField
 {
 	// ====================================================================== the base meshes
@@ -9947,6 +9949,8 @@ namespace LandField
 			}
 			At(Base::Trodden).FarFrom = 60.0f;
 		}
+		// (the steppe's burnt cottage, its look of release 2 on trial, Tried("burntground"): LandScorch)
+		if (Fd.Steppe.bOn && Fd.Tried("burntground")) LandScorch::Look(Fd.Steppe.Kit, At(Base::Chimney));
 		// A region's kit (each file's text in Fd.Kit, by the name its region gives the slot; a plain stand-in for a model
 		// not given) and its own clutter.
 		if (Rg)
@@ -9968,6 +9972,7 @@ namespace LandField
 				}
 				M.Name = Name;
 				Rg->KitLook(K, M);
+				if (Fd.Tried("burntground") && M.Name == "BurntChimney") LandScorch::Look(Fd.Kit, M); // (the east village's burnt cottage)
 			}
 			for (int K = 0; K < 6; ++K) Rg->ClutterMesh(K, At(static_cast<Base>(static_cast<int>(Base::Clut0) + K)));
 			for (int K = static_cast<int>(Base::Tuft); K < static_cast<int>(Base::Clut0); ++K) Rg->OwnClutter(static_cast<Base>(K), At(static_cast<Base>(K)));
@@ -10112,7 +10117,17 @@ namespace LandField
 		Count.MeshSeconds = std::chrono::duration<double>(T2 - T1).count();
 	}
 
-	Ground::Ground(const Field& F) : In(std::make_unique<Impl>(F)) {}
+	Ground::Ground(const Field& F) : In(std::make_unique<Impl>(F))
+	{
+		// (each burnt cottage's own burnt ground, in the near tiles, on trial, Tried("burntground"): LandScorch)
+		if (F.Tried("burntground"))
+		{
+			LandScorch::Laid Burnt = LandScorch::Lay(*this, F);
+			LandScorch::FeedBurn(*this, Burnt.Marks); // (the clutter thinned and dried on it: AddBurn, before any clutter is asked for)
+			ScorchMarks = LandScorch::Into(In->TileList, std::move(Burnt));
+		}
+	}
+	Rgb8 Ground::BurntColourAt(double X, double Y) const { return ScorchMarks ? LandScorch::ColourOver(*ScorchMarks, X, Y, ColourAt(X, Y)) : ColourAt(X, Y); }
 	Ground::~Ground() = default;
 
 	double Ground::HeightAt(double X, double Y, Drawn* OutWhat) const
