@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6bc6f8fbf 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 852f0b416 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -68535,7 +68535,8 @@
   var FRONT = ["inf", "mtn", "eng", "fort", "cav"];
   var MOBILE = ["arm", "mot"];
   var GAP = 40;
-  function rowsOf2(mine4) {
+  function rowsOf2(all) {
+    const mine4 = all.filter((u) => u.team !== "snp");
     const lines2 = [mine4.filter((u) => FRONT.includes(u.kind)), mine4.filter((u) => MOBILE.includes(u.kind)), mine4.filter((u) => u.kind === "art")];
     if (!lines2[0].length && lines2[1].length) lines2[0] = lines2[1].splice(0, Math.ceil(lines2[1].length / 2));
     return lines2;
@@ -68618,7 +68619,7 @@
     });
   }
   function drawUp(mine4, side5, f, cx, lo, hi) {
-    const z = f.zones[side5];
+    const z = f.zones[side5], pairs2 = mine4.filter((u) => u.team === "snp");
     const dir = side5 === "att" ? 1 : -1;
     let front = side5 === "att" ? z[3] - 40 : z[1] + 40;
     const lines2 = rowsOf2(mine4);
@@ -68677,6 +68678,7 @@
         for (const u of held3) u.reserve = "held";
       }
       place2(lines2[2], front - dir * 230, false);
+      if (pairs2.length) place2(pairs2, front - dir * 290, false);
       return;
     }
     const rows = [];
@@ -68692,6 +68694,7 @@
     cut2(held3, wide3 || !lines2[1].length ? 110 : 170);
     for (const u of held3) u.reserve = "held";
     cut2(lines2[2], 230);
+    cut2(pairs2, 290);
     const deep = (us) => Math.max(...us.map((u) => u.d));
     const steps = (gap) => {
       const ys2 = [];
