@@ -17,7 +17,7 @@ export const CONVOY_PRACTICE: ConvoyPractice[] = [
     boats: [{ name: 'Pack', nat: 'GER', n: 6 }], escorts: [{ name: 'Escort group', nat: 'UK', n: 4 }], kit: { UK: kit(false, false, false), GER: boatsKit } },
   { title: 'Radar on the escorts', about: 'Eight boats against six escorts whose radar finds a boat on the surface in the dark', sea: 'wapp', year: 1941, month: 8,
     boats: [{ name: 'Pack', nat: 'GER', n: 8 }], escorts: [{ name: 'Escort group', nat: 'UK', n: 6 }], kit: { UK: kit(true, false, false), GER: boatsKit } },
-  { title: 'A long winter night', about: 'Twelve boats against seven escorts through seventeen hours of dark', sea: 'natl', year: 1942, month: 11,
+  { title: 'A long winter night', about: 'Twelve boats against seven escorts through a November night of fifteen and a half to nearly eighteen hours of dark', sea: 'natl', year: 1942, month: 11,
     boats: [{ name: 'Pack', nat: 'GER', n: 12 }], escorts: [{ name: 'Escort group', nat: 'UK', n: 7 }], kit: { UK: kit(true, false, false), GER: boatsKit } },
   { title: 'The hunters trained', about: 'Fifteen boats against nine escorts with radar, ahead-throwers and group training', sea: 'natl', year: 1943, month: 3,
     boats: [{ name: 'Pack', nat: 'GER', n: 15 }], escorts: [{ name: 'Escort group', nat: 'UK', n: 9 }], kit: { UK: kit(true, true, true), GER: boatsKit } },

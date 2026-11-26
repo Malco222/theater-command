@@ -454,6 +454,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, townqueue.ts; Brian 25 November 2026 13:41Z: "easy to manage the cities") What each town builds next, in order.
 			Add(TEXT("townqueuerule"), TEXT("Building queues"), TEXT("Each of your towns can be given its next buildings in order. At the opening of your month, once a town's builders are free and the treasury can pay, the next on its list is ordered for you at that day's price, as if you had pressed BUILD yourself. One the treasury cannot pay for yet waits at the head of its town's list. Your staff never touches a queue. It can be switched in any month."),
 				Now.bTownQueue ? TEXT("ON") : TEXT("OFF"), Now.bTownQueue);
+			// (Release 2, citydefences.ts; Brian 24 November 2026 22:08Z; the design director's ruling of 25 Nov 2026 02:23Z) City defences.
+			Add(TEXT("citydefencesrule"), TEXT("City defences"), TEXT("Searchlights to build beside the anti-aircraft guns. By night the guns fire almost blind unless Fighter control's radar lays them; searchlights help the radar-laid guns and the night fighters, and fail under cloud and against very large raids. A garrison digs in to the town it holds, a month at a time for up to three months, and the town's heavy guns fire on attacking tanks: if the town is stormed, one level of them is lost with it. Off, the guns are as good by night as by day, and a town is only as strong as its walls and forts. It can be switched in any month."),
+				Now.bCityDefences ? TEXT("ON") : TEXT("OFF"), Now.bCityDefences);
 			Add(TEXT("columns"), TEXT("Supply columns"), Now.bColumnsCan
 					? TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them, and what burns on the road never reaches the front. It can be switched in the campaign's first month only.")
 					: TEXT("Each month lorries carry the supplies from the railhead to the armies beyond it, and you see them on the roads. Enemy aircraft, and partisans on occupied ground, can catch them. It was set as this campaign opened, and stays as it was set."),
@@ -714,7 +717,7 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("teamsrule") || Id == TEXT("settledtownsrule") || Id == TEXT("townqueuerule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("ownwaterrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule") || Id == TEXT("airnames"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("teamsrule") || Id == TEXT("settledtownsrule") || Id == TEXT("townqueuerule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("ownwaterrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule") || Id == TEXT("airnames") || Id == TEXT("citydefencesrule"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
@@ -723,7 +726,7 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 			const FCampaignView& Now = Session->GetView();
 			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("airnames") ? Now.bAirNames : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("teamsrule") ? Now.bSupportTeams : Id == TEXT("settledtownsrule") ? Now.bSettledTowns : Id == TEXT("townqueuerule") ? Now.bTownQueue
 				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog : Id == TEXT("sailorsrule") ? Now.bSailors : Id == TEXT("ownwaterrule") ? Now.bOwnWater
-				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Id == TEXT("seekoncerule") ? Now.bSeekOnce : Id == TEXT("atomrule") ? Now.bAtomBomb : Id == TEXT("carrierstrikerule") ? Now.bCarrierStrike : Id == TEXT("wingbydaterule") ? Now.bWingByDate : Now.bColumnsOn;
+				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Id == TEXT("seekoncerule") ? Now.bSeekOnce : Id == TEXT("atomrule") ? Now.bAtomBomb : Id == TEXT("carrierstrikerule") ? Now.bCarrierStrike : Id == TEXT("wingbydaterule") ? Now.bWingByDate : Id == TEXT("citydefencesrule") ? Now.bCityDefences : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
 			{
 				const bool bBreakUpRow = Id == TEXT("breakuprule");
@@ -4097,6 +4100,22 @@ void ACampaignPlayerController::ToggleEffects()
 	SaveOptions();
 }
 
+FString ACampaignPlayerController::SafeAnswerOnPage() const
+{
+	// (A page of the rules' own only: the month's card and a raid's card have their own lit answers.)
+	if (bPageOpen && !Page.Month.bValid && !Page.Card.bValid)
+	{
+		for (const FPageButton& Button : Page.Top)
+		{
+			if (Button.bSafe && Button.bOk && !Button.Act.IsEmpty())
+			{
+				return Button.Act;
+			}
+		}
+	}
+	return FString();
+}
+
 void ACampaignPlayerController::EnterKey()
 {
 	if (IsAnswering())
@@ -6244,6 +6263,11 @@ void ACampaignPlayerController::Escape()
 		{
 			AtomBackAt = FPlatformTime::Seconds();
 			PressPage(Page.Card.Back.Act); // (release 2, atom.ts: Esc, as Enter, is BACK on a bomb raid's card: the bomb is kept)
+		}
+		else if (const FString Safe = SafeAnswerOnPage(); !Safe.IsEmpty())
+		{
+			SafeBackAt = FPlatformTime::Seconds();
+			PressPage(Safe); // (release 2, formations offered; ruling 134(f): Esc, as Enter, is GO BACK on a question asked on the page's head, and the page stays open)
 		}
 		else if (!StepBackPage()) // (release 2, tc.UI.Ease: back to the room it was reached from, where there is one)
 		{
@@ -13133,6 +13157,25 @@ void ACampaignPlayerController::EndMonth()
 	if (bEnterByKey && !bScripted && FPlatformTime::Seconds() - AtomBackAt < 0.5)
 	{
 		return;
+	}
+	// (Release 2, formations offered; the UI director's marks of 25 November 2026 under ruling 134(f).) A question asked
+	// in place on a page's head (form them all, decline them all): Enter is GO BACK, the lit answer, and nothing is
+	// formed or declined. The other answer takes a click. (END THE MONTH clicked goes on as ever.)
+	if (bEnterByKey && !bScripted)
+	{
+		const FString Safe = SafeAnswerOnPage();
+		if (!Safe.IsEmpty())
+		{
+			SafeBackAt = FPlatformTime::Seconds();
+			PressPage(Safe);
+			return;
+		}
+		// (The page is as it was before the question: a held or doubled Enter takes no key for its first half second,
+		// so that it cannot end the month he was still answering in.)
+		if (FPlatformTime::Seconds() - SafeBackAt < 0.5)
+		{
+			return;
+		}
 	}
 	// (Rulings 88 and 90.) Armies at the front that have not been touched and have no orders: the month is never
 	// barred, but he is asked once, and may tick not to be asked. With the question up, this key is its END THE

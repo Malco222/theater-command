@@ -27,7 +27,7 @@ describe('the sentence on the railway\'s row', () => {
     const berlin = g.byName['Berlin'];
     guns(g, berlin, 0); // (1.5.1: the start guns stand at Berlin, Germany's capital; this test needs bare ground)
     expect(onNet(berlin.id)).toBe(true);
-    expect(guardSays(g, berlin.id)).toMatchObject({ level: 0, coming: 0, ready: null, stops: 0, line: 'No guns guard the railway here.' });
+    expect(guardSays(g, berlin.id)).toMatchObject({ level: 0, coming: 0, ready: null, stops: 0, line: 'No guns are built here to guard the railway.' });
     guns(g, berlin, 1);
     expect(guardSays(g, berlin.id)!.line).toBe('Level 1 guns guard the railway here: they stop 15% of the bombing that would cut it.');
     guns(g, berlin, 2);
@@ -64,7 +64,7 @@ describe('the sentence on the railway\'s row', () => {
     const g = grand();
     const warsaw = g.byName['Warsaw'];
     expect(warsaw.ctrl).not.toBe('GER');
-    expect(guardSays(g, warsaw.id)).toMatchObject({ line: 'No guns guard the railway here.', order: null });
+    expect(guardSays(g, warsaw.id)).toMatchObject({ line: 'No guns are built here to guard the railway.', order: null });
     guns(g, warsaw, 2);
     expect(guardSays(g, warsaw.id)).toMatchObject({ level: 2, coming: 0, order: null, line: 'Level 2 guns guard the railway here: they stop 30% of the bombing that would cut it.' });
   });
@@ -151,7 +151,7 @@ describe('a line cut by bombing says whether guns stood there', () => {
     }));
     expect(cutThroughGuns(g, berlin.id)).toBe(0);
     expect(cutThroughGuns(g, saxony.id)).toBe(2);
-    expect(cutSays(g, berlin.id)!.line).toBe(`Bombed in ${date(g.turn)}. No guns guarded the railway here. ${STOPS} Berlin until engineers relay the track. Only engineers can be carried up to the break.`);
+    expect(cutSays(g, berlin.id)!.line).toBe(`Bombed in ${date(g.turn)}. No guns were built here to guard the railway. ${STOPS} Berlin until engineers relay the track. Only engineers can be carried up to the break.`);
     expect(cutSays(g, saxony.id)!.line).toBe(`Bombed in ${date(g.turn)}, through level 2 guns. ${STOPS} Saxony until engineers relay the track. Only engineers can be carried up to the break.`);
     // The pointing box's short line stays as built.
     expect(cutSays(g, saxony.id)!.short).toBe(`railway cut (bombed, ${date(g.turn)})`);

@@ -11,6 +11,7 @@ import data from '../../data/campaign/history.json';
 import { hashString, Rng } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import type { Game } from './types';
+import { unitsDecide } from './units';
 
 export interface Stop {
   stop: number; id: string; name: string; under: string; blurb: string; lines: string[];
@@ -77,6 +78,14 @@ export const dialRules = (g: Game): boolean => g.flags.open === 1;
 export const stopOf = (g: Game): number => (g.flags.open === 1 ? g.flags.hist ?? FREE : FREE);
 export const stopDef = (g: Game): Stop => HISTORY.stops.find((s) => s.stop === stopOf(g)) ?? HISTORY.stops.find((s) => s.stop === FREE)!;
 export const stopByNumber = (n: number): Stop | undefined => HISTORY.stops.find((s) => s.stop === n);
+/**
+ * True with Units decide on at a stop that keeps no book (stops 3 to 5): where a held row on the old chart answers an
+ * attack by land (ai.ts `answersHere`, B11) and a landing or a drop from the air on it leaves the mark of the shore it
+ * won (navy.ts `landCorps`, `shoreWon`). The design director's rulings of 14:15Z and 15:09Z, 25 November 2026 (audit
+ * item 38). At the book's stops the book's release is the record's hand, and with Units decide off nothing is read.
+ * The one definition both read: ai.ts imports navy.ts, so it lives here, where neither import leads back.
+ */
+export const unitsFree = (g: Game): boolean => unitsDecide(g) && !stopDef(g).book;
 /**
  * True where the book's restraints hold: a computer staff, at a stop that names them (b509(c), b512), in a war where
  * no player holds a seat on that front (b527: computer against computer, or not at all).

@@ -12120,6 +12120,28 @@ namespace
 			TSharedRef<SWrapBox> Box = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(6.0f, 5.0f));
 			for (const FPageButton& Button : Buttons)
 			{
+				if (Button.bSafe)
+				{
+					// (Release 2, formations offered; the UI director's marks of 25 November 2026 under ruling 134(f).) The safe
+					// answer to a question asked in place on the page's head, GO BACK: the lit button, in brass, and it shows
+					// its key. Enter and Esc press it (the controller's SafeAnswerOnPage).
+					const FLinearColor LitInk(FColor::FromHex(TEXT("1F1808")));
+					Box->AddSlot()
+					[
+						Aimed(FName(*(TEXT("act:") + Button.Act)), SNew(SButton).ButtonStyle(&BrassStyle).ContentPadding(FMargin(14.0f, 5.0f)).IsFocusable(false).IsEnabled(Button.bOk)
+						.ToolTipText(FText::FromString(Button.Tip))
+						.OnClicked_Lambda([this, Act = Button.Act]() { if (Controller.IsValid()) { Controller->PressPage(Act); } return FReply::Handled(); })
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Text(FText::FromString(Button.Label)).Font(Font(TEXT("Bold"), 10, 160)).ColorAndOpacity(LitInk)
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), LitInk)]
+						])
+					];
+					continue;
+				}
 				Box->AddSlot()
 				[
 					Aimed(FName(*(TEXT("act:") + Button.Act)), OfficeButton(*Button.Label, Button.bDanger ? Alarm : BrightBrass, Button.bOk, Button.Tip, [this, Act = Button.Act]() { if (Controller.IsValid()) { Controller->PressPage(Act); } }))
@@ -14139,6 +14161,40 @@ namespace
 						]
 						+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(FMargin(16.0f, 9.0f, 12.0f, 9.0f))[Whole]
 					])
+				];
+			}
+
+			// (Release 2, formations offered: the UI director's marks of 25 November 2026, section 1.) One row, first under
+			// the red bands: a decision, but nothing is lost this month, so it is a row and not a band. It is amber once,
+			// for an offer in its last month, because that is something due. A press opens the offers page, and the card
+			// comes back from there by BACK TO THE MONTH'S REPORT, as it does from a battle report. No row where the
+			// rules send no sentence: nothing is offered, or the offers are switched off.
+			if (!Card.OffersText.IsEmpty())
+			{
+				const FLinearColor OffersInk = Card.bOffersAmber ? Warn : Cream;
+				PageBody->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+				[
+					SNew(SBorder).BorderImage(&MonthBoxBrush).Padding(FMargin(0.0f))
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth()
+						[
+							SNew(SBox).WidthOverride(5.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Card.bOffersAmber ? Warn : Muted)]
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(FMargin(14.0f, 8.0f, 12.0f, 8.0f))
+						[
+							// (ruling 149: no sentence is cut with dots: it wraps)
+							SNew(STextBlock).Text(FText::FromString(Card.OffersText)).Font(Serif(TEXT("Bold"), 16)).ColorAndOpacity(OffersInk).AutoWrapText(true)
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+						[
+							Aimed(FName(*(TEXT("act:") + Card.OffersAct)), SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(16.0f, 8.0f)).IsFocusable(false).IsEnabled(!Card.OffersAct.IsEmpty())
+							.OnClicked_Lambda(Go(Card.OffersAct))
+							[
+								SNew(STextBlock).Text(FText::FromString(TEXT("SEE THE OFFERS"))).Font(Font(TEXT("Bold"), 10, 200)).ColorAndOpacity(Cream)
+							])
+						]
+					]
 				];
 			}
 
@@ -16206,7 +16262,9 @@ namespace
 					TSharedRef<SVerticalBox> Words = SNew(SVerticalBox)
 						+ SVerticalBox::Slot().AutoHeight()
 						[
+							// (Release 2, formations offered.) A row that sets its own lines and has no title leaves no empty line for one.
 							SNew(STextBlock).Text(FText::FromString(Entry.Title)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream)
+							.Visibility(Entry.Title.IsEmpty() && Entry.Tones.Num() > 0 ? EVisibility::Collapsed : EVisibility::Visible)
 						];
 					if (!Entry.Alarm.IsEmpty())
 					{
@@ -16216,11 +16274,17 @@ namespace
 							SNew(STextBlock).Text(FText::FromString(Entry.Alarm)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Alarm).AutoWrapText(true)
 						];
 					}
-					for (const FString& Line : Entry.Lines)
+					for (int32 LineAt = 0; LineAt < Entry.Lines.Num(); ++LineAt)
 					{
+						// (Release 2, formations offered: the UI director's marks of 25 November 2026.) A row that says how its
+						// lines are set has each plain, muted or amber (amber once, for an offer in its last month: something
+						// due). A row that says nothing is set muted throughout, as every page always was.
+						const FString& Line = Entry.Lines[LineAt];
+						const FLinearColor LineInk = !Entry.Tones.IsValidIndex(LineAt) || Entry.Tones[LineAt] == TEXT("muted") ? Muted
+							: Entry.Tones[LineAt] == TEXT("amber") ? FLinearColor(FColor(224, 161, 60)) : Cream;
 						Words->AddSlot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 						[
-							SNew(STextBlock).Text(FText::FromString(Line)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+							SNew(STextBlock).Text(FText::FromString(Line)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(LineInk).AutoWrapText(true)
 						];
 					}
 					if (Entry.Meter >= 0.0f)

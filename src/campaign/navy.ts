@@ -45,10 +45,11 @@ import { alongside, riding } from './stations';
 import { stationBars, whyStationBars } from './far';
 import { FAR_SEAS_FIRST, WORLD, farOn } from './world';
 import { PACIFIC, coversBeaches, hopAims, keepersOf, pacificGround, ringDrawn, shoreLift, skiesOver, useShoreLift, type ShoreLift } from './pacific';
-import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf, theatreOf } from './history';
-import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, placed, type Assessment } from './game';
+import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf, theatreOf, unitsFree } from './history';
+import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, hasRoom, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, roomForAll, routineNews, warning, placed, type Assessment } from './game';
+import { islandOf, roomAt, roomRefusal, roomSays } from './islands';
 import { traitFleet, traitSeaLoss } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules, housed } from './siege';
+import { SIEGE, arrive, besieged, besiegerOf, feeders, fieldCtrl, garrisonOf, roomIn, siegeRules, housed } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
 import { RES, fieldBeside, fuelFleet, laneStopped } from './resources';
 import { bargainOutputLoss, replacedDeal } from './bargains';
@@ -286,6 +287,14 @@ export const laneCounts = (rt: SeaRoute): boolean => rt.carries !== false;
 
 /** Whether the sea lane or convoy route of this id carries something laid, as every staff counts it (cargoLaid). */
 export const laneCarries = (g: Game, id: string): boolean => { const rt = seaRoutes(g).find((r) => r.id === id); return !!rt && laneCounts(rt); };
+
+/**
+ * A fleet's page on a lane whose shipping is not counted in the game (cargoLaid false), word for word (the UI director's
+ * words of 12:57Z, 25 November 2026, for the design director's ruling of 12:39Z, Pacific batch 3, A(2) and A(7)): the
+ * first in place of the tons and the sunk line, the second after it, on the fleet page and nowhere else.
+ */
+export const LANE_UNCOUNTED = 'Its shipping is not counted in the game: an escort saves no cargo here, and raiders sink none.';
+export const LANE_NO_STAFF = 'So no staff on either side, yours included, sends ships to guard or raid it.';
 
 /** Every route cargoes travel by sea, once each: what an escort can be bound to. */
 export function seaRoutes(g: Game): SeaRoute[] {
@@ -1362,7 +1371,11 @@ function whyNotQuay(g: Game, c: Corps, to: Region, rides = false): string | null
   }
   const steep = whyBarred(g, c, to);
   if (steep) return steep;
-  if (placed(g, to, c.nat).length >= STACK) return `${to.name} has no room for another corps.`;
+  // (A harbour holds five corps of a side, and an island of the Pacific its own room, said in its own words: islands.ts.
+  // On an island the quay counts as a march and a landing count, engineers apart (`hasRoom`, islands.ts engRoom): at a room of
+  // one corps the count decides what the island holds, and a ship must not be refused where a march or a landing
+  // would be let in. Every other harbour counts all the corps of a side on its quay, as it always did.)
+  if (islandOf(g, to) ? !hasRoom(g, to, c) : placed(g, to, c.nat).length >= roomAt(g, to, c.nat)) return roomRefusal(g, to, [c]) ?? roomSays(g, to) ?? `${to.name} has no room for another corps.`;
   // (A row that goes with a corps already shipped there this month sails in that corps' lift: `rides`, rider b604 to ruling 234.)
   if (!rides && ownShips !== c.nat && liftLeft(g, c.nat) < 1) return 'All the shipping is in use this month.';
   return null;
@@ -1451,7 +1464,7 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
     if (!from.seas.some((z) => to.seas.includes(z))) return `${to.name} is out of reach: the transport aircraft can cross one sea, from a coast on it to another.`;
     if (g.flags[dropKey(g, nat)]) return 'The transport aircraft can carry one airborne assault a month.';
     if (skyDenies(g, nat, to.id)) return `${g.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no transport aircraft can fly under them. Win the sky there first.`;
-    return null;
+    return islandFull(g, cs, to);
   }
   if (n.sealift <= 0) return `${n.name} has no shipping for a landing.`;
   if (cs.some((c) => (c.nat !== nat && !sailsWith(g, nat, c)) || c.reg !== from.id)) return 'A landing force sails from one port.';
@@ -1472,8 +1485,18 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (!seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: surpriseOn(g, nat, to) })) return laneWhy(g, nat, from, to, laneBar(g, nat, from, to, surpriseOn(g, nat, to)));
   // Troopships cannot cross under an enemy sky. Only surprise, or winning the sky over the beach, gets them there.
   if (!surpriseOn(g, nat, to) && skyDenies(g, nat, to.id)) return `${g.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`;
-  return null;
+  // (The island's room is asked last, of a force that could otherwise sail: every older refusal is said as it was.)
+  return islandFull(g, cs, to);
 }
+
+/**
+ * An island of the Pacific takes no more corps ashore than it has room for, those of the force's side already on it
+ * counted and engineers apart, as a march counts them (rulings 173(b) and 179(s): "the limit of an open beach is the
+ * island's room of one corps and what the corps carries"). The island's own sentence where the force is too many
+ * ("Wake has room for one corps."), or null: always null for ground that is no island of the table, and with the far
+ * side off.
+ */
+const islandFull = (g: Game, cs: Corps[], to: Region): string | null => (islandOf(g, to) && !roomForAll(g, to, cs) ? roomRefusal(g, to, cs) ?? roomSays(g, to) : null);
 
 /** What a force is worth in divisions: size times strength. */
 const worthOf = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs * c.str, 0);
@@ -1846,6 +1869,9 @@ export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[]
   if (why) return { ok: false, why };
   const nat = cs[0].nat, from = g.regions[cs[0].reg];
   const held = to.ctrl;
+  // (Whose army held the field there before the landing, to tell a shore the landing wins: on the far side, and on the
+  // old chart under Units decide at a stop that keeps no book. Below.)
+  const field = farOn(g) || unitsFree(g) ? fieldCtrl(g, to) : null;
   const air = airborne(cs);
   const surprise = !air && surpriseOn(g, nat, to);
   const rode = air ? [] : riding(g, cs);
@@ -1876,6 +1902,21 @@ export function landCorps(g: Game, cs: Corps[], to: Region, fight?: (cs: Corps[]
   }
   for (const c of cs) if (!c.dead) c.ap = 0;
   if (taken) for (const c of rode) if (!c.dead) c.hold = false;
+  // (The far side: a shore won from the sea is marked with its month, as the ground changes hands or the army is
+  // first laid round a town that holds. The staff's answer by land reads it to tell a beach from ground an enemy
+  // marched into: ai.ts `beach`, the design director's B11 of 25 November 2026. The mark above, `landedAt`, is
+  // written as the landing sails, whatever becomes of it: a landing thrown back in the month the province then
+  // fell to a march read as a beach by it, and a second wave put ashore round a town still holding wiped the first
+  // wave's month. The skeptic's finding. Ground won by a drop from the air is marked the same way, on the same
+  // condition: the design director's ruling of 13:39Z, 25 November 2026, on B11's eighth point, "a drop from the air
+  // is answered as a landing: mark it like a beach, so b641's landing answer governs it, not B11's march overland".
+  // As built a drop left no mark, and the held rows on its front answered it as if the enemy had marched in.
+  // With the far side off it is marked on the old chart too, a landing and a drop alike, under Units decide at a
+  // stop that keeps no book (history.ts `unitsFree`), where the held rows there answer an attack by land: the
+  // design director's ruling of 15:09Z, 25 November 2026, point 4, "written under Units decide at stops 3 to 5, so a
+  // beach reads as a landing (b641) and a drop as one, never as an entry by land". Nothing is marked with the far
+  // side off and Units decide off, nor at the book's stops with the far side off.)
+  if (field !== null && taken && (to.ctrl !== held || fieldCtrl(g, to) !== field)) g.flags[`shoreWon:${to.id}`] = g.turn;
   const adj = g.nations[nat].adj;
   if (air) headline(g, 'battle', taken ? `${adj} airborne troops take ${to.name} from the air.` : `A ${adj} airborne assault on ${to.name} is beaten off with heavy loss.`, nat, to.id, { arm: 'land', won: taken ? nat : held, lost: taken ? held : nat });
   else headline(g, 'battle', taken ? `${adj} troops land at ${to.name} from the sea.` : `A ${adj} landing at ${to.name} is thrown back into the sea.`, nat, to.id, { arm: 'land', won: taken ? nat : held, lost: taken ? held : nat });

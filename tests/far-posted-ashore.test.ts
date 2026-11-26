@@ -7,11 +7,18 @@
 // division raised at home now comes ashore, on its date, at its country's nearest held port to the posting, and the
 // staff posts it. A local levy keeps the old rule, and so does a row that takes corps already on the board: only
 // what such a row adds from home comes ashore, and nobody is counted twice.
+//
+// Since the design director's ruling B7 of 25 November 2026 (design-director/pacific-japan-1125.md) that is the rule of
+// the rows a book dates alone (stops 1 and 2, `ashoreFor`). Everywhere else one rule reads every country's rows, the
+// player's too (`postedFor`; tests/far-dated-rows-b7.test.ts): a row posted on ground its side does not hold forms at
+// its country's nearest held harbour in the same theatre, else at its capital, and a row raised for an operation
+// waits for its war. Three tests here pinned what that ruling changed, and say so where they stand.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { allied, ashoreFor, createGame, declareWar, friendlyUnits, relocate, setWar, startPhase } from '../src/campaign/game';
+import { allied, ashoreFor, createGame, declareWar, relocate, setWar, startPhase } from '../src/campaign/game';
+import { setStop } from '../src/campaign/history';
 import { homeland } from '../src/campaign/middleeast';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -58,18 +65,30 @@ describe('a posted division comes ashore where its posting is lost (rider b642 p
     expect(g.corps.filter((x) => x.nat === 'JAP' && x.name === CANTON)).toHaveLength(1);
   });
 
-  it('a posting a neutral holds is the same: the 65th Brigade for Luzon comes ashore on its date with America at peace', () => {
+  // (Changed by ruling B7. This test read "a posting a neutral holds is the same: the 65th Brigade for Luzon comes
+  // ashore on its date with America at peace", at Japan's nearest held port. A row the record raised for an operation
+  // now forms when that war has begun, never on its date; and with no harbour of Japan's in the Philippines it forms
+  // at home. By the book, stops 1 and 2, the brigade still comes on its date, for the dated landings that sail it.)
+  it('a posting a neutral holds: the 65th Brigade for Luzon waits for the war with America, and then forms at home while Japan holds no harbour in the Philippines', () => {
     const g = war();
     const lingayen = g.byName['Lingayen'];
     expect(lingayen.ctrl).toBe('USA');
     month(g, 29);
+    expect(row(g, BRIGADE)).toBeUndefined();
+    // No half year runs against a row that waits for its war.
+    month(g, 40);
+    expect(row(g, BRIGADE)).toBeUndefined();
+    setWar(g, 'JAP', 'USA');
+    month(g, 41);
     const c = row(g, BRIGADE)!;
-    const at = g.regions[c.reg];
     // (6,651 men, 0.44 of a division: the director's order for Luzon, (3), of 21 November 2026.)
-    expect([at.port, at.ctrl, c.hold, c.str, c.full]).toEqual([true, 'JAP', false, 0.44, 0.44]);
-    // The nearest port Japan holds with room: nothing nearer was passed over but for want of room or an enemy on it.
-    const nearer = g.regions.filter((r) => r.port && r.ctrl === 'JAP' && mapDist2(g, r.x, r.y, lingayen.x, lingayen.y) < mapDist2(g, at.x, at.y, lingayen.x, lingayen.y));
-    for (const r of nearer) expect(friendlyUnits(g, r, 'JAP').filter((u) => u.kind !== 'eng').length, r.name).toBeGreaterThanOrEqual(3);
+    expect([homeland(g.regions[c.reg], 'JAP'), g.regions[c.reg].ctrl, c.hold, c.str, c.full]).toEqual([true, 'JAP', false, 0.44, 0.44]);
+    // By the book it comes on its date as it did, at a port of Japan's, with America at peace.
+    const b = war();
+    setStop(b, 1, true);
+    month(b, 29);
+    const d = row(b, BRIGADE)!;
+    expect([b.regions[d.reg].port, b.regions[d.reg].ctrl, d.hold, d.str]).toEqual([true, 'JAP', false, 0.44]);
   });
 
   it('a row that takes corps already on the board keeps the old rule: the 18th Division is not brought to Rangoon\'s coast', () => {
@@ -149,15 +168,21 @@ describe('a posted division comes ashore where its posting is lost (rider b642 p
     const WHOLE = 'Tientsin-Pukow railway garrison (21st Division)', REST = 'Tientsin-Pukow railway garrison (21st Division, less its Bataan detachment)', PART = '21st Division detachment (for Bataan)';
     // (Since (g) of 21 November 2026 the detachment names each row that may make its cut: this one at stops 3 to 5, the 17th Division's taking over Hsuchow at the book's stops, far-21st-division.)
     expect(dated(PART)[6].cut).toEqual([REST, '13th Army (17th Division, Hsuchow)']);
-    // Hsuchow held: the garrison is cut to 0.65 and the quarter for Bataan comes, ashore where Lingayen is not Japan's.
+    // Hsuchow held: the garrison is cut to 0.65 and the quarter for Bataan comes, at home where Lingayen is not Japan's.
+    // (Changed by ruling B7: the detachment is a row for Luzon with no war of its own, so it waits for the war with
+    // America, and with no harbour of Japan's in the Philippines it forms at home, not at the nearest port anywhere.
+    // The three wars here are at war with America, as the record's was by January 1942.)
     const g = war();
     expect(g.regions[row(g, WHOLE)!.reg].name).toBe('Hsuchow');
     month(g, 30);
+    expect([row(g, REST)!.str, row(g, PART), row(g, WHOLE)]).toEqual([0.65, undefined, undefined]);
+    setWar(g, 'JAP', 'USA');
+    month(g, 31);
     const rest = row(g, REST)!, part = row(g, PART)!;
-    expect(row(g, WHOLE)).toBeUndefined();
-    expect([rest.str, part.str, g.regions[part.reg].ctrl, g.regions[part.reg].port, part.hold]).toEqual([0.65, 0.25, 'JAP', true, false]);
+    expect([rest.str, part.str, g.regions[part.reg].ctrl, homeland(g.regions[part.reg], 'JAP'), part.hold]).toEqual([0.65, 0.25, 'JAP', true, false]);
     // Hsuchow lost on the date: the garrison stays whole where it stands, and no quarter is counted twice.
     const h = war();
+    setWar(h, 'JAP', 'USA');
     lose(h, 'Hsuchow', 'CHN', 'Tsinan');
     for (const t of [30, 33, 37]) {
       month(h, t);
@@ -167,6 +192,7 @@ describe('a posted division comes ashore where its posting is lost (rider b642 p
     }
     // Hsuchow retaken inside the half year: the cut is made and the detachment comes then.
     const k = war();
+    setWar(k, 'JAP', 'USA');
     const hsuchow = lose(k, 'Hsuchow', 'CHN', 'Tsinan');
     month(k, 30);
     expect(row(k, PART)).toBeUndefined();
@@ -202,9 +228,15 @@ describe('a posted division comes ashore where its posting is lost (rider b642 p
     expect([indian?.at.ctrl, indian?.at.port, indian?.adds]).toEqual(['UK', true, null]);
   });
 
-  it("the player's Japan is as it was: such a row forms at home and shipping it is his business", () => {
+  // (Changed by ruling B7. This test read "the player's Japan is as it was: such a row forms at home and shipping it
+  // is his business", and the brigade stood at Tokyo in January 1942 with America at peace. The player's rows are
+  // under the one rule now: tests/far-dated-rows-b7.test.ts.)
+  it("the player's Japan is under the same rule: the brigade waits for its war, and with no harbour in the Philippines it forms at home, his to ship", () => {
     const g = war('JAP');
     month(g, 29);
+    expect(row(g, BRIGADE)).toBeUndefined();
+    setWar(g, 'JAP', 'USA');
+    month(g, 30);
     const c = row(g, BRIGADE)!;
     expect(homeland(g.regions[c.reg], 'JAP')).toBe(true);
   });

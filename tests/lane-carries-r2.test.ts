@@ -8,17 +8,22 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { createGame, declareWar } from '../src/campaign/game';
 import { escortLanes } from '../src/campaign/fleets';
-import { NAVY, fleetReach, laneCarries, laneCounts, lanesTo, navalAI, seaRoutes, shippingIn, whyNotEscort, zoneOf } from '../src/campaign/navy';
+import { LANE_NO_STAFF, LANE_UNCOUNTED, NAVY, fleetReach, laneCarries, laneCounts, laneNear, lanesTo, navalAI, seaRoutes, shippingIn, whyNotEscort, zoneOf } from '../src/campaign/navy';
 import { RES } from '../src/campaign/resources';
+import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
+import { humanUp, stepAI } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
+import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
 const war = (): Game => { const g = startOpen(createGame(3, null)); declareWar(g, 'JAP', 'USA'); return g; };
+/** The Pacific's three lanes laid after the ruling (the Japan and Pacific thread, batch 3): their stores are not read yet, so they carry nothing, by design. */
+const LAID_AFTER = ['america-hawaii', 'america-australia', 'britain-india'];
 const EMPTY = { id: 'zz-nothing-laid', name: 'the test lane', from: 'the West Coast', to: 'USA', zones: ['hawaii', 'calrun', 'california'], oil: 0, sup: 0, text: 'A lane laid with nothing counted yet, for this test only.' };
 /** A game played with the test's empty lane laid beside the chart's own rows. */
-function withEmpty<T>(f: (g: Game) => T, laid: Partial<typeof EMPTY> = {}): T {
+function withEmpty<T>(f: (g: Game) => T, laid: Partial<typeof EMPTY> = {}, make: () => Game = war): T {
   (RES.lanes as unknown[]).push({ ...EMPTY, ...laid });
-  try { return f(war()); } finally { RES.lanes.splice(RES.lanes.findIndex((l) => l.id === EMPTY.id), 1); }
+  try { return f(make()); } finally { RES.lanes.splice(RES.lanes.findIndex((l) => l.id === EMPTY.id), 1); }
 }
 
 /** Japan's boats out raiding in Hawaiian Waters, where the lane runs, and America's Pacific Fleet free to patrol there. */
@@ -33,7 +38,7 @@ describe('a lane in a staff\'s count by sea', () => {
   it('every lane and convoy route of the whole world laid before the ruling carries something, so none of their counts moves', () => {
     const g = war();
     expect(seaRoutes(g).length).toBeGreaterThan(10);
-    expect(seaRoutes(g).filter((r) => !laneCounts(r)).map((r) => r.id)).toEqual([]);
+    expect(seaRoutes(g).filter((r) => !laneCounts(r) && !LAID_AFTER.includes(r.id)).map((r) => r.id)).toEqual([]);
     for (const c of NAVY.convoys) expect(laneCarries(g, c.id), c.id).toBe(true);
     // Japan's southern oil lane carries the oilfields' yield, with no share of need of its own.
     const south = RES.lanes.find((l) => l.id === 'south-oil');
@@ -83,4 +88,31 @@ describe('a lane in a staff\'s count by sea', () => {
       expect(whyNotEscort(g, f, EMPTY.id)).toBeNull();
     });
   });
+
+  it("the player's fleet page says its shipping is not counted, in place of its losses, and that no staff guards or raids it", () => {
+    const asAmerica = (): Game => {
+      const g = startOpen(createGame(3, 'USA'));
+      for (let k = 0; !humanUp(g) && k < 80; k++) stepAI(g);
+      declareWar(g, 'JAP', 'USA');
+      return g;
+    };
+    withEmpty((g) => {
+      const f = g.fleets.find((x) => x.nat === 'USA' && x.name === 'Pacific Fleet')!;
+      const empty = seaRoutes(g).find((r) => r.id === EMPTY.id)!;
+      expect(laneNear(g, f, empty)).toBe(true);
+      TC().load(saveGame(g));
+      const sec = TC().page(`fleet:${f.id}`).sections.find((x) => x.heading === 'LANES TO ESCORT')!;
+      const row = sec.rows.find((r) => r.title === EMPTY.name)!;
+      expect(row.lines).toEqual([LANE_UNCOUNTED, LANE_NO_STAFF]);
+      expect(row.buttons[0].ok).toBe(true);
+      // A lane that carries something reads its losses as before.
+      // (With the Pacific's three lanes laid, the Hawaii lane stands in this list too and is not counted either: the
+      // row asked here is one whose lane carries something. Mended at the join of the lanes, 25 November 2026.)
+      const other = sec.rows.find((r) => r.title !== EMPTY.name && !r.lines.includes(LANE_UNCOUNTED));
+      if (other) expect(other.lines[0]).toMatch(/^Cargoes lost on it now: |cut|closed|no port/i);
+    }, {}, asAmerica);
+  });
 });
+
+type PageOut = { sections: { heading: string; rows: { title: string; lines: string[]; buttons: { ok: boolean }[] }[] }[] };
+const TC = (): { load: (t: string) => unknown; page: (id: string) => PageOut } => (globalThis as unknown as { TC: { load: (t: string) => unknown; page: (id: string) => PageOut } }).TC;

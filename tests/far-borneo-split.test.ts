@@ -74,6 +74,10 @@ const made = (name: string): Told[] => told.filter((t) => t.name === name && t.w
 /** December's work done by the book: the detachment at Kuching, and Miri, Brunei and Kuching in Japan's hands. */
 const january = (stop = 1): Game => {
   const g = war(27, stop);
+  // (Where no book dates the rows, Cam Ranh is Japan's, as the demand on Vichy France makes it in a played war:
+  // since the design director's ruling B7 of 25 November 2026 a row posted on a neutral's ground waits for its war
+  // there, and the detachment would not be on its quay in month 27. By the book it comes on its date as it did.)
+  if (stop === 3) japans(g, 'Cam Ranh');
   startPhase(g, 'JAP');
   const k = find(g, KAWAGUCHI)!;
   for (const nm of ['Miri', 'Brunei', 'Kuching']) japans(g, nm);

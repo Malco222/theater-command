@@ -66,8 +66,8 @@ describe('fog on raids: the switch on', () => {
     expect(k.ago).toBe(-1);
     const p = previewRaid(g, 'bomb', t);
     expect(p.why).toBeNull();
-    expect(p.fog!.fighters).toBe('Fighters: unknown');
-    expect(p.fog!.guns).toBe('Guns: unknown');
+    expect(p.fog!.fighters).toBe('Fighters: not known');
+    expect(p.fog!.guns).toBe('Guns: not known');
     expect(p.fog!.band).toMatch(/^Losses forecast: \d+ to \d+% \(not scouted\)$/);
     // The low end: only the fighters known for sure (their fields in sight now), and no guns but the light flak.
     const lo = knownDefence(g, 'UK', t, 'low');
@@ -86,9 +86,9 @@ describe('fog on raids: the switch on', () => {
     // The card's figures are the high end's: the defence the side must allow for.
     expect(p.bomberLoss).toBe(p.fog!.loss[1]);
     // The list of targets and the pages say the same.
-    expect(raidTargetsFor(g, 'bomb').find((x) => x.id === t)!.what).toMatch(/guns not known, fighters not known/);
+    expect(raidTargetsFor(g, 'bomb').find((x) => x.id === t)!.what).toMatch(/built guns not known and 60 light, fighters not known/);
     const page = JSON.stringify(airPage(g, `plan:bomb:${t}:${p.picked.join('.')}`));
-    expect(page).toContain('Fighters: unknown');
+    expect(page).toContain('Fighters: not known');
     expect(page).toContain('(not scouted)');
     // And the 3D card, through the bridge, in the fields it already draws.
     TC().load(saveGame(g));
@@ -98,7 +98,7 @@ describe('fog on raids: the switch on', () => {
     expect(card.ways.gunsFigure).toBe('Unknown');
     expect(card.ways.day.lost).toMatch(/^\d+ to \d+% · about /);
     expect(card.ticket).toContain('Losses forecast:');
-    expect(card.fog.fighters).toBe('Fighters: unknown');
+    expect(card.fog.fighters).toBe('Fighters: not known');
   });
 
   it('a place seen before and out of sight now: the high end counts every fighter last seen in reach of it, all rising', () => {
@@ -116,7 +116,7 @@ describe('fog on raids: the switch on', () => {
     expect(hi.extra).toBe(Math.max(0, k.fighters - sure));
     expect(hi.aa).toBe(k.guns);
     const p = previewRaid(g, 'bomb', t);
-    expect(p.fog!.fighters).toBe(`Fighters: about ${k.fighters.toLocaleString('en-US')} in reach, seen 2 months ago`);
+    expect(p.fog!.fighters).toBe(`Fighters: about ${k.fighters.toLocaleString('en-US')} in reach, seen two months ago`);
     expect(p.fog!.loss[1]).toBe(forecastAir(g, assessAir(g, going(g, p.picked), 'bomb', t, hi), 'bomb', t).bomberLoss);
     expect(p.fog!.loss[1]).toBeGreaterThan(p.fog!.loss[0]);
   });
@@ -154,14 +154,14 @@ describe('fog on raids: the switch on', () => {
     g.turn = month + 3;
     const p = previewRaid(g, 'bomb', t);
     expect(p.fog!.ago).toBe(3);
-    expect(p.fog!.fighters).toMatch(/seen 3 months ago$/);
-    expect(p.fog!.guns).toMatch(/^Guns: (none built|light|medium|heavy), seen 3 months ago$/);
+    expect(p.fog!.fighters).toMatch(/seen three months ago$/);
+    expect(p.fog!.guns).toMatch(/^Guns: (none built|level [123]), seen three months ago$/);
     // A staff counts it stale from 'stale' months.
     expect(wantsLook(g, 'UK', t)).toBe(3 >= F.stale);
     g.turn = month + F.forget;
     rememberSkies(g, 'UK');
     expect(g.intel.airSeen!.UK[t]).toBeUndefined();
-    expect(previewRaid(g, 'bomb', t).fog!.fighters).toBe('Fighters: unknown');
+    expect(previewRaid(g, 'bomb', t).fog!.fighters).toBe('Fighters: not known');
   });
 
   it('a raid can be ordered on a city never seen, and it is fought and booked on what is really there', () => {
@@ -231,13 +231,13 @@ describe('fog on raids: the switch on', () => {
     const g = britain(true);
     const t = id(g, 'Rhineland');
     const p = previewRaid(g, 'bomb', t);
-    expect(p.fog!.guns).toBe('Guns: unknown');
+    expect(p.fog!.guns).toBe('Guns: not known');
     expect(p.fog!.squadrons[1]).toBeGreaterThan(0);
     const line = (label: string) => p.lines.find((l) => l.label === label);
     // The guns are the high end's reckoning: the ticket may not say they ring the factories.
     for (const l of p.lines) expect(l.value).not.toMatch(/^Level \d guns ring /);
-    expect(line('Anti-aircraft guns')!.value).toMatch(/may ring/);
-    expect(line('Flak')!.value).toMatch(/may stand/);
+    expect(line('Anti-aircraft guns')!.value).toMatch(/^Not scouted, so reckoned at the worst: level \d guns round the factories of /);
+    expect(line('Flak')!.value).toMatch(/^Not scouted, so reckoned at the worst: about [\d,]+ guns built round /);
     // The forecast counts the fighters last seen near it: the ticket may not say none are in range.
     expect(line('In range to intercept')!.value).not.toBe('No enemy fighters');
     expect(line('Forces')!.value).not.toMatch(/against no fighters$/);

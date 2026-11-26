@@ -94,13 +94,14 @@
 // The data is history.json, 'stations' (the far side's rows: far-pacific-war.json); with none, nothing here happens.
 
 import { divisionsOf } from './armies';
-import { DEFENCE, allied, atWar, friendlyUnits, hostileUnits, limitAttackers, men, moveCorps, moveCost, relocate, removeCorps, resolveBattle, withWorksAside, type AttackOpts } from './game';
+import { DEFENCE, allied, atWar, friendlyUnits, hasRoom, hostileUnits, limitAttackers, men, moveCorps, moveCost, relocate, removeCorps, resolveBattle, withWorksAside, type AttackOpts } from './game';
 import { HISTORY, bookDate, onBook, stopDef, theatreOf } from './history';
 import { lineShut } from './line';
 import { appoint, generalOf } from './commanders';
 import { NAVY, canPass, fleetReach, landCorps, onOwnShipping, rebase, whyNotLand, zoneOf } from './navy';
 import { blocked } from './rivers';
 import { arrive, besieged, fieldCtrl, takeField } from './siege';
+import { islandOf } from './islands';
 import { STACK, type BattleReport, type Corps, type Game, type Region, type Stance, type Terrain } from './types';
 
 /** A month of the record, the place (or the places, the first its side holds), the months of works there, and what else. */
@@ -311,7 +312,13 @@ export function bookedAhead(g: Game, c: Corps): boolean {
   });
 }
 
-/** True where a corps can fall back to: ground its side holds, no enemy in the field, and a retreat's room. */
+/**
+ * True where a corps can fall back to: ground its side holds, no enemy in the field, and a retreat's room.
+ * (The book's own station is counted against five and a retreat's two on an island of the Pacific too: the record
+ * stood more commands on Singapore Island than the two the islands' table has room for, and the book is not kept
+ * from its place by a table written after it. The historian mends the one or the other: form B3 of 25 November
+ * 2026, (c).)
+ */
 const open = (g: Game, c: Corps, to: Region, joining: boolean): boolean =>
   allied(g, c.nat, to.ctrl) && !hostileUnits(g, to, c.nat).length && (to.id === c.reg || joining || friendlyUnits(g, to, c.nat).filter((u) => u.kind !== 'eng').length < STACK + 2);
 
@@ -542,7 +549,10 @@ export const broughtWatch: { tell: ((e: { row: Attack; corps: Corps; from: Regio
  */
 export const bookReckoning: { why: ((g: Game, nat: string, force: Corps[], to: Region, sea: boolean) => string | null) | null } = { why: null };
 
-/** True where an attack's corps can be put down to go in from: ground whose field its side holds, no enemy in it, and room. */
+/**
+ * True where an attack's corps can be put down to go in from: ground whose field its side holds, no enemy in it, and room.
+ * (The book's own put-down, counted as `open` counts a station.)
+ */
 const door = (g: Game, c: Corps, r: Region): boolean =>
   allied(g, c.nat, fieldCtrl(g, r)) && !hostileUnits(g, r, c.nat).length && (r.id === c.reg || friendlyUnits(g, r, c.nat).filter((u) => u.kind !== 'eng').length < STACK + 2);
 
@@ -933,7 +943,10 @@ export function bookAttacks(g: Game, nat: string, owed?: ReadonlySet<string>): v
     bookWatch.tell?.({ row, what: 'due', to, force: pool });
     if (!line.length) {
       // Nobody stands in the field there: it goes in unfought, as a landing on an empty shore does.
-      for (const c of pool) if (c.reg !== to.id) { relocate(g, c, to); c.ap = 0; }
+      // (Onto an island of the Pacific, as many of it as the island has room for, as the winners of a fight for it
+      // would: the rest stay at the door. Rulings 173(b) and 179(s); islands.ts.)
+      const isle = islandOf(g, to) !== null;
+      for (const c of pool) if (c.reg !== to.id && (!isle || hasRoom(g, to, c))) { relocate(g, c, to); c.ap = 0; }
       tries();
       arrive(g, to, nat);
       g.supplyDirty = true;

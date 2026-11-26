@@ -10,7 +10,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { answering } from '../src/campaign/ai';
-import { createGame, relocate, setWar, startPhase } from '../src/campaign/game';
+import { createGame, relocate, rowOffers, setWar, startPhase, takeOffer } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game } from '../src/campaign/types';
@@ -52,10 +52,20 @@ describe('the 7th Division (rider b641)', () => {
     expect(g.regions[c.reg].name).toBe('Sapporo');
   });
 
-  it("a player's Japan has the row too", () => {
+  // (Changed by the design director's ruling B8 of 25 November 2026. This test read "a player's Japan has the row
+  // too", and the row formed of itself, striking his 6th Army's 7th Division off the map in Manchuria. A row that
+  // takes a corps of the player's is an offer now: nothing is taken until he says yes, and taken it forms as it did.)
+  it("a player's Japan is offered the row, and has it where he takes it", () => {
     const g = war(3, 'JAP');
+    // (His rows are offers only where the switch 'offers' is on: stage.json, off until its screen passes, the design
+    // director's 13:39Z of 25 November 2026. A campaign opened with it on carries the flag; the test sets it by hand.)
+    g.flags.offers = 1;
     month(g, 12);
-    expect(g.regions[row(g, HOME)!.reg].name).toBe('Sapporo');
+    expect([row(g, HOME), row(g, AWAY)?.name]).toEqual([undefined, AWAY]);
+    const offers = rowOffers(g).filter((o) => o.name === HOME);
+    expect(offers.map((o) => [g.regions[o.region].name, o.takes.map((t) => t.name), o.why])).toEqual([['Sapporo', [AWAY], null]]);
+    expect(takeOffer(g, offers[0].id)).toBeNull();
+    expect([g.regions[row(g, HOME)!.reg].name, row(g, AWAY)]).toEqual(['Sapporo', undefined]);
   });
 
   it('it answers a landing on the home islands with the rows held there', () => {

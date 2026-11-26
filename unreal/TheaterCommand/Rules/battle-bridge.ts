@@ -505,7 +505,9 @@ import { staffOnly } from '../../../src/battle/land/offered';
 import { LAND, MOTION, type Kind } from '../../../src/battle/land/rules';
 import type { LandUnit } from '../../../src/battle/land/units';
 import { STORIES } from '../../../src/campaign/stories';
+import { islandLook, islandOf } from '../../../src/campaign/islands';
 import { SKY } from '../../../src/battle/air/book';
+import { latLonOf } from '../../../src/battle/air/sky';
 import { AirSim } from '../../../src/battle/air/sim';
 import { airTicket, flyKinds, foughtAir } from '../../../src/battle/air/ticket';
 import type { AirOutcome, AirUnit } from '../../../src/battle/air/types';
@@ -793,6 +795,20 @@ export function battleCalls(h: BattleHooks) {
       // The ground's weather this month, in the 3D game's words (thaw mud, snow, rain, clear); looks only.
       const wx = groundWeather(g, g.regions[to]);
       if (wx && !ticket.weather) ticket.weather = wx;
+      // The island's own dress (release 2; the design director, 25 November 2026, 12:39Z, B(3), and 13:00Z, D(2)): on
+      // any island of the table (src/campaign/islands.ts, the whole-world chart alone) the place's own latitude and
+      // longitude in degrees, to a hundredth, for the sun, the weather and the men's front; and the look its row names
+      // (jungle, or beach and palms on an islet) where it names one. Where it names none the 3D game dresses the field
+      // by its climate from that latitude and longitude. Looks only, as the scars are: no rule reads either, and the
+      // battle settled or started is built from a ticket of its own that never carries them. With the far side off no
+      // ground is an island of the table, and this ticket is the one it always was.
+      if (islandOf(g, g.regions[to])) {
+        const [lat, lon] = latLonOf(g.regions[to].x, g.regions[to].y);
+        // (to a hundredth of a degree; the + 0 keeps a place just south of the equator from reading minus nought)
+        ticket.latLon = [Math.round(lat * 100) / 100 + 0, Math.round(lon * 100) / 100 + 0];
+        const look = islandLook(g, g.regions[to]);
+        if (look) ticket.look = look;
+      }
       // Captured kit (release 2): each side's latest capture of the last six months, whose tanks and how many blocks.
       const took = (nat: string) => (g.captured?.[nat] ?? []).filter((k) => g.turn - k.turn < 6).slice(-1)[0];
       const ca = took(t.att.nat), cd = took(t.def.nat);

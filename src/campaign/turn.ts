@@ -21,6 +21,7 @@ import {
   endPhase, foldNews, sidesAtPeace, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, sameSide, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
   type Assessment, type CostOf, type FieldBill, type GroundWorks, type ProbeReport,
   worksMonth,
+  declineOffer, rowOffers, takeOffer, type RowOffer,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
 import { atItsPost } from './pacific';
@@ -62,6 +63,7 @@ import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
 import { damageRules, openDamage } from './citydamage';
+import { flakFog, isFlakLine } from './citydefences';
 import { FIELD, fieldRepairView as fieldRepairViewOf, fieldRules as fieldRulesOf, fieldView, fieldsDamaged, fieldsMonth, openFields, orderFieldRepair as repairFieldFor, undoFieldRepair as undoFieldFor, type FieldRepairView, type FieldView } from './fieldstate';
 import { damagedTowns, repairAll, repairAllPlan, repairCity, repairView, townsDamaged, undoRepair, type RepairAll, type RepairView } from './repairs';
 import { endTrade, gateTrade, refreshTrade, signTrade, tradeBook, type GateTradeRow, type TradeBook } from './trade';
@@ -618,6 +620,9 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
     if (l.label === 'Armor' && /without armor/.test(l.value) && k.none.length) return { ...l, value: 'No tanks have been seen among the defenders', effect: 'Tank attack up 25% if there are none' };
     // (The grand campaign: the guns of a defence that is not identified are not known, and neither is what they take from the tanks.)
     if (l.label === 'Armor' && /^Tank attack up/.test(l.value) && k.none.length) return { label: l.label, value: 'Tank attack up by as much as 25%: their guns are not known' };
+    // (City defences: the town's heavy guns against the tanks are not known while the garrison is not identified; the line
+    // says the most they could take, as the line above does for the guns of a defence in the field.)
+    if (isFlakLine(l) && k.none.length) return flakFog();
     return l;
   // (Guns alone, ruling 211(a): before the battle the row is left out while any defender is not identified, and the
   // odds speak alone; the fog wins, the design director's log b357. After it they have been seen.)
@@ -973,6 +978,31 @@ export function whyNotSetAsideDirective(g: Game): string | null {
 /** The player tells the cabinet its directive will not be carried out: the trust is lost at once, and the next one is set sooner. */
 export function orderSetAside(g: Game): boolean {
   return g.human !== null && humanUp(g) && setAside(g, g.human);
+}
+
+// ---- Formations offered out of the player's own corps (ruling B8 of 25 November 2026; whole world only) -------------
+// A dated row that would take corps of his off the map is an offer, never a silent removal (game.ts `rowOffers`). The
+// month's offers are one list; he takes all, takes some, or declines, in his own month. None with the far side off.
+// The end of a loan is in the same list (an offer with `loan`): a lent regiment its division awaits goes home only if
+// he takes it.
+
+/** The player's open offers: what each would form and where, and which of his corps it would take. */
+export const formationOffers = (g: Game): RowOffer[] => rowOffers(g);
+export type { RowOffer };
+
+/** Why the player cannot answer an offer now, or null if he can. */
+export function whyNotAnswerOffers(g: Game): string | null {
+  return g.human === null || !humanUp(g) || onEve(g) ? 'It is not your month.' : null;
+}
+
+/** The player takes an offer: the formation is made as the record made it, out of the corps it names (a loan's end: the lent regiment is let go). Null where it was done, else the plain reason it was not; the offer then stands. */
+export function orderTakeFormation(g: Game, id: number): string | null {
+  return whyNotAnswerOffers(g) ?? takeOffer(g, id);
+}
+
+/** The player declines an offer: the formation never comes, and his corps stay as they are (a loan's end: the lent regiment stays his for good). */
+export function orderDeclineFormation(g: Game, id: number): boolean {
+  return whyNotAnswerOffers(g) === null && declineOffer(g, id);
 }
 
 /**

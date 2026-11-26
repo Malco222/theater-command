@@ -16,6 +16,7 @@ import data from '../../data/campaign/airversion.json';
 import { turnToDate } from '../core/ticket';
 import type { AirFleet, Game } from './types';
 import { damageField, fieldRules, fieldShut } from './fieldstate';
+import { fieldWithered } from './wither';
 
 export const AIRV = data as unknown as {
   nightGuns: { on: boolean; share: number };
@@ -104,13 +105,16 @@ export const fieldWrecked = (g: Game, region: number): boolean => (g.flags.field
  * wrecked it this month; with airfields as targets, its runway is shut until repaired (fieldstate.ts fieldShut). And a
  * group on its way to another airfield by stages (release 2, ferry.ts): it is out of the fight until it gets there, so
  * it meets no raid, flies none, and lends no land battle its aircraft. Only the switch 'ferry' writes `way`.
+ * (The whole-world chart, ruling 173(e) with rider (o)(2): and a group whose field stands on a cut-off island of the
+ * historian's table and has gone unfed. It flies nothing and meets nothing until the island is fed: wither.ts.)
  */
-export const wrecked = (g: Game, f: AirFleet): boolean => f.ship === undefined && (f.way !== undefined || fieldShut(g, f.base));
+export const wrecked = (g: Game, f: AirFleet): boolean => f.ship === undefined && (f.way !== undefined || fieldShut(g, f.base) || fieldWithered(g, f));
 
 /** Why a group cannot fly for a wrecked or shut field, or null. */
 export function whyNotField(g: Game, f: AirFleet): string | null {
   if (!wrecked(g, f)) return null;
   if (f.way !== undefined) return `On its way to ${g.regions[f.way.to]?.name ?? 'another airfield'}: out of the fight until it gets there.`;
+  if (!fieldShut(g, f.base)) return `Grounded. ${g.regions[f.base].name} is cut off, and no fuel or bombs reach its field. It flies again once they reach the island by sea.`;
   return g.flags.fields === 1 && fieldRules(g) ? `Grounded: the runway at ${g.regions[f.base].name} is cratered until it is repaired.` : `Grounded this month: saboteurs wrecked the field at ${g.regions[f.base].name}.`;
 }
 

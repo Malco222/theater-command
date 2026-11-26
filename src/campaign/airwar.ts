@@ -25,7 +25,7 @@ import { turnToDate, type TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import type { FoughtAir } from './airfought';
 import {
-  AIR, AIRWAR, CLOSE, afloat, pilotWords, schoolWords, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, smallOn, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, squadronsOf, type AirForecast,
+  AIR, AIRWAR, CLOSE, afloat, pilotWords, schoolWords, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding, fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, smallOn, whyNotBase, whyNotMission, whyNotShipAir, flakGuns, noneSeen, seenAgo, squadronsOf, standingGuns, type AirForecast,
 } from './air';
 import { damageRules } from './citydamage';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
@@ -38,13 +38,14 @@ import { airKnown, airMetWords, seaSeenWords } from './seasight';
 import { airfieldOpenTo } from './prizes';
 import { seaWhat, seaWhere } from './sea-words';
 import { onNet, railCut, railsAt } from './rails';
-import { besiegerOf, siegeRules, siegeView, townHeld, townHitText, type TownHit } from './siege';
+import { besiegerOf, siegeRules, siegeView, townHeld, townHitText, townWorksPhrase, type TownHit } from './siege';
 import { townName } from './towns';
 import { shipRule } from './tech';
 import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneName, zoneOfGroup, zoneOfRegion } from './weather';
 import { whyNotField, wrecked } from './airversion';
 import { wayWords } from './ferry';
 import { strafeSection, type StrafeSection } from './strafers';
+import { lightsAt } from './citydefences';
 import { fieldKnown, fieldRules, fieldView } from './fieldstate';
 import { band, bandNote, fogBits, fogged, knownDefence, knownLines, raidFogOn, rememberSkies, skyKnown } from './airfog';
 
@@ -651,7 +652,22 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
   // Fog on raids (airfog.ts, its switch on): out of the side's sight its guns and the fighters in reach are as last seen.
   const k = raidFogOn(g) && g.regions[t] ? skyKnown(g, nat, t, sight) : null;
   const hide = k && !k.live ? fogBits(k) : null;
-  const gunsBit = (): string => (hide ? hide.guns : gunsAt(g, t) ? `level ${gunsAt(g, t)} guns` : '');
+  // (The raid row, the UI director's section B of 25 Nov 2026 19:10Z: the built guns first, the standing light guns every
+  // target has named apart; out of sight the built guns as last seen, and the standing ones never hidden.)
+  const gunsBit = (): string => {
+    const S = num(standingGuns()), built = flakGuns(gunsAt(g, t));
+    // (Out of sight, her 20:08Z marks, item 6: the built guns as last seen, counted as the card counts them.)
+    if (hide && k) {
+      if (k.guns < 0) return `built guns not known and ${S} light`;
+      const was = flakGuns(k.guns), when = seenAgo(k.ago);
+      return was.all ? `about ${num(was.all)} guns built (${num(was.heavy)} heavy) when ${when}, and ${S} light` : `${S} light guns, none built when ${when}`;
+    }
+    return built.all ? `${num(built.all)} guns built (${num(built.heavy)} heavy) and ${S} light` : `${S} light guns`;
+  };
+  // City defences: the searchlights follow the guns, as they truly are even where the fog hedges the guns: the design
+  // director, 25 Nov 2026 19:44Z, ruled radar and searchlights known truth reads for the joint sight form (audit 28),
+  // never one true and one none. Switch off: lightsAt reads none.
+  const lightsBit = (): string => (lightsAt(g, t) ? `level ${lightsAt(g, t)} searchlights` : '');
   if (kind === 'harbour') {
     const there = shipsInPort(g, t, nat);
     const seen = there.filter((f) => fleetKnown(g, f, nat) === 'exact');
@@ -664,10 +680,11 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
   if (kind === 'town') {
     const v = siegeView(g, t)!;
     const who = sight[t] === SIGHT.none && !v.by ? 'its garrison not known' : v.inside ? `${plural(v.inside, 'corps', 'corps')} inside${v.guard > 0 ? ' with its guard' : ''}` : 'held by its guard alone';
-    return `${v.sizeWord}: ${who}. Troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger${v.broken > 0 ? `, ${Math.round(v.broken * 100)}% of its works broken` : ''}${v.by ? ', under siege' : ''}${gunsBit() ? `, ${gunsBit()}` : ''}`;
+    return `${v.sizeWord}: ${who}. Troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger${townWorksPhrase(g, r)}${v.broken > 0 ? `, ${Math.round(v.broken * 100)}% of its works broken` : ''}${v.by ? ', under siege' : ''}${gunsBit() ? `, ${gunsBit()}` : ''}${lightsBit() ? `, ${lightsBit()}` : ''}`;
   }
   if (kind === 'bomb' || kind === 'night') {
-    const bits = [r.fac > 0 ? plural(r.fac, 'factory', 'factories') : '', onNet(t) && !railCut(g, t) ? (railsAt(t).length >= 3 ? 'a railway junction' : 'a railway') : '', gunsBit(), hide ? hide.fighters : ''];
+    // City defences: the searchlights after the guns, with the switch on (lightsAt reads none with it off).
+    const bits = [r.fac > 0 ? plural(r.fac, 'factory', 'factories') : '', onNet(t) && !railCut(g, t) ? (railsAt(t).length >= 3 ? 'a railway junction' : 'a railway') : '', gunsBit(), lightsBit(), hide ? hide.fighters : ''];
     return bits.filter(Boolean).join(', ');
   }
   if (kind === 'line') {
@@ -875,7 +892,12 @@ export interface RaidFog {
   ago: number;
   /** The level of its guns as known, 0 to 3; -1 where never seen. */
   gunLevel: number;
-  /** The card's lines: "Fighters: unknown", "Guns: heavy, seen 3 months ago", "Damage: none, in sight" ('' where towns take no lasting damage). */
+  /**
+   * The fighters in reach as last seen (airfog.ts SkyKnown.fighters), -1 where never seen: a reader asks the sighting
+   * itself, never the words of a line (the UI director, 25 Nov 2026 21:22Z, case b, her code note).
+   */
+  fightersSeen: number;
+  /** The card's lines: "Fighters: not known", "Guns: level 2, seen three months ago", "Damage: none, in sight" ('' where towns take no lasting damage). */
   fighters: string;
   guns: string;
   damage: string;
@@ -1103,7 +1125,7 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
     const pair = (x: number, y: number): [number, number] => [Math.min(x, y), Math.max(x, y)];
     const loss = pair(share(lo), share(fc));
     plan.fog = {
-      live: k.live, scouted: k.scouted, ago: k.ago, gunLevel: k.guns,
+      live: k.live, scouted: k.scouted, ago: k.ago, gunLevel: k.guns, fightersSeen: k.fighters,
       ...knownLines(g, k, damageRules(g) && (kind === 'bomb' || kind === 'night' || kind === 'town')),
       loss, bomberLossN: pair(Math.round(lo.bmrLoss), Math.round(fc.bmrLoss)), fighterLossN: pair(Math.round(lo.ftrLoss), Math.round(fc.ftrLoss)),
       success: pair(lo.success, fc.success), squadrons: pair(Math.round(al.squadrons), Math.round(a.squadrons)),
@@ -1235,9 +1257,11 @@ export interface DayNight {
   gunsLabel: string;
   /**
    * The same defences in numbers (Brian, 20 November 2026: "calculate how many flak guns they have and fighter
-   * squadrons they have that will be in range to intercept them"): the flak guns round the target, light and heavy
-   * together, and how many of them are heavy; and the enemy's fighter squadrons able to meet the raid, and the groups
-   * they come from. `foes` counts every fighter of those groups; `foesAble` those that can get to the raid.
+   * squadrons they have that will be in range to intercept them"): the guns built round the target, light and heavy
+   * together (0 where none are built), and how many of them are heavy; `gunsCount` says them in words with the light
+   * guns every target has named apart (the UI director's section B, 25 Nov 2026); and the enemy's fighter squadrons
+   * able to meet the raid, and the groups they come from. `foes` counts every fighter of those groups; `foesAble`
+   * those that can get to the raid.
    */
   gunCount: number;
   gunHeavy: number;
@@ -1246,7 +1270,7 @@ export interface DayNight {
   foeGroups: number;
   foesAble: number;
   foesCount: string;
-  /** After the label, in the row's small dim type, where no guns are built: 'light flak only' (any target puts up some). Empty with guns. */
+  /** After the label, in the row's small dim type: 'not scouted' where fog hides the guns (airfog.ts); empty otherwise. (It said 'light flak only' where no guns were built, until the count named the standing light guns apart: gunsCount.) */
   gunsTail: string;
   /** Fighter groups picked that fly by day and stay at home by night: "Stays home: no escort by night". */
   home: number[];
@@ -1324,14 +1348,17 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
   const hidden = !!fog && !fog.live;
   const level = hidden ? Math.max(0, fog.gunLevel) : g.regions[target] ? gunsAt(g, target) : 0;
   const guns = flakGuns(level);
+  // (The UI director, 25 Nov 2026 19:10Z, section B: the built guns first, the standing light guns every target has
+  // named apart, never hidden; a bare target in place of "No anti-aircraft guns" and "light flak only".)
+  const standing = `the ${num(standingGuns())} light guns every target has.`;
   const squadrons = lead.meets.reduce((n, x) => n + squadronsOf(x.nat, x.able, turnToDate(g.turn).year), 0), able = lead.meets.reduce((n, x) => n + x.able, 0);
   const out: DayNight = {
     chosen: kind, day, night,
     bombers: lead.bombers,
     foes: lead.meets.reduce((n, x) => n + x.ftr, 0),
-    guns: level, gunsLabel: level ? `Level ${level} anti-aircraft guns` : 'No anti-aircraft guns', gunsTail: level ? '' : 'light flak only',
+    guns: level, gunsLabel: level ? `Level ${level} anti-aircraft guns` : `Only ${standing}`, gunsTail: '',
     gunCount: guns.all, gunHeavy: guns.heavy,
-    gunsCount: guns.heavy ? `about ${num(guns.all)} guns, ${num(guns.heavy)} of them heavy` : `about ${num(guns.all)} light guns`,
+    gunsCount: guns.all ? `About ${num(guns.all)} guns built here, ${num(guns.heavy)} of them heavy, and ${standing}` : `Only ${standing}`,
     foeSquadrons: squadrons, foeGroups: lead.meets.length, foesAble: able,
     foesCount: squadrons ? `about ${num(squadrons)} fighter ${squadrons === 1 ? 'squadron' : 'squadrons'} in range` : '',
     home: day.picked.filter((id) => fighter(id) && !night.picked.includes(id)),
@@ -1341,13 +1368,16 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
     out.fog = fog;
     out.gunsKnown = fog.gunLevel >= 0;
     if (hidden) {
-      const when = fog.guns.replace(/^Guns: [^,]*/, '');
-      out.gunsLabel = fog.gunLevel < 0 ? 'Anti-aircraft guns not known' : `${level ? `Level ${level} anti-aircraft guns` : 'No anti-aircraft guns'}${when}`;
-      out.gunsTail = fog.gunLevel < 0 ? 'not scouted' : out.gunsTail;
-      out.gunsCount = fog.gunLevel < 0 ? 'guns not known' : out.gunsCount;
+      // (Her 20:08Z marks, items 3 to 5: the months in words, and a none said as none built.)
+      const when = seenAgo(fog.ago);
+      out.gunsLabel = fog.gunLevel < 0 ? 'Anti-aircraft guns not known' : level ? `Level ${level} anti-aircraft guns, ${when}` : `No guns built, ${when}`;
+      // (Her 21:22Z marks, case d: at a seen level the tail carries the month, as the 3D tail does; seen with none, the
+      // count takes item 2's form, which holds its month.)
+      out.gunsTail = fog.gunLevel < 0 ? 'not scouted' : level ? when : out.gunsTail;
+      out.gunsCount = fog.gunLevel < 0 ? `Guns built here not known, and ${standing}` : level ? out.gunsCount : noneSeen(fog.ago);
       const [lo, hi] = fog.squadrons;
       out.foeSquadrons = hi;
-      out.foesCount = hi > 0 ? `about ${band(lo, hi, false)} fighter ${hi === 1 ? 'squadron' : 'squadrons'} in range (not scouted)` : fog.fighters === 'Fighters: unknown' ? 'fighters in range not known' : '';
+      out.foesCount = hi > 0 ? `about ${band(lo, hi, false)} fighter ${hi === 1 ? 'squadron' : 'squadrons'} in range (not scouted)` : fog.fightersSeen < 0 ? 'fighters in range not known' : '';
     }
   }
   return out;
@@ -1399,6 +1429,8 @@ export interface RaidReplay {
   won: boolean;
   level: string;
   result: string;
+  /** (City defences, a night raid with the switch on) The searchlights at the target as the raid's report read them. */
+  lights?: { level: number; cloud: boolean; lit: number };
 }
 
 /** The raids flown in one month (this month unless told otherwise), oldest first, as a viewer may know them: his own side's, and those flown against it. With nobody at the controls, all of them. */
@@ -1413,7 +1445,7 @@ export function raidReplays(g: Game, turn = g.turn, viewer: string | null = g.hu
   const mineToo = (nat: string): boolean => viewer === null || (!!nat && allied(g, nat, viewer));
   return g.airReports.filter((r) => r.turn === turn && (mineToo(r.attNat) || mineToo(r.defNat))).map((r) => {
     const p = r.zone >= 0 ? g.seas[r.zone] : g.regions[r.region];
-    return { id: r.id, turn: r.turn, kind: r.mission, region: r.region, zone: r.zone, place: r.place, x: p?.x ?? 0, y: p?.y ?? 0, attNat: r.attNat, defNat: r.defNat, attackers: side(r.att), defenders: side(r.def), won: r.won, level: r.level, result: r.result };
+    return { id: r.id, turn: r.turn, kind: r.mission, region: r.region, zone: r.zone, place: r.place, x: p?.x ?? 0, y: p?.y ?? 0, attNat: r.attNat, defNat: r.defNat, attackers: side(r.att), defenders: side(r.def), won: r.won, level: r.level, result: r.result, ...(r.lights ? { lights: { ...r.lights } } : {}) };
   });
 }
 

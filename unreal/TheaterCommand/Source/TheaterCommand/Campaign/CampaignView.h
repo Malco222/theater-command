@@ -472,6 +472,7 @@ struct FPageButton
 	FString Tip;
 	bool bOk = false;
 	bool bDanger = false; // something that cannot be undone
+	bool bSafe = false; // (release 2, formations offered) the safe answer to a question asked in place on a page's head: lit, and Enter's and Esc's (ruling 134(f))
 };
 
 struct FPageRow
@@ -483,6 +484,7 @@ struct FPageRow
 	float Meter = -1.0f; // (rules version 71) a bar under the lines, 0 to 1: how far a test is met. None when less than nothing.
 	FString Alarm; // (rules version 73) a line set out in red under the title: a warning that goes with the row
 	FString Picture; // what to show a large picture of beside the row, if anything: "air:ftr:GER" is Germany's fighter, "air:bmr:UK" Britain's bomber
+	TArray<FString> Tones; // (release 2, formations offered) how each of Lines is set where the row says it: "" plain, "muted" or "amber". With none, every line is set as it always was.
 };
 
 struct FPageSection
@@ -708,6 +710,12 @@ struct FMonthCard
 	TArray<FMonthHome> Home;
 	TArray<FMonthStaff> Staff;
 	TArray<FMonthElse> Elsewhere;
+	/** (Release 2, formations offered: the UI director's marks of 25 November 2026.) The one row for the formations offered to the
+	 * player, first under the red bands: its sentence, whether one is in its last month (amber), and the act a press sends
+	 * ("open:offers"). No row where the sentence is empty: nothing is offered, or the offers are switched off. */
+	FString OffersText;
+	bool bOffersAmber = false;
+	FString OffersAct;
 };
 
 /** (Rules 84.3.3) One of FIRST COMMAND's staff notes, a tip or the closing note, in the rules' words for this game. */
@@ -1358,6 +1366,7 @@ struct FCampaignView
 	bool bWingByDate = false; // (release 2, carriers.ts) a navy's carrier wing changes by date (the switch as set)
 	bool bSettledTowns = false; // (release 2, buildings.ts) a conquered town held three months can put up every building
 	bool bTownQueue = false; // (release 2, townqueue.ts) the player can queue the next buildings for his towns
+	bool bCityDefences = false; // (release 2, citydefences.ts) searchlights, the guns by night by what they see, a garrison's town works, the town's guns on tanks
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
 	// opening month only.
 	bool bR2Switches = false, bColumnsOn = false, bColumnsCan = false;

@@ -221,9 +221,11 @@ describe('a row lands in the lift of the corps it goes with (rider b604)', () =>
   it("the player's force is his to choose: nothing sails he did not send, and a row he sends with its corps takes no shipping", () => {
     const g = december(3, 'JAP');
     const kb = beach(g);
-    // (A player's rows of the south form up at home, as his other dated rows do, and shipping them is his business:
-    // here the four are put on the quay by hand, held as their rows have them.)
-    expect(at(g, reg('1st'))).not.toBe('Hainan');
+    // (Since the design director's ruling B7 of 25 November 2026 a player's row posted on ground he holds forms
+    // there, whoever owns it: the 1st Tank Regiment is on Hainan's quay. Before it every such row formed at Tokyo, and
+    // this line read `not.toBe('Hainan')`. The 5th and 18th Divisions are offers to him now (ruling B8), so the four
+    // are put on the quay by hand, held as their rows have them.)
+    expect(at(g, reg('1st'))).toBe('Hainan');
     for (const u of [...g.corps]) if (u.nat === 'JAP' && ([G5, G18, reg('1st'), reg('6th')].includes(u.name) || g.regions[u.reg].name === 'Hainan')) removeCorps(g, u);
     const d5 = addCorps(g, 'JAP', G5, 'inf', 1, 'Hainan', { hold: 1 }), d18 = addCorps(g, 'JAP', G18, 'inf', 1, 'Hainan', { hold: 1 });
     const t1 = addCorps(g, 'JAP', reg('1st'), 'arm', 1, 'Hainan', { hold: 1, est: 0.25 }), t6 = addCorps(g, 'JAP', reg('6th'), 'arm', 1, 'Hainan', { hold: 1, est: 0.25 });

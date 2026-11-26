@@ -35,6 +35,19 @@ function fought(TC: ReturnType<typeof battleCalls>, ids: number[], to: number): 
   return { over: over!, out: TC.battleEnd() };
 }
 
+/**
+ * A battle given up as it opens: TC.battleStart's battle with the attacker's whole army withdrawn before a shot. A true
+ * result of that battle's own field, as the 3D game hands back for a player who pulls out at once, and cheap to make:
+ * nothing is fought out (a battle fought to its end is some thousands of steps of the field, ten seconds and more).
+ */
+function givenUp(TC: ReturnType<typeof battleCalls>, ids: number[], to: number): FieldResult {
+  TC.battleStart(ids, to, { staff: true });
+  expect(TC.battleOrder({ do: 'withdrawAll', side: 'att' })).toEqual({ ok: true });
+  const over = (TC.battleView() as { over: FieldResult | null }).over;
+  expect(over).not.toBeNull();
+  return over!;
+}
+
 /** What the campaign holds after: who owns what, and each corps' place and strength. */
 const state = (g: Game): string => JSON.stringify({ owners: g.regions.map((r) => r.owner), corps: g.corps });
 
@@ -73,9 +86,10 @@ describe('a campaign battle handed back from the 3D game\'s land rules', () => {
     const o = offers(a.g)[0];
     const ids = o.corps.map((c) => c.id), to = o.target.id;
     const seed = (b.TC.battleLook(ids, to) as { ticket: { seed: number } }).ticket.seed;
-    const old = fought(a.TC, ids, to);
+    // (a result of that battle's own field, given up as it opens: what is tested is the refusal, not the fighting)
+    const over = givenUp(a.TC, ids, to);
     const before = state(b.g);
-    expect(b.TC.battleSettleLand(ids, to, old.over, seed + 1)).toEqual({ why: expect.any(String) });
+    expect(b.TC.battleSettleLand(ids, to, over, seed + 1)).toEqual({ why: expect.any(String) });
     expect(b.TC.battleSettleLand(ids, to, { over: null })).toBeNull();
     expect(b.count()).toBe(0);
     expect(state(b.g)).toBe(before);
@@ -96,48 +110,47 @@ describe('a campaign battle handed back from the 3D game\'s land rules', () => {
     const o = offers(cur)[0];
     const ids = o.corps.map((c) => c.id), to = o.target.id;
     const seed = (TC.battleLook(ids, to) as { ticket: { seed: number } }).ticket.seed;
-    const field = rig();
-    const old = fought(field.TC, ids, to);
-    const first = TC.battleSettleLand(ids, to, { over: structuredClone(old.over) }, seed);
+    // (a result of that battle's own field, given up as it opens: what is tested is where it is remembered, not the fighting)
+    const over = givenUp(rig().TC, ids, to);
+    const first = TC.battleSettleLand(ids, to, { over: structuredClone(over) }, seed);
     const after = state(cur);
     expect(attacks).toBe(1);
     // asked again with another seed: another battle, refused, not the answer it had
-    expect(TC.battleSettleLand(ids, to, { over: structuredClone(old.over) }, seed + 1)).toEqual({ why: expect.any(String) });
+    expect(TC.battleSettleLand(ids, to, { over: structuredClone(over) }, seed + 1)).toEqual({ why: expect.any(String) });
     expect(attacks).toBe(1);
     // the save from before the battle loaded: the same battle refought to the same result is settled in it
     cur = loadGame(before)!;
     expect((TC.battleLook(ids, to) as { ticket: { seed: number } }).ticket.seed).toBe(seed);
-    const again = TC.battleSettleLand(ids, to, { over: structuredClone(old.over) }, seed);
+    const again = TC.battleSettleLand(ids, to, { over: structuredClone(over) }, seed);
     expect(attacks).toBe(2);
     expect(state(cur)).toBe(after);
     expect(again).not.toBe(first);
     expect(again).toEqual(first);
     // and a new campaign as well
     cur = newCampaign();
-    TC.battleSettleLand(ids, to, { over: structuredClone(old.over) }, seed);
+    TC.battleSettleLand(ids, to, { over: structuredClone(over) }, seed);
     expect(attacks).toBe(3);
   });
 
   it('remembers every battle settled in its campaign: one settled between does not let the first be booked twice', () => {
+    // (What is tested is the memory of the battles settled, not the fighting: each result here is its own field's,
+    // given up as the battle opens, so no battle is fought out to make it. The round trip above fights one to its end.)
     const { g, TC, count } = rig();
-    const field = rig();
     const all = offers(g);
     const a = all[0], b = all.find((x) => x.target.id !== a.target.id && !x.corps.some((c) => a.corps.some((d) => d.id === c.id)));
-    if (!b) return;
+    if (!b) throw new Error('the opening offers no second attack apart from the first: this test needs two battles');
     const ia = a.corps.map((c) => c.id), ib = b.corps.map((c) => c.id);
     const sa = (TC.battleLook(ia, a.target.id) as { ticket: { seed: number } }).ticket.seed;
-    const sb = (TC.battleLook(ib, b.target.id) as { ticket: { seed: number } } | null)?.ticket?.seed;
-    const ra = fought(field.TC, ia, a.target.id).over;
-    const fieldB = rig();
-    const rb = sb === undefined ? null : fought(fieldB.TC, ib, b.target.id).over;
-    TC.battleSettleLand(ia, a.target.id, { over: structuredClone(ra) }, sa);
+    const sb = (TC.battleLook(ib, b.target.id) as { ticket: { seed: number } }).ticket.seed;
+    const ra = givenUp(rig().TC, ia, a.target.id), rb = givenUp(rig().TC, ib, b.target.id);
+    const first = TC.battleSettleLand(ia, a.target.id, { over: structuredClone(ra) }, sa);
     expect(count()).toBe(1);
-    if (rb && sb !== undefined) {
-      TC.battleSettleLand(ib, b.target.id, { over: structuredClone(rb) }, sb);
-      expect(count()).toBe(2);
-    }
-    const n = count();
-    TC.battleSettleLand(ia, a.target.id, { over: structuredClone(ra) }, sa);
-    expect(count()).toBe(n);
+    TC.battleSettleLand(ib, b.target.id, { over: structuredClone(rb) }, sb);
+    expect(count()).toBe(2);
+    const after = state(g);
+    // the first asked again, with another settled since: its answer as it was, and nothing booked
+    expect(TC.battleSettleLand(ia, a.target.id, { over: structuredClone(ra) }, sa)).toEqual(first);
+    expect(count()).toBe(2);
+    expect(state(g)).toBe(after);
   });
 });

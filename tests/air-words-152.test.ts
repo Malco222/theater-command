@@ -558,9 +558,11 @@ describe("the review's mends: what a lowering really strikes off, where pilots l
   });
 });
 
-describe("the review's mends: the pages' lines only where they are true (GER from 17, seed 7)", () => {
+describe("the review's mends: the pages' lines only where they are true (GER from 17, seed 22)", () => {
+  // (Seed 7 on 1.5.2; release 2's war (pass 2, 26 November 2026) gives seed 7's Germany four troop targets in reach.
+  // Seeds 1 to 30 scanned: 22 and 27 keep none, with bombing targets, and group 31 in the night campaign over London.)
   it("finding 13's line is not shown where his aircraft reach the enemy for another kind of raid", () => {
-    TC.start({ view: 'grand', human: 'GER', from: 17, seed: 7, world: true });
+    TC.start({ view: 'grand', human: 'GER', from: 17, seed: 22, world: true });
     const g = copy();
     expect(raidTargetsFor(g, 'bomb').length).toBeGreaterThan(0);
     expect(raidTargetsFor(g, 'ground').length).toBe(0);
@@ -569,7 +571,7 @@ describe("the review's mends: the pages' lines only where they are true (GER fro
   });
 
   it("the campaign's way out is not shown on a targets page whose kind would stay empty once the group is freed", () => {
-    TC.start({ view: 'grand', human: 'GER', from: 17, seed: 7, world: true });
+    TC.start({ view: 'grand', human: 'GER', from: 17, seed: 22, world: true });
     const g = copy();
     expect(campaignWhy(g, 31)).toMatch(/^It flies with the night campaign over London\./);
     const ground = TC.page('raid:ground:31');
@@ -732,15 +734,16 @@ describe("the UI director's nine answers on the air words (25 November 2026, 14:
 
   it("answer 4: with an engineer corps, the line ends as it did (America, an engineer corps raised from the arsenal, USA from 40, seed 11)", () => {
     TC.start({ view: 'grand', human: 'USA', from: 40, seed: 11, world: true });
+    // (Casablanca on 1.5.2; Oran on release 2's war, pass 2 of 26 November 2026: the airfield the line names is the war's.)
     expect(TC.order('corps:eng', -1).ok).toBe(true);
     // (on order and not yet raised: the month it is due, as the arsenal's order list gives it; the UI director, 15:04Z)
     TC.endMonth();
-    expect(TC.page('raid:ground').headline).toBe('No target is in reach. Your aircraft could reach the enemy from Casablanca if it had an airfield: an engineer corps can lay one there. You have one on order in the ARSENAL, due March 1943.');
+    expect(TC.page('raid:ground').headline).toBe('No target is in reach. Your aircraft could reach the enemy from Oran if it had an airfield: an engineer corps can lay one there. You have one on order in the ARSENAL, due March 1943.');
     TC.endMonth();
     TC.endMonth();
     const g = copy();
     expect(g.corps.filter((c) => c.nat === 'USA' && !c.dead && c.kind === 'eng').length).toBe(1);
-    expect(TC.page('raid:ground').headline).toBe('No target is in reach. Your aircraft could reach the enemy from Casablanca if it had an airfield: an engineer corps can lay one there.');
+    expect(TC.page('raid:ground').headline).toBe('No target is in reach. Your aircraft could reach the enemy from Oran if it had an airfield: an engineer corps can lay one there.');
   });
 
   it("answer 4: where his nation can never raise an engineer corps, the engineer clause is dropped (the arsenal's list made to hold none, by hand)", () => {

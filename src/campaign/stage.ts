@@ -104,6 +104,11 @@ const staged = (env: string, key: string): boolean => {
 };
 /** True where new grand campaigns open with the marked army (release 2, marked.ts; stage.json 'marked'). Forced by TC_MARKED. */
 export const MARKED_STAGE: boolean = staged('TC_MARKED', 'marked');
+// A row that takes a named corps whole waits while that corps is in contact, on the old chart (release 2; the design
+// director's ruling of 19:47Z, 25 November 2026; game.ts `expeditions`): the grand campaigns opened while this is true
+// carry the flag 'fromWait'. Forced by TC_FROMWAIT.
+/** True where new grand campaigns open with the old chart's "from" rows waiting on contact (stage.json 'fromWait'). */
+export const FROMWAIT_STAGE: boolean = staged('TC_FROMWAIT', 'fromWait');
 /** True where new grand campaigns open with the lorries moved to the front named first (stage.json 'lorryShift'). */
 export const LORRYSHIFT_STAGE: boolean = staged('TC_LORRYSHIFT', 'lorryShift');
 /** True where new grand campaigns open with horse-drawn wagons where lorries are short (stage.json 'wagons'). */
@@ -192,3 +197,13 @@ export const FERRY_STAGE: boolean = staged('TC_FERRY', 'ferry');
 // while this is true carry the flag 'airNames' (air.ts groupName). Words only. Forced by TC_AIRNAMES.
 /** True where new grand campaigns open with the air arms' own numbers and names (stage.json 'airNames'). */
 export const AIRNAMES_STAGE: boolean = staged('TC_AIRNAMES', 'airNames');
+// City defences (release 2; Brian 24 November 2026 22:08Z; city defences, the design director's ruling of 25 Nov 2026
+// 02:23Z; citydefences.ts): the grand campaigns opened while this is true carry the flag 'cityDefences'. Forced by
+// TC_CITYDEFENCES.
+/** True where new grand campaigns open with searchlights, guns by night by what they see, and towns their garrisons fortify (stage.json 'cityDefences'). */
+export const CITYDEFENCES_STAGE: boolean = staged('TC_CITYDEFENCES', 'cityDefences');
+// Formations offered (release 2, Japan and the Pacific; the design director's ruling B8 of 25 November 2026): the grand
+// campaigns opened while this is true carry the flag 'offers' (game.ts offersOn). Read only on the whole world. Off
+// until its screen passes the Mac (his 13:39Z of that day). Forced by TC_OFFERS.
+/** True where new grand campaigns open with the player's dated rows as offers (stage.json 'offers'). */
+export const OFFERS_STAGE: boolean = staged('TC_OFFERS', 'offers');

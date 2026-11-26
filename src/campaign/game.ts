@@ -31,7 +31,7 @@ import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, m
 import { civicDrafts, civicSum, handedOver, holdersNow, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
 import { divisionsOf, growCorps, numberCorps, numbersUnderFlag } from './armies';
-import { DRAWN, countingFor, formsAny, heldAlready, heldLine, joinNames, joinsAlone, keepCounted, layOnce, namesNow, ownShare, rowOver } from './drawn';
+import { DRAWN, corpsInContact, countingFor, formsAny, heldAlready, heldLine, joinNames, joinsAlone, keepCounted, layOnce, namesNow, ownShare, rowOver } from './drawn';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
@@ -62,7 +62,8 @@ import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarnin
 import { legionDrafts } from './legions';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
-import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fedBySea, feedingSeas, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld, type SeaReach } from './siege';
+import { clearTownWorks, flakLine, flakLostWithTown, isFlakLine, townFlak, townFlakCut, townWorksMonth, townWorksWords } from './citydefences';
+import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fedBySea, feedingSeas, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld, fortTerm, type SeaReach } from './siege';
 import { battleHit } from './repairs';
 import { TOWNS, townName, townSize, worthOf } from './towns';
 import { WEATHER, skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
@@ -74,7 +75,10 @@ import { chargeDelay, isRearguard, rearguardWeeks, rearguardsAt, rearguardsLapse
 import { clientWar, tiedPair } from './far';
 import { atomFallen, atomMonth, atomPress } from './atom';
 import { demandInstead, keepersOf, keptForces, pacificWar } from './pacific';
+import { engRoom, islandOf, roomAt, roomRefusal, roomSays } from './islands';
 import { frontOfRow, onLiveFront } from './planfronts';
+import { bookKept } from './stations';
+import { floorWords, witherAt, witherDrop, witherFed, witherMonth, withered } from './wither';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -587,7 +591,7 @@ function reactionMoves(g: Game, aggressor: string, victim: string): void {
     if (!c.dyle || c.nat === g.human || !atWar(g, c.nat, aggressor)) continue;
     const to = g.byName[c.dyle];
     if (!to || to.owner !== victim || !allied(g, c.nat, to.ctrl)) continue;
-    if (hostileUnits(g, to, c.nat).length || placed(g, to, c.nat).length >= STACK) continue;
+    if (hostileUnits(g, to, c.nat).length || placed(g, to, c.nat).length >= roomAt(g, to, c.nat)) continue;
     place(g, c, to);
     c.dyle = null;
     moved++;
@@ -596,6 +600,11 @@ function reactionMoves(g: Game, aggressor: string, victim: string): void {
 }
 
 export const hostileUnits = (g: Game, r: Region, nat: string): Corps[] => r.units.filter((u) => atWar(g, u.nat, nat));
+/**
+ * True where an enemy of this corps stands on its own province: an army round the town it holds, or a town held
+ * against the field it stands in. (The far side's islands ask it: ruling 173(e) is for an island with no enemy ashore.)
+ */
+export const enemyAshore = (g: Game, c: Corps): boolean => { const r = g.regions[c.reg]; return atWar(g, c.nat, r.ctrl) || r.units.some((u) => !u.dead && atWar(g, u.nat, c.nat)); };
 
 /** Who dug a place's works: the nation that built them; the works on the map from the first day are their country's. */
 export const worksBy = (r: Region): string => r.fort?.by ?? r.owner;
@@ -652,6 +661,33 @@ export const roomless = fortRow;
  */
 export function portKeep(g: Game, r: Region): number {
   return (fortRows(g) ? portStores(g, r) : null) ?? DESERT.stores;
+}
+/**
+ * A nation's place in the order of the nations (Object.keys(g.nations)), as a flag holds it: whose pocket a town's is
+ * (siege.ts `pktn:`) and whose kept stores a port's are (`stores:by:`).
+ */
+export const natIndex = (g: Game, nat: string): number => Object.keys(g.nations).indexOf(nat);
+/**
+ * The months a fortified port overseas has already lived on its kept stores (the design director's ruling of 19:01Z,
+ * 25 November 2026: "one town, one larder, priced once"). Under true reach a siege that opens round such a port begins
+ * with these months eaten (siege.ts invest). The stores were last filled in the month the flag holds, so the first
+ * month on them is the month after. The present month counts too once the holder's own month has drawn its supply
+ * from them (`drawn`): the siege's clock then starts with the next month. Otherwise the present month is the siege's
+ * own to charge. They cannot have run longer than they last (portKeep).
+ * Only stores the present holder filled are his to have eaten. Whose they are is recorded at the fill, as a pocket's
+ * town records whose pocket it was (the same ruling: "as a pocket's town already does"): under true reach the supply
+ * picture writes the holder's place (`stores:by:<id>`, natIndex) beside the month, whoever's ships carried them. Stores
+ * whose record names another nation were never his, however the port came to him (a battle, a fall, a hand-back, a
+ * treaty or the last act), and stores with no record (filled with true reach off, or in a save from before the record)
+ * charge nothing until the holder's own next fill writes one: the conservative reading. A port captured in or after
+ * the month of the fill (Region.since) charges nothing either: a port lost and retaken by battle since its holder last
+ * filled it, and stores a new holder filled in the very month he took the port.
+ */
+export function keptStoresRun(g: Game, r: Region, drawn = false): number {
+  const last = g.flags[storesKey(r.id)];
+  if (!r.overseas || !r.port || !worksKept(r) || last === undefined || last <= r.since) return 0;
+  if (Object.keys(g.nations)[g.flags[storesByKey(r.id)] ?? -1] !== r.ctrl) return 0;
+  return Math.min(portKeep(g, r), Math.max(0, g.turn - (drawn ? 0 : 1) - last));
 }
 /**
  * A fortress crew in a fortified port overseas living on the port's stores this month (07:12Z): the sea behind it is
@@ -991,9 +1027,11 @@ const sameBytes = (a: ArrayLike<number>, b: ArrayLike<number>): boolean => {
   return true;
 };
 /** The flags' names a call asks after for every province, made once (the same names, without building them again). */
-const depotKeys: string[] = [], storesKeys: string[] = [];
+const depotKeys: string[] = [], storesKeys: string[] = [], storesByKeys: string[] = [];
 const depotKey = (id: number): string => (depotKeys[id] ??= 'depot:' + id);
 const storesKey = (id: number): string => (storesKeys[id] ??= `stores:${id}`);
+// (Whose stores they are, under true reach: keptStoresRun. It begins with "stores:" so that a load keeps it with the month.)
+const storesByKey = (id: number): string => (storesByKeys[id] ??= `stores:by:${id}`);
 
 /** One country's supply picture from its stores outward over the provinces its roads may pass, and its lines' lengths. */
 function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], heads: number[], wide: boolean, long: string[], deep: Uint8Array, sand: Uint8Array, rail: RailNow): { ok: Uint8Array; reach: Float32Array; east: boolean } {
@@ -1219,6 +1257,8 @@ export function computeSupply(g: Game): void {
   // lanes by the seas closed to a alone). Asked only where a's own lanes reach the port; where no sea of them is closed
   // to id the walk would take the same seas, and they are a's own lanes.
   const truly = trueReach(g);
+  // (The nations' places (natIndex), made once in a call and only when a fill under true reach asks for one.)
+  let places: Map<string, number> | null = null;
   const asIf = new Map<string, Uint8Array>();
   const carrying = (a: string, id: string, theirs: Uint8Array): Uint8Array => {
     const key = a + '>' + id;
@@ -1295,7 +1335,12 @@ export function computeSupply(g: Game): void {
       // (Under the fortress rows, a port that holds a row keeps that row's stores: one stores, not two. 07:12Z.)
       if (!shut && r.overseas && r.port && worksKept(r)) {
         if (quay) {
-          if (!truly || (by === 1 ? forHolder(id, r) : by === 2 || mates!.some((a) => feeds(a, id, r) && forHolder(a, r)))) g.flags[storesKey(r.id)] = g.turn;
+          if (!truly) g.flags[storesKey(r.id)] = g.turn;
+          else if (by === 1 ? forHolder(id, r) : by === 2 || mates!.some((a) => feeds(a, id, r) && forHolder(a, r))) {
+            // Under true reach the fill records whose stores they are: the holder's, whoever's ships carried them.
+            g.flags[storesKey(r.id)] = g.turn;
+            g.flags[storesByKey(r.id)] = (places ??= new Map(Object.keys(g.nations).map((n, i) => [n, i]))).get(r.ctrl)!;
+          }
         }
         else if (g.turn - (g.flags[storesKey(r.id)] ?? -99) <= portKeep(g, r)) quay = true;
       }
@@ -1508,8 +1553,6 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
   const most = corps.length ? g.nations[corps[0].nat].maxAttack || 99 : 99;
   const ranked = [...corps].sort((x, y) => corpsBase(g, y) * KIND[y.kind].atk - corpsBase(g, x) * KIND[x.kind].atk);
   const guns: Corps[] = [];
-  // Support teams (release 2) fire from behind the line: a few ride in beside the corps that fight, as guns do.
-  const teams: Corps[] = [];
   if (g.flags.open === 1 && corps.length) {
     // Attacked from several sides at once a defence cannot cover every road: each side's roads carry more (the grand campaign).
     if (new Set(corps.filter((c) => !blocked(g, c, target)).map((c) => c.reg)).size >= DEFENCE.frontage.sides) cap += DEFENCE.frontage.extra;
@@ -1517,7 +1560,6 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
     if (worksAgainst(g, target, armyOf(corps[0])) || hostileUnits(g, target, armyOf(corps[0])).some((u) => u.dug)) {
       for (const c of ranked) if (c.kind === 'art' && guns.length < DEFENCE.frontage.guns && !blocked(g, c, target)) guns.push(c);
     }
-    for (const c of ranked) if (isTeam(c) && teams.length < TEAMS.frontage && !blocked(g, c, target)) teams.push(c);
   }
   const fill = (over: Corps[]): Corps[] => {
     const used: Record<number, number> = {};
@@ -1532,16 +1574,18 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
     }
     return out;
   };
-  const behind = teams.length ? [...guns, ...teams] : guns;
-  const out = fill(behind);
+  const out = fill(guns);
+  // Support teams (release 2) take a place on the roads as any corps does, never riding past a full frontage (the
+  // design director's rulings of 25 November 2026, 20:38Z and 21:33Z: one rule for every unit, no new figure), and
+  // go in only beside a fighting corps, never alone.
+  const beside = (cs: Corps[]): Corps[] => (cs.some(fights) || !cs.some(isTeam) ? cs : cs.filter((c) => !isTeam(c)));
   // The guns support somebody: with nobody else to go in, they take the roads themselves like any other corps.
-  // (The teams ride only beside a fighting corps.)
-  const force = out.length ? (teams.length && out.some(fights) ? [...out, ...behind] : [...out, ...guns]) : fill([]);
+  const force = beside(out.length ? [...out, ...guns] : fill([]));
   if (!gunsRule(g) || force.some(fights)) return force;
   // In the grand campaign guns never go forward alone (ruling 211(a)): where the roads filled up with guns and
   // engineers, the fighting corps to hand take them instead, and with no fighting corps there is no attack.
-  const line = fill(corps.filter((c) => !fights(c)));
-  return line.length ? (teams.length ? [...line, ...guns, ...teams] : [...line, ...guns]) : [];
+  const line = fill(corps.filter((c) => !fights(c) && !isTeam(c)));
+  return line.length ? beside([...line, ...guns]) : [];
 }
 
 /** Which week of the month a corps reaches after spending this many more action points. */
@@ -1913,6 +1957,9 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // An assault the month the army comes up to the town goes in off the march, with nothing made ready.
   const rushed = town && g.flags[`siege:${target.id}`] === g.turn ? SIEGE.assault.hasty[townSize(g, target)] : 1;
   const hasty = rushed < 1;
+  // (City defences, the design director's ruling of 25 Nov 2026 02:23Z: the heavy anti-aircraft guns of a town with a
+  // living garrison fire on the tanks that storm it, a further cut on top of the streets'. 0 with the switch off.)
+  const flak = town ? townFlakCut(g, target) : 0;
   for (const c of attackers) {
     if (wide && barred(g, c, target)) { tooSteep++; continue; }
     if (wide && land && noCrossing(g, c.kind, c.reg, target.id)) { noBridge++; continue; }
@@ -1932,7 +1979,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     }
     if (c.kind === 'arm') {
       // In the streets of a town a tank is a target: there is no room to manoeuvre.
-      if (town) { p *= SIEGE.assault.armour; streets = true; }
+      if (town) { p *= SIEGE.assault.armour; streets = true; if (flak > 0) p *= 1 - flak; }
       else if (target.terrain === 'mountain' || target.terrain === 'urban' || target.terrain === 'marsh') { p *= 0.6; armorStuck = true; }
       // Tanks against a defence that cannot stop them. In the grand campaign the edge shrinks by its anti-tank strength.
       else {
@@ -2131,7 +2178,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       // ("Panama City, Panama's capital", not "Capital of Panama City"; "Lodz, a city", not "City of Lodz": the UI director,
       // builds 1668 and 1678.)
       label: 'The town', value: `${townSize(g, target) === 'capital' ? `${place}, ${theWords(`${theName(g.nations[target.owner])}'s`)} capital` : `${place}, a ${TOWNS.words[townSize(g, target)].toLowerCase()}`}${target.fort ? `, with fortress works of level ${target.fort.lv}${served ? '' : `, dug by ${theName(g.nations[worksBy(target)])}: they give its defenders no cover`}` : ''}`,
-      effect: `Its defenders fight ${Math.round((walls - 1) * 100)}% stronger in the streets${broken > 0 ? `: bombardment has already broken down ${Math.round(broken * 100)}% of its works` : ''}`,
+      effect: `Its defenders fight ${Math.round((walls - 1) * 100)}% stronger in the streets${townWorksWords(g, target, fortTerm(target, served))}${broken > 0 ? `: bombardment has already broken down ${Math.round(broken * 100)}% of its works` : ''}`,
     });
     // (Which share stands behind which: the design director's 07:36Z.)
     if (crewP > 0) {
@@ -2407,6 +2454,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   if (armorShock) lines.push(at ? { label: 'Armor', value: `Tank attack up ${Math.round(25 * (1 - at.strength))}%` } : { label: 'Armor', value: 'Tanks against a defence without armor', effect: 'Tank attack up 25%' });
   if (armorStuck) lines.push({ label: 'Armor', value: 'Tanks in close country', effect: 'Tank attack cut to 60%' });
   if (streets) lines.push({ label: 'Armor', value: 'Tanks in the streets of the town', effect: `Tank attack cut to ${Math.round(SIEGE.assault.armour * 100)}%` });
+  if (streets && flak > 0) lines.push(flakLine(flak));
   if (hasty) lines.push({ label: 'A hasty assault', value: 'The army has only just come up to the town: it goes in off the march', effect: `Attack cut to ${Math.round(rushed * 100)}%. Next month the assault is made ready and goes in at full weight` });
   if (flank > 1) lines.push({ label: 'Direction', value: `Attack from ${sources.size} sides`, effect: `Attack up ${Math.round((flank - 1) * 100)}%` });
   // What the battle card tells of it: who will pay, how much of the tanks' shock is left, and what he brings against the works.
@@ -2456,6 +2504,8 @@ function reportUnit(c: Corps): ReportUnit {
 
 export function removeCorps(g: Game, c: Corps): void {
   c.dead = true;
+  // (The whole-world chart: a withered island garrison's count goes with it. Ruling 173(e), wither.ts.)
+  if (farOn(g)) witherDrop(g, c, true);
   const gen = generalOf(g, c);
   if (gen) { gen.corps = -1; c.general = null; }
   const r = g.regions[c.reg];
@@ -2505,7 +2555,8 @@ function leaveWorks(g: Game, c: Corps): void {
   const old = groundWorks(g, from.id);
   const n = old ? old.corps : 0;
   g.flags[`fw:${from.id}`] = Math.round(((old ? old.months * n : 0) + months) / (n + 1) * 100) / 100;
-  g.flags[`fwk:${from.id}`] = Math.min(STACK, n + 1);
+  // (Works hold no more corps than the ground has room for: five, or an island's own room. islands.ts.)
+  g.flags[`fwk:${from.id}`] = Math.min(islandOf(g, from)?.room ?? STACK, n + 1);
   g.flags[`fwn:${from.id}`] = Object.keys(g.nations).indexOf(c.nat);
 }
 
@@ -2591,7 +2642,8 @@ export function retreatTarget(g: Game, c: Corps, from: Region, banned: Set<numbe
     const r = g.regions[j];
     // (In the grand campaign an army also falls back on the lines of its own side round a town it is besieging.)
     if (!fallsOn(g, c, r, banned)) continue;
-    if (placed(g, r, c.nat).length >= STACK + 2) continue;
+    // (An island of the Pacific takes a beaten army two over its room, as any ground takes two over its five: islands.ts.)
+    if (placed(g, r, c.nat).length >= roomAt(g, r, c.nat) + 2) continue;
     const s = fallScore(g, c, from, r, banned);
     if (s < bs) { bs = s; best = r; }
   }
@@ -2640,7 +2692,7 @@ function fallThrough(g: Game, c: Corps, from: Region, banned: Set<number>): Regi
   for (const n of full) {
     for (const k of n.nb) {
       const m = g.regions[k];
-      if (k === from.id || !fallsOn(g, c, m, banned) || placed(g, m, c.nat).length >= STACK + 2) continue;
+      if (k === from.id || !fallsOn(g, c, m, banned) || placed(g, m, c.nat).length >= roomAt(g, m, c.nat) + 2) continue;
       const s = fallScore(g, c, n, m, banned, from);
       if (s < bs) { bs = s; best = m; }
     }
@@ -2795,13 +2847,16 @@ function moveIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a
   const lead = gunsRule(g);
   const order = attackers.map((c, i) => ({ c, i })).sort((x, y) => (lead ? Number(fights(y.c)) - Number(fights(x.c)) : 0) || KIND[x.c.kind].move - KIND[y.c.kind].move || corpsBase(g, y.c) - corpsBase(g, x.c));
   let moved = 0;
+  // (An island of the Pacific takes no more of the winners than it has room for, those of their side already on it
+  // counted, as a march onto it would be: rulings 173(b) and 179(s), islands.ts. The rest stay where they came from.)
+  const isle = islandOf(g, target) !== null;
   for (const { c, i } of order) {
     // Troops who stormed a town from the lines round it are already there.
     if (c.reg === target.id) continue;
     if (lead && !fights(c) && !gunsMayFollow(g, c, target)) { c.ap = Math.max(0, c.ap - 1); continue; }
     // A force that came by sea all goes ashore together.
     const cost = opts.sea !== undefined ? 0 : moveCost(g, c, target);
-    if (moved >= (opts.occupy ?? STACK) || (moved > 0 && c.ap < cost) || (opts.sea === undefined ? blocked(g, c, target) : barred(g, c, target))) { c.ap = Math.max(0, c.ap - 1); continue; }
+    if (moved >= (opts.occupy ?? STACK) || (isle && !hasRoom(g, target, c)) || (moved > 0 && c.ap < cost) || (opts.sea === undefined ? blocked(g, c, target) : barred(g, c, target))) { c.ap = Math.max(0, c.ap - 1); continue; }
     leaveWorks(g, c);
     place(g, c, target);
     c.ap = Math.max(0, c.ap - cost);
@@ -2941,6 +2996,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   let a = assess(g, attackers, target, opts);
   // The grand campaign: the fight may be for the town itself, or to raise the siege of a town of the attackers' own side.
   const town = !!opts.town, sieges = siegeRules(g);
+  // (City defences: the town's guns that fired on the stormers' tanks, as the storm begins. Only where the storm's own
+  // assessment priced them, that is where its card carries their line: tanks stormed. With no tanks, or the switch
+  // off, 0. The design director, 25 Nov 2026 12:18Z.)
+  const flakAt = town && a.lines.some(isFlakLine) ? townFlak(g, target) : 0;
   // (Release 2, rearguard.ts) The rearguards holding the field against this attack: they cost the attackers time.
   const rears = town || opts.breakout ? [] : rearguardsAt(g, target, (nat) => atWar(g, nat, armyOf(attackers[0])));
   const gone = town ? [] : giveWay(g, a, attackers, target);
@@ -3009,6 +3068,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   let attLost = 0, defLost = 0, prisoners = 0;
   // True if the field is won but the town holds out (the grand campaign), and if it gave itself up at the summons.
   let held = false, gates = false;
+  let flakOut: { label: string; value: string } | null = null;
   // The share of its men each corps loses in this fight: what its morale makes of the day.
   const bled = new Map<number, number>();
   const attW = splitWeights(attackers, opts.field?.corps), defW = splitWeights(defenders, opts.field?.corps);
@@ -3179,6 +3239,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       if (watch > 0) { prisoners += watchMen; defU.push({ name: `Town guard of ${townName(target)}`, nat: target.ctrl, kind: 'inf', divs: Math.round(watch * 10) / 10, men: watchMen, lost: watchMen, fate: 'surrendered', guard: true }); }
       for (const c of attackers) c.ap = Math.max(0, c.ap - SIEGE.assault.ap);
       fall(g, target, attNat, 'storm');
+      // (City defences: a town whose guns fought the stormers' tanks loses a level of them with it.)
+      flakOut = flakLostWithTown(g, target, flakAt, townName(target));
     }
     // (The fortress rows: where a fortress crew went into its works, the guard goes in with it and the town holds.)
     else if (inField && !intoWorks) {
@@ -3220,6 +3282,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     attLost, defLost, prisoners,
   };
   if (town) rep.town = true;
+  if (flakOut) rep.lines.push(flakOut);
   if (inField) rep.guarded = true;
   if (held) rep.siege = true;
   if (gates) rep.gates = true;
@@ -3425,6 +3488,8 @@ export function capture(g: Game, r: Region, nat: string): void {
   g.supplyDirty = true;
   // Works standing empty go with the ground: whoever takes it from their owner finds nothing he can use.
   if (g.flags[`fw:${r.id}`] !== undefined) { const left = groundWorks(g, r.id); if (!left || !allied(g, r.ctrl, left.nat)) clearWorks(g, r.id); }
+  // (City defences: the town's barricades and strongpoints were its old holder's, and go with him. Off: nothing.)
+  clearTownWorks(g, r);
   if (groundRules(g)) {
     // The minefields are lifted by whoever takes the ground, and the side driven off it blows the bridges behind it.
     liftMines(g, r);
@@ -3523,12 +3588,32 @@ function ownNearest(g: Game, c: Corps): Region | null {
 
 /**
  * Room for this corps in a region. Engineers work among the other troops: they are not counted against the
- * corps a province holds, and it takes two engineer corps at most.
+ * corps a province holds, and it takes two engineer corps at most. (How many corps a province holds is `roomAt`'s
+ * to say: five, or on the whole-world chart an island's own room. islands.ts.)
  */
 export function hasRoom(g: Game, to: Region, c: Corps): boolean {
   const here = placed(g, to, c.nat);
   const eng = here.filter((u) => u.kind === 'eng').length;
-  return c.kind === 'eng' ? eng < 2 : here.length - eng < STACK;
+  return c.kind === 'eng' ? eng < engRoom(g, to) : here.length - eng < roomAt(g, to, c.nat);
+}
+
+/**
+ * How many more corps of a side an island of the Pacific takes ashore: its room less the side's corps already on it,
+ * engineers apart as `hasRoom` counts them, and never less than none (rulings 173(b) and 179(s): a landing force for
+ * an atoll is one corps). Infinity for ground that is no island of the table, and with the far side off, where a
+ * landing is counted as it always was.
+ */
+export function shoreRoom(g: Game, to: Region, nat: string): number {
+  return islandOf(g, to) ? Math.max(0, roomAt(g, to, nat) - placed(g, to, nat).filter((u) => u.kind !== 'eng').length) : Infinity;
+}
+
+/**
+ * Why a corps cannot march into a province next door for want of room there, in the player's words, or null where
+ * room is not what stops it. Only an island of the Pacific says so ("Hong Kong has room for one corps."): other
+ * ground that is full says nothing here, as before, and the two corps may change places.
+ */
+export function whyNoRoom(g: Game, c: Corps, to: Region): string | null {
+  return to.id !== c.reg && allied(g, c.nat, to.ctrl) && !hostileUnits(g, to, c.nat).length && !hasRoom(g, to, c) ? roomRefusal(g, to, [c]) ?? roomSays(g, to) : null;
 }
 
 /** Moves one corps one region. Returns false if the move is not allowed. */
@@ -3726,7 +3811,7 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
   if (besieged(g, dest) && !junctionOpenTo(g, c.nat, dest)) return news('siege', `${dest.name} is under siege.`, 'No train runs into it.', to);
   if (net && !onNet(to)) return { code: 'noline', line: `No railway runs to ${dest.name}.`, at: to };
   if (barred(g, c, dest)) return { code: 'steep', line: whyBarred(g, c, dest)!, at: to };
-  if (railReach(g, c).has(to)) return hasRoom(g, dest, c) ? null : { code: 'room', line: `${dest.name} has no room for another corps.`, at: to };
+  if (railReach(g, c).has(to)) return hasRoom(g, dest, c) ? null : { code: 'room', line: roomRefusal(g, dest, [c]) ?? roomSays(g, dest) ?? `${dest.name} has no room for another corps.`, at: to };
   if (net && railCut(g, to)) return news('cut', `The railway at ${dest.name} is cut${cutAside(g, to)}.`, `No train runs into it until ${mended(to)}.`, to);
   // Where the line is broken: the way there over the map's lines that meets the fewest breaks, and the first of them.
   // A break on his own side's ground (a cut, a siege, bridges down) is a smaller thing than ground he does not hold,
@@ -3767,7 +3852,9 @@ export function roomForAll(g: Game, to: Region, corps: Corps[]): boolean {
   if (!corps.length) return true;
   const here = placed(g, to, corps[0].nat).filter((u) => !corps.includes(u));
   const eng = here.filter((u) => u.kind === 'eng').length, riding = corps.filter((c) => c.kind === 'eng').length;
-  return eng + riding <= 2 && here.length - eng + (corps.length - riding) <= STACK;
+  // (Engineers apart: two, or on an island of the Pacific the lesser of two and its room. Engineers already there over
+  // that, the record's or a beaten army's, bar more engineers and nobody else. islands.ts engRoom.)
+  return (riding === 0 ? eng <= Math.max(2, engRoom(g, to)) : eng + riding <= engRoom(g, to)) && here.length - eng + (corps.length - riding) <= roomAt(g, to, corps[0].nat);
 }
 
 /**
@@ -3796,7 +3883,7 @@ export function whyNoTrainFor(g: Game, corps: Corps[], to?: number): NoTrain | n
   const first = whys.findIndex(Boolean);
   if (first < 0) {
     const dest = to === undefined ? undefined : g.regions[to];
-    return dest && !roomForAll(g, dest, corps) ? { code: 'room', line: `${dest.name} has no room for ${corps.length === 1 ? 'another corps' : `${corps.length} more corps`}.`, at: dest.id } : null;
+    return dest && !roomForAll(g, dest, corps) ? { code: 'room', line: roomRefusal(g, dest, corps) ?? roomSays(g, dest) ?? `${dest.name} has no room for ${corps.length === 1 ? 'another corps' : `${corps.length} more corps`}.`, at: dest.id } : null;
   }
   const no = whys[first]!;
   if (whys.every(Boolean)) {
@@ -4284,6 +4371,8 @@ export function sailOn(g: Game, nat: string): void {
 export function evacuate(g: Game, c: Corps): boolean {
   const r = g.regions[c.reg];
   const N = g.nations[c.nat];
+  // (Ruling 173(e), the whole-world chart: a withered island garrison does not sail. It waits for a ship of its side.)
+  if (withered(g, c)) return false;
   if (!N.seaSupply || !r.port || r.owner === c.nat || N.capital < 0 || !seaOpenAt(g, c.nat, r)) return false;
   const dest = refugeHeld(g, c, r);
   if (!dest) return false;
@@ -4304,6 +4393,7 @@ export function evacuate(g: Game, c: Corps): boolean {
 export function whyNotEvacuate(g: Game, c: Corps): string | null {
   const r = g.regions[c.reg];
   const N = g.nations[c.nat];
+  if (withered(g, c)) return `${c.name} is cut off and out of stores on ${placeName(r.name)}: it cannot be lifted off until stores have reached it by sea.`;
   if (!N.seaSupply) return `${N.name} has no ships to lift an army off a beach.`;
   if (!r.port) return `${r.name} has no port to lift an army from.`;
   if (r.owner === c.nat) return `${r.name} is home ground: there is nowhere to be lifted off to.`;
@@ -4421,7 +4511,7 @@ function mobilise(g: Game, nat: string): void {
     // Form up in the industrial towns still held, emptiest first, away from the fighting.
     let best: Region | null = null, bs = 1e9;
     for (const r of g.regions) {
-      if (r.owner !== nat || r.ctrl !== nat || r.fac < 1 || r.units.filter((u) => !roomless(g, u)).length >= STACK || enemyNear(r) || besieged(g, r)) continue;
+      if (r.owner !== nat || r.ctrl !== nat || r.fac < 1 || r.units.filter((u) => !roomless(g, u)).length >= roomAt(g, r, nat) || enemyNear(r) || besieged(g, r)) continue;
       const s = r.units.length * 10 - r.fac - (r.cap ? 3 : 0);
       if (s < bs) { bs = s; best = r; }
     }
@@ -4500,7 +4590,7 @@ function liftedOut(c: Corps, from: Region, to: Region): void {
 export function refuge(g: Game, c: Corps, from: Region): Region {
   for (const nm of havensOf(from)) {
     const r = g.byName[nm];
-    if (r && r.id !== from.id && allied(g, c.nat, r.ctrl) && !hostileUnits(g, r, c.nat).length && placed(g, r, c.nat).length < STACK && seaOpenAt(g, c.nat, r)) return r;
+    if (r && r.id !== from.id && allied(g, c.nat, r.ctrl) && !hostileUnits(g, r, c.nat).length && placed(g, r, c.nat).length < roomAt(g, r, c.nat) && seaOpenAt(g, c.nat, r)) return r;
   }
   // Ruling 221 (F): troops lifted off the coast of a country their own is fighting are landed at the nearest harbour
   // their country holds on that country's ground, with no enemy in it, room and the sea open: the war they came for
@@ -4533,7 +4623,7 @@ export function refugeHeld(g: Game, c: Corps, from: Region): Region | null {
  */
 export function nearHarbour(g: Game, nat: string, from: Region, fits: (r: Region) => boolean = () => true): Region | null {
   return g.regions
-    .filter((r) => r.port && r.id !== from.id && r.owner === from.owner && r.ctrl === nat && !hostileUnits(g, r, nat).length && placed(g, r, nat).length < STACK && seaOpenAt(g, nat, r) && fits(r))
+    .filter((r) => r.port && r.id !== from.id && r.owner === from.owner && r.ctrl === nat && !hostileUnits(g, r, nat).length && placed(g, r, nat).length < roomAt(g, r, nat) && seaOpenAt(g, nat, r) && fits(r))
     .sort((a, b) => chartDist(g, a, from) - chartDist(g, b, from) || a.id - b.id)[0] ?? null;
 }
 
@@ -4673,10 +4763,16 @@ const sharesWar = (g: Game, nat: string, friend: string): boolean => !!g.nations
  * not, the nearest ground in the nation's own hands with room for one more corps, across the enemy's lines if
  * the place is a pocket. Nobody stacks a sixth corps in a province because a calendar said so. Null if every such
  * place is full.
+ *
+ * (The whole-world chart: the record's own place is counted against five as it always was, `record`, though it be an
+ * island of the Pacific with room for fewer. The record was written before the islands' table, and where its rows
+ * stand more corps on an island than the island's room they are put down all the same and nobody is sent away or
+ * struck for it: the historian mends the rows (form B3 of 25 November 2026, (c)). The ground a row is sent on to is
+ * counted by its own room, an island's among it, as is a corps come in from the sea.)
  */
-function roomNear(g: Game, nat: string, at: Region): Region | null {
-  const full = (r: Region): boolean => placed(g, r, nat).filter((u) => u.kind !== 'eng').length >= STACK;
-  if (!full(at)) return at;
+function roomNear(g: Game, nat: string, at: Region, record = false): Region | null {
+  const full = (r: Region, most = roomAt(g, r, nat)): boolean => placed(g, r, nat).filter((u) => u.kind !== 'eng').length >= most;
+  if (!full(at, record ? STACK : undefined)) return at;
   const seen = new Uint8Array(g.regions.length);
   const q = [at.id];
   seen[at.id] = 1;
@@ -4735,6 +4831,43 @@ function warBegan(g: Game, w: string[]): number {
 }
 
 /**
+ * The far side: whether a dated row is one the far side's rule for dated rows reads (ruling B7's reach, `postedFor`):
+ * its posting lies beyond the old chart, and no book dates its country's rows (stations.ts `bookKept`). Never with
+ * the far side off, and never a row posted on the old chart.
+ */
+const farRow = (g: Game, nat: string, row: any[]): boolean => {
+  const posting = g.byName[row[5]];
+  return farOn(g) && !!posting && beyondEurope(posting) && !bookKept(g, nat);
+};
+
+/**
+ * True where the war a row names has begun and is over: it is not on now, and the row has seen it on (`due:N`, kept
+ * the month its war first let it come), or one side declared it on the other. A war not on now that nobody has
+ * declared is a war not yet begun. (A war on from the first day was declared by nobody: a row that never saw it on
+ * reads it as not yet begun.)
+ */
+function warOver(g: Game, i: number, w: string[]): boolean {
+  if (warOn(g, w)) return false;
+  if (g.flags[`due:${i}`] !== undefined) return true;
+  return Object.keys(g.flags).some((k) => {
+    const p = k.split(':');
+    if (p.length !== 3 || p[0] !== 'war') return false;
+    return w[1] === '*' ? p[1] === w[0] || p[2] === w[0] : (p[1] === w[0] && p[2] === w[1]) || (p[1] === w[1] && p[2] === w[0]);
+  });
+}
+
+/**
+ * The month a dated row's half year is counted from, as the rule of dated rows reads it (`expeditions`): its date,
+ * or in the grand campaign the month its war let it come (`due:N`), and never before the month after the last month
+ * it was made to wait (`wait:N`: for its war by ruling B7, for a live front, for an offer it is made from).
+ */
+function rowDue(g: Game, i: number, row: any[], o: any): number {
+  const due = g.flags.open === 1 && o.war && g.flags[`due:${i}`] !== undefined ? g.flags[`due:${i}`] : row[0];
+  const waited = g.flags[`wait:${i}`];
+  return waited !== undefined ? Math.max(due, waited + 1) : due;
+}
+
+/**
  * The allies a dated row sent a corps to fight beside: the countries its 'war' names other than its own (Creforce and
  * W Force, for Greece). ai.ts wantsOut reads them: on such a country's ground the corps is its guest.
  */
@@ -4749,6 +4882,13 @@ const UNLESS = new Set<string>(((setup as any).expeditions as any[] ?? []).map((
  * under history (a row settled is marked 1; one the grand campaign gave up on, or never sent, 2).
  */
 const rowLanded = (g: Game, name: string): boolean => ((setup as any).expeditions as any[] ?? []).some((row, i) => row[2] === name && (g.flags[`came:${i}`] !== undefined || g.flags[`sent:${i}`] === 1));
+/**
+ * True where a corps a row takes whole (`from`) is not on the board because the dated row of its country that makes it
+ * waits, unsent (`wait:`), and no living corps carries that name yet. Read by `expeditions` under the switch 'fromWait'
+ * alone, on the far side: the row that names it waits with it, and has its half year from the month it comes.
+ */
+const fromWaits = (g: Game, nat: string, from: string[]): boolean => ((setup as any).expeditions as any[] ?? []).some((r2, j) => r2[1] === nat
+  && from.includes(r2[2]) && !g.flags[`sent:${j}`] && g.flags[`wait:${j}`] !== undefined && !g.corps.some((x) => x.nat === nat && !x.dead && x.name === r2[2]));
 
 /**
  * A grand campaign begun after the first day (staff.ts, startOpen): a row whose men history's full-size corps already
@@ -4776,7 +4916,7 @@ function fallbackHarbour(g: Game, nat: string, at: Region): Region | null {
   let best: Region | null = null, bd = Infinity;
   for (const r of g.regions) {
     if (!r.port || r.id === at.id || THEATRE_OF.get(r.name) !== k) continue;
-    if (!allied(g, nat, r.ctrl) || hostileUnits(g, r, nat).length || placed(g, r, nat).filter((u) => u.kind !== 'eng').length >= STACK) continue;
+    if (!allied(g, nat, r.ctrl) || hostileUnits(g, r, nat).length || placed(g, r, nat).filter((u) => u.kind !== 'eng').length >= roomAt(g, r, nat)) continue;
     const d = chartDist(g, r, at);
     if (d < bd || (d === bd && best && r.id < best.id)) { bd = d; best = r; }
   }
@@ -4826,7 +4966,7 @@ function landVoyages(g: Game, nat: string): void {
     let reg: Region | null = g.regions[v.to];
     if (!allied(g, nat, reg.ctrl) || hostileUnits(g, reg, nat).length) reg = atWar(g, nat, reg.ctrl) || allied(g, nat, reg.ctrl) ? fallbackHarbour(g, nat, reg) : null;
     if (reg) reg = roomNear(g, nat, reg) ?? reg;
-    if (!reg || !allied(g, nat, reg.ctrl) || hostileUnits(g, reg, nat).length || placed(g, reg, nat).filter((u) => u.kind !== 'eng').length >= STACK) continue;
+    if (!reg || !allied(g, nat, reg.ctrl) || hostileUnits(g, reg, nat).length || placed(g, reg, nat).filter((u) => u.kind !== 'eng').length >= roomAt(g, reg, nat)) continue;
     g.atSea = g.atSea.filter((x) => x !== v);
     const c = v.corps;
     c.reg = reg.id;
@@ -4863,7 +5003,10 @@ export function ashoreFor(g: Game, nat: string, row: any[], reg: Region | undefi
   const mine = (r: Region): boolean => (o.shore ? r.owner === o.shore && allied(g, nat, r.ctrl) : r.ctrl === nat);
   let best: Region | null = null, bd = Infinity;
   for (const r of g.regions) {
-    if (!r.port || !mine(r) || hostileUnits(g, r, nat).length || friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= STACK) continue;
+    // (Where the book dates this country's rows, stops 1 and 2 of the dial, the record's hand stands over an island's
+    // room: its port is counted against five, as it always was. The design director, 13:58Z 25 November 2026, island
+    // room 1. Elsewhere the island's own room binds the row, as it binds everyone.)
+    if (!r.port || !mine(r) || hostileUnits(g, r, nat).length || friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= (bookKept(g, nat) ? STACK : roomAt(g, r, nat))) continue;
     const d = chartDist2(g, r, posting);
     if (d < bd) { bd = d; best = r; }
   }
@@ -4884,6 +5027,139 @@ function keptLevy(g: Game, nat: string, row: any[]): boolean {
   return farOn(g) && !!row[6]?.levy && !!own && !own.alive && !!reg && reg.owner === row[1] && reg.ctrl === nat && !!keepersOf(g, reg)?.includes(nat);
 }
 
+/**
+ * The stretch of a country's ground a province stands on: every province of the same owner joined to it by land.
+ * It is what "the same theatre" means beyond the old chart, where no side theatre is drawn (theatres.json names the
+ * old chart's four): the far side's fronts are read the same way, each country's ground a front of its own, Burma's
+ * apart from Malaya's (staff.ts `fronts`), and the near harbour of ruling 221 (F) is asked on the ground of one
+ * country too (`nearHarbour`). Luzon and Mindanao are one stretch, the Philippines; Malaya is one, Burma with India
+ * another, British Borneo a third; Guam is its own.
+ */
+function stretchOf(g: Game, at: Region): Set<number> {
+  const seen = new Set<number>([at.id]);
+  const q = [at.id];
+  for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (!seen.has(j) && g.regions[j].owner === at.owner) { seen.add(j); q.push(j); }
+  return seen;
+}
+
+/** The corps on the board a dated row would break up to find its men: those of its country, living, that its `from` list names. */
+const rowTakes = (g: Game, nat: string, o: any): Corps[] => (Array.isArray(o?.from) ? g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name)) : []);
+
+/**
+ * The far side: a dated row posted on ground its country's side does not hold (the design director's ruling B7 of
+ * 25 November 2026, design-director/pacific-japan-1125.md; one rule for every nation under the far switch).
+ *
+ *   where   It forms at the harbour its country holds nearest the posting in the same theatre (`stretchOf`: the
+ *           posting's country's ground, joined by land), with no enemy in it, room and the sea open (`nearHarbour`,
+ *           ruling 221 F's own asking), else at its capital, and whoever leads it ships it from there. It holds
+ *           nothing in place where it forms: the place it was to hold is not its side's.
+ *   when    A row the record raised for an operation forms when that war has begun, never on its date. A row that
+ *           names its war (`war`) waits for it as it always did. A row that names none, posted on the ground of a
+ *           country its own is at peace with, was raised to take that ground: it waits until its country is at war
+ *           with whoever holds the posting, and its half year is counted from that month (`waits`). As built the 65th
+ *           Brigade for Lingayen came in January 1942 with America at peace.
+ *
+ * As built a player whose capital lies beyond the old chart had every row posted on ground his country did not OWN
+ * formed at his capital: for Japan 57 rows of 86 at Tokyo, 26 of them posted on ground in China that Japan held, with
+ * a sea lift of four corps a month. A computer's rows came ashore at its nearest held port anywhere on the chart
+ * (`ashoreFor`, rider b642 part 2), on their dates.
+ *
+ * Who is read. Every country's rows posted beyond the old chart, the player's and the computer's, at stops 3 to 5
+ * of the history dial; at stops 1 and 2 only where no book dates that country's rows (stations.ts `bookKept`: the
+ * player's own country, any country in a war where the player is the book's invader, and every country once the
+ * book is closed in the theatre). Where the book dates a computer's rows they come as the book had them: `ashoreFor`
+ * stands, for the dated operations that sail them (ruling B7's own words: the record's book stays the book).
+ *
+ * Who is not read, and keeps the rule it had: a posting on the old chart (ruling 229, 1c: the side theatres' own
+ * near harbour); a posting its side holds, its own or an ally's or a client's (it forms there, or at home where the
+ * friend is at peace, as before); a local levy, a row that came overland, a row with no home but one ground
+ * (`shore`), a fort, a row that joins a standing corps, a row made out of a defeat. A computer's row that takes corps
+ * already on the board (`from`) moves no living corps off to an unheld posting: they stay where they stand, and only
+ * what the row adds from home (`adds`) comes; the player's is an offer (ruling B8, `rowOffers`), and the offer forms
+ * by this rule.
+ *
+ * (That is B7's own reading, not a departure from it: the design director's ruling of 13:39Z, 25 November 2026, on
+ * the batch 1 readings, point 1 of the dated rows: "B7 says where a row FORMS. A row that moves a living corps moves
+ * it only to ground its side holds; to unheld ground the corps stays where it stands." A row made of corps already
+ * on the board forms nothing new where it is posted: it moves the corps that are its men, and to a posting its side
+ * does not hold they are not moved. The earlier rulings pinned by tests stand on the same reading: the 18th Division
+ * is not brought to Rangoon's coast (17:10Z, 19 November); with Hsuchow lost the garrison stays whole and its
+ * detachment waits its half year and is struck (17:23Z); a row let go by a live front has its half year for its
+ * posting from that month, and its corps stays as it is (05:35Z, 21 November). Read the other way, a computer's
+ * 18th Division left the south for Japan's home islands the month after Singapore fell, with Rangoon still
+ * Britain's. The player's offer forms by the harbour rule because taking it is his own order: he may take it at home
+ * at once or wait for the posting and take it there, which is every move the computer has and one more.)
+ *
+ * Returns null where the row is not read. Else `waits` (its war has not begun), or the place (`at`, null where its
+ * country holds neither a harbour in the theatre nor its capital), the worth that comes where that is not the whole
+ * row (`adds`), and `takes` where it is the player's row that would take his corps.
+ */
+export function postedFor(g: Game, nat: string, row: any[], reg: Region | undefined): { at: Region | null; adds: number | null; waits: boolean; takes: boolean } | null {
+  const o = row[6] ?? {}, posting = g.byName[row[5]];
+  if (!farOn(g) || !reg || !posting || reg.id !== posting.id || !beyondEurope(posting) || allied(g, nat, posting.ctrl)) return null;
+  if (o.levy || o.overland || o.shore || o.joins || o.join || o.ifLost || row[3] === 'fort' || bookKept(g, nat)) return null;
+  const body = Array.isArray(o.from) && o.adds > 0;
+  const takes = o.from !== undefined && !body;
+  if (takes && !(nat === g.human && rowTakes(g, nat, o).length > 0)) return null;
+  if (!o.war && !atWar(g, nat, posting.ctrl)) return { at: null, adds: null, waits: true, takes };
+  const ground = stretchOf(g, posting), cap = g.nations[nat].capital;
+  const home = cap >= 0 && g.regions[cap].ctrl === nat ? roomNear(g, nat, g.regions[cap]) ?? g.regions[cap] : null;
+  return { at: nearHarbour(g, nat, posting, (r) => ground.has(r.id)) ?? home, adds: body ? o.adds : null, waits: false, takes };
+}
+
+/**
+ * Free play: where a dated row is put down this month, read with nothing changed. `at` is the place its row names;
+ * the answer is the place it forms at (`reg`), whether that is somewhere other than a posting lost (`fell`: it holds
+ * nothing in place there), the port a row is brought ashore at for a lost posting and the worth that lands
+ * (`ashore`), and, on the far side, whether its war has not begun (`waits`) and whether it is the player's row that
+ * takes his corps, formed away from its posting (`shifted`): `postedFor`.
+ */
+function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: Region; fell: boolean; ashore: { at: Region; adds: number | null } | null; waits: boolean; shifted: boolean; home: boolean } {
+  let reg = at, fell = false, shifted = false;
+  // (It has fallen back to forming at home, its own place lost or at peace: a division is laid once, drawn.ts.)
+  let home = false;
+  let ashore: { at: Region; adds: number | null } | null = null;
+  // A country's own army, raised on its own soil, forms up at the capital if the place meant for it is already lost.
+  const cap = g.nations[nat].capital;
+  if (reg && reg.owner === nat && !allied(g, nat, reg.ctrl) && cap >= 0) { reg = g.regions[cap]; home = true; }
+  // Nor is it put down in a friendly country that is at peace: it forms at home instead.
+  if (reg && reg.ctrl !== nat && allied(g, nat, reg.ctrl) && !sharesWar(g, nat, reg.ctrl) && cap >= 0) { reg = g.regions[cap]; home = true; }
+  // A place its side has lost to the enemy: it lands at the nearest harbour its side holds on that front, and is
+  // not cancelled for the loss (ruling 229, 1c). It holds nothing in place there: the place it was to hold is gone.
+  // (A place held by a country it is not at war with, Vichy's or a neutral's, is waited for as before.)
+  if (reg && !allied(g, nat, reg.ctrl) && atWar(g, nat, reg.ctrl) && !o.joins && !o.join && row[3] !== 'fort') {
+    const h = fallbackHarbour(g, nat, reg);
+    if (h) { reg = h; fell = true; }
+  }
+  // (The far side: a row posted on ground its side does not hold forms at its country's nearest held harbour in the
+  // same theatre, else at its capital, and waits for its war: ruling B7, `postedFor`. Never with the far side off.)
+  const posted = fell ? null : postedFor(g, nat, row, reg);
+  if (posted) {
+    if (posted.waits) return { reg, fell, ashore, waits: true, shifted, home };
+    if (posted.at && posted.takes) { reg = posted.at; fell = true; shifted = true; }
+    else if (posted.at) { ashore = { at: posted.at, adds: posted.adds }; reg = posted.at; fell = true; }
+    return { reg: reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl) ? roomNear(g, nat, reg, true) ?? reg : reg, fell, ashore, waits: false, shifted, home };
+  }
+  // The wider world: a player whose homeland lies across the ocean has such an army form at home, and shipping
+  // it is his business. (A computer's staff ships the corps it raises itself, and is sent none of these: above.)
+  // (The far side: never a row posted on ground he holds himself, whoever owns it: it forms there. Ruling B7: Japan's
+  // rows for Canton and Hainan, which stood at Tokyo. An ally's ground is as it was: his army is his to ship.)
+  if (worldOn(g) && nat === g.human && cap >= 0 && beyondEurope(cap) && g.regions[cap].ctrl === nat && reg && reg.owner !== nat && !(reg.ctrl === nat && farOn(g)) && !o.from && !o.joins && row[3] !== 'fort')
+    reg = roomNear(g, nat, g.regions[cap]) ?? g.regions[cap];
+  // (The far side: a division raised at home and posted abroad is not struck for a lost posting. On its date it
+  // comes ashore at its country's nearest held port to the posting and the staff posts it: rider b642 part 2 to
+  // ruling 234, `ashoreFor`. Nobody is brought ashore with the far side off. Since ruling B7 it is the rule of the
+  // rows a book dates alone: `postedFor` reads every other.)
+  if (!fell) {
+    ashore = ashoreFor(g, nat, row, reg);
+    if (ashore) { reg = ashore.at; fell = true; }
+  }
+  // A full province sends it on to the nearest ground with room. (The record's own place is counted against five on
+  // an island of the Pacific too, `roomNear`'s `record`: form B3 (c). So is it above, for a row `postedFor` places.)
+  if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = roomNear(g, nat, reg, true) ?? reg;
+  return { reg, fell, ashore, waits: false, shifted, home };
+}
+
 /** For the measuring harness: told of each dated row struck off unsent when its half year is out. Nothing in the game listens. */
 export const struckWatch: { tell: ((e: { turn: number; due: number; nat: string; name: string; kind: string; divs: number; place: string; owner: string | null; holder: string | null; to: string | null; toHolder: string | null; war: boolean; until: boolean; ifLost: boolean; joins: string | null; hold: boolean }) => void) | null } = { tell: null };
 
@@ -4901,7 +5177,463 @@ function takenShare(g: Game, i: number): number | undefined {
   return old !== undefined && old > 0 && old < 1 ? old : undefined;
 }
 
-function expeditions(g: Game, nat: string): void {
+// ---- Rows that take a corps from the player: an offer, never a silent removal (ruling B8) ---------------------------
+//
+// The design director's ruling B8 of 25 November 2026 (design-director/pacific-japan-1125.md), whole world only. A
+// dated row made from corps on the board (`from`: the 25th Army's 5th Division out of the 21st Army's) struck those
+// corps off wherever they stood as it formed, the player's as a computer's: 65 of Japan's 152 dated rows. A human
+// seat is never moved automatically. So for the player's own country such a row is an OFFER:
+//   made     in the month the rule would have formed the row, with everything else it waits for met (its date, its
+//            war, a place with room), and only while a corps it would take is on the board. Nothing is taken.
+//   open     it stands until he answers, through the rest of the row's own half year: the half year a computer's
+//            row has to form before it is struck (`rowDue`, counted from its date, or from the month its war let it
+//            come). The month's offers are one list on the month card (the 3D game's TC.offers), take all or pick,
+//            never a card each. (As first built no half year ran against an offer: it stood until he answered. The
+//            design director's ruling of 13:39Z, 25 November 2026, on the batch 1 readings, point 5 of the dated
+//            rows: "The half-year wait is only for a war not yet begun, and holds for both: the player's offer stays
+//            in the list for the same half year.")
+//   taken    it does what the rule did before: the corps it names are struck off and the row forms, where the rule
+//            puts it that month (`rowPlace`; away from an unheld posting by ruling B7). Where it cannot form that
+//            month (no room) he is told why and the offer stands.
+//   declined the row never comes, and his corps stay as they are under their own names.
+//   lapses   when a corps it needed is gone from the board, when the war it was raised for is over, or when its
+//            last month is past (its row's own `until`, or the end of its half year, whichever comes first:
+//            `offerLast`): he is told. (An offer whose war was over stood on the card for good and could never be
+//            taken: the mending of 25 November 2026.) A war that is over strikes the computer's row in the same month
+//            and on the same reach: one rule for both seats (the same ruling, point 5: "A row whose war is over lapses
+//            at once, the player's offer and the computer's row alike"; `warOver`).
+//   sisters  a row whose men another row releases by cutting a corps (`cut`), or which is itself made from the
+//            formation another row would make (`from`: the 18th Division for Rangoon out of the 25th Army's 18th
+//            Division), waits on his answer while that other row stands as an open offer, and no half year runs
+//            against it for the months he takes (`sourceAsked`). Where he declines that other row, or its offer
+//            lapses, and the corps it would have been made from are still his, the row made from it never comes:
+//            its men are the corps he kept, and nobody is counted twice (`menKept`). The offer says which later
+//            rows he gives up by declining (`then`).
+// A computer's rows are as they were. The state is three flags a row: `asked:N` the month it was made, `asked:n:N`
+// how many corps it named, and `unmade:N` the month he declined it or it lapsed. With the far side off no offer is
+// ever made and none of them is written or read.
+//
+// The end of a loan is the same case where a division awaits the lent corps (the ruling's own words: "rows that take
+// a corps from the player ... never a silent removal"; the reviewer's finding of 25 November 2026). A regiment only
+// lent to a campaign (`until`) left the map when its time was up (`lentOver`) and went home to its division
+// (`comeHome`), the player's as a computer's: Japan's 1st and 6th Tank Regiments the month Singapore was his, the
+// 7th with Bataan. For the player's own country that is an offer in the same list:
+//   made     in the month the loan is over, by the rule that always decided it (`lentOver`). Nothing leaves.
+//   taken    the regiment goes home as the rule had it go: off the map, its worth into its division one for one,
+//            or remembered for a division still to be formed (`comeHome`).
+//   declined it stays his for good under its own name, and is never asked for again. Its division stays short of
+//            its share while the regiment lives, as while it was lent (`awaited`), so nobody is counted twice.
+//   gone     where the regiment is destroyed while the offer stands there is nothing left to ask about.
+// Two flags a row: `leave:N` the month it was made, `kept:N` once he has declined. A computer's loans end as they did.
+//
+// Every other loan ends as it did, for the player too, and that is put to the design director with nothing built: a
+// corps the main army's order of battle counts elsewhere (the South Africans lent to East Africa, the panzer
+// divisions lent to the Balkans) cannot be kept without being counted twice, and a garrison whose record ends in a
+// surrender (`ends`) was never a loan. Only where a division's row awaits the regiment does the game know where its
+// men are counted, and there the choice is a real one.
+
+/**
+ * True where the player's dated rows are offers (ruling B8 and all that hangs on it: the end of a loan, Oahu's split,
+ * the half year, the offers page): the whole world, in a campaign opened with the switch 'offers' (stage.ts
+ * OFFERS_STAGE; the design director's 13:39Z of 25 November 2026, "B8 stays OFF until its screen is built and passes
+ * the Mac"). Off, no offer is made and none of its flags is written or read: the player's rows come and go as a
+ * computer's do, as they did before the ruling was built. A computer's rows never read it.
+ */
+export const offersOn = (g: Game): boolean => farOn(g) && g.flags.offers === 1;
+/** True for the player's own country where his rows are offers (`offersOn`). */
+const hisOffers = (g: Game, nat: string | null): boolean => nat !== null && nat === g.human && offersOn(g);
+
+// (Not `offer:N`: that flag is the map line's, the month a row's line told the player it names divisions he holds
+// already (a division is laid once, drawn.ts: `expeditions`, below). The two were one key when the lines met, and a
+// row whose line had been told would have been read here as an offer open and unanswered.)
+const offerKey = (i: number): string => `asked:${i}`;
+const offerCount = (i: number): string => `asked:n:${i}`;
+const offerOpen = (g: Game, nat: string, i: number): boolean => hisOffers(g, nat) && g.flags[offerKey(i)] !== undefined;
+const offerShut = (g: Game, i: number): void => { delete g.flags[offerKey(i)]; delete g.flags[offerCount(i)]; };
+/**
+ * A row of the formations list (startPhase, `formRow`) has its number in the one list of offers after the dated
+ * rows, so that an offer's id, its flags and the 3D game's calls name either list alike: Oahu's split is offered by
+ * the same machinery (the design director's ruling of 13:39Z, 25 November 2026, point 3).
+ */
+const formId = (k: number): number => (((setup as any).expeditions as any[]) ?? []).length + k;
+/** The row an offer's id names: a dated row, or a row of the formations list; and which. */
+function offerRow(id: number): { row: any[]; form: boolean } | null {
+  const E = ((setup as any).expeditions as any[]) ?? [];
+  if (!Number.isInteger(id) || id < 0) return null;
+  if (id < E.length) return { row: E[id], form: false };
+  const f = ((setup as any).formations as any[] ?? [])[id - E.length];
+  return f ? { row: f, form: true } : null;
+}
+
+/** The month the player declined a row offered to him, or its offer lapsed: the formation was never made, by his answer or for want of one. */
+const unmadeKey = (i: number): string => `unmade:${i}`;
+/** The places in the list of dated rows of a country's rows that would make a formation of one of these names. */
+const makersOf = (nat: string, names: string[]): number[] => {
+  const out: number[] = [];
+  ((setup as any).expeditions as any[] ?? []).forEach((r, j) => { if (r[1] === nat && names.includes(r[2])) out.push(j); });
+  return out;
+};
+
+/**
+ * True while a formation this row waits on stands as an offer the player has not answered: the row that would make
+ * its cut (`cut`), with no row having made it; or, for a row made from formations none of which is on the board
+ * (`from`, with no body of its own), the row that would make one of them. Such a row waits on his answer and no half
+ * year runs against it. As built the 21st Division's detachment for Bataan was struck with the offer to cut
+ * Hsuchow's garrison unanswered, and the 18th Division formed whole at Rangoon, taking nobody, with the offer to
+ * form the 25th Army's 18th Division still open. Never with the far side off, and never for a computer.
+ */
+function sourceAsked(g: Game, nat: string, o: any): boolean {
+  if (!hisOffers(g, nat)) return false;
+  const cut = o.cut ? (Array.isArray(o.cut) ? (o.cut as string[]) : [o.cut as string]) : [];
+  if (cut.length && !cut.some((nm) => rowLanded(g, nm)) && makersOf(nat, cut).some((j) => offerOpen(g, nat, j))) return true;
+  return Array.isArray(o.from) && !(o.adds > 0) && rowTakes(g, nat, o).length === 0 && makersOf(nat, o.from).some((j) => offerOpen(g, nat, j));
+}
+
+/**
+ * True for the player's row made from formations none of which is on the board, where one of them was offered to
+ * him and never made (declined, or its offer lapsed: `unmade`) and the corps IT would have been made from still
+ * stand on his board, however many such links back. The row's men are those corps, kept under their own names: the
+ * row never comes (ruling B8: declined, his corps stay as they are; and nobody is counted twice). As built it came
+ * whole and took nobody: declining the 25th Army's 18th Division and then holding Rangoon gave him the 18th Division
+ * twice over. Where the kept corps are gone too, the row is as it always was. Never with the far side off, and never
+ * for a computer.
+ */
+function menKept(g: Game, nat: string, o: any, deep = 0): boolean {
+  if (!hisOffers(g, nat) || !Array.isArray(o?.from) || o.adds > 0 || rowTakes(g, nat, o).length > 0) return false;
+  const rows = (setup as any).expeditions as any[];
+  return makersOf(nat, o.from).some((j) => g.flags[unmadeKey(j)] !== undefined && !rowLanded(g, rows[j][2])
+    && (rowTakes(g, nat, rows[j][6]).length > 0 || (deep < 8 && menKept(g, nat, rows[j][6], deep + 1))));
+}
+
+/** The offer is made: the month, and how many of his corps it names. */
+function offerMade(g: Game, nat: string, i: number, o: any): void {
+  g.flags[offerKey(i)] = g.turn;
+  g.flags[offerCount(i)] = rowTakes(g, nat, o).length;
+}
+
+/**
+ * The last month in which an offer may be answered: the month before its row's own last month (`until`, the month
+ * the rule stops reading the row), or the last month of the row's half year (`rowDue`: a computer's row not formed
+ * by then is struck), whichever comes first. The rule's own reading of when an offer lapses for time, not a second
+ * date: `offerGone` reads this, and the offers page shows it.
+ *
+ * (The half year runs against an offer on the far side's rule's own reach and no further: a dated row `farRow` reads
+ * (ruling B7's reach: posted beyond the old chart, no book dating its country's rows), and a row of the formations
+ * list (Oahu's split). The design director's ruling of 13:39Z, 25 November 2026, point 5 of the dated rows, is built
+ * "for every dated row the far side's rule reaches": an offer of a row posted on the old chart (the Fifth Army's II
+ * Corps at Naples, the First Parachute Army in Gelderland) keeps what it had, its row's own `until` where it has one,
+ * and otherwise no last month: it stands until he answers. As first mended the half year reached those too: the
+ * skeptic's review of 25 November 2026.)
+ */
+/**
+ * A row's words as the rule of dated rows reads them (`expeditions`): its setup words, with the war and the share
+ * (`takes`) the map line's table gives a stood war row in the grand campaign (drawn.ts countingFor). Every reader of
+ * when a row comes, or what it waits for, reads them here, so the offers page and the rule read the same war: as
+ * merged, rowsAwaitingWar read the setup row's war, and listed Italy's Ciamuria and XXVI Corps as waiting for the war
+ * with Britain while the rule held them for the war with Greece (the skeptic's review of 25 November 2026).
+ */
+function countedWords(g: Game, nat: string, row: any[], base: any = row[6] ?? {}): any {
+  const counted = countingFor(g, nat, row);
+  return counted && (counted.war || counted.takes) ? { ...base, ...(counted.war ? { war: counted.war } : {}), ...(counted.takes ? { takes: counted.takes } : {}) } : base;
+}
+
+function offerLast(g: Game, nat: string, row: any[], i: number): number | null {
+  const o = countedWords(g, nat, row);
+  if (!offerRow(i)?.form && !farRow(g, nat, row)) return o.until ? o.until - 1 : null;
+  const half = rowDue(g, i, row, o) + 6;
+  return o.until ? Math.min(o.until - 1, half) : half;
+}
+
+/**
+ * Why an open offer has lapsed, in plain words: its last month is past (`offerLast`), the war it was raised for is
+ * over, or a corps it needed is gone from the map (said by the count: "the corps" where it named one, "one of the
+ * 3 corps", "2 of the 3 corps", "the 3 corps"). Null while it stands.
+ */
+function offerGone(g: Game, nat: string, row: any[], i: number): string | null {
+  const o = countedWords(g, nat, row), there = rowTakes(g, nat, o).length, named = g.flags[offerCount(i)] ?? 0, last = offerLast(g, nat, row, i);
+  if (last !== null && g.turn > last) return `The offer to form ${row[2]} has lapsed: its time has passed.`;
+  if (o.war && !warOn(g, o.war)) return `The offer to form ${row[2]} has lapsed: the war it was raised for is over.`;
+  // (A row of the formations list takes its strength out of the corps it names, in their order, and does not come
+  // only where none of them is left (`formRow`): its offer lapses there and nowhere sooner. As first built it lapsed
+  // when any one of them was gone, so that a player's America who took the 24th Infantry Division first, emptying
+  // the Hawaiian Division, lost the offer of the 25th, though the 298th Infantry still stood to form it as the rule
+  // would have: the skeptic's review of 25 November 2026.)
+  if (offerRow(i)?.form) return there > 0 || named === 0 ? null : `The offer to form ${row[2]} has lapsed: ${named === 1 ? 'the corps' : `the ${named} corps`} it was to be formed from ${named === 1 ? 'is' : 'are'} no longer on the map.`;
+  if (there >= named) return null;
+  const lost = named - there;
+  const which = named === 1 ? 'the corps' : `${lost === named ? 'the' : lost === 1 ? 'one of the' : `${lost} of the`} ${named} corps`;
+  return `The offer to form ${row[2]} has lapsed: ${which} it was to be formed from ${lost === 1 ? 'is' : 'are'} no longer on the map.`;
+}
+
+/** An open offer's month: it lapses where `offerGone` says so, and he is told; else it stands, with any more of his corps it now names counted in. */
+function offerStands(g: Game, nat: string, row: any[], i: number): string | null {
+  const gone = offerGone(g, nat, row, i);
+  if (!gone) { g.flags[offerCount(i)] = Math.max(g.flags[offerCount(i)] ?? 0, rowTakes(g, nat, row[6] ?? {}).length); return null; }
+  offerShut(g, i);
+  g.flags[`sent:${i}`] = 2;
+  g.flags[unmadeKey(i)] = g.turn;
+  headline(g, 'info', gone, nat);
+  return gone;
+}
+
+/** One of the player's corps an offer would take: where it stands and its size. */
+export interface OfferTakes { id: number; name: string; kind: Kind; region: number; divs: number; men: number }
+/**
+ * An offer as either interface shows it: the row's place in the list of dated rows (`id`), what would form and how
+ * big, the month it was made, where it would form this month (`region`, -1 where nowhere; `joins` the corps it would
+ * strengthen where it forms no corps of its own), the corps it would take, and why it cannot be taken this month
+ * (`why`, null where it can). `then` names his later rows that are made from this formation or cut from it, which he
+ * gives up by declining it (`menKept`). The end of a loan is in the same list (a regiment its division awaits,
+ * `loanStays`): `loan` says in plain words what it was lent for and what taking and declining do (null for a
+ * formation offered); its name, size and place are the lent regiment's own, and that regiment is the one it takes.
+ * `last` is the last month in which it may be answered (`offerLast`): null for the end of a loan, and for an offer
+ * of a row on the old chart with no `until` of its own, which stand until he answers.
+ */
+export interface RowOffer {
+  id: number; name: string; kind: Kind; divs: number; men: number; since: number; last: number | null; region: number; joins: string | null; takes: OfferTakes[]; why: string | null; then: string[]; loan: string | null;
+  /**
+   * What becomes of the men of the corps it takes beyond the formation's own (the offers page's line for them):
+   * 'lost' where the corps taken are struck off whole and the row forms at its own size (`expeditions`: nothing goes
+   * back to the depots), 'stay' where the row takes only its own strength out of them and the rest stay in the last
+   * corps it draws on (the formations list, `formRow`). Null for the end of a loan.
+   */
+  rest: 'lost' | 'stay' | null;
+  /**
+   * The end of a loan, from the row's own data: what the regiment was lent to do (`take Singapore`, `hold ...`), the
+   * division it goes back into, and how: 'into' the division on the map, 'later' remembered for a division still to be
+   * formed, 'lost' where that division never came or is gone. Null for a formation offered.
+   */
+  lent: { to: string; division: string; goes: 'into' | 'later' | 'lost' } | null;
+}
+
+/** One open offer of the player's, read with nothing changed. */
+function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
+  const o = row[6] ?? {}, posting = g.byName[row[5]];
+  const divs = g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4];
+  const takes = rowTakes(g, nat, o).map((c) => ({ id: c.id, name: c.name, kind: c.kind, region: c.reg, divs: c.divs, men: men(c) }));
+  const old = o.joins ? g.corps.find((x) => x.nat === nat && x.name === o.joins && !x.dead) : undefined;
+  const P = rowPlace(g, nat, row, o, posting);
+  const reg = old ? g.regions[old.reg] : !P.waits && P.reg && allied(g, nat, P.reg.ctrl) ? P.reg : null;
+  // Why it cannot be formed this month: the gates the row's own reading keeps (`expeditions`), in its order.
+  const why = ((): string | null => {
+    const gone = offerGone(g, nat, row, i);
+    if (gone) return gone;
+    if (o.stops && !(o.stops as number[]).includes(stopOf(g))) return 'It is not formed at this setting of the history dial.';
+    if (P.waits) return `It forms once you are at war with ${theName(g.nations[posting.ctrl])}, which holds ${posting.name}.`;
+    if (o.cut && !(Array.isArray(o.cut) ? (o.cut as string[]) : [o.cut as string]).some((nm) => rowLanded(g, nm))) return 'The formation its men are released from has not been formed.';
+    if (old) return null;
+    if (!reg) return `There is nowhere for it to form: ${posting?.name ?? row[5]} is not yours, and you hold no harbour on that ground, nor your capital.`;
+    if (!o.join && placed(g, reg, nat).filter((u) => u.kind !== 'eng').length >= STACK) return `There is no room for another corps at ${reg.name}, or near it.`;
+    return null;
+  })();
+  // His rows still to come at this stop of the dial that are made out of this formation: cut from it, or made from
+  // it with no other corps of theirs on the board (one that names a corps he keeps by declining is offered still).
+  const names = (x: unknown): string[] => (Array.isArray(x) ? (x as string[]) : typeof x === 'string' ? [x] : []);
+  const then = [...new Set((((setup as any).expeditions as any[]) ?? []).filter((r, j) => r[1] === nat && j !== i && r[2] !== row[2] && !g.flags[`sent:${j}`]
+    && (!r[6]?.stops || (r[6].stops as number[]).includes(stopOf(g)))
+    && (names(r[6]?.cut).includes(row[2]) || (Array.isArray(r[6]?.from) && !(r[6].adds > 0) && r[6].from.includes(row[2])
+      && rowTakes(g, nat, { from: (r[6].from as string[]).filter((nm) => nm !== row[2]) }).length === 0))).map((r) => r[2] as string))];
+  return { id: i, name: row[2], kind: row[3], divs, men: Math.round(divs * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(i)], last: offerLast(g, nat, row, i), region: reg ? reg.id : -1, joins: old ? old.name : null, takes, why, then, loan: null, rest: 'lost', lent: null };
+}
+
+const leaveKey = (i: number): string => `leave:${i}`;
+const keptKey = (i: number): string => `kept:${i}`;
+const leaveOpen = (g: Game, nat: string, i: number): boolean => hisOffers(g, nat) && g.flags[leaveKey(i)] !== undefined;
+/** The player's corps a lent row put on the map, while it lives. */
+const lentCorps = (g: Game, nat: string, i: number): Corps | undefined => { const id = g.flags[`lent:${i}`]; return id > 0 ? g.corps.find((x) => x.id === id && x.nat === nat && !x.dead) : undefined; };
+
+/** The place in the list of dated rows of the division whose row awaits a lent corps of that name (`awaits`), or -1 where none does. */
+const awaitedBy = (nat: string, name: string): number => (((setup as any).expeditions as any[]) ?? []).findIndex((r) => r[1] === nat && Array.isArray(r[6]?.awaits) && r[6].awaits.includes(name));
+
+/**
+ * The far side: whether the corps of a lent row stays on the map this month for the player's sake (ruling B8: the
+ * end of a loan takes no corps of his off the map; it is an offer). Only a regiment a division's row awaits is
+ * asked about: there the game knows where its men are counted, so keeping it counts nobody twice. False for every
+ * other lent row, for a computer's row, with the far side off, where the corps is no longer on the map (nothing is
+ * left to ask about), and where he has just said it may go (`taken`): the loan then ends as it always did. True
+ * where he has declined (`kept`), and where the loan is over and the offer is made or stands; the month it is first
+ * over is the month it is made.
+ */
+function loanStays(g: Game, nat: string, row: any[], o: any, i: number, taken: boolean): boolean {
+  if (!hisOffers(g, nat) || awaitedBy(nat, row[2]) < 0) return false;
+  if (!lentCorps(g, nat, i)) { delete g.flags[leaveKey(i)]; return false; }
+  if (g.flags[keptKey(i)]) return true;
+  if (taken) return false;
+  if (g.flags[leaveKey(i)] === undefined && lentOver(g, nat, row, o)) g.flags[leaveKey(i)] = g.turn;
+  return true;
+}
+
+/**
+ * The end of a loan as the list shows it: the lent regiment, where it stands, and what letting it go and keeping it
+ * do. What letting it go does is said as `comeHome` will do it: into its division where that is on the map,
+ * remembered for it where its row has still to form, and lost to it where that row never came or the division is
+ * gone. Null where the regiment is gone.
+ */
+function loanView(g: Game, nat: string, row: any[], i: number): RowOffer | null {
+  const o = row[6] ?? {}, c = lentCorps(g, nat, i), k = awaitedBy(nat, row[2]);
+  if (!c || k < 0) return null;
+  const home = ((setup as any).expeditions as any[])[k];
+  const there = g.flags[`sent:${k}`] === 1 && g.corps.some((x) => x.nat === nat && x.name === home[2] && !x.dead && x.divs === home[4]);
+  const list = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+  const to = typeof o.takes === 'string' ? `take ${o.takes}` : Array.isArray(o.holds) ? `hold ${list(o.holds as string[])}` : 'a campaign';
+  const lent = `It was lent to ${to}, and its loan is over`;
+  const goes = there ? `it goes home to its division, ${home[2]}`
+    : g.flags[`sent:${k}`] === undefined ? `it goes home, and joins its division, ${home[2]}, when that is formed`
+      : `it leaves the map, for its division, ${home[2]}, is not there to take it`;
+  const mine = { id: c.id, name: c.name, kind: c.kind, region: c.reg, divs: c.divs, men: men(c) };
+  return { id: i, name: c.name, kind: c.kind, divs: c.divs, men: men(c), since: g.flags[leaveKey(i)], last: null, region: c.reg, joins: null, takes: [mine], why: null, then: [], loan: `${lent}. Let go, ${goes}; kept, it stays under your command, and its division stays short of it.`,
+    rest: null, lent: { to, division: home[2], goes: there ? 'into' : g.flags[`sent:${k}`] === undefined ? 'later' : 'lost' } };
+}
+
+/**
+ * One open offer of a row of the formations list (Oahu's split), read with nothing changed: what would form, where
+ * (`formPlace`, the formations list's own placing) and which of his corps it would take, in the order the row takes
+ * them. It cannot be taken only where it has lapsed or has nowhere to form; it names no later rows (`then`).
+ */
+function formView(g: Game, nat: string, row: any[], id: number): RowOffer {
+  const o = row[6] ?? {}, made = formMade(g, nat, row) ?? [];
+  const reg = formPlace(g, nat, row, made);
+  const takes = made.map((c) => ({ id: c.id, name: c.name, kind: c.kind, region: c.reg, divs: c.divs, men: men(c) }));
+  const why = offerGone(g, nat, row, id) ?? (reg ? null : `There is nowhere for it to form: ${row[5]} is not yours.`);
+  // (Its size is what `formRow` would make of it this month: its own strength, and never more than the corps it
+  // names now hold. As first built it said the row's size, more than those corps held: the skeptic's review.)
+  const held = made.reduce((t, x) => t + x.divs * x.str, 0);
+  return { id, name: row[2], kind: row[3], divs: row[4], men: Math.round(Math.min(row[4] * (o.str ?? 1), held) * MEN_PER_DIV), since: g.flags[offerKey(id)], last: offerLast(g, nat, row, id), region: reg ? reg.id : -1, joins: null, takes, why, then: [], loan: null, rest: 'stay', lent: null };
+}
+
+/** The player's open offers, oldest first and then in the order of the rows: the month's one list (ruling B8). None with the far side off. */
+export function rowOffers(g: Game): RowOffer[] {
+  const nat = g.human;
+  if (nat === null || !offersOn(g) || !g.nations[nat]?.alive) return [];
+  const out: RowOffer[] = [];
+  ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
+    if (row[1] !== nat) return;
+    if (offerOpen(g, nat, i)) out.push(offerView(g, nat, row, i));
+    else if (leaveOpen(g, nat, i)) { const v = loanView(g, nat, row, i); if (v) out.push(v); }
+  });
+  ((setup as any).formations as any[] ?? []).forEach((row, k) => { if (row[1] === nat && offerOpen(g, nat, formId(k))) out.push(formView(g, nat, row, formId(k))); });
+  return out.sort((a, b) => a.since - b.since || a.id - b.id);
+}
+
+/**
+ * For the offers page (the design director's ruling of 13:39Z, 25 November 2026, point 2 of the dated rows: "Until
+ * then they leave as today, and the offers page says so"): the player's corps lent to a campaign whose loan's end is
+ * not asked of him (`loanStays`: no division's row awaits it), which leave his command by themselves when the loan is
+ * over (`lentOver`). Each with what it was lent to do and when it leaves: by its month (`until`) where the date
+ * decides it, else when the place it was lent to take is his side's (`takes`) or the last place it was lent to hold is
+ * lost (`holds`). Read with nothing changed; none with the far side off.
+ */
+export function loansEnding(g: Game): { id: number; name: string; until: number | null; takes: string | null; holds: string[] | null }[] {
+  const nat = g.human;
+  if (nat === null || !offersOn(g) || !g.nations[nat]?.alive) return [];
+  const out: { id: number; name: string; until: number | null; takes: string | null; holds: string[] | null }[] = [];
+  ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
+    const o = row[6] ?? {};
+    if (row[1] !== nat || !o.until || awaitedBy(nat, row[2]) >= 0 || !lentCorps(g, nat, i)) return;
+    // (By date where `lentOver` reads the date: the book's stops, or a row lent for no place.)
+    const byDate = stopDef(g).book || (!o.takes && !o.holds);
+    out.push({ id: i, name: lentCorps(g, nat, i)!.name, until: byDate ? o.until : null, takes: !byDate && !o.holds && typeof o.takes === 'string' ? o.takes : null, holds: !byDate && Array.isArray(o.holds) ? o.holds : null });
+  });
+  return out;
+}
+
+/**
+ * For the offers page (the same ruling, point 7: "One line on the offers page for a row waiting for its war: yes"):
+ * the player's dated rows that have come due and wait for their war to begin, by ruling B7. A row that names its war
+ * (`war`) and finds it not yet begun, or one posted on ground a country his is at peace with holds (`postedFor`).
+ * `with` is who he must be at war with: the posting's holder, or the other of the two its war names ('*' for any war);
+ * `pair` is set where its war is between two others (an ally's war it was raised to join). `offer` says the row would
+ * take corps of his now on the board, so it comes as an offer when its war begins. Read with nothing changed; none
+ * with the far side off.
+ */
+export function rowsAwaitingWar(g: Game): { id: number; name: string; with: string; pair: [string, string] | null; place: string; offer: boolean }[] {
+  const nat = g.human;
+  if (nat === null || !offersOn(g) || g.flags.open !== 1 || !g.nations[nat]?.alive || shipsItsOwn(g, nat)) return [];
+  const out: { id: number; name: string; with: string; pair: [string, string] | null; place: string; offer: boolean }[] = [];
+  ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
+    const o = countedWords(g, nat, row);
+    if (row[1] !== nat || g.flags[`sent:${i}`] || offerOpen(g, nat, i) || leaveOpen(g, nat, i)) return;
+    // (As the board stands, the row would take corps of his: when its war begins it is an offer, not a formation.)
+    const offer = rowTakes(g, nat, o).length > 0;
+    if ((o.stops && !(o.stops as number[]).includes(stopOf(g))) || (g.turn < row[0] && !(o.war && o.after !== undefined))) return;
+    if (o.war) {
+      const w = o.war as string[];
+      if (warOn(g, w) || warOver(g, i, w)) return;
+      const mine = w.includes(nat);
+      out.push({ id: i, name: row[2], with: mine ? (w[0] === nat ? w[1] : w[0]) : w[1], pair: mine ? null : [w[0], w[1]], place: row[5], offer });
+      return;
+    }
+    const posting = g.byName[row[5]];
+    if (posting && rowPlace(g, nat, row, o, posting).waits) out.push({ id: i, name: row[2], with: posting.ctrl, pair: null, place: row[5], offer });
+  });
+  return out;
+}
+
+/**
+ * The player says yes to an offer (ruling B8): the row forms as the rule always formed it, the corps it names struck
+ * off; or, at the end of a loan, the lent regiment goes home as the rule always had it go. Null where it was done;
+ * else the plain reason it could not be this month, with the offer left standing.
+ */
+export function takeOffer(g: Game, id: number): string | null {
+  const nat = g.human, at = offerRow(id);
+  // (A row of the formations list, Oahu's split: it forms as that list always formed it, in the month he says yes.)
+  if (at?.form) {
+    if (nat === null || at.row[1] !== nat || !offerOpen(g, nat, id)) return 'There is no such offer.';
+    const gone = offerStands(g, nat, at.row, id);
+    if (gone) return gone;
+    const why = formView(g, nat, at.row, id).why;
+    if (why) return why;
+    if (!formRow(g, nat, at.row, id, true)) return 'It cannot be formed this month.';
+    offerShut(g, id);
+    return null;
+  }
+  const row = at?.row;
+  // (The end of a loan: he lets the regiment go, and it leaves as the rule always had it leave.)
+  if (nat !== null && row && row[1] === nat && leaveOpen(g, nat, id)) {
+    if (!lentCorps(g, nat, id)) { delete g.flags[leaveKey(id)]; return 'There is no such offer.'; }
+    expeditions(g, nat, id);
+    return g.flags[`lent:${id}`] === -1 ? null : 'It cannot leave this month.';
+  }
+  if (nat === null || !row || row[1] !== nat || !offerOpen(g, nat, id)) return 'There is no such offer.';
+  const gone = offerStands(g, nat, row, id);
+  if (gone) return gone;
+  const why = offerView(g, nat, row, id).why;
+  if (why) return why;
+  expeditions(g, nat, id);
+  // (A trap, found when the Pacific fold met the map's head 1125p: `sent` 1 is also what a row that laid nothing
+  // writes, every division it names standing already in a corps of his it does not take (a division is laid once,
+  // drawn.ts `formsAny`). Taken so, it is closed as done, the corps the offer named stay, and his one word of it is
+  // the row's line, `heldLine`. `offerView`'s `why` does not read the held divisions. It is not reached on today's
+  // data: no corps of his comes to hold such a division while the offer stands, since `sourceAsked` and `menKept`
+  // hold the rows that would name it back. A row that could, added to the data, wants its own answer here.)
+  if (g.flags[`sent:${id}`] !== 1) return 'It cannot be formed this month.';
+  offerShut(g, id);
+  g.supplyDirty = true;
+  return null;
+}
+
+/** The player says no to an offer (ruling B8): the row never comes, and his corps stay as they are; or, at the end of a loan, the lent regiment stays his. False where there is no such offer. */
+export function declineOffer(g: Game, id: number): boolean {
+  const nat = g.human, at = offerRow(id), row = at?.row;
+  // (The end of a loan: he keeps the regiment, for good.)
+  if (nat !== null && row && !at!.form && row[1] === nat && leaveOpen(g, nat, id)) {
+    delete g.flags[leaveKey(id)];
+    if (!lentCorps(g, nat, id)) return false;
+    g.flags[keptKey(id)] = 1;
+    return true;
+  }
+  if (nat === null || !row || row[1] !== nat || !offerOpen(g, nat, id)) return false;
+  offerShut(g, id);
+  g.flags[`sent:${id}`] = 2;
+  g.flags[unmadeKey(id)] = g.turn;
+  return true;
+}
+
+/**
+ * `take` is the one row the player has just said yes to (ruling B8, `takeOffer`): that row alone is read, and it
+ * forms as the rule always formed it. Every other reading gives none, and reads every row.
+ */
+function expeditions(g: Game, nat: string, take?: number): void {
   const gone: Corps[] = [], down: Corps[] = [];
   // (A division is laid once, drawn.ts: lent rows whose corps stand on when their time is up, by the name each stands under and where.)
   const stood: { id: number; name: string; reg: number }[] = [];
@@ -4923,6 +5655,7 @@ function expeditions(g: Game, nat: string): void {
     return over.has(x.id);
   };
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
+    if (take !== undefined && i !== take) return;
     const booked = g.flags.open === 1 && row[1] === nat && bookRow(g, nat, g.byName[row[5]]);
     // (Nothing is counted twice, b609: a division the roster already names elsewhere is not added again. The corps that
     // holds it, where it still lives, is broken up into the row: the book's 'from' list, read as a row's own.)
@@ -4930,8 +5663,7 @@ function expeditions(g: Game, nat: string): void {
     // (The stood war rows, drawn.ts and counting.json: in the grand campaign such a row waits for the war the table
     // names for it, and takes the share of a corps the table names, as W Force's row takes its brigade. The setup row
     // keeps its own words, so no historical scenario moves.)
-    const counted = countingFor(g, nat, row);
-    const o0 = counted && (counted.war || counted.takes) ? { ...o00, ...(counted.war ? { war: counted.war } : {}), ...(counted.takes ? { takes: counted.takes } : {}) } : o00;
+    const o0 = countedWords(g, nat, row, o00);
     const o = bookOnly(g, nat, row[2]) ? { ...o0, hold: 1, stay: 1 } : o0;
     // (A country's own call-up counted from its war's start waits for no book month in the grand campaign: ruling 229, part 3.)
     const fromWar = g.flags.open === 1 && !!o.war && o.after !== undefined;
@@ -4947,7 +5679,10 @@ function expeditions(g: Game, nat: string): void {
       if (g.flags[`sent:${i}`] === 1) estMonth(g, nat, row);
       // The main army's order of battle already counts these formations: the campaign only had the loan of them.
       const id = g.flags[`lent:${i}`];
-      if (o.until && id > 0 && lentOver(g, nat, row, o)) {
+      // (The far side: the end of a loan takes no regiment of the player's that its division awaits off the map: it
+      // is an offer, and the regiment stays until he lets it go. Ruling B8, `loanStays`. A computer's loan ends as
+      // it did, and so does everybody's with the far side off.)
+      if (o.until && id > 0 && !loanStays(g, nat, row, o, i, take === i) && (take === i || lentOver(g, nat, row, o))) {
         const c = g.corps.find((x) => x.id === id && x.nat === nat);
         // (The far side: a regiment its division awaits comes home to it: `comeHome`. A row whose record ends in a
         // surrender, `ends`, is told as one: `down`, below.)
@@ -4964,6 +5699,7 @@ function expeditions(g: Game, nat: string): void {
         }
         else if (c) { (o.ends === 'surrender' && farOn(g) ? down : gone).push(c); comeHome(g, nat, i, row, c); }
         g.flags[`lent:${i}`] = -1;
+        if (take === i) delete g.flags[leaveKey(i)];
         // (A corps ends its loan once: another lent row that added to it, `joins`, has nothing left to end.)
         ((setup as any).expeditions as any[]).forEach((_, j) => { if (j !== i && g.flags[`lent:${j}`] === id) g.flags[`lent:${j}`] = -1; });
       }
@@ -4983,10 +5719,13 @@ function expeditions(g: Game, nat: string): void {
       if (o.awaits && farOn(g)) makeUp(g, nat, row, o);
       return;
     }
+    // (The far side: a row the player has been offered stands open until he answers, and nothing is read of it but
+    // whether the corps it needs are still there: ruling B8, `offerStands`.)
+    if (take !== i && offerOpen(g, nat, i)) { offerStands(g, nat, row, i); return; }
     let reg = g.byName[row[5]];
     let due = row[0];
-    let fell = false;
-    // (It has fallen back to forming at home, its own place lost or at peace: drawn.ts.)
+    let fell = false, shifted = false;
+    // (It has fallen back to forming at home, its own place lost or at peace: drawn.ts. Read where the row is placed, `rowPlace`.)
     let home = false;
     let ashore: { at: Region; adds: number | null } | null = null;
     // The wider world: a computer-run country that ships its own army across the ocean (world.ts, 'overseas') is sent
@@ -4998,7 +5737,15 @@ function expeditions(g: Game, nat: string): void {
       const k = reg ? THEATRE_OF.get(reg.name) ?? -1 : -1;
       if (k >= 0 && THEATRE_LIST[k].scripted && row[0] >= (THEATRE_LIST[k].opens ?? 0) && (!booked || bookWaits(g, reg!.owner))) return;
       if (o.war) {
-        if (!warOn(g, o.war)) return;
+        // (The far side: a row whose war is over lapses at once, the player's and the computer's alike, and never
+        // comes: the design director's ruling of 13:39Z, 25 November 2026, on the batch 1 readings, point 5 of the
+        // dated rows, "one rule for both sides". As built a computer's row waited here for the war to come again and
+        // was then struck for its half year, while the player's offer of it lapsed at once. A war not yet begun is
+        // waited for as before, by both. Read on the far side's rows alone, `farRow`: nothing on the old chart.)
+        if (!warOn(g, o.war)) {
+          if (farRow(g, nat, row) && warOver(g, i, o.war)) { g.flags[`sent:${i}`] = 2; if (hisOffers(g, nat) && row[1] === nat) g.flags[unmadeKey(i)] = g.turn; }
+          return;
+        }
         // And it waits for its own country to be in that war: no army turns up in a war its country is not fighting.
         if (!o.war.includes(nat) && !atWar(g, nat, o.war[0]) && !atWar(g, nat, o.war[1])) return;
         // (A call-up is counted from the war's start, but never from before the month the row is first seen: a game
@@ -5009,31 +5756,13 @@ function expeditions(g: Game, nat: string): void {
         due = g.flags[`due:${i}`] ??= fromWar ? Math.max(warBegan(g, o.war), g.turn - 1) + o.after : g.turn;
         if (g.turn < due) return;
       }
-      // A country's own army, raised on its own soil, forms up at the capital if the place meant for it is already lost.
-      const cap = g.nations[nat].capital;
-      if (reg && reg.owner === nat && !allied(g, nat, reg.ctrl) && cap >= 0) { reg = g.regions[cap]; home = true; }
-      // Nor is it put down in a friendly country that is at peace: it forms at home instead.
-      if (reg && reg.ctrl !== nat && allied(g, nat, reg.ctrl) && !sharesWar(g, nat, reg.ctrl) && cap >= 0) { reg = g.regions[cap]; home = true; }
-      // A place its side has lost to the enemy: it lands at the nearest harbour its side holds on that front, and is
-      // not cancelled for the loss (ruling 229, 1c). It holds nothing in place there: the place it was to hold is gone.
-      // (A place held by a country it is not at war with, Vichy's or a neutral's, is waited for as before.)
-      if (reg && !allied(g, nat, reg.ctrl) && atWar(g, nat, reg.ctrl) && !o.joins && !o.join && row[3] !== 'fort') {
-        const h = fallbackHarbour(g, nat, reg);
-        if (h) { reg = h; fell = true; }
-      }
-      // The wider world: a player whose homeland lies across the ocean has such an army form at home, and shipping
-      // it is his business. (A computer's staff ships the corps it raises itself, and is sent none of these: above.)
-      if (worldOn(g) && nat === g.human && cap >= 0 && beyondEurope(cap) && g.regions[cap].ctrl === nat && reg && reg.owner !== nat && !o.from && !o.joins && row[3] !== 'fort')
-        reg = roomNear(g, nat, g.regions[cap]) ?? g.regions[cap];
-      // (The far side: a division raised at home and posted abroad is not struck for a lost posting. On its date it
-      // comes ashore at its country's nearest held port to the posting and the staff posts it: rider b642 part 2 to
-      // ruling 234, `ashoreFor`. Nobody is brought ashore with the far side off.)
-      if (!fell) {
-        ashore = ashoreFor(g, nat, row, reg);
-        if (ashore) { reg = ashore.at; fell = true; }
-      }
-      // A full province sends it on to the nearest ground with room.
-      if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = roomNear(g, nat, reg) ?? reg;
+      // Where it is put down: the place meant for it, home where that is lost or a friend's at peace, the near
+      // harbour of a front lost to the enemy, the port a posted division comes ashore at (`rowPlace`).
+      const P = rowPlace(g, nat, row, o, reg);
+      // (The far side: a row raised to take the ground of a country its own is at peace with waits for that war, and
+      // has its half year from the month it begins: ruling B7, `postedFor`. Never with the far side off.)
+      if (P.waits) { g.flags[`wait:${i}`] = g.turn; return; }
+      reg = P.reg; fell = P.fell; ashore = P.ashore; shifted = P.shifted; home = P.home;
     }
     // (The far side: a dated row takes no corps standing on a live front of its staff's plan (planfronts.ts): the
     // design director's rulings of 05:30Z and 05:35Z of 21 November 2026 to ruling 234. As built the 18th Division's
@@ -5041,15 +5770,55 @@ function expeditions(g: Game, nat: string): void {
     // standing, and the 56th's took the Sakaguchi Detachment off the Indies' road. A row with a body of its own
     // (`adds`, the 56th's) comes at that worth and takes nobody, as one brought ashore for a lost posting does. A row
     // with none waits for the front, and its half year is counted from the month the front lets its corps go.)
+    // (And, under the switch 'fromWait' (stage.json; one switch for both charts, the design director's 20:08Z of
+    // 25 November 2026), none standing in contact, an enemy at war on its province or beside it: her ruling of 19:47Z,
+    // "one sentence, both doors: a date never lifts a corps out of a fight". Her 18:47Z ruling guards the rows that
+    // draw a division (drawn.ts, `corpsInContact`); this is the row that takes a named corps whole. As measured over
+    // three whole-world wars to month 66, 29 corps in contact were lifted to another province by this path with no
+    // live front to hold them: the 18th Division out of the line in China for Malaya, Britain's 70th out of Siam to
+    // become the Chindits, a cavalry brigade from Calicut back to Loyang. The same two outcomes as for a live front: a
+    // row with a body of its own comes at that worth and takes nobody, a row with none waits and has its half year
+    // from the month its corps comes free. A corps already standing where the row forms is not lifted, and takes the
+    // row's name as before. Where the player's rows are offers he is asked as before, with his corps in the line or
+    // out of it: taking it is his order, not a date's. Switch off: the flag is read and nothing else.)
+    // (Under the same switch, a row whose named corps is not on the board because the dated row that makes it waits,
+    // unsent, is held as that row's corps would hold it: the 18th Division's row at Rangoon names the 25th Army's
+    // 18th Division, whose row at Hainan waits while the 21st Army's 18th Division is in the line at Tungkun. As built
+    // the Rangoon row found nobody to take and came whole from nobody, and the Hainan row, its corps come free, made a
+    // second 18th Division beside it. `fromWaits`.)
+    // (At a stop that keeps a book, stops 1 and 2, the book's rows keep their book as every other piece does, and
+    // neither of the two is read: the contact rule acts at stops 3 to 5. Her ruling of 21:25Z, 25 November 2026.)
+    const inFight = g.flags.fromWait === 1 && !stopDef(g).book && !hisOffers(g, nat);
     let own = false;
-    if (Array.isArray(o.from) && !ashore && row[1] === nat && farOn(g) && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && onLiveFront(g, nat, x))) {
+    if (Array.isArray(o.from) && !ashore && row[1] === nat && farOn(g) && (g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name)
+      && (onLiveFront(g, nat, x) || (inFight && x.reg !== reg?.id && corpsInContact(g, nat, x))))
+      || (inFight && fromWaits(g, nat, o.from)))) {
       if (o.adds > 0) own = true;
       else { g.flags[`wait:${i}`] = g.turn; return; }
     }
+    // (The old chart, the grand campaign: a row that takes a named corps whole waits while that corps is in contact, an
+    // enemy at war on its province or beside it, as the far side's waits for a live front, and its half year is counted
+    // from the month the corps comes free. Where the corps already stands at the place the row forms the row goes ahead:
+    // a new name, nothing lifted. The design director's ruling of 19:47Z, 25 November 2026, the 18:47Z test on this
+    // door too (pacific-japan/dd-form-from-rows-contact-1125.md). Its own switch, 'fromWait' (stage.json), off until its
+    // gate passes. drawn.ts, `corpsInContact`. As on the far side it acts at stops 3 to 5 only: at the book's stops the
+    // book's rows keep their book, her ruling of 21:25Z.)
+    const formsAt = reg?.id;
+    if (g.flags.fromWait === 1 && g.flags.open === 1 && !farOn(g) && !stopDef(g).book && Array.isArray(o.from) && !ashore && row[1] === nat && formsAt !== undefined
+      && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt && corpsInContact(g, nat, x))) { g.flags[`wait:${i}`] = g.turn; return; }
+    // (The far side: a row that waits on a formation the player has been offered and has not answered, the one that
+    // makes its cut or the one it is itself made from, waits on his answer and has its half year from the month he
+    // gives it: he is never struck a row for the months he took, nor given its men twice. And a row made from a
+    // formation he did not make, whose corps he kept, never comes. Ruling B8; the mending of 25 November 2026:
+    // `sourceAsked`, `menKept`.)
+    if (take !== i && sourceAsked(g, nat, o)) { g.flags[`wait:${i}`] = g.turn; return; }
+    if (take !== i && row[1] === nat && menKept(g, nat, o)) { g.flags[`sent:${i}`] = 2; g.flags[unmadeKey(i)] = g.turn; return; }
     const waited = g.flags[`wait:${i}`];
     if (waited !== undefined) due = Math.max(due, waited + 1);
-    if (g.turn - due > 6 || (o.war && !warOn(g, o.war)) || (o.until && g.turn >= o.until)) {
-      if (g.turn - due > 6) {
+    // (An offer the player takes is not struck for the months he took to answer: it stood open. Ruling B8.)
+    const late = g.turn - due > 6 && take !== i;
+    if (late || (o.war && !warOn(g, o.war)) || (o.until && g.turn >= o.until)) {
+      if (late) {
         g.flags[`sent:${i}`] = g.flags.open === 1 ? 2 : 1;
         const at = g.byName[row[5]];
         struckWatch.tell?.({ turn: g.turn, due, nat, name: row[2], kind: row[3], divs: row[4], place: row[5], owner: at?.owner ?? null, holder: at?.ctrl ?? null, to: reg?.name ?? null, toHolder: reg?.ctrl ?? null, war: !!o.war && !warOn(g, o.war), until: !!o.until && g.turn >= o.until, ifLost: !!o.ifLost, joins: o.joins ?? null, hold: !!o.hold });
@@ -5069,8 +5838,13 @@ function expeditions(g: Game, nat: string): void {
     if (o.ifLost && (o.ifLost as string[]).some((nm) => { const r = g.byName[nm]; return !r || allied(g, nat, r.ctrl); })) return;
     // (A row that stands in for another, in a war where that other has already landed, never comes: ruling 229, 1c.)
     if (o.unless && g.flags.open === 1 && rowLanded(g, o.unless)) { g.flags[`sent:${i}`] = 2; return; }
+    // (The far side: a row that would take corps of the player's off the board is an offer, never a silent removal:
+    // ruling B8 of 25 November 2026. It is made in the month the rule would have formed the row, stands open until he
+    // answers, and taken (`take`) it does what the rule always did. A computer's rows are as they were.)
+    const asks = hisOffers(g, nat) && take !== i && !ashore && !own && rowTakes(g, nat, o).length > 0;
     const old = o.joins ? g.corps.find((x) => x.nat === nat && x.name === o.joins && !x.dead) : undefined;
     if (old) {
+      if (asks) { offerMade(g, nat, i, o); return; }
       g.flags[`sent:${i}`] = 1;
       // Corps broken up to find the divisions are struck off, and a corps only lent to the campaign is remembered.
       if (Array.isArray(o.from) && !own) for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
@@ -5149,8 +5923,10 @@ function expeditions(g: Game, nat: string): void {
       }
     }
     // Troops sent to take over a stretch of an ally's line ('join') go in whatever already stands there.
-    // (Room is counted as everywhere else: engineers take none.)
+    // (Room is counted as everywhere else: engineers take none. The record's own place is counted against five on an
+    // island of the Pacific too, as `roomNear` counts it: a row is not kept waiting, and so struck, by the islands' table.)
     if (!o.join && placed(g, reg, nat).filter((u) => u.kind !== 'eng').length >= STACK) return;
+    if (asks) { offerMade(g, nat, i, o); return; }
     g.flags[`sent:${i}`] = 1;
     // (The body of a row brought ashore for a lost posting takes nobody off the board: the corps it would have
     // taken stay where they stand under their own names. Rider b642 part 2. Nor does the body of a row whose corps
@@ -5159,7 +5935,8 @@ function expeditions(g: Game, nat: string): void {
       for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
       g.supplyDirty = true;
     }
-    const as = ashore ? { ...o, hold: undefined, stay: undefined, est: ashore.adds ?? o.est } : fell ? { ...o, hold: undefined } : o;
+    // (The player's row formed away from its posting with the corps it takes holds nothing in place there either: `shifted`.)
+    const as = ashore ? { ...o, hold: undefined, stay: undefined, est: ashore.adds ?? o.est } : shifted ? { ...o, hold: undefined, stay: undefined } : fell ? { ...o, hold: undefined } : o;
     // (A row that takes part of a division already landed leaves that division the weaker by it, in the grand campaign:
     // W Force's 1st Armoured Brigade came out of the 2nd Armoured Division in Egypt, and was counted in both. A
     // division not landed yet comes the weaker when it does.)
@@ -5323,6 +6100,9 @@ function digIn(g: Game, nat: string): void {
       delete c.relief;
       if (c.dug && c.town === undefined && !c.yields && !c.fought) { if (c.pressed) delete c.pressed; continue; }
     }
+    // (A withered island garrison has no moves to spend and marched nowhere: it keeps the works it stood in as they
+    // are. It digs no more of them, and none where it had none. Ruling 173(e), the whole-world chart.)
+    if (c.town === undefined && !c.yields && !c.fought && withered(g, c)) { if (c.pressed) delete c.pressed; continue; }
     if (c.town === undefined && !c.yields && c.ap >= c.apMax && !c.fought) {
       // A month in which the line was attacked is a month's digging lost: the works are what the attack left of them.
       const gain = c.pressed ? DEFENCE.wear.regrow : 1;
@@ -5360,6 +6140,9 @@ export function endPhase(g: Game, nat: string): void {
   // And again as it closes, before the other staffs move: what he saw this month he goes on knowing.
   if (nat === g.human) seeCuts(g);
   digIn(g, nat);
+  // (City defences: a garrison's month in its town is a month's barricades and strongpoints, read after every storm of
+  // the month has been fought; a town left empty loses a month. Off: nothing is read or written.)
+  townWorksMonth(g, nat);
   if (g.nations[nat].alive) desertWorks(g, nat, true);
   siegeEmpties(g);
   mendPrizes(g, nat);
@@ -5373,6 +6156,80 @@ export function endPhase(g: Game, nat: string): void {
   crown(g);
 }
 
+/**
+ * Where a row of the reinforcements or formations list is put down this month, read with nothing changed: its place,
+ * the capital where that is not its side's, and in free play home rather than a friend's ground at peace, and the
+ * nearest ground with room. Null where it does not come (no such ground on this chart, or nowhere its side holds),
+ * and for a row made from corps on the board (`made`, far side) where none of them is left or its place is lost.
+ */
+function formPlace(g: Game, nat: string, row: any[], made: Corps[] | null): Region | null {
+  const n = g.nations[nat];
+  let reg = g.byName[row[5]];
+  // A row for ground this campaign's chart does not carry (a far-side row on the older chart) never comes.
+  if (!reg) return null;
+  if (made && (!made.length || !allied(g, nat, reg.ctrl))) return null;
+  if (!allied(g, nat, reg.ctrl)) reg = g.regions[n.capital];
+  if (!reg || !allied(g, nat, reg.ctrl)) return null;
+  if (g.flags.open === 1 && row[3] !== 'fort') {
+    // Free play: not on the ground of a friend who is at peace, and never a sixth corps in one province.
+    if (reg.ctrl !== nat && !sharesWar(g, nat, reg.ctrl) && n.capital >= 0 && g.regions[n.capital].ctrl === nat) reg = g.regions[n.capital];
+    // (The record's own hand: a row by date is counted against five, an island's room or no: form B3, (c).)
+    reg = roomNear(g, nat, reg, true) ?? reg;
+  }
+  return reg;
+}
+
+/**
+ * The corps on the board a row of the formations list is made from (far side: `from`), in the order it names them;
+ * null where it names none, or with the far side off.
+ */
+const formMade = (g: Game, nat: string, row: any[]): Corps[] | null => (farOn(g) && Array.isArray(row[6]?.from)
+  ? (row[6].from as string[]).flatMap((nm) => g.corps.filter((x) => x.nat === nat && !x.dead && x.name === nm)) : null);
+
+/**
+ * A row of the reinforcements or formations list in its month. `id` is a formations row's number in the one list of
+ * offers (`formId`), else -1; `take` is true where the player has just said yes to it (`takeOffer`). True where the
+ * row formed.
+ *
+ * (The far side: a row of the formations list made from the player's own corps on the board is an offer, made in its
+ * month, never a silent removal: the design director's ruling of 13:39Z, 25 November 2026, on the batch 1 readings,
+ * point 3 of the dated rows, "Oahu's split: an offer too, yes. A reorganisation of the player's own forces is the
+ * player's choice." It is made, stands, lapses and is answered as ruling B8's offers are (`rowOffers`, `takeOffer`,
+ * `declineOffer`, the same flags); taken, the row forms as it always did; declined, his corps stay whole and the row
+ * never comes. As built a player's America had the 24th and 25th Infantry Divisions made out of the Hawaiian
+ * Division's corps in October 1941 without a word, as a computer's has. A computer's rows are as they were.)
+ */
+function formRow(g: Game, nat: string, row: any[], id: number, take = false): boolean {
+  // A row marked 'open' is the open grand campaign's alone (ruling 233, rider b609(a)): the history campaign's roster stays the book's.
+  if (row[6]?.open && g.flags.open !== 1) return false;
+  // (The far side: a row made from corps on the board, `from`, as a dated expedition's is: the design director's
+  // ruling of 06:21Z of 21 November 2026 to ruling 234, on Oahu's split. A computer staff that ships its own army
+  // is sent no dated expedition (world.ts shipsItsOwn), so America's reorganisations stand in this list, for every
+  // country alike. A reorganisation makes nothing from nothing: the row takes its strength out of the corps it
+  // names, in their order, and never more than they hold; a corps emptied is struck off; with none of them left
+  // the row does not come, and with its own place lost it is never formed at the capital instead.)
+  const made = formMade(g, nat, row);
+  const reg = formPlace(g, nat, row, made);
+  if (!reg) return false;
+  if (made && id >= 0 && hisOffers(g, nat) && !take) { offerMade(g, nat, id, row[6]); return false; }
+  const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
+  // A row by date reads its strength as a first-day row does (ruled 16:32Z, 17 November 2026; no row of Europe's book says one).
+  if (row[6]?.str !== undefined) c.str = row[6].str;
+  if (made) {
+    const want = c.divs * c.str;
+    let got = 0;
+    for (const x of made) {
+      const has = x.divs * x.str, part = Math.min(has, want - got);
+      if (part <= 0) continue;
+      got += part;
+      if (has - part < 1e-9) removeCorps(g, x); else x.str = (has - part) / x.divs;
+    }
+    c.str = got / c.divs;
+    g.supplyDirty = true;
+  }
+  return true;
+}
+
 export function startPhase(g: Game, nat: string): void {
   const n = g.nations[nat];
   fadeWorks(g, nat);
@@ -5382,45 +6239,15 @@ export function startPhase(g: Game, nat: string): void {
   // Shipping by the record's dates (ruling 234, rider b630).
   liftDates(g, nat);
   // Reinforcements from the pre-war mobilisation, and the armies and fronts formed later from men already under arms.
-  for (const row of [...(setup as any).reinforcements, ...((setup as any).formations ?? [])]) {
-    if (row[0] !== g.turn || row[1] !== nat) continue;
-    // A row marked 'open' is the open grand campaign's alone (ruling 233, rider b609(a)): the history campaign's roster stays the book's.
-    if (row[6]?.open && g.flags.open !== 1) continue;
-    let reg = g.byName[row[5]];
-    // A row for ground this campaign's chart does not carry (a far-side row on the older chart) never comes.
-    if (!reg) continue;
-    // (The far side: a row made from corps on the board, `from`, as a dated expedition's is: the design director's
-    // ruling of 06:21Z of 21 November 2026 to ruling 234, on Oahu's split. A computer staff that ships its own army
-    // is sent no dated expedition (world.ts shipsItsOwn), so America's reorganisations stand in this list, for every
-    // country alike. A reorganisation makes nothing from nothing: the row takes its strength out of the corps it
-    // names, in their order, and never more than they hold; a corps emptied is struck off; with none of them left
-    // the row does not come, and with its own place lost it is never formed at the capital instead.)
-    const made: Corps[] | null = farOn(g) && Array.isArray(row[6]?.from)
-      ? (row[6].from as string[]).flatMap((nm) => g.corps.filter((x) => x.nat === nat && !x.dead && x.name === nm)) : null;
-    if (made && (!made.length || !allied(g, nat, reg.ctrl))) continue;
-    if (!allied(g, nat, reg.ctrl)) reg = g.regions[n.capital];
-    if (!reg || !allied(g, nat, reg.ctrl)) continue;
-    if (g.flags.open === 1 && row[3] !== 'fort') {
-      // Free play: not on the ground of a friend who is at peace, and never a sixth corps in one province.
-      if (reg.ctrl !== nat && !sharesWar(g, nat, reg.ctrl) && n.capital >= 0 && g.regions[n.capital].ctrl === nat) reg = g.regions[n.capital];
-      reg = roomNear(g, nat, reg) ?? reg;
-    }
-    const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
-    // A row by date reads its strength as a first-day row does (ruled 16:32Z, 17 November 2026; no row of Europe's book says one).
-    if (row[6]?.str !== undefined) c.str = row[6].str;
-    if (made) {
-      const want = c.divs * c.str;
-      let got = 0;
-      for (const x of made) {
-        const has = x.divs * x.str, take = Math.min(has, want - got);
-        if (take <= 0) continue;
-        got += take;
-        if (has - take < 1e-9) removeCorps(g, x); else x.str = (has - take) / x.divs;
-      }
-      c.str = got / c.divs;
-      g.supplyDirty = true;
-    }
-  }
+  // (A row of the formations list is numbered in the one list of offers after the dated rows: `formId`.)
+  const early = (setup as any).reinforcements as any[];
+  [...early, ...((setup as any).formations ?? [])].forEach((row: any[], j: number) => {
+    if (row[0] !== g.turn || row[1] !== nat) return;
+    formRow(g, nat, row, j >= early.length ? formId(j - early.length) : -1);
+  });
+  // (The far side: the player's reorganisations offered and not yet answered stand or lapse as any offer does: ruling
+  // B8 and the design director's ruling of 13:39Z, 25 November 2026, point 3, `formRow`. Never for a computer.)
+  if (hisOffers(g, nat)) ((setup as any).formations ?? []).forEach((row: any[], k: number) => { if (offerOpen(g, nat, formId(k))) offerStands(g, nat, row, formId(k)); });
   // The fortress rows of this month, and those whose orders take them out of their works (the fortress rows' switch on).
   fortsMonth(g, nat);
   expeditions(g, nat);
@@ -5503,15 +6330,23 @@ export function startPhase(g: Game, nat: string): void {
   let drafted_ = 0, freeLeft = heldMen;
   // Corps starved into surrender this month, by where they stood: an army lost together is one piece of news.
   const starved = new Map<number, { names: string[]; men: number }>();
+  // (Ruling 173(e), the whole-world chart alone: on an island of the historian's table a cut-off garrison withers to
+  // a floor and does not lay down its arms from hunger. wither.ts; with the far side off nothing of it is read.)
+  const far = farOn(g);
   army.forEach((c, i) => {
     // What it knew before the month's drafts: a corps back from the battle schools is a grade better than when it went.
     // And its strength before them: the drafts come in new uniforms (wearMonth).
     const knew = c.xp, had = c.str;
     // Its morale for the month: where it stands, who stands with it, whether it has had any rest (the grand campaign).
     moraleMonth(g, c, { owed, cold: c.supplied && frozen(g, nat, g.regions[c.reg]) });
+    // (A count carried off every island of the table is struck off: the rule does not answer there.)
+    if (far) witherDrop(g, c);
     if (c.supplied && !stored.has(c)) {
       // (A fortress crew fed all month is restocked: its own stores' count starts again, 09:06Z (b).)
       if (fortRow(g, c)) crewFed(g, c);
+      // (A withered island garrison mends when a ship of its side can reach it again: fed from outside, its count is
+      // struck off. A town's own stores under siege, or a pocket's, are not a ship.)
+      if (far && !shutIn(g, c) && !inPocket(g, c)) witherFed(g, c);
       const give = want[i] * share;
       if (give > 0) {
         // Green drafts thin out what a corps of the player's has learned.
@@ -5527,15 +6362,27 @@ export function startPhase(g: Game, nat: string): void {
       const bite = cold ? cmdWinter(g, c) : 0;
       if (cold) c.str *= 1 - EASTERN.winter.attrition * bite;
       const rest = ((c.fought ? 0.25 : 0.45) + restedOrg(g, c) + ward(c).org) * lineStrength(g, c).mul * columnShare(g, c) * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g, c);
-      c.org = Math.min(1, c.org + (owed ? rest * (1 - BUDGET.debt.rest * owed) : rest));
+      // (A garrison still withered here eats a besieged town's stores or a pocket's, which are no ship: it gets no
+      // rest from them, and stays at its floor. An enemy who lands beside it does not mend it.)
+      if (!(far && withered(g, c))) c.org = Math.min(1, c.org + (owed ? rest * (1 - BUDGET.debt.rest * owed) : rest));
       if (owed) c.str *= 1 - BUDGET.debt.desert * owed;
     } else {
       // (A fortress crew under the fortress rows lives on its works' own stores, counted apart from its organisation
       // (09:06Z): it holds its organisation and its strength while they last, and goes in the month they run out; a
       // row with no clock yields only with its army.)
-      const crew = fortRow(g, c) ? crewMonth(g, c) : 'fed';
+      // (The whole-world chart: the island of the table this corps is cut off on, where its rule holds this month, and
+      // what the corps was before the month's hunger. A crew already withered has no stores left to count.)
+      const isle = far ? witherAt(g, c, enemyAshore(g, c)) : null;
+      const was = isle ? { org: c.org, str: c.str } : null;
+      const crew = fortRow(g, c) ? (isle && withered(g, c) ? 'held' : crewMonth(g, c)) : 'fed';
       if (crew === 'fed') { c.org -= UNFED; c.str *= 0.85; }
-      if (crew === 'fed' ? c.org <= 0 : crew === 'starved') {
+      if (isle && was) {
+        // Hunger takes it to the island's floor and no further; the month its stores are gone, its own player is told.
+        if (witherMonth(g, c, isle, was, crew === 'fed' ? monthsUnfed(was.org) : crew) === 'withers' && nat === g.human) {
+          // (The UI director's words, 14:00Z 25 November 2026. Bad news to its own player, `lost`, in the month it withers only.)
+          headline(g, 'info', `Cut off and out of stores, ${c.name} withers on ${placeName(g.regions[c.reg].name)}. It holds on at ${floorWords(isle)} of its strength and will not lay down its arms, but it can no longer attack. It recovers once stores reach it by sea.`, nat, c.reg, { lost: nat });
+        }
+      } else if (crew === 'fed' ? c.org <= 0 : crew === 'starved') {
         const lost = starved.get(c.reg) ?? { names: [], men: 0 };
         lost.names.push(c.name);
         lost.men += men(c);
@@ -5557,6 +6404,8 @@ export function startPhase(g: Game, nat: string): void {
     if (jointHold(g, c)) c.ap = 0;
     // A garrison keeps to its town until it is ordered out.
     if (c.town) c.ap = 0;
+    // A withered island garrison only defends: it neither attacks, marches nor sails (ruling 173(e), rider (o)(3)).
+    if (far && withered(g, c)) c.ap = 0;
   });
   if (drafted_ > 0) drawMen(g, nat, drafted_);
   if (menRules(g) && nat === g.human) {

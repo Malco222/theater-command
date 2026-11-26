@@ -25,7 +25,8 @@
 import data from '../../data/campaign/capitulations.json';
 import { reliefBar } from './ai';
 import { skyDenies } from './air';
-import { allied, annexMonth, assess, atWar, capitulate, corpsBase, ensureSupply, fights, friendlyUnits, gunsRule, headline, homeOf, hostileUnits, limitAttackers, overseasRead, railReachFor, theName, thornGround, victorOf } from './game';
+import { allied, annexMonth, assess, atWar, capitulate, corpsBase, ensureSupply, fights, friendlyUnits, gunsRule, headline, homeOf, hostileUnits, limitAttackers, overseasRead, railReachFor, shoreRoom, theName, thornGround, victorOf } from './game';
+import { engRoom, roomAt } from './islands';
 import { FIT_ORG } from './staff';
 import { stopDef, stopOf } from './history';
 import { whyBarred } from './ground';
@@ -165,9 +166,10 @@ const PLANS = 64;
 
 /**
  * The corps that come by land, each put on a province it could attack from while that province has room (hasRoom's:
- * STACK corps, engineers apart up to 2, its side's corps already there counted, those that stay where they stand
- * first), the strongest first and each where the fewest stand: copies of them standing there, so the attack is weighed
- * from where it would go in (limitAttackers' roads, its sides, assess's rivers and flanks), and nothing in the war is moved.
+ * the province's room in corps, islands.ts roomAt; engineers apart up to 2, its side's corps already there counted,
+ * those that stay where they stand first), the strongest first and each where the fewest stand: copies of them
+ * standing there, so the attack is weighed from where it would go in (limitAttackers' roads, its sides, assess's
+ * rivers and flanks), and nothing in the war is moved.
  * Those shipped up come with the one harbour their sailing puts in at (sailingPlans).
  */
 function standThem(g: Game, ally: string, cs: Stand[]): Corps[] {
@@ -185,7 +187,7 @@ function standThem(g: Game, ally: string, cs: Stand[]): Corps[] {
     }
     return l;
   };
-  const fits = (c: Corps, id: number): boolean => (c.kind === 'eng' ? at(id).eng < 2 : at(id).line < STACK);
+  const fits = (c: Corps, id: number): boolean => (c.kind === 'eng' ? at(id).eng < engRoom(g, g.regions[id]) : at(id).line < roomAt(g, g.regions[id], ally));
   const out: Corps[] = cs.filter(stays).map((x) => x.c);
   for (const { c, from } of cs.filter((x) => !stays(x)).sort((a, b) => weight(g, b.c) - weight(g, a.c) || a.c.id - b.c.id)) {
     const open = from.filter((id) => fits(c, id)).sort((a, b) => at(a).line - at(b).line || a - b);
@@ -221,12 +223,12 @@ function sailingPlans(g: Game, shipped: Stand[]): Map<number, number>[] {
 
 /**
  * The corps a plan of sailings ships, sharing the lift (a corps each): the strongest first, each into its quay's
- * harbour of the plan while that harbour has room as whyNotShip counts it (STACK of its side's units of every kind),
+ * harbour of the plan while that harbour has room as whyNotShip counts it (roomAt of its side's units of every kind),
  * none twice; under the guns rule a sailing of guns alone takes the strongest corps that fights in its last place.
  */
 function shipFor(g: Game, ally: string, shipped: Stand[], plan: Map<number, number>, lift: number, skip: Set<number>): Stand[] {
   const room = new Map<number, number>();
-  const left = (id: number): number => room.get(id) ?? STACK - friendlyUnits(g, g.regions[id], ally).length;
+  const left = (id: number): number => room.get(id) ?? roomAt(g, g.regions[id], ally) - friendlyUnits(g, g.regions[id], ally).length;
   const can = shipped.filter((x) => !skip.has(x.c.id) && x.from.includes(plan.get(x.quay!)!)).sort((a, b) => weight(g, b.c) - weight(g, a.c) || a.c.id - b.c.id);
   const pick: Stand[] = [];
   for (const x of can) {
@@ -266,8 +268,8 @@ function strongest<T>(g: Game, xs: T[], n: number, corps: (x: T) => Corps): T[] 
  * place is a besieged town) and sent in as it would send them: by land from the provinces they would attack from
  * (limitAttackers), with as many shipped there as its shipping carries (sealift, a corps each), one sailing from each
  * harbour into one harbour of its side beside the place, every sailing the month's moves allow (the design director's
- * 12:20Z and 12:38Z); or as a landing on the place from one port, no more than its shipping carries nor than STACK, at a
- * landing's strength (landingOpts). In reach
+ * 12:20Z and 12:38Z); or as a landing on the place from one port, no more than its shipping carries, nor than STACK,
+ * nor than an island of the Pacific has room for, at a landing's strength (landingOpts). In reach
  * when the odds reach the bar the computer asks before it goes to a relief: 1.25 at a capital or great city, 1.5
  * elsewhere (reliefBar).
  */
@@ -343,7 +345,7 @@ function reliefFrom(g: Game, nat: string, friends: string[], may: (c: Corps) => 
       }
       // Or a landing on the place from one port.
       for (const [, cs] of [...ports].sort(([a], [b]) => a - b)) {
-        const group = strongest(g, cs, Math.min(lift, STACK), (c) => c);
+        const group = strongest(g, cs, Math.min(lift, STACK, shoreRoom(g, t, ally)), (c) => c);
         if (!group.length || (gunsRule(g) && !group.some(fights))) continue;
         const odds = assess(g, group, t, landingOpts(g, group, t)).odds;
         if (odds >= bar) return { by: ally, target: t.id, odds, corps: group.map((c) => c.id) };

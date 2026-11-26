@@ -251,7 +251,11 @@ describe('the army sent across the ocean', () => {
       // with none on the way, at 28 and from 35 to 39 it is Cornwall, with danger under the staff's bar, and at 46 Sardinia.
       // March 1943 since 1.5.2's small air arms (an arm too small to hold any sky fights over its army) moved the war:
       // scanned again, from 28 to 33 and from 40 to 46 the harbour is Cornwall, with danger under the staff's bar, and
-      // from 34 to 39 it is Gibraltar, with none on the way; turn 43 stands in the middle of the later run.)
+      // from 34 to 39 it is Gibraltar, with none on the way; turn 43 stands in the middle of the later run. December
+      // 1941 on release 2's joins of 25 November 2026 (1125r) before 1.5.2 came in: from 28 to 34 and 40 to 45 the
+      // harbour is Cornwall or the West Country, with danger under the staff's bar, from 35 to 39 Gibraltar, with none,
+      // and at 46 Sardinia. Release 2 with both (pass 2, 26 November 2026) scans as 1.5.2 does: 28 to 33 and 40 to 46
+      // Cornwall, with danger under the staff's bar, 34 to 39 Gibraltar, with none.)
       const g = at(MAR_43);
       const before = new Set(across(g, 'USA').map((c) => c.id));
       // A month's sailing banked and a fit corps on the quay.

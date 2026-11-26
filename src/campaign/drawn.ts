@@ -60,9 +60,10 @@ import counting from '../../data/campaign/counting.json';
 import { addCorps, atWar, relocate, removeCorps } from './game';
 import { divisionWords, divisionsNamed, divisionsOf, keepNumbers, ordinal, setStandInCount, standInCount, standInNumbers } from './armies';
 import { seat } from './commanders';
+import { stopDef } from './history';
 import type { Corps, Game, Kind, Region } from './types';
 
-export const DRAWN = words as unknown as { one: string; many: string; here: string; hereMany: string; conv: string; stood: string; from: string; fromMany: string };
+export const DRAWN = words as unknown as { one: string; many: string; here: string; hereMany: string; hereSea: string; hereSeaMany: string; manyPart: string; ashore: string; afloat: string; conv: string; stood: string; from: string; fromMany: string };
 
 /** A stood war row's line of the table (counting.json): the war it waits for, the board corps it draws on in order, a share it takes where it stands. */
 export interface Counted {
@@ -197,9 +198,10 @@ export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number,
   const k = g.byName[row[5]]?.theatre ?? -1;
   // (Nor out of a fight, on either chart: a corps with an enemy at war on its province or beside it, holding the ground
   // or standing on it, keeps its divisions there, and the row forms without them, as for a corps that cannot leave.
-  // A date never lifts a corps out of a fight: the design director's ruling of 18:47Z, 25 November 2026.)
-  const enemy = (r: Region): boolean => (!!r.ctrl && atWar(g, nat, r.ctrl)) || r.units.some((u) => !u.dead && atWar(g, nat, u.nat));
-  const fighting = (c: Corps): boolean => { const r = g.regions[c.reg]; return enemy(r) || r.nb.some((j) => enemy(g.regions[j])); };
+  // A date never lifts a corps out of a fight: the design director's ruling of 18:47Z, 25 November 2026. `corpsInContact`.
+  // That sentence acts at stops 3 to 5 only, on this door as on the 'from' rows': at the book's stops the book's rows
+  // keep their book and draw a held division at its date, fight or not, still laid once. Her rulings of 21:25Z and 21:50Z.)
+  const fighting = (c: Corps): boolean => !stopDef(g).book && corpsInContact(g, nat, c);
   const stays = (c: Corps): boolean => home || nat === g.human || afloat.has(c) || c.reg === reg.id || (k >= 0 && g.regions[c.reg].theatre === k) || busy(c) || fighting(c);
   const was = o.was as Record<string, string> | undefined;
   const out: Claim[] = [];
@@ -272,6 +274,18 @@ export const formsAny = (claims: Claim[], n: number): boolean => n - claims.leng
  */
 export function ownShare(c: Corps): number {
   return c.out && c.outOf ? clamp(1 - c.out / c.outOf) : 1;
+}
+
+/**
+ * Whether a corps is in contact: an enemy at war with its country holds or stands on its province or one beside it,
+ * read as the board stands (the design director's ruling of 18:47Z, 25 November 2026: a date never lifts a corps out
+ * of a fight). The war rows' draw reads it (`heldAlready`), and on the old chart, under its own switch 'fromWait', so
+ * does a row that takes a named corps whole (game.ts, `expeditions`; her ruling of 19:47Z). Nothing changes.
+ */
+export function corpsInContact(g: Game, nat: string, c: Corps): boolean {
+  const enemy = (r: Region): boolean => (!!r.ctrl && atWar(g, nat, r.ctrl)) || r.units.some((u) => !u.dead && atWar(g, nat, u.nat));
+  const r = g.regions[c.reg];
+  return enemy(r) || r.nb.some((j) => enemy(g.regions[j]));
 }
 
 /**
@@ -555,7 +569,15 @@ export function heldLine(g: Game, row: any[], claims: Claim[]): string | null {
   const the = (name: string): string => (/^the /i.test(name) ? name : `the ${name}`);
   const list = (xs: string[]): string => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}` : xs[0] ?? '');
   const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
-  const where = (qs: Claim[]): string => list([...new Set(qs.map((q) => g.regions[q.from!.reg].name))]);
+  // (Where his own stand: in the place, or, for a corps on a passage, at sea and bound for its harbour, never the port it
+  // sailed from. The UI director's marks of 21:52Z.)
+  const bound = (c: Corps): string | undefined => { const v = (g.atSea ?? []).find((x) => x.corps === c); return v ? g.regions[v.to].name : undefined; };
+  const at = (cs: Corps[]): string => {
+    const ashore = [...new Set(cs.filter((c) => bound(c) === undefined).map((c) => g.regions[c.reg].name))];
+    const afloat = [...new Set(cs.map(bound).filter((x): x is string => x !== undefined))];
+    return list([...(ashore.length ? [fill(DRAWN.ashore, { where: list(ashore) })] : []), ...(afloat.length ? [fill(DRAWN.afloat, { to: list(afloat) })] : [])]);
+  };
+  const where = (qs: Claim[]): string => at(qs.map((q) => q.from!));
   const lines: string[] = [];
   // (The stood war rows: a division the table counts in one of his corps under a name the row gives it, or by share,
   // is not one he holds by name: `drawn`, told by the corps it was to be drawn from. One counted under its card's own
@@ -572,14 +594,19 @@ export function heldLine(g: Game, row: any[], claims: Claim[]): string | null {
     return cap(joined ? the(joined) : list(qs.map((q) => the(q.name[0]))));
   };
   // (Where every one of them stands at the row's own place already, the place is said once: the UI director's `here`.)
-  const there = mine.length > 0 && mine.every((q) => g.regions[q.from!.reg].name === row[5]);
-  if (mine.length) lines.push(fill(there ? (mine.length === 1 ? DRAWN.here : DRAWN.hereMany) : mine.length === 1 ? DRAWN.one : DRAWN.many, { names: said(mine), place: row[5], where: where(mine) }));
-  for (const q of made) lines.push(fill(DRAWN.conv, { names: cap(the(q.name[0])), place: row[5], was: q.conv!, where: where([q]) }));
+  const there = mine.length > 0 && mine.every((q) => bound(q.from!) === undefined && g.regions[q.from!.reg].name === row[5]);
+  // (Every one of them on a passage bound for the row's own place: he has sent them already. The UI director's 21:52Z.)
+  const sailing = mine.length > 0 && mine.every((q) => bound(q.from!) === row[5]);
+  // (Some on their way there and some not: the promise is only of those not. The UI director's 21:59Z.)
+  const partly = !sailing && mine.some((q) => bound(q.from!) === row[5]);
+  const one = mine.length === 1;
+  if (mine.length) lines.push(fill(there ? (one ? DRAWN.here : DRAWN.hereMany) : sailing ? (one ? DRAWN.hereSea : DRAWN.hereSeaMany) : one ? DRAWN.one : partly ? DRAWN.manyPart : DRAWN.many, { names: said(mine), place: row[5], at: where(mine) }));
+  for (const q of made) lines.push(fill(DRAWN.conv, { names: cap(the(q.name[0])), place: row[5], was: q.conv!, at: where([q]) }));
   // One line for each corps the row was to draw on: a division the row names by itself, or so many to make up the row.
   for (const h of [...new Set(drawn.map((q) => q.from!))]) {
     const qs = drawn.filter((q) => q.from === h);
     const named = qs.filter((q) => q.named), rest = qs.filter((q) => !q.named);
-    const as = { place: row[5], army: h.name.replace(/^the /i, ''), where: g.regions[h.reg].name, formation: String(row[2]).replace(/^the /i, '') };
+    const as = { place: row[5], army: h.name.replace(/^the /i, ''), at: at([h]), formation: String(row[2]).replace(/^the /i, '') };
     for (const q of named) lines.push(fill(DRAWN.from, { ...as, names: cap(the(q.name[0])) }));
     if (rest.length === 1) lines.push(fill(DRAWN.from, { ...as, names: 'One division' }));
     else if (rest.length) lines.push(fill(DRAWN.fromMany, { ...as, count: cap(inWords(rest.length)) }));

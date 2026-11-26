@@ -407,6 +407,8 @@ const DESK_SIGN: Record<string, string> = { research: 'star', build: 'inf', dipl
 function buildSign(text: string): string {
   const what = /ordered (.+?)(?: at |, | and |\.|$)/.exec(text)?.[1] ?? '';
   if (/anti-aircraft/i.test(what)) return 'aa';
+  // (City defences: searchlights have no sign of their own yet, and take the star as any other work.)
+  if (/searchlights/i.test(what)) return 'star';
   return /corps/i.test(what) && !/armou?red|panzer|tank|artillery|engineer|mountain|airborne|parachute|marine|cavalry|mechani[sz]ed|motori[sz]ed/i.test(what) ? 'inf' : 'star';
 }
 
@@ -1182,11 +1184,11 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     if (o.what === 'corps' ? !c : g.regions[o.region]?.ctrl !== me) continue;
     // Guns, airfields and works are not counted: one order is a level of them at a place (ruling 133(g): never
     // '1 anti-aircraft guns finished'). The line says what is ready, and the place and its level stand under it.
-    const item = o.what === 'work' ? (o.label === 'anti-aircraft guns' ? 'aa' : o.label === 'airfields' || o.sign === 'field' ? 'field' : null) : null;
+    const item = o.what === 'work' ? (o.label === 'anti-aircraft guns' ? 'aa' : o.label === 'airfields' || o.sign === 'field' ? 'field' : o.sign === 'lights' ? 'lights' : null) : null;
     if (!o.unit && (item || o.label === 'fortifications')) {
       const level = item ? workLevel(g, item, o.region) : 0;
       const town = g.regions[o.region] ? townName(g.regions[o.region]) : '';
-      const text = `${cap(o.label)} ${item === 'aa' ? 'ready' : 'finished'}`, place = level > 0 ? `${town}, level ${level}` : town;
+      const text = `${cap(o.label)} ${item === 'aa' || item === 'lights' ? 'ready' : 'finished'}`, place = level > 0 ? `${town}, level ${level}` : town;
       if (!done.some((x) => x.bare && x.text === text && x.place === place)) done.push({ sign: o.mark, count: 1, text, place, region: o.region, bare: true });
       continue;
     }
@@ -1214,7 +1216,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     if (h.kind === 'info' && h.arm === 'sea' && !card.foot) { card.foot = h.text; used.add(h); continue; }
     // (A work already said among the deliveries, 'Anti-aircraft guns ready' with its place and level, is not said a
     // second time as a line of news.)
-    const built = h.kind === 'info' ? /^The (anti-aircraft guns|airfields) at (.+) are (?:in place|ready): level \d+\.$/.exec(h.text) : null;
+    const built = h.kind === 'info' ? /^The (anti-aircraft guns|airfields|searchlights) at (.+) are (?:in place|ready): level \d+\.$/.exec(h.text) : null;
     // (The headline gives a place its article, "at the Ruhr": the delivery row has the bare name.)
     if (built && card.home.some((x) => x.bare && x.region !== undefined && g.regions[x.region]?.name === built[2].replace(/^the /, '') && x.text.toLowerCase().startsWith(built[1]))) { used.add(h); continue; }
     if (h.kind === 'info') news.push(h);

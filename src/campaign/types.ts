@@ -385,7 +385,7 @@ export interface Build {
   /** A corps' kind. (Airfields as targets: a 'field' work carries 'strip' here where the level is a field strip, not concrete; read it as a string, isStripBuild.) */
   kind?: Kind;
   divs?: number;
-  /** For the arsenal: which aircraft ('ftr', 'bmr'), ship class ('dd', 'tp' and so on) or work ('factory', 'yard', 'aa', 'field'), and how many. */
+  /** For the arsenal: which aircraft ('ftr', 'bmr'), ship class ('dd', 'tp' and so on) or work ('factory', 'yard', 'aa', 'field', 'lights' with city defences), and how many. */
   item?: string;
   count?: number;
   name: string;
@@ -1648,6 +1648,12 @@ export interface AirReport {
    * the switch on; a report without it (the switch off, or an older save) says nothing of strafing.
    */
   strafed?: string[];
+  /**
+   * City defences (the design director's ruling of 25 Nov 2026 02:23Z), a night raid flown with the switch on: the
+   * searchlights at the target, their level, whether cloud blinded them, and the share (0 to 1) of the guns' levels
+   * that fired by searchlight. Absent otherwise.
+   */
+  lights?: { level: number; cloud: boolean; lit: number };
 }
 
 /** Ruling 236.2: how a battle for the sky over one province stands, for the side fighting for it. */

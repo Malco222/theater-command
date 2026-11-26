@@ -1348,6 +1348,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("wingByDate"), Out.bWingByDate); // (release 2, carriers.ts)
 	Object->TryGetBoolField(TEXT("settledTowns"), Out.bSettledTowns); // (release 2, buildings.ts)
 	Object->TryGetBoolField(TEXT("townQueue"), Out.bTownQueue); // (release 2, townqueue.ts)
+	Object->TryGetBoolField(TEXT("cityDefences"), Out.bCityDefences); // (release 2, citydefences.ts)
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
 	Object->TryGetBoolField(TEXT("columnsOn"), Out.bColumnsOn);
 	Object->TryGetBoolField(TEXT("columnsCan"), Out.bColumnsCan);
@@ -4367,6 +4368,7 @@ namespace
 				Entry->TryGetStringField(TEXT("tip"), Button.Tip);
 				Entry->TryGetBoolField(TEXT("ok"), Button.bOk);
 				Entry->TryGetBoolField(TEXT("danger"), Button.bDanger);
+				Entry->TryGetBoolField(TEXT("safe"), Button.bSafe); // (release 2, formations offered: GO BACK on a question asked in place)
 			}
 		}
 	}
@@ -4650,6 +4652,14 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 		Told->TryGetStringField(TEXT("foot"), Month.Foot);
 		Told->TryGetStringField(TEXT("count"), Month.Count);
 		Told->TryGetStringField(TEXT("rest"), Month.Rest);
+		// (Release 2, formations offered.) The card's one row for them, where the rules send one: { text, amber, act }.
+		const TSharedPtr<FJsonObject>* OffersRow = nullptr;
+		if (Told->TryGetObjectField(TEXT("offersRow"), OffersRow) && OffersRow && OffersRow->IsValid())
+		{
+			(*OffersRow)->TryGetStringField(TEXT("text"), Month.OffersText);
+			(*OffersRow)->TryGetBoolField(TEXT("amber"), Month.bOffersAmber);
+			(*OffersRow)->TryGetStringField(TEXT("act"), Month.OffersAct);
+		}
 		auto ReadFigures = [](const TSharedPtr<FJsonObject>& From, TArray<FMonthFigure>& Into)
 		{
 			const TArray<TSharedPtr<FJsonValue>>* Figures = nullptr;
@@ -5007,6 +5017,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 					RowEntry->TryGetNumberField(TEXT("meter"), Row.Meter);
 					RowEntry->TryGetStringField(TEXT("alarm"), Row.Alarm);
 					RowEntry->TryGetStringField(TEXT("picture"), Row.Picture);
+					RowEntry->TryGetStringArrayField(TEXT("tones"), Row.Tones); // (release 2, formations offered: a line plain, muted or amber)
 				}
 			}
 		}
