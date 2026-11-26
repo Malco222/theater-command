@@ -362,6 +362,17 @@ namespace TheaterFx
 		// burst behind it, drawn wherever it is within far.draw_beyond_m)
 		uint8_t FarRep = 0;
 		Vec FarAt;
+		// (release 2's sea items, TheaterFxSea.inl: a piece that lies or runs in a ship's own frame, DeckWash's water and
+		// the deck's brass. DeckShip: her number + 1 (0: an ordinary piece, as ever). DeckMode: 1 water running off or over
+		// her edge (DeckP + DeckV t, falling DeckG), 2 a sheet of foam sliding to a stop (DeckP + DeckV (1 - e^-t)), 3 a
+		// spent case thrown, lying and rolling (its place DeckP and way DeckV stepped each frame from DeckT; its axis
+		// DeckAx and its other way DeckFa), 4 a case gone over her side, falling to the sea. All in her frame: X toward
+		// her bow, Y to port, Z up from her waterline amidships. Each frame (ShipRide's pose, at Draw) its world place is
+		// written to From (or, a case, At1 and At2), so the draw finds it on her wherever she has turned and heeled)
+		uint32_t DeckShip = 0, DeckId = 0;
+		uint8_t DeckMode = 0;
+		Vec DeckP, DeckV, DeckAx, DeckFa;
+		double DeckT = 0.0, DeckG = 0.0, DeckZ = 0.0, DeckFull = 1.0;
 	};
 
 	class Battle
@@ -646,6 +657,87 @@ namespace TheaterFx
 		 * foam patch stained with it. Far off its white is held over the sky. No flash. Without the sea_splash row:
 		 * Shell on "water" with the size row its calibre is nearest (bomb500, bomb250, how150), as before. */
 		void SeaSplash(double Now, const Vec& At, double CalibreMm, const char* Dye = "");
+
+		// ---- Release 2, the ten dramatic moments: the sea's items 9, 10 and 11 (TheaterFxSea.inl). No scene calls any of
+		// these until the sea scene wires them behind its own switches; uncalled, every frame is as it was, to the byte.
+		// Each piece seeds its own dice from its place, a key or the time: none draws on the battle's shared seed.
+
+		/** Item 9 part 4: a shell's column rising close off a ship's side (shell misses land 6 to 12 m off her side, never
+		 * nearer) whose head falls across her deck. ColumnAt: where the shell fell (metres, world; its height is the
+		 * sea's); CalibreMm: its calibre, as SeaSplash's (the column's height, rise, hang and fall are sea_splash's
+		 * table's); Toward: from the column to her nearest deck edge, level (its length is how far off her side the
+		 * column stands, metres); DeckZ: her deck's height there (metres, world). After the column's rise and most of its
+		 * hang its head comes down as a curtain of white water leaning toward her and bent by the wind, landing across
+		 * her deck from her near edge out to sea_splash.drench.reach_k of the column's height from the column, where it
+		 * settles in sheets at DeckZ and is gone within drench.life seconds of landing. Nothing when her edge is beyond
+		 * that reach, without the row (sea_splash.drench.reach_k), or with two drenches already falling on her (ShipId:
+		 * hers, 0 or more; under 0, a drench landing within 40 m counts as hers). Lay the column itself with SeaSplash
+		 * at the same moment. Returns the pieces laid (0: none). */
+		int DeckDrench(double Now, const Vec& ColumnAt, double CalibreMm, const Vec& Toward, double DeckZ, int ShipId = -1);
+		/** The sea_splash table at a calibre (Name: height_m, rise_s, hang_s, fall_s, foam_m, foam_s, crown_wide), read as
+		 * SeaSplash reads it; Usual where the recipe has none. For the previewer's calibre ladder and a scene's lots. */
+		double SeaTable(const char* Name, double CalibreMm, double Usual) const;
+
+		/** Where a ship lies this frame, for what lies or runs in her own frame (DeckWash's water, the deck's brass): At,
+		 * her waterline amidships (metres, world); Fore, Left and Up her own axes in the world (toward her bow, to port,
+		 * up through her deck; as she is drawn, turned, heeled and trimmed; made square here, Up first); Long her length
+		 * and HalfBeam half her beam (metres); Coaming the height of what stands at her deck's edge (a bulwark or a
+		 * coaming, metres: a case stops there if it is over the case's width; 0, a rail with open sides, over it goes). */
+		struct ShipPose
+		{
+			Vec At, Fore = Vec(1.0, 0.0, 0.0), Left = Vec(0.0, 1.0, 0.0), Up = Vec(0.0, 0.0, 1.0);
+			double Long = 0.0, HalfBeam = 0.0, Coaming = 0.0;
+		};
+		/** Ship ShipId (0 or more) lies so this frame (Now, the clock the frame is drawn at): call it once a frame for every
+		 * ship that carries anything in her frame, before Draw. It lays what her wash has due and moves all she carries
+		 * with her (Draw writes their world places from her pose). A ship not told of for 5 s is let go, and what she
+		 * carried goes with her. */
+		void ShipRide(double Now, int ShipId, const ShipPose& Pose);
+		/** The plan's name for ShipRide (item 11's brass): the same call. */
+		void CasesRide(double Now, int ShipId, const ShipPose& Pose) { ShipRide(Now, ShipId, Pose); }
+		/** She is gone (sunk, out of the scene): what she carries goes at once and her wash stops. */
+		void ShipRideStop(int ShipId);
+		/** Item 9 part 5 and item 10 part 6: water on her deck running off her edge, drawn in her own frame and moved with
+		 * her every frame (ShipRide). Edge: Count points along the deck edge the water runs over (metres, in her frame: X
+		 * toward her bow, Y to port, Z up from her waterline, so a point at her deck's edge has her freeboard there for
+		 * Z). Kind "runoff" (after a drench): white sheets pouring over the edge and down her side to the sea, foam where
+		 * they land; "awash" (a ship listing far over): the sea washing up over her low edge and along it, foam sliding
+		 * inboard across the deck. Strength 0 to 1 scales how many (the row's sheets_per_s at 1, for each 10 m of edge);
+		 * Seconds how long it runs (it thins over its last quarter); DeckWashStop ends it sooner. Its dice are its own,
+		 * from where she is. A second call for her starts a new wash beside the first (at most 4 a ship). The row:
+		 * sea_splash.runoff (and .awash). Returns 1 when laid, 0 when not (no row, no pose, no edge). */
+		int DeckWash(double Now, int ShipId, const Vec* Edge, int Count, double Strength, double Seconds, const char* Kind = "runoff");
+		/** Her wash stops: no new water; what is running is gone in a second or two. */
+		void DeckWashStop(double Now, int ShipId);
+
+		/** Item 10 part 3: the oil lane a holed ship trails as she steams on (furnace oil from a ship under way never burned
+		 * as a trail: oil, never fire). Call OilLeak every frame while she leaks: Hole, where the oil leaves her (metres,
+		 * world; its height is not read); Rate 0 to 1, how much (it sets the lane's width where it leaves her). Every
+		 * sea_leak.every_s (2 s) a point of her track is kept; a ship lying stopped lays no new point (none within gap_m
+		 * of the last). The kit draws nothing: the scene lays the lane with its own slick paint from OilLane's strip. At
+		 * most sea_leak.points (200) points a ship (past that the older half is thinned to every other point, so a long
+		 * lane keeps its whole length, coarser astern) and sea_leak.ships (6) ships; a seventh is refused until a lane
+		 * has faded. No row: nothing. No dice: its ragged edge and sheen come from each point's own number. */
+		void OilLeak(double Now, int ShipId, const Vec& Hole, double Rate = 1.0);
+		/** She stops leaking (sunk, or the leak is out): her lane lays no new point and stays on the sea, widening and
+		 * fading as it ages, until it is gone (sea_leak.dark_s). */
+		void OilLeakStop(double Now, int ShipId);
+		/** One point of a lane's strip, oldest first. At: its middle on the sea now (metres, world; Z the sea's height),
+		 * drifted down the wind (sea_leak.drift_k of it, about 3 per cent); Across: level and square to the lane there
+		 * (toward its left as it runs from old to new); Left and Right: how far its edge lies from At each way (metres,
+		 * its width sea_leak.w0_m + k_m * sqrt(age), ragged by each point's own number); Dark: how dark the oil is, 0
+		 * none to 1 (sea_leak.dark at first, fading to nothing by dark_s); Sheen: a faint rainbow sheen's share, 0 to 1;
+		 * Age: seconds since it left her. The last point is where the oil leaves her now, while she leaks. */
+		struct LanePoint
+		{
+			Vec At, Across;
+			double Left = 0.0, Right = 0.0, Dark = 0.0, Sheen = 0.0, Age = 0.0;
+		};
+		/** Her lane's strip at Now into Strip (emptied first): how many points (0: none). Reads the lanes only; nothing
+		 * the kit's Draw changes. */
+		int OilLane(double Now, int ShipId, std::vector<LanePoint>& Strip) const;
+		/** The ships with a lane on the sea now, into Ships (emptied first): how many. */
+		int OilLanes(std::vector<int>& Ships) const;
 
 		/** What the eye is: where it is, which way its screen's right, up and forward point, and how many pixels a
 		 * radian across the screen is (the screen's width / (2 tan(field of view / 2))). Smoke takes SmokeLight (the
@@ -1946,5 +2038,57 @@ namespace TheaterFx
 		Vec GoingOwn(const Bit& B, double Age) const;
 		void Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough = 0.0, uint32_t LumpSeed = 0, double Turn = 0.0, const Rgb& Floor = Rgb(), const Rgb& Through = Rgb(), const Vec& Outward = Vec(), const Rgb& Lift = Rgb(), const Vec& TaperB = Vec());
 		int LayBit(int Slot, const Bit& B, double Now, const View& Eye, int Room); // (how many slots it took: 0, 1, or 2 for a twin)
+
+		// ---- Release 2's sea items (TheaterFxSea.inl): their own state, cleared with the rest (SeaClear)
+		// (DeckDrench's falls: whose, where they land and when each is over, for at most two at once on a ship)
+		struct DrenchFall
+		{
+			int Ship = -1;
+			Vec At;
+			double Ends = 0.0;
+		};
+		std::vector<DrenchFall> Drenches;
+		// (the ships that carry pieces in their own frame: each one's pose as last told, and when)
+		struct Rider
+		{
+			int Ship = -1;
+			ShipPose Pose;
+			double At = 0.0;
+		};
+		std::vector<Rider> Riders;
+		const Rider* RiderOf(int Ship) const;
+		// (DeckWash: one ship's water running over an edge, its own dice)
+		struct Washing
+		{
+			int Ship = -1;
+			uint8_t Kind = 1; // (1 runoff, 2 awash)
+			std::vector<Vec> Edge;
+			double Strength = 1.0, Start = 0.0, Until = 0.0, Next = 0.0, Length = 0.0;
+			Dice D;
+		};
+		std::vector<Washing> Washes;
+		void WashLay(Washing& W, const ShipPose& Pose, double T);
+		static Vec ShipToWorld(const ShipPose& Pose, const Vec& Local);
+		void DeckPlace(double Now); // (each frame at Draw: every piece in a ship's frame to its world place)
+		uint32_t DeckIds = 0;
+		// (the oil lanes: each leaking ship's kept points, laid every every_s; Hole and HoleAt the place the oil leaves
+		// her now and when that was told; Serial the number each point is given, for its ragged edge)
+		struct LaneDot
+		{
+			Vec At;
+			double Born = 0.0, Rate = 1.0;
+			uint32_t Serial = 0;
+		};
+		struct Lane
+		{
+			int Ship = -1;
+			std::vector<LaneDot> Dots;
+			Vec Hole;
+			double HoleAt = 0.0, Rate = 1.0, Next = 0.0;
+			bool bLeaks = true;
+			uint32_t Serials = 0;
+		};
+		std::vector<Lane> Lanes;
+		void SeaClear();
 	};
 }

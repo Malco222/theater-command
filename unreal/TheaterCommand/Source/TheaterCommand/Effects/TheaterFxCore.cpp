@@ -621,6 +621,7 @@ namespace TheaterFx
 		}
 		LastDrawn = 0;
 		ShadowRoom = ShadowsWere = 0;
+		SeaClear(); // (release 2's sea items, TheaterFxSea.inl)
 	}
 
 	void Battle::SetLensFade(double Gone, double Whole, double Plane)
@@ -16741,6 +16742,7 @@ namespace TheaterFx
 		UpWas = Eye.Up;
 		bEyeWas = true;
 		Run(Now);
+		DeckPlace(Now); // (release 2's sea items: what lies in a ship's frame to where she is now; no ship told of, nothing)
 		CutTrails();
 		// (Bit::Serial: what was made since the last Draw lies at the end of Bits in the order it was made; numbered so
 		// before Prune moves anything)
@@ -18062,4 +18064,8 @@ namespace TheaterFx
 		J.Roll = std::max(-MostRoll, std::min(MostRoll, J.Roll));
 		return J;
 	}
+
+	// Release 2, the ten dramatic moments: the sea's items 9, 10 and 11 (DeckDrench, DeckWash, the oil lane, the deck's
+	// brass, the guns' haze), kept in their own file so that they sit in one place
+#include "Effects/TheaterFxSea.inl"
 }

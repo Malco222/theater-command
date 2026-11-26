@@ -725,6 +725,120 @@ void FBattleEffects::SeaSplash(const FVector& WorldAt, float CalibreMm, const FS
 	});
 }
 
+// Release 2, the ten dramatic moments: the sea's items 9, 10 and 11 (the core's TheaterFxSea.inl)
+void FBattleEffects::DeckDrench(const FVector& ColumnAt, float CalibreMm, const FVector& Toward, float DeckZ, int32 ShipId)
+{
+	Do([=, this]()
+	{
+		// (Toward is a length as well as a way: world units to metres, as a place is)
+		Core.DeckDrench(Time(), ToFx(ColumnAt), CalibreMm, ToFx(Toward), DeckZ / UnitsPerMetre, ShipId);
+	});
+}
+
+void FBattleEffects::ShipRide(int32 ShipId, const FTransform& Hull, float LongMetres, float HalfBeamMetres, float CoamingMetres)
+{
+	TheaterFx::Battle::ShipPose Pose;
+	Pose.At = ToFx(Hull.GetLocation());
+	Pose.Fore = ToFxWay(Hull.GetUnitAxis(EAxis::X));
+	Pose.Left = ToFxWay(Hull.GetUnitAxis(EAxis::Y));
+	Pose.Up = ToFxWay(Hull.GetUnitAxis(EAxis::Z));
+	Pose.Long = LongMetres;
+	Pose.HalfBeam = HalfBeamMetres;
+	Pose.Coaming = CoamingMetres;
+	Do([=, this]()
+	{
+		Core.ShipRide(Time(), ShipId, Pose);
+	});
+}
+
+void FBattleEffects::ShipRideStop(int32 ShipId)
+{
+	Do([=, this]()
+	{
+		Core.ShipRideStop(ShipId);
+	});
+}
+
+void FBattleEffects::DeckWash(int32 ShipId, const TArray<FVector>& EdgeMetres, float Strength, float Seconds, const FString& Kind)
+{
+	// (already metres in her frame: copied as they are)
+	std::vector<TheaterFx::Vec> Edge;
+	Edge.reserve(EdgeMetres.Num());
+	for (const FVector& P : EdgeMetres)
+	{
+		Edge.emplace_back(P.X, P.Y, P.Z);
+	}
+	const std::string Named_ = Named(Kind);
+	Do([=, this]()
+	{
+		Core.DeckWash(Time(), ShipId, Edge.data(), static_cast<int>(Edge.size()), Strength, Seconds, Named_.c_str());
+	});
+}
+
+void FBattleEffects::DeckWashStop(int32 ShipId)
+{
+	Do([=, this]()
+	{
+		Core.DeckWashStop(Time(), ShipId);
+	});
+}
+
+void FBattleEffects::OilLeak(int32 ShipId, const FVector& WorldAt, float Rate)
+{
+	Do([=, this]()
+	{
+		Core.OilLeak(Time(), ShipId, ToFx(WorldAt), Rate);
+	});
+}
+
+void FBattleEffects::OilLeakStop(int32 ShipId)
+{
+	Do([=, this]()
+	{
+		Core.OilLeakStop(Time(), ShipId);
+	});
+}
+
+int32 FBattleEffects::OilLane(int32 ShipId, TArray<FOilLanePoint>& Out) const
+{
+	Out.Reset();
+	if (!IsReady())
+	{
+		return 0;
+	}
+	// (the lanes alone: nothing the kit's draw on its worker reads or writes)
+	std::vector<TheaterFx::Battle::LanePoint> Strip;
+	Core.OilLane(Time(), ShipId, Strip);
+	Out.Reserve(static_cast<int32>(Strip.size()));
+	for (const TheaterFx::Battle::LanePoint& P : Strip)
+	{
+		FOilLanePoint& L = Out.AddDefaulted_GetRef();
+		const FVector Mid(P.At.X, P.At.Y, P.At.Z), Across(P.Across.X, P.Across.Y, P.Across.Z);
+		L.Mid = Mid * UnitsPerMetre;
+		L.LeftEdge = (Mid + Across * P.Left) * UnitsPerMetre;
+		L.RightEdge = (Mid - Across * P.Right) * UnitsPerMetre;
+		L.Dark = static_cast<float>(P.Dark);
+		L.Sheen = static_cast<float>(P.Sheen);
+		L.AgeSeconds = static_cast<float>(P.Age);
+	}
+	return Out.Num();
+}
+
+void FBattleEffects::OilLanes(TArray<int32>& Ships) const
+{
+	Ships.Reset();
+	if (!IsReady())
+	{
+		return;
+	}
+	std::vector<int> Have;
+	Core.OilLanes(Have);
+	for (const int Id : Have)
+	{
+		Ships.Add(Id);
+	}
+}
+
 void FBattleEffects::SetWind(const FVector& MetresPerSecond)
 {
 	Do([=, this]()

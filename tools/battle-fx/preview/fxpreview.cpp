@@ -2831,6 +2831,59 @@ namespace
 	}
 }
 
+// Release 2, item 9 part 1: the calibre ladder, for the sea scene's patch (fxpreview recipe.txt out ladder sea 0).
+// What SeaSplash(At, CalibreMm, "") lays at each calibre (its table's height, rise, hang and fall, the pieces it makes
+// and how long the last of them lives), and what the scene draws today in its place: Shell on "water" with SplashRow's
+// size for the show's What (heavy from 300 mm, medium from 180, else light; small, the one-gun rounds of 140 mm and
+// under), its crown and its pieces and life the same way. Nothing is drawn.
+static int Ladder(const FlatRecipe& Book)
+{
+	const double Cals[] = { 76.0, 102.0, 127.0, 140.0, 152.0, 203.0, 283.0, 305.0, 356.0, 381.0, 406.0, 460.0 };
+	// (how long its last piece is drawn: frames 0.1 s apart seen from 1 km off, to 120 s)
+	auto Lasts = [](Battle& Fx, double From)
+	{
+		Battle::View V;
+		V.Eye = Vec(-1000.0, 0.0, 20.0);
+		V.Forward = Vec(1.0, 0.0, 0.0);
+		V.Right = Vec(0.0, -1.0, 0.0);
+		V.Up = Vec(0.0, 0.0, 1.0);
+		V.PixelsPerRadian = 1500.0;
+		double Last = From;
+		for (int K = 0; K <= 1200; ++K)
+		{
+			const double T = From + 0.1 * K;
+			if (Fx.Draw(T, V) > 0)
+			{
+				Last = T;
+			}
+		}
+		return Last - From;
+	};
+	std::printf("calibre_mm  height_m  rise_s  hang_s  fall_s  stands_s  pieces  life_s   |  today: what  row      crown_m   pieces  life_s\n");
+	for (const double Mm : Cals)
+	{
+		Battle Fx;
+		Fx.Setup(&Book, &FlatSea, nullptr, 3u);
+		Fx.SeaSplash(1.0, Vec(0.0, 0.0, 0.0), Mm, "");
+		const int Pieces = Fx.PuffsAsked();
+		const double Life = Lasts(Fx, 1.0);
+		const double H = Fx.SeaTable("height_m", Mm, 0.0), Rise = Fx.SeaTable("rise_s", Mm, 0.0), Hang = Fx.SeaTable("hang_s", Mm, 0.0), Fall = Fx.SeaTable("fall_s", Mm, 0.0);
+		// (today's: the show's What by calibre, SeaShow's Splash; a one-gun round of 140 mm and under is "small")
+		const char* What = Mm >= 300.0 ? "heavy" : (Mm >= 180.0 ? "medium" : (Mm <= 140.0 ? "small*" : "light"));
+		const char* Row = Mm >= 300.0 ? "bomb500" : (Mm >= 180.0 ? "bomb250" : (Mm <= 140.0 ? "how105" : "how150"));
+		Battle Old;
+		Old.Setup(&Book, &FlatSea, nullptr, 3u);
+		Old.Shell(1.0, Vec(0.0, 0.0, 0.0), Row, "water", false);
+		const int OldPieces = Old.PuffsAsked();
+		const double OldLife = Lasts(Old, 1.0);
+		const std::string Cr = std::string("sizes.") + Row + ".crown_m.";
+		const double C0 = Book.Numbers.count(Cr + "0") ? Book.Numbers.at(Cr + "0") : 0.0, C1 = Book.Numbers.count(Cr + "1") ? Book.Numbers.at(Cr + "1") : 0.0;
+		std::printf("%10.0f  %8.1f  %6.2f  %6.2f  %6.2f  %8.2f  %6d  %6.2f   |  %-11s %-8s %3.0f-%-3.0f   %6d  %6.2f\n", Mm, H, Rise, Hang, Fall, Rise + Hang + Fall, Pieces, Life, What, Row, C0, C1, OldPieces, OldLife);
+	}
+	std::printf("(* small: the show's one-gun rounds of 140 mm and under; a salvo's shells under 180 mm are light, how150)\n");
+	return 0;
+}
+
 int main(int Argc, char** Argv)
 {
 	if (Argc < 6)
@@ -2861,6 +2914,10 @@ int main(int Argc, char** Argv)
 		}
 	}
 	const std::string OutDir = Argv[2], Size = Argv[3], Ground = Argv[4];
+	if (Size == "ladder")
+	{
+		return Ladder(Book); // (release 2, item 9: the calibre ladder, printed)
+	}
 	std::vector<int> Frames;
 	{
 		std::stringstream S(Argv[5]);

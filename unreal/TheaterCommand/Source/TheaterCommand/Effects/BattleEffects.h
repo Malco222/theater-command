@@ -20,6 +20,15 @@ class USceneComponent;
 
 /** The camera's jolt from hits close by, for the caller to add to its own camera if it wants it: it is never moved
  * here. Offset is in world units. A setting turns it off (FBattleEffects::bShake). */
+/** One point of a holed ship's oil lane (release 2, item 10: FBattleEffects::OilLane), oldest first, in world units:
+ * Mid its middle on the sea, LeftEdge and RightEdge its two edges (ragged), Dark how dark the oil is (0 none to 1, the
+ * scene's slick paint's darkness), Sheen a faint sheen's share, AgeSeconds since it left her. */
+struct FOilLanePoint
+{
+	FVector Mid = FVector::ZeroVector, LeftEdge = FVector::ZeroVector, RightEdge = FVector::ZeroVector;
+	float Dark = 0.0f, Sheen = 0.0f, AgeSeconds = 0.0f;
+};
+
 struct FBattleJolt
 {
 	FVector Offset = FVector::ZeroVector;
@@ -269,6 +278,42 @@ public:
 	 * dye name from the recipe's sea_splash.dyes ("pink" Nagato, "red" Kongo, "yellow" Haruna, ...; empty for none,
 	 * Yamato), and a stained foam patch. Without the sea_splash row: ShellOfSize on "water" as before. */
 	void SeaSplash(const FVector& WorldAt, float CalibreMm, const FString& Dye = FString());
+	// ---- Release 2, the ten dramatic moments: the sea's items 9, 10 and 11 (TheaterFx::Battle's, TheaterFxSea.inl). No
+	// scene calls them until the sea scene wires each behind its own switch; uncalled, every frame is as before.
+	/** A shell's column close off a ship's side whose head falls across her deck (item 9): ColumnAt where the shell fell
+	 * (world), CalibreMm as SeaSplash's, Toward from the column to her nearest deck edge, level (world units; its length
+	 * is how far off her side it stands), DeckZ her deck's world height there (world units), ShipId hers. Call it with
+	 * the column's SeaSplash. Nothing beyond sea_splash.drench.reach_k of the column's height, or with two drenches
+	 * already falling on her. */
+	void DeckDrench(const FVector& ColumnAt, float CalibreMm, const FVector& Toward, float DeckZ, int32 ShipId = -1);
+	/** Ship ShipId lies so this frame (once a frame for each ship that carries anything in her own frame: DeckWash's
+	 * water, the deck's brass; before Tick). Hull: her frame in the world, its X toward her bow, Y to her port side, Z
+	 * up through her deck, its origin on her waterline amidships (her hull as drawn, turned, heeled and trimmed; its
+	 * scale is not read). LongMetres her length, HalfBeamMetres half her beam, CoamingMetres what stands at her deck's
+	 * edge (a bulwark; 0 for a rail with open sides). A ship not told of for 5 s is let go with all she carries. */
+	void ShipRide(int32 ShipId, const FTransform& Hull, float LongMetres, float HalfBeamMetres, float CoamingMetres = 0.0f);
+	/** The plan's name for ShipRide (item 11, the deck's brass): the same call. */
+	void CasesRide(int32 ShipId, const FTransform& Hull, float LongMetres, float HalfBeamMetres, float CoamingMetres = 0.0f) { ShipRide(ShipId, Hull, LongMetres, HalfBeamMetres, CoamingMetres); }
+	/** She is gone (sunk, or out of the scene): what she carries goes at once, her wash stops. */
+	void ShipRideStop(int32 ShipId);
+	/** Water on her deck running off her edge (item 9's runoff after a drench, item 10's awash on a ship listing far
+	 * over), in her own frame and moved with her (ShipRide first). EdgeMetres: points along the edge it runs over, in
+	 * METRES in her frame (X toward her bow, Y to port, Z up from her waterline: Z is her freeboard there). Strength 0 to
+	 * 1 scales how much; Seconds how long it runs; Kind "runoff" or "awash". The recipe's sea_splash.runoff row. */
+	void DeckWash(int32 ShipId, const TArray<FVector>& EdgeMetres, float Strength, float Seconds, const FString& Kind = TEXT("runoff"));
+	/** Her wash stops: what is running is gone in a second or two. */
+	void DeckWashStop(int32 ShipId);
+	/** A holed ship leaking oil as she steams on (item 10): call it every frame while she leaks, WorldAt where the oil
+	 * leaves her, Rate 0 to 1. The kit keeps her track (sea_leak: a point every 2 s, at most 200 a ship, 6 ships) and
+	 * draws nothing; the scene lays OilLane's strip with its own slick paint. Oil, never fire: a trail never burns. */
+	void OilLeak(int32 ShipId, const FVector& WorldAt, float Rate = 1.0f);
+	/** She stops leaking (sunk, or the leak stopped): her lane stays, widening and fading, until it is gone. */
+	void OilLeakStop(int32 ShipId);
+	/** Her lane now, oldest first, into Out (world units): how many points. Reads only the lanes, which the kit's draw on
+	 * its worker never touches, so it may be asked any time on the game thread. */
+	int32 OilLane(int32 ShipId, TArray<FOilLanePoint>& Out) const;
+	/** The ships with a lane on the sea now. */
+	void OilLanes(TArray<int32>& Ships) const;
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */
 	void SetWind(const FVector& MetresPerSecond);
 	/** The sky or haze behind the battle's smoke as the SCREEN shows it at this hour (as GroundColour's: red, green and
