@@ -702,8 +702,10 @@ int main(int Argc, char** Argv)
 				KeepExtendMs += Ms;
 				KeepExtendMost = std::max(KeepExtendMost, Ms);
 			}
-			// (the frames until the next piece, the screen two battle seconds behind the latest: one search call a frame)
-			const double ShowTo = Keep.bOver ? Keep.End + 8.0 : std::max(0.0, Keep.End - 2.0);
+			// (the frames until the next piece, one search call a frame; the screen one battle second behind the latest, as
+			// close as the game lets it come before it waits on the rules (LandBattleLive.cpp, LiveMargin), not the two
+			// seconds of the comparison above)
+			const double ShowTo = Keep.bOver ? Keep.End + 8.0 : std::max(0.0, Keep.End - 1.0);
 			const long FramesNow = std::max(1L, static_cast<long>(std::ceil((Keep.End - LastEnd) / Frame)));
 			LastEnd = Keep.End;
 			const double From = KeepShown;

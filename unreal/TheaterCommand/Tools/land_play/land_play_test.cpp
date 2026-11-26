@@ -2476,7 +2476,9 @@ int main(int argc, char** argv)
 				Rattle.Hear(Burst, 110.0, 110.0, 1.0, Near, Cue);
 				for (const LandSound::Take& K : Cue) OnePings += K.Name.rfind("steel_", 0) == 0 ? 1 : 0;
 			}
-			const bool bRattle = Pings == Want8 && Twice == 0 && First >= 0.0 && Last <= 0.4 && Last - First >= 0.15 && LongPings == Want30 && OnePings == 1 && Clangs == Want8 - 1 && Rings == 1;
+			// (spread over the burst's 0.4 s: the last ping may come a little after it where the mix's same-take rule holds a
+			// take back to a clear moment, a few hundredths of a second)
+			const bool bRattle = Pings == Want8 && Twice == 0 && First >= 0.0 && Last - First <= 0.4 && Last <= 0.5 && Last - First >= 0.15 && LongPings == Want30 && OnePings == 1 && Clangs == Want8 - 1 && Rings == 1;
 			std::printf("armour: a burst of 8 off a tank rattles %d pings over %.2f s (%.2f to %.2f, never one take twice running: %s; %d cut short, %d ringing out), %d whine; 30 rounds %d pings; a single round %d: %s\n",
 				Pings, Pings ? Last - First : 0.0, Pings ? First : 0.0, Pings ? Last : 0.0, Twice ? "WRONG" : "so", Clangs, Rings, Whined, LongPings, OnePings, bRattle ? "as it should" : "WRONG");
 			if (!bRattle) Fault("a small arm's burst off armour did not rattle (land.armourStrikes' burst keys)");
