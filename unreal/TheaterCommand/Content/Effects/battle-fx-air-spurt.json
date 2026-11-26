@@ -1,0 +1,8 @@
+{
+ "what": "The owner's item 2 (26 November): the spray from a hole at the hit (air_hit.spurt). Laid over battle-fx.json for the air battle alone (FBattleEffects::LayOver) by its launch word; each number here replaces the recipe's, the rest stay. See tools/battle-fx/README.md, The air's dramatic moments.",
+ "air_hit": {
+  "spurt": {
+   "on": 1
+  }
+ }
+}

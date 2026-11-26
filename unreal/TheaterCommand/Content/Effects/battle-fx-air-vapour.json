@@ -1,0 +1,6 @@
+{
+ "what": "The air word -TheaterAirVapour lays this over battle-fx.json, before Begin, on both air kits: contrails behind the aircraft over the day's trail height (air_vapour), and their old water as the sky's haze (sky_haze, vapour_ink). Nothing else changes.",
+ "air_vapour": {
+  "on": 1
+ }
+}
