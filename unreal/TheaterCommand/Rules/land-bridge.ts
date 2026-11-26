@@ -69,6 +69,23 @@ function need(): LiveBattle {
   return live;
 }
 
+// ---- Drawing up while he places his army: the lines the screen says (the UI director, 26 November 2026 04:22Z) ----
+/** The rules' own line for a block dug in (sim.placeable). */
+const DUG = 'It is dug in where it stands.';
+const DRAWN = { line: 'in a line', two: 'in two lines', wedge: 'in a wedge', column: 'in a column' } as const;
+const COUNTED = ['None', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
+/** A unit's name at the head of a sentence: one that opens with its number takes "The" ("The 2nd Battalion"). */
+const theName = (who: string): string => (/^\d/.test(who) ? `The ${who}` : who);
+/** Why a unit he would place cannot go there, as a sentence with its name (the rules' own line where the name is not known). */
+function cannotGo(who: string, why: string): string {
+  if (!who) return why;
+  const name = theName(who);
+  if (why === DUG) return `${name} is dug in where it stands.`;
+  if (why === 'Outside your ground.') return `${name} cannot go there: it would stand outside your ground.`;
+  if (why === 'Another block stands there.') return `${name} cannot go there: another unit already stands there.`;
+  return `${name} cannot go there. ${why}`;
+}
+
 (globalThis as Record<string, unknown>).TC = {
   landPieces() {
     return PIECES.map((p) => ({
@@ -171,14 +188,27 @@ function need(): LiveBattle {
     const l = need(), rows = Array.isArray(list) ? list.filter((p) => Array.isArray(p)).map((p) => p.map(Number)) : [];
     const no = l.canPlaceMany(rows);
     const ok = no === null && l.placeMany(rows);
-    return { ok, why: ok ? '' : no?.why ?? 'Not now: the battle has begun.', ...(no && no.id >= 0 ? { id: no.id, who: no.who } : {}) };
+    return { ok, why: ok ? '' : no ? cannotGo(no.who, no.why) : 'Not now: the battle has begun.', ...(no && no.id >= 0 ? { id: no.id, who: no.who } : {}) };
   },
 
   landDrawUp(kind: string, ids?: number[] | null) {
     const k = FORMATIONS.find((f) => f === kind);
     if (!k) return { ok: false, why: 'No such formation.', placed: 0 };
-    const r = need().drawUp(k, Array.isArray(ids) ? ids.map(Number) : []);
-    return { ok: r.ok, why: r.why, ...(r.id !== undefined ? { id: r.id, who: r.who ?? '' } : {}), placed: r.placed.length };
+    const named = Array.isArray(ids) ? ids.map(Number) : [];
+    const r = need().drawUp(k, named);
+    // The words are the UI director's (26 November 2026 04:22Z): sentences, "unit" and never "block".
+    const dug = r.left.filter((b) => b.why === DUG);
+    if (!r.ok) {
+      const why = r.none === 'room' ? `Your ground has no room to draw them up ${DRAWN[k]}.`
+        : r.none === 'stay' && dug.length === r.left.length && dug.length > 1 ? 'They are all dug in where they stand.'
+          : r.none === 'stay' ? cannotGo(r.who ?? '', r.why) : r.why;
+      return { ok: false, why, ...(r.id !== undefined ? { id: r.id, who: r.who ?? '' } : {}), placed: 0 };
+    }
+    const notes: string[] = [];
+    if (dug.length === 1) notes.push(`${theName(dug[0].who)} is dug in and stays where it stands.`);
+    else if (dug.length > 1) notes.push(`${COUNTED[dug.length] ?? dug.length} of them are dug in and stay where they stand.`);
+    if (r.off >= 50) notes.push(`Drawn up ${Math.round(r.off / 10) * 10} m off, on the nearest ground that holds them all.`);
+    return { ok: true, why: '', placed: r.placed.length, ...(notes.length ? { note: notes.join(' ') } : {}) };
   },
 
   landBegin() {

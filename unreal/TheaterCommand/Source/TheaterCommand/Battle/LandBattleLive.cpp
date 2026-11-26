@@ -314,6 +314,17 @@ void ALandBattle::PumpLive()
 		{
 			S.Note = NoteOf(!A.Why.IsEmpty() ? A.Why : A.Kind == TEXT("place") ? FString(TEXT("The block cannot stand there")) : FString(TEXT("The order was not taken")));
 			S.NoteAge = 0.0;
+			// (a formation the rules would not draw up is not lit)
+			if (A.Kind == TEXT("drawup"))
+			{
+				S.General.DrawnUp.clear();
+			}
+		}
+		else if (A.bOk && !A.Note.IsEmpty())
+		{
+			// (a yes with a word to it: some units left where they are dug in, or the formation stood a way off)
+			S.Note = NoteOf(A.Note);
+			S.NoteAge = 0.0;
 		}
 	}
 	FString Why;
@@ -576,6 +587,24 @@ void ALandBattle::PlaceLive(int32 Block, double X, double Y, double Face)
 	if (Live.IsValid())
 	{
 		Live->Place(Block, X, Y, Face);
+	}
+}
+
+void ALandBattle::PlaceManyLive(const FString& ListJson)
+{
+	if (Live.IsValid() && !ListJson.IsEmpty())
+	{
+		Live->PlaceMany(ListJson);
+	}
+}
+
+void ALandBattle::DrawUpLive(const FString& Kind)
+{
+	if (Live.IsValid() && State.IsValid())
+	{
+		Live->DrawUp(WideOf(State->General.Clipboard.DrawUp(NarrowOf(Kind))), Kind);
+		// (lit at once; put out again if the rules refuse it, PumpLive)
+		State->General.DrawnUp = NarrowOf(Kind);
 	}
 }
 

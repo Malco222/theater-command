@@ -232,18 +232,30 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 	if (bGeneral && !S.bCard)
 	{
 		const bool bDeploying = S.General.Clipboard.Deploying();
+		// (groups on the number keys, release 2: the numbers are his groups' and the pace is on the minus and plus keys,
+		// so the pace's buttons lose their number marks and one small muted mark of the two keys stands after them; the
+		// UI director, 26 November 2026. A part with no action is that mark: words only, no button.)
+		const bool bGroupKeys = FLandLive::RuleNow(TEXT("groups"));
 		if (!bDeploying)
 		{
 			Tops.Add({ TEXT("PAUSE"), TEXT("SPACE"), TEXT("speed:0"), S.SpeedNow <= 0.0 });
-			Tops.Add({ TEXT("\u00D71"), TEXT("1"), TEXT("speed:1"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 1.0) });
-			Tops.Add({ TEXT("\u00D72"), TEXT("2"), TEXT("speed:2"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 2.0) });
-			Tops.Add({ TEXT("\u00D74"), TEXT("3"), TEXT("speed:4"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 4.0) });
+			Tops.Add({ TEXT("\u00D71"), bGroupKeys ? TEXT("") : TEXT("1"), TEXT("speed:1"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 1.0) });
+			Tops.Add({ TEXT("\u00D72"), bGroupKeys ? TEXT("") : TEXT("2"), TEXT("speed:2"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 2.0) });
+			Tops.Add({ TEXT("\u00D74"), bGroupKeys ? TEXT("") : TEXT("3"), TEXT("speed:4"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 4.0) });
+			if (bGroupKeys)
+			{
+				Tops.Add({ TEXT("\u2212  +"), TEXT(""), TEXT(""), false });
+			}
 		}
 		Tops.Add({ TEXT("FILM"), TEXT("C"), TEXT("general:film"), false });
 		// (his view from above in one press, lit while it is on; pressed again, back as it was)
 		Tops.Add({ TEXT("TOP VIEW"), TEXT("O"), TEXT("general:topview"), S.GeneralEye.TopView() });
 	}
-	auto TopWidth = [&](const FTop& P) { return WideOf(P.Label, TopFace) + 18.0 + WideOf(P.Key, TopCapFace) + 16.0; };
+	auto TopWidth = [&](const FTop& P)
+	{
+		// (the pace keys' small mark, and a button with no key mark: no cap's room)
+		return !P.Action[0] ? WideOf(P.Label, TopFace) + 6.0 : WideOf(P.Label, TopFace) + 18.0 + (P.Key[0] ? WideOf(P.Key, TopCapFace) + 16.0 : 0.0);
+	};
 	double TopsW = 0.0;
 	for (const FTop& P : Tops)
 	{
@@ -283,15 +295,25 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 			for (const FTop& P : Tops)
 			{
 				const double Wd = TopWidth(P);
+				if (!P.Action[0])
+				{
+					// (the pace keys' mark: small and muted, words only)
+					Write(P.Label, X + 1.0, Y + 4.0, TopFace, Muted, 5);
+					X += Wd + 5.0;
+					continue;
+				}
 				const FLinearColor Ink = P.bLit ? DeskInk : Cream, Ground = P.bLit ? FLinearColor(Brass.R, Brass.G, Brass.B, 1.0f) : Leather;
 				Fill(X, Y, Wd, Ht, Brass, 3);
 				Fill(X + 1.0, Y + 1.0, Wd - 2.0, Ht - 2.0, Ground, 4);
 				const double LabelW = WideOf(P.Label, TopFace);
 				Write(P.Label, X + 9.0, Y + 4.0, TopFace, Ink, 5);
-				const double CapX = X + 9.0 + LabelW + 7.0, CapW = WideOf(P.Key, TopCapFace) + 9.0;
-				Fill(CapX, Y + 4.0, CapW, Ht - 8.0, Ink * FLinearColor(1.0f, 1.0f, 1.0f, 0.7f), 5);
-				Fill(CapX + 1.0, Y + 5.0, CapW - 2.0, Ht - 10.0, Ground, 6);
-				Write(P.Key, CapX + 4.5, Y + 4.0, TopCapFace, Ink, 7);
+				if (P.Key[0])
+				{
+					const double CapX = X + 9.0 + LabelW + 7.0, CapW = WideOf(P.Key, TopCapFace) + 9.0;
+					Fill(CapX, Y + 4.0, CapW, Ht - 8.0, Ink * FLinearColor(1.0f, 1.0f, 1.0f, 0.7f), 5);
+					Fill(CapX + 1.0, Y + 5.0, CapW - 2.0, Ht - 10.0, Ground, 6);
+					Write(P.Key, CapX + 4.5, Y + 4.0, TopCapFace, Ink, 7);
+				}
 				Buttons.Add({ FSlateRect(static_cast<float>(X), static_cast<float>(Y), static_cast<float>(X + Wd), static_cast<float>(Y + Ht)), P.Action });
 				X += Wd + 5.0;
 			}
@@ -865,6 +887,16 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	// One chip: its paper, its words (and the radio's sign and time first, where an order is on the air), from (X, Y);
 	// its width. Measured only, nothing drawn, when bDraw is false.
 	const FSlateFontInfo ChipFace = Typed(11.0f, true, 0);
+	// A unit's group number (groups on the number keys, release 2): a small square chip in the lit key mark's look, the
+	// desk's ink on brass, from its top left corner (X, Y); 16 a side (the UI director, 26 November 2026).
+	const FSlateFontInfo TiedFace = Typed(10.0f, true, 0);
+	auto TiedChip = [&](int Group, double X, double Y, int32 Layer)
+	{
+		const FString Digit = FString::FromInt(Group);
+		Fill(X, Y, 16.0, 16.0, DeskInk * FLinearColor(1.0f, 1.0f, 1.0f, 0.7f), Layer);
+		Fill(X + 1.0, Y + 1.0, 14.0, 14.0, FLinearColor(Brass.R, Brass.G, Brass.B, 1.0f), Layer + 1);
+		Write(Digit, X + (16.0 - WideOf(Digit, TiedFace)) * 0.5, Y + 0.5, TiedFace, DeskInk, Layer + 2);
+	};
 	auto DrawChip = [&](const FString& Words, const FLinearColor& ChipPaper, const FLinearColor& ChipInk, double Air, double X, double Y, double Ht, bool bDraw, int32 Layer) -> double
 	{
 		const FString Time = Air >= 0.0 ? AirWords(Air) : FString();
@@ -891,6 +923,10 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	// The foot (the UI director, 18:26Z: give the field back): his cards in one row along the bottom, the orders of the
 	// unit in hand just above them only while one is in hand. Worked out first, so the tags keep clear of it.
 	const bool bHand = !Clip.Chosen().empty();
+	// (release 2, each its own Options row, off until passed: groups on the number keys, and drawing up while he places
+	// his army; Brian, 26 November 2026)
+	const bool bGroupKeys = FLandLive::RuleNow(TEXT("groups"));
+	const bool bDrawUp = Clip.Deploying() && FLandLive::RuleNow(TEXT("drawup"));
 	const double CardH = 44.0, CardGap = 6.0, RowY = Size.Y - CardH - 10.0;
 	const double OrdersY = RowY - 28.0 - 8.0;
 	// (at deploy BEGIN THE BATTLE stands where the order bar stands in battle, above the row at its right: the UI director,
@@ -1133,7 +1169,9 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		const double NameW = WideOf(Name, Face);
 		const double OwnerW = DrawChip(OwnerWords, OwnerPaper, OwnerInk, Air, 0.0, 0.0, TH, false, 0);
 		const double StateW = DrawChip(StateWords, StatePaper, StateInk, -1.0, 0.0, 0.0, TH, false, 0);
-		const double TW = NameW + 12.0 + TreeW + OwnerW + StateW;
+		// (its group's number before its name, release 2: his own units only)
+		const double TiedW = !bFoe && bGroupKeys && T->Group > 0 ? 19.0 : 0.0;
+		const double TW = TiedW + NameW + 12.0 + TreeW + OwnerW + StateW;
 		// (kept inside the field: above the foot, under the top bar, inside the edges; pinned at the edge with a small arrow
 		// toward its unit where the unit is off it: the UI director, 18:26Z)
 		const double WantX = Top.X - TW * 0.5, WantY = Top.Y - TH;
@@ -1162,12 +1200,16 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			Fill(TX - 2.0, TY - 2.0, TW + 4.0, TH + 4.0 + 4.0, BrightBrass, 4);
 		}
 		Fill(TX, TY, TW, TH, bFoe ? Slate : Paper, 5);
-		Write(Name, TX + 6.0, TY + 2.0, Face, bFoe ? Cream : DeskInk, 6);
+		if (TiedW > 0.0)
+		{
+			TiedChip(T->Group, TX + 4.0, TY + 2.5, 6);
+		}
+		Write(Name, TX + 6.0 + TiedW, TY + 2.0, Face, bFoe ? Cream : DeskInk, 6);
 		if (bWoods)
 		{
-			Forest(TX + NameW + 9.0, TY + 1.5, 18.0, LeafInk, 6);
+			Forest(TX + TiedW + NameW + 9.0, TY + 1.5, 18.0, LeafInk, 6);
 		}
-		const double ChipX = TX + NameW + 12.0 + TreeW;
+		const double ChipX = TX + TiedW + NameW + 12.0 + TreeW;
 		DrawChip(OwnerWords, OwnerPaper, OwnerInk, Air, ChipX, TY, TH, true, 6);
 		DrawChip(StateWords, StatePaper, StateInk, -1.0, ChipX + OwnerW, TY, TH, true, 6);
 		// (its strength, a thin bar under the tag: what is left of it)
@@ -1330,6 +1372,17 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			Ring.Add(Local(G.Corners[(K % 4) * 2], G.Corners[(K % 4) * 2 + 1]));
 		}
 		Lines(Ring, !G.bCarryOk ? Amber : G.bCarryWoods ? Leaf : Cream, 2.5f, 9);
+		// (several carried as one, release 2: the others' grounds where they would be set down, a thinner ring each;
+		// amber, all of them, where any one of them cannot stand)
+		for (size_t MoreAt = 0; MoreAt + 8 <= G.CarryMore.size(); MoreAt += 8)
+		{
+			TArray<FVector2D> MoreRing;
+			for (int32 K = 0; K <= 4; ++K)
+			{
+				MoreRing.Add(Local(G.CarryMore[MoreAt + (K % 4) * 2], G.CarryMore[MoreAt + (K % 4) * 2 + 1]));
+			}
+			Lines(MoreRing, !G.bCarryOk ? Amber : Cream, 1.5f, 9);
+		}
 	}
 	// ---- The mark answering an order: a ring opening out where it went, gone in a second and a bit. ----
 	if (G.bPingOn)
@@ -1420,7 +1473,9 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	// ---- The setup step's word, on the desk strip under the title band: one line in sentence case, then the woods'. ----
 	if (Clip.Deploying())
 	{
-		TArray<FString> Said = { TEXT("Drag your units anywhere on your ground (the brass line), then begin the battle. The clock waits.") };
+		// (with drawing up on, release 2: the UI director's line of 26 November 2026)
+		TArray<FString> Said = { FString(bDrawUp ? TEXT("Place your units on your ground (the brass line): drag one, or draw a box round several and drag them as one, or DRAW UP. The clock waits.")
+			: TEXT("Drag your units anywhere on your ground (the brass line), then begin the battle. The clock waits.")) };
 		if (!G.WoodsField.empty())
 		{
 			Said.Add(TEXT("Units in the woods, inside the green lines, start hidden from the enemy until it comes close or they open fire."));
@@ -1450,10 +1505,16 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		{
 			if (!Clip.Deploying())
 			{
+				// (groups on the number keys, release 2: the pace's buttons lose their number marks and one small muted
+				// mark of the minus and plus keys stands after them: a part with no action, words only)
 				Ends.Add({ TEXT("PAUSE"), TEXT("SPACE"), TEXT("speed:0"), S.SpeedNow <= 0.0 });
-				Ends.Add({ TEXT("\u00D71"), TEXT("1"), TEXT("speed:1"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 1.0) });
-				Ends.Add({ TEXT("\u00D72"), TEXT("2"), TEXT("speed:2"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 2.0) });
-				Ends.Add({ TEXT("\u00D74"), TEXT("3"), TEXT("speed:4"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 4.0) });
+				Ends.Add({ TEXT("\u00D71"), bGroupKeys ? TEXT("") : TEXT("1"), TEXT("speed:1"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 1.0) });
+				Ends.Add({ TEXT("\u00D72"), bGroupKeys ? TEXT("") : TEXT("2"), TEXT("speed:2"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 2.0) });
+				Ends.Add({ TEXT("\u00D74"), bGroupKeys ? TEXT("") : TEXT("3"), TEXT("speed:4"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 4.0) });
+				if (bGroupKeys)
+				{
+					Ends.Add({ TEXT("\u2212  +"), TEXT(""), TEXT(""), false });
+				}
 			}
 			Ends.Add({ TEXT("FILM"), TEXT("C"), TEXT("general:film"), false });
 			Ends.Add({ TEXT("TOP VIEW"), TEXT("O"), TEXT("general:topview"), S.GeneralEye.TopView() });
@@ -1461,12 +1522,18 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		double Whole = 0.0;
 		for (const FPart& P : Ends)
 		{
-			Whole += ButtonWidth(P.Label, P.Key) + 6.0;
+			Whole += (P.Action[0] ? ButtonWidth(P.Label, P.Key) : WideOf(P.Label, BarFace)) + 6.0;
 		}
 		double X = Size.X - 18.0 - Whole + 6.0;
 		RowRight = Ends.Num() > 0 ? X - 10.0 : Size.X - 18.0;
 		for (const FPart& P : Ends)
 		{
+			if (!P.Action[0])
+			{
+				Write(P.Label, X, RowY + (CardH - 28.0) * 0.5 + 5.0, BarFace, Muted, 14);
+				X += WideOf(P.Label, BarFace) + 6.0;
+				continue;
+			}
 			X = Button(P.Label, P.Key, P.Action, X, RowY + (CardH - 28.0) * 0.5, P.bLit, false, 12);
 		}
 	}
@@ -1523,6 +1590,13 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 				Fill(X - 2.0, RowY - 2.0, CW + 4.0, CardH + 4.0, BrightBrass, 12);
 			}
 			Fill(X, RowY, CW, CardH, bGone ? Track : Paper, 13);
+			// (its group's number, release 2: a small chip at the card's top left, its name after it; a click on the chip
+			// takes the whole group in hand)
+			const double TiedW = bGroupKeys && T.Group > 0 ? 19.0 : 0.0;
+			if (TiedW > 0.0)
+			{
+				TiedChip(T.Group, X + 4.0, RowY + 3.0, 14);
+			}
 			// (line 1: its name and who commands it; line 2: its kind and how it stands)
 			FString OwnerWords, StateWords;
 			FLinearColor OwnerPaper = Track, OwnerInk = Cream, StatePaper = Track, StateInk = Cream;
@@ -1537,11 +1611,11 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			// floor; only one too wide at 11 takes the army's short words (the UI director, 20:56Z).
 			FString Name = Wide(T.Short.empty() ? T.Name : T.Short).ToUpper();
 			FSlateFontInfo LineFace = NameFace;
-			if (WideOf(Name, LineFace) > CW - 12.0)
+			if (WideOf(Name, LineFace) > CW - 12.0 - TiedW)
 			{
 				LineFace = SmallNameFace;
 			}
-			if (WideOf(Name, LineFace) > CW - 12.0)
+			if (WideOf(Name, LineFace) > CW - 12.0 - TiedW)
 			{
 				static const TCHAR* const Shorter[][2] = { { TEXT("MACHINE-GUN"), TEXT("MG") }, { TEXT("PANZERGRENADIER"), TEXT("PZ.GREN.") }, { TEXT("INFANTRY"), TEXT("INF.") },
 					{ TEXT("ARMORED"), TEXT("ARMD.") }, { TEXT("ARMOURED"), TEXT("ARMD.") }, { TEXT("ARTILLERY"), TEXT("ARTY.") }, { TEXT("MOTORIZED"), TEXT("MOT.") },
@@ -1549,14 +1623,14 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 					{ TEXT("BRIGADE"), TEXT("BDE.") }, { TEXT("BATTALION"), TEXT("BN.") } };
 				for (const auto& Pair : Shorter)
 				{
-					if (WideOf(Name, LineFace) <= CW - 12.0)
+					if (WideOf(Name, LineFace) <= CW - 12.0 - TiedW)
 					{
 						break;
 					}
 					Name.ReplaceInline(Pair[0], Pair[1], ESearchCase::CaseSensitive);
 				}
 			}
-			Write(Name, X + 6.0, RowY + 4.0 + (LineFace.Size < NameFace.Size ? 1.0 : 0.0), LineFace, bGone ? Muted : DeskInk, 14);
+			Write(Name, X + 6.0 + TiedW, RowY + 4.0 + (LineFace.Size < NameFace.Size ? 1.0 : 0.0), LineFace, bGone ? Muted : DeskInk, 14);
 			// Line 2, from the right: who commands it, then at most one mark of how it stands (gone, running, help late or
 			// dug in as a chip; help coming as the hourglass and its time; else hidden in the woods), then its kind.
 			double Right = X + CW - 4.0;
@@ -1612,6 +1686,11 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			if (T.bOrderable)
 			{
 				Buttons.Add({ FSlateRect(static_cast<float>(X), static_cast<float>(RowY), static_cast<float>(X + CW), static_cast<float>(RowY + CardH)), FString::Printf(TEXT("pick:%d"), T.Block) });
+				// (the chip's own button, after the card's so that it is the one a press on it finds)
+				if (TiedW > 0.0)
+				{
+					Buttons.Add({ FSlateRect(static_cast<float>(X + 2.0), static_cast<float>(RowY + 1.0), static_cast<float>(X + 22.0), static_cast<float>(RowY + 21.0)), FString::Printf(TEXT("general:group:%d"), T.Group) });
+				}
 			}
 			X += CW + CardGap;
 		}
@@ -1626,6 +1705,70 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	if (bHand && Clip.Deploying() && Clip.Side() == 0 && !Clip.Waiters().empty() && FLandLive::RuleNow(TEXT("patrol")) && FLandLive::RuleNow(TEXT("hide")))
 	{
 		Button(TEXT("SEND A PATROL TONIGHT"), TEXT(""), TEXT("general:patrol"), 18.0, OrdersY, false, false, 12);
+	}
+
+	// ---- While he places his army: DRAW UP (release 2; Brian, 26 November 2026: "i should be able to move my units in a
+	// formation before the battle begins during the deployed phase"), on the bar's row between SEND A PATROL TONIGHT and
+	// BEGIN THE BATTLE: a small muted label with its key, then LINE, TWO LINES, WEDGE, COLUMN. With units in hand they
+	// act on those, with none on all of his; the one last drawn is lit until he drags a unit by hand. Under the pointer
+	// a button says what a click would do, in a sentence above the row. Words and places the UI director's (26
+	// November 2026, 03:51Z and 04:22Z). ----
+	if (bDrawUp)
+	{
+		struct FDrawn { const TCHAR* Label; const char* Kind; const TCHAR* Action; const TCHAR* Would; };
+		static const FDrawn Drawn[] = {
+			{ TEXT("LINE"), "line", TEXT("general:drawup:line"), TEXT("Draw up {who} side by side, facing the enemy, {guns} behind.") },
+			{ TEXT("TWO LINES"), "two", TEXT("general:drawup:two"), TEXT("Draw up {who} in two lines, one behind the other, {guns} behind.") },
+			{ TEXT("WEDGE"), "wedge", TEXT("general:drawup:wedge"), TEXT("Draw up {who} in a wedge, its point toward the enemy, {guns} behind.") },
+			{ TEXT("COLUMN"), "column", TEXT("general:drawup:column"), TEXT("Draw up {who} one behind another, {guns} at the rear.") } };
+		const FString DrawWord = TEXT("DRAW UP"), DrawKey = TEXT("U"), NoKey = FString();
+		const double DrawCapW = WideOf(DrawKey, CapFace) + 10.0;
+		const double DrawLabelW = WideOf(DrawWord, BarFace) + 8.0 + DrawCapW + 12.0;
+		double DrawW = DrawLabelW - 6.0;
+		for (const FDrawn& Form : Drawn)
+		{
+			DrawW += ButtonWidth(Form.Label, NoKey) + 6.0;
+		}
+		// (centred between the patrol's button, its room kept whether it shows or not, and BEGIN THE BATTLE)
+		const double DrawLeft = 18.0 + ButtonWidth(TEXT("SEND A PATROL TONIGHT"), NoKey) + 14.0;
+		const double DrawRight = Size.X - 18.0 - ButtonWidth(TEXT("BEGIN THE BATTLE"), TEXT("SPACE")) - 14.0;
+		const double DrawX = FMath::Max(DrawLeft, (DrawLeft + DrawRight - DrawW) * 0.5);
+		// (the label and its key's cap on a plate, muted: it names the four, it is not a button)
+		Fill(DrawX - 8.0, OrdersY, DrawLabelW - 2.0, 28.0, Plate, 12);
+		Write(DrawWord, DrawX, OrdersY + 5.0, BarFace, Muted, 13);
+		{
+			const double CapX = DrawX + WideOf(DrawWord, BarFace) + 8.0;
+			Fill(CapX, OrdersY + 4.0, DrawCapW, 20.0, Muted * FLinearColor(1.0f, 1.0f, 1.0f, 0.7f), 13);
+			Fill(CapX + 1.0, OrdersY + 5.0, DrawCapW - 2.0, 18.0, Leather, 14);
+			Write(DrawKey, CapX + 5.0, OrdersY + 5.0, CapFace, Muted, 15);
+		}
+		const FDrawn* OverForm = nullptr;
+		double FormX = DrawX + DrawLabelW;
+		for (const FDrawn& Form : Drawn)
+		{
+			const double FormW = ButtonWidth(Form.Label, NoKey);
+			if (GeneralHeld < 0 && HoverAt.X >= FormX && HoverAt.X < FormX + FormW && HoverAt.Y >= OrdersY && HoverAt.Y < OrdersY + 28.0)
+			{
+				OverForm = &Form;
+			}
+			FormX = Button(Form.Label, NoKey, Form.Action, FormX, OrdersY, G.DrawnUp == Form.Kind, false, 12);
+		}
+		if (OverForm)
+		{
+			// ("those in hand", or "your units" with none in hand; "and support teams" only where his army has them)
+			bool bTeams = false;
+			for (const LandCommand::Tag& Each : Clip.Tags())
+			{
+				bTeams = bTeams || (Each.bMine && !Each.Team.empty());
+			}
+			const FString Would = FString(OverForm->Would).Replace(TEXT("{who}"), bHand ? TEXT("those in hand") : TEXT("your units"), ESearchCase::CaseSensitive)
+				.Replace(TEXT("{guns}"), bTeams ? TEXT("guns and support teams") : TEXT("guns"), ESearchCase::CaseSensitive);
+			const FSlateFontInfo WouldFace = Serif(TEXT("Regular"), 13.0f);
+			const double WouldW = WideOf(Would, WouldFace);
+			const double WouldX = FMath::Clamp(DrawX + DrawW * 0.5 - WouldW * 0.5, 28.0, FMath::Max(28.0, Size.X - 28.0 - WouldW));
+			Fill(WouldX - 10.0, OrdersY - 30.0, WouldW + 20.0, 24.0, Plate, 15);
+			Write(Would, WouldX, OrdersY - 27.0, WouldFace, BrightBrass, 16);
+		}
 	}
 
 	// ---- The orders of the unit in hand, just above the cards, only while one is in hand and only those it can give
@@ -1826,6 +1969,11 @@ void SLandBattleScreen::Do(const FString& Action)
 	{
 		// (a kept view's chip: flown to; with Shift, kept anew, LandGeneralEye's KeepView)
 		Scene->GeneralDo((FSlateApplication::Get().GetModifierKeys().IsShiftDown() ? FString(TEXT("keepview:")) : FString(TEXT("view:"))) + Action.Mid(13));
+	}
+	else if (Action.StartsWith(TEXT("general:group:")))
+	{
+		// (a group's chip on a card, release 2: its units taken in hand; with Shift, added to those in hand)
+		Scene->GeneralDo((FSlateApplication::Get().GetModifierKeys().IsShiftDown() ? FString(TEXT("addgroup:")) : FString(TEXT("group:"))) + Action.Mid(14));
 	}
 	else if (Action.StartsWith(TEXT("general:")))
 	{
@@ -2175,6 +2323,31 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 			}
 			return FReply::Handled();
 		}
+		else if (const int32 GroupKey = !FLandLive::RuleNow(TEXT("groups")) ? 0 : Key == EKeys::One ? 1 : Key == EKeys::Two ? 2 : Key == EKeys::Three ? 3
+			: Key == EKeys::Four ? 4 : Key == EKeys::Five ? 5 : Key == EKeys::Six ? 6 : Key == EKeys::Seven ? 7 : Key == EKeys::Eight ? 8 : Key == EKeys::Nine ? 9 : 0; GroupKey > 0)
+		{
+			// (groups on the number keys, release 2; Brian, 26 November 2026: Cmd on a Mac, Ctrl elsewhere, with a number
+			// ties those in hand to it; the number alone takes its units in hand, with Shift adds them to those in hand,
+			// and pressed twice quickly glides the view to them. Unreal hands a Mac's Cmd over as Control and its Ctrl
+			// as Command, so either is taken. In the setup step and in the fight alike.)
+			if (!Event.IsRepeat())
+			{
+				Scene->GeneralDo(FString::Printf(TEXT("%s:%d"), Event.IsControlDown() || Event.IsCommandDown() ? TEXT("tie") : Event.IsShiftDown() ? TEXT("addgroup") : TEXT("group"), GroupKey));
+			}
+			return FReply::Handled();
+		}
+		else if (const int32 PaceStep = !FLandLive::RuleNow(TEXT("groups")) ? 0 : Key == EKeys::Hyphen || Key == EKeys::Subtract ? -1 : Key == EKeys::Equals || Key == EKeys::Add ? 1 : 0; PaceStep != 0)
+		{
+			// (with the groups on the numbers the pace is on the minus and plus keys, the numeric pad's too: a step slower
+			// or faster through x1, x2 and x4, as the pace's own buttons. Not while he places his army: the clock waits
+			// there, and SPACE or ENTER begins the battle.)
+			if (!bSetup && !Event.IsRepeat())
+			{
+				const double PaceNow = S->SpeedNow > 0.0 ? S->SpeedNow : SpeedBefore > 0.0 ? SpeedBefore : 1.0;
+				Pace(PaceStep > 0 ? (PaceNow < 1.5 ? 2.0 : 4.0) : (PaceNow > 3.0 ? 2.0 : 1.0));
+			}
+			return FReply::Handled();
+		}
 		else if (Key == EKeys::SpaceBar)
 		{
 			if (bSetup)
@@ -2210,6 +2383,9 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		else if (Key == EKeys::O) { Scene->GeneralDo(TEXT("topview")); return FReply::Handled(); }
 		else if (Key == EKeys::V && !bSetup) { Scene->GeneralDo(TEXT("ride")); return FReply::Handled(); }
 		else if (Key == EKeys::Enter && bSetup) { Scene->GeneralDo(TEXT("begin")); return FReply::Handled(); }
+		// (U, "draw up", while he places his army: each press draws them up in the next of the four, Line first; release 2.
+		// The scene does nothing with the row off, or once the battle has begun.)
+		else if (Key == EKeys::U && bSetup) { Scene->GeneralDo(TEXT("drawup")); return FReply::Handled(); }
 		else
 		{
 			return FReply::Unhandled();

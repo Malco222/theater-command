@@ -12,6 +12,9 @@ import { livePiece } from '../src/battle/land/live';
 import { LAND } from '../src/battle/land/rules';
 import { GAP } from '../src/battle/land/units';
 import type { Command } from '../src/battle/core/types';
+// (the 3D game's own sources read as text, Vite's `?raw`, tests/ahead/raw.d.ts)
+import clipboardCpp from '../unreal/TheaterCommand/Source/TheaterCommand/Battle/LandCommand.cpp?raw';
+import rulesTableCpp from '../unreal/TheaterCommand/Source/TheaterCommand/Battle/LandLive.cpp?raw';
 
 const ROOM: [number, number, number, number] = [360, 120, 2640, 480];
 const DEF: [number, number, number, number] = [360, 1240, 2640, 1800];
@@ -184,6 +187,22 @@ describe('placing several blocks as one act', () => {
     expect(JSON.stringify(many.to(20, 100000))).toBe(JSON.stringify(one.to(20, 100000)));
   });
 
+  it('says how far off it stood them where the place worked out is barred, and when the ground has no room', () => {
+    const L = open();
+    const r = L.drawUp('line');
+    expect(r).toMatchObject({ ok: true, why: '', left: [] });
+    expect(r.off).toBeGreaterThanOrEqual(0);
+    expect(r.placed.length).toBeGreaterThan(2);
+    // Drawn up again where they now stand: nothing bars the place worked out, so it is not moved off it.
+    expect(L.drawUp('line').off).toBe(0);
+    // One named alone is a formation of one.
+    const one = L.sim.units.filter((u) => u.side === 'att' && L.sim.placeable(u) === null)[0];
+    expect(L.drawUp('wedge', [one.id])).toMatchObject({ ok: true, off: 0 });
+    // A block of the other side named: none of his to draw up.
+    const theirs = L.sim.units.find((u) => u.side === 'def')!;
+    expect(L.drawUp('line', [theirs.id])).toMatchObject({ ok: false, none: 'nothing' });
+  });
+
   it('is refused once the battle has begun', () => {
     const L = open();
     const u = L.sim.units.filter((v) => v.side === 'att')[0];
@@ -234,8 +253,17 @@ describe('drawing up through the game\'s doorway', () => {
       if (stays) {
         const dug = TC.landDrawUp('line', [stays.id]);
         expect(dug).toMatchObject({ ok: false, id: stays.id, placed: 0 });
-        expect(dug.why.length).toBeGreaterThan(5);
-        expect(dug.who.length).toBeGreaterThan(0);
+        expect(dug.why).toMatch(/ is dug in where it stands\.$/);
+        expect(dug.why).toContain(dug.who);
+        // Named with some that may go: drawn up without it, and the note says which stays.
+        const withIt = TC.landDrawUp('line', [stays.id, ...some.map((u) => u.id)]);
+        expect(withIt).toMatchObject({ ok: true, placed: 3 });
+        expect(withIt.note).toMatch(/ is dug in and stays where it stands\.$/);
+        const dugToo = now.filter((u) => u.side === me && !moved.includes(u) && u.kind === 'inf').slice(0, 2);
+        if (dugToo.length === 2) {
+          expect(TC.landDrawUp('line', dugToo.map((u) => u.id)).why).toBe('They are all dug in where they stand.');
+          expect(TC.landDrawUp('line', [...dugToo, ...some].map((u) => u.id)).note).toBe('Two of them are dug in and stay where they stand.');
+        }
       }
       const rest = JSON.stringify(now.filter((u) => !some.includes(u)).map((u) => [u.id, u.x, u.y]));
       const r3 = TC.landDrawUp('line', some.map((u) => u.id));
@@ -249,8 +277,12 @@ describe('drawing up through the game\'s doorway', () => {
       // A word that is no formation, and a refusal that names the block.
       expect(TC.landDrawUp('square').ok).toBe(false);
       const no = TC.landPlaceMany([[three[0].id, three[0].x, three[0].y], [three[1].id, three[1].x, room[3] + 500]]);
-      expect(no).toMatchObject({ ok: false, id: three[1].id, why: 'Outside your ground.' });
+      expect(no).toMatchObject({ ok: false, id: three[1].id });
       expect(no.who.length).toBeGreaterThan(0);
+      expect(no.why).toMatch(/ cannot go there: it would stand outside your ground\.$/);
+      expect(no.why).toContain(no.who);
+      const onTop = TC.landPlaceMany([[three[0].id, three[1].x + 3, three[1].y]]);
+      expect(onTop.why).toMatch(/ cannot go there: another unit already stands there\.$/);
       // The battle begins and is fought from where they were drawn up.
       expect(TC.landBegin().ok).toBe(true);
       expect(TC.landTick(5).t).toBeGreaterThan(4.9);
@@ -258,4 +290,20 @@ describe('drawing up through the game\'s doorway', () => {
       TC.landEnd();
     });
   }
+});
+
+// The 3D game's clipboard (LandCommand.cpp, plain C++) works a carried group's and a drawn line's places out itself, so
+// that the ring under the pointer says at once whether they may stand; the rules still decide. Its two figures are the
+// rules' own, held here so that neither drifts: the setup step's clearance, and the gap between blocks side by side.
+describe('the 3D clipboard keeps the rules\' figures', () => {
+  const cpp: string = clipboardCpp;
+  const figure = (name: string): number => Number(new RegExp(`constexpr double ${name} = ([0-9.]+);`).exec(cpp)?.[1]);
+  it('the clearance between blocks placed', () => expect(figure('PlaceClear')).toBe(LAND.placeClear));
+  it('the gap between blocks side by side', () => expect(figure('DrawGap')).toBe(GAP));
+  // (and the Options rows the screen reads are in the game's table, each off until passed)
+  it('the rows are in the table, off', () => {
+    const table: string = rulesTableCpp;
+    expect(table).toMatch(/\{ TEXT\("drawup"\), TEXT\("Draw up units together before battle"\), .*TEXT\("TheaterLandNoDrawUp"\), false, TEXT\("TheaterLandRuleDrawUp"\) \}/);
+    expect(table).toMatch(/\{ TEXT\("groups"\), TEXT\("Groups on the number keys"\), .*TEXT\("TheaterLandNoGroups"\), false, TEXT\("TheaterLandRuleGroups"\) \}/);
+  });
 });

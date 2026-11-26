@@ -150,6 +150,20 @@ namespace
 		// battle, the custom battles too: a team's fire shakes by its own harm, and a defence's line stays in its
 		// places while its teams fire. So the line says "into battle", not "campaign battles".)
 		{ TEXT("teams"), TEXT("Support teams in battle"), TEXT("Every infantry corps takes its own machine gun and mortar teams into battle, drawn from its own men, not extra ones, and they fire in support from behind its line. This changes how battles turn out. A change takes effect from the next battle. It works only with \u201CAttackers stay where they stop to fight\u201D and \u201CUnits face the fire that hurts most\u201D on."), TEXT("TheaterLandNoTeams"), false, TEXT("TheaterLandRuleTeams") },
+		// (Drawing up while he places his army, release 2: Brian, 26 November 2026 03:45Z, "i should be able to move my
+		// units in a formation before the battle begins during the deployed phase". A control of the setup step and no
+		// battle rule (the design director, 03:50Z): several units dragged as one, a line drawn on his ground, and LINE,
+		// TWO LINES, WEDGE, COLUMN, each place by the rules' own land:place, all of them or none. Off until the Mac and
+		// the art director pass it; -TheaterLandRuleDrawUp turns it on for a run. Name and line the UI director's of
+		// 03:51Z. The rules do not read the key: the screen does (LandBattleCommand.cpp, LandBattleScreen.cpp).)
+		{ TEXT("drawup"), TEXT("Draw up units together before battle"), TEXT("Before the battle begins you can take several units in hand, drag them as one, and draw them up in a line, two lines, a wedge or a column. Off: you place them one at a time, as before. Only how you place them: no result changes."), TEXT("TheaterLandNoDrawUp"), false, TEXT("TheaterLandRuleDrawUp") },
+		// (Groups on the number keys, release 2: Brian, 26 November 2026 03:51Z, "you should be able to group units so
+		// you can hit the #1 and the units tied to it are all selected". Cmd on a Mac, Ctrl elsewhere, with a number
+		// ties those in hand to it; the number takes them in hand again, with Shift adds them, twice glides the view to
+		// them. The clock's pace moves from the numbers to the minus and plus keys while the row is on. A control and
+		// no battle rule. Off until the Mac and the art director pass it; -TheaterLandRuleGroups turns it on for a run.
+		// Name and line the UI director's of 03:53Z. The rules do not read the key: the screen does.)
+		{ TEXT("groups"), TEXT("Groups on the number keys"), TEXT("Tie the units in hand to a number with Cmd and that number (Ctrl on Windows); press the number to take them in hand again, twice to look at them. The clock's pace moves to \u2212 and +. Off: the numbers set the pace, as before. Only how you give orders: no result changes."), TEXT("TheaterLandNoGroups"), false, TEXT("TheaterLandRuleGroups") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 
@@ -424,6 +438,18 @@ void FLandLive::Place(int32 Id, double X, double Y, double Face)
 	if (Wake) Wake->Trigger();
 }
 
+void FLandLive::PlaceMany(const FString& ListJson)
+{
+	Requests.Enqueue({ TEXT("place"), TEXT("landPlaceMany"), TEXT("[") + ListJson + TEXT("]"), TEXT("several as one") });
+	if (Wake) Wake->Trigger();
+}
+
+void FLandLive::DrawUp(const FString& ArgumentsJson, const FString& Kind)
+{
+	Requests.Enqueue({ TEXT("drawup"), TEXT("landDrawUp"), ArgumentsJson, Kind });
+	if (Wake) Wake->Trigger();
+}
+
 void FLandLive::Begin()
 {
 	Requests.Enqueue({ TEXT("begin"), TEXT("landBegin"), TEXT("[]"), FString() });
@@ -550,8 +576,13 @@ uint32 FLandLive::Run()
 				A.Why = FieldText(Reply, TEXT("why"));
 				if (A.Why.IsEmpty() && !Error.IsEmpty()) A.Why = Error;
 			}
+			else
+			{
+				// (a yes with a word to it: a draw-up that left some where they are dug in, or stood them a way off)
+				A.Note = FieldText(Reply, TEXT("note"));
+			}
 			// (a block placed stands its men again: the next piece starts them afresh; begun, the clock runs)
-			if (A.bOk && Asked.Kind == TEXT("place")) bNeedPiece = true;
+			if (A.bOk && (Asked.Kind == TEXT("place") || Asked.Kind == TEXT("drawup"))) bNeedPiece = true;
 			if (A.bOk && Asked.Kind == TEXT("begin")) { bDeploying = false; bNeedPiece = true; }
 			// (the hedges in, the blocks on their lines hide: their men stand again; given or not, the clock may run)
 			if (Asked.Kind == TEXT("hedges"))

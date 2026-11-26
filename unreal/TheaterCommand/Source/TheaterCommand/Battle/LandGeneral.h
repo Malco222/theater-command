@@ -87,6 +87,12 @@ struct FLandGeneralShown
 	int Carried = -1;
 	double Corners[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	bool bCarryOk = false;
+	/** Several carried as one in the setup step (release 2, drawing up): the others' grounds' corners where they would
+	 * be set down, eight numbers a block as Corners (the one he holds is Corners'); empty: one carried alone. */
+	std::vector<double> CarryMore;
+	/** The formation his units were last drawn up in (release 2: "line", "two", "wedge", "column"; empty: none yet, or
+	 * he has dragged a unit by hand since): its button is lit. */
+	std::string DrawnUp;
 	/** His ground's edge in the setup step, along the ground. */
 	std::vector<std::pair<double, double>> RoomEdge;
 	/** The woods' edges on and near his ground (field metres, two points a stretch), made once; and in the setup step on

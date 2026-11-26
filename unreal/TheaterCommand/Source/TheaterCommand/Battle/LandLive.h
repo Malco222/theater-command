@@ -34,11 +34,13 @@ public:
 	/** The rules' answer to one of the player's orders, placings or the battle's begin, in the order asked. */
 	struct FAnswer
 	{
-		/** "order", "place" or "begin", and what was asked (the order's JSON, or the block's id). */
+		/** "order", "place", "drawup" or "begin", and what was asked (the order's JSON, the block's id, the formation's word). */
 		FString Kind, Asked;
 		bool bOk = false;
 		/** Why not, in the rules' plain words, where they said (a placing refused). */
 		FString Why;
+		/** A word the rules add to a yes (a draw-up that left some units where they are dug in, or stood them a way off). */
+		FString Note;
 	};
 
 	/**
@@ -113,6 +115,12 @@ public:
 	void Order(const FString& CommandJson);
 	/** A block placed in the setup step, facing Face (radians, 0 north, clockwise). */
 	void Place(int32 Id, double X, double Y, double Face);
+	/** Several blocks placed as one act in the setup step, all of them or none (release 2, drawing up): TC.landPlaceMany's
+	 * list, "[[id,x,y,face],...]", as LandCommand::General::PlaceMany writes it. A refusal names the block. */
+	void PlaceMany(const FString& ListJson);
+	/** His blocks drawn up in a formation in the setup step (release 2): TC.landDrawUp's arguments, "[\"line\",[ids]]",
+	 * as LandCommand::General::DrawUp writes them, and the formation's word for the log. */
+	void DrawUp(const FString& ArgumentsJson, const FString& Kind);
 	/** The setup step ends: the clock may run. */
 	void Begin();
 	/** The 3D field is laid: its hedge lines and gateways (TC.landHedges' JSON arrays; "[]" where none), handed to the
