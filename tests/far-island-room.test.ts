@@ -207,36 +207,42 @@ describe('the player and Wake', () => {
     expect(engRoom(g, osaka)).toBe(2);
   }, 300000);
 
-  it('cannot march a corps onto Singapore that its men there leave no room for, and is told why; the two may still change places', () => {
+  it("marches a corps onto Singapore while its side's men there and his are within its room, refuses one they are not, and says why; the two may still change places", () => {
     const g = war('UK');
     const singapore = at(g, 'Singapore'), johore = at(g, 'Johore');
     expect(singapore.nb).toEqual([johore.id]);
     // (Read off the board: the coast guns' 15,000 and Malaya Command's men, drafted to 7,050 by the player's month.)
     const there = [...placed(g, singapore, 'UK'), ...(singapore.garr ?? [])].filter((u) => u.kind !== 'eng').reduce((n, u) => n + men(u), 0);
     expect(there).toBe(22050);
-    const c = corps(g, 'UK', 'Third', johore);
+    // Singapore's room is 5 (the design director's stand-in G of 14:28Z): a third corps, which its room of 2 corps
+    // refused, now goes.
+    const third = corps(g, 'UK', 'Third', johore);
+    expect(hasRoom(g, singapore, third)).toBe(true);
+    expect(whyNoRoom(g, third, singapore)).toBeNull();
+    removeCorps(g, third);
+    const c = corps(g, 'UK', 'Army', johore, 4);
     expect(hasRoom(g, singapore, c)).toBe(false);
     expect(reach(g, c).has(singapore.id)).toBe(false);
-    // (7,950 more fit: "more can go" is rounded down and the 22,050 there up, so the two add up to the room the line shows.)
-    const said = 'Singapore has room for 2 divisions, about 30,000 men, and 23,000 of yours are there: only 7,000 more can go, and you are sending 15,000.';
+    // (52,950 more fit: "more can go" is rounded down and the 22,050 there up, so the two add up to the room the line shows.)
+    const said = 'Singapore has room for 5 divisions, about 75,000 men, and 23,000 of yours are there: only 52,000 more can go, and you are sending 60,000.';
     expect(whyNoRoom(g, c, singapore)).toBe(said);
     expect(orderMove(g, c, singapore.id)).toBe(0);
     expect(moveCorps(g, c, singapore)).toBe(false);
     // (Nor by rail, with the island's own sentence.)
     expect(whyNoTrainFor(g, [c], singapore.id)).toMatchObject({ code: 'room', line: said, at: singapore.id });
-    // A worn corps of 7,500 has the room a fresh one has not.
-    const worn = corps(g, 'UK', 'Worn', johore, 1, 0.5);
-    expect(hasRoom(g, singapore, worn)).toBe(true);
-    removeCorps(g, worn);
+    // A worn army of 52,500 has the room a fresh one has not.
+    c.str = 0.875;
+    expect(hasRoom(g, singapore, c)).toBe(true);
+    c.str = 1;
     // Ground that is no island says nothing of room here.
     expect(whyNoRoom(g, c, at(g, 'Kuala Lumpur'))).toBeNull();
     // The 3D game's march: the island's sentence, and the offer to change places with the corps that stands there: the
-    // men there after the swap (30,000) are within the room (Q6, read as recommended).
+    // men there after the swap (75,000) are within the room (Q6, read as recommended).
     TC().load(saveGame(g));
     const tried = TC().move([c.id], singapore.id) as { moved: unknown[]; note: string };
     expect(tried.moved).toEqual([]);
-    expect(tried.note).toMatch(/^Singapore has room for 2 divisions, about 30,000 men\. Order the march again and Third changes places with Malaya Command/);
-    expect(TC().province(singapore.id).island).toEqual({ room: 2, line: 'Singapore has room for 2 divisions, about 30,000 men.' });
+    expect(tried.note).toMatch(/^Singapore has room for 5 divisions, about 75,000 men\. Order the march again and Army changes places with Malaya Command/);
+    expect(TC().province(singapore.id).island).toEqual({ room: 5, line: 'Singapore has room for 5 divisions, about 75,000 men.' });
     const swapped = TC().move([c.id], singapore.id) as { moved: { id: number }[]; note: string };
     expect(swapped.moved).toHaveLength(2);
     expect(swapped.note).toMatch(/have changed places\.$/);
@@ -394,19 +400,19 @@ describe('two corps changing places onto an island', () => {
     const singapore = at(g, 'Singapore'), johore = at(g, 'Johore');
     clear(g, singapore);
     const stay = corps(g, 'UK', 'Stays', singapore, 1, 0.8), out = corps(g, 'UK', 'Goes Out', singapore, 1, 0.3);
-    // (12,000 stay; the corps coming off frees its 4,500.)
-    const fitsIn = corps(g, 'UK', '9th Corps', johore, 2, 0.6);
+    // (12,000 stay; the corps coming off frees its 4,500. Singapore's room is 5, 75,000 men.)
+    const fitsIn = corps(g, 'UK', '9th Corps', johore, 5, 0.7);
     expect(whyNoSwap(g, fitsIn, out)).toBeNull();
-    fitsIn.str = 0.7;
-    expect(men(fitsIn)).toBe(21000);
-    expect(whyNoSwap(g, fitsIn, out)).toBe('Singapore has room for 2 divisions, about 30,000 men, and 12,000 of yours stay there after the swap: only 18,000 more can go, and 9th Corps has 21,000.');
+    fitsIn.str = 0.9;
+    expect(men(fitsIn)).toBe(67500);
+    expect(whyNoSwap(g, fitsIn, out)).toBe('Singapore has room for 5 divisions, about 75,000 men, and 12,000 of yours stay there after the swap: only 63,000 more can go, and 9th Corps has 67,500.');
     expect(swapCorps(g, fitsIn, out)).toBe(false);
-    // A swap that brings no more men than goes out stands, however full the island (34,500 there before, 33,000 after).
-    out.divs = 2; out.str = 0.75;
+    // A swap that brings no more men than goes out stands, however full the island (79,500 there before and after).
+    out.divs = 5; out.str = 0.9;
     expect(whyNoSwap(g, fitsIn, out)).toBeNull();
     // A corps larger than the whole room never swaps on: the too-large line first.
-    fitsIn.divs = 3; fitsIn.str = 0.8;
-    expect(whyNoSwap(g, fitsIn, out)).toBe('Singapore has room for 2 divisions, about 30,000 men. 9th Corps has 36,000: too many for the island.');
+    fitsIn.divs = 6;
+    expect(whyNoSwap(g, fitsIn, out)).toBe('Singapore has room for 5 divisions, about 75,000 men. 9th Corps has 81,000: too many for the island.');
     expect(stay.reg).toBe(singapore.id);
   }, 300000);
 });
@@ -418,13 +424,14 @@ describe('the winners of a fight for an island', () => {
     setWar(g, 'JAP', 'UK');
     for (const u of [...johore.units]) removeCorps(g, u);
     johore.ctrl = 'JAP';
-    const force = [1, 2, 3, 4].map((k) => { const c = addCorps(g, 'JAP', `Army ${k}`, 'inf', 1, johore.id, {}); c.ap = c.apMax; c.xp = 0.8; return c; });
+    // (Four armies of three divisions: 45,000 men each at full strength, against Singapore's room of 75,000.)
+    const force = [1, 2, 3, 4].map((k) => { const c = addCorps(g, 'JAP', `Army ${k}`, 'inf', 3, johore.id, {}); c.ap = c.apMax; c.xp = 0.8; return c; });
     const report = resolveBattle(g, force, singapore);
     expect(report.taken).toBe(true);
     const inside = placed(g, singapore, 'JAP');
-    expect(inside.reduce((n, c) => n + men(c), 0)).toBeLessThanOrEqual(30000);
-    expect(inside.length).toBeGreaterThan(0);
-    expect(inside.length + placed(g, johore, 'JAP').length).toBe(4);
+    expect(inside.reduce((n, c) => n + men(c), 0)).toBeLessThanOrEqual(75000);
+    expect(inside.map((c) => c.name)).toEqual(['Army 1']);
+    expect(placed(g, johore, 'JAP').map((c) => c.name)).toEqual(['Army 2', 'Army 3', 'Army 4']);
     // Nobody was struck off for want of room.
     expect(force.every((c) => !c.dead)).toBe(true);
   }, 300000);
@@ -481,6 +488,21 @@ describe("the record's rows and an island's room", () => {
     expect(run(3)).not.toBe('Pearl Harbor');
     expect(run(3)).not.toBe('none');
     expect(run(1)).toBe('Pearl Harbor');
+  }, 300000);
+});
+
+describe("the design director's stand-ins of 14:28Z, flagged G (c)", () => {
+  it('Singapore has room for 5, Formosa\'s south for 3, and the Kure landing forces stage at Palau, not Yap', () => {
+    const g = startOpen(createGame(3, null));
+    expect(roomSays(g, at(g, 'Singapore'))).toBe('Singapore has room for 5 divisions, about 75,000 men.');
+    expect(roomSays(g, at(g, 'Formosa'))).toBe('Formosa has room for 3 divisions, about 45,000 men.');
+    expect(roomSays(g, at(g, 'Taihoku'))).toBe('Taihoku has room for 2 divisions, about 30,000 men.');
+    // The Kure row comes in its month at Palau, through the far rows' own amend.
+    g.turn = 27;
+    startPhase(g, 'JAP');
+    const kure = g.corps.find((c) => c.nat === 'JAP' && !c.dead && c.name === 'Naval landing forces (Kure 1st and 2nd)')!;
+    expect(kure).toBeDefined();
+    expect(g.regions[kure.reg].name).toBe('Palau');
   }, 300000);
 });
 

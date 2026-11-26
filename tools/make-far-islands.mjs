@@ -1,5 +1,5 @@
 // The islands' rows for the rules, written from the historian's table (rulings 173 and 179): each island's room in
-// corps, the floor a cut-off garrison withers to, and whether it is an islet. The table is the source
+// divisions' worth of men (read so since the design director's ruling of 14:28Z, 25 November 2026), the floor a cut-off garrison withers to, and whether it is an islet. The table is the source
 // (data/campaign/tables/islands-draft.csv: edit it, never this file's output); run `node tools/make-far-islands.mjs`
 // after the table changes, and tests/far-islands.test.ts fails until it has been.
 //
@@ -76,7 +76,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const lines = Object.keys(islands).map((k) => `    ${JSON.stringify(k)}: ${JSON.stringify(islands[k])}`);
   const said = (names) => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names.join(''));
   const bare = Object.keys(islands).filter((k) => islands[k][3] === '');
-  const about = "The Pacific's islands for the rules (rulings 173 and 179), read only on the whole-world chart: [room in corps, the floor a cut-off garrison withers to, 1 for an islet, the look of its field in the 3D ground battle]. Written by tools/make-far-islands.mjs from data/campaign/tables/islands-draft.csv, which is the source: edit the table, never this file.";
+  const about = "The Pacific's islands for the rules (rulings 173 and 179), read only on the whole-world chart: [room in divisions' worth of men (15,000 a division; the design director, 14:28Z, 25 November 2026), the floor a cut-off garrison withers to, 1 for an islet, the look of its field in the 3D ground battle]. Written by tools/make-far-islands.mjs from data/campaign/tables/islands-draft.csv, which is the source: edit the table, never this file.";
   const look = `The 4th element dresses the 3D ground battle's field and nothing else (the design director, 25 November 2026, 12:39Z, B(3), narrowed at 13:00Z, D(2)): no rule of the campaign or of the fight reads it. By the table's own columns: 'jungle' where jungle is 1; otherwise 'island' only where the islet flag is 1; otherwise no word (''), and the 3D game dresses the field by its climate from the place's latitude and longitude. No word, whatever the flags, where the climate is subarctic or the ground is urban, and for Iwo Jima by name (an islet of black volcanic ash with no palms), until the art director has scored stills of them. Rows with no word: ${said(bare)}. (G) ${said(noRow)} have no row in the table, so no climate, ground or jungle was read for them: they take 'island' by the chart's islet flag alone, a guess (${noRow.map((n) => `${n}: ${ROW_SAYS[n] ?? 'no ruling yet'}`).join('; ')}).`;
   const out = `{\n  "_about": ${JSON.stringify(about)},\n  "_look": ${JSON.stringify(look)},\n  "_noRow": ${JSON.stringify(noRow)},\n  "islands": {\n${lines.join(',\n')}\n  }\n}\n`;
   fs.writeFileSync(path.join(ROOT, 'data/campaign/far-islands.json'), out);

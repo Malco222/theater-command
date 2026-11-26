@@ -20,7 +20,7 @@ describe("the islands' rows", () => {
     expect(made.noRow).toEqual(['Addu Atoll', 'Seychelles']);
   });
 
-  it('give an atoll room for one corps and a floor of a quarter, a large island more room and a half', () => {
+  it("give an atoll room for one division's worth of men and a floor of a quarter, a large island more room and a half", () => {
     const g = startOpen(createGame(3, null));
     const of = (name: string) => islandOf(g, g.byName[name]);
     expect(of('Wake')).toEqual({ room: 1, floor: 0.25, islet: true });
@@ -29,6 +29,11 @@ describe("the islands' rows", () => {
     expect(of('Okinawa')).toEqual({ room: 4, floor: 0.5, islet: false });
     expect(of('Guadalcanal')).toEqual({ room: 3, floor: 0.5, islet: false });
     expect(of('Pearl Harbor')).toEqual({ room: 2, floor: 0.5, islet: false });
+    // The design director's stand-ins of 14:28Z, 25 November 2026, (c), flagged G in the table: Singapore 5, Formosa's
+    // south (Takao) 3; Taihoku stays 2.
+    expect(of('Singapore')).toEqual({ room: 5, floor: 0.25, islet: false });
+    expect(of('Formosa')).toEqual({ room: 3, floor: 0.5, islet: false });
+    expect(of('Taihoku')).toEqual({ room: 2, floor: 0.5, islet: false });
     // Ground that is no island of the table has no row: Tokyo, Honolulu's neighbour, a province of Europe.
     for (const name of ['Tokyo', 'Maui', 'Paris']) expect(of(name), name).toBeNull();
     expect(islandNames()).toHaveLength(43);
