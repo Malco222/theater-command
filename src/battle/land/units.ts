@@ -30,8 +30,16 @@ export interface LandOrder {
    * tanks can find them. A group with no foot ignores it.
    */
   together?: number;
-  /** At the double (release 2, the player's 'move' with run): foot go LAND.double faster, upright and winded after. */
+  /**
+   * At the double (release 2, the player's 'move' with run): foot go LAND.double faster, upright and winded after. After
+   * the break (release 2, pursue) also on a 'withdraw' the broken army's player gives: he may hurry.
+   */
   run?: boolean;
+  /**
+   * After the break (release 2, pursue): a 'withdraw' whose way the broken army's player picked. The block makes for
+   * (x, its own edge) by the field's ways, and not straight back from where it stands.
+   */
+  via?: boolean;
 }
 
 export interface LandUnit extends UnitBase {

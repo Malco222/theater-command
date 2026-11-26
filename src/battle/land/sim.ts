@@ -212,6 +212,17 @@ export function warnLine(why: BreakCause): string {
     : `Your army is near breaking: its losses along the whole line are near what ${why.side === 'att' ? 'an attack' : 'a defence'} will pay. Withdraw, or hand it to the staff.`;
 }
 
+/**
+ * After the break (release 2, the switch `pursue`; LandBattle.pursue): the army that broke and the one that holds the
+ * field, fixed at the break with how it ended there ('rout': its bar was full; 'destroyed': none of its blocks was left
+ * in the fight), why and when. 'phase': 'ask' while a player who won has not chosen (the battle does not step, as in the
+ * setup step), 'pursue' once the winner fights on. 'on': the broken army's blocks still on the field at the break, by
+ * id with the strength each had then: each is billed what it has when it leaves the field or the day ends, with no flat
+ * share on top (the design director, 26 November 2026, 06:36Z (a)). 'off': its computer general has called the
+ * pursuit off, and the day ends as this tick is judged. 'ended': how the pursuit ended, once it has (FieldResult.pursued).
+ */
+export interface Aftermath { side: Side; winner: Side; how: 'rout' | 'destroyed'; why: BreakCause; t: number; phase: 'ask' | 'pursue'; on: Map<number, number>; off?: boolean; ended?: 'left' | 'off' | 'time' | 'spent' }
+
 export class LandBattle implements BattleSim<LandUnit> {
   readonly domain = 'land' as const;
   readonly ticket: FieldTicket<LandPlace>;
@@ -287,6 +298,18 @@ export class LandBattle implements BattleSim<LandUnit> {
   radio = false;
   /** True while a staff (ai.ts) is giving its orders: those are the computer's, never taken in hand nor sent by radio. */
   private staffing = false;
+  /**
+   * Fighting on after the break (release 2; Brian, 26 November 2026, 03:53Z: "i feel like the battles end abruptly" and
+   * "if the enemy retreats, i have the option to continue on with the battle or end it"; the design director's rulings
+   * of 03:58Z, 06:36Z, 12:16Z and 12:37Z; "After the break" below). Off (the default): an army's break ends the battle
+   * at that instant, as ever, and nothing below is read. On (the bridge's { pursue: true }): at the break the winner
+   * chooses. END there is the battle as it ends with the switch off, to the last figure. PURSUE fights on with the
+   * verdict fixed: the broken army's runners run and its blocks in order fall back, never forward; the day ends when
+   * the last of them has left the field, when the winner calls the pursuit off, or with the day's clock.
+   */
+  pursue = false;
+  /** The break as it stood, with `pursue` on and the winner still to choose or fighting on: null otherwise. */
+  aftermath: Aftermath | null = null;
   /**
    * Hidden in the woods (release 2; Brian, 22 November 04:18Z: ambushes; LAND.hide): off unless whoever opens the field
    * turns it on (hideOn). Off, no block is ever hidden and nothing here is read.
@@ -449,6 +472,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    * comes, and then nothing below reads it.
    */
   private coming: { u: LandUnit; f: ForceTicket; at: number; edge: Edge; x: number; y: number; lanes: [number, number] | null }[] = [];
+  /** The broken army's corps from next door that turned back with it (pursue, "After the break"): never on the field, and nothing lost there. */
+  private turned: typeof this.coming = [];
   /** The battle second each joining corps came on. */
   private joinedAt = new Map<number, number>();
   /** The corps that come up from next door. */
@@ -793,7 +818,11 @@ export class LandBattle implements BattleSim<LandUnit> {
   /** The joiners whose time has come: each corps' blocks walk on together, and its coming is told. */
   private arrive(): void {
     const due: typeof this.coming = [];
-    while (this.coming.length && this.t >= this.coming[0].at - 1e-9) due.push(this.coming.shift()!);
+    while (this.coming.length && this.t >= this.coming[0].at - 1e-9) {
+      const c = this.coming.shift()!;
+      // After the break (release 2, pursue): a corps coming up for the army that broke turns back with it.
+      if (this.aftermath && c.u.side === this.aftermath.side) this.turned.push(c); else due.push(c);
+    }
     for (const corps of [...new Set(due.map((c) => c.u.corps))]) {
       const g = due.filter((c) => c.u.corps === corps);
       for (const c of g) this.walkOn(c);
@@ -1649,6 +1678,8 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   command(c: Command, by: Side): boolean {
     if (this.over) return false;
+    // After the break (release 2, pursue): the winner's choice, and what each side may still order.
+    if (this.aftermath) { const done = this.afterCommand(c, by); if (done !== null) return done; }
     // A block waiting for help (hold until relieved, release 2) is never its staff's to order: only the player's own
     // order calls its wait off.
     const mine = (ids: number[]): LandUnit[] => ids.map((i) => this.unit(i)).filter((u): u is LandUnit => !!u && u.side === by && fighting(u) && u.kind !== 'fort' && !(this.staffing && u.waits && !u.waits.free));
@@ -1669,8 +1700,13 @@ export class LandBattle implements BattleSim<LandUnit> {
         // A group keeps its shape: each block goes to the point plus its place in the group. At the double (run): the
         // player's run (release 2).
         const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
+        // After the break (release 2, pursue): the broken army's blocks only fall back. The way is the player's to pick,
+        // never forward: each makes for its own edge by the point he gives, across the field, and leaves there; at the
+        // double if he says so (he may hurry).
+        const back = !!this.aftermath && by === this.aftermath.side;
         for (const u of us) {
-          const o: LandOrder = { kind: 'move', x: c.x + (us.length > 1 ? u.x - cx : 0), y: c.y + (us.length > 1 ? u.y - cy : 0), face: c.face, ...(c.run ? { run: true } : {}) };
+          const o: LandOrder = back ? { kind: 'withdraw', x: c.x + (us.length > 1 ? u.x - cx : 0), y: by === 'att' ? 0 : this.field.h, via: true, ...(c.run ? { run: true } : {}) }
+            : { kind: 'move', x: c.x + (us.length > 1 ? u.x - cx : 0), y: c.y + (us.length > 1 ? u.y - cy : 0), face: c.face, ...(c.run ? { run: true } : {}) };
           give(u, () => this.send(u, o));
         }
         this.say({ what: 'contact', side: by, text: '' });
@@ -2685,6 +2721,8 @@ export class LandBattle implements BattleSim<LandUnit> {
   step(): void {
     if (this.setup) return;
     if (this.over) { this.drill?.step(); return; }
+    // After the break (release 2, pursue): while the player who won has not chosen, the battle does not step.
+    if (this.aftermath?.phase === 'ask') return;
     // Hidden in the woods (release 2): as the clock starts, the computer's defence lays its ambushes and every block
     // then standing in woods is hidden from the other side.
     if (this.hide && !this.hidStarted) this.hideStart();
@@ -2699,7 +2737,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (this.t >= this.nextThink) {
       this.nextThink = this.t + LAND.think;
       this.staffing = true;
-      for (const s of ['att', 'def'] as Side[]) if (this.ai[s]) thinkFor(this, s);
+      // (after the break, pursue: the day is decided, and each staff has only the pursuit to see to)
+      for (const s of ['att', 'def'] as Side[]) if (this.ai[s]) { if (this.aftermath) this.staffAfter(s); else thinkFor(this, s); }
       this.staffing = false;
     }
     for (const u of this.units) { u.pinned = false; if (live(u)) { u.still += DT; u.clear += DT; } }
@@ -3212,7 +3251,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (t.kind === 'arm' && LAND.alone.on) take *= this.alone(t, u);
     if (t.side === 'def' && dist(t.x, t.y, t.home[0], t.home[1]) < LAND.hold.within) take *= this.holdTake(u, t);
     // Upright and running in the open, at the double: struck harder (direct command, release 2).
-    if (t.order?.kind === 'move' && t.order.run && t.speed > 0.5) take *= LAND.double.exposed;
+    if ((t.order?.kind === 'move' || t.order?.kind === 'withdraw') && t.order.run && t.speed > 0.5) take *= LAND.double.exposed;
     const luck = 1 + LAND.jitter * (this.rng.next() * 2 - 1);
     const dmg = p * am * amx * take * luck * (u.side === 'att' ? this.fortune : 1 / this.fortune) * DT;
     // Units face the fire that hurts most (faceRule) weighs enemies by faceOn: the same blow as it would land on the
@@ -3387,7 +3426,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (u.state === 'routing') { to = [u.x, u.side === 'att' ? -50 : this.field.h + 50]; run = true; }
     else if (u.order?.kind === 'withdraw') {
       // Straight back to its own edge, or back round by its bridge where a river or rock lies behind it.
-      u.path = this.dry(this.going(u), u.x, u.y, u.x, u.order.y) && !this.exit(this.going(u), u.x, u.y) ? [[u.x, u.order.y]] : this.route(u, u.order.x, u.order.y);
+      // (after the break, pursue: by the point the player gave it, where he picked its way, 'via')
+      u.path = !u.order.via && this.dry(this.going(u), u.x, u.y, u.x, u.order.y) && !this.exit(this.going(u), u.x, u.y) ? [[u.x, u.order.y]] : this.route(u, u.order.x, u.order.y);
       to = u.path[0];
     }
     else if (u.order?.kind === 'attack') {
@@ -3489,7 +3529,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     pace *= up > 0 ? Math.max(0.4, 1 - (up / 20) * 1.5) : 1;
     const top = u.team ? LAND.teams[u.team].speed : LAND.speed[k];
     // At the double (direct command, release 2): faster, and winded for a while after.
-    const double = !run && u.order?.kind === 'move' && !!u.order.run;
+    // (after the break, pursue: the broken army's player may hurry a block he sends back; no other withdraw carries run)
+    const double = !run && (u.order?.kind === 'move' || u.order?.kind === 'withdraw') && !!u.order.run;
     if (double) u.winded = this.t + LAND.double.winded;
     let v = top * Math.max(0.12, pace) * (run ? 1.15 : 1) * (double ? LAND.double.pace[m] : 1) * (u.state === 'wavering' ? 0.85 : 1);
     const d = dist(u.x, u.y, to[0], to[1]);
@@ -4009,11 +4050,173 @@ export class LandBattle implements BattleSim<LandUnit> {
     return !!u.gives && (u.order?.kind === 'withdraw' || u.state === 'routing');
   }
 
+  // ---- After the break (release 2, pursue) ------------------------------------------------------------------------
+  //
+  // Brian, 26 November 2026, 03:53Z: "i feel like the battles end abruptly" and "if the enemy retreats, i have the
+  // option to continue on with the battle or end it". The design director, 03:58Z, 06:36Z, 12:16Z and 12:37Z. With the
+  // switch off an army's break ends the battle at that instant (judge, finish). With it on:
+  //   - At the break the winner and the verdict are fixed, and the winner chooses. A player who won is asked, and the
+  //     battle does not step until he answers ({ do: 'land:pursue' } or { do: 'land:end' }). A computer general
+  //     chooses at its own sight: PURSUE where one of its blocks can still reach one of theirs before it is off the
+  //     field (quarry), END where none can. Never by the bill.
+  //   - END at the break is finish() as it runs with the switch off, at the same instant: the same result to the last
+  //     figure.
+  //   - PURSUE fights on. The broken army gives no fight: its runners run and do not rally, and its blocks in order
+  //     fall back to their own edge and strike nothing (a block under 'withdraw' never strikes: targetOf). Its player
+  //     may pick a block's way back ('move': by that point to its own edge, never forward) and hurry it (run), and no
+  //     more; its corps still coming up turn back. The winner's blocks are the winner's to order as ever; its staff
+  //     sends each after the nearest block of theirs it can catch, and halts those that can catch none.
+  //   - The pursuit ends when the last of the broken army has left the field, when the winner calls it off (the
+  //     player's { do: 'land:end' }; a computer general when nothing more can be caught), when the winner's own bar
+  //     fills, or with the day's clock. Neither side may hand the day to the staff or pull its whole army out: the day
+  //     is decided.
+  //   - The bill (kept): each block of the broken army on the field at the break counts what it has when it leaves or
+  //     the day ends, with no flat share on top; one that had left before the break keeps its share as under END. So
+  //     the rout is priced once, by the field that fought it. R follows from the shares as ever and stays on the side
+  //     of the line the break put it (result.ts: that side is the winner's and the dice's run, never the shares'). The
+  //     result carries `pursued` for the campaign, which then bills no pursuit of its own for the day.
+  // No figure is new: a runner's pace is move's, the double is LAND.double, and a block falling back is struck as one
+  // always was. The staff's sight (quarry) draws on no dice.
+
+  /**
+   * The break with `pursue` on: fixes the winner and has it choose. True where the battle goes on (a player is asked,
+   * or a computer general pursues); false where it ends here as with the switch off: none of the broken army is left on
+   * the field, the winner's own bar is full, or its computer general sees nothing it can catch.
+   */
+  private breakOpens(s: Side, how: 'rout' | 'destroyed', why: BreakCause): boolean {
+    const winner = other(s), on = new Map<number, number>();
+    for (const u of this.units) if (u.side === s && live(u)) on.set(u.id, u.str);
+    if (!on.size || this.brink(winner).bar >= 1) return false;
+    this.aftermath = { side: s, winner, how, why, t: this.t, phase: 'ask', on };
+    if (this.ticket[winner].human) {
+      this.say({ what: 'land:ask', side: winner, text: `${this.army(s)} has broken. Pursue it, or end the battle here.` });
+      return true;
+    }
+    if (!this.units.some((u) => this.quarry(u))) { this.aftermath = null; return false; }
+    this.pursueOn();
+    return true;
+  }
+
+  /** The winner fights on: the broken army's orders still on the air are dropped, and its blocks in order fall back. */
+  private pursueOn(): void {
+    const A = this.aftermath!;
+    A.phase = 'pursue';
+    // No runner of it rallies now (nerve), however it broke.
+    this.broke[A.side] = true;
+    this.pending = this.pending.filter((p) => this.unit(p.id)?.side !== A.side);
+    for (const u of this.units) if (u.side === A.side && fighting(u)) this.fallBack(u);
+    // Its staff looks to the pursuit at once.
+    this.nextThink = this.t;
+    this.say({ what: 'land:pursuit', side: A.winner, text: this.ticket[A.winner].human ? 'Your army pursues.' : `${this.army(A.winner)} pursues. Get your men off the field.` });
+  }
+
+  /** A block of the broken army still in order falls back to its own edge, as at the break (judge); a wait for help is over. */
+  private fallBack(u: LandUnit): void {
+    if (u.waits) this.endWait(u, 'gives');
+    u.fellBack = true;
+    if (u.order?.kind !== 'withdraw') { u.order = { kind: 'withdraw', x: u.x, y: u.side === 'att' ? 0 : this.field.h }; u.path = []; u.keepFace = null; }
+    u.engaged = undefined;
+  }
+
+  /**
+   * The block of the broken army this one of the winner's can still catch, as its staff judges by sight: the nearest in
+   * its reach now, or one it gains on and closes with before that block is off the field, both going straight for the
+   * block's own edge at their kinds' paces over open ground (a runner at move's own 1.15). Guns and teams catch only
+   * what is in their reach; a wavering block and a fort catch nothing. Null where none.
+   */
+  private quarry(u: LandUnit): LandUnit | null {
+    const A = this.aftermath;
+    if (!A || u.side !== A.winner || !fighting(u) || u.kind === 'fort' || u.state === 'wavering') return null;
+    const reach = reachOf(u), mine = u.team ? LAND.teams[u.team].speed : LAND.speed[u.kind];
+    let best: LandUnit | null = null, least = Infinity;
+    for (const e of this.units) {
+      if (e.side !== A.side || !live(e) || e.hid) continue;
+      const gap = this.gap(u, e);
+      const theirs = (e.team ? LAND.teams[e.team].speed : LAND.speed[e.kind]) * (e.state === 'routing' ? 1.15 : 1);
+      const left = theirs > 0 ? (e.side === 'att' ? e.y : this.field.h - e.y) / theirs : Infinity;
+      const closes = gap <= reach ? 0 : u.kind !== 'art' && mine > theirs ? (gap - reach) / (mine - theirs) : Infinity;
+      if (closes < left && gap < least) { least = gap; best = e; }
+    }
+    return best;
+  }
+
+  /**
+   * A staff's thought after the break. The broken army's gives no orders. The winner's sends each block that is its to
+   * send (not guns or teams, which fire from where they stand; not one the player has in hand; not one waiting for
+   * help) after the nearest block it can catch, and halts one that can catch none. A computer general with nothing
+   * left to catch calls the pursuit off (judged at the tick's end); a player's staff never ends his battle for him.
+   */
+  private staffAfter(s: Side): void {
+    const A = this.aftermath!;
+    if (s !== A.winner || A.phase !== 'pursue') return;
+    let any = false;
+    for (const u of this.units) {
+      if (u.side !== s || !fighting(u)) continue;
+      const e = this.quarry(u);
+      if (e) any = true;
+      if (u.kind === 'art' || u.kind === 'fort' || u.taken || (u.waits && !u.waits.free)) continue;
+      if (!e) { if (u.order?.kind === 'attack') this.command({ do: 'hold', units: [u.id] }, s); continue; }
+      if (u.order?.kind === 'attack' && u.order.target === e.id) continue;
+      if (u.reserve === 'held') u.reserve = 'sent';
+      this.command({ do: 'attack', units: [u.id], target: e.id }, s);
+    }
+    if (!any && !this.ticket[s].human) A.off = true;
+  }
+
+  /**
+   * An order given after the break: true or false where it is the aftermath's to answer, null where it goes on to the
+   * rules as ever. The winner's { do: 'land:pursue' } and { do: 'land:end' } (the player's, never his staff's); while a
+   * player is choosing, nothing else, so END then is the battle exactly as it stood at the break; never the staff's
+   * dice nor a whole army pulled out; and of the broken army only a way back ('move', 'withdraw'), its fighters on
+   * call, and its staff's seat.
+   */
+  private afterCommand(c: Command, by: Side): boolean | null {
+    const A = this.aftermath!, what: string = c.do;
+    if (what === 'land:pursue') {
+      if (by !== A.winner || A.phase !== 'ask') return false;
+      this.pursueOn();
+      return true;
+    }
+    if (what === 'land:end') {
+      if (by !== A.winner || this.staffing) return false;
+      this.endAfter('off');
+      return true;
+    }
+    if (A.phase === 'ask' || what === 'dice' || what === 'withdrawAll') return false;
+    if (by !== A.side) return null;
+    return what === 'move' || what === 'withdraw' || what === 'land:air' || what === 'auto' ? null : false;
+  }
+
+  /** After the break, each tick of the pursuit: the broken army keeps falling back, and the pursuit ends by one of its ways. */
+  private judgeAfter(): void {
+    const A = this.aftermath!;
+    if (A.phase !== 'pursue') return;
+    const b = this.brink(A.winner);
+    this.bar[A.winner] = b.bar;
+    for (const u of this.units) if (u.side === A.side && fighting(u) && u.order?.kind !== 'withdraw') this.fallBack(u);
+    const ended = !this.units.some((u) => u.side === A.side && live(u)) ? 'left'
+      : A.off ? 'off'
+        : b.bar >= 1 || !this.units.some((u) => u.side === A.winner && fighting(u)) ? 'spent'
+          : this.t >= this.ticket.limit ? 'time' : null;
+    if (ended) this.endAfter(ended);
+  }
+
+  /** The day ends after the break: END at the break (a player's answer) exactly as with the switch off; else by the pursuit's own count. */
+  private endAfter(ended: 'left' | 'off' | 'time' | 'spent'): void {
+    const A = this.aftermath!;
+    if (A.phase === 'ask') this.aftermath = null; else A.ended = ended;
+    this.finish(A.winner, A.how, undefined, A.why);
+  }
+
   private judge(): void {
+    // After the break (release 2, pursue): the day is decided, and what is left to judge is when the pursuit ends.
+    if (this.aftermath) { this.judgeAfter(); return; }
     for (const s of ['att', 'def'] as Side[]) {
       const left = this.units.filter((u) => u.side === s && fighting(u));
       if (!left.length) {
         const how = this.units.some((u) => u.side === s && u.state === 'withdrawn') && !this.units.some((u) => u.side === s && u.state === 'routing') ? 'withdrew' : 'destroyed';
+        // After the break (release 2, pursue): driven from the fight with runners still on the field, the winner chooses.
+        if (this.pursue && how === 'destroyed' && this.breakOpens(s, 'destroyed', this.breakCause(s))) return;
         // Driven from the field, it broke: why, as it stood when the last block left the fight (b496(2)).
         this.finish(other(s), how, undefined, how === 'destroyed' ? this.breakCause(s) : undefined);
         return;
@@ -4040,6 +4243,8 @@ export class LandBattle implements BattleSim<LandUnit> {
         // The blocks that broke are already running; the rest fall back in order with their army.
         for (const u of left) { u.fellBack = true; u.order = { kind: 'withdraw', x: u.x, y: s === 'att' ? 0 : this.field.h }; u.path = []; u.keepFace = null; u.engaged = undefined; }
         this.say({ what: 'broken', side: s, text: breakLine(why, this.whose(s)), brokeBy: { ...why } });
+        // After the break (release 2, pursue): the winner chooses, PURSUE or END; END here is the line below.
+        if (this.pursue && this.breakOpens(s, 'rout', why)) return;
         this.finish(other(s), 'rout', undefined, why);
         return;
       }
@@ -4054,6 +4259,11 @@ export class LandBattle implements BattleSim<LandUnit> {
    * the break. An attack's runner back in a river it came over counts as before: the card's crossing prices that.
    */
   private kept(u: LandUnit): number {
+    // After the break, pursued (release 2, pursue; the design director, 26 November 2026, 06:36Z (a)): a block of the
+    // broken army that was on the field at the break is billed what it has when it leaves the field or the day ends,
+    // with no flat share on top: the field fought its rout, and the rules do not charge it again. One that had left
+    // before the break keeps its share below, as under END.
+    if (this.aftermath?.phase === 'pursue' && this.aftermath.on.has(u.id)) return u.str;
     const caught = u.side === 'def' && u.state === 'routing' && inRiver(groundAt(this.field, u.x, u.y));
     return u.state === 'gone' || caught ? u.str * (1 - LAND.count.gone[u.side]) : u.state === 'routing' || u.fellBack ? u.str * (1 - LAND.count.routing[u.side]) : u.str;
   }
@@ -4093,8 +4303,20 @@ export class LandBattle implements BattleSim<LandUnit> {
       forces.set(u.corps, f);
     }
     // A corps from next door that never came up: nothing lost on the field.
-    for (const c of this.coming) if (!forces.has(c.u.corps)) forces.set(c.u.corps, { corps: c.u.corps, side: c.u.side, lost: 0, p: 0 });
+    // (so is one that turned back with its broken army: after the break, pursue; none with the switch off)
+    for (const c of [...this.coming, ...this.turned]) if (!forces.has(c.u.corps)) forces.set(c.u.corps, { corps: c.u.corps, side: c.u.side, lost: 0, p: 0 });
     const loser = other(winner);
+    // After the break, pursued (release 2, pursue): what the pursuit took of the broken army, by what its blocks on the
+    // field at the break have lost since; already inside the shares, the men and the forces above.
+    const A = this.aftermath?.phase === 'pursue' ? this.aftermath : null;
+    let took = 0, tookMen = 0;
+    if (A) for (const u of this.units) {
+      const was = A.on.get(u.id);
+      if (was === undefined) continue;
+      const since = Math.max(0, was - u.str) / u.str0;
+      took += u.power0 * since; tookMen += Math.round(u.men0 * since);
+    }
+    if (A) took /= this.power[A.side];
     // "about 4%", or under one in a hundred "less than 1%", never "about 0%" (the UI director's words, b358).
     // Where nothing was lost at all, it says "none" (b408).
     const pct = (p: number): string => (p < 1e-4 ? 'none' : p < 0.005 ? 'less than 1%' : `about ${Math.round(p * 100)}%`);
@@ -4113,7 +4335,16 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Handed over, the field's figure is only the part before the staff took it: it says so, as it reads beside the
     // campaign's bill for the whole day (the design director, b356). Handed over before a shot, the staff's line says so
     // already, and there is no figure to give (the UI director, after the retest).
-    if (how !== 'objective') lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? 'Neither side lost any of its strength.' : (told ? `By the day's end, counting the rout, ${this.sideOf('att', 'attack')} had lost ${pct(lost.att)} of its strength in all, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.` : `${cap(this.sideOf('att', 'attack'))} lost ${pct(lost.att)} of its strength, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`));
+    // (after the break, pursued: how long the pursuit went on and what it took; the strength line under it counts the
+    // pursuit and no flat share for the rout)
+    if (A) {
+      const halves = Math.max(1, Math.round((this.t - A.t) / 30)), m = Math.floor(halves / 2), half = halves % 2 === 1;
+      const n = ['', 'a', 'two', 'three', 'four', 'five', 'six'][m] ?? `${m}`;
+      const span = m === 0 ? 'half a minute' : m === 1 ? (half ? 'a minute and a half' : 'a minute') : `${n}${half ? ' and a half' : ''} minutes`;
+      const whose = this.ticket[winner].human ? 'Your' : this.practice ? 'Their' : `The ${this.ticket[winner].adj}`;
+      lines.push(took < 1e-4 ? `${whose} pursuit went on for ${span} and caught none of them.` : `${whose} pursuit went on for ${span} and cost ${this.army(loser).replace(/^The /, 'the ').replace(/^Your /, 'your ').replace(/^Their /, 'their ')} ${pct(took)} more of its strength.`);
+    }
+    if (how !== 'objective') lines.push(lost.att < 1e-4 && lost.def < 1e-4 ? 'Neither side lost any of its strength.' : (told ? `By the day's end, counting the ${A ? 'pursuit' : 'rout'}, ${this.sideOf('att', 'attack')} had lost ${pct(lost.att)} of its strength in all, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.` : `${cap(this.sideOf('att', 'attack'))} lost ${pct(lost.att)} of its strength, ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`));
     else if (this.contactAt !== null) lines.push(`Before you handed the battle to the staff, ${this.sideOf('att', 'attack')} had lost ${pct(lost.att)} of its strength on the field, and ${this.sideOf('def', 'defence')} ${pct(lost.def)}.`);
     // The battle is over: nothing marches on (the blocks' cards and the 3D models alike), and none is left standing in the
     // river: one still wading it is set on the nearer bank (b464(5)). The figures above are already counted.
@@ -4128,6 +4359,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       ...(how === 'withdrew' && this.contactAt !== null ? { pulled: { side: loser, bar: Math.round(Math.min(1, this.bar[loser]) * 1000) / 1000 } } : {}),
       // What the fighters on call flew and lost, by group, for the campaign's bill (air support).
       ...(this.airOn.att || this.airOn.def ? { air: this.airBill() } : {}),
+      // Fought on after the break (pursue): for the campaign, which then bills no pursuit of its own for the day.
+      ...(A ? { pursued: { at: Math.round(A.t * 10) / 10, seconds: Math.round(this.t - A.t), took: Math.round(took * 1000) / 1000, men: tookMen, ended: A.ended ?? 'off' } } : {}),
     };
     this.strikes = [];
     if (verdict !== winner) this.over.lines.push('The day went their way, but the campaign counts it as close as the odds allowed.');
@@ -4157,7 +4390,9 @@ export class LandBattle implements BattleSim<LandUnit> {
    * routs at odds the card calls sure or hopeless fall in.
    */
   private brokeAfter(s: Side, why?: BreakCause): string {
-    const sec = this.t - (this.contactAt ?? this.t), who = this.army(s);
+    // (after the break, pursued: the break's own second, not the day's last)
+    const at = this.aftermath?.phase === 'pursue' ? this.aftermath.t : this.t;
+    const sec = at - (this.contactAt ?? at), who = this.army(s);
     // "Of fighting" on every form (the UI director, b464).
     const halves = Math.round(sec / 30), m = Math.floor(halves / 2), half = halves % 2 === 1;
     const n = ['', 'a', 'two', 'three', 'four', 'five', 'six'][m] ?? `${m}`;
@@ -4623,7 +4858,13 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.events = [];
     // Every block on the field is in sight: what the player knows of each is known() (b464(2)). 'as' only sorts the cuts
     // and screens a side sees (hedge cutters, smoke on call; release 2), and the night's patrol (night patrol).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as) };
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as), ...this.phonesView(as), ...this.bearerView(as), ...this.afterView() };
+  }
+
+  /** After the break (pursue): who broke, who chooses or pursues, the break's second and the phase; nothing before it, nor with the switch off. */
+  afterView(): Pick<BattleView, 'after'> {
+    const A = this.aftermath;
+    return A ? { after: { side: A.side, winner: A.winner, t: Math.ceil(A.t * 100) / 100, phase: A.phase } } : {};
   }
 
   /** Air support's part of the view, only where a side has fighters on call. */
