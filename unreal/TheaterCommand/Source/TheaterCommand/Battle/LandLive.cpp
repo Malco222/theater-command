@@ -157,6 +157,16 @@ namespace
 		// -TheaterAirB17Fine turns it on for a run, -TheaterAirNoB17Fine off. The air battle reads it once as it starts
 		// (AAirBattle::B17FineRead); the campaign map keeps the older one; it is never sent to the land rules.)
 		{ TEXT("b17Fine"), TEXT("Finer B-17"), TEXT("The B-17s in the air battles are drawn as the newer, finer model: her riveted skin, her own engines, nose-art panel and kill tally. Slower to draw. Off: the older B-17."), TEXT("TheaterAirNoB17Fine"), false, TEXT("TheaterAirB17Fine") },
+		// (Turning airscrews, release 2: Brian, 26 November 2026 04:00Z, "the b-17 propellers didnt look like they were
+		// spinning". Past 300 m from the eye, the whole of the Overview, every aircraft was drawn from its far shape, which
+		// kept its blades standing still and drew the newer models' own blur disc solid. On: no still blades at any distance,
+		// each airscrew an even haze on the copies (M_ScrewHaze, Tools/build_content.py) and a stronger smear close to; a dead
+		// engine feathered still shows its blades. Looks only: nothing the rules count reads it. Off until the Mac has
+		// timed it and the art director has passed it (AIR-SCENE.md item 61), then this row flips to on in one line;
+		// -TheaterAirPropSpin turns it on for a run, -TheaterAirNoPropSpin off. NOT a fly-it-yourself row: its key begins
+		// "fly" only so that FLandLive::Start passes it over with the air battles' other switches. The air battle reads it
+		// once a battle (AAirBattle::PropSpinOn); it is never sent to the land rules.)
+		{ TEXT("flyPropSpin"), TEXT("Turning airscrews"), TEXT("Every aircraft's airscrews are drawn turning at every distance: a soft haze far off, a blurred sweep close to; an engine stopped with its blades feathered shows them standing still. Off: past 300 m the blades stand still."), TEXT("TheaterAirNoPropSpin"), false, TEXT("TheaterAirPropSpin") },
 		// (Old wrecks, Brian 23 November 20:09Z: starts off as Scarred ground does, until the effects thread's wrecks pass the
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)

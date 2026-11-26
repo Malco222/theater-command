@@ -129,6 +129,10 @@ struct FAirBattleState
 	 * -1 not yet read, 0 off (the older B-17, Content/Models/B17.json), 1 on (B17Fine.json). */
 	int B17FineOn = -1;
 
+	/** The Battle rules card's "Turning airscrews" (rule "flyPropSpin", release 2), read when the battle's first shape is
+	 * made (AAirBattle::PropSpinOn): -1 not yet read, 0 off, 1 on. Looks only: nothing the rules count reads it. */
+	int PropSpinOn = -1;
+
 	/** The bombers' nose art (AirBattleNoseArt.cpp, release 2): its switch as read when the battle's first frame was drawn
 	 * (-1 not yet read, 0 off, 1 on); the list and the panels' text (Content/Data/NoseArt), read then; each model's panel
 	 * once asked for (Cols 0: none); whether each model the battle names has one; and which painting each aircraft wears. */

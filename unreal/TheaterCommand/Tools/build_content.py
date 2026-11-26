@@ -296,6 +296,41 @@ def build_highlight():
     finish(m)
 
 
+def build_screw_haze():
+    """AN AIRSCREW TURNING, ON THE AIR BATTLE'S COPIES (release 2, the Battle rules card's "Turning airscrews", rule
+    flyPropSpin; Brian, 26 November 2026 04:00Z: "the b-17 propellers didnt look like they were spinning"). M_Highlight's
+    look, light that is not shaded and see-through by the mesh's own alpha, made usable on instanced meshes: past 300 m
+    each aircraft is a copy in its shape's instanced mesh, and M_Highlight is not flagged for them, so the engine would
+    draw its default material there. A material of its own so that the map's M_Highlight is left as it is. Without it
+    the air battle takes the still blades out past 300 m and draws no haze, said once."""
+    m = new_material("M_ScrewHaze")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("used_with_instanced_static_meshes", True)
+    colour = mel.create_material_expression(m, unreal.MaterialExpressionVertexColor, -700, 0)
+    glow = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -450, 0)
+    connect(colour, "", glow, "A")
+    connect(scalar(m, "Brightness", 1.0, -700, 200), "", glow, "B")
+    to_property(glow, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    to_property(colour, "A", unreal.MaterialProperty.MP_OPACITY)
+    finish(m)
+
+
+def build_screw_haze_or_tell():
+    """M_ScrewHaze is the air battle's turning airscrews' alone, and the battle draws no far haze without it: whatever
+    goes wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_screw_haze()
+    except Exception:
+        unreal.log_error("Theater Command: M_ScrewHaze was not built (no far airscrew haze):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_ScrewHaze"):
+                eal.delete_asset(f"{MATERIALS}/M_ScrewHaze")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_ScrewHaze could not be removed:\n" + traceback.format_exc())
+
+
 def build_cloud():
     """THE AIR BATTLES' CLOUDS (the art director's brief, item 4, 20 November 2026: torn fragments with crisp sunlit
     rims in place of soft discs). Each puff is one shape from the sheet the game paints when a battle opens
@@ -2910,11 +2945,12 @@ REBUILD = os.environ.get("TC_REBUILD", "")
 # TC_REBUILD=M_LandCrowd after a change to M_MapSurface.)
 # (GS6: M_CloudTurned, the clouds turned on the graphics chip, the same: TC_REBUILD=M_CloudTurned after a change to
 # Battle/AirSkyChip.inl, whose text its Custom node holds, or to M_Cloud's pixels, which it repeats.)
+# (M_ScrewHaze, the air battle's far airscrews' haze on its copies (row flyPropSpin), the same: built once when missing.)
 # (The wind and the clouds' shadows, release 2, 23 November: M_LandBlades, the grass, corn and trees the wind bends, and
 # M_LandCloudShade, the clouds' shadows on the field, the same; they and M_LandSurface, M_LandLeaves and M_LandStalks read
 # Tools/land_look/T_LandCloudWind.png: TC_REBUILD=M_LandBlades,M_LandCloudShade,M_LandSurface,M_LandLeaves,M_LandStalks
 # once, and again after make_sky_textures.py.)
-for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_LandBlades", build_land_blades_or_tell), ("M_LandCloudShade", build_land_cloud_shade_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_HitMark", build_hit_mark), ("M_UnderSea", build_under_sea)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_LandBlades", build_land_blades_or_tell), ("M_LandCloudShade", build_land_cloud_shade_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_ScrewHaze", build_screw_haze_or_tell), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_HitMark", build_hit_mark), ("M_UnderSea", build_under_sea)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

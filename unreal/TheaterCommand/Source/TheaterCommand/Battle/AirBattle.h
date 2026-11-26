@@ -24,7 +24,7 @@ class UProceduralMeshComponent;
 class UDecalComponent;
 class UInstancedStaticMeshComponent;
 class UStaticMesh;
-namespace AirShow { struct Fx; struct Shape; struct Group; }
+namespace AirShow { struct Fx; struct Shape; struct Group; struct PlaneOut; }
 class USceneComponent;
 class USkyLightComponent;
 class USoundAttenuation;
@@ -265,6 +265,12 @@ private:
 		 * panels, port and starboard where it is worn on both; tried says it was looked at, painted or not. */
 		TWeakObjectPtr<UProceduralMeshComponent> NoseArt;
 		bool bNoseArtTried = false;
+		/** Its far airscrews on its own mesh (the row "flyPropSpin", FarScrews): made; shown; which are drawn still (a bit a
+		 * screw: its engine dead and feathered); and each screw's engine (from 1), taken when first needed. */
+		bool bFarScrews = false;
+		bool bFarShown = false;
+		int32 FarStill = 0;
+		TArray<int32> FarEngine;
 	};
 	TMap<int32, FPlaneMade> PlaneMade;
 	/**
@@ -283,6 +289,8 @@ private:
 		TArray<int32> Keys;
 		TArray<FTransform> At;
 		TArray<FTransform> Before;
+		/** Its mesh carries its airscrews' haze (the row "flyPropSpin"): sorted as ScrewSort. */
+		bool bHaze = false;
 	};
 	TMap<FString, FPlaneCopies> PlaneCopies;
 	/** The copies' meshes, by shape and level ("<shape>|far", "<shape>|light"; null kept where none can be made); and
@@ -587,6 +595,29 @@ private:
 	void ShowDiscs(FPlaneMade& Made, bool bShow);
 	/** Which engine each of an aircraft's discs is (FPlaneMade::DiscEngine), from its model's engines across the span. */
 	void TakeDiscEngines(FPlaneMade& Made, const AirShow::Shape& Shape);
+	/**
+	 * The Battle rules card's "Turning airscrews" (rule "flyPropSpin", -TheaterAirPropSpin; Brian, 26 November 2026
+	 * 04:00Z, "the b-17 propellers didnt look like they were spinning"): read once a battle, the first time a shape is
+	 * asked for, into its state's PropSpinOn. On, every shape is kept under its own key ("|screws"): its far shape (the
+	 * copies' and the light shape's, past 300 m) has its blades and its modeller's blur disc taken out, and the copies
+	 * draw each airscrew as an even haze (M_ScrewHaze, ScrewHaze); the near discs trail a stronger smear. Off: nothing
+	 * is read, made or drawn otherwise.
+	 */
+	bool PropSpinOn();
+	/** The far airscrews' haze (M_ScrewHaze: M_Highlight's look, usable on the copies), made when the row is first read on;
+	 * null where the content has none (the far shapes then lose their still blades, with no haze). */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> ScrewHaze;
+	/** The haze's ink while the row is on this battle, else null. */
+	UMaterialInterface* ScrewHazeInk() const;
+	/** The airscrews' see-through sort against the clouds, as the air fight's effects (AirFxMesh): 0 seen from over the
+	 * clouds' base, -30 from under it, behind every cloud between. */
+	int32 ScrewSort() const { return SkyOrder == 2 ? -30 : 0; }
+	/** Every disc and haze sorted again as SkyOrder turns (row on). */
+	void ResortScrews();
+	/** An aircraft past its near shape on its own mesh, the row on (copies off, or an engine stopped and feathered): each
+	 * running airscrew's haze (section 5) and each feathered one's still blades (section 6), shown while bFar. */
+	void FarScrews(FPlaneMade& Made, UProceduralMeshComponent* Mesh, const AirShow::PlaneOut& P, bool bFar);
 	/** Each formation's engines, by group, and the kind of loop each was chosen as (B-17, fourEngined, ...). */
 	UPROPERTY()
 	TMap<int32, TObjectPtr<UAudioComponent>> Engines;

@@ -3298,6 +3298,11 @@ void AAirBattle::DrawSky()
 		{
 			RainShafts->SetTranslucentSortPriority(Want == 1 ? -21 : -12);
 		}
+		// (the airscrews' discs and haze, the row "flyPropSpin" on, with the air fight's)
+		if (State && State->PropSpinOn == 1)
+		{
+			ResortScrews();
+		}
 	}
 	// Turned to the eye as far as it has moved: the near room as often as its puffs' turn shows, the far room (most of
 	// the points) and the shadows only when the eye has moved far enough for a far puff's turn to show (AirSky::Rooms).
@@ -4035,6 +4040,49 @@ bool AAirBattle::B17FineNearRoom(const FPlaneMade& Made)
 	return false;
 }
 
+bool AAirBattle::PropSpinOn()
+{
+	// The Battle rules card's "Turning airscrews" (FLandLive's rule "flyPropSpin", release 2; off until the Mac has
+	// timed it and the art director has passed it): read once a battle, as its first shape is asked for (ShapeFor), so
+	// that every shape it makes follows it. Without the airscrews' own ink (M_Highlight, DiscInk) no screw is found, and
+	// the row stays off. Said only when on: off, the battle's log is as it was before.
+	if (!State)
+	{
+		return false;
+	}
+	if (State->PropSpinOn < 0)
+	{
+		State->PropSpinOn = DiscInk && FLandLive::RuleNow(TEXT("flyPropSpin")) ? 1 : 0;
+		if (State->PropSpinOn == 1)
+		{
+			if (!ScrewHaze)
+			{
+				// (M_Highlight's look made usable on the copies, Tools/build_content.py's M_ScrewHaze: M_Highlight itself is
+				// not, and on a copy the engine would draw the default material in its place)
+				if (UMaterialInterface* Haze = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_ScrewHaze.M_ScrewHaze"), nullptr, LOAD_NoWarn | LOAD_Quiet))
+				{
+					ScrewHaze = UMaterialInstanceDynamic::Create(Haze, this);
+					ScrewHaze->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+				}
+			}
+			if (ScrewHaze)
+			{
+				UE_LOG(LogTheater, Display, TEXT("Air battle: turning airscrews: on (the Battle rules card's Turning airscrews, or -TheaterAirPropSpin): no still blades past 300 m, each airscrew an even haze there (M_ScrewHaze), a stronger smear close to."));
+			}
+			else
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle: turning airscrews: on, but /Game/Campaign/Materials/M_ScrewHaze is missing (run Tools/build_content.sh): past 300 m the blades are taken out with no haze in their place."));
+			}
+		}
+	}
+	return State->PropSpinOn == 1;
+}
+
+UMaterialInterface* AAirBattle::ScrewHazeInk() const
+{
+	return State && State->PropSpinOn == 1 ? ScrewHaze.Get() : nullptr;
+}
+
 FString AAirBattle::ModelFor(const FString& Model, const FString& Nation, bool bFighter) const
 {
 	// The battle's model names (the unit table's, and the carrier aircraft's), as the miniature kit knows them: a
@@ -4101,6 +4149,9 @@ namespace AirParts
 		};
 		TArray<FPiece> Doors;
 		FPiece Racked;
+		/** A far shape's airscrews' blades, one piece a screw as Screws (the row "flyPropSpin": taken out of the far shape
+		 * with its blur disc, TakeFarScrews), drawn standing still for an engine stopped and feathered. */
+		TArray<FPiece> StillBlades;
 		/** Its kill slots, for an ace's victories (the file's tally.kills; AirBattleTally.cpp): read when an ace first
 		 * needs them, from its file (Kind) as its points were brought in (Middle, Fit). */
 		FAirTallySide Kills;
@@ -4194,6 +4245,98 @@ namespace AirParts
 			At.Blades = S.Blades;
 			Shape.Screws.Add(At);
 		}
+	}
+
+	/**
+	 * A sculpted aircraft's airscrews taken out of its far shape too (the row "flyPropSpin"; Battle/AirScrew's
+	 * StripScrews): the far mesh's blades, found as the near mesh's are, and its modeller's blur disc (drawn solid in a far
+	 * mesh: its "clear" is not read), leave the shape; each screw's blades are kept apart for an engine feathered, and the
+	 * near shape's screws given it, for the copies' haze. Its far screws not the near ones (as many, each hub within a
+	 * twentieth of its radius: on every aircraft in Content/Models they are) and the shape is left as it was: false.
+	 */
+	static bool TakeFarScrews(FShape& Away, const FMiniatureMesh& Far, const FShape& Near, const FString& Kind, const FVector& Middle, double Fit)
+	{
+		FString Text;
+		if (Near.Screws.Num() == 0 || !FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models") / (Kind + TEXT(".json")))))
+		{
+			return false;
+		}
+		const std::string FileText(TCHAR_TO_UTF8(*Text));
+		const std::vector<int> Paints = AirScrew::FarPaints(FileText);
+		const AirScrew::PaintsAre Are = AirScrew::PaintKinds(FileText);
+		if (Paints.empty() || static_cast<int32>(Paints.size()) > Far.Vertices.Num() || Away.Triangles.Num() != Far.Triangles.Num() || Away.Points.Num() != Far.Vertices.Num())
+		{
+			return false;
+		}
+		std::vector<AirScrew::Vec3> Points;
+		Points.reserve(Paints.size());
+		for (size_t K = 0; K < Paints.size(); ++K)
+		{
+			const FVector& P = Far.Vertices[static_cast<int32>(K)];
+			Points.push_back({ P.X, P.Y, P.Z });
+		}
+		const std::vector<int> Triangles(Far.Triangles.GetData(), Far.Triangles.GetData() + Far.Triangles.Num());
+		const AirScrew::Stripped Cut = AirScrew::StripScrews(Points, Paints, Are, Triangles);
+		// (the far screws in the shape's frame, as the near ones were brought in)
+		std::vector<AirScrew::Screw> Wanted, Found;
+		for (const FShape::FScrewAt& At : Near.Screws)
+		{
+			AirScrew::Screw S;
+			S.Hub = { At.Hub.X, At.Hub.Y, At.Hub.Z };
+			S.Radius = At.Radius;
+			S.Blades = At.Blades;
+			Wanted.push_back(S);
+		}
+		for (const AirScrew::Screw& Each : Cut.Screws)
+		{
+			AirScrew::Screw S = Each;
+			const FVector Hub = (FVector(Each.Hub.X, Each.Hub.Y, Each.Hub.Z) - Middle) * Fit;
+			S.Hub = { Hub.X, Hub.Y, Hub.Z };
+			S.Radius = Each.Radius * Fit;
+			Found.push_back(S);
+		}
+		const std::vector<int> Which = AirScrew::SameScrews(Wanted, Found);
+		if (Which.empty() || Cut.Drop.size() * 3 != static_cast<size_t>(Away.Triangles.Num()))
+		{
+			return false;
+		}
+		TArray<FPiece> Still;
+		Still.SetNum(Near.Screws.Num());
+		for (size_t J = 0; J < Cut.Blades.size(); ++J)
+		{
+			FPiece& Piece = Still[Which[J]];
+			TMap<int32, int32> Into;
+			for (const int T : Cut.Blades[J])
+			{
+				for (int32 C = 0; C < 3; ++C)
+				{
+					const int32 Point = Away.Triangles[T * 3 + C];
+					if (const int32* Have = Into.Find(Point))
+					{
+						Piece.Triangles.Add(*Have);
+						continue;
+					}
+					const int32 Made = Piece.Points.Add(Away.Points[Point]);
+					Piece.Normals.Add(Away.Normals.IsValidIndex(Point) ? Away.Normals[Point] : FVector::UpVector);
+					Piece.Colors.Add(Away.Colors.IsValidIndex(Point) ? Away.Colors[Point] : FColor(22, 22, 22));
+					Into.Add(Point, Made);
+					Piece.Triangles.Add(Made);
+				}
+			}
+		}
+		TArray<int32> Kept;
+		Kept.Reserve(Away.Triangles.Num());
+		for (int32 T = 0; T + 2 < Away.Triangles.Num(); T += 3)
+		{
+			if (!Cut.Drop[static_cast<size_t>(T / 3)])
+			{
+				Kept.Append({ Away.Triangles[T], Away.Triangles[T + 1], Away.Triangles[T + 2] });
+			}
+		}
+		Away.Triangles = MoveTemp(Kept);
+		Away.Screws = Near.Screws;
+		Away.StillBlades = MoveTemp(Still);
+		return true;
 	}
 
 	/**
@@ -4659,8 +4802,29 @@ namespace AirParts
 	 * An airscrew turning, as a film's camera sees it: a see-through dark disc in its own Y-Z plane (the shaft along X),
 	 * clear at the boss and soft at the tips, darker where each blade sweeps, so that it is seen to turn. Both faces.
 	 */
-	static void DiscOf(double Radius, int32 Blades, TArray<FVector>& Points, TArray<int32>& Triangles, TArray<FVector>& Normals, TArray<FColor>& Colours)
+	static void LayDisc(const AirScrew::DiscMade& Made, const FVector& At, TArray<FVector>& Points, TArray<int32>& Triangles, TArray<FVector>& Normals, TArray<FColor>& Colours)
 	{
+		const int32 First = Points.Num();
+		for (size_t K = 0; K < Made.Points.size(); ++K)
+		{
+			Points.Add(At + FVector(Made.Points[K].X, Made.Points[K].Y, Made.Points[K].Z));
+			Normals.Add(FVector(1.0, 0.0, 0.0));
+			Colours.Add(FColor(Made.Red[K], Made.Green[K], Made.Blue[K], Made.Alpha[K]));
+		}
+		for (const int T : Made.Triangles)
+		{
+			Triangles.Add(First + T);
+		}
+	}
+
+	/** (bSmear, the row "flyPropSpin": the stronger trailing smear of Battle/AirScrew's MakeDisc, as many triangles) */
+	static void DiscOf(double Radius, int32 Blades, TArray<FVector>& Points, TArray<int32>& Triangles, TArray<FVector>& Normals, TArray<FColor>& Colours, bool bSmear = false)
+	{
+		if (bSmear)
+		{
+			LayDisc(AirScrew::MakeDisc(Radius, Blades, false), FVector::ZeroVector, Points, Triangles, Normals, Colours);
+			return;
+		}
 		constexpr int32 Round = 48;
 		const double Rings[4] = { 0.12, 0.5, 0.9, 1.0 };
 		for (int32 Ring = 0; Ring < 4; ++Ring)
@@ -4848,7 +5012,7 @@ namespace AirParts
 	 * the procedural meshes carry them; the material makes them linear), all on Ink. Null for a shape with no triangles.
 	 * Built as the ground battle builds its crowds' (LandVat), fast, with no collision.
 	 */
-	static UStaticMesh* StillOf(UObject* Owner, const FShape& Shape, UMaterialInterface* Ink)
+	static UStaticMesh* StillOf(UObject* Owner, const FShape& Shape, UMaterialInterface* Ink, UMaterialInterface* Haze = nullptr)
 	{
 		const int32 Count = Shape.Points.Num();
 		if (!Owner || !Ink || Count == 0 || Shape.Triangles.Num() < 3 || Shape.Colors.Num() != Count)
@@ -4903,8 +5067,50 @@ namespace AirParts
 		{
 			return nullptr;
 		}
+		// (the row "flyPropSpin": each airscrew an even haze at its hub, a second section on its own see-through ink, Haze;
+		// the far shape's only, the light shape has no screws. Each face its own corners, facing its own way.)
+		const bool bHaze = Haze && Shape.Screws.Num() > 0;
+		if (bHaze)
+		{
+			const FPolygonGroupID Hazed = D.CreatePolygonGroup();
+			Attributes.GetPolygonGroupMaterialSlotNames()[Hazed] = TEXT("Haze");
+			for (const FShape::FScrewAt& Screw : Shape.Screws)
+			{
+				const AirScrew::DiscMade Disc = AirScrew::MakeDisc(Screw.Radius, Screw.Blades, true);
+				const int32 Many = static_cast<int32>(Disc.Points.size());
+				TArray<FVertexInstanceID> Faces;
+				Faces.SetNum(Many * 2);
+				for (int32 I = 0; I < Many; ++I)
+				{
+					const FVertexID Vertex = D.CreateVertex();
+					const AirScrew::Vec3& P = Disc.Points[static_cast<size_t>(I)];
+					Positions[Vertex] = FVector3f(Screw.Hub + FVector(P.X, P.Y, P.Z));
+					const FLinearColor Tone(FColor(Disc.Red[static_cast<size_t>(I)], Disc.Green[static_cast<size_t>(I)], Disc.Blue[static_cast<size_t>(I)], Disc.Alpha[static_cast<size_t>(I)]));
+					for (int32 Side = 0; Side < 2; ++Side)
+					{
+						const FVertexInstanceID Corner = D.CreateVertexInstance(Vertex);
+						Normals[Corner] = Side == 0 ? FVector3f::ForwardVector : -FVector3f::ForwardVector;
+						Tangents[Corner] = FVector3f::RightVector;
+						Signs[Corner] = 1.0f;
+						Colours[Corner] = FVector4f(Tone);
+						Uvs.Set(Corner, 0, FVector2f::ZeroVector);
+						Faces[I * 2 + Side] = Corner;
+					}
+				}
+				for (size_t T = 0; T + 2 < Disc.Triangles.size(); T += 3)
+				{
+					const int32 Side = T < Disc.Front ? 0 : 1;
+					const FVertexInstanceID Three[3] = { Faces[Disc.Triangles[T] * 2 + Side], Faces[Disc.Triangles[T + 1] * 2 + Side], Faces[Disc.Triangles[T + 2] * 2 + Side] };
+					D.CreateTriangle(Hazed, TArrayView<const FVertexInstanceID>(Three, 3));
+				}
+			}
+		}
 		UStaticMesh* Made = NewObject<UStaticMesh>(Owner, MakeUniqueObjectName(Owner, UStaticMesh::StaticClass(), FName(TEXT("AirPlaneStill"))));
 		Made->GetStaticMaterials().Add(FStaticMaterial(Ink, TEXT("Ink")));
+		if (bHaze)
+		{
+			Made->GetStaticMaterials().Add(FStaticMaterial(Haze, TEXT("Haze")));
+		}
 		TArray<const FMeshDescription*> Levels;
 		Levels.Add(&D);
 		UStaticMesh::FBuildMeshDescriptionsParams Params;
@@ -4930,8 +5136,11 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 	const int32 Scheme = FMiniatureMesh::SchemeOf(Name);
 	// (and one of a torpedo group a shape of its own: a model with both loads in its file carries its torpedo there,
 	// its bombs anywhere else; FMiniatureMesh::bTorpedoLoad)
+	// (and with the Battle rules card's "Turning airscrews" on, a shape of its own too, its far shape without its blades:
+	// the shapes are kept for the whole run, and a battle with the row off must draw what it drew before)
+	const bool bScrews = PropSpinOn();
 	const FString ShapeKey = (bStandIn ? FString::Printf(TEXT("%s@%.1f|%s"), *Name, Span, *Model) : Name) + (Scheme > 0 ? FString::Printf(TEXT("|scheme%d"), Scheme) : FString())
-		+ (bTorpedo ? TEXT("|torpedo") : TEXT(""));
+		+ (bTorpedo ? TEXT("|torpedo") : TEXT("")) + (bScrews ? TEXT("|screws") : TEXT(""));
 	TMap<FString, AirParts::FShape>& Shapes = AirParts::Shapes();
 	if (!Shapes.Contains(ShapeKey))
 	{
@@ -4975,6 +5184,20 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 				if (bNavy)
 				{
 					AirParts::Recoat(Away.Colors, FMiniatureMesh::VehicleColour(Nation).ToFColor(true), Navy);
+				}
+				// (the row "flyPropSpin": its airscrews out of the far shape as well, to turn as its copies' haze)
+				if (bScrews && Near.Screws.Num() > 0)
+				{
+					const int32 Before = Away.Triangles.Num() / 3;
+					if (AirParts::TakeFarScrews(Away, Far, Near, Kind, Middle, Fit))
+					{
+						UE_LOG(LogTheater, Display, TEXT("Air battle: turning airscrews: %s's far shape %d triangles, %d after its %d airscrews' blades and blur disc are taken out."),
+							*ShapeKey, Before, Away.Triangles.Num() / 3, Away.Screws.Num());
+					}
+					else
+					{
+						UE_LOG(LogTheater, Warning, TEXT("Air battle: turning airscrews: %s's far airscrews are not its near ones, so its far shape keeps its blades standing still."), *ShapeKey);
+					}
 				}
 				Shapes.Add(ShapeKey + TEXT("|far"), MoveTemp(Away));
 			}
@@ -5118,9 +5341,15 @@ void AAirBattle::PlaneNear(int32 Key, UProceduralMeshComponent* Mesh, bool bNear
 			TArray<FVector> Points, Normals;
 			TArray<int32> Triangles;
 			TArray<FColor> Colours;
-			AirParts::DiscOf(Screw.Radius, Screw.Blades, Points, Triangles, Normals, Colours);
+			// (the row "flyPropSpin": its stronger smear, sorted against the clouds as the air fight's effects are)
+			const bool bSmear = State && State->PropSpinOn == 1;
+			AirParts::DiscOf(Screw.Radius, Screw.Blades, Points, Triangles, Normals, Colours, bSmear);
 			Disc->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
 			Disc->SetMaterial(0, DiscInk);
+			if (bSmear)
+			{
+				Disc->SetTranslucentSortPriority(ScrewSort());
+			}
 			// (and its blades standing still, shown in place of the turning disc once its engine is dead and feathered)
 			Points.Reset();
 			Normals.Reset();
@@ -5177,6 +5406,142 @@ void AAirBattle::TakeDiscEngines(FPlaneMade& Made, const AirShow::Shape& Shape)
 	}
 }
 
+void AAirBattle::ResortScrews()
+{
+	const int32 Order = ScrewSort();
+	for (TPair<FString, FPlaneCopies>& Pair : PlaneCopies)
+	{
+		if (Pair.Value.bHaze && Pair.Value.Copies.IsValid())
+		{
+			Pair.Value.Copies->SetTranslucentSortPriority(Order);
+		}
+	}
+	for (TPair<int32, FPlaneMade>& Pair : PlaneMade)
+	{
+		for (const TWeakObjectPtr<UProceduralMeshComponent>& Disc : Pair.Value.Discs)
+		{
+			if (Disc.IsValid())
+			{
+				Disc->SetTranslucentSortPriority(Order);
+			}
+		}
+		if (Pair.Value.bFarScrews)
+		{
+			if (TObjectPtr<UProceduralMeshComponent>* Mesh = Planes.Find(Pair.Key); Mesh && *Mesh)
+			{
+				(*Mesh)->SetTranslucentSortPriority(Order);
+			}
+		}
+	}
+}
+
+void AAirBattle::FarScrews(FPlaneMade& Made, UProceduralMeshComponent* Mesh, const AirShow::PlaneOut& P, bool bFar)
+{
+	// (the copies draw a far aircraft's airscrews as their haze; one on its own mesh draws them here, its far shape in
+	// section 0 having none: each running screw's haze, section 5, and each feathered one's blades standing still, 6)
+	const AirParts::FShape* Far = AirParts::Shapes().Find(Made.Shape + TEXT("|far"));
+	if (!Mesh || !Far || Far->Screws.Num() == 0 || Far->StillBlades.Num() != Far->Screws.Num())
+	{
+		return;
+	}
+	int32 Still = 0;
+	if (bFar && P.bFeathered && !P.DeadEngines.empty())
+	{
+		// (each screw's engine as TakeDiscEngines takes a disc's: the engine nearest it across the span)
+		if (Made.FarEngine.Num() != Far->Screws.Num())
+		{
+			const AirShow::Shape Flown = AirShow::ShapeOf(P.Model, P.bFighter);
+			const double SpanUnits = FMath::Max(1.0, Made.Span * UnitsPerMetre);
+			Made.FarEngine.Init(1, Far->Screws.Num());
+			for (int32 K = 0; K < Far->Screws.Num() && Flown.Engines.size() >= 2; ++K)
+			{
+				const double Across = -Far->Screws[K].Hub.Y / SpanUnits;
+				double Nearest = TNumericLimits<double>::Max();
+				for (size_t N = 0; N < Flown.Engines.size(); ++N)
+				{
+					const double Off = FMath::Abs(Flown.Engines[N].Y / FMath::Max(1.0, Flown.Span) - Across);
+					if (Off < Nearest)
+					{
+						Nearest = Off;
+						Made.FarEngine[K] = static_cast<int32>(N) + 1;
+					}
+				}
+			}
+		}
+		for (int32 K = 0; K < Far->Screws.Num() && K < 31; ++K)
+		{
+			if (std::find(P.DeadEngines.begin(), P.DeadEngines.end(), Made.FarEngine[K]) != P.DeadEngines.end())
+			{
+				Still |= 1 << K;
+			}
+		}
+	}
+	if (bFar && (!Made.bFarScrews || Still != Made.FarStill))
+	{
+		TArray<FVector> Points, Normals;
+		TArray<int32> Triangles;
+		TArray<FColor> Colours;
+		UMaterialInterface* Haze = ScrewHazeInk();
+		for (int32 K = 0; K < Far->Screws.Num() && Haze; ++K)
+		{
+			if ((Still & (1 << K)) == 0)
+			{
+				AirParts::LayDisc(AirScrew::MakeDisc(Far->Screws[K].Radius, Far->Screws[K].Blades, true), Far->Screws[K].Hub, Points, Triangles, Normals, Colours);
+			}
+		}
+		if (Triangles.Num() > 0)
+		{
+			Mesh->CreateMeshSection(5, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+			Mesh->SetMaterial(5, Haze);
+			Mesh->SetTranslucentSortPriority(ScrewSort());
+		}
+		else if (Mesh->GetNumSections() > 5)
+		{
+			Mesh->ClearMeshSection(5);
+		}
+		Points.Reset();
+		Normals.Reset();
+		Triangles.Reset();
+		Colours.Reset();
+		for (int32 K = 0; K < Far->Screws.Num(); ++K)
+		{
+			if ((Still & (1 << K)) != 0)
+			{
+				const AirParts::FShape::FPiece& Blades = Far->StillBlades[K];
+				const int32 First = Points.Num();
+				Points.Append(Blades.Points);
+				Normals.Append(Blades.Normals);
+				Colours.Append(Blades.Colors);
+				for (const int32 T : Blades.Triangles)
+				{
+					Triangles.Add(First + T);
+				}
+			}
+		}
+		if (Triangles.Num() > 0)
+		{
+			Mesh->CreateMeshSection(6, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+			Mesh->SetMaterial(6, PlaneInk);
+		}
+		else if (Mesh->GetNumSections() > 6)
+		{
+			Mesh->ClearMeshSection(6);
+		}
+		Made.bFarScrews = true;
+		Made.FarStill = Still;
+		Made.bFarShown = !bFar;
+	}
+	// (shown or hidden only as it changes: each change sends the mesh to the graphics chip again)
+	if (Made.bFarScrews && Made.bFarShown != bFar)
+	{
+		Made.bFarShown = bFar;
+		for (int32 Section = 5; Section <= 6 && Section < Mesh->GetNumSections(); ++Section)
+		{
+			Mesh->SetMeshSectionVisible(Section, bFar);
+		}
+	}
+}
+
 void AAirBattle::ShowDiscs(FPlaneMade& Made, bool bShow)
 {
 	for (const TWeakObjectPtr<UProceduralMeshComponent>& Disc : Made.Discs)
@@ -5224,7 +5589,8 @@ UStaticMesh* AAirBattle::PlaneStill(const FString& Shape, bool bLight)
 		return Have->Get();
 	}
 	const AirParts::FShape* From = bLight ? AirParts::LightOf(Shape) : AirParts::Shapes().Find(Key);
-	UStaticMesh* Made = From ? AirParts::StillOf(this, *From, PlaneInk) : nullptr;
+	// (the far one with its airscrews' haze, the row "flyPropSpin" on: ScrewHazeInk is null with it off)
+	UStaticMesh* Made = From ? AirParts::StillOf(this, *From, PlaneInk, bLight ? nullptr : ScrewHazeInk()) : nullptr;
 	// (null kept too: a shape with no mesh is drawn on its own mesh, and not tried again)
 	PlaneStills.Add(Key, Made);
 	return Made;
@@ -5245,6 +5611,14 @@ AAirBattle::FPlaneCopies* AAirBattle::CopiesFor(const FString& Key, bool bShadow
 	Copies->SetupAttachment(Root);
 	Copies->SetStaticMesh(Mesh);
 	Copies->SetMaterial(0, Ink);
+	// (a far shape's airscrews' haze, the row "flyPropSpin": its mesh's second section, on its own see-through ink,
+	// sorted against the clouds as the air fight's effects are)
+	if (Mesh->GetStaticMaterials().Num() > 1)
+	{
+		Copies->SetMaterial(1, Mesh->GetStaticMaterials()[1].MaterialInterface);
+		Copies->SetTranslucentSortPriority(ScrewSort());
+		Group.bHaze = true;
+	}
 	Copies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Copies->SetCanEverAffectNavigation(false);
 	// (a shadow within ShadowFarM, as the aircraft's own meshes; lit by the light thrown up from under the eye, too)
@@ -5620,7 +5994,9 @@ void AAirBattle::Draw(double Real)
 		// ridden one never: B17FineNearRoom, the rule "b17Fine")
 		const bool bNearShape = Lit && Lit->bTwoShapes && (bRidden || Away < (Lit->bNear ? 450.0 : 300.0) || (Lit->bNear && Lit->bBay && P.Bay > 0.0))
 			&& (bRidden || B17FineNearRoom(*Lit));
-		if (bCopiesOn && Lit && Lit->bTwoShapes && !bNearShape)
+		// (the row "flyPropSpin": one with an engine stopped and feathered stays on its own mesh, where its still blades are)
+		const bool bFeatheredFar = S.PropSpinOn == 1 && P.bFeathered && !P.DeadEngines.empty();
+		if (bCopiesOn && Lit && Lit->bTwoShapes && !bNearShape && !bFeatheredFar)
 		{
 			const bool bLightWanted = Away * Enlarged > LightFromM * (Lit->bCopy && Lit->bLight ? 0.9 : 1.0);
 			UStaticMesh* Still = bLightWanted ? PlaneStill(Lit->Shape, true) : nullptr;
@@ -5663,6 +6039,10 @@ void AAirBattle::Draw(double Real)
 			if (Lit->bTwoShapes)
 			{
 				PlaneNear(P.Key, Mesh, bNearShape);
+				if (S.PropSpinOn == 1)
+				{
+					FarScrews(*Lit, Mesh, P, !bNearShape);
+				}
 			}
 		}
 		// Its bay doors as the flight core has them, while it is near (turned only when they have moved), and its racked
