@@ -4,7 +4,7 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { frontWatch, runAI } from '../src/campaign/ai';
+import { frontWatch, havenTakes, runAI } from '../src/campaign/ai';
 import { addCorps, createGame, declareWar, removeCorps } from '../src/campaign/game';
 import { troopshipsWanted } from '../src/campaign/desks';
 import { canRaise, deliver } from '../src/campaign/economy';
@@ -133,5 +133,24 @@ describe("a group sent by rail onto an island that has no room for it (the UI di
     const small = corps(g, 'JAP', 'Small', taihoku);
     TC().load(saveGame(g));
     expect(TC().railTip([b.id, small.id], formosa.id).no).toMatch(/^Taihoku Second cannot go by rail, so nobody rides\. No train for Taihoku Second this month/);
+  }, 300000);
+});
+
+describe('a staging island for a hop', () => {
+  it("is picked for no more of the corps brought up than fit there in men; other ground counts them against its room in corps", () => {
+    const g = startOpen(createGame(3, null));
+    const saipan = at(g, 'Saipan'), tokyo = at(g, 'Tokyo');
+    clear(g, saipan);
+    // (Half a division's worth there: a division and a half of Saipan's two still left.)
+    corps(g, 'JAP', 'There', saipan, 1, 0.5);
+    expect(roomLeft(g, saipan, 'JAP')).toBeCloseTo(1.5, 9);
+    const first = corps(g, 'JAP', 'First', tokyo), second = corps(g, 'JAP', 'Second', tokyo), half = corps(g, 'JAP', 'Half', tokyo, 1, 0.5);
+    const space = roomLeft(g, saipan, 'JAP');
+    expect(havenTakes(g, saipan, 'JAP', [], first, space)).toBe(true);
+    expect(havenTakes(g, saipan, 'JAP', [first], second, space)).toBe(false);
+    expect(havenTakes(g, saipan, 'JAP', [first], half, space)).toBe(true);
+    // Ground that is no island: the count of those brought against the room left, as it always was.
+    const osaka = at(g, 'Osaka');
+    expect([havenTakes(g, osaka, 'JAP', [first], second, 2), havenTakes(g, osaka, 'JAP', [first, second], half, 2)]).toEqual([true, false]);
   }, 300000);
 });

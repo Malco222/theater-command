@@ -59,12 +59,21 @@ const railCorps = (g: Game, c: Corps, to: Region): boolean => !offFront(g, c, to
  * The part of a landing force an island of the Pacific takes, in plan order, each corps that still fits in men and one
  * too large for what is left passed over (islands.ts `fitWave`), with its count; on ground that is no island the whole
  * force (the same array) and Infinity, as a landing was always counted there. Where none fits, `left` is 0 and the
- * shore reads as full (Q3 of the island-room map, read as recommended: no computer splits a corps).
+ * shore reads as full (the design director, 21:37Z, 26 November 2026, 2: "a wave is the corps that fit, in plan
+ * order; if none fits, the shore is full and the staff goes to the plan's next shore"; no computer splits a corps).
  */
 const shoreWave = (g: Game, r: Region, nat: string, force: Corps[]): { left: number; wave: Corps[] } => {
   const left = fitCount(g, r, nat, force);
   return { left, wave: left < force.length ? fitWave(g, r, nat, force) : force };
 };
+/**
+ * Whether a staging harbour p takes corps c brought up for a hop beside `add`, those brought before it: on an island of
+ * the Pacific in men beside its side's already there (`fits`, the one body), so that no more are picked for it than
+ * can stand there; on other ground, and with the far side off, by the count of those brought against the room left
+ * (`space`, in corps), as it always was.
+ */
+export const havenTakes = (g: Game, p: Region, nat: string, add: readonly Corps[], c: Corps, space: number): boolean =>
+  islandOf(g, p) ? fits(g, p, nat, [...add, c]) : add.length < space;
 /** True where the whole of a wave goes ashore at r: on an island all of it fits in men; elsewhere always. */
 const lands = (g: Game, r: Region, w: Corps[]): boolean => !w.length || fitCount(g, r, w[0].nat, w) >= w.length;
 // (A held home row that answers a landing from the sea marches, rides and fights only on its own piece of home
@@ -2506,7 +2515,8 @@ export function hop(g: Game, nat: string, ph: PlanPhase | null): void {
         const top = Math.min(cap, shoreRoom(g, r, nat, [...near.filter((c) => c.reg === p.id), ...far]));
         const w = fitWave(g, r, nat, near.filter((c) => c.reg === p.id)).slice(0, top), add: Corps[] = [];
         for (const c of far) {
-          if (w.length + add.length >= top || add.length >= space) break;
+          if (w.length + add.length >= top) break;
+          if (!havenTakes(g, p, nat, add, c, space)) { if (islandOf(g, p)) continue; break; }
           if (!lands(g, r, [...w, ...add, c])) continue;
           add.push(c);
           if (shipsFor(g, [...w, ...add], r) && enough([...w, ...add], r, defended) && holdsAshore(g, nat, r, [...w, ...add])) { send = add; at = p; break; }
