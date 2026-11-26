@@ -32,6 +32,12 @@ const living = (g: Game, name: string): Corps | undefined => g.corps.find((c) =>
 const telFlags = (g: Game): string[] => Object.keys(g.flags).filter((k) => /^row(Told|At|Front):/.test(k));
 const tellings = (g: Game): string[] => g.headlines.filter((h) => /formed from|left the front|has not formed yet|without your|The arrival/.test(h.text)).map((h) => h.text);
 const fromSave = (): Game => loadGame((TC().save() as { text: string }).text)!;
+/** The three 3D notes on pressing the row: the UI director's section 7, case 1 (00:44Z, 26 November 2026), word for word. */
+const NOTES = {
+  on: 'Arrivals now wait while their corps are at the front: one formed from a corps in the field forms the month after that corps leaves the front.',
+  off: 'Arrivals no longer wait: a corps an arrival is formed from is taken wherever it stands, as before.',
+  refused: 'Arrivals wait for their corps only in a grand campaign.',
+};
 
 /** A grand campaign of Germany's with "Test Corps" in contact at Grenzmark, and a row of month `due` taking it whole to form "Test Army" at Magdeburg. */
 function board(on: boolean, due = 2, corps = 'Test Corps', army = 'Test Army'): { g: Game; i: number; held: Corps } {
@@ -48,12 +54,12 @@ describe('the switch through the bridge', () => {
     expect((TC().view() as { fromWait: boolean }).fromWait).toBe(false);
     const on = TC().act('fromwaitrule:on') as { ok: boolean; note: string; view: { fromWait: boolean } };
     expect(on.ok).toBe(true);
-    expect(on.note).toMatch(/^Arrivals wait while their corps are at the front is on\./);
+    expect(on.note).toBe(NOTES.on);
     expect(on.view.fromWait).toBe(true);
     expect(fromSave().flags.fromWait).toBe(1);
     const off = TC().act('fromwaitrule:off') as { ok: boolean; note: string; view: { fromWait: boolean } };
     expect(off.ok).toBe(true);
-    expect(off.note).toMatch(/is off\. The corps is taken wherever it stands, as before\.$/);
+    expect(off.note).toBe(NOTES.off);
     expect(off.view.fromWait).toBe(false);
     expect(fromSave().flags.fromWait).toBeUndefined();
     expect(TC().fromWait(true)).toEqual({ set: true, on: true });
@@ -69,7 +75,7 @@ describe('the switch through the bridge', () => {
     TC().load(saveGame(createGame(3, 'GER')));
     const on = TC().act('fromwaitrule:on') as { ok: boolean; note: string; view: { fromWait: boolean } };
     expect(on.ok).toBe(false);
-    expect(on.note).toBe('Arrivals wait while their corps are at the front: it works only in a grand campaign.');
+    expect(on.note).toBe(NOTES.refused);
     expect(on.view.fromWait).toBe(false);
     expect(TC().fromWait(true)).toEqual({ set: false, on: false });
     expect(fromSave().flags.fromWait).toBeUndefined();
@@ -107,10 +113,14 @@ describe('the switch through the bridge', () => {
     expect(back.flags.fromWait).toBeUndefined();
   });
 
-  it("the Options row's name and line are the UI director's, ending with the setter's sentence", () => {
+  it("the Options row's name and whole line are the UI director's section 6, and its three notes her section 7, case 1", () => {
+    // (words-09: the whole line, not its ending.)
     expect(FROMWAIT_ROW.id).toBe('fromwaitrule');
     expect(FROMWAIT_ROW.name).toBe('Arrivals wait while their corps are at the front');
-    expect(FROMWAIT_ROW.line.endsWith("It works only in a grand campaign: from History's shape to Anything goes, and at By the book and Close to history once History's book has closed where the arrival is due. It can be switched on or off in any month.")).toBe(true);
+    expect(FROMWAIT_ROW.line).toBe("An arrival due on a date and formed from a corps already in the field, yours or any other side's, waits while that corps is at the front, and forms the month after the corps leaves it. Where an arrival is offered to you, you decide instead. Off, the corps is taken wherever it stands, as before. This changes the month some arrivals form. It works only in a grand campaign: from History's shape to Anything goes, and at By the book and Close to history once History's book has closed where the arrival is due. It can be switched on or off in any month.");
+    expect(FROMWAIT_ROW.on).toBe(NOTES.on);
+    expect(FROMWAIT_ROW.off).toBe(NOTES.off);
+    expect(FROMWAIT_ROW.refused).toBe(NOTES.refused);
   });
 });
 
