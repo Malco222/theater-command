@@ -4,7 +4,7 @@
 # Started by the LaunchAgent every half hour through the night (see install.sh). Each time it first asks whether
 # it may run at all, and leaves at once, saying why in the night's attempts.log, unless ALL of these hold:
 #   - tonight's run is not done yet, and it is between 9 PM and 6 AM on this Mac's clock;
-#   - the Mac is on mains power, its lid is open and its screen is not locked (a locked screen stalls the game);
+#   - the Mac is on mains power and its lid is open (a locked screen is fine: the game draws the same behind it);
 #   - nobody has touched the keyboard or mouse for 20 minutes;
 #   - no game is open that is not a picture run (that is Brian's game, from any folder, his backup icons too),
 #     no other picture run (TheaterShots=) and no Unreal editor is open, and none of the Mac builder's scripts
@@ -83,14 +83,16 @@ screen_locked() { ioreg -n Root -d1 | grep -q '"CGSSessionScreenIsLocked"=Yes'; 
 on_battery() { pmset -g batt | head -1 | grep -q "Battery Power"; }
 # Brian's game: any game run (from any folder) without TheaterShots= and without this kit's own mark (-FilmCritic, on
 # every run it starts, battle scenes included). Any full editor counts as someone at work too.
-brians_game() { pgrep -fl "UnrealEditor" | grep -v "TheaterShots=" | grep -v -- "-FilmCritic" | grep -q .; }
+# (the engine's own binary only: Epic's UnrealEditorServices helper runs all the time and is not a game)
+brians_game() { ps -axo args= | grep -E "MacOS/UnrealEditor( |$)" | grep -v "TheaterShots=" | grep -v -- "-FilmCritic" | grep -q .; }
 other_picture_run() { pgrep -fl "TheaterShots=" | grep -q .; }
 builder_busy() { pgrep -f "TC-mac-work/.*\.sh" > /dev/null; }
 free_gb() { df -g "$PROJ" | awk 'NR==2 {print $4}'; }
 
 keep_awake
 lid_closed && leave "the lid is closed"
-screen_locked && leave "the screen is locked"
+# (a locked screen does not stop it: the Mac builder measured the same frame rate locked as unlocked, 26 Nov;
+# each scene's result says whether the screen was locked, so the morning check can tell if that ever changes)
 on_battery && leave "on battery power"
 if [ "$FORCE" != 1 ]; then
   idle=$(idle_seconds); [ "${idle:-0}" -lt 1200 ] && leave "the Mac was in use ${idle}s ago"
@@ -143,7 +145,6 @@ came_back() {
   local idle; idle=$(idle_seconds)
   # (the display was woken by a claim of activity at the start: the idle clock is read from two minutes after it)
   [ "$FORCE" != 1 ] && [ $(( $(date +%s) - WOKE )) -gt 120 ] && [ "${idle:-0}" -lt 60 ] && { echo "a key or the mouse was used"; return 0; }
-  screen_locked && { echo "the screen was locked"; return 0; }
   lid_closed && { echo "the lid was closed"; return 0; }
   brians_game && { echo "a game was opened"; return 0; }
   return 1
@@ -191,7 +192,8 @@ play_scene() { # name minutes flags (with {OUT} for the scene's folder and {KIT}
     rm -rf "$dir" "$OUT/$name.zip"
     return 1
   fi
-  echo "{\"scene\":\"$name\",\"seconds\":$secs,\"exit\":$code,\"pictures\":$pics,\"note\":\"$why\"}" > "$dir/result.json"
+  local locked=false; screen_locked && locked=true
+  echo "{\"scene\":\"$name\",\"seconds\":$secs,\"exit\":$code,\"pictures\":$pics,\"locked\":$locked,\"note\":\"$why\"}" > "$dir/result.json"
   RESULTS+=("$name")
   # Stills go from PNG to JPEG (about a sixth of the size; the checker finds step-001.jpg under its PNG name).
   if command -v sips > /dev/null; then

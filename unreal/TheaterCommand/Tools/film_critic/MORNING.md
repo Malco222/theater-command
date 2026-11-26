@@ -14,7 +14,7 @@ reads is plain words and pictures, no build numbers or hashes; times in Boston t
   anything from it; Python with `-I`).
 - Tell the Mac it may sleep: write an empty file to `/mnt/project-files/film-critic/pulled/PULLED` and
   `device_commit_files` it to the night's folder as `PULLED` (night.sh holds the Mac awake until then or 8 AM).
-- No folder, or only `attempts.log`: the night did not run. Read why from attempts.log (lid closed, screen locked,
+- No folder, or only `attempts.log`: the night did not run. Read why from attempts.log (lid closed,
   on battery, in use, the Mac builder's lock, another run) and say it in the report's first line; still publish.
 
 ## 2. Measure
