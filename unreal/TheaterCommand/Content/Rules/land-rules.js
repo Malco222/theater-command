@@ -13366,7 +13366,13 @@
   var DUG = "It is dug in where it stands.";
   var DRAWN2 = { line: "in a line", two: "in two lines", wedge: "in a wedge", column: "in a column" };
   var COUNTED = ["None", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
-  var BARRED = { water: "in the water", bridge: "on a bridge", marsh: "in a marsh", rock: "on bare rock", bunker: "on a bunker" };
+  var BARRED = {
+    water: "it cannot stand in the water",
+    bridge: "it cannot stand on a bridge",
+    marsh: "it cannot stand in a marsh",
+    rock: "it cannot stand on bare rock",
+    bunker: "a bunker stands on that spot"
+  };
   var theName = (who) => /^\d/.test(who) ? `The ${who}` : who;
   function cannotGo(who, why, on) {
     if (!who) return why;
@@ -13375,7 +13381,7 @@
     if (why === "Outside your ground.") return `${name} cannot go there: it would stand outside your ground.`;
     if (why === "Another block stands there.") return `${name} cannot go there: another unit already stands there.`;
     if (why === "Off the field.") return `${name} cannot go there: it would stand off the field.`;
-    if (why === "Not on water, a bridge or ground it cannot stand on.") return `${name} cannot go there: it cannot stand ${on ? BARRED[on] : "on water or on a bridge"}.`;
+    if (why === "Not on water, a bridge or ground it cannot stand on.") return `${name} cannot go there: ${on ? BARRED[on] : "it cannot stand in the water or on a bridge"}.`;
     return `${name} cannot go there. ${why}`;
   }
   globalThis.TC = {
