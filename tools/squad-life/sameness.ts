@@ -4,16 +4,19 @@
 // section, or a platoon's squad) are doing: how many share one pose, how often a whole group changes pose in the same
 // half second, how alike they face. Looks only: reads the drill, changes nothing.
 //
-//   node dist/sameness.mjs [piece] [seed] [upto] [mode]      mode: shipped | book | platoons | life
+//   node dist/sameness.mjs [piece] [seed] [upto] [mode]      mode: shipped | book | platoons | life | seasoned | leaders | all
 import { livePiece, type LiveOpts } from '../../src/battle/land/live';
 
 interface M { k: number; j?: number; n: number; sec?: number; sub?: number; role: string; pose: string; x: number; y: number; face: number; fell?: number; job?: unknown; v: number; aim?: [number, number]; act?: string }
 interface Sq { u: { id: number; side: string; kind: string; state: string }; men: M[]; phase: string }
 
 const [piece = 'normandy-1944', seedS = '11', uptoS = '600', mode = 'shipped'] = process.argv.slice(2);
+const LIFE = new Set(['life', 'seasoned', 'leaders', 'all']);
 const opts: LiveOpts & { book?: boolean; life?: boolean } = { me: null, platoons: mode === 'platoons' };
-if (mode === 'book' || mode === 'life') opts.book = true;
-if (mode === 'life') opts.life = true;
+if (mode === 'book' || LIFE.has(mode)) opts.book = true;
+if (LIFE.has(mode)) opts.life = true;
+if (mode === 'seasoned' || mode === 'all') opts.seasoned = true;
+if (mode === 'leaders' || mode === 'all') opts.leaders = true;
 const L = livePiece(piece, Number(seedS), opts);
 const squads = (L.drill as unknown as { squads: Map<number, Sq> }).squads;
 const VEH = new Set(['tank', 'gun', 'lorry', 'hmg', 'mortar']);

@@ -396,7 +396,9 @@ namespace SeaNightSky
 				Limit = 4.5 + 1.0 * (-12.0 - S) / 6.0;
 			}
 		}
-		if (W.bMoon && W.MoonUp > 0.0)
+		// (the moon's wash: the sky's own reckoning only; the light core's StarShare already dims the stars for her, so
+		// with it given she is counted there, once)
+		if (See.StarShare < 0.0 && W.bMoon && W.MoonUp > 0.0)
 		{
 			Limit -= MoonWash * Clamp(W.MoonLit, 0.0, 1.0) * Smooth(0.0, 30.0, W.MoonUp);
 		}

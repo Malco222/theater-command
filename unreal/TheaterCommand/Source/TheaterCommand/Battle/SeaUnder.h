@@ -59,6 +59,10 @@ public:
 	static void SetWanted(bool bInOn);
 
 	void Bind(const FRoom& InRoom, const SeaShow::Field& InBoard);
+	/** The battle's own sun where the sea's light core gives one (the release 2 ocean plan, step 11(d): field mode, the
+	 * field's sun unclamped), in place of the stage's, which is kept 12 to 70 degrees up: so night under the water is
+	 * night, and its 0.8 stop opens. Read at the next ReadSun (Bind's, and each dive's); never called in seed mode. */
+	void SetSky(double Up, double From);
 	bool IsOn() const { return bOn; }
 	/** How far a boat the show hides must be from her for the eye to go under beside her, by the water's sight in use
 	 * (SeaUnder::UnheldClearBy): for PlanShots' director, as for the player's own dive. */
@@ -159,6 +163,9 @@ private:
 	bool bOn = true, bUnder = false, bCrossed = false, bCeilingLaid = false, bShadowsKept = false, bKeyShadows = true;
 	/** The stage's sun: its height and bearing (degrees), the day it gives (SeaUnder::DaylightOf, by the key lamp's share). */
 	double SunUp = 45.0, SunFrom = 0.0, Daylight = 1.0;
+	/** SetSky's sun (step 11(d)), where given. */
+	bool bSkyGiven = false;
+	double SkyUp = 45.0, SkyFrom = 0.0;
 	double DaySee = SeaUnder::SeeDay, NightSee = SeaUnder::SeeNight, LightAtBoat = 0.6;
 	double ClearBy = SeaUnder::UnheldClearBy();
 	std::vector<SeaUnder::Window> Plan;

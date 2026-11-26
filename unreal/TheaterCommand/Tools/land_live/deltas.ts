@@ -14,11 +14,11 @@ import type { Side } from '../../../../src/battle/core/types';
 
 const [folder = '.', key = 'normandy-1944', seedArg, meArg = 'att', tickArg = '0.5', ordersArg = ''] = process.argv.slice(2);
 const me: Side | null = meArg === 'none' ? null : (meArg as Side);
-// (LAND_LIVE_SWITCHES=blast,escort,mech,spg,td,cars,aa,life,hatches,teamwork,snipers turns those Battle rules card rows on for the run (release 2). LAND_LIVE_BEARERS=0:
+// (LAND_LIVE_SWITCHES=blast,escort,mech,spg,td,cars,aa,life,hatches,seasoned,leaders,tankmind,tankmg,pierce,exits,teamwork,snipers turns those Battle rules card rows on for the run (release 2). LAND_LIVE_BEARERS=0:
 // stretcher bearers off, as release 1.5 ships them; unset, on, as the rules start them. Deltas already written in the
 // run's folder are reused unless LAND_LIVE_FIGHT is set: set it whenever the rules or a switch changed.)
 const on = new Set((process.env.LAND_LIVE_SWITCHES ?? '').split(',').filter(Boolean));
-const opts: LiveOpts = { me, setup: false, ...(process.env.LAND_LIVE_BEARERS === '0' ? { bearers: false } : {}), ...(on.has('blast') ? { blast: true } : {}), ...(on.has('teams') ? { teams: true } : {}), ...(on.has('escort') ? { escort: true } : {}), ...(on.has('mech') ? { mech: true } : {}), ...(on.has('spg') ? { spg: true } : {}), ...(on.has('td') ? { td: true } : {}), ...(on.has('cars') ? { cars: true } : {}), ...(on.has('aa') ? { aa: true } : {}), ...(on.has('light') ? { light: true } : {}), ...(on.has('life') ? { life: true } : {}), ...(on.has('hatches') ? { hatches: true } : {}), ...(on.has('teamwork') ? { teamwork: true } : {}), ...(on.has('snipers') ? { snipers: true } : {}) };
+const opts: LiveOpts = { me, setup: false, ...(process.env.LAND_LIVE_BEARERS === '0' ? { bearers: false } : {}), ...(on.has('blast') ? { blast: true } : {}), ...(on.has('teams') ? { teams: true } : {}), ...(on.has('facing') ? { facing: true } : {}), ...(on.has('escort') ? { escort: true } : {}), ...(on.has('mech') ? { mech: true } : {}), ...(on.has('spg') ? { spg: true } : {}), ...(on.has('td') ? { td: true } : {}), ...(on.has('cars') ? { cars: true } : {}), ...(on.has('aa') ? { aa: true } : {}), ...(on.has('light') ? { light: true } : {}), ...(on.has('life') ? { life: true } : {}), ...(on.has('hatches') ? { hatches: true } : {}), ...(on.has('seasoned') ? { seasoned: true } : {}), ...(on.has('leaders') ? { leaders: true } : {}), ...(on.has('tankmind') ? { tankmind: true } : {}), ...(on.has('tankmg') ? { tankmg: true } : {}), ...(on.has('pierce') ? { pierce: true } : {}), ...(on.has('exits') ? { exits: true } : {}), ...(on.has('teamwork') ? { teamwork: true } : {}), ...(on.has('snipers') ? { snipers: true } : {}) };
 // (LAND_LIVE_CAMPAIGN=1: the set piece's ticket fought as a campaign battle, no set piece: its stand-in models, and the
 // self-propelled guns and tank destroyers the spg and td switches draw only there)
 // (LAND_LIVE_TICKET=<file>: a campaign battle's ticket file, {ticket, live} as the campaign hands it over (its sky and
@@ -27,8 +27,9 @@ const piece = PIECES.find((p) => p.key === key);
 const ticketFile = process.env.LAND_LIVE_TICKET ? JSON.parse(readFileSync(process.env.LAND_LIVE_TICKET, 'utf8')) : null;
 // (LAND_LIVE_SWITCHES=teams: in a campaign battle every infantry force with its own machine-gun and mortar
 // battalions, as the Battle rules card's "teams" row has the bridge make them: src/battle/land/own-teams.ts; and in
-// every battle the rules' sim.teamsRule, through the options above)
-const own = <T extends Parameters<typeof ownTeamsLook>[0]>(t: T): T => (on.has('teams') ? (ownTeamsLook(t) as T) : t);
+// every battle the rules' sim.teamsRule, through the options above. Both only with `facing` beside it, as the bridge
+// has them: LAND_LIVE_SWITCHES=teams,facing. `facing` alone: Units face the fire that hurts most, sim.faceRule.)
+const own = <T extends Parameters<typeof ownTeamsLook>[0]>(t: T): T => (on.has('teams') && on.has('facing') ? (ownTeamsLook(t) as T) : t);
 const withOwn = ticketFile ? own(ticketFile as { ticket: Parameters<typeof liveTicket>[0]; live?: LiveOpts }) : null;
 const L = withOwn
   ? liveTicket(withOwn.ticket, { ...opts, ...(withOwn.live ?? {}) })

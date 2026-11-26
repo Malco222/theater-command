@@ -273,6 +273,11 @@ struct FMiniatureMesh
 		bool bPacked = false; // a city or capital in a province too small for it: built tight and tall, with no parks, works or detached houses
 		TArray<double> Arms; // the bearings (degrees east of north) of the roads and railways out of it: the town runs out along them
 		bool bFar = false; // the same town as seen from high up: one piece for each block, no trees, streets or cranes (laid out exactly as the near one is)
+		// (release 2, grander great cities: Campaign/GrandCity.h) a city or a capital with a fuller heart, turrets and small
+		// domes over it, and a garden suburb at its edge: the same town, every house where it stood, and no dice thrown for it
+		bool bGrand = false;
+		// (and the same for the far side's own kits, looks 7 to 10, each in its own manner of building: "tc.Map.GrandCitiesFar")
+		bool bGrandFar = false;
 	};
 	/**
 	 * A town as a place with a plan. A small place: a chapel and a street. A town: a church, a main street and a
@@ -281,9 +286,11 @@ struct FMiniatureMesh
 	 * square with one landmark of its own that is known from the air. A port has its quay at the water's edge,
 	 * with cranes, warehouses, ships alongside and a lighthouse. Roofs and walls are those of its part of Europe.
 	 * OutQuarters takes the middles of its lit quarters, on the map, for its glow by night; OutBeacon the lantern
-	 * of its lighthouse, on the table (left alone where it has none).
+	 * of its lighthouse, on the table (left alone where it has none). (Release 2, street cars.) OutAvenues takes,
+	 * for each arm of a city's or a capital's two avenues that a street car may work, two points of the map: her
+	 * stop by the square and her terminus (Campaign/StreetLife.h); asking for them throws no dice and builds nothing.
 	 */
-	void Township(const FTownSite& Site, TArray<FVector>* OutChimneys = nullptr, TArray<FVector2D>* OutQuarters = nullptr, FVector* OutBeacon = nullptr, FVector* OutLandmarkTop = nullptr);
+	void Township(const FTownSite& Site, TArray<FVector>* OutChimneys = nullptr, TArray<FVector2D>* OutQuarters = nullptr, FVector* OutBeacon = nullptr, FVector* OutLandmarkTop = nullptr, TArray<FVector2D>* OutAvenues = nullptr);
 	/**
 	 * One of the buildings a town is given by its owner, standing at the town's edge: Line is 0 a market, 1 farms,
 	 * 2 a school, 3 a drill ground, 4 a hospital, 5 a town hall. Each grows with its level (1 to 3); bGoing puts

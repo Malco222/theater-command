@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 65ff0c3c8 2026-11-25. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 2aa97d1ce 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -509,6 +509,95 @@
         SOV: [[1941, 9999]]
       },
       commonwealth: ["CAN", "AUS", "NZL", "NZ", "SAF", "IND"]
+    },
+    /**
+     * Only anti-tank weapons take a tank (release 2; Brian, 25 November 2026, 15:58Z: "are bullets taking out german
+     * tanks? cannon fire or bazookas should be the only think taking them out", and 16:03Z, "ok add all of those": guns,
+     * launchers and close assault; the design director's pierce ruling, 25 Nov, P1 to P9; LandBattle.pierce): off unless
+     * the battle is opened with it. With it on, a blow that falls on a tank block is weighed by the striker's pierce
+     * share (LandBattle.pierceShare), what it carries that can pierce armour, and by nothing else it has:
+     *   tanks and field guns: 1 (their punch and the measured armour already apply; field guns from far back are a later
+     *     form's question, Q5).
+     *   a block on foot ('foot'): the least of 'most' and G + H + C, where
+     *     guns (G), its own anti-tank guns, anywhere inside its reach: 'with' where its kit says Anti-tank guns
+     *       (ForceKit.atGuns), else 'without' (the early small guns and the anti-tank rifles together, which get no knob
+     *       of their own); plus 'destroyers' where its kit says Tank destroyers (atTd); never above guns.most.
+     *     hand (H), hand-held launchers: only where its kit says so (atHand), and only within hand.at metres between
+     *       the blocks' edges.
+     *     close (C), close assault with grenades, charges and bottles: every foot block, only within close.at;
+     *       engineers 'eng' in its place.
+     *     'close' or 'open' by the ground: close where the tank stands on 'ground' (woods, rough, buildings, industry,
+     *       suburb) or the striker stands on 'works' (its fieldworks or a bunker). The plain kit (no field) is guns at the
+     *       without level, no launcher, and close assault.
+     *   a machine-gun team teams.mg and a mortar team teams.mor, in place of LAND.teams' armour (off keeps 0.15 and 0.5);
+     *     a support team this table does not list takes nothing, as a machine-gun team (a test holds 'teams' to
+     *     LAND.teams' own keys, so a new team must be given its share here by a ruling).
+     *   a fort: 'fort', at its full reach (its guns are in its works; no kit read).
+     * LAND.alone (tanks alone) still multiplies what the tank takes, on top, unchanged.
+     * Split fire (fixed: the b418 shape, Q2): what a foot block or a support team cannot put into the tank, 1 less its
+     * share, lands as a blow on the nearest enemy block in its reach that is not a tank (by targetOf's own score; never a
+     * hidden block), with its own aspect, ground, height and take, at the same luck and with no draw of the dice; where
+     * there is none it is lost. So kit moves where a block's fire lands and from what distance, never how much it deals:
+     * the card has priced the research already, and the field must not price it a second time. No share is above 1,
+     * today's weight. Only the blow's weight is multiplied (P1): at any share, even none, it is still a blow on her, with
+     * its nerve and its pin as ever, so a machine-gun team's fire takes none of her strength and is owed none of her
+     * losses (P4), and shakes her crews only as far as others' blows take strength off her that tick, as it does today.
+     * One draw of the dice per blow, as ever, whatever the share.
+     * The overrun (P5): with pierce on, foot threatens a hull by its kit alone, at its reach where it has anti-tank guns,
+     * else at hand.at where it has launchers, else not at all; with pierce off the overrun's own test is untouched.
+     * The foot a tank does drive through strikes her by the gap and the ground as the two stand (P1: "their gap"; the
+     * drawing's P9 reads the same gap): its guns and, among its men, its close assault. Weighed from where she began
+     * her drive, as the rest of that blow is (b418), such a block put nothing at all into her in a fifth to a half of
+     * its blows and its close assault almost never counted (the fairness checker, 25 Nov).
+     * Kit comes only from the ticket (P3): the nation's own research on a campaign ticket (ticket.ts), a sample ticket's
+     * SAMPLE_KIT (sample.ts), a set piece's own data (pieces.ts). Nothing here reads a nation's name, the date, the
+     * card's anti-tank strength, the calendar's guns of the day or LAND.overrun.at.
+     * The numbers (P2), each with the range the builder may tune within, fitted by the paired measure
+     * (tools/land-gate/paired.ts: off, on and a dice placebo on the same battles, both mirrors, the marks M1 to M6 of
+     * P7); 'most', teams.mg, the close ground, split fire and the threat rule are fixed.
+     *   guns.with 0.5 [0.4 to 0.6]; guns.without 0.35 [0.15 to 0.35; the ruling's first value 0.25]; guns.destroyers 0
+     *   [0 to 0.15; first 0.1]; guns.most 0.65 [0.55 to 0.65]; hand.open 0.2 [0.15 to 0.25]; hand.close 0.35
+     *   [0.3 to 0.4]; hand.at 100 [80 to 120]; close.open 0.15 [0.1 to 0.2]; close.close 0.25 [0.2 to 0.3]; close.at 30
+     *   [25 to 40]; eng.open 0.3 [0.25 to 0.35]; eng.close 0.5 [0.4 to 0.6]; teams.mor 0.05 [0 to 0.1]; fort 0.6
+     *   [0.5 to 0.8].
+     * Two were tuned from the first values, for the kit lean with the tanks defending (M5: the field must not price
+     * research the card has priced, b418): at the first values the attack's foot won 7.5 points more of its 120 battles
+     * with the full kit than with the plain kit (bar 5) and 16.7 more on urban ground (bar 12); with the early guns at
+     * 0.35 and Tank destroyers adding nothing, 4.2 and 10.0. So Tank destroyers moves nothing on the field for now (its
+     * kit field is read all the same). Every other number stands at its first value.
+     * Measured 25 November 2026 over 5,185 battles, 51 marks, 47 passed and 4 failed: it FAILS the pass rule, so the
+     * switch stays off (P8, step 5). All four are in the shipping set with the tanks defending, and the worst is the lean
+     * (M2): the attack won 59.6% of 240 with it off and 48.8% with it on, 10.8 points toward the side with the tanks
+     * (bar 8; the dice placebo moved 0.4), 6 results flipped to the attack and 32 to the defence (net 10.8%, bar 8%),
+     * hills at odds 1.2 by 16.7 (bar 15), and endings on the clock from 44 to 57 (5.4% of the battles, bar 5%). No
+     * number inside the ranges mends it (guns.with at 0.6: 9.6 points; with close assault and the mortar at their tops
+     * too: 10.4), and the ruling's one rule mend changes nothing there, every foot block of that set having anti-tank
+     * guns. The standing gate with it on, the same set with the tanks attacking (+2.5), the bare set (+2.4 and -3.6),
+     * the kit lean, the set pieces and the purpose marks all passed.
+     * Measured again the same day after the checkers' two mends (the share of foot a tank drives through, and a team the
+     * table does not list): 5,185 battles, every figure of every set the same, 47 of 51 marks passed, the same 4 failed.
+     * With the ruled order's numbers all at their tops the failing set reads 10.4 points, flips 3 and 28, the clock 56.
+     * Left to the design director, each with its reading (no bar; neither changes the code):
+     *   a split blow counts its whole nerve on the tank and again on the men, and a machine-gun team's fire still
+     *     shakes a tank's crews though it takes none of her strength (P1's letter; P4 has it "do nothing"). On the
+     *     failing set, with the nerve shared out as the weight is: 10.0 points, flips 5 and 29, the clock 46 (off 44);
+     *     with a share of none adding no nerve on her: 11.3 points, the clock 56. Neither mends the lean.
+     *   an army all on foot (the pass rule's sets all give the side without tanks a corps of field guns): attacking a
+     *     defence with tanks at odds 1.2 it won 69 of 210 off and 42 on with the plain kit (12.9 points; plains 23.3),
+     *     49 with the sample kit (9.5); defending against tanks, the attack won 74 off and 83 on (plain), 79 (sample).
+     *     tools/land-gate/paired.ts --set SF, a reading with no bar.
+     */
+    pierce: {
+      guns: { with: 0.5, without: 0.35, destroyers: 0, most: 0.65 },
+      hand: { open: 0.2, close: 0.35, at: 100 },
+      close: { open: 0.15, close: 0.25, at: 30 },
+      eng: { open: 0.3, close: 0.5 },
+      most: 1,
+      teams: { mg: 0, mor: 0.05, snp: 0 },
+      fort: 0.6,
+      foot: ["inf", "mtn", "cav", "eng", "mot"],
+      ground: ["woods", "rough", "buildings", "industry", "suburb"],
+      works: ["works", "bunker"]
     },
     /**
      * A queue, not a pile (the art director, b418): within 'near' metres of ground a block keeps 'hard' of its pace on or
@@ -3334,6 +3423,16 @@
       pause: { every: [8, 14], for: [2, 3.5], gun: [25, 40], gunFor: [3, 4.5] },
       ready: [0.6, 2.4]
     },
+    tankmg: {
+      _about: "A tank's machine guns, seen firing (release 2; Brian, 25 November 2026, 15:55Z: 'i never see the machine guns on the tanks firing'; 15:56Z: 'i dont want it to be all the time as thats unrealistic with ammo'). Looks only (ruling 217), the drill's own dice; on only where asked (Drill tankmg: the 3D game's switch)."
+    },
+    exits: {
+      _about: "Men who leave the field are seen leaving (release 2; Brian, 25 November 2026, 17:11Z: 'some soldiers freeze and then disapear'). Looks only (ruling 217), the drill's own dice; on only where asked (Drill exits: the 3D game's switch). The men of a routing block run on past the field's edge. The men of a block that has left the fight (fled off the field, or withdrawn at its out line) stay drawn, each going for his own edge: a withdrawn block's man gets up and turns in his own moment, 0 to 'rise' battle seconds after it left, and runs at his own 'pace' [least, most] metres a battle second; vehicles drive at their block's pace. Each is dropped from the list once 'past' metres beyond his edge, or 'cap' battle seconds after his block left.",
+      past: 8,
+      cap: 60,
+      rise: 0.8,
+      pace: [3.4, 4.6]
+    },
     hatch: {
       _about: "Heads up, hatches down (release 2; Brian, 25 November 2026, 15:11Z: 'do those 3 ideas'). Looks only (ruling 217), the drill's own dice; on only where asked (Drill hatches: the 3D game's switch). A tank's commander rides with his head out of his hatch, for the view, until something sends him down: a round at his own tank, a shell bursting within 'burst' metres of her, or the enemy within his own nerve of it: 'near' metres by his crew's experience [raw, regular, veteran], each commander his own share 'own' [least, most] of it. He drops inside 'drop' seconds [least, most] after the first of it (times 'quick' by experience: a veteran is down at once) and comes up again once nothing has troubled him for 'quiet' seconds by experience (his own share 'own' of it): a green commander closes up early and stays down long, a veteran rides heads up until the rounds are at him and is up again soon after. A round at another tank of his block sends him down too a share 'mates' of the time, by experience. A commander struck in his hatch (book.tankMg) stays down. Off, a block's tanks close up as one with the enemy inside 120 m.",
       near: [260, 160, 90],
@@ -3343,6 +3442,15 @@
       quiet: [30, 16, 8],
       burst: 30,
       mates: [0.8, 0.4, 0.1]
+    },
+    seasoned: {
+      _about: "Experience you can see (release 2; Brian, 25 November 2026, 15:11Z: 'do those 3 ideas'). Looks only (ruling 217), the drill's own dice; on only where asked and only with squad life (Drill seasoned: the 3D game's switch)."
+    },
+    leaders: {
+      _about: "When the leader falls (release 2; Brian, 25 November 2026, 15:11Z: 'do those 3 ideas'). Looks only (ruling 217), the drill's own dice; on only where asked and only with squad life (Drill leaders: the 3D game's switch)."
+    },
+    tankmind: {
+      _about: "Tanks with minds of their own (release 2; Brian, 25 November 2026, 15:57Z: 'i dont want the tanks and vehicles doing the exact same thing as each other. i want everything to see like it has its own mind'). Looks only (ruling 217), the drill's own dice; on only where asked (Drill tankmind: the 3D game's switch)."
     },
     blast: {
       _about: "Shell blasts (release 2; Brian, 23 November 05:04Z: 'explosions on the ground should be able to take out multiple people if they are close to it'). Looks only, the rules' counts untouched (Drill.thin): with LandBattle.blast on, the men a block loses to a gun's or a tank's high explosive wait up to 'hold' battle seconds for one burst, or until as many are due as one shell of the class takes ('most', a realistic few: men of a section stand 5 to 10 m apart); a 'shell' event that took a key man within 'anchor' seconds is that burst. The men nearest it fall, within shells.ts REACH of it; a man lying down counts his distance over 'lying', kneeling over 'kneeling' (a burst finds him less: fragments fly up and out).",
@@ -3725,6 +3833,47 @@
        */
       __publicField(this, "hatches");
       /**
+       * Experience you can see (release 2; Brian, 25 November 2026, 15:11Z: "do those 3 ideas"): a squad's training shows
+       * in how it moves: green squads bunch up and freeze for a moment under first fire, veterans keep wider gaps and get
+       * down fast. By the block's training alone (u.xp, grade()), never its nation or the date. Looks only (the drill's
+       * own dice), and only with squad life on. Off unless asked (DR.seasoned).
+       */
+      __publicField(this, "seasoned");
+      /**
+       * When the leader falls (release 2; Brian, 25 November 2026, 15:11Z: "do those 3 ideas"): a squad whose leader is
+       * hit goes to ground and hesitates a few seconds, then the next man takes charge. He is marked as acting leader in
+       * the drill only: the man the 3D game draws is never swapped. Looks only (the drill's own dice), and only with squad
+       * life on. Off unless asked (DR.leaders).
+       */
+      __publicField(this, "leaders");
+      /**
+       * Tanks with minds of their own (release 2; Brian, 25 November 2026, 15:57Z: "i dont want the tanks and vehicles
+       * doing the exact same thing as each other. i want everything to see like it has its own mind"; 15:56Z: "should the
+       * tanks be moving or was that the real tactic?"): each tank takes up an order at her own moment, halts briefly at
+       * her own place to fire and moves on while her partner covers, lays her hull to the threat and her turret to her
+       * own arc; the other vehicles and the guns likewise. Looks only (the drill's own dice; the block's place and pace
+       * stay the rules'). It needs neither squad life nor the drill book. Off unless asked (DR.tankmind).
+       */
+      __publicField(this, "tankmind");
+      /**
+       * A tank's machine guns, seen firing (release 2; Brian, 25 November 2026, 15:55Z: "i never see the machine guns on
+       * the tanks firing"; 15:56Z: "i dont want it to be all the time as thats unrealistic with ammo"): each tank her own
+       * machine-gun mind: short bursts at targets worth the rounds, spells and pauses at her own pace and moment, the guns
+       * her model carries, and a stock of rounds that each burst draws down, so she eases off as it runs low. Looks only
+       * (the drill's own dice). It needs neither squad life nor the drill book; where the book is on as well, this takes
+       * the place of the book's tank bursts. Off unless asked (DR.tankmg).
+       */
+      __publicField(this, "tankmg");
+      /**
+       * Men who leave the field are seen leaving (release 2; Brian, 25 November 2026, 17:11Z: "some soldiers freeze and
+       * then disapear"): the men of a routing block run on past the field's edge and do not halt and cower on it, and
+       * the men, vehicles and observers of a block that has left the fight (gone off the edge, or withdrawn at its out
+       * line) stay in view(), each marked `lv`, running or driving to their own edge, and are dropped one by one once
+       * past it. Looks only: the rules never read it, and a battle ends the same with it on or off. Off unless asked
+       * (DR.exits).
+       */
+      __publicField(this, "exits");
+      /**
        * Support teams at work (release 2; Brian, 25 November 2026, 14:15Z: "There should be a machine gun teens that lay down
        * suppressing fire, such as the German MG 42 and the US machine gun"; 15:36Z "yes to all"): each machine gun and mortar
        * of a support team works as a crew, its gunner, number two, glasses and bearers each at his own part, and the team's
@@ -3739,12 +3888,30 @@
       /** Each side's tanks standing this step, and each block's most dangerous men (its guns), worked out once a step. */
       __publicField(this, "tankMemo", { t: -1, at: {} });
       __publicField(this, "priMemo", /* @__PURE__ */ new Map());
+      // ---- Men who leave the field are seen leaving (Drill.exits) ----
+      //
+      // Brian, 25 November 2026, 17:11Z: "some soldiers freeze and then disapear". The rules take a block out of the fight
+      // once it has fled off the field ('gone') or fallen back to its out line ('withdrawn'), often far inside the field.
+      // With the switch on, its men no longer leave view() all in that step: each man who stood the step before leaves on
+      // his own, getting up and turning in his own moment, going at his own pace with a drift of his own (Brian, 13:40Z: "i
+      // dont want all the soldiers of a squad doing the exact same thing at the same time"), and each is taken off the list
+      // once DR.exits.past metres beyond his own edge, or DR.exits.cap battle seconds after his block left. A leaving man
+      // fires at nothing, nothing fires at him, and no other block's drill reads him. Looks only: the drill's own dice
+      // (salts 421 to 439), and none of this runs while the switch is off.
+      /** Each block's figures at the drill's last step while it fought, and the battle time each block left the fight. */
+      __publicField(this, "leftFig", /* @__PURE__ */ new Map());
+      __publicField(this, "leftAt", /* @__PURE__ */ new Map());
       this.b = b;
       this.seed = b.ticket.seed;
       this.sections = !!opts.sections || !!opts.platoons;
       this.platoons = !!opts.platoons;
       this.life = !!opts.life;
       this.hatches = !!opts.hatches;
+      this.seasoned = this.life && !!opts.seasoned;
+      this.leaders = this.life && !!opts.leaders;
+      this.tankmind = !!opts.tankmind;
+      this.tankmg = !!opts.tankmg;
+      this.exits = !!opts.exits;
       this.teamwork = !!opts.teamwork;
       this.byBook = opts.book ?? (this.platoons || this.life);
       this.scale = opts.scale !== void 0 && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
@@ -4297,7 +4464,7 @@
       const b = this.b, t = b.t;
       if (b.over) {
         if (!this.settled) {
-          for (const sq of this.squads.values()) this.falls(sq);
+          for (const sq of this.squads.values()) if (!(this.exits && this.leftAtEnd(sq))) this.falls(sq);
           this.settle();
         }
         return;
@@ -4323,6 +4490,7 @@
         sq.net = Math.hypot(sq.wx, sq.wy);
         sq.slow = sq.speed < MOUNT.down || sq.net < MOUNT.down ? sq.slow + DT : 0;
         sq.fast = sq.net > MOUNT.up && sq.speed > MOUNT.up ? sq.fast + DT : sq.slow >= 1 ? 0 : Math.max(0, sq.fast - 2 * DT);
+        if (this.exits && this.leaves(sq)) continue;
         this.falls(sq);
         if (b.bearers && !sq.esc) this.litters(sq);
         if (t >= sq.nextThink && sq.esc) {
@@ -4391,6 +4559,174 @@
         this.leads.set(side, cur && best.d > cur.d - LEAD_BY ? was : [best.id, best.g]);
       }
     }
+    /** A man leaving the field, still on the list. */
+    leavingNow(m) {
+      return this.exits && m.lv !== void 0 && !m.lvOut;
+    }
+    /** Whether any man of a block (its own, its armoured infantry's, its escorts') is leaving and still on the list. */
+    leavingIn(id) {
+      for (const sq of this.squads.values()) {
+        if (sq.u.id !== id && sq.of !== id) continue;
+        if ([...sq.men, ...sq.veh, ...sq.fo ?? []].some((m) => this.leavingNow(m))) return true;
+      }
+      return false;
+    }
+    /**
+     * Each step, before a block's drill: false for a block still in the fight (its figures noted); for one that has left
+     * it, its men are named leaving the step it leaves, they go on a step, and true (no more drill of its own: it neither
+     * thinks, walks nor fires, and its men do not fall).
+     */
+    leaves(sq) {
+      if (live(sq.u)) {
+        this.leftFig.set(sq, sq.u.figures);
+        return false;
+      }
+      if (!this.leftAt.has(sq)) this.leaveNow(sq);
+      if (this.b.bearers && !sq.esc) {
+        this.litters(sq);
+        if (this.leftFig.has(sq)) {
+          for (const m of sq.men) if (m.br && m.fell === void 0 && !m.job && m.lv === void 0) this.leaveOne(sq, m);
+        }
+      }
+      for (const m of [...sq.veh, ...sq.men, ...sq.fo ?? []]) if (m.lv !== void 0 && !m.lvOut) this.leaveStep(sq, m);
+      return true;
+    }
+    /** The battle's last step: a block that left the fight in it has its men named leaving too, and none of them falls. */
+    leftAtEnd(sq) {
+      if (live(sq.u)) return false;
+      if (!this.leftAt.has(sq)) this.leaveNow(sq);
+      return true;
+    }
+    /**
+     * The step a block leaves the fight: every man who stood the step before (a key man while the rules kept his model,
+     * the rest of a section not fallen), its vehicles and its spotters are named leaving. A bearer on a carry goes on
+     * with it. A block the drill never saw fighting has nobody to name.
+     */
+    leaveNow(sq) {
+      this.leftAt.set(sq, this.b.t);
+      const was = this.leftFig.get(sq);
+      if (was === void 0) return;
+      for (const m of sq.men) if (m.fell === void 0 && !m.job && (m.j !== void 0 || m.k < was)) this.leaveOne(sq, m);
+      for (const m of sq.veh) if (m.fell === void 0) this.leaveOne(sq, m);
+      for (const m of sq.fo ?? []) this.leaveOne(sq, m);
+    }
+    /**
+     * One man named leaving: no aim, no cover, nobody's escort or helper, out of any firing pose; his way, his own drift,
+     * his own moment to get up and go (a routing man, a vehicle or a rider already on the move goes on at once; a man on
+     * foot already on the move keeps going as he was till his moment, and only then breaks into his own run: nobody is
+     * stopped dead), his own pace and his gait. A man on foot runs (one routing keeps his gait, else flees); a support
+     * team's weapon is carried at the walk it had; vehicles drive, a towed gun behind her tractor, at their block's pace
+     * (3 m a battle second at least); riders ride.
+     */
+    leaveOne(sq, m) {
+      const u = sq.u, t = this.b.t, E = DR.exits, routed = u.state === "gone", veh = VEHICLE.has(m.role), rides = CARRIED.has(m.pose);
+      const moving = MOVING.has(m.pose) && m.v > 0, r = (salt) => roll(this.seed, u.id, m.n, salt);
+      m.lv = t;
+      m.aim = void 0;
+      m.hidden = void 0;
+      m.cover = "none";
+      m.esc = void 0;
+      m.aid = void 0;
+      m.rapid = void 0;
+      m.burst = void 0;
+      m.coax = void 0;
+      m.lvDir = u.side === "att" ? -1 : 1;
+      m.lvA = (r(424) - 0.5) * 0.5;
+      m.lvGo = moving && (routed || veh || rides) ? t : t + E.rise * r(422);
+      if (veh || rides) m.lvV = clamp2(Math.max(3, sq.speed) * (0.9 + 0.2 * r(425)), 3, m.role === "tank" ? tankTop(sq) : rides ? 14 : 16);
+      else if (CREWED.has(m.role)) m.lvV = (moving ? m.v : DR.teams.pace) * (0.92 + 0.16 * r(426));
+      else m.lvV = E.pace[0] + (E.pace[1] - E.pace[0]) * r(423) + (routed ? 1 : 0);
+      m.lvP = m.role === "tank" || m.role === "lorry" ? "drive" : m.role === "gun" ? "towed" : rides ? m.pose : CREWED.has(m.role) ? moving ? m.pose : "walk" : routed ? moving && (m.pose === "flee" || m.pose === "run" || m.pose === "advance") ? m.pose : "flee" : "run";
+      const still = { fire_stand: "idle", fire_kneel: "wait", fire_prone: "hide", lmg_burst: "hide", throw_grenade: "idle", fire: m.role === "tank" ? "halt" : m.role === "gun" ? "deployed" : "wait" };
+      if (m.lvGo > t && !moving) {
+        m.v = 0;
+        m.pose = still[m.pose] ?? (MOVING.has(m.pose) ? veh ? m.role === "lorry" ? "parked" : "halt" : CREWED.has(m.role) ? "wait" : "idle" : m.pose);
+      } else m.pose = still[m.pose] ?? m.pose;
+    }
+    /**
+     * A leaving man's step: aboard, in his seat in his lorry wherever she goes (off the list with her); a towed gun stands
+     * till her tractor has come for her, then follows on her hitch (off the list with it); else he turns toward his way
+     * as fast as he can turn and, once his moment has come (or while he is still on the move as he was), goes on along it
+     * at his pace, keeping a little way on while he turns (no one goes backward, crabs or turns on the spot; his x kept on
+     * the field, his y not). A tractor with a gun to fetch heads for her first. Off the list once past his edge, or at the
+     * cap.
+     */
+    leaveStep(sq, m) {
+      const f = this.b.field, t = this.b.t, x0 = m.x, y0 = m.y, veh = VEHICLE.has(m.role);
+      if (m.lv < t && ((m.lvDir > 0 ? y0 - f.h : -y0) >= DR.exits.past || t - (this.leftAt.get(sq) ?? t) >= DR.exits.cap)) m.lvOut = true;
+      const tow = m.role === "gun" && !m.ml ? this.tractorOf(sq, m) : void 0;
+      if (m.pose === "mounted" && (sq.u.kind === "mot" || m.role === "crew") && sq.veh.length && !m.off) {
+        const lorry = this.lorryOf(sq, m), p = this.seat(sq, m);
+        if (lorry.lvOut) m.lvOut = true;
+        m.x = p[0];
+        m.y = p[1];
+        m.face = lorry.face;
+        m.v = lorry.v;
+      } else if (tow) {
+        const [fx, fy] = fwd(tow.face), hx = tow.x - fx * 6, hy = tow.y - fy * 6, d = Math.hypot(tow.x - m.x, tow.y - m.y);
+        if (!m.lvHk && m.pose === "towed" && tow.lv !== void 0) {
+          const e = Math.hypot(hx - m.x, hy - m.y), s = (Math.max(m.v, m.lvV) + 1.5) * DT;
+          if (e <= s) {
+            m.x = hx;
+            m.y = hy;
+            m.lvHk = true;
+          } else {
+            m.face = bearing2(m.x, m.y, hx, hy);
+            m.x += (hx - m.x) / e * s;
+            m.y += (hy - m.y) / e * s;
+          }
+        } else if (!m.lvHk && d <= 8 && tow.lv !== void 0) m.lvHk = true;
+        if (m.lvHk) {
+          if (tow.lvOut) m.lvOut = true;
+          const e = Math.hypot(tow.x - m.x, tow.y - m.y);
+          if (e > 0.5) {
+            m.x = tow.x - (tow.x - m.x) / e * 6;
+            m.y = tow.y - (tow.y - m.y) / e * 6;
+            m.face = bearing2(m.x, m.y, tow.x, tow.y);
+          }
+          m.v = tow.v;
+          m.pose = "towed";
+        } else if (m.pose !== "towed" || tow.lv === void 0) {
+          m.v = 0;
+          m.pose = "deployed";
+        }
+      } else {
+        const gun = veh && m.role === "lorry" ? this.toFetch(sq, m) : void 0;
+        const want = gun ? bearing2(m.x, m.y, gun.x, gun.y) : (m.lvDir > 0 ? 0 : Math.PI) + m.lvA;
+        const rate = (m.role === "tank" ? TURN.tank : veh ? TURN.wheels : m.pose === "ride" ? TURN.ride : TURN.foot) * DT;
+        m.face = turnTo(m.face, want, rate);
+        const go = t >= m.lvGo;
+        if (go) {
+          m.pose = m.lvP;
+          m.v = m.lvV;
+        }
+        if (go || MOVING.has(m.pose) && m.v > 0) {
+          const c = Math.cos(wrap(want - m.face)), s = m.v * DT * Math.max(c, 0.15);
+          m.x = clamp2(m.x + Math.sin(m.face) * s, 1, f.w - 1);
+          m.y += Math.cos(m.face) * s;
+        } else m.v = 0;
+      }
+      m.spot = [m.x, m.y];
+      m.slotAt = [m.x, m.y];
+      m.went = Math.hypot(m.x - x0, m.y - y0) / DT;
+    }
+    /** A field gun's tractor, where every towed gun of the battery has her own (one gun to each); else none, and she drives herself. */
+    tractorOf(sq, g) {
+      const towed = sq.men.filter((x) => x.role === "gun" && !x.ml && x.j === void 0);
+      return sq.veh.length >= towed.length ? sq.veh[this.lorryIx(sq, g)] : void 0;
+    }
+    /** The leaving gun a battery's tractor has still to fetch (not yet hitched), if any. */
+    toFetch(sq, v) {
+      return sq.men.find((g) => g.role === "gun" && !g.ml && g.lv !== void 0 && !g.lvHk && !g.lvOut && g.pose === "deployed" && this.tractorOf(sq, g) === v);
+    }
+    /** At the battle's end, a man still leaving stops in a still pose: kneeling, or crouched if his block fled; tanks (and a self-propelled gun) halt, guns stand, lorries park; riders and men aboard as they are. */
+    leftRest(sq, m) {
+      if (m.role === "tank" || m.role === "gun" && m.ml) return "halt";
+      if (m.role === "gun") return "deployed";
+      if (m.role === "lorry") return "parked";
+      if (CARRIED.has(m.pose)) return m.pose;
+      return sq.u.state === "gone" ? "cower" : "wait";
+    }
     /**
      * The battle is over: every man stops where he is. The winners stand easy, the beaten keep their heads down, and those
      * who ran crouch where they got to; tanks halt, guns stand, lorries park.
@@ -4409,6 +4745,7 @@
           m.aim = void 0;
           m.hidden = void 0;
           m.pose = m.role === "tank" ? "halt" : m.role === "gun" || CREWED.has(m.role) ? "deployed" : m.role === "lorry" ? "parked" : m.role === "holder" ? m.pose === "ride" ? "ride" : "horses" : m.pose === "mounted" || m.pose === "ride" ? m.pose : sq.phase === "flee" ? "cower" : u.side === won ? m.k % 3 ? "idle" : "wait" : "wait";
+          if (this.exits && m.lv !== void 0) m.pose = this.leftRest(sq, m);
         }
       }
     }
@@ -4418,7 +4755,7 @@
       if (on === void 0 || k === void 0) return;
       this.shellKills.add(on + ":" + k);
       const vq = this.squads.get(on), v = vq?.men.find((x2) => x2.k === k);
-      if (vq && v) this.killRound(by2 !== void 0 ? this.b.unit(by2) : void 0, vq, v, [x, y]);
+      if (vq && v && !(this.exits && v.lv !== void 0)) this.killRound(by2 !== void 0 ? this.b.unit(by2) : void 0, vq, v, [x, y]);
       if (vq && this.b.blast) vq.anchor = { x, y, t: this.b.t };
     }
     /** A model the rules took with no striker on the field (the air's bombs and guns): no round of the field's for him. */
@@ -4472,6 +4809,7 @@
      * Men the rules have lifted off the tray fall where they stand, a tank too: she burns where she stood (at one of her
      * posts, up to about 20 m from the place the rules lay her wreck, their own mark for its shelter; wreckSpot).
      */
+    // ---- When the leader falls (Drill.leaders): its helpers stand just above falls(), below this line ----
     falls(sq) {
       const u = sq.u, t = this.b.t;
       for (const m of sq.men) {
@@ -4976,6 +5314,7 @@
     band(u) {
       return u.xp < DR.xp.raw ? 0 : u.xp >= DR.xp.veteran ? 2 : 1;
     }
+    // ---- Experience you can see (Drill.seasoned): its helpers follow this line ----
     nums(u) {
       const s = this.b.style[u.side];
       return DR.style[s && this.b.ai[u.side] ? s.id : "plain"];
@@ -7344,6 +7683,7 @@
      * cover; routing, they drive for their own edge. Each tank's place is where the rules would lay her wreck (sim.ts
      * wreckOffset), so she is never far from it; knocked out, she burns where she stood (falls, wreckSpot).
      */
+    // ---- Tanks with minds of their own (Drill.tankmind): its helpers stand just above tanks(), below this line ----
     tanks(sq) {
       const u = sq.u, b = this.b, t = b.t, N = this.nums(u), e = this.threat(u), dir = this.threatDir(sq), ph = sq.phase, h = sq.heading;
       const tanks = this.up(sq).filter((m) => m.role === "tank");
@@ -8410,7 +8750,7 @@
       const base = host ?? u;
       const gone = sq.foAt ? Math.hypot(base.x - sq.foAt[0], base.y - sq.foAt[1]) : Infinity;
       if (!sq.fo || sq.foWith !== base.id || sq.foOn !== e.id || gone > 60) {
-        const taken = [...this.squads.values()].filter((o) => o !== sq && o.fo && o.u.side === u.side).map((o) => o.fo[0].slotAt);
+        const taken = [...this.squads.values()].filter((o) => o !== sq && o.fo && o.u.side === u.side && (!this.exits || live(o.u))).map((o) => o.fo[0].slotAt);
         let best = [base.x, base.y], score = -Infinity;
         for (let i = 0; i < 25; i++) {
           const a = (i % 5 - 2) * base.w / 5, l = (Math.floor(i / 5) - 2) * base.d / 3;
@@ -8568,9 +8908,10 @@
               }
             }
             const nx = m.x + ux * s, ny = m.y + uy * s;
+            const on = this.exits && sq.phase === "flee";
             m.x = clamp2(nx, 1, f.w - 1);
-            m.y = clamp2(ny, 1, f.h - 1);
-            if (s > 0.05 && Math.hypot(nx - m.x, ny - m.y) > 0.8 * s && MOVING.has(m.pose)) {
+            m.y = on ? ny : clamp2(ny, 1, f.h - 1);
+            if (!on && s > 0.05 && Math.hypot(nx - m.x, ny - m.y) > 0.8 * s && MOVING.has(m.pose)) {
               m.spot = [m.x, m.y];
               this.arrive(sq, m);
             }
@@ -8778,7 +9119,7 @@
         const u = sq.u;
         if (Math.hypot(u.x - x, u.y - y) > Math.max(u.w, u.d) / 2 + 80) continue;
         for (const q of this.standing(sq)) {
-          if (!VEHICLE.has(q.role)) continue;
+          if (!VEHICLE.has(q.role) || this.exits && q.lv !== void 0) continue;
           const [qx, qy] = this.ahead(q, dt);
           if (Math.hypot(qx - x, qy - y) < r) return true;
         }
@@ -8910,6 +9251,7 @@
       if (heavy || u.team === "snp") this.duck(x, y);
       this.book({ ...base, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
     }
+    // ---- A tank's machine guns, seen firing (Drill.tankmg): its helpers stand just above mgKill(), below this line ----
     /**
      * Whether the man (model k, or a section's man as the block's count of losses) a tank block took off the enemy's
      * foot went to her machine guns, not her main gun's shells (BOOK.tankMg.kill: more in the open). The drill book only;
@@ -8954,7 +9296,7 @@
           const g = tq.tw?.guns.get(x);
           return !g || !!g.at && g.set <= t && !g.mis && x.v === 0 && !MOVING.has(x.pose);
         };
-        const can = this.standing(tq).filter((x) => x.role !== "lorry" && x.role !== "holder" && x.role !== "spotter" && (mg ? x.role === "tank" : p ? shells(x) : !shells(x)) && setUp(x));
+        const can = this.standing(tq).filter((x) => x.role !== "lorry" && x.role !== "holder" && x.role !== "spotter" && (mg ? x.role === "tank" : p ? shells(x) : !shells(x)) && setUp(x) && !(this.exits && x.lv !== void 0));
         const pref = v.role === "tank" && !p && by2?.team !== "mg" ? can.filter((x) => x.role === "at") : can.filter((x) => SMALL_ARMS.has(x.pose) || shells(x) || x.role === "hmg" && (!tq.tw || x.pose === "fire"));
         const from = pref.length ? pref : tq.tw && by2?.team === "mg" ? can.filter((x) => x.role === "hmg") : can;
         let dd = Infinity;
@@ -9013,6 +9355,7 @@
         if (m.br) o.br = 1;
         if (m.call !== void 0 && m.callAt) o.cs = [r13(m.callAt[0]), r13(m.callAt[1])];
         if (m.sw) o.sw = { ...m.sw };
+        if (this.leavingNow(m)) o.lv = 1;
         if (m.role === "sniper" || m.role === "spotter") {
           o.r = "rifle";
           o.sn = m.role === "sniper" ? 1 : 2;
@@ -9032,14 +9375,14 @@
         const u = sq.u;
         const lead = this.leads.get(u.side), mark = lead && lead[0] === u.id ? lead[1] : void 0;
         if (as !== void 0 && u.side !== as && !b.known(u)) continue;
-        if (u.state === "withdrawn" && !sq.men.some((m) => m.fell !== void 0)) continue;
-        const men = sq.men.filter((m) => m.fell !== void 0 || m.job !== void 0 || this.stands(sq, m) && live(u)).map((m) => {
+        if (u.state === "withdrawn" && !sq.men.some((m) => m.fell !== void 0) && !(this.exits && this.leavingIn(u.id))) continue;
+        const men = sq.men.filter((m) => m.fell !== void 0 || m.job !== void 0 || this.stands(sq, m) && live(u) || this.leavingNow(m)).map((m) => {
           const o = one(m);
           if (b.trucks && m.pose === "mounted" && m.fell === void 0 && sq.veh.length) o.sv = m.out !== void 0 ? [this.lorryOf(sq, m).k, this.seatNo(sq, m), Math.round(m.out * 100) / 100] : [this.lorryOf(sq, m).k, this.seatNo(sq, m)];
           if (mark !== void 0 && m.fell === void 0 && grp(m) === mark && m.role !== "lorry" && m.role !== "holder") o.ld = 1;
           return o;
         });
-        for (const v of sq.veh) if (live(u)) men.push(one(v));
+        for (const v of sq.veh) if (live(u) || this.leavingNow(v)) men.push(one(v));
         if (sq.of !== void 0) {
           const own = byId.get(sq.of);
           if (own) own.men.push(...men);
@@ -9051,7 +9394,7 @@
           blk.fo = sq.fo.map(one);
           blk.foWith = sq.foWith;
           blk.foOn = sq.foOn;
-        }
+        } else if (this.exits && sq.fo?.some((m) => this.leavingNow(m))) blk.fo = sq.fo.filter((m) => this.leavingNow(m)).map(one);
         if (b.phones && b.phonesSeen(as)) {
           const ln = this.linemen(u.id);
           if (ln.length) blk.ln = ln;
@@ -9597,6 +9940,30 @@
        * A battle with no team block on the field is the same on or off. Off unless whoever opens the field turns it on.
        */
       __publicField(this, "teamsRule", false);
+      /**
+       * Units face the fire that hurts most (release 2, the Battle rules card's `facing`, off; the design director's ruling
+       * of 25 November 2026, 21:54Z, on the ground thread's trace of two cities).
+       *
+       * Off, as it always was: any blow that lands on a block's front holds it for the tick ("face what it is fighting,
+       * unless held by an enemy in front"), and a held block may not turn to meet another enemy. Any striker, at any range,
+       * however light the blow and whatever the block's cover: so a machine gun a kilometre off held a block in a building
+       * to its facing while a line came in on its side, where blows count half as much again. Ruled a fault: the hold
+       * read no cover.
+       *
+       * On: a block faces what costs it most. Of the enemies that struck it this tick, the one whose blow costs it most
+       * holds it: in front, the block stands as it faces; on its side or behind, the block turns to meet it. A blow a
+       * building's cover has cut low holds it only while nothing hurts it more. No new figure: the cost is the harm the
+       * fight already reckons, after cover. It is weighed as it would land face on (the facing's own weight and the tick's
+       * luck taken out), so the costliest enemy is the same one whichever way the block faces and two enemies of about
+       * equal weight never turn it back and forth: facing the heavier is what costs it least. Struck by no one, it faces
+       * what it is fighting, as before.
+       *
+       * It moves every battle (guns hold too), so it has its own row and its own gate, and `teams` goes on only with it on
+       * (live.ts). Off unless whoever opens the field turns it on.
+       */
+      __publicField(this, "faceRule", false);
+      /** faceRule: of the enemies that struck each block this tick, the costliest, what its blow cost face on, and whether it landed on the front. */
+      __publicField(this, "costliest", /* @__PURE__ */ new Map());
       /** Each own team block's parent force (own-teams.ts ownTeamParents), by the forces' ids: read once from the ticket. */
       __publicField(this, "teamParent");
       /** The computer's tank blocks going round to a tank block's flank (ai.ts): where to, at whom, since when. */
@@ -9699,6 +10066,14 @@
        * Infantry with tanks row). With it, tanks overrun foot in the open (LAND.overrun, overruns): harm unchanged.
        */
       __publicField(this, "escort", false);
+      /**
+       * Only anti-tank weapons take a tank (release 2; Brian, 25 November 2026, 15:58Z: "are bullets taking out german
+       * tanks? cannon fire or bazookas should be the only think taking them out"): with it on, what a block of foot or a
+       * support team can do to a tank block comes only from what it carries that can pierce armour (LAND.pierce), never
+       * from its rifles and machine guns. A real rule: it changes results, so it is off unless turned on (the bridge's
+       * { pierce: true }, the Battle rules card's row), and with it off every battle is as before to the last figure.
+       */
+      __publicField(this, "pierce", false);
       /**
        * Men in lorries (release 1.5, looks only; Brian, 23 November 14:10Z and 15:50Z, "soldiers in the back of a truck and
        * they then hop out"): each man aboard says his lorry and seat (MenOut.sv), and lorried men get down over the tailboard
@@ -9816,7 +10191,8 @@
       this.ticket = ticket;
       this.rng = new Rng(ticket.attempt ? hashString(`field-run:${ticket.seed}:${ticket.attempt}`) : ticket.seed);
       this.style = { att: styleFor(ticket, "att"), def: styleFor(ticket, "def") };
-      const A = ticket.reckoning.A, D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
+      const priced = ticket.reckoning.teamFire && [...ticket.att.forces, ...ticket.def.forces].some(isOwnTeam) ? ticket.reckoning.teamFire : void 0;
+      const A = ticket.reckoning.A / (priced ? Math.max(1e-6, priced.att) : 1), D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds) / (priced ? Math.max(1e-6, priced.def) : 1);
       this.power = { att: A, def: D2 };
       this.teamParent = ownTeamParents(ticket);
       const att = makeBlocks("att", ticket.att, A, 1, void 0, ticket.turn);
@@ -12085,8 +12461,10 @@
           u.clear += DT;
         }
       }
+      if (this.costliest.size) this.costliest.clear();
       const hurt = /* @__PURE__ */ new Map();
       const kept = this.airOn.att || this.airOn.def ? /* @__PURE__ */ new Map() : null;
+      const unseen = this.pierce ? new Set(this.units.filter((e) => e.hid).map((e) => e.id)) : null;
       for (const u of this.units) {
         if (!fighting2(u)) continue;
         const t = this.targetOf(u);
@@ -12109,9 +12487,9 @@
         }
         if (!u.met) {
           u.met = true;
-          const unseen = u.team === "snp" && u.hid && !this.ticket[u.side].human && this.ticket[t.side].human;
+          const unseen2 = u.team === "snp" && u.hid && !this.ticket[u.side].human && this.ticket[t.side].human;
           if (u.side === "att" || !t.met) {
-            if (unseen) this.say({ what: "contact", side: u.side, text: `${this.ticket[u.side].adj} troops are attacking your ${t.name}.`, x: t.x, y: t.y });
+            if (unseen2) this.say({ what: "contact", side: u.side, text: `${this.ticket[u.side].adj} troops are attacking your ${t.name}.`, x: t.x, y: t.y });
             else this.say({ what: "contact", unit: u.id, side: u.side, text: `${this.named(u)} is in action.`, x: u.x, y: u.y });
           }
         }
@@ -12120,6 +12498,7 @@
           continue;
         }
         const blow = this.blow(u, t);
+        const struck = blow.dmg;
         if (this.phones && this.wires.length) this.wireBlow(u, t);
         if (blind) {
           const F = LAND.hide.search;
@@ -12134,27 +12513,24 @@
           kept.set(t.id, (kept.get(t.id) ?? 0) + raw);
         }
         const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true, team: 0, teamNerve: 0 };
-        if (this.led && blow.parts) {
-          h.dmg += blow.dmg;
-          const sp = nerveSplit(blow.parts, this.led.on), pt = blow.parts, w = h.pw ?? (h.pw = { flank: 0, rear: 0, fire: 0, ambush: 0 });
-          h.nerve += sp.block;
-          h.dm = (h.dm ?? 0) + blow.dmg * sp.army;
-          h.built = (h.built ?? 0) + blow.nerve;
-          h.dn = (h.dn ?? 0) + blow.dmg * blow.nerve;
-          w.flank += blow.dmg * (pt.aspect === "flank" ? pt.nm : 1);
-          w.rear += blow.dmg * (pt.aspect === "rear" ? pt.nm : 1);
-          w.fire += blow.dmg * pt.fire;
-          w.ambush += blow.dmg * pt.ambush;
-        } else this.tally(h, u, blow);
+        this.landBlow(h, u, blow);
         if (!blind) h.blind = false;
         h.from.push([u, blow.dmg]);
+        if (blow.rest && blow.rest.part >= 1) h.from.pop();
         hurt.set(t.id, h);
-        if (blow.front) t.pinned = true;
+        if (this.faceRule) {
+          const cost = struck > 0 ? blow.faceOn * (blow.dmg / struck) : 0, top = this.costliest.get(t.id);
+          if (!top || cost > top.cost) this.costliest.set(t.id, { by: u.id, cost, front: blow.front });
+        } else if (blow.front) t.pinned = true;
         if (u.team === "snp" && !blind) this.sniped(u, t);
         if (blow.aspect !== "front" && this.t - t.flankedAt > 20) {
           t.flankedAt = this.t;
           if (t.side === "att" ? this.ticket.att.human : this.ticket.def.human) this.say({ what: "flanked", unit: t.id, side: t.side, text: `${this.named(t)} is hit from the ${blow.aspect === "rear" ? "rear" : "flank"}.`, x: t.x, y: t.y });
         }
+        if (blow.rest) this.splitFire(u, blow.rest, hurt, kept, unseen);
+      }
+      if (this.faceRule) {
+        for (const [id, top] of this.costliest) if (top.front) this.unit(id).pinned = true;
       }
       if (this.teamsRule) {
         for (const h of hurt.values()) if (h.team > 0 && h.dmg > 0) h.nerve = ((h.dmg - h.team) * h.nerve + h.teamNerve) / h.dmg;
@@ -12386,8 +12762,78 @@
       if (e.team) return null;
       if (e.kind === "arm" || e.kind === "fort") return reachOf(e);
       if (e.kind === "art") return gunsOf(e).closeAt;
+      if (this.pierce) return this.kitReach(e);
       if (LAND.alone.foot.includes(e.kind) && this.ownAntiTank(e)) return reachOf(e);
       return null;
+    }
+    /**
+     * Only anti-tank weapons take a tank (LAND.pierce; the design director's pierce ruling, 25 Nov, P5): how far a foot
+     * block's own weapons that can stop a tank reach, by its kit alone: with its own anti-tank guns (ForceKit.atGuns) its
+     * reach; else with launchers (atHand) LAND.pierce.hand.at; else none (close assault and the early guns do not stop
+     * tanks driving through). Never its army's name or the month: the overrun's old table is not read.
+     */
+    kitReach(e) {
+      if (!LAND.pierce.foot.includes(e.kind)) return null;
+      return e.kit?.atGuns ? reachOf(e) : e.kit?.atHand ? LAND.pierce.hand.at : null;
+    }
+    /**
+     * Only anti-tank weapons take a tank (LAND.pierce; the design director's pierce ruling, 25 Nov, P1 and P2): the share
+     * of a block's blow that can fall on a tank block, from what it carries that can pierce armour. Tanks and field guns
+     * 1; a machine-gun or mortar team its own figure; a fort its own, in its reach; a block on foot its own anti-tank
+     * guns anywhere in its reach (by its kit, the plain kit the early guns), its launchers within hand.at where its kit
+     * has them, and close assault within close.at, each by the ground: close where the tank stands on close ground or
+     * the striker in its works. Pure: the two blocks' kinds, the striker's team and kit, the gap between their edges and
+     * the ground where each stands (blow() asks it as the two stand now, an overrun's pair too); no dice, no army's
+     * name, no date, nothing of the card, nothing written during the tick.
+     */
+    pierceShare(u, t, gap = this.gap(u, t), uAt = [u.x, u.y], tAt = [t.x, t.y]) {
+      const P = LAND.pierce;
+      if (t.kind !== "arm") return 1;
+      if (u.team) return P.teams[u.team] ?? 0;
+      if (u.kind === "fort") return gap <= reachOf(u) ? P.fort : 0;
+      if (!P.foot.includes(u.kind)) return 1;
+      const where = P.ground.includes(coverAt(this.field, tAt[0], tAt[1])) || P.works.includes(groundAt(this.field, uAt[0], uAt[1])) ? "close" : "open";
+      let s = gap <= reachOf(u) ? Math.min(P.guns.most, (u.kit?.atGuns ? P.guns.with : P.guns.without) + (u.kit?.atTd ? P.guns.destroyers : 0)) : 0;
+      if (u.kit?.atHand && gap <= P.hand.at) s += P.hand[where];
+      if (gap <= P.close.at) s += (u.kind === "eng" ? P.eng : P.close)[where];
+      return Math.min(P.most, s);
+    }
+    /**
+     * Split fire (LAND.pierce; the pierce ruling, 25 Nov, P1 and Q2: the b418 shape): the rest of a blow that could not
+     * pierce a tank lands as a blow on the nearest enemy block in the striker's reach that is not a tank, by targetOf's
+     * own score (the gap times the turn to it, a routing block's doubled), never a block hidden now or as the tick's
+     * blows began ('unseen'); where there is none it is lost. Weighed by blow() itself on that block (its own aspect,
+     * ground, height and take) at the first blow's luck, so no draw of the dice. The air's share is held back from it,
+     * and its hurt, its nerve and whose losses it is owed are kept, as for any blow on that block (step). The striker
+     * stays engaged with the tank it faces.
+     */
+    splitFire(u, rest, hurt, kept, unseen) {
+      const reach = reachOf(u);
+      let e = null, score = Infinity;
+      for (const x of this.units) {
+        if (x.side === u.side || !live2(x) || x.hid || unseen.has(x.id) || x.kind === "arm") continue;
+        const d = this.gap(u, x);
+        if (d > reach) continue;
+        const s = d * (1 + Math.abs(turn(u.face, bearing(u.x, u.y, x.x, x.y)))) * (x.state === "routing" ? 2 : 1);
+        if (s < score) {
+          score = s;
+          e = x;
+        }
+      }
+      if (!e) return;
+      const blow = this.blow(u, e, rest);
+      if (this.airLeft[u.side] > 0) {
+        const full = blow.dmg / blow.screen, held = full * this.airOn[u.side].share, raw = held / blow.ground;
+        blow.dmg = (full - held) * blow.screen;
+        this.airBank[u.side].set(e.id, (this.airBank[u.side].get(e.id) ?? 0) + raw);
+        this.airLedger[u.side].withheld += raw;
+        kept.set(e.id, (kept.get(e.id) ?? 0) + raw);
+      }
+      const h = hurt.get(e.id) ?? { dmg: 0, nerve: 0, from: [], blind: true, team: 0, teamNerve: 0 };
+      this.landBlow(h, u, blow);
+      h.blind = false;
+      h.from.push([u, blow.dmg]);
+      hurt.set(e.id, h);
     }
     /**
      * Whether an enemy weapon that can pierce a hull reaches a block now (tankReach: a tank's, a gun's over open sights, a
@@ -12414,7 +12860,7 @@
         if (u.order && u.order.kind !== "attack") continue;
         const f = this.unit(u.engaged);
         if (!f || f.side === u.side || !foot(f) || f.hid || this.overrun.has(f.id) || this.gap(u, f) > reachOf(u)) continue;
-        if (f.dug && dist(f.x, f.y, f.home[0], f.home[1]) <= LAND.dug.keep || this.ownAntiTank(f)) continue;
+        if (f.dug && dist(f.x, f.y, f.home[0], f.home[1]) <= LAND.dug.keep || (this.pierce ? this.kitReach(f) !== null : this.ownAntiTank(f))) continue;
         if (!this.units.some((g) => g.side === u.side && foot(g) && this.gap(u, g) <= LAND.alone.near)) continue;
         const dx = f.x - u.x, dy = f.y - u.y, len = Math.hypot(dx, dy) || 1;
         const to = [clamp(f.x + dx / len * (f.d / 2), 5, this.field.w - 5), clamp(f.y + dy / len * (f.d / 2), 5, this.field.h - 5)];
@@ -12508,6 +12954,27 @@
      * Support teams in battle (teamsRule): a team's is not added to the others'; it is kept with its own harm (team,
      * teamNerve), and step makes the one multiplier of them once every blow is in.
      */
+    /**
+     * A blow landed on its target's hurt this tick (step, and splitFire for the rest of a split blow). Under the field
+     * spread's army ledger its own split, as before; else tally, which keeps support teams' harm apart under teamsRule.
+     * The two are never on together in the game: the ledger is bench-only. Under the ledger the teams' nerve split is off,
+     * so a bench run with both on is not a reading of `teams`. Under the ledger (step 1b, choice 13) each part of m is
+     * read at the army or at the block, never both.
+     */
+    landBlow(h, u, blow) {
+      if (this.led && blow.parts) {
+        h.dmg += blow.dmg;
+        const sp = nerveSplit(blow.parts, this.led.on), pt = blow.parts, w = h.pw ?? (h.pw = { flank: 0, rear: 0, fire: 0, ambush: 0 });
+        h.nerve += sp.block;
+        h.dm = (h.dm ?? 0) + blow.dmg * sp.army;
+        h.built = (h.built ?? 0) + blow.nerve;
+        h.dn = (h.dn ?? 0) + blow.dmg * blow.nerve;
+        w.flank += blow.dmg * (pt.aspect === "flank" ? pt.nm : 1);
+        w.rear += blow.dmg * (pt.aspect === "rear" ? pt.nm : 1);
+        w.fire += blow.dmg * pt.fire;
+        w.ambush += blow.dmg * pt.ambush;
+      } else this.tally(h, u, blow);
+    }
     tally(h, u, blow) {
       h.dmg += blow.dmg;
       if (this.teamsRule && ownArm2(u)) {
@@ -12520,7 +12987,7 @@
      * from which aspect, the part of what the target takes that is its ground (ground), and the share a smoke screen across
      * it left of it (screen: 1 where none; smoke on call, release 2), so the air's part of it can be held back whole.
      */
-    blow(u, t) {
+    blow(u, t, spill) {
       const pair = this.inOverrun(u, t);
       const uAt = pair && u.ovr ? u.ovr.back : [u.x, u.y], tAt = pair && t.ovr ? t.ovr.back : [t.x, t.y];
       const gu = coverAt(this.field, uAt[0], uAt[1]);
@@ -12546,7 +13013,7 @@
         const G2 = gunsOf(u), close = this.gap(u, t) < G2.closeAt;
         p *= close ? G2.close : G2.punch;
         if (!close) nerveMul *= fireN = G2.nerve;
-        if (u.team && t.kind === "arm") p *= LAND.teams[u.team].armour;
+        if (u.team && t.kind === "arm" && !this.pierce) p *= LAND.teams[u.team].armour;
       }
       if (u.kind === "arm" && LAND.tanksClose.ground.includes(gu)) p *= LAND.tanksClose.punch;
       if (u.kind === "arm" && motionOf(t) === "foot" && this.closed(u)) p *= LAND.closed.foot;
@@ -12556,7 +13023,8 @@
       const aspect = rearguard || pair ? "front" : aspectOf(t.face, t.x, t.y, u.x, u.y);
       const [am, nm] = LAND.aspect[aspect];
       let amx = 1;
-      if (this.measured && t.kind === "arm" && (u.kind === "arm" || u.kind === "art" && !u.team && this.gap(u, t) < gunsOf(u).closeAt)) amx = this.armourAt(u, t, faceOfAspect(aspect), this.gap(u, t)) ?? 1;
+      const plate = this.measured && t.kind === "arm" && (u.kind === "arm" || u.kind === "art" && !u.team && this.gap(u, t) < gunsOf(u).closeAt);
+      if (plate) amx = this.armourAt(u, t, faceOfAspect(aspect), this.gap(u, t)) ?? 1;
       const ground = this.groundTake(t, tAt);
       let take = ground;
       if (t.kind === "arm" && LAND.alone.on) take *= this.alone(t, u);
@@ -12566,10 +13034,22 @@
         take *= LAND.snipers.take.fragile;
         if (u.team === "mor" || u.kind === "art" && !u.team || u.kind === "arm") take *= LAND.snipers.take.blast;
       }
-      const luck = 1 + LAND.jitter * ((u.team === "snp" ? this.snpRoll(u, 342) : this.rng.next()) * 2 - 1);
+      const roll3 = spill ? spill.roll : u.team === "snp" ? this.snpRoll(u, 342) : this.rng.next();
+      const luck = 1 + LAND.jitter * (roll3 * 2 - 1);
       const f = this.lean === void 0 ? this.fortune : this.fortune * this.lean;
       const dmg = p * am * amx * take * luck * (u.side === "att" ? f : 1 / f) * DT;
-      return { dmg, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen, ...this.led ? { parts: { aspect, nm, fire: fireN, ambush: ambushN } } : {} };
+      const parts = this.led ? { parts: { aspect, nm, fire: fireN, ambush: ambushN } } : {};
+      let faceOn = 0;
+      if (this.faceRule) {
+        const plateOn = plate && aspect !== "front" ? this.armourAt(u, t, "front", this.gap(u, t)) ?? 1 : amx;
+        faceOn = p * LAND.aspect.front[0] * plateOn * take * (u.side === "att" ? f : 1 / f) * DT;
+      }
+      if (this.pierce && (spill || t.kind === "arm")) {
+        const part = spill ? spill.part : this.pierceShare(u, t);
+        const rest = !spill && part < 1 && (u.team || LAND.pierce.foot.includes(u.kind)) ? { roll: roll3, part: 1 - part } : void 0;
+        return { dmg: dmg * part, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen, faceOn: faceOn * part, ...parts, ...rest ? { rest } : {} };
+      }
+      return { dmg, nerve: nm * nerveMul, front: aspect === "front", aspect, ground, screen, faceOn, ...parts };
     }
     /**
      * 'from' is who struck it this tick and how hard. Each model it loses goes to the one of them owed most (LandUnit.owed:
@@ -12789,9 +13269,11 @@
         u.speed = 0;
         const e = u.engaged !== void 0 ? this.unit(u.engaged) : void 0;
         let want = u.keepFace;
-        if (e && !u.pinned) {
-          const off2 = Math.abs(turn(u.keepFace ?? u.face, bearing(u.x, u.y, e.x, e.y)));
-          if (u.keepFace === null || off2 > Math.PI / 3) want = bearing(u.x, u.y, e.x, e.y);
+        const top2 = this.faceRule ? this.costliest.get(u.id) : void 0, by2 = top2 ? this.unit(top2.by) : void 0;
+        const meet = by2 && live2(by2) ? by2 : e;
+        if (meet && !u.pinned) {
+          const off2 = Math.abs(turn(u.keepFace ?? u.face, bearing(u.x, u.y, meet.x, meet.y)));
+          if (u.keepFace === null || off2 > Math.PI / 3) want = bearing(u.x, u.y, meet.x, meet.y);
         }
         if (u.order?.kind === "move" && !u.path.length) {
           u.order = null;
@@ -14089,8 +14571,10 @@
     date: "July 1944",
     turn: 59,
     place: { region: -1, name: "Normandy", terrain: "plains", river: null, bridgeDown: false, town: "Le Mesnil", townSize: "village", fort: 0, mines: 0 },
-    att: { nat: "USA", adj: "American", color: "#6b7a4a", army: "USA", standIn: "POL", tanks: ["Sherman"], gun: "Howitzer105", general: "General Hale", style: "methodical" },
-    def: { nat: "GER", adj: "German", color: "#5f6a6e", army: "GER", tanks: ["Tiger", "PanzerIV"], gun: "leFH18", general: "General Vane", style: "bold" },
+    // (kit, by hand: both infantries with their own anti-tank guns, tank destroyers behind them, and launchers in the
+    // sections: the bazooka; the Panzerschreck and Panzerfaust. The historian's to correct as data.)
+    att: { nat: "USA", adj: "American", color: "#6b7a4a", army: "USA", standIn: "POL", tanks: ["Sherman"], gun: "Howitzer105", general: "General Hale", style: "methodical", kit: { atGuns: true, atTd: true, atHand: true } },
+    def: { nat: "GER", adj: "German", color: "#5f6a6e", army: "GER", tanks: ["Tiger", "PanzerIV"], gun: "leFH18", general: "General Vane", style: "bold", kit: { atGuns: true, atTd: true, atHand: true } },
     attForces: [
       ["VII Corps", "inf", 3, 0.5, 4],
       ["3rd Armored Group", "arm", 2, 0.32, 3],
@@ -14115,8 +14599,11 @@
     date: "July 1943",
     turn: 47,
     place: { region: -1, name: "Kursk salient", terrain: "plains", river: null, bridgeDown: false, town: "Oktyabrsky", townSize: "village", fort: 0, mines: 0 },
-    att: { nat: "SOV", adj: "Soviet", color: "#7b7748", army: "SOV", tanks: ["T34", "T34", "LightTank", "T34", "T34", "LightTank"], gun: "ZiS3", general: "General Orlov", style: "mass" },
-    def: { nat: "GER", adj: "German", color: "#5f6a6e", army: "GER", tanks: ["PanzerIV", "Tiger", "StuG3", "PanzerIV"], gun: "leFH18", general: "General Vane", style: "methodical" },
+    // (kit, by hand: the rifle divisions with their own anti-tank guns, their anti-tank rifles counted inside the guns,
+    // no launcher; the panzergrenadiers with anti-tank guns and assault guns and tank destroyers beside them, no launcher
+    // yet. The historian's to correct as data.)
+    att: { nat: "SOV", adj: "Soviet", color: "#7b7748", army: "SOV", tanks: ["T34", "T34", "LightTank", "T34", "T34", "LightTank"], gun: "ZiS3", general: "General Orlov", style: "mass", kit: { atGuns: true } },
+    def: { nat: "GER", adj: "German", color: "#5f6a6e", army: "GER", tanks: ["PanzerIV", "Tiger", "StuG3", "PanzerIV"], gun: "leFH18", general: "General Vane", style: "methodical", kit: { atGuns: true, atTd: true } },
     attForces: [
       ["Guards Tank Army", "arm", 6, 0.5, 18],
       ["Guards Rifle Corps", "inf", 4, 0.36, 9],
@@ -14183,7 +14670,9 @@
         share,
         dug: !!dug,
         first,
-        battles: 4
+        battles: 4,
+        // What its foot carries that can pierce armour, from the piece's own data (LAND.pierce).
+        ...a.kit && LAND.pierce.foot.includes(kind) ? { kit: { ...a.kit } } : {}
       }))
     });
     const A = 100;
@@ -14710,7 +15199,7 @@
       if (opts.cars === true && !piece) sim.cars = true;
       if (opts.aa === true && !piece) sim.aa = true;
       if (opts.light === true && !piece) sim.light = true;
-      this.drill = sim.drillOn({ sections: true, ...opts.platoons === false ? {} : { platoons: true }, ...opts.book !== void 0 ? { book: opts.book } : {}, ...opts.life === true ? { life: true } : {}, ...opts.hatches === true ? { hatches: true } : {}, ...opts.teamwork === true ? { teamwork: true } : {} });
+      this.drill = sim.drillOn({ sections: true, ...opts.platoons === false ? {} : { platoons: true }, ...opts.book !== void 0 ? { book: opts.book } : {}, ...opts.life === true ? { life: true } : {}, ...opts.hatches === true ? { hatches: true } : {}, ...opts.seasoned === true ? { seasoned: true } : {}, ...opts.leaders === true ? { leaders: true } : {}, ...opts.tankmind === true ? { tankmind: true } : {}, ...opts.tankmg === true ? { tankmg: true } : {}, ...opts.exits === true ? { exits: true } : {}, ...opts.teamwork === true ? { teamwork: true } : {} });
       if (opts.setup && this.me) sim.setupOn(this.me, true);
       if (opts.hide !== false) sim.hideOn();
       if (opts.armour !== false) sim.measured = true;
@@ -14722,9 +15211,11 @@
       if (opts.bocage) sim.bocage = true;
       if (opts.phones !== false) sim.phones = true;
       if (opts.bearers !== false) sim.bearers = true;
-      if (opts.teams === true) sim.teamsRule = true;
+      if (opts.facing === true) sim.faceRule = true;
+      if (opts.teams === true && opts.facing === true) sim.teamsRule = true;
       if (opts.blast === true) sim.blast = true;
       if (opts.escort === true) sim.escort = true;
+      if (opts.pierce === true) sim.pierce = true;
       if (opts.trucks === true) sim.trucks = true;
       if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
       const tanksSeen = { att: 0, def: 0 };
@@ -15083,6 +15574,7 @@
         phones: opts?.phones !== false,
         bearers: opts?.bearers !== false,
         teams: opts?.teams === true,
+        facing: opts?.facing === true,
         patrol: opts?.patrol !== false,
         captured: opts?.captured !== false,
         worn: opts?.worn !== false,
@@ -15100,6 +15592,12 @@
         light: opts?.light === true,
         life: opts?.life === true,
         hatches: opts?.hatches === true,
+        seasoned: opts?.seasoned === true,
+        leaders: opts?.leaders === true,
+        tankmind: opts?.tankmind === true,
+        tankmg: opts?.tankmg === true,
+        pierce: opts?.pierce === true,
+        exits: opts?.exits === true,
         teamwork: opts?.teamwork === true,
         japan: opts?.japan === true,
         snipers: opts?.snipers === true
@@ -15112,7 +15610,8 @@
      * landStart. Its result (the last delta's over) goes back to the campaign's TC.battleSettleLand(ids, to, over).
      */
     landStartTicket(ticketOrLook, opts) {
-      if (opts?.teams === true) ticketOrLook = ownTeamsLook(ticketOrLook);
+      const sw = opts;
+      if (sw?.teams === true && sw?.facing === true) ticketOrLook = ownTeamsLook(ticketOrLook);
       const look = "ticket" in ticketOrLook && ticketOrLook.ticket ? ticketOrLook : null;
       const ticket = look ? look.ticket : ticketOrLook;
       const o = { ...look?.live ?? {}, ...opts ?? {} };
@@ -15134,6 +15633,7 @@
         phones: o.phones !== false,
         bearers: o.bearers !== false,
         teams: o.teams === true,
+        facing: o.facing === true,
         patrol: o.patrol !== false,
         captured: o.captured !== false,
         worn: o.worn !== false,
@@ -15152,6 +15652,12 @@
         light: o.light === true,
         life: o.life === true,
         hatches: o.hatches === true,
+        seasoned: o.seasoned === true,
+        leaders: o.leaders === true,
+        tankmind: o.tankmind === true,
+        tankmg: o.tankmg === true,
+        pierce: o.pierce === true,
+        exits: o.exits === true,
         teamwork: o.teamwork === true,
         japan: o.japan === true,
         island: o.island === true,

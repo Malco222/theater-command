@@ -309,6 +309,44 @@ export interface LiveOpts {
    */
   hatches?: boolean;
   /**
+   * Experience you can see (release 2, looks only; Brian, 25 November 15:11Z: "do those 3 ideas"; Drill.seasoned):
+   * green squads bunch up and freeze for a moment under first fire, veterans keep wider gaps and get down fast, by the
+   * block's training alone. Works only with life on. Off unless true.
+   */
+  seasoned?: boolean;
+  /**
+   * When the leader falls (release 2, looks only; Brian, 25 November 15:11Z: "do those 3 ideas"; Drill.leaders): a
+   * squad whose leader is hit goes to ground and hesitates a few seconds, then the next man takes charge (marked in the
+   * drill only; no man's model is swapped). Works only with life on. Off unless true.
+   */
+  leaders?: boolean;
+  /**
+   * Tanks with minds of their own (release 2, looks only; Brian, 25 November 15:57Z: "i want everything to see like it
+   * has its own mind"; Drill.tankmind): each tank and vehicle takes up an order at her own moment, halts briefly at her
+   * own place to fire and moves on while her partner covers, hull to the threat and turret to her own arc. Needs
+   * neither life nor the drill book. Off unless true.
+   */
+  tankmind?: boolean;
+  /**
+   * A tank's machine guns, seen firing (release 2, looks only; Brian, 25 November 15:55Z: "i never see the machine
+   * guns on the tanks firing", 15:56Z: "i dont want it to be all the time as thats unrealistic with ammo";
+   * Drill.tankmg): each tank fires short bursts at targets worth the rounds, at her own pace and moment, with pauses,
+   * and eases off as her rounds run low. Needs neither life nor the drill book. Off unless true.
+   */
+  tankmg?: boolean;
+  /**
+   * Only anti-tank weapons take a tank (release 2, a real rule; Brian, 25 November 15:58Z: "cannon fire or bazookas
+   * should be the only think taking them out"; the rules' sim.pierce, LAND.pierce): foot and support teams hurt a
+   * tank block only with what they carry that can pierce armour. Off unless true.
+   */
+  pierce?: boolean;
+  /**
+   * Men who leave the field are seen leaving (release 2, looks only; Brian, 25 November 17:11Z: "some soldiers freeze
+   * and then disapear"; Drill.exits): routing men run on past the field's edge, and the men of a block that has left
+   * the fight stay in the feed, marked `lv`, until each is past his own edge. Off unless true.
+   */
+  exits?: boolean;
+  /**
    * Support teams at work (release 2, looks only; Brian, 25 November 14:15Z: "There should be a machine gun teens that lay
    * down suppressing fire, such as the German MG 42 and the US machine gun", 15:36Z "yes to all"; Drill.teamwork): each
    * machine gun and mortar of a support team works as a crew, its men each at his own part and the team's weapons each in
@@ -394,6 +432,13 @@ export interface LiveOpts {
    * Off unless true.
    */
   teams?: boolean;
+  /**
+   * Units face the fire that hurts most (release 2, the Battle rules card's "facing"; the design director's ruling of
+   * 25 November 21:54Z; the rules' sim.faceRule): a block is held to its facing only by the enemy whose blows cost it
+   * most after its cover, and turns to meet another that costs it more. NOT looks only: it changes every fight. Support
+   * teams in battle works only with it on (the same ruling). Off unless true.
+   */
+  facing?: boolean;
   /** Shell blasts (release 2, looks only; sim.blast): one burst takes the men near it together. Off unless true. */
   blast?: boolean;
   /** Infantry with tanks (release 2, looks only; sim.escort): foot advance behind their tanks, never under them. Off unless true. */
@@ -564,7 +609,7 @@ export class LiveBattle {
     if (opts.cars === true && !piece) sim.cars = true;
     if (opts.aa === true && !piece) sim.aa = true;
     if (opts.light === true && !piece) sim.light = true;
-    this.drill = sim.drillOn({ sections: true, ...(opts.platoons === false ? {} : { platoons: true }), ...(opts.book !== undefined ? { book: opts.book } : {}), ...(opts.life === true ? { life: true } : {}), ...(opts.hatches === true ? { hatches: true } : {}), ...(opts.teamwork === true ? { teamwork: true } : {}) });
+    this.drill = sim.drillOn({ sections: true, ...(opts.platoons === false ? {} : { platoons: true }), ...(opts.book !== undefined ? { book: opts.book } : {}), ...(opts.life === true ? { life: true } : {}), ...(opts.hatches === true ? { hatches: true } : {}), ...(opts.seasoned === true ? { seasoned: true } : {}), ...(opts.leaders === true ? { leaders: true } : {}), ...(opts.tankmind === true ? { tankmind: true } : {}), ...(opts.tankmg === true ? { tankmg: true } : {}), ...(opts.exits === true ? { exits: true } : {}), ...(opts.teamwork === true ? { teamwork: true } : {}) });
     // Every block of his side placeable (the rules' setupOn all), not only his guns and teams.
     if (opts.setup && this.me) sim.setupOn(this.me, true);
     if (opts.hide !== false) sim.hideOn();
@@ -577,9 +622,12 @@ export class LiveBattle {
     if (opts.bocage) sim.bocage = true;
     if (opts.phones !== false) sim.phones = true;
     if (opts.bearers !== false) sim.bearers = true;
-    if (opts.teams === true) sim.teamsRule = true;
+    if (opts.facing === true) sim.faceRule = true;
+    // (Support teams in battle works only with "facing" on: the design director, 25 November 21:54Z.)
+    if (opts.teams === true && opts.facing === true) sim.teamsRule = true;
     if (opts.blast === true) sim.blast = true;
     if (opts.escort === true) sim.escort = true;
+    if (opts.pierce === true) sim.pierce = true;
     if (opts.trucks === true) sim.trucks = true;
     if (opts.patrol !== false && opts.hide !== false) sim.patrol = true;
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };

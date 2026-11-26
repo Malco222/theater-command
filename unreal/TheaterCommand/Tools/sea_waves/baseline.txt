@@ -16,7 +16,8 @@ Tools/sea_show/run.sh
     wolf-pack-surrender (600 s each)
   sea_under_test: 408 checks, 0 failed
   in all 1,155 "ok" lines in the log (the recordings and sea_under_test), the same in r0pre, r1, r2 and r3, in
-  step 1(a)'s ocean-marks-r1 and ocean-marks-r2, and in step 2's ocean-waves-r1, ocean-waves-r2 and ocean-waves-r3
+  step 1(a)'s ocean-marks-r1 and ocean-marks-r2, in step 2's ocean-waves-r1, ocean-waves-r2 and ocean-waves-r3, and in
+  step 3's ocean-light-r1, ocean-light-r2 and ocean-light-r3
   a frame within budget (the show's own frame on the cloud Xeon, the least of three plays; one in a thousand / mean, ms):
                           r0pre            r1               r2               r3
     light-ships           0.506 / 0.065    0.519 / 0.066    0.724 / 0.073    0.389 / 0.067
@@ -34,12 +35,21 @@ Tools/sea_show/run.sh
     show plays changed)
     ocean-waves-r3 (step 2, the third review's fixes; beside other sessions' renders, load 8 to 15): light-ships
     0.235 / 0.039, samar 0.345 / 0.071, two-lines 0.156 / 0.035
+    ocean-light-r1 (step 3; run alone, load 3 to 5): light-ships 0.249 / 0.040, samar 0.390 / 0.074, two-lines
+    0.163 / 0.034
+    ocean-light-r2 (step 3, the review's fixes; beside other sessions' runs, load 2 to 6.6): light-ships 0.478 / 0.054,
+    samar 0.572 / 0.093, two-lines 0.320 / 0.046
+    ocean-light-r3 (step 3, the second review's fixes; nothing the show builds changed): light-ships 0.414 / 0.050,
+    samar 0.640 / 0.086, two-lines 0.284 / 0.044. (Three whole runs beside other sessions' builds and runs, load 5 to
+    25 on the four cores, failed the budget alone, in 3 to 7 recordings, 1.2 to 12.2 ms one in a thousand, every other
+    check passing: so each recording was then played as run.sh plays it, the same build line and order, each in a
+    quiet moment (load about 3.4), and sea_under_test over them all: every check passed, each on its first play.)
 
 Tools/convoy_looks/run.sh
   convoy looks: 3,795 checks, 0 failed
   convoy looks against the show: 423 checks, 0 failed
-  (the same in step 1(a)'s ocean-marks-r1 and ocean-marks-r2, and in step 2's ocean-waves-r1, ocean-waves-r2 and
-  ocean-waves-r3)
+  (the same in step 1(a)'s ocean-marks-r1 and ocean-marks-r2, in step 2's ocean-waves-r1, ocean-waves-r2 and
+  ocean-waves-r3, and in step 3's ocean-light-r1, ocean-light-r2 and ocean-light-r3)
 
 Tools/sea_waves/run.sh (step 0's own)
   measure_test: 38 checks, 0 failed (31 in r1; r2 adds the RHI thread, the whole frame over the same frames, the
@@ -280,6 +290,122 @@ built, because the game does not draw the fleet's sea yet)
   (every step of the full runner passed, SEA WAVES: ALL PASSED, with step 0's, step 1(a)'s and step 2's counts as
   above; step 2's "SampleNear at a world point costs 35 ns or less" read 30.33 ns this time, so r1's 35.44 ns was the
   host's load, as the review found: both trees 28.3 ns there)
+
+Tools/sea_waves/run.sh, step 3's (the light core: Battle/SeaDayCore.{h,cpp}, namespace SeaDay; nothing wired into the
+game, so nothing on screen changes; run ocean-light-r3, 25 November 2026, on 942d9295 and step 3's files with its
+second review's fixes (ocean-light-r1, before any: 67 checks; ocean-light-r2, the first review's: 77); the counts of
+step 0's, step 1(a)'s and step 2's steps above unchanged)
+  day_extract: 24 pieces of the game's source cut out (SeaBattle.cpp's SeaParts, OpenOn's hour and clamp, TakeTheRoom's
+    fog and LightTheBattle's lamps; CampaignBattleLook's AirHaze; AirBattle.cpp's sea haze; AirStage.cpp's SetSeaWind
+    and MovingSea's sky and haze; SeaUnder.cpp's ReadSun), each with its #line back to the game's file
+  sea_day_test: 81 checks, 0 failed (recordings 1, seed 19, pins 9, fog 3, vis 3, field 23, continuity 3, haze 7,
+    sightings 5, colours 1, water 4, scan 3), on the 9 recordings and stand-ins; its lines, OUT/day/sea_day_lines.txt;
+    the same under -fsanitize=address,undefined and built with clang++
+    seed: OpenOn's own lines bit for bit over 144,144 seeds and places (18,644 held at 12 degrees, 11,473 at 70); the
+      key 7.0, fills 0.75, 4,900 K, sky light 0.72, the unlit and self-lit shares 1, SkyOnScreen, SeaSkyLight, the haze
+      in HazeInk, MovingSea's sky and haze, ReadSun, over 30 days under 11 command lines: bare (221/221/223,
+      229/230/231, 15 km at twice the room's density), and under -TheaterSeaSky=, -TheaterSeaGrade=,
+      -TheaterBattleGrade=, -TheaterNoBattleGrade, -TheaterAirHaze=, -TheaterSeaHaze= and -TheaterSeaHigh=, the
+      scene's own numbers passed in as step 11 passes them (each switch moves the scene off the built-ins: 9 of 9)
+    fog: FogSeen (the height fog's line integral as transcribed; the Mac's check 1 confirms it) against a numeric
+      integral, 4,000 rays, worst 7.75e-06 of the optical depth; FogFor over 72 fits, worst 1.0000 Cmin
+    field: the moon keys only up and lit, in proportion to her lit share (7.0 x 0.06 x lit x the root of her height's
+      sine); a light{} with no moon keyed by the glow; the night's key in from nothing at -4 degrees, at most 0.80% of
+      the day's with no moon; adding any moon never lowers the light on the level sea or its shown level (10,240 moons)
+    the moon (r3): she moves nothing of the day's or the dusk's sky and lamps: 4,230 moons from the horizon up, clear
+      with vis and in squalls, worst 0 (under 1% asked), and from -4 degrees up the moonless look bit for bit; at night
+      she lifts each sky colour by no more than her own light (her key's share of the day's over the moonless sky's)
+      and never darkens it: 1,200 moonlit nights and dusks under -4; a 1%-lit moon half a degree up moves the horizon
+      on the screen by 0.081 levels at most (in r2 the glow's floor she replaces lifted the sky: 25.6 levels against
+      the moonless 4.5 at -20 degrees, lat 50, January); the floor now lifts the lamps alone
+    continuity: 768 sweeps (Cmin 0.05, 0.02 and 0.1) and 7,205 minutes, no quarter degree of sun moving anything by a
+      tenth, the key measured by what lands on the level sea with its way: worst fog 9.0%, sky colours 8.9%, sun-side
+      haze 8.6%, the light on the level sea 8.2%, unlit pieces 8.2%, fog colour 8.2%, exposure 5.6% (r2 5.3%), the key
+      on the water 5.6% (r2 3.6%), the sea material's own haze 3.7%; with no vis the
+      haze held to the tenth through its own band too (the night's air at -18 degrees to the day's at +2, clear to a
+      gale's rain, Cmin 0.02 to 0.1): the fog at most 9.0% (sun -12.75, clear, Cmin 0.02, the 14 m eye at 40 km), the
+      sea material's own 3.7%; the haze not moving with the sun at all outside its band (with vis -6 to 0 degrees, with
+      none -18 to +2)
+    WHICH RULE GIVES WAY: only where the field gives vis (vis > 0): inside the -6 to 0 degree twilight band the fog is
+      not held to the tenth (worst 54.4% for a quarter degree, at sun -4.50, vis 300 m, Cmin 0.02, the 14 m eye at
+      10 km; the sea material's own haze unmoved there with vis). The rules' vis is wholly the fog from the horizon up
+      at every sun, and the plan's tenth-a-minute rule gives way to it there (plan v2, step 3, amended at its reviews,
+      25 Nov; LookOf runs once a battle; an ask to Brian, section 10). (r2's 60.3%, and its 12.4% for the material's
+      own haze, were a field with no vis, which r2 exempted too: with no vis nothing gives way, and it is held above)
+    haze: from the horizon up the rules' vis at every sun (23,604 days: vis 300 m to 30 km, 0 to 70 degrees, Cmin 0.02
+      to 0.1, clear and in squalls): every planned eye at least 1.0000 Cmin at vis, the lookout at most 1.091 Cmin there
+      and 0.342 at 1.5 vis; with no vis, from +2 degrees up under a clear sky or fair-weather cumulus the air scene's
+      30 km at 1.2 times (1,638 suns), and under weather (rain, a low deck, squalls, spray) the weather's own air (the
+      night's own less clear air's) added to it, its start drawn in by the square of the air scene's share, thinned
+      only as far as a day-lit hull at Hunt's 4 km needs: 3,276 suns, 1,638 thinned; the day's air 3.4 to 24.5 times
+      the air scene's, within 1.53 times of its night's where the weather is most of that; squalls from 111 m (in r2 the
+      air scene's clear 30 km by day in squalls, a gale's rain and spray)
+    sightings: 11,315, each kept at Cmin or more from every planned eye at its recording's own sun and at every sun from
+      -6 degrees up (1,520 suns), worst 1.000 Cmin; at night NightSight over 240 of 240 nights (the exposure at most
+      +2.6), and the silhouette judged again from the look alone over 1,500 nights from -6 down, a lit hull and a dark
+      one: least 1.74 Cmin against the sky, 1.02 against the sea, 2.0 screen levels
+    the night's air: never thicker than the sky's and rain's own; thinned on 750 of the 1,500 nights, by at most 10.4
+      times (vis 8 km in squalls): the rules' vis bounds it (plan v2, step 3, amended; an ask to Brian)
+    colours: 17,771 hours from 8:00 to 15:00 with the sun 6 degrees up or more (the colours' floor), worst 1.19 levels
+      (119 of them under the low sun's tints, 6 to 7 degrees); 673 hours with the sun under 6 get the dawn's own colours
+    water: the nine recordings by place (samar tropic, two-lines temperate, light-ships med, the convoy north, the
+      wolf packs med), and 21 places (the Bay of Biscay temperate; Gibraltar, the Alboran Sea, Odessa and Azov med; the
+      Red Sea, the Gulf, the Gulf of Mexico, Okinawa, the East China Sea and the Sargasso tropic)
+
+On the release 2 join (light-join-r2, 25 November 2026: step 3's 8570700f merged onto eb5f13eb, the storms' join of
+release 2's 0531fa9b, the storms' work, ocean-r2's 942d9295, graph_pin adapted, Pearl's pin v2 and the cumulus and
+stratocumulus days; nothing wired, and nothing on screen changes). Every runner as above, on what the join plays (12
+recordings and stand-ins: the 9 above, sub-34-hunt-central's file being sub-air-mediterranean-1942.json, and the three
+real wolf-pack nights, convoy-first-pack, convoy-hunted and convoy-hunters), beside other sessions' builds and runs
+(load 3 to 17):
+  Tools/sea_waves/run.sh: SEA WAVES: ALL PASSED. measure_test 38 checks; graph_pin 72; pearl_pin 38 pins, 0 changed;
+    room_scan 27 setters (self-test 8 cases); switches_scan 10 checks, 34 switches, 9 built (self-test 6); bench_table
+    31 cases; bench_dry_run 20; marks_pool_test 12 checks on each of the 12 and 13 over them all; fold_table byte for
+    byte (49 winds); sea_waves_test 80 checks on the 3 battles; gale_pin 13 digests, 0 changed; gale_decks 7 models, 2
+    skipped, 0 moved; gale_test 37 checks; day_extract the same 24 pieces; sea_day_test 82 checks, 0 failed
+  day_extract: of the 24 pieces only one reads otherwise on the join, AirBattle.cpp's SeaHazeInk (b3a33e0a, the art
+    director's mend round of 22 November: 0.44, 0.55, 0.74 to 0.42, 0.60, 0.88). Seed mode never takes it (the sea
+    battle's haze is HazeInk), so seed mode was release 2's own light bit for bit as merged; the core's pin of it
+    (SeaHazeInkToday) and field mode's air scene haze by day with no vis now take release 2's
+  sea_day_test: 82 checks, 0 failed (recordings 1, seed 19, pins 9, fog 3, vis 4, field 23, continuity 3, haze 7,
+    sightings 5, colours 1, water 4, scan 3); the same built with clang++ and under -fsanitize=address,undefined
+    seed: OpenOn's own lines bit for bit over the same 144,144 seeds and places; release 2's own light over 33 days (the
+      12 among them) under the same 11 command lines
+    pins: PlannedEyes against release 2's AimEye, whose overview is SkyWeather->OverviewHeight() (eb5f13eb): 1,300 m,
+      or under a deck the weather's dome draws 150 m under its base, never under 300 (SeaSky.h's OverviewMost,
+      OverviewUnderBase, OverviewLeast, read as they stand); both ends are planned eyes, and the new vis check holds
+      every metre between: 72,072 rays over the 72 fits, worst 1.000000 Cmin, at 1,300 m. "Nothing is wired yet"
+      reads the game's code with its comments blanked and catches SeaDay:: as well as SeaDayCore: the storms'
+      SeaNightCore.h names SeaDayCore in two comments (the hand-off step 11 will make), and no code does
+    every field-mode figure above as measured on 942d9295 (the vis fits, the field's 23, continuity's worst fog 9.0%,
+      sky colours 8.9%, sun-side haze 8.6%, the light on the level sea 8.2%, exposure 5.6%, the material's own haze
+      3.7%, the twilight band's ruling 54.4%, the haze's 23,604 days and 1,638 and 3,276 suns, the night's air 750 of
+      1,500 thinned by at most 10.4 times, the colours' 17,771 hours at worst 1.19 levels), but the sightings, which
+      follow the recordings: 11,908 over 2,432 suns, worst 1.000 Cmin; NightSight at each stand-in's own light holds
+      on all 9 nights (the three real nights: convoy-first-pack the moon, +2.3 stops, 0.540 against the sky, 0.343
+      against the sea; convoy-hunted the glow, +2.4, 0.485 and 0.225; convoy-hunters the moon, +2.4, 0.650 and 0.474)
+  Tools/sea_show/run.sh: the 12 each ALL CHECKS PASSED but for "a frame within budget" under load; sea_under_test 590
+    checks, 0 failed; 1,604 checks in the log with 6 KNOWN. The budget failed alone under load, at 4.1 to 4.5 ms one
+    in a thousand: in 8 of the 12 in a first run (load 5 to 17), in convoy-hunters in a second, back to back, and in
+    convoy-night-air, convoy-night and convoy-first-pack in a third; each passed on its own immediate rerun as run.sh
+    plays it (convoy-hunters 0.505 ms; the three 0.078, 0.073 and 0.359 ms). Nothing the show builds changed
+  Tools/convoy_looks/run.sh: convoy looks 3,991 checks, 0 failed; against the show 741 checks, 0 failed
+
+Step 11 wired (the storms' thread, 25 November 2026, on 7df10413: the light core hung on the sea battle under
+-TheaterSeaDay=field, off by default; seed mode is today's, every pinned line byte-equal). Changed counts only:
+  Tools/sea_waves/run.sh: measure_test 38 checks ("12 of the release 2 sea's 34 switches built", -TheaterSeaDay=seed,
+    -TheaterSeaVisContrast=0.05 and -TheaterSeaStars=0 after -TheaterSeaMarksPool=0); room_scan 34 setters, every one
+    given back (the scan now reads a field written with a small b first, bPerPixelAtmosphereTransmittance among them);
+    switches_scan 10 checks, 34 switches, 12 built; day_extract the same 24 pieces; sea_day_test 82 checks, 0 failed
+    (g++ and clang++): "nothing is wired yet" became "wired only where step 11 wires it" (SeaBattle.cpp and SeaBattle.h
+    name the core in code, every other game file none), and the smoke hour's pin reads the one Tick line given
+    HourShade, FLinearColor::White unless field mode. Every other count as above
+  Tools/sea_waves/run_night_sky.sh: night_sky_test 72 checks (69 and 3 new: with the core's StarShare given, a full moon
+    high moves neither the limit nor the Milky Way and takes only the stars behind her disc; without it the dome
+    still washes them itself)
+  Tools/sea_waves/run_sea_field.sh, run_night.sh, run_storm.sh and run_weather.sh: each ALL PASSED
+  Tools/sea_show/run.sh: the 12 each ALL CHECKS PASSED, the frame budget among them (load 1 to 3); sea_under_test 590
+    checks, 0 failed. Tools/convoy_looks/run.sh: passed; against the show 741 checks, 0 failed
 
 Tools/air_show/run.sh (Pearl's guard beside pearl_pin): 3 recordings ALL CHECKS PASSED; airscrews 18 aircraft, 0 failed; sea face all checks pass
 

@@ -65,8 +65,8 @@ namespace SeaNight
 		bool bGiven = false;
 		double SunUp = 90.0, MoonUp = -90.0, MoonLit = 0.0, MoonFrom = 0.0, Seeing = 0.0;
 	};
-	/** The night share (0 night to 1 day) from the recording's light: ConvoyLook::SkyLit ([CL]), until the sea scene's
-	 * SeaDayCore lands with Day.UnlitShare, which is then handed to Night::SetShare. */
+	/** The night share (0 night to 1 day) from the recording's light: ConvoyLook::SkyLit ([CL]); in field mode step 11
+	 * hands the battle day's own UnlitShare to Night::SetShare in its place (ASeaBattle::OpenOn). */
 	double ShareOf(const Light& L);
 	/** Night fighting's night: the light given, the sun more than 6 degrees under (civil twilight's end), and the share
 	 * under a half. */
@@ -186,7 +186,7 @@ namespace SeaNight
 	{
 	public:
 		void Begin(uint64_t Seed, const Light& InLight, double Share = -1.0);
-		/** The night share handed in (SeaDayCore's Day.UnlitShare, once it lands): 0 night to 1 day. */
+		/** The night share handed in (the battle day's UnlitShare, in field mode): 0 night to 1 day. */
 		void SetShare(double Share);
 		double Share() const { return DayShare; }
 		/** Night fighting's night now (IsNight): nothing is lit or fired otherwise. */

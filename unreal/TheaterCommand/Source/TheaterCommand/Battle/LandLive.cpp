@@ -109,6 +109,38 @@ namespace
 		// can see is not touched: that part changes results and waits for the design director's ruling under a switch of
 		// its own. Off until a Mac off/on line and the art director pass it; -TheaterLandRuleHatches turns it on for a run.)
 		{ TEXT("hatches"), TEXT("Heads up, hatches down"), TEXT("Each tank commander rides with his head out of the hatch for the view, and drops inside in his own time when rounds come at his tank or the enemy gets close: green crews early and for long, veterans late and briefly. Off: a platoon's tanks all close up together when the enemy is within 120 metres."), TEXT("TheaterLandNoHatches"), false, TEXT("TheaterLandRuleHatches") },
+		// (Experience you can see, release 2: Brian, 25 November 15:11Z, "do those 3 ideas": green squads bunch up and
+		// freeze under first fire, veterans spread out and get down fast. The drill's, looks only, by the block's training
+		// alone (never its nation or the date); it works only with squad life on, and a battle ends the same with it on or
+		// off (tests/land-seasoned). Off until a Mac off/on line and the art director pass it; -TheaterLandRuleSeasoned
+		// turns it on for a run.)
+		{ TEXT("seasoned"), TEXT("Experience you can see"), TEXT("A squad's training shows in how it moves. Green squads bunch together and freeze for a moment when first fired on; veterans keep wider gaps and get down at once. Needs Squads of individuals on. Off: every squad spaces itself and reacts alike."), TEXT("TheaterLandNoSeasoned"), false, TEXT("TheaterLandRuleSeasoned") },
+		// (When the leader falls, release 2: Brian, 25 November 15:11Z, "do those 3 ideas": the squad hesitates a few
+		// seconds, then the next man takes charge. The drill's, looks only: the acting leader is marked in the drill and
+		// no man's model is swapped; it works only with squad life on, and a battle ends the same with it on or off
+		// (tests/land-leaders). Off until a Mac off/on line and the art director pass it; -TheaterLandRuleLeaders turns it
+		// on for a run.)
+		{ TEXT("leaders"), TEXT("When the leader falls"), TEXT("When a squad's leader is hit, his men go to ground and hesitate for a few seconds, some looking his way, until the next man takes charge and leads them on. Green squads take longer. Needs Squads of individuals on. Off: a squad carries on as if nothing had happened."), TEXT("TheaterLandNoLeaders"), false, TEXT("TheaterLandRuleLeaders") },
+		// (Tanks with minds of their own, release 2: Brian, 25 November 15:57Z, "i dont want the tanks and vehicles doing
+		// the exact same thing as each other. i want everything to see like it has its own mind". The drill's, looks only:
+		// the block's place and pace stay the rules', and a battle ends the same with it on or off (tests/land-tank-mind).
+		// It needs neither squad life nor the drill book. Off until a Mac off/on line and the art director pass it;
+		// -TheaterLandRuleTankMind turns it on for a run.)
+		{ TEXT("tankmind"), TEXT("Tanks with minds of their own"), TEXT("Each tank and vehicle acts for itself within its platoon's plan: it takes up an order at its own moment, stops briefly at its own spot to fire and moves on while its partner covers, and keeps its hull to the threat and its turret on its own arc. Off: a platoon's tanks drive, halt and turn as one."), TEXT("TheaterLandNoTankMind"), false, TEXT("TheaterLandRuleTankMind") },
+		// (Tank machine guns, release 2: Brian, 25 November 15:55Z, "i never see the machine guns on the tanks firing",
+		// and 15:56Z, "i dont want it to be all the time as thats unrealistic with ammo". The drill's, looks only: a
+		// battle ends the same with it on or off (tests/land-tankmg). It needs neither squad life nor the drill book.
+		// Off until a Mac off/on line and the art director pass it; -TheaterLandRuleTankMg turns it on for a run.)
+		{ TEXT("tankmg"), TEXT("Tank machine guns"), TEXT("Tanks fire their machine guns at enemy soldiers in short bursts, each tank at her own moment and at targets worth the rounds, with pauses between, and they ease off as their ammunition runs down. Off: tanks' machine guns stay silent."), TEXT("TheaterLandNoTankMg"), false, TEXT("TheaterLandRuleTankMg") },
+		// (Only anti-tank weapons take a tank, release 2: Brian, 25 November 15:58Z, "are bullets taking out german
+		// tanks? cannon fire or bazookas should be the only think taking them out". A REAL rule (the rules' sim.pierce,
+		// LAND.pierce): it changes results, so it stays off until the design director's ruling and the paired measure
+		// pass it, then a Mac off/on line; -TheaterLandRulePierce turns it on for a run.)
+		{ TEXT("pierce"), TEXT("Only anti-tank weapons stop tanks"), TEXT("Rifles and machine guns can no longer knock out a tank. A tank falls only to other tanks, to guns, to anti-tank launchers at short range, or to infantry assaulting it up close. Off: infantry fire wears tanks down from as far as it can reach."), TEXT("TheaterLandNoPierce"), false, TEXT("TheaterLandRulePierce") },
+		// (Men who leave the field are seen leaving, release 2: Brian, 25 November 17:11Z, "some soldiers freeze and
+		// then disapear". The drill's, looks only: a battle ends the same with it on or off (tests/land-exits). Off
+		// until a Mac off/on line and the art director pass it; -TheaterLandRuleExits turns it on for a run.)
+		{ TEXT("exits"), TEXT("Soldiers leave the field on foot"), TEXT("Men who run away keep running past the edge of the field, and the men of a unit that falls back are seen running to the rear until they are gone, instead of stopping where they stand and vanishing. Off: a unit that leaves the battle disappears where it is."), TEXT("TheaterLandNoExits"), false, TEXT("TheaterLandRuleExits") },
 		// (Machine gun and mortar teams at work, release 2: Brian, 25 November 14:15Z, machine gun and mortar teams "lay down
 		// suppressing fire, such as the German MG 42 and the US machine gun". The drill's, looks only: where a team sets up,
 		// how its crew works the gun (number two at the feed, the NCO with his glasses, bearers running ammunition), bursts
@@ -201,7 +233,17 @@ namespace
 		// Since the design director's ruling of 17:52Z the same switch turns on the rules' sim.teamsRule in every
 		// battle, the custom battles too: a team's fire shakes by its own harm, and a defence's line stays in its
 		// places while its teams fire. So the line says "into battle", not "campaign battles".)
-		{ TEXT("teams"), TEXT("Support teams in battle"), TEXT("Every infantry corps takes its own machine gun and mortar teams into battle, drawn from its own men, not extra ones, and they fire in support from behind its line. This changes how battles turn out."), TEXT("TheaterLandNoTeams"), false, TEXT("TheaterLandRuleTeams") },
+		{ TEXT("teams"), TEXT("Support teams in battle"), TEXT("Every infantry corps takes its own machine gun and mortar teams into battle, drawn from its own men, not extra ones, and they fire in support from behind its line. This changes how battles turn out. A change takes effect from the next battle. It works only with Units face the fire that hurts most on."), TEXT("TheaterLandNoTeams"), false, TEXT("TheaterLandRuleTeams") },
+		// (Units face the fire that hurts most, release 2: the design director's ruling of 25 November 21:54Z on the
+		// fairness gate's trace. Off, any blow on a block's front holds it to its facing, at any range, however light
+		// and whatever its cover: ruled a fault. On, a block is held only by the enemy whose blows cost it most after
+		// its cover, and turns to meet another that costs it more (the rules' sim.faceRule). It is NOT looks only: it
+		// moves every battle, guns hold too, so it has this row of its own and its own fairness gate, and stays off
+		// until that gate and the design director pass it; -TheaterLandRuleFacing turns it on for a run. "Support
+		// teams in battle" above does nothing without it (the same ruling: the bridge and live.ts read both). Its key,
+		// name and line are the UI director's of 25 November 22:14Z, and "A change takes effect from the next battle." on
+		// both rows theirs of 22:30Z: a battle reads its rows once, as it begins.)
+		{ TEXT("facing"), TEXT("Units face the fire that hurts most"), TEXT("A unit faces the enemy that hurts it most, once its cover is counted, and turns to meet another only when that one hurts it more. Fire that truly hurts still holds a unit to its facing; a far-off gun that does it little harm no longer keeps it facing the wrong way while infantry comes in at its side. Off: any enemy striking a unit's front, however lightly and from however far, keeps it from turning to meet another at its side, as before. This changes how battles turn out. A change takes effect from the next battle."), TEXT("TheaterLandNoFacing"), false, TEXT("TheaterLandRuleFacing") },
 		// (Sniper teams, release 2: Brian, 25 November 16:07Z, "should we add snipers? how would that impact the battle?",
 		// then "yes". The rules' LAND.snipers: each side's foot gives its army's share of its power to a few sniper teams,
 		// so the card's odds stand; they change how a battle goes, so this row waits for the design director's ruling and

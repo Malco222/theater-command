@@ -48,7 +48,7 @@ step() {
 SOURCES=("$HERE/sea_night_test.cpp"
   "$SRC/Battle/SeaNightCore.cpp" "$SRC/Battle/ConvoyLooksCore.cpp"
   "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp"
-  "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp"
+  "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/AirSky.cpp"
   "$SRC/Effects/TheaterFxCore.cpp")
 WARN=(-std=c++20 -O2 -Wall -Wextra -Wshadow -Werror)
 

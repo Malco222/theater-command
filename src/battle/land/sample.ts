@@ -6,12 +6,20 @@ import { combinedArms, groundAttack, groundDefence, isFoot } from '../../campaig
 import { ENGINEERING } from '../../campaign/rivers';
 import { antiTank, snipedIn, tollFor, tollOf, type Facing } from '../../campaign/support';
 import { FORT_MUL, KIND, TERRAIN_DEF, type Corps, type Game, type Kind, type Region } from '../../campaign/types';
-import type { AirOnCall, FieldTicket, ForceTicket, Side, SideTicket } from '../core/types';
+import type { AirOnCall, FieldTicket, ForceKit, ForceTicket, Side, SideTicket } from '../core/types';
 import type { LandPlace, Terrain } from './field';
 import { LAND } from './rules';
 
-const force = (corps: number, name: string, nat: string, kind: string, divs: number, share: number, dug = false, first = 1, str = 0.9): ForceTicket =>
-  ({ corps, name, nat, kind, divs, men: divs * 15000 * str, str, org: 0.85, xp: 0.3, mor: 0.65, share, dug, first });
+const force = (corps: number, name: string, nat: string, kind: string, divs: number, share: number, dug = false, first = 1, str = 0.9, kit?: ForceKit | null): ForceTicket =>
+  ({ corps, name, nat, kind, divs, men: divs * 15000 * str, str, org: 0.85, xp: 0.3, mor: 0.65, share, dug, first, ...(kit && Object.keys(kit).length && (LAND.pierce.foot as readonly string[]).includes(kind) ? { kit: { ...kit } } : {}) });
+
+/**
+ * Only anti-tank weapons take a tank (LAND.pierce; the design director's pierce ruling, 25 Nov, P3): what the foot
+ * corps of a sample ticket carry that can pierce armour, both sides alike: their own anti-tank guns, no tank destroyers
+ * and no launchers. A sample ticket's card is plain odds and prices no kit, so the same kit on both sides keeps it
+ * even. Data on the ticket only: nothing reads it unless the battle is opened with LandBattle.pierce.
+ */
+export const SAMPLE_KIT: ForceKit = { atGuns: true };
 
 export interface SampleOpts {
   river?: boolean; bridgeDown?: boolean; fort?: number; dug?: boolean; town?: LandPlace['townSize']; seed?: number; humanAtt?: boolean; title?: string;
@@ -27,6 +35,11 @@ export interface SampleOpts {
   /** The armies' nations, for a sandbox's invented pairing (left out: RED and BLU, no nation's), and the history dial's stop. */
   nat?: Partial<Record<Side, string>>;
   hist?: number;
+  /**
+   * What a side's foot corps carry that can pierce armour (LAND.pierce), in place of SAMPLE_KIT: for the paired
+   * measure's kit lean (tools/land-gate). {} or null: the plain kit (no field written). Kit goes with the corps.
+   */
+  kit?: Partial<Record<Side, ForceKit | null>>;
 }
 
 /** A corps of a hand-made army: its name, kind, divisions, share of its side's strength, and its first division's number. */
@@ -45,19 +58,21 @@ const attId = (i: number): number => i + 1, defId = (i: number): number => 11 + 
 
 export function sampleTicket(terrain: Terrain, odds: number, o: SampleOpts = {}): FieldTicket<LandPlace> {
   const A = 100;
-  return made(terrain, { A, D: A / odds, odds, dice: [0.8, 1.2], even: 1.2 }, o);
+  const kit = { att: o.kit?.att !== undefined ? o.kit.att : SAMPLE_KIT, def: o.kit?.def !== undefined ? o.kit.def : SAMPLE_KIT };
+  return made(terrain, { A, D: A / odds, odds, dice: [0.8, 1.2], even: 1.2 }, o, DEF, 0.9, kit);
 }
 
-function made(terrain: Terrain, reckoning: FieldTicket<LandPlace>['reckoning'], o: SampleOpts, defence: Corps5[] = DEF, defStr = 0.9): FieldTicket<LandPlace> {
+/** kit: what each side's foot corps carry that can pierce armour (LAND.pierce); left out, the plain kit, no field written. */
+function made(terrain: Terrain, reckoning: FieldTicket<LandPlace>['reckoning'], o: SampleOpts, defence: Corps5[] = DEF, defStr = 0.9, kit?: Record<Side, ForceKit | null>): FieldTicket<LandPlace> {
   const nA = o.nat?.att ?? 'RED', nD = o.nat?.def ?? 'BLU';
   const att: SideTicket = {
     nat: nA, adj: 'Your', color: '#7d6a4f', human: !!o.humanAtt, general: { name: 'General Hale', level: 2 },
-    forces: ATT.map(([name, kind, divs, share, first], i) => force(attId(i), name, nA, kind, divs, share, false, first)),
+    forces: ATT.map(([name, kind, divs, share, first], i) => force(attId(i), name, nA, kind, divs, share, false, first, 0.9, kit?.att)),
     ...(o.air?.att ? { air: o.air.att } : {}), ...(o.style?.att ? { style: o.style.att } : {}),
   };
   const def: SideTicket = {
     nat: nD, adj: 'Enemy', color: '#5a6f86', human: false, general: { name: 'General Vane', level: 2 },
-    forces: defence.map(([name, kind, divs, share, first], i) => force(defId(i), name, nD, kind, divs, share, !!o.dug && kind !== 'art', first, defStr)),
+    forces: defence.map(([name, kind, divs, share, first], i) => force(defId(i), name, nD, kind, divs, share, !!o.dug && kind !== 'art', first, defStr, kit?.def)),
     ...(o.air?.def ? { air: o.air.def } : {}), ...(o.style?.def ? { style: o.style.def } : {}),
   };
   return {
@@ -222,8 +237,12 @@ export function practiceBill(p: PracticeGround, R: number, field: Record<Side, n
   return { att: share(att, (c, i) => Math.min(0.6, attPart(c, i) * kA)), def: share(def, (c, i) => Math.min(0.8, defPart(c, i) * kD) * weight) };
 }
 
-/** A practice ground's ticket: the practice armies on that ground, at the odds their own card gives them there. */
-export function practiceTicket(p: PracticeGround, o: Omit<SampleOpts, 'river' | 'fort' | 'bridgeDown' | 'dug'> = {}): FieldTicket<LandPlace> {
+/**
+ * A practice ground's ticket: the practice armies on that ground, at the odds their own card gives them there. Its foot
+ * carries the plain kit (no ForceKit field: LAND.pierce): its card is reckoned with no research, and the field's kit
+ * must match the card it plays out (the pierce ruling, 25 Nov, P3).
+ */
+export function practiceTicket(p: PracticeGround, o: Omit<SampleOpts, 'river' | 'fort' | 'bridgeDown' | 'dug' | 'kit'> = {}): FieldTicket<LandPlace> {
   return made(p.terrain, practiceReckoning(p), { ...o, river: p.river, fort: p.fort, ...(p.air ? { air: PRACTICE_AIR, date: PRACTICE_AIR_DATE } : {}) }, defenceOn(p), p.str ?? 0.9);
 }
 

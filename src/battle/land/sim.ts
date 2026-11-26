@@ -23,7 +23,7 @@ import { armyNames, bendAt, deploy, joinBlocks, makeBlocks, wetUnder, type LandO
 import { Drill, wreckOffset } from './drill';
 import { phoneFallback, phoneLines, type PhoneFallback } from './rules';
 import { NERVE_PARTS, REF_NERVE, SPREAD, ledgerK, nerveSplit, noTrace, weighsOf, type BlowWeights, type LedgerTrace, type NerveParts } from './spread';
-import { ownTeamParents } from './own-teams';
+import { isOwnTeam, ownTeamParents } from './own-teams';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
 
@@ -377,6 +377,30 @@ export class LandBattle implements BattleSim<LandUnit> {
    * A battle with no team block on the field is the same on or off. Off unless whoever opens the field turns it on.
    */
   teamsRule = false;
+  /**
+   * Units face the fire that hurts most (release 2, the Battle rules card's `facing`, off; the design director's ruling
+   * of 25 November 2026, 21:54Z, on the ground thread's trace of two cities).
+   *
+   * Off, as it always was: any blow that lands on a block's front holds it for the tick ("face what it is fighting,
+   * unless held by an enemy in front"), and a held block may not turn to meet another enemy. Any striker, at any range,
+   * however light the blow and whatever the block's cover: so a machine gun a kilometre off held a block in a building
+   * to its facing while a line came in on its side, where blows count half as much again. Ruled a fault: the hold
+   * read no cover.
+   *
+   * On: a block faces what costs it most. Of the enemies that struck it this tick, the one whose blow costs it most
+   * holds it: in front, the block stands as it faces; on its side or behind, the block turns to meet it. A blow a
+   * building's cover has cut low holds it only while nothing hurts it more. No new figure: the cost is the harm the
+   * fight already reckons, after cover. It is weighed as it would land face on (the facing's own weight and the tick's
+   * luck taken out), so the costliest enemy is the same one whichever way the block faces and two enemies of about
+   * equal weight never turn it back and forth: facing the heavier is what costs it least. Struck by no one, it faces
+   * what it is fighting, as before.
+   *
+   * It moves every battle (guns hold too), so it has its own row and its own gate, and `teams` goes on only with it on
+   * (live.ts). Off unless whoever opens the field turns it on.
+   */
+  faceRule = false;
+  /** faceRule: of the enemies that struck each block this tick, the costliest, what its blow cost face on, and whether it landed on the front. */
+  private readonly costliest = new Map<number, { by: number; cost: number; front: boolean }>();
   /** Each own team block's parent force (own-teams.ts ownTeamParents), by the forces' ids: read once from the ticket. */
   private teamParent: Map<number, number>;
   /** The computer's tank blocks going round to a tank block's flank (ai.ts): where to, at whom, since when. */
@@ -480,6 +504,14 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   escort = false;
   /**
+   * Only anti-tank weapons take a tank (release 2; Brian, 25 November 2026, 15:58Z: "are bullets taking out german
+   * tanks? cannon fire or bazookas should be the only think taking them out"): with it on, what a block of foot or a
+   * support team can do to a tank block comes only from what it carries that can pierce armour (LAND.pierce), never
+   * from its rifles and machine guns. A real rule: it changes results, so it is off unless turned on (the bridge's
+   * { pierce: true }, the Battle rules card's row), and with it off every battle is as before to the last figure.
+   */
+  pierce = false;
+  /**
    * Men in lorries (release 1.5, looks only; Brian, 23 November 14:10Z and 15:50Z, "soldiers in the back of a truck and
    * they then hop out"): each man aboard says his lorry and seat (MenOut.sv), and lorried men get down over the tailboard
    * one at a time (Drill.alight, hopOut), the lorries standing meanwhile. Off unless turned on (the bridge's
@@ -564,7 +596,11 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.rng = new Rng(ticket.attempt ? hashString(`field-run:${ticket.seed}:${ticket.attempt}`) : ticket.seed);
     this.style = { att: styleFor(ticket, 'att'), def: styleFor(ticket, 'def') };
     // Each side's blocks share out exactly the power the card counted, so the odds on the field are the card's.
-    const A = ticket.reckoning.A, D = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds);
+    // (Support teams, release 2 behind `teams`: where the card has priced each side's own teams (Reckoning.teamFire) and
+    // they are on this ticket as team blocks, the blocks share out the power before that term: the teams on the field
+    // are the term. Priced but not on the ticket, or not priced: A and A / odds, as it always was.)
+    const priced = ticket.reckoning.teamFire && [...ticket.att.forces, ...ticket.def.forces].some(isOwnTeam) ? ticket.reckoning.teamFire : undefined;
+    const A = ticket.reckoning.A / (priced ? Math.max(1e-6, priced.att) : 1), D = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds) / (priced ? Math.max(1e-6, priced.def) : 1);
     this.power = { att: A, def: D };
     this.teamParent = ownTeamParents(ticket);
     const att = makeBlocks('att', ticket.att, A, 1, undefined, ticket.turn);
@@ -2126,7 +2162,7 @@ export class LandBattle implements BattleSim<LandUnit> {
   // ---- The tick -----------------------------------------------------------------------------------------------------
 
   /** The squad brain, made the first time it is asked for (drill.ts). */
-  drillOn(opts?: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; hatches?: boolean; teamwork?: boolean; scale?: boolean | number }): Drill {
+  drillOn(opts?: { sections?: boolean; platoons?: boolean; book?: boolean; life?: boolean; hatches?: boolean; seasoned?: boolean; leaders?: boolean; tankmind?: boolean; tankmg?: boolean; exits?: boolean; teamwork?: boolean; scale?: boolean | number }): Drill {
     if (this.drill) return this.drill;
     const { scale, ...rest } = opts ?? {};
     // True: the battle's own N; a number: that N (a recording or a test that sets its own).
@@ -2843,6 +2879,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       this.staffing = false;
     }
     for (const u of this.units) { u.pinned = false; if (live(u)) { u.still += DT; u.clear += DT; } }
+    if (this.costliest.size) this.costliest.clear();
     // Blows first, from where everyone stands, then nerve, then movement: no block gets to strike first by its place in the list.
     // (Under the field spread's army ledger: dm, the tick's damage times the parts of m read at the army; built, the
     // blows' nerve weight as built, every part, with which what is held back or spared lands on the block later; dn, the
@@ -2850,6 +2887,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     const hurt = new Map<number, Hurt>();
     // What blows held back this tick for air strikes, by the block they fell on (air support).
     const kept = this.airOn.att || this.airOn.def ? new Map<number, number>() : null;
+    // Only anti-tank weapons take a tank (LAND.pierce): the blocks hidden as this tick's blows begin, so the rest of a
+    // blow (split fire) never lands on one, whichever block strikes first.
+    const unseen = this.pierce ? new Set(this.units.filter((e) => e.hid).map((e) => e.id)) : null;
     for (const u of this.units) {
       if (!fighting(u)) continue;
       const t = this.targetOf(u);
@@ -2885,6 +2925,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       // closes up (LAND.closed). It draws no die.
       if (u.team === 'snp' && t.kind === 'arm') { if (!blind) t.closedTo = Math.round((this.t + LAND.closed.secs) * 1000) / 1000; continue; }
       const blow = this.blow(u, t);
+      const struck = blow.dmg;
       // Field telephone lines (release 2): a gun's or a mortar team's blow may cut the wire to the block it falls on.
       if (this.phones && this.wires.length) this.wireBlow(u, t);
       if (blind) {
@@ -2904,31 +2945,34 @@ export class LandBattle implements BattleSim<LandUnit> {
         kept!.set(t.id, (kept!.get(t.id) ?? 0) + raw);
       }
       const h = hurt.get(t.id) ?? { dmg: 0, nerve: 0, from: [], blind: true, team: 0, teamNerve: 0 };
-      // (Under the field spread's army ledger its own split, as before; else tally, which keeps support teams' harm apart
-      // under teamsRule. The two are never on together in the game: the ledger is bench-only. Under the ledger the teams'
-      // nerve split is off, so a bench run with both on is not a reading of `teams`.)
-      // Under the field spread's army ledger (step 1b, choice 13) each part of m is read at the army or at the block, never both.
-      if (this.led && blow.parts) {
-        h.dmg += blow.dmg;
-        const sp = nerveSplit(blow.parts, this.led.on), pt = blow.parts, w = (h.pw ??= { flank: 0, rear: 0, fire: 0, ambush: 0 });
-        h.nerve += sp.block; h.dm = (h.dm ?? 0) + blow.dmg * sp.army; h.built = (h.built ?? 0) + blow.nerve; h.dn = (h.dn ?? 0) + blow.dmg * blow.nerve;
-        // Each part's own weight as built, wherever it is read (the trace: the gate reads each part apart).
-        w.flank += blow.dmg * (pt.aspect === 'flank' ? pt.nm : 1); w.rear += blow.dmg * (pt.aspect === 'rear' ? pt.nm : 1);
-        w.fire += blow.dmg * pt.fire; w.ambush += blow.dmg * pt.ambush;
-      } else this.tally(h, u, blow);
+      // (the field spread's army ledger's split under the bench's ledger, else tally: landBlow)
+      this.landBlow(h, u, blow);
       if (!blind) h.blind = false;
       // Who struck it this tick, and how hard: whose blow a lost model goes to (suffer; shells.ts). Never read by the fight.
       h.from.push([u, blow.dmg]);
+      // (LAND.pierce: a blow that could put nothing into a tank is owed none of her losses: a machine-gun team never takes one)
+      if (blow.rest && blow.rest.part >= 1) h.from.pop();
       hurt.set(t.id, h);
-      if (blow.front) t.pinned = true;
+      if (this.faceRule) {
+        // Units face the fire that hurts most: the blow as the fight reckons it (searched cover and air's share taken
+        // off as they were above), weighed face on. The first of two that cost alike keeps the place.
+        const cost = struck > 0 ? blow.faceOn * (blow.dmg / struck) : 0, top = this.costliest.get(t.id);
+        if (!top || cost > top.cost) this.costliest.set(t.id, { by: u.id, cost, front: blow.front });
+      } else if (blow.front) t.pinned = true;
       if (u.team === 'snp' && !blind) this.sniped(u, t);
       if (blow.aspect !== 'front' && this.t - t.flankedAt > 20) {
         t.flankedAt = this.t;
         if (t.side === 'att' ? this.ticket.att.human : this.ticket.def.human) this.say({ what: 'flanked', unit: t.id, side: t.side, text: `${this.named(t)} is hit from the ${blow.aspect === 'rear' ? 'rear' : 'flank'}.`, x: t.x, y: t.y });
       }
+      // Only anti-tank weapons take a tank (LAND.pierce): what the blow could not put into the tank lands, after it, on
+      // the men with her (split fire). Only its weight on her was less (the ruling's P1): at any share, even none, it
+      // was a blow on her above, with its nerve, its pin and its place among the tick's blows as ever.
+      if (blow.rest) this.splitFire(u, blow.rest, hurt, kept, unseen!);
     }
     // Support teams in battle (teamsRule): what the tick's harm costs in nerve is the others' harm at the others' sum
     // and each team's at its own, as one multiplier on the whole (suffer takes one). No team struck it: the sum as it was.
+    // Units face the fire that hurts most (faceRule): a block is held by its costliest enemy of the tick, where that one is in front.
+    if (this.faceRule) for (const [id, top] of this.costliest) if (top.front) this.unit(id)!.pinned = true;
     if (this.teamsRule) for (const h of hurt.values()) if (h.team > 0 && h.dmg > 0) h.nerve = ((h.dmg - h.team) * h.nerve + h.teamNerve) / h.dmg;
     // The nerve what was held back would have cost, as the tick's blows on that block cost it, owed with it. (Under the
     // field spread's army ledger, the blows' weight as built: the strike lands it on the block, or with the air part at
@@ -3182,8 +3226,83 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (e.team) return null;
     if (e.kind === 'arm' || e.kind === 'fort') return reachOf(e);
     if (e.kind === 'art') return gunsOf(e).closeAt;
+    // Only anti-tank weapons take a tank (LAND.pierce, the ruling's P5): with it on, foot threatens a hull by its kit alone.
+    if (this.pierce) return this.kitReach(e);
     if (LAND.alone.foot.includes(e.kind) && this.ownAntiTank(e)) return reachOf(e);
     return null;
+  }
+
+  /**
+   * Only anti-tank weapons take a tank (LAND.pierce; the design director's pierce ruling, 25 Nov, P5): how far a foot
+   * block's own weapons that can stop a tank reach, by its kit alone: with its own anti-tank guns (ForceKit.atGuns) its
+   * reach; else with launchers (atHand) LAND.pierce.hand.at; else none (close assault and the early guns do not stop
+   * tanks driving through). Never its army's name or the month: the overrun's old table is not read.
+   */
+  private kitReach(e: LandUnit): number | null {
+    if (!LAND.pierce.foot.includes(e.kind)) return null;
+    return e.kit?.atGuns ? reachOf(e) : e.kit?.atHand ? LAND.pierce.hand.at : null;
+  }
+
+  /**
+   * Only anti-tank weapons take a tank (LAND.pierce; the design director's pierce ruling, 25 Nov, P1 and P2): the share
+   * of a block's blow that can fall on a tank block, from what it carries that can pierce armour. Tanks and field guns
+   * 1; a machine-gun or mortar team its own figure; a fort its own, in its reach; a block on foot its own anti-tank
+   * guns anywhere in its reach (by its kit, the plain kit the early guns), its launchers within hand.at where its kit
+   * has them, and close assault within close.at, each by the ground: close where the tank stands on close ground or
+   * the striker in its works. Pure: the two blocks' kinds, the striker's team and kit, the gap between their edges and
+   * the ground where each stands (blow() asks it as the two stand now, an overrun's pair too); no dice, no army's
+   * name, no date, nothing of the card, nothing written during the tick.
+   */
+  pierceShare(u: LandUnit, t: LandUnit, gap: number = this.gap(u, t), uAt: [number, number] = [u.x, u.y], tAt: [number, number] = [t.x, t.y]): number {
+    const P = LAND.pierce;
+    if (t.kind !== 'arm') return 1;
+    // (a support team the table does not list yet takes nothing off a tank, as a machine-gun team: its fire goes to the
+    // men with her. Never a blow that is not a number; a test holds the table to LAND.teams' own keys.)
+    if (u.team) return P.teams[u.team] ?? 0;
+    if (u.kind === 'fort') return gap <= reachOf(u) ? P.fort : 0;
+    if (!P.foot.includes(u.kind)) return 1;
+    const where = P.ground.includes(coverAt(this.field, tAt[0], tAt[1])) || P.works.includes(groundAt(this.field, uAt[0], uAt[1])) ? 'close' : 'open';
+    let s = gap <= reachOf(u) ? Math.min(P.guns.most, (u.kit?.atGuns ? P.guns.with : P.guns.without) + (u.kit?.atTd ? P.guns.destroyers : 0)) : 0;
+    if (u.kit?.atHand && gap <= P.hand.at) s += P.hand[where];
+    if (gap <= P.close.at) s += (u.kind === 'eng' ? P.eng : P.close)[where];
+    return Math.min(P.most, s);
+  }
+
+  /**
+   * Split fire (LAND.pierce; the pierce ruling, 25 Nov, P1 and Q2: the b418 shape): the rest of a blow that could not
+   * pierce a tank lands as a blow on the nearest enemy block in the striker's reach that is not a tank, by targetOf's
+   * own score (the gap times the turn to it, a routing block's doubled), never a block hidden now or as the tick's
+   * blows began ('unseen'); where there is none it is lost. Weighed by blow() itself on that block (its own aspect,
+   * ground, height and take) at the first blow's luck, so no draw of the dice. The air's share is held back from it,
+   * and its hurt, its nerve and whose losses it is owed are kept, as for any blow on that block (step). The striker
+   * stays engaged with the tank it faces.
+   */
+  private splitFire(u: LandUnit, rest: { roll: number; part: number }, hurt: Map<number, Hurt>, kept: Map<number, number> | null, unseen: Set<number>): void {
+    const reach = reachOf(u);
+    let e: LandUnit | null = null, score = Infinity;
+    for (const x of this.units) {
+      if (x.side === u.side || !live(x) || x.hid || unseen.has(x.id) || x.kind === 'arm') continue;
+      const d = this.gap(u, x);
+      if (d > reach) continue;
+      const s = d * (1 + Math.abs(turn(u.face, bearing(u.x, u.y, x.x, x.y)))) * (x.state === 'routing' ? 2 : 1);
+      if (s < score) { score = s; e = x; }
+    }
+    if (!e) return;
+    const blow = this.blow(u, e, rest);
+    // (the air's share of it, as step holds it back from any blow)
+    if (this.airLeft[u.side] > 0) {
+      const full = blow.dmg / blow.screen, held = full * this.airOn[u.side]!.share, raw = held / blow.ground;
+      blow.dmg = (full - held) * blow.screen;
+      this.airBank[u.side].set(e.id, (this.airBank[u.side].get(e.id) ?? 0) + raw);
+      this.airLedger[u.side].withheld += raw;
+      kept!.set(e.id, (kept!.get(e.id) ?? 0) + raw);
+    }
+    const h = hurt.get(e.id) ?? { dmg: 0, nerve: 0, from: [], blind: true, team: 0, teamNerve: 0 };
+    // (landed as step lands any blow: so under teamsRule a support team's spill is kept apart in tally, like its blow)
+    this.landBlow(h, u, blow);
+    h.blind = false;
+    h.from.push([u, blow.dmg]);
+    hurt.set(e.id, h);
   }
 
   /**
@@ -3214,7 +3333,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       const f = this.unit(u.engaged);
       if (!f || f.side === u.side || !foot(f) || f.hid || this.overrun.has(f.id) || this.gap(u, f) > reachOf(u)) continue;
       // The foot in the open: not dug in where it began (fieldworks), nor on a hedge; its own anti-tank weapon none.
-      if ((f.dug && dist(f.x, f.y, f.home[0], f.home[1]) <= LAND.dug.keep) || this.ownAntiTank(f)) continue;
+      // (with pierce on, by its kit alone: LAND.pierce, the ruling's P5)
+      if ((f.dug && dist(f.x, f.y, f.home[0], f.home[1]) <= LAND.dug.keep) || (this.pierce ? this.kitReach(f) !== null : this.ownAntiTank(f))) continue;
       // Its own foot beside it (LAND.alone.near): tanks never go in alone.
       if (!this.units.some((g) => g.side === u.side && foot(g) && this.gap(u, g) <= LAND.alone.near)) continue;
       // The way: from where it stands through to the foot's far edge, every step of it open ground its tracks can take.
@@ -3305,6 +3425,23 @@ export class LandBattle implements BattleSim<LandUnit> {
    * Support teams in battle (teamsRule): a team's is not added to the others'; it is kept with its own harm (team,
    * teamNerve), and step makes the one multiplier of them once every blow is in.
    */
+  /**
+   * A blow landed on its target's hurt this tick (step, and splitFire for the rest of a split blow). Under the field
+   * spread's army ledger its own split, as before; else tally, which keeps support teams' harm apart under teamsRule.
+   * The two are never on together in the game: the ledger is bench-only. Under the ledger the teams' nerve split is off,
+   * so a bench run with both on is not a reading of `teams`. Under the ledger (step 1b, choice 13) each part of m is
+   * read at the army or at the block, never both.
+   */
+  private landBlow(h: Hurt, u: LandUnit, blow: { dmg: number; nerve: number; parts?: NerveParts }): void {
+    if (this.led && blow.parts) {
+      h.dmg += blow.dmg;
+      const sp = nerveSplit(blow.parts, this.led.on), pt = blow.parts, w = (h.pw ??= { flank: 0, rear: 0, fire: 0, ambush: 0 });
+      h.nerve += sp.block; h.dm = (h.dm ?? 0) + blow.dmg * sp.army; h.built = (h.built ?? 0) + blow.nerve; h.dn = (h.dn ?? 0) + blow.dmg * blow.nerve;
+      // Each part's own weight as built, wherever it is read (the trace: the gate reads each part apart).
+      w.flank += blow.dmg * (pt.aspect === 'flank' ? pt.nm : 1); w.rear += blow.dmg * (pt.aspect === 'rear' ? pt.nm : 1);
+      w.fire += blow.dmg * pt.fire; w.ambush += blow.dmg * pt.ambush;
+    } else this.tally(h, u, blow);
+  }
   private tally(h: Hurt, u: LandUnit, blow: { dmg: number; nerve: number }): void {
     h.dmg += blow.dmg;
     if (this.teamsRule && ownArm(u)) { h.team += blow.dmg; h.teamNerve += blow.dmg * blow.nerve; } else h.nerve += blow.nerve;
@@ -3314,7 +3451,7 @@ export class LandBattle implements BattleSim<LandUnit> {
    * from which aspect, the part of what the target takes that is its ground (ground), and the share a smoke screen across
    * it left of it (screen: 1 where none; smoke on call, release 2), so the air's part of it can be held back whole.
    */
-  private blow(u: LandUnit, t: LandUnit): { dmg: number; nerve: number; front: boolean; aspect: 'front' | 'flank' | 'rear'; ground: number; screen: number; parts?: NerveParts } {
+  private blow(u: LandUnit, t: LandUnit, spill?: { roll: number; part: number }): { dmg: number; nerve: number; front: boolean; aspect: 'front' | 'flank' | 'rear'; ground: number; screen: number; faceOn: number; parts?: NerveParts; rest?: { roll: number; part: number } } {
     // An overrun's tank strikes and is struck as from where it stood before the drive (its height and its own ground
     // there), face to face: harm unchanged (b418; the design director, 06:02Z).
     const pair = this.inOverrun(u, t);
@@ -3356,7 +3493,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       p *= close ? G.close : G.punch;
       if (!close) nerveMul *= fireN = G.nerve;
       // A support team's bullets and light bombs do little to tanks (release 2).
-      if (u.team && t.kind === 'arm') p *= LAND.teams[u.team].armour;
+      // (with pierce on, its pierce share below stands in the armour figure's place: LAND.pierce.teams)
+      if (u.team && t.kind === 'arm' && !this.pierce) p *= LAND.teams[u.team].armour;
     }
     if (u.kind === 'arm' && LAND.tanksClose.ground.includes(gu)) p *= LAND.tanksClose.punch;
     // Closed up (LAND.closed): her commanders down inside, she finds less of the men on foot to fire at.
@@ -3367,7 +3505,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     const [am, nm] = LAND.aspect[aspect];
     // Measured armour (release 2): a tank's blow on a tank, or a gun's over open sights, by the face and the range.
     let amx = 1;
-    if (this.measured && t.kind === 'arm' && (u.kind === 'arm' || (u.kind === 'art' && !u.team && this.gap(u, t) < gunsOf(u).closeAt))) amx = this.armourAt(u, t, faceOfAspect(aspect), this.gap(u, t)) ?? 1;
+    const plate = this.measured && t.kind === 'arm' && (u.kind === 'arm' || (u.kind === 'art' && !u.team && this.gap(u, t) < gunsOf(u).closeAt));
+    if (plate) amx = this.armourAt(u, t, faceOfAspect(aspect), this.gap(u, t)) ?? 1;
     const ground = this.groundTake(t, tAt);
     let take = ground;
     // Tanks that have left their infantry on close ground take the card's own figure for tanks alone there (item 7).
@@ -3380,11 +3519,36 @@ export class LandBattle implements BattleSim<LandUnit> {
       take *= LAND.snipers.take.fragile;
       if (u.team === 'mor' || (u.kind === 'art' && !u.team) || u.kind === 'arm') take *= LAND.snipers.take.blast;
     }
-    const luck = 1 + LAND.jitter * ((u.team === 'snp' ? this.snpRoll(u, 342) : this.rng.next()) * 2 - 1);
+    // (one draw of the dice per blow, whatever its share; the rest of a split blow is weighed at the same draw: 'spill')
+    const roll = spill ? spill.roll : u.team === 'snp' ? this.snpRoll(u, 342) : this.rng.next();
+    const luck = 1 + LAND.jitter * (roll * 2 - 1);
     // The day's luck, and under the field spread's move (step 1b) its factor beside it.
     const f = this.lean === undefined ? this.fortune : this.fortune * this.lean;
     const dmg = p * am * amx * take * luck * (u.side === 'att' ? f : 1 / f) * DT;
-    return { dmg, nerve: nm * nerveMul, front: aspect === 'front', aspect, ground, screen, ...(this.led ? { parts: { aspect, nm, fire: fireN, ambush: ambushN } } : {}) };
+    const parts = this.led ? { parts: { aspect, nm, fire: fireN, ambush: ambushN } } : {};
+    // Units face the fire that hurts most (faceRule) weighs enemies by faceOn: the same blow as it would land on the
+    // block's front (the front's weight, and a tank's front plate where armour is measured), without the tick's luck.
+    // So what an enemy costs does not change as the block turns. Nothing else reads it; off, it is not reckoned.
+    // (The day's factor f as in dmg: under the field spread's lean the same for every enemy of one block, so the
+    // costliest is the same one; with pierce on, only the share of it that can reach a tank, as the fight reckons it.)
+    let faceOn = 0;
+    if (this.faceRule) {
+      const plateOn = plate && aspect !== 'front' ? this.armourAt(u, t, 'front', this.gap(u, t)) ?? 1 : amx;
+      faceOn = p * LAND.aspect.front[0] * plateOn * take * (u.side === 'att' ? f : 1 / f) * DT;
+    }
+    // Only anti-tank weapons take a tank (LAND.pierce; the design director's pierce ruling, 25 Nov): a blow on a tank
+    // block is weighed by the striker's pierce share, by the gap and the ground as the two stand now. An overrun's
+    // pair too (P1: "their gap"): the plain blow above is still weighed as from before the drive, but what the men
+    // can put into a tank driving through them is what reaches her where she is, their guns and their close assault,
+    // never nothing because she started her drive from beyond their reach. What a foot block or a support team could
+    // not put into her is the rest, for the men with her (splitFire, from step).
+    // 'spill': this blow is such a rest, the part of the striker's blow it carries.
+    if (this.pierce && (spill || t.kind === 'arm')) {
+      const part = spill ? spill.part : this.pierceShare(u, t);
+      const rest = !spill && part < 1 && (u.team || LAND.pierce.foot.includes(u.kind)) ? { roll, part: 1 - part } : undefined;
+      return { dmg: dmg * part, nerve: nm * nerveMul, front: aspect === 'front', aspect, ground, screen, faceOn: faceOn * part, ...parts, ...(rest ? { rest } : {}) };
+    }
+    return { dmg, nerve: nm * nerveMul, front: aspect === 'front', aspect, ground, screen, faceOn, ...parts };
   }
 
   /**
@@ -3604,9 +3768,13 @@ export class LandBattle implements BattleSim<LandUnit> {
       // Face what it is fighting, unless held by an enemy in front or by the facing its line was given.
       const e = u.engaged !== undefined ? this.unit(u.engaged) : undefined;
       let want = u.keepFace;
-      if (e && !u.pinned) {
-        const off = Math.abs(turn(u.keepFace ?? u.face, bearing(u.x, u.y, e.x, e.y)));
-        if (u.keepFace === null || off > Math.PI / 3) want = bearing(u.x, u.y, e.x, e.y);
+      // Units face the fire that hurts most (faceRule): struck this tick, it turns to meet the enemy whose blow cost it
+      // most (in front, that enemy holds it: pinned, above). Struck by no one, or with the rule off: what it is fighting.
+      const top = this.faceRule ? this.costliest.get(u.id) : undefined, by = top ? this.unit(top.by) : undefined;
+      const meet = by && live(by) ? by : e;
+      if (meet && !u.pinned) {
+        const off = Math.abs(turn(u.keepFace ?? u.face, bearing(u.x, u.y, meet.x, meet.y)));
+        if (u.keepFace === null || off > Math.PI / 3) want = bearing(u.x, u.y, meet.x, meet.y);
       }
       if (u.order?.kind === 'move' && !u.path.length) { u.order = null; }
       if (want !== null && Math.abs(turn(u.face, want)) > 0.02) { this.turnTo(u, want); u.act = 'turn'; }

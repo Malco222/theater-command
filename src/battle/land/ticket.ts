@@ -13,10 +13,12 @@ import { townName, townSize } from '../../campaign/towns';
 import { SIEGE, guardForce, guardMen, guardOf, guardPower } from '../../campaign/siege';
 import { stopOf } from '../../campaign/history';
 import { techRules } from '../../campaign/tech';
+import { isFoot } from '../../campaign/ground';
+import { SUPPORT } from '../../campaign/support';
 import { canOrder, jointForce, orderAttack, previewAttack } from '../../campaign/turn';
 import { corpsKnown, oddsBand } from '../../campaign/intel';
 import { KIND, type BattleReport, type Corps, type Game, type Region } from '../../campaign/types';
-import type { AirOnCall, FieldResult, FieldTicket, ForceTicket, SideTicket } from '../core/types';
+import type { AirOnCall, FieldResult, FieldTicket, ForceKit, ForceTicket, SideTicket } from '../core/types';
 import { streetsOf, type LandPlace } from './field';
 import { LAND } from './rules';
 import { bearingOf, streamFor } from './stream';
@@ -29,6 +31,22 @@ export function goingIn(g: Game, corps: Corps[], target: Region): Corps[] {
 
 /** The research a computer general's style grows by (data/battle/land-styles.json grow.tech). */
 const DOCTRINES = ['combined', 'deep'];
+
+/**
+ * Only anti-tank weapons take a tank (LAND.pierce; the design director's pierce ruling, 25 Nov, P3): what a corps on
+ * foot (isFoot: not tanks, guns or teams) carries that can pierce armour, from its own nation's research: Anti-tank
+ * guns, Tank destroyers and the hand-held weapons (support.json tech). Read straight off the nation's record, as the
+ * doctrine line below is, and only with the research rules on: never through techOf or hasTech, which open research on
+ * a first look. Nothing where it holds none of the three, or without research rules: the plain kit, both sides alike.
+ * Never the nation's name, never the date. Read by the field only with LandBattle.pierce on.
+ */
+function pierceKit(g: Game, c: Corps): { kit: ForceKit } | Record<string, never> {
+  if (!techRules(g) || !isFoot(c)) return {};
+  const done = g.nations[c.nat]?.tech?.done, T = SUPPORT.tech;
+  if (!done) return {};
+  const kit: ForceKit = { ...(done.includes(T.antiTank) ? { atGuns: true } : {}), ...(done.includes(T.tankDestroyers) ? { atTd: true } : {}), ...(done.includes(T.handHeld) ? { atHand: true } : {}) };
+  return Object.keys(kit).length ? { kit } : {};
+}
 
 function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number, crosses?: (c: Corps) => boolean): SideTicket {
   const N = g.nations[nat];
@@ -45,6 +63,7 @@ function sideOf(g: Game, nat: string, cs: Corps[], weigh: (c: Corps) => number, 
     // How worn its uniforms and kit look (release 2, looks only): absent while it is fresh.
     ...(c.wear !== undefined ? { wear: c.wear } : {}),
     ...(c.fresh ? { fresh: c.fresh } : {}),
+    ...pierceKit(g, c),
   }));
   // The general of the strongest corps commands on the field.
   const lead = cs.map((c) => generalOf(g, c)).filter((x) => !!x).sort((a, b) => b!.level - a!.level)[0] ?? null;
@@ -138,7 +157,9 @@ export function landTicket(g: Game, chosen: Corps[], target: Region): FieldTicke
     // game.ts): the field lays the river before those, and no others.
     att: { ...sideOf(g, attNat, going, (c) => corpsBase(g, c) * KIND[c.kind].atk, crossing ? (c) => !!riverBetween(g, c.reg, target.id) : undefined), ...onCall(cardAir?.att) },
     def: { ...withGuard(g, target, a.guard ?? 0, a.defenders.reduce((s, c) => s + weighDef(c), 0), sideOf(g, defNat, a.defenders, weighDef)), ...onCall(cardAir?.def) },
-    reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...(a.luck ? { luck: [a.luck[0], a.luck[1]] as [number, number] } : {}), ...(band.exact ? {} : { seen: band.mid }) },
+    reckoning: { A: a.A, D: a.D, odds: a.odds, dice: [a.dice[0], a.dice[1]], even: evenOdds(a.dice), ...(a.luck ? { luck: [a.luck[0], a.luck[1]] as [number, number] } : {}), ...(band.exact ? {} : { seen: band.mid }), ...(a.teamFire ? { teamFire: { att: a.teamFire.att, def: a.teamFire.def } } : {}) },
+    // (Support teams on the card, release 2 behind `teams`: the card's term for them rides with the reckoning, so the field
+    // lays its blocks at the power before it: Reckoning.teamFire, read by sim.ts only when own-team blocks are on the ticket.)
     lines: a.lines, limit: LAND.limit,
     // The attacks already made on this place this month by this side: the same ground, a fresh day's luck.
     attempt: g.reports.filter((x) => x.turn === g.turn && x.region === target.id && x.attNat === attNat).length,
