@@ -143,7 +143,9 @@ def picture_tags(scene_shots, kind, fname):
     always = {"every-picture"} | ({"every-battle"} if kind in BATTLE_KINDS else set())
     for p in (scene_shots or {}).get("pictures", []):
         m = p["match"]
-        if fnmatch.fnmatch(fname, m) or fnmatch.fnmatch(stem, m) or fname == m or stem == os.path.splitext(m)[0]:
+        # (a still the Mac turned from PNG into JPEG keeps its stem: "step-001.png" in shots.yaml finds step-001.jpg)
+        mstem = os.path.splitext(m)[0] if m.lower().endswith(PICTURE_EXT) else m
+        if fnmatch.fnmatch(fname, m) or fnmatch.fnmatch(stem, m) or fnmatch.fnmatch(stem, mstem):
             return sorted(set(p["tags"]) | always), p["about"], True, p["look"]
     base = list(KIND_TAGS.get(kind or "", []))
     base += (scene_shots or {}).get("tags", [])
@@ -465,6 +467,8 @@ def check_scene(name, night_dir, entry, shots, rules, img_dir, out_dir, look_all
     scene["tags"] = sorted(scene_tags)
     # the machine verdict per rule (clip and facts parts; the picture part is the judges')
     pic_by_name = {p["name"]: p for p in pictures}
+    for p in pictures:  # (the game's still lines name a still without its extension)
+        pic_by_name.setdefault(os.path.splitext(p["name"])[0], p)
     rule_out = []
     for r in fitting:
         parts = []
@@ -486,7 +490,8 @@ def check_scene(name, night_dir, entry, shots, rules, img_dir, out_dir, look_all
                 still = w.get("still")
                 # the nearest still stands for the moment only when it was taken within 15 s of it
                 near = still and abs(w.get("still_off_s") or 0) <= 15
-                p = pic_by_name.get(os.path.basename(str(still))) if near else None
+                key = os.path.basename(str(still))
+                p = (pic_by_name.get(key) or pic_by_name.get(os.path.splitext(key)[0])) if near else None
                 ev.append(dict(w, thumb=p["thumb"] if p else None, picture=p["file"] if p else None))
             parts.append({"source": "facts", "check": r["facts"], "status": fr["status"], "words": fr["words"],
                           "measured": fr.get("measured"), "evidence": ev})

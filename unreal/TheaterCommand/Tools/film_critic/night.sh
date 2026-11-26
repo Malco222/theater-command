@@ -193,6 +193,12 @@ play_scene() { # name minutes flags (with {OUT} for the scene's folder and {KIT}
   fi
   echo "{\"scene\":\"$name\",\"seconds\":$secs,\"exit\":$code,\"pictures\":$pics,\"note\":\"$why\"}" > "$dir/result.json"
   RESULTS+=("$name")
+  # Stills go from PNG to JPEG (about a sixth of the size; the checker finds step-001.jpg under its PNG name).
+  if command -v sips > /dev/null; then
+    find "$dir" -type f -name '*.png' | while read -r png; do
+      sips -s format jpeg -s formatOptions 88 "$png" --out "${png%.png}.jpg" > /dev/null 2>&1 && rm -f "$png"
+    done
+  fi
   rm -f "$OUT/$name.zip"
   # The zip is what the morning check fetches: once it is made, only result.json stays loose (the Mac's disk is
   # nearly full, and the camera and men facts squeeze about ten to one in a zip).
@@ -249,6 +255,9 @@ elif [ -n "$LATE" ] && [ "$played" -gt 0 ]; then
 fi
 say "run ends after $(( (END - START) / 60 )) minutes ${STOPPED:+(stopped: $STOPPED)}"
 
-# Keep two nights: tonight's and the one before.
+# Keep two nights at most, and none the morning check has already fetched (PULLED) other than tonight's.
 ls -1d "$ROOT"/20??-??-?? 2> /dev/null | sort -r | tail -n +3 | while read -r old; do rm -rf "$old"; done
+for old in "$ROOT"/20??-??-??; do
+  [ -d "$old" ] && [ "$old" != "$OUT" ] && [ -f "$old/PULLED" ] && rm -rf "$old"
+done
 exit 0

@@ -1,0 +1,68 @@
+# Film critic scene map-fleets-europe (and map-fleets-europe-heading, the same steps with -TheaterFleetHeading):
+# the campaign map's fleets sailing north, south, west and east, each caught mid-sail, just arrived, and at rest a
+# minute later (Brian 26 Nov: the wakes of fleets at rest all point screen-left).
+# Britain, September 1939, seed 1. On this head (node, the rules bundle at 1939-09 with the release 2 switches):
+#   Home Fleet in the North Sea, Western Approaches Fleet in the Western Approaches, Dover Fleet in the English
+#   Channel, Mediterranean Fleet in the Eastern Mediterranean, all at sea (none in harbour). Every order below is
+#   accepted (TC.forceOrder "fleet:<id>:<sea>:patrol", the string OrderFleetTo sends), the Mediterranean Fleet's
+#   second order of the month too (a fleet's reach is counted from where it began the month).
+# How the map sails a fleet (CampaignMapActor.cpp, ArmyPiece.cpp): by water, for T = 1.1 + length/380 s, held
+# between 1.4 and 3.6 s, eased in and out; from 84% of the way the bow turns to lie as fleets at rest lie.
+# The order-sea picture is taken 1.1 s after the order, so each leg below is long enough (T 2.1 to 2.5 s by the
+# straight line, more by water) that the still is at 44 to 56% of the way, well before that turn:
+#   north  Home Fleet to the Norwegian Sea          T 2.14  half way at about 1.15 s near Bergen
+#   south  Western Approaches Fleet to the Iberian Coast  T 2.49  near Galicia
+#   west   Mediterranean Fleet to the Central Mediterranean  T 2.25  between Crete and Derna
+#   east   Mediterranean Fleet back to the Eastern Mediterranean  T 2.25  the same water, the other way
+# A look-at waits for the place's fine ground, at least 3.5 s: a look-at on the destination right after an order is
+# the "just arrived" still (about 5 s after the order); the second look-at there, a minute on, the "at rest" still.
+# Film strips (-FilmCriticStrip=12,4): 4 s after each order-sea, the whole sail.
+# The step player cannot turn the camera: every still here is at the table's own heading. The photographer scene
+# photo-fleets-yaw takes the fleets at rest from four headings.
+# No end-month here (the -heading copy is kept short).
+# Each step's picture is step-NNN.png, NNN the step's number below.
+
+# 001: the British campaign table, September 1939
+start	UK 1939-09 seed 1
+# 002: AT REST, never moved: Dover Fleet in the English Channel off the Cotentin
+look-at	Cotentin middle
+# 003: the North Sea off Norway, where Home Fleet will pass going north (no fleet yet, or Home Fleet at the bottom edge)
+look-at	Bergen middle
+# 004: Home Fleet in hand: the seas it can reach ringed
+select-unit	Home Fleet
+# 005: MID-SAIL heading NORTH: Home Fleet about half way up the Norwegian coast, its wake trailing south behind it
+order-sea	Norwegian Sea	does
+# 006: JUST ARRIVED from the south: Home Fleet in the Norwegian Sea (its middle lies about 200 map units west of Trondheim)
+look-at	Trondheim far
+# 007: the Atlantic off Galicia, where the Western Approaches Fleet will pass going south
+look-at	Galicia middle
+# 008: Western Approaches Fleet in hand
+select-unit	Western Approaches Fleet
+# 009: MID-SAIL heading SOUTH: Western Approaches Fleet off Galicia, its wake trailing north
+order-sea	Iberian Coast	does
+# 010: JUST ARRIVED from the north: Western Approaches Fleet on the Iberian Coast off Cadiz
+look-at	Cadiz middle
+# 011: the sea between Crete and Derna, where the Mediterranean Fleet will pass going west
+look-at	Derna middle
+# 012: Mediterranean Fleet in hand (the British one: TC.find gives fleet 4, not the French fleet of that name)
+select-unit	Mediterranean Fleet
+# 013: MID-SAIL heading WEST: Mediterranean Fleet between Crete and Derna, its wake trailing east
+order-sea	Central Mediterranean	does
+# 014: JUST ARRIVED from the east: Mediterranean Fleet in the Central Mediterranean, east of Malta
+look-at	Malta middle
+# 015: the same water between Crete and Derna again
+look-at	Derna middle
+# 016: Mediterranean Fleet in hand again
+select-unit	Mediterranean Fleet
+# 017: MID-SAIL heading EAST over the same water as 013, the other way: its wake trailing west
+order-sea	Eastern Mediterranean	does
+# 018: JUST ARRIVED from the west: Mediterranean Fleet back in the Eastern Mediterranean, west of Cyprus
+look-at	Cyprus middle
+# 019: AT REST a minute after sailing north: Home Fleet in the Norwegian Sea
+look-at	Trondheim far
+# 020: AT REST a minute after sailing south: Western Approaches Fleet off Cadiz
+look-at	Cadiz middle
+# 021: AT REST after sailing east: Mediterranean Fleet west of Cyprus
+look-at	Cyprus middle
+# 022: AT REST, never moved, a few minutes on: Dover Fleet in the Channel (the control: compare with 002)
+look-at	Cotentin middle

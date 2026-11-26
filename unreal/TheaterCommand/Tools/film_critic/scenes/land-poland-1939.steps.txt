@@ -1,0 +1,128 @@
+# Film critic scene land-poland-1939: a land battle fought live from the campaign (FIGHT IT YOURSELF), in the East, summer (farmland) look.
+# Germany, September 1939, seed 1: XIX Corps attacks Pomorze (plains, held by Poland).
+# Checked on the release 2 head 2fdb13e5 (node, the rules bundle with the release 2 switches): the names are found
+# (TC.find), the army can attack the province, TC.battleLook gives the ticket "The Battle of Pomorze"; fought in the
+# land rules (Content/Rules/land-rules.js, as LandLive does) it meets at about battle s 60 and is over at about
+# 139. The field's look by LandScape::Pick's own boxes: farmland (53.3 N, 18.1 E).
+# -TheaterFightEveryLook offers FIGHT IT YOURSELF on every look (fight-yourself-looks.txt passes only some).
+# The battle's keys (LandBattleScreen.cpp): Enter begins; 1/2/3 are x1/x2/x4 on his high view and x0.5/x1/x2 in the
+# film; Tab picks his next unit; V rides with it; C is the film (and C or Esc takes the map back from the film).
+# No order key (G F X K T B H R L) is pressed. A battle second is half a real second at x1.
+# A land-wait waits at most 15 minutes; "begun" is waited only after Enter (in the placing view it never ends).
+# No film strips in this scene (the night's disk): the facts file still has the camera of every frame.
+# Each step's picture is step-NNN.png, NNN the step's number below.
+# Then a second battle the same month: I Corps (with Corps Wodrig, in Masuria) attacks Warsaw (urban, held by Poland):
+# ticket "The Battle of Warsaw", a city field (ground cells: 4430 buildings, 2536 suburb, industry, a river,
+# bridges); in the rules it meets at about 114 and is over at about 305. Whether the second ticket still stands
+# after the first battle is fought live was not run in node (it is another army in another province).
+
+# 001: the campaign table as it opens (GER, 1939-09)
+start	GER 1939-09 seed 1
+# 002: Berlin close in the first month: an agent piece near the capital? (Brian: "i didnt see spies")
+look-at	Berlin near
+# ---- The battle of Pomorze: FIGHT IT YOURSELF, fought live (rules sim on this head: contact about 60 s, over about 139 s; look farmland)
+# 003: XIX Corps picked up on the map: the army piece in hand, the provinces it can reach lit
+select-unit	XIX Corps
+# 004: the attack card for Pomorze: the odds, SEND THEM IN and FIGHT IT YOURSELF
+order-province	Pomorze	card
+# 005: the land battle opens (a second in: the field being laid, or its first frame)
+press	FIGHT IT YOURSELF	does
+# 006: 8 real s of the placing view: the field, its ground and both sides placed, before the battle begins
+land-wait	8s
+# 007: Enter (BEGIN): the battle begins, the high view
+land-key	enter
+# 008: pace x4 (2 battle s a real s) until contact; the high view
+land-key	3
+# 009: past any night before: the attack under way, seen from his high view
+land-wait	begun
+# 010: Tab: his next unit in hand, the view glides to it
+land-key	tab
+# 011: V: the film rides with that unit: a close view of its men or tanks
+land-key	v
+# 012: 12 real s riding with them toward the enemy at x4: men running, vehicles moving
+land-wait	12s
+# 013: until the first contact (about battle s 60), still riding with the unit
+land-wait	contact
+# 014: in the film the keys 1-3 are x0.5/x1/x2: x1 (half a battle s a real s) for the close fight
+land-key	2
+# 015: 16 real s of the close fight at x1: fire, men going to ground or falling
+land-wait	16s
+# 016: C: the film gives the camera back: his high view of the fight
+land-key	c
+# 017: Q held a second: his view turns (the view's own keys, no order)
+land-key	q	view
+# 018: W held a second: his view walks forward, lower over the field
+land-key	w	view
+# 019: C: the film takes the camera, choosing its own shots
+land-key	c
+# 020: 16 real s of the film's own cutting: each cut clean, the camera smooth between cuts
+land-wait	16s
+# 021: Esc: the map (his high view) back
+land-key	esc
+# 022: x4 to the end of the battle
+land-key	3
+# 023: the after card: who won, the losses, CONTINUE
+land-wait	card	card
+# 024: CONTINUE: the battle handed back to the campaign map
+land-click	continue
+# 025: the campaign map after the battle of Pomorze
+check-province	Pomorze
+# ---- The battle of Warsaw: FIGHT IT YOURSELF, fought live (rules sim on this head: contact about 114 s, over about 305 s; look farmland, on a city field (suburbs, buildings, industry, a river))
+# The city field: the nearest the game comes to T4, the ruined city, which is not built (no city look in LandScape)
+# 026: I Corps picked up on the map: the army piece in hand, the provinces it can reach lit
+select-unit	I Corps
+# 027: the attack card for Warsaw: the odds, SEND THEM IN and FIGHT IT YOURSELF
+order-province	Warsaw	card
+# 028: the land battle opens (a second in: the field being laid, or its first frame)
+press	FIGHT IT YOURSELF	does
+# 029: 8 real s of the placing view: the field, its ground and both sides placed, before the battle begins
+land-wait	8s
+# 030: Enter (BEGIN): the battle begins, the high view
+land-key	enter
+# 031: pace x4 (2 battle s a real s) until contact; the high view
+land-key	3
+# 032: past any night before: the attack under way, seen from his high view
+land-wait	begun
+# 033: Tab: his next unit in hand, the view glides to it
+land-key	tab
+# 034: V: the film rides with that unit: a close view of its men or tanks
+land-key	v
+# 035: 12 real s riding with them toward the enemy at x4: men running, vehicles moving
+land-wait	12s
+# 036: until the first contact (about battle s 114), still riding with the unit
+land-wait	contact
+# 037: in the film the keys 1-3 are x0.5/x1/x2: x1 (half a battle s a real s) for the close fight
+land-key	2
+# 038: 16 real s of the close fight at x1: fire, men going to ground or falling
+land-wait	16s
+# 039: C: the film gives the camera back: his high view of the fight
+land-key	c
+# 040: Q held a second: his view turns (the view's own keys, no order)
+land-key	q	view
+# 041: W held a second: his view walks forward, lower over the field
+land-key	w	view
+# 042: C: the film takes the camera, choosing its own shots
+land-key	c
+# 043: 16 real s of the film's own cutting: each cut clean, the camera smooth between cuts
+land-wait	16s
+# 044: Esc: the map (his high view) back
+land-key	esc
+# 045: x4 to the end of the battle
+land-key	3
+# 046: the after card: who won, the losses, CONTINUE
+land-wait	card	card
+# 047: CONTINUE: the battle handed back to the campaign map
+land-click	continue
+# 048: the campaign map after the battle of Warsaw
+check-province	Warsaw
+# ---- The map at his border, day and night (Brian: by night his own ground read as fog)
+# 049: East Prussia by day: his own ground, the border and the ground beyond
+look-at	Masuria middle
+# 050: T: held at night: the same view by lamplight; own ground lighter than the fog beyond
+key	t
+# 051: Pomorze by night after the battle: the battle's scars on the map
+look-at	Pomorze near
+# 052: T: the day and night run again
+key	t
+# 053: T: held at day again
+key	t

@@ -1,0 +1,79 @@
+# Film critic scene air-raid-rhineland: the bombing film, flown live from the campaign (Brian 26 Nov: "the bombing
+# video camera is super choppy ... it flickers and isn't smooth").
+# France, January 1940, seed 1. DAY BOMBING: RHINELAND with Groupement de Chasse 3 and the bombers (groups 33 and 10),
+# 250 fighters and 100 bombers against 450 fighters, FLY IT YOURSELF.
+# Checked on the release 2 head 2fdb13e5 (node, the rules bundle Content/Rules/campaign-rules.js): France is offered
+# in January 1940; TC.page("plan:bomb:7:33.10") is titled "DAY BOMBING: RHINELAND" and carries the fly offer;
+# TC.airLook gives "The air battle over Rhineland"; the HUD's button reads "FLY IT YOURSELF" (CampaignHUD.cpp).
+# The air battle's own clock, flown in the rules: the formations meet at about battle s 181, the bombs fall at about
+# 393, it is over at about 453. Its clock (AirDesk.cpp Clock::Step): x1 is half a battle second a real second, x4 two;
+# x10 by itself until the formations meet and once the fight winds down; the opening flyover at half a second a second.
+# Flags this scene needs: -TheaterAirCampaignLive (FLY IT YOURSELF is offered only with it in a picture run).
+# Film strips (-FilmCriticStrip=12,24): every air-wait is filmed, at most 24 s each, and the press until the next strip.
+# A check-province during the battle is a silent wait of about 66 s (45 s for the busy table, 1.1 s, 20 s more):
+# the battle runs on, one still at its end, no strip. Used to pass the long dull stretches without filling the strip
+# budget (1500 frames a run). No question card comes in an air battle unless a button of his asks it.
+# Each step's picture is step-NNN.png, NNN the step's number below.
+
+# 001: the French campaign table, January 1940, as it opens
+start	FRA 1940-01 seed 1
+# 002: the raid card DAY BOMBING: RHINELAND, with FLY THE RAID BY DAY and FLY IT YOURSELF
+open-page	plan:bomb:7:33.10	card DAY BOMBING: RHINELAND
+# 003: the air battle opens: a second in (it may still be the black frame while the scene warms up)
+press	FLY IT YOURSELF	does
+# 004: one real second after the opening's black frame lifts: the raid's opening shot
+air-wait	1s
+# 005: three seconds on: the bombers' formation in the opening flyover
+air-wait	3s
+# 006: four seconds on: the flyover over the target, the defending fighters coming up (the guard)
+air-wait	4s
+# 007: the flyover over: command taken, the strategy view of both formations
+air-wait	flyover
+# 008: pace x0.5 (the clock still runs x10 by itself until the formations meet)
+air-key	x0.5
+# 009: silent wait (about 66 s, no strip): the formations meet at about 181; still at about battle s 193, the first passes
+check-province	Rhineland
+# 010: pace x1
+air-key	x1
+# 011: 24 real s of the fight at x1 (battle s 193 to 205): fighters among the bombers, tracer
+air-wait	24s
+# 012: C: the chase view, the eye glides behind his squadron's leader
+air-key	chase
+# 013: 8 real s of the chase view
+air-wait	8s
+# 014: the next aircraft of his in the chase view
+air-key	next
+# 015: 4 real s behind that aircraft
+air-wait	4s
+# 016: Esc: back to the strategy view
+air-key	escape
+# 017: pace x4
+air-key	x4
+# 018: silent wait at x4: still at about battle s 343, the bombers well on toward the target
+check-province	Rhineland
+# 019: pace x1
+air-key	x1
+# 020: silent wait at x1: still at about battle s 376, the bombers close to the target
+check-province	Rhineland
+# 021: pace x4
+air-key	x4
+# 022: battle s 386: the run-in to the target
+air-wait	386
+# 023: pace x1 for the bombs (the strike itself never runs fast)
+air-key	x1
+# 024: battle s 386 to 401 at x1 (30 real s, strip the first 24): the bombs fall at about 393; still just after
+air-wait	401
+# 025: pace x4; the fight winds down at x10 by itself
+air-key	x4
+# 026: silent wait: the raid over at about battle s 453; still: the after card, or the last of the fight
+check-province	Rhineland
+# 027: the after card: the raid's result, losses on both sides
+air-wait	card
+# 028: CONTINUE: the battle handed back to the map (the step waits for the table)
+air-key	continue
+# 029: spare: had 028 answered a question in place of the card, the card is waited for here (else nothing is up)
+air-wait	card
+# 030: spare CONTINUE (else: no air battle is up)
+air-key	continue
+# 031: the French map after the raid
+check-province	Rhineland
