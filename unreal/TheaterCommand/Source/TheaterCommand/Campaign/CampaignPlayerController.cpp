@@ -545,6 +545,35 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	{
 		Add(*Row.Id, Row.Label, *Row.Tip, Row.bOn ? TEXT("ON") : TEXT("OFF"), Row.bOn);
 	}
+	// (Release 2 assembly, 26 November 2026; Brian's rule of 25 November: a feature that has not yet passed the Mac and the
+	// art director ships off, and is not left for him to switch on.) A grand war's rule row whose feature the ship list
+	// holds off is left out, as the list's own launch-word rows are (OptionRows), unless it is on in this war (so it can
+	// be turned off) or this is a test run: the step player, a picture run, kept options, or -TheaterR2Rows.
+	{
+		const TCHAR* Cmd = FCommandLine::Get();
+		FString Run;
+		const bool bTestRun = FParse::Param(Cmd, TEXT("TheaterR2Rows")) || FParse::Param(Cmd, TEXT("TheaterKeepOptions"))
+			|| FParse::Value(Cmd, TEXT("TheaterSteps="), Run, false) || FParse::Value(Cmd, TEXT("TheaterShots="), Run, false);
+		if (!bTestRun)
+		{
+			Out.RemoveAll([](const FGameOption& Option)
+			{
+				if (Option.bOn)
+				{
+					return false;
+				}
+				for (int32 Index = 0; Index < Release2Ship::Count(); ++Index)
+				{
+					const Release2Ship::FFeature& Feature = Release2Ship::At(Index);
+					if (Feature.Kind == Release2Ship::EKind::CampaignRule && !Feature.bShips && Option.Id.Equals(Feature.Words, ESearchCase::CaseSensitive))
+					{
+						return true;
+					}
+				}
+				return false;
+			});
+		}
+	}
 	return Out;
 }
 
