@@ -111,6 +111,7 @@ namespace
 		double Time = 0.0, Bt = 0.0;
 		const int Hard0 = E.HardLifts();
 		const int Stops0 = E.HardStops();
+		const int Cuts0 = E.Cuts();
 		M.Recs.reserve(static_cast<size_t>(Seconds * 70.0) + 16);
 		while (Time < Seconds)
 		{
@@ -144,6 +145,7 @@ namespace
 		M.HardLifts = E.HardLifts() - Hard0;
 		M.HardStops = E.HardStops() - Stops0;
 		M.Frames = static_cast<int>(M.Recs.size());
+		if (E.Cuts() - Cuts0 != M.Cuts) Fault("Cuts() counted %d cuts where the poses said %d", E.Cuts() - Cuts0, M.Cuts);
 		return M;
 	}
 
@@ -840,8 +842,8 @@ namespace
 	}
 
 	/** A long boom swung under the sea: tilted from looking down to looking up from 1.4 km away, the eye flung at the
-	 * water at well over a kilometre a second. The lift cannot climb that in time, so it is put clear at once (counted);
-	 * the rule held is that it is never under. */
+	 * water at well over a kilometre a second. The lift cannot climb that in time, so it is put clear at once on a few
+	 * frames (counted, at most 8); the rule held is that it is never under. */
 	void RuleFloorFling()
 	{
 		for (Timing K : Timings)
@@ -857,15 +859,17 @@ namespace
 			Measured M = Fly(E, Sc, K, 12.0);
 			Smoothness(M, Sc, E.Set.FeelArm);
 			const std::string Name = std::string("rule 9 a 1.4 km boom swung under the sea ") + TimingName(K);
-			Report(Name, M, "(the hard lifts are this scenario's point)");
+			Report(Name, M, "(a few hard lifts: the eye flung at the water)");
 			if (M.Lowest < E.Set.FloorHard - 1e-9) Fault("%s: the eye stood %.3f m over the wave (FloorHard %.2f)", Name.c_str(), M.Lowest, E.Set.FloorHard);
+			if (M.HardLifts > 8) Fault("%s: %d hard lifts (a few at most: the lift leads the floor it sees coming)", Name.c_str(), M.HardLifts);
 			if (!M.bFinite) Fault("%s: not finite", Name.c_str());
 		}
 	}
 
 	/** Looking straight up at a ship from the water, her clearance 20 m: under her the eye is either in the sea or too
-	 * near her, so the floor's lift and her clearance meet, and the hard rules act on most frames there (counted). Held:
-	 * never under the wave, never inside her clearance, finite, and the picture to the kick all the same. */
+	 * near her, so the floor's lift and her clearance meet, and the hard rules act on some frames there (counted, at most
+	 * 300 in the 20 s). Held: never under the wave, never inside her clearance, finite, and the picture to the kick all
+	 * the same. */
 	void RuleFloorAndClear()
 	{
 		for (Timing K : Timings)
@@ -901,6 +905,7 @@ namespace
 			GateSmooth(Name, M);
 			if (M.Lowest < E.Set.FloorHard - 1e-9) Fault("%s: the eye stood %.3f m over the wave", Name.c_str(), M.Lowest);
 			if (Nearest < 20.0 - 1e-6) Fault("%s: the eye came %.3f m from her (clear 20)", Name.c_str(), Nearest);
+			if (M.HardStops > 300) Fault("%s: %d hard stops (at most 300 in the 20 s)", Name.c_str(), M.HardStops);
 			if (!M.bFinite) Fault("%s: not finite", Name.c_str());
 		}
 	}
@@ -1603,6 +1608,7 @@ namespace
 				GateSmooth(Name, M);
 				if (M.Lowest < E.Set.FloorHard - 1e-9) Fault("%s: the eye stood %.3f m over the wave", Name, M.Lowest);
 				if (M.HardLifts) Fault("%s: the lift could not climb in time on %d frames", Name, M.HardLifts);
+				if (M.HardStops > 130) Fault("%s: %d hard stops (at most 130 in the 50 s)", Name, M.HardStops);
 				if (Highest > 1500.0 + 1e-9) Fault("%s: the eye rose to %.2f m (EyeMost 1500)", Name, Highest);
 				if (M.Cuts != 1) Fault("%s: %d cuts (one wanted: the 5 km step; the 300 m one is carried)", Name, M.Cuts);
 			}
@@ -2159,8 +2165,9 @@ namespace
 		}
 	}
 
-	/** Cuts and teleports start the view from rest where they put it: no turn, tilt, zoom, offset or lift carried
-	 * across; and the teleport's slack is three frames of the anchor's own speed. */
+	/** A cut starts the view from rest where it puts it: no turn, tilt, zoom, offset or lift carried across; a teleport
+	 * starts the offset and the lift from rest (his turn, tilt and zoom go on: see RuleSecondLook); and the teleport's
+	 * slack is three frames of the anchor's own speed. */
 	void RuleCutsClean()
 	{
 		const double Dt = 1.0 / 60.0;
@@ -2725,7 +2732,8 @@ namespace
 				std::snprintf(Line, sizeof(Line), "eye up to %.2f m, %d frames within a metre of EyeMost", Top, AtTop);
 				Report(Name, M, Line);
 				GateSmooth(Name, M);
-				if (M.HardStops > 8) Fault("%s: %d hard stops with no cap moving (a handful at most)", Name, M.HardStops);
+				if (M.HardStops) Fault("%s: %d hard stops with no cap moving", Name, M.HardStops);
+				if (M.HardLifts > 150) Fault("%s: %d hard lifts in 20 minutes (at most 150)", Name, M.HardLifts);
 				if (M.Lowest < E.Set.FloorHard - 1e-9) Fault("%s: the eye stood %.3f m over the floor", Name, M.Lowest);
 			}
 		}
@@ -2756,6 +2764,600 @@ namespace
 			if (!(Lifted < 0.5)) Fault("%s: the floor's lift held the view up %.2f m (his want sank under the floor)", Name.c_str(), Lifted);
 			if (Rested < E.Set.FloorClear - 0.05 || Rested > E.Set.FloorClear + 0.5) Fault("%s: rested %.3f m over the floor (FloorClear %.1f)", Name.c_str(), Rested, E.Set.FloorClear);
 			if (!(Rose > 3.0)) Fault("%s: rose only %.2f m in a second of his rise (the want sank under the floor)", Name.c_str(), Rose);
+		}
+	}
+
+	/** What review round 2 found, each flown and gated: the battle's pace changed on a hitch (paused, or 1, to 10 in one
+	 * frame) on a moving frame and under an anchor whose speed is measured; a teleport on the frame an anchor's speed is
+	 * first measured; a box carried with the reference; a floor rising fast; a lock's last digits; an anchor not finite
+	 * for a while; a second Begin after a fast frame or followed by a lock; the ground over the ceiling; the counters. */
+	void RuleSecondLook()
+	{
+		{
+			// rule 1 on a raid's middle at 120 m/s of battle time, unlocked, no input, the same FrameId all the way: the
+			// battle runs at pace 1, then is paused (or at 0.5, or 1), then goes to 10 on one frame of up to a quarter
+			// second, or back (a frame never seen moving that steps further than TeleportBeyond in one frame is a shift,
+			// carried, as FREE-EYE.md says)
+			const double Cases[][3] = { { 0.0, 10.0, 0.2 }, { 0.0, 10.0, 0.25 }, { 1.0, 10.0, 0.25 }, { 0.5, 10.0, 0.25 }, { 0.0, 4.0, 0.25 }, { 10.0, 0.0, 0.25 } };
+			double Worst = 0.0;
+			int Cuts = 0;
+			for (const auto& C : Cases)
+			{
+				FreeEye::Eye E;
+				auto Mid = [](double Bt) { return Vec{ 100.0 * Bt, 66.0 * Bt, 3000.0 }; };
+				BeginAt(E, 0.6, Mid(0.0));
+				double Bt = 0.0;
+				Vec Rel0;
+				for (int F = 0; F < 400; ++F)
+				{
+					const double Dt = F == 200 ? C[2] : 1.0 / 60.0;
+					Bt += Dt * (F < 100 ? 1.0 : F < 200 ? C[0] : C[1]);
+					FreeEye::Input In;
+					In.Frame = Mid(Bt);
+					In.FrameId = 3;
+					Cuts += E.Update(In, Dt, nullptr).bCut ? 1 : 0;
+					if (F == 30) Rel0 = E.Rel();
+					if (F > 30) Worst = std::max(Worst, (E.Rel() - Rel0).Length());
+				}
+			}
+			// and paces changing at random on the jittered clock
+			{
+				FreeEye::Eye E;
+				auto Mid = [](double Bt) { return Vec{ -80.0 * Bt, 120.0 * Bt, 4000.0 }; };
+				BeginAt(E, 0.4, Mid(0.0));
+				Clock Ck(Timing::Jitter, 23);
+				Lcg R(5);
+				const double Paces[] = { 0.0, 0.5, 1.0, 4.0, 10.0 };
+				double Bt = 0.0, Pace = 1.0, Time = 0.0;
+				Vec Rel0;
+				int F = 0;
+				while (Time < 120.0)
+				{
+					const double Dt = Ck.Next();
+					Time += Dt;
+					if (R.Next() < 0.03) Pace = Paces[static_cast<int>(R.Next() * 4.999)];
+					Bt += Dt * Pace;
+					FreeEye::Input In;
+					In.Frame = Mid(Bt);
+					In.FrameId = 9;
+					Cuts += E.Update(In, Dt, nullptr).bCut ? 1 : 0;
+					if (F == 30) Rel0 = E.Rel();
+					if (F > 30) Worst = std::max(Worst, (E.Rel() - Rel0).Length());
+					++F;
+				}
+			}
+			std::printf("%-44s Rel moved %.3g m, cuts %d\n", "rule 1 a moving frame as the pace changes", Worst, Cuts);
+			if (Worst > 1e-9) Fault("rule 1: unlocked on a moving frame with no input, a change of pace on a hitch moved Rel %.3g m", Worst);
+			if (Cuts) Fault("rule 1: %d cuts on a moving frame as the pace changed", Cuts);
+		}
+		{
+			// rule 6 against 1 and 7: locked on an aircraft at 180 m/s turning 3 deg/s, ride on, its speed measured (and
+			// fed, to compare); paused for two seconds (or at pace 1), then pace 10 on a hitch: no teleport, no cut, the
+			// heading still turned with hers to the last digit
+			for (int Fed = 0; Fed < 2; ++Fed)
+			{
+				const double Cases[][2] = { { 0.0, 0.12 }, { 0.0, 0.25 }, { 1.0, 0.25 }, { 0.5, 0.25 } };
+				for (const auto& C : Cases)
+				{
+					FreeEye::Eye E;
+					const double V = 180.0, W = 3.0 * Rad, Rd = V / W;
+					auto Head = [W](double Bt) { return 0.3 + W * Bt; };
+					auto Plane = [&Head, Rd](double Bt) { return Vec{ -Rd * std::cos(Head(Bt)), Rd * std::sin(Head(Bt)), 3000.0 }; };
+					BeginAt(E, 0.4, Plane(0.0));
+					double Bt = 0.0, Off0 = 0.0, OffMost = 0.0;
+					Vec Rel0;
+					int Cuts = 0;
+					for (int F = 0; F < 600; ++F)
+					{
+						const double Dt = F == 420 ? C[1] : 1.0 / 60.0;
+						const double Pace = F < 300 ? 1.0 : F < 420 ? C[0] : 10.0;
+						Bt += Dt * Pace;
+						FreeEye::Input In;
+						In.bLock = true;
+						In.AnchorId = 2;
+						In.Anchor = Plane(Bt);
+						In.bAnchorVel = Fed != 0;
+						In.AnchorVel = Vec{ std::sin(Head(Bt)), std::cos(Head(Bt)), 0.0 } * (V * Pace);
+						In.AnchorHeading = Head(Bt);
+						In.bRide = true;
+						const bool bCut = E.Update(In, Dt, nullptr).bCut;
+						if (F > 240) Cuts += bCut ? 1 : 0;
+						const double Off = std::remainder(E.Heading() - Head(Bt), 2.0 * Pi);
+						if (F == 240)
+						{
+							Off0 = Off;
+							Rel0 = E.Rel();
+						}
+						if (F > 240) OffMost = std::max({ OffMost, std::abs(Off - Off0), (E.Rel() - Rel0).Length() });
+					}
+					char Name[96];
+					std::snprintf(Name, sizeof(Name), "rule 6 pace %.1f to 10 on a %.2f s frame, %s", C[0], C[1], Fed ? "fed" : "measured");
+					std::printf("%-44s cuts %d, heading off the ride and Rel moved %.3g\n", Name, Cuts, OffMost);
+					if (Cuts) Fault("%s: %d cuts (a change of pace is no teleport)", Name, Cuts);
+					if (OffMost > 1e-9) Fault("%s: the heading left the ride or Rel moved by %.3g", Name, OffMost);
+				}
+			}
+		}
+		{
+			// a teleport while he turns, ride on: the cut keeps his turn going and the ride's turn on that frame
+			FreeEye::Eye E;
+			BeginAt(E, 0.4, Vec{});
+			double StepBefore = 0.0, StepAt = 0.0, StepAfter = 0.0, OffBefore = 0.0, OffAfter = 0.0;
+			int Cuts = 0;
+			for (int F = 0; F < 200; ++F)
+			{
+				const double Hd = F < 150 ? 0.2 : 0.2 + 10.0 * Rad;
+				FreeEye::Input In;
+				In.bLock = true;
+				In.AnchorId = 3;
+				In.Anchor = Vec{ F < 150 ? 0.0 : 1500.0, 0.0, 500.0 };
+				In.AnchorHeading = Hd;
+				In.bRide = true;
+				In.Turn = F > 60 ? 1.0 : 0.0;
+				const double Was = E.Heading();
+				Cuts += E.Update(In, 1.0 / 60.0, nullptr).bCut && F > 0 ? 1 : 0;
+				const double Step = std::remainder(E.Heading() - Was, 2.0 * Pi);
+				if (F == 149) StepBefore = Step;
+				if (F == 150) StepAt = Step;
+				if (F == 151) StepAfter = Step;
+				if (F == 149) OffBefore = std::remainder(E.WantHeading() - E.Heading(), 2.0 * Pi);
+				if (F == 150) OffAfter = std::remainder(E.WantHeading() - E.Heading(), 2.0 * Pi);
+			}
+			const double Kept = std::abs(StepAt - 10.0 * Rad - StepBefore) + std::abs(StepAfter - StepBefore);
+			std::printf("%-44s cuts %d; his turn a frame %.4f deg before, %.4f with the ship's 10 on the cut, %.4f after\n", "a teleport while he turns, ride on", Cuts, StepBefore * Deg, StepAt * Deg, StepAfter * Deg);
+			if (Cuts != 1) Fault("teleport: %d cuts for one 1.5 km jump", Cuts);
+			if (Kept * Deg > 0.05 || std::abs(OffAfter - OffBefore) * Deg > 0.05) Fault("teleport: the cut dropped his turn or the ride's (%.4f deg off)", Kept * Deg);
+		}
+		{
+			// a teleport on the frame an unfed anchor's speed is first measured: a squadron's middle at 150 m/s is the
+			// frame; he locks on an aircraft 40 m off it, and on the next frame the scene puts it 600 m (or 250 m) aside
+			const double Cases[][3] = { { 1.0, 0.1, 600.0 }, { 0.9, 0.1, 600.0 }, { 1.0, 1.0 / 30.0, 250.0 }, { 0.3, 0.1, 600.0 } };
+			for (const auto& C : Cases)
+			{
+				FreeEye::Eye E;
+				auto Mid = [](double Bt) { return Vec{ 0.0, 150.0 * Bt, 3000.0 }; };
+				BeginAt(E, C[0], Mid(0.0));
+				double Bt = 0.0;
+				int CutAt = -1;
+				for (int F = 0; F < 90; ++F)
+				{
+					const double Dt = F == 61 ? C[1] : 1.0 / 60.0;
+					Bt += Dt;
+					FreeEye::Input In;
+					In.Frame = Mid(Bt);
+					In.bLock = F >= 60;
+					In.AnchorId = 5;
+					In.Anchor = Mid(Bt) + Vec{ 40.0 + (F >= 61 ? C[2] : 0.0), 0.0, 0.0 };
+					if (E.Update(In, Dt, nullptr).bCut && CutAt < 0) CutAt = F;
+				}
+				char Name[96];
+				std::snprintf(Name, sizeof(Name), "rule 6 %.0f m aside as it is measured, zoom %.1f", C[2], C[0]);
+				std::printf("%-44s cut on frame %d (61 wanted)\n", Name, CutAt);
+				if (CutAt != 61) Fault("%s: the teleport cut on frame %d (61 wanted)", Name, CutAt);
+			}
+			// and one measured for a while, then 600 m aside on a tenth of a second
+			{
+				FreeEye::Eye E;
+				auto Plane = [](double Bt) { return Vec{ 0.0, 150.0 * Bt, 3000.0 }; };
+				BeginAt(E, 0.8, Plane(0.0));
+				double Bt = 0.0;
+				int CutAt = -1;
+				for (int F = 0; F < 200; ++F)
+				{
+					const double Dt = F == 150 ? 0.1 : 1.0 / 60.0;
+					Bt += Dt;
+					FreeEye::Input In;
+					In.bLock = true;
+					In.AnchorId = 5;
+					In.Anchor = Plane(Bt) + Vec{ F >= 150 ? 600.0 : 0.0, 0.0, 0.0 };
+					if (E.Update(In, Dt, nullptr).bCut && F > 0 && CutAt < 0) CutAt = F;
+				}
+				std::printf("%-44s cut on frame %d (150 wanted)\n", "rule 6 600 m across its measured way", CutAt);
+				if (CutAt != 150) Fault("rule 6: an unfed anchor 600 m across its way in a tenth of a second cut on frame %d (150 wanted)", CutAt);
+			}
+			// and no teleport: a raid at pace 10 (1800 m/s) is the frame; a lock (unfed) on a plane 50 m off it, a 0.2 s
+			// hitch on the next frame
+			{
+				FreeEye::Eye E;
+				const Vec V{ 0.0, 1800.0, 0.0 };
+				E.Begin(Vec{ 0.0, -300.0, 5300.0 }, Vec{ 0.0, 0.0, 5000.0 }, Vec{ 0.0, 0.0, 5000.0 });
+				double T = 0.0;
+				int Cuts = 0;
+				for (int F = 0; F < 300; ++F)
+				{
+					const double Dt = F == 121 ? 0.2 : 1.0 / 60.0;
+					T += Dt;
+					FreeEye::Input In;
+					In.Frame = Vec{ 0.0, 0.0, 5000.0 } + V * T;
+					In.bLock = F >= 120;
+					In.AnchorId = 7;
+					In.Anchor = In.Frame + Vec{ 50.0, 0.0, 0.0 };
+					Cuts += E.Update(In, Dt, nullptr).bCut ? 1 : 0;
+				}
+				std::printf("%-44s cuts %d\n", "rule 6 unfed lock at 1800 m/s, then a hitch", Cuts);
+				if (Cuts) Fault("rule 6: an unfed lock on a plane at 1800 m/s cut %d times over a hitch on its next frame", Cuts);
+			}
+			// a lock (unfed) on an aircraft 600 m/s faster than the still view, at the drone's boom: a cut once its speed is
+			// measured, never a glide that falls kilometres behind
+			{
+				FreeEye::Eye E;
+				E.Begin(Vec{ 0.0, -1.0, 800.0 }, Vec{ 0.0, 0.0, 800.0 }, Vec{});
+				double T = 0.0, Far = 0.0;
+				int Cuts = 0;
+				for (int F = 0; F < 60 * 30; ++F)
+				{
+					T += 1.0 / 60.0;
+					FreeEye::Input In;
+					In.bLock = true;
+					In.AnchorId = 1;
+					In.Anchor = Vec{ 10.0, 600.0 * T, 800.0 };
+					Cuts += E.Update(In, 1.0 / 60.0, nullptr).bCut ? 1 : 0;
+					Far = std::max(Far, (E.Pivot() - In.Anchor).Length());
+				}
+				std::printf("%-44s cuts %d, the pivot at most %.1f m off it\n", "rule 3 unfed lock 600 m/s faster, drone", Cuts, Far);
+				if (Cuts != 1 || Far > 100.0) Fault("rule 3: an unfed lock 600 m/s faster cut %d times and left the pivot up to %.1f m behind", Cuts, Far);
+			}
+		}
+		{
+			// rule 10 with a box carried with the reference (round the raid's middle, or round the locked aircraft): his
+			// pan toward either wall comes to rest on it softly, and with no input the anchor stays centred
+			for (Timing K : Timings)
+			{
+				for (int Locked = 0; Locked < 2; ++Locked)
+				{
+					for (double V : { 30.0, 120.0 })
+					{
+						for (double Pan : { -1.0, 1.0 })
+						{
+							FreeEye::Eye E;
+							auto Mid = [V](int, double Bt) { return Vec{ V * Bt, 0.0, 3000.0 }; };
+							BeginOn(E, Mid(0, 0.0) + Vec{ 0.0, 0.0, 50.0 }, 0.0, 30.0, 0.4, Mid(0, 0.0));
+							Script Sc;
+							Sc.Where = Mid;
+							Sc.Feed = [&Mid, Locked, Pan, V](FreeEye::Input& In, FreeEye::Eye&, double Time, double Bt)
+							{
+								In.Frame = Mid(0, Bt);
+								In.bLock = Locked != 0;
+								In.AnchorId = 1;
+								In.Anchor = Mid(0, Bt);
+								In.bAnchorVel = true;
+								In.AnchorVel = Vec{ V, 0.0, 0.0 };
+								In.bBox = true;
+								In.BoxMin = Mid(0, Bt) + Vec{ -60.0, -60.0, -200.0 };
+								In.BoxMax = Mid(0, Bt) + Vec{ 60.0, 60.0, 200.0 };
+								// (a second of the box not finite: the last good one holds)
+								if (Time > 5.0 && Time < 6.0) In.BoxMin.X = std::nan("");
+								In.PanRight = Time > 3.0 && Time < 7.0 ? Pan : 0.0;
+							};
+							Measured M = Fly(E, Sc, K, 12.0);
+							Smoothness(M, Sc, E.Set.FeelArm, 0.5);
+							const double Rest = (E.Pivot() - Mid(0, M.Recs.back().Bt)).X;
+							char Name[96];
+							std::snprintf(Name, sizeof(Name), "rule 10 box with the %s at %.0f, pan %s %s", Locked ? "anchor" : "frame", V, Pan < 0.0 ? "back" : "on", TimingName(K));
+							char Line[64];
+							std::snprintf(Line, sizeof(Line), "rests %.3f m from its middle (wall 60)", Rest);
+							Report(Name, M, Line);
+							GateSmooth(Name, M);
+							if (M.HardStops) Fault("%s: %d hard stops on a box that moves with the reference", Name, M.HardStops);
+							if (std::abs(std::abs(Rest) - 60.0) > 0.01) Fault("%s: came to rest %.3f m from the box's middle (its wall at 60)", Name, Rest);
+						}
+					}
+					// no input, the box's front wall 20 m ahead of the anchor, the box first given 2 s in, at speed: it stays
+					// centred
+					FreeEye::Eye E;
+					auto Mid = [](double Bt) { return Vec{ 120.0 * Bt, 0.0, 3000.0 }; };
+					BeginOn(E, Mid(0.0), 0.0, 30.0, 0.4, Mid(0.0));
+					Clock Ck(K, 9);
+					double Time = 0.0, Most = 0.0;
+					while (Time < 25.0)
+					{
+						const double Dt = Ck.Next();
+						Time += Dt;
+						FreeEye::Input In;
+						In.Frame = Mid(Time);
+						In.bLock = Locked != 0;
+						In.AnchorId = 1;
+						In.Anchor = Mid(Time);
+						In.bAnchorVel = true;
+						In.AnchorVel = Vec{ 120.0, 0.0, 0.0 };
+						In.bBox = Time > 2.0;
+						In.BoxMin = Mid(Time) + Vec{ -60.0, -60.0, -200.0 };
+						In.BoxMax = Mid(Time) + Vec{ 20.0, 60.0, 200.0 };
+						E.Update(In, Dt, nullptr);
+						Most = std::max(Most, E.Rel().Length());
+					}
+					char Name[96];
+					std::snprintf(Name, sizeof(Name), "rule 10 box 20 m ahead, %s, no input %s", Locked ? "locked" : "frame", TimingName(K));
+					std::printf("%-44s |Rel| up to %.3g m\n", Name, Most);
+					if (Most > 1e-9) Fault("%s: the box held a still view %.3g m off (its wall did not move against it)", Name, Most);
+				}
+			}
+		}
+		{
+			// rule 9 under a floor rising fast for four seconds (or two), then still, under a drone at rest: the lift takes
+			// up the climb within its push and rides at FloorClear, put clear at once only while it gathers speed, and
+			// goes on up softly when the floor stops
+			for (Timing K : Timings)
+			{
+				for (double Rate : { 30.0, 60.0 })
+				{
+					for (double Long : { 2.0, 4.0 })
+					{
+						FreeEye::Eye E;
+						Flat W;
+						BeginOn(E, Vec{ 0.0, 0.0, 6.0 }, 0.0, 30.0, 0.0);
+						Script Sc;
+						Sc.Where = StillAt;
+						Sc.Ground = &W;
+						Sc.Tick = [&W, Rate, Long](double Bt) { W.Height = Rate * std::clamp(Bt - 1.0, 0.0, Long); };
+						Sc.Feed = [](FreeEye::Input&, FreeEye::Eye&, double, double) {};
+						Measured M = Fly(E, Sc, K, 1.0 + Long + 6.0);
+						Smoothness(M, Sc, E.Set.FeelArm);
+						// (the felt push on the frames next to the last hard lift, which Smoothness leaves out)
+						int LateHard = 0;
+						double Lost = 0.0, Under = 1e9;
+						for (size_t I = 2; I < M.Recs.size(); ++I)
+						{
+							const Rec& R = M.Recs[I];
+							if (R.bHard && R.Bt > 1.0 + 2.0 * Rate / (E.Set.LiftPush * E.Set.FeelArm) + 0.5) ++LateHard;
+							if (M.Recs[I - 1].bHard && !R.bHard)
+							{
+								const double V1 = (M.Recs[I - 1].P.Eye.Z - M.Recs[I - 2].P.Eye.Z) / M.Recs[I - 1].Dt;
+								const double V2 = (R.P.Eye.Z - M.Recs[I - 1].P.Eye.Z) / R.Dt;
+								Lost = std::max(Lost, (V1 - V2) / R.Dt / std::max(R.Arm, E.Set.FeelArm) * Deg);
+							}
+							if (R.Bt > 1.0 + Long - 0.2 && R.Bt < 1.0 + Long) Under = std::min(Under, R.Clear);
+						}
+						char Name[96];
+						std::snprintf(Name, sizeof(Name), "rule 9 floor rising %.0f m/s for %.0f s %s", Rate, Long, TimingName(K));
+						char Line[128];
+						std::snprintf(Line, sizeof(Line), "hard lifts once up to speed %d, clear %.2f m as it stops, push on leaving a hard lift %.0f", LateHard, Under, Lost);
+						Report(Name, M, Line);
+						GateSmooth(Name, M);
+						if (LateHard) Fault("%s: %d hard lifts once the lift had had time to take up the climb", Name, LateHard);
+						if (Long > 3.0 && Under < 0.9 * E.Set.FloorClear) Fault("%s: rode %.2f m over the floor at the end of the climb (FloorClear %.1f)", Name, Under, E.Set.FloorClear);
+						if (Lost > KickMost) Fault("%s: the eye was stopped at %.0f deg/s/s as it left a hard lift", Name, Lost);
+					}
+				}
+			}
+		}
+		{
+			// rule 1 to the last bit after a lock: from a pivot 50 m above a ship at 15 m/s (and an aircraft at 150), no
+			// input, his offset comes to rest exactly, and soon
+			for (Timing K : Timings)
+			{
+				for (double V : { 15.0, 150.0 })
+				{
+					FreeEye::Eye E;
+					auto Ship = [V](double Bt) { return Vec{ 0.0, V * Bt, 8.0 }; };
+					BeginOn(E, Ship(0.0) + Vec{ 0.0, 0.0, 50.0 }, 0.0, 30.0, 0.4);
+					Clock Ck(K, 3);
+					double Time = 0.0, LastMoved = 0.0;
+					Vec Was;
+					while (Time < 40.0)
+					{
+						const double Dt = Ck.Next();
+						Time += Dt;
+						FreeEye::Input In;
+						In.bLock = true;
+						In.AnchorId = 1;
+						In.Anchor = Ship(Time);
+						In.bAnchorVel = true;
+						In.AnchorVel = Vec{ 0.0, V, 0.0 };
+						E.Update(In, Dt, nullptr);
+						if ((E.Rel() - Was).Length() > 0.0) LastMoved = Time;
+						Was = E.Rel();
+					}
+					char Name[96];
+					std::snprintf(Name, sizeof(Name), "rule 1 lock from 50 m up at %.0f m/s %s", V, TimingName(K));
+					std::printf("%-44s Rel last moved at %.1f s, |Rel| %.3g m at the end\n", Name, LastMoved, E.Rel().Length());
+					if (LastMoved > 12.0 || E.Rel().Length() > 0.0) Fault("%s: his offset still moved at %.1f s (|Rel| %.3g m)", Name, LastMoved, E.Rel().Length());
+				}
+			}
+		}
+		{
+			// rule 14: an anchor fed not finite for ten frames while locked at 150 m/s (pace 1 and 4), its speed fed or
+			// measured: the reference goes on at its speed, and nothing jumps when it comes back
+			for (int Fed = 0; Fed < 2; ++Fed)
+			{
+				for (double Pace : { 1.0, 4.0 })
+				{
+					for (Timing K : { Timing::F60, Timing::F30 })
+					{
+						FreeEye::Eye E;
+						const double V = 150.0 * Pace, Dt = K == Timing::F60 ? 1.0 / 60.0 : 1.0 / 30.0;
+						auto Plane = [V](double T) { return Vec{ V * T, 0.0, 3000.0 }; };
+						BeginAt(E, 0.5, Plane(0.0));
+						double T = 0.0, Before = 0.0, Step = 0.0;
+						int Cuts = 0;
+						Vec OffWas;
+						for (int F = 0; F < 600; ++F)
+						{
+							T += Dt;
+							FreeEye::Input In;
+							In.bLock = true;
+							In.AnchorId = 1;
+							In.Anchor = F >= 400 && F < 410 ? Vec{ std::nan(""), 0.0, 0.0 } : Plane(T);
+							In.bAnchorVel = Fed != 0;
+							In.AnchorVel = Vec{ V, 0.0, 0.0 };
+							const FreeEye::Pose P = E.Update(In, Dt, nullptr);
+							const Vec Off = P.Eye - Plane(T);
+							// (against the anchor, the eye's step a frame over the gap and after it, and over the frames
+							// before it: a glide still going on moves it as much on both)
+							if (F > 300) Cuts += P.bCut ? 1 : 0;
+							if (F >= 370 && F < 400) Before = std::max(Before, (Off - OffWas).Length());
+							if (F >= 400 && F < 430) Step = std::max(Step, (Off - OffWas).Length());
+							OffWas = Off;
+						}
+						char Name[96];
+						std::snprintf(Name, sizeof(Name), "rule 14 anchor not finite 10 frames, %s %.0f m/s %s", Fed ? "fed" : "measured", V, TimingName(K));
+						std::printf("%-44s cuts %d, the eye stepped %.3g m against it in a frame (%.3g before)\n", Name, Cuts, Step, Before);
+						if (Cuts || Step > Before + 1e-6) Fault("%s: %d cuts, the eye stepped %.3g m against the anchor (%.3g before the gap)", Name, Cuts, Step, Before);
+					}
+				}
+			}
+			// a lock that rises on a frame whose anchor is not finite takes on the next good one, bLock held
+			FreeEye::Eye E;
+			E.Begin(Vec{ 0.0, -300.0, 600.0 }, Vec{ 0.0, 0.0, 300.0 }, Vec{});
+			int LockedAt = -1;
+			for (int F = 0; F < 60; ++F)
+			{
+				FreeEye::Input In;
+				In.bLock = true;
+				In.AnchorId = 4;
+				In.Anchor = F == 0 ? Vec{ std::nan(""), 0.0, 0.0 } : Vec{ 40.0, 0.0, 300.0 };
+				E.Update(In, 1.0 / 60.0, nullptr);
+				if (LockedAt < 0 && E.Locked() == 4) LockedAt = F;
+			}
+			std::printf("%-44s locked on frame %d (1 wanted)\n", "rule 14 a lock rising on an anchor not finite", LockedAt);
+			if (LockedAt != 1) Fault("rule 14: bLock held over an anchor not finite on its first frame locked on frame %d (1 wanted)", LockedAt);
+		}
+		{
+			// rule 13 again: Begin after the frame flew at 1200 m/s, the first Update's frame a step on (same id): the
+			// first frame is the shot; and Begin 5 km from where the eye flew, then a lock 50 m from the new pivot on the
+			// second frame: carried, not cut
+			FreeEye::Eye E;
+			E.Begin(Vec{ 0.0, -300.0, 5300.0 }, Vec{ 0.0, 0.0, 5000.0 }, Vec{ 0.0, 0.0, 5000.0 });
+			for (int F = 1; F <= 60; ++F)
+			{
+				FreeEye::Input In;
+				In.Frame = Vec{ 0.0, 1200.0 * F / 60.0, 5000.0 };
+				In.PanRight = 1.0;
+				E.Update(In, 1.0 / 60.0, nullptr);
+			}
+			const Vec Shot{ 0.0, -300.0, 300.0 };
+			E.Begin(Shot, Vec{}, Vec{});
+			FreeEye::Input In;
+			In.Frame = Vec{ 0.0, 220.0, 0.0 };
+			const FreeEye::Pose P1 = E.Update(In, 1.0 / 60.0, nullptr);
+			const double Off = (P1.Eye - Shot).Length();
+			E.Begin(Vec{ 5000.0, -500.0, 600.0 }, Vec{ 5000.0, 0.0, 0.0 }, Vec{});
+			FreeEye::Input N;
+			const FreeEye::Pose P2 = E.Update(N, 1.0 / 60.0, nullptr);
+			FreeEye::Input L;
+			L.bLock = true;
+			L.AnchorId = 3;
+			L.Anchor = E.Pivot() + Vec{ 50.0, 0.0, 0.0 };
+			int Cuts = 0;
+			double Step = 0.0;
+			Vec Was = P2.Eye;
+			for (int F = 0; F < 600; ++F)
+			{
+				const FreeEye::Pose P = E.Update(L, 1.0 / 60.0, nullptr);
+				Cuts += P.bCut ? 1 : 0;
+				Step = std::max(Step, (P.Eye - Was).Length());
+				Was = P.Eye;
+			}
+			std::printf("%-44s first frame %.3g m off the shot; a lock 50 m off after a Begin: cuts %d, eye step %.3f m\n", "rule 13 Begin again after flying", Off, Cuts, Step);
+			if (Off > 1e-9 || P1.bCut) Fault("rule 13: Begin after a fast frame: the first frame stood %.3g m off the shot", Off);
+			if (Cuts || Step > 5.0) Fault("rule 13: a lock 50 m off just after a Begin cut %d times or stepped the eye %.1f m", Cuts, Step);
+		}
+		{
+			// rule 9 over rule 10: the ground rises through a ceiling of 100 m; the floor wins
+			FreeEye::Eye E;
+			E.Set.EyeMost = 100.0;
+			Flat W;
+			W.Height = 50.0;
+			E.Begin(Vec{ 0.0, -100.0, 95.0 }, Vec{ 0.0, 0.0, 60.0 }, Vec{});
+			double Lowest = 1e9;
+			for (int F = 0; F < 240; ++F)
+			{
+				W.Height = 50.0 + F;
+				FreeEye::Input In;
+				const FreeEye::Pose P = E.Update(In, 1.0 / 60.0, &W);
+				Lowest = std::min(Lowest, P.Eye.Z - W.Height);
+			}
+			std::printf("%-44s lowest %.3f m over it\n", "rule 9 ground rising through the ceiling", Lowest);
+			if (Lowest < E.Set.FloorHard - 1e-9) Fault("rule 9: the ground rising over EyeMost put the eye %.3f m over it (FloorHard %.1f)", Lowest, E.Set.FloorHard);
+		}
+		{
+			// the counters: a Begin over the ceiling is a cut counted; a frame of no time that lifts the eye counts it
+			FreeEye::Eye E;
+			E.Set.EyeMost = 1500.0;
+			E.Begin(Vec{ 0.0, -300.0, 2000.0 }, Vec{ 0.0, 0.0, 1700.0 }, Vec{});
+			FreeEye::Input In;
+			const bool bCut = E.Update(In, 1.0 / 60.0, nullptr).bCut;
+			FreeEye::Eye D;
+			Flat W;
+			D.Begin(Vec{ 0.0, -10.0, 5.0 }, Vec{ 0.0, 0.0, 5.0 }, Vec{});
+			D.Update(In, 1.0 / 60.0, &W);
+			const int Lifts0 = D.HardLifts();
+			W.Height = 20.0;
+			D.Update(In, 0.0, &W);
+			std::printf("%-44s Begin over the ceiling: cut %d, Cuts() %d; a lift on a frame of no time counted %d\n", "Cuts() and HardLifts()", bCut ? 1 : 0, E.Cuts(), D.HardLifts() - Lifts0);
+			if (!bCut || E.Cuts() != 1) Fault("counters: a Begin over the ceiling said cut %d and counted %d", bCut ? 1 : 0, E.Cuts());
+			if (D.HardLifts() - Lifts0 != 1) Fault("counters: a hard lift on a frame of no time counted %d", D.HardLifts() - Lifts0);
+		}
+		{
+			// rule 3 and 8: a skip between two ships heaving 6 m, their speed fed, SteadyZ 3, at the drone's boom: the
+			// pivot's world speed carried across, the reference's steadied speed taken for the fed one
+			for (Timing K : { Timing::F60, Timing::F30 })
+			{
+				double Worst = 0.0, Allowed = 0.0;
+				for (double At : { 9.0, 10.0, 11.0, 12.0 })
+				{
+					FreeEye::Eye E;
+					E.Set.SteadyZ = 3.0;
+					auto Ship = [](int Key, double Bt) { return Vec{ 300.0 * Key, 12.0 * Bt, 8.0 + 6.0 * std::sin(2.0 * Pi * Bt / 8.0 + 2.0 * Key) }; };
+					BeginOn(E, Ship(0, 0.0), 0.0, 20.0, 0.0);
+					Script Sc;
+					Sc.Where = [&Ship](int Key, double Bt) { return Key < 0 ? Vec{} : Ship(Key, Bt); };
+					Sc.Feed = [&Ship, At](FreeEye::Input& In, FreeEye::Eye&, double, double Bt)
+					{
+						In.bLock = true;
+						In.AnchorId = Bt < At ? 0 : 1;
+						In.Anchor = Ship(In.AnchorId, Bt);
+						In.bAnchorVel = true;
+						In.AnchorVel = (Ship(In.AnchorId, Bt + 1e-4) - Ship(In.AnchorId, Bt - 1e-4)) * (1.0 / 2e-4);
+					};
+					Measured M = Fly(E, Sc, K, At + 2.0);
+					for (size_t I = 2; I + 1 < M.Recs.size(); ++I)
+					{
+						if (M.Recs[I].Key == M.Recs[I - 1].Key) continue;
+						const Vec V1 = (M.Recs[I].Pivot - M.Recs[I - 1].Pivot) * (1.0 / M.Recs[I].Dt);
+						const Vec V2 = (M.Recs[I + 1].Pivot - M.Recs[I].Pivot) * (1.0 / M.Recs[I + 1].Dt);
+						Worst = std::max(Worst, (V2 - V1).Length());
+						Allowed = E.Set.GlidePush * std::max(M.Recs[I].Arm, E.Set.FeelArm) * M.Recs[I + 1].Dt * 1.05 + 0.05;
+					}
+				}
+				char Name[96];
+				std::snprintf(Name, sizeof(Name), "rule 8 skip between ships heaving 6 m, fed %s", TimingName(K));
+				std::printf("%-44s the pivot's world speed changed %.3f m/s over the frame after the skip (its push %.3f)\n", Name, Worst, Allowed);
+				if (Worst > Allowed) Fault("%s: the pivot's world speed changed %.3f m/s after the skip (its push allows %.3f)", Name, Worst, Allowed);
+			}
+		}
+		{
+			// rule 10, the ceiling's waits: under EyeMost 3000 a boom of 63 m tilted 10 degrees, then zoomed out to the
+			// whole range and tilted down to 80 at once: the pivot comes down and the boom waits for it, no hard stop
+			for (Timing K : Timings)
+			{
+				FreeEye::Eye E;
+				E.Set.EyeMost = 3000.0;
+				BeginOn(E, Vec{ 0.0, 0.0, 2900.0 }, 0.0, 10.0, 0.5);
+				Script Sc;
+				Sc.Where = StillAt;
+				double Last = 0.0;
+				Sc.Feed = [&Last](FreeEye::Input& In, FreeEye::Eye&, double Time, double)
+				{
+					const double Dt = Time - Last;
+					Last = Time;
+					if (Time > 1.0 && Time < 3.0) In.Zoom = -20.0 * Dt;
+					if (Time > 1.0 && Time < 2.0) In.Tilt = 70.0 * Dt;
+					if (Time > 8.0 && Time < 9.0) In.Tilt = -60.0 * Dt;
+					if (Time > 8.5 && Time < 10.0) In.Zoom = 20.0 * Dt;
+				};
+				Measured M = Fly(E, Sc, K, 16.0);
+				Smoothness(M, Sc, E.Set.FeelArm);
+				double Top = -1e9;
+				for (const Rec& R : M.Recs) Top = std::max(Top, R.P.Eye.Z);
+				const std::string Name = std::string("rule 10 zoomed out and tilted down under EyeMost ") + TimingName(K);
+				char Line[64];
+				std::snprintf(Line, sizeof(Line), "eye up to %.3f m (EyeMost 3000)", Top);
+				Report(Name, M, Line);
+				GateSmooth(Name, M);
+				if (M.HardStops) Fault("%s: %d hard stops at a ceiling that did not move", Name.c_str(), M.HardStops);
+				if (Top > 3000.0 + 1e-6) Fault("%s: the eye stood %.3f m over EyeMost", Name.c_str(), Top - 3000.0);
+			}
 		}
 	}
 }
@@ -2789,6 +3391,7 @@ int main()
 	RuleCapsMore();
 	RuleCarries();
 	RuleHandsRandom();
+	RuleSecondLook();
 	std::printf("%d fault%s\n", Faults, Faults == 1 ? "" : "s");
 	return std::min(Faults, 100);
 }
