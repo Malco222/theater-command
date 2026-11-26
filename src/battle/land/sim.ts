@@ -277,6 +277,11 @@ export class LandBattle implements BattleSim<LandUnit> {
   private falling: Record<Side, number | null> = { att: null, def: null };
   /** The highest each falling army's bar stood from the order until its last block was out: what it pays by (DD 14:54Z, b474). */
   private fallBar: Record<Side, number> = { att: 0, def: 0 };
+  /**
+   * The blocks all fall back itself took into its player's hand (direct command: the blocks he orders are his), not
+   * those already his when he gave it: PURSUE, the order that replaces it, gives them back to his staff (pursueOn).
+   */
+  private fallHands: Record<Side, number[]> = { att: [], def: [] };
   /** Seconds of battle time the fresh hold has kept each army at the brink, as judged: for the words on why it broke (b496(2)). */
   private heldFor: Record<Side, number> = { att: 0, def: 0 };
   /**
@@ -1765,7 +1770,10 @@ export class LandBattle implements BattleSim<LandUnit> {
     // After the break (release 2, pursue): the winner's choice, and what each side may still order.
     if (this.aftermath) { const done = this.afterCommand(c, by); if (done !== null) return done; }
     // Falling back, the army takes no new orders (all fall back, release 1.5): handing it to the computer or the dice still ends it.
-    if (this.falling[by] !== null && c.do !== 'auto' && c.do !== 'dice' && c.do !== 'withdrawAll') return false;
+    // After the break (release 2, pursue) the aftermath's own rule stands in its place (afterCommand, above: of the
+    // broken army only a way back, its fighters on call and its staff's seat), so the player whose falling army broke
+    // can still choose its way back and hurry it, as his screen tells him (afterWhy).
+    if (this.falling[by] !== null && !this.aftermath && c.do !== 'auto' && c.do !== 'dice' && c.do !== 'withdrawAll') return false;
     // A block waiting for help (hold until relieved, release 2) is never its staff's to order: only the player's own
     // order calls its wait off.
     const mine = (ids: number[]): LandUnit[] => ids.map((i) => this.unit(i)).filter((u): u is LandUnit => !!u && u.side === by && fighting(u) && u.kind !== 'fort' && !(this.staffing && u.waits && !u.waits.free));
@@ -1938,6 +1946,7 @@ export class LandBattle implements BattleSim<LandUnit> {
           this.falling[by] = this.t;
           this.fallBar[by] = this.breaking(by);
           this.coming = this.coming.filter((k) => k.u.side !== by);
+          this.fallHands[by] = us.filter((u) => !u.taken).map((u) => u.id);
           hands(us);
           for (const u of us) give(u, () => this.send(u, { kind: 'withdraw', x: u.x, y: by === 'att' ? 0 : this.field.h }));
           this.say({ what: 'land:fallBack', side: by, text: `${this.army(by)} falls back.` });
@@ -4689,6 +4698,25 @@ export class LandBattle implements BattleSim<LandUnit> {
   private pursueOn(): void {
     const A = this.aftermath!;
     A.phase = 'pursue';
+    // All fall back (release 1.5) meets the pursuit (the design director, 26 November 2026, 21:22Z): a winner who was
+    // falling back when the enemy broke is asked as any winner is (breakOpens reads the field, never his standing
+    // order), and PURSUE is a new order: it replaces ALL FALL BACK for his blocks that pursue. His army falls back no
+    // longer: its orders are taken again (command), a block of it is out at its own edge as ever (outLine), the
+    // fall-back orders still on the air to it are void (by radio they land seconds after he gives them: the enemy
+    // can break in between), the blocks the fall back itself took into his hand are his staff's again (fallHands),
+    // and each block of his that can catch one of the broken army's (quarry, the staff's own sight) gives up its way
+    // back and halts for his staff, or for him, to send on. A block that can catch none keeps its way back. END at
+    // the break leaves all of this as it stood.
+    if (this.falling[A.winner] !== null) {
+      this.falling[A.winner] = null;
+      this.pending = this.pending.filter((p) => { const u = this.unit(p.id); if (!u || u.side !== A.winner || p.smoke) return true; delete u.orderAt; return false; });
+      for (const id of this.fallHands[A.winner]) { const u = this.unit(id); if (u) { delete u.taken; delete u.cut; } }
+      this.fallHands[A.winner] = [];
+      for (const u of this.units) {
+        if (u.side !== A.winner || !fighting(u) || u.kind === 'fort' || u.order?.kind !== 'withdraw' || !this.quarry(u)) continue;
+        u.order = null; u.path = []; u.keepFace = null;
+      }
+    }
     // No runner of it rallies now (nerve), however it broke.
     this.broke[A.side] = true;
     this.pending = this.pending.filter((p) => this.unit(p.id)?.side !== A.side);
@@ -4881,6 +4909,12 @@ export class LandBattle implements BattleSim<LandUnit> {
   fallBackWhy(s: Side): string | null {
     if (this.over) return 'The battle is over.';
     if (this.setup !== null) return 'The battle has not begun.';
+    // After the break (release 2, pursue; the UI director's words, 26 November 2026, 21:27Z): the day is decided.
+    const A = this.aftermath;
+    if (A) {
+      if (s === A.side) return 'Your army has broken and is already falling back.';
+      return A.phase === 'ask' ? `${this.army(A.side)} has broken: pursue it, or end the battle.` : 'Your army is pursuing: to stop, call off the pursuit.';
+    }
     if (this.falling[s] !== null) return 'Your army is already falling back.';
     if (!this.units.some((u) => u.side === s && fighting(u) && u.kind !== 'fort')) return 'No unit of yours can fall back.';
     return null;
