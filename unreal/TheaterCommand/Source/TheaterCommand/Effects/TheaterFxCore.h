@@ -485,6 +485,19 @@ namespace TheaterFx
 			 * there (none is left in her as she drives on or turns, nor hangs behind her). */
 			Vec Carry, Pivot;
 			double Spin = 0.0;
+			/** Her path through the burst where the caller knows it (two moments or more): her middle (At) and how far she
+			 * has turned since Now (Turn, radians, + turning x toward y) at moments Dt seconds of the kit's clock after
+			 * Now, rising, the first at 0 (her middle Pivot). Every strike is then where her plate is on it (straight
+			 * between its moments, held past the last), as she slows, stops or turns; Carry and Spin are her way and turn
+			 * where it has none. At most PathMost of them are taken. */
+			struct PathPoint
+			{
+				double Dt = 0.0;
+				Vec At;
+				double Turn = 0.0;
+			};
+			static constexpr size_t PathMost = 64;
+			std::vector<PathPoint> Path;
 			/** Her own height under the plate where a spark thrown down goes out (her deck under her turret's side, her
 			 * track guard under her hull's side), at Now; under -1e29: none, the ground. */
 			double Floor = -1.0e30;

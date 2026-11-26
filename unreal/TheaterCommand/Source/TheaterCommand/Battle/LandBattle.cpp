@@ -1782,9 +1782,10 @@ bool ALandBattle::Open()
 	// Effects (R2): small arms off armour (Brian, 25 November 15:58Z: "bullets should be bouncing off it"): a rifle's or
 	// machine gun's round on a tank, an assault gun, a self-propelled gun, an armoured car or a half-track is drawn
 	// bouncing off her plate (sparks, ricochets, never dirt) and heard as a rattle of steel, whatever the rules made of
-	// it (LandPlay::World::bRicochet; the kit's ShotsOnArmour). On unless -TheaterLandNoRicochet.
-	PlayWorld.bRicochet = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoRicochet"));
-	UE_LOG(LogTheater, Log, TEXT("Land battle: small arms on armour %s"), PlayWorld.bRicochet ? TEXT("bounce off it (ricochets and a rattle of steel, release 2; -TheaterLandNoRicochet: as before)") : TEXT("as before (-TheaterLandNoRicochet)"));
+	// it (LandPlay::World::bRicochet; the kit's ShotsOnArmour). Off unless -TheaterLandRicochet (release 2, on trial: the
+	// ship list turns it on after the Mac test and the art director's pass); off, every battle as before.
+	PlayWorld.bRicochet = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandRicochet"));
+	UE_LOG(LogTheater, Log, TEXT("Land battle: small arms on armour %s"), PlayWorld.bRicochet ? TEXT("bounce off it (ricochets and a rattle of steel; -TheaterLandRicochet, release 2, on trial)") : TEXT("as before (off unless -TheaterLandRicochet)"));
 	S.Play.Begin(Rec, PlayWorld);
 	MakeRiders();
 	SeatLight(0);
@@ -4100,6 +4101,10 @@ void ALandBattle::MakeArmour()
 	// as the defender's tank, taken from them (the Mac's off/on line).
 	Armour->bCapturedLook = LandParts::OnTrial("captured") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoCaptured"));
 	Armour->bCapturedTest = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCapturedTest"));
+	// Effects (R2), small arms off armour (-TheaterLandRicochet, read again in Open for PlayWorld.bRicochet): each rifle's
+	// and machine gun's strike's plate worked out as the vehicles are made (a few ms each, here, not on the frame), so
+	// PlayWorld.Plate only turns it by her pose (LandKit::Vehicle::PlateNow). Off, nothing is worked out: as before.
+	Armour->bKeepPlates = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandRicochet"));
 	if (Armour->bCapturedLook || Armour->bCapturedTest)
 	{
 		UE_LOG(LogTheater, Display, TEXT("Land battle: captured kit ON%s"), Armour->bCapturedTest ? TEXT(" (test: every other attacker tank block taken from the defender)") : TEXT(""));
@@ -7457,10 +7462,19 @@ void ALandBattle::PlayEffects()
 				// inside the room it has (RoomMid, RoomA, RoomB), over her floor, riding with her: the kit runs on life's
 				// clock, a battle second's metres are Life life seconds', as her dust's)
 				// (her turn: + as her heading grows, north toward east, which is the world's x toward its y)
+				// (her path through the burst: her middle in the world, a battle second's moments Life life seconds, her turn as is)
 				const FVector Carry = WorldWay(E.Carry.X, E.Carry.Y, E.Carry.Z) * (UnitsPerMetre / S.Life);
+				TArray<FVector> PathAt;
+				TArray<double> PathDt, PathTurn;
+				for (const LandPlay::Effect::PathPoint& Pt : E.Path)
+				{
+					PathAt.Add(World(Pt.At.X, Pt.At.Y, Pt.At.Z));
+					PathDt.Add(Pt.Dt * S.Life);
+					PathTurn.Add(Pt.Turn);
+				}
 				Effects->ShotsOnArmour(E.Gun, At, World(E.To.X, E.To.Y, E.To.Z), WorldWay(E.Normal.X, E.Normal.Y, E.Normal.Z).GetSafeNormal(),
 					World(E.RoomMid.X, E.RoomMid.Y, E.RoomMid.Z), WorldWay(E.RoomA.X, E.RoomA.Y, E.RoomA.Z) * UnitsPerMetre, WorldWay(E.RoomB.X, E.RoomB.Y, E.RoomB.Z) * UnitsPerMetre,
-					Carry, World(E.Pivot.X, E.Pivot.Y, E.Pivot.Z), E.Turn / S.Life, E.Floor > -1.0e29 ? E.Floor * UnitsPerMetre : -1.0e30, Name, E.Rounds, static_cast<float>(E.PerSecond), Ground);
+					Carry, World(E.Pivot.X, E.Pivot.Y, E.Pivot.Z), E.Turn / S.Life, E.Floor > -1.0e29 ? E.Floor * UnitsPerMetre : -1.0e30, PathAt, PathDt, PathTurn, Name, E.Rounds, static_cast<float>(E.PerSecond), Ground);
 				break;
 			}
 			Effects->Shots(E.Gun, At, World(E.To.X, E.To.Y, E.To.Z), Name, E.Rounds, static_cast<float>(E.PerSecond), Ground); // (rounds a life second, on the kit's life clock: the mix cuts the burst alike)

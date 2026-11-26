@@ -216,9 +216,10 @@ namespace LandSound
 		std::vector<Piece> WhinePieces;
 		double ArmourDb = -4.0, ArmourWhineChance = 0.3;
 		/** A burst off armour (RattleOff): at most burstMost pings, burstShare of its rounds, burstPitchPercent and
-		 * burstDbSpread (under db) of each its own. */
-		int ArmourBurstMost = 4;
-		double ArmourBurstShare = 0.5, ArmourBurstPitch = 6.0, ArmourBurstDbSpread = 4.0;
+		 * burstDbSpread (under db) of each its own; every ping but the last cut to burstRingS (a sharp clang, the steel
+		 * ringing out only at the end); burstWhineChance its whine's chance (a single round's whineChance). */
+		int ArmourBurstMost = 8;
+		double ArmourBurstShare = 0.4, ArmourBurstPitch = 8.0, ArmourBurstDbSpread = 4.0, ArmourBurstRing = 0.25, ArmourBurstWhine = 0.6;
 		std::map<std::string, std::pair<double, double>> FiringPart;
 		// (a take that fires in several bursts with silences between: its other stretches of firing, besides its part, a
 		// crowded machine gun's next places to play from)

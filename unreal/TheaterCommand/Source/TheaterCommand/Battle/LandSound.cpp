@@ -327,6 +327,8 @@ namespace LandSound
 		ArmourBurstShare = Ar["burstShare"].Num(ArmourBurstShare);
 		ArmourBurstPitch = Ar["burstPitchPercent"].Num(ArmourBurstPitch);
 		ArmourBurstDbSpread = Ar["burstDbSpread"].Num(ArmourBurstDbSpread);
+		ArmourBurstRing = Ar["burstRingS"].Num(ArmourBurstRing);
+		ArmourBurstWhine = Ar["burstWhineChance"].Num(ArmourBurstWhine);
 		const Json& Mg = Land["mgClose"];
 		for (size_t K = 0; K < Mg.Keys.size(); ++K)
 		{
@@ -829,8 +831,10 @@ namespace LandSound
 		// Effects (R2), small arms off armour: a machine gun raking a tank is a rattle of steel, not one ring. A ping for
 		// about burstShare of its rounds, never more than burstMost, spread over the burst (rounds / rate) each in its own
 		// stretch of it, a take of the list each (Pick: never the same twice running), a little pitch and level of its own
-		// over Start's; and one whine off now and then (the ground's gap and whineChance, somewhere in the burst). The
-		// mix's limits and same-take rule as ever (Start). One roll a statement.
+		// over Start's, every one but the last cut to burstRingS with a 0.05 s fade (a sharp clang; the steel rings out
+		// only at the end, so eight pings are a rattle, not one wash); and one whine off now and then (the ground's gap
+		// and burstWhineChance, somewhere in the burst). The mix's limits and same-take rule as ever (Start). One roll a
+		// statement.
 		const double Long = N.Rounds / N.PerSecond;
 		const int Pings = std::clamp(static_cast<int>(std::lround(N.Rounds * ArmourBurstShare)), 1, std::max(1, ArmourBurstMost));
 		for (int K = 0; K < Pings; ++K)
@@ -844,10 +848,15 @@ namespace LandSound
 			P.Pitch *= 1.0 + (Tone * 2.0 - 1.0) * ArmourBurstPitch * 0.01;
 			const double Level = Roll();
 			P.Db = ArmourDb - Level * ArmourBurstDbSpread;
+			if (K + 1 < Pings && ArmourBurstRing > 0.0)
+			{
+				P.Cut = ArmourBurstRing;
+				P.CutFade = std::min(0.05, ArmourBurstRing);
+			}
 			if (Start(P, Now, Far, bOnScreen, Out)) ++ArmourRings;
 		}
 		const double WhineWhen = Roll();
-		WhineOff(N.At + Vec(0.0, 0.0, 0.3), Far, Now, Base.Delay + 0.02 + Long * WhineWhen, ArmourDb - 2.0, ArmourWhineChance, Out);
+		WhineOff(N.At + Vec(0.0, 0.0, 0.3), Far, Now, Base.Delay + 0.02 + Long * WhineWhen, ArmourDb - 2.0, ArmourBurstWhine, Out);
 	}
 
 	void Mixer::CutBurst(Take& T, const Noise& N)

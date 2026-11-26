@@ -765,6 +765,98 @@ int main(int argc, char** argv)
 			RecordingPath.substr(RecordingPath.find_last_of('/') + 1).c_str(), static_cast<double>(Recording.size()) / 1e6, B.End, B.Month, B.Year,
 			B.Vehicles().size(), B.Rounds().size(), Ms(L0, L1), Ms(P0, P1));
 	}
+	// ---- Effects (R2), small arms off armour (-TheaterLandRicochet, Battle::bKeepPlates): the same battle made with every
+	// rifle's and machine gun's strike's plate worked out as she is made, so the game's frame only turns it by her pose
+	// (PlateNow). Each kept plate, at her pose as she stood when it struck, is the plate PlateAbout searches out there (to a
+	// millimetre); PlateNow costs well under 0.3 ms the most (the game's rule step asks it once a burst on armour, three in
+	// a frame at worst); and what keeping them adds to the battle's making.
+	std::printf("\nSMALL ARMS OFF ARMOUR (Effects R2): PLATES KEPT AS THE BATTLE IS MADE (Battle::bKeepPlates, Vehicle::PlateNow)\n");
+	{
+		Battle KB;
+		KB.Life = B.Life;
+		KB.BrewWaitLeast = B.BrewWaitLeast;
+		KB.BrewWaitMost = B.BrewWaitMost;
+		KB.Fires = Fires;
+		KB.bCapturedTest = B.bCapturedTest;
+		KB.bKeepPlates = true;
+		std::string KeepError;
+		const auto K0 = Clock::now();
+		if (!KB.Load(Recording, Read, Flat, bTable ? &Table : nullptr, 79, KeepError))
+		{
+			std::printf("  FAIL the battle with its plates kept: %s\n", KeepError.c_str());
+			++Failures;
+		}
+		const auto K1 = Clock::now();
+		// (every small arm's round that struck a vehicle, by the moment it struck)
+		struct Struck { double L; size_t V; int N; std::string Face; };
+		std::vector<Struck> List;
+		for (const Round& R : KB.Rounds())
+		{
+			if ((R.W != "rifle" && R.W != "mg") || R.R.empty() || R.R == "miss")
+			{
+				continue;
+			}
+			for (size_t I = 0; I < KB.Vehicles().size(); ++I)
+			{
+				const TrackWords& W = KB.Vehicles()[I].Words();
+				if (R.On == W.Block && R.Ok == W.K && R.Oj == W.J)
+				{
+					List.push_back({ R.L, I, R.N, R.Face.empty() ? std::string("front") : R.Face });
+				}
+			}
+		}
+		std::stable_sort(List.begin(), List.end(), [](const Struck& A, const Struck& Bs) { return A.L < Bs.L; });
+		Tally Same, Cost;
+		long Kept = 0, Roomed = 0;
+		double SumUs = 0.0, MostUs = 0.0;
+		const size_t Every = std::max<size_t>(1, List.size() / 120); // (about 120 of them searched again: each a few ms)
+		for (size_t I = 0; I < List.size(); ++I)
+		{
+			const Struck& S = List[I];
+			KB.Update(S.L);
+			const Vehicle& V = KB.Vehicles()[S.V];
+			Vehicle::PlateSpot Got;
+			const auto C0 = Clock::now();
+			const bool bGot = V.PlateNow(S.N, Got);
+			const double Us = 1000.0 * Ms(C0, Clock::now());
+			SumUs += Us;
+			MostUs = std::max(MostUs, Us);
+			Cost.Note(Us < 300.0, Us, "round " + std::to_string(S.N) + ": PlateNow took " + std::to_string(Us) + " microseconds");
+			if (!bGot)
+			{
+				continue;
+			}
+			++Kept;
+			Roomed += Got.A.Length() > 0.0 || Got.B.Length() > 0.0 ? 1 : 0;
+			if (I % Every != 0)
+			{
+				continue;
+			}
+			// (searched again at her pose now, as it struck)
+			V3 At, Normal;
+			if (!V.StruckNow(S.N, At, Normal))
+			{
+				continue;
+			}
+			const V3 In = V.Root.Way(S.Face == "rear" ? V3(1.0, 0.0, 0.0) : S.Face == "left" ? V3(0.0, 1.0, 0.0) : S.Face == "right" ? V3(0.0, -1.0, 0.0)
+				: S.Face == "top" ? V3(0.0, 0.0, -1.0) : V3(-1.0, 0.0, 0.0)).Unit(V3(-1.0, 0.0, 0.0));
+			Vehicle::PlateSpot Full;
+			V.PlateAbout(At, Normal, In, Full);
+			const double Off = std::max({ (Got.At - Full.At).Length(), (Got.Mid - Full.Mid).Length(), (Got.A - Full.A).Length(), (Got.B - Full.B).Length(),
+				(Got.Normal - Full.Normal).Length(), (Got.Floor > -1e29) != (Full.Floor > -1e29) ? 1.0 : Got.Floor > -1e29 ? std::fabs(Got.Floor - Full.Floor) : 0.0 });
+			Same.Note(Off <= 0.001, Off, Who(V) + " round " + std::to_string(S.N) + ": kept plate " + std::to_string(Off) + " m off the plate searched at her pose then");
+		}
+		std::printf("  %zu small-arms strikes on %zu vehicles: %ld plates kept (%ld with a room); the battle made in %.0f ms with them kept (%.0f ms without); PlateNow %.1f microseconds on average, %.1f the most\n",
+			List.size(), KB.Vehicles().size(), Kept, Roomed, Ms(K0, K1), Ms(L0, L1), List.empty() ? 0.0 : SumUs / static_cast<double>(List.size()), MostUs);
+		Report("a kept plate, the plate searched at her pose then (1 mm)", Same, "m");
+		Report("PlateNow under 0.3 ms", Cost, "us");
+		if (Kept == 0 && !List.empty())
+		{
+			std::printf("  FAIL no plate kept\n");
+			++Failures;
+		}
+	}
+
 	std::vector<Vehicle>& All = B.Vehicles();
 	for (const Vehicle& V : All)
 	{

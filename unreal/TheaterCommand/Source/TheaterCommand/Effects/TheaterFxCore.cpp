@@ -5404,6 +5404,21 @@ namespace TheaterFx
 		Plate.Spin = bSpin ? PlateIn.Spin : 0.0; // (a turn that is no number, about no place, or faster than any vehicle turns: none)
 		Plate.Pivot = bSpin ? PlateIn.Pivot : PlateIn.At;
 		Plate.Floor = PlateIn.Floor == PlateIn.Floor && PlateIn.Floor > -1.0e29 && PlateIn.Floor < 1.0e6 ? PlateIn.Floor : -1.0e30;
+		// (her path: taken where it begins at Now, its moments rise, and each is a number, her middle within a kilometre
+		// of the plate and her turn under 20 turns; else none, her steady way and turn. Its first moment is her middle)
+		bool bPath = PlateIn.Path.size() >= 2 && PlateIn.Path.front().Dt == 0.0;
+		for (size_t K = 0; bPath && K < PlateIn.Path.size() && K < ArmourPlate::PathMost; ++K)
+		{
+			const ArmourPlate::PathPoint& Pt = PlateIn.Path[K];
+			bPath = RealPlace(Pt.At) && (Pt.At - PlateIn.At).Length() < 1000.0 && std::isfinite(Pt.Dt) && std::isfinite(Pt.Turn) && std::fabs(Pt.Turn) < 125.0
+				&& (K == 0 || Pt.Dt > PlateIn.Path[K - 1].Dt);
+		}
+		Plate.Path.clear();
+		if (bPath)
+		{
+			Plate.Path.assign(PlateIn.Path.begin(), PlateIn.Path.begin() + static_cast<std::ptrdiff_t>(std::min(PlateIn.Path.size(), ArmourPlate::PathMost)));
+			Plate.Pivot = Plate.Path.front().At;
+		}
 		ShotsLaid(Now, Gun, From, PlateIn.At, Weapon, Rounds, PerSecond, GroundIn, &Plate);
 	}
 
@@ -5505,14 +5520,16 @@ namespace TheaterFx
 			Span Sparks{ 3.0, 8.0 }, Fast{ 3.0, 26.0 }, SparkLife{ 0.08, 0.24 }, Cone{ 40.0, 70.0 }, Lift{ 10.0, 50.0 }, RicoLife{ 0.2, 0.45 }, Kink{ 8.0, 25.0 };
 			double Uneven = 2.5, Open = 60.0, SparkWide = 0.012, SparkLeastPx = 1.3, LongPx = 5.0, MinOut = 0.1, SparkOver = 1.4;
 			double FlashM = 0.05, FlashS = 0.034, FlashLeastPx = 3.0, FlashOver = 2.0, HaloM = 0.2, HaloAlpha = 0.35;
-			double SpreadA = 0.45, SpreadB = 0.25, ChipChance = 0.06, ChipAlpha = 0.22, TracerChance = 0.8, Slower = 0.5, Yaw = 25.0, KinkSlow = 0.75, RicoAlpha = 0.7, StreakS = 1.0 / 30.0, Drop = 9.8;
+			double SpreadA = 0.45, SpreadB = 0.25, ChipChance = 0.06, ChipAlpha = 0.22, TracerChance = 0.8, Slower = 0.5, Yaw = 25.0, KinkSlow = 0.75, RicoAlpha = 0.7, StreakS = 0.014, Drop = 9.8;
 			int Kinks = 2;
 			Rgb Hot, Cooled, FlashCol, HaloCol, ChipCol;
 			double Many = 1.0, Coarse = 1.0, MPerPx = 0.0; // (far off and on a busy screen: the share of sparks thrown, how much bigger each, a metre's pixels)
+			double SparkHold = 0.4, SparkCool = 1.0;      // (how long a spark burns at full strength, a share of its life, and how far it cools: far off, longer and less)
 			// (where on the plate the rounds strike: about Base, each way along it up to Reach off (spread Sig, a bell's
 			// width), so never past the room the caller knows of less edge_m; Carry her velocity, Floor her own floor at Now)
 			Vec Base, Carry, Pivot;
 			double ReachA = 0.0, ReachB = 0.0, SigA = 0.0, SigB = 0.0, Floor = -1.0e30, Spin = 0.0;
+			std::vector<ArmourPlate::PathPoint> Path; // (her path, where she has one: her middle and turn at moments after Now)
 		} Pl;
 		if (bPlate)
 		{
@@ -5536,6 +5553,7 @@ namespace TheaterFx
 			Pl.Pivot = Plate->Pivot;
 			Pl.Spin = Plate->Spin;
 			Pl.Floor = Plate->Floor;
+			Pl.Path = Plate->Path;
 			Pl.Sparks = SpanOf(RP + "sparks", 3.0, 8.0, 0.0, 40.0);
 			Pl.Fast = SpanOf(RP + "spark_mps", 3.0, 26.0, 0.1, 200.0);
 			Pl.SparkLife = SpanOf(RP + "spark_life_s", 0.08, 0.24, 0.01, 2.0);
@@ -5583,7 +5601,7 @@ namespace TheaterFx
 			Pl.Kinks = static_cast<int>(NumOf("kinks", 2.0, 0.0, 6.0));
 			Pl.KinkSlow = NumOf("kink_slow", 0.75, 0.1, 1.0);
 			Pl.RicoAlpha = NumOf("tracer_alpha", 0.7, 0.0, 1.0);
-			Pl.StreakS = NumOf("tracer_streak_s", 1.0 / 30.0, 0.002, 0.2);
+			Pl.StreakS = NumOf("tracer_streak_s", 0.014, 0.002, 0.2);
 			Pl.Drop = NumOf("tracer_drop", 9.8, 0.0, 50.0);
 			Pl.Hot = Picture(RP + "spark", Rgb::FromPicture(255, 240, 190));
 			Pl.Cooled = Picture(RP + "spark_old", Rgb::FromPicture(255, 180, 80));
@@ -5601,19 +5619,76 @@ namespace TheaterFx
 			const double Asked = static_cast<double>(RoomGate());
 			const double BusyK = HalvePast > 0.0 && Asked > HalvePast * MaxPuffs ? (Asked > 0.8 * MaxPuffs ? 0.25 : 0.5) : 1.0;
 			Pl.Many = FarK * BusyK;
+			// (far off, where a metre on the plate is under full_px, a spark holds its full strength longer and cools only
+			// part way: faded and cooled over her paint it would read as a dull brown fleck, not a spark)
+			if (FarK < 1.0)
+			{
+				Pl.SparkHold = NumOf("spark_hold_far", 0.7, 0.0, 0.95);
+				Pl.SparkCool = NumOf("spark_cool_far", 0.5, 0.0, 1.0);
+			}
 			Pl.Coarse = 1.0 / std::sqrt(FarK);
 			Pl.MPerPx = bEyeKnown ? Away / Ppr : 0.0;
 		}
 		// (where her way and her turn have carried a point of her, or turned a way of her, Dt after Now; and the plate as a
 		// round strikes it: its outward way and its two along it then, and how fast the plate goes there)
+		// (on her path where she has one: her middle, how far she has turned, her velocity and her turn's rate Dt after
+		// Now, straight between its moments and held past its last; else her steady way and turn)
+		struct OnPath
+		{
+			Vec Mid, Vel;
+			double Turn = 0.0, Spin = 0.0;
+		};
+		auto PathAt = [&](double Dt)
+		{
+			OnPath G;
+			const std::vector<ArmourPlate::PathPoint>& P = Pl.Path;
+			if (Dt <= P.front().Dt || Dt >= P.back().Dt)
+			{
+				const ArmourPlate::PathPoint& End_ = Dt <= P.front().Dt ? P.front() : P.back();
+				G.Mid = End_.At;
+				G.Turn = End_.Turn;
+				return G;
+			}
+			size_t K = 1;
+			while (K + 1 < P.size() && P[K].Dt < Dt)
+			{
+				++K;
+			}
+			const ArmourPlate::PathPoint& A = P[K - 1];
+			const ArmourPlate::PathPoint& B = P[K];
+			const double Each = B.Dt - A.Dt, S = (Dt - A.Dt) / Each;
+			G.Mid = A.At + (B.At - A.At) * S;
+			G.Turn = A.Turn + (B.Turn - A.Turn) * S;
+			G.Vel = (B.At - A.At) * (1.0 / Each);
+			G.Spin = (B.Turn - A.Turn) / Each;
+			return G;
+		};
+		const bool bOnPath = Pl.Path.size() >= 2;
+		auto Turn = [](const Vec& W, double A)
+		{
+			return Vec(W.X * std::cos(A) - W.Y * std::sin(A), W.X * std::sin(A) + W.Y * std::cos(A), W.Z);
+		};
 		auto TurnedBy = [&](const Vec& W, double Dt)
 		{
-			const double A = Pl.Spin * Dt;
-			return Pl.Spin == 0.0 ? W : Vec(W.X * std::cos(A) - W.Y * std::sin(A), W.X * std::sin(A) + W.Y * std::cos(A), W.Z);
+			if (bOnPath)
+			{
+				return Turn(W, PathAt(Dt).Turn);
+			}
+			return Pl.Spin == 0.0 ? W : Turn(W, Pl.Spin * Dt);
 		};
 		auto Moved = [&](const Vec& P, double Dt)
 		{
+			if (bOnPath)
+			{
+				const OnPath G = PathAt(Dt);
+				return G.Mid + Turn(P - Pl.Pivot, G.Turn);
+			}
 			return Pl.Pivot + TurnedBy(P - Pl.Pivot, Dt) + Pl.Carry * Dt;
+		};
+		// (how far her floor has risen Dt after Now)
+		auto Risen = [&](double Dt)
+		{
+			return bOnPath ? PathAt(Dt).Mid.Z - Pl.Pivot.Z : Pl.Carry.Z * Dt;
 		};
 		struct StruckFrame
 		{
@@ -5699,7 +5774,7 @@ namespace TheaterFx
 			const int NSparks = std::max(1, static_cast<int>(std::lround(Thrown * Pl.Many)));
 			// (the ground under the strike, and her own floor under the plate where she has one there, as she is when it
 			// strikes: no spark falls through either)
-			const double Ground_ = Height(At.X, At.Y), Own = Pl.Floor > -1.0e29 ? Pl.Floor + Pl.Carry.Z * (Ts - Now) : -1.0e30;
+			const double Ground_ = Height(At.X, At.Y), Own = Pl.Floor > -1.0e29 ? Pl.Floor + Risen(Ts - Now) : -1.0e30;
 			const double Floor = std::max(Ground_, Own);
 			for (int I = 0; I < NSparks; ++I)
 			{
@@ -5759,11 +5834,11 @@ namespace TheaterFx
 				B.From = AtB + Nn * 0.01 + SeenWay * (SeenWay.Dot(Nn) >= 0.0 ? Half : -Half);
 				B.Col = Pl.Hot;
 				B.Col2 = Pl.Cooled;
-				B.Cool = 1.0; // (white-yellow, to orange only by its end)
+				B.Cool = Pl.SparkCool; // (white-yellow, to orange only by its end; far off, part way)
 				B.Over = Pl.SparkOver;
 				B.Alpha = 1.0;
 				B.FadeIn = 0.002;
-				B.Hold = 0.4;
+				B.Hold = Pl.SparkHold;
 				B.Heart = 0.9;
 				B.Rim = 0.3;
 				B.LeastPx = Pl.SparkLeastPx;
@@ -5995,8 +6070,9 @@ namespace TheaterFx
 				Fr.N = TurnedBy(Pl.N, Since);
 				Fr.Ta = TurnedBy(Pl.Ta, Since);
 				Fr.Tb = TurnedBy(Pl.Tb, Since);
-				const Vec Arm = Hit - (Pl.Pivot + Pl.Carry * Since);
-				Fr.Vel = Pl.Carry + Vec(-Pl.Spin * Arm.Y, Pl.Spin * Arm.X, 0.0);
+				const OnPath G = bOnPath ? PathAt(Since) : OnPath{ Pl.Pivot + Pl.Carry * Since, Pl.Carry, 0.0, Pl.Spin };
+				const Vec Arm = Hit - G.Mid;
+				Fr.Vel = G.Vel + Vec(-G.Spin * Arm.Y, G.Spin * Arm.X, 0.0);
 				HitDist = (Hit - From).Length();
 				HitWay = Dist > 0.5 ? (Hit - From).Unit(Dir) : -Fr.N; // (a shooter unseen, fired from the strike itself: struck square)
 				HitReach = Fly;

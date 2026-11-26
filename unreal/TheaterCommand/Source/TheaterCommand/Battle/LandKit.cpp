@@ -3623,6 +3623,7 @@ namespace LandKit
 			{
 				S.bOnSurface = Cast(S.Face, S.U, S.H, TurretAt, S.Body, S.Local, S.Normal);
 				S.TurretAt = TurretAt;
+				S.bPlate = false;
 				bStruck = true;
 			}
 		}
@@ -3875,6 +3876,10 @@ namespace LandKit
 			}
 		}
 		std::stable_sort(Timeline.begin() + static_cast<std::ptrdiff_t>(Kept), Timeline.end(), [](const Timed& A, const Timed& B) { return A.T < B.T; });
+		if (bKeepPlates)
+		{
+			KeepPlates();
+		}
 	}
 
 	bool Vehicle::Cast(const std::string& Face, double U, double H, double TurretAt, int& OutBody, V3& OutLocal, V3& OutNormal) const
@@ -4725,17 +4730,22 @@ namespace LandKit
 
 	bool Vehicle::PlateAbout(const V3& AtIn, const V3& NormalIn, const V3& In, PlateSpot& Out) const
 	{
+		return PlateIn(BodyPlaces, Root.Way(V3(1.0, 0.0, 0.0)), AtIn, NormalIn, In, Out);
+	}
+
+	bool Vehicle::PlateIn(const std::vector<Place>& Places, const V3& Ahead, const V3& AtIn, const V3& NormalIn, const V3& In, PlateSpot& Out) const
+	{
 		const V3 Up(0.0, 0.0, 1.0);
 		V3 At = AtIn, N = NormalIn.Unit(Up);
 		std::vector<double> Boxes;
 		if (Shape)
 		{
-			BodyBoxes(*Shape, BodyPlaces, Boxes);
+			BodyBoxes(*Shape, Places, Boxes);
 		}
 		auto Ray = [&](const V3& From, const V3& Way, double Most, double& OutT, V3& OutNormal)
 		{
 			OutT = Most;
-			return Shape && RayAcross(*Shape, BodyPlaces, &Boxes, From, Way, Most, OutT, OutNormal);
+			return Shape && RayAcross(*Shape, Places, &Boxes, From, Way, Most, OutT, OutNormal);
 		};
 		// What stands in front of where the scar's cast struck her (it passes through her road wheels, sprockets, idlers
 		// and tracks: a scar there would run round with them): the round strikes that.
@@ -4764,7 +4774,6 @@ namespace LandKit
 		constexpr int Grid = 33, Middle = 16;
 		const V3 Way = In.Length() > 0.5 ? In.Unit(-N) : -N;
 		const double Square = -Way.Dot(N);
-		const V3 Ahead = Root.Way(V3(1.0, 0.0, 0.0));
 		const V3 A = (std::fabs(N.Z) < 0.9 ? Up.Cross(N) : Ahead - N * Ahead.Dot(N)).Unit(V3(1.0, 0.0, 0.0));
 		const V3 B = N.Cross(A).Unit(Up);
 		const size_t Cells = static_cast<size_t>(Grid * Grid);
@@ -4881,14 +4890,14 @@ namespace LandKit
 			// (X - At).BIn along the plane and -Depth / Square past it; cast square, (X - At).A, (X - At).B and -Depth)
 			const V3 AIn = A + N * (Way.Dot(A) / Square), BIn = B + N * (Way.Dot(B) / Square);
 			const double DepthLo = -std::max(Slack * Square, Slack), DepthHi = std::max(Clear * Square, Lift);
-			for (size_t Bi = 0; Bi < Shape->Bodies.size() && Bi < BodyPlaces.size(); ++Bi)
+			for (size_t Bi = 0; Bi < Shape->Bodies.size() && Bi < Places.size(); ++Bi)
 			{
 				const Body& Bo = Shape->Bodies[Bi];
 				if (Bo.Name == "aerial" || Bo.Part < 0 || !Shape->Parts[static_cast<size_t>(Bo.Part)].bShown || Bo.Near.Triangles.empty())
 				{
 					continue;
 				}
-				const Place& P = BodyPlaces[Bi];
+				const Place& P = Places[Bi];
 				const Quat Back = P.Q.Conj();
 				auto Into = [&Back](const V3& W) { return Back.Rotate(Swap(W)); };
 				const V3 O = Into(At - P.At), Nb = Into(N), Ab = Into(A), Bb = Into(B), AInb = Into(AIn), BInb = Into(BIn), Wb = Into(Way);
@@ -5019,6 +5028,59 @@ namespace LandKit
 		return true;
 	}
 
+	namespace
+	{
+		/** The way a round came in on a face (as the scar's cast took it), in her hull's own axes. */
+		V3 FaceIn(const std::string& Face)
+		{
+			return Face == "rear" ? V3(1.0, 0.0, 0.0) : Face == "left" ? V3(0.0, 1.0, 0.0) : Face == "right" ? V3(0.0, -1.0, 0.0)
+				: Face == "top" ? V3(0.0, 0.0, -1.0) : V3(-1.0, 0.0, 0.0);
+		}
+	}
+
+	void Vehicle::KeepPlates()
+	{
+		if (!Shape)
+		{
+			return;
+		}
+		std::vector<Xf> Parts;
+		std::vector<Place> Places;
+		for (Strike& S : Strikes)
+		{
+			if (S.bPlate || S.bHeavy || (S.W != "rifle" && S.W != "mg") || S.Body < 0 || static_cast<size_t>(S.Body) >= Shape->Bodies.size())
+			{
+				continue;
+			}
+			// (she posed as she stood when it struck: the plate searched about the strike, then kept in the struck body's
+			// own axes, which carry it as she drives, turns and trains her turret)
+			Xf RootXf;
+			Pose(S.L, Parts, &RootXf);
+			Shape->Places(Parts, Places);
+			if (static_cast<size_t>(S.Body) >= Places.size())
+			{
+				continue;
+			}
+			const Place& P = Places[static_cast<size_t>(S.Body)];
+			const Place RootThen{ Swap(RootXf.T), RootXf.Q };
+			PlateSpot Got;
+			if (!PlateIn(Places, RootThen.Way(V3(1.0, 0.0, 0.0)), P.Point(S.Local), P.Way(S.Normal), RootThen.Way(FaceIn(S.Face)).Unit(V3(-1.0, 0.0, 0.0)), Got))
+			{
+				continue;
+			}
+			const Quat Back = P.Q.Conj();
+			auto PointIn = [&](const V3& X) { return Back.Rotate(Swap(X - P.At)); };
+			auto WayIn = [&](const V3& W) { return Back.Rotate(Swap(W)); };
+			S.PlateAt = PointIn(Got.At);
+			S.PlateNormal = WayIn(Got.Normal);
+			S.PlateMid = PointIn(Got.Mid);
+			S.PlateA = WayIn(Got.A);
+			S.PlateB = WayIn(Got.B);
+			S.PlateDrop = Got.Floor > -1.0e29 ? Got.At.Z - Got.Floor : -1.0;
+			S.bPlate = true;
+		}
+	}
+
 	bool Vehicle::PlateNow(int RoundN, PlateSpot& Out) const
 	{
 		for (const Strike& S : Strikes)
@@ -5026,11 +5088,23 @@ namespace LandKit
 			if (S.N == RoundN && S.Body >= 0 && static_cast<size_t>(S.Body) < BodyPlaces.size())
 			{
 				const Place& P = BodyPlaces[static_cast<size_t>(S.Body)];
-				// (the way its round came in: the face's, as the scar's cast took it, in her hull's axes)
-				const std::string& Face = S.Face;
-				const V3 In = Face == "rear" ? V3(1.0, 0.0, 0.0) : Face == "left" ? V3(0.0, 1.0, 0.0) : Face == "right" ? V3(0.0, -1.0, 0.0)
-					: Face == "top" ? V3(0.0, 0.0, -1.0) : V3(-1.0, 0.0, 0.0);
-				return PlateAbout(P.Point(S.Local), P.Way(S.Normal), Root.Way(In).Unit(V3(-1.0, 0.0, 0.0)), Out);
+				if (S.bPlate)
+				{
+					// (kept: turned by her pose now; her floor as far under the strike as it was)
+					Out.At = P.Point(S.PlateAt);
+					Out.Normal = P.Way(S.PlateNormal);
+					Out.Mid = P.Point(S.PlateMid);
+					Out.A = P.Way(S.PlateA);
+					Out.B = P.Way(S.PlateB);
+					Out.Floor = S.PlateDrop >= 0.0 ? Out.At.Z - S.PlateDrop : -1.0e30;
+					return true;
+				}
+				// (not kept: her skin's point alone, no room: every round there)
+				Out.At = Out.Mid = P.Point(S.Local);
+				Out.Normal = P.Way(S.Normal);
+				Out.A = Out.B = V3();
+				Out.Floor = -1.0e30;
+				return true;
 			}
 		}
 		return false;
@@ -5952,6 +6026,7 @@ namespace LandKit
 			const Block* B = BlockOf(Tracks[I].Block);
 			All[I].Life = Life;
 			All[I].BrewWait = BrewWaitOf(I); // (Effects (R2))
+			All[I].bKeepPlates = bKeepPlates; // (Effects (R2))
 			All[I].Build(Looks[KeyOf[I]], Tracks[I], RoundList, End, InGround, Brew[I] != 0, static_cast<int>(I), B->Side, B->Nation);
 			All[I].FateKey = FateOf[I];
 		}
@@ -6215,6 +6290,7 @@ namespace LandKit
 			Ve.Life = Life;
 			Ve.LoopsUntil = Loops;
 			Ve.BrewWait = BrewWaitOf(V); // (Effects (R2))
+			Ve.bKeepPlates = bKeepPlates; // (Effects (R2))
 			TrackWords Wreck;
 			const TrackWords* W = &Grown[V];
 			if (W->Died >= 0.0)

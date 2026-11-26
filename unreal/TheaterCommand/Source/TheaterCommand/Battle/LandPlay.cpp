@@ -423,87 +423,121 @@ namespace LandPlay
 		return Tr.IsVehicle() && ArmouredVehicle(Tr, Rec->BlockOf(Tr.Block));
 	}
 
+	Vec PathMoved(const Effect& E, const Vec& P, double Dt, double* OutTurn)
+	{
+		// (a field way turned by A radians clockwise seen from above, as LandFeed's heading grows)
+		auto Turned = [](const Vec& W, double A) { return Vec(W.X * std::cos(A) + W.Y * std::sin(A), -W.X * std::sin(A) + W.Y * std::cos(A), W.Z); };
+		if (E.Path.empty())
+		{
+			if (OutTurn) *OutTurn = E.Turn * Dt;
+			return E.Pivot + E.Carry * Dt + Turned(P - E.Pivot, E.Turn * Dt);
+		}
+		// (her middle and her turn at Dt: straight between the moments either side, held before the first and past the last)
+		const Effect::PathPoint& First = E.Path.front();
+		Vec Mid = First.At;
+		double Turn = First.Turn;
+		if (Dt >= E.Path.back().Dt)
+		{
+			Mid = E.Path.back().At;
+			Turn = E.Path.back().Turn;
+		}
+		else if (Dt > First.Dt)
+		{
+			size_t K = 1;
+			while (K + 1 < E.Path.size() && E.Path[K].Dt < Dt) ++K;
+			const Effect::PathPoint& A = E.Path[K - 1];
+			const Effect::PathPoint& B = E.Path[K];
+			const double S = B.Dt > A.Dt ? (Dt - A.Dt) / (B.Dt - A.Dt) : 1.0;
+			Mid = A.At + (B.At - A.At) * S;
+			Turn = A.Turn + (B.Turn - A.Turn) * S;
+		}
+		if (OutTurn) *OutTurn = Turn;
+		return Mid + Turned(P - First.At, Turn);
+	}
+
 	void Replay::PlateOf(const Round& R, int Target, Effect& Sh) const
 	{
 		const std::string Face = R.Fc.empty() ? std::string("front") : R.Fc;
 		const Track& Tr = Rec->Tracks[static_cast<size_t>(Target)];
-		// A field way turned as her heading turns by DF radians (clockwise seen from above, as LandFeed's heading grows).
-		auto Turned = [](const Vec& W, double DF) { return Vec(W.X * std::cos(DF) + W.Y * std::sin(DF), -W.X * std::sin(DF) + W.Y * std::cos(DF), W.Z); };
-		auto Wrap = [](double A) { return std::remainder(A, 2.0 * 3.14159265358979323846); };
-		// How she goes through the burst's strikes, from when it lands to as its last round strikes (a quarter of a
-		// second at least): the steady way (field metres a battle second) and steady turn (radians a battle second)
-		// about her middle nearest her track at the rounds' moments (least squares, at most 12 of them), and her place
-		// and heading on that line as it lands. The scene's pose and the kit's clock are the battle time played to (Now):
-		// her plate is handed over as it would be then, were she going so, and the kit, carrying each strike on with her
-		// and turning it as she turns, lays it where her plate is when it strikes, never in her nor behind her.
-		// (the burst flies from Now, a frame or so after it was fired: so it strikes as much after its landing)
-		const double Now = PlayedTo, Lands = R.L + std::max(0.0, Now - R.T), Dt = Lands - Now;
-		const double Span = std::clamp((Sh.Rounds - 1) / std::max(Sh.PerSecond, 0.1), 0.25, 3.0);
-		const LandFeed::Spot LS = LandFeed::SpotAt(Tr, Lands);
-		const int Samples = std::clamp(Sh.Rounds, 2, 12);
-		double St = 0.0, Stt = 0.0, Sf = 0.0, Stf = 0.0;
-		Vec Sc, Stc;
-		for (int K = 0; K < Samples; ++K)
-		{
-			const double Tk = Span * K / (Samples - 1);
-			const LandFeed::Spot Sk = LandFeed::SpotAt(Tr, Lands + Tk);
-			const Vec Ck(Sk.X, Sk.Y, HeightAt(Sk.X, Sk.Y));
-			const double Fk = Wrap(Sk.F - LS.F);
-			St += Tk;
-			Stt += Tk * Tk;
-			Sc = Sc + Ck;
-			Stc = Stc + Ck * Tk;
-			Sf += Fk;
-			Stf += Tk * Fk;
-		}
-		const double Many = Samples, Den = Many * Stt - St * St; // (above naught: two moments a quarter of a second apart at least)
-		Sh.Carry = (Stc * Many - Sc * St) * (1.0 / Den);
-		Sh.Turn = (Many * Stf - St * Sf) / Den;
-		const Vec C0 = (Sc - Sh.Carry * St) * (1.0 / Many);
-		LandFeed::Spot L0 = LS;
-		L0.X = C0.X;
-		L0.Y = C0.Y;
-		L0.F = LS.F + (Sf - Sh.Turn * St) / Many;
-		Sh.Pivot = C0 - Sh.Carry * Dt;
-		// Her plate as it lands: the scene's cast (World::Plate) or her skin's point (World::Skin) at her pose now, carried
-		// on to her landing as she goes (her place and heading then); else her plain box there.
+		// Her plate as the scene has her posed at the battle time played to (Now): the scene's cast (World::Plate), her
+		// skin's point (World::Skin), else her plain box at her place then. Handed over so, never moved on a guess.
+		const double Now = PlayedTo;
+		const LandFeed::Spot N0 = LandFeed::SpotAt(Tr, Now);
+		const Vec CN(N0.X, N0.Y, HeightAt(N0.X, N0.Y));
 		PlateSpot P;
-		bool bKnown = false;
 		Vec At, Normal;
-		if (Here.Plate && Here.Plate(Target, R.N, P) && P.Normal.Length() > 0.5)
+		const bool bCast = Here.Plate && Here.Plate(Target, R.N, P) && P.Normal.Length() > 0.5;
+		if (bCast)
 		{
-			bKnown = true;
+			// (as the scene gives it)
 		}
 		else if (Here.Skin && Here.Skin(Target, R.N, R.L, Face, R.U, R.H, At, Normal) && Normal.Length() > 0.5)
 		{
+			P = PlateSpot();
 			P.At = P.RoomMid = At; // (her skin's point alone, no room known: every round there)
 			P.Normal = Normal;
-			bKnown = true;
-		}
-		if (bKnown)
-		{
-			const LandFeed::Spot N0 = LandFeed::SpotAt(Tr, Now);
-			const Vec CN(N0.X, N0.Y, HeightAt(N0.X, N0.Y));
-			const double DF = Wrap(L0.F - N0.F);
-			P.At = C0 + Turned(P.At - CN, DF);
-			P.RoomMid = C0 + Turned(P.RoomMid - CN, DF);
-			P.Normal = Turned(P.Normal, DF);
-			P.RoomA = Turned(P.RoomA, DF);
-			P.RoomB = Turned(P.RoomB, DF);
-			P.Floor = P.Floor > -1.0e29 ? P.Floor + C0.Z - CN.Z : -1.0e30;
 		}
 		else
 		{
-			P = PlainPlate(Tr, Rec->BlockOf(Tr.Block), L0, C0.Z, Face, R.U, R.H);
+			P = PlainPlate(Tr, Rec->BlockOf(Tr.Block), N0, CN.Z, Face, R.U, R.H);
 		}
-		// (and back from her landing to Now: about her middle then, turned back, and back along her way)
-		const double Back = -Sh.Turn * Dt;
-		Sh.To = Sh.Pivot + Turned(P.At - C0, Back);
-		Sh.Normal = Turned(P.Normal, Back);
-		Sh.RoomMid = Sh.Pivot + Turned(P.RoomMid - C0, Back);
-		Sh.RoomA = Turned(P.RoomA, Back);
-		Sh.RoomB = Turned(P.RoomB, Back);
-		Sh.Floor = P.Floor > -1.0e29 ? P.Floor - Sh.Carry.Z * Dt : -1.0e30;
+		Sh.To = P.At;
+		Sh.Normal = P.Normal;
+		Sh.RoomMid = P.RoomMid;
+		Sh.RoomA = P.RoomA;
+		Sh.RoomB = P.RoomB;
+		Sh.Floor = P.Floor;
+		Sh.Pivot = CN;
+		// Her path from Now to past the burst's last strike: the burst flies from Now (a frame or so after the rules fired
+		// it), its first round striking as it lands (Lands, or the flight of a slow round from her gun's distance if
+		// later), the rest at its rate after (a quarter of a second at least). Her middle on the ground and her heading
+		// from her track at every point her track keeps in that time (she goes straight between them, so a strike is
+		// where her plate is at its moment as she slows, stops, speeds up or turns) and every tenth of a second besides
+		// (her ground's rise and fall), at most 60 moments: never inside her, never left behind her.
+		const double Lands = R.L + std::max(0.0, Now - R.T);
+		const double Fly = (P.At - Sh.At).Length() / 600.0;
+		const double Span = std::clamp((Sh.Rounds - 1) / std::max(Sh.PerSecond, 0.1), 0.25, 3.0);
+		const double Until = std::clamp(std::max(Lands - Now, Fly) + Span + 0.1, 0.3, 6.0);
+		std::vector<double> Moments;
+		const int Even = std::clamp(static_cast<int>(std::ceil(Until / 0.1)), 2, 30);
+		for (int K = 1; K <= Even; ++K) Moments.push_back(Until * K / Even);
+		for (const LandFeed::Point& Pt : Tr.At)
+		{
+			if (Pt.T > Now && Pt.T < Now + Until && Moments.size() < 59) Moments.push_back(Pt.T - Now);
+		}
+		std::sort(Moments.begin(), Moments.end());
+		Sh.Path.clear();
+		Sh.Path.reserve(Moments.size() + 1);
+		Effect::PathPoint Start;
+		Start.At = CN;
+		Sh.Path.push_back(Start);
+		double Heading = N0.F;
+		for (double M : Moments)
+		{
+			if (M <= Sh.Path.back().Dt + 1e-6) continue; // (one moment a millionth of a second)
+			Effect::PathPoint Pt;
+			Pt.Dt = M;
+			const LandFeed::Spot Sk = LandFeed::SpotAt(Tr, Now + M);
+			Pt.At = Vec(Sk.X, Sk.Y, HeightAt(Sk.X, Sk.Y));
+			Pt.Turn = Sh.Path.back().Turn + std::remainder(Sk.F - Heading, 2.0 * 3.14159265358979323846); // (the short way each step)
+			Heading = Sk.F;
+			Sh.Path.push_back(Pt);
+		}
+		// (and her steady way and turn through it, least squares, for a kit that takes no path)
+		double St = 0.0, Stt = 0.0, Sf = 0.0, Stf = 0.0;
+		Vec Sc, Stc;
+		for (const Effect::PathPoint& Pt : Sh.Path)
+		{
+			St += Pt.Dt;
+			Stt += Pt.Dt * Pt.Dt;
+			Sc = Sc + Pt.At;
+			Stc = Stc + Pt.At * Pt.Dt;
+			Sf += Pt.Turn;
+			Stf += Pt.Dt * Pt.Turn;
+		}
+		const double Many = static_cast<double>(Sh.Path.size()), Den = Many * Stt - St * St; // (above naught: three moments at least, 0.3 s)
+		Sh.Carry = (Stc * Many - Sc * St) * (1.0 / Den);
+		Sh.Turn = (Many * Stf - St * Sf) / Den;
 	}
 
 	void Replay::Step(double From, double To, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise, std::vector<Loss>& OutLoss)

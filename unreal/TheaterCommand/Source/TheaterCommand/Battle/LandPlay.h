@@ -63,14 +63,8 @@ namespace LandPlay
 		 * and for her nation: no .50 on a British Sherman, no MG 34 on an early Tiger's roof). False: TankMg never gives
 		 * her roof gun, so her commander never fires one she has not got. Empty: every American and German tank has one. */
 		std::function<bool(int Track)> RoofGun;
-		/** Effects (R2), -TheaterLandGunFlash (Brian, 23 November: "can we make the mussel flash realistic?"): the look of
-		 * the shooter's own gun (track Track; Weapon the round's: rifle, mg, tank, at, gun; Army and Role his), the
-		 * kit's look named after the weapon's row as "mg:star"; for a man whose one round is a burst (a squad leader's
-		 * sub-machine gun) its rounds and their rate a life second, else left at 0 for the round's own. Empty, or this
-		 * unset: the kit's row by the weapon alone, as before. */
-		std::function<std::string(int Track, const std::string& Weapon, const std::string& Army, const std::string& Role, int& OutRounds, double& OutPerSecond)> GunLook;
-		/** Effects (R2), small arms off armour (Brian, 25 November: "bullets should be bouncing off it"; the scene's
-		 * -TheaterLandNoRicochet turns it off): a rifle's or a machine gun's round that strikes an armoured vehicle
+		/** Effects (R2), small arms off armour (Brian, 25 November: "bullets should be bouncing off it"; off unless
+		 * -TheaterLandRicochet (release 2, on trial)): a rifle's or a machine gun's round that strikes an armoured vehicle
 		 * (ArmouredVehicle: a tank, an assault gun, a self-propelled gun, an armoured car, a half-track), whatever the rules
 		 * made of it, is its burst's Shots with bArmour (the plate's point and its outward Normal: the kit's ricochets,
 		 * never dirt) and a Glance noise carrying the burst's rounds (a rattle of steel), and no Glance effect of its own.
@@ -80,6 +74,12 @@ namespace LandPlay
 		 * now (the tank core's cast on her model, nearer wheels and tracks included, and how far it runs flat about the
 		 * strike: LandKit::Vehicle::PlateNow). False: not known (her Skin, every round at its point; else her plain box). */
 		std::function<bool(int Track, int Round, PlateSpot& Out)> Plate;
+		/** Effects (R2), -TheaterLandGunFlash (Brian, 23 November: "can we make the mussel flash realistic?"): the look of
+		 * the shooter's own gun (track Track; Weapon the round's: rifle, mg, tank, at, gun; Army and Role his), the
+		 * kit's look named after the weapon's row as "mg:star"; for a man whose one round is a burst (a squad leader's
+		 * sub-machine gun) its rounds and their rate a life second, else left at 0 for the round's own. Empty, or this
+		 * unset: the kit's row by the weapon alone, as before. */
+		std::function<std::string(int Track, const std::string& Weapon, const std::string& Army, const std::string& Role, int& OutRounds, double& OutPerSecond)> GunLook;
 	};
 
 	/** Whether a vehicle's plate turns a rifle or machine-gun round (World::bRicochet): her own model where the
@@ -121,13 +121,25 @@ namespace LandPlay
 		/** For Screen: how long the rules hold its screen, battle seconds (the round's Hang); -1 the calibre's own. */
 		double Hang = -1.0;
 		/** For Shots with bArmour (Effects (R2), small arms off armour): her plate at the battle time played to (To and
-		 * Normal), how far it runs flat (PlateSpot's RoomMid, RoomA, RoomB) and her floor under it (under -1e29 none),
-		 * as she would be then going as she goes through the burst: her velocity (Carry, field metres a battle second),
-		 * and her turn about the upright through her middle (Pivot, then), Turn radians a battle second, + as her heading
-		 * grows (clockwise seen from above). The kit lays each strike where the plate is when it strikes. */
+		 * Normal), how far it runs flat (PlateSpot's RoomMid, RoomA, RoomB) and her floor under it (under -1e29 none), as
+		 * she is posed then; her path through the burst (Path: her middle on the ground and how far her heading has
+		 * turned, + clockwise seen from above, at moments from then (Dt 0, her middle Pivot) to past its last strike), so
+		 * the kit lays each strike where her plate is when it strikes, as she slows, stops or turns (PathMoved); and her
+		 * steady velocity (Carry, field metres a battle second) and turn (Turn, radians a battle second) through it. */
+		struct PathPoint
+		{
+			double Dt = 0.0;
+			Vec At;
+			double Turn = 0.0;
+		};
 		Vec RoomMid, RoomA, RoomB, Carry, Pivot;
 		double Floor = -1.0e30, Turn = 0.0;
+		std::vector<PathPoint> Path;
 	};
+	/** Effects (R2), small arms off armour: where a point of her plate as handed over (an Effect's To, RoomMid) is Dt
+	 * battle seconds later, carried along her Path (straight between its moments, held before the first and after the
+	 * last), and how far she has turned by then; the kit (ShotsOnArmour) carries it so. No path: her Carry and Turn. */
+	Vec PathMoved(const Effect& E, const Vec& P, double Dt, double* OutTurn = nullptr);
 
 	/** One thing for the sound (LandSound), at battle time T. */
 	enum class NoiseKind : unsigned char

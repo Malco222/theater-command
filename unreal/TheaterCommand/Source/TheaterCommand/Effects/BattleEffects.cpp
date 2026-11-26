@@ -424,7 +424,8 @@ void FBattleEffects::Shots(int32 Gun, const FVector& From, const FVector& To, co
 	});
 }
 
-void FBattleEffects::ShotsOnArmour(int32 Gun, const FVector& From, const FVector& To, const FVector& Normal, const FVector& RoomMid, const FVector& RoomA, const FVector& RoomB, const FVector& Carry, const FVector& Pivot, double Spin, double FloorZ, const FString& Weapon, int32 Rounds, float PerSecond, const FString& Ground)
+void FBattleEffects::ShotsOnArmour(int32 Gun, const FVector& From, const FVector& To, const FVector& Normal, const FVector& RoomMid, const FVector& RoomA, const FVector& RoomB, const FVector& Carry, const FVector& Pivot, double Spin, double FloorZ,
+	const TArray<FVector>& PathAt, const TArray<double>& PathDt, const TArray<double>& PathTurn, const FString& Weapon, int32 Rounds, float PerSecond, const FString& Ground)
 {
 	Do([=, this]()
 	{
@@ -438,6 +439,19 @@ void FBattleEffects::ShotsOnArmour(int32 Gun, const FVector& From, const FVector
 		Plate.Pivot = ToFx(Pivot);
 		Plate.Spin = Spin;
 		Plate.Floor = FloorZ > -1.0e29 ? FloorZ / UnitsPerMetre : -1.0e30;
+		// (her path, where the three lists agree: the kit checks the rest)
+		if (PathAt.Num() >= 2 && PathAt.Num() == PathDt.Num() && PathAt.Num() == PathTurn.Num())
+		{
+			Plate.Path.reserve(static_cast<size_t>(PathAt.Num()));
+			for (int32 K = 0; K < PathAt.Num(); ++K)
+			{
+				TheaterFx::Battle::ArmourPlate::PathPoint Pt;
+				Pt.Dt = PathDt[K];
+				Pt.At = ToFx(PathAt[K]);
+				Pt.Turn = PathTurn[K];
+				Plate.Path.push_back(Pt);
+			}
+		}
 		Core.ShotsOnArmour(Time(), Gun, ToFx(From), Plate, Named(Weapon).c_str(), Rounds, PerSecond, Named(Ground).c_str());
 	});
 }

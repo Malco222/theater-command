@@ -557,8 +557,16 @@ namespace LandKit
 			double Floor = -1.0e30;
 		};
 		/** Round N's plate (StruckNow's strike; where the scar's cast passed through a road wheel, a sprocket, an idler or
-		 * a track standing in front of her hull, the round strikes that, as it would have). False if it did not strike. */
+		 * a track standing in front of her hull, the round strikes that, as it would have). False if it did not strike.
+		 * Kept (bKeepPlates): worked out once as her rounds are (Build, Grow), as she stood when it struck, kept in the
+		 * struck body's own axes and only turned by her pose now here (a few microseconds); a round not kept (a shell, or
+		 * bKeepPlates off) gives her skin's point with no room (every round there), never the search on the game's
+		 * frame. */
 		bool PlateNow(int RoundN, PlateSpot& Out) const;
+		/** Effects (R2), small arms off armour: work out the plate of each rifle's or machine gun's round that strikes her
+		 * as her rounds are worked out (Build, Grow: PlateAbout as she stood then, about 0.5 to 3 ms each), for PlateNow.
+		 * Off unless set (Battle::bKeepPlates gives it, before Build). */
+		bool bKeepPlates = false;
 		/** The same about any strike on her at the pose now (field), its round coming in along In: the checks' way in. */
 		bool PlateAbout(const V3& At, const V3& Normal, const V3& In, PlateSpot& Out) const;
 		/** A ray across her as posed now (field, Way a unit way): the nearest of her drawn surfaces (her tracks and running
@@ -607,6 +615,11 @@ namespace LandKit
 			bool bOnSurface = false;
 			std::string W, R, Face;
 			double TurretAt = 0.0; // her turret's training at L when it was cast (Grow casts it again if that changes)
+			// (Effects (R2), bKeepPlates: a small arm's round's plate, PlateAbout as she stood at L, in the struck body's
+			// own axes (points from its pivot, ways), and her floor that far under the strike)
+			bool bPlate = false;
+			V3 PlateAt, PlateNormal, PlateMid, PlateA, PlateB;
+			double PlateDrop = -1.0;
 		};
 		/** The passes' running state as they enter a step, kept every Resume step (a battle second): Grow takes up there. */
 		struct Resume
@@ -659,6 +672,10 @@ namespace LandKit
 		void PosePinned(std::vector<Xf>& OutParts, Xf* OutRoot, double* OutPitch = nullptr, double* OutRoll = nullptr) const;
 		Xf Seat(double X, double Y, double F, double* OutPitch, double* OutRoll) const;
 		bool Cast(const std::string& Face, double U, double H, double TurretAt, int& OutBody, V3& OutLocal, V3& OutNormal) const;
+		/** PlateAbout with her bodies placed at Places and her way ahead Ahead (field). */
+		bool PlateIn(const std::vector<Place>& Places, const V3& Ahead, const V3& AtIn, const V3& NormalIn, const V3& In, PlateSpot& Out) const;
+		/** bKeepPlates: each small arm's strike not yet kept, its plate worked out as she stood when it struck. */
+		void KeepPlates();
 		void Finish(const Xf& RootXf);
 		static double Latest(const std::vector<double>& Times, double T);
 	};
@@ -803,6 +820,10 @@ namespace LandKit
 		/** Any block marked captured, whatever the switch: stands in for every tank block of the attacker taken from the
 		 * defender's model (the Mac's off/on line, "-TheaterLandCapturedTest"). Set before Load. */
 		bool bCapturedTest = false;
+		/** Effects (R2), small arms off armour (-TheaterLandRicochet): every vehicle works out the plate of each rifle's or
+		 * machine gun's round that strikes her as she is made (Vehicle::bKeepPlates), so PlateNow costs nothing on the
+		 * game's frame. Off unless set; set before Load. */
+		bool bKeepPlates = false;
 
 	private:
 		std::vector<Vehicle> All;

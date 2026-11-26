@@ -12,7 +12,11 @@
 //     where the same burst as Shots into the same place kicks some (so the count would see one);
 //   - her driving at the gun at 5 m/s, backing away from it at 5 m/s, and pivoting at 0.5 radians a second: every strike
 //     on her plate where it is when it strikes, and nothing inside her as she goes (her gun, a part standing out over her
-//     front that the kit is not told of, is counted apart: a spark may cross it).
+//     front that the kit is not told of, is counted apart: a spark may cross it); and her driving at the gun at 9 m/s and
+//     pivoting at 0.5 radians a second, each stopping dead 0.6 s into the burst, her path handed over with her steady way
+//     and turn: every strike on her plate where it is when it strikes, none carried on past where she stopped into her;
+//   - far off (600 m), no spark laid to fade to a dull brown fleck: each holds its full strength longer and cools only
+//     part way to orange (spark_hold_far, spark_cool_far).
 // For each it checks:
 //   - every round strikes the plate: one flash each, its middle on the face within 3 cm of her plate at its moment, inside
 //     her face less edge_m (none off her face), and sparks whose streaks start on her face;
@@ -136,17 +140,23 @@ namespace
 		Vec Carry;
 		double Spin, Floor;
 		bool bSide, bLow, bFloorControl;
+		// (StopAt 0 or more: she stops dead that long after Now, partway through the burst, her way and turn gone; the kit
+		// is handed her path (her middle and turn at Now, at StopAt and after), and her steady way and turn as well, which
+		// would carry the strikes on past where she stopped, inside her)
+		double StopAt;
 	};
 
 	// (a place at moment T, as she was at Now: back along her way and turned back about her middle)
-	Vec Back(const Case& C, const Vec& P, double T)
+	Vec Back(const Case& C, const Vec& P, double TIn)
 	{
+		const double T = C.StopAt >= 0.0 ? std::min(TIn, C.StopAt) : TIn;
 		const Vec Q = P - C.Carry * T;
 		const double A = -C.Spin * T;
 		return Vec(Q.X * std::cos(A) - Q.Y * std::sin(A), Q.X * std::sin(A) + Q.Y * std::cos(A), Q.Z);
 	}
-	Vec BackWay(const Case& C, const Vec& W, double T)
+	Vec BackWay(const Case& C, const Vec& W, double TIn)
 	{
+		const double T = C.StopAt >= 0.0 ? std::min(TIn, C.StopAt) : TIn;
 		const double A = -C.Spin * T;
 		return Vec(W.X * std::cos(A) - W.Y * std::sin(A), W.X * std::sin(A) + W.Y * std::cos(A), W.Z);
 	}
@@ -163,6 +173,19 @@ namespace
 		P.Pivot = Vec(0.0, 0.0, 0.0);
 		P.Spin = C.Spin;
 		P.Floor = bFloor ? C.Floor : -1.0e30;
+		if (C.StopAt >= 0.0)
+		{
+			// (her path: her middle at the origin at Now, where her way and turn have taken her when she stops, and still there)
+			const double Moments[3] = { 0.0, C.StopAt, C.StopAt + 3.0 };
+			for (double M : Moments)
+			{
+				Battle::ArmourPlate::PathPoint Pt;
+				Pt.Dt = M;
+				Pt.At = C.Carry * std::min(M, C.StopAt);
+				Pt.Turn = C.Spin * std::min(M, C.StopAt);
+				P.Path.push_back(Pt);
+			}
+		}
 		return P;
 	}
 
@@ -277,19 +300,21 @@ int main(int Argc, char** Argv)
 	const Vec UnderTop(-0.6, -1.6, 1.73), Foot(-0.2, -1.2, 1.88), TurretSide(-0.2, -1.2, 2.25), Low(-0.6, -1.6, 0.9);
 	const Vec Driving(2.2, -0.9, 1.5);
 	const Case Cases[] = {
-		{ "side, eye 30 m", 30.0, 1.7, SideEye, Side, Left, Side + FromLeft, SideMid, X, Z, 2.7, 0.315, Vec(), 0.0, None, true, false, false },
-		{ "side, eye 150 m", 150.0, 6.0, SideEye, Side, Left, Side + FromLeft, SideMid, X, Z, 2.7, 0.315, Vec(), 0.0, None, true, false, false },
-		{ "side, eye 600 m", 600.0, 20.0, SideEye, Side, Left, Side + FromLeft, SideMid, X, Z, 2.7, 0.315, Vec(), 0.0, None, true, false, false },
-		{ "roof from a rise, eye 30 m", 30.0, 4.0, SideEye, Roof, Z, RoofGun, RoofMid, X, Y, 1.4, 1.2, Vec(), 0.0, None, false, false, false },
-		{ "front, 3 cm under her top edge, u 0.8", 30.0, 1.7, FrontEye, EdgeHi, X, EdgeHi + FromAhead, FrontMid, Y, Z, 1.6, 0.315, Vec(), 0.0, 1.2, false, false, false },
-		{ "front, 3 cm under her top edge, u -0.8", 30.0, 1.7, FrontEye, EdgeLo, X, EdgeLo + FromAhead, FrontMid, Y, Z, 1.6, 0.315, Vec(), 0.0, 1.2, false, false, false },
-		{ "side, 0.1 m under her top edge", 30.0, 1.7, SideEye, UnderTop, Left, UnderTop + FromLeft, SideMid, X, Z, 2.7, 0.315, Vec(), 0.0, None, false, false, false },
-		{ "turret's foot, 5 cm over her deck", 30.0, 1.7, SideEye, Foot, Left, Foot + FromLeft, TurretMid, X, Z, 1.4, 0.51, Vec(), 0.0, 1.83, false, false, false },
-		{ "turret's side, 0.42 m over her deck", 30.0, 1.7, SideEye, TurretSide, Left, TurretSide + FromLeft, TurretMid, X, Z, 1.4, 0.51, Vec(), 0.0, 1.83, false, false, true },
-		{ "side low over her tracks, 0.9 m up", 30.0, 1.7, SideEye, Low, Left, Low + FromLeft, LowMid, X, Z, 3.2, 0.6, Vec(), 0.0, None, false, true, false },
-		{ "front, driving at the gun at 5 m/s", 30.0, 1.7, FrontEye, Driving, X, Driving + X * 120.0 + Vec(0.0, 0.0, -0.9), FrontMid, Y, Z, 1.6, 0.315, Vec(5.0, 0.0, 0.0), 0.0, 1.2, false, false, false },
-		{ "front, backing from the gun at 5 m/s", 30.0, 1.7, FrontEye, Driving, X, Driving + FromAhead, FrontMid, Y, Z, 1.6, 0.315, Vec(-5.0, 0.0, 0.0), 0.0, 1.2, false, false, false },
-		{ "front, pivoting at 0.5 rad/s", 30.0, 1.7, FrontEye, Driving, X, Driving + FromAhead, FrontMid, Y, Z, 1.6, 0.315, Vec(), 0.5, 1.2, false, false, false },
+		{ "side, eye 30 m", 30.0, 1.7, SideEye, Side, Left, Side + FromLeft, SideMid, X, Z, 2.7, 0.315, Vec(), 0.0, None, true, false, false, -1.0 },
+		{ "side, eye 150 m", 150.0, 6.0, SideEye, Side, Left, Side + FromLeft, SideMid, X, Z, 2.7, 0.315, Vec(), 0.0, None, true, false, false, -1.0 },
+		{ "side, eye 600 m", 600.0, 20.0, SideEye, Side, Left, Side + FromLeft, SideMid, X, Z, 2.7, 0.315, Vec(), 0.0, None, true, false, false, -1.0 },
+		{ "roof from a rise, eye 30 m", 30.0, 4.0, SideEye, Roof, Z, RoofGun, RoofMid, X, Y, 1.4, 1.2, Vec(), 0.0, None, false, false, false, -1.0 },
+		{ "front, 3 cm under her top edge, u 0.8", 30.0, 1.7, FrontEye, EdgeHi, X, EdgeHi + FromAhead, FrontMid, Y, Z, 1.6, 0.315, Vec(), 0.0, 1.2, false, false, false, -1.0 },
+		{ "front, 3 cm under her top edge, u -0.8", 30.0, 1.7, FrontEye, EdgeLo, X, EdgeLo + FromAhead, FrontMid, Y, Z, 1.6, 0.315, Vec(), 0.0, 1.2, false, false, false, -1.0 },
+		{ "side, 0.1 m under her top edge", 30.0, 1.7, SideEye, UnderTop, Left, UnderTop + FromLeft, SideMid, X, Z, 2.7, 0.315, Vec(), 0.0, None, false, false, false, -1.0 },
+		{ "turret's foot, 5 cm over her deck", 30.0, 1.7, SideEye, Foot, Left, Foot + FromLeft, TurretMid, X, Z, 1.4, 0.51, Vec(), 0.0, 1.83, false, false, false, -1.0 },
+		{ "turret's side, 0.42 m over her deck", 30.0, 1.7, SideEye, TurretSide, Left, TurretSide + FromLeft, TurretMid, X, Z, 1.4, 0.51, Vec(), 0.0, 1.83, false, false, true, -1.0 },
+		{ "side low over her tracks, 0.9 m up", 30.0, 1.7, SideEye, Low, Left, Low + FromLeft, LowMid, X, Z, 3.2, 0.6, Vec(), 0.0, None, false, true, false, -1.0 },
+		{ "front, driving at the gun at 5 m/s", 30.0, 1.7, FrontEye, Driving, X, Driving + X * 120.0 + Vec(0.0, 0.0, -0.9), FrontMid, Y, Z, 1.6, 0.315, Vec(5.0, 0.0, 0.0), 0.0, 1.2, false, false, false, -1.0 },
+		{ "front, backing from the gun at 5 m/s", 30.0, 1.7, FrontEye, Driving, X, Driving + FromAhead, FrontMid, Y, Z, 1.6, 0.315, Vec(-5.0, 0.0, 0.0), 0.0, 1.2, false, false, false, -1.0 },
+		{ "front, pivoting at 0.5 rad/s", 30.0, 1.7, FrontEye, Driving, X, Driving + FromAhead, FrontMid, Y, Z, 1.6, 0.315, Vec(), 0.5, 1.2, false, false, false, -1.0 },
+		{ "front, driving at the gun at 9 m/s, stopping 0.6 s in", 30.0, 1.7, FrontEye, Driving, X, Driving + X * 120.0 + Vec(0.0, 0.0, -0.9), FrontMid, Y, Z, 1.6, 0.315, Vec(9.0, 0.0, 0.0), 0.0, 1.2, false, false, false, 0.6 },
+		{ "front, pivoting at 0.5 rad/s, stopping 0.6 s in", 30.0, 1.7, FrontEye, Driving, X, Driving + FromAhead, FrontMid, Y, Z, 1.6, 0.315, Vec(), 0.5, 1.2, false, false, false, 0.6 },
 	};
 	double NearSparksPer = 0.0, NearWidth = 0.0;
 	for (const Case& C : Cases)
@@ -480,6 +505,20 @@ int main(int Argc, char** Argv)
 				if (SparksPer < 3.0 || SparksPer > 8.0) Fault("close in, not 3 to 8 sparks a round", C.Name);
 			}
 			if (C.bSide && C.EyeAway > 500.0 && !(SparksPer < NearSparksPer && WidestSpark > NearWidth)) Fault("far off, the sparks are not fewer and bigger than close in", C.Name);
+			if (C.bSide && C.EyeAway > 500.0)
+			{
+				// (far off: every spark holds its full strength spark_hold_far of its life and cools only spark_cool_far of
+				// the way, so none is laid to fade to a dull brown fleck over her paint; close in, as before)
+				int FarHeld = 0, FarSparks = 0;
+				for (const Bit& B : Pieces)
+				{
+					if (B.Form != Bit::Shape::Streak || B.bFired || !B.bLight) continue;
+					++FarSparks;
+					if (B.Hold >= 0.7 - 1e-9 && B.Cool <= 0.5 + 1e-9) ++FarHeld;
+				}
+				std::printf("  far off: %d of %d sparks held to 0.7 of their life and cooled half way\n", FarHeld, FarSparks);
+				if (FarSparks == 0 || FarHeld != FarSparks) Fault("far off, a spark fades or cools all the way (a dull brown fleck)", C.Name);
+			}
 			CaseDigest = Digest;
 			const auto D0 = std::chrono::steady_clock::now();
 			for (int F = 0; F <= 150; ++F) Got.MostPuffs = std::max(Got.MostPuffs, Fx.Draw(F / 60.0, View));
