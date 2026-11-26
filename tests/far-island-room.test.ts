@@ -606,8 +606,13 @@ describe('one body', () => {
       if (/islandOf\([^)]*\)\??\.room\b/.test(src)) bad.push(`${f}: islandOf(...).room`);
       // A count of corps (`.length`) compared with STACK is a room check by a path of its own, unless it is the
       // record's hand at stops 1 and 2 (marked so on its line) or the size of a landing (navy.ts, not a room).
+      // (The record's hand is exempt only where it is laid, the dated rows and the book's stations, game.ts and stations.ts.)
+      const hand = /\/campaign\/(game|stations)\.ts$/.test(f);
       src.split('\n').forEach((line: string, i: number) => {
-        if (/\.length\s*(>=|<|<=|>)\s*STACK\b/.test(line) && !/record's hand/.test(line) && !/No more than \$\{STACK\} corps can go ashore/.test(line)) bad.push(`${f}:${i + 1}: ${line.trim()}`);
+        if (/\.length\s*(>=|<|<=|>)\s*STACK\b/.test(line) && !(hand && /record's hand/.test(line)) && !/No more than \$\{STACK\} corps can go ashore/.test(line)) bad.push(`${f}:${i + 1}: ${line.trim()}`);
+        // A count of corps compared with the room left (in divisions' worth on an island) is a second count of the room:
+        // the sceptic's mutation of 26 November 2026, `placed(...).length >= Math.floor(roomLeft(...))`, passed the old scan.
+        if (/\.length\s*(>=|<|<=|>)\s*(Math\.(floor|ceil|round)\()?\s*roomLeft\(/.test(line) || /roomLeft\([^;]*\)\)?\s*(>=|<|<=|>)\s*[\w.()[\]]*\.length\b/.test(line)) bad.push(`${f}:${i + 1}: ${line.trim()}`);
       });
     }
     expect(bad).toEqual([]);
