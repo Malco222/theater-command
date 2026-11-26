@@ -693,7 +693,10 @@ namespace VehicleParts
 	 */
 	static void Tiger(FMiniatureMesh& M)
 	{
-		const FBuild B(M, Hex(TEXT("9C8A58")));
+		// (Brian, 26 November 2026: "have the paint be on it regardless of the year". This stand-in was in the dark
+		// yellow of the war's later years, where the Panzer IV it follows is in tank grey. With one look for the whole
+		// war it is in the Panzer IV's grey: see UnitTable::OneLook. The sculpted Tiger takes Germany's grey already.)
+		const FBuild B(M, Hex(UnitTable::OneLook() ? TEXT("51575C") : TEXT("9C8A58")));
 		const FLinearColor Sand = B.Paint, Dark = B.Shade;
 
 		FGear G;
@@ -793,7 +796,9 @@ namespace VehicleParts
 	 */
 	static void Panther(FMiniatureMesh& M)
 	{
-		const FBuild B(M, Hex(TEXT("9C8A58")));
+		// (One look for the whole war, as the Tiger: the Panzer IV's grey, and none of the later years' stripes.)
+		const bool bGreyAllWar = UnitTable::OneLook();
+		const FBuild B(M, Hex(bGreyAllWar ? TEXT("51575C") : TEXT("9C8A58")));
 		const FLinearColor Sand = B.Paint, Dark = B.Shade;
 		const FLinearColor Leaf = Hex(TEXT("5A6240")), Earth = Hex(TEXT("6E4A34"));
 
@@ -816,9 +821,12 @@ namespace VehicleParts
 		B.Side({ { 2.9, 0.48 }, { 3.43, 0.95 }, { 3.35, 1.1 }, { -3.3, 1.1 }, { -3.43, 0.9 }, { -3.1, 0.5 } }, -0.96, 0.96, Sand);
 		B.Layers({ { { 3.38, -1.6 }, { 3.38, 1.6 }, { -3.3, 1.6 }, { -3.3, -1.6 } }, { { 2.25, -1.28 }, { 2.25, 1.28 }, { -3.45, 1.28 }, { -3.45, -1.28 } } }, { 1.05, 1.85 }, Sand, false);
 		// Stripes of green and red-brown over the sand.
-		B.Plate(-1.6, 0.0, 1.855, 0.5, 2.5, 0.012, Leaf);
-		B.Plate(-2.6, 0.2, 1.855, 0.4, 2.4, 0.012, Earth);
-		B.Plate(1.2, -0.3, 1.855, 0.4, 2.3, 0.012, Earth);
+		if (!bGreyAllWar)
+		{
+			B.Plate(-1.6, 0.0, 1.855, 0.5, 2.5, 0.012, Leaf);
+			B.Plate(-2.6, 0.2, 1.855, 0.4, 2.4, 0.012, Earth);
+			B.Plate(1.2, -0.3, 1.855, 0.4, 2.3, 0.012, Earth);
+		}
 		// The machine gun in its ball on the front plate; the driver's visor; lamps; the hatches.
 		B.BallGun(2.85, 0.6, 1.42, 0.34);
 		B.Plate(2.72, -0.6, 1.53, 0.3, 0.4, 0.04, Dark, 35.0);
@@ -1632,6 +1640,11 @@ bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double M
 		if (Era > 0)
 		{
 			BuiltKey += FString::Printf(TEXT("|%d"), Era);
+		}
+		// (and by whether it is painted with one look for the whole war: see UnitTable::OneLook)
+		if (UnitTable::OneLook())
+		{
+			BuiltKey += TEXT("|one");
 		}
 	}
 	FMiniatureMesh* Model = Built.Find(BuiltKey);
