@@ -29,7 +29,8 @@ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
 # rocking, by model and at x1, x4 and x10, the chase camera riding her, and the strategy camera's picture steady and its
 # look never jumping, at 60 frames a second and at a Mac's uneven ones; the raid's minute (fed live, and late), its
 # busiest forty seconds (data/raid-busy.json; at 30 frames a second too, at x10, and on other dice, where its boxes
-# weaved and its strategy camera trailed off the picture before they kept their places) and the set pieces. Flown as
+# weaved and its strategy camera trailed off the picture before they kept their places) and the set pieces (at x10 too,
+# where the strategy camera's look must be within 100 m of what it is after as often as the old camera's). Flown as
 # release 1.5 flew it (AIR_SMOOTH_OLD=1), the report must be the release 2 build's before the check, to the byte
 # (data/shake-old-30899121.txt). That build (30899121) flew the He 111s in weaves, banked to 20 degrees, about once a
 # bomber's air minute, and the single-engined bombers banked to 61 to 75 degrees in their places, and its strategy
@@ -44,7 +45,7 @@ for P in "60 1" "30 1" "60 4" "mac 4" "60 10" "30 10" "mac 10"; do
 done
 "$OUT/air_smooth_probe" --shake "$HERE/data/raid-busy.json" mac 4 live 290 330 3 || STATUS=1
 for R in bremen-b17 oahu midway-fleet; do
-  for P in "60 1" "mac 4"; do
+  for P in "60 1" "mac 4" "60 10"; do
     "$OUT/air_smooth_probe" --shake "$ROOT/Content/Data/AirBattles/$R.json" $P replay || STATUS=1
   done
 done

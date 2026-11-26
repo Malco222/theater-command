@@ -654,20 +654,23 @@ namespace AirShow
 		 *   ahead or back and SlotCloseMost across or up (TorpedoLineMost across a torpedo box abreast for its run), its
 		 *   speed changing by no more than SlotAheadPull and SlotPull a second, and comes to rest on it (PlaceWant), its
 		 *   own speed added to hers; one coming back to her place flies it at once;
-		 * - every bomber in her place in a box banks no more than RallyBankMost; a twin rolls at HeavyRollMost; a
+		 * - every bomber in her place in a box banks no more than RallyBankMost; a twin rolls at HeavyRollMost, and out
+		 *   of it (on her run, on her way home, falling out) no faster than SlotRollMost, eased; a
 		 *   single-engined one rolls her own way, eased, no faster than SlotRollMost, and no faster than HeavyRollMost
 		 *   once her wings are within RallyBankMost and two degrees of level and she rolls no faster than that (she
 		 *   rolls out of a dive's pull-out as she rolls, her roll rate never cut in a step);
 		 * - a straggler drops back and down from where she fell out of her box, as far as the battle has her behind
 		 *   and below it, her place going there no faster than StragAheadMost ahead or back and SlotCloseMost across,
-		 *   and moving between views as her box's does; a place under wave-top is held up there, level.
+		 *   from her own speed about her box in its turning frame (BoxTurnRate, no faster than BoxTurnMost), and moving
+		 *   between views as her box's does; a place under wave-top is held up there, level; she rolls no faster than
+		 *   SlotRollMost, eased.
 		 * Off: the flying as releases 1.5 and before had it.
 		 */
 		void SetSmooth(bool bOn) { bSmooth = bOn; }
 		bool Smooth() const { return bSmooth; }
 		double PathSpan = 0.5, RollDamping = 0.7;
 		double SlotCloseMost = 4.0, SlotPull = 0.08, SlotAheadMost = 8.0, SlotAheadPull = 0.3, StragAheadMost = 60.0, StragAheadPull = 2.0;
-		double SlotRollMost = 20.0, TorpedoLineMost = 5.0;
+		double SlotRollMost = 20.0, TorpedoLineMost = 5.0, BoxTurnMost = 3.0;
 		/**
 		 * Drop on the lead and the rally (Brian, 22 November 04:11Z). A level bombing box lets its bombs go on its lead:
 		 * his stick first, and each of the others as her bombardier sees his bombs leave, DropOnLeadLeast to
@@ -1515,6 +1518,9 @@ namespace AirShow
 		/** While a box turns for home on its lead (and keeps on him after): his place, heading and way, for a bomber
 		 * falling back behind it; false otherwise (the box's own, as the battle has it). */
 		bool RallyFrame(int GroupId, Vec& At, double& Face, Vec& Vel) const;
+		/** How fast a box's frame turns now (radians an air second): its lead's turn while it turns for home
+		 * (RallyFrame), else its heading's between the views either side of now. */
+		double BoxTurnRate(int GroupId) const;
 		void Leave(Craft& C);
 		Vec Local(const Craft& C, const Vec& L) const;
 		/** How far a bomber is drawn above her place: her load just gone, she lifts a little. */

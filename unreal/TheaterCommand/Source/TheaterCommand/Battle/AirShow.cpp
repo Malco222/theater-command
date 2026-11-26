@@ -597,14 +597,20 @@ namespace AirShow
 		const Vec W(Off.Dot(F), Off.Dot(R), Off.Z);
 		// (a place she did not fly the step before: her slot's, as she comes back to it or closes up from behind, is
 		// flown at once, as before; a straggler's, from where she is and at her own speed about her box, so that falling
-		// out is never a step of where she is asked to be)
+		// out is never a step of where she is asked to be. Her speed about the box is taken in the box's own frame,
+		// which turns with it (BoxTurnRate, no faster than BoxTurnMost): less the turn's own speed at where she is, and
+		// no faster than her place goes. With the turn left in, a B-17 falling out 400 m behind her box's middle as it
+		// turned 1.4 degrees a second had her place set going 10 m/s across, and it ran 800 m out to the wrong side for
+		// two minutes and more)
 		if (C.PlaceStep != PilotSteps - 1 || C.bPlaceStrag != bStrag)
 		{
 			if (bStrag)
 			{
-				const Vec Was = C.P - Mid, Rel = Velocity(C) - ToVel;
+				const Vec Was = C.P - Mid;
 				C.PlaceAt = Vec(Was.Dot(F), Was.Dot(R), Was.Z);
-				C.PlaceVel = Vec(Rel.Dot(F), Rel.Dot(R), Rel.Z);
+				const double Turn = Clamp(BoxTurnRate(C.Group), -BoxTurnMost * Deg, BoxTurnMost * Deg);
+				const Vec Rel = Velocity(C) - ToVel - (R * C.PlaceAt.X - F * C.PlaceAt.Y) * Turn;
+				C.PlaceVel = Vec(Clamp(Rel.Dot(F), -AheadMost, AheadMost), Clamp(Rel.Dot(R), -AcrossMost, AcrossMost), Clamp(Rel.Z, -SlotCloseMost, SlotCloseMost));
 			}
 			else
 			{
@@ -1237,6 +1243,14 @@ namespace AirShow
 			{
 				RollMost = std::min(RollMost, std::max(SlotRollMost * Deg, std::fabs(C.RollNow) * std::exp(-Dt / std::max(C.RollTime, 0.02))));
 			}
+		}
+		// (flying smooth, a bomber of two engines or more out of her box's own roll, on her run, on her way home or
+		// falling out of her box, and a single-engined one falling out of hers, rolls no faster than SlotRollMost as well,
+		// her roll rate brought down to it in her own roll time; falling, she rolls as she can. A He 111 leaving her box
+		// for home rolled from level to 30 degrees in half a second, 60 degrees a second; SetSmooth)
+		if (bSmooth && !C.bFighter && C.Doing != Role::Fall && (bTwin ? !bBoxed : C.Doing == Role::Straggle))
+		{
+			RollMost = std::min(RollMost, std::max(SlotRollMost * Deg, std::fabs(C.RollNow) * std::exp(-Dt / std::max(C.RollTime, 0.02))));
 		}
 		// Roll toward it, no faster than the airframe rolls.
 		double Roll_ = Clamp(Wrap(BankWant - C.Bank), -RollMost * Dt, RollMost * Dt);
@@ -4754,6 +4768,30 @@ namespace AirShow
 			if (!Best || C.Slot < Best->Slot || (C.Slot == Best->Slot && C.Key < Best->Key)) Best = &C;
 		}
 		return Best;
+	}
+
+	double Show::BoxTurnRate(int GroupId) const
+	{
+		// (on its lead while it turns for home, RallyFrame: his own turn; else its heading's between the views either side
+		// of now, as Interpolate turns it)
+		Vec At, Vel;
+		double Face = 0.0;
+		if (RallyFrame(GroupId, At, Face, Vel))
+		{
+			const Craft* L = BoxLead(GroupId);
+			return L ? L->TurnNow : 0.0;
+		}
+		const View* A = nullptr;
+		const View* B = nullptr;
+		for (const View& V : Views)
+		{
+			if (V.T <= ShownT) A = &V;
+			else { B = &V; break; }
+		}
+		if (!A || !B || B->T <= A->T) return 0.0;
+		const auto Ga = A->Groups.find(GroupId), Gb = B->Groups.find(GroupId);
+		if (Ga == A->Groups.end() || Gb == B->Groups.end()) return 0.0;
+		return Wrap(Gb->second.Face - Ga->second.Face) / ((B->T - A->T) * Scale);
 	}
 
 	bool Show::RallyFrame(int GroupId, Vec& At, double& Face, Vec& Vel) const

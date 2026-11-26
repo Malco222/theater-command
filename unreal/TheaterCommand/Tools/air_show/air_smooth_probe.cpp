@@ -131,7 +131,10 @@ namespace
 //    over 30 more than three times a minute at x10 (eight single-engined); banked more than RallyBankMost and a
 //    degree there; swings over 1 degree more than 0.3 times a bomber's air minute (where a type has an air minute and
 //    more); banked over 5 degrees more than 1% of her time; a torpedo plane over 100 m from her slot in the 20 air
-//    seconds before her run.
+//    seconds before her run. Her bank and tip BAND and roll-rate jumps in her box are taken only where she is in it
+//    all the 1.5 s about the moment (her roll out of it, for home or into a dive, is not her box rocking);
+//  - the strategy camera at x10 and on the game's clock: its look within 100 m of what it is after in fewer than 95%
+//    of the frames, or than the old camera's share.
 // AIR_SMOOTH_OLD=1 flies it as release 1.5 did, with the strategy camera as it was, and reports only; its report is
 // the same, to the byte, as the release 2 build's before this check (Tools/air_show/data/shake-old-30899121.txt, run.sh).
 //
@@ -687,6 +690,7 @@ namespace Shake
 			FeedKind.c_str(), bOld ? ", flown as release 1.5 (AIR_SMOOTH_OLD)" : "", From, EndT, Frame, Wall);
 		std::map<std::tuple<std::string, int, int>, Cell> Cells; // (model, doing, pace)
 		std::map<std::string, BoxRow> Boxes;
+		std::map<std::pair<std::string, int>, Cell> InBox; // (model, pace): a bomber in her box all the 1.5 s about it
 		for (auto& Pair : Tracks)
 		{
 			Track& Tr = Pair.second;
@@ -836,6 +840,27 @@ namespace Shake
 					}
 					Ce.Seconds += T[C] - T[C - 1];
 					Ce.Keys.insert(Tr.Key);
+					// (judged in her box only where all the 1.5 s about it are in it: one either side of her leaving it,
+					// rolling for home or into her dive, is her roll out of it, not her box rocking. Taken with it, the
+					// He 111s of the line-hand raid read 0.25 degrees rms at x4 in their box, nearly all of it in the 2 s
+					// before they turned for home, and 0.013 without; the Dauntlesses over Midway on the game's clock 0.40,
+					// as they rolled into their dives, and 0.027 without)
+					bool bWhole = Tr.S[Begin + C].D == OnBox;
+					for (size_t I = L15; I <= H15 && bWhole; ++I) bWhole = Tr.S[Begin + I].D == OnBox;
+					if (bWhole)
+					{
+						Cell& Ib = InBox[{ Tr.Model, Pc }];
+						Ib.BankBand.Add(Bb);
+						Ib.TipBand.Add(Tb);
+						if (C > 1)
+						{
+							const double R1 = (B[C] - B[C - 1]) / std::max(1e-6, T[C] - T[C - 1]), R0 = (B[C - 1] - B[C - 2]) / std::max(1e-6, T[C - 1] - T[C - 2]);
+							Ib.Jumps10 += std::fabs(R1 - R0) > 10.0 ? 1 : 0;
+							Ib.Jumps30 += std::fabs(R1 - R0) > 30.0 ? 1 : 0;
+						}
+						Ib.Seconds += T[C] - T[C - 1];
+						Ib.Keys.insert(Tr.Key);
+					}
 				}
 				Begin = End;
 			}
@@ -1013,13 +1038,20 @@ namespace Shake
 			// second trails a crowd whose middle wanders, as a busy one's does, 400 px and more at x10)
 			const double LagMost = std::max(bFast ? 720.0 : 480.0, Was.LagPxP95);
 			V.Judge(Pc.LagPxP95 <= LagMost, Say("the strategy camera keeps up: its look %.0f px off what it is after on the picture at the 95th percentile, %.0f m (at most %.0f px, or the old camera's)", Pc.LagPxP95, Pc.LagP95, LagMost));
+			// (and at x10 its look within 100 m of what it is after in 95% of the frames, or as often as the old camera's:
+			// over the set pieces what it is after itself jumps as the crowds part, and neither camera reaches 95%)
+			if (bFast)
+			{
+				const double NearLeast = std::min(0.95, Was.Near);
+				V.Judge(Pc.Near >= NearLeast, Say("the strategy camera's look within 100 m of what it is after in %.1f%% of the frames (at least %.1f%%, or the old camera's)", 100.0 * Pc.Near, 100.0 * NearLeast));
+			}
 		}
-		for (auto& Pair : Cells)
+		for (auto& Pair : InBox)
 		{
 			const Cell& C = Pair.second;
-			const int D = std::get<1>(Pair.first), Pc = std::get<2>(Pair.first);
-			if (D != OnBox || C.Seconds < 30.0 || (Pc != X1 && Pc != X4 && Pc != X10)) continue;
-			const std::string& M = std::get<0>(Pair.first);
+			const int Pc = Pair.first.second;
+			if (C.Seconds < 30.0 || (Pc != X1 && Pc != X4 && Pc != X10)) continue;
+			const std::string& M = Pair.first.first;
 			const bool bTwin = Boxes[M].bTwin;
 			// (a twin's wing tip on the chase camera's picture no more than 0.2 px rms at x1 and 1 at x4, her bank 0.2 and
 			// 0.25 degrees; a single-engined type, a dive or torpedo bomber, rolls quicker in her place: her bank 0.2 and
