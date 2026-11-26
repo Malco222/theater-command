@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 1e0ac1e89 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b5b87fdf0 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -77235,6 +77235,7 @@
     r.ctrl = owner.alive && allied(g2, nat, r.owner) ? r.owner : nat;
     r.since = g2.turn;
     if (g2.flags[storesAtKey(r.id)] !== void 0) delete g2.flags[storesAtKey(r.id)];
+    if (g2.flags[storesHeldKey(r.id)] !== void 0) delete g2.flags[storesHeldKey(r.id)];
     g2.flags[`fellP:${r.id}`] = g2.phase;
     moraleCapital(g2, r, old);
     r.prev = old;
