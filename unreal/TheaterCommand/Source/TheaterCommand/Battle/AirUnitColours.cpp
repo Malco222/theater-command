@@ -255,6 +255,16 @@ namespace AirUnitColours
 		double FacingZ(const Mesh& M, size_t K) { return M.Facings.size() > K * 3 + 2 ? M.Facings[K * 3 + 2] : 0.0; }
 		int PartOf(const Mesh& M, size_t K) { return K < M.Parts.size() ? M.Parts[K] : 0; }
 		PaintIs IsOf(const Found& F, int Paint) { return Paint >= 0 && static_cast<size_t>(Paint) < F.Paints.size() ? F.Paints[static_cast<size_t>(Paint)] : PaintIs::Never; }
+		/** What a paint is to the regions: a line of the coat (LinesTakeCoat) is the coat where it lies. */
+		PaintIs AsCoat(PaintIs Is) { return Is == PaintIs::Line ? PaintIs::Coat : Is; }
+		double ShadeOf(const Found& F, int Paint) { return Paint >= 0 && static_cast<size_t>(Paint) < F.Shade.size() ? F.Shade[static_cast<size_t>(Paint)] : 1.0; }
+		/** An earned colour as a line of the coat wears it: each channel by its shade (unchanged at 1). */
+		Rgb Shaded(Rgb C, double K)
+		{
+			if (K == 1.0) return C;
+			auto One = [K](uint8_t V) { return static_cast<uint8_t>(std::clamp(std::lround(V * K), 0L, 255L)); };
+			return Rgb{ One(C.R), One(C.G), One(C.B) };
+		}
 
 		double RootAt(const Tail& T, double X) { return T.RootA + T.RootB * X; }
 
@@ -824,6 +834,11 @@ namespace AirUnitColours
 		return true;
 	}
 
+	bool LinesTakeCoat(const std::string& Kind)
+	{
+		return Kind == "B17Fine";
+	}
+
 	TailPart PartFor(const std::string& Nation)
 	{
 		const std::string N = NationOf(Nation);
@@ -844,6 +859,28 @@ namespace AirUnitColours
 			if (Name == "upper" || Name == "upper2" || Name == "under" || Name == "nose") F.Paints[K] = PaintIs::Coat;
 			else if (Name == "boss" || Name == "hub") F.Paints[K] = PaintIs::Boss;
 			else if (Name == "leg") F.Paints[K] = PaintIs::Hub;
+		}
+		// (the finer B-17's rivet and seam lines: the coat where they lie, each a shade of it as her file paints the line
+		// against the coat it runs over, upper for rivet and seam, under for rivet_under and seam_under)
+		F.Shade.assign(M.PaintNames.size(), 1.0);
+		if (LinesTakeCoat(M.Kind))
+		{
+			auto Light = [&M](int Paint)
+			{
+				if (Paint < 0 || static_cast<size_t>(Paint) >= M.Colours.size()) return -1.0;
+				const Rgb& C = M.Colours[static_cast<size_t>(Paint)];
+				return 0.2126 * C.R + 0.7152 * C.G + 0.0722 * C.B;
+			};
+			const double Upper = Light(M.Paint("upper")), Under = Light(M.Paint("under"));
+			for (size_t K = 0; K < M.PaintNames.size(); ++K)
+			{
+				const std::string& Name = M.PaintNames[K];
+				const bool bUpper = Name == "rivet" || Name == "seam", bUnder = Name == "rivet_under" || Name == "seam_under";
+				const double Coat = bUpper ? Upper : Under, Own = Light(static_cast<int>(K));
+				if ((!bUpper && !bUnder) || Coat <= 0.0 || Own < 0.0) continue;
+				F.Paints[K] = PaintIs::Line;
+				F.Shade[K] = std::clamp(Own / Coat, 0.4, 1.6);
+			}
 		}
 		const size_t Count = N.Count();
 		if (Count == 0) { F.Note = "no points"; return F; }
@@ -1280,7 +1317,7 @@ namespace AirUnitColours
 		if (TailOf) TailOf->assign(Me.Count(), -1);
 		for (size_t K = 0; K < Me.Count(); ++K)
 		{
-			const PaintIs Is = IsOf(F, Me.Paints[K]);
+			const PaintIs Is = AsCoat(IsOf(F, Me.Paints[K]));
 			const double X = Me.X(K), Y = Me.Y(K), Z = Me.Z(K);
 			if (Is == PaintIs::Boss || Is == PaintIs::Hub)
 			{
@@ -1558,10 +1595,10 @@ namespace AirUnitColours
 		for (size_t K = 0; K < Me.Count(); ++K)
 		{
 			int Under = -1;
-			const Takes T = Pa.At(Me.X(K), Me.Y(K), Me.Z(K), IsOf(F, Me.Paints[K]), PartOf(Me, K), FacingY(Me, K), &Under);
+			const Takes T = Pa.At(Me.X(K), Me.Y(K), Me.Z(K), AsCoat(IsOf(F, Me.Paints[K])), PartOf(Me, K), FacingY(Me, K), &Under);
 			Out.Took[K] = T;
 			if (T == Takes::Keep) continue;
-			Out.Points.emplace_back(static_cast<int>(K), Sooted(M, Pa.ColourOf(T), Soot(static_cast<int>(K))));
+			Out.Points.emplace_back(static_cast<int>(K), Sooted(M, Shaded(Pa.ColourOf(T), ShadeOf(F, Me.Paints[K])), Soot(static_cast<int>(K))));
 			if (Under >= 0)
 			{
 				const Patch& Pt = Pa.Patches[static_cast<size_t>(Under)];
@@ -1589,8 +1626,8 @@ namespace AirUnitColours
 		for (size_t T = 0; T + 2 < Me.Triangles.size(); T += 3)
 		{
 			const int C[3] = { Me.Triangles[T], Me.Triangles[T + 1], Me.Triangles[T + 2] };
-			const PaintIs Is = IsOf(F, Me.Paints[static_cast<size_t>(C[0])]);
-			if (Is == PaintIs::Never || IsOf(F, Me.Paints[static_cast<size_t>(C[1])]) != Is || IsOf(F, Me.Paints[static_cast<size_t>(C[2])]) != Is) continue;
+			const PaintIs Is = AsCoat(IsOf(F, Me.Paints[static_cast<size_t>(C[0])]));
+			if (Is == PaintIs::Never || AsCoat(IsOf(F, Me.Paints[static_cast<size_t>(C[1])])) != Is || AsCoat(IsOf(F, Me.Paints[static_cast<size_t>(C[2])])) != Is) continue;
 			Point Corners[3];
 			Spread X, Y, Z;
 			for (int I = 0; I < 3; ++I)
@@ -1666,7 +1703,11 @@ namespace AirUnitColours
 					if (Co.bEarned)
 					{
 						const double Sooting = B.W[0] * Soot(C[0]) + B.W[1] * Soot(C[1]) + B.W[2] * Soot(C[2]);
-						Co.Colour = Sooted(M, Pa.ColourOf(What), Sooting);
+						// (a piece of a line's triangle a shade of the coat's colour, mixed as its corners are; any other exactly as before)
+						const double S0 = ShadeOf(F, Me.Paints[static_cast<size_t>(C[0])]), S1 = ShadeOf(F, Me.Paints[static_cast<size_t>(C[1])]),
+									 S2 = ShadeOf(F, Me.Paints[static_cast<size_t>(C[2])]);
+						const double Shading = S0 == 1.0 && S1 == 1.0 && S2 == 1.0 ? 1.0 : B.W[0] * S0 + B.W[1] * S1 + B.W[2] * S2;
+						Co.Colour = Sooted(M, Shaded(Pa.ColourOf(What), Shading), Sooting);
 					}
 					Index.push_back(static_cast<int>(Ct.Corners.size()));
 					Ct.Corners.push_back(Co);

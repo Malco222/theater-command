@@ -438,6 +438,17 @@ namespace AirShow
 	};
 	/** The built-in shape of a model, by name, until the model files carry their sockets. */
 	Shape ShapeOf(const std::string& Model, bool bFighter);
+	/**
+	 * The finer B-17 (the Battle rules card's "Finer B-17", row b17Fine, release 2): whether this battle draws the B-17 from
+	 * the modeller's newer file, set once as an air battle begins (AAirBattle::B17FineRead) and read by ShapeOf, whose
+	 * B-17 then has her engines where that file's sockets put them (her span, length and gunners' stations are the same).
+	 * Off unless set: the B-17 as she always was.
+	 */
+	void SetFineB17(bool bOn);
+	bool FineB17();
+	/** The model file a sculpted model is read from (Content/Models/<it>.json): "B17Fine" for "B17" when bFine, else its
+	 * own name. AAirBattle::ModelFor names its shapes by it, so every reader and every kept shape follows. */
+	std::string FileOf(const std::string& Kind, bool bFine);
 	/** Where a slot of a group's formation lies (the flyover frames its lead three by it). */
 	Vec SlotOf(const Group& G, int Slot);
 	/** Whether a point of an aircraft's own frame lies in its airframe (the fuselage, the wing, the tailplane, the

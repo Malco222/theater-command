@@ -59,7 +59,12 @@ namespace
 			std::string Why;
 			if (!AirNoseArt::ReadPanel(S.NoseArtPanelsText, Kind, Read, Why))
 			{
-				Read = AirNoseArt::Panel();
+				// (the finer B-17's panel is in a file of its own, read only while the Battle rules card's Finer B-17 is
+				// on: off, this text is empty and nothing is read from it)
+				if (S.NoseArtFinePanelsText.empty() || !AirNoseArt::ReadPanel(S.NoseArtFinePanelsText, Kind, Read, Why))
+				{
+					Read = AirNoseArt::Panel();
+				}
 			}
 			Found = S.NoseArtPanels.emplace(Kind, std::move(Read)).first;
 		}
@@ -298,6 +303,20 @@ void AAirBattle::DrawNoseArt(const FVector& EyeAt)
 			return;
 		}
 		S.NoseArtPanelsText.assign(reinterpret_cast<const char*>(Panels.GetData()), static_cast<size_t>(Panels.Num()));
+		// (the finer B-17's own panel, laid on her newer skin by Tools/pack_nose_art.py --fine: only while she flies; not
+		// read, she flies bare and the rest wear theirs)
+		if (S.B17FineOn == 1)
+		{
+			TArray<uint8> FinePanels;
+			if (FFileHelper::LoadFileToArray(FinePanels, *(Folder / TEXT("panels-fine.json"))))
+			{
+				S.NoseArtFinePanelsText.assign(reinterpret_cast<const char*>(FinePanels.GetData()), static_cast<size_t>(FinePanels.Num()));
+			}
+			else
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle: nose art: Content/Data/NoseArt/panels-fine.json could not be read, so the finer B-17s fly bare."));
+			}
+		}
 		S.NoseArt.Begin(S.NoseArtList, S.SkyPlace.Seed, S.Board.Bombers);
 		UE_LOG(LogTheater, Display, TEXT("Air battle: nose art: %d paintings; the board names the seats of %d bomber groups."),
 			static_cast<int32>(S.NoseArtList.Painted().size()), static_cast<int32>(S.Board.Bombers.size()));
