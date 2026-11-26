@@ -1720,22 +1720,48 @@ describe('city defences: the raid card names its place as the news does, the swi
     const the = (places as { the: string[] }).the;
     for (const name of the) expect(placeName(name).length).toBeLessThanOrEqual(24);
     const on = ruhrByNight({ cloud: true }), off = ruhrByNight({ cloud: true, on: false });
-    let named = 0, grown = 0, target = 0;
+    let named = 0, grown = 0, target = 0, own = 0, ownless = 0;
     for (const name of the) {
       const r = on.g.byName[name];
       if (!r) continue;
-      for (const kind of ['bomb', 'airfield', 'harbour'] as const) {
+      // Every kind of raid the planner offers on a province. A raid on the town names "the defences of" the town, and
+      // the town's name is the province's own where the town has none (the Azores, the Dakotas, the Pampas, the Valdai).
+      const whole = new RegExp(`(?<![\\p{L}])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}])`, 'u');
+      for (const kind of ['bomb', 'night', 'ground', 'line', 'superiority', 'recon', 'town', 'airfield', 'harbour'] as const) {
         const a = planRaid(on.g, kind, r.id, undefined, 'UK').sky, b = planRaid(off.g, kind, r.id, undefined, 'UK').sky;
         expect([name, kind, b === undefined]).toEqual([name, kind, false]);
         if (b!.includes('the target')) { expect([name, kind, a]).toEqual([name, kind, b]); target++; continue; }
-        expect([name, kind, a]).toEqual([name, kind, b!.replace(name, `the ${name}`)]);
+        if (!whole.test(b!)) {
+          // A town with a name of its own that the news gives no article: the line is the same on and off.
+          expect([name, kind, kind, a]).toEqual([name, kind, 'town', b]);
+          own++;
+          continue;
+        }
+        expect([name, kind, a]).toEqual([name, kind, b!.replace(whole, `the ${name}`)]);
         named++;
+        if (kind === 'town') ownless++;
         if (/ over (.+?)[.:]/.exec(a!)![1].length > 24) grown++;
       }
     }
-    // Each case is met on this map: places named with their article, some of them past 24 with it, and places too
-    // long as shipped.
-    expect([named > 0, grown > 0, target > 0]).toEqual([true, true, true]);
+    // Each case is met on this map: places named with their article, some of them past 24 with it, places too long as
+    // shipped, towns with a name of their own, and towns that carry their province's.
+    expect([named > 0, grown > 0, target > 0, own > 0, ownless > 0]).toEqual([true, true, true, true, true]);
+  });
+
+  it('a raid on a town that carries its province\'s name: the weather line gives it the article with the switch on, as the storm report does', () => {
+    // (The Azores have no town named in the data, so the town is "Azores" and the raid's place "the defences of
+    // Azores". The news says "the Azores", and so does this row's storm report, which reads placeName(townName).)
+    const lines: Record<string, string | undefined> = {};
+    for (const on of [true, false]) {
+      const r = ruhrByNight({ on });
+      setWeather(r.g, true);
+      const az = r.g.byName.Azores;
+      expect(townName(az)).toBe('Azores');
+      lines[`${on}`] = planRaid(r.g, 'town', az.id, undefined, 'UK').sky;
+    }
+    expect(lines.false).toMatch(/ over the defences of Azores[.:]/);
+    expect(lines.true).toBe(lines.false!.replace('the defences of Azores', 'the defences of the Azores'));
+    expect(placeName(townName(ruhrByNight().g.byName.Azores))).toBe('the Azores');
   });
 });
 
@@ -1783,7 +1809,7 @@ describe('city defences on the air rules\' present card: one card names its plac
     // The searchlights' level form, with a raid the lights can hold, and their words under cloud.
     for (const [fog, k] of fogs) {
       const few = ruhrByNight({ guns: 2, lights: 2, radar: true, bombers: 100 }), dull = ruhrByNight({ guns: 2, lights: 2, radar: true, cloud: true });
-      expect([fog, card(assessAir(few.g, [few.f], 'night', few.t, k), 'Searchlights').map((l) => l.replace(/^.*(?= over )/, ''))]).toEqual([fog, [' over the Ruhr']]);
+      expect([fog, card(assessAir(few.g, [few.f], 'night', few.t, k), 'Searchlights')]).toEqual([fog, ['Level 2 searchlights over the Ruhr']]);
       expect([fog, card(assessAir(dull.g, [dull.f], 'night', dull.t, k), 'Searchlights')]).toEqual([fog, ['Cloud over the Ruhr']]);
     }
   });
@@ -1809,6 +1835,9 @@ describe('city defences on the air rules\' present card: one card names its plac
       expect([fog, /guns built round the harbour of the Cotentin,/.test(flak[0])]).toEqual([fog, k !== undefined]);
       // The switch off: the shipped guns lines bare, the new Flak line as with it on.
       for (const l of card(b, 'Anti-aircraft guns')) expect([fog, l, /the (harbour|factories) of Cotentin/.test(l)]).toEqual([fog, l, true]);
+      // The harbour's own shipped line is there with the switch off, and the switch neither adds a guns line nor drops one.
+      expect([fog, card(b, 'Anti-aircraft guns').filter((l) => l.includes('the harbour of Cotentin')).length]).toEqual([fog, 1]);
+      expect([fog, card(b, 'Anti-aircraft guns').length]).toEqual([fog, guns.length]);
       expect(card(b, 'Flak')).toEqual(flak);
     }
     // And the card's sky line, this row's own: the same name.
