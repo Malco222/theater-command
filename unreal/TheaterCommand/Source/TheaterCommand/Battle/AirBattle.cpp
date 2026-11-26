@@ -97,6 +97,10 @@ struct FAirLandMade
 	/** (release 2, the hitch's naming lines) Where the paint is, for the speed log's lines (AAirBattle::LandPhaseName):
 	 * 0 asked, not begun; picture K's rows 4K+1, its shading 4K+2, its smaller copies 4K+3; -1 done. Written on the pool. */
 	std::atomic<int32> Phase { 0 };
+	/** (the row flyGroundKeep) The kept file's name in Saved/AirGround once it is read or written, and what became of
+	 * it, for the log; written on the pool, read once the paint is done. Empty with the row off. */
+	FString KeptName;
+	FString KeepSaid;
 };
 
 /** (release 2, the hitch) What the ground's painter is asked to paint: the place and the book of town plans. */
@@ -1518,6 +1522,75 @@ void AAirBattle::PaintLand()
 	}
 }
 
+/**
+ * (Release 2, the hitch: the Battle rules card's "The ground is kept once painted", row flyGroundKeep; on for a run
+ * -TheaterAirGroundKeep, off -TheaterAirNoGroundKeep.) On, the three painted pictures are kept in the project's
+ * Saved/AirGround, one file a ground named by a key of everything the painter reads (Battle/AirGroundKeep.h), and a
+ * later flight of the same ground reads them on the pool instead of painting; a file whose header, key, sizes, length
+ * or check does not match is refused and the ground painted. The folder keeps the six grounds last used (its order.txt).
+ */
+static bool GroundKeepOn()
+{
+	return FLandLive::RuleNow(TEXT("flyGroundKeep"));
+}
+
+/** (the row flyGroundKeep, on the pool) This ground's kept pictures, whole, into Out; false (and why, in Made's KeepSaid) if not. */
+static bool ReadKeptGround(const FString& Folder, uint64 KeyOf, const std::vector<AirLand::Frame>& Frames, std::vector<std::vector<uint8_t>>& Out, FAirLandMade& Made)
+{
+	Made.KeptName = AirParts::Wide(AirGroundKeep::FileName(KeyOf));
+	TArray<uint8> Bytes;
+	if (!FFileHelper::LoadFileToArray(Bytes, *(Folder / Made.KeptName), FILEREAD_Silent))
+	{
+		Made.KeepSaid = TEXT("none kept yet: painted, and kept");
+		return false;
+	}
+	std::string Why;
+	if (!AirGroundKeep::Unpack(Bytes.GetData(), static_cast<size_t>(Bytes.Num()), KeyOf, Frames, Out, Why))
+	{
+		Made.KeepSaid = TEXT("the kept file refused (") + AirParts::Wide(Why) + TEXT("): painted, and kept again");
+		return false;
+	}
+	Made.KeepSaid = TEXT("read from the kept file, not painted");
+	return true;
+}
+
+/** (the row flyGroundKeep, on the pool) The painted pictures kept: written beside their place, then moved into it, as the
+ * campaign's save is (ACampaignGameMode::WriteSave). */
+static void WriteKeptGround(const FString& Folder, uint64 KeyOf, const std::vector<AirLand::Frame>& Frames, const std::vector<std::vector<uint8_t>>& Pictures, FAirLandMade& Made)
+{
+	const std::vector<uint8_t> Packed = AirGroundKeep::Pack(KeyOf, Frames, Pictures);
+	const FString Path = Folder / Made.KeptName;
+	const FString Beside = Path + TEXT(".writing");
+	IFileManager::Get().MakeDirectory(*Folder, true);
+	if (Packed.empty() || !AirGroundKeep::WriteBytes(TCHAR_TO_UTF8(*Beside), Packed) || !IFileManager::Get().Move(*Path, *Beside, true, true))
+	{
+		Made.KeepSaid += TEXT(" (but it could not be written)");
+		Made.KeptName.Empty();
+	}
+}
+
+/** (the row flyGroundKeep, on the game thread once the ground is laid) The folder's order with this ground first; the
+ * grounds past the six last used, and any ground file the order does not name, deleted. */
+static void RememberKeptGround(const FString& Folder, const FString& Name)
+{
+	const FString OrderFile = Folder / TEXT("order.txt");
+	FString Order;
+	FFileHelper::LoadFileToString(Order, *OrderFile);
+	std::vector<std::string> Drop;
+	const std::string Now = AirGroundKeep::Remember(TCHAR_TO_UTF8(*Order), TCHAR_TO_UTF8(*Name), Drop);
+	FFileHelper::SaveStringToFile(AirParts::Wide(Now), *OrderFile, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	TArray<FString> Files;
+	IFileManager::Get().FindFiles(Files, *(Folder / TEXT("*.ground")), true, false);
+	for (const FString& File : Files)
+	{
+		const std::string Plain = TCHAR_TO_UTF8(*File);
+		if (AirGroundKeep::IsGroundName(Plain) && Now.find(Plain + "\n") == std::string::npos)
+		{
+			IFileManager::Get().Delete(*(Folder / File), false, false, true);
+		}
+	}
+}
+
 void AAirBattle::StartPaint(const FAirLandAsk& Ask)
 {
 	LandMade = MakeShared<FAirLandMade, ESPMode::ThreadSafe>();
@@ -1532,7 +1605,9 @@ void AAirBattle::StartPaint(const FAirLandAsk& Ask)
 	// is written; the phase kept for the long frames' line either way, AirParts::Hitch)
 	const bool bSay = TheaterSpeed::IsLogging();
 	const double Asked = LandAsked;
-	LandPainting = Async(EAsyncExecution::ThreadPool, [Made = LandMade, P = Ask.P, Plans = Ask.Plans, Loops, bSay, Asked]()
+	// (the row flyGroundKeep: the folder the pictures are kept in; empty with the row off, and nothing is read or kept)
+	const FString KeepFolder = GroundKeepOn() ? FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("AirGround"))) : FString();
+	LandPainting = Async(EAsyncExecution::ThreadPool, [Made = LandMade, P = Ask.P, Plans = Ask.Plans, Loops, bSay, Asked, KeepFolder]()
 	{
 		const double Began = FPlatformTime::Seconds();
 		if (bSay)
@@ -1543,28 +1618,45 @@ void AAirBattle::StartPaint(const FAirLandAsk& Ask)
 		Made->Painter = std::make_unique<AirLand::Painter>(P, Plans);
 		Made->Frames = AirLand::Frames(P);
 		Made->Levels.SetNum(static_cast<int32>(Made->Frames.size()));
+		// (the row flyGroundKeep: this ground's kept pictures read whole, or none; with the row off, nothing is read)
+		const bool bKeep = !KeepFolder.IsEmpty();
+		const uint64 KeepKey = bKeep ? AirGroundKeep::Key(P, Plans, Made->Frames) : 0;
+		std::vector<std::vector<uint8_t>> Kept;
+		const bool bFromDisk = bKeep && ReadKeptGround(KeepFolder, KeepKey, Made->Frames, Kept, *Made);
+		std::vector<std::vector<uint8_t>> ToKeep;
 		for (int32 K = 0; K < Made->Levels.Num(); ++K)
 		{
 			const AirLand::Frame& F = Made->Frames[static_cast<size_t>(K)];
 			std::vector<uint8_t> Rgba(static_cast<size_t>(F.W) * F.H * 4);
-			std::vector<float> Heights(static_cast<size_t>(F.W) * F.H);
-			// (in bands of 64 rows, every band on a thread of its own; the shadows when every row's heights are in)
-			const int32 Bands = (F.H + 63) / 64;
-			const AirLand::Painter& Painter = *Made->Painter;
-			Made->Phase.store(4 * K + 1);
-			ParallelFor(Bands, [&](int32 B) { Painter.PaintRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); }, Loops);
-			if (bSay)
+			if (bFromDisk)
 			{
-				UE_LOG(LogTheater, Display, TEXT("Air hitch: ground picture %d (%d x %d at %.0f m): rows painted %.2f s after it was asked for (%d bands)."),
-					K, F.W, F.H, F.Step, FPlatformTime::Seconds() - Asked, Bands);
+				Rgba.swap(Kept[static_cast<size_t>(K)]); // (the kept picture: the bytes the painter made of this very ground)
 			}
-			if (AirLand::Painter::Shades(F))
+			else
 			{
-				Made->Phase.store(4 * K + 2);
-				ParallelFor(Bands, [&](int32 B) { Painter.ShadeRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); }, Loops);
+				std::vector<float> Heights(static_cast<size_t>(F.W) * F.H);
+				// (in bands of 64 rows, every band on a thread of its own; the shadows when every row's heights are in)
+				const int32 Bands = (F.H + 63) / 64;
+				const AirLand::Painter& Painter = *Made->Painter;
+				Made->Phase.store(4 * K + 1);
+				ParallelFor(Bands, [&](int32 B) { Painter.PaintRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); }, Loops);
 				if (bSay)
 				{
-					UE_LOG(LogTheater, Display, TEXT("Air hitch: ground picture %d: shaded %.2f s after it was asked for (%d bands)."), K, FPlatformTime::Seconds() - Asked, Bands);
+					UE_LOG(LogTheater, Display, TEXT("Air hitch: ground picture %d (%d x %d at %.0f m): rows painted %.2f s after it was asked for (%d bands)."),
+						K, F.W, F.H, F.Step, FPlatformTime::Seconds() - Asked, Bands);
+				}
+				if (AirLand::Painter::Shades(F))
+				{
+					Made->Phase.store(4 * K + 2);
+					ParallelFor(Bands, [&](int32 B) { Painter.ShadeRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); }, Loops);
+					if (bSay)
+					{
+						UE_LOG(LogTheater, Display, TEXT("Air hitch: ground picture %d: shaded %.2f s after it was asked for (%d bands)."), K, FPlatformTime::Seconds() - Asked, Bands);
+					}
+				}
+				if (bKeep)
+				{
+					ToKeep.push_back(Rgba); // (the row flyGroundKeep: kept as painted, before its smaller copies are made)
 				}
 			}
 			Made->Phase.store(4 * K + 3);
@@ -1580,6 +1672,10 @@ void AAirBattle::StartPaint(const FAirLandAsk& Ask)
 			{
 				UE_LOG(LogTheater, Display, TEXT("Air hitch: ground picture %d: its smaller copies made %.2f s after it was asked for."), K, FPlatformTime::Seconds() - Asked);
 			}
+		}
+		if (bKeep && !bFromDisk)
+		{
+			WriteKeptGround(KeepFolder, KeepKey, Made->Frames, ToKeep, *Made);
 		}
 		Made->Seconds = FPlatformTime::Seconds() - Began;
 		Made->Phase.store(-1);
@@ -1864,6 +1960,15 @@ void AAirBattle::LayLand()
 		*AirParts::Wide(S.Board.PlaceName), *AirParts::Wide(Count.Plan), Count.Villages, Count.Links, Count.Bridges, Count.Spires, Count.bCoast ? TEXT(", the coast") : TEXT(""),
 		Made.Seconds, LoudPaint() ? TEXT("its loops at the frame's priority: -TheaterAirLoudPaint") : TEXT("its loops at the background's priority"),
 		FPlatformTime::Seconds() - LandAsked);
+	if (!Made.KeepSaid.IsEmpty())
+	{
+		// (the row flyGroundKeep: what became of the kept file, and the folder's order with this ground first)
+		UE_LOG(LogTheater, Display, TEXT("Air battle ground: %s, Saved/AirGround/%s (the Battle rules card's row flyGroundKeep, or -TheaterAirGroundKeep)."), *Made.KeepSaid, *Made.KeptName);
+		if (!Made.KeptName.IsEmpty())
+		{
+			RememberKeptGround(FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("AirGround"))), Made.KeptName);
+		}
+	}
 	// (the pictures are on the drawing thread now: the copies here are let go, all but the near picture's own texels
 	// and the painter, for the craters)
 	if (Made.Levels.Num() > 0 && Made.Levels[0].Each.Num() > 0 && LandPictures.Num() > 0)

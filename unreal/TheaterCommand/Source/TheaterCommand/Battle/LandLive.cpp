@@ -174,6 +174,14 @@ namespace
 		// until the Mac passes it; -TheaterAirPaintEarly turns it on for a run, -TheaterAirNoPaintEarly off. Never sent to
 		// the land rules.)
 		{ TEXT("flyPaintEarly"), TEXT("The ground is painted early"), TEXT("A replayed air battle starts painting its ground as soon as it is queued, so the painted fields and town are ready sooner. Off: the ground is painted as the battle opens."), TEXT("TheaterAirNoPaintEarly"), false, TEXT("TheaterAirPaintEarly") },
+		// (The air battle's hitch, release 2: the ground's pictures under a raid with no stage are the pool's work of 13.6
+		// to 18.2 s, and a freeze of about a second fell inside it in every one of the Mac's legs of 26 November. On: the
+		// three pictures, once painted, are kept in the project's Saved/AirGround (about 48 MB a ground, the six last used)
+		// under a key of everything the painter reads, and a later flight of the same ground reads them on the pool instead
+		// of painting (AAirBattle::StartPaint, Battle/AirGroundKeep.h); a file that does not match is refused and the ground
+		// painted. Looks only: the same bytes. Off until the Mac passes it; -TheaterAirGroundKeep turns it on for a run,
+		// -TheaterAirNoGroundKeep off. Never sent to the land rules.)
+		{ TEXT("flyGroundKeep"), TEXT("The ground is kept once painted"), TEXT("An air battle's painted ground (its fields, woods, rivers and town) is kept on disk, so a later raid on the same place shows it at once instead of painting it again. Off: every raid paints its ground afresh."), TEXT("TheaterAirNoGroundKeep"), false, TEXT("TheaterAirGroundKeep") },
 		// (Release 2, the scramble offer: Brian, 24 November 2026 22:21Z, "i want every air battle playable". In the enemy's
 		// month the campaign stops where an enemy raid on his ground meets his fighters and offers SCRAMBLE: taken, he flies
 		// the defence in the battle in the air (AAirBattle, his side 'def'), and the month runs on with what the battle
