@@ -7738,9 +7738,8 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     // (Release 2, arrivalwaits.ts) Arrivals wait while their corps are at the front, switched by the player in any month
     // of a grand campaign. Off, a row waiting this month forms next month wherever its corps stand.
     ok = setFromWait(s, part[1] === 'on');
-    note = !ok ? `${FROMWAIT_ROW.name}: it works only in a grand campaign.`
-      : fromWaitOn(s) ? `${FROMWAIT_ROW.name} is on. An arrival formed from a corps already in the field waits while that corps is at the front, and forms the month after the corps leaves it.`
-      : `${FROMWAIT_ROW.name} is off. The corps is taken wherever it stands, as before.`;
+    // (Its words are arrivalwaits.ts's, FROMWAIT_ROW: the bridge holds none of its own.)
+    note = !ok ? FROMWAIT_ROW.refused : fromWaitOn(s) ? FROMWAIT_ROW.on : FROMWAIT_ROW.off;
     return { ok, note, fly, flies, open, view: view() };
   }
   if (part[0] === 'fleetwhyrule') {

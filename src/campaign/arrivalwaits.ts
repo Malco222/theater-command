@@ -210,6 +210,11 @@ export const FROMWAIT_ROW = {
   id: 'fromwaitrule',
   name: 'Arrivals wait while their corps are at the front',
   line: 'An arrival due on a date and formed from a corps already in the field, yours or any other side\'s, waits while that corps is at the front, and forms the month after the corps leaves it. Where an arrival is offered to you, you decide instead. Off, the corps is taken wherever it stands, as before. This changes the month some arrivals form. It works only in a grand campaign: from History\'s shape to Anything goes, and at By the book and Close to history once History\'s book has closed where the arrival is due. It can be switched on or off in any month.',
+  // The notes the 3D shows on pressing the row (the bridge's act('fromwaitrule:on' / ':off') reads them here and holds
+  // no words of its own): switched on, switched off, and refused outside a grand campaign.
+  on: 'Arrivals wait while their corps are at the front is on. An arrival formed from a corps already in the field waits while that corps is at the front, and forms the month after the corps leaves it.',
+  off: 'Arrivals wait while their corps are at the front is off. The corps is taken wherever it stands, as before.',
+  refused: 'Arrivals wait while their corps are at the front: it works only in a grand campaign.',
 } as const;
 
 /** The switch as the rule reads it, in a grand campaign (game.ts `expeditions` reads `g.flags.fromWait`). */

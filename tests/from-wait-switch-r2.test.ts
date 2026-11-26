@@ -75,6 +75,25 @@ describe('the switch through the bridge', () => {
     expect(TC().r2Ship(['fromwaitrule'])).toBeNull();
   });
 
+  it("the three notes on pressing the row are arrivalwaits.ts's (FROMWAIT_ROW.on, .off, .refused): the bridge holds no words of its own", () => {
+    // (words-01: every word the player reads of the rule lives in the module. The notes are swapped for marks here, so
+    // a bridge that wrote its own words, even the same ones, would not show the marks.)
+    const row = FROMWAIT_ROW as unknown as Record<'on' | 'off' | 'refused', string>;
+    const kept = { on: row.on, off: row.off, refused: row.refused };
+    expect([typeof kept.on, typeof kept.off, typeof kept.refused]).toEqual(['string', 'string', 'string']);
+    try {
+      Object.assign(row, { on: '(on)', off: '(off)', refused: '(refused)' });
+      TC().load(saveGame(grand()));
+      expect((TC().act('fromwaitrule:on') as { note: string }).note).toBe('(on)');
+      expect((TC().act('fromwaitrule:off') as { note: string }).note).toBe('(off)');
+      TC().load(saveGame(createGame(3, 'GER')));
+      expect((TC().act('fromwaitrule:on') as { note: string }).note).toBe('(refused)');
+    } finally { Object.assign(row, kept); }
+    TC().load(saveGame(grand()));
+    expect((TC().act('fromwaitrule:on') as { note: string }).note).toBe(FROMWAIT_ROW.on);
+    expect((TC().act('fromwaitrule:off') as { note: string }).note).toBe(FROMWAIT_ROW.off);
+  });
+
   it("the ship list takes it once; a later off stays off", () => {
     TC().load(saveGame(grand()));
     expect(TC().r2Ship(['fromwaitrule'])).not.toBeNull();
