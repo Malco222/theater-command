@@ -206,14 +206,40 @@ export function jumps(G: Rng, crew: number, p: number, how: FallHow, upTo: numbe
 }
 
 /**
+ * The crew's one rule: each man's share of getting out under a parachute, by the way down, times 'outBand' by height
+ * (book.ts SKY.fate.out), at most 0.95; from a glide over the sea nobody jumps (hole H-GLIDE-SEA). A bomber's men read
+ * it, and so, with 'bailouts', does a fighter's crew past its pilot (the Fulmar's observer: the design director, 26
+ * November 2026 18:44Z, item 1).
+ */
+export function manOut(sc: Scene, how: FallHow): number {
+  const F = SKY.fate;
+  return how === 'glide' && sc.sea ? 0 : Math.min(0.95, (F.out[how] ?? 0) * F.outBand[sc.band]);
+}
+/** The men a forced landing loses, of a crew of `crew`: one die, as ever. */
+export const landLost = (R: Rng, crew: number): number => R.int(Math.max(1, Math.ceil(crew / 3)));
+
+/**
+ * Release 2, 'bailouts': one man of a fighter's crew past its pilot (the two-seat Fulmar's observer, crew 2, D8), his
+ * pilot not brought back by the rules. He is crew, so he gets out by the crew's one rule, the bomber men's (manOut,
+ * landLost, called), pilot killed included (the design director, 26 November 2026 18:44Z, item 1), on G after the
+ * pilot's draws: from a glide he jumps at the rule's share, else the landing keeps him less the men it loses.
+ */
+function crewOut(G: Rng, sc: Scene, how: FallHow): 'chute' | 'out' | null {
+  const p = manOut(sc, how);
+  if (p > 0 && G.chance(p)) return 'chute';
+  if (how !== 'glide') return null;
+  return Math.max(0, 1 - landLost(G, sc.crew)) > 0 ? 'out' : null;
+}
+
+/**
  * Release 2, 'bailouts': how one man of a fighter not brought back by the rules gets out, by the one rule across every
  * way down (the design director, 26 November 2026: D1, D3, D11), on G, whoever's ground it is over. From a glide over
  * land he jumps at out.glide times outBand (hole H-GLIDE-JUMP, 0 as shipped); otherwise he rides it down and climbs
  * out at ftrLand (H-FTR-LAND). In a way his pilot could get out of, under a parachute at pilotOut times outBand
  * (H-FTR-OUT); in a breakup or a collision at out times outBand (D11). From an explosion, or with the pilot hit, never.
  * `landed`: the look stream's own climb-out die, already thrown for a pilot over the enemy's ground in a glide (as with
- * the switch off): it stands for him if he does not jump (the design's section 4.3), so only over his own ground, and
- * for a second man, is the climb-out drawn on G.
+ * the switch off): it stands for him if he does not jump (the design's section 4.3), so only over his own ground is the
+ * climb-out drawn on G. (A fighter's second man is crew, and reads the crew's rule: crewOut.)
  */
 function oneOut(G: Rng, sc: Scene, how: FallHow, landed?: boolean): 'chute' | 'out' | null {
   const F = SKY.fate, band = F.outBand[sc.band];
@@ -281,10 +307,10 @@ export function fateOf(rng: Rng, sc: Scene, mem: FateMemory, pair?: { fid: numbe
     thrown = ours = chutes;
   } else if (how === 'glide') {
     // One die: the men lost in the landing.
-    lost = rng.int(Math.max(1, Math.ceil(sc.crew / 3)));
+    lost = landLost(rng, sc.crew);
     out = sc.crew - lost;
   } else {
-    const p = Math.min(0.95, (F.out[how] ?? 0) * F.outBand[sc.band]);
+    const p = manOut(sc, how);
     if (sc.crew > DICE) more = rng.fork(53);
     for (let i = 0; i < DICE; i++) if (rng.chance(p)) { thrown++; if (i < sc.crew) ours++; }
     for (let i = DICE; i < sc.crew; i++) if (more!.chance(p)) extra++;
@@ -298,12 +324,15 @@ export function fateOf(rng: Rng, sc: Scene, mem: FateMemory, pair?: { fid: numbe
   if (sc.bailouts) {
     if (sc.air === 'ftr') {
       // The pilot: brought back, as above; not brought back, by the one rule, whoever's ground it is over (D1, D3, D11).
-      // A second man (the two-seat Fulmar, crew 2: D8) gets out by the same rule after the pilot's draws, whether or
-      // not the pilot is brought back (the count holds only the pilot).
+      // A second man (the two-seat Fulmar, crew 2: D8) is crew (the design director, 18:44Z, item 1): where the count
+      // brings his pilot back he shows as his pilot shows, so the crew's fate is one fate and the look never shows him
+      // lost or taken where the count brought the crew back; otherwise he gets out by the crew's rule (crewOut), after
+      // the pilot's draws.
       const G = rng.fork(GOT);
       // Over the enemy's ground a pilot who rides a glide down keeps the look stream's climb-out die thrown above.
-      const men = sc.back ? [] : [oneOut(G, sc, how, how === 'glide' && sc.over === 'enemy' ? out === 1 : undefined)];
-      for (let i = 1; i < sc.crew; i++) men.push(oneOut(G, sc, how));
+      const pilot = sc.back ? 'chute' as const : oneOut(G, sc, how, how === 'glide' && sc.over === 'enemy' ? out === 1 : undefined);
+      const men = sc.back ? [] : [pilot];
+      for (let i = 1; i < sc.crew; i++) men.push(sc.back ? pilot : crewOut(G, sc, how));
       const kept = sc.back ? chuteAt : [];
       const up = men.filter((m) => m === 'chute').length;
       chutes = kept.length + up;
@@ -318,7 +347,7 @@ export function fateOf(rng: Rng, sc: Scene, mem: FateMemory, pair?: { fid: numbe
     } else if (how === 'glide') {
       // The bomber's glide reads the one rule from its own entry (out.glide, hole H-GLIDE-JUMP; never over the sea,
       // H-GLIDE-SEA): who jumps on the way down, and the landing keeps whoever stayed, less those lost in it.
-      const p = sc.sea ? 0 : Math.min(0.95, (F.out.glide ?? 0) * F.outBand[sc.band]);
+      const p = manOut(sc, how);
       if (p > 0) {
         const got = jumps(rng.fork(GOT), sc.crew, p, how, upTo);
         chutes = got.chutes; chuteAt = got.at;

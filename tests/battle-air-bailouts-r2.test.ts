@@ -21,7 +21,7 @@ import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
 import type { FieldEvent } from '../src/battle/core/types';
 import { SKY } from '../src/battle/air/book';
-import { crewOf, fateOf, freshMemory, GOT, type Scene } from '../src/battle/air/fates';
+import { crewOf, fateOf, freshMemory, GOT, HOWS, type Scene } from '../src/battle/air/fates';
 import { bomberGuns } from '../src/battle/air/guns';
 import { airBattle, airLooks, AirSim, MORE_LOOKS } from '../src/battle/air/sim';
 import { airTicket, raidGroups } from '../src/battle/air/ticket';
@@ -777,7 +777,7 @@ describe('(f) each ruling seen to bite, switch on', () => {
     });
     expect(more).toBeGreaterThan(0);
   });
-  it('D8: the two-seat Fulmar falls with crew 2 (hole H-FULMAR), its second man by the pilot\'s rule after the pilot\'s draws, brought back or not; every other fighter 1', () => {
+  it('D8: the two-seat Fulmar falls with crew 2 (hole H-FULMAR), its second man after the pilot\'s draws (by the crew\'s rule since the design director\'s 18:44Z: part h); every other fighter 1', () => {
     let fulmars = 0, others = 0;
     for (const p of SET.filter((b) => /^(harbour|carriers)/.test(b.key)).map(pairFor)) for (const e of p.on.lost) {
       if (fallOf(e).air !== 'ftr') continue;
@@ -785,7 +785,7 @@ describe('(f) each ruling seen to bite, switch on', () => {
     }
     expect(fulmars).toBeGreaterThan(0);
     expect(others).toBeGreaterThan(0);
-    // Unit draws: both men out sometimes, under parachutes or climbing out; with the pilot brought back, the second still drawn.
+    // Unit draws: both men out sometimes, under parachutes or climbing out; with the pilot brought back, both out (part h).
     const rng = new Rng(13);
     let two = 0, backTwo = 0;
     for (let i = 0; i < 6_000; i++) {
@@ -840,5 +840,76 @@ describe('(g) after the sceptics: the glide reads its own height, and the crew r
     };
     expect(crews(tk)).toEqual([4]);
     expect(crews(swapped)).toEqual([5]);
+  });
+});
+
+// The design director, 26 November 2026 18:44Z, item 1: "The Fulmar's second man is crew, so he gets out by the crew's
+// one rule (the bomber men's, including pilot killed at 0.35), not the pilot's. And the look never shows a fate the
+// count does not make: where the count says back, he shows as his pilot shows, so no parachute into enemy ground with
+// captured 0." Sizes fixed before running: 10,000 draws a cell.
+describe('(h) the design director\'s 18:44Z, item 1: the Fulmar\'s second man is crew', () => {
+  const WAYS = ['explode', 'flamer', 'burn', 'wing', 'tail', 'pilot', 'spin', 'glide', 'breakup', 'collide'] as const;
+  const only = (h: string) => HOWS.map((x) => (x === h ? 1 : 0));
+  const N = 10_000;
+  /** Within 4 standard errors of a share (exactly none where the share is 0). */
+  const near = (k: number, n: number, want: number, what: string) =>
+    expect(Math.abs(k / n - want), `${what}: ${k}/${n} against ${want}`).toBeLessThanOrEqual(4 * Math.sqrt((want * (1 - want)) / n) + 1e-12);
+  it('his pilot not brought back, he gets out by the crew\'s rule for each way down, pilot killed included (out[how] x outBand, the bomber men\'s), at each band on either ground; a bomber\'s men read the same', () => {
+    let cells = 0;
+    for (const how of WAYS) for (const over of ['own', 'enemy'] as const) for (const band of [0, 1, 2] as const) {
+      const pair = how === 'collide' ? { fid: 1, cause: 'ram' as const } : undefined;
+      const want = Math.min(0.95, SKY.fate.out[how] * SKY.fate.outBand[band]);
+      withBook(() => { if (how !== 'collide') { SKY.fate.base.ftr = only(how); SKY.fate.base.bmr = only(how); } }, () => {
+        let chute = 0, climb = 0;
+        for (let seed = 1; seed <= N; seed++) {
+          const go = (crew: number) => fateOf(new Rng(seed * 31 + band), fighter({ model: 'Fulmar', crew, over, band, alt: SKY.bands.alt[band] }), freshMemory(), pair);
+          const one = go(1), two = go(2);
+          expect(two.how).toBe(how);
+          expect(two.chutes + (two.out ?? 0)).toBeLessThanOrEqual(2);
+          // The pilot's draws come first on fork 83, so the crew of 1 on the same dice is the pilot alone: the rest is the second man.
+          const dc = two.chutes - one.chutes, dout = (two.out ?? 0) - (one.out ?? 0);
+          expect([dc >= 0, dout >= 0, dc + dout <= 1]).toEqual([true, true, true]);
+          chute += dc; climb += dout;
+        }
+        near(chute, N, want, `second man, ${how} ${over} band ${band}`);
+        // A forced landing keeps whoever stayed, less the landing's one die: for a crew of 2 it loses none (int(1)).
+        expect(climb, `${how} ${over} band ${band}`).toBe(how === 'glide' ? N - chute : 0);
+        // The bomber's men, the same way down and height: the same rule.
+        const rng = new Rng(900 + band);
+        let men = 0, up = 0;
+        for (let i = 0; i < N / 5; i++) { const f = fateOf(rng, scene({ crew: 5, over, band, alt: SKY.bands.alt[band] }), freshMemory(), pair); expect(f.how).toBe(how); men += 5; up += f.chutes; }
+        near(up, men, want, `bomber's men, ${how} ${over} band ${band}`);
+      });
+      cells++;
+    }
+    expect(cells).toBe(60);
+  });
+  it('his pilot brought back, his way out is his pilot\'s on every draw: under a parachute, his canopy after the pilot\'s, and the pilot\'s canopy where it was', () => {
+    let n = 0;
+    for (let seed = 1; seed <= N; seed++) {
+      const over = seed % 2 ? 'own' as const : 'enemy' as const, band = (seed % 3) as 0 | 1 | 2;
+      const pair = seed % 5 === 0 ? { fid: 1, cause: 'ram' as const } : undefined;
+      const go = (crew: number) => fateOf(new Rng(seed), fighter({ model: 'Fulmar', crew, back: true, over, band, alt: SKY.bands.alt[band] }), freshMemory(), pair);
+      const one = go(1), two = go(2);
+      expect([two.chutes, two.out ?? 0, two.chuteAt?.length], `seed ${seed}`).toEqual([2, 0, 2]);
+      expect(two.chuteAt![0]).toBe(one.chuteAt![0]);
+      expect(two.chuteAt![1]).toBeGreaterThanOrEqual(two.chuteAt![0]);
+      n++;
+    }
+    expect(n).toBe(N);
+  });
+  it('no fall of the set shows a fate the count does not make: brought back, every man of the crew under his parachute (none left aboard to be lost or taken) and captured 0; not brought back, captured by its formula; never more out than aboard', () => {
+    let back = 0, fulmarBack = 0, falls = 0;
+    for (const p of allPairs()) for (const e of p.on.lost) {
+      const f = fallOf(e);
+      falls++;
+      expect(f.chutes + (f.out ?? 0), p.key).toBeLessThanOrEqual(f.crew!);
+      if (f.back) {
+        back++; if (f.crew === 2) fulmarBack++;
+        expect([f.chutes, f.out ?? 0, f.captured], `${p.key} t ${e.t}`).toEqual([f.crew, 0, 0]);
+      } else expect(f.captured, p.key).toBe(f.over === 'enemy' ? f.chutes + (f.out ?? 0) : 0);
+    }
+    console.log(`(h) falls ${falls}; brought back ${back}, of them Fulmars ${fulmarBack}`);
+    expect(back).toBeGreaterThan(500);
   });
 });
