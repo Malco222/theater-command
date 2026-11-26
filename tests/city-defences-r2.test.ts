@@ -22,7 +22,7 @@ import { loadGame, saveGame } from '../src/campaign/save';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 import { CITYDEF, LIGHTS_TOP, START_LAID, WORKS_TOP, cityDefences, cityDefencesOn, layStartGunsFromRecord, lightsAt, openCityDefences, setCityDefences } from '../src/campaign/citydefences';
 import { cancelBuild, deliver, ledger, upkeepTotal } from '../src/campaign/economy';
-import { assess, capture, createGame, endPhase, placeName, relocate } from '../src/campaign/game';
+import { assess, capture, createGame, endPhase, placeName, relocate, theWords } from '../src/campaign/game';
 import { cityOrders } from '../src/campaign/orders';
 import { GUARD_TOP } from '../src/campaign/guard';
 import { startOpen } from '../src/campaign/staff';
@@ -1680,9 +1680,61 @@ describe('city defences: the raid card names its place as the news does, the swi
     expect(a).toEqual(b);
   });
 
-  it('no article pushes a name past the weather line\'s room, so no place turns into "the target" with the switch', () => {
-    // (weather.ts prints "the target" for a name over 24 characters; the longest articled name is 18, 22 with "the ".)
-    for (const name of (places as { the: string[] }).the) expect(placeName(name).length).toBeLessThanOrEqual(24);
+  it('the weather line reads a place inside a phrase as the news does: an airfield raid and a harbour raid (the independent read of 26 Nov 2026)', () => {
+    const lines: Record<string, string | undefined> = {};
+    for (const on of [true, false]) {
+      const r = ruhrByNight({ guns: 2, lights: 2, cloud: true, on });
+      // An airfield raid on the Ruhr, under the Ruhr's cloud.
+      expect([on, planRaid(r.g, 'airfield', r.t, undefined, 'UK').sky]).toEqual([on, `Cloud over the airfield at ${on ? 'the Ruhr' : 'Ruhr'}: fewer bombs hit, and fewer bombers are found.`]);
+      // A harbour raid on the Cotentin, under whatever sky it has this month.
+      lines[`${on}`] = planRaid(r.g, 'harbour', r.g.byName.Cotentin.id, undefined, 'UK').sky;
+    }
+    expect(lines.false).toMatch(/ over the harbour of Cotentin[.:]/);
+    expect(lines.true).toBe(lines.false!.replace('the harbour of Cotentin', 'the harbour of the Cotentin'));
+    // The news's own reading of the same words.
+    expect(theWords('British bombers raid the harbour of Cotentin.')).toBe('British bombers raid the harbour of the Cotentin.');
+  });
+
+  it('the longest form, a closed sky over a harbour whose place takes the article, prints whole with the switch on and as shipped with it off (the UI director, 26 Nov 2026 05:01Z)', () => {
+    // ("Judge the room on the phrase as shipped, before the article ... A switch should never make the card say less.")
+    for (const on of [true, false]) {
+      const r = ruhrByNight({ on });
+      const c = r.g.byName.Cotentin.id, i = zoneOfRegion(r.g, c);
+      keptSky.push([i, WEATHER.zones[i].odds]);
+      WEATHER.zones[i].odds = Array.from({ length: 12 }, () => [0, 0, 10] as [number, number, number]);
+      setWeather(r.g, true);
+      const plan = planRaid(r.g, 'harbour', c, undefined, 'UK');
+      expect([on, plan.sky]).toEqual([on, on ? 'Closed sky over the harbour of the Cotentin: nothing flies there this month.' : 'Closed sky over the harbour of Cotentin: nothing flies there this month.']);
+      // The reason the card cannot open names the zone, on and off alike.
+      expect([on, plan.why]).toEqual([on, planRaid(r.g, 'bomb', c, undefined, 'UK').why]);
+      expect(plan.why).toMatch(/^Closed sky this month: nothing flies over /);
+    }
+  });
+
+  it('the line\'s room is judged on the shipped place, so the switch never turns a named place into "the target"', () => {
+    // (weather.ts prints "the target" for a place over 24 characters. A bare province never comes near it: the longest
+    // articled name is 18, 22 with "the ". A phrase can: "the harbour of Cotentin" is 23 and prints its name, and with
+    // the switch on it still does, as "the harbour of the Cotentin", 27. A place over 24 as shipped reads "the target"
+    // on and off alike.)
+    const the = (places as { the: string[] }).the;
+    for (const name of the) expect(placeName(name).length).toBeLessThanOrEqual(24);
+    const on = ruhrByNight({ cloud: true }), off = ruhrByNight({ cloud: true, on: false });
+    let named = 0, grown = 0, target = 0;
+    for (const name of the) {
+      const r = on.g.byName[name];
+      if (!r) continue;
+      for (const kind of ['bomb', 'airfield', 'harbour'] as const) {
+        const a = planRaid(on.g, kind, r.id, undefined, 'UK').sky, b = planRaid(off.g, kind, r.id, undefined, 'UK').sky;
+        expect([name, kind, b === undefined]).toEqual([name, kind, false]);
+        if (b!.includes('the target')) { expect([name, kind, a]).toEqual([name, kind, b]); target++; continue; }
+        expect([name, kind, a]).toEqual([name, kind, b!.replace(name, `the ${name}`)]);
+        named++;
+        if (/ over (.+?)[.:]/.exec(a!)![1].length > 24) grown++;
+      }
+    }
+    // Each case is met on this map: places named with their article, some of them past 24 with it, and places too
+    // long as shipped.
+    expect([named > 0, grown > 0, target > 0]).toEqual([true, true, true]);
   });
 });
 
