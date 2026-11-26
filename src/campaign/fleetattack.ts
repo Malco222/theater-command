@@ -76,8 +76,11 @@ const ownFleet = (g: Game, id: number): Fleet | null => {
 /**
  * Why fleet `id` cannot be sent at enemy fleet `target` now, or null if it can. Read-only.
  * (Release 2; Brian, 26 November 2026 03:51Z: "i can't drag my fleet on top of another fleet to start a battle".) With
- * `asAtWar`, read as though the two were already at war: for the fleet of a country at peace that the player could declare
- * war on, so that the question of war is asked only where the attack could then be made.
+ * `asAtWar`, the war line alone is skipped: the rest is read on the war as it stands, at peace. That is the sights' quick
+ * hint over the fleet of a country at peace, not the answer: a declaration changes the reach too (a closed strait lets
+ * through only a country at war with nobody, an open one is shut to its holder's enemies, and he may come to stand
+ * with a side whose straits then open), so the question of war is put only on the reading of a copy on which the war
+ * has been declared (the bridge's warFleetAttack).
  */
 export function whyNotFleetAttack(g: Game, id: number, target: number, asAtWar = false): string | null {
   if (!fleetAttackOn(g)) return 'Fleets are sent straight at the enemy only where that is switched on.';

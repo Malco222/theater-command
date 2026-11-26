@@ -5701,6 +5701,8 @@ const SHIP_WORD: Record<string, [string, string]> = { bb: ['battleship', 'battle
  * (Release 2; Brian, 26 November 2026 03:51Z: "i can't drag my fleet on top of another fleet to start a battle".) The
  * fleets in sight of countries at peace with the player that he could declare war on this month (an ally's are not
  * among them), each with the rules' reason fleet `id` could not be sent at it even once at war, or '' where it could.
+ * The sights' quick hint, read on the war as it stands (whyNotFleetAttack's asAtWar): the drop itself asks
+ * warFleetAttack, which reads the war declared on a copy, before war is offered.
  */
 function peaceFleets(s: Game, id: number): { id: number; why: string }[] {
   const me = s.human;
@@ -5714,6 +5716,39 @@ function peaceFleets(s: Game, id: number): { id: number; why: string }[] {
     out.push({ id: t.id, why: whyNotFleetAttack(s, id, t.id, true) ?? '' });
   }
   return out;
+}
+
+/** The ships left behind in the 3D fleet tray, as 'bb.1,ca.2': ship class to count. */
+function shipsLeftBehind(spec: string): Record<string, number> {
+  const take: Record<string, number> = {};
+  for (const bit of spec.split(',')) { const [cls, n] = bit.split('.'); if (cls && Number(n) > 0) take[cls] = (take[cls] ?? 0) + Number(n); }
+  return take;
+}
+
+/**
+ * (Release 2; Brian, 26 November 2026 03:51Z.) Fleet `id` set down on fleet `target` of a country at peace with him:
+ * why it could not be sent at those ships once war on that country is declared, or '' where it could. Read on a copy
+ * of the campaign on which the war has been declared as DECLARE WAR declares it (orderDeclare: the friends that come
+ * in with it, the side he then stands with, so the straits that open or shut to him), and on which the ships left
+ * behind in the tray (`staying`, as 'bb.1,ca.2') have been split off, as the card does before it asks. So war is put to
+ * him only where the attack card that follows could be fought. Nothing in the war is changed. `declare` is false where
+ * war cannot be declared on that country this month (or he is at war with it already: `why` is then the card's own).
+ * `ok` is false where it could not be read.
+ */
+function warFleetAttack(id: number, target: number, staying = '') {
+  const s = game();
+  const me = s.human;
+  const t = s.fleets.find((x) => x.id === target);
+  if (!me || !t || t.nat === me) return { ok: false, declare: false, why: '' };
+  if (atWar(s, me, t.nat)) return { ok: true, declare: false, why: whyNotFleetAttack(s, id, target) ?? '' };
+  if (!humanUp(s) || allied(s, me, t.nat) || !declarable(s).includes(t.nat)) return { ok: true, declare: false, why: '' };
+  const war = loadGame(saveGame(s));
+  if (!war || !orderDeclare(war, t.nat)) return { ok: false, declare: true, why: '' };
+  const take = shipsLeftBehind(staying);
+  if (Object.keys(take).length && orderSplit(war, id, take) < 0) {
+    return { ok: true, declare: true, why: whyNotSplit(war, id, take) ?? 'Those ships cannot be split off now.' };
+  }
+  return { ok: true, declare: true, why: whyNotFleetAttack(war, id, target) ?? '' };
 }
 
 /** One of the player's fleets in hand: its card, and everything it could be told to do this month. Null where the rules keep no such navy. */
@@ -8224,8 +8259,7 @@ function act(action: string, region = -1, fought?: FoughtAir) {
   } else if (part[0] === 'fleetsplitmany') {
     // (Release 2: splitting a stack; Brian 23 November 2026 22:23Z.) The ships left behind in the 3D tray, as 'bb.1,ca.2':
     // split off as a squadron of their own, where the fleet is and under its order, so that only the lit ships go.
-    const take: Record<string, number> = {};
-    for (const bit of (part[2] ?? '').split(',')) { const [cls, n] = bit.split('.'); if (cls && Number(n) > 0) take[cls] = (take[cls] ?? 0) + Number(n); }
+    const take = shipsLeftBehind(part[2] ?? '');
     const made = orderSplit(s, Number(part[1]), take);
     ok = made >= 0;
     const left = Object.entries(take).map(([c, n]) => `${n} ${SHIP_WORD[c]?.[n === 1 ? 0 : 1] ?? c}`).join(', ');
@@ -9090,7 +9124,7 @@ function find(name: string) {
 const battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids, f) => playerOrder(act)(`raid:${k}:${t}:${ids.join('.')}`, -1, f) });
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
-  raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, school: schoolFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
+  raidsFlown, fleetInHand, warFleetAttack, briefing, sack: sackGeneral, drafts: draftsFor, school: schoolFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
   land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, nationsBook, start, save, peek, peekChart, load, view, reach: lookOut(reachOf), marchPlan: lookOut(marchPlanOf), nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(goOut(move), 'march'), previewAttack: lookOut(preview), attack: playerOrder(goOut(attack)), takeOutlook: lookOut(takeOutlook), take: playerOrder(goOut(take), 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: lookOut(leadOf),
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
   lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,

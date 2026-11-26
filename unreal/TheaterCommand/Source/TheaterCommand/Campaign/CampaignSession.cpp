@@ -531,7 +531,8 @@ namespace
 		// ahead after every order, 2 to 14 ms of the frame after.)
 		static const TSet<FString> Questions = { TEXT("previewAttack"), TEXT("takeOutlook"), TEXT("reach"), TEXT("marchPlan"), TEXT("railTip"), TEXT("lead"),
 			TEXT("stands"), TEXT("province"), TEXT("railShow"), TEXT("garrisonWhy"), TEXT("gateLeft"),
-			TEXT("bargainsLook") }; // R2 bargains hook: the map's look at the bargains (changes nothing; Campaign/BargainCalls.cpp)
+			TEXT("bargainsLook"), // R2 bargains hook: the map's look at the bargains (changes nothing; Campaign/BargainCalls.cpp)
+			TEXT("warFleetAttack") }; // (release 2) a fleet set down on a fleet at peace: read on a copy, the save as it was
 		return Questions.Contains(Function);
 	}
 
@@ -5104,6 +5105,22 @@ static void ReadSorties(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSort
 			Fly->TryGetNumberField(TEXT("fleet"), Sortie.FromFleet);
 		}
 	}
+}
+
+bool FCampaignSession::WarFleetAttack(int32 FleetId, int32 Target, const FString& Staying, FString& OutWhy, bool& bOutDeclare)
+{
+	OutWhy.Reset();
+	bOutDeclare = false;
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (!CallRules(TEXT("warFleetAttack"), FString::Printf(TEXT("[%d,%d,%s]"), FleetId, Target, *JsonQuote(Staying)), Object) || !Object.IsValid()
+		|| !Object->TryGetBoolField(TEXT("ok"), bOk) || !bOk)
+	{
+		return false;
+	}
+	Object->TryGetBoolField(TEXT("declare"), bOutDeclare);
+	Object->TryGetStringField(TEXT("why"), OutWhy);
+	return true;
 }
 
 FFleetHand FCampaignSession::FleetInHand(int32 FleetId)

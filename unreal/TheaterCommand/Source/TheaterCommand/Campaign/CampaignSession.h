@@ -235,6 +235,14 @@ public:
 	bool Act(const FString& Action, int32 RegionId, FString& OutNote, TArray<FSortie>* OutSorties = nullptr, FString* OutOpen = nullptr, FActExtras* OutExtras = nullptr);
 	/** One of the player's fleets as the rules describe it, with the seas and coasts in its reach. */
 	FFleetHand FleetInHand(int32 FleetId);
+	/**
+	 * (Release 2; Brian, 26 November 2026 03:51Z.) Fleet FleetId set down on fleet Target of a country at peace with the
+	 * player: OutWhy is why it could not be sent at those ships once war is declared on that country, empty where it
+	 * could, read by the rules on a copy of the war with the war declared and the ships left behind (Staying, as
+	 * "bb.1,ca.2") split off. bOutDeclare is false where war cannot be declared on it this month. Changes nothing. False
+	 * where the rules could not read it.
+	 */
+	bool WarFleetAttack(int32 FleetId, int32 Target, const FString& Staying, FString& OutWhy, bool& bOutDeclare);
 	/** The situation as the campaign opens, as stops of a flight over the map. Empty if there is nothing to tell. */
 	TArray<FNewsCard> Briefing(FString& OutNation, FString& OutDate);
 
