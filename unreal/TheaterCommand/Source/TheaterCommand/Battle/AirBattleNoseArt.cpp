@@ -79,7 +79,9 @@ bool AAirBattle::NoseArtReady()
 		return NoseArtInk != nullptr;
 	}
 	bNoseArtTried = true;
+	const double LoadBegan = FPlatformTime::Seconds();
 	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_TallyMark.M_TallyMark"));
+	NoteLoad(TEXT("M_TallyMark (the nose art)"), LoadBegan); // (release 2, the hitch's naming lines: said only while the speed log is written)
 	if (!Base)
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Air battle: nose art: no M_TallyMark (Tools/build_content.sh makes it), so no bomber's nose art is painted."));

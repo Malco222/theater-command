@@ -949,6 +949,17 @@ private:
 	TArray<TObjectPtr<UProceduralMeshComponent>> WarmShelf;
 	UPROPERTY()
 	TArray<TObjectPtr<UObject>> WarmKeep;
+	/**
+	 * (Release 2, the hitch: the Mac's timing legs of 26 November, build 172f19ae0.) The naming lines, written only while
+	 * the speed log is (-TheaterSpeedLog), each beginning "Air hitch:" (AirParts::Hitch in AirBattle.cpp). HitchNote, each
+	 * frame from Tick: after a long frame (over 33 ms, as the speed log counts them) and on the one frame after it (the
+	 * draw thread's time is sometimes booked a frame late), the ground paint's phase, the black, and the frames since the
+	 * eye last cut. LandPhaseName: the ground paint's phase in words. NoteLoad: a load by name, with its ms.
+	 */
+	void HitchNote(float DeltaSeconds);
+	FString LandPhaseName() const;
+	static void NoteLoad(const TCHAR* What, double Began);
+	bool bHitchLastLong = false;
 	/** The sun a hard small disc while the battle stands (the art director, build 1750); the lamp kept, put back with the table. */
 	void TheSun(UDirectionalLightComponent& Key);
 	/** Toward the battle's sun, a unit vector in the world: the set piece's own sun where its stage stands; over a raid with

@@ -54,6 +54,8 @@
 #include "RenderingThread.h"
 #include "CoreGlobals.h" // (GGameThreadTime: the opening held, WarmTick)
 #include "RenderTimer.h" // (GRenderThreadTime, as TheaterSpeed reads it)
+#include "RHI.h" // (RHIGetGPUFrameCycles: the naming line under the black, as LandBattle.cpp reads it)
+#include "Campaign/TheaterSpeed.h" // (TheaterSpeed::IsLogging: the hitch's naming lines, AirParts::Hitch)
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "MeshDescription.h"
@@ -77,6 +79,7 @@
 #include "Widgets/Layout/SDPIScaler.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
@@ -90,6 +93,9 @@ struct FAirLandMade
 	std::vector<AirLand::Frame> Frames;
 	TArray<CampaignTextures::FLevels> Levels;
 	double Seconds = 0.0;
+	/** (release 2, the hitch's naming lines) Where the paint is, for the speed log's lines (AAirBattle::LandPhaseName):
+	 * 0 asked, not begun; picture K's rows 4K+1, its shading 4K+2, its smaller copies 4K+3; -1 done. Written on the pool. */
+	std::atomic<int32> Phase { 0 };
 };
 
 /** (1.5.1) The opening held (AAirBattle::WarmUp, WarmTick). */
@@ -103,6 +109,48 @@ namespace AirParts
 	static constexpr double WarmQuickMs = 80.0;
 	/** The black's easing off as the flyover begins (s). */
 	static constexpr double CurtainFade = 0.5;
+}
+
+/**
+ * (Release 2, the hitch's naming lines: the Mac's timing legs of 26 November, build 172f19ae0, and the two readers and
+ * their sceptics.) Lines that name what the air scene was doing about each long frame, written only while the speed log
+ * is (-TheaterSpeedLog, tc.Speed.Log 1); with it off nothing here says or changes anything. Each begins "Air hitch:".
+ */
+namespace AirParts
+{
+	namespace Hitch
+	{
+		/** The frame (GFrameCounter) of the eye's last cut, and its kind. */
+		static uint64 CutFrame = 0;
+		static const TCHAR* CutKind = TEXT("none yet");
+
+		/** A cut of the eye told to the renderer (TellCut): kept for the long frames' line, and said. With no kind given, the
+		 * eye's own aim cut it (AimEye's close view and its jumps, the overview drawn back off a fuel ball). */
+		static void NoteCut(const TCHAR* Kind)
+		{
+			CutFrame = GFrameCounter;
+			CutKind = Kind ? Kind : TEXT("the eye's own aim (AimEye)");
+			if (TheaterSpeed::IsLogging())
+			{
+				UE_LOG(LogTheater, Display, TEXT("Air hitch: the eye cut, frame %lld: %s."), static_cast<long long>(GFrameCounter), CutKind);
+			}
+		}
+
+		/** Each step's ms since the last, for one line at the end (the press, Open). */
+		struct FSteps
+		{
+			double At = FPlatformTime::Seconds();
+			double Began = At;
+			FString Line;
+			void Step(const TCHAR* Name)
+			{
+				const double Now = FPlatformTime::Seconds();
+				Line += FString::Printf(TEXT("%s%s %.1f"), Line.IsEmpty() ? TEXT("") : TEXT(", "), Name, 1000.0 * (Now - At));
+				At = Now;
+			}
+			double Ms() const { return 1000.0 * (FPlatformTime::Seconds() - Began); }
+		};
+	}
 }
 
 namespace AirParts
@@ -599,8 +647,9 @@ namespace AirParts
 	/** A cut, told to the renderer: this frame starts afresh, so the last shot's sharpening, light and exposure are not
 	 * carried into the new one (the camera and film director's note of 22 November: at each cut the upscaler's history,
 	 * the bounced light and the eye's adaptation smeared cloud, flak smoke and light for a frame or a few). */
-	static void TellCut(UWorld* Here)
+	static void TellCut(UWorld* Here, const TCHAR* Kind = nullptr)
 	{
+		Hitch::NoteCut(Kind);
 		if (APlayerController* Controller = Here ? Here->GetFirstPlayerController() : nullptr)
 		{
 			if (Controller->PlayerCameraManager)
@@ -807,6 +856,7 @@ bool AAirBattle::Open(const FString& Why)
 		return false;
 	}
 	FAirBattleState& S = *State;
+	AirParts::Hitch::FSteps PressSteps; // (the hitch's naming lines: each step's ms, said at the end while the speed log is written)
 	// (the sheet of cloud shapes begun on the pool now, for LaySky; once a run)
 	AirParts::BeginSheet();
 	// The mix (the sound director's mix.json, carried in Content/Data/Sound): the scene reads its numbers, never copies them.
@@ -881,6 +931,7 @@ bool AAirBattle::Open(const FString& Why)
 			}
 		}
 	}
+	PressSteps.Step(TEXT("the mix and the sound"));
 	// The paint: the campaign's own surface, coloured by each point's colour, as the stage's ships are.
 	{
 		UMaterialInterface* Surface = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_MapSurface.M_MapSurface"));
@@ -934,6 +985,7 @@ bool AAirBattle::Open(const FString& Why)
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterScrewTurns="), Turns);
 		ScrewTurns = FMath::Clamp(static_cast<double>(Turns), 0.0, 30.0);
 	}
+	PressSteps.Step(TEXT("the inks"));
 	// The effects: the kit's own, drawn out to the air distance, on the air clock (its mesh, the one it hangs on Root,
 	// drawn behind the clouds while the eye is under them: DrawSky).
 	const TArray<TObjectPtr<USceneComponent>> BeforeAir = Root->GetAttachChildren();
@@ -994,7 +1046,9 @@ bool AAirBattle::Open(const FString& Why)
 			GroundFx.Reset();
 		}
 	}
+	PressSteps.Step(TEXT("the effects kits"));
 	Raise();
+	PressSteps.Step(TEXT("the ground (Raise)"));
 	// The flight core's ground: the stage's hills; with no stage the board's own land, as LayGround lays it (the
 	// pre-check on round 14: Bremen's bombs had burst as water columns); else the sea.
 	if (Stage && Stage->IsRaised())
@@ -1016,8 +1070,11 @@ bool AAirBattle::Open(const FString& Why)
 		}
 	}
 	LaySky();
+	PressSteps.Step(TEXT("the clouds (LaySky)"));
 	LayZenith();
+	PressSteps.Step(TEXT("LayZenith"));
 	LayHazeBand();
+	PressSteps.Step(TEXT("LayHazeBand"));
 	KeyWarmth = S.Board.StageKey.empty() && !S.Board.Land.empty() ? 6500.0f : 4900.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterKeyWarmth="), KeyWarmth);
 	KeyWarmth = FMath::Clamp(KeyWarmth, 1700.0f, 12000.0f);
@@ -1027,11 +1084,15 @@ bool AAirBattle::Open(const FString& Why)
 	Small->SetCastShadow(false);
 	Small->RegisterComponent();
 	OpenTroops(); // (release 2: the column under a raid on troops, where the sky has marks: AirBattleTroops.cpp)
+	PressSteps.Step(TEXT("OpenTroops"));
 	HideTheTable();
+	PressSteps.Step(TEXT("HideTheTable"));
 	LayDeckShade();
 	LayDeckSheet();
+	PressSteps.Step(TEXT("the deck's shade and sheet"));
 	LayCirrus();
 	LayRainShafts();
+	PressSteps.Step(TEXT("cirrus and rain"));
 	Eye = Here->SpawnActor<ACameraActor>();
 	if (Eye)
 	{
@@ -1099,14 +1160,16 @@ bool AAirBattle::Open(const FString& Why)
 	}
 	// (the eye stood on its opening place before it is the view: spawned at the world's middle, the frame drawn before
 	// the battle's first tick was drawn from there, at the stage's sea level; the first tick then cuts to the flyover)
+	PressSteps.Step(TEXT("the eye and its grade"));
 	AimEye(0.0);
 	SkyLowerOnce();
+	PressSteps.Step(TEXT("the first aim and the sky's lower half (SkyLowerOnce)"));
 	if (APlayerController* Controller = Here->GetFirstPlayerController())
 	{
 		if (Eye)
 		{
 			Controller->SetViewTarget(Eye);
-			AirParts::TellCut(Here);
+			AirParts::TellCut(Here, TEXT("the battle's first view (Open)"));
 		}
 		AirParts::ShowFrame(Cast<ACampaignHUD>(Controller->GetHUD()), false);
 	}
@@ -1137,10 +1200,15 @@ bool AAirBattle::Open(const FString& Why)
 		WarmUp();
 	}
 	ShowScreen();
+	PressSteps.Step(TEXT("the warm sheets and the screen"));
 	bBegun = true;
 	SetActorTickEnabled(true);
 	UE_LOG(LogTheater, Display, TEXT("Air battle: %s, %s (%s), %d views%s."), *Why, *AirParts::Wide(S.Board.Title), *AirParts::Wide(S.Board.Date),
 		S.bReplay ? static_cast<int32>(S.Recording.Views.size()) : 1, ShotFolder.IsEmpty() ? TEXT("") : *(TEXT(", pictures into ") + ShotFolder));
+	if (TheaterSpeed::IsLogging())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air hitch: the press (Open), frame %lld, %.0f ms in all; each step in ms: %s."), static_cast<long long>(GFrameCounter), PressSteps.Ms(), *PressSteps.Line);
+	}
 	return true;
 }
 
@@ -1401,9 +1469,18 @@ void AAirBattle::PaintLand()
 	// UpdatePrimitive's wait for its tasks 1005 ms, 8.9 s into the flyover, ending as the ground was painted). The same
 	// ground, perhaps a little later. -TheaterAirLoudPaint: spread at the frame's priority, as before.
 	const EParallelForFlags Loops = LoudPaint() ? EParallelForFlags::None : EParallelForFlags::BackgroundPriority;
-	LandPainting = Async(EAsyncExecution::ThreadPool, [Made = LandMade, P, Plans, Loops]()
+	// (the hitch's naming lines: each picture's each phase, in seconds since the paint was asked for, while the speed log
+	// is written; the phase kept for the long frames' line either way, AirParts::Hitch)
+	const bool bSay = TheaterSpeed::IsLogging();
+	const double Asked = LandAsked;
+	LandPainting = Async(EAsyncExecution::ThreadPool, [Made = LandMade, P, Plans, Loops, bSay, Asked]()
 	{
 		const double Began = FPlatformTime::Seconds();
+		if (bSay)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Air hitch: ground paint begun on the pool %.2f s after it was asked for (%s)."), Began - Asked,
+				Loops == EParallelForFlags::None ? TEXT("its loops at the frame's priority") : TEXT("its loops at the background's priority"));
+		}
 		Made->Painter = std::make_unique<AirLand::Painter>(P, Plans);
 		Made->Frames = AirLand::Frames(P);
 		Made->Levels.SetNum(static_cast<int32>(Made->Frames.size()));
@@ -1415,11 +1492,23 @@ void AAirBattle::PaintLand()
 			// (in bands of 64 rows, every band on a thread of its own; the shadows when every row's heights are in)
 			const int32 Bands = (F.H + 63) / 64;
 			const AirLand::Painter& Painter = *Made->Painter;
+			Made->Phase.store(4 * K + 1);
 			ParallelFor(Bands, [&](int32 B) { Painter.PaintRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); }, Loops);
+			if (bSay)
+			{
+				UE_LOG(LogTheater, Display, TEXT("Air hitch: ground picture %d (%d x %d at %.0f m): rows painted %.2f s after it was asked for (%d bands)."),
+					K, F.W, F.H, F.Step, FPlatformTime::Seconds() - Asked, Bands);
+			}
 			if (AirLand::Painter::Shades(F))
 			{
+				Made->Phase.store(4 * K + 2);
 				ParallelFor(Bands, [&](int32 B) { Painter.ShadeRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); }, Loops);
+				if (bSay)
+				{
+					UE_LOG(LogTheater, Display, TEXT("Air hitch: ground picture %d: shaded %.2f s after it was asked for (%d bands)."), K, FPlatformTime::Seconds() - Asked, Bands);
+				}
 			}
+			Made->Phase.store(4 * K + 3);
 			TArray<FColor> Pixels;
 			Pixels.SetNumUninitialized(F.W * F.H);
 			for (int32 I = 0; I < Pixels.Num(); ++I)
@@ -1428,8 +1517,13 @@ void AAirBattle::PaintLand()
 				Pixels[I] = FColor(C[0], C[1], C[2], 255);
 			}
 			CampaignTextures::MakeLevels(F.W, F.H, Pixels, true, Made->Levels[K]);
+			if (bSay)
+			{
+				UE_LOG(LogTheater, Display, TEXT("Air hitch: ground picture %d: its smaller copies made %.2f s after it was asked for."), K, FPlatformTime::Seconds() - Asked);
+			}
 		}
 		Made->Seconds = FPlatformTime::Seconds() - Began;
+		Made->Phase.store(-1);
 	});
 	// (a picture run waits for the ground, so that every picture has it)
 	if (!ShotFolder.IsEmpty())
@@ -1449,7 +1543,9 @@ void AAirBattle::LayLand()
 	}
 	FAirLandMade& Made = *LandMade;
 	const FAirBattleState& S = *State;
+	const double LoadBegan = FPlatformTime::Seconds();
 	UMaterialInterface* Cloth = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Flag.M_Flag"));
+	NoteLoad(TEXT("M_Flag (LayLand)"), LoadBegan);
 	if (!Cloth)
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Air battle ground: M_Flag is missing; the plain ground stays."));
@@ -3310,7 +3406,7 @@ void AAirBattle::DrawSky()
 	if (bCut)
 	{
 		// (every cut the sky sees is told to the renderer too: the flyover's shots, the pictures, the strategy camera's jumps)
-		AirParts::TellCut(GetWorld());
+		AirParts::TellCut(GetWorld(), TEXT("a jump the sky saw (DrawSky: the flyover's shots, the time eye, the strategy camera)"));
 	}
 	// (a turn painted aside stands on the picture while the eye goes on a few frames: the painters fade a puff by the
 	// lens along that way (AirSky's SetSweep), so that in a glide of hundreds of metres a frame none shows as a disc
@@ -3620,6 +3716,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 		return;
 	}
 	KeepTheTableHidden();
+	HitchNote(DeltaSeconds); // (release 2, the hitch's naming lines: only while the speed log is written)
 	if (LandPainting.IsValid() && LandPainting.IsReady())
 	{
 		LandPainting.Wait();
@@ -5354,8 +5451,10 @@ void AAirBattle::WarmShapes()
 	const double Began = FPlatformTime::Seconds();
 	TSet<FString> Done;
 	const int32 Before = AirParts::Shapes().Num();
+	FString EachMs; // (the hitch's naming lines: each shape's ms, read and made, said while the speed log is written)
 	auto Ready = [&](const FString& Model, const FString& Nation, bool bFighter, double Span, bool bTorpedo)
 	{
+		const double ShapeBegan = FPlatformTime::Seconds();
 		const FString ShapeKey = ShapeFor(Model, Nation, bFighter, Span, bTorpedo);
 		if (Done.Contains(ShapeKey))
 		{
@@ -5368,6 +5467,7 @@ void AAirBattle::WarmShapes()
 			PlaneStill(ShapeKey, false);
 			PlaneStill(ShapeKey, true);
 		}
+		EachMs += FString::Printf(TEXT("%s%s %.0f"), EachMs.IsEmpty() ? TEXT("") : TEXT(", "), *ShapeKey, 1000.0 * (FPlatformTime::Seconds() - ShapeBegan));
 	};
 	for (const AirShow::PlaneOut& P : S.Show.Planes())
 	{
@@ -5396,6 +5496,10 @@ void AAirBattle::WarmShapes()
 	}
 	UE_LOG(LogTheater, Display, TEXT("Air battle: the raid's %d aircraft shapes made ready under the opening's black (%d near and far shapes new this run), with their copies' meshes, in %.0f ms."),
 		Done.Num(), AirParts::Shapes().Num() - Before, 1000.0 * (FPlatformTime::Seconds() - Began));
+	if (TheaterSpeed::IsLogging())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air hitch: the shapes made under the black, frame %lld, each in ms (read and made, with its copies' meshes): %s."), static_cast<long long>(GFrameCounter), *EachMs);
+	}
 }
 
 void AAirBattle::WarmTick(float DeltaSeconds)
@@ -5414,6 +5518,14 @@ void AAirBattle::WarmTick(float DeltaSeconds)
 	WarmSlowest = FMath::Max(WarmSlowest, FMath::Max3(FrameMs, GameMs, DrawMs));
 	const bool bQuick = FrameMs < AirParts::WarmQuickMs && GameMs < AirParts::WarmQuickMs && DrawMs < AirParts::WarmQuickMs;
 	WarmQuick = bQuick ? WarmQuick + 1 : 0;
+	if (TheaterSpeed::IsLogging())
+	{
+		// (release 2, the hitch's naming lines: each frame under the black, so that its slow frames can be laid against
+		// what was first drawn and what the pool was painting)
+		UE_LOG(LogTheater, Display, TEXT("Air hitch: under the black, frame %lld (%d under it), %.0f ms: game %.1f, draw %.1f, graphics chip %.1f ms; %d quick in a row (%d wanted); the shapes %s, %d warm sheets before the eye; ground paint %s."),
+			static_cast<long long>(GFrameCounter), WarmFrames, FrameMs, GameMs, DrawMs, FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()), WarmQuick, AirParts::WarmQuickWanted,
+			bWarmShapes ? TEXT("made") : TEXT("not yet made"), WarmShelf.Num(), *LandPhaseName());
+	}
 	if (Eye)
 	{
 		// (60 m before the eye, side by side, turned to it)
@@ -5458,6 +5570,60 @@ void AAirBattle::WarmDone(const TCHAR* Why)
 	WarmKeep.Empty();
 	UE_LOG(LogTheater, Display, TEXT("Air battle: the opening held %.2f s behind its black frame (%d frames, the slowest %.0f ms; %s); the flyover begins. (-TheaterAirNoCurtain: the old opening)"),
 		WarmBegan >= 0.0 ? FPlatformTime::Seconds() - WarmBegan : 0.0, WarmFrames, WarmSlowest, Why);
+}
+
+FString AAirBattle::LandPhaseName() const
+{
+	if (!LandMade.IsValid())
+	{
+		return TEXT("none");
+	}
+	if (!LandPainting.IsValid())
+	{
+		return LandPictures.Num() > 0 ? TEXT("laid") : TEXT("none");
+	}
+	const int32 Phase = LandMade->Phase.load();
+	if (Phase < 0)
+	{
+		return TEXT("painted, not yet laid");
+	}
+	if (Phase == 0)
+	{
+		return TEXT("asked, not yet begun");
+	}
+	static const TCHAR* const Parts[] = { TEXT("rows"), TEXT("rows"), TEXT("shading"), TEXT("smaller copies") };
+	return FString::Printf(TEXT("picture %d %s, %.1f s since asked"), Phase / 4, Parts[Phase % 4], FPlatformTime::Seconds() - LandAsked);
+}
+
+void AAirBattle::HitchNote(float DeltaSeconds)
+{
+	if (!TheaterSpeed::IsLogging() || !State.IsValid())
+	{
+		bHitchLastLong = false;
+		return;
+	}
+	// (a long frame as the speed log counts one, and the one frame after it)
+	const bool bLong = DeltaSeconds > 0.0334f;
+	const bool bAfter = !bLong && bHitchLastLong;
+	bHitchLastLong = bLong;
+	if (!bLong && !bAfter)
+	{
+		return;
+	}
+	const FAirBattleState& S = *State;
+	const TCHAR* Black = !bBegun ? TEXT("up, the scene not yet made") : S.bWarming ? TEXT("up") : S.Curtain > 0.0 ? TEXT("fading") : TEXT("down");
+	const FString SinceCut = AirParts::Hitch::CutFrame == 0 ? FString(TEXT("no cut of the eye yet"))
+		: FString::Printf(TEXT("%lld frames since the eye last cut (%s)"), static_cast<long long>(GFrameCounter - AirParts::Hitch::CutFrame), AirParts::Hitch::CutKind);
+	UE_LOG(LogTheater, Display, TEXT("Air hitch: %s, frame %lld, %.0f ms: ground paint %s; the black %s; %s."), bLong ? TEXT("a long frame") : TEXT("the frame after a long frame"),
+		static_cast<long long>(GFrameCounter), DeltaSeconds * 1000.0, *LandPhaseName(), Black, *SinceCut);
+}
+
+void AAirBattle::NoteLoad(const TCHAR* What, double Began)
+{
+	if (TheaterSpeed::IsLogging())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air hitch: loaded %s in %.1f ms (frame %lld)."), What, 1000.0 * (FPlatformTime::Seconds() - Began), static_cast<long long>(GFrameCounter));
+	}
 }
 
 void AAirBattle::Draw(double Real)
@@ -7514,7 +7680,7 @@ void AAirBattle::Finish()
 	{
 		AirParts::ShowFrame(Cast<ACampaignHUD>(Controller->GetHUD()), true);
 		Controller->SetViewTarget(Controller->GetPawn());
-		AirParts::TellCut(GetWorld());
+		AirParts::TellCut(GetWorld(), TEXT("back to the map (Finish)"));
 	}
 	ShowTheTable();
 	if (Hand)
@@ -7692,7 +7858,12 @@ USoundBase* AAirBattle::SoundOf(const TCHAR* Name, bool bLoop)
 		return nullptr;
 	}
 	// The battle pack's recordings, brought in by Tools/build_sounds.sh from Sounds/Real to /Game/Campaign/Sounds/Real.
+	const double LoadBegan = FPlatformTime::Seconds();
 	USoundBase* Made = LoadObject<USoundBase>(nullptr, *FString::Printf(TEXT("/Game/Campaign/Sounds/Real/%s.%s"), Name, Name), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (TheaterSpeed::IsLogging())
+	{
+		NoteLoad(*FString::Printf(TEXT("the sound %s (SoundOf)"), Name), LoadBegan); // (release 2, the hitch's naming lines)
+	}
 	if (!Made)
 	{
 		SoundsMissing.Add(Key);
