@@ -340,6 +340,32 @@ describe('every caller: a row reads the one test with the corps that leave in th
     expect([off.held.divs, off.free.divs]).toEqual([2, 2]);
   });
 
+  it('A2: the draw of a theatre skips a corps a claim of this row keeps where it stands (here at the battle schools), though the largest, and takes the next', () => {
+    const { g } = board();
+    const enemy = (r: Region): boolean => (!!r.ctrl && atWar(g, 'GER', r.ctrl)) || r.units.some((u) => !u.dead && atWar(g, 'GER', u.nat));
+    const quiet = g.regions.filter((r) => theatreName(r) === 'the Balkans' && !enemy(r) && !r.nb.some((j) => enemy(g.regions[j])));
+    expect(quiet.length).toBeGreaterThan(1);
+    const ii = named(g, 'II Corps')!;
+    relocate(g, ii, quiet[0]);
+    ii.school = true;
+    const free = add(g, 'GER', 'Free Test Corps', 'inf', quiet[1], 1);
+    expect(g.corps.filter((x) => x.nat === 'GER' && !x.dead && theatreName(g.regions[x.reg]) === 'the Balkans')).toEqual([ii, free]);
+    const divs = ii.divs;
+    expect(divs).toBeGreaterThan(free.divs);
+    expect([corpsInContact(g, 'GER', ii), corpsInContact(g, 'GER', free)]).toEqual([false, false]);
+    const d = divisionsOf(g, ii)[0];
+    const told: Told[] = [];
+    drawnWatch.tell = (e) => told.push(e);
+    const name = `Test Theatre Army (${d.name})`;
+    const i = addRow([2, 'GER', name, 'inf', 2, 'Magdeburg', { from: 'the Balkans' }]);
+    month(g, 2);
+    // (The claim: II Corps holds the division the row names, and keeps it, at school.)
+    expect(told.find((t) => t.row === name)!.claims.map((q) => [q.from, q.stays])).toEqual([['II Corps', true]]);
+    expect(g.flags[`sent:${i}`]).toBe(1);
+    expect([ii.dead, ii.divs]).toEqual([false, divs]);
+    expect(free.dead).toBe(true);
+  });
+
   it('the telling reads the same test: two corps of one row on one province are both at the front; a corps of another row relieves', () => {
     const { g, c, nm } = board();
     const d = add(g, 'GER', 'Test Corps', 'inf', nm, 2);
