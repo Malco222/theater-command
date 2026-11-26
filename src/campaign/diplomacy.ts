@@ -9,7 +9,7 @@ import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, allied, atWar, bloc, capture, declareWar, endVoyages, headline, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, theWords, warning, roomless } from './game';
+import { addCorps, allied, atWar, bloc, capture, declareWar, endVoyages, headline, keptStoresHolder, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, theWords, warning, roomless } from './game';
 import { leagueMonth, ownPath, playersOwn, spared, standsWith } from './league';
 import { turnToDate } from '../core/ticket';
 import { alertNation, traitsMonth } from './traits';
@@ -702,6 +702,8 @@ export function signPeace(g: Game, a: string, b: string): boolean {
 }
 
 export function transfer(g: Game, r: Region, to: string): void {
+  // (Under true reach the holder's kept stores stay his where the port was already his: game.ts keptStoresHolder.)
+  keptStoresHolder(g, r, to);
   r.owner = to; r.ctrl = to; r.cap = false; r.since = g.turn;
   g.supplyDirty = true;
 }
