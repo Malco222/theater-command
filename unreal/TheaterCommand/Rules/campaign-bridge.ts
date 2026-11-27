@@ -195,6 +195,7 @@ import { columnsOn as columnsAreOn, columnsSettable, columnsView, setColumns } f
 import { nicknamesOn, setNicknames } from '../../../src/campaign/nicknames';
 import { airNamesOn, setAirNames } from '../../../src/campaign/airnames';
 import { markedOn, setMarked } from '../../../src/campaign/marked';
+import { churnedOn, churnedView, setChurned } from '../../../src/campaign/churned';
 import { thePlace } from '../../../src/campaign/bombers';
 import { cancelDump, dumpPlaces, dumpPrice, dumpsOf, dumpsOn as dumpsAreOn, dumpsView, firstFront, frontsAt, logisticsSet, lorryPool, orderDump, poolOn as lorryPoolOn, setLogistics, setLorryFirst, shiftOn as lorryShiftOn, wagonsOn as wagonsAreOn, whyNoDump, LOGI, type LogisticsSwitch } from '../../../src/campaign/logistics';
 import { railheads } from '../../../src/campaign/rails';
@@ -959,6 +960,9 @@ function drawView(step = false) {
       }
       return out.slice(0, 160);
     })(),
+    // (Release 2, churned ground's record: churned.ts, a record for the 3D map and never a rule.) Fronts' sight rule: only
+    // where both provinces are seen, with the months of the player's own picture. Absent with the switch off.
+    churned: churnedView(s, seen),
     // Prizes to mark on the map (Version 56): for each province the region, the tag of the army that holds prizes
     // outside a town it has not taken ('' if none; an airfield alone does not count), and 1 if something there burns.
     prizes: (() => {
@@ -9581,6 +9585,18 @@ function r2Ship(ids: string[]) {
   return took > 0 ? view() : null;
 }
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).r2Ship = r2Ship;
+
+// (Release 2, churned ground: churned.ts.) The record follows the map's own switch, tc.Map.FrontChurn (the ship list's
+// row frontchurn), so the two are one switch with one setter: the table calls this as a war is set up or read in, with
+// that switch, and nowhere else. On keeps the record from the next month's end; off deletes it. TC.churnSwitch(on)
+// answers the war's picture where it changed anything, else null.
+function churnSwitch(on: unknown) {
+  const s = game();
+  const was = churnedOn(s) || s.churned !== undefined;
+  setChurned(s, on === true);
+  return (churnedOn(s) || s.churned !== undefined) !== was ? view() : null;
+}
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).churnSwitch = churnSwitch;
 
 // The supply window (release 2; the map-speed lane's finding of 24 November 2026: a picture could refresh the supply
 // picture, so when one was drawn decided when supply was refreshed, and two tables playing the same orders could part).

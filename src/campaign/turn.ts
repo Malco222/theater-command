@@ -93,6 +93,7 @@ import { logVoyages } from './voyage';
 import { ATOM, PACES, aiAtom, armStrike, atomFly, atomOn, atomView, beginPlants, chooseSite, disarmStrike, pausePlants, setAtom, setMaking, setPace, whyNotPlants, whyNotStrike, type AtomView } from './atom';
 import type { AtomPace } from './types';
 import { aiMines, mineSeas, minesMonth, minesStrike, orderMines, seaMinesOn, whyNotMines } from './mines';
+import { churnMonth } from './churned';
 import { orderCarrierStrike, type CarrierStrikeResult } from './harbourstrike';
 import { galeNews } from './heavyseas';
 import { orderRearguard, standDown as standRearDown, whyNotRearguard } from './rearguard';
@@ -137,6 +138,8 @@ function closePhase(g: Game, nat: string): void {
     logVoyages(g);
     // Minefields wear and are swept (release 2, mines.ts; nothing with that switch off).
     minesMonth(g);
+    // Churned ground's record for the 3D map, never a rule (release 2, churned.ts; nothing with that switch off).
+    churnMonth(g);
     g.phase = 0; g.turn++; g.week = 1;
     // Airfields as targets: the repairs in hand do the month's work (fieldstate.ts; nothing with the switch off).
     fieldsMonth(g);

@@ -1324,6 +1324,13 @@ struct FCampaignView
 	// For the night: the nations at war (their towns are blacked out), and the fronts as pairs of regions.
 	TArray<FString> Blackout;
 	TArray<int32> Fronts;
+	// (Release 2, churned ground's record: rules churned.ts, a record for this map and never a rule; the design director's
+	// rulings of 27 November 2026.) Four numbers each, where both provinces are seen: the two provinces, the months the
+	// stand has stood as the player knows it, and -1 while it stands or the months since it was left. Empty without the
+	// switch, and while the record is not yet kept (bChurnKept false: a war from before it, until its first month's end).
+	TArray<int32> Churned;
+	bool bChurnKept = false;
+	int32 ChurnYear = 0; // the months the ground takes to heal, as the rules send it with the list (0: none sent)
 	TArray<FString> Wars; // every pair of nations at war, two by two: the front line is drawn between their holdings
 	TArray<int32> Cold; // provinces with factories and nothing on order, where the player can know it: their chimneys stand cold
 	TArray<FArmNote> Arms; // (release 1) what each arm is, for the bigger unit card

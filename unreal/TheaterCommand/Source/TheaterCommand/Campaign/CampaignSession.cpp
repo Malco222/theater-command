@@ -52,6 +52,33 @@ namespace
 		}
 	}
 
+	/** (Release 2, churned ground's record, rules churned.ts: the design director's rulings of 27 November 2026.) The record
+	 * follows the map's own switch, tc.Map.FrontChurn, which row frontchurn of the release 2 ship list lays, so the two are
+	 * one switch with one setter: on, the rules keep it from the next month's end; off after on, they delete it. Asked
+	 * only where it would change something: with the switch on, or where the war's picture carries the record's list. A
+	 * war with the switch off that never had it is not touched, so it is saved byte for byte as before. The rules answer
+	 * null when nothing changed, else the new picture, which replaces Json. */
+	void ShipChurnRecord(FRulesHost& Host, FString& Json)
+	{
+		const IConsoleVariable* Switch = IConsoleManager::Get().FindConsoleVariable(TEXT("tc.Map.FrontChurn"));
+		const bool bOn = Switch != nullptr && Switch->GetInt() != 0;
+		if (!bOn && !Json.Contains(TEXT("\"churned\":{"), ESearchCase::CaseSensitive))
+		{
+			return;
+		}
+		FString Laid, Error;
+		if (!Host.Call(TEXT("churnSwitch"), bOn ? TEXT("[true]") : TEXT("[false]"), Laid, Error))
+		{
+			UE_LOG(LogTheater, Display, TEXT("Churned ground: these rules keep no record of it (%s)"), *Error); // (the stand-in rules, or rules before it)
+			return;
+		}
+		if (!Laid.IsEmpty() && Laid != TEXT("null"))
+		{
+			UE_LOG(LogTheater, Display, TEXT("Churned ground: the rules' record is now %s for this war (tc.Map.FrontChurn)"), bOn ? TEXT("kept") : TEXT("gone"));
+			Json = MoveTemp(Laid);
+		}
+	}
+
 	/** (Speed, b414 mark 1: see FCampaignSession::MoveAside.) */
 	TAutoConsoleVariable<int32> CVarRulesAside(
 		TEXT("tc.Speed.RulesAside"), 1,
@@ -433,6 +460,7 @@ bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& Vi
 		return false;
 	}
 	ShipWarSwitches(*Host, ViewJson);
+	ShipChurnRecord(*Host, ViewJson); // (release 2: churned ground's record follows tc.Map.FrontChurn)
 	TellBattleRules(); // (release 2: the battle card follows the Battle rules card from the war's first month)
 	// (Speed: the same call takes about 0.25 to 0.6 s in a fast JavaScript engine on a laptop, and two or three times
 	// that where the engine cannot compile the rules as it runs them. This line says which the game has.)
@@ -499,6 +527,7 @@ bool FCampaignSession::Load(const FString& SaveText)
 	if (bRead)
 	{
 		ShipWarSwitches(*Host, Json);
+		ShipChurnRecord(*Host, Json); // (release 2: churned ground's record follows tc.Map.FrontChurn)
 		TellBattleRules(); // (release 2: a war read in follows the Battle rules card as it stands now, not as it stood when saved)
 	}
 	if (!bRead || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
@@ -1119,6 +1148,21 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			for (const TSharedPtr<FJsonValue>& Value : *Fronts)
 			{
 				Out.Fronts.Add(FMath::RoundToInt32(Value->AsNumber()));
+			}
+		}
+		// (Release 2, churned ground's record: rules churned.ts. Absent without its switch.)
+		const TSharedPtr<FJsonObject>* Churned = nullptr;
+		if (Object->TryGetObjectField(TEXT("churned"), Churned) && Churned && Churned->IsValid())
+		{
+			Out.ChurnYear = FMath::Max(0, FMath::RoundToInt32((*Churned)->GetNumberField(TEXT("year"))));
+			Out.bChurnKept = (*Churned)->GetBoolField(TEXT("kept"));
+			const TArray<TSharedPtr<FJsonValue>>* Pairs = nullptr;
+			if ((*Churned)->TryGetArrayField(TEXT("pairs"), Pairs))
+			{
+				for (const TSharedPtr<FJsonValue>& Value : *Pairs)
+				{
+					Out.Churned.Add(FMath::RoundToInt32(Value->AsNumber()));
+				}
 			}
 		}
 		const TArray<TSharedPtr<FJsonValue>>* Prizes = nullptr;

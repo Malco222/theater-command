@@ -117,6 +117,9 @@ export function saveGame(g: Game): string {
     mines: g.flags.open === 1 && g.flags.seaMines === 1 && g.mines?.length ? g.mines : undefined,
     // A queue for a town (release 2, townqueue.ts): kept only with that switch on and something queued.
     townQueue: g.flags.open === 1 && g.flags.townQueue === 1 && g.townQueue ? g.townQueue : undefined,
+    // Churned ground's record (release 2, churned.ts): kept only with that switch on, so a save without it is written as
+    // it always was. An empty record is kept too: it says the record has been kept, which an older war's has not.
+    churned: g.flags.open === 1 && g.flags.churned === 1 && g.churned ? g.churned : undefined,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -342,6 +345,8 @@ function readSave(text: string, promote: boolean): Game | null {
   if (Array.isArray(d.mines)) g.mines = d.mines;
   // (A queue for a town, release 2.) As saved; a save without it has nothing queued.
   if (d.townQueue && typeof d.townQueue === 'object') g.townQueue = d.townQueue;
+  // (Churned ground's record, release 2: on a line of its own, as the mines are.)
+  if (Array.isArray(d.churned)) g.churned = d.churned;
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
   // A grand campaign saved before carriers had aircraft of their own: every carrier fleet is given its wings.
   if (g.flags.open === 1) openCarriers(g);
