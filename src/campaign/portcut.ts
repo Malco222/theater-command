@@ -50,6 +50,12 @@
 //                     or not: keepsStores) as the crew is struck off (game.ts removeCorps). Cleared once the port's stores
 //                     are filled again, it changes hands or it is no longer of the kind, when the switch is turned off,
 //                     when its holder falls, and when the player falls.
+//   portDraw:<nat>    the month of the last draw of the supply picture the telling read (portsMonth, straight after each
+//                     nation's draw, game.ts startPhase), with the nation whose month it opened in the key: the draw that
+//                     a crew lost from then until the next was last seen by (portCrew's month and `seen`), so that a game
+//                     saved and loaded between two draws names the same one (the UI director's 05:03Z, item 5). One at a
+//                     time, set afresh at each nation's month. Cleared where a reading is missed (nobody at the table, or
+//                     the player fallen), when the switch is turned off, and when the player falls.
 // None begins with "stores:", so a load never touches them (save.ts keeps the supply picture's own marks by that prefix).
 import { turnToDate } from '../core/ticket';
 import { AIR } from './air';
@@ -93,18 +99,27 @@ const shutKey = (z: number, nat: string): string => `seaShut:${z}:${nat}`;
 const lostKey = (id: number, c: Corps): string => `portLost:${id}:${c.id}:${c.nat}:${c.name}`;
 const hadKey = (id: number): string => `portHad:${id}`;
 const crewKey = (id: number, c: Corps, months: number, seen: string): string => `portCrew:${id}:${c.id}:${c.nat}:${months}:${c.born ?? 1}${seen === c.nat ? '' : `:${seen}`}`;
+const DRAW = 'portDraw:';
 /**
- * The last draw of the supply picture whose reckoning reads it, per game: the month and the nation whose month it
- * opened (portsMonth reads straight after each nation's draw, game.ts startPhase). Not saved: a game loaded, or one whose
- * telling has just been switched on, is in a nation's month after its draw (lastDraw). Let go whenever a reading is
- * missed, so that it never names a draw older than the last.
+ * The last draw of the supply picture whose reckoning reads it: the month and the nation whose month it opened
+ * (`portDraw:`; portsMonth reads straight after each nation's draw, game.ts startPhase). Saved with the game, so that a
+ * game loaded names the draw it was saved after (the UI director's 05:03Z, item 5). Where there is none (a game saved
+ * before it was kept, or one whose telling has just been switched on), the game is in a nation's month after its draw.
+ * Let go whenever a reading is missed, so that it never names a draw older than the last.
  */
-const reading = new WeakMap<Game, { turn: number; nat: string }>();
-const lastDraw = (g: Game): { turn: number; nat: string } => reading.get(g) ?? { turn: g.turn, nat: g.order[Math.min(g.phase, g.order.length - 1)] };
+function lastDraw(g: Game): { turn: number; nat: string } {
+  for (const k in g.flags) if (k.startsWith(DRAW)) return { turn: g.flags[k], nat: k.slice(DRAW.length) };
+  return { turn: g.turn, nat: g.order[Math.min(g.phase, g.order.length - 1)] };
+}
+/** Lets the last draw's mark go (`portDraw:`), and with `nat` marks the draw just made in its month. */
+function markDraw(g: Game, nat?: string): void {
+  for (const k of Object.keys(g.flags)) if (k.startsWith(DRAW)) delete g.flags[k];
+  if (nat !== undefined) g.flags[DRAW + nat] = g.turn;
+}
 /** A sea's record while the switch watches it open (`seaShut:`): a hold that begins after it is one the switch saw begin. */
 const WATCHED_OPEN = -1;
 /** The telling's own flags, by their prefixes. */
-const PORT_FLAGS = ['portTold:', 'portSpent:', 'seaShut:', 'portLost:', 'portHad:', 'portCrew:'];
+const PORT_FLAGS = ['portTold:', 'portSpent:', 'seaShut:', 'portLost:', 'portHad:', 'portCrew:', DRAW];
 const portFlag = (k: string): boolean => PORT_FLAGS.some((p) => k.startsWith(p));
 
 /**
@@ -115,7 +130,6 @@ const portFlag = (k: string): boolean => PORT_FLAGS.some((p) => k.startsWith(p))
  */
 export function setPortStores(g: Game, on: boolean): boolean {
   if (g.flags.open !== 1) return false;
-  reading.delete(g);
   if (on) {
     const was = portStoresOn(g);
     g.flags.portStores = 1;
@@ -144,9 +158,9 @@ export function portsDone(g: Game, nat: string): void {
   // (The lines kept for the player's month, and the ports he had corps in, are his alone: they go when he falls. So do
   // the holds the switch watched for him: given his seat back, he is watched afresh, and a sea already shut then is a
   // hold whose start the switch did not see. The crews lost in a port go with its holder, and with the player, whose
-  // months no longer read them or clear them.)
+  // months no longer read them or clear them; so does the mark of the last draw, kept only while he is at the table.)
   for (const k of Object.keys(g.flags)) {
-    if (nat === g.human ? k.startsWith('portLost:') || k.startsWith('portHad:') || k.startsWith('seaShut:') || k.startsWith('portCrew:') : k.startsWith('portCrew:') && g.regions[+k.split(':')[1]]?.ctrl === nat) delete g.flags[k];
+    if (nat === g.human ? k.startsWith('portLost:') || k.startsWith('portHad:') || k.startsWith('seaShut:') || k.startsWith('portCrew:') || k.startsWith(DRAW) : k.startsWith('portCrew:') && g.regions[+k.split(':')[1]]?.ctrl === nat) delete g.flags[k];
   }
 }
 
@@ -843,10 +857,11 @@ function holdsMonth(g: Game, sweep: boolean): void {
  * with the switch off, or with nobody at the table.
  */
 export function portsMonth(g: Game, nat: string): void {
-  if (!portStoresOn(g) || !g.human || !g.nations[g.human]?.alive) { reading.delete(g); return; }
+  if (!portStoresOn(g)) return;
+  if (!g.human || !g.nations[g.human]?.alive) { markDraw(g); return; }
   const me = g.human, mine = nat === me;
   // (The draw just made: a crew lost from now until the next was last seen by it. portCrewGone.)
-  reading.set(g, { turn: g.turn, nat });
+  markDraw(g, nat);
   holdsMonth(g, mine);
   // (A crew lost in a port counts only until the port's stores are filled again, and only while it is of the kind, a
   // pocket or not.)

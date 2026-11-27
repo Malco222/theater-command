@@ -94,7 +94,7 @@ function gibraltar(human: string, place: (g: Game) => void): { g: Game; gib: num
   return { g, gib: g.byName.Gibraltar.id, ninth };
 }
 /** The telling's own flags. */
-const OWN = /^(portTold|portSpent|seaShut|portLost|portHad|portCrew):/;
+const OWN = /^(portTold|portSpent|seaShut|portLost|portHad|portCrew|portDraw):/;
 const news = (g: Game, from = 0): string[] => g.headlines.slice(from).map((h) => h.text).filter((t) => /Malta|Gibraltar|stores/.test(t) && !/memorial|wireless|honour|ring broke|Rats of/.test(t));
 const texts = (ls: PortLine[]): string[] => ls.map((l) => l.text);
 
@@ -475,8 +475,10 @@ describe('who is told', () => {
     expect(news(us.g)).toEqual([]);
     expect(portCardLines(us.g, MALTA, 'USA')).toEqual([]);
     // (Nothing is kept for him but the record of the holds, which watches the seas of every port of the kind whatever
-    // his wars, so that a hold begun before his war with its holder is seen to begin: the UI director's 23:50Z, item 5.)
-    expect(Object.keys(us.g.flags).filter((k) => OWN.test(k) && !k.startsWith('seaShut:'))).toEqual([]);
+    // his wars, so that a hold begun before his war with its holder is seen to begin: the UI director's 23:50Z, item 5;
+    // and the mark of the last draw, one, whoever is at the table: the 05:03Z, item 5.)
+    expect(Object.keys(us.g.flags).filter((k) => OWN.test(k) && !k.startsWith('seaShut:'))).toEqual(['portDraw:UK']);
+    expect(us.g.flags['portDraw:UK']).toBe(21);
     expect(us.g.flags['seaShut:20:UK']).toBe(16);
   });
 
@@ -1385,6 +1387,47 @@ describe('03:13Z, item 2: a crew lost in battle, the count on the rule\'s own cl
     ]);
   });
 
+  it('05:03Z, item 5: saved and loaded between France\'s draw of April and Britain\'s, and the crew lost after the load: the record names the draw the game was saved after, France\'s, and every line reads as the rule acts', () => {
+    const at = gibCrewed('UK');
+    let g = at.g, ninth = at.ninth;
+    const rows: unknown[] = [];
+    let kept: string[] = [];
+    for (let t = 17; ; t++) {
+      const h0 = g.headlines.length;
+      g.turn = t;
+      phase(g, 'ITA');
+      phase(g, 'FRA');
+      if (t === 20) {
+        // (France's month opened, the month is handed on to Britain's, as a step of the turn does (turn.ts stepAI), and
+        // the game is saved there and loaded. The crew is then struck off, whatever takes it (game.ts removeCorps),
+        // before Britain's draw: the last draw that saw it living was France's.)
+        g.phase = g.order.indexOf('FRA') + 1;
+        expect(g.order[g.phase]).toBe('UK');
+        g = loadGame(saveGame(g))!;
+        expect(Object.keys(g.flags).filter((k) => k.startsWith('portDraw:')).map((k) => [k, g.flags[k]])).toEqual([['portDraw:FRA', 20]]);
+        ninth = g.corps.find((c) => c.id === at.ninth.id)!;
+        removeCorps(g, g.corps.find((c) => c.id === at.crew.id)!);
+        kept = Object.keys(g.flags).filter((k) => k.startsWith('portCrew:')).map((k) => `${k}=${g.flags[k]}`);
+      }
+      phase(g, 'UK');
+      rows.push([t, ninth.supplied, Math.round(ninth.org * 100) / 100, ninth.dead, ours(g, h0), texts(portCardLines(g, at.gib, 'UK')), ninth.dead ? null : portCorpsLine(g, ninth)]);
+      if (ninth.dead) break;
+    }
+    // The record: France's draw of April, the one the game was saved after. (The 03:13Z build kept the mark of the last
+    // draw in memory only, and a game loaded had none: the record named Britain's draw, not yet made, so that April's
+    // card and corps line told a garrison going hungry that it "lives on the port's stores through April", and the news
+    // of the stores spent came only in May.)
+    expect(kept).toEqual([`portCrew:${at.gib}:${at.crew.id}:UK:16:1:FRA=20`]);
+    expect(rows).toEqual([
+      BEFORE(17), BEFORE(18), BEFORE(19),
+      // April: Britain's draw, after the loss, reads the port's own two, four months after the fill: the 9th goes hungry,
+      // and the month the stores run out is told in it, as where the crew is lost before his draw unsaved.
+      [20, false, 0.6, false, [NEWS_SPENT('June')], [SPENT_G('June'), REMEDY_G('through June')], HUNGRY_G('June')],
+      [21, false, 0.2, false, [], [SPENT_G('June'), REMEDY_G('through July')], HUNGRY_G('June')],
+      [22, false, -0.2, true, ['Cut off in Gibraltar, the 9th Corps has starved and is lost.'], [], null],
+    ]);
+  });
+
   // (Words only: the record of a crew lost is written as the corps is struck off, game.ts removeCorps, inside the war.)
   it('Italy\'s landing in her April, with the switch on and off under the fortress rows: the record is written with it on and never with it off, and the war after it, saved and loaded and played four months by the computer, is the same war, its own words and marks aside', () => {
     const after = (on: boolean): { g: Game; kept: string[] } => {
@@ -1413,11 +1456,11 @@ describe('03:13Z, item 2: a crew lost in battle, the count on the rule\'s own cl
     const strip = (g: Game): string => {
       const h = structuredClone(g) as Game;
       h.headlines = h.headlines.filter((x) => !told.some((t) => t.text === x.text && t.turn === x.turn));
-      for (const k of Object.keys(h.flags)) if (/^(portStores$|portTold:|portSpent:|seaShut:|portLost:|portHad:|portCrew:)/.test(k) || k === 'newsweek') delete h.flags[k];
+      for (const k of Object.keys(h.flags)) if (/^(portStores$|portTold:|portSpent:|seaShut:|portLost:|portHad:|portCrew:|portDraw:)/.test(k) || k === 'newsweek') delete h.flags[k];
       return saveGame(h);
     };
     expect(strip(on.g)).toBe(strip(off.g));
-    expect(saveGame(off.g)).not.toMatch(/portStores|portTold|portSpent|seaShut|portLost|portHad|portCrew/);
+    expect(saveGame(off.g)).not.toMatch(/portStores|portTold|portSpent|seaShut|portLost|portHad|portCrew|portDraw/);
   }, 600000);
 });
 
@@ -1512,7 +1555,7 @@ describe('05:03Z, item 1: a port in a pocket is left to the pocket\'s own lines,
   const wordsOnly = (g: Game): string => {
     const h = structuredClone(g) as Game;
     h.headlines = h.headlines.filter((x) => !OURS.test(x.text));
-    for (const k of Object.keys(h.flags)) if (/^(portStores$|portTold:|portSpent:|seaShut:|portLost:|portHad:|portCrew:)/.test(k) || k === 'newsweek') delete h.flags[k];
+    for (const k of Object.keys(h.flags)) if (/^(portStores$|portTold:|portSpent:|seaShut:|portLost:|portHad:|portCrew:|portDraw:)/.test(k) || k === 'newsweek') delete h.flags[k];
     return saveGame(h);
   };
   const SURROUNDED = (months: string): string => `Gibraltar is surrounded: no road and no ship reaches it from the rest of the United Kingdom. 6 British corps are cut off there, with stores for ${months}; after that the troops go hungry.`;
