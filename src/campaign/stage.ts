@@ -71,11 +71,12 @@ const winForced = (globalThis as { TC_WINCHANCE?: unknown }).TC_WINCHANCE ?? G.p
 /** True where new grand campaigns open with the honest win chance on land (data/campaign/stage.json 'winChance'). */
 export const WINCHANCE_STAGE: boolean = winForced !== undefined ? !!winForced && winForced !== '0' : (stage as { winChance?: boolean }).winChance === true;
 
-// True reach on the old chart (audit item 41; game.ts trueReach): the grand campaigns opened while this and Units decide
-// are true carry the flag 'trueReach'. A run outside the browser can be given it by its environment:
-// TC_UNITS=1 TC_TRUEREACH=1 node ... (On the far side the rule needs no flag: it is on with the far switch.)
+// True reach on the old chart (audit item 41; game.ts trueReach): the grand campaigns opened while this is true carry
+// the flag 'trueReach', with Units decide or without it. A run outside the browser can be given it by its environment:
+// TC_TRUEREACH=1 node ... The 3D's ship list switches it as a September 1939 war opens ('truereachrule'). (On the far side the rule
+// needs no flag: it is on with the far switch.)
 const reachForced = (globalThis as { TC_TRUEREACH?: unknown }).TC_TRUEREACH ?? G.process?.env?.TC_TRUEREACH;
-/** True where new grand campaigns with Units decide open with true reach (data/campaign/stage.json 'trueReach'). */
+/** True where new grand campaigns open with true reach (data/campaign/stage.json 'trueReach'). */
 export const TRUEREACH_STAGE: boolean = reachForced !== undefined ? !!reachForced && reachForced !== '0' : (stage as { trueReach?: boolean }).trueReach === true;
 
 // Units decide (release 2; src/campaign/units.ts): the grand campaigns opened while this is true carry the flag

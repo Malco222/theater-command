@@ -1107,16 +1107,27 @@ function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], head
  * 2026): a sea the shutting power holds closed to the nation fed is closed to every ship carrying it stores, whatever
  * the flag. An ally's ships feed a port for another nation (the supply picture's holder's and mates' quays) only by a
  * way that stays open with the seas closed to the nation fed closed to them too; paper reach is not reach. One rule
- * for both charts: on wherever the far side is on, and on the old chart under Units decide with its own sub-flag
- * 'trueReach' (stage.json), off until its gate passes. Every history stop alike.
+ * for both charts: on wherever the far side is on, and on the old chart with its own flag 'trueReach', with Units
+ * decide or without it (stage.json; the bridge's ship list 'truereachrule'), off until its gate passes. Every history
+ * stop alike. (With Units decide on, the reading is the one the 96- and 48-war gates measured, unchanged.)
  */
-export const trueReach = (g: Game): boolean => farOn(g) || (unitsDecide(g) && g.flags.trueReach === 1);
+export const trueReach = (g: Game): boolean => farOn(g) || (g.flags.open === 1 && g.flags.trueReach === 1);
 /**
- * Sets the old chart's sub-flag of true reach, for tests and the bench: only in a grand campaign with Units decide
- * (returns whether it was set). The supply picture is drawn afresh at its next asking.
+ * Whether true reach can be switched on by hand or by the ship list: in a grand campaign that opened on the first day
+ * (September 1939, no `openFrom`), and only in that opening month. Kept stores filled with the rule off carry no
+ * record of whose they are (`stores:by:`), and under true reach such stores feed nobody (keptStoresHis), so a war
+ * switched on later would find its cut-off ports hungry at once. A later start is the same case: its history months
+ * were all filled with the rule off (flags.open is laid only at startOpen), so it is left as it is until the design
+ * director rules how a later start should take the rule.
+ */
+export const trueReachSettable = (g: Game): boolean => g.flags.open === 1 && g.turn === 1 && g.flags.openFrom === undefined;
+/**
+ * Sets the old chart's flag of true reach (returns whether it was set): on only where trueReachSettable, off in any
+ * month of a grand campaign; never outside one. With or without Units decide. The supply picture is drawn afresh at
+ * its next asking.
  */
 export function setTrueReach(g: Game, on: boolean): boolean {
-  if (!unitsDecide(g)) return false;
+  if (on ? !trueReachSettable(g) : g.flags.open !== 1) return false;
   if (on) g.flags.trueReach = 1;
   else delete g.flags.trueReach;
   g.supplyDirty = true;

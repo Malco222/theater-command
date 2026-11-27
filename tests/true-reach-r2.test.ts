@@ -7,8 +7,8 @@
 // The supply picture let an ally's ships feed a port for another nation (an ally's port overseas for the guest's corps,
 // the side theatre's shared shipping) wherever the ally's own lanes reached it: Norway, at war with Germany and not
 // with Italy, kept a British Malta fed through a sea Italy had shut to Britain. With the rule on, the ally's lanes are
-// walked as if every sea closed to the nation fed were closed to the ally too. The old chart, the rule's own sub-flag
-// under Units decide; the far switch in tests/true-reach-far-r2.test.ts. Seas are closed by real fleets; no war is played.
+// walked as if every sea closed to the nation fed were closed to the ally too. The old chart, the rule's own flag
+// (with Units decide or without it); the far switch in tests/true-reach-far-r2.test.ts. Seas are closed by real fleets; no war is played.
 //
 // Every picture in this file is drawn under TC_SUPPLY_CHECK, which asks every kept answer afresh and throws on a difference.
 import { vi } from 'vitest';
@@ -21,7 +21,7 @@ import { SeaPicture, openSeas, zoneOf } from '../src/campaign/navy';
 import { besieged, fedBySea, feeders, feedingSeas, garrison, garrisonFed, garrisonOf, monthsShut, ringClosed, siegeMonth, siegeView, siegesNow, storesOf } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import { TRUEREACH_STAGE, UNITS_STAGE } from '../src/campaign/stage';
-import { setUnitsDecide } from '../src/campaign/units';
+import { setUnitsDecide, unitsDecide } from '../src/campaign/units';
 import type { Game } from '../src/campaign/types';
 
 /** A war nobody plays, the old chart's first day, with Units decide; true reach's sub-flag as asked. */
@@ -338,35 +338,67 @@ describe('an ally\'s ships feed a port only where they could truly sail there wi
     }
   });
 
-  it('is off on the old chart with Units decide alone, on with its sub-flag, and set by hand only under Units decide', () => {
-    // Bench only: stage.json keeps it off, and a campaign opens without the flag.
+  it('is off on the old chart until its own flag is set; set by hand on in a grand campaign\'s opening month only, with Units decide or without it; off in any month', () => {
+    // Off until its gate: stage.json keeps it off, and a campaign opens without the flag.
     expect([UNITS_STAGE, TRUEREACH_STAGE]).toEqual([false, false]);
     const g = startOpen(createGame(1, null));
-    expect([trueReach(g), g.flags.trueReach]).toEqual([false, undefined]);
-    // Refused without Units decide.
-    expect(setTrueReach(g, true)).toBe(false);
-    expect([trueReach(g), g.flags.trueReach]).toEqual([false, undefined]);
-    expect(setUnitsDecide(g, true)).toBe(true);
-    expect(trueReach(g)).toBe(false);
+    expect([unitsDecide(g), trueReach(g), g.flags.trueReach]).toEqual([false, false, undefined]);
+    // Refused outside a grand campaign, on and off.
+    const h = createGame(1, null);
+    expect([setTrueReach(h, true), setTrueReach(h, false), h.flags.trueReach]).toEqual([false, false, undefined]);
+    // Without Units decide, in the opening month: taken (option (b): its own flag alone).
     g.supplyDirty = false;
     expect(setTrueReach(g, true)).toBe(true);
-    expect([trueReach(g), g.flags.trueReach, g.supplyDirty]).toEqual([true, 1, true]);
+    expect([unitsDecide(g), trueReach(g), g.flags.trueReach, g.supplyDirty]).toEqual([false, true, 1, true]);
     g.supplyDirty = false;
     expect(setTrueReach(g, false)).toBe(true);
     expect([trueReach(g), g.flags.trueReach, g.supplyDirty]).toEqual([false, undefined, true]);
-    // The reading follows the gate: Malta by Norway is fed under Units decide alone, and not once the sub-flag is set.
-    // (The stores of the last month a ship came in were filled with true reach off, so no record says whose they are:
-    // under true reach they feed no one until the holder's own next fill writes one, the guard's own reading, the
-    // design director's 22:08Z of 25 November 2026, game.ts keptStoresHis. The fortress goes hungry at once.)
+    // With Units decide, as before.
+    expect(setUnitsDecide(g, true)).toBe(true);
+    expect(trueReach(g)).toBe(false);
+    expect(setTrueReach(g, true)).toBe(true);
+    expect([trueReach(g), g.flags.trueReach]).toEqual([true, 1]);
+    // After the opening month the setter refuses on and takes off. (The stores of the last month a ship came in were
+    // filled with true reach off, so no record says whose they are: under true reach they would feed no one until the
+    // holder's own next fill writes one, game.ts keptStoresHis, and the fortress would go hungry at once. That is why
+    // a war under way cannot take it.)
     const m = malta(false);
     for (let k = 0; k < 4; k++) { m.g.turn++; computeSupply(m.g); }
     expect([m.g.turn, m.c.supplied, m.g.flags[`stores:${m.r.id}`], m.g.flags[`stores:by:${m.r.id}`]]).toEqual([5, true, 5, undefined]);
-    expect(setTrueReach(m.g, true)).toBe(true);
+    expect(setTrueReach(m.g, true)).toBe(false);
+    expect([trueReach(m.g), m.g.flags.trueReach]).toEqual([false, undefined]);
+    expect(setTrueReach(m.g, false)).toBe(true);
+    // The reading of a flag laid by hand in a war under way is unchanged: hungry at once (the bench's own reading).
+    m.g.flags.trueReach = 1; m.g.supplyDirty = true;
     const keep = portKeep(m.g, m.r);
     for (let k = 1; k <= keep + 1; k++) {
       m.g.turn++; computeSupply(m.g);
       expect([m.g.turn, m.c.supplied, m.g.flags[`stores:${m.r.id}`]]).toEqual([5 + k, false, 5]);
     }
+  });
+
+  it('acts on the old chart without Units decide: Malta by Norway, as under Units decide, month for month', () => {
+    // The same board as the first test with Units decide left off: off, Norway's paper reach feeds the British corps;
+    // on, the fortress lives on its stores for portKeep months and then goes hungry, exactly as with Units decide on.
+    const plain = (on: boolean, ud: boolean) => {
+      const g = startOpen(createGame(1, null));
+      if (ud) g.flags.unitsDecide = 1;
+      if (on) g.flags.trueReach = 1;
+      g.supplyDirty = true;
+      computeSupply(g);
+      declareWar(g, 'ITA', 'UK');
+      declareWar(g, 'GER', 'NOR');
+      patrol(g, 'ITA', 'central');
+      const c = addCorps(g, 'UK', 'Malta test', 'inf', 1, 'Malta', {});
+      computeSupply(g);
+      const r = g.byName['Malta'], keep = portKeep(g, r), row: boolean[] = [];
+      for (let k = 0; k <= keep + 2; k++) { if (k) { g.turn++; computeSupply(g); } row.push(c.supplied); }
+      return { ud: unitsDecide(g), reach: trueReach(g), row };
+    };
+    const off = plain(false, false), on = plain(true, false), onUd = plain(true, true);
+    expect([off.ud, off.reach, off.row.every((x) => x)]).toEqual([false, false, true]);
+    expect([on.ud, on.reach, on.row.at(-1)]).toEqual([false, true, false]);
+    expect(on.row).toEqual(onUd.row);
   });
 
   it('gives the same answers from kept pictures as from fresh ones while a sea closes and opens again to the nation fed alone', () => {

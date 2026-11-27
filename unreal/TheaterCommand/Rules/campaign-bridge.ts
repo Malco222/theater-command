@@ -157,7 +157,7 @@ import { seaOpenAt } from '../../../src/campaign/navy';
 import { LANE_NO_STAFF, LANE_UNCOUNTED, laneCarries } from '../../../src/campaign/navy';
 import { NAVY, subScene } from '../../../src/campaign/navy';
 import { subSceneOf } from './sub-scene'; // D1 (ruling 241): the month's submarine scene, staged; look only
-import { chanceOn, headline, offersOn } from '../../../src/campaign/game';
+import { chanceOn, headline, offersOn, setTrueReach, trueReach } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
 import { CHART_NOW, answersOf, attachWorld, closedCountry, motherLine, patronOf } from '../../../src/campaign/world';
@@ -9438,7 +9438,7 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, offerCalls(g
 // first time an older war (1.5, 1.5.1) is played in release 2, or the first time a war is played in a build whose list
 // has newly gained it. Each is then marked in the war (g.flags['r2:<id>']), so that a switch he turns off afterwards
 // stays off, through every save and load. A switch that can be set only in a war's opening month
-// (the supply columns and their three orders) is left as it is in an older war. Fleets sent straight at the enemy and
+// (the supply columns and their three orders; true reach, which takes only as a September 1939 war opens) is left as it is in an older war. Fleets sent straight at the enemy and
 // breaking corps up are not here: they are already on unless he turned them off. The secret war is not here either: a
 // new war reads it from its own setting, and an older war cannot take it. A parent switch comes before the one that
 // needs it (rearguards before the bridges blown behind them, shadowing before the relay, the columns before their orders).
@@ -9468,6 +9468,11 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   'logistics:dumps': (s) => setLogistics(s, 'dumps', true),
   // (Release 2, atom.ts: the atomic project, switched in any month, so an older war takes it too.)
   atomrule: (s) => setAtom(s, true) && atomOn(s),
+  // (Release 2, game.ts trueReach: true reach on the old chart, taken only as a September 1939 war opens
+  // (trueReachSettable), so an older war and a later start are left as they are. On the list for the 3D's ship list to
+  // name; it has no Options row and no view field yet. The rule ships off until the design director's gate on the
+  // player's own start.)
+  truereachrule: (s) => setTrueReach(s, true) && trueReach(s),
 };
 function r2Ship(ids: string[]) {
   const s = game();
