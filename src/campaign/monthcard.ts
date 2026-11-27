@@ -47,7 +47,7 @@ import { menRules, raisable } from './manpower';
 import { bureauCost } from './research';
 import { MEN_PER_DIV, type AirReport, type Game, type Headline, type SeaSide, type ShipClass, type Ships } from './types';
 import { seaSaid, seaWhere } from './sea-words';
-import { rowsWaitingOnRows } from './arrivalwaits';
+import { rowsWaitingOnRows, struckOnCard } from './arrivalwaits';
 
 export type CardTone = 'good' | 'bad' | 'warn' | 'plain';
 /** The eight pictures both builds have (art-director/raid-card/targets). */
@@ -234,7 +234,8 @@ export interface MonthCard {
   sky?: SkyView;
   /**
    * The telling (arrivalwaits.ts): a muted line for each of his dated arrivals that waits only for another arrival to
-   * form, every month it waits. Absent where there is none.
+   * form, every month it waits; first, in the month a told row held for its place is struck, the struck line that ends
+   * its muted line (`struckOnCard`, the UI director's section 11 (a)). Absent where there is none.
    */
   waits?: string[];
 }
@@ -513,6 +514,11 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const foe = (nat?: string | null): boolean => !!nat && !!g.nations[nat] && atWar(g, nat, me);
   const hs = g.headlines.slice(mark.h);
   const used = new Set<Headline>();
+  // (The telling's struck lines, arrivalwaits.ts `struckOnCard`: the card's own from the start, first among the home
+  // lines with the waiting lines (section 6), so that no other part of the card takes one and none is counted in
+  // "more". The UI director's section 11 (a), 06:56Z, 27 November 2026.)
+  const struck = struckOnCard(g, hs, me);
+  for (const h of struck) used.add(h);
   // The card tells everything since the mark, so its last items are dated in the month that has just opened: the
   // moves of those who go before him. Such an item names its month, or "week 1" under June's title reads as June's.
   const dated = (turn: number): { month?: string } => (turn !== mark.turn ? { month: turnToDate(turn).label.split(' ')[0] } : {});
@@ -1197,7 +1203,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   // The line when men run out (ruling 133(d)(1)).
   const menOut = menOutLine(g, me);
   if (menOut && menOutDue(g, me)) card.menOut = menOut;
-  const waits = rowsWaitingOnRows(g, me);
+  // (A struck line first, in the place of the muted line it ends; the rows still waiting after it.)
+  const waits = [...struck.map((h) => h.text), ...rowsWaitingOnRows(g, me)];
   if (waits.length) card.waits = waits;
   const news: Headline[] = [];
   for (const h of hs) {

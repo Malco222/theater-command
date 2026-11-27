@@ -369,8 +369,27 @@ export function struckForPlaceLines(g: Game, xs: StruckForPlace[]): { text: stri
   }
   return groups.map((q) => {
     const place = g.regions[q.at].name;
-    return { text: `${join(q.names.map((x, k) => named(x, k === 0)))}, due in ${place} since ${turnToDate(q.since).label}, will not form: ${place} is still not in friendly hands, and the arrival has waited as long as it may.`, at: q.at };
+    return { text: `${join(q.names.map((x, k) => named(x, k === 0)))}, due in ${place} since ${turnToDate(q.since).label}, will not form: ${place}${STRUCK_TAIL}`, at: q.at };
   });
+}
+/** The end of every struck line, written here alone: the cards know the maker's own headline by it. */
+const STRUCK_TAIL = ' is still not in friendly hands, and the arrival has waited as long as it may.';
+
+/**
+ * The struck lines on the month's report card (the UI director's section 11 (a), 06:56Z, 27 November 2026: "The struck
+ * line takes the place of the muted line it ends. It stands first among the home lines (after the men's line, as 8.4),
+ * is never cut and never counted in '{159} more lines of news are in the Newsreel'. The browser's card and the bridge's
+ * card both read it the way they read the waiting line (8.4)."). The row's telling flags go at the strike, so the card
+ * reads the strike's own headline, said once by `struckForPlaceLines` in the month of the strike: of the headlines the
+ * card tells (`hs`, its month's), those of his own that this maker wrote, in the order they were said. Nothing new is
+ * written to the save, nothing outlives its month (a month's headlines are told on that month's card alone), and with
+ * the switch off, where no such headline is ever said, there is none. The card takes them as its own (monthcard.ts:
+ * first in `waits`, and not among its news): they are never cut, never counted and never said twice on it. Read as
+ * the waiting line is: only with the switch on, and only for his own card.
+ */
+export function struckOnCard<H extends { text: string; kind: string; nat?: string }>(g: Game, hs: H[], nat: string | null): H[] {
+  if (!nat || g.flags.fromWait !== 1 || nat !== g.human) return [];
+  return hs.filter((h) => h.kind === 'info' && h.nat === nat && h.text.endsWith(STRUCK_TAIL) && h.text.includes(', will not form: '));
 }
 
 /**
