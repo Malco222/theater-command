@@ -233,6 +233,7 @@ namespace LandFeed
 			T.K = J["k"].Int(0);
 			T.J = std::max(0, J["j"].Int(0));
 			T.Role = J["r"].Str("rifle");
+			T.Model = J["ml"].Str("");
 			T.Fo = J["fo"].Int(0);
 		}
 

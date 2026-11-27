@@ -2,6 +2,10 @@
 # The ground battle's cloud test: builds the replay, sound, camera, desk and shell-hole cores (the game's own
 # Battle/LandFeed, LandPlay, LandSound, LandEye, LandDesk, LandCrater, and the field LandField with LandSight, no engine) and plays a recorded ground battle through them at 60 frames a
 # second. Usage: Tools/land_play/run.sh [recording.json ...]  (default: every recording)
+# Release 2's small arms off armour (the game's -TheaterLandRicochet, on trial) is off here as in the game unless asked
+# for: LAND_PLAY_RICOCHET=1 Tools/land_play/run.sh runs the same recordings with it on and its checks (what is armour,
+# the carriers the rules name, every burst at armour off her plate, following her, never inside her, the rattle). Run it
+# both ways before a release-2 change to the ricochets: off, every output must be as before but for timings.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
