@@ -2251,6 +2251,10 @@ namespace LandMen
 			Vec3 UpShift;
 			float UpYaw = 0.f, UpFor = 1.4f;
 			Pose UpFrom;
+			// His place eased from where he lay onto his track (PlaceLeft): from UpWalkAt life seconds after UpAt (on his
+			// feet), over how far his track was from where he lay (UpDist, -1 till the ease's first frame) at a slow walk;
+			// the pose he lay in blended out over UpBlend life seconds.
+			float UpDist = -1.f, UpWalkAt = 0.f, UpBlend = 0.4f;
 			// Killed while down wounded: he goes still where he lies (no head dropped, no new fall).
 			bool bStill = false;
 		};
@@ -4845,6 +4849,8 @@ namespace LandMen
 			M.UpShift = Vec3();
 			M.UpFrom = M.Now;
 			M.UpFor = 0.f;
+			M.UpDist = -1.f;
+			M.UpBlend = 0.4f;
 			const size_t Ch = std::min(M.ChCursor, M.Stances.empty() ? size_t(0) : M.Stances.size() - 1);
 			int Gi = S.ClipIndex(M.bFaceUp ? "get_up_back" : "get_up_face");
 			bool bShift = false;
@@ -4853,9 +4859,8 @@ namespace LandMen
 			else if ((Gi = S.ClipIndex("go_prone")) >= 0) { From = S.Clips[static_cast<size_t>(Gi)].Long; bShift = true; }
 			if (Gi < 0 || M.Stances.empty() || M.Stances[Ch].Cl == Prone)
 			{
-				// (none, or the rules have him lie: their stance from lying, as any man's)
-				M.Shown = -1;
-				M.EndClass = Prone;
+				// (none, or the rules have him lie: their stance from lying, as any man's, eased onto his track)
+				LetGo(M);
 				return;
 			}
 			// (go_prone backwards a wounded man's slow, laboured way up: 2.2 s, twice a fit man's)
@@ -4887,14 +4892,52 @@ namespace LandMen
 			// (eased out from seven tenths of the way up, over 1.6 s or at a shuffle, 0.6 m/s, the longer)
 			const float Dist = std::hypot(M.UpShift.X, M.UpShift.Y);
 			M.UpFor = static_cast<float>(0.7 * Dur * Life) + UpEase(Dist, M.UpYaw);
+			M.UpWalkAt = static_cast<float>(Dur * Life);
 			M.Queue.push_back(SegmentOf(M, M.Stances[Ch], Now + Dur, 0.2f));
 			M.Shown = static_cast<int>(Ch);
 			M.EndClass = M.Stances[Ch].Cl;
 		}
 
+		/** Down wounded no longer his (the bearers took him, or his wound was taken back), or up at back with the rules
+		 * having him lie: their stance from lying, as any man's, his pelvis laid where it lay (UpShift) and his place eased
+		 * from where he lay onto his track (UpLeft), never let go at once. UpAt is Now. */
+		void LetGo(Man& M)
+		{
+			const Soldier& S = *M.S;
+			M.UpYaw = 0.f;
+			M.UpShift = Vec3();
+			M.UpFrom = M.Now;
+			M.UpDist = -1.f;
+			Vec3 PL;
+			float WL = 0.f;
+			bool bL = false;
+			if (LieOf(S, M.UpFrom, PL, WL, bL))
+			{
+				M.UpShift = { PL.X, PL.Y, 0.f };
+				TurnRoot(S, M.UpFrom, 0.f, -PL.X, -PL.Y);
+			}
+			M.UpFor = UpEase(std::hypot(M.UpShift.X, M.UpShift.Y), 0.f);
+			M.UpWalkAt = 0.f;
+			M.UpBlend = 1.f;
+			M.Shown = -1;
+			M.EndClass = Prone;
+		}
+
 		/** How long the get-up's turn and move take to ease out (life seconds): 1.6 s, or a shuffle's 0.6 m/s and 2.5 s a
 		 * radian of turn, the longer. */
 		static float UpEase(float Dist, float Yaw) { return std::max(1.6f, Dist / 0.6f + std::fabs(Yaw) * 0.4f); }
+
+		/** How much of the hold on his place is left (1 at first, 0 once on his track), Now: as the get-up's turn and
+		 * move (UpLeft) where his track is where he lay; else from UpWalkAt over his track's distance at a slow walk's
+		 * 0.8 m/s, 1.6 s at least, whatever the distance (he walks the last of it, never snaps). */
+		float PlaceLeft(const Man& M, double Now) const
+		{
+			if (M.UpAt < 0.0 || M.UpFor <= 0.f) return 0.f;
+			const float Walk = std::max(0.f, M.UpDist);
+			if (Walk <= 0.f) return UpLeft(M, Now);
+			const double Tu = (Now - M.UpAt) * Life - static_cast<double>(M.UpWalkAt);
+			return 1.f - Smooth(static_cast<float>(Tu / static_cast<double>(std::max(1.6f, Walk / 0.8f))));
+		}
 
 		/** How much of the get-up's turn and move is left (1 at first, 0 once eased out), Now. */
 		float UpLeft(const Man& M, double Now) const
@@ -5271,7 +5314,8 @@ namespace LandMen
 				// getting up at back, his place eases to the track's as the get-up's pivot does)
 				if (HitsNow.bWounded && M.Info.WoundStarted >= 0.0)
 				{
-					const float K = M.UpAt < 0.0 ? 1.f : UpLeft(M, Now);
+					if (M.UpAt >= 0.0 && M.UpDist < 0.f) M.UpDist = static_cast<float>(std::hypot(M.X - M.WoundX, M.Y - M.WoundY));
+					const float K = M.UpAt < 0.0 ? 1.f : PlaceLeft(M, Now);
 					if (K > 0.f)
 					{
 						M.X += (M.WoundX - M.X) * static_cast<double>(K);
@@ -5317,9 +5361,16 @@ namespace LandMen
 				if (M.Back < 0.0 || Now < M.Back)
 				{
 					if (M.Info.WoundStarted < 0.0) StartWound(M, M.Wd);
-					bDown = M.Info.WoundStarted >= 0.0;
+					bDown = M.Info.WoundStarted >= 0.0 && M.UpAt < 0.0;
 				}
 				else if (M.Info.WoundStarted >= 0.0 && M.UpAt < 0.0) StartGetUp(M, Now);
+			}
+			// (down wounded and no longer the hits' (the bearers took him, cy in a later delta, or wd taken back): the
+			// hold on his place ends at once, eased onto his track; the hits never take him again)
+			else if (M.State == Man::Alive && HitsNow.bWounded && M.Info.WoundStarted >= 0.0 && M.UpAt < 0.0 && (M.bCarried || M.Wd < 0.0))
+			{
+				M.UpAt = Now;
+				LetGo(M);
 			}
 			if (bDown) M.DownAt = DownPelvis(M, Now);
 			// (getting up at back: the rules' stances wait till he is on his feet)
@@ -5444,7 +5495,7 @@ namespace LandMen
 				if (bDown && bSample && Now >= M.WoundEnds) DownPose(M, Now, P);
 				if (UpK > 0.f && bSample)
 				{
-					const float Wu = Smooth(static_cast<float>((Now - M.UpAt) * Life / 0.4));
+					const float Wu = Smooth(static_cast<float>((Now - M.UpAt) * Life / static_cast<double>(M.UpBlend)));
 					if (Wu < 1.f)
 					{
 						Pose From = M.UpFrom;
@@ -5729,6 +5780,9 @@ namespace LandMen
 			M.DownClip = -1;
 			M.bStill = false;
 			M.UpFor = 0.f;
+			M.UpDist = -1.f;
+			M.UpWalkAt = 0.f;
+			M.UpBlend = 0.4f;
 			for (int L = 0; L < LodCount; ++L) { M.bSkinned[L] = false; M.RestAt[L].clear(); M.RestFacing[L].clear(); }
 			for (Shot& Sh : M.Shots) { Sh.Done = 0; Sh.LastC = -1.f; }
 			M.ShotCur = 0;

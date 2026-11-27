@@ -301,6 +301,8 @@ namespace
 		double SX = 0.0, SY = 0.0;
 		std::string W = "rifle";
 		std::string PoseAtWd;   // (the rules' own way: from wd the drill's stance, 'wounded', as the bearers' option writes it)
+		std::string PoseAtBack; // (the rules' stance for back, if any: from two seconds before it, while he lies)
+		std::vector<double> Path;   // (his track's points t, x, y in threes, facing F, in place of the straight walk, if any)
 	};
 
 	std::string Little(const std::vector<Man1>& Men)
@@ -318,10 +320,18 @@ namespace
 			const Man1& M = Men[I];
 			const int K = static_cast<int>(I) + 1;
 			const double T0 = 0.0, T1 = 40.0;
-			R << (I ? "," : "") << "{\"b\": 2, \"k\": " << K << ", \"r\": \"rifle\", \"at\": [[" << T0 << ", " << M.X - std::sin(M.F) * M.Go * Hit << ", "
-			  << M.Y - std::cos(M.F) * M.Go * Hit << ", " << M.F << "], [" << T1 << ", " << M.X + std::sin(M.F) * M.Go * (T1 - Hit) << ", "
-			  << M.Y + std::cos(M.F) * M.Go * (T1 - Hit) << ", " << M.F << "]], \"ch\": [[0, \"" << M.Pose << "\", \"" << M.Cover << "\", 0, 0, 0, 0]";
+			if (M.Path.empty())
+				R << (I ? "," : "") << "{\"b\": 2, \"k\": " << K << ", \"r\": \"rifle\", \"at\": [[" << T0 << ", " << M.X - std::sin(M.F) * M.Go * Hit << ", "
+				  << M.Y - std::cos(M.F) * M.Go * Hit << ", " << M.F << "], [" << T1 << ", " << M.X + std::sin(M.F) * M.Go * (T1 - Hit) << ", "
+				  << M.Y + std::cos(M.F) * M.Go * (T1 - Hit) << ", " << M.F << "]], \"ch\": [[0, \"" << M.Pose << "\", \"" << M.Cover << "\", 0, 0, 0, 0]";
+			else
+			{
+				R << (I ? "," : "") << "{\"b\": 2, \"k\": " << K << ", \"r\": \"rifle\", \"at\": [";
+				for (size_t P = 0; P + 2 < M.Path.size(); P += 3) R << (P ? ", [" : "[") << M.Path[P] << ", " << M.Path[P + 1] << ", " << M.Path[P + 2] << ", " << M.F << "]";
+				R << "], \"ch\": [[0, \"" << M.Pose << "\", \"" << M.Cover << "\", 0, 0, 0, 0]";
+			}
 			if (!M.PoseAtWd.empty() && M.Wd >= 0.0) R << ", [" << M.Wd << ", \"" << M.PoseAtWd << "\", \"none\", 0, 0, 0, 0]";
+			if (!M.PoseAtBack.empty() && M.Back >= 0.0) R << ", [" << M.Back - 2.0 << ", \"" << M.PoseAtBack << "\", \"none\", 0, 0, 0, 0]";
 			R << "]";
 			if (M.D >= 0.0) R << ", \"d\": " << M.D;
 			if (M.Wd >= 0.0) R << ", \"wd\": " << M.Wd;
@@ -1085,6 +1095,121 @@ namespace
 		Check(bOk1 && bOk2 && bDown, "wounded: a live battle's wd in a later delta (Extend) puts him down");
 	}
 
+	/** The bearers take him in a live battle after the hits put him down (wd in one delta, cy and the carried stance a
+	 * few seconds later in another, his track then walking off with the stretcher): the hits' hold on his place ends at
+	 * once and he goes with his track, his pelvis never more than 13 cm in a frame. */
+	void LiveCarried(const Files& Fs)
+	{
+		Man1 M;
+		M.Path = { 0.0, 0.0, 0.0, 8.0, 0.0, 0.0, 28.0, 0.0, 30.0, 40.0, 0.0, 30.0 };
+		const std::string Whole = Little({ M });
+		std::string Header = Whole;
+		const size_t A = Header.find("\"men\": [");
+		const size_t B = Header.find("], \"rounds\"");
+		const std::string Row = Header.substr(A + 8, B - A - 8);
+		Header.erase(A + 8, B - A - 8);
+		Crowd C;
+		Crowd::Hits On;
+		On.bJolt = On.bVariety = On.bWounded = true;
+		MakeCrowd(C, Fs, Header, On);
+		std::string Err;
+		std::string Mine = Row;
+		Mine.insert(1, "\"n\": 0, ");
+		const bool bOk1 = C.Extend("{\"t\": 1.0, \"men\": [" + Mine + "]}", Err);
+		int F = 0;
+		for (; F <= 90; ++F) C.Update(F / 30.0);
+		const bool bOk2 = C.Extend("{\"t\": 3.0, \"men\": [{\"n\": 0, \"wd\": 4.0}]}", Err);
+		for (; F <= 8 * 30; ++F) C.Update(F / 30.0);
+		const int Ix = C.Find(2, 1, 0);
+		const bool bDown = Ix >= 0 && C.Info(Ix).WoundStarted >= 0.0;
+		const bool bOk3 = C.Extend("{\"t\": 8.0, \"men\": [{\"n\": 0, \"cy\": [[8.0, 40.0, [1, 90, 0], [1, 91, 0]]], \"ch\": [[8.0, \"carried_wounded\", \"none\", 0, 0, 0, 0]]}]}", Err);
+		double Most = 0.0, MostAt = 0.0, Off25 = 99.0, OffEnd = 99.0;
+		bool bFinite = true;
+		Vec3 Was;
+		if (Ix >= 0)
+		{
+			const Soldier* S = C.SoldierOf(Ix);
+			const int Pe = S->BoneIndex("pelvis");
+			for (; F <= 32 * 30; ++F)
+			{
+				const double T = F / 30.0;
+				C.Update(T);
+				bFinite = bFinite && FramesFinite(C, Ix);
+				const Vec3 Pel = C.FramesOf(Ix)[Pe].Point(S->Bones[static_cast<size_t>(Pe)].Head);
+				if (F > 8 * 30 + 1 && Len(Minus(Pel, Was)) > Most) { Most = Len(Minus(Pel, Was)); MostAt = T; }
+				Was = Pel;
+				const double Ty = T < 8.0 ? 0.0 : T > 28.0 ? 30.0 : 30.0 * (T - 8.0) / 20.0;
+				const double Off = std::hypot(static_cast<double>(Pel.X), static_cast<double>(Pel.Y) - Ty);
+				if (F == 25 * 30) Off25 = Off;
+				if (F == 32 * 30) OffEnd = Off;
+			}
+		}
+		std::printf("  live carried: deltas %s, %s, %s (%s); %s; pelvis at most %.1f cm a frame from cy (at %.2f s), %.2f m off his track at 25 s, %.2f m at 32 s\n",
+			bOk1 ? "read" : "refused", bOk2 ? "read" : "refused", bOk3 ? "read" : "refused", Err.c_str(), bDown ? "down wounded before cy" : "not down", 100.0 * Most, MostAt, Off25, OffEnd);
+		Check(bOk1 && bOk2 && bOk3 && bDown, "wounded: live, cy in a delta after his wound (he was down wounded first)");
+		Check(Off25 < 1.5 && OffEnd < 1.5, "wounded: live, the bearers take him: he goes with his track (within 1.5 m at 25 s and 32 s), not pinned where he fell");
+		Check(Most <= 0.13 && bFinite, "wounded: live, the bearers take him: his pelvis never more than 13 cm in a frame, no NaN");
+	}
+
+	/** Up at back after his track walked 0, 2 and 10 m while he lay, with a standing stance at back and a prone one: he
+	 * eases onto his track, never more than 13 cm in a frame at the pelvis, and is on it in the end. */
+	void UpOntoTrack(const Files& Fs)
+	{
+		std::vector<Man1> Men;
+		const double Walks[3] = { 0.0, 2.0, 10.0 };
+		for (int I = 0; I < 6; ++I)
+		{
+			Man1 M;
+			M.X = 40.0 * I;
+			M.Wd = 6.0;
+			M.Back = 20.0;
+			const double D = Walks[I % 3];
+			M.Path = { 0.0, M.X, 0.0, 6.0, M.X, 0.0, 18.0, M.X, D, 40.0, M.X, D };
+			if (I >= 3) M.PoseAtBack = "fire_prone";
+			Men.push_back(M);
+		}
+		Crowd C;
+		Crowd::Hits On;
+		On.bJolt = On.bVariety = On.bWounded = true;
+		MakeCrowd(C, Fs, Little(Men), On);
+		std::vector<int> Ix;
+		for (int I = 0; I < 6; ++I) Ix.push_back(C.Find(2, I + 1, 0));
+		const Soldier* S = C.SoldierOf(Ix[0]);
+		const int Pe = S->BoneIndex("pelvis");
+		std::vector<double> Most(6, 0.0), MostAt(6, 0.0);
+		std::vector<Vec3> Was(6);
+		bool bFinite = true;
+		for (int F = 0; F <= 40 * 30; ++F)
+		{
+			const double T = F / 30.0;
+			C.Update(T);
+			for (int I = 0; I < 6; ++I)
+			{
+				const int M = Ix[static_cast<size_t>(I)];
+				bFinite = bFinite && FramesFinite(C, M);
+				const Vec3 Pel = C.FramesOf(M)[Pe].Point(S->Bones[static_cast<size_t>(Pe)].Head);
+				const double Step = Len(Minus(Pel, Was[static_cast<size_t>(I)]));
+				if (T > 19.5 && Step > Most[static_cast<size_t>(I)]) { Most[static_cast<size_t>(I)] = Step; MostAt[static_cast<size_t>(I)] = T; }
+				Was[static_cast<size_t>(I)] = Pel;
+			}
+		}
+		bool bSmooth = true, bOn = true, bDown = true;
+		for (int I = 0; I < 6; ++I)
+		{
+			const Man1& M = Men[static_cast<size_t>(I)];
+			const Vec3 Pel = Was[static_cast<size_t>(I)];
+			const double Off = std::hypot(static_cast<double>(Pel.X) - M.X, static_cast<double>(Pel.Y) - M.Path[8]);
+			std::printf("  up onto his track (walked %.0f m, %s at back): pelvis at most %.1f cm a frame from back (at %.2f s), %.2f m off his track at 40 s\n",
+				M.Path[8], I >= 3 ? "prone" : "standing", 100.0 * Most[static_cast<size_t>(I)], MostAt[static_cast<size_t>(I)], Off);
+			bDown = bDown && C.Info(Ix[static_cast<size_t>(I)]).WoundStarted >= 0.0;
+			bSmooth = bSmooth && Most[static_cast<size_t>(I)] <= 0.13;
+			bOn = bOn && Off < 0.6;
+		}
+		Check(bDown, "wounded, up onto his track: the six went down wounded");
+		Check(bSmooth && bFinite, "wounded, up onto his track: 0, 2 and 10 m walked, standing or prone at back, his pelvis never more than 13 cm in a frame (no snap, no NaN)");
+		Check(bOn, "wounded, up onto his track: on his track in the end (within 0.6 m)");
+	}
+
 	/** A flinch clip by name (hit_flinch_f, the soldiers thread's, here a stand-in made of fire_stand with its additive base):
 	 * laid over his pose instead of the code's jolt, pelvis to the bit where the clip leaves it, no NaN. */
 	void FlinchByName(const Files& Fs, const std::string& Folder)
@@ -1220,6 +1345,8 @@ int main(int Argc, char** Argv)
 	Struck(Fs);
 	Wounded(Fs);
 	LiveWound(Fs);
+	LiveCarried(Fs);
+	UpOntoTrack(Fs);
 	std::printf("== variety (bVariety alone, then every part on)\n");
 	std::map<std::string, int> StandOnly, StandAll;
 	for (size_t K = 0; K < Battles.size(); ++K)
