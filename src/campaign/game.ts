@@ -5833,24 +5833,29 @@ function standInsOf(g: Game, nat: string, row: any[]): Corps[] {
   return g.flags.open === 1 && UNLESS.has(row[2]) ? ((setup as any).expeditions as any[]).filter((r2) => r2[6]?.unless === row[2] && r2[1] === nat).map((r2) => g.corps.find((u) => u.nat === nat && !u.dead && u.name === r2[2])).filter((x): x is Corps => !!x) : [];
 }
 
+/** How a loan would have ended this month, had the one contact test not held its corps (`loanHeld`, arrivalwaits.ts `tellLoan`). */
+export type LoanWay = 'gone' | 'back' | 'down' | 'home';
+
 /**
  * A loan's end held by the one contact test (the design director's "3 RULED IN", 01:37Z, 27 November 2026), read where
  * `expeditions` would end the loan of sent row `i` this month, in the contact rule's scope (the theatre draw's, her
  * Q2): the lent corps living, the loan over (an `until` row's by `lentOver`, unless the player's offer of its end is
  * made or he has kept it; a war row's by its war over, the corps not at sea), and `corpsInContact` true with the corps
- * whose loans end in the same pass as the corps that leave with it (`leaving`). With how it would have ended: 'down' (a
- * garrison whose record ends in a surrender), 'back' (every division it holds goes back to the corps it came out of, or
- * a war row's), else 'gone'. Null where nothing holds it. Writes nothing.
+ * whose loans end in the same pass as the corps that leave with it (`leaving`). With how it would have ended: 'home' (a
+ * regiment of the player's that a division's row awaits, whose loan's end is his to answer, `loanStays`: while the test
+ * holds it the offer is not made, and the hold is told instead), 'down' (a garrison whose record ends in a surrender),
+ * 'back' (every division it holds goes back to the corps it came out of, or a war row's), else 'gone'. Null where
+ * nothing holds it. Writes nothing.
  */
-function loanHeld(g: Game, nat: string, row: any[], o: any, i: number, id: number, leaving: (x: Corps) => boolean): { c: Corps; way: 'gone' | 'back' | 'down' } | null {
+function loanHeld(g: Game, nat: string, row: any[], o: any, i: number, id: number, leaving: (x: Corps) => boolean): { c: Corps; way: LoanWay } | null {
   if (!contactRuleActs(g, g.byName[row[5]])) return null;
   const c = g.corps.find((x) => x.id === id && x.nat === nat && !x.dead);
   if (!c) return null;
-  let way: 'gone' | 'back' | 'down';
+  let way: LoanWay;
   if (o.until) {
     if (g.flags[leaveKey(i)] !== undefined || g.flags[keptKey(i)] || !lentOver(g, nat, row, o)) return null;
     const drawn = g.flags.open === 1 && !!c.drew?.length && divisionsOf(g, c).every((d) => c.drew!.some((r) => r.name[0] === d.name && r.from !== c.id && !r.conv));
-    way = o.ends === 'surrender' && farOn(g) ? 'down' : drawn ? 'back' : 'gone';
+    way = hisOffers(g, nat) && awaitedBy(nat, row[2]) >= 0 ? 'home' : o.ends === 'surrender' && farOn(g) ? 'down' : drawn ? 'back' : 'gone';
   } else if (o.war && g.flags.open === 1 && !warOn(g, o.war) && !g.atSea?.some((v) => v.corps.id === id) && (c.drew || c.rowed)) way = 'back';
   else return null;
   return corpsInContact(g, nat, c, new Set(endingNow(g, leaving))) ? { c, way } : null;
@@ -5946,6 +5951,9 @@ function expeditions(g: Game, nat: string, take?: number): void {
         if (g.flags[`rowTold:${i}`] !== undefined) rowDone(g, i);
         ((setup as any).expeditions as any[]).forEach((_, j) => { if (j !== i && g.flags[`lent:${j}`] === id) g.flags[`lent:${j}`] = -1; });
       }
+      // (A loan's end of the player's that waited, told, and is now offered to him (`loanStays`): the hold is over, and its
+      // telling flags go; his answer is the offer's. None exist with the switch never on.)
+      if (!held && g.flags[leaveKey(i)] !== undefined && g.flags[`rowTold:${i}`] !== undefined) rowDone(g, i);
       // (The far side: a division that awaits lent regiments keeps their shares for them while they are lent: `makeUp`.)
       if (o.awaits && farOn(g)) makeUp(g, nat, row, o);
       return;

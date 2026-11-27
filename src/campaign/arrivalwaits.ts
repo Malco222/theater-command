@@ -27,6 +27,7 @@
 import setup from '../../data/campaign/setup-1939.json';
 import { turnToDate } from '../core/ticket';
 import { allied, atFrontNow, headline, rowHolds, theWords } from './game';
+import type { LoanWay } from './game';
 import { contactRuleActs, stopOf } from './history';
 import type { Corps, Game, Region } from './types';
 
@@ -188,16 +189,20 @@ export function tellPlace(g: Game, i: number, at: Region): void {
  * 01:37Z, 27 November 2026). For the player's own row alone, the headline once, in the month the hold begins, in the
  * form of section 1 (DRAFT for the UI director: no marked sentence exists for a loan's end). `way` is how the loan would
  * have ended: 'gone' (it leaves for other fronts), 'back' (its divisions go back to the corps they came out of), 'down'
- * (a garrison whose record ends in a surrender). Its flags go where the loan ends (`rowDone`).
+ * (a garrison whose record ends in a surrender), 'home' (a regiment its division's row awaits, whose loan's end he is
+ * asked about: the question waits with it, and is put the month after it leaves the front). Its flags go where the
+ * loan ends (`rowDone`), or, for 'home', where his answer ends it.
  */
-export function tellLoan(g: Game, i: number, c: Corps, way: 'gone' | 'back' | 'down'): void {
+export function tellLoan(g: Game, i: number, c: Corps, way: LoanWay): void {
   const row = ROWS()[i];
   if (!row || g.flags.fromWait !== 1 || !g.human || row[1] !== g.human || c.nat !== g.human) return;
   g.flags[atKey(i)] = c.reg;
   if (g.flags[toldKey(i)] !== undefined) return;
   g.flags[toldKey(i)] = g.turn;
   const at = `it is at the front in ${placeOf(g, c)}`;
-  const line = way === 'down'
+  const line = way === 'home'
+    ? `${named(c.name, true)}, lent to the campaign, has come to the end of its loan this month, but ${at}. It stays, and you are asked whether to let it go home to its division the month after it leaves the front.`
+    : way === 'down'
     ? `${named(c.name, true)} is due to lay down its arms this month, but ${at}. It fights on, and lays them down the month after it leaves the front.`
     : way === 'back'
       ? `${named(c.name, true)}, lent to the campaign, is due to go back to the corps it came out of this month, but ${at}. It stays, and goes back the month after it leaves the front.`
