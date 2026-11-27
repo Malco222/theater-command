@@ -2267,7 +2267,9 @@ export class Drill {
   // Brian, 23 November 05:05Z: "if the troops are with tanks, have them advance behind the tank using it as cover like
   // they would in real life for the units near the tank and make sure their players cant be run over by their own
   // vechiles and they get out of the way. vechiles can run over enemy soldiers though which would kill them".
-  // LandBattle.escort, looks only (the drill's, DRILL.escort): the rules' counts and places are untouched.
+  // LandBattle.escort. What follows is the drill's share (DRILL.escort), which is looks only: the drill leaves the rules'
+  // counts and places untouched. The ROW is not looks only: the same switch runs the rules' overrun (sim.ts overruns,
+  // LAND.overrun), which moves tank blocks and so changes results (the design director, 27 November 2026, 01:54Z).
 
   /** A tank's key (her block's id x 1000 + her k), and the tanks of a side standing, each with her key. */
   private tanksStanding(side: Side, x: number, y: number, within: number): [Man, number][] {

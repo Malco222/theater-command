@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 84dc5eab6 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 73b175ba2 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -95984,7 +95984,9 @@
     // Brian, 23 November 05:05Z: "if the troops are with tanks, have them advance behind the tank using it as cover like
     // they would in real life for the units near the tank and make sure their players cant be run over by their own
     // vechiles and they get out of the way. vechiles can run over enemy soldiers though which would kill them".
-    // LandBattle.escort, looks only (the drill's, DRILL.escort): the rules' counts and places are untouched.
+    // LandBattle.escort. What follows is the drill's share (DRILL.escort), which is looks only: the drill leaves the rules'
+    // counts and places untouched. The ROW is not looks only: the same switch runs the rules' overrun (sim.ts overruns,
+    // LAND.overrun), which moves tank blocks and so changes results (the design director, 27 November 2026, 01:54Z).
     /** A tank's key (her block's id x 1000 + her k), and the tanks of a side standing, each with her key. */
     tanksStanding(side5, x, y, within4) {
       const out = [];
@@ -102448,7 +102450,9 @@
        * Infantry with tanks (release 2; Brian, 23 November 05:05Z): foot near a friendly tank advance behind her, no man is
        * run over by his own side's vehicles (they step out of the way), and an enemy tank can run a man over (Drill.escort,
        * clearOfVehicles, thin; DRILL.escort). Off unless turned on (the bridge's { escort: true }, the Battle rules card's
-       * Infantry with tanks row). With it, tanks overrun foot in the open (LAND.overrun, overruns): harm unchanged.
+       * Infantry with tanks row). With it, tanks overrun foot in the open (LAND.overrun, overruns). The overrun adds no
+       * harm of its own, but the tank block drives through the foot's ground and back, so places, cover, reaches and so
+       * results change: NOT a looks-only row (the design director, 27 November 2026, 01:54Z).
        */
       __publicField(this, "escort", false);
       /**

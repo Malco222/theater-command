@@ -475,7 +475,8 @@ namespace
 		{
 			std::string Model, Nation;
 			int Year = 1944, Month = 7;
-			std::string Expect; // white (the star), cross, red (the star), flash, rectangle, yellow (the army star), none;
+			std::string Expect; // white (the star), cross, truecross (the cross at its true proportions), red (the star), flash,
+			                    // rectangle, yellow (the army star), none;
 			                    // redflash (the map's flash: red, white, red); own (one of the thirty-eight nations' own);
 			                    // bluering (France's roundel as first painted, blue outside); redring (as the map's, red outside)
 			bool bAnyYear = false;
@@ -484,6 +485,8 @@ namespace
 			// (marks at their real size, Dress::bRealMarks: her largest mark as painted is no wider than Wide, metres)
 			bool bRealMarks = false;
 			double Wide = 0.0;
+			// (the German cross at its true proportions, Dress::bTrueCross, the trial word "truecross": Expect "truecross")
+			bool bTrueCross = false;
 		};
 		auto Expected = [](const std::string& Nation, int Year, int Month)
 		{
@@ -591,6 +594,22 @@ namespace
 		{
 			Cases.push_back(C);
 		}
+		// (the German cross at its true proportions, Dress::bTrueCross, the trial word "truecross"; the art director's
+		// ruling of 27 November 2026, 01:23Z: the black a quarter of the cross's length wide, the white an eighth of its
+		// length along each side of an arm, so five twelfths of the cross is white by area where a fifth was. On every
+		// German vehicle of the real-size list above at the same sizes, and on three as shipped, without "realmarks".)
+		for (const Case& C : std::vector<Case>{ { "PanzerIV", "GER", 1943, 7, "truecross", false, false, false, "", true, 0.25, true },
+				 { "Tiger", "GER", 1944, 7, "truecross", false, false, false, "", true, 0.30, true }, { "Panther", "GER", 1944, 7, "truecross", false, false, false, "", true, 0.30, true },
+				 { "StuG3", "GER", 1943, 7, "truecross", false, false, false, "", true, 0.25, true }, { "Hanomag", "GER", 1944, 7, "truecross", false, false, false, "", true, 0.25, true },
+				 { "Hummel", "GER", 1944, 7, "truecross", false, false, false, "", true, 0.25, true }, { "Kubelwagen", "GER", 1944, 7, "truecross", false, false, false, "", true, 0.25, true },
+				 { "LightTank", "GER", 1941, 6, "truecross", true, false, false, "", true, 0.25, true }, { "Truck", "GER", 1944, 7, "truecross", false, false, false, "", true, 0.25, true },
+				 { "PanzerIV", "GER", 1944, 7, "truecross", false, false, false, "", false, 0.0, true }, { "Tiger", "GER", 1944, 7, "truecross", false, false, false, "", false, 0.0, true },
+				 { "Truck", "GER", 1944, 7, "truecross", false, false, false, "", false, 0.0, true },
+				 // (and the word changes no other nation's mark)
+				 { "Sherman", "USA", 1944, 7, "white", false, false, false, "", true, 0.381, true }, { "T34", "SOV", 1943, 7, "red", false, false, false, "", true, 0.30, true } })
+		{
+			Cases.push_back(C);
+		}
 		int Failures = 0;
 		size_t AllAdded = 0, AllCases = 0;
 		for (const Case& C : Cases)
@@ -610,6 +629,7 @@ namespace
 			D.bAllMarks = C.bAllMarks;
 			D.bNewMarks = C.bNewMarks;
 			D.bRealMarks = C.bRealMarks;
+			D.bTrueCross = C.bTrueCross;
 			D.Coat = C.Coat;
 			Model Off, On;
 			const auto T0 = Clock::now();
@@ -623,6 +643,27 @@ namespace
 				std::printf("  FAIL %s (%s): %s\n", C.Model.c_str(), C.Nation.c_str(), Error.c_str());
 				++Failures;
 				continue;
+			}
+			// (the word "truecross" is the German cross's alone: any other mark's vehicle is built point for point as with
+			// the word off)
+			if (C.bTrueCross && C.Expect != "cross" && C.Expect != "truecross")
+			{
+				Dress WordOff = D;
+				WordOff.bTrueCross = false;
+				Model BuiltWordOff;
+				std::string WordOffError;
+				bool bWordChangesNothing = BuiltWordOff.Load(Text, WordOff, WordOffError) && BuiltWordOff.Bodies.size() == On.Bodies.size();
+				for (size_t B = 0; bWordChangesNothing && B < On.Bodies.size(); ++B)
+				{
+					bWordChangesNothing = On.Bodies[B].Near.Points == BuiltWordOff.Bodies[B].Near.Points && On.Bodies[B].Near.Colours == BuiltWordOff.Bodies[B].Near.Colours
+						&& On.Bodies[B].Near.Triangles == BuiltWordOff.Bodies[B].Near.Triangles;
+				}
+				if (!bWordChangesNothing)
+				{
+					std::printf("  FAIL %s (%s): the word truecross changed a vehicle whose mark is not the German cross\n", C.Model.c_str(), C.Nation.c_str());
+					++Failures;
+					continue;
+				}
 			}
 			++AllCases;
 			std::string Why;
@@ -809,7 +850,7 @@ namespace
 			// (where the army painted it, the art director's mends of 24 November: no cross on a Tiger's or a Panther's
 			// turret, and the cross on both her hull's sides; the Japanese star on her front, not her sides)
 			const int TurretIx = On.PartIndex("turret"), HullIx = On.PartIndex("hull");
-			const bool bBig = C.Expect == "cross" && (On.Name.compare(0, 5, "Tiger") == 0 || On.Name.compare(0, 7, "Panther") == 0);
+			const bool bBig = (C.Expect == "cross" || C.Expect == "truecross") && (On.Name.compare(0, 5, "Tiger") == 0 || On.Name.compare(0, 7, "Panther") == 0);
 			int Sides[2] = { 0, 0 };
 			for (const Mark& Mk : On.Painted)
 			{
@@ -832,8 +873,10 @@ namespace
 			}
 			const double Wh = White / Near, Bl = Black / Near, Rd = Red / Near, Ye = Yellow / Near;
 			// (the cross: black over a white one a little wider, of the same length: about a fifth of it white along its
-			// arms' sides; the marks under her own dust, chipped and scuffed)
-			const bool bPaint = C.Expect == "none" || (C.Expect == "white" && Wh > 0.8) || (C.Expect == "cross" && Wh > 0.1 && Bl > 0.35)
+			// arms' sides; the marks under her own dust, chipped and scuffed. At its true proportions, "truecross": five
+			// twelfths of it white, and never so with the word off)
+			const bool bPaint = C.Expect == "none" || (C.Expect == "white" && Wh > 0.8) || (C.Expect == "cross" && Wh > 0.1 && Wh < 0.3 && Bl > 0.35)
+				|| (C.Expect == "truecross" && Wh > 0.33 && Wh < 0.5 && Bl > 0.45)
 				|| (C.Expect == "red" && Rd > 0.8) || (C.Expect == "flash" && Wh > 0.45 && Rd > 0.2) || (C.Expect == "rectangle" && Rd > 0.6 && Wh > 0.05)
 				|| (C.Expect == "yellow" && Ye > 0.8) || (C.Expect == "redflash" && Rd > 0.45 && Wh > 0.2) || C.Expect == "own"
 				// (a roundel's rings by area: the outer 56 in a hundred, the middle 33, the disc 11)
@@ -931,11 +974,15 @@ namespace
 				double Wide; // (half as big again as the captor's mark at its real size, metres across)
 				bool bBack;  // (her back plate takes a captor's mark by her sides' rule, a quarter of a metre across or more; else none)
 				bool bRoof;  // (her roof takes an air mark, a quarter of a metre across or more; else none)
+				bool bTrue = false; // (the German captor's cross at its true proportions, Dress::bTrueCross: the same sizes and floors)
 			};
 			for (const Taken& K : { Taken{ "T34", "GER", "SOV", 0.375, false, true }, Taken{ "Sherman", "GER", "USA", 0.375, true, true },
 					 Taken{ "PanzerIV", "USA", "GER", 0.5715, true, true }, Taken{ "PanzerIV", "SOV", "GER", 0.45, true, true },
 					 Taken{ "Tiger", "USA", "GER", 0.5715, true, true }, Taken{ "LightTank", "GER", "UK", 0.375, false, true },
-					 Taken{ "M10", "GER", "USA", 0.375, false, false }, Taken{ "M3Halftrack", "GER", "USA", 0.375, true, false } })
+					 Taken{ "M10", "GER", "USA", 0.375, false, false }, Taken{ "M3Halftrack", "GER", "USA", 0.375, true, false },
+					 Taken{ "T34", "GER", "SOV", 0.375, false, true, true }, Taken{ "Sherman", "GER", "USA", 0.375, true, true, true },
+					 Taken{ "LightTank", "GER", "UK", 0.375, false, true, true }, Taken{ "M10", "GER", "USA", 0.375, false, false, true },
+					 Taken{ "M3Halftrack", "GER", "USA", 0.375, true, false, true } })
 			{
 				std::string Text, Error;
 				if (!ReadFile(Content + "/Models/Battle/" + K.Model + ".json", Text))
@@ -950,6 +997,7 @@ namespace
 				D.Year = 1943;
 				D.Month = 7;
 				D.bMarks = true;
+				D.bTrueCross = K.bTrue;
 				Model Was, Real;
 				const bool bWas = Was.Load(Text, D, Error);
 				D.bRealMarks = true;
@@ -957,6 +1005,46 @@ namespace
 				std::string Why;
 				double Least = 1e9, Most = 0.0, FileMost = 0.0, Roof = 0.0, Back = 0.0;
 				size_t Sides = 0, Under = 0;
+				// (a German captor's cross, as it was and at its true proportions. Laid flat, with marks not at their real
+				// size: its black to its white by area, 0.5 at its true proportions (two bars a quarter of its length wide
+				// over two half of it wide), 0.68 as it was. Painted on her skin, with marks at their real size: the word
+				// reaches it, so she is not painted point for point as with the word off; its share of white is held on
+				// her owner's own crosses above, which the same pieces paint.)
+				double FlatWhite = 0.0, FlatBlack = 0.0;
+				bool bPaintedAsWas = false;
+				if (bReal && std::string(K.Captor) == "GER")
+				{
+					for (const Body& Bo : Was.Bodies)
+					{
+						const Mesh& Flat = Bo.Near;
+						for (size_t T = 0; T + 2 < Flat.Triangles.size(); T += 3)
+						{
+							const uint32_t I0 = Flat.Triangles[T], I1 = Flat.Triangles[T + 1], I2 = Flat.Triangles[T + 2];
+							const bool bWhite = Flat.Colours[I0 * 4] == 206 && Flat.Colours[I0 * 4 + 1] == 204 && Flat.Colours[I0 * 4 + 2] == 194;
+							const bool bBlack = Flat.Colours[I0 * 4] == 24 && Flat.Colours[I0 * 4 + 1] == 24 && Flat.Colours[I0 * 4 + 2] == 24;
+							if (!bWhite && !bBlack)
+							{
+								continue;
+							}
+							const V3 Pa(Flat.Points[I0 * 3], Flat.Points[I0 * 3 + 1], Flat.Points[I0 * 3 + 2]), Pb(Flat.Points[I1 * 3], Flat.Points[I1 * 3 + 1], Flat.Points[I1 * 3 + 2]),
+								Pc(Flat.Points[I2 * 3], Flat.Points[I2 * 3 + 1], Flat.Points[I2 * 3 + 2]);
+							(bWhite ? FlatWhite : FlatBlack) += 0.5 * (Pb - Pa).Cross(Pc - Pa).Length();
+						}
+					}
+					if (K.bTrue)
+					{
+						Dress Plain = D;
+						Plain.bTrueCross = false;
+						Model RealWas;
+						std::string PlainError;
+						bPaintedAsWas = RealWas.Load(Text, Plain, PlainError) && RealWas.Bodies.size() == Real.Bodies.size();
+						for (size_t B = 0; bPaintedAsWas && B < Real.Bodies.size(); ++B)
+						{
+							bPaintedAsWas = Real.Bodies[B].Near.Points == RealWas.Bodies[B].Near.Points && Real.Bodies[B].Near.Colours == RealWas.Bodies[B].Near.Colours
+								&& Real.Bodies[B].Near.Triangles == RealWas.Bodies[B].Near.Triangles;
+						}
+					}
+				}
 				if (!bReal)
 				{
 					Why = "did not load: " + Error;
@@ -1056,10 +1144,19 @@ namespace
 					{
 						Why = "her roof carries an air mark where it takes none of a quarter of a metre";
 					}
+					else if (std::string(K.Captor) == "GER" && (FlatWhite <= 0.0 || std::fabs(FlatBlack / FlatWhite - (K.bTrue ? 0.5 : 0.6825)) > 0.02))
+					{
+						Why = std::string("her flat captor cross is not ") + (K.bTrue ? "at its true proportions" : "as it was") + " (black to white " + std::to_string(FlatWhite > 0.0 ? FlatBlack / FlatWhite : 0.0) + ")";
+					}
+					else if (K.bTrue && bPaintedAsWas)
+					{
+						Why = "her painted captor cross is the cross as it was";
+					}
 				}
 				++AllCases;
-				std::printf("  %-11s taken by %-3s from %-3s  her captor's mark on her sides %.3f to %.3f m across (at most %.3f; as it was %.3f); her back %.3f (was 0.500), her roof %.3f (was 0.600)  %s\n",
-					K.Model, K.Captor, K.From, Least > 1e8 ? 0.0 : 2.0 * Least, 2.0 * Most, K.Wide, 3.0 * FileMost, 2.0 * Back, 2.0 * Roof, Why.empty() ? "ok" : ("FAIL " + Why).c_str());
+				std::printf("  %-11s taken by %-3s from %-3s%s  her captor's mark on her sides %.3f to %.3f m across (at most %.3f; as it was %.3f); her back %.3f (was 0.500), her roof %.3f (was 0.600)  %s\n",
+					K.Model, K.Captor, K.From, K.bTrue ? " (true cross)" : "", Least > 1e8 ? 0.0 : 2.0 * Least, 2.0 * Most, K.Wide, 3.0 * FileMost, 2.0 * Back, 2.0 * Roof,
+					Why.empty() ? "ok" : ("FAIL " + Why).c_str());
 				Failures += Why.empty() ? 0 : 1;
 			}
 		}

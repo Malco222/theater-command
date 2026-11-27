@@ -367,6 +367,15 @@ namespace LandKit
 		 * stays large, as crews painted it so their own gunners would hold their fire (her ruling of 17:56Z): half as
 		 * big again as its real size, never over three quarters of its plate's height. Off: as before, point for point. */
 		bool bRealMarks = false;
+		/** The German beam cross at its true proportions (release 2, on its own switch, the trial word "truecross"; the
+		 * art director's ruling of 27 November 2026, 01:23Z, which follows Brian's word of 26 November on an aircraft's
+		 * cross): the black bars a quarter of the cross's length wide and the white an eighth of its length along each
+		 * side of an arm, as the campaign map's and the aircraft's cross are drawn; each arm black to its open end and
+		 * the whole one coat of pieces side by side, as before. The aircraft's thin black edge outside the white is left
+		 * out: on a tank's quarter-metre cross it is 8 mm, under the paint's own step, and it would add twelve pieces to
+		 * every cross. Sizes and places are untouched (MarkReal; her file's places). Off: the cross as before, its
+		 * black 0.27 of its length wide and its white 0.045 of its length a side, point for point. */
+		bool bTrueCross = false;
 	};
 
 	class Model
@@ -901,6 +910,9 @@ namespace LandKit
 		bool bNewMarks = false;
 		/** Marks at their real size (release 2, the trial word "realmarks"; Dress::bRealMarks). Off: as before. */
 		bool bRealMarks = false;
+		/** The German cross at its true proportions (release 2, the trial word "truecross"; Dress::bTrueCross). Off: as
+		 * before. Off unless set; set before Load. */
+		bool bTrueCross = false;
 
 	private:
 		std::vector<Vehicle> All;

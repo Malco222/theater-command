@@ -64,6 +64,9 @@ describe('infantry with tanks', () => {
   const sideOf = new Map(on.L.sim.units.map((u) => [u.id, u.side]));
   const kindOf = new Map(on.L.sim.units.map((u) => [u.id, u.kind]));
 
+  // (This identity holds on THIS battle only, where both sides' foot carry their own anti-tank weapons, so no tank
+  // ever overruns: it says nothing of the overrun, which moves tank blocks and changes results elsewhere. The row is
+  // a rules row, not looks only: the design director, 27 November 2026, 01:54Z.)
   it('fights the very same battle: every block, figure and result', () => {
     expect(on.units).toBe(off.units);
     expect(JSON.stringify(on.L.sim.over)).toBe(JSON.stringify(off.L.sim.over));

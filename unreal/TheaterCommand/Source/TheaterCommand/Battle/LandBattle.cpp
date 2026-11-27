@@ -1231,6 +1231,48 @@ bool ALandBattle::BeginReplay(const FString& InKey)
 	return Open();
 }
 
+namespace
+{
+	// The blast press's curve as the pressed twins work it out (build_content.py, _press_curve): T life seconds after the
+	// front came, out over Rise as 1 - (1 - T / Rise)^2, held back by (1 - T / Back)^2; 0 before, and from Back on.
+	double BlastPressCurve(double PressCurveT, double PressCurveRise, double PressCurveBack)
+	{
+		const double PressCurveOut = FMath::Clamp(PressCurveT / PressCurveRise, 0.0, 1.0);
+		const double PressCurveHome = 1.0 - FMath::Clamp(PressCurveT / PressCurveBack, 0.0, 1.0);
+		return (1.0 - (1.0 - PressCurveOut) * (1.0 - PressCurveOut)) * PressCurveHome * PressCurveHome;
+	}
+
+	// ...its peak and when it comes, sampled 401 times over the rise.
+	double BlastPressPeakOf(double PressCurveRise, double PressCurveBack, double& PressWhen)
+	{
+		double PressMostSeen = 0.0;
+		PressWhen = 0.0;
+		for (int32 BlastPressK = 0; BlastPressK <= 400; ++BlastPressK)
+		{
+			const double PressT = PressCurveRise * BlastPressK / 400.0;
+			const double PressAtT = BlastPressCurve(PressT, PressCurveRise, PressCurveBack);
+			if (PressAtT > PressMostSeen)
+			{
+				PressMostSeen = PressAtT;
+				PressWhen = PressT;
+			}
+		}
+		return FMath::Max(PressMostSeen, 1e-6);
+	}
+
+	// The effects kit's size rows (battle-fx.json at d1e18fa5f): the reach is the kit's live dust skirt's,
+	// 0.5 x burst.shock_ring.of_cloud (1.5) x sizes.<row>.cloud_m (TheaterFxCore.cpp, Skirt); NOT shock_ring.reach_m
+	// (9 m) or its "frames 1 to 4", which the kit does not run. The strength: 0.3 a light mortar, 0.7 a 105, 1 a 150
+	// and up (agreed); mortar 0.4 and gun75 0.5 to be confirmed by the effects engineer; a grenade 0.15.
+	struct FBlastPressRow
+	{
+		const TCHAR* PressRowSize;
+		double PressRowReachM, PressRowStrength;
+	};
+	const FBlastPressRow BlastPressRows[] = {{TEXT("grenade"), 3.75, 0.15}, {TEXT("light"), 6.0, 0.3}, {TEXT("mortar"), 9.0, 0.4}, {TEXT("gun75"), 15.0, 0.5},
+		{TEXT("how105"), 22.5, 0.7}, {TEXT("how150"), 28.5, 1.0}, {TEXT("bomb250"), 36.0, 1.0}, {TEXT("bomb500"), 45.0, 1.0}};
+}
+
 void ALandBattle::LoadInks()
 {
 	// Vertex colours on the campaign's own surface (sRGB in, made linear there), as the air battle's aircraft: the
@@ -1270,8 +1312,132 @@ void ALandBattle::LoadInks()
 		GroundInk = Ink(0.95f, 0.15f, 0.14f);
 	}
 	ThingInk = Ink(0.9f, 0.2f, 0.06f);
+	// The blast press (Brian's film details, 26 November, "grass and dust flattened by blasts": the grass, the corn and
+	// the leaves round a bursting shell flinch outward and spring back; PressBurst, PressFrame), on with
+	// "-TheaterLandBlastPress" and only with the wind asked for (as the wind block below reads it), off until the art
+	// director and the Mac's frame rate pass it. "-TheaterLandBlastPress=<strength>" or
+	// "=<strength>,<front m/s>,<rise s>,<back s>,<most>" tunes it without a rebuild (1, 340, 0.08, 0.75, 0.45: life
+	// seconds, the effects kit's; strength times every burst's; most, the cap, the share of a plant's height as drawn
+	// a tip goes aside at most, whatever the strength, held to 0.1 .. 0.9). A strength that is there but is not a plain
+	// decimal ("=off", "=no", "=false") turns it OFF, as "-TheaterLandWind=off" turns the wind off; an empty part is
+	// that number's default. Decided here, before any swaying material is loaded: on, each pressed twin
+	// (M_LandBladesPress, M_LandLeavesPress, M_LandStalksPress, build_content.py) in its plain one's place, but only
+	// where the plain one loads too (so a twin can never outlive its plain material), else the plain one, said once;
+	// off (not asked, no wind asked, strength 0 or a word, M_LandBlades missing or no twin at all), the three plain ones
+	// as before and nothing else.
+	UMaterialInterface* PressTwin[3] = {nullptr, nullptr, nullptr}; // (the leaves', the stalks', the blades')
+	{
+		const TCHAR* PressLine = FCommandLine::Get();
+		FString PressSpec;
+		const bool bPressAsked = FParse::Param(PressLine, TEXT("TheaterLandBlastPress")) || FParse::Value(PressLine, TEXT("TheaterLandBlastPress="), PressSpec, false);
+		float WindForPress = FParse::Param(PressLine, TEXT("TheaterLandEpic")) || FParse::Param(PressLine, TEXT("TheaterLandWind")) ? 1.0f : 0.0f;
+		FParse::Value(PressLine, TEXT("TheaterLandWind="), WindForPress);
+		bBlastPress = false;
+		FMemory::Memzero(PressSlotStart);
+		FMemory::Memzero(PressSlotStrength);
+		FMemory::Memzero(PressSlotReach);
+		for (FVector2D& PressSlotSpot : PressSlotAt)
+		{
+			PressSlotSpot = FVector2D::ZeroVector;
+		}
+		PressWroteNow = PressWroteBefore = -1.0;
+		PressLivedWas = State.IsValid() ? State->Lived : 0.0;
+		bPressTail = false;
+		// (each number in its place, empty parts kept, as the WalkPan switch reads its own: an empty part, or one that is
+		// not wholly a plain decimal ("fast", "2x", "1e3", "nan"), is that number's default, but a strength that is there
+		// and is not a plain decimal ("off", "no", "false") is OFF; the rest held to their limits; the rise held to at
+		// most half the way back, so the flinch is always out fast and home slow)
+		TArray<FString> PressTuned;
+		PressSpec.ParseIntoArray(PressTuned, TEXT(","), false);
+		const auto PressPartAt = [&PressTuned](int32 BlastPressK)
+		{
+			return PressTuned.IsValidIndex(BlastPressK) ? PressTuned[BlastPressK].TrimStartAndEnd() : FString();
+		};
+		const auto PressPlainDecimal = [](const FString& PressPart)
+		{
+			// (plain decimals only: an optional sign, digits, one point, at least one digit; FString::IsNumeric)
+			bool bPressDigit = false;
+			for (int32 PressCharAt = 0; PressCharAt < PressPart.Len(); ++PressCharAt)
+			{
+				bPressDigit = bPressDigit || FChar::IsDigit(PressPart[PressCharAt]);
+			}
+			return bPressDigit && PressPart.IsNumeric();
+		};
+		const auto PressNumber = [&PressPartAt, &PressPlainDecimal](int32 BlastPressK, double PressDefault, double PressLeast, double PressMost)
+		{
+			const FString PressPart = PressPartAt(BlastPressK);
+			if (!PressPlainDecimal(PressPart))
+			{
+				return PressDefault;
+			}
+			const double PressRead = FCString::Atod(*PressPart);
+			return FMath::IsFinite(PressRead) ? FMath::Clamp(PressRead, PressLeast, PressMost) : PressDefault;
+		};
+		const FString PressStrengthPart = PressPartAt(0);
+		const bool bPressStrengthWord = !PressStrengthPart.IsEmpty() && !PressPlainDecimal(PressStrengthPart);
+		PressGain = bPressStrengthWord ? 0.0 : PressNumber(0, 1.0, 0.0, 4.0);
+		PressFrontMps = PressNumber(1, 340.0, 5.0, 5000.0);
+		PressBackS = PressNumber(3, 0.75, 0.05, 10.0);
+		PressRiseS = FMath::Min(PressNumber(2, 0.08, 0.01, 2.0), 0.5 * PressBackS);
+		PressMostOfHeight = PressNumber(4, 0.45, 0.1, 0.9);
+		PressPeak = BlastPressPeakOf(PressRiseS, PressBackS, PressPeakS);
+		double PressPeakDrawnS = 0.0;
+		PressPeakFix = BlastPressPeakOf(0.08, 0.75, PressPeakDrawnS) / PressPeak;
+		if (bPressAsked && WindForPress > 0.0f && PressGain > 0.0)
+		{
+			static const TCHAR* const PressPlain[3] = {TEXT("M_LandLeaves"), TEXT("M_LandStalks"), TEXT("M_LandBlades")};
+			// (each plain one first: a twin is taken only where its plain material loads too, so a twin left over from an
+			// earlier build can never be drawn when its plain material is gone; then the wind's M_LandBlades decides)
+			int32 PressTwins = 0;
+			bool bPressPlain[3] = {false, false, false};
+			for (int32 BlastPressK = 0; BlastPressK < 3; ++BlastPressK)
+			{
+				bPressPlain[BlastPressK] = LoadObject<UMaterialInterface>(nullptr, *FString::Printf(TEXT("/Game/Campaign/Materials/%s.%s"), PressPlain[BlastPressK], PressPlain[BlastPressK]), nullptr, LOAD_NoWarn | LOAD_Quiet) != nullptr;
+				PressTwin[BlastPressK] = bPressPlain[BlastPressK] ? LoadObject<UMaterialInterface>(nullptr, *FString::Printf(TEXT("/Game/Campaign/Materials/%sPress.%sPress"), PressPlain[BlastPressK], PressPlain[BlastPressK]), nullptr, LOAD_NoWarn | LOAD_Quiet) : nullptr;
+				PressTwins += PressTwin[BlastPressK] ? 1 : 0;
+			}
+			const bool bPressBlades = bPressPlain[2];
+			bBlastPress = PressTwins > 0 && bPressBlades;
+			if (!bPressBlades)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Land battle: the blast press OFF: no wind (M_LandBlades is missing, said below)."));
+			}
+			else if (PressTwins == 0)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Land battle: the blast press OFF: none of its three materials was found (run Tools/build_content.sh with TC_REBUILD=M_LandBladesPress,M_LandLeavesPress,M_LandStalksPress, and the same TC_LODGED that built the plain three)."));
+			}
+			else
+			{
+				for (int32 BlastPressK = 0; BlastPressK < 3; ++BlastPressK)
+				{
+					static bool bPressToldNoTwin[3] = {false, false, false};
+					if (!PressTwin[BlastPressK] && bPressPlain[BlastPressK] && !bPressToldNoTwin[BlastPressK])
+					{
+						bPressToldNoTwin[BlastPressK] = true;
+						UE_LOG(LogTheater, Warning, TEXT("Land battle: /Game/Campaign/Materials/%sPress is missing (run Tools/build_content.sh with TC_REBUILD=%sPress, and the same TC_LODGED that built %s): %s drawn without the blast press."), PressPlain[BlastPressK], PressPlain[BlastPressK], PressPlain[BlastPressK], PressPlain[BlastPressK]);
+					}
+				}
+				UE_LOG(LogTheater, Display, TEXT("Land battle: the blast press ON (-TheaterLandBlastPress, %d of 3 pressed materials): strength x%.2f, front %.0f m/s, out in %.3f s, back by %.2f s (life seconds), at most %.2f of a plant's height aside"),
+					PressTwins, PressGain, PressFrontMps, PressRiseS, PressBackS, PressMostOfHeight);
+			}
+		}
+		else if (bPressAsked)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: the blast press OFF: %s%s"), WindForPress <= 0.0f ? TEXT("it asks for the wind too (-TheaterLandWind or -TheaterLandEpic).") :
+				bPressStrengthWord ? TEXT("its strength is a word, not a number: -TheaterLandBlastPress=") : TEXT("its strength is 0 (-TheaterLandBlastPress=0)."),
+				WindForPress > 0.0f && bPressStrengthWord ? *PressStrengthPart : TEXT(""));
+		}
+		if (!bBlastPress)
+		{
+			PressTwin[0] = PressTwin[1] = PressTwin[2] = nullptr;
+		}
+	}
+	const auto SwayingMaterial = [&PressTwin](const TCHAR* PressPlainPath, int32 PressWhich) -> UMaterialInterface*
+	{
+		return PressTwin[PressWhich] ? PressTwin[PressWhich] : LoadObject<UMaterialInterface>(nullptr, PressPlainPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
+	};
 	// The hedges' and trees' leaves on their cards (M_LandLeaves, build_content.py): without it, their solid sprigs.
-	UMaterialInterface* Leaves = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_LandLeaves.M_LandLeaves"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	UMaterialInterface* Leaves = SwayingMaterial(TEXT("/Game/Campaign/Materials/M_LandLeaves.M_LandLeaves"), 0);
 	LeafInk = Leaves ? UMaterialInstanceDynamic::Create(Leaves, this) : nullptr;
 	if (!Leaves)
 	{
@@ -1285,7 +1451,7 @@ void ALandBattle::LoadInks()
 	// The corn's stalks near a low lens (M_LandStalks, build_content.py; the art director's cut 4, fix 4): without it, the
 	// bundles to the lens, said once. Shown from NearFrom + NearSpan of depth past the lens, gone from FarTo along the
 	// ground, where the bundles (cleared within LandParts::StalkClear) take over.
-	UMaterialInterface* Stalks = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_LandStalks.M_LandStalks"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	UMaterialInterface* Stalks = SwayingMaterial(TEXT("/Game/Campaign/Materials/M_LandStalks.M_LandStalks"), 1);
 	StalkInk = Stalks ? UMaterialInstanceDynamic::Create(Stalks, this) : nullptr;
 	if (StalkInk)
 	{
@@ -1334,7 +1500,7 @@ void ALandBattle::LoadInks()
 		const FVector Blowing = Rec.Weather.bWind ? WorldWay(Rec.Weather.WindX, Rec.Weather.WindY, 0.0) : WorldWay(2.6, 1.2, 0.0);
 		const double Speed = Blowing.Size2D();
 		const FVector Way = Speed > 0.1 ? FVector(Blowing.X / Speed, Blowing.Y / Speed, 0.0) : FVector(0.91, 0.41, 0.0);
-		UMaterialInterface* Blades = WindAsked > 0.0f ? LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_LandBlades.M_LandBlades"), nullptr, LOAD_NoWarn | LOAD_Quiet) : nullptr;
+		UMaterialInterface* Blades = WindAsked > 0.0f ? SwayingMaterial(TEXT("/Game/Campaign/Materials/M_LandBlades.M_LandBlades"), 2) : nullptr;
 		bWindOn = Blades != nullptr;
 		if (WindAsked > 0.0f && !Blades)
 		{
@@ -1360,6 +1526,7 @@ void ALandBattle::LoadInks()
 			struct FBlow
 			{
 				float Bend = 0.0f, Curve = 0.0f, Tall = 12.0f, Spring = 0.25f, SpringHz = 0.55f, Flutter = 0.0f, FlutterHz = 2.2f, Sheen = 0.0f, Ripe = 0.0f;
+				float PressBend = 0.0f; // (the blast press: radians at the peak of a full press, by the height as drawn)
 			};
 			auto Blow = [&](UMaterialInstanceDynamic* M, const FBlow& B)
 			{
@@ -1380,6 +1547,15 @@ void ALandBattle::LoadInks()
 				M->SetScalarParameterValue(TEXT("FlutterHz"), B.FlutterHz * ShakePace);
 				M->SetScalarParameterValue(TEXT("Sheen"), B.Sheen * FMath::Min(Gusty, 1.2f));
 				M->SetScalarParameterValue(TEXT("SheenRipe"), B.Ripe * FMath::Min(Gusty, 1.2f));
+				// (the blast press's own numbers, on the ten swaying copies only: the timing the slot choice uses too)
+				if (bBlastPress && B.PressBend > 0.0f)
+				{
+					M->SetScalarParameterValue(TEXT("PressBend"), B.PressBend);
+					M->SetScalarParameterValue(TEXT("PressFront"), static_cast<float>(PressFrontMps));
+					M->SetScalarParameterValue(TEXT("PressRise"), static_cast<float>(PressRiseS));
+					M->SetScalarParameterValue(TEXT("PressBack"), static_cast<float>(PressBackS));
+					M->SetScalarParameterValue(TEXT("PressMost"), static_cast<float>(PressMostOfHeight));
+				}
 			};
 			auto Swaying = [&](float Roughness, float Specular, float Grain)
 			{
@@ -1427,6 +1603,13 @@ void ALandBattle::LoadInks()
 			FBlow OfPalm; OfPalm.Bend = 0.012f; OfPalm.Curve = 1.0f; OfPalm.Spring = 0.6f; OfPalm.SpringHz = 0.35f;
 			FBlow OfPalmLeaf = OfPalm; OfPalmLeaf.Flutter = 0.12f; OfPalmLeaf.FlutterHz = 1.3f;
 			FBlow OfGround; OfGround.Sheen = 0.06f; OfGround.Ripe = 0.11f;
+			// (the blast press, whatever the wind: 5 m from a 150 mm shell a 1 m stalk of corn or tuft of grass flinches some
+			// 0.43 m, a 1.5 m bush 0.28 m, an 18 m oak's crown 0.2 m at its top; at most PressMostOfHeight (0.45 unless the
+			// switch says) of a plant's height as drawn, however many shells press it, each point brought down as it leans
+			// so it stays as far from the foot: grass keeps its length, corn and stalks bow a little longer. A tree's leaves
+			// go as its wood)
+			OfGrass.PressBend = 0.45f; OfGrain.PressBend = 0.45f; OfStalk.PressBend = 1.1f; OfBush.PressBend = 0.2f;
+			OfWood.PressBend = OfLeaf.PressBend = 0.008f; OfLively.PressBend = OfLivelyLeaf.PressBend = 0.012f; OfPalm.PressBend = OfPalmLeaf.PressBend = 0.01f;
 			Blow(BladeInk, OfGrass);
 			Blow(GrainInk, OfGrain);
 			Blow(StalkInk, OfStalk);
@@ -3051,6 +3234,7 @@ void ALandBattle::LayThings()
 	// stalks' materials, which hold the wind, are told not to move at all)
 	float SwayTo = 250.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandSwayTo="), SwayTo);
+	PressSeenTo = SwayTo > 0.0f ? SwayTo * U * 0.01 : 1.0e12; // (the blast press: 0 or less sways everywhere, so every burst is seen)
 	const auto Windblown = [this, SwayTo, U](UInstancedStaticMeshComponent* Copies, bool bSways, bool bClutterCopy)
 	{
 		if (!bSways)
@@ -4752,6 +4936,13 @@ void ALandBattle::MakeArmour()
 	// nations' too, in place of the sizes that word tried. "-TheaterLandNoRealMarks" off whatever the trial.
 	Armour->bRealMarks = LandParts::OnTrial("realmarks") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoRealMarks"));
 	UE_LOG(LogTheater, Log, TEXT("Land battle: marks at their real size %s"), Armour->bRealMarks ? TEXT("ON (-TheaterLandTrial=realmarks, release 2): each mark at its wartime size in metres") : TEXT("off (as before)"));
+	// The German cross at its true proportions (release 2, on trial: "-TheaterLandTrial=truecross", off until the art
+	// director and a Mac look pass it; her ruling of 27 November 2026, 01:23Z; LandKit's Dress::bTrueCross): the black
+	// bars a quarter of the cross's length wide, the white an eighth of its length a side, as the campaign map's and
+	// the aircraft's cross. A word of its own: not "realmarks", whose Mac look stays the gate of sizes and places with
+	// the cross as it was, and not the map's one look. "-TheaterLandNoTrueCross" off whatever the trial.
+	Armour->bTrueCross = LandParts::OnTrial("truecross") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoTrueCross"));
+	UE_LOG(LogTheater, Log, TEXT("Land battle: the German cross at its true proportions %s"), Armour->bTrueCross ? TEXT("ON (-TheaterLandTrial=truecross, release 2): black a quarter of its length wide, white an eighth a side") : TEXT("off (as before)"));
 	std::string Error;
 	{
 		// How a pierced tank ends by the face struck (the modeller's measured odds: a rear hit on a Tiger or a Panther
@@ -7778,6 +7969,10 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// in FieldMs).
 	PlayEffects();
 	FlyOver(EyeWorld); // (Effects (R2): the fighters on call over the field, -TheaterLandAirSupport)
+	if (bBlastPress)
+	{
+		PressFrame(); // (the blast press's clock, after ALL this frame's bursts, the fighters' crashes too: only while a press shows; off, one bool test)
+	}
 	DrawFall(EyeWorld, static_cast<float>(Real)); // (G10: rain and snow round the eye, -TheaterLandFalling)
 	Mark = LandParts::Seconds();
 	LandFell::Phase("tick: the breaches");
@@ -8635,6 +8830,184 @@ void ALandBattle::Press(const FString& Button)
 }
 
 // ---- What happens ----------------------------------------------------------------------------------------------
+
+void ALandBattle::PressBurst(double PressBurstX, double PressBurstY, double PressRadiusM, double PressBurstStrength, double PressAtSeconds)
+{
+	// The blast press: as a shell bursts at field metres (X, Y), the grass, the corn and the leaves within RadiusM of it
+	// flinch outward by Strength (times PressGain) and spring back (build_content.py, blast_press). Written to the
+	// pressed twins' slot parameters once, now, never between: the materials work the curve out from PressNow, the life
+	// clock PressFrame writes. Nothing unless "-TheaterLandBlastPress" is on with the wind. Refused whole: a number that
+	// is not finite (one would leave every swaying thing's place undefined, NaN, field-wide), a place more than 200 m off
+	// the field, a reach over 200 m (so no float overflows in a parameter, whatever the eye), a strength of 0 or less.
+	if (!bBlastPress || !State.IsValid() || !FMath::IsFinite(PressBurstX) || !FMath::IsFinite(PressBurstY) || !FMath::IsFinite(PressRadiusM) ||
+		!FMath::IsFinite(PressBurstStrength) || !FMath::IsFinite(PressAtSeconds) || PressBurstStrength <= 0.0 || PressRadiusM <= 0.0 || PressRadiusM > 200.0)
+	{
+		return;
+	}
+	const FLandBattleState& PressScene = *State;
+	const double PressFieldW = PressScene.Rec.Ground.W, PressFieldH = PressScene.Rec.Ground.H;
+	if (PressFieldW > 0.0 && PressFieldH > 0.0 ? (PressBurstX < -200.0 || PressBurstX > PressFieldW + 200.0 || PressBurstY < -200.0 || PressBurstY > PressFieldH + 200.0) : (FMath::Abs(PressBurstX) > 1.0e5 || FMath::Abs(PressBurstY) > 1.0e5))
+	{
+		return;
+	}
+	static_assert(UE_ARRAY_COUNT(PressSlotStart) == 4, "build_content.py's PRESS_SLOTS (the header's four PressSlot arrays, and the two name lists below)");
+	static_assert(UE_ARRAY_COUNT(PressSlotStrength) == UE_ARRAY_COUNT(PressSlotStart) && UE_ARRAY_COUNT(PressSlotReach) == UE_ARRAY_COUNT(PressSlotStart) &&
+		UE_ARRAY_COUNT(PressSlotAt) == UE_ARRAY_COUNT(PressSlotStart), "the header's four PressSlot arrays, each one place a slot");
+	const double PressPush = FMath::Min(PressBurstStrength, 1.5) * PressGain;
+	const double PressReach = FMath::Clamp(PressRadiusM, 1.0, 60.0) * UnitsPerMetre * 0.01; // (in the world's metres, as PressWhere)
+	// (the burst's place as the materials read a point's: its world place in centimetres times 0.01; World swaps the
+	// field's X and Y for Unreal's, and the battle's root stands where its actor does)
+	const FVector PressWhere = GetActorTransform().TransformPosition(World(PressBurstX, PressBurstY, 0.0)) * 0.01;
+	const FVector2D PressBurstSpot(PressWhere.X, PressWhere.Y);
+	// How much a press here is seen: nothing past PressSeenTo and its reach from the eye (the grass sways only within
+	// SwayTo of it), else more the nearer (10 m or nearer: all). While the film's window is up in its corner
+	// (bCornerLens) its lens may stand anywhere, so then every burst counts as fully seen; without an eye, the same.
+	const auto PressSeen = [this](const FVector2D& PressSeenAt, double PressSeenMargin) -> double
+	{
+		if (!Eye || bCornerLens)
+		{
+			return 1.0;
+		}
+		const double PressApart = FVector2D::Distance(FVector2D(Eye->GetActorLocation().X, Eye->GetActorLocation().Y) * 0.01, PressSeenAt);
+		return PressApart > PressSeenTo + PressSeenMargin ? 0.0 : 10.0 / FMath::Max(PressApart, 10.0);
+	};
+	const double PressWanted = PressPush * PressSeen(PressBurstSpot, PressReach);
+	if (PressWanted <= 0.0)
+	{
+		return;
+	}
+	// The burst's moment on the life clock, never ahead of now, and behind it by at most a tenth of a second or one
+	// frame's life step (to 1 s), whichever is more: the kit stamps a burst with last frame's clock (PressLivedWas),
+	// which is 0.13 s behind at 4x and 30 frames a second.
+	const double PressLivedNow = PressScene.Lived;
+	const double PressBegan = FMath::Clamp(PressAtSeconds, PressLivedNow - FMath::Clamp(PressLivedNow - PressLivedWas, 0.1, 1.0), PressLivedNow);
+	// The slot: the one whose press is least seen, what it has left (all of it until its peak has passed at its far
+	// edge) times its strength times how much the eye sees it (an empty, finished or unseen one: nothing); of equals,
+	// the one showing least now (the newest, not the oldest). If even that one is seen more than this burst would be,
+	// this burst gives way instead, and nothing snaps.
+	int32 PressSlot = 0;
+	double PressLeast = TNumericLimits<double>::Max(), PressLeastShown = TNumericLimits<double>::Max();
+	for (int32 BlastPressK = 0; BlastPressK < static_cast<int32>(UE_ARRAY_COUNT(PressSlotStart)); ++BlastPressK)
+	{
+		const double PressSince = PressLivedNow - PressSlotStart[BlastPressK];
+		const double PressFar = PressSince - PressSlotReach[BlastPressK] / PressFrontMps;
+		const double PressLeft = PressSlotStrength[BlastPressK] * (PressFar < PressPeakS ? 1.0 : BlastPressCurve(PressFar, PressRiseS, PressBackS) / PressPeak) * PressSeen(PressSlotAt[BlastPressK], PressSlotReach[BlastPressK]);
+		const double PressShown = PressSlotStrength[BlastPressK] * BlastPressCurve(PressSince, PressRiseS, PressBackS);
+		if (PressLeft < PressLeast || (PressLeft == PressLeast && PressShown < PressLeastShown))
+		{
+			PressLeast = PressLeft;
+			PressLeastShown = PressShown;
+			PressSlot = BlastPressK;
+		}
+	}
+	if (PressLeast > PressWanted)
+	{
+		return;
+	}
+	PressSlotStart[PressSlot] = PressBegan;
+	PressSlotStrength[PressSlot] = PressPush;
+	PressSlotReach[PressSlot] = PressReach;
+	PressSlotAt[PressSlot] = PressBurstSpot;
+	// (blue is one over the reach, so the shader multiplies; alpha the start on the life clock; the strength times
+	// PressPeakFix, so a tuned rise or way back leans as far at its peak as the default; the eight names made once)
+	static const FName PressAtNames[] = {FName(TEXT("PressAt0")), FName(TEXT("PressAt1")), FName(TEXT("PressAt2")), FName(TEXT("PressAt3"))};
+	static const FName PressStrengthNames[] = {FName(TEXT("PressStrength0")), FName(TEXT("PressStrength1")), FName(TEXT("PressStrength2")), FName(TEXT("PressStrength3"))};
+	static_assert(UE_ARRAY_COUNT(PressAtNames) == UE_ARRAY_COUNT(PressSlotStart) && UE_ARRAY_COUNT(PressStrengthNames) == UE_ARRAY_COUNT(PressSlotStart), "one name of each per slot");
+	const FLinearColor PressAtColour(static_cast<float>(PressWhere.X), static_cast<float>(PressWhere.Y), static_cast<float>(1.0 / PressReach), static_cast<float>(PressBegan));
+	for (UMaterialInstanceDynamic* PressInk : {BladeInk.Get(), GrainInk.Get(), BushInk.Get(), WoodInk.Get(), LivelyInk.Get(), PalmInk.Get(), LeafInk.Get(), LivelyLeafInk.Get(), PalmLeafInk.Get(), StalkInk.Get()})
+	{
+		if (PressInk)
+		{
+			PressInk->SetVectorParameterValue(PressAtNames[PressSlot], PressAtColour);
+			PressInk->SetScalarParameterValue(PressStrengthNames[PressSlot], static_cast<float>(PressPush * PressPeakFix));
+		}
+	}
+}
+
+void ALandBattle::PressOfSize(double PressBurstX, double PressBurstY, const FString& PressSizeRow, double PressAtSeconds)
+{
+	// (the kit's size rows, BlastPressRows above; a row it does not hold, torpedo or churn, presses nothing. With the
+	// switch off, one bool test and back: the effects' lines call this for every burst)
+	if (!bBlastPress)
+	{
+		return;
+	}
+	for (const FBlastPressRow& PressRow : BlastPressRows)
+	{
+		if (PressSizeRow == PressRow.PressRowSize)
+		{
+			PressBurst(PressBurstX, PressBurstY, PressRow.PressRowReachM, PressRow.PressRowStrength, PressAtSeconds);
+			return;
+		}
+	}
+}
+
+FString ALandBattle::PressRowOfCalibre(const FString& PressCalibre)
+{
+	// A Shell event's calibre to the size row the kit draws for it, in the kit's order (TheaterFxCore.cpp SizeOfCalibre,
+	// with battle-fx.json's from_shell_cal): light, mortar, field (gun75), howitzer (how105), heavy (how150); a kit size
+	// row the press does not hold (torpedo, churn: the kit draws them as named), no row, so nothing is pressed; then a
+	// name that is itself one of the press's size rows; then anything else, "bomb" (air strikes) among them, a 105.
+	static const TCHAR* const PressCalibres[][2] = {{TEXT("light"), TEXT("light")}, {TEXT("mortar"), TEXT("mortar")}, {TEXT("field"), TEXT("gun75")},
+		{TEXT("howitzer"), TEXT("how105")}, {TEXT("heavy"), TEXT("how150")}, {TEXT("torpedo"), TEXT("")}, {TEXT("churn"), TEXT("")}};
+	for (const auto& PressPair : PressCalibres)
+	{
+		if (PressCalibre == PressPair[0])
+		{
+			return FString(PressPair[1]);
+		}
+	}
+	for (const FBlastPressRow& PressRow : BlastPressRows)
+	{
+		if (PressCalibre == PressRow.PressRowSize)
+		{
+			return FString(PressRow.PressRowSize);
+		}
+	}
+	return FString(TEXT("how105"));
+}
+
+void ALandBattle::PressFrame()
+{
+	// The blast press's clock (the pressed twins' PressNow, and PressBefore for the pass that works out last frame's
+	// places, so the flinch has motion vectors): the scene's life clock, so the press keeps time with the smoke at 0.5x,
+	// 2x and 4x and stands still with it when held. Written only while a slot still shows (to its far edge, 0.05 s to
+	// spare) at this frame's clock OR last frame's, and the frame after, when both clocks are past every slot, so the
+	// press and the pass for last frame's places both read exactly 0 and stay so (a slow frame at 4x or 8x can step a
+	// whole press; then last frame's clock is what still shows); held, written once. Nothing otherwise.
+	if (!bBlastPress || !State.IsValid())
+	{
+		return;
+	}
+	const double PressLivedNow = State->Lived;
+	const double PressLivedBefore = PressLivedWas;
+	PressLivedWas = PressLivedNow;
+	bool bPressLive = false;
+	for (int32 BlastPressK = 0; BlastPressK < static_cast<int32>(UE_ARRAY_COUNT(PressSlotStart)); ++BlastPressK)
+	{
+		bPressLive = bPressLive || (PressSlotStrength[BlastPressK] > 0.0 && FMath::Min(PressLivedNow, PressLivedBefore) - PressSlotStart[BlastPressK] < PressSlotReach[BlastPressK] / PressFrontMps + PressBackS + 0.05);
+	}
+	if (!bPressLive && !bPressTail)
+	{
+		return;
+	}
+	bPressTail = bPressLive;
+	if (PressLivedNow == PressWroteNow && PressLivedBefore == PressWroteBefore)
+	{
+		return;
+	}
+	PressWroteNow = PressLivedNow;
+	PressWroteBefore = PressLivedBefore;
+	static const FName PressNowName(TEXT("PressNow")), PressBeforeName(TEXT("PressBefore"));
+	for (UMaterialInstanceDynamic* PressInk : {BladeInk.Get(), GrainInk.Get(), BushInk.Get(), WoodInk.Get(), LivelyInk.Get(), PalmInk.Get(), LeafInk.Get(), LivelyLeafInk.Get(), PalmLeafInk.Get(), StalkInk.Get()})
+	{
+		if (PressInk)
+		{
+			PressInk->SetScalarParameterValue(PressNowName, static_cast<float>(PressLivedNow));
+			PressInk->SetScalarParameterValue(PressBeforeName, static_cast<float>(PressLivedBefore));
+		}
+	}
+}
 
 void ALandBattle::PlayEffects()
 {
