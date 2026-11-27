@@ -1895,13 +1895,17 @@ export class Drill {
   }
 
   /**
-   * A man the rules take from sq lying in the path of an enemy tank on the move, close under her nose (Drill.thin): her,
-   * him and her block. Any enemy tank near the block will do: which enemy took the man is the drill's to choose.
+   * A man the rules take from sq lying in the path of a tank on the move, close under her nose (Drill.thin): her, him
+   * and her block. Only a tank of the block the rules booked the loss to (by, Drill.strikerOf) may crush him (the
+   * design director, 27 November 2026, 05:03Z: "A crush is drawn only where the crushing block IS the booked striker.
+   * Otherwise the loss is drawn the ordinary way, to the booked block"): the drawing names the block the battle's own
+   * books name. Before this any enemy tank near would do, and the man was drawn under a block that had not struck his.
    */
-  private crushOf(sq: Squad, cand: Man[]): [Man, Man, LandUnit] | undefined {
+  private crushOf(sq: Squad, cand: Man[], by: LandUnit | undefined): [Man, Man, LandUnit] | undefined {
     const C = DR.escort.clear, u = sq.u;
+    if (!by) return undefined;
     for (const bq of this.squads.values()) {
-      if (bq.u.side === u.side || bq.u.kind !== 'arm' || !live(bq.u)) continue;
+      if (bq.u.id !== by.id || bq.u.side === u.side || bq.u.kind !== 'arm' || !live(bq.u)) continue;
       if (Math.hypot(bq.u.x - u.x, bq.u.y - u.y) > C.within + (Math.max(u.w, u.d) + Math.max(bq.u.w, bq.u.d)) / 2) continue;
       for (const v of bq.men) {
         if (v.role !== 'tank' || !this.stands(bq, v) || (v.went ?? 0) <= DR.escort.moving) continue;
@@ -1964,10 +1968,11 @@ export class Drill {
     // its key men a moment ago is that burst (Drill.shelled). The men nearest the burst fall to it, within its reach
     // (shells.ts REACH, by the shell's class), a man lying down or in cover taken less often; beyond it, another shell.
     // The rules' count of the block's men is never changed: they fall up to DR.blast.hold seconds later, and together.
-    // Infantry with tanks (release 2, LandBattle.escort): a man of the block in the path of an enemy tank on the move,
-    // close under her nose, when the rules take one from it, is the one taken: by her tracks (a 'track' round, no shot).
+    // Infantry with tanks (release 2, LandBattle.escort): a man of the block in the path of a tank on the move of the
+    // block that struck it (by), close under her nose, when the rules take one from it, is the one taken: by her tracks
+    // (a 'track' round, no shot). A tank of any other block crushes nobody: the loss falls the ordinary way, to by.
     if (b.escort) {
-      const crushed = this.crushOf(sq, cand);
+      const crushed = this.crushOf(sq, cand, by);
       if (crushed) {
         const [v, m, tu] = crushed;
         cand.splice(cand.indexOf(m), 1);
