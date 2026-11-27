@@ -6379,7 +6379,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     g.supplyDirty = true;
     headline(g, 'event', `${g.nations[nat].adj} forces lay down their arms: ${names.join('; ')}.`, nat, at);
   }
-  // (A reading of the design director's 17:53Z (3), asked of her: his standing offers' month waited for room is read
+  // (The design director's ruling of 20:19Z, 27 November 2026, 1: his standing offers' month waited for room is read
   // from the board he acts on, once every row of the month is read and the corps leaving have left.)
   if (take === undefined) offersWaited(g, nat);
 }
@@ -6388,11 +6388,13 @@ function expeditions(g: Game, nat: string, take?: number): void {
  * A month waited for room by the player's standing offers (`roomWaited`), each counted once, read from the board he
  * acts on: once the month's dated rows are all read (`expeditions`), where FORM IT is shut for want of room alone
  * (`offerRead`'s `forRoom`), an offer made this month among them. Never from the board at the row's own turn in that
- * reading, where a row read after it may yet fill the place or a corps leave it. A reading of the design director's
- * 17:53Z, 27 November 2026, (3) ("Months waited for room come off the player's offer (offerLast) exactly as off the
- * computer's half year"), Japan and Pacific's of 20:15Z, asked of her: the sceptic's F1. A computer's row, and a
- * player's row that is no standing offer, are counted where they always were, at the row's turn. The lapse is read at
- * the row's turn, as before (`offerStands`). Nothing is kept with the far side off.
+ * reading, where a row read after it may yet fill the place or a corps leave it. The design director's ruling of
+ * 20:19Z, 27 November 2026, 1, on the sceptic's F1: "a month counts as waited for room when the seat, at its own moment
+ * of acting, finds no room. The computer acts at its row's turn in the month's pass. The player acts on the board after
+ * the pass, the board his page shows." "One count a month, through the same function. It is taken once at the end of
+ * the pass, never by a page read." A computer's row, and a player's row that is no standing offer, are counted where
+ * they always were, at the row's turn. The lapse is read at the row's turn, as before (`offerStands`). Nothing is kept
+ * with the far side off.
  */
 function offersWaited(g: Game, nat: string): void {
   // (The rows the month's reading reads as this country's, `expeditions`: its own, and a fallen country's it keeps.)
