@@ -482,16 +482,20 @@ namespace LandGeneralEye
 			// own hand (Brian, 26 November: "god mode ... a free camera mode where i can move where every i want").
 			// It is the tilt the hill view sets that his hand lowers, from where the view stands, so a press always
 			// moves it; HILL VIEW lights, and its press, or his tilt back up, puts the view back to tilting with the
-			// zoom. A second press of HILL VIEW has no zoom of a first to go back to.)
+			// zoom. A second press of HILL VIEW has no zoom of a first to go back to: where his hand brings the low look
+			// on from none. A hill view his press brought on is the hill view still, however far his hand has taken its
+			// look down or back up since: its second press goes back to the zoom and the tilt from before the first
+			// (the Mac's check, 27 November 2026: pressed, his keys held to the lowest look, pressed again, and the
+			// view stayed at the hill's zoom, half way back).)
 			// (From where it is wanted, or lower where it stands lower: where its own push would bring it to rest.
 			// Going, by a press or a call, its wish is none while it still stands far down: lowered from the wish, his
 			// key held down let it run on up for ten degrees before it turned (review, 26 November).)
 			if (bOwnTilt) bToAuto = true;
+			if (WantHill >= HillNone()) bHillBack = false;
 			const double Cur = std::min(WantHill, HillRest());
 			const double From = std::min(Cur, TiltAt(WantS, Cur) + Soft);
 			WantHill = std::max(From + In.Tilt * Rad, std::min(From, Set.LowTilt * Rad));
 			LowKey = In.Tilt * Rad;
-			bHillBack = false;
 		}
 		else if (In.Tilt > 0.0 && bByItself && Set.bLowByHand && WantHill < HillNone())
 		{
@@ -514,8 +518,9 @@ namespace LandGeneralEye
 				Own();
 				bToAuto = false;
 				WantTl = std::min(Line, Set.TiltMost * Rad);
+				// (the hill view's press has nothing left to go back from: its memory is let go where it could next
+				// be read, as his hand brings a low look on from none, above)
 			}
-			bHillBack = false;
 		}
 		else if (In.Tilt != 0.0)
 		{

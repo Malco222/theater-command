@@ -997,6 +997,38 @@ namespace
 			else if (R.Jolt > 1200.0 || R.Kick > 1200.0) Fault("the hill view's second press, his tilt handed back from high over the low look, kicked the picture (over 1200 degrees a second squared with no key down)");
 			else if (!R.Plain() || std::abs(R.Zoom() - Zoom0) > 0.01) Fault("the hill view's second press did not go back to the zoom and to no tilt of his own, as the view had it before the first");
 		}
+		// HILL's second press in the free view, his hand having taken the hill view's own low look down since the first
+		// (to the lowest look; and down and part of the way back up, a low look still): back to the zoom and the tilt
+		// from before the first press, as the button's words promise. (The Mac's check, 27 November 2026: pressed, his
+		// keys held to the lowest look, pressed again, and the view stayed at the hill's zoom, half way back.) And the
+		// rule it must not undo: a low look his hand brought on from none has no first press to go back to, and one his
+		// hand put out through the top of its line has none left: there the press leaves the zoom where it stands.
+		for (int Way = 0; Way < 4; ++Way)
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			const double Zoom0 = R.Zoom();
+			if (Way < 3) { R.Hill(); R.Wait(5.0); }
+			const double ZoomHill = R.Zoom();
+			if (Way == 0) { R.Tilt(-50.0, 2.0); R.Wait(4.0); }
+			else if (Way == 1) { R.Tilt(-50.0, 2.0); R.Wait(2.0); R.Tilt(50.0, 0.2); R.Wait(3.0); }
+			else if (Way == 2) { R.Tilt(50.0, 2.0); R.Wait(3.0); R.Tilt(-50.0, 2.0); R.Wait(1.0); R.Tilt(-50.0, 1.5); R.Wait(4.0); }
+			else { R.Notches(3); R.Wait(3.0); R.Tilt(-50.0, 1.5); R.Wait(4.0); }
+			const double ZoomAt = R.Zoom(), LowAt = R.B.Gen.HillTiltWanted();
+			// (set up: a low look lit and no tilt of his own; lower than the hill view's own where his hand took it
+			// down; and, where a press went first, the press did move the zoom)
+			const bool bSetUp = R.B.Gen.HillView() && !R.B.Gen.OwnTilt() && (Way == 3 || std::abs(ZoomHill - Zoom0) > 0.05)
+				&& (Way == 0 ? LowAt < Set.LowTilt + 0.5 : Way == 1 ? LowAt > Set.LowTilt + 2.0 && LowAt < Set.HillTilt : true);
+			R.Calm();
+			R.Hill(); R.Wait(8.0);
+			static const char* Name[] = { "to the lowest look", "down and part of the way back up", "out through the top and on again by hand", "on by hand with no press" };
+			if (bSay) std::printf("  the low look's bench (hill back, his hand having taken the low look %s): zoom %.3f from %.3f (%.3f before the first press, %.3f in the hill view), the low look was %.1f, plain %d; the picture's tilt pushed %.0f degrees a second squared at the most (look kick %.0f, rise %.0f)\n",
+				Name[Way], R.Zoom(), ZoomAt, Zoom0, ZoomHill, LowAt, R.Plain() ? 1 : 0, R.Jolt, R.Kick, R.Rise);
+			if (!bSetUp) Fault("the low look's bench did not take the hill view's low look in hand before its second press");
+			else if (R.Jolt > 1200.0 || R.Kick > 1200.0 || R.Rise > 1200.0) Fault("the hill view's second press, the low look taken in hand since the first, kicked the picture (over 1200 degrees a second squared with no key down)");
+			else if (Way < 2 && (!R.Plain() || std::abs(R.Zoom() - Zoom0) > 0.01)) Fault("the hill view's second press, his hand having taken its low look down since the first, did not go back to the zoom and the tilt from before the first press");
+			else if (Way >= 2 && (!R.Plain() || std::abs(R.Zoom() - ZoomAt) > 0.01)) Fault("the hill view pressed off a low look his own hand brought on did not leave the view tilting with the zoom where it stood");
+		}
 		// HILL's first press from a tilt of his own
 		{
 			LowRig R(true, true);
