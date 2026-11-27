@@ -405,7 +405,9 @@ int main(int Argc, char** Argv)
 
 	// ---- P5: the Unreal side from its source. These count lines of text: they show the lines are there, not that the
 	// code behaves, and a harmless reformat breaks them (then mend the text here). The proof for the Unreal side is the
-	// Mac's run with -TheaterAirNoPropSpin against the base.
+	// Mac's run with -TheaterAirNoPropSpin against the base. (The far guards are shared with the row "flyPropBlur",
+	// AIR-SCENE.md item 85, which runs this row's far machinery with its own faint disc: either row on, neither as before;
+	// its own test is air_prop_blur_test.)
 	std::printf("The air battle's row, from its source (%s)\n", Source.c_str());
 	std::string Battle, Rules, State, Content;
 	const bool bSource = ReadText(Source + "/Battle/AirBattle.cpp", Battle) && ReadText(Source + "/Battle/LandLive.cpp", Rules)
@@ -419,17 +421,17 @@ int main(int Argc, char** Argv)
 		Check(Count(Battle, "FLandLive::RuleNow(TEXT(\"flyPropSpin\"))") == 1 && Count(State, "int PropSpinOn = -1;") == 1 && Count(Battle, "State->PropSpinOn = ") == 1,
 			"read once a battle, into the battle's own state");
 		Check(Count(Battle, "const bool bScrews = PropSpinOn();") == 1 && Count(Battle, "+ (bScrews ? TEXT(\"|screws\") : TEXT(\"\"));") == 1
-				&& Count(Battle, "if (bScrews && Near.Screws.Num() > 0 && ScrewHazeInk())") == 1,
+				&& Count(Battle, "if ((bScrews || bBlur) && Near.Screws.Num() > 0 && ScrewHazeInk())") == 1,
 			"the row on, every shape under a key of its own and only then its far shape stripped (off: the keys and shapes of before)");
 		Check(Count(Battle, "past 300 m the blades stay standing as before (no haze to put in their place)") == 1,
 			"no haze ink (M_ScrewHaze not built), no far shape stripped: never an aircraft with no airscrew at all");
-		Check(Count(Battle, "bLight ? nullptr : ScrewHazeInk()") == 1 && Count(Battle, "return State && State->PropSpinOn == 1 ? ScrewHaze.Get() : nullptr;") == 1
+		Check(Count(Battle, "bLight ? nullptr : ScrewHazeInk()") == 1 && Count(Battle, "return State && (State->PropSpinOn == 1 || State->PropBlurOn == 1) ? ScrewHaze.Get() : nullptr;") == 1
 				&& Count(Battle, "const bool bHaze = Haze && Shape.Screws.Num() > 0;") == 1 && Count(Battle, "if (Mesh->GetStaticMaterials().Num() > 1)") == 1,
 			"the copies' haze only with the row on (off: one section, one material, as before)");
 		Check(Count(Battle, "const bool bSmear = State && State->PropSpinOn == 1;") == 1 && Count(Battle, "AirParts::DiscOf(Screw.Radius, Screw.Blades, Points, Triangles, Normals, Colours, bSmear);") == 1,
 			"the near disc's smear only with the row on (off: the old disc, point for point)");
-		Check(Count(Battle, "const bool bFeatheredFar = S.PropSpinOn == 1 && P.bFeathered && !P.DeadEngines.empty() && ScrewHazeInk();") == 1 && Count(Battle, "if (S.PropSpinOn == 1)") == 1
-				&& Count(Battle, "if (State && State->PropSpinOn == 1)") == 1,
+		Check(Count(Battle, "const bool bFeatheredFar = (S.PropSpinOn == 1 || S.PropBlurOn == 1) && P.bFeathered && !P.DeadEngines.empty() && ScrewHazeInk();") == 1
+				&& Count(Battle, "if (S.PropSpinOn == 1 || S.PropBlurOn == 1)") == 1 && Count(Battle, "if (State && (State->PropSpinOn == 1 || State->PropBlurOn == 1))") == 1,
 			"a feathered bomber's own mesh, its far airscrews and the discs' sort only with the row on");
 		Check(Count(Content, "m = new_material(\"M_ScrewHaze\")") == 1 && Count(Content, "(\"M_ScrewHaze\", build_screw_haze_or_tell)") == 1,
 			"M_ScrewHaze built with the content, once, when it is missing");

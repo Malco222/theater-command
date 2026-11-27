@@ -167,6 +167,16 @@ namespace
 		// "fly" only so that FLandLive::Start passes it over with the air battles' other switches. The air battle reads it
 		// once a battle (AAirBattle::PropSpinOn); it is never sent to the land rules.)
 		{ TEXT("flyPropSpin"), TEXT("Turning airscrews"), TEXT("Every aircraft's airscrews are drawn turning at every distance: a soft haze far off, a blurred sweep close to; an engine stopped with its blades feathered shows them standing still. Off: past 300 m the blades stand still."), TEXT("TheaterAirNoPropSpin"), false, TEXT("TheaterAirPropSpin") },
+		// (Far airscrews a faint blur, release 2: Brian, 27 November 2026 01:23:16Z, "yeah the far propellers don't move and
+		// dont look good"; his picture of the Overview showed each far B-17's airscrew a big solid disc with a yellow rim,
+		// the modeller's blur disc drawn on the far shape's solid ink, as every build played draws it and as "Turning
+		// airscrews" does too without its haze's ink. On: past 300 m no solid disc and no still blades, each airscrew a
+		// faint grey disc on the copies (M_ScrewHaze); close to, the blades' painted marks (the finer B-17's, the
+		// Wellington's) go with the blades and the tips' paint is a faint arc on the turning disc. Looks only: nothing the
+		// rules count reads it. Off until the Mac and the art director have passed it (AIR-SCENE.md item 85);
+		// -TheaterAirPropBlur turns it on for a run, -TheaterAirNoPropBlur off. NOT a fly-it-yourself row: its key begins
+		// "fly" only so that FLandLive::Start passes it over. The air battle reads it once a battle (AAirBattle::PropBlurOn).)
+		{ TEXT("flyPropBlur"), TEXT("Far airscrews a faint blur"), TEXT("Past 300 m each aircraft's airscrews are drawn as a faint, see-through grey disc in place of the solid disc with its yellow rim and the blades standing still; close to, the blades' painted marks turn away with them and the yellow tips show as a faint arc. Off: the far airscrews as before."), TEXT("TheaterAirNoPropBlur"), false, TEXT("TheaterAirPropBlur") },
 		// (Old wrecks, Brian 23 November 20:09Z: starts off as Scarred ground does, until the effects thread's wrecks pass the
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)

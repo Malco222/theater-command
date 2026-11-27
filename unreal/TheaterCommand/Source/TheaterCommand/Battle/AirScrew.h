@@ -63,8 +63,12 @@ namespace AirScrew
 	struct PaintsAre
 	{
 		std::vector<bool> Blade, Blur; // by paint number
+		/** (the row "flyPropBlur": every paint whose name begins "decal", the makers' marks the finer B-17's and the
+		 * Wellington's modeller painted on each blade, decal and decal_rim; none in a file without names) */
+		std::vector<bool> Decal;
 		bool IsBlade(int Paint) const { return Paint >= 0 && static_cast<size_t>(Paint) < Blade.size() && Blade[static_cast<size_t>(Paint)]; }
 		bool IsBlur(int Paint) const { return Paint >= 0 && static_cast<size_t>(Paint) < Blur.size() && Blur[static_cast<size_t>(Paint)]; }
+		bool IsDecal(int Paint) const { return Paint >= 0 && static_cast<size_t>(Paint) < Decal.size() && Decal[static_cast<size_t>(Paint)]; }
 	};
 	PaintsAre PaintKinds(const std::string& FileText);
 
@@ -131,4 +135,54 @@ namespace AirScrew
 	constexpr unsigned char SmearRgb[3] = { 8, 8, 8 };
 	constexpr double DiscRings[4] = { 0.12, 0.5, 0.9, 1.0 };
 	constexpr int NearRound = 48, HazeRound = 24;
+
+	// ---- The row "flyPropBlur" (Brian, 27 November 2026 01:23:16Z: "yeah the far propellers don't move and dont look
+	// good"; his picture of the Overview showed each far B-17's airscrew a big solid disc with a yellow rim: the
+	// modeller's own blur disc, blur and blur_tip, drawn by the far shape's copies on the aircraft's solid ink).
+
+	/**
+	 * A far airscrew as a film shows one a few hundred metres off: a faint grey disc, near see-through, the tips' band a
+	 * little stronger than the middle, and no yellow (the copies past 300 m, on M_ScrewHaze in place of the far shape's
+	 * blur disc and still blades). MakeDisc's rings and its far haze's HazeRound points about each, both faces; each
+	 * ring's colour BlurRgb and alpha BlurAlpha. Fainter than the haze of "flyPropSpin" (HazeAlpha), which stands 12
+	 * levels of 255 off the sky at the Overview: this one 6, a shimmer at most (air_prop_blur_test).
+	 */
+	DiscMade MakeBlurDisc(double Radius, int Blades);
+	constexpr unsigned char BlurRgb[3] = { 40, 40, 42 };
+	constexpr unsigned char BlurAlpha[4] = { 0, 30, 42, 0 };
+
+	/**
+	 * By triangle of a mesh: true where it is a blade's painted mark (all three corners painted decal or decal_rim) inside
+	 * one of Screws' discs (a quarter of its radius either side of the disc at most, out to a twentieth past its
+	 * radius, as Find takes a blade's painted band). Left in the near shape when its blades are taken out to turn as the
+	 * disc, each hub's 84 (the finer B-17's; the Wellington's the same) stand still about half the radius out while the
+	 * disc turns, with the row "flyPropSpin" on or off; with "flyPropBlur" they go with their blades. A point past the
+	 * paints is no mark.
+	 */
+	std::vector<bool> BladeDecals(const std::vector<Vec3>& Points, const std::vector<int>& Paints, const PaintsAre& Are, const std::vector<int>& Triangles,
+	                              const std::vector<Screw>& Screws);
+
+	/**
+	 * The colour of an aircraft's airscrews' painted tips, as its file gives the paint (sRGB, "colours" by paint number):
+	 * its paint "blade_tip" (the real blades' yellow tips, the finer B-17's and the Wellington's), else "blur_tip" (the
+	 * modeller's ring on the blur disc: yellow on the American and British fighters, red on the Japanese), the first of
+	 * them a point of the near mesh (NearPaints) is painted with. False when it paints neither (the Bf 109, the Fw 190:
+	 * no painted tips, no arc).
+	 */
+	bool TipColour(const std::string& FileText, const std::vector<int>& NearPaints, unsigned char Rgb[3]);
+
+	/**
+	 * The painted tips of a turning airscrew close to (the near shape's disc, under 300 m; never on the far copies): a
+	 * faint arc behind each blade in the tips' own paint (Rgb as the file gives it, sRGB), brightest just behind the
+	 * blade and fading round to a faint ring before the next. Three rings at TipRings of the radius, NearRound points
+	 * about each, the middle one alone coloured (the band soft both sides), both faces, alpha at most TipMost. The
+	 * airscrews' ink (M_Highlight) takes a point's colour bytes as light as they are, not made linear as the aircraft's
+	 * own paint is (M_MapSurface's Power 2.2, build_content.py): the paint is made linear here, so that the arc is the
+	 * tips' own colour and not a lighter one.
+	 */
+	DiscMade MakeTipArcs(double Radius, int Blades, const unsigned char Rgb[3]);
+	constexpr double TipRings[3] = { 0.90, 0.955, 1.0 };
+	constexpr unsigned char TipMost = 100;
+	/** How much of what is behind the tips' arc hides at its middle ring (0 to 1), Ahead as SmearAlpha's. */
+	double TipAlpha(double Ahead);
 }
