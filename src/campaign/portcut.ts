@@ -176,6 +176,14 @@ export interface PortCut {
   feedsTo: number | null;
   /** The month the garrison goes hungry: the first month the stores feed it no longer. */
   hungry: number | null;
+  /**
+   * The last month a fill of the stores this month would feed the garrison through, by the rule's clock as it stands
+   * (the remedy line's month): under the fortress rows a crew whose nation has had this month's reckoning has eaten its
+   * month already, and a fill after it leaves its count running, so that it starves when it would have; and a corps of a
+   * nation whose month comes after a crew's is drawn without it in the month it starves (refillTo). The soonest of the
+   * garrison's nations, or with no garrison the holder's own.
+   */
+  refill: number | null;
   /** The month the first corps of the garrison is struck off if no ship gets in (null with no garrison that starves). */
   lost: number | null;
   /**
@@ -415,6 +423,20 @@ function fedTo(g: Game, crews: PortCrew[], last: number, nat: string): number {
 }
 
 /**
+ * The last month a fill of the port's stores this month would feed these nations' corps through, the soonest of them
+ * (the remedy line, the UI director's 03:13Z, item 1): the window counts from the fill (game.ts computeSupply), and the
+ * keep its draws read is the crews' as they would be after it (crewsOf, read as filled this month). The fill comes in
+ * the month as it stands, after the reckoning of every nation already charged: its crews have eaten this month's stores
+ * and the fill does not restock them (a crew is restocked only in a reckoning fed all month, game.ts startPhase), so
+ * that each still starves when its own count runs out; a crew of a nation not yet charged is fed at its reckoning and
+ * its count starts again. With no crew, the fill's month and the port's own two.
+ */
+function refillTo(g: Game, r: Region, nats: string[], uncharged?: string): number {
+  const crews = crewsOf(g, r, g.turn, uncharged);
+  return Math.min(...nats.map((nat) => fedTo(g, crews, g.turn, nat)));
+}
+
+/**
  * The months the shutting side counts the port's stores for, from its own sight (ruling 1: never read from the holder's
  * stores): with the fortress rows off, the port's own two. Under them, a fortress crew's stores (portKeep) only where
  * it sees the port whole, and the crew with it; where it does not, null: a crew it cannot see may keep the stores
@@ -489,7 +511,7 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
     // whether his lanes reached the sea at them, say when his ships last got in.)
     const heldHungry = since === null || keep === null ? null : since + keep + 1;
     return {
-      region: r.id, holder, keep, shut, side: 'shutting', state: null, cut: false, lastFilled: null, feedsTo: null, hungry: null, lost: null, lostBy: null, garrison: [], fleetInReach: null,
+      region: r.id, holder, keep, shut, side: 'shutting', state: null, cut: false, lastFilled: null, feedsTo: null, hungry: null, refill: null, lost: null, lostBy: null, garrison: [], fleetInReach: null,
       heldSince: since, heldHungry, heldLost: heldHungry === null ? null : heldHungry + hungryRun() - 1,
     };
   }
@@ -511,7 +533,8 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
   };
   // (Each corps' month, and the soonest it can come: the first loss is "by" its month where any corps of the garrison
   // can be lost before it.)
-  const counts = garrisonOf(g, r).map((c) => { const fed = fedFor(c.nat); return { id: c.id, fed, lost: lostMonth(g, c, fed, uncharged), soonest: lostMonth(g, c, fed, uncharged, true) }; });
+  const corps = garrisonOf(g, r);
+  const counts = corps.map((c) => { const fed = fedFor(c.nat); return { id: c.id, fed, lost: lostMonth(g, c, fed, uncharged), soonest: lostMonth(g, c, fed, uncharged, true) }; });
   // (The garrison lives on the stores through the last month they feed all of it.)
   const feedsTo = last === null ? null : counts.length ? Math.min(...counts.map((x) => x.fed!)) : fedFor(holder);
   const state = last === g.turn ? 'filled' : feedsTo !== null && feedsTo >= g.turn ? 'stores' : 'hungry';
@@ -519,6 +542,7 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
   return {
     ...base, side: 'holder', state, cut: state !== 'filled' && shut.length > 0, lastFilled: last, feedsTo,
     hungry: feedsTo !== null ? feedsTo + 1 : g.turn,
+    refill: refillTo(g, r, corps.length ? [...new Set(corps.map((c) => c.nat))] : [holder], uncharged),
     lost,
     lostBy: lost !== null && counts.some((x) => x.soonest < lost),
     garrison: counts.map((x) => ({ id: x.id, lost: x.lost, by: x.soonest < x.lost, fed: x.fed })),
@@ -616,7 +640,12 @@ export function portCardLines(g: Game, regionId: number, viewer: string | null, 
   // sea card shows each side's strength there and no threshold, so the line is followed by those two figures, a
   // sentence for each sea it names, and no figure of the strength needed: the UI director's 23:50Z, item 3.)
   const measured = opts.measure ? open.map((z) => measureSaid(g, z, viewer)).filter((x): x is string => x !== null) : [];
-  out.push({ text: theWords(`A fleet of yours at sea there, strong enough to open ${seasSaid(g, open, 'or')}, lets the ships in and fills the stores: one such month feeds the garrison through ${monthSaid(g, g.turn + keep)}.${measured.map((x) => ` ${x}`).join('')}`), tone: 'note' });
+  // (What one such month feeds: the keep, counted from this month. Where a fill this month may feed the garrison less
+  // long than that, a fortress crew's clock running on through it (PortCut.refill), the line counts the shorter and says
+  // it is the least: the UI director's 03:13Z, item 1. Everywhere else, as laid.)
+  const least = f.refill !== null && f.refill < g.turn + keep;
+  const feeds = least ? `at least through ${monthSaid(g, f.refill!)}` : `through ${monthSaid(g, g.turn + keep)}`;
+  out.push({ text: theWords(`A fleet of yours at sea there, strong enough to open ${seasSaid(g, open, 'or')}, lets the ships in and fills the stores: one such month feeds the garrison ${feeds}.${measured.map((x) => ` ${x}`).join('')}`), tone: 'note' });
   return out;
 }
 
