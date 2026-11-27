@@ -13355,6 +13355,7 @@ bool ACampaignPlayerController::CanFlyLive() const
 		// (weighed once a pick, the first time it is asked: the rules must have a battle in the air for this raid)
 		FlyOfferAct = Page.Card.Fly.Act;
 		FlyOffer = 0;
+		FlyOfferWhy.Reset();
 		FCampaignSession* Session = GetSession();
 		FString LookText, LookError;
 		TSharedPtr<FJsonObject> LookAnswer;
@@ -13365,6 +13366,7 @@ bool ACampaignPlayerController::CanFlyLive() const
 		if (Session && !TellFlownKinds(*Session) && IsToldKind(Kind))
 		{
 			UE_LOG(LogTheater, Display, TEXT("Campaign: FLY IT YOURSELF not offered for %s: the rules could not be told that a raid of this kind is flown (TC.airKinds); FLY THE RAID only"), *FlyOfferAct);
+			FlyOfferWhy = FlyNotOfferedLine(FString());
 			return false;
 		}
 		if (!Session || !Session->CallBattle(TEXT("airLook"), FString::Printf(TEXT("[\"%s\",%d,[%s]]"), *Kind, Target, *IdsText), LookText, LookError)
@@ -13372,17 +13374,54 @@ bool ACampaignPlayerController::CanFlyLive() const
 			|| !LookAnswer->TryGetObjectField(TEXT("ticket"), LookTicket) || !LookTicket || !LookTicket->IsValid())
 		{
 			FString Why = LookError;
-			if (LookAnswer.IsValid())
+			// (the known-faults mend of 27 November: the rules' own why, apart from any error of the call, is kept for the card)
+			FString RulesWhy;
+			if (LookAnswer.IsValid() && LookAnswer->TryGetStringField(TEXT("why"), Why))
 			{
-				LookAnswer->TryGetStringField(TEXT("why"), Why);
+				RulesWhy = Why;
 			}
 			UE_LOG(LogTheater, Display, TEXT("Campaign: FLY IT YOURSELF not offered for %s: no battle in the air for it (%s); FLY THE RAID only"), *FlyOfferAct, *Why);
+			FlyOfferWhy = FlyNotOfferedLine(RulesWhy);
 			return false;
 		}
 		FlyOffer = 1;
 		UE_LOG(LogTheater, Display, TEXT("Campaign: FLY IT YOURSELF offered for %s"), *FlyOfferAct);
 	}
 	return FlyOffer > 0;
+}
+
+FString ACampaignPlayerController::FlyNotOfferedLine(const FString& RulesWhy)
+{
+	// (the UI director, 23:28Z, in the project's ui-director/raid-card-fly-yourself-UI-MARKS.md: the general sentence is
+	// FlyLive's own notice, read from this one place by the card and by both of FlyLive's notices; the rules' why is
+	// airLook's own sentence, never a copy (src/battle/air/ticket.ts airTicket; Tools/fly_why prints what the card says))
+	const FString Why = RulesWhy.TrimStartAndEnd();
+	return Why.IsEmpty()
+		? FString(TEXT("This raid cannot be flown in the air battle: FLY THE RAID sends your crews."))
+		: FString(TEXT("This raid cannot be flown in the air battle. ")) + Why;
+}
+
+FString ACampaignPlayerController::FlyNotOfferedWhy() const
+{
+	// (weighed as the button is, once a pick: nothing to say where it is offered, or before CanFlyLive has weighed this pick)
+	if (CanFlyLive() || FlyOffer != 0 || FlyOfferAct != Page.Card.Fly.Act || FlyOfferWhy.IsEmpty())
+	{
+		return FString();
+	}
+	// (the gates CanFlyLive passes before it weighs: with the switch off, a scripted run, no card, a raid FLY THE RAID cannot
+	// send, a battle already open, or a raid he does not fly himself, the card says nothing new)
+	if ((!AAirBattle::CampaignLiveOn() && !AAirBattle::CampaignLiveOn(TEXT("ground"))) || bScripted || !bPageOpen || !Page.Card.bValid || !Page.Card.Fly.bOk || LiveRaid.IsValid() || LiveBattle.IsValid())
+	{
+		return FString();
+	}
+	FString Kind;
+	int32 Target = INDEX_NONE;
+	TArray<int32> Ids;
+	if (!ReadFlyAct(Page.Card.Fly.Act, Kind, Target, Ids) || !IsFlownKind(Kind))
+	{
+		return FString();
+	}
+	return FlyOfferWhy;
 }
 
 void ACampaignPlayerController::FlyLive()
@@ -13403,7 +13442,7 @@ void ACampaignPlayerController::FlyLive()
 	if (!TellFlownKinds(*Session) && IsToldKind(Kind))
 	{
 		// (release 2: told again as the battle opens; a raid of a kind the rules could not be told of is not opened)
-		Notify(TEXT("This raid cannot be flown in the air battle: FLY THE RAID sends your crews."), 6.0);
+		Notify(FlyNotOfferedLine(FString()), 6.0);
 		return;
 	}
 	CampaignSounds::Play(this, TEXT("stamp"), 0.6f);
@@ -13426,7 +13465,8 @@ void ACampaignPlayerController::FlyLive()
 		Sky->HandBack = nullptr;
 		Sky->Destroy();
 		FlyOffer = 0;
-		Notify(TEXT("This raid cannot be flown in the air battle: FLY THE RAID sends your crews."), 6.0);
+		FlyOfferWhy = FlyNotOfferedLine(FString());
+		Notify(FlyNotOfferedLine(FString()), 6.0);
 		return;
 	}
 	LiveRaid = Sky;
@@ -13441,6 +13481,7 @@ void ACampaignPlayerController::AirHandBack(const FString& Kind, int32 Target, c
 	LiveRaid.Reset();
 	FlyOfferAct.Reset();
 	FlyOffer = -1;
+	FlyOfferWhy.Reset();
 	const FString FlownPage = FlyLivePage, FlownAct = FlyLiveAct;
 	FlyLivePage.Reset();
 	FlyLiveAct.Reset();
@@ -13467,6 +13508,7 @@ void ACampaignPlayerController::AirHandBack(const FString& Kind, int32 Target, c
 			{
 				FlyOfferAct = FlownAct;
 				FlyOffer = 0;
+				FlyOfferWhy = FlyNotOfferedLine(FString());
 			}
 		}
 		Notify(TEXT("The raid could not be flown to its end, so nothing was booked: FLY THE RAID on its card still sends your crews."), 7.0);

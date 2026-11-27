@@ -15462,6 +15462,18 @@ namespace
 			}
 			Deal(TEXT("COULD JOIN"), Could, TEXT("No other group can reach it this month."));
 
+			// (A mend in his game, the design director's known-faults line of 27 November 2026 23:13Z, corrected 23:16Z) Where
+			// FLY IT YOURSELF is not offered for the raid as picked, the card says why above its buttons, as its strafing
+			// note is drawn (Regular 11, Muted): the rules' why from TC.airLook (FlyNotOfferedWhy). Collapsed, and so taking
+			// no room, everywhere else.
+			(PageFoot.IsValid() ? PageFoot : PageBody)->AddSlot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 8.0f, 12.0f, 0.0f)
+			[
+				SNew(STextBlock)
+				.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->FlyNotOfferedWhy().IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+				.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() ? Controller->FlyNotOfferedWhy() : FString()); })
+				.Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).Justification(ETextJustify::Right)
+			];
+
 			// One brass button flies the raid. (Pinned to the card's foot: it names what he is about to do, and stays on
 			// the screen while he chooses.)
 			(PageFoot.IsValid() ? PageFoot : PageBody)->AddSlot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 8.0f, 12.0f, 0.0f)

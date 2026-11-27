@@ -1551,6 +1551,16 @@ public:
 	 * only where TC.airLook has a ticket for the raid as picked.
 	 */
 	bool CanFlyLive() const;
+	/**
+	 * (A mend in his game, the design director's known-faults line of 27 November 2026 23:13Z, corrected 23:16Z) Why FLY IT
+	 * YOURSELF is not on the raid card up, for the card to say so where the button would stand: the rules' own why where
+	 * TC.airLook refused the raid as picked, after "This raid cannot be flown in the air battle." (or, where the rules gave
+	 * none, that sentence with "FLY THE RAID sends your crews."). Empty where it is offered, not yet weighed, or the raid is
+	 * not one he may fly himself (the switch off, a night raid, no card). Before, CanFlyLive only wrote the why to the log.
+	 */
+	FString FlyNotOfferedWhy() const;
+	/** (The same mend) The card's line for a refusal: the rules' why after the general sentence, or the general sentence. */
+	static FString FlyNotOfferedLine(const FString& RulesWhy);
 	void FlyLive();
 	/** (Release 1.5) The look of the land a battle for this region is fought on, this month, as LandScape::Pick lays it,
 	 * with "+snow" where snow lies (LandScape::SnowOf a quarter or more). */
@@ -1688,6 +1698,8 @@ private:
 	/** (Release 1.6) FLY IT YOURSELF's offer, weighed once for the fly act it was asked of (TC.airLook): 1 offered, 0 not, -1 not yet. */
 	mutable FString FlyOfferAct;
 	mutable int32 FlyOffer = -1;
+	/** (The known-faults mend of 27 November) The card's line kept with FlyOffer 0 for FlyOfferAct (FlyNotOfferedWhy); empty with 1 or -1. */
+	mutable FString FlyOfferWhy;
 	/** (Release 1.5) The raid card his raid was flown from (its page and its fly act), for the card to come back as he left
 	 * it when the raid closes with no result (AirHandBack). */
 	FString FlyLivePage;
