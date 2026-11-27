@@ -266,7 +266,7 @@ describe('the shutting side, from its own sight only', () => {
     expect(g.flags['seaShut:20:UK']).toBe(16);
     month(g, 17);
     const lines = portCardLines(g, MALTA, 'ITA');
-    expect(lines).toEqual([{ tone: 'note', text: 'Your fleets have held the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from March and is lost at the start of May, unless ships get through.' }]);
+    expect(lines).toEqual([{ tone: 'note', text: 'Your fleets have held the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from March and is lost by the start of May, unless ships get through.' }]);
     const f = portCutOff(g, MALTA, 'ITA')!;
     expect([f.side, f.state, f.lastFilled, f.feedsTo, f.lost, f.heldSince, f.heldHungry, f.heldLost]).toEqual(['shutting', null, null, null, null, 16, 19, 21]);
     // Britain's stores are not read: another month on Britain's flag changes nothing the shutting side is told.
@@ -281,13 +281,13 @@ describe('the shutting side, from its own sight only', () => {
   it('with others, every nation by its adjective; an ally of the shutting side reads its ally\'s hold; aircraft hold the sky', () => {
     const two = malta('ITA', ['9th Corps'], 16, (g) => { declareWar(g, 'GER', 'UK'); sail(g, 'ITA', 'central', ['Submarine Fleet']); sail(g, 'GER', 'central', ['U-boat Fleet']); });
     month(two.g, 17);
-    expect(texts(portCardLines(two.g, MALTA, 'ITA'))).toEqual(['Italian and German fleets have held the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from March and is lost at the start of May, unless ships get through.']);
+    expect(texts(portCardLines(two.g, MALTA, 'ITA'))).toEqual(['Italian and German fleets have held the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from March and is lost by the start of May, unless ships get through.']);
     const ally = malta('GER', ['9th Corps'], 16, (g) => { declareWar(g, 'GER', 'UK'); sail(g, 'ITA', 'central'); });
     month(ally.g, 17);
-    expect(texts(portCardLines(ally.g, MALTA, 'GER'))).toEqual(['Italian fleets have held the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from March and is lost at the start of May, unless ships get through.']);
+    expect(texts(portCardLines(ally.g, MALTA, 'GER'))).toEqual(['Italian fleets have held the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from March and is lost by the start of May, unless ships get through.']);
     const air = malta('ITA', ['9th Corps'], 16, (g) => { g.nations.ITA.air = 200; });
     month(air.g, 17);
-    expect(texts(portCardLines(air.g, MALTA, 'ITA'))).toEqual(['Your aircraft have held the sky over the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from March and is lost at the start of May, unless ships get through.']);
+    expect(texts(portCardLines(air.g, MALTA, 'ITA'))).toEqual(['Your aircraft have held the sky over the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from March and is lost by the start of May, unless ships get through.']);
   });
 });
 
@@ -323,7 +323,7 @@ describe('the shutting side: a count only where the rule\'s clock runs, from its
     g.supplyDirty = true;
     phase(g, 'UK');
     expect([g.flags[`stores:${gib}`], g.flags[`seaShut:${g.regions[gib].seas[1]}:UK`]]).toEqual([17, 17]);
-    const line = 'Your fleets have held the Western Mediterranean and the waters off the Iberian coast since January. Counting from then, the garrison of Gibraltar goes hungry from April and is lost at the start of June, unless ships get through.';
+    const line = 'Your fleets have held the Western Mediterranean and the waters off the Iberian coast since January. Counting from then, the garrison of Gibraltar goes hungry from April and is lost by the start of June, unless ships get through.';
     expect(texts(portCardLines(g, gib, 'ITA'))).toEqual([line]);
     const f = portCutOff(g, gib, 'ITA')!;
     expect([f.heldSince, f.heldHungry, f.heldLost]).toEqual([17, 20, 22]);
@@ -352,7 +352,7 @@ describe('the shutting side: a count only where the rule\'s clock runs, from its
     month(g, 17, ['ITA', 'UK']);
     const r = g.regions[MALTA];
     expect([fogOn(g, 'ITA'), sightOf(g, 'ITA')[MALTA]]).toEqual([true, SIGHT.none]);
-    const line = 'Your aircraft have held the sky over the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from March and is lost at the start of May, unless ships get through.';
+    const line = 'Your aircraft have held the sky over the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from March and is lost by the start of May, unless ships get through.';
     expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual([line]);
     // The garrison taken off: Malta is still British, and Italy sees nothing of it, so its card says the same.
     removeCorps(g, ninth);
@@ -368,7 +368,7 @@ describe('the shutting side: a count only where the rule\'s clock runs, from its
     // With the fog lifted, Italy sees Malta whole: the crew and its stores are counted.
     g.flags.nofog = 1;
     expect(sightOf(g, 'ITA')[MALTA]).toBe(SIGHT.full);
-    expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual(['Your aircraft have held the sky over the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from April and is lost at the start of June, unless ships get through.']);
+    expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual(['Your aircraft have held the sky over the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from April and is lost by the start of June, unless ships get through.']);
     // And seen whole with no garrison for the rule to starve (the crew keeps its own clock), there is no line.
     for (const c of [...r.units]) if (c.kind !== 'fort') removeCorps(g, c);
     expect(portCardLines(g, MALTA, 'ITA')).toEqual([]);
@@ -386,7 +386,7 @@ describe('the shutting side: a count only where the rule\'s clock runs, from its
   it('with another nation in the line, every nation by its adjective and no "Your" in the middle of it: Germany\'s player at a Gibraltar shut by Italy and Germany', () => {
     const { g, gib } = gibraltar('GER', (h) => { sail(h, 'ITA', 'wmed', ['1st Fleet']); sail(h, 'GER', 'iberia', ['Battle Fleet']); });
     for (const t of [16, 17]) { g.turn = t; phase(g, 'GER'); phase(g, 'ITA'); phase(g, 'UK'); }
-    expect(texts(portCardLines(g, gib, 'GER'))).toEqual(['Italian fleets have held the Western Mediterranean, and German fleets have held the waters off the Iberian coast since December 1940. Counting from then, the garrison of Gibraltar goes hungry from March and is lost at the start of May, unless ships get through.']);
+    expect(texts(portCardLines(g, gib, 'GER'))).toEqual(['Italian fleets have held the Western Mediterranean, and German fleets have held the waters off the Iberian coast since December 1940. Counting from then, the garrison of Gibraltar goes hungry from March and is lost by the start of May, unless ships get through.']);
     // (Italy's player reads the same line by the adjectives: Germany is in it too.)
     const it = gibraltar('ITA', (h) => { sail(h, 'ITA', 'wmed', ['1st Fleet']); sail(h, 'GER', 'iberia', ['Battle Fleet']); });
     for (const t of [16, 17]) { it.g.turn = t; phase(it.g, 'GER'); phase(it.g, 'ITA'); phase(it.g, 'UK'); }
@@ -606,7 +606,7 @@ describe('item 5: the shutting side\'s "have held ... since" only for a hold the
     g.supplyDirty = true;
     month(g, 20, ['ITA', 'UK']);
     expect(g.flags['seaShut:20:UK']).toBe(20);
-    expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual(['Your fleets have held the Central Mediterranean since April. Counting from then, the garrison of Malta goes hungry from July and is lost at the start of September, unless ships get through.']);
+    expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual(['Your fleets have held the Central Mediterranean since April. Counting from then, the garrison of Malta goes hungry from July and is lost by the start of September, unless ships get through.']);
   });
 
   it('Gibraltar: the Western Mediterranean already shut at the first look, the Iberian waters shut in January under its watch: the count runs from January', () => {
@@ -625,7 +625,7 @@ describe('item 5: the shutting side\'s "have held ... since" only for a hold the
     g.supplyDirty = true;
     phase(g, 'UK');
     expect([g.flags[`seaShut:${wmed}:UK`], g.flags[`seaShut:${iberia}:UK`]]).toEqual([0, 17]);
-    expect(texts(portCardLines(g, gib, 'ITA'))).toEqual(['Your fleets have held the Western Mediterranean and the waters off the Iberian coast since January. Counting from then, the garrison of Gibraltar goes hungry from April and is lost at the start of June, unless ships get through.']);
+    expect(texts(portCardLines(g, gib, 'ITA'))).toEqual(['Your fleets have held the Western Mediterranean and the waters off the Iberian coast since January. Counting from then, the garrison of Gibraltar goes hungry from April and is lost by the start of June, unless ships get through.']);
   });
 
   it('the player falls: the holds watched for him and the watch go with him', () => {
@@ -634,5 +634,82 @@ describe('item 5: the shutting side\'s "have held ... since" only for a hold the
     expect([g.flags['seaShut:20:UK'], g.flags.portWatch]).toEqual([16, 1]);
     portsDone(g, 'ITA');
     expect(Object.keys(g.flags).filter((k) => /^(seaShut:|portWatch)/.test(k))).toEqual([]);
+  });
+});
+
+describe('item 6: "by the start of" where the count can only be the latest month, "at" where it is exact', () => {
+  const CARD = (month: string, word: string): string => `Cut off by sea: Italian fleets hold the Central Mediterranean, and no ship reaches the harbour. The garrison lives on the port's stores through February; unless the sea is opened, it then goes hungry and is lost ${word} the start of ${month}.`;
+
+  it('the shutting side cannot see the garrison\'s order: its line always says "by"', () => {
+    const { g } = malta('ITA');
+    month(g, 17);
+    expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual(['Your fleets have held the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from March and is lost by the start of May, unless ships get through.']);
+    expect(portCutOff(g, MALTA, 'ITA')!.lostBy).toBeNull();
+  });
+
+  it('the holder\'s treasury in debt pays for less rest in a fed month: "by", and the corps is lost sooner than the month named; at full order the debt changes nothing, and it stays "at"', () => {
+    const { g, cs: [ninth] } = malta('UK');
+    month(g, 17);
+    // After January's reckoning: the corps low in order, and Britain's treasury deep in debt.
+    ninth.org = 0.1;
+    expect(texts(portCardLines(g, MALTA, 'UK'))[0]).toBe(CARD('April', 'at'));
+    g.nations.UK.pp = -1e6;
+    const f = portCutOff(g, MALTA, 'UK')!;
+    expect([f.lost, f.lostBy, f.garrison]).toEqual([20, true, [{ id: ninth.id, lost: 20, by: true }]]);
+    expect(texts(portCardLines(g, MALTA, 'UK'))[0]).toBe(CARD('April', 'by'));
+    // (The debt halves February's rest: the corps is struck off as March opens, before April.)
+    month(g, 18);
+    month(g, 19);
+    expect(ninth.dead).toBe(true);
+    // At full order a fed month's rest, halved or not, leaves it full: the count is exact, and says "at".
+    const full = malta('UK');
+    month(full.g, 17);
+    full.g.nations.UK.pp = -1e6;
+    expect([full.cs[0].org, portCutOff(full.g, MALTA, 'UK')!.lostBy, texts(portCardLines(full.g, MALTA, 'UK'))[0]]).toEqual([1, false, CARD('May', 'at')]);
+  });
+
+  it('the news: the first month no ship gets in, told with the treasury in debt and the corps low in order, says "by"', () => {
+    const { g, cs: [ninth] } = malta('UK');
+    ninth.org = 0.1;
+    g.nations.UK.pp = -1e6;
+    const h0 = g.headlines.length;
+    month(g, 17);
+    expect(news(g, h0)).toEqual(['No ship reaches Malta: Italian fleets hold the Central Mediterranean. The garrison lives on the port\'s stores through February; unless the sea is opened, it then goes hungry and is lost by the start of May.']);
+    // (The same news with the treasury paying says "at".)
+    const paid = malta('UK');
+    paid.cs[0].org = 0.1;
+    const p0 = paid.g.headlines.length;
+    month(paid.g, 17);
+    expect(news(paid.g, p0)).toEqual(['No ship reaches Malta: Italian fleets hold the Central Mediterranean. The garrison lives on the port\'s stores through February; unless the sea is opened, it then goes hungry and is lost at the start of May.']);
+  });
+
+  it('a corps that marched this month does not count its next month as rested: "by" only where that can bring the loss sooner', () => {
+    // Low in order, the month without a rested month's rest brings it to the same month: "at", and so it is.
+    const low = malta('UK');
+    month(low.g, 17);
+    low.cs[0].org = 0.1;
+    low.cs[0].ap = 0;
+    expect([portCutOff(low.g, MALTA, 'UK')!.lostBy, texts(portCardLines(low.g, MALTA, 'UK'))[0]]).toEqual([false, CARD('April', 'at')]);
+    for (let t = 18; t <= 20; t++) { month(low.g, t); expect([t, low.cs[0].dead]).toEqual([t, t >= 20]); }
+    // A little higher, a rested month would take it to May and an unrested one only to April: "by the start of May".
+    const mid = malta('UK');
+    month(mid.g, 17);
+    mid.cs[0].org = 0.3;
+    mid.cs[0].ap = 0;
+    expect([portCutOff(mid.g, MALTA, 'UK')!.lostBy, texts(portCardLines(mid.g, MALTA, 'UK'))[0]]).toEqual([true, CARD('May', 'by')]);
+    for (let t = 18; t <= 20; t++) { month(mid.g, t); expect([t, mid.cs[0].dead]).toEqual([t, t >= 20]); }
+  });
+
+  it('hungry, nothing is left out (the hungry months take their order whatever else): the card, the news and the corps line say "at", in debt too', () => {
+    const { g, cs: [ninth] } = malta('UK');
+    month(g, 17);
+    g.nations.UK.pp = -1e6;
+    month(g, 18);
+    const h0 = g.headlines.length;
+    month(g, 19);
+    expect(news(g, h0)).toEqual(['Malta\'s stores are spent and no ship has got through: the garrison goes hungry, and is lost at the start of May unless the sea is opened.']);
+    expect(texts(portCardLines(g, MALTA, 'UK'))[0]).toBe('Cut off by sea, and the port\'s stores are spent: the garrison goes hungry, losing order every month, and is lost at the start of May unless the sea is opened.');
+    expect(portCorpsLine(g, ninth)).toBe('Hungry: Malta\'s stores are spent. Lost at the start of May unless ships get through.');
+    expect(portCutOff(g, MALTA, 'UK')!.garrison).toEqual([{ id: ninth.id, lost: 21, by: false }]);
   });
 });
