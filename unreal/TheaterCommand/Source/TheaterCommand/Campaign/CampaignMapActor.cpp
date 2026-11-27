@@ -10563,7 +10563,7 @@ void ACampaignMapActor::BuildTrees(const TSet<FIntPoint>* Only)
 					}
 					const int32 GI = FMath::Clamp(FMath::RoundToInt32(X / Terrain.Cell), 0, Terrain.NX - 1);
 					const int32 GJ = FMath::Clamp(FMath::RoundToInt32(Y / Terrain.Cell), 0, Terrain.NY - 1);
-					const float Wooded = Paint.Ground[Terrain.Index(GI, GJ)].A / 255.0f;
+					const float Wooded = ChurnWoods(Terrain.Index(GI, GJ), Paint.Ground[Terrain.Index(GI, GJ)].A / 255.0f); // (release 2: thinned in the core of churned ground; as it was while that is off)
 					if (Wooded < 0.35f || Chance > Wooded * 0.92f)
 					{
 						continue;
@@ -13790,7 +13790,7 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 		// it over the land in the frames after this one, in place of sending it now.)
 		if (!TakeSeasonSnow(Pixels))
 		{
-			CampaignTextures::Update(MasksPicture, Pixels);
+			SendMasks(Pixels); // (release 2: with churned ground on, laid over them as they go; else the plain send)
 		}
 	}
 	// The year turns on the table. The woods: fresh green in spring, gold and russet through the autumn, bare in
@@ -18202,6 +18202,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	PlantTreesDue(CameraFocus); // (release 2, map run 8: the woods' month turn, a few squares a frame, tc.Speed.TreesSpread)
 	UpdateOwnershipPaint();
 	UpdateSeasonTurn(); // (release 2: the season turns, CampaignSeasonTurn.cpp; tc.Map.SeasonTurn, nothing while it is off)
+	UpdateFrontChurn(CameraFocus, CameraDistance); // (release 2: churned ground between dug-in lines, CampaignFrontChurn.cpp; tc.Map.FrontChurn, nothing while it is off)
 	// The showpiece turns slowly on its stand.
 	if (ShowMesh && !ShowModel.IsEmpty() && GetWorld())
 	{
