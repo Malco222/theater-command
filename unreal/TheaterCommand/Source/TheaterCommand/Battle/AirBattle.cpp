@@ -5076,10 +5076,10 @@ namespace AirParts
 	 * her sheen file's gloss and metal at K under her contact shade, and each point past her file's (her star and bar)
 	 * her coat's. Nothing unless her overlay and her sheen file are of one size and the shape holds at least as many points.
 	 */
-	static void SheenOnto(FShape& Shape, const AirSkin::Level& Skin, const AirSheen::Level& Own, double ShadeStrength, const AirSheen::Carried& Coat)
+	static void SheenOnto(FShape& Shape, const AirSkin::Level& Worn, const AirSheen::Level& Own, double ShadeStrength, const AirSheen::Carried& Coat)
 	{
 		const size_t Count = Own.Count();
-		if (Skin.Count() != Count || Own.Metal.size() != Count || Shape.Points.Num() < static_cast<int32>(Count))
+		if (Worn.Count() != Count || Own.Metal.size() != Count || Shape.Points.Num() < static_cast<int32>(Count))
 		{
 			return;
 		}
@@ -5087,7 +5087,7 @@ namespace AirParts
 		for (int32 K = 0; K < Shape.Points.Num(); ++K)
 		{
 			const size_t At = static_cast<size_t>(K);
-			const AirSheen::Carried C = At < Count ? AirSheen::Carry(Own.Gloss[At], Own.Metal[At], AirSkin::ShadeFactor(Skin.Shade[At], ShadeStrength)) : Coat;
+			const AirSheen::Carried C = At < Count ? AirSheen::Carry(Own.Gloss[At], Own.Metal[At], AirSkin::ShadeFactor(Worn.Shade[At], ShadeStrength)) : Coat;
 			Shape.Sheen[K] = FVector2D(C.U, C.V);
 		}
 	}
