@@ -31,6 +31,7 @@
 import { turnToDate } from '../core/ticket';
 import { AIR } from './air';
 import { theUnit } from './bombers';
+import { seaFigure, seaMeasure } from './carriers';
 import { hospitalNear, hospitalWorth } from './buildings';
 import { columnShare } from './columns';
 import { cmdRally, cmdWinter } from './commanders';
@@ -383,8 +384,12 @@ export interface PortLine { text: string; tone: 'warn' | 'bad' | 'note' }
  * nation with corps there, the stores left or spent, and what opens the sea; with the sea open, what the stores would
  * feed; to the side that shuts it, how long it has held the sea and the rule's count from then. Empty with the switch
  * off, with no viewer (a war watched with nobody at the table), and for every other province or viewer.
+ *
+ * `measure` (the browser's card): the remedy line is followed by the measure its sea card gives this seat, a sentence
+ * for each sea the line names (the UI director's 23:50Z, item 3). The 3D game's sea card shows no strengths, so its
+ * card leaves the sentence out.
  */
-export function portCardLines(g: Game, regionId: number, viewer: string | null): PortLine[] {
+export function portCardLines(g: Game, regionId: number, viewer: string | null, opts: { measure?: boolean } = {}): PortLine[] {
   // (A war watched with nobody at the table has no viewer: the card is nobody's. The rules' own readings, the news and
   // the corps struck off, read portCutOff's null viewer themselves.)
   if (!portStoresOn(g) || viewer === null) return [];
@@ -403,14 +408,25 @@ export function portCardLines(g: Game, regionId: number, viewer: string | null):
   const out: PortLine[] = [];
   if (f.state === 'stores') out.push({ text: theWords(`Cut off by sea: ${heldSaid(g, f.shut, viewer, false)}, and no ship reaches the harbour. The garrison lives on the port's stores through ${monthSaid(g, f.feedsTo!)}; unless the sea is opened, it then goes hungry and is lost at the start of ${monthSaid(g, f.lost)}.`), tone: 'warn' });
   else out.push({ text: theWords(`Cut off by sea, and the port's stores are spent: the garrison goes hungry, losing order every month, and is lost at the start of ${monthSaid(g, f.lost)} unless the sea is opened.`), tone: 'bad' });
-  // (Ruling 4: "strong enough" shows only the measure the game's own sea card already shows that seat. The sea card
-  // shows each side's strength there and no measure of what opens the sea, so the line ends at the month: the UI
-  // director marks the join once she has the sea card's words.)
   // (One sea opened is enough: the quay is open where any sea of the port is in the holder's lanes. With several shut,
-  // the seas whose opening joins his lanes are named, joined by "or": the marks give one sea here, so the several-seas
-  // form waits on the UI director.)
-  out.push({ text: theWords(`A fleet of yours at sea there, strong enough to open ${seasSaid(g, openers(g, r, f.shut.map((s) => s.sea)), 'or')}, lets the ships in and fills the stores: one such month feeds the garrison through ${monthSaid(g, g.turn + f.keep)}.`), tone: 'note' });
+  // the seas whose opening joins his lanes are named, joined by "or".)
+  const open = openers(g, r, f.shut.map((s) => s.sea));
+  // (Ruling 4: "strong enough" shows only the measure the game's own sea card already shows that seat. The browser's
+  // sea card shows each side's strength there and no threshold, so the line is followed by those two figures, a
+  // sentence for each sea it names, and no figure of the strength needed: the UI director's 23:50Z, item 3.)
+  const measured = opts.measure ? open.map((z) => measureSaid(g, z, viewer)).filter((x): x is string => x !== null) : [];
+  out.push({ text: theWords(`A fleet of yours at sea there, strong enough to open ${seasSaid(g, open, 'or')}, lets the ships in and fills the stores: one such month feeds the garrison through ${monthSaid(g, g.turn + f.keep)}.${measured.map((x) => ` ${x}`).join('')}`), tone: 'note' });
   return out;
+}
+
+/**
+ * The sea card's measure for the seat, in a sentence (the UI director's 23:50Z, item 3): "At sea in the Central
+ * Mediterranean today: yours 11, the enemy's 76." Its figures are the sea card's own, printed as it prints them
+ * (carriers.ts seaMeasure, seaFigure), the enemy's "as found" where the card says so. Null where the card gives none.
+ */
+function measureSaid(g: Game, z: number, viewer: string): string | null {
+  const m = seaMeasure(g, z, viewer);
+  return m && `At sea in ${seaWhat(g.seas[z].name)} today: yours ${seaFigure(m.ours)}, the enemy's${m.found ? ', as found,' : ''} ${seaFigure(m.theirs)}.`;
 }
 
 /**

@@ -8,12 +8,15 @@
 // the card named opens, not a month before or after. The shutting side's line reads only its own sight (how long its
 // side has held the sea), never Britain's stores. With the switch off, nothing of it is said or written.
 import { describe, expect, it } from 'vitest';
+import { seaPicture } from '../src/campaign/carriers';
 import { addCorps, computeSupply, createGame, declareWar, portKeep, removeCorps, startPhase } from '../src/campaign/game';
 import { SIGHT, fogOn, sightOf } from '../src/campaign/intel';
-import { closedTo, zoneOf } from '../src/campaign/navy';
+import { closedTo, seaSide, zoneOf } from '../src/campaign/navy';
 import { PORTSTORES_ROW, monthSaid, portCardLines, portCorpsLine, portCutOff, portStoresOn, setPortStores, type PortLine } from '../src/campaign/portcut';
+import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game } from '../src/campaign/types';
+import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
 const MALTA = 361;
 
@@ -478,5 +481,48 @@ describe('who is told', () => {
     expect([off.cs[0].dead, on.cs[0].dead]).toEqual([true, true]);
     expect(news(on.g)).toHaveLength(3);
     expect(PORTSTORES_ROW.id).toBe('portstores');
+  });
+});
+
+// ---- On the build (the UI director, 26 Nov 2026, 23:50Z) -------------------------------------------------------------
+
+type Call = (...a: unknown[]) => unknown;
+const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
+
+describe('item 3: the browser\'s card follows the remedy line with the sea card\'s measure for this seat', () => {
+  it('Malta in January 1941: yours and the enemy\'s as found, the sea card\'s own figures as it prints them; the plain form where the seas are not searched; none in 3D', () => {
+    const { g } = malta('UK');
+    month(g, 17);
+    const z = zoneOf(g, 'central');
+    // (The sea card's own sums for this seat: its side, and the enemy as found where the carriers' rules search the seas.)
+    expect([g.flags.carriers, Math.round(seaSide(g, z, 'UK', false).total), Math.round(seaPicture(g, z, 'UK').theirs), Math.round(seaSide(g, z, 'UK', true).total)]).toEqual([1, 11, 131, 151]);
+    const lines = portCardLines(g, MALTA, 'UK', { measure: true });
+    expect(lines).toEqual([
+      { tone: 'warn', text: 'Cut off by sea: Italian fleets hold the Central Mediterranean, and no ship reaches the harbour. The garrison lives on the port\'s stores through February; unless the sea is opened, it then goes hungry and is lost at the start of May.' },
+      { tone: 'note', text: 'A fleet of yours at sea there, strong enough to open the Central Mediterranean, lets the ships in and fills the stores: one such month feeds the garrison through March. At sea in the Central Mediterranean today: yours 11, the enemy\'s, as found, 131.' },
+    ]);
+    // Where the seas are not searched, the sea card gives the enemy whole, with no "as found".
+    delete g.flags.carriers;
+    expect(texts(portCardLines(g, MALTA, 'UK', { measure: true }))[1]).toBe('A fleet of yours at sea there, strong enough to open the Central Mediterranean, lets the ships in and fills the stores: one such month feeds the garrison through March. At sea in the Central Mediterranean today: yours 11, the enemy\'s 151.');
+    g.flags.carriers = 1;
+    // The 3D game's sea card shows no strengths: its card leaves the sentence out.
+    TC().load(saveGame(g));
+    const cut = ((TC().province as Call)(MALTA) as { portCut: { text: string; tone: string }[] }).portCut;
+    expect(cut.map((l) => l.text)).toEqual(texts(portCardLines(g, MALTA, 'UK')));
+    expect(cut[1].text).toBe('A fleet of yours at sea there, strong enough to open the Central Mediterranean, lets the ships in and fills the stores: one such month feeds the garrison through March.');
+    // Hungry, the same: the remedy line and its measure.
+    month(g, 18);
+    month(g, 19);
+    expect(texts(portCardLines(g, MALTA, 'UK', { measure: true }))[1]).toMatch(/^A fleet of yours at sea there, strong enough to open the Central Mediterranean, lets the ships in and fills the stores: one such month feeds the garrison through May\. At sea in the Central Mediterranean today: yours \d+, the enemy's, as found, \d+\.$/);
+  });
+
+  it('Gibraltar with both seas shut: a sentence for each sea the remedy line names, in its order', () => {
+    const { g, gib } = gibraltar('UK', (h) => { sail(h, 'ITA', 'wmed', ['1st Fleet']); sail(h, 'ITA', 'iberia', ['2nd Fleet']); });
+    month(g, 16);
+    month(g, 17);
+    expect(texts(portCardLines(g, gib, 'UK', { measure: true }))[1]).toBe('A fleet of yours at sea there, strong enough to open the Western Mediterranean or the waters off the Iberian coast, lets the ships in and fills the stores: one such month feeds the garrison through March. At sea in the Western Mediterranean today: yours 9, the enemy\'s, as found, 1. At sea in the waters off the Iberian coast today: yours 5, the enemy\'s, as found, 0.');
+    // (With the sea open there is no remedy line, and so no measure.)
+    const h = malta('UK').g;
+    expect(texts(portCardLines(h, MALTA, 'UK', { measure: true }))).toEqual(['Cut off by sea, its stores would feed the garrison for two months.']);
   });
 });

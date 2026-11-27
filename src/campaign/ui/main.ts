@@ -89,7 +89,7 @@ import { nearX, ringStretch, wrapSpan } from '../wrap';
 import { WORLD, beyondEurope, closedGround, lakesOf, motherLine, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, gunsTo, shippingWords, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
 import { resultFor, strafedLine, type StrafeSection } from '../strafers';
-import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
+import { seaFigure, seaMeasure, whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import { ON_CAMPAIGN, landTicket, staffOnly } from '../../battle/land';
 import { fieldOpen, fightOnField } from '../../battle/ui/page';
@@ -3856,7 +3856,8 @@ function pocketNote(r: Region): string {
  * has held the sea. Nothing with the switch off.
  */
 function portNote(r: Region): string {
-  return portCardLines(g, r.id, g.human).map((l) => `<div class="note${l.tone === 'note' ? '' : ` ${l.tone}`}">${esc(l.text)}</div>`).join('');
+  // (The browser's card follows the remedy line with the sea card's measure for this seat: the UI director's 23:50Z, item 3.)
+  return portCardLines(g, r.id, g.human, { measure: true }).map((l) => `<div class="note${l.tone === 'note' ? '' : ` ${l.tone}`}">${esc(l.text)}</div>`).join('');
 }
 
 function siegeBlock(r: Region): string {
@@ -6157,11 +6158,13 @@ function seaPane(): string {
   const docked = g.fleets.filter((f) => f.home === z.id && !atSea(f) && afloat(f) && shown(f));
   let head: string;
   if (me && g.nations[me].atWar.length) {
-    const us = seaSide(g, z.id, me, false), them = seaSide(g, z.id, me, true);
-    const theirs = pic ? pic.theirs : them.total;
+    // (Its two figures, yours and the enemy's as found, are the sea's measure for this seat, which the port's card reads
+    // too: carriers.ts seaMeasure.)
+    const us = seaSide(g, z.id, me, false), them = seaSide(g, z.id, me, true), m = seaMeasure(g, z.id, me)!;
+    const theirs = m.theirs;
     const loss = Math.round(seaRisk(g, z.id, me) * NAVY.intercept.loss * 100);
     head = `<div class="sub">${closedTo(g, z.id, me) ? 'Closed to your troopships and supply ships: the enemy is much the stronger here.' : theirs >= 1 ? 'Contested, but still open to your shipping.' : 'Open to your shipping.'}</div>
-      <div class="facts"><div class="fact"><span>Your side</span><b>${num(us.total)}</b></div><div class="fact"><span>The enemy${pic ? ', as found' : ''}</span><b>${num(theirs)}</b></div><div class="fact"><span>Lost crossing</span><b>${loss ? `about ${loss}%` : 'None'}</b></div></div>
+      <div class="facts"><div class="fact"><span>Your side</span><b>${seaFigure(m.ours)}</b></div><div class="fact"><span>The enemy${m.found ? ', as found' : ''}</span><b>${seaFigure(theirs)}</b></div><div class="fact"><span>Lost crossing</span><b>${loss ? `about ${loss}%` : 'None'}</b></div></div>
       <p class="sub" style="margin-top:6px">Strength counts the fleets at sea here and the aircraft that can reach this sea from the coasts each side holds${us.air + them.air >= 1 ? `: yours ${num(us.air)}, the enemy's ${num(them.air)}` : ''}. The last figure is the share of a corps likely to be lost if it crossed this sea now.</p>
       ${pic ? `<div class="note"><b>The search.</b> ${esc(pic.word)}.${pic.reported ? ` ${pic.reported} enemy force${pic.reported === 1 ? ' is' : 's are'} reported here and not identified: ${pic.reported === 1 ? 'its' : 'their'} strength is not counted above.` : ''} Ships and carriers here, carriers in the seas next door and aircraft from your coasts all search this sea. A group or a carrier wing can fly a search of it from the Air tab.</div>` : ''}`;
   } else head = `<div class="sub">${z.coast.length} coastal region${z.coast.length === 1 ? '' : 's'} on this sea.</div>`;
