@@ -168,7 +168,9 @@ describe('the offers page', () => {
     // has less room left than the row's men, and five fighting corps stand there.)
     const { going, out } = sixteenth(g), okinawa = g.byName.Okinawa;
     expect([fits(g, okinawa, 'JAP', going, { out }), roomLeft(g, okinawa, 'JAP') * MEN_PER_DIV < men(going[0]), standing(g, okinawa)]).toEqual([false, true, STACK]);
-    const why = 'There is no room for another corps at Okinawa, or near it.';
+    // ("on Okinawa": the no-room line takes "on" or "at" from the page's own island test, game.ts `onOrAt`, as the first
+    // line does: the UI director's small mend of 18:04Z, 27 November 2026. "at" for a place on land: far-lapse, Taihoku.)
+    const why = 'There is no room for another corps on Okinawa, or near it.';
     const r = open(g).sections[0].rows.find((x: any) => x.title === NOV41[2]);
     expect(words(r)).toEqual([NOV41[2], ['plain: Infantry, 8,000 men, to form on Okinawa.', 'plain: Takes your General reserve (16th Division, home from China) at Osaka, 15,000 men.',
       'plain: The other 8,000 are lost with the old corps.', 'muted: Offered in November 1941, open until May 1942.', `muted: ${why}`],
@@ -265,12 +267,12 @@ describe('the offers page', () => {
     const h = loadGame(TC().save().text)!;
     const left = rowOffers(h), go = left.filter((o) => !o.why), passed = left.filter((o) => o.why);
     const struck = [...new Set(go.flatMap((o) => o.takes.map((t) => t.id)))].map((id) => h.corps.find((c) => c.id === id && !c.dead)!);
-    expect([go.map((o) => o.name), passed.map((o) => [o.name, o.why])]).toEqual([[NOV41[3], NOV41[4], GARRISON], [[NOV41[2], 'There is no room for another corps at Okinawa, or near it.']]]);
+    expect([go.map((o) => o.name), passed.map((o) => [o.name, o.why])]).toEqual([[NOV41[3], NOV41[4], GARRISON], [[NOV41[2], 'There is no room for another corps on Okinawa, or near it.']]]);
     expect(TC().page('offers').note).toBe(`Form all ${go.length}? ${struck.length} of your corps leave the map, ${menWords(struck.reduce((n, c) => n + men(c), 0))} men, and ${go.length} formations form. It cannot be undone. ${passed.length} cannot be formed this month and stays open.`);
     expect(TC().page('offers').note).toBe('Form all 3? 3 of your corps leave the map, 34,000 men, and 3 formations form. It cannot be undone. 1 cannot be formed this month and stays open.');
     const all = TC().act('offers:all:take');
     expect(all).toMatchObject({ ok: false, open: '' });
-    expect(all.note).toBe(`3 formations are formed: ${NOV41[3]}, ${NOV41[4]} and ${GARRISON}. ${NOV41[2]} is not formed. There is no room for another corps at Okinawa, or near it.`);
+    expect(all.note).toBe(`3 formations are formed: ${NOV41[3]}, ${NOV41[4]} and ${GARRISON}. ${NOV41[2]} is not formed. There is no room for another corps on Okinawa, or near it.`);
     const p = TC().page('offers');
     expect([p.headline, p.sections[0].rows.map((r: any) => r.title), p.top]).toEqual(['1 formation offered', [NOV41[2]], [{ ...HEAD_BUTTONS[0], ok: false }, HEAD_BUTTONS[1]]]);
     // Declining the last one closes the page.
@@ -341,7 +343,7 @@ describe('an offer sent on by sea: card and result agree, in every seat', () => 
     const n = war();
     months(n, 1, 30);
     noRoomForSixteenth(n);
-    const why = 'There is no room for another corps at Okinawa, or near it.';
+    const why = 'There is no room for another corps on Okinawa, or near it.';
     expect(of(n)).toMatchObject({ region: okinawa.id, why, moved: null });
     const r = open(n).sections[0].rows.find((x: any) => x.title === NOV41[2]);
     expect([r.lines[0], r.buttons[0]]).toEqual(['Infantry, 8,000 men, to form on Okinawa.', { label: 'FORM IT', act: `offers:take:${index(NOV41[2])}`, ok: false, tip: why }]);

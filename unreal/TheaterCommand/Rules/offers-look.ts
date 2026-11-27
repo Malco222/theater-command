@@ -25,7 +25,7 @@
 // the rows without a second call. campaign-bridge.ts adds the calls to TC with Object.assign(TC, offerCalls(game, view)).
 
 import { formationOffers, orderDeclineFormation, orderTakeFormation, whyNotAnswerOffers, type RowOffer } from '../../../src/campaign/turn';
-import { loansEnding, placeName, rowsAwaitingWar, theName } from '../../../src/campaign/game';
+import { loansEnding, onOrAt, placeName, rowsAwaitingWar, theName } from '../../../src/campaign/game';
 import { menWords } from '../../../src/campaign/manpower';
 import { turnToDate } from '../../../src/core/ticket';
 import { KIND, type Game } from '../../../src/campaign/types';
@@ -118,8 +118,9 @@ export function offerLines(s: Game, o: RowOffer): OfferLine[] {
     out.push({ text: o.lent.goes === 'lost' ? `Sent home, it leaves the map: ${theDivision(o.lent.division)} is no longer on it. Kept, it stays yours for good.` : `Sent home, it goes back into ${theDivision(o.lent.division)}. Kept, it stays yours for good.`, tone: '' });
   } else {
     const r = o.region >= 0 ? s.regions[o.region] : null;
-    // (The design director's island test: a place with no land neighbour is "on", every other "at".)
-    const at = r ? `${r.nb.length === 0 ? 'on' : 'at'} ${r.name}` : '';
+    // (The design director's island test: a place with no land neighbour is "on", every other "at": game.ts `onOrAt`,
+    // which the no-room line reads too.)
+    const at = r ? `${onOrAt(r)} ${r.name}` : '';
     // (A row that joins a standing corps forms no corps of its own: it joins it where it stands.)
     const where = o.joins ? `, to join your ${o.joins}${at ? ` ${at}` : ''}` : at ? `, to form ${at}` : '';
     out.push({ text: `${kindWord(o.kind)}, ${menWords(o.men)} men${where}.`, tone: '' });

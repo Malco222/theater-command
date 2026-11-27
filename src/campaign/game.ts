@@ -297,6 +297,14 @@ export function placeName(name: string, start = false): string {
   return PLACES.the.includes(name) ? `${start ? 'The' : 'the'} ${name}` : name;
 }
 
+/**
+ * The design director's island test, as the offers page words a place: a place with no land neighbour is "on", every
+ * other "at". The one copy, read by the offer's first line (offers-look.ts `offerLines`) and its no-room line
+ * (`offerView`): the UI director, 18:04Z, 27 November 2026, "the no-room line takes 'on' or 'at' from the page's own
+ * island test, as the first line does, never typed".
+ */
+export const onOrAt = (r: Region): 'on' | 'at' => (r.nb.length === 0 ? 'on' : 'at');
+
 export function headline(g: Game, kind: Headline['kind'], text: string, nat?: string, region?: number, tag?: NewsTag): void {
   g.headlines.push({ turn: g.turn, week: newsWeek(g), text: theWords(text), kind, nat, region, ...tag });
 }
@@ -5673,7 +5681,7 @@ function offerRead(g: Game, nat: string, row: any[], i: number): { view: RowOffe
       // the board yet, so it is never told to split. A row made from corps on the board, and other ground: the old line.)
       const isle = !stopDef(g).book && !rowOut(g, nat, o).length && islandOf(g, reg)
         ? roomRefusal(g, reg, rowCorps(g, nat, row, o).map((c) => ({ ...c, name: row[2], dead: true }) as Corps), { forms: true }) : null;
-      return isle ?? `There is no room for another corps at ${reg.name}, or near it.`;
+      return isle ?? `There is no room for another corps ${onOrAt(reg)} ${reg.name}, or near it.`;
     }
     return null;
   })();
