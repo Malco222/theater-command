@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import HUD from '../unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignHUD.cpp?raw';
 import SESSION from '../unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignSession.cpp?raw';
 import { seaPicture } from '../src/campaign/carriers';
+import { signPeace } from '../src/campaign/diplomacy';
 import { addCorps, allied, computeSupply, createGame, declareWar, portKeep, removeCorps, resolveBattle, startPhase, trueReach } from '../src/campaign/game';
 import { crewStores, storesEaten } from '../src/campaign/fortrows';
 import { SIGHT, fogOn, sightOf } from '../src/campaign/intel';
@@ -721,29 +722,49 @@ describe('item 5: the shutting side\'s "have held ... since" only for a hold the
     expect(clock.slice(-1)).toEqual([[19, false, true]]);
   });
 
-  it('Spain comes into the war at Gibraltar in January 1941, after Italy\'s and Germany\'s fleets shut both its seas in October 1940: the month the switch saw, and the clock from then', () => {
-    const g = grand('ESP');
-    const gib = g.byName.Gibraltar.id, [wmed, iberia] = g.regions[gib].seas;
+  /**
+   * Gibraltar held by a British 9th Corps alone; Italy at war with Britain from August 1940, France's fleet in harbour;
+   * Germany's Battle Fleet off the Iberian coast and Italy's 1st Fleet in the Western Mediterranean from October; and
+   * `who`, at peace until then, comes into the war against Britain on the Axis side in January 1941. Its player reads
+   * its card each month after Britain's.
+   */
+  function lateAtGibraltar(who: string): { g: Game; seas: number[]; card: Record<number, string[]>; clock: [number, boolean, boolean][] } {
+    const g = grand(who);
+    const gib = g.byName.Gibraltar.id;
     const [ninth] = garrison(g, 'Gibraltar', ['9th Corps']);
     const card: Record<number, string[]> = {}, clock: [number, boolean, boolean][] = [];
     for (let t = 12; t <= 19; t++) {
       g.turn = t;
       if (t === 12) { declareWar(g, 'ITA', 'UK'); for (const f of g.fleets) if (f.nat === 'FRA') f.stance = 'port'; }
-      if (t === 17) { g.nations.ESP.align = 'axis'; declareWar(g, 'ESP', 'UK'); }
+      if (t === 17) { g.nations[who].align = 'axis'; declareWar(g, who, 'UK'); }
       g.supplyDirty = true;
       phase(g, 'GER');
       if (t === 14) { sail(g, 'GER', 'iberia', ['Battle Fleet']); g.supplyDirty = true; }
       phase(g, 'ITA');
       if (t === 14) { sail(g, 'ITA', 'wmed', ['1st Fleet']); g.supplyDirty = true; }
-      phase(g, 'ESP');
+      phase(g, who);
       phase(g, 'UK');
-      card[t] = texts(portCardLines(g, gib, 'ESP'));
+      card[t] = texts(portCardLines(g, gib, who));
       clock.push([t, ninth.supplied, ninth.dead]);
     }
+    return { g, seas: g.regions[gib].seas, card, clock };
+  }
+
+  it('Hungary comes into the war in January 1941, after Italy\'s and Germany\'s fleets shut both of Gibraltar\'s seas in October 1940: the month the switch saw, and the clock from then', () => {
+    const { g, seas: [wmed, iberia], card, clock } = lateAtGibraltar('HUN');
     expect([g.flags[`seaShut:${wmed}:UK`], g.flags[`seaShut:${iberia}:UK`]]).toEqual([14, 14]);
     for (let t = 12; t <= 16; t++) expect([t, card[t]]).toEqual([t, []]);
     const line = 'Italian fleets have held the Western Mediterranean, and German fleets have held the waters off the Iberian coast since October 1940. Counting from then, the garrison of Gibraltar is hungry by January and lost by the start of March, unless ships get through.';
     expect([card[17], card[18]]).toEqual([[line], [line]]);
+    expect(clock.slice(4)).toEqual([[16, true, false], [17, false, false], [18, false, false], [19, false, true]]);
+  });
+
+  it('Spain comes into the war at Gibraltar in January 1941, after the same holds: the ring closes at Britain\'s January, and while it stands the port is left to the pocket\'s lines and Spain\'s card has none (the UI director\'s 05:03Z, item 1); the record of the holds is kept, and the rule\'s clock is the same', () => {
+    const { g, seas: [wmed, iberia], card, clock } = lateAtGibraltar('ESP');
+    const gib = g.byName.Gibraltar.id;
+    expect([g.flags[`seaShut:${wmed}:UK`], g.flags[`seaShut:${iberia}:UK`], g.flags[`pkt:${gib}`]]).toEqual([14, 14, 17]);
+    // (The 03:13Z build gave Spain the line Hungary reads above, in January and February.)
+    for (let t = 12; t <= 19; t++) expect([t, card[t]]).toEqual([t, []]);
     expect(clock.slice(4)).toEqual([[16, true, false], [17, false, false], [18, false, false], [19, false, true]]);
   });
 });
@@ -1217,7 +1238,11 @@ describe('03:13Z, item 2: a crew lost in battle, the count on the rule\'s own cl
   const NEWS_SPENT = (lost: string): string => `Gibraltar's stores are spent and no ship has got through: the garrison goes hungry, and is lost at the start of ${lost} unless the sea is opened.`;
   const LIVING_G = (through: string): string => `Living on Gibraltar's stores through ${through}.`;
   const HUNGRY_G = (lost: string): string => `Hungry: Gibraltar's stores are spent. Lost at the start of ${lost} unless ships get through.`;
-  /** Britain's player at Gibraltar from January to the month the 9th is struck off, the crew lost in battle in `by`'s April. */
+  /**
+   * Britain's player at Gibraltar from January to the month the 9th is struck off, the crew lost in battle in `by`'s
+   * April. Where the battle is Spain's, she is at war from then, closes the ring round the port as Britain's May opens
+   * (siege.ts pocketMonth), and makes peace in her May.
+   */
   function play(by: 'ITA' | 'ESP'): { rows: unknown[]; record: string[]; bare: number | null } {
     const { g, gib, ninth, crew } = gibCrewed('UK');
     const rows: unknown[] = [];
@@ -1232,7 +1257,8 @@ describe('03:13Z, item 2: a crew lost in battle, the count on the rule\'s own cl
         declareWar(g, 'ESP', 'UK');
         phase(g, 'ESP');
         crewBeaten(g, gib, crew, 'ESP');
-      }
+      } else if (t > 20 && by === 'ESP') phase(g, 'ESP');
+      if (t === 21 && by === 'ESP') expect(signPeace(g, 'ESP', 'UK')).toBe(true);
       rows.push([t, ninth.supplied, Math.round(ninth.org * 100) / 100, ninth.dead, ours(g, h0), texts(portCardLines(g, gib, 'UK')), ninth.dead ? null : portCorpsLine(g, ninth)]);
       if (t === 20) {
         // (The same month read without the record: the count the build made, from the port's own two.)
@@ -1264,7 +1290,7 @@ describe('03:13Z, item 2: a crew lost in battle, the count on the rule\'s own cl
     expect([record.length, record[0].endsWith(':UK:16:1:ITA'), bare]).toEqual([1, true, 18]);
   });
 
-  it('Spain\'s attack from Cadiz in her April, after Britain\'s draw: that draw fed the garrison on the crew\'s stores, it is hungry from May, and every line counts April as fed', () => {
+  it('Spain\'s attack from Cadiz in her April, after Britain\'s draw: that draw fed the garrison on the crew\'s stores, and it is hungry from May; the ring Spain closes in May is left to the pocket\'s lines, and once her peace breaks it, every line counts April as fed', () => {
     const { rows, record, bare } = play('ESP');
     expect(rows).toEqual([
       BEFORE(17), BEFORE(18), BEFORE(19),
@@ -1272,8 +1298,11 @@ describe('03:13Z, item 2: a crew lost in battle, the count on the rule\'s own cl
       // after it read the port's own two: no month after April is fed. (Without the record, the build's count said here
       // that the stores were spent, of a garrison fed this month.)
       [20, true, 1, false, [], [STORES_G('April', 'July'), REMEDY_G('through June')], LIVING_G('April')],
-      // May: the stores are spent, and it is told in the month they are.
-      [21, false, 0.6, false, [NEWS_SPENT('July')], [SPENT_G('July'), REMEDY_G('through July')], HUNGRY_G('July')],
+      // May: Spain at war beside it, the ring closes as Britain's month opens, and the port is left to the pocket's own
+      // lines (the UI director's 05:03Z, item 1): no line of the port's. (The 03:13Z build told the stores spent here.)
+      [21, false, 0.6, false, [], [], null],
+      // June: Spain's peace has broken the ring, and the port's lines come back on the rule's own clock, the record of
+      // the crew lost in April kept through the pocket: hungry since May, and struck off as July opens.
       [22, false, 0.2, false, [], [SPENT_G('July'), REMEDY_G('through August')], HUNGRY_G('July')],
       [23, false, -0.2, true, ['Cut off in Gibraltar, the 9th Corps has starved and is lost.'], [], null],
     ]);
@@ -1383,17 +1412,18 @@ describe('03:13Z, item 3: a corps in a cut-off port always has its line', () => 
   });
 });
 
-describe('a port in a pocket (siege.ts pocketMonth): its holder\'s army on the pocket\'s own clock as well', () => {
+describe('05:03Z, item 1: a port in a pocket is left to the pocket\'s own lines, as a besieged port is left to the siege\'s', () => {
   /**
-   * Gibraltar with Spain at war beside it, so that the port is cut off by land as well as by sea: a pocket, whose stores
-   * its holder's army eats on the pocket's own clock (siege.ts pocketMonth), and once they are spent the holder's draws
-   * feed nobody there (game.ts computeSupply, pocketDry), whatever the port's stores. A British 9th Corps in the town and
-   * the 10th to the 13th in the field; the stores filled by a real draw in December 1940 (turn 16); Italy and Germany at
-   * war with Britain, France's fleet in harbour, and Italy's 1st Fleet in the Western Mediterranean and her 2nd off the
-   * Iberian coast. Britain's player reads his cards in his own month.
+   * Gibraltar with Spain at war beside it, so that the port is cut off by land as well as by sea: a pocket (siege.ts
+   * pocketMonth), whose own lines tell the player both roads and ships ("Gibraltar is surrounded: no road and no ship
+   * reaches it ...") on the rule's own clock. A British 9th Corps in the town and the 10th to the 13th in the field; the
+   * stores filled by a real draw in December 1940 (turn 16); Italy and Germany at war with Britain, France's fleet in
+   * harbour, and Italy's 1st Fleet in the Western Mediterranean and her 2nd off the Iberian coast. The switch as asked,
+   * and the player's seat (Italy's seeing Gibraltar whole).
    */
-  function pocketed(forts: boolean): { g: Game; gib: number; town: Corps; field: Corps[] } {
-    const g = grand('UK', true, forts);
+  function pocketed(forts: boolean, on = true, human = 'UK'): { g: Game; gib: number; town: Corps; field: Corps[] } {
+    const g = grand(human, on, forts);
+    if (human === 'ITA') g.flags.nofog = 1;
     const r = g.byName.Gibraltar;
     const town = addCorps(g, 'UK', '9th Corps', 'inf', 2, 'Gibraltar', {});
     r.units.splice(r.units.indexOf(town), 1);
@@ -1413,67 +1443,112 @@ describe('a port in a pocket (siege.ts pocketMonth): its holder\'s army on the p
     return { g, gib: r.id, town, field };
   }
   const OURS = /^(No ship reaches |Ships reach |Cut off (on|in) |.*'s stores are spent and no ship)/;
-  const SPENT_G = (lost: string): string => `Cut off by sea, and the port's stores are spent: the garrison goes hungry, losing order every month, and is lost at the start of ${lost} unless the sea is opened.`;
-  const HUNGRY_G = (lost: string): string => `Hungry: Gibraltar's stores are spent. Lost at the start of ${lost} unless ships get through.`;
-  /** Each month from December 1940 until the corps are struck off: the pocket's record, the corps, and every line. */
-  function play(forts: boolean): { rows: unknown[][]; shipped: string[] } {
-    const { g, gib, town, field } = pocketed(forts);
+  /** The lines of Gibraltar the rules told, other than the telling's own (the newsreel's wireless aside). */
+  const SHIPPED = (g: Game, from = 0): string[] => g.headlines.slice(from).map((h) => h.text).filter((t) => /Gibraltar/.test(t) && !OURS.test(t) && !/wireless/.test(t));
+  /**
+   * Each month from December 1940 until the corps are struck off, Britain's player reading in his own month: whether the
+   * pocket's record stands, the corps, the telling's own news, his card, each corps' line, and the pocket's own lines.
+   * Spain makes peace with Britain in her month `peace`, where asked.
+   */
+  function play(forts: boolean, on = true, peace?: number): { g: Game; rows: unknown[][]; shipped: string[] } {
+    const { g, gib, town, field } = pocketed(forts, on);
     const rows: unknown[][] = [], shipped: string[] = [];
-    for (let t = 16; t <= 30; t++) {
+    for (let t = 16; t <= 40; t++) {
       const h0 = g.headlines.length;
       month(g, t, ['GER', 'ITA', 'UK']);
       const all = [town, ...field];
-      const said = g.headlines.slice(h0).map((h) => h.text);
-      shipped.push(...said.filter((x) => /^(The stores of Gibraltar|Cut off and out of supply)/.test(x)));
-      rows.push([t, g.flags[`pktx:${gib}`] === 1, all.every((c) => c.dead) ? null : [all.every((c) => c.supplied), Math.round(town.org * 100) / 100], said.filter((x) => OURS.test(x)), texts(portCardLines(g, gib, 'UK')), town.dead ? null : portCorpsLine(g, town), field[0].dead ? null : portCorpsLine(g, field[0])]);
+      shipped.push(...SHIPPED(g, h0));
+      rows.push([t, g.flags[`pkt:${gib}`] !== undefined, all.every((c) => c.dead) ? null : [all.every((c) => c.supplied), Math.round(town.org * 100) / 100], g.headlines.slice(h0).map((h) => h.text).filter((x) => OURS.test(x)), texts(portCardLines(g, gib, 'UK')), town.dead ? null : portCorpsLine(g, town), field[0].dead ? null : portCorpsLine(g, field[0])]);
+      const h1 = g.headlines.length;
       phase(g, 'ESP');
+      if (t === peace) expect(signPeace(g, 'ESP', 'UK')).toBe(true);
+      shipped.push(...SHIPPED(g, h1));
       if (all.every((c) => c.dead)) break;
     }
-    return { rows, shipped };
+    return { g, rows, shipped };
   }
+  /** The war with the switch on and off, the telling's own words and marks aside (as the switch's own test of a whole war). */
+  const wordsOnly = (g: Game): string => {
+    const h = structuredClone(g) as Game;
+    h.headlines = h.headlines.filter((x) => !OURS.test(x.text));
+    for (const k of Object.keys(h.flags)) if (/^(portStores$|portTold:|seaShut:|portLost:|portHad:|portCrew:)/.test(k) || k === 'newsweek') delete h.flags[k];
+    return saveGame(h);
+  };
+  const SURROUNDED = (months: string): string => `Gibraltar is surrounded: no road and no ship reaches it from the rest of the United Kingdom. 6 British corps are cut off there, with stores for ${months}; after that the troops go hungry.`;
+  const POCKET_SPENT = 'The stores of Gibraltar are spent: 5 British corps, 150,000 men, are out of supply and cannot hold out long.';
 
-  it('the fortress rows off: the pocket\'s stores spent in February 1941, a month before the port\'s; from then every line reads the rule\'s clock, and the corps are struck off as April opens, the month named', () => {
-    const { rows, shipped } = play(false);
-    // December, the month of the fill, and January, the pocket's stores not yet spent. The month the garrison is lost is
-    // "by": the pocket the count leaves out can only bring it sooner, and does (the UI director's 23:50Z, item 6). (What
-    // the stores feed before then, "through February", is the port's own count: the pocket's waits for his word.)
-    expect(rows[0].slice(0, 3)).toEqual([16, false, [true, 1]]);
-    expect(rows[1].slice(0, 3)).toEqual([17, false, [true, 1]]);
-    expect(rows[1][3]).toEqual(['No ship reaches Gibraltar: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast. The garrison lives on the port\'s stores through February; unless the sea is opened, it then goes hungry and is lost by the start of May.']);
-    expect((rows[1][4] as string[])[0]).toBe('Cut off by sea: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast, and no ship reaches the harbour. The garrison lives on the port\'s stores through February; unless the sea is opened, it then goes hungry and is lost by the start of May.');
-    // February: the pocket's stores are spent at Britain's draw, which feeds none of his corps. The card and every corps
-    // card read it so, with the month the rule strikes them off. (The 03:13Z build gave the card "lives on the port's
-    // stores through February" here, and each corps "Living on Gibraltar's stores through February."; the build before
-    // it, no corps line.) The shipped line tells the stores spent.
-    expect(rows[2].slice(0, 4)).toEqual([18, true, [false, 0.6], []]);
-    expect((rows[2][4] as string[])[0]).toBe(SPENT_G('April'));
-    expect(rows[2].slice(5)).toEqual([HUNGRY_G('April'), HUNGRY_G('April')]);
-    // (The telling's own news of the stores spent is not told: the 03:13Z build told it here, in March, by the port's
-    // own count; the month the pocket's ran out is one the rule does not keep.)
-    expect(rows[3].slice(0, 4)).toEqual([19, true, [false, 0.2], []]);
-    expect((rows[3][4] as string[])[0]).toBe(SPENT_G('April'));
-    expect(rows[3].slice(5)).toEqual([HUNGRY_G('April'), HUNGRY_G('April')]);
-    // Struck off as April opens. (The rule's own line of the surrender stands, and the struck-off line gives way to it.)
-    expect(rows[4].slice(0, 4)).toEqual([20, true, null, []]);
-    expect(rows.length).toBe(5);
-    expect(shipped).toEqual(['The stores of Gibraltar are spent: 5 British corps, 150,000 men, are out of supply and cannot hold out long.', 'Cut off and out of supply, the British army at Gibraltar lays down its arms: 6 corps, 101,332 men.']);
+  it('the fortress rows off: the ring closes at Britain\'s December 1940, and while it stands no port line, for him or for Italy; the pocket\'s own lines as shipped, its stores spent in February, the corps struck off as April opens', () => {
+    const { g, rows, shipped } = play(false);
+    // (The pocket's record stands every month; the corps fed through January, hungry from February.)
+    expect(rows.map((x) => x.slice(0, 3))).toEqual([[16, true, [true, 1]], [17, true, [true, 1]], [18, true, [false, 0.6]], [19, true, [false, 0.2]], [20, true, null]]);
+    // No news, card or corps line of the port's. (The 03:13Z build told "No ship reaches Gibraltar: ..." in January, and
+    // its mends of the review, 9092b90e1 and b44a5d25b, read the pocket's stores on the port's lines: "Cut off by sea,
+    // and the port's stores are spent: ..." from February.)
+    expect(rows.map((x) => x.slice(3))).toEqual(rows.map(() => [[], [], null, null]));
+    expect(shipped).toEqual([SURROUNDED('2 months'), POCKET_SPENT, 'Cut off and out of supply, the British army at Gibraltar lays down its arms: 6 corps, 101,332 men.']);
+    // The pocket's own lines unchanged, and the same war with the switch off.
+    const off = play(false, false);
+    expect(off.shipped).toEqual(shipped);
+    expect(off.rows.map((x) => x.slice(0, 3))).toEqual(rows.map((x) => x.slice(0, 3)));
+    expect(wordsOnly(g)).toBe(wordsOnly(off.g));
   });
 
-  it('under the fortress rows: the crew\'s 16 months for the port, the pocket\'s seven, spent in July 1941; "by the start of July 1942" before it, and from then the rule\'s own months, the corps struck off as September opens', () => {
-    const { rows, shipped } = play(true);
-    // (January to June: "by the start of July 1942", and the rule strikes them off sooner.)
-    for (let i = 1; i <= 6; i++) {
-      expect(rows[i].slice(0, 3)).toEqual([16 + i, false, [true, 1]]);
-      expect((rows[i][4] as string[])[0]).toMatch(/ lives on the port's stores through April 1942; unless the sea is opened, it then goes hungry and is lost by the start of July 1942\.$/);
-    }
-    // July 1941: spent at Britain's draw. (The 03:13Z build: "Living on Gibraltar's stores through April 1942.")
-    expect(rows[7].slice(0, 4)).toEqual([23, true, [false, 0.6], []]);
-    expect((rows[7][4] as string[])[0]).toBe(SPENT_G('September'));
-    expect(rows[7].slice(5)).toEqual([HUNGRY_G('September'), HUNGRY_G('September')]);
-    expect(rows[8].slice(0, 4)).toEqual([24, true, [false, 0.2], []]);
-    expect(rows[8].slice(5)).toEqual([HUNGRY_G('September'), HUNGRY_G('September')]);
-    expect(rows[9].slice(0, 4)).toEqual([25, true, null, []]);
-    expect(shipped).toEqual(['The stores of Gibraltar are spent: 5 British corps, 150,000 men, are out of supply and cannot hold out long.', 'Cut off and out of supply, the British army at Gibraltar lays down its arms: 5 corps, 92,120 men.']);
+  it('under the fortress rows: the crew\'s 16 months for the port, the pocket\'s seven, spent in July 1941; no port line while the ring stands, and the corps struck off as September opens', () => {
+    const { g, rows, shipped } = play(true);
+    expect(rows.map((x) => x.slice(0, 3))).toEqual([16, 17, 18, 19, 20, 21, 22, 23, 24, 25].map((t) => [t, true, t < 23 ? [true, 1] : t === 23 ? [false, 0.6] : t === 24 ? [false, 0.2] : null]));
+    // (The 03:13Z build told "No ship reaches Gibraltar: ... through April 1942; ... lost at the start of July 1942." in
+    // January, and its mends read "by the start of July 1942" until July.)
+    expect(rows.map((x) => x.slice(3))).toEqual(rows.map(() => [[], [], null, null]));
+    expect(shipped).toEqual([SURROUNDED('7 months'), POCKET_SPENT, 'Cut off and out of supply, the British army at Gibraltar lays down its arms: 5 corps, 92,120 men.']);
+    const off = play(true, false);
+    expect(off.shipped).toEqual(shipped);
+    expect(wordsOnly(g)).toBe(wordsOnly(off.g));
+  });
+
+  it('the ring broken by Spain\'s peace in her January: the record goes at Britain\'s February, and the port\'s lines come back that month on the rule\'s own clock, the sea still shut', () => {
+    const { rows, shipped } = play(false, true, 17);
+    const STORES = 'Cut off by sea: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast, and no ship reaches the harbour. The garrison lives on the port\'s stores through February; unless the sea is opened, it then goes hungry and is lost at the start of May.';
+    const SPENT = 'Cut off by sea, and the port\'s stores are spent: the garrison goes hungry, losing order every month, and is lost at the start of May unless the sea is opened.';
+    const REMEDY = (through: string): string => `A fleet of yours at sea there, strong enough to open the Western Mediterranean or the waters off the Iberian coast, lets the ships in and fills the stores: one such month feeds the garrison through ${through}.`;
+    const HUNGRY = 'Hungry: Gibraltar\'s stores are spent. Lost at the start of May unless ships get through.';
+    expect(rows).toEqual([
+      [16, true, [true, 1], [], [], null, null],
+      [17, true, [true, 1], [], [], null, null],
+      // February: the ring broken as Britain's month opens. The window feeds the garrison through February on the
+      // December fill, and every line counts it.
+      [18, false, [true, 1], [], [STORES, REMEDY('April')], 'Living on Gibraltar\'s stores through February.', 'Living on Gibraltar\'s stores through February.'],
+      // March: the stores are spent, and it is told in the month they are.
+      [19, false, [false, 0.6], ['Gibraltar\'s stores are spent and no ship has got through: the garrison goes hungry, and is lost at the start of May unless the sea is opened.'], [SPENT, REMEDY('May')], HUNGRY, HUNGRY],
+      [20, false, [false, 0.2], [], [SPENT, REMEDY('June')], HUNGRY, HUNGRY],
+      // Struck off as May opens, the month every line named. (The rule's own line of the surrender stands, and the
+      // struck-off line gives way to it.)
+      [21, false, null, [], [], null, null],
+    ]);
+    expect(shipped).toEqual([SURROUNDED('2 months'), 'The ring round Gibraltar is broken: the roads are open to the British troops there again.', 'The ring closes at Gibraltar: 5 British corps, 150,000 men, are cut off from all supply.', 'Cut off and out of supply, the British army at Gibraltar lays down its arms: 6 corps, 101,332 men.']);
+  });
+
+  it('the shutting side too: Italy\'s player, seeing Gibraltar whole, has no line while the ring stands; with Spain\'s peace in her January, it comes back at Italy\'s March, the month after the record goes, from the hold the switch saw begin', () => {
+    const read = (peace?: number): unknown[] => {
+      const { g, gib, town } = pocketed(false, true, 'ITA');
+      const out: unknown[] = [];
+      for (let t = 16; t <= 21 && !town.dead; t++) {
+        g.turn = t;
+        phase(g, 'GER');
+        phase(g, 'ITA');
+        // (Italy's player reads his card in his own month, before Britain's.)
+        out.push([t, g.flags[`pkt:${gib}`] !== undefined, texts(portCardLines(g, gib, 'ITA'))]);
+        phase(g, 'UK');
+        phase(g, 'ESP');
+        if (t === peace) signPeace(g, 'ESP', 'UK');
+        out.push([t, town.supplied, town.dead]);
+      }
+      return out;
+    };
+    const line = (hungry: string, lost: string, since = 'December 1940'): string[] => [`Your fleets have held the Western Mediterranean and the waters off the Iberian coast since ${since}. Counting from then, the garrison of Gibraltar is hungry by ${hungry} and lost by the start of ${lost}, unless ships get through.`];
+    // (December, before Britain's month closes the ring: the hold the switch saw begin, and the count from it.)
+    const DEC = [16, false, line('March 1941', 'May 1941', 'December')];
+    expect(read()).toEqual([DEC, [16, true, false], [17, true, []], [17, true, false], [18, true, []], [18, false, false], [19, true, []], [19, false, false], [20, true, []], [20, false, true]]);
+    expect(read(17)).toEqual([DEC, [16, true, false], [17, true, []], [17, true, false], [18, true, []], [18, true, false], [19, false, line('March', 'May')], [19, false, false], [20, false, line('March', 'May')], [20, false, false], [21, false, line('March', 'May')], [21, false, true]]);
   });
 });
 

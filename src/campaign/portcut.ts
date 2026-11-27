@@ -8,12 +8,13 @@
 // startPhase). Until now nothing said so: Malta's corps starved with no warning (rules-builder/release2/true-reach,
 // gate96-1126 READ, "Malta"). One function, portCutOff, reads the facts from the rules' own clock, so that every month
 // it names is the month the rule acts; the port's card, the news and the corps card all call it, and nobody copies it.
+// A port in its holder's pocket is left to the pocket's own lines, as a besieged port is left to the siege's (portOfKind).
 //
 // Its own flags (numbers only, saved with the game, written only with the switch on and a player at the table):
 //   portTold:<id>     the month the first cut-off news of the port was told to the player: the relief is told only after
-//                     it ("Relief, after the first line was told"). Cleared at the relief, when the port changes hands or
-//                     the player has no part in it any more, when the switch is turned off, and when its holder or the
-//                     player falls (portsDone).
+//                     it ("Relief, after the first line was told"). Cleared at the relief, when the port changes hands,
+//                     is left to a siege's lines or its holder's pocket's (watched), or the player has no part in it any
+//                     more, when the switch is turned off, and when its holder or the player falls (portsDone).
 //   seaShut:<z>:<nat> the month sea z became shut to nation nat, read at every nation's month as it opens: the start of
 //                     the hold the shutting side sees on the port's card ("held ... since"). -1 (WATCHED_OPEN) while
 //                     the switch watches the sea open to it; the month it became shut only where the switch watched it
@@ -21,10 +22,10 @@
 //                     as it is turned on or at the first month it reads the seas; a port newly of the kind; a nation
 //                     newly holding one): a hold whose start the switch did not see, which gives no month (the UI
 //                     director's 23:50Z, item 5). Kept for every nation but the player that holds a port of this kind
-//                     on that sea, whatever its wars and the player's, so that a hold begun before the player's war
-//                     with the holder is seen to begin. Cleared when no port of the kind asks for it, when the switch
-//                     is turned off, when the nation falls, and when the player falls (so that a player given his seat
-//                     back is watched afresh).
+//                     on that sea (in its own pocket or not: keepsStores), whatever its wars and the player's, so that a
+//                     hold begun before the player's war with the holder is seen to begin. Cleared when no port of the
+//                     kind asks for it, when the switch is turned off, when the nation falls, and when the player falls
+//                     (so that a player given his seat back is watched afresh).
 //   portLost:<id>:<corps>:<nat>:<name>
 //                     the month a corps of the port's garrison starved there, kept from its nation's reckoning to the
 //                     player's own, so that the corps a port loses in one month are told in one line ("Several"),
@@ -42,9 +43,10 @@
 //                     it is not the crew's own (`seen`; a crew that starves goes in its own nation's reckoning, after its
 //                     own draw): the rule reads the stores of the crews living at each draw (game.ts portKeep), so that
 //                     the months it fed the garrison on the crew's stores are still counted once the crew is gone, and
-//                     the draws after it are counted without it. Written in any port of the kind as the crew is struck off
-//                     (game.ts removeCorps). Cleared once the port's stores are filled again, it changes hands or it is no
-//                     longer of the kind, when the switch is turned off, when its holder falls, and when the player falls.
+//                     the draws after it are counted without it. Written in any port of the kind (in its holder's pocket
+//                     or not: keepsStores) as the crew is struck off (game.ts removeCorps). Cleared once the port's stores
+//                     are filled again, it changes hands or it is no longer of the kind, when the switch is turned off,
+//                     when its holder falls, and when the player falls.
 // None begins with "stores:", so a load never touches them (save.ts keeps the supply picture's own marks by that prefix).
 import { turnToDate } from '../core/ticket';
 import { AIR } from './air';
@@ -61,7 +63,7 @@ import { MORALE, moraleRules } from './morale';
 import { NAVY, SeaPicture, canPass, closedTo, fleetReach, inPassage, openSeas, seaSide, seaStarts, shipCount } from './navy';
 import { skiesOver } from './pacific';
 import { seaWhat } from './sea-words';
-import { fieldCtrl, pocketDry, pocketNat, siegeRules } from './siege';
+import { fieldCtrl, pocketNat, siegeRules } from './siege';
 import { witherAt } from './wither';
 import { farOn } from './world';
 import type { Corps, Game, Region } from './types';
@@ -152,8 +154,7 @@ export interface SeaHeld {
  * One corps of the garrison and the month the rule strikes it off if no ship gets in; `by` where that month is only the
  * latest it can come, something the count leaves out as the month stands being able to bring it sooner (lostMonth).
  * `fed`: the last month the port's stores feed it (null where they feed none), by the keep the rule reads at its own
- * nation's draw each month (fedTo); none for a corps of the holder's in a pocket whose stores are spent (siege.ts
- * pocketDry: his draws feed nobody there).
+ * nation's draw each month (fedTo).
  */
 export interface GarrisonCount { id: number; lost: number; by: boolean; fed: number | null }
 
@@ -183,8 +184,8 @@ export interface PortCut {
   /** The month the stores were last filled for the holder (null where they never were, or the larder is not his). */
   lastFilled: number | null;
   /**
-   * The last month they feed the garrison (null where they feed none): the soonest of its corps' (GarrisonCount.fed,
-   * null where one of them is fed by none), or with no garrison the holder's own, by the rule's clock (fedTo).
+   * The last month they feed the garrison (null where they feed none): the soonest of its corps' (GarrisonCount.fed),
+   * or with no garrison the holder's own, by the rule's clock (fedTo).
    */
   feedsTo: number | null;
   /** The month the garrison goes hungry: the first month the stores feed it no longer. */
@@ -201,10 +202,9 @@ export interface PortCut {
   lost: number | null;
   /**
    * True where `lost` is only the latest month the first loss can come: something the count leaves out as the month
-   * stands (a treasury in debt, a corps that cannot count its month as rested, a pocket's stores not yet spent) can
-   * bring it sooner. Its lines then say "by the start of", and otherwise "at the start of" (the UI director's 23:50Z,
-   * item 6). Null for the shutting side, whose count is always only the latest (it cannot see the garrison's order): its
-   * line says "by".
+   * stands (a treasury in debt, a corps that cannot count its month as rested) can bring it sooner. Its lines then say
+   * "by the start of", and otherwise "at the start of" (the UI director's 23:50Z, item 6). Null for the shutting side,
+   * whose count is always only the latest (it cannot see the garrison's order): its line says "by".
    */
   lostBy: boolean | null;
   /** Each corps of the garrison that the rule would strike off from hunger, with its month. */
@@ -224,18 +224,31 @@ export interface PortCut {
 }
 
 /**
- * A port whose stores the rules keep, as the supply picture's window reads it (game.ts computeSupply): a fortified port
- * overseas, held by a nation alive and at war, with no army of the enemy's round the town (a siege runs on the siege's
- * own clock: siege.ts) and no friendly ground beside it by land (where the roads may feed the garrison whatever the stores).
- * A port with enemy ground beside it is cut off by land as well, a pocket (siege.ts pocketMonth): watched still, the
- * pocket's clock running beside the window, and the holder's count reads the pocket's stores spent where the rule does
- * (portCutOff).
+ * A port whose stores the rules keep, as the supply picture's window reads it (game.ts computeSupply), and whose lines
+ * these are: a fortified port overseas, held by a nation alive and at war, with no army of the enemy's round the town (a
+ * siege runs on the siege's own clock: siege.ts), no friendly ground beside it by land (where the roads may feed the
+ * garrison whatever the stores), and not in its holder's pocket (portOfKind).
  */
 function watched(g: Game, r: Region): boolean {
   return portOfKind(g, r) && !!g.nations[r.ctrl].atWar.length;
 }
-/** The same port, its holder's wars aside: one whose seas the record of the holds watches (holdsMonth). */
+/**
+ * The same port, its holder's wars aside. A port in a pocket is left to the pocket's own lines, as a besieged port is
+ * left to the siege's (the UI director's 05:03Z, item 1): cut off by land as well as by sea (siege.ts pocketMonth), its
+ * holder's army there lives on the pocket's stores on the pocket's own clock, and the pocket tells the player both
+ * roads and ships ("{Gibraltar} is surrounded: no road and no ship reaches it from the rest of {Britain}. ..."). While
+ * the holder's pocket record stands for the port (`pkt:`, siege.ts pocketNat), the port has no card, news or corps line
+ * here, for any reader, the shutting side too; its lines come back the month the record goes.
+ */
 function portOfKind(g: Game, r: Region): boolean {
+  return keepsStores(g, r) && pocketNat(g, r) !== r.ctrl;
+}
+/**
+ * The same port, a pocket or not: one whose records the telling keeps (the holds, holdsMonth; a crew lost there,
+ * portCrewGone), so that its lines come back on the rule's own clock the month the pocket's record goes. The records
+ * are numbers and no line.
+ */
+function keepsStores(g: Game, r: Region): boolean {
   if (!r.overseas || !r.port || !worksKept(r)) return false;
   if (!g.nations[r.ctrl]?.alive) return false;
   if (siegeRules(g) && fieldCtrl(g, r) !== r.ctrl) return false;
@@ -595,34 +608,21 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
   const flag = g.flags[`stores:${r.id}`];
   const his = flag !== undefined && (!trueReach(g) || keptStoresHis(g, r));
   const last = his ? flag : null;
-  // (A pocket, siege.ts pocketMonth: the port cut off by land as well as by sea, its holder's army there living on the
-  // pocket's stores on the pocket's own clock. Where the rule records those stores spent, the holder's draws feed nobody
-  // there, whatever the window (game.ts computeSupply, pocketDry): the stores feed none of his corps, this month or
-  // after, unless the ring is broken. Where they are not yet spent, the pocket the count leaves out can only bring the
-  // loss sooner: the soonest month takes it at its worst, spent at his next draw, and the month named is "by" (the UI
-  // director's 23:50Z, item 6). Its other nations' draws are not stopped by it.)
-  const pocket = siegeRules(g) && pocketNat(g, r) === holder;
-  const dry = pocket && pocketDry(g, r, holder);
   // (The months they feed each nation's corps, by the keep the rule reads at that nation's draw each month: the keep
   // they were filled with while the crew whose stores they are lives, and after it starves, the keep it leaves. The UI
   // director's 01:14Z, item 3. With the fortress rows off, or no crew, the port's own two: the fill's month and two.)
   const crews = last !== null ? crewsOf(g, r, last, uncharged) : [];
   const feeds = new Map<string, number | null>();
   const fedFor = (nat: string): number | null => {
-    if (!feeds.has(nat)) feeds.set(nat, last === null || (dry && nat === holder) ? null : fedTo(g, crews, last, nat));
+    if (!feeds.has(nat)) feeds.set(nat, last === null ? null : fedTo(g, crews, last, nat));
     return feeds.get(nat)!;
   };
   // (Each corps' month, and the soonest it can come: the first loss is "by" its month where any corps of the garrison
   // can be lost before it.)
   const corps = garrisonOf(g, r);
-  const counts = corps.map((c) => {
-    const fed = fedFor(c.nat);
-    const worst = lostMonth(g, c, fed, uncharged, true);
-    return { id: c.id, fed, lost: lostMonth(g, c, fed, uncharged), soonest: pocket && !dry && c.nat === holder ? Math.min(worst, lostMonth(g, c, null, uncharged, true)) : worst };
-  });
-  // (The garrison lives on the stores through the last month they feed all of it: no month, where one of its corps is
-  // fed by none.)
-  const feedsTo = !counts.length ? fedFor(holder) : counts.some((x) => x.fed === null) ? null : Math.min(...counts.map((x) => x.fed!));
+  const counts = corps.map((c) => { const fed = fedFor(c.nat); return { id: c.id, fed, lost: lostMonth(g, c, fed, uncharged), soonest: lostMonth(g, c, fed, uncharged, true) }; });
+  // (The garrison lives on the stores through the last month they feed all of it.)
+  const feedsTo = last === null ? null : counts.length ? Math.min(...counts.map((x) => x.fed!)) : fedFor(holder);
   const state = last === g.turn ? 'filled' : feedsTo !== null && feedsTo >= g.turn ? 'stores' : 'hungry';
   const lost = counts.length ? Math.min(...counts.map((x) => x.lost)) : null;
   return {
@@ -776,8 +776,7 @@ export function portCorpsLine(g: Game, c: Corps): string | null {
   // the rule's clock as it stands when the card is read, and never the picture of supply as last drawn, which may be
   // another nation's draw of this month and change within it: in March of the Canadian play a corps whose nation's draw
   // comes after a crew starves is still drawn as fed by Britain's, with the crew living, and its own draw will not feed
-  // it. Hungry by the clock, it reads hungry: so too in a pocket whose stores the rule records spent, where its nation's
-  // draws feed it none whatever the port's stores, siege.ts pocketDry.)
+  // it. Hungry by the clock, it reads hungry.)
   const fed = mine.fed !== null && mine.fed >= g.turn;
   return fed
     ? theWords(`Living on ${port}'s stores through ${monthSaid(g, mine.fed!)}.`)
@@ -794,10 +793,10 @@ const involved = (g: Game, r: Region, extra: Corps[] = []): boolean => {
 
 /**
  * The record of each hold, at every nation's month as it opens (after its draw of the supply picture): every sea of
- * every port of the kind (portOfKind) held by a nation other than the player, whatever its wars and the player's, so
- * that a hold begun before the player's war with the holder is seen to begin. A sea open to the holder keeps
- * WATCHED_OPEN; one shut keeps the month it became shut. At the player's own month, records no port of the kind still
- * asks for go.
+ * every port of the kind (keepsStores, a pocket or not) held by a nation other than the player, whatever its wars and
+ * the player's, so that a hold begun before the player's war with the holder is seen to begin. A sea open to the holder
+ * keeps WATCHED_OPEN; one shut keeps the month it became shut. At the player's own month, records no port of the kind
+ * still asks for go.
  *
  * Only a hold the switch saw begin has a month (the UI director's 23:50Z, item 5): a sea shut to its holder keeps the
  * month only where the reading before watched it open. A sea already shut the first time a reading watches it (the
@@ -809,8 +808,9 @@ function holdsMonth(g: Game, sweep: boolean): void {
   const me = g.human!;
   const want = new Set<string>();
   for (const r of g.regions) {
-    // (His own ports he never shuts: a hold on them is nobody's at his table.)
-    if (r.ctrl === me || !portOfKind(g, r)) continue;
+    // (His own ports he never shuts: a hold on them is nobody's at his table. A port in its holder's pocket is watched
+    // still: its lines come back when the pocket's record goes, from the hold the switch saw begin.)
+    if (r.ctrl === me || !keepsStores(g, r)) continue;
     for (const z of r.seas) {
       const k = shutKey(z, r.ctrl);
       if (want.has(k)) continue;
@@ -836,11 +836,12 @@ export function portsMonth(g: Game, nat: string): void {
   // (The draw just made: a crew lost from now until the next was last seen by it. portCrewGone.)
   reading.set(g, { turn: g.turn, nat });
   holdsMonth(g, mine);
-  // (A crew lost in a port counts only until the port's stores are filled again, and only while it is of the kind.)
+  // (A crew lost in a port counts only until the port's stores are filled again, and only while it is of the kind, a
+  // pocket or not.)
   for (const k of Object.keys(g.flags)) {
     if (!k.startsWith('portCrew:')) continue;
     const r = g.regions[+k.split(':')[1]];
-    if (!r || !portOfKind(g, r) || (g.flags[`stores:${r.id}`] ?? -1) >= g.flags[k] || r.since >= g.flags[k]) delete g.flags[k];
+    if (!r || !keepsStores(g, r) || (g.flags[`stores:${r.id}`] ?? -1) >= g.flags[k] || r.since >= g.flags[k]) delete g.flags[k];
   }
   for (const r of g.regions) {
     const k = toldKey(r.id);
@@ -881,7 +882,8 @@ export function portsMonth(g: Game, nat: string): void {
 export function portCrewGone(g: Game, c: Corps): void {
   if (!portStoresOn(g) || c.dead || !fortRow(g, c) || !g.human || !g.nations[g.human]?.alive) return;
   const r = g.regions[c.reg];
-  if (!r || !watched(g, r) || !allied(g, c.nat, r.ctrl)) return;
+  // (In a port of the kind whose holder is at war, a pocket or not: the count reads it once the pocket's record goes.)
+  if (!r || !keepsStores(g, r) || !g.nations[r.ctrl].atWar.length || !allied(g, c.nat, r.ctrl)) return;
   const months = crewStores(c);
   if (months === null) return;
   const at = lastDraw(g);
