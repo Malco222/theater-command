@@ -305,7 +305,7 @@ describe('an offer sent on by sea: card and result agree, in every seat', () => 
     okinawaFull(g);
     months(g, 27, 27);
     const r = open(g).sections[0].rows.find((x: any) => x.title === NOV41[2]);
-    expect([r.lines[0], r.buttons[0].label, r.buttons[0].ok]).toEqual(['Infantry, 8,000 men, to form at Kagoshima.', 'FORM IT', true]);
+    expect([r?.lines[0], r?.buttons[0].label, r?.buttons[0].ok]).toEqual(['Infantry, 8,000 men, to form at Kagoshima.', 'FORM IT', true]);
     expect(TC().act(`offers:take:${index(NOV41[2])}`)).toMatchObject({ ok: true, note: `${NOV41[2]} is formed.` });
     const h = loadGame(TC().save().text)!;
     const at = (x: Game): string[] => x.corps.filter((c) => c.nat === 'JAP' && !c.dead && c.name === NOV41[2]).map((c) => x.regions[c.reg].name);
