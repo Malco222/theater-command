@@ -258,7 +258,7 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, 
         # the Normal in its place: the Normal takes one feed, and the last one given wins, so a lying normal fed before
         # the tooth was lost. Told and left out if it fails; only in a build made with TC_LODGED=1, see LODGED: without
         # it the material is node for node as before)
-        lying = windy(name + " (lying normal)", lambda: lying_normal(m, -900, 4400, standing=tooth))
+        lying = windy(name, lambda: lying_normal(m, -900, 4400, standing=tooth), "the lying normal")
         if lying is not None:
             facing_out = lying
     to_property(facing_out, "", unreal.MaterialProperty.MP_NORMAL)
@@ -2000,9 +2000,13 @@ def wind_sway(m, x, y, leaves=False, press_twin=False, press_upright=False):
     way only (a leaf card's flutter is left as the wind makes it: a shake would
     swing back and forth, and the press is a flinch, not a show; each point brought down as it leans, so it keeps its
     distance from the foot: grass keeps its length, corn and stalks bow a little longer, press_lean). The twins' own wind divides by BendHeight and GustSize held to PRESS_FLOOR (the same numbers
-    for any the game writes). press_upright: the lean, the wind's and the press's, times
-    how upright the instance stands (upright_share), so a piece laid over does not slide along the ground. Neither: the
-    nodes are those it always made, in the same order."""
+    for any the game writes). press_upright (with press_twin only; the twins always have it): the twin's offset, the
+    wind's lean and the press's, times how upright the instance stands (upright_share), so a piece laid over does not
+    slide along the ground. Built with TC_LODGED=1 the upright share is not made at all: the lodged trial's stillness
+    ("still", saturate((up.z - 0.5) / 0.485)) is then the one ramp, on the wind's lean in every swaying material and on
+    the press's push in the twins, so a twin with no press written is its plain material at every tilt. (The lasting
+    flattened ring round a shell hole is that trial, "lodged": its stillness covers the ring, and the plain materials
+    never take the upright share.) Neither press_twin nor TC_LODGED: the nodes are those it always made, in the same order."""
     gust, metres, way = wind_gust(m, x, y, True, press_floored=press_twin)
     where = node(m, unreal.MaterialExpressionWorldPosition, x, y + 500)
     where.set_editor_property("world_position_shader_offset", unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
@@ -2053,7 +2057,7 @@ def wind_sway(m, x, y, leaves=False, press_twin=False, press_upright=False):
         still = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, up, -0.5, x + 2250, y + 700), 1.0 / 0.485, x + 2400, y + 700), x + 2550, y + 700)
         lean = times(m, lean, still, x + 2700, y + 300)
     press_sideways = times(m, way, lean, x + 2400, y + 250)
-    if press_twin or press_upright:
+    if press_twin:
         press_up, press_stretch = own_up(m, x + 4350, y + 600)
     if press_twin:
         # (the press on the height as drawn: the mesh's own height times the instance's stretch upward, and the bending
@@ -2074,11 +2078,12 @@ def wind_sway(m, x, y, leaves=False, press_twin=False, press_upright=False):
         # (the twin's offset: aside, and down by the press's drop (exactly 0 with no press), the whole times how upright
         # the piece stands, so a piece laid over neither slides nor sinks)
         offset = pair(m, press_sideways, press_drop_cm, x + 5250, y + 900)
-        if press_upright:
+        if press_upright and not LODGED:
+            # (built with TC_LODGED=1 the twin takes the lodged trial's stillness alone, "still" above, on the wind's
+            # lean and the press's push, as its plain material does: one ramp, so a twin with no press written is its
+            # plain material bit for bit at every tilt, and the upright share is not made at all)
             offset = times(m, offset, upright_share(m, x + 4500, y + 600, press_up, press_stretch), x + 5400, y + 700)
     else:
-        if press_upright:
-            press_sideways = times(m, press_sideways, upright_share(m, x + 4500, y + 600, press_up, press_stretch), x + 5250, y + 700)
         offset = pair(m, press_sideways, node(m, unreal.MaterialExpressionConstant, x + 2400, y + 400, r=0.0), x + 2550, y + 300)
     if leaves:
         # (each card on its own: three slow beats out of step, by where its corners stand)
@@ -2102,9 +2107,12 @@ def lying_normal(m, x, y, standing=None):
     a lying mat of corn or grass faces the sky whatever way its blades' own faces turned, so its normal is bent toward
     the world's up by 0.85 x (1 - saturate((up.z - 0.5) / 0.485)), up the instance's own +Z turned into the world. Within
     some 10 degrees of upright (all that stands today) the share is exactly 0 and the normal exactly the mesh's own
-    (0, 0, 1), as when nothing is connected. The painter does the same (land_field_picture.cpp).
+    (0, 0, 1), as when nothing is connected. The painter (land_field_picture.cpp) bends by the same share and ramp,
+    but from the mesh's plain normal, with no tooth.
     standing: the material's own normal for a thing that stands, where it has one (M_LandBlades' tooth), in place of
-    the mesh's own (0, 0, 1): the lying mat is bent from that, and what stands keeps it exactly."""
+    the mesh's own (0, 0, 1): the lying mat is bent from that, and what stands keeps it exactly. So the blades' mat
+    keeps a little of the paper's grain (and, the tooth being a lerp a shade shorter than 1, leans a shade further to
+    the sky) where the painter's has none; the stalks, which have no tooth, match the painter exactly."""
     upward = node(m, unreal.MaterialExpressionTransform, x, y,
                   transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
                   transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
@@ -2121,14 +2129,16 @@ def lying_normal(m, x, y, standing=None):
     return lerp(m, own, sky, share, x + 1200, y + 150)
 
 
-def windy(name, make):
+def windy(name, make, left_out="the wind"):
     """The wind's part of a material that stood before it (M_LandSurface, M_LandLeaves, M_LandStalks): made, or, if
-    anything in it goes wrong, told and left out, so the material is built as it was without the wind."""
+    anything in it goes wrong, told and left out, so the material is built as it was without the wind. left_out: the part
+    named in that line ("the wind" unless said; "the lying normal" for lying_normal, whose failure leaves the Normal
+    as it was, the tooth or the mesh's own, and the material built)."""
     import traceback
     try:
         return make()
     except Exception:
-        unreal.log_error(f"Theater Command: {name} built without the wind:\n" + traceback.format_exc())
+        unreal.log_error(f"Theater Command: {name} built without {left_out}:\n" + traceback.format_exc())
         return None
 
 
@@ -2386,7 +2396,7 @@ def build_land_stalks(name="M_LandStalks", press_twin=False, press_upright=False
     to_property(painted, "", unreal.MaterialProperty.MP_BASE_COLOR)
     # (the corn laid over by a blast, on trial "lodged", lit as a mat facing the sky; told and left out if it fails;
     # only in a build made with TC_LODGED=1, see LODGED)
-    lying = windy("M_LandStalks (lying normal)", lambda: lying_normal(m, -2400, 2600)) if LODGED else None
+    lying = windy(name, lambda: lying_normal(m, -2400, 2600), "the lying normal") if LODGED else None
     if lying is not None:
         to_property(lying, "", unreal.MaterialProperty.MP_NORMAL)
     through = times(m, times(m, painted, vector(m, "Through", (0.9, 1.0, 0.45, 1.0), -500, 250), -350, 200),
@@ -2439,7 +2449,7 @@ def build_land_stalks_or_tell():
     wrong in it is told, and the rest of the content is built as before."""
     import traceback
     try:
-        build_land_stalks(press_upright=UPRIGHT_PLAIN)
+        build_land_stalks()
     except Exception:
         unreal.log_error("Theater Command: M_LandStalks was not built (the corn keeps its bundles to the lens):\n" + traceback.format_exc())
         try:
@@ -2506,7 +2516,7 @@ def build_land_leaves_or_tell():
     wrong in it is told, and the rest of the content is built as before."""
     import traceback
     try:
-        build_land_leaves(press_upright=UPRIGHT_PLAIN)
+        build_land_leaves()
     except Exception:
         unreal.log_error("Theater Command: M_LandLeaves was not built (the ground battle draws its solid sprigs):\n" + traceback.format_exc())
         try:
@@ -2566,7 +2576,7 @@ def build_land_blades_or_tell():
     and the rest of the content is built as before."""
     import traceback
     try:
-        build_map_surface("M_LandBlades", sway=True, press_upright=UPRIGHT_PLAIN)
+        build_map_surface("M_LandBlades", sway=True)
     except Exception:
         unreal.log_error("Theater Command: M_LandBlades was not built (the grass and trees stand still in the wind):\n" + traceback.format_exc())
         try:
@@ -2707,13 +2717,6 @@ def build_flak_lit():
     finish(m)
 
 
-# (The lean of the plain swaying materials times how upright each piece stands (wind_sway's upright): off, so that they
-# are node for node as before. The lasting flattened ring round a shell hole lays pieces over, up to some 80 degrees,
-# and the wind then slides their tips along the ground: whoever turns that ring on sets this True and rebuilds
-# TC_REBUILD=M_LandBlades,M_LandLeaves,M_LandStalks. The pressed twins below always have it.)
-UPRIGHT_PLAIN = False
-
-
 def build_pressed_or_tell(name, build):
     """THE BLAST PRESS's twins (wind_sway's press; the game loads them in place of the plain ones only with
     "-TheaterLandBlastPress", LandBattle::LoadInks): whatever goes wrong in one is told (once a run, as it is built once a
@@ -2809,6 +2812,13 @@ for name, build in (("M_LandBladesPress", lambda: build_pressed_or_tell("M_LandB
             unreal.log_warning(f"Theater Command: {MATERIALS}/{name} not built: its plain material {name[:-len('Press')]} is missing")
     elif REBUILD == "all" or name in REBUILD.split(",") or name[:-len("Press")] in BUILT_THIS_RUN or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
+        # (a twin built in a run that did not build its plain material, missing or named alone, takes this run's
+        # TC_LODGED, which nothing on the assets records: said once, so a plain material built otherwise is put right)
+        if name[:-len("Press")] not in BUILT_THIS_RUN and eal.does_asset_exist(f"{MATERIALS}/{name}"):
+            unreal.log_warning(f"Theater Command: {MATERIALS}/{name} built without its plain material {name[:-len('Press')]}, "
+                               f"with TC_LODGED={'1' if LODGED else 'unset'} (this run): if M_LandBlades, M_LandLeaves and "
+                               f"M_LandStalks were built with another TC_LODGED, build all six in one run with the same TC_LODGED "
+                               f"(TC_REBUILD=M_LandBlades,M_LandLeaves,M_LandStalks remakes the three twins with them)")
     else:
         unreal.log(f"Theater Command: {MATERIALS}/{name} already exists, left alone")
 def build_battle_puffs(name="M_BattlePuffs", soft=False):
