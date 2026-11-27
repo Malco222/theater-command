@@ -91,7 +91,7 @@ describe('the numbers', () => {
 });
 
 describe('what a raid costs in the grand campaign', () => {
-  it('a quarter to well over half of the bombers that go by day without escort into a strong patrol in 1939, few by night, and never more than the rules allow', () => {
+  it('a quarter to well over half of the bombers that go by day without escort into a strong patrol in 1939, few by night, and never more than ruling 227's day cap', () => {
     const g = grand('GER');
     const { b, escorts, target, patrol } = daylight(g);
     const alone = assessAir(g, [b], 'bomb', target);
