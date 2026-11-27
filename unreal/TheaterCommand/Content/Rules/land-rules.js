@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of ac185a037 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of b7077957e 2026-11-27. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -719,6 +719,22 @@
      * bill charges for the result it hands back (the design director, b356; tests/battle-land.test.ts).
      */
     spent: { att: 0.13, def: 0.18 },
+    /**
+     * The refits that ride with "Only the hits that land shake a unit" (sim.hitsShake), read in place of the values they
+     * name only while it is on (the design director, 26 November 13:36Z); off, the values above stand, byte for byte, and
+     * since hitsShake needs "Attackers stay where they stop to fight" (stand), only with both on. Each fitted by the method
+     * and record of the value it replaces, with stand and hitsShake on:
+     * - take.marsh 1.23, in place of hold.take.marsh 1.32 (DD 13:47Z). Its record, ruling 226 mark 4: the plain attack
+     *   (select all, right-click the nearest, Space) at 1.1 to 1.4 on marsh carries the ground within 4 points of its
+     *   card, about 2 in the attack's favour. Over 800 battles: 1.22 +1.2, 1.23 +1.7, 1.24 +3.3; 1.32 +10.4 (the old sum
+     *   had marsh blocks breaking mid-fight; with each blow's nerve on its own harm they stand, and the held marsh gave
+     *   the attack more than its card).
+     * spent is not refitted (DD 14:08Z): with it on, its record (each side's losses within a fifth of the campaign's
+     * bill, winners and losers alike, b356) holds on every set, and its drift is below one step of the knob.
+     */
+    shaken: {
+      take: { marsh: 1.23 }
+    },
     /**
      * But not while more than this share of its power stands fresh or has not fought: one worn block never takes a fresh
      * army with it (ruling 226(2), b476(1)).
@@ -2284,13 +2300,16 @@
     if (u.order?.kind === "withdraw" || u.waits && !u.waits.free) return;
     const K = LAND.snipers.keep, dir = side === "att" ? 1 : -1, near = foes.filter((f) => f.kind !== "fort" && b.gap(u, f) < K);
     if (u.slipTo !== void 0) {
-      if (u.order) return;
+      if (u.order || u.slipAt) return;
       const spot2 = b.slipSpot(u);
-      if (spot2) b.command({ do: "move", units: [u.id], x: spot2[0], y: spot2[1] }, side);
+      if (spot2) {
+        u.slipAt = spot2;
+        b.command({ do: "move", units: [u.id], x: spot2[0], y: spot2[1] }, side);
+      }
       return;
     }
     if (near.length) {
-      if (u.order?.kind === "move" && !near.some((f) => dist(f.x, f.y, u.order.x, u.order.y) < K)) return;
+      if (u.order?.kind === "move" && !near.some((f) => b.gapAt(u, u.order.x, u.order.y, f) < K)) return;
       const spot2 = b.sniperSpot(u, [u.x, u.y - dir * 400], u.y);
       const gap = near.reduce((m, f) => Math.min(m, b.gap(u, f)), Infinity);
       const [x, y] = spot2 ?? [u.x, u.y - dir * (K - gap + 50)];
@@ -3019,7 +3038,8 @@
   var FRONT = ["inf", "mtn", "eng", "fort", "cav"];
   var MOBILE = ["arm", "mot"];
   var GAP = 40;
-  function rowsOf(mine) {
+  function rowsOf(all) {
+    const mine = all.filter((u) => u.team !== "snp");
     const lines = [mine.filter((u) => FRONT.includes(u.kind)), mine.filter((u) => MOBILE.includes(u.kind)), mine.filter((u) => u.kind === "art")];
     if (!lines[0].length && lines[1].length) lines[0] = lines[1].splice(0, Math.ceil(lines[1].length / 2));
     return lines;
@@ -3102,7 +3122,7 @@
     });
   }
   function drawUp(mine, side, f, cx, lo, hi) {
-    const z = f.zones[side];
+    const z = f.zones[side], pairs2 = mine.filter((u) => u.team === "snp");
     const dir = side === "att" ? 1 : -1;
     let front = side === "att" ? z[3] - 40 : z[1] + 40;
     const lines = rowsOf(mine);
@@ -3144,6 +3164,13 @@
       }
       return false;
     };
+    const pairsUp = () => {
+      if (!pairs2.length) return;
+      const rear = Math.max(0, ...mine.filter((u) => u.team !== "snp").map((u) => dir * (front - u.y) + u.d / 2));
+      const deep2 = Math.max(...pairs2.map((u) => u.d));
+      const y = front - dir * Math.max(230, rear + GAP + deep2 / 2);
+      place(pairs2, Math.min(f.h - deep2 / 2, Math.max(deep2 / 2, y)), false);
+    };
     const held = [];
     if (side === "def" && lines[0].length >= 4) {
       for (let n2 = Math.max(1, Math.floor(lines[0].length / 4)); n2 > 0; n2--) {
@@ -3161,6 +3188,7 @@
         for (const u of held) u.reserve = "held";
       }
       place(lines[2], front - dir * 230, false);
+      pairsUp();
       return;
     }
     const rows = [];
@@ -3190,6 +3218,7 @@
     let ys = steps(GAP);
     for (let gap = GAP - 5; gap >= 10 && past(ys); gap -= 5) ys = steps(gap);
     rows.forEach((r, i) => place(r.us, ys[i], r.wings));
+    pairsUp();
   }
 
   // ../../data/battle/drill.json
@@ -11553,6 +11582,7 @@
   var inRiver = (g) => g === "water" || g === "blown";
   var live2 = (u) => u.state !== "gone" && u.state !== "withdrawn";
   var fighting2 = (u) => live2(u) && u.state !== "routing";
+  var passesFriends = (_b, u) => u.team === "snp";
   var weightOf = (u) => u.priced ?? u.power0;
   var ownArm2 = (u) => u.team === "mg" || u.team === "mor";
   var INWARD = { south: [0, 1, 0], north: [0, -1, Math.PI], west: [1, 0, Math.PI / 2], east: [-1, 0, 1.5 * Math.PI] };
@@ -11980,6 +12010,16 @@
        */
       __publicField(this, "pierce", false);
       /**
+       * Only the hits that land shake a unit (release 2; the design director, 26 November 06:21Z, the sniper teams' gate
+       * tracing it; the UI director's row, 06:23Z): each blow's nerve weight prices only its own harm, so a block struck by
+       * several in a tick loses the sum of each weight times the harm it did, as the air's blows already are (bombs,
+       * strafing). Off, the old way: the tick's weights are
+       * summed and the sum laid on all its harm, so a blow that does no harm still multiplies the nerve of everyone else's.
+       * Off unless whoever opens the field turns it on (the bridge's { hitsShake: true }, and with sniper teams, which fight
+       * only with it).
+       */
+      __publicField(this, "hitsShake", false);
+      /**
        * Men in lorries (release 1.5, looks only; Brian, 23 November 14:10Z and 15:50Z, "soldiers in the back of a truck and
        * they then hop out"): each man aboard says his lorry and seat (MenOut.sv), and lorried men get down over the tailboard
        * one at a time (Drill.alight, hopOut), the lorries standing meanwhile. Off unless turned on (the bridge's
@@ -12201,7 +12241,11 @@
     holdTake(u, t) {
       const p = this.ticket.place, H = LAND.hold;
       const streets = streetsOf(p);
-      return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 && t.joined === void 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
+      return this.takeOf(p.terrain) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 && t.joined === void 0 ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
+    }
+    /** The held defence's share of the damage on its ground: hold.take, or its refit while hitsShake is on (LAND.shaken). */
+    takeOf(terrain) {
+      return (this.hitsShake ? LAND.shaken.take[terrain] : void 0) ?? LAND.hold.take[terrain] ?? 0.4;
     }
     say(e) {
       const ev = { t: Math.round(this.t * 10) / 10, ...e };
@@ -13192,7 +13236,10 @@
           const back = !!this.aftermath && by2 === this.aftermath.side;
           for (const u of us) {
             const o = back ? { kind: "withdraw", x: c.x + (us.length > 1 ? u.x - cx : 0), y: by2 === "att" ? 0 : this.field.h, via: true, ...c.run ? { run: true } : {} } : { kind: "move", x: c.x + (us.length > 1 ? u.x - cx : 0), y: c.y + (us.length > 1 ? u.y - cy : 0), face: c.face, ...c.run ? { run: true } : {} };
-            give(u, () => this.send(u, o));
+            give(u, () => {
+              if (u.team === "snp") u.placed = true;
+              this.send(u, o);
+            });
           }
           this.say({ what: "contact", side: by2, text: "" });
           this.events.pop();
@@ -13215,14 +13262,16 @@
           if (!t || t.side === by2 || !live2(t) || t.hid || !all.length) return false;
           hands(all);
           const lone = all.some((u) => u.team !== "snp") ? all.filter((u) => u.team === "snp") : [];
+          const us = lone.length ? all.filter((u) => u.team !== "snp") : all;
+          const group = us.map((u) => u.id);
           for (const u of lone) give(u, () => {
             u.order = null;
             u.path = [];
             u.keepFace = null;
             u.aim = t.id;
             delete u.cut;
+            if (!u.placed) u.stalk = { target: t.id, group };
           });
-          const us = lone.length ? all.filter((u) => u.team !== "snp") : all;
           if (!us.length) return true;
           const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
           const axis = bearing(cx, cy, t.x, t.y);
@@ -13314,6 +13363,7 @@
             if (!u || this.placeWhy(u, x, y) !== null || by2 !== this.setup) return false;
             const f = c.face === void 0 ? void 0 : Number(c.face);
             this.place(u, x, y, f !== void 0 && Number.isFinite(f) ? f : void 0);
+            if (u.team === "snp") u.placed = true;
             return true;
           }
           if (c.do === "land:patrol") {
@@ -13430,6 +13480,13 @@
      * leaves the block's orderAt (its move's or attack's) alone.
      */
     order(u, go, air, from = this.t, c, smoke = false) {
+      if (!smoke && u.team === "snp") {
+        const g = go;
+        go = () => {
+          delete u.stalk;
+          g();
+        };
+      }
       if (this.phones && this.t > 0 && this.wireDown(u)) {
         this.byFallback(u, go, from, c, smoke);
         return;
@@ -14052,7 +14109,9 @@
     /**
      * Where a sniper team of the computer's goes next (ai.ts snipersUp): hiding ground within 'step' metres of it toward
      * 'to', never ahead of 'front' (its own leading foot, measured along its side's way), and at least 'keep' metres from
-     * every found enemy block; the furthest forward first, then the nearest. Null where there is none.
+     * every found enemy block by the battle's own gap (as the drills' 'near' reads it: by the middles, a team backed off
+     * to a spot still read near and was sent again each second, 26 Nov); the furthest forward first, then the nearest. Null
+     * where there is none.
      */
     sniperSpot(u, to, front, step = 400, keep = LAND.snipers.keep) {
       const dir = u.side === "att" ? 1 : -1, cell = this.field.cell, k = Math.max(1e-6, Math.hypot(to[0] - u.x, to[1] - u.y));
@@ -14062,7 +14121,7 @@
         const x = Math.round(clamp(u.x + (to[0] - u.x) * a / k - (to[1] - u.y) * c / k, 5, this.field.w - 5));
         const y = Math.round(clamp(u.y + (to[1] - u.y) * a / k + (to[0] - u.x) * c / k, 5, this.field.h - 5));
         if (Math.hypot(x - u.x, y - u.y) > step || dir * y > dir * front || !this.sniperGround(x, y)) continue;
-        if (foes.some((e) => dist(e.x, e.y, x, y) < keep)) continue;
+        if (foes.some((e) => this.gapAt(u, x, y, e) < keep)) continue;
         const sc = dir * y * 1e3 - Math.hypot(x - u.x, y - u.y);
         if (sc <= score || this.wet(u, x, y, false)) continue;
         score = sc;
@@ -14120,12 +14179,61 @@
       t.pinK = t.pinTo !== void 0 && this.t < t.pinTo ? Math.min(t.pinK ?? 1, pin) : pin;
       t.pinTo = at(S.pin.secs);
     }
+    /**
+     * A sniper team sent in with a group (LandUnit.stalk; the design director, 26 November 01:49Z (d)), once a second, by
+     * the drill the computer's staff gives its own teams (ai.ts snipersUp), the group's target for its way: slipping
+     * away, to other hiding ground near by; a found enemy within LAND.snipers.keep, back from it; the target in its
+     * reach, it stays and fires on it (its aim); else one bound to the next hiding ground toward the target, never ahead
+     * of the group's leading foot. Done once the target is gone or hidden, or the group has no foot left: it stays
+     * where it is.
+     */
+    stalkOn(u) {
+      const s = u.stalk, t = this.unit(s.target), ok2 = (e) => fighting2(e) && e.state !== "routing";
+      if (!ok2(u) || u.order?.kind === "withdraw" || !t || !ok2(t) || t.hid) {
+        delete u.stalk;
+        return;
+      }
+      if (u.waits && !u.waits.free) return;
+      const go = (x, y) => {
+        this.send(u, { kind: "move", x, y });
+        u.aim = t.id;
+      };
+      if (u.slipTo !== void 0) {
+        if (u.order || u.slipAt) return;
+        const spot2 = this.slipSpot(u);
+        if (spot2) {
+          u.slipAt = spot2;
+          go(spot2[0], spot2[1]);
+        }
+        return;
+      }
+      const K = LAND.snipers.keep, dir = u.side === "att" ? 1 : -1;
+      const near = this.units.filter((f) => f.side !== u.side && ok2(f) && !f.hid && f.kind !== "fort" && this.gap(u, f) < K);
+      if (near.length) {
+        if (u.order?.kind === "move" && !near.some((f) => this.gapAt(u, u.order.x, u.order.y, f) < K)) return;
+        const spot2 = this.sniperSpot(u, [u.x, u.y - dir * 400], u.y);
+        const gap = near.reduce((m, f) => Math.min(m, this.gap(u, f)), Infinity);
+        const [x, y] = spot2 ?? [u.x, u.y - dir * (K - gap + 50)];
+        go(x, y);
+        return;
+      }
+      if (u.order || this.gap(u, t) <= reachOf(u)) return;
+      const foot = s.group.map((id) => this.unit(id)).filter((m) => !!m && ok2(m) && !m.team && m.kind !== "art" && m.kind !== "fort");
+      if (!foot.length) {
+        delete u.stalk;
+        return;
+      }
+      const front = dir > 0 ? Math.max(...foot.map((m) => m.y)) : Math.min(...foot.map((m) => m.y));
+      const spot = this.sniperSpot(u, [t.x, t.y], front);
+      if (spot && dir * (spot[1] - u.y) > 20) go(spot[0], spot[1]);
+    }
     /** A sniper team at half strength or the rout nerve (LAND.snipers.back): it withdraws to its own edge, never routs. */
     sniperBack(u) {
       if (u.order?.kind === "withdraw") return;
       this.send(u, { kind: "withdraw", x: u.x, y: u.side === "att" ? 0 : this.field.h });
       u.engaged = void 0;
       delete u.slipTo;
+      delete u.slipAt;
       delete u.search;
       delete u.searchR;
       if (this.ticket[u.side].human) this.say({ what: "land:snipersBack", unit: u.id, side: u.side, text: `${this.named(u)} has lost too many men and pulls back.`, x: u.x, y: u.y });
@@ -14144,13 +14252,14 @@
         if (u.slipTo !== void 0) {
           if (this.t < u.slipTo - 1e-9) continue;
           delete u.slipTo;
+          delete u.slipAt;
           if (clear()) {
             u.hid = true;
             delete u.unloc;
           }
           continue;
         }
-        if ((u.slips ?? 0) >= S.most || u.str < S.str * u.str0 || u.still < S.after || !clear()) continue;
+        if ((u.slips ?? 0) >= S.most || u.str < S.str * u.str0 || u.still < S.after || u.order?.kind === "move" || !clear()) continue;
         u.slipTo = Math.round((this.t + S.secs) * 1e3) / 1e3;
         u.slips = (u.slips ?? 0) + 1;
       }
@@ -14448,6 +14557,7 @@
           else thinkFor(this, s);
         }
         this.staffing = false;
+        for (const u of this.units) if (u.stalk) this.stalkOn(u);
       }
       for (const u of this.units) {
         u.pinned = false;
@@ -14532,13 +14642,16 @@
       }
       if (kept) for (const [id, raw] of kept) {
         const h = hurt.get(id), side = other(this.unit(id).side);
-        this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * (h.built ?? h.nerve));
+        this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * (h.built ?? this.tickNerve(h)));
       }
       if (this.led) {
         this.tickM = /* @__PURE__ */ new Map();
         for (const [id, h] of hurt) if (h.dmg > 0) this.tickM.set(id, (h.dn ?? 0) / h.dmg);
       }
-      for (const [id, h] of hurt) this.suffer(this.unit(id), h.dmg, h.nerve, h.from, h.blind, false, this.led && h.dmg > 0 ? (h.dm ?? 0) / h.dmg : 1, h.built ?? h.nerve, this.led && h.pw && h.dmg > 0 ? weighsOf(h.pw, h.dmg) : void 0);
+      for (const [id, h] of hurt) {
+        const m = this.tickNerve(h);
+        this.suffer(this.unit(id), h.dmg, m, h.from, h.blind, false, this.led && h.dmg > 0 ? (h.dm ?? 0) / h.dmg : 1, h.built ?? m, this.led && h.pw && h.dmg > 0 ? weighsOf(h.pw, h.dmg) : void 0);
+      }
       if (this.repay.length) this.repayNow();
       if (this.airOn.att || this.airOn.def) this.flyAir();
       if (this.bearers) this.carry();
@@ -14587,6 +14700,7 @@
         const pl = a.w / 2 + b.w / 2 * c + b.d / 2 * s - Math.abs(lat);
         const pd = a.d / 2 + b.w / 2 * s + b.d / 2 * c + (a.side === b.side ? 0 : LAND.apart) - Math.abs(dep);
         if (pl <= 0 || pd <= 0) continue;
+        if (a.side === b.side && (passesFriends(this, a) || passesFriends(this, b))) continue;
         if (a.side !== b.side && this.inOverrun(a, b)) continue;
         if (a.side === b.side && (this.narrows(a, a.x, a.y) || this.narrows(b, b.x, b.y))) {
           const into = (u, ox, oy) => u.pressing !== void 0 && ox * Math.sin(u.pressing) + oy * Math.cos(u.pressing) > 0;
@@ -14662,6 +14776,26 @@
       if (u.aim !== void 0) {
         const a = this.unit(u.aim);
         if (a && live2(a) && a.side !== u.side && !a.hid && this.gap(u, a) <= reach) return a;
+      }
+      if (snp) {
+        const holds = (id) => {
+          const e = id === void 0 ? void 0 : this.unit(id);
+          if (!e || !live2(e) || e.side === u.side || e.hid) return null;
+          const d = this.gap(u, e);
+          return d <= reach && this.sniperSees(u, e, d) ? e : null;
+        };
+        const sent = u.order?.kind === "attack" ? holds(u.order.target) : null;
+        if (sent) return sent;
+        const kept = holds(u.engaged);
+        if (kept) {
+          const k = this.sniperPick(kept);
+          const better = this.units.some((e) => {
+            if (e === kept || e.side === u.side || !live2(e) || e.hid || this.sniperPick(e) >= k) return false;
+            const d = this.gap(u, e);
+            return d <= reach && this.sniperSees(u, e, d);
+          });
+          if (!better) return kept;
+        }
       }
       if (u.hid && u.order?.kind !== "attack" && !snp) reach = Math.min(reach, this.ambushAt(u));
       let best = null, score = Infinity;
@@ -14942,6 +15076,10 @@
     gap(a, b) {
       return Math.max(0, dist(a.x, a.y, b.x, b.y) - (Math.max(a.w, a.d) + Math.max(b.w, b.d)) / 4);
     }
+    /** The gap 'a' would have to 'b' standing at (x, y), by the same measure (gap). */
+    gapAt(a, x, y, b) {
+      return Math.max(0, dist(x, y, b.x, b.y) - (Math.max(a.w, a.d) + Math.max(b.w, b.d)) / 4);
+    }
     /**
      * What a block takes of a blow for the ground it stands on (its cover, the shelter of wrecks beside men on foot, tanks
      * blind in the streets): the part of what it takes that is where it stands, not whose ground it is.
@@ -14968,6 +15106,11 @@
      * read at the army or at the block, never both.
      */
     landBlow(h, u, blow) {
+      if (this.hitsShake) {
+        h.own = (h.own ?? 0) + blow.dmg * blow.nerve;
+        h.w = (h.w ?? 0) + blow.nerve;
+        h.n = (h.n ?? 0) + 1;
+      }
       if (this.led && blow.parts) {
         h.dmg += blow.dmg;
         const sp = nerveSplit(blow.parts, this.led.on), pt = blow.parts, w = h.pw ?? (h.pw = { flank: 0, rear: 0, fire: 0, ambush: 0 });
@@ -15063,6 +15206,17 @@
      * given a model lands a shell there. So guns are seen firing in their share of the harm, not only where they did the
      * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
      */
+    /**
+     * The nerve weight a tick's blows on one block lay on their harm (suffer): the weights summed (off; under the teams
+     * rule, its own mix), or with nerve by its own harm (hitsShake) each blow's weight on its own harm, as a share of all
+     * of it, a support team's blows as every other's (so the teams rule's mix is the same as hitsShake's there); where no
+     * blow did harm, the weights' mean. Under the field spread's army ledger (bench only, never on in the game) hitsShake
+     * is not read: the ledger weighs its own parts, so a bench run with both on is not a reading of hitsShake.
+     */
+    tickNerve(h) {
+      if (!this.hitsShake || this.led) return h.nerve;
+      return h.dmg > 0 ? (h.own ?? 0) / h.dmg : h.n ? (h.w ?? 0) / h.n : 0;
+    }
     suffer(t, dmg, nerveMul, from = [], blind = false, bare = false, mArmy = 1, nerveBuilt = nerveMul, parts) {
       if (t.hid && dmg > 0 && !blind && !bare) this.reveal(t, "struck");
       if (t.waits && !t.waits.free && !bare && dmg > 0 && dist(t.x, t.y, t.waits.at[0], t.waits.at[1]) <= LAND.dug.keep) {
@@ -15091,6 +15245,7 @@
       if (t.team === "snp") {
         t.quietTo = Math.round((this.t + LAND.snipers.quiet) * 1e3) / 1e3;
         delete t.slipTo;
+        delete t.slipAt;
       }
       t.still = 0;
       t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
@@ -17691,6 +17846,7 @@
       if (opts.stand === true) sim.standRule = true;
       if (opts.facing === true && opts.stand === true) sim.faceRule = true;
       if (opts.teams === true && opts.facing === true && opts.stand === true) sim.teamsRule = true;
+      if (opts.hitsShake === true || opts.snipers === true && opts.hide !== false) sim.hitsShake = true;
       if (opts.blast === true) sim.blast = true;
       if (opts.escort === true) sim.escort = true;
       if (opts.pierce === true) sim.pierce = true;
