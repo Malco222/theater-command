@@ -353,6 +353,73 @@ int main(int Argc, char** Argv)
 		T = AirSheen::Tune();
 		Check(AirSheen::ParseTune(",,,,,1", T, W) && T.Graze == 1.0 && T.Glare == 1.0, "the sixth is the grazing guard");
 	}
+	if (Argc >= 6)
+	{
+		std::printf("S6 M_AirPaint's nodes (Tools/build_content.py, its \"if air:\" block)\n");
+		std::string Script;
+		Check(ReadText(Argv[5], Script), "build_content.py read");
+		const size_t From = Script.find("\n    if air:\n");
+		const size_t To = From == std::string::npos ? std::string::npos : Script.find("\n    finish(m)\n", From);
+		const std::string Block = From == std::string::npos || To == std::string::npos ? std::string() : Script.substr(From, To - From);
+		Check(!Block.empty(), "the block found");
+		// (every scalar(m, "<Name>", <default>, ...) in it, one a line)
+		struct Param
+		{
+			std::string Name;
+			double Default;
+		};
+		std::vector<Param> Params;
+		for (size_t At = Block.find("scalar(m, \""); At != std::string::npos; At = Block.find("scalar(m, \"", At + 1))
+		{
+			const size_t NameAt = At + 11, NameEnd = Block.find('"', NameAt);
+			if (NameEnd == std::string::npos) break;
+			const size_t ValueAt = Block.find(", ", NameEnd) + 2;
+			Params.push_back({ Block.substr(NameAt, NameEnd - NameAt), std::strtod(Block.c_str() + ValueAt, nullptr) });
+		}
+		const AirSheen::Tune T;
+		const std::vector<Param> Wanted = { { "Roughness", 0.9 }, { "Specular", 0.25 }, { "SheenEdge", T.Edge }, { "SheenGain", T.Gain }, { "SheenGlassBelow", T.GlassBelow },
+			{ "SheenFloor", T.Floor }, { "SheenSpec", T.Spec }, { "SheenMetalFrom", T.MetalFrom }, { "SheenMetal", T.Metal }, { "SheenLowSun", T.LowSun }, { "SheenGlare", T.Glare },
+			{ "SheenGraze", T.Graze } };
+		bool bAll = Params.size() == Wanted.size();
+		std::string Got;
+		for (const Param& W : Wanted)
+		{
+			int Found = 0;
+			for (const Param& P : Params)
+			{
+				if (P.Name == W.Name)
+				{
+					++Found;
+					bAll = bAll && std::fabs(P.Default - W.Default) < 1e-12;
+				}
+			}
+			bAll = bAll && Found == 1;
+			if (Found != 1) Got += W.Name + " ";
+		}
+		Check(bAll, "its scalar parameters, each once, with AirSheen::Tune's defaults (Roughness 0.9 and Specular 0.25 as M_MapSurface's)", Got + std::to_string(Params.size()) + " found");
+		Check(Block.find("vector(m, \"SheenSun\", (0.0, 0.0, 0.0, 0.0),") != std::string::npos, "SheenSun (0,0,0): no guard until C++ sets the sun");
+		Check(Block.find("node(m, unreal.MaterialExpressionTextureCoordinate, ") != std::string::npos && Block.find("carried, -1300, 1450, r=True, g=False, b=False, a=False)") != std::string::npos
+				&& Block.find("carried, -1300, 1600, r=False, g=True, b=False, a=False)") != std::string::npos,
+			"U and V read from the first texture coordinate's red and green");
+		bool bConstants = true;
+		for (const char* C : { "-0.9, -1000, 1950", "20.0, -700, 1950", "20.0, -700, 2500", "mirror, -0.9, ", "10.0, -400, 2700", "n_dot_v, -0.15, ", "4.0, -1000, 2850", "4.1667, -850, 3000",
+				 "n_dot_s, 2.0, ", "sun, -1.0, ", "depth, -1.0, ", "0.9, -1000, 1450", "rough, 0.34, chipped", "chipped, 0.85, 350, 2500" })
+		{
+			bConstants = bConstants && Block.find(C) != std::string::npos;
+		}
+		Check(bConstants, "the law's constants: 0.9, 20, the glare's 0.9 and 10, the graze's 0.15 and 4, the low sun's 4.1667, the mirror's 2 and -1");
+		Check(Count(Block, "to_property(") == 3 && Count(Block, "MP_ROUGHNESS") == 1 && Count(Block, "MP_SPECULAR") == 1 && Count(Block, "MP_METALLIC") == 1
+				&& Count(Block, "rough = lerp(m, rough, rough_ink, guard,") == 1 && Count(Block, "spec = lerp(m, spec, spec_ink, guard,") == 1 && Count(Block, "metal = lerp(m, metal, 0.0, guard,") == 1,
+			"roughness, specular and metal each connected once, each back to the ink's under the guard");
+		Check(Count(Script, "    if not air:\n        to_property(times(m, chipped, 0.85, 750, -700), \"\", unreal.MaterialProperty.MP_METALLIC)\n") == 1
+				&& Count(Script, "    if not air:\n        to_property(lerp(m, scalar(m, \"Roughness\", 0.9, -450, 200), 0.34, chipped, -250, 200), \"\", unreal.MaterialProperty.MP_ROUGHNESS)\n"
+								 "        to_property(scalar(m, \"Specular\", 0.25, -450, 300), \"\", unreal.MaterialProperty.MP_SPECULAR)\n") == 1,
+			"M_MapSurface's own metal, roughness and specular kept, under if not air");
+		Check(Count(Script, "def build_map_surface(name=\"M_MapSurface\", soot=False, crowd=False, sway=False, air=False):") == 1
+				&& Count(Script, "build_map_surface(\"M_AirPaint\", air=True)") == 1 && Count(Script, "(\"M_AirPaint\", build_air_paint_or_tell)") == 1
+				&& Count(Script, "M_AirPaint was not built") == 1,
+			"M_AirPaint built when missing or asked (TC_REBUILD=M_AirPaint), told when it fails");
+	}
 	if (Argc >= 5)
 	{
 		std::printf("S7 the Unreal side, from its source\n");
