@@ -1842,7 +1842,8 @@ why are they green?", then of the first matt pictures 03:12Z: "thats white. it s
    cool on top; her star and bar and number satin. The same in every month of the war (her file holds no schemes).
    How: the Battle rules card's **Silver Mustang** (FLandLive's rule `flyMustangMetal`, off by default;
    `-TheaterAirMustangMetal` / `-TheaterAirNoMustangMetal`). Her file is the air rules thread's issue-13
-   (battle-models/air-bar-1126/issue-13/Mustang.json, sha256 4b7fe030..., the art director's pick of 04:58Z: roughness
+   (battle-models/air-bar-1126/issue-13/Mustang-b.json, sha256 b6adf723..., marks as the art director ruled at 18:49Z:
+   the side star at radius 0.30 moved forward clear of the number, the wing marks 0.05 m forward; her pick of 04:58Z: roughness
    0.28, fuselage panels 0.25 to 0.32, wings 0.35, bare skin metal 100, paint metal 0), kept byte for byte as
    Content/Models/MustangBare.json BESIDE the old Mustang.json, which the row off still draws: so the row off is every
    Mustang as before. With the row on, ModelFor names every Mustang "MustangBare" (only the drawing: her flight is the
@@ -1858,7 +1859,10 @@ why are they green?", then of the first matt pictures 03:12Z: "thats white. it s
    `-TheaterAirMustangMetalInk=gain,floor,spec,metal,glare,graze,metalfrom` (the art director's fall-back if the Mac
    shows sparkle: `=,0.32`). Cloud test: Tools/air_show/air_mustang_metal_test.cpp.
    The Mac's stills the art director judges (her 04:58Z list): beside a B-17, sun high and at 14 degrees, from above and
-   the chase eye, at 300 m, a slow 10 s orbit, and the same shots with the row off.
+   the chase eye, at 300 m, a slow 10 s orbit, and the same shots with the row off; and (her 21:46Z words, with Mustang-b
+   passed) a low rear quarter and a from-below still. Her side number, where one is drawn (a number 1 to 14 in her
+   slot's radius, two figures at most), keeps off the star and bar's aft end: the art director's 21:46Z words, by the
+   cloud test's figures 0.115 m clear (number to x -3.533, bar end x -3.418, her file's x forward).
 
 85. **Far airscrews a faint blur** (release 2; Brian, 27 November 2026 01:23:16Z: "yeah the far propellers don't move
    and dont look good"; his picture of the Overview showed each far B-17's airscrew as a big solid disc with a yellow

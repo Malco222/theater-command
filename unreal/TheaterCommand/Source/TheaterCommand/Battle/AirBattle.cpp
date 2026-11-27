@@ -4743,8 +4743,8 @@ void AAirBattle::MustangMetalRead()
 {
 	// The Battle rules card's "Silver Mustang" (FLandLive's rule "flyMustangMetal", release 2; off until the Mac's stills
 	// are judged). Brian, 27 November: "shouldnt the p-51 mustangs be silver with black paint?", then "it should be shiny
-	// silver", "metalic". Her file is the air rules thread's issue-13 (battle-models/air-bar-1126/issue-13/Mustang.json,
-	// sha256 4b7fe030..., the art director's pick: E0E3E5 at roughness 0.28), kept beside the old one as
+	// silver", "metalic". Her file is the air rules thread's issue-13 (battle-models/air-bar-1126/issue-13/Mustang-b.json,
+	// sha256 b6adf723..., the art director's pick: E0E3E5 at roughness 0.28; her marks as ruled 18:49Z), kept beside the old one as
 	// Content/Models/MustangBare.json so that the row off draws every Mustang as before. Read once a run and kept.
 	static AirSheen::OwnFinish BareKept;
 	static bool bBareKeptRead = false;
