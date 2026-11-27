@@ -18,7 +18,7 @@ import { fuelMet } from './resources';
 import { railheads } from './rails';
 import { airOver, columnsOn, columnsSettable, type ColumnRun } from './columns';
 import { SIGHT, sightOf } from './intel';
-import { FIRES, bookFire, dumpFiresOn, fadeFires } from './dumpfires';
+import { FIRES, bookFire, dumpFiresOn, fadeFires, setDumpFires } from './dumpfires';
 import type { Game } from './types';
 
 export const LOGI = data as unknown as {
@@ -54,7 +54,8 @@ export function setLogistics(g: Game, which: LogisticsSwitch, on: boolean): bool
   if (on) g.flags[which] = 1;
   else {
     delete g.flags[which];
-    if (which === 'dumps') delete g.dumps;
+    // (Release 2, dumpfires.ts) The fires need the dumps: with the dumps off, they are off too.
+    if (which === 'dumps') { delete g.dumps; setDumpFires(g, false); }
     if (which === 'lorryShift') delete g.lorryFirst;
   }
   return true;

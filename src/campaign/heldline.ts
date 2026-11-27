@@ -16,7 +16,7 @@
 // With the switch off nothing here is read and nothing is written.
 
 import data from '../../data/campaign/heldline.json';
-import { feel } from './morale';
+import { feel, moraleRules } from './morale';
 import type { BattleReport, Corps, Game } from './types';
 
 export const HELD = data as unknown as { chance: number; felt: number; lift: number; ribbon: [string, string] };
@@ -26,7 +26,12 @@ export const heldOn = (g: Game): boolean => g.flags.heldline === 1;
 
 /** Turns the switch on or off at any time. Off takes every medal back (the morale already felt stays as it is). */
 export function setHeld(g: Game, on: boolean): boolean {
-  if (on) { g.flags.heldline = 1; return true; }
+  // (Only the grand campaign keeps morale, morale.ts moraleRules: elsewhere the medal would lift nothing.)
+  if (on) {
+    if (!moraleRules(g)) return false;
+    g.flags.heldline = 1;
+    return true;
+  }
   delete g.flags.heldline;
   for (const c of g.corps) delete c.held;
   for (const v of g.atSea ?? []) delete v.corps.held;

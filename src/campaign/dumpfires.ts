@@ -7,28 +7,38 @@
 // 1. A dump that loses at least 'least' division-months so is set burning (logistics.ts tendDumps books it). No die is
 //    thrown: it is the aircraft over it that burn it.
 // 2. It smokes on the campaign map that month and the next, as the bombed towns do (campaign-bridge.ts 'bombed').
-// 3. In the month that follows the bombing, every corps of its side standing within the dump's reach on its own side's
-//    ground has 'slow' fewer moves (game.ts startPhase, beside the fuel shortage's own): the fuel and shells it was to
-//    draw went up in the fire.
+// 3. In the month that follows the bombing, the corps that draw their month's supply on that dump (columns.ts: the
+//    nearest ready dump with stock for them, nearer than the railhead) have 'slow' fewer moves (game.ts startPhase,
+//    beside the fuel shortage's own): the fuel and shells they were to draw went up in the fire. A corps that merely
+//    stands within its reach, of either side, loses nothing (the design director's gate, 27 Nov 14:12Z, item 2).
 // 4. Every nation alike, the player's and the computers'.
 //
-// With the switch off nothing here is read and nothing is written. It does nothing where the dumps are off.
+// With the switch off nothing here is read and nothing is written. It needs the forward dumps: the setter will not turn
+// it on where they are off, and turning the dumps off puts it off (logistics.ts setLogistics), so it is never a dead
+// switch. The dumps are set only in a war's first month, so it reaches new wars.
 
 import data from '../../data/campaign/dumpfires.json';
-import { dumpRoads } from './logistics';
+import { dumpsOn } from './logistics';
 import type { Game } from './types';
 
 export const FIRES = data as { least: number; slow: number; smoke: number };
 
-/** One dump set burning: whose, where, the month, the division-months that went up, and 1 where the player's aircraft were among those over it. */
-export interface DumpFire { nat: string; region: number; turn: number; burnt: number; mine?: 1 }
+/**
+ * One dump set burning: whose, where, the month, the division-months that went up, 1 where the player's aircraft were
+ * among those over it, and the corps that drew their month's supply on it (by id), once the columns have gone out.
+ */
+export interface DumpFire { nat: string; region: number; turn: number; burnt: number; mine?: 1; fed?: number[] }
 
 /** The switch: a grand campaign's own, off unless the release 2 ship list or the player turns it on. */
 export const dumpFiresOn = (g: Game): boolean => g.flags.dumpfires === 1;
 
-/** Turns the switch on or off at any time. Off puts every fire out. */
+/** Turns the switch on or off at any time. Off puts every fire out. It will not go on where the forward dumps are off. */
 export function setDumpFires(g: Game, on: boolean): boolean {
-  if (on) { g.flags.dumpfires = 1; return true; }
+  if (on) {
+    if (!dumpsOn(g)) return false;
+    g.flags.dumpfires = 1;
+    return true;
+  }
   delete g.flags.dumpfires;
   delete g.dumpFires;
   return true;
@@ -46,15 +56,23 @@ export function bookFire(g: Game, fire: DumpFire): void {
   (g.dumpFires ??= []).push(fire);
 }
 
-/** The provinces where a nation's corps move slower this month: within reach of its dumps set burning this month. */
+/**
+ * Called by the columns (columns.ts) as a nation's corps at province 'to' draw their month's supply on its dump at
+ * 'region': where that dump was set burning this month, those corps are noted on the fire.
+ */
+export function noteFed(g: Game, nat: string, region: number, to: number): void {
+  if (!dumpFiresOn(g) || !g.dumpFires) return;
+  const fire = g.dumpFires.find((f) => f.nat === nat && f.region === region && f.turn === g.turn);
+  if (!fire) return;
+  const ids = g.corps.filter((c) => c.nat === nat && c.reg === to && !c.dead && c.kind !== 'fort' && c.supplied).map((c) => c.id);
+  if (ids.length) fire.fed = [...(fire.fed ?? []), ...ids];
+}
+
+/** The corps (by id) of a nation that move slower this month: those that drew on its dumps set burning this month. */
 export function slowedByFire(g: Game, nat: string): Set<number> | null {
   if (!dumpFiresOn(g) || !g.dumpFires) return null;
   const out = new Set<number>();
-  for (const f of g.dumpFires) {
-    if (f.nat !== nat || f.turn !== g.turn) continue;
-    const road = dumpRoads(g, nat, f.region);
-    road.forEach((d, i) => { if (d >= 0) out.add(i); });
-  }
+  for (const f of g.dumpFires) if (f.nat === nat && f.turn === g.turn) for (const id of f.fed ?? []) out.add(id);
   return out.size ? out : null;
 }
 
