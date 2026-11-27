@@ -157,8 +157,16 @@ const inRiver = (g: Ground): boolean => g === 'water' || g === 'blown';
  * teams did it and that harm times each team's own multiplier, kept out of 'nerve' (LandBattle.tally).
  */
 interface Hurt { dmg: number; nerve: number; from: [LandUnit, number][]; blind: boolean; team: number; teamNerve: number; dm?: number; built?: number; dn?: number; pw?: BlowWeights }
+/** With nerve by its own harm (hitsShake; landBlow, tickNerve): own, each blow's weight times its harm; w, the weights; n, the blows. */
+interface Hurt { own?: number; w?: number; n?: number }
 const live = (u: LandUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
 const fighting = (u: LandUnit): boolean => live(u) && u.state !== 'routing';
+/**
+ * A team that passes through its own side's blocks (spread). Each kind under its own row: a sniper pair exists only
+ * with sniper teams on; the machine-gun and mortar teams join under `teams` (sim.teamsRule) as a second term at the join.
+ */
+// (b: the battle whose rows say which kinds count; at the join the teams' term reads b.teamsRule)
+const passesFriends = (_b: LandBattle, u: LandUnit): boolean => u.team === 'snp';
 /** A block's weight as its army's bar and break count it: the card's part for a corps come up from next door, else its power0. */
 const weightOf = (u: LandUnit): number => u.priced ?? u.power0;
 /**
@@ -619,6 +627,16 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   pierce = false;
   /**
+   * Only the hits that land shake a unit (release 2; the design director, 26 November 06:21Z, the sniper teams' gate
+   * tracing it; the UI director's row, 06:23Z): each blow's nerve weight prices only its own harm, so a block struck by
+   * several in a tick loses the sum of each weight times the harm it did, as the air's blows already are (bombs,
+   * strafing). Off, the old way: the tick's weights are
+   * summed and the sum laid on all its harm, so a blow that does no harm still multiplies the nerve of everyone else's.
+   * Off unless whoever opens the field turns it on (the bridge's { hitsShake: true }, and with sniper teams, which fight
+   * only with it).
+   */
+  hitsShake = false;
+  /**
    * Men in lorries (release 1.5, looks only; Brian, 23 November 14:10Z and 15:50Z, "soldiers in the back of a truck and
    * they then hop out"): each man aboard says his lorry and seat (MenOut.sv), and lorried men get down over the tailboard
    * one at a time (Drill.alight, hopOut), the lorries standing meanwhile. Off unless turned on (the bridge's
@@ -823,7 +841,12 @@ export class LandBattle implements BattleSim<LandUnit> {
     const p = this.ticket.place, H = LAND.hold;
     const streets = streetsOf(p);
     // (A corps come up from next door holds no works: the card prices it with none.)
-    return (H.take[p.terrain] ?? 0.4) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 && t.joined === undefined ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
+    return this.takeOf(p.terrain) * (p.river && !u.dry ? 1 + (H.river - 1) * this.armourWet : 1) * (p.fort > 0 && t.joined === undefined ? H.works[Math.min(3, p.fort)] : 1) * (streets ? H.streets[`${p.terrain} ${streets}`] ?? H.streets[streets] : 1) * this.flankHold;
+  }
+
+  /** The held defence's share of the damage on its ground: hold.take, or its refit while hitsShake is on (LAND.shaken). */
+  private takeOf(terrain: string): number {
+    return (this.hitsShake ? LAND.shaken.take[terrain] : undefined) ?? LAND.hold.take[terrain] ?? 0.4;
   }
 
   /** The share of the attack's tanks and lorries, by strength, that must cross the river: 0 where it has none (b494). */
@@ -1810,7 +1833,7 @@ export class LandBattle implements BattleSim<LandUnit> {
         for (const u of us) {
           const o: LandOrder = back ? { kind: 'withdraw', x: c.x + (us.length > 1 ? u.x - cx : 0), y: by === 'att' ? 0 : this.field.h, via: true, ...(c.run ? { run: true } : {}) }
             : { kind: 'move', x: c.x + (us.length > 1 ? u.x - cx : 0), y: c.y + (us.length > 1 ? u.y - cy : 0), face: c.face, ...(c.run ? { run: true } : {}) };
-          give(u, () => this.send(u, o));
+          give(u, () => { if (u.team === 'snp') u.placed = true; this.send(u, o); });
         }
         this.say({ what: 'contact', side: by, text: '' });
         this.events.pop(); this.log.pop();
@@ -1833,13 +1856,17 @@ export class LandBattle implements BattleSim<LandUnit> {
         if (!t || t.side === by || !live(t) || t.hid || !all.length) return false;
         hands(all);
         // A sniper team sent in with others (the plain attack: every block at the nearest enemy) takes no lane in the
-        // line abreast: it stays in its cover and takes the target as its aim, as a fire order gives it (land:fire). In
-        // a lane of its own it pushed the line's real blocks out past the target's flanks and cost the plain attack 6
-        // battles in 100 (the sniper gate's G7, 25 Nov; the design director's ruling of 18:55Z). Sent alone, or with
-        // only other sniper teams, it goes as ordered.
+        // line abreast: it takes the target as its aim, as a fire order gives it (land:fire). In a lane of its own it
+        // pushed the line's real blocks out past the target's flanks and cost the plain attack 6 battles in 100 (the
+        // sniper gate's G7, 25 Nov; the design director's ruling of 18:55Z). Where its own side put it by an order of its
+        // own, it stays there; else it goes up by its staff's drill, cover to cover, till the target is in its reach,
+        // never ahead of the group's leading foot (stalkOn; 26 Nov 01:49Z (d): left where his staff laid it, out of
+        // reach, 95 in 100 of the player's teams never fired). Sent alone, or with only other sniper teams, it goes as
+        // ordered.
         const lone = all.some((u) => u.team !== 'snp') ? all.filter((u) => u.team === 'snp') : [];
-        for (const u of lone) give(u, () => { u.order = null; u.path = []; u.keepFace = null; u.aim = t.id; delete u.cut; });
         const us = lone.length ? all.filter((u) => u.team !== 'snp') : all;
+        const group = us.map((u) => u.id);
+        for (const u of lone) give(u, () => { u.order = null; u.path = []; u.keepFace = null; u.aim = t.id; delete u.cut; if (!u.placed) u.stalk = { target: t.id, group }; });
         if (!us.length) return true;
         // Several blocks sent at one: they come on abreast, each in its own lane, the outer ones round the target's
         // flanks, instead of all making for its middle. One block alone goes straight for it (the computer general's way).
@@ -1933,6 +1960,7 @@ export class LandBattle implements BattleSim<LandUnit> {
           if (!u || this.placeWhy(u, x, y) !== null || by !== this.setup) return false;
           const f = c.face === undefined ? undefined : Number(c.face);
           this.place(u, x, y, f !== undefined && Number.isFinite(f) ? f : undefined);
+          if (u.team === 'snp') u.placed = true;
           return true;
         }
         // Night patrol (release 2): { do: 'land:patrol', unit } while he places his army, his attack sends that block's
@@ -2055,6 +2083,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    * leaves the block's orderAt (its move's or attack's) alone.
    */
   private order(u: LandUnit, go: () => void, air: boolean, from = this.t, c?: Command, smoke = false): void {
+    // A sniper team's stalk with a group (stalkOn) ends with any later order of its own, as it lands.
+    if (!smoke && u.team === 'snp') { const g = go; go = (): void => { delete u.stalk; g(); }; }
     // Field telephone lines (release 2): to a block whose wire is down, whoever gives it, by its army's fallback.
     if (this.phones && this.t > 0 && this.wireDown(u)) { this.byFallback(u, go, from, c, smoke); return; }
     if (!air) { go(); return; }
@@ -2664,7 +2694,9 @@ export class LandBattle implements BattleSim<LandUnit> {
   /**
    * Where a sniper team of the computer's goes next (ai.ts snipersUp): hiding ground within 'step' metres of it toward
    * 'to', never ahead of 'front' (its own leading foot, measured along its side's way), and at least 'keep' metres from
-   * every found enemy block; the furthest forward first, then the nearest. Null where there is none.
+   * every found enemy block by the battle's own gap (as the drills' 'near' reads it: by the middles, a team backed off
+   * to a spot still read near and was sent again each second, 26 Nov); the furthest forward first, then the nearest. Null
+   * where there is none.
    */
   sniperSpot(u: LandUnit, to: [number, number], front: number, step = 400, keep: number = LAND.snipers.keep): [number, number] | null {
     const dir = u.side === 'att' ? 1 : -1, cell = this.field.cell, k = Math.max(1e-6, Math.hypot(to[0] - u.x, to[1] - u.y));
@@ -2675,7 +2707,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       const x = Math.round(clamp(u.x + ((to[0] - u.x) * a) / k - ((to[1] - u.y) * c) / k, 5, this.field.w - 5));
       const y = Math.round(clamp(u.y + ((to[1] - u.y) * a) / k + ((to[0] - u.x) * c) / k, 5, this.field.h - 5));
       if (Math.hypot(x - u.x, y - u.y) > step || dir * y > dir * front || !this.sniperGround(x, y)) continue;
-      if (foes.some((e) => dist(e.x, e.y, x, y) < keep)) continue;
+      if (foes.some((e) => this.gapAt(u, x, y, e) < keep)) continue;
       const sc = dir * y * 1000 - Math.hypot(x - u.x, y - u.y);
       if (sc <= score || this.wet(u, x, y, false)) continue;
       score = sc; best = [x, y];
@@ -2735,12 +2767,50 @@ export class LandBattle implements BattleSim<LandUnit> {
     t.pinTo = at(S.pin.secs);
   }
 
+  /**
+   * A sniper team sent in with a group (LandUnit.stalk; the design director, 26 November 01:49Z (d)), once a second, by
+   * the drill the computer's staff gives its own teams (ai.ts snipersUp), the group's target for its way: slipping
+   * away, to other hiding ground near by; a found enemy within LAND.snipers.keep, back from it; the target in its
+   * reach, it stays and fires on it (its aim); else one bound to the next hiding ground toward the target, never ahead
+   * of the group's leading foot. Done once the target is gone or hidden, or the group has no foot left: it stays
+   * where it is.
+   */
+  private stalkOn(u: LandUnit): void {
+    const s = u.stalk!, t = this.unit(s.target), ok = (e: LandUnit): boolean => fighting(e) && e.state !== 'routing';
+    if (!ok(u) || u.order?.kind === 'withdraw' || !t || !ok(t) || t.hid) { delete u.stalk; return; }
+    if (u.waits && !u.waits.free) return;
+    const go = (x: number, y: number): void => { this.send(u, { kind: 'move', x, y }); u.aim = t.id; };
+    if (u.slipTo !== undefined) {
+      // One spot a slip, as the computer's drill (ai.ts snipersUp).
+      if (u.order || u.slipAt) return;
+      const spot = this.slipSpot(u);
+      if (spot) { u.slipAt = spot; go(spot[0], spot[1]); }
+      return;
+    }
+    const K = LAND.snipers.keep, dir = u.side === 'att' ? 1 : -1;
+    const near = this.units.filter((f) => f.side !== u.side && ok(f) && !f.hid && f.kind !== 'fort' && this.gap(u, f) < K);
+    if (near.length) {
+      if (u.order?.kind === 'move' && !near.some((f) => this.gapAt(u, u.order!.x, u.order!.y, f) < K)) return;
+      const spot = this.sniperSpot(u, [u.x, u.y - dir * 400], u.y);
+      const gap = near.reduce((m, f) => Math.min(m, this.gap(u, f)), Infinity);
+      const [x, y] = spot ?? [u.x, u.y - dir * (K - gap + 50)];
+      go(x, y);
+      return;
+    }
+    if (u.order || this.gap(u, t) <= reachOf(u)) return;
+    const foot = s.group.map((id) => this.unit(id)).filter((m): m is LandUnit => !!m && ok(m) && !m.team && m.kind !== 'art' && m.kind !== 'fort');
+    if (!foot.length) { delete u.stalk; return; }
+    const front = dir > 0 ? Math.max(...foot.map((m) => m.y)) : Math.min(...foot.map((m) => m.y));
+    const spot = this.sniperSpot(u, [t.x, t.y], front);
+    if (spot && dir * (spot[1] - u.y) > 20) go(spot[0], spot[1]);
+  }
+
   /** A sniper team at half strength or the rout nerve (LAND.snipers.back): it withdraws to its own edge, never routs. */
   private sniperBack(u: LandUnit): void {
     if (u.order?.kind === 'withdraw') return;
     this.send(u, { kind: 'withdraw', x: u.x, y: u.side === 'att' ? 0 : this.field.h });
     u.engaged = undefined;
-    delete u.slipTo;
+    delete u.slipTo; delete u.slipAt;
     delete u.search; delete u.searchR;
     if (this.ticket[u.side].human) this.say({ what: 'land:snipersBack', unit: u.id, side: u.side, text: `${this.named(u)} has lost too many men and pulls back.`, x: u.x, y: u.y });
   }
@@ -2758,11 +2828,12 @@ export class LandBattle implements BattleSim<LandUnit> {
       const clear = (): boolean => this.sniperGround(u.x, u.y) && !this.units.some((e) => e.side !== u.side && fighting(e) && this.gap(u, e) <= S.clear);
       if (u.slipTo !== undefined) {
         if (this.t < u.slipTo - 1e-9) continue;
-        delete u.slipTo;
+        delete u.slipTo; delete u.slipAt;
         if (clear()) { u.hid = true; delete u.unloc; }
         continue;
       }
-      if ((u.slips ?? 0) >= S.most || u.str < S.str * u.str0 || u.still < S.after || !clear()) continue;
+      // A team on its way to a spot it chose keeps that way: it slips, if all still holds, once it is there (26 Nov).
+      if ((u.slips ?? 0) >= S.most || u.str < S.str * u.str0 || u.still < S.after || u.order?.kind === 'move' || !clear()) continue;
       u.slipTo = Math.round((this.t + S.secs) * 1000) / 1000;
       u.slips = (u.slips ?? 0) + 1;
     }
@@ -3085,6 +3156,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       // (after the break, pursue: the day is decided, and each staff has only the pursuit to see to)
       for (const s of ['att', 'def'] as Side[]) if (this.ai[s]) { if (this.aftermath) this.staffAfter(s); else thinkFor(this, s); }
       this.staffing = false;
+      // Sniper teams sent in with a group go up by their staff's drill, whoever's side (stalkOn).
+      for (const u of this.units) if (u.stalk) this.stalkOn(u);
     }
     for (const u of this.units) { u.pinned = false; if (live(u)) { u.still += DT; u.clear += DT; } }
     if (this.costliest.size) this.costliest.clear();
@@ -3185,12 +3258,13 @@ export class LandBattle implements BattleSim<LandUnit> {
     // The nerve what was held back would have cost, as the tick's blows on that block cost it, owed with it. (Under the
     // field spread's army ledger, the blows' weight as built: the strike lands it on the block, or with the air part at
     // the army on the ledger, so each part of it is priced once, never dropped with the split: G.)
-    if (kept) for (const [id, raw] of kept) { const h = hurt.get(id)!, side = other(this.unit(id)!.side); this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * (h.built ?? h.nerve)); }
+    if (kept) for (const [id, raw] of kept) { const h = hurt.get(id)!, side = other(this.unit(id)!.side); this.airNerve[side].set(id, (this.airNerve[side].get(id) ?? 0) + raw * (h.built ?? this.tickNerve(h))); }
     // Under the ledger, the tick's blows' weight as built on each block they struck, damage-weighted, for air harm landing
     // on it this tick (airHarm; cleared once the tick is judged).
     if (this.led) { this.tickM = new Map(); for (const [id, h] of hurt) if (h.dmg > 0) this.tickM.set(id, (h.dn ?? 0) / h.dmg); }
     // (The ledger reads the damage-weighted m of the tick's blows; the block keeps today's per-blow sum of what it reads.)
-    for (const [id, h] of hurt) this.suffer(this.unit(id)!, h.dmg, h.nerve, h.from, h.blind, false, this.led && h.dmg > 0 ? (h.dm ?? 0) / h.dmg : 1, h.built ?? h.nerve, this.led && h.pw && h.dmg > 0 ? weighsOf(h.pw, h.dmg) : undefined);
+    // (With nerve by its own harm, hitsShake, each blow's weight on its own harm: tickNerve.)
+    for (const [id, h] of hurt) { const m = this.tickNerve(h); this.suffer(this.unit(id)!, h.dmg, m, h.from, h.blind, false, this.led && h.dmg > 0 ? (h.dm ?? 0) / h.dmg : 1, h.built ?? m, this.led && h.pw && h.dmg > 0 ? weighsOf(h.pw, h.dmg) : undefined); }
     // What waits' cover spared, being paid out at the pace it was spared (hold until relieved, release 2).
     if (this.repay.length) this.repayNow();
     if (this.airOn.att || this.airOn.def) this.flyAir();
@@ -3256,6 +3330,9 @@ export class LandBattle implements BattleSim<LandUnit> {
       const pl = a.w / 2 + (b.w / 2) * c + (b.d / 2) * s - Math.abs(lat);
       const pd = a.d / 2 + (b.w / 2) * s + (b.d / 2) * c + (a.side === b.side ? 0 : LAND.apart) - Math.abs(dep);
       if (pl <= 0 || pd <= 0) continue;
+      // A team passes through its own side's blocks, neither eased by them nor easing them: a few men hold no frontage
+      // (the design director, 26 November 03:51Z, one rule for every team kind, each under its own row).
+      if (a.side === b.side && (passesFriends(this, a) || passesFriends(this, b))) continue;
       // A tank block driving through a foot block's ground (overrun) is not eased off it.
       if (a.side !== b.side && this.inOverrun(a, b)) continue;
       // A queue, not a pile (the art director, b418, b439): a block marching into a friend's ground has it make way,
@@ -3331,6 +3408,31 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (snp && ((u.quietTo !== undefined && this.t < u.quietTo) || u.slipTo !== undefined)) return null;
     // Guns told to fire on one block strike it whenever it is in their reach (ai.ts; ruling 239(6)).
     if (u.aim !== undefined) { const a = this.unit(u.aim); if (a && live(a) && a.side !== u.side && !a.hid && this.gap(u, a) <= reach) return a; }
+    // A sniper team keeps its target while it still holds, alive, seen and in reach; it scores afresh only when the target
+    // fails (the design director, 26 November 03:51Z: a choice kept, not remade each tick). A target it was sent at
+    // comes first, as in the pick below. A kept target fails, too, once another in reach and seen stands in a better
+    // class of the pick (sniperPick: a tank closing up, foot halting, a block breaking): nearer or straighter ahead
+    // never unseats it, so the pick's order of classes stands.
+    if (snp) {
+      const holds = (id: number | undefined): LandUnit | null => {
+        const e = id === undefined ? undefined : this.unit(id);
+        if (!e || !live(e) || e.side === u.side || e.hid) return null;
+        const d = this.gap(u, e);
+        return d <= reach && this.sniperSees(u, e, d) ? e : null;
+      };
+      const sent = u.order?.kind === 'attack' ? holds(u.order.target) : null;
+      if (sent) return sent;
+      const kept = holds(u.engaged);
+      if (kept) {
+        const k = this.sniperPick(kept);
+        const better = this.units.some((e) => {
+          if (e === kept || e.side === u.side || !live(e) || e.hid || this.sniperPick(e) >= k) return false;
+          const d = this.gap(u, e);
+          return d <= reach && this.sniperSees(u, e, d);
+        });
+        if (!better) return kept;
+      }
+    }
     // Hidden in the woods (release 2): it holds its fire till the enemy is close, unless it is sent in. A sniper team
     // fires from hiding at its whole reach, and may be found for it (snipeFromHiding).
     if (u.hid && u.order?.kind !== 'attack' && !snp) reach = Math.min(reach, this.ambushAt(u));
@@ -3635,6 +3737,11 @@ export class LandBattle implements BattleSim<LandUnit> {
     return Math.max(0, dist(a.x, a.y, b.x, b.y) - (Math.max(a.w, a.d) + Math.max(b.w, b.d)) / 4);
   }
 
+  /** The gap 'a' would have to 'b' standing at (x, y), by the same measure (gap). */
+  gapAt(a: LandUnit, x: number, y: number, b: LandUnit): number {
+    return Math.max(0, dist(x, y, b.x, b.y) - (Math.max(a.w, a.d) + Math.max(b.w, b.d)) / 4);
+  }
+
   /**
    * What a block takes of a blow for the ground it stands on (its cover, the shelter of wrecks beside men on foot, tanks
    * blind in the streets): the part of what it takes that is where it stands, not whose ground it is.
@@ -3664,6 +3771,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    * read at the army or at the block, never both.
    */
   private landBlow(h: Hurt, u: LandUnit, blow: { dmg: number; nerve: number; parts?: NerveParts }): void {
+    // (Only the hits that land shake a unit, hitsShake: every blow's weight on its own harm, a support team's too: tickNerve.)
+    if (this.hitsShake) { h.own = (h.own ?? 0) + blow.dmg * blow.nerve; h.w = (h.w ?? 0) + blow.nerve; h.n = (h.n ?? 0) + 1; }
     if (this.led && blow.parts) {
       h.dmg += blow.dmg;
       const sp = nerveSplit(blow.parts, this.led.on), pt = blow.parts, w = (h.pw ??= { flank: 0, rear: 0, fire: 0, ambush: 0 });
@@ -3788,6 +3897,18 @@ export class LandBattle implements BattleSim<LandUnit> {
    * given a model lands a shell there. So guns are seen firing in their share of the harm, not only where they did the
    * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
    */
+  /**
+   * The nerve weight a tick's blows on one block lay on their harm (suffer): the weights summed (off; under the teams
+   * rule, its own mix), or with nerve by its own harm (hitsShake) each blow's weight on its own harm, as a share of all
+   * of it, a support team's blows as every other's (so the teams rule's mix is the same as hitsShake's there); where no
+   * blow did harm, the weights' mean. Under the field spread's army ledger (bench only, never on in the game) hitsShake
+   * is not read: the ledger weighs its own parts, so a bench run with both on is not a reading of hitsShake.
+   */
+  private tickNerve(h: Hurt): number {
+    if (!this.hitsShake || this.led) return h.nerve;
+    return h.dmg > 0 ? (h.own ?? 0) / h.dmg : h.n ? (h.w ?? 0) / h.n : 0;
+  }
+
   private suffer(t: LandUnit, dmg: number, nerveMul: number, from: [LandUnit, number][] = [], blind = false, bare = false, mArmy = 1, nerveBuilt = nerveMul, parts?: Partial<Record<NervePart, number>>): void {
     // A hidden block struck (planes over the woods) is found (release 2); fire on cover alone finds it by its own odds.
     // Kept harm landing ('bare', hold until relieved) is no blow of anyone's that tick, and finds no one.
@@ -3825,7 +3946,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     // A sniper team under fire, seen, vague or blind, holds its fire till LAND.snipers.quiet after the last blow; struck
     // while it slips away, it stays found.
-    if (t.team === 'snp') { t.quietTo = Math.round((this.t + LAND.snipers.quiet) * 1000) / 1000; delete t.slipTo; }
+    if (t.team === 'snp') { t.quietTo = Math.round((this.t + LAND.snipers.quiet) * 1000) / 1000; delete t.slipTo; delete t.slipAt; }
     t.still = 0;
     t.figures = t.str <= 0 ? 0 : Math.max(1, Math.ceil(t.tray * t.str));
     // Stretcher bearers (release 2): its wounded lie for its bearers, its light cases go to their dressing. A model lost

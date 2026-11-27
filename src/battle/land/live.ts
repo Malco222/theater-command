@@ -479,9 +479,19 @@ export interface LiveOpts {
    * only: it changes every fight. "facing" and "teams" work only with it on (the same ruling). Off unless true.
    */
   stand?: boolean;
+  /**
+   * Only the hits that land shake a unit (release 2; the design director, 26 November 06:21Z; the UI director's row,
+   * 06:23Z; sim.hitsShake): each blow's nerve weighs only on its own harm. Off unless true; on whenever sniper teams are
+   * (they fight only with it).
+   */
+  hitsShake?: boolean;
   /** Shell blasts (release 2, looks only; sim.blast): one burst takes the men near it together. Off unless true. */
   blast?: boolean;
-  /** Infantry with tanks (release 2, looks only; sim.escort): foot advance behind their tanks, never under them. Off unless true. */
+  /**
+   * Infantry with tanks (release 2; sim.escort): foot advance behind their tanks, never under them. NOT looks only: with
+   * it, tanks overrun foot in the open (LAND.overrun, the sim's overruns; harm unchanged), and that changes results (the
+   * design director, 27 November 01:54Z: a rules row, gated 23 November). Off unless true.
+   */
   escort?: boolean;
   /** Men in lorries (release 1.5, looks only; sim.trucks): seats said, and over the tailboard one at a time. Off unless true. */
   trucks?: boolean;
@@ -691,6 +701,7 @@ export class LiveBattle {
     if (opts.facing === true && opts.stand === true) sim.faceRule = true;
     // (Support teams in battle works only with "facing" on, and so with "stand": 25 November 21:54Z and 26 November 01:02Z.)
     if (opts.teams === true && opts.facing === true && opts.stand === true) sim.teamsRule = true;
+    if (opts.hitsShake === true || (opts.snipers === true && opts.hide !== false)) sim.hitsShake = true;
     if (opts.blast === true) sim.blast = true;
     if (opts.escort === true) sim.escort = true;
     if (opts.pierce === true) sim.pierce = true;

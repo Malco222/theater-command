@@ -98,6 +98,16 @@ export interface LandUnit extends UnitBase {
   quietTo?: number;
   slipTo?: number;
   slips?: number;
+  /** Where a slipping sniper team chose to go: it keeps that spot till the slip ends (no second spot in one slip). */
+  slipAt?: [number, number];
+  /**
+   * A sniper team sent in with a group (the attack order; the design director, 26 November 01:49Z (d)): the group's
+   * target, which it bounds toward by its staff's own drill till it is in reach, and the group's blocks, whose leading
+   * foot it never goes ahead of. Any later order of its own ends it.
+   */
+  stalk?: { target: number; group: number[] };
+  /** A sniper team its side put where it is by an order of its own (a move, or the setup step): a group sends it no further. */
+  placed?: boolean;
   /** A machine-gun or mortar team of the computer's aimed at this found enemy sniper team (LAND.snipers; ai.ts counterSnipers). */
   hunts?: number;
   /**
@@ -465,7 +475,10 @@ const MOBILE: Kind[] = ['arm', 'mot'];
 export const GAP = 40;
 
 /** A side's rows: foot in the front line, tanks and lorries next (half of them in front where there is no foot), guns. */
-function rowsOf(mine: LandUnit[]): LandUnit[][] {
+function rowsOf(all: LandUnit[]): LandUnit[][] {
+  // A sniper pair is no gun: it takes no place in the guns' row (it would shift the battery along it), and draws up in a
+  // row of its own behind them (drawUp), from where its staff or its player sets it in its hide.
+  const mine = all.filter((u) => u.team !== 'snp');
   const lines: LandUnit[][] = [mine.filter((u) => FRONT.includes(u.kind)), mine.filter((u) => MOBILE.includes(u.kind)), mine.filter((u) => u.kind === 'art')];
   if (!lines[0].length && lines[1].length) lines[0] = lines[1].splice(0, Math.ceil(lines[1].length / 2));
   return lines;
@@ -596,7 +609,7 @@ function streamLanes(mine: LandUnit[], side: Side, f: LandField): void {
  * row behind it, GAP kept between its blocks, so no two are drawn up on top of each other (b492(3)).
  */
 function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: number, hi?: number): void {
-  const z = f.zones[side];
+  const z = f.zones[side], pairs = mine.filter((u) => u.team === 'snp');
   const dir = side === 'att' ? 1 : -1;
   let front = side === 'att' ? z[3] - 40 : z[1] + 40;
   const lines = rowsOf(mine);
@@ -638,6 +651,18 @@ function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: num
     }
     return false;
   };
+  /**
+   * The sniper pairs' own row (the design director, 26 November 05:02Z), drawn up once every other row stands, so it
+   * shifts no other block: where the guns' row stands (230 m behind the front line), or GAP behind the hindmost row
+   * where that row stands further back. Kept inside the field.
+   */
+  const pairsUp = (): void => {
+    if (!pairs.length) return;
+    const rear = Math.max(0, ...mine.filter((u) => u.team !== 'snp').map((u) => dir * (front - u.y) + u.d / 2));
+    const deep = Math.max(...pairs.map((u) => u.d));
+    const y = front - dir * Math.max(230, rear + GAP + deep / 2);
+    place(pairs, Math.min(f.h - deep / 2, Math.max(deep / 2, y)), false);
+  };
   // A defence of four blocks or more in its line keeps a quarter of them back as a reserve, centred between its tanks
   // on the wings (b407). Each is the last division of whichever corps has most in the line, so every corps' first
   // divisions stand in the line. Where the tanks could not stand on the wings and are centred behind the line, the
@@ -657,6 +682,7 @@ function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: num
     const wide = place(lines[1], front - dir * 110, true);
     if (held.length) { place(held, front - dir * (wide || !lines[1].length ? 110 : 170), false); for (const u of held) u.reserve = 'held'; }
     place(lines[2], front - dir * 230, false);
+    pairsUp();
     return;
   }
   // In its lanes (b492(3)): each line cut into rows no wider than the room, the front ones full and the rest behind.
@@ -692,4 +718,5 @@ function drawUp(mine: LandUnit[], side: Side, f: LandField, cx: number, lo?: num
   let ys = steps(GAP);
   for (let gap = GAP - 5; gap >= 10 && past(ys); gap -= 5) ys = steps(gap);
   rows.forEach((r, i) => place(r.us, ys[i], r.wings));
+  pairsUp();
 }
