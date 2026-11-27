@@ -860,6 +860,10 @@ private:
 	 * click there that sends them at the double. */
 	double GeneralClickAt = -10.0;
 	FVector2D GeneralClickWhere = FVector2D::ZeroVector;
+	/** The free view (release 2): his unit last taken in hand by a click on the field and when (real seconds), for a
+	 * second click on it that locks the view on it. */
+	int32 GeneralPickBlock = -1;
+	double GeneralPickAt = -10.0;
 	/** Each frame, after the clock: the clipboard brought to the time shown, its tags and routes put on the screen. */
 	void ShowGeneral();
 	/** Each frame, after the film's pose: the general's own view takes the picture while his map is up (the film's
@@ -904,6 +908,12 @@ private:
 	 * "-TheaterLandViewsAt=<battle seconds>": -1 none; -2 not yet read) and how far it has gone. */
 	double ViewsCheckAt = -2.0;
 	int32 ViewsCheckStep = 0;
+	/** The Mac's check of the free view (release 2, "-TheaterLandFreeViewAt=<battle seconds>": -1 none; -2 not yet
+	 * read), how far it has gone, and the frames drawn and the real seconds gone since its last step. */
+	double FreeCheckAt = -2.0;
+	int32 FreeCheckStep = 0;
+	int32 FreeCheckFrames = 0;
+	double FreeCheckReal = 0.0;
 	/**
 	 * The film in a corner (release 2; Brian, 24 November 20:38Z): while he commands from his own view, the film
 	 * director's shot in a small window. A second picture of the field, drawn small through the film's lens every few
