@@ -3705,6 +3705,7 @@ REBUILD = os.environ.get("TC_REBUILD", "")
 # trial word, so without it M_LandBlades, M_LandLeaves and M_LandStalks are built node for node as before. To try the
 # word on the Mac: TC_LODGED=1 TC_REBUILD=M_LandBlades,M_LandLeaves,M_LandStalks; the same without TC_LODGED puts them back.)
 LODGED = os.environ.get("TC_LODGED", "") == "1"
+FAILED_THIS_RUN = set()  # (the materials whose build raised in this run, in the try below: their press twins are not built this run)
 BUILT_THIS_RUN = set()  # (the materials the loop below built in this run: the blast press's twins follow their plain ones)
 # (M_LandSurface, the ground battle's ground, comes after M_MapSurface and can never stop the rest: see
 # build_land_surface_or_tell. After the pictures are painted again, TC_REBUILD=M_LandSurface brings them in again.
@@ -3727,15 +3728,21 @@ for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_l
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         # (a material after the 15 pinned ones is built in a try of its own: a fault in a new one never stops the
         # pinned materials, which the run before it has already written. The release 2 ocean plan, step 13)
+        # (BUILT_THIS_RUN takes a material only when its build ran to the end: one that raised half way, or left an
+        # older asset standing, never has its blast press twin built beside it in this run)
         if name in ("M_MapSurface", "M_Solid", "M_Highlight", "M_Flag", "M_Land", "M_Sea", "M_Wake", "M_FlakSmoke",
                     "M_Beam", "M_FlakLit", "M_Glow", "M_Cloud", "M_DeckShade", "M_StageSea", "M_UnderSea"):
             build()
+            built_whole = True
         else:
             try:
                 build()
+                built_whole = True
             except Exception as why:
+                built_whole = False
+                FAILED_THIS_RUN.add(name)
                 unreal.log_error(f"Theater Command: {MATERIALS}/{name} was not built: {why}")
-        if eal.does_asset_exist(f"{MATERIALS}/{name}"):
+        if built_whole and eal.does_asset_exist(f"{MATERIALS}/{name}"):
             BUILT_THIS_RUN.add(name)
     else:
         unreal.log(f"Theater Command: {MATERIALS}/{name} already exists, left alone")
@@ -3763,6 +3770,10 @@ for name, build in (("M_LandBladesPress", lambda: build_pressed_or_tell("M_LandB
                 unreal.log_error(f"Theater Command: {MATERIALS}/{name} could NOT be deleted ({press_why}): its plain material {name[:-len('Press')]} is missing; the game will not use it (it loads a twin only with its plain material), delete it by hand")
         else:
             unreal.log_warning(f"Theater Command: {MATERIALS}/{name} not built: its plain material {name[:-len('Press')]} is missing")
+    elif name[:-len("Press")] in FAILED_THIS_RUN:
+        # (its plain material raised half way in this run: what stands under that name may be half built or an older
+        # one, so the twin is not built beside it; said once, and an older twin is left as it was)
+        unreal.log_warning(f"Theater Command: {MATERIALS}/{name} not built: its plain material {name[:-len('Press')]} failed in this run (see the red line above)")
     elif REBUILD == "all" or name in REBUILD.split(",") or name[:-len("Press")] in BUILT_THIS_RUN or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         press_built = build()
         # (a twin built in a run that did not build its plain material, missing or named alone, takes this run's
