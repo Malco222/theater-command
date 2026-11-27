@@ -59,6 +59,7 @@ import words from '../../data/campaign/drawn.json';
 import counting from '../../data/campaign/counting.json';
 import { addCorps, atWar, givesWay, hostileUnits, relocate, removeCorps } from './game';
 import { divisionWords, divisionsNamed, divisionsOf, keepNumbers, ordinal, setStandInCount, standInCount, standInNumbers } from './armies';
+import { answering, frontAnswering } from './ai';
 import { seat } from './commanders';
 import { contactRuleActs } from './history';
 import type { Corps, Game, Kind, Region } from './types';
@@ -334,7 +335,9 @@ export const NO_LEAVING: ReadonlySet<Corps> = new Set();
  * (`hold`: set from its row's words, kept for good by `stay`, and lifted only by the general's own orders, ai.ts
  * `release` and the plan's `freed`), which every picker of the general's (ai.ts) reads before it moves a corps. Never a
  * corps the player orders: the general moves none of his, and his own orders are his. Read as it stands when the test
- * reads it. Writes nothing.
+ * reads it. Writes nothing. A held corps that answers this month is not bound: the general's own answer rule takes its
+ * hold off for the month's fighting (ai.ts `withAnswer`, over the corps that `answering` and `frontAnswering` list), so
+ * it is free to come on (`enemiesBeside`, the rule sceptic's finding S4-1, round 4).
  */
 const boundHere = (g: Game, u: Corps): boolean => !!u.hold && u.nat !== g.human && u.joint !== g.human;
 
@@ -346,9 +349,18 @@ const boundHere = (g: Game, u: Corps): boolean => !!u.hold && u.nat !== g.human 
 function enemiesBeside(g: Game, nat: string, c: Corps, first = false, free = false): string[] {
   const out: string[] = [];
   const add = (x: string): void => { if (!out.includes(x)) out.push(x); };
+  // (The held corps of each enemy that answer this month, ai.ts `answering` and `frontAnswering`, the two lists the
+  // general's `withAnswer` takes the hold off: read once a call, for an enemy one of whose held corps is beside.)
+  const answer = new Map<string, Set<Corps>>();
+  const bound = (u: Corps): boolean => {
+    if (!boundHere(g, u)) return false;
+    let a = answer.get(u.nat);
+    if (!a) { a = new Set([...answering(g, u.nat), ...frontAnswering(g, u.nat)]); answer.set(u.nat, a); }
+    return !a.has(u);
+  };
   const look = (r: Region): boolean => {
-    if (r.ctrl && atWar(g, nat, r.ctrl) && !(free && r.units.some((u) => !u.dead && u.nat === r.ctrl && boundHere(g, u)))) { add(r.ctrl); if (first) return true; }
-    for (const u of r.units) if (!u.dead && atWar(g, nat, u.nat) && !(free && boundHere(g, u))) { add(u.nat); if (first) return true; }
+    if (r.ctrl && atWar(g, nat, r.ctrl) && !(free && r.units.some((u) => !u.dead && u.nat === r.ctrl && bound(u)))) { add(r.ctrl); if (first) return true; }
+    for (const u of r.units) if (!u.dead && atWar(g, nat, u.nat) && !(free && bound(u))) { add(u.nat); if (first) return true; }
     return false;
   };
   const r = g.regions[c.reg];
