@@ -26,7 +26,7 @@
  */
 import setup from '../../data/campaign/setup-1939.json';
 import { turnToDate } from '../core/ticket';
-import { allied, atFrontNow, headline, rowHolds, theWords } from './game';
+import { allied, atFrontNow, headline, loanBackInto, rowHolds, theWords } from './game';
 import type { LoanWay } from './game';
 import { contactRuleActs, stopOf } from './history';
 import type { Corps, Game, Region } from './types';
@@ -187,7 +187,7 @@ export function tellPlace(g: Game, i: number, at: Region): void {
  * game.ts `expeditions`: a lent row's corps (row `i`, sent, its loan over) is held where it stands by the one contact
  * test, so the loan's end waits (the design director's "3 RULED IN: a loan's end waits while the test holds the corps",
  * 01:37Z, 27 November 2026). For the player's own row alone, the headline once, in the month the hold begins, in the
- * form of section 1 (DRAFT for the UI director: no marked sentence exists for a loan's end). `way` is how the loan would
+ * form of section 1 (her marks of 16:07Z, 27 November 2026, B1: `loanHeldLine`). `way` is how the loan would
  * have ended: 'gone' (it leaves for other fronts), 'back' (its divisions go back to the corps they came out of), 'down'
  * (a garrison whose record ends in a surrender), 'home' (a regiment its division's row awaits, whose loan's end he is
  * asked about: the question waits with it, and is put the month after it leaves the front), 'rejoin' (such a regiment
@@ -203,10 +203,17 @@ export function tellLoan(g: Game, i: number, c: Corps, way: LoanWay): void {
   headline(g, 'info', loanHeldLine(g, c, way), row[1], c.reg);
 }
 
+/** Where a held loan's divisions go back: "into {the 7th Armoured Division}" where the rule knows the corps, else "to the corps it came out of". */
+const backInto = (g: Game, c: Corps): string => {
+  const into = loanBackInto(g, c);
+  return into ? `into ${named(into)}` : 'to the corps it came out of';
+};
+
 /**
- * The headline of a loan's end held by the one test (`tellLoan`; DRAFT for the UI director: no marked sentence exists
- * for a loan's end), in the form of section 1: the corps, how its loan would have ended this month, where it is at the
- * front, and what it does instead. The one maker of the sentence: a reader that shows it calls this. Writes nothing.
+ * The headline of a loan's end held by the one test (`tellLoan`), in the form of section 1: the corps, how its loan
+ * would have ended this month, where it is at the front, and what it does instead. The UI director's B1 of 16:07Z, 27
+ * November 2026, marks all five: four pass as printed, and "goes back" is her sentence. The one maker of the sentence:
+ * a reader that shows it calls this. Writes nothing.
  */
 export function loanHeldLine(g: Game, c: Corps, way: LoanWay): string {
   const at = `it is at the front in ${placeOf(g, c)}`;
@@ -217,7 +224,10 @@ export function loanHeldLine(g: Game, c: Corps, way: LoanWay): string {
     : way === 'down'
     ? `${named(c.name, true)} is due to lay down its arms this month, but ${at}. It fights on, and lays them down the month after it leaves the front.`
     : way === 'back'
-      ? `${named(c.name, true)}, lent to the campaign, is due to go back to the corps it came out of this month, but ${at}. It stays, and goes back the month after it leaves the front.`
+      // (The UI director's B1, 16:07Z, 27 November 2026: ""this month" moves so it cannot read with "came out of", and the
+      // corps is named where the rule knows it" (game.ts `loanBackInto`); "Where the rule cannot name it: "... is due this
+      // month to go back to the corps it came out of, ..."".)
+      ? `${named(c.name, true)}, lent to the campaign, is due this month to go back ${backInto(g, c)}, but ${at}. It stays, and goes back the month after it leaves the front.`
       : `${named(c.name, true)}, lent to the campaign, is due to leave for other fronts this month, but ${at}. It stays, and goes the month after it leaves the front.`;
   return line;
 }

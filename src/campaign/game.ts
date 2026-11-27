@@ -5930,6 +5930,20 @@ function loanHeld(g: Game, nat: string, row: any[], o: any, i: number, id: numbe
 }
 
 /**
+ * The one corps a held loan's divisions go back into ('back'), where the rule knows it: every division the lent corps
+ * holds is one it drew (`drew`) from another corps, and all of them from the same corps, which stands; its name as it
+ * stands now. Null where they came out of more than one corps, or out of one no longer on the board (the UI director's
+ * B1 of 16:07Z, 27 November 2026: "the corps is named where the rule knows it"). For the telling's words only. Writes
+ * nothing.
+ */
+export function loanBackInto(g: Game, c: Corps): string | null {
+  const from = new Set(divisionsOf(g, c).map((d) => c.drew?.find((r) => r.name[0] === d.name && r.from !== c.id && !r.conv)?.from));
+  if (from.size !== 1 || from.has(undefined)) return null;
+  const id = [...from][0];
+  return g.corps.find((x) => x.id === id && x.nat === c.nat && !x.dead)?.name ?? null;
+}
+
+/**
  * Whether, by its own words, a gate of the base's could have written `wait:<i>` on this lent row before it was sent:
  * the base writes the marker only on a row not yet sent, and only on the far side, at three gates: ruling B7's wait for
  * a posting beyond Europe that its country does not own (`rowPlace` sends a row its country owns the ground of home
