@@ -1571,6 +1571,9 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    paint is refused aloud, never quietly dropped. First made from battle-models/air-bar-1126/issue-4/B17.json (sha256
    f4d417ed0085e866...). A re-issued model file is one more run of that command and one commit. A re-export of
    B17Fine.json itself fails the cloud test until the tool is run again.
+   Remade on 27 November from the model thread's pushed wear (the same path, sha256 2717c78061a7353b...: the art
+   director's "push the wear harder"; blend, soot and five colours moved, every geometry list, the 160 far repaints
+   and shade as before).
    Cost: none on the graphics chip (the same points, triangles, material and draws: only the colour bytes differ).
    Her shapes are made once more under "|skin" the first battle it is on (a second read of her 10.3 MB file each
    level, as with any first battle).
