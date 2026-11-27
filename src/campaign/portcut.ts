@@ -483,13 +483,14 @@ export function portCardLines(g: Game, regionId: number, viewer: string | null, 
 }
 
 /**
- * The sea card's measure for the seat, in a sentence (the UI director's 23:50Z, item 3): "At sea in the Central
- * Mediterranean today: yours 11, the enemy's 76." Its figures are the sea card's own, printed as it prints them
- * (carriers.ts seaMeasure, seaFigure), the enemy's "as found" where the card says so. Null where the card gives none.
+ * The sea card's measure for the seat, in a sentence (the UI director's 23:50Z, item 3, and 01:14Z, item 1): "At sea in
+ * the Central Mediterranean today: yours 11, the enemy's 131, as found." Its figures are the sea card's own, printed as
+ * it prints them (carriers.ts seaMeasure, seaFigure: a strength is a measure, so figures under 11 stay figures), and
+ * "as found" after the enemy's where the card says so. Null where the card gives none.
  */
 function measureSaid(g: Game, z: number, viewer: string): string | null {
   const m = seaMeasure(g, z, viewer);
-  return m && `At sea in ${seaWhat(g.seas[z].name)} today: yours ${seaFigure(m.ours)}, the enemy's${m.found ? ', as found,' : ''} ${seaFigure(m.theirs)}.`;
+  return m && `At sea in ${seaWhat(g.seas[z].name)} today: yours ${seaFigure(m.ours)}, the enemy's ${seaFigure(m.theirs)}${m.found ? ', as found' : ''}.`;
 }
 
 /**

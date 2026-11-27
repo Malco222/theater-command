@@ -531,7 +531,7 @@ describe('item 3: the browser\'s card follows the remedy line with the sea card\
     const lines = portCardLines(g, MALTA, 'UK', { measure: true });
     expect(lines).toEqual([
       { tone: 'warn', text: 'Cut off by sea: Italian fleets hold the Central Mediterranean, and no ship reaches the harbour. The garrison lives on the port\'s stores through February; unless the sea is opened, it then goes hungry and is lost at the start of May.' },
-      { tone: 'note', text: 'A fleet of yours at sea there, strong enough to open the Central Mediterranean, lets the ships in and fills the stores: one such month feeds the garrison through March. At sea in the Central Mediterranean today: yours 11, the enemy\'s, as found, 131.' },
+      { tone: 'note', text: 'A fleet of yours at sea there, strong enough to open the Central Mediterranean, lets the ships in and fills the stores: one such month feeds the garrison through March. At sea in the Central Mediterranean today: yours 11, the enemy\'s 131, as found.' },
     ]);
     // Where the seas are not searched, the sea card gives the enemy whole, with no "as found".
     delete g.flags.carriers;
@@ -545,14 +545,14 @@ describe('item 3: the browser\'s card follows the remedy line with the sea card\
     // Hungry, the same: the remedy line and its measure.
     month(g, 18);
     month(g, 19);
-    expect(texts(portCardLines(g, MALTA, 'UK', { measure: true }))[1]).toMatch(/^A fleet of yours at sea there, strong enough to open the Central Mediterranean, lets the ships in and fills the stores: one such month feeds the garrison through May\. At sea in the Central Mediterranean today: yours \d+, the enemy's, as found, \d+\.$/);
+    expect(texts(portCardLines(g, MALTA, 'UK', { measure: true }))[1]).toMatch(/^A fleet of yours at sea there, strong enough to open the Central Mediterranean, lets the ships in and fills the stores: one such month feeds the garrison through May\. At sea in the Central Mediterranean today: yours \d+, the enemy's \d+, as found\.$/);
   });
 
   it('Gibraltar with both seas shut: a sentence for each sea the remedy line names, in its order', () => {
     const { g, gib } = gibraltar('UK', (h) => { sail(h, 'ITA', 'wmed', ['1st Fleet']); sail(h, 'ITA', 'iberia', ['2nd Fleet']); });
     month(g, 16);
     month(g, 17);
-    expect(texts(portCardLines(g, gib, 'UK', { measure: true }))[1]).toBe('A fleet of yours at sea there, strong enough to open the Western Mediterranean or the waters off the Iberian coast, lets the ships in and fills the stores: one such month feeds the garrison through March. At sea in the Western Mediterranean today: yours 9, the enemy\'s, as found, 1. At sea in the waters off the Iberian coast today: yours 5, the enemy\'s, as found, 0.');
+    expect(texts(portCardLines(g, gib, 'UK', { measure: true }))[1]).toBe('A fleet of yours at sea there, strong enough to open the Western Mediterranean or the waters off the Iberian coast, lets the ships in and fills the stores: one such month feeds the garrison through March. At sea in the Western Mediterranean today: yours 9, the enemy\'s 1, as found. At sea in the waters off the Iberian coast today: yours 5, the enemy\'s 0, as found.');
     // (With the sea open there is no remedy line, and so no measure.)
     const h = malta('UK').g;
     expect(texts(portCardLines(h, MALTA, 'UK', { measure: true }))).toEqual(['Cut off by sea, its stores would feed the garrison for two months.']);
@@ -838,5 +838,22 @@ describe('item 8: the 3D cards (C++ for the Mac pass, not compiled here)', () =>
     // (The tray gives a card the width it asks for: the corps' line asks for no more than about four tiles' width, and
     // so wraps inside the card rather than stretch it. The review of the 23:50Z build, finding 4.)
     expect(HUD).toMatch(/SNew\(SBox\)\.MaxDesiredWidth\(340\.0f\)\s*\[\s*SNew\(STextBlock\)\.Visibility\(Card\.PortLine\.IsEmpty\(\)/);
+  });
+});
+
+// ---- On the 23:50Z build (the UI director, 27 Nov 2026, 01:14Z) -------------------------------------------------------
+
+describe('01:14Z, item 1: the measure\'s join, "as found" after the figure', () => {
+  it('Malta in January 1941, the seas searched and not; Gibraltar\'s figures under 11 stay figures, a sentence for each sea', () => {
+    const REMEDY = 'A fleet of yours at sea there, strong enough to open the Central Mediterranean, lets the ships in and fills the stores: one such month feeds the garrison through March.';
+    const { g } = malta('UK');
+    month(g, 17);
+    expect(texts(portCardLines(g, MALTA, 'UK', { measure: true }))[1]).toBe(`${REMEDY} At sea in the Central Mediterranean today: yours 11, the enemy's 131, as found.`);
+    delete g.flags.carriers;
+    expect(texts(portCardLines(g, MALTA, 'UK', { measure: true }))[1]).toBe(`${REMEDY} At sea in the Central Mediterranean today: yours 11, the enemy's 151.`);
+    const gib = gibraltar('UK', (h) => { sail(h, 'ITA', 'wmed', ['1st Fleet']); sail(h, 'ITA', 'iberia', ['2nd Fleet']); });
+    month(gib.g, 16);
+    month(gib.g, 17);
+    expect(texts(portCardLines(gib.g, gib.gib, 'UK', { measure: true }))[1]).toBe('A fleet of yours at sea there, strong enough to open the Western Mediterranean or the waters off the Iberian coast, lets the ships in and fills the stores: one such month feeds the garrison through March. At sea in the Western Mediterranean today: yours 9, the enemy\'s 1, as found. At sea in the waters off the Iberian coast today: yours 5, the enemy\'s 0, as found.');
   });
 });
