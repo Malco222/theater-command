@@ -4338,75 +4338,523 @@ namespace LandKit
 							ToMiddle = V3(0.0, 0.0, 0.0);
 							return PlateHigh(Bo.Near, Bo.Pivot, Place, Facing, Members[static_cast<size_t>(BodyIx)].size(), &ToMiddle, bSideways);
 						};
-						// (what a run of plate takes, by her sides' rule above: three quarters of it, and 5 cm clear at each end)
-						auto CaptorTakes = [](double Run) { return std::max(std::min(0.75 * Run, Run - 0.10), 0.0) / 2.0; };
-						CaptorRoof = CaptorPlate();
-						CaptorBack = CaptorPlate();
-						// Each is laid at the middle of the plate's run, as her side marks are, and sized by that run. Every size of
-						// the few is tried until one is taken whole, and the largest any of them gets is kept: a smaller mark may
-						// find a clearer place on the plate, so a place that takes next to nothing does not end the looking; and a
-						// place that finds no skin under it (the gap between two plates) takes no mark at all.
-						for (const double Try : { 1.0, 0.85, 0.7, 0.55, 0.4 })
-						{
-							V3 Facing;
-							if (!Plate(RoofPart, 2, 1.0, 0.3 * Try, At, 0.05, &Facing))
-							{
-								continue;
-							}
-							const int BodyIx = Parts[static_cast<size_t>(RoofPart)].Body;
-							V3 ToLongMid, ToWideMid, NotUsed;
-							if (CaptorRun(BodyIx, At, Facing, false, ToLongMid) <= 0.0)
-							{
-								continue;
-							}
-							if (CaptorRun(BodyIx, At, Facing, true, ToWideMid) <= 0.0)
-							{
-								continue;
-							}
-							// (the shorter of the plate's two runs through its middle bounds an air mark)
-							const V3 PlateMid = At + ToLongMid + ToWideMid;
-							const double LongRun = CaptorRun(BodyIx, PlateMid, Facing, false, NotUsed);
-							const double WideRun = CaptorRun(BodyIx, PlateMid, Facing, true, NotUsed);
-							const double Size = std::min(0.3 * Try, CaptorTakes(std::min(LongRun, WideRun)));
-							if (Size > CaptorRoof.Size)
-							{
-								CaptorRoof.Size = Size;
-								CaptorRoof.At = PlateMid;
-								CaptorRoof.Facing = Facing;
-							}
-							if (Size >= 0.3 * Try)
-							{
-								break;
-							}
-						}
-						const double Real = MarkReal(CaptorKind, Kind, R["role"].Str(), Name, false);
-						const double Want = Real > 0.0 ? 1.5 * Real : 0.25;
-						for (const double Try : { 1.0, 0.85, 0.7, 0.55, 0.4 })
-						{
-							V3 Facing;
-							if (!Plate(BackPart, 0, -1.0, Want * Try, At, 0.05, &Facing))
-							{
-								continue;
-							}
-							const int BodyIx = Parts[static_cast<size_t>(BackPart)].Body;
-							V3 ToTallMid;
-							const double Tall = CaptorRun(BodyIx, At, Facing, false, ToTallMid);
-							if (Tall <= 0.0)
-							{
-								continue;
-							}
-							const double Size = std::min(Want * Try, CaptorTakes(Tall));
-							if (Size > CaptorBack.Size)
-							{
-								CaptorBack.Size = Size;
-								CaptorBack.At = At + ToTallMid;
-								CaptorBack.Facing = Facing;
-							}
-							if (Size >= Want * Try)
-							{
-								break;
-							}
-						}
+							CaptorRoof = CaptorPlate();
+							CaptorBack = CaptorPlate();
+							// The largest mark her plate takes whole, and where on it. Her plate: the biggest run of flat skin of the part
+							// that faces the way wanted, by area, among those within half a metre of the very top or back (flat: each
+							// piece of it within some 8 degrees of the piece it joins, so a dome or a lid moulded onto the plate is not
+							// the plate). Every place on it, some 5 cm apart, is asked two things. How far, across the plate's own flat,
+							// to the nearest thing of hers that stands proud of it there: another part of hers level with it or above (a
+							// hatch, a cupola, a ventilator, an exhaust), or her own part's skin 15 mm or more above it. And how far to
+							// the plate's edge, along the mark's up and across it. An air mark (her roof) takes three quarters of the
+							// nearest of these and keeps 5 cm clear of it; an upright one (her back) at most three quarters of the
+							// plate's height, 5 cm clear of its edges and of whatever stands proud. The place that takes the largest
+							// mark is kept; among those within half a centimetre of it the one nearest her middle line, then nearest
+							// the plate's own middle.
+							// (As first built, 26 November 2026, the place was the middle of the plate's clear pieces, which is not itself
+							// a clear place: a T-34's roof mark lay between her two hatches and under their rims.)
+							auto CaptorFind = [&](int PartIx, int Axis, double Sign, double Cap, bool bAirMark, CaptorPlate& Found) {
+								Found = CaptorPlate();
+								if (PartIx < 0 || Parts[static_cast<size_t>(PartIx)].Body < 0 || Cap <= 0.05)
+								{
+									return;
+								}
+								const int BodyIx = Parts[static_cast<size_t>(PartIx)].Body;
+								auto Outward = [Axis, Sign](const V3& P) { return Sign * (Axis == 0 ? P.X : P.Z); };
+								auto RawPoint = [&](uint32_t I) { return V3(Raw.Points[I * 3], Raw.Points[I * 3 + 1], Raw.Points[I * 3 + 2]); };
+								// (a triangle with its shortest side from its first corner to its third, so a grid laid along its first two
+								// sides is as even on a sliver as on a square one)
+								auto ShortLast = [](V3& A, V3& B, V3& C) {
+									const double AB = (B - A).Length(), BC = (C - B).Length(), CA = (A - C).Length();
+									if (AB <= BC && AB <= CA)
+									{
+										// (A to B the shortest: B, C, A)
+										const V3 Was = A;
+										A = B;
+										B = C;
+										C = Was;
+									}
+									else if (BC <= AB && BC <= CA)
+									{
+										// (B to C the shortest: C, A, B)
+										const V3 Was = C;
+										C = B;
+										B = A;
+										A = Was;
+									}
+								};
+								struct CaptorFlat
+								{
+									V3 A, B, C, Nm;
+									double Area = 0.0;
+									size_t Tri = 0;
+									uint32_t Ix[3] = { 0, 0, 0 };
+								};
+								std::vector<CaptorFlat> Flats;
+								double Outmost = -1e9;
+								for (size_t T = 0; T + 2 < Raw.Triangles.size(); T += 3)
+								{
+									const uint32_t I0 = Raw.Triangles[T], I1 = Raw.Triangles[T + 1], I2 = Raw.Triangles[T + 2];
+									if (Raw.Parts[I0] != PartIx || Raw.Parts[I1] != PartIx || Raw.Parts[I2] != PartIx)
+									{
+										continue;
+									}
+									CaptorFlat Fl;
+									Fl.A = RawPoint(I0);
+									Fl.B = RawPoint(I1);
+									Fl.C = RawPoint(I2);
+									const V3 Cr = (Fl.B - Fl.A).Cross(Fl.C - Fl.A);
+									Fl.Area = 0.5 * Cr.Length();
+									if (Fl.Area < 1e-7)
+									{
+										continue;
+									}
+									Fl.Nm = Cr * (0.5 / Fl.Area);
+									if (Outward(Fl.Nm) < 0.8)
+									{
+										continue;
+									}
+									Fl.Tri = T / 3;
+									Fl.Ix[0] = I0;
+									Fl.Ix[1] = I1;
+									Fl.Ix[2] = I2;
+									Flats.push_back(Fl);
+									Outmost = std::max(Outmost, Outward((Fl.A + Fl.B + Fl.C) * (1.0 / 3.0)));
+								}
+								Flats.erase(std::remove_if(Flats.begin(), Flats.end(), [&](const CaptorFlat& Fl) { return Outward((Fl.A + Fl.B + Fl.C) * (1.0 / 3.0)) < Outmost - 0.5; }), Flats.end());
+								if (Flats.empty())
+								{
+									return;
+								}
+								// (the pieces that join: two that share a corner, to half a millimetre, and face within some 8 degrees)
+								using CaptorCorner = std::array<long long, 3>;
+								auto CornerOf = [](const V3& P) { return CaptorCorner{ std::llround(P.X * 2000.0), std::llround(P.Y * 2000.0), std::llround(P.Z * 2000.0) }; };
+								std::map<CaptorCorner, std::vector<size_t>> Welded;
+								for (size_t F = 0; F < Flats.size(); ++F)
+								{
+									for (const V3& P : { Flats[F].A, Flats[F].B, Flats[F].C })
+									{
+										Welded[CornerOf(P)].push_back(F);
+									}
+								}
+								std::vector<size_t> Root(Flats.size());
+								for (size_t F = 0; F < Flats.size(); ++F)
+								{
+									Root[F] = F;
+								}
+								auto RootOf = [&Root](size_t F) {
+									while (Root[F] != F)
+									{
+										Root[F] = Root[Root[F]];
+										F = Root[F];
+									}
+									return F;
+								};
+								for (const auto& Corner : Welded)
+								{
+									const std::vector<size_t>& Meet = Corner.second;
+									for (size_t I = 0; I < Meet.size(); ++I)
+									{
+										for (size_t J = I + 1; J < Meet.size(); ++J)
+										{
+											if (Flats[Meet[I]].Nm.Dot(Flats[Meet[J]].Nm) < 0.99)
+											{
+												continue;
+											}
+											const size_t Ra = RootOf(Meet[I]), Rb = RootOf(Meet[J]);
+											if (Ra != Rb)
+											{
+												Root[std::max(Ra, Rb)] = std::min(Ra, Rb);
+											}
+										}
+									}
+								}
+								std::vector<double> Areas(Flats.size(), 0.0);
+								for (size_t F = 0; F < Flats.size(); ++F)
+								{
+									Areas[RootOf(F)] += Flats[F].Area;
+								}
+								size_t Biggest = 0;
+								for (size_t F = 1; F < Flats.size(); ++F)
+								{
+									if (Areas[F] > Areas[Biggest])
+									{
+										Biggest = F;
+									}
+								}
+								if (Areas[Biggest] < 0.02)
+								{
+									return;
+								}
+								// (the plate's rim: every side of a piece of it that no other piece of it shares, corner for corner)
+								std::map<std::pair<CaptorCorner, CaptorCorner>, int> SidesShared;
+								auto SideOf = [&CornerOf](const V3& P, const V3& Q) {
+									const CaptorCorner Cp = CornerOf(P), Cq = CornerOf(Q);
+									return Cp < Cq ? std::make_pair(Cp, Cq) : std::make_pair(Cq, Cp);
+								};
+								struct CaptorRim
+								{
+									V3 A, B;
+								};
+								std::vector<CaptorRim> Rim;
+								for (int Pass = 0; Pass < 2; ++Pass)
+								{
+									for (size_t F = 0; F < Flats.size(); ++F)
+									{
+										if (RootOf(F) != Biggest)
+										{
+											continue;
+										}
+										const V3 Corners[3] = { Flats[F].A, Flats[F].B, Flats[F].C };
+										for (int K = 0; K < 3; ++K)
+										{
+											const V3& P = Corners[K];
+											const V3& Q = Corners[(K + 1) % 3];
+											if (Pass == 0)
+											{
+												++SidesShared[SideOf(P, Q)];
+											}
+											else if (SidesShared[SideOf(P, Q)] == 1)
+											{
+												Rim.push_back({ P, Q });
+											}
+										}
+									}
+								}
+								// (whatever of hers might stand proud of the plate: every point of hers not of the plate itself, and a grid
+								// 25 mm apart over every triangle of hers wider than that, so a broad flat lid counts across its whole face;
+								// never a part this month's swaps leave undrawn, which stands nowhere. Only what could lie within reach of a
+								// place asked: no further across the plate's flat than a mark of the size wanted is bounded by, from a place
+								// on the plate or eased 40 cm off it at most. The plate leans no more than some 37 degrees from the way it is
+								// asked to face, so nothing lower than six tenths of that reach below its own lowest corner stands proud of
+								// it there. As first built the cut was 56 cm below the part's outermost piece, which a deep or leaning plate
+								// reaches past.)
+								std::vector<char> OfPlate(Raw.Triangles.size() / 3, 0), OfPlatePoint(N, 0);
+								double Lowest = 1e9;
+								for (size_t F = 0; F < Flats.size(); ++F)
+								{
+									if (RootOf(F) == Biggest)
+									{
+										OfPlate[Flats[F].Tri] = 1;
+										for (const uint32_t I : Flats[F].Ix)
+										{
+											OfPlatePoint[I] = 1;
+										}
+										for (const V3& P : { Flats[F].A, Flats[F].B, Flats[F].C })
+										{
+											Lowest = std::min(Lowest, Outward(P));
+										}
+									}
+								}
+								struct CaptorStander
+								{
+									V3 P;
+									bool bOwn = false;
+								};
+								std::vector<CaptorStander> Standers;
+								const double Within = bAirMark ? std::max(Cap / 0.75, Cap + 0.05) : Cap + 0.05;
+								const double Floor = Lowest - 0.6 * (Within + 0.4) - 0.02;
+								for (size_t K = 0; K < N; ++K)
+								{
+									const V3 P = RawPoint(static_cast<uint32_t>(K));
+									if (!OfPlatePoint[K] && Outward(P) > Floor && Parts[static_cast<size_t>(Raw.Parts[K])].Body >= 0)
+									{
+										Standers.push_back({ P, Raw.Parts[K] == PartIx });
+									}
+								}
+								for (size_t T = 0; T + 2 < Raw.Triangles.size(); T += 3)
+								{
+									if (OfPlate[T / 3])
+									{
+										continue;
+									}
+									const uint32_t I0 = Raw.Triangles[T];
+									V3 A = RawPoint(I0), B = RawPoint(Raw.Triangles[T + 1]), C = RawPoint(Raw.Triangles[T + 2]);
+									if (Parts[static_cast<size_t>(Raw.Parts[I0])].Body < 0 || (Outward(A) <= Floor && Outward(B) <= Floor && Outward(C) <= Floor))
+									{
+										continue;
+									}
+									ShortLast(A, B, C);
+									const int CutsU = std::max(1, static_cast<int>(std::ceil((B - A).Length() / 0.025)));
+									const int CutsV = std::max(1, static_cast<int>(std::ceil((C - A).Length() / 0.025)));
+									if (CutsU == 1 && CutsV == 1)
+									{
+										continue;
+									}
+									const bool bOwn = Raw.Parts[I0] == PartIx;
+									for (int I = 0; I <= CutsU; ++I)
+									{
+										for (int J = 0; J <= CutsV; ++J)
+										{
+											const double U = static_cast<double>(I) / CutsU, V = static_cast<double>(J) / CutsV;
+											if (U + V > 1.0 + 1e-9)
+											{
+												break;
+											}
+											const V3 P = A + (B - A) * U + (C - A) * V;
+											if (Outward(P) > Floor)
+											{
+												Standers.push_back({ P, bOwn });
+											}
+										}
+									}
+								}
+								// (the places asked, each with how far the nearest proud thing is across the plate's flat there; the mark
+								// that distance alone would let it take, which no place can better; and the mark it likely takes, the
+								// plate's rim read for its edges)
+								struct CaptorSpot
+								{
+									V3 P, Nm;
+									double Clear = 0.0, Bound = 0.0, Likely = 0.0, FromMiddle = 0.0;
+								};
+								std::vector<CaptorSpot> Spots;
+								V3 Middle;
+								double Summed = 0.0;
+								for (size_t F = 0; F < Flats.size(); ++F)
+								{
+									if (RootOf(F) != Biggest)
+									{
+										continue;
+									}
+									const CaptorFlat& Fl = Flats[F];
+									Middle += (Fl.A + Fl.B + Fl.C) * (Fl.Area / 3.0);
+									Summed += Fl.Area;
+									V3 A = Fl.A, B = Fl.B, C = Fl.C;
+									ShortLast(A, B, C);
+									const int CutsU = std::max(1, static_cast<int>(std::ceil((B - A).Length() / 0.05)));
+									const int CutsV = std::max(1, static_cast<int>(std::ceil((C - A).Length() / 0.05)));
+									for (int I = 0; I < CutsU; ++I)
+									{
+										for (int J = 0; J < CutsV; ++J)
+										{
+											const double U = (I + 1.0 / 3.0) / CutsU, V = (J + 1.0 / 3.0) / CutsV;
+											if (U + V > 1.0)
+											{
+												break;
+											}
+											CaptorSpot Sp;
+											Sp.P = A + (B - A) * U + (C - A) * V;
+											Sp.Nm = Fl.Nm;
+											Spots.push_back(Sp);
+										}
+									}
+								}
+								Middle = Middle * (1.0 / Summed);
+								// (how far the nearest proud thing is from a place, across the plate's flat there; no further than bounds a
+								// mark of the size wanted, which is all that is asked of it. The things are read in order of how far to her
+								// side of the place they lie, nearest first either way, and no further out than the nearest found so far:
+								// a thing lies at least as far from the place across the plate's flat as it does to her side, less only
+								// what the plate leans to her side over the thing's height, which is under her own length.)
+								std::sort(Standers.begin(), Standers.end(), [](const CaptorStander& L, const CaptorStander& G) { return L.P.Y < G.P.Y; });
+								double Span = 1.0;
+								{
+									V3 Least(1e9, 1e9, 1e9), Greatest(-1e9, -1e9, -1e9);
+									for (size_t K = 0; K < N; ++K)
+									{
+										const V3 P = RawPoint(static_cast<uint32_t>(K));
+										Least = V3(std::min(Least.X, P.X), std::min(Least.Y, P.Y), std::min(Least.Z, P.Z));
+										Greatest = V3(std::max(Greatest.X, P.X), std::max(Greatest.Y, P.Y), std::max(Greatest.Z, P.Z));
+									}
+									Span += (Greatest - Least).Length();
+								}
+								auto ClearAt = [&Standers, Within, Span](const V3& P, const V3& Nm) {
+									double Least2 = Within * Within;
+									const double Leans = std::fabs(Nm.Y) * Span;
+									auto Read = [&](const CaptorStander& St) {
+										const V3 Dv = St.P - P;
+										const double Above = Dv.Dot(Nm);
+										if (Above > (St.bOwn ? 0.015 : -0.01))
+										{
+											Least2 = std::min(Least2, Dv.Dot(Dv) - Above * Above);
+										}
+									};
+									const size_t From = static_cast<size_t>(std::lower_bound(Standers.begin(), Standers.end(), P.Y, [](const CaptorStander& St, double Y) { return St.P.Y < Y; }) - Standers.begin());
+									for (size_t K = From; K < Standers.size(); ++K)
+									{
+										const double Aside = Standers[K].P.Y - P.Y - Leans;
+										if (Aside > 0.0 && Aside * Aside >= Least2)
+										{
+											break;
+										}
+										Read(Standers[K]);
+									}
+									for (size_t K = From; K > 0; --K)
+									{
+										const double Aside = P.Y - Standers[K - 1].P.Y - Leans;
+										if (Aside > 0.0 && Aside * Aside >= Least2)
+										{
+											break;
+										}
+										Read(Standers[K - 1]);
+									}
+									return std::sqrt(std::max(Least2, 0.0));
+								};
+								// (the rule above: the mark a place takes, of the plate's whole run through it along the mark's up, how far
+								// its edge is along the mark's up and across it, and how far the nearest proud thing)
+								auto RuleOf = [Cap, bAirMark](double TallRun, double TallEdge, double WideEdge, double Clear) {
+									if (bAirMark)
+									{
+										const double Nearest = std::min({ Clear, TallEdge, WideEdge });
+										return std::min({ Cap, 0.75 * Nearest, Nearest - 0.05 });
+									}
+									return std::min({ Cap, 0.375 * TallRun, TallEdge - 0.05, WideEdge - 0.05, Clear - 0.05 });
+								};
+								// (the mark a place takes, her skin itself asked for the plate's edges through the place; 0 where the place
+								// finds no skin under it)
+								auto TakesAt = [&](const V3& P, const V3& Nm, double Clear) {
+									V3 ToTallMid, ToWideMid;
+									const double TallRun = CaptorRun(BodyIx, P, Nm, false, ToTallMid);
+									if (TallRun <= 0.0)
+									{
+										return 0.0;
+									}
+									const double WideRun = CaptorRun(BodyIx, P, Nm, true, ToWideMid);
+									if (WideRun <= 0.0)
+									{
+										return 0.0;
+									}
+									return RuleOf(TallRun, TallRun / 2.0 - ToTallMid.Length(), WideRun / 2.0 - ToWideMid.Length(), Clear);
+								};
+								// (the mark a place likely takes: the same rule, the plate's rim read for its edges in place of her skin. Only
+								// to choose which places her skin is asked about first: her skin may run on past the rim, onto a piece that
+								// joins the plate at a gentle angle.)
+								auto LikelyAt = [&Rim, &RuleOf](const V3& P, const V3& Nm, double Clear) {
+									const V3 Hint = std::fabs(Nm.Z) > 0.8 ? V3(1.0, 0.0, 0.0) : V3(0.0, 0.0, 1.0);
+									const V3 Along = (Hint - Nm * Nm.Dot(Hint)).Unit(V3(0.0, 0.0, 1.0));
+									const V3 Athwart = Along.Cross(Nm).Unit(V3(0.0, 1.0, 0.0));
+									// (to the rim up, down, and either way across: a metre at most, as her skin is asked)
+									double Reaches[4] = { 1.0, 1.0, 1.0, 1.0 };
+									for (const CaptorRim& Rm : Rim)
+									{
+										const V3 Da = Rm.A - P, Db = Rm.B - P;
+										const double Au = Da.Dot(Along), Av = Da.Dot(Athwart), Bu = Db.Dot(Along), Bv = Db.Dot(Athwart);
+										if ((Av <= 0.0) != (Bv <= 0.0))
+										{
+											const double Hit = Au + (Bu - Au) * (Av / (Av - Bv));
+											double& Reach = Reaches[Hit >= 0.0 ? 0 : 1];
+											Reach = std::min(Reach, std::fabs(Hit));
+										}
+										if ((Au <= 0.0) != (Bu <= 0.0))
+										{
+											const double Hit = Av + (Bv - Av) * (Au / (Au - Bu));
+											double& Reach = Reaches[Hit >= 0.0 ? 2 : 3];
+											Reach = std::min(Reach, std::fabs(Hit));
+										}
+									}
+									return RuleOf(Reaches[0] + Reaches[1], std::min(Reaches[0], Reaches[1]), std::min(Reaches[2], Reaches[3]), Clear);
+								};
+								for (CaptorSpot& Sp : Spots)
+								{
+									Sp.Clear = ClearAt(Sp.P, Sp.Nm);
+									Sp.Bound = RuleOf(2.0, 1.0, 1.0, Sp.Clear);
+									Sp.Likely = LikelyAt(Sp.P, Sp.Nm, Sp.Clear);
+									Sp.FromMiddle = (Sp.P - Middle).Length();
+								}
+								// (of two places, the one nearer her middle line, to the centimetre; then nearer the plate's middle; then by
+								// place, so the same model always gives the same answer)
+								auto Nearer = [](const CaptorSpot& L, const CaptorSpot& G) {
+									const long long Ly = std::llround(std::fabs(L.P.Y) * 100.0), Gy = std::llround(std::fabs(G.P.Y) * 100.0);
+									if (Ly != Gy)
+									{
+										return Ly < Gy;
+									}
+									const long long Lm = std::llround(L.FromMiddle * 100.0), Gm = std::llround(G.FromMiddle * 100.0);
+									if (Lm != Gm)
+									{
+										return Lm < Gm;
+									}
+									if (L.P.X != G.P.X)
+									{
+										return L.P.X < G.P.X;
+									}
+									if (L.P.Y != G.P.Y)
+									{
+										return L.P.Y < G.P.Y;
+									}
+									return L.P.Z < G.P.Z;
+								};
+								// (the likeliest first: by the mark each likely takes, to the centimetre, then the nearer)
+								std::sort(Spots.begin(), Spots.end(), [&Nearer](const CaptorSpot& L, const CaptorSpot& G) {
+									const long long Ll = std::llround(L.Likely * 100.0), Gl = std::llround(G.Likely * 100.0);
+									if (Ll != Gl)
+									{
+										return Ll > Gl;
+									}
+									return Nearer(L, G);
+								});
+								// (her skin asked about the likeliest one after another, a hundred or so at most; never about a place the proud
+								// things alone keep from taking a larger mark than the largest found. As first built the places were asked in
+								// the order of what the proud things alone allow, which on a roof with her hatches in its middle is its rim
+								// first: the hundred or so were spent there.)
+								struct CaptorAnswer
+								{
+									double Size = 0.0;
+									size_t Spot = 0;
+								};
+								std::vector<CaptorAnswer> Answers;
+								double Most = 0.0;
+								for (size_t K = 0; K < Spots.size() && Answers.size() < 128; ++K)
+								{
+									if (Spots[K].Bound <= 0.05 || Spots[K].Bound <= Most + 0.005)
+									{
+										continue;
+									}
+									const double Size = TakesAt(Spots[K].P, Spots[K].Nm, Spots[K].Clear);
+									Answers.push_back({ Size, K });
+									Most = std::max(Most, Size);
+								}
+								// (kept: of the places that take the largest mark found, or one within half a centimetre of it, the nearer)
+								size_t Kept = Spots.size();
+								for (const CaptorAnswer& An : Answers)
+								{
+									if (An.Size > 0.0 && An.Size >= Most - 0.005 && (Kept == Spots.size() || Nearer(Spots[An.Spot], Spots[Kept])))
+									{
+										Kept = An.Spot;
+										Found.Size = An.Size;
+										Found.At = Spots[An.Spot].P;
+										Found.Facing = Spots[An.Spot].Nm;
+									}
+								}
+								// (then the place is eased about on the plate, 2 cm and then 1 cm at a time along the mark's up, across it and
+								// aslant, each time the way that lets it take the largest mark, for as long as one does: the places asked lie
+								// 5 cm apart, and the best lies between. Aslant too: in a corner the mark is bounded by two edges at once, and
+								// a move along either alone gains nothing.)
+								if (Found.Size > 0.0 && Found.Size < Cap)
+								{
+									const V3 Fc = Found.Facing;
+									const V3 Hint = std::fabs(Fc.Z) > 0.8 ? V3(1.0, 0.0, 0.0) : V3(0.0, 0.0, 1.0);
+									const V3 Upright = (Hint - Fc * Fc.Dot(Hint)).Unit(V3(0.0, 0.0, 1.0));
+									const V3 Sideways = Upright.Cross(Fc).Unit(V3(0.0, 1.0, 0.0));
+									const V3 Slant = (Upright + Sideways) * std::sqrt(0.5), Aslant = (Upright - Sideways) * std::sqrt(0.5);
+									for (const double Pace : { 0.02, 0.01 })
+									{
+										for (int Moves = 0; Moves < 12; ++Moves)
+										{
+											V3 Better = Found.At;
+											double BetterSize = Found.Size;
+											for (const V3& Way : { Upright, -Upright, Sideways, -Sideways, Slant, -Slant, Aslant, -Aslant })
+											{
+												const V3 P = Found.At + Way * Pace;
+												const double Size = TakesAt(P, Fc, ClearAt(P, Fc));
+												if (Size > BetterSize + 1e-6)
+												{
+													BetterSize = Size;
+													Better = P;
+												}
+											}
+											if (BetterSize <= Found.Size)
+											{
+												break;
+											}
+											Found.Size = BetterSize;
+											Found.At = Better;
+										}
+									}
+								}
+							};
+							CaptorFind(RoofPart, 2, 1.0, 0.3, true, CaptorRoof);
+							const double Real = MarkReal(CaptorKind, Kind, R["role"].Str(), Name, false);
+							CaptorFind(BackPart, 0, -1.0, Real > 0.0 ? 1.5 * Real : 0.25, false, CaptorBack);
 						// (a mark no wider than the clear it must keep each side is a speck, not a mark: none)
 						for (CaptorPlate* Speck : { &CaptorRoof, &CaptorBack })
 						{
