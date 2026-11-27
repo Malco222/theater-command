@@ -716,7 +716,8 @@ function openers(g: Game, r: Region, shut: number[]): number[] {
 /**
  * A corps' own line for its card (the UI director's section 3): living on the port's stores, through the month they
  * last; or hungry, with the month the rule strikes it off. Null with the switch off, for a corps not in such a port, and
- * where the sea is not shut or a ship got in this month.
+ * where the sea is not shut or a ship got in this month. A corps of the garrison in a port cut off always has its line
+ * (the UI director's 03:13Z, item 3).
  */
 export function portCorpsLine(g: Game, c: Corps): string | null {
   // (Its own player's card: none in a war watched with nobody at the table.)
@@ -726,11 +727,15 @@ export function portCorpsLine(g: Game, c: Corps): string | null {
   const mine = f.garrison.find((x) => x.id === c.id);
   if (!mine) return null;
   const port = portOf(g.regions[c.reg]);
-  // (Its own months on the stores, by the keep the rule reads at its own nation's draw: GarrisonCount.fed.)
+  // (Its own months on the stores, by the keep the rule reads at its own nation's draw: GarrisonCount.fed. The line reads
+  // the rule's clock as it stands when the card is read, and never the picture of supply as last drawn, which may be
+  // another nation's draw of this month and change within it: in March of the Canadian play a corps whose nation's draw
+  // comes after a crew starves is still drawn as fed by Britain's, with the crew living, and its own draw will not feed
+  // it. Hungry by the clock, it reads hungry.)
   const fed = mine.fed !== null && mine.fed >= g.turn;
-  if (fed && c.supplied) return theWords(`Living on ${port}'s stores through ${monthSaid(g, mine.fed!)}.`);
-  if (!fed && !c.supplied) return theWords(`Hungry: ${port}'s stores are spent. Lost ${startOf(mine.by)} ${monthSaid(g, mine.lost)} unless ships get through.`);
-  return null;
+  return fed
+    ? theWords(`Living on ${port}'s stores through ${monthSaid(g, mine.fed!)}.`)
+    : theWords(`Hungry: ${port}'s stores are spent. Lost ${startOf(mine.by)} ${monthSaid(g, mine.lost)} unless ships get through.`);
 }
 
 // ---- The news -------------------------------------------------------------------------------------------------------

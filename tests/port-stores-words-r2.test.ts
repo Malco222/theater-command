@@ -1069,9 +1069,10 @@ describe('01:14Z, item 3: the keep the stores were filled with, under the fortre
       [17, ['No ship reaches Malta: Italian fleets hold the Central Mediterranean. The garrison lives on the port\'s stores through February; unless the sea is opened, it then goes hungry and is lost at the start of May.'], [STORES], ['Living on Malta\'s stores through March.', 'Living on Malta\'s stores through February.']],
       [18, [], [STORES], ['Living on Malta\'s stores through March.', 'Living on Malta\'s stores through February.']],
       // March: Britain's draw feeds the 9th on the crew's stores, and the crew starves in Britain's reckoning. Canada's
-      // draw, after it, will read the port's own two: the Canadian corps' stores are spent this month. (Its card has no
-      // line until that draw: the picture drawn with the crew living still feeds it.)
-      [19, ['Malta\'s stores are spent and no ship has got through: the garrison goes hungry, and is lost at the start of May unless the sea is opened.', 'Cut off on Malta, the Malta fortress has starved and is lost.'], [SPENT('May')], ['Living on Malta\'s stores through March.', null]],
+      // draw, after it, will read the port's own two: the Canadian corps' stores are spent this month. Its card reads the
+      // rule's clock as it stands, though the picture drawn with the crew living still feeds it until that draw (the UI
+      // director's 03:13Z, item 3: the build gave it no line here).
+      [19, ['Malta\'s stores are spent and no ship has got through: the garrison goes hungry, and is lost at the start of May unless the sea is opened.', 'Cut off on Malta, the Malta fortress has starved and is lost.'], [SPENT('May')], ['Living on Malta\'s stores through March.', HUNGRY('May')]],
       [20, [], [SPENT('May')], [HUNGRY('June'), HUNGRY('May')]],
       [21, [], [SPENT('May')], [HUNGRY('June'), HUNGRY('May')]],
       // The Canadian corps struck off as May opens in Canada's month, told as Britain's next month opens with the 9th,
@@ -1307,5 +1308,37 @@ describe('03:13Z, item 2: a crew lost in battle, the count on the rule\'s own cl
       // Struck off as June opens, in Britain's month.
       [22, line('April', 'June')], [22, false, true],
     ]);
+  });
+});
+
+describe('03:13Z, item 3: a corps in a cut-off port always has its line', () => {
+  it('the Canadian play: the picture drawn again within Britain\'s March, without the crew, and each corps\' line reads the rule\'s clock before and after it', () => {
+    const { g, ninth } = crewed('UK', (h) => { addCorps(h, 'CAN', '1st Canadian Corps', 'inf', 2, 'Malta', {}); declareWar(h, 'ITA', 'CAN'); }, ['ITA', 'UK', 'CAN']);
+    const canadian = g.corps.find((c) => c.name === '1st Canadian Corps')!;
+    for (let t = 17; t <= 18; t++) month(g, t, ['ITA', 'UK', 'CAN']);
+    g.turn = 19;
+    phase(g, 'ITA');
+    phase(g, 'UK');
+    const read = (): unknown[] => [ninth.supplied, canadian.supplied, portCorpsLine(g, ninth), portCorpsLine(g, canadian)];
+    const LIVING = 'Living on Malta\'s stores through March.';
+    const HUNGRY = (lost: string): string => `Hungry: Malta's stores are spent. Lost at the start of ${lost} unless ships get through.`;
+    // Britain's March, the crew starved in his reckoning: the picture as his draw left it, with the crew living, still
+    // feeds the Canadian corps, whose own draw will not. (The build gave it no line.)
+    expect(read()).toEqual([true, true, LIVING, HUNGRY('May')]);
+    // A move of his redraws the picture within his month (game.ts ensureSupply), without the crew: neither corps is fed
+    // by it now. The 9th was fed this month by its own draw, and lives on the stores through March. (The build gave it no
+    // line.)
+    g.supplyDirty = true;
+    computeSupply(g);
+    expect(read()).toEqual([false, false, LIVING, HUNGRY('May')]);
+    // And as the rule acts: the Canadian corps hungry in its own month of March, the 9th in April; struck off as May and
+    // June open, each in its own nation's month, the months the lines named.
+    phase(g, 'CAN');
+    const clock: unknown[] = [[19, ninth.org, Math.round(canadian.org * 100) / 100]];
+    for (let t = 20; t <= 22; t++) {
+      month(g, t, ['ITA', 'UK', 'CAN']);
+      clock.push([t, ninth.dead ? null : Math.round(ninth.org * 100) / 100, canadian.dead ? null : Math.round(canadian.org * 100) / 100]);
+    }
+    expect(clock).toEqual([[19, 1, 0.6], [20, 0.6, 0.2], [21, 0.2, null], [22, null, null]]);
   });
 });
