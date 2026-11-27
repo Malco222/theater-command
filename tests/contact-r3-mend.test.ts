@@ -126,3 +126,46 @@ describe('T3-3: a stand-in in contact in the province the row forms in is not he
     expect(ruleHolds(g).filter((h) => h.path === 'standDown')).toEqual([]);
   });
 });
+
+// ---- S1-9 (a): a lent corps that would stand on at its loan's end is not held ---------------------------------------
+
+describe("S1-9 (a): a lent corps whose loan's end would leave it standing (`rowOver`) is not held, and is told nothing", () => {
+  // (Its one division drawn from a corps no longer on the board: at the loan's end it stands on where it is, as the
+  // base has it, so nothing leaves the Neumark and no hold is needed; holding it would tell him it goes back.)
+  const run = (on: boolean): { g: Game; c: Corps; j: number } => {
+    const { g, nm } = board(on);
+    const { c, j } = lend(g, 'Lent Test Stand Corps', nm);
+    const [d0] = divisionsOf(g, c);
+    c.drew = [{ name: [d0.name, d0.short], no: d0.no, from: 987654 }];
+    month(g, 2);
+    return { g, c, j };
+  };
+
+  it('switch on, alone beside the enemy: the loan ends as the base ends it, the corps stands on, and no hold is noted or told', () => {
+    const { g, c, j } = run(true);
+    expect([c.dead, c.reg, g.flags[`lent:${j}`], g.flags[`wait:${j}`], g.flags[`rowTold:${j}`]]).toEqual([false, g.byName.Neumark.id, -1, undefined, undefined]);
+    expect(ruleHolds(g).filter((h) => h.path.startsWith('loan'))).toEqual([]);
+    expect(g.headlines.filter((h: any) => /Lent Test Stand Corps/.test(h.text))).toEqual([]);
+  });
+
+  it('switch off: the same, as the base', () => {
+    const { g, c, j } = run(false);
+    expect([c.dead, c.reg, g.flags[`lent:${j}`], g.flags[`wait:${j}`]]).toEqual([false, g.byName.Neumark.id, -1, undefined]);
+  });
+
+  it("a row lent for a war that is not on (Germany and the United States): the corps stands on, as the base has it, and is not held", () => {
+    for (const on of [true, false]) {
+      const { g, nm } = board(on);
+      const c = add(g, 'Lent Test War Corps', nm);
+      const j = addRow([1, 'GER', 'Lent Test War Corps', 'inf', 1, 'Neumark', { war: ['GER', 'USA'] }]);
+      g.flags[`sent:${j}`] = 1;
+      g.flags[`lent:${j}`] = c.id;
+      const [d0] = divisionsOf(g, c);
+      c.drew = [{ name: [d0.name, d0.short], no: d0.no, from: 987654 }];
+      month(g, 2);
+      expect([on, c.dead, c.reg, g.flags[`lent:${j}`], g.flags[`wait:${j}`]]).toEqual([on, false, nm.id, -1, undefined]);
+      expect(ruleHolds(g)).toEqual([]);
+      clear();
+    }
+  });
+});

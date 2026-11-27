@@ -516,6 +516,22 @@ export function layOnce(g: Game, nat: string, row: any[], n: number, reg: Region
  * free (the design director's ruling of 19:03Z, 25 November 2026). It leaves the row's corps as a corps of its own,
  * or, where the row's corps holds nothing else, that corps takes its name and is free of the row's orders.
  */
+/**
+ * Whether `rowOver` would leave the corps standing (true) or see it go (false), read without doing it: the same reading
+ * of its divisions, and nothing written, no watch told. game.ts `loanHeld` reads it under the switch 'fromWait': a
+ * loan's end that leaves its corps standing where it is takes nobody from the front, so the one test has nothing to
+ * hold there, and the loan ends as it always did (the rule sceptic's finding S1-9 (a), round 3).
+ */
+export function rowStandsOn(g: Game, c: Corps, leaving: (x: Corps) => boolean = () => false, war = false): boolean {
+  return partsOf(g, c).some((p) => {
+    const rec = c.drew?.find((r) => r.name[0] === p.name[0]);
+    if (!rec) return war;
+    const own = rec.from === c.id || !!rec.conv;
+    const parent = own ? undefined : g.corps.find((x) => x.id === rec.from && x.nat === c.nat && !x.dead && !leaving(x));
+    return !(parent && parent.reg === c.reg);
+  });
+}
+
 export function rowOver(g: Game, c: Corps, leaving: (x: Corps) => boolean = () => false, war = false): boolean {
   const keep: Part[] = [];
   // (The war over: the drawn divisions that stand on apart from the corps they came out of.)

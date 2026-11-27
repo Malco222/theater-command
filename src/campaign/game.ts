@@ -32,7 +32,7 @@ import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, m
 import { civicDrafts, civicSum, handedOver, holdersNow, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
 import { divisionsOf, growCorps, numberCorps, numbersUnderFlag } from './armies';
-import { DRAWN, NO_LEAVING, corpsInContact, countingFor, recordBattle, formsAny, heldAlready, heldLine, joinNames, joinsAlone, keepCounted, layOnce, namesNow, ownShare, rowOver } from './drawn';
+import { DRAWN, NO_LEAVING, corpsInContact, countingFor, recordBattle, formsAny, heldAlready, heldLine, joinNames, joinsAlone, keepCounted, layOnce, namesNow, ownShare, rowOver, rowStandsOn } from './drawn';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
@@ -5912,8 +5912,13 @@ function loanHeld(g: Game, nat: string, row: any[], o: any, i: number, id: numbe
     // home to its division as it goes, `comeHome`, so the hold says so. Sceptic finding S1-9 (b).)
     way = hisOffers(g, nat) && awaitedBy(nat, row[2]) >= 0 ? 'home' : o.ends === 'surrender' && farOn(g) ? 'down' : drawn ? 'back'
       : farOn(g) && awaitedBy(nat, row[2]) >= 0 && !(g.flags.open === 1 && (c.drew || c.rowed)) ? 'rejoin' : 'gone';
-  } else if (o.war && g.flags.open === 1 && !warOn(g, o.war) && !g.atSea?.some((v) => v.corps.id === id) && (c.drew || c.rowed)) way = 'back';
-  else return null;
+    // (A corps the loan's end leaves standing where it is, `rowOver`, takes nobody from the front: nothing to hold, and
+    // no way to tell. Read as the base reads it where the loan ends. Sceptic finding S1-9 (a).)
+    if (g.flags.open === 1 && (c.drew || c.rowed) && !(o.ends === 'surrender' && farOn(g)) && rowStandsOn(g, c, leaving)) return null;
+  } else if (o.war && g.flags.open === 1 && !warOn(g, o.war) && !g.atSea?.some((v) => v.corps.id === id) && (c.drew || c.rowed)) {
+    if (rowStandsOn(g, c, leaving, true)) return null;
+    way = 'back';
+  } else return null;
   return corpsInContact(g, nat, c, new Set(endingNow(g, leaving))) ? { c, way } : null;
 }
 
