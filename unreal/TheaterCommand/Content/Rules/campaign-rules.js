@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 324f463d4 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c62e61c4a 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -20920,8 +20920,14 @@
     }
     return groups.map((q) => {
       const place3 = g2.regions[q.at].name;
-      return { text: `${join(q.names.map((x, k) => named(x, k === 0)))}, due in ${place3} since ${turnToDate(q.since).label}, will not form: ${place3} is still not in friendly hands, and the arrival has waited as long as it may.`, at: q.at };
+      return { text: `${join(q.names.map((x, k) => named(x, k === 0)))}, due in ${place3} since ${turnToDate(q.since).label}, will not form: ${place3}${STRUCK_TAIL}`, at: q.at };
     });
+  }
+  var STRUCK_TAIL = " is still not in friendly hands, and the arrival has waited as long as it may.";
+  function struckOnCard(g2, hs, nat, markTurn) {
+    if (!nat || g2.flags.fromWait !== 1 || nat !== g2.human) return { own: [], older: [] };
+    const all = hs.filter((h) => h.kind === "info" && h.nat === nat && h.text.endsWith(STRUCK_TAIL) && h.text.includes(", will not form: "));
+    return { own: all.filter((h) => h.turn > markTurn), older: all.filter((h) => h.turn <= markTurn) };
   }
   function formedTail(was, name) {
     const yours = (x) => x === name ? "corps of that name" : x;
@@ -20944,6 +20950,8 @@
       if (since === void 0 || row2[1] !== nat || g2.flags[`sent:${i}`]) return;
       if (!contactRuleActs(g2, g2.byName[row2[5]])) return;
       if (Array.isArray(row2[6]?.stops) && !row2[6].stops.includes(stopOf(g2))) return;
+      const { o } = rowWords(g2, nat, row2);
+      if (o.war && !warOn(g2, o.war) || o.until && g2.turn >= o.until) return;
       const at4 = g2.flags[atKey(i)];
       if (at4 === void 0 || !g2.regions[at4]) return;
       out.push({ i, row: row2, at: at4, since, from: fromOf(row2) });
@@ -115043,6 +115051,8 @@
     const foe = (nat) => !!nat && !!g2.nations[nat] && atWar(g2, nat, me);
     const hs = g2.headlines.slice(mark2.h);
     const used = /* @__PURE__ */ new Set();
+    const { own: struck, older: struckBefore } = struckOnCard(g2, hs, me, mark2.turn);
+    for (const h of [...struck, ...struckBefore]) used.add(h);
     const dated2 = (turn2) => turn2 !== mark2.turn ? { month: turnToDate(turn2).label.split(" ")[0] } : {};
     const roll3 = g2.passings.filter((p) => p.turn >= mark2.turn);
     const fellOf = (h) => {
@@ -115556,8 +115566,8 @@
     for (const b of banded) {
       b.band.head = brief(b.band.head, BAND_ROOM);
       if (b.band.region !== void 0 || b.band.word === "WARNING") continue;
-      const struck = /\b(?:invades?|attacks?) /.exec(b.band.head);
-      const who = [...struck ? namedIn(b.band.head.slice(struck.index)) : [], ...namedIn(b.band.head), ...b.band.nats].find((x) => x !== me && !!g2.nations[x]);
+      const struck2 = /\b(?:invades?|attacks?) /.exec(b.band.head);
+      const who = [...struck2 ? namedIn(b.band.head.slice(struck2.index)) : [], ...namedIn(b.band.head), ...b.band.nats].find((x) => x !== me && !!g2.nations[x]);
       const seat5 = who ? g2.nations[who].capital : -1;
       if (g2.regions[seat5]) b.band.region = seat5;
     }
@@ -115697,7 +115707,7 @@
     if (sky) card.sky = sky;
     const menOut = menOutLine(g2, me);
     if (menOut && menOutDue(g2, me)) card.menOut = menOut;
-    const waits2 = rowsWaitingOnRows(g2, me);
+    const waits2 = [...struck.map((h) => h.text), ...rowsWaitingOnRows(g2, me)];
     if (waits2.length) card.waits = waits2;
     const news3 = [];
     for (const h of hs) {

@@ -4888,7 +4888,7 @@ function bookWaits(g: Game, owner: string): boolean {
 }
 
 /** True where the war an expedition row names is on: '*' as the second name is a war with anyone. */
-const warOn = (g: Game, w: string[]): boolean => (w[1] === '*' ? (g.nations[w[0]]?.atWar.length ?? 0) > 0 : atWar(g, w[0], w[1]));
+export const warOn = (g: Game, w: string[]): boolean => (w[1] === '*' ? (g.nations[w[0]]?.atWar.length ?? 0) > 0 : atWar(g, w[0], w[1]));
 /** The month the war a row names began, by its declaration (the earliest, for '*'): this month where none was declared. */
 function warBegan(g: Game, w: string[]): number {
   const foes = w[1] === '*' ? g.nations[w[0]]?.atWar ?? [] : [w[1]];
