@@ -1,7 +1,7 @@
 // The computer's air staff in the grand campaign, and what a raid costs there. Every computer nation at war plans
 // raids of its own at every level of difficulty and flies them at once: bombers against factories and railway
 // junctions by day or night, against the armies on a live front, and fighters for the sky over it. A raid's losses
-// are counted by the record (ruling 227): in 1939 a quarter to well over half of the bombers that go without escort
+// are counted by the record (ruling 227): in 1939 a quarter to well over half of the bombers that go by day without escort
 // into a strong patrol, and never more than the ruling's day cap. The historical scenarios keep the air war they always had.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import airwar from '../data/campaign/airwar.json';
