@@ -6,7 +6,8 @@ same shape (tools/battle-models/skinexport.py's output, e.g. issue-4/B17.json) a
 lacks, beside Content/Models/B17Fine.json, which it never changes:
 
     python3 -I Tools/make_air_skin.py --base Content/Models/B17Fine.json --skin <model thread's B17.json> \
-        --out Content/Data/AirSkin/B17Fine.json [--with-gloss-metal]
+        --out Content/Data/AirSkin/B17Fine.json [--with-gloss-metal] \
+        [--sheen-out Content/Data/AirSkin/B17Fine-sheen.json]
 
 What it writes (one line, keys in a fixed order, no time stamp: the same inputs give the same bytes):
   skin_of, base_sha256, base_bytes, base_fnv64 (FNV-1a 64 of the base's bytes, for the std-only cloud test),
@@ -21,6 +22,10 @@ What it writes (one line, keys in a fixed order, no time stamp: the same inputs 
                  gloss, metal  only with --with-gloss-metal (a later material's)
   check          points with the colour the game's law gives them (no shade, and with shade at full strength), so
                  that the C++ law is tied to this file (Tools/air_show/air_b17_skin_test.cpp)
+With --sheen-out (the paint sheen, row flyB17Sheen; Battle/AirSheen), in the same run and from the same bytes, a second
+file: sheen_of, base_sha256, base_fnv64, source_sha256 (the overlay's very own), coat [gloss, metal] (the medians over
+her near paint-0 points), near and far {gloss, metal} integers 0-100 a point (roughness x 100, metal x 100), as the
+model thread has them. When the model thread re-issues its file, ONE run with --out and --sheen-out remakes both.
 Never marks, never anything by month or year: the game's own star and bar stays, and paint never depends on the date.
 
 It refuses (exit 2) unless the base's sha256 begins 5e1f39002423, the two files' points, facings, triangles, part and
@@ -237,28 +242,87 @@ def make(base_bytes, skin_bytes, with_gloss_metal=False, base_sha_prefix=BASE_SH
     return text, figures
 
 
+def make_sheen(base_bytes, skin_bytes, base_sha_prefix=BASE_SHA_PREFIX):
+    """The paint sheen's file (row flyB17Sheen; Battle/AirSheen) from the same two files' bytes: the skin's own gloss
+    (roughness x 100) and metal (x 100) a point, near and far, and her coat's (the median of each over the near paint-0
+    points). Refused (Refused) wherever make() refuses (it is run first, on the very same bytes, so the two files are
+    always made from one pair of inputs), and where gloss or metal is missing, of the wrong length or outside 0-100.
+    Returns (text, figures)."""
+    make(base_bytes, skin_bytes, base_sha_prefix=base_sha_prefix)
+    base = loads(base_bytes, "base")
+    skin = loads(skin_bytes, "skin")
+    levels = {}
+    figures = {}
+    for level in ("near", "far"):
+        s = skin[level]
+        n = len(base[level]["paints"])
+        out = {}
+        for key in ("gloss", "metal"):
+            vals = s.get(key)
+            if not isinstance(vals, list) or len(vals) != n:
+                raise Refused("%s %s: not one a point (the sheen needs the skin's gloss and metal)" % (level, key))
+            out[key], _ = ints_0_100(vals, level + " " + key)
+        levels[level] = out
+        figures[level] = {"points": n}
+    paints = skin["near"]["paints"]
+    zero = [k for k, p in enumerate(paints) if p == 0]
+    if not zero:
+        raise Refused("no near paint-0 point: her coat's finish cannot be taken")
+    gloss = sorted(levels["near"]["gloss"][k] for k in zero)
+    metal = sorted(levels["near"]["metal"][k] for k in zero)
+    coat = [gloss[len(gloss) // 2], metal[len(metal) // 2]]
+    figures["coat"] = coat
+    doc = {
+        "sheen_of": "B17Fine",
+        "base_sha256": hashlib.sha256(base_bytes).hexdigest(),
+        "base_fnv64": "%016x" % fnv64(base_bytes),
+        "source_sha256": hashlib.sha256(skin_bytes).hexdigest(),
+        "coat": coat,
+        "near": levels["near"],
+        "far": levels["far"],
+    }
+    text = json.dumps(doc, separators=(",", ":"), ensure_ascii=True) + "\n"
+    return text, figures
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--base", required=True, help="the game's Content/Models/B17Fine.json")
     ap.add_argument("--skin", required=True, help="the model thread's skinned B-17 file of the same shape")
-    ap.add_argument("--out", required=True, help="Content/Data/AirSkin/B17Fine.json")
+    ap.add_argument("--out", help="Content/Data/AirSkin/B17Fine.json (the overlay)")
     ap.add_argument("--with-gloss-metal", action="store_true", help="carry the skin's gloss and metal too (a later material's)")
+    ap.add_argument("--sheen-out", help="Content/Data/AirSkin/B17Fine-sheen.json (the paint sheen's file, row flyB17Sheen): "
+                    "give it with --out, so that one run makes both from the same skin")
     a = ap.parse_args(argv)
+    if not a.out and not a.sheen_out:
+        print("make_air_skin: refused: nothing to write (give --out, --sheen-out or both)", file=sys.stderr)
+        return 2
     with open(a.base, "rb") as f:
         base_bytes = f.read()
     with open(a.skin, "rb") as f:
         skin_bytes = f.read()
+    # (both made before either is written: a refusal writes neither, so the two files never come from two skins)
     try:
-        text, figures = make(base_bytes, skin_bytes, a.with_gloss_metal)
+        made = make(base_bytes, skin_bytes, a.with_gloss_metal) if a.out else None
+        sheen = make_sheen(base_bytes, skin_bytes) if a.sheen_out else None
     except Refused as e:
         print("make_air_skin: refused: %s" % e, file=sys.stderr)
         return 2
-    with open(a.out, "w", encoding="ascii", newline="\n") as f:
-        f.write(text)
-    for level, fig in figures.items():
-        print("make_air_skin: %s: %d points, %d repainted, blend changed at %d, soot at %d, worst rounding: blend/soot %.3f, shade %.4f"
-              % (level, fig["points"], fig["repaint"], fig["blend_changed"], fig["soot_changed"], fig["blend_err"], fig["shade_err"]))
-    print("make_air_skin: wrote %s, %d bytes, sha256 %s" % (a.out, len(text), hashlib.sha256(text.encode("ascii")).hexdigest()))
+    if made:
+        text, figures = made
+        with open(a.out, "w", encoding="ascii", newline="\n") as f:
+            f.write(text)
+        for level, fig in figures.items():
+            print("make_air_skin: %s: %d points, %d repainted, blend changed at %d, soot at %d, worst rounding: blend/soot %.3f, shade %.4f"
+                  % (level, fig["points"], fig["repaint"], fig["blend_changed"], fig["soot_changed"], fig["blend_err"], fig["shade_err"]))
+        print("make_air_skin: wrote %s, %d bytes, sha256 %s" % (a.out, len(text), hashlib.sha256(text.encode("ascii")).hexdigest()))
+    if sheen:
+        text, figures = sheen
+        with open(a.sheen_out, "w", encoding="ascii", newline="\n") as f:
+            f.write(text)
+        print("make_air_skin: sheen: near %d points, far %d points, coat %d/%d, wrote %s, %d bytes, sha256 %s"
+              % (figures["near"]["points"], figures["far"]["points"], figures["coat"][0], figures["coat"][1], a.sheen_out, len(text),
+                 hashlib.sha256(text.encode("ascii")).hexdigest()))
     return 0
 
 
