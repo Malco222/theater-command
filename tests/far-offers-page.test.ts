@@ -21,7 +21,7 @@ import { MEN_PER_DIV, STACK, type Corps, type Game, type Region } from '../src/c
 import { menWords } from '../src/campaign/manpower';
 import setup from '../data/campaign/setup-1939.json';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
-import { askForm, cardRowOf, offersLook } from '../unreal/TheaterCommand/Rules/offers-look';
+import { askForm, cardRowOf, offerLines, offersLook } from '../unreal/TheaterCommand/Rules/offers-look';
 import { orderDeclineFormation, orderTakeFormation } from '../src/campaign/turn';
 
 type Call = (...a: unknown[]) => any;
@@ -347,6 +347,27 @@ describe('an offer sent on by sea: card and result agree, in every seat', () => 
     expect(of(n)).toMatchObject({ region: okinawa.id, why, moved: null });
     const r = open(n).sections[0].rows.find((x: any) => x.title === NOV41[2]);
     expect([r.lines[0], r.buttons[0]]).toEqual(['Infantry, 8,000 men, to form on Okinawa.', { label: 'FORM IT', act: `offers:take:${index(NOV41[2])}`, ok: false, tip: why }]);
+  }, 600000);
+
+  // (The sceptic's F3, 27 November 2026: the fact was set from whatever place the rule had reached, so a row whose own
+  // place is not held, which falls back to its capital (`rowPlace`'s `home`), was handed a move from Tokyo. The brief's
+  // T2-1: null where "the row's place [is] not held".)
+  it('the fact is none where the row\'s own place is not held: Okinawa lost, the row falls back to Tokyo and forms near it with room, and nothing is told as moved', () => {
+    const g = war();
+    months(g, 1, 30);
+    const okinawa = g.byName.Okinawa, tokyo = g.regions[g.nations.JAP.capital];
+    for (const c of g.corps.filter((x) => x.nat === 'JAP' && !x.dead && x.reg === okinawa.id)) removeCorps(g, c);
+    okinawa.ctrl = 'CHN';
+    expect([okinawa.owner, g.nations.JAP.atWar.includes('CHN'), tokyo.name]).toEqual(['JAP', true, 'Tokyo']);
+    // It forms at a place of Japan's own with room, by the rule (no "why"), and that place is not Okinawa.
+    const lines = (): string[] => offerLines(g, of(g)).map((l) => l.text);
+    const at = (): string => g.regions[of(g).region].name;
+    expect([of(g).why, of(g).region === okinawa.id, g.regions[of(g).region].ctrl]).toEqual([null, false, 'JAP']);
+    expect([of(g).moved, lines()[0], lines().some((l) => /has no room for it/.test(l))]).toEqual([null, `Infantry, 8,000 men, to form at ${at()}.`, false]);
+    // Its fallback place full too: the rule sends it on again, and still nothing is told as moved.
+    const first = g.byName[at()], { going } = sixteenth(g);
+    for (let k = 0; standing(g, first) < STACK || fits(g, first, 'JAP', going, {}); k++) addCorps(g, 'JAP', `Test fallback ${k}`, 'inf', 1, first.id, {});
+    expect([of(g).why, at() === first.name, of(g).moved, lines()[0], lines().some((l) => /has no room for it/.test(l))]).toEqual([null, false, null, `Infantry, 8,000 men, to form at ${at()}.`, false]);
   }, 600000);
 });
 
