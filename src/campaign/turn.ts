@@ -23,6 +23,8 @@ import {
   worksMonth,
   declineOffer, rowOffers, takeOffer, type RowOffer,
 } from './game';
+import { men } from './game';
+import { islandOf, swapRefusal } from './islands';
 import { foldChoices, foldCorps, type FoldView } from './fold';
 import { atItsPost } from './pacific';
 import { stationBars, whyStationBars } from './far';
@@ -686,6 +688,26 @@ export function orderProbe(g: Game, c: Corps, target: Region): ProbeReport | nul
 export function swapChoices(g: Game, c: Corps, to: number): Corps[] {
   if (g.human === null || !humanUp(g) || onEve(g) || !canOrder(g, c)) return [];
   return g.regions[to].units.filter((b) => canOrder(g, b) && whyNoSwap(g, c, b) === null);
+}
+
+/**
+ * Why corps c cannot change places onto island `to` for its room, said for one corps there: the corps he picked, where
+ * he picked one; where the game picks, the one whose swap leaves the most room (the most men coming out, then the
+ * first in the list), so that the refusal holds for every choice. Null where a swap is open (with the corps picked, or
+ * with any corps there), where nobody there is refused only for the island's room, and on ground that is no island of
+ * the table (and so with the far side off). The UI director, 00:19Z, 27 November 2026, U4: "where the player picked
+ * the corps to change places with, the line names that corps; where the game picks, the one whose swap leaves the
+ * most room, so the refusal holds for every choice." (The swap card's empty list reads it: ui/main.ts swapCard.)
+ */
+export function swapWhy(g: Game, c: Corps, to: number, picked: Corps | null = null): string | null {
+  const r = g.regions[to];
+  if (!r || !islandOf(g, r)) return null;
+  if (picked) return whyNoSwap(g, c, picked);
+  const there = r.units.filter((b) => canOrder(g, b));
+  if (there.some((b) => whyNoSwap(g, c, b) === null)) return null;
+  const forRoom = there.filter((b) => { const why = whyNoSwap(g, c, b); return why !== null && why === swapRefusal(g, r, c, b); });
+  const best = [...forRoom].sort((a, b) => men(b) - men(a))[0];
+  return best ? whyNoSwap(g, c, best) : null;
 }
 
 /** The player has two corps in neighbouring provinces change places. False if they cannot. */

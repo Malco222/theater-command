@@ -1,8 +1,9 @@
 // With the whole world off nothing reads the islands' table, and every province has room for five corps as it always
-// had (rulings 173(b) and 179(s), form B3 of 25 November 2026: the islands' room is the whole-world chart's alone).
+// had (rulings 173(b) and 179(s), form B3 of 25 November 2026: the islands' room is the whole-world chart's alone;
+// counted in men since 14:28Z, still the whole-world chart's alone, with no new switch).
 import { describe, expect, it } from 'vitest';
 import { addCorps, createGame, hasRoom, placed, removeCorps, shoreRoom } from '../src/campaign/game';
-import { islandNames, islandOf, roomAt, roomSays } from '../src/campaign/islands';
+import { fitWave, fits, islandNames, islandOf, roomLeft, roomRefusal, roomSays } from '../src/campaign/islands';
 import { whyNotShip } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
 import { STACK, type Region } from '../src/campaign/types';
@@ -13,12 +14,21 @@ describe("an island's room with the whole world off", () => {
     expect(islandNames()).toEqual([]);
     for (const r of g.regions) {
       expect(islandOf(g, r)).toBeNull();
-      expect(roomAt(g, r, r.ctrl), r.name).toBe(STACK);
+      expect(roomLeft(g, r, r.ctrl, 0), r.name).toBe(STACK);
       expect(roomSays(g, r)).toBeNull();
-      expect(shoreRoom(g, r, 'GER')).toBe(Infinity);
+      expect(shoreRoom(g, r, 'GER', [])).toBe(Infinity);
     }
-    // A province that bore an island's name would be no island here either: the table is not loaded at all.
-    expect(roomAt(g, { ...g.regions[0], name: 'Wake' } as Region, 'USA')).toBe(STACK);
+    // A province that bore an island's name would be no island here either: the table is not loaded at all, and a
+    // corps of any size is counted as one of five, never in men.
+    const wake = { ...g.regions[0], name: 'Wake', units: [] } as Region;
+    expect(roomLeft(g, wake, 'USA', 0)).toBe(STACK);
+    const army = addCorps(g, 'USA', 'Big Army', 'inf', 4, g.byName['Washington'].id, {});
+    expect(fits(g, wake, 'USA', [army], { rows: 4 })).toBe(true);
+    expect(fits(g, wake, 'USA', [army], { rows: 5 })).toBe(false);
+    expect(fits(g, wake, 'USA', [army], { rows: 6, slack: 2 })).toBe(true);
+    expect(fits(g, wake, 'USA', [army], { rows: 7, slack: 2 })).toBe(false);
+    expect(fitWave(g, wake, 'USA', [army, army])).toEqual([army, army]);
+    expect(roomRefusal(g, wake, [army])).toBeNull();
   }, 300000);
 
   it('a harbour takes its fifth corps and refuses a sixth in the words it always used', () => {

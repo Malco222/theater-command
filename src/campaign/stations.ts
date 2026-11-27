@@ -320,7 +320,7 @@ export function bookedAhead(g: Game, c: Corps): boolean {
  * 2026, (c).)
  */
 const open = (g: Game, c: Corps, to: Region, joining: boolean): boolean =>
-  allied(g, c.nat, to.ctrl) && !hostileUnits(g, to, c.nat).length && (to.id === c.reg || joining || friendlyUnits(g, to, c.nat).filter((u) => u.kind !== 'eng').length < STACK + 2);
+  allied(g, c.nat, to.ctrl) && !hostileUnits(g, to, c.nat).length && (to.id === c.reg || joining || friendlyUnits(g, to, c.nat).filter((u) => u.kind !== 'eng').length < STACK + 2 /* record's hand: the book's stations act at stops 1 and 2 alone */);
 
 /** Two commands made one: the men of `c` go into `into`, which stands in the same place. */
 function join(g: Game, c: Corps, into: Corps): void {
@@ -554,7 +554,7 @@ export const bookReckoning: { why: ((g: Game, nat: string, force: Corps[], to: R
  * (The book's own put-down, counted as `open` counts a station.)
  */
 const door = (g: Game, c: Corps, r: Region): boolean =>
-  allied(g, c.nat, fieldCtrl(g, r)) && !hostileUnits(g, r, c.nat).length && (r.id === c.reg || friendlyUnits(g, r, c.nat).filter((u) => u.kind !== 'eng').length < STACK + 2);
+  allied(g, c.nat, fieldCtrl(g, r)) && !hostileUnits(g, r, c.nat).length && (r.id === c.reg || friendlyUnits(g, r, c.nat).filter((u) => u.kind !== 'eng').length < STACK + 2 /* record's hand: the book's stations act at stops 1 and 2 alone */);
 
 /** Puts a corps of a dated attack down where it goes in from. False where it is shut in a town. */
 function bring(g: Game, c: Corps, to: Region): boolean {

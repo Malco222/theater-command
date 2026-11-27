@@ -22,7 +22,7 @@ import openData from '../../data/campaign/open.json';
 import { allied, atWar, corpsBase, roomless } from './game';
 import { corpsKnown, fogOn } from './intel';
 import { fieldCtrl } from './siege';
-import { roomAt } from './islands';
+import { fitWave, islandOf, roomLeft } from './islands';
 import { KIND, TERRAIN_DEF, type Corps, type Game, type Region } from './types';
 
 /** The numbers of the reckoning (open.json, 'descent.strength'). */
@@ -173,17 +173,23 @@ export function followUp(g: Game, nat: string, quay: Region, wave: Corps[], at: 
   if (!S) return 0;
   const gone = new Set([...wave, ...counted].map((c) => c.id));
   const there = at.units.filter((u) => !u.dead && (u.nat === nat || allied(g, nat, u.nat)) && !roomless(g, u)).length;
-  const room = Math.max(0, Math.min((S.months - 1) * g.nations[nat].sealift, roomAt(g, at, nat) - wave.length - there, most));
+  // (An island of the Pacific takes the follow-up corps that still fit in men beside the wave and its side's corps
+  // there, the strongest first: islands.ts `fitWave`. Other ground: five corps, as it always was.)
+  const isle = islandOf(g, at) !== null;
+  const room = Math.max(0, Math.min((S.months - 1) * g.nations[nat].sealift, isle ? Infinity : roomLeft(g, at, nat, wave.length + there), most));
   if (room <= 0) return 0;
   const ours = (c: string): boolean => c === nat || allied(g, nat, c);
   const quiet = (r: Region): boolean => ours(r.ctrl) && !r.units.some((u) => !u.dead && atWar(g, nat, u.nat)) && !r.nb.some((j) => atWar(g, nat, fieldCtrl(g, g.regions[j])));
-  return [quay, ...quay.nb.map((j) => g.regions[j]).filter(quiet)]
+  const ranked = [quay, ...quay.nb.map((j) => g.regions[j]).filter(quiet)]
     .flatMap((r) => r.units)
     .filter((u) => u.nat === nat && field(u) && u.kind !== 'eng' && !u.airborne && u.joint === undefined && u.str >= 0.6 && !gone.has(u.id))
-    .map((u) => stands(g, u, at))
-    .sort((a, b) => b - a)
+    .map((u) => ({ u, s: stands(g, u, at) }))
+    .sort((a, b) => b.s - a.s);
+  const goes = isle ? new Set<Corps>(fitWave(g, at, nat, [...wave, ...ranked.map((x) => x.u)])) : null;
+  return ranked
+    .filter((x) => !goes || goes.has(x.u))
     .slice(0, room)
-    .reduce((s, x) => s + x, 0);
+    .reduce((s, x) => s + x.s, 0);
 }
 
 /** How much of an enemy corps a nation's side knows of: all of one identified or reported, nothing of one never seen. */

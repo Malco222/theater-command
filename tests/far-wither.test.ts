@@ -325,6 +325,10 @@ describe('a cut-off island garrison withers and is never a free prize (ruling 17
       return { g, r, c };
     };
     // Kwajalein: the rule does not answer, and the siege runs as it did: the town's stores, three hungry months, the fall.
+    // (The test row is a full division again, 15,000 men, as it always was: it fills the atoll, and the record's own
+    // two rows for it in January 1942 (the 61st Guard Unit and the Maizuru landing force, 2,550 men) go to the nearest
+    // held harbour with room and are struck for nothing. The design director, 00:20Z, 27 November 2026, D1: "The 80%
+    // test garrison goes back, as you say: a test is never tuned to pass.")
     const atoll = story('Kwajalein', 'Eniwetok');
     expect(witherAt(atoll.g, atoll.c, true)).toBeNull();
     expect(witherAt(atoll.g, atoll.c, false)).not.toBeNull();

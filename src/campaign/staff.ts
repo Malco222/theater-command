@@ -48,7 +48,7 @@ import { armOrder, canArm, openRifles } from './rifles';
 import { WORLD_FIRST, WORLD_MAP, acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oceanShares, overseasOf, shoreOf } from './world';
 import { patronOfClient, stationed, tieWar } from './far';
 import { inTheWay, pacificGround, runQuays } from './pacific';
-import { roomAt } from './islands';
+import { fits, islandOf, roomLeft, roomForDivision } from './islands';
 import { EASTERN, addCorps, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
 import { ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, TOWNQUEUE_STAGE, TRUEREACH_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE, AIRNAMES_STAGE, FERRY_STAGE, CITYDEFENCES_STAGE, OFFERS_STAGE, FLAKGROUND_STAGE } from './stage';
@@ -921,8 +921,14 @@ export function rearMonth(g: Game, nat: string): void {
     if ((r.owner !== nat && allied(g, nat, r.owner) && g.nations[r.owner]?.alive) || !r.prev || !atWar(g, nat, r.prev)) continue;
     const since = r.since ?? 0;
     if (since <= 0 || g.turn <= since || g.flags[`rear:${r.id}`] === since) continue;
-    if (hostileUnits(g, r, nat).length || friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= roomAt(g, r, nat)) continue;
     const row = T.towns[r.name], worth = row?.[0] ?? T.each;
+    // (On an island of the table the corps to be raised is known, one division at `worth`: it asks whether that corps
+    // fits, the island's men and its five, as economy.ts deliver does (the design director, 00:20Z, 27 November 2026,
+    // D5 and D6: "Where a check names its corps, it asks with that corps"). Other ground: room for a division, as built.)
+    const room = islandOf(g, r) && worth > 0
+      ? fits(g, r, nat, [{ nat, kind: 'inf', divs: 1, str: worth } as Corps])
+      : roomForDivision(g, r, nat, friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length);
+    if (hostileUnits(g, r, nat).length || !room) continue;
     if (!(worth > 0)) { g.flags[`rear:${r.id}`] = since; continue; }
     if (menRules(g) && menLeft(g, nat) + 1e-9 < worth) continue;
     if (!canArm(g, nat, worth)) continue;
@@ -1563,7 +1569,7 @@ function sector(g: Game, nat: string, f: Front, least: number, beside?: Region):
     for (const j of doors) {
       const r = g.regions[j];
       for (const c of r.units) if (fit(c)) front.push(c);
-      room += Math.max(0, roomAt(g, r, nat) - r.units.filter((u) => allied(g, nat, u.nat) && !roomless(g, u)).length);
+      room += Math.max(0, roomLeft(g, r, nat, r.units.filter((u) => allied(g, nat, u.nat) && !roomless(g, u)).length));
     }
     for (const j of doors) for (const k of g.regions[j].nb) {
       if (seen.has(k)) continue;
@@ -1705,7 +1711,7 @@ function effortOrders(g: Game, nat: string, e: Effort, real: Front[], T: Temper)
     .sort((a, b) => f.depth[a] - f.depth[b] || g.regions[b].vp - g.regions[a].vp || a - b)
     .slice(0, Math.max(0, E.sector - 1));
   const staging: Record<string, number> = {};
-  for (const j of doors) if (j !== g.nations[nat].capital) staging[g.regions[j].name] = Math.min(roomAt(g, g.regions[j], nat), E.mass);
+  for (const j of doors) if (j !== g.nations[nat].capital) staging[g.regions[j].name] = Math.min(Math.floor(roomLeft(g, g.regions[j], nat, 0, placed(g, g.regions[j], nat))), E.mass);
   return {
     posture: 'attack', name: e.name.replace(/^t/, 'T'), from: e.from, effort: at.id,
     enemies: f.enemies, objectives: [at.name, ...around.map((j) => g.regions[j].name)],
@@ -2098,7 +2104,8 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
     // (And where only its strength kept its force from every beach last month, it builds up: the quay is filled,
     // and the shipping desk builds the ships to lift what stands there. Version 83, the test of strength.)
     const more = !!STRENGTH && flag(g, `st:more:${nat}${SLOT[slot]}`) > 0 && g.turn - flag(g, `st:more:${nat}${SLOT[slot]}`) <= 2;
-    const want = lod?.short ? Math.max(sea.L.force, Math.min(n.sealift, roomAt(g, quay, nat))) : more ? Math.max(sea.L.force, Math.min(STRENGTH!.wave, roomAt(g, quay, nat))) : sea.L.force;
+    const most = Math.floor(roomLeft(g, quay, nat, 0, placed(g, quay, nat)));
+    const want = lod?.short ? Math.max(sea.L.force, Math.min(n.sealift, most)) : more ? Math.max(sea.L.force, Math.min(STRENGTH!.wave, most)) : sea.L.force;
     phase.staging = { ...(phase.staging ?? {}), [quay.name]: Math.max(phase.staging?.[quay.name] ?? 0, want) };
   }
   // A war for a strip of frontier (an op with 'near', the Winter War): while it is the staff's only war, only the troops
@@ -2613,7 +2620,7 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
   const kf = `st:foe:${nat}:o`, kq = `st:quay:${nat}:o`, at = `st:quayAt:${nat}:o`, none = `st:far:${nat}`;
   const foe = ids[flag(g, kf) - 1], quay = g.regions[flag(g, kq) - 1];
   // A quay must have room for the force among whatever corps of its allies stand there: three Americans can never stand in a harbour five British corps fill.
-  const room = (p: Region): boolean => roomAt(g, p, nat) - placed(g, p, nat).filter((u) => u.nat !== nat).length >= D.force;
+  const room = (p: Region): boolean => roomLeft(g, p, nat, placed(g, p, nat).filter((u) => u.nat !== nat).length, placed(g, p, nat).filter((u) => u.nat === nat)) >= D.force;
   if (foe && quay && g.nations[foe].alive && atWar(g, nat, foe) && allied(g, nat, quay.ctrl) && room(quay) && (g.turn - flag(g, at) < 3 || lodgment(g, nat, 1)?.short)) return { foe, quay };
   if (flag(g, none) === g.turn) return null;
   const drop = (): null => { delete g.flags[kf]; delete g.flags[kq]; g.flags[none] = g.turn; return null; };
@@ -2722,7 +2729,7 @@ export function seaBase(g: Game, nat: string, slot = 0): Region | null {
   const D = OPEN.descent;
   // (The target the quay was chosen for: the enemy, and the countries of the list's shores it may land on or plan for.)
   const target = D.afresh ? 1 + (hashString(`${you}:${[...new Set(listed.map((r) => r.owner))].sort().join(',')}`) % 1000000) : 0;
-  const room = (p: Region): boolean => !D.room || roomAt(g, p, nat) - placed(g, p, nat).filter((u) => u.nat !== nat).length >= sea.L.force;
+  const room = (p: Region): boolean => !D.room || roomLeft(g, p, nat, placed(g, p, nat).filter((u) => u.nat !== nat).length, placed(g, p, nat).filter((u) => u.nat === nat)) >= sea.L.force;
   const kept = g.regions[flag(g, key) - 1];
   const fresh = !!kept && kept.ctrl === nat && g.turn - flag(g, at) < 6 && (!target || flag(g, tk) === target);
   if (fresh && room(kept) && quayWorth(g, nat, kept, shores, shut).worth > 0) return kept;
