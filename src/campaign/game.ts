@@ -5930,6 +5930,36 @@ function loanHeld(g: Game, nat: string, row: any[], o: any, i: number, id: numbe
 }
 
 /**
+ * Whether, by its own words, a gate of the base's could have written `wait:<i>` on this lent row before it was sent:
+ * the base writes the marker only on a row not yet sent, and only on the far side, at three gates: ruling B7's wait for
+ * a posting beyond Europe that its country does not own (`rowPlace` sends a row its country owns the ground of home
+ * first) and none of the words `postedFor` leaves out exclude (`P.waits`); the far from-row's live front, a `from` with
+ * no body of its own (`onLiveFront`); and `sourceAsked`, the player's row whose `cut`, or `from` with no body, waits on
+ * an offer. It never deletes one. Where this is false, any `wait:<i>` a sent row carries is the contact rule's own.
+ * Writes nothing.
+ */
+export function baseMayMark(g: Game, nat: string, row: any[], o: any): boolean {
+  if (!farOn(g)) return false;
+  if ((Array.isArray(o.from) && !(o.adds > 0)) || o.cut) return true;
+  const at = g.byName[row[5]];
+  return !!at && beyondEurope(at) && at.owner !== nat && !o.war && !(o.levy || o.overland || o.shore || o.joins || o.join || o.ifLost || row[3] === 'fort');
+}
+
+/**
+ * A held loan has ended (its corps gone, back or down, lost or its place fallen, at the two points `expeditions` ends a
+ * loan), or the hold of the player's own loan has ended and its offer is made: under the switch 'fromWait', the wait
+ * marker the contact rule wrote for the hold goes with it. The design director's (4) of 16:07Z, 27 November 2026: "The
+ * rule clears the markers IT wrote when the loan ends, on the ON path only. Off writes none, so switch-off identity
+ * holds." Only where no gate of the base's could have written one before the row was sent (`baseMayMark`): there the save
+ * cannot tell the rule's marker from the base's, and it stays as it was (her "bring me why"). Switch off: nothing.
+ */
+function loanMarkGone(g: Game, nat: string, j: number): void {
+  const row = ((setup as any).expeditions as any[])[j];
+  if (g.flags.fromWait !== 1 || g.flags[`wait:${j}`] === undefined || !row || baseMayMark(g, nat, row, rowWords(g, nat, row).o)) return;
+  delete g.flags[`wait:${j}`];
+}
+
+/**
  * `take` is the one row the player has just said yes to (ruling B8, `takeOffer`): that row alone is read, and it
  * forms as the rule always formed it. Every other reading gives none, and reads every row.
  */
@@ -6009,9 +6039,11 @@ function expeditions(g: Game, nat: string, take?: number): void {
         // (A loan's end that waited and was told: its telling flags go with it, `rowDone`. A war that never had the
         // switch on has none, and nothing changes.)
         if (g.flags[`rowTold:${i}`] !== undefined) rowDone(g, i);
+        // (And the wait marker the rule wrote while it held the loan: `loanMarkGone`. Switch off: nothing.)
+        loanMarkGone(g, nat, i);
         if (take === i) delete g.flags[leaveKey(i)];
         // (A corps ends its loan once: another lent row that added to it, `joins`, has nothing left to end.)
-        ((setup as any).expeditions as any[]).forEach((_, j) => { if (j !== i && g.flags[`lent:${j}`] === id) g.flags[`lent:${j}`] = -1; });
+        ((setup as any).expeditions as any[]).forEach((_, j) => { if (j !== i && g.flags[`lent:${j}`] === id) { g.flags[`lent:${j}`] = -1; loanMarkGone(g, nat, j); } });
       }
       // (The stood war rows, drawn.ts: a row keyed to a war was lent for that war, every nation's. The war over, each
       // division it drew goes back to the corps it came out of, or stands on where it is; what it raised new stays
@@ -6024,11 +6056,12 @@ function expeditions(g: Game, nat: string, take?: number): void {
         g.supplyDirty = true;
         g.flags[`lent:${i}`] = -1;
         if (g.flags[`rowTold:${i}`] !== undefined) rowDone(g, i);
-        ((setup as any).expeditions as any[]).forEach((_, j) => { if (j !== i && g.flags[`lent:${j}`] === id) g.flags[`lent:${j}`] = -1; });
+        loanMarkGone(g, nat, i);
+        ((setup as any).expeditions as any[]).forEach((_, j) => { if (j !== i && g.flags[`lent:${j}`] === id) { g.flags[`lent:${j}`] = -1; loanMarkGone(g, nat, j); } });
       }
       // (A loan's end of the player's that waited, told, and is now offered to him (`loanStays`): the hold is over, and its
       // telling flags go; his answer is the offer's. None exist with the switch never on.)
-      if (!held && g.flags[leaveKey(i)] !== undefined && g.flags[`rowTold:${i}`] !== undefined) rowDone(g, i);
+      if (!held && g.flags[leaveKey(i)] !== undefined && g.flags[`rowTold:${i}`] !== undefined) { rowDone(g, i); loanMarkGone(g, nat, i); }
       // (The far side: a division that awaits lent regiments keeps their shares for them while they are lent: `makeUp`.)
       if (o.awaits && farOn(g)) makeUp(g, nat, row, o);
       return;
