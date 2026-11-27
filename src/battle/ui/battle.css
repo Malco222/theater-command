@@ -1,0 +1,192 @@
+/* The field battle page, on the UI director's kit (kit/tokens.css, kit/kit.css): the desk for what you work at, paper
+   for what you read, brass for what you press. TODO(polish): the UI director's own pass over this page. */
+
+html, body { height: 100%; margin: 0; }
+body { background: var(--desk-950); color: var(--paper-100); overflow: hidden; }
+#app { height: 100%; }
+button { cursor: pointer; }
+.tc-btn .tc-key { opacity: .6; font-size: 12px; min-width: 0; padding: 0 3px; }
+/* Facts in a row (brief check 19): each stays whole, and the dot before one falls into the clipped margin when it
+   starts a line, so no line ever ends or begins with a dot. */
+.facts { display: block; overflow: hidden; }
+.facts > span { display: flex; flex-wrap: wrap; margin-left: -1.4em; }
+.facts .fact { white-space: nowrap; }
+.facts .fact::before { content: '·'; display: inline-block; width: 1.4em; text-align: center; }
+
+/* ---- Choosing ---- */
+.choose { height: 100%; overflow: auto; background: radial-gradient(ellipse at 50% 0%, #2d241a 0%, var(--desk-900) 60%, var(--desk-950) 100%); }
+.chead { padding: 28px max(16px, calc(50% - 480px)) 8px; }
+.chead h1 { margin-top: 4px; }
+.cbody { padding: 8px max(16px, calc(50% - 480px)) 48px; }
+.intro { margin: 8px 0 24px; }
+.intro p { margin: 0; font-size: 15px; line-height: 22px; }
+.shead { margin: 24px 0 10px; }
+.offers { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
+.offer { display: grid; gap: 4px; text-align: left; color: var(--paper-100); font-family: var(--font-serif); }
+.offer .otop { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.offer .otop > .tc-data { white-space: nowrap; }
+.offer .omid { color: var(--paper-200); font-size: 13px; }
+.offer .olow { color: var(--text-muted); font-size: 12px; }
+.none { color: var(--text-muted); }
+.again { margin-top: 12px; }
+.grounds { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
+
+/* ---- The battle ---- */
+.battle { height: 100%; display: grid; grid-template-rows: auto 1fr auto auto; min-height: 0; }
+.bbar { display: flex; align-items: center; gap: 16px; padding: 8px 14px; background: var(--desk-900); border-bottom: 1px solid var(--brass-700); box-shadow: 0 6px 18px rgba(0, 0, 0, .5); position: relative; z-index: 2; flex-wrap: wrap; }
+.btitle { display: grid; min-width: 0; max-width: 360px; }
+.btitle .tc-data { color: var(--text-muted); font-size: 12px; }
+.bclock { display: grid; text-align: center; }
+.bclock .tc-data { font-weight: 700; }
+.bspeed { display: flex; gap: 4px; }
+/* PAUSED and PAUSE take the same room, so pausing never folds the bar or unfolds it: one bar height at a given
+   width (the UI director, 245e366). */
+.bspeed #pauseWord { display: inline-block; min-width: calc(6ch + .6em); }
+.bspeed .tc-btn.is-lit { border-color: var(--brass-300); color: var(--brass-100); box-shadow: var(--shadow-lit); }
+.bbal { flex: 1; min-width: 220px; max-width: 420px; display: grid; gap: 3px; }
+.bends #ratio { white-space: nowrap; }
+/* ---- The land's top bar: one row and 83 high at every width, for every battle, built the way the fleet action's is
+   (the UI director, after 1969d7b). Everything here is scoped off .sea, which keeps its own. ---- */
+.battle:not(.sea) .bbar { flex-wrap: nowrap; gap: 12px; min-height: 83px; }
+.battle:not(.sea) .btitle, .battle:not(.sea) .bclock, .battle:not(.sea) .bspeed { flex: none; }
+/* The title holds three lines: its name, the date, and where the field is ("Open country · across the Vistula"). */
+.battle:not(.sea) .btitle .tc-title-3 { white-space: nowrap; }
+.battle:not(.sea) .btitle.is-small .tc-title-3 { font-size: 15px; }
+/* The middle narrows to fit and never slides under the buttons: at its narrowest it still holds both names, the odds,
+   and break bars of 50 a side. */
+.battle:not(.sea) .bbal { flex: 1 1 360px; min-width: min-content; }
+.battle:not(.sea) .bbar2 { min-width: 50px; }
+/* The odds always take two lines, the card's over now, whether the defence was scouted or not, so every battle starts
+   the field at the same height. The line for now keeps room for its longest figures, so nothing moves as they change:
+   "now 9.99 to 1", or for the staff's band (b453) "now between 88.8 and 88.8 to 1". */
+.battle:not(.sea) .bends #ratio .facts > span { flex-direction: column; }
+.battle:not(.sea) .bends #ratio .fact + .fact { min-width: calc(13ch + 1.4em); }
+.battle:not(.sea) .bends #ratio.is-band .fact + .fact { min-width: calc(30ch + 1.4em); }
+/* The two buttons stay on the bar's one row; where they would be pushed off its end they stack at the right end, small
+   (page.ts fitBar). */
+.battle:not(.sea) .bacts { flex: none; }
+.battle:not(.sea) .bacts.is-stacked { flex-direction: column; gap: 4px; align-items: stretch; }
+.battle:not(.sea) .bacts.is-stacked > .tc-btn { height: var(--control-sm); padding: 0 var(--space-3); font-size: 11px; }
+/* Under 1440 the clock's buttons drop their key caps, and the line of keys under the field takes them instead:
+   "Space pause · 1 2 3 speed". */
+.battle:not(.sea) .keys .fact:has(.knarrow) { display: none; }
+@media (max-width: 1439px) {
+  .battle:not(.sea) .bspeed .tc-key { display: none; }
+  .battle:not(.sea) .keys .fact:has(.knarrow) { display: block; }
+}
+.bclock .tc-label { color: var(--paper-300); }
+.bclock .tc-label.is-paused { color: var(--brass-300); }
+/* How near to breaking (ruling 226(3)): under the balance bar, a bar a side in its nation's colour, no numbers;
+   his own under his name, theirs under theirs, each filling from its own end. */
+.bbreak { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin-top: 2px; }
+.bbreak .tc-label { font-size: 12px; line-height: 14px; color: var(--paper-300); white-space: nowrap; }
+.bbar2 { display: flex; height: 6px; border: 1px solid var(--line); border-radius: 2px; background: var(--desk-800); overflow: hidden; }
+.bbar2.is-theirs { justify-content: flex-end; }
+.bbar2 i { display: block; height: 100%; width: 0; transition: width .3s; }
+.bends { display: flex; justify-content: space-between; gap: 8px; font: 700 12px/14px var(--font-typed); letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+.bends .tc-data { font-size: 12px; color: var(--paper-200); text-transform: none; letter-spacing: 0; }
+.btrack { position: relative; display: flex; height: 8px; border: 1px solid var(--line); border-radius: 2px; overflow: visible; background: var(--desk-800); }
+.btrack i { display: block; height: 100%; transition: width .3s; }
+.btrack b { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--paper-100); box-shadow: 0 0 0 1px rgba(0, 0, 0, .6); }
+/* The staff's band where the defence is not fully known (b453), drawn as the attack card draws its doubt. */
+.btrack b.band { margin-left: 0; top: -3px; bottom: -3px; border-radius: 2px; background: repeating-linear-gradient(115deg, rgba(244, 238, 218, .5) 0 3px, rgba(244, 238, 218, .12) 3px 7px); box-shadow: 0 0 0 1px rgba(244, 238, 218, .65); }
+.bacts { position: relative; display: flex; gap: 8px; margin-left: auto; }
+/* Air support (b533): the button carries its state; lit while armed, quiet while none is ready. */
+.bacts .bair .airst { margin-left: 6px; font-size: 12px; opacity: .85; white-space: nowrap; }
+.bacts .bair.is-lit { border-color: var(--brass-300); color: var(--brass-100); box-shadow: var(--shadow-lit); }
+.bacts .bair.is-off { opacity: .6; }
+.wask { position: absolute; right: 0; top: calc(100% + 8px); width: 320px; display: grid; gap: 10px; z-index: 5; }
+.wask[hidden] { display: none; }
+.wask p { margin: 0; font: 400 15px/22px var(--font-serif); }
+.wask .wbtns { display: flex; gap: 8px; justify-content: flex-end; }
+.bfield { position: relative; min-height: 0; overflow: hidden; }
+.bfield canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; user-select: none; }
+/* The top of the field: the tag (PAUSED, RUNNING ×2, until the armies meet), the dispatch, his own army's warning. */
+.ftop { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: min(720px, calc(100% - 32px)); display: grid; justify-items: center; gap: 6px; pointer-events: none; }
+/* The clock's tag: top left, at the zoom group's height and mirroring it, so the dispatch has the top centre alone (the UI director, slice 3). */
+.ftag { position: absolute; left: 12px; top: 12px; pointer-events: none; height: var(--control-sm); display: flex; align-items: center; padding: 0 10px; font: 700 12px/18px var(--font-typed); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-900, #2a2118); }
+.ftag[hidden], .fwarn[hidden] { display: none; }
+.ftag .tc-key { opacity: 1; margin-left: 4px; }
+.fwarn { padding: 6px 12px; font: 400 14px/20px var(--font-serif); border-left: 4px solid var(--amber); }
+.dispatch { max-width: 100%; padding: 7px 14px; display: flex; gap: 10px; align-items: baseline; font: 400 14px/20px var(--font-serif); pointer-events: none; transition: opacity .8s; }
+.dispatch:empty { display: none; }
+.dispatch.is-old { opacity: 0; }
+/* Red is Routing's (the UI director, 6): the stamp is brass, darkened to read on the paper. */
+.dispatch .tc-label { color: var(--brass-700); flex: none; }
+.zoom { position: absolute; right: 12px; top: 12px; display: flex; gap: 4px; }
+/* The controls band: its own solid strip above the tray, never over the field (the UI and art directors, 7 and 6). */
+.keys { padding: 5px 14px; background: var(--desk-900); border-top: 1px solid var(--line); font-size: 12px; line-height: 18px; color: var(--paper-200); }
+.keys .fact::before { width: 2em; }
+.keys .facts > span { margin-left: -2em; }
+.keys .tc-key { opacity: 1; }
+.tray { display: flex; gap: 8px; padding: 8px 12px 10px; overflow-x: auto; background: var(--desk-900); border-top: 1px solid var(--brass-700); }
+.ucard { flex: none; min-width: 196px; display: grid; gap: 4px; text-align: left; color: var(--paper-100); font-family: var(--font-serif); padding: 8px 10px; }
+.ucard .uhead { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* Two lines, nothing cut (the UI director): the name in bold, what it belongs to under it. The chip grows to fit. */
+.ucard .uname { display: grid; white-space: nowrap; }
+.ucard .uname b { font-size: 13px; line-height: 16px; }
+.ucard .uname span { font-size: 12px; line-height: 15px; color: var(--paper-300); }
+.ucard .bsign { flex: none; width: 30px; height: 21px; }
+.ucard .tc-meter { grid-template-columns: 64px 1fr 26px; }
+.ucard .tc-meter .tc-label { font-size: 12px; }
+.ucard .ustate { font-size: 12px; color: var(--text-muted); min-height: 15px; }
+.ucard .ustate b { color: var(--paper-100); }
+.ucard .ustate.warn b { color: var(--amber); }
+.ucard .ustate.bad b { color: var(--alarm); }
+.ucard .ustate.muted b { color: var(--text-muted); }
+.ucard.is-off { opacity: .45; border-style: dashed; }
+.ucard[hidden], .tmore[hidden], .ugroup[hidden] { display: none; }
+/* A big battle's tray (the design director, b388): its blocks under their corps; a header picks up the corps. */
+.ugroup { flex: none; display: grid; align-content: start; gap: 3px; padding: 6px 8px; }
+.ugroup.is-off { border-style: dashed; opacity: .55; }
+.ghead { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; min-width: 0; padding: 2px 4px 3px; text-align: left; color: var(--paper-100); background: none; border: 1px solid transparent; border-bottom-color: var(--brass-700); cursor: pointer; font: 700 13px/16px var(--font-serif); }
+.ghead span { flex: none; font: 400 12px/15px var(--font-serif); color: var(--paper-300); }
+.ghead:hover { border-color: var(--brass-500); }
+.ghead.is-on { border-color: var(--brass-300); box-shadow: inset 0 0 0 1px var(--brass-300); }
+.grows { display: grid; grid-auto-flow: column; grid-template-rows: repeat(4, auto); column-gap: 8px; row-gap: 2px; }
+.urow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; height: 18px; padding: 0 4px; text-align: left; color: var(--paper-100); background: none; border: 1px solid transparent; cursor: pointer; font: 400 12px/16px var(--font-serif); }
+.urow:hover { border-color: var(--brass-500); }
+.urow.is-on { border-color: var(--brass-300); background: rgba(224, 184, 114, .12); }
+.urow.is-off { opacity: .45; border-style: dashed; border-color: var(--line); }
+.urow .rname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.urow .rstate { font: 400 12px/16px var(--font-serif); color: var(--text-muted); white-space: nowrap; }
+.urow .rstate:empty { display: none; }
+.urow .rstate:not(:empty) + .rbar { display: none; }
+.urow .rstate.warn { color: var(--amber); }
+.urow .rstate.bad { color: var(--alarm); }
+.urow .rbar { display: block; width: 36px; height: 4px; background: rgba(14, 11, 8, .75); }
+.urow .rbar b { display: block; height: 100%; background: var(--gain); }
+.urow .rbar b.is-mid { background: var(--amber); }
+.urow .rbar b.is-low { background: var(--alarm); }
+/* "7 more ▸" and "◂ 7 more" (ruling 226(9)): a card of its own at the end of the row. */
+.tmore { flex: none; min-width: 112px; padding: 0 12px; white-space: nowrap; display: grid; place-items: center; font: 700 12px/16px var(--font-typed); letter-spacing: .06em; text-transform: uppercase; color: var(--paper-200); }
+
+/* SINCE YOUR LAST BATTLE (ruling 226(11)): one line per change, the place in bold. */
+.since { margin: 0 0 18px; padding: 10px 16px; }
+.since h2 { margin: 0 0 6px; }
+.since ul { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 2px; }
+.since li { font-size: 15px; line-height: 22px; }
+.nobr { white-space: nowrap; }
+
+/* ---- After the battle ---- */
+.veil { position: fixed; inset: 0; background: rgba(14, 11, 8, .62); display: grid; place-items: center; z-index: 10; padding: 16px; }
+.after { width: min(640px, 100%); max-height: calc(100vh - 32px); overflow: auto; display: grid; gap: 8px; font-family: var(--font-serif); }
+.after h2 { margin: 0; }
+.after h3 { margin: 10px 0 0; }
+.after p { margin: 0; font-size: 15px; line-height: 22px; }
+.after .verdict { margin: 6px 0 4px; }
+.after ul { margin: 0; padding-left: 18px; }
+.after li { font-size: 14px; line-height: 20px; }
+.after .aside2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.after .aside2 ul { list-style: none; padding: 0; }
+.after .aside2 li > span { color: var(--ink-600); font-size: 13px; display: block; }
+.after .warn { color: var(--alarm-deep); }
+.after .paid { color: var(--ink-600); font-style: italic; }
+.afoot { display: flex; justify-content: flex-end; margin-top: 8px; }
+@media (max-width: 720px) {
+  .after .aside2 { grid-template-columns: 1fr; }
+  .bbar { gap: 8px; }
+  .battle:not(.sea) .bbar { flex-wrap: wrap; }
+  .bspeed .tc-key, .keys { display: none; }
+}
+.tc-label { font-size: 12px; }

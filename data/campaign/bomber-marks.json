@@ -1,0 +1,26 @@
+{
+  "_about": {
+    "what": "What each nation's bombers carry to tell one from another (bomber-marks.ts; the historian's note of 20 November 2026, historian/bomber-tours-identity.md). Only American bombers carry a name and nose art (Brian, 20 November 2026: 'nose art only for US bombers, other countries didnt do that'). Every other nation's carry the marking their air force painted, and every nation's carry a tally: a bomb for each mission and a mark for each aircraft shot down.",
+    "letter": "Britain and the Commonwealth: two squadron letters and the aircraft's own letter ('KM-G'), called by the letter's word ('G for George'). 'early' are the words to the end of 1942 and 'late' those from 'from' on. 'block' are squadron letters never given: PO and AR are kept clear of two famous Lancasters, the rest read badly. 'never' are a famous real aircraft's letters, a squadron's two ('AJ', the dams raid) or one aircraft's whole marking ('KM-B'): a bomber whose turn it would be wears the last letters in its group's order instead.",
+    "code": "Germany: the wing's two characters, then the aircraft's letter and its squadron's letter ('5J+DM'). 'aircraft' are the aircraft letters of one squadron, 'squadrons' the squadron letters of one wing, 'words' the radio word for each letter of the alphabet.",
+    "tail": "Japan: a unit code and the aircraft's number on the tail ('K-312'). 'codes' are the unit codes, 'first' the first number and 'per' how many aircraft carry one code. 'never' are two famous real aircraft's markings: a bomber whose turn it would be carries a number 'per' higher instead.",
+    "squadron": "Italy: the squadron's number and the aircraft's ('278-7'). A group's squadrons are numbered on from a number between 'from' and 'to', 'per' aircraft each.",
+    "tactical": "The Soviet Union: a number painted in one of 'colours', 'per' aircraft to a colour ('White 23').",
+    "number": "Everyone else: a number ('No. 14')."
+  },
+  "letter": {
+    "from": 1943,
+    "early": ["Ace", "Beer", "Charlie", "Don", "Edward", "Freddie", "George", "Harry", "Ink", "Johnnie", "King", "London", "Monkey", "Nuts", "Orange", "Pip", "Queen", "Robert", "Sugar", "Toc", "Uncle", "Vic", "William", "X-ray", "Yorker", "Zebra"],
+    "late": ["Able", "Baker", "Charlie", "Dog", "Easy", "Fox", "George", "How", "Item", "Jig", "King", "Love", "Mike", "Nan", "Oboe", "Peter", "Queen", "Roger", "Sugar", "Tare", "Uncle", "Victor", "William", "X-ray", "Yoke", "Zebra"],
+    "block": ["PO", "AR", "SS", "SA", "KK", "VD", "WC"],
+    "never": ["AJ", "KM-B", "PM-M"]
+  },
+  "code": {
+    "aircraft": "ABCDEFGHKLMN",
+    "squadrons": "HKLMNPRSTUVW",
+    "words": ["Anton", "Berta", "Cäsar", "Dora", "Emil", "Friedrich", "Gustav", "Heinrich", "Ida", "Julius", "Kaufmann", "Ludwig", "Martha", "Nordpol", "Otto", "Paula", "Quelle", "Richard", "Siegfried", "Toni", "Ulrich", "Viktor", "Wilhelm", "Xanthippe", "Ypsilon", "Zeppelin"]
+  },
+  "tail": { "codes": ["K", "R", "T", "U", "V", "W", "X", "Y", "Z", "K1", "R1", "T1", "U1", "V1", "W1", "X1", "Y1", "Z1", "K2", "R2", "T2", "U2", "V2", "W2", "X2", "Y2", "Z2"], "first": 301, "per": 60, "never": ["T1-323", "T1-326"] },
+  "squadron": { "from": 190, "to": 270, "per": 12 },
+  "tactical": { "colours": ["White", "Red", "Yellow", "Blue"], "per": 50 }
+}

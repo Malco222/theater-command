@@ -1,0 +1,28 @@
+{
+  "_about": "The record's capitulations for the yield form at stops 1-2 (the design director's 05:30Z, 07:20Z and 07:28Z of 22 November 2026; the historian's historian/capitulations-1939-45.md, corrected 07:20Z, whose Turn column reads first blow to yield). A row: [nation, the enemy it yields to, months from that enemy's first blow on its home ground to the yield, the book's theatre or null, mark]. At stops 1-2 a computer-run country yields at its month's opening once that many months have passed since the first blow of the enemy victorOf names; if victorOf names an enemy whose blow the row does not date, or the theatre's book is closed, the row lapses and the country yields by the cause, as at stops 3-5. The player's own country never yields by a row (ruling 99; the dial never leashes the player).",
+  "_left": "Not rows: the Baltic states and Romania's lands (ultimatums, diplomacy.json 'baltic' and its partition events), Iraq, Iran, Vichy North Africa, Italy, Romania 1944 and Bulgaria (their own dated events in diplomacy.json), Vichy Syria (a campaign, not a country's yield), Finland (not a capitulation), Germany and Japan (the Turn column dates no first blow: the end of the war is the fall's and the score's), and the Netherlands East Indies (the far side keeps its own ruled rows).",
+  "_marks": "'judgment' where the record gives a range and the rules builder took one end: Poland's 1-2 is taken at 2, the last field force at Kock on 6 October (Warsaw yielded on 28 September, month 1); Hungary's 61-65 at Debrecen's armistice of 20 January 1945 (Horthy's of 15 October failed).",
+  "_overseas": "Corrections to the map's overseas marks, read only with the yield form on (the design director's 09:05Z and 11:50Z of 22 November 2026, on the historian's overseas-marks-home-chart.md), and then everywhere the score reads a country's home (game.ts overseasRead and homeOf: homeLost, victorOf, the yield cause). The test: home is ground under the state's ordinary home regime, islands included, and ground under a regime of its own is overseas. Syria, a French mandate unmarked where Lebanon beside it is marked; Albania, a kingdom in personal union with Italy from April 1939, never annexed; Bohemia and Moravia, the Protectorate of 16 March 1939, autonomous under its own regime; Spanish Morocco, a protectorate under the treaty of 1912, occupied but not annexed. The fifteen Libyan provinces stay overseas as the map has them, as Algeria does, though Italy's law of 9 January 1939 made the coast metropolitan. Iceland's and Egypt's owners are not the yield form's: on the after-release list.",
+  "overseas": ["Syria", "Albania", "Bohemia", "Moravia", "Spanish Morocco"],
+  "_home": "The other way (the design director's 11:50Z, on the historian's overseas-marks-home-chart.md): ground the map marks overseas that is its state's own home ground with its own islands, under the state's ordinary home regime. The Canary Islands (two of Spain's fifty provinces since 1927, one since 1833) and the Azores (Europe in Art. 1 of Portugal's constitution of 1933). Read only with the yield form on, everywhere overseasRead is read.",
+  "home": ["Canary Islands", "Azores"],
+  "_annexed": "Dated changes (the design director's 11:50Z, on the historian's section 3): a formal annexation moves a province's home to the annexing state from its date, and a de facto one does not. A row here makes the province home ground of 'by' from month 'from', fixed the first month on or after it in which 'by' holds the province and the country it belongs to has fallen (game.ts annexMonth, homeOf); it is that country's own again if it is ever restored. The annexations the game makes itself already move the owner (diplomacy.json 'baltic', 'bessarabia' and 'vienna'; the Winter War's peace), so they need no row. Not rows, being de facto or split in the sources: the General Government (Warsaw, Krakow, Kielce, Lublin), Alsace, Lorraine and Luxembourg (civil administration from 2 Aug 1940), Lower Styria and Upper Carniola (Slovenia, 14 Apr 1941), Bialystok's attachment to East Prussia (1 Aug 1941), Tangier. Hatay, Danzig and Eupen-Malmedy have no province of their own.",
+  "annexed": [
+    { "by": "GER", "from": 2, "regions": ["Poznan", "Pomorze", "Danzig Corridor", "Polish Silesia", "Mlawa"], "_why": "Western Poland incorporated into the Reich by the decree of 8 October 1939, the Gaue from 26 October (historian S5, S25)." },
+    { "by": "GER", "from": 3, "regions": ["Lodz"], "_why": "Lodz joined the Warthegau on 9 November 1939 (S25)." },
+    { "by": "SOV", "from": 3, "regions": ["Lwow", "Brest", "Bialystok", "Polesie", "Volhynia"], "_why": "Eastern Poland taken into the USSR by Soviet law; Soviet citizenship imposed in November 1939 (S26; the laws of 1-2 November likely)." },
+    { "by": "LIT", "from": 2, "regions": ["Wilno"], "_why": "The Vilnius region passed by the USSR to Lithuania by the treaty of 10 October 1939 (S27). In the game the Red Army keeps Wilno, a Soviet-share row, so this row reads only where Lithuania holds it." }
+  ],
+  "rows": [
+    ["POL", "GER", 1, null, "judgment"],
+    ["DEN", "GER", 0, "north", ""],
+    ["NOR", "GER", 2, "north", ""],
+    ["LUX", "GER", 0, "west", ""],
+    ["NED", "GER", 0, "west", ""],
+    ["BEL", "GER", 0, "west", ""],
+    ["FRA", "GER", 1, "west", ""],
+    ["YUG", "GER", 0, "balkans", ""],
+    ["GRE", "GER", 0, "balkans", ""],
+    ["HUN", "SOV", 4, "east", "judgment"]
+  ]
+}

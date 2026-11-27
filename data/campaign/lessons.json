@@ -1,0 +1,94 @@
+{
+  "_about": "FIRST COMMAND, the first hour (the design director's ruling 129 and brief design-director/first-hour-brief.md; the words as cut by ruling 147; the door by ruling 141; the look by the art director's first-hour-look-brief.md). One list for both games, as the count of armies is (ruling 102): the lessons in order, their words, the deed line that earns each stamp, what each deed is called when an interface reports it ('does'), and when each comes due ('due', read by lessons.ts). Words in CAPITALS name controls; where a game calls a control something else, its own word stands in 'names' for that game and the design director is told. {place}, {province} and {city} are filled from the campaign in hand. Which lessons are done is kept with the player, not with the save, so a second campaign does not teach them again unless he asks.",
+  "campaign": { "nat": "GER", "from": 1, "level": "cadet", "depth": "field" },
+  "door": { "label": "First command", "fresh": "New here? Learn as you play.", "again": "The ten lessons again." },
+  "setting": "Staff notes for a new commander",
+  "groups": [
+    { "from": 0, "label": "September 1939 · Orders", "plain": "Orders" },
+    { "from": 6, "label": "October 1939 · The city and the railway", "plain": "The city and the railway" },
+    { "from": 8, "label": "November 1939 · The air", "plain": "The air" },
+    { "from": 9, "label": "December 1939 · Building, and the war is yours", "plain": "Building" }
+  ],
+  "lessons": [
+    {
+      "id": "month", "head": "The month",
+      "text": "The war moves a month at a time. You give your orders, then END THE MONTH carries out everyone's at once. This card opens every month: read it first.",
+      "deed": "", "does": "card", "due": "card"
+    },
+    {
+      "id": "pickup", "head": "Pick up an army",
+      "text": "Click the flag at {place} to pick the army up. Its card shows its corps. Lit ground is as far as it can march this month. Esc puts it down.",
+      "deed": "Pick up one army.", "does": "pick", "due": "army", "after": "month"
+    },
+    {
+      "id": "march", "head": "March",
+      "text": "Right-click lit ground to send it there. Right-click friendly ground farther off and it keeps marching, month after month, until it arrives.",
+      "deed": "Order one march.", "does": "march", "due": "reach"
+    },
+    {
+      "id": "attack", "head": "Attack",
+      "text": "Right-click the enemy ground beside you. Before anything is spent, a card sets your army against theirs and gives the odds. Attack when its verdict favours you.",
+      "deed": "Order one attack.", "does": "attack", "due": "foe"
+    },
+    {
+      "id": "end", "head": "Next army, then end the month",
+      "text": "NEXT ARMY (Tab) takes you to each army at the front with no orders. STAND THIS MONTH keeps one put. When it reads NEXT IN THE REAR, END THE MONTH.",
+      "deed": "End the month.", "does": "end", "due": "month", "after": "attack", "months": 1
+    },
+    {
+      "id": "card", "head": "Read the month card",
+      "text": "Your fronts come first, then the world. Click a line to go to its place. A red band is a dated warning: never end a month without reading one.",
+      "deed": "Click one line of the card.", "does": "line", "due": "card", "months": 1
+    },
+    {
+      "id": "city", "head": "A province falls with its city",
+      "text": "{province} is not yours until {city} falls. Storm it now at the odds shown, or keep up the siege and let hunger, guns and bombers wear the garrison down.",
+      "deed": "Storm it, or hold the siege a month.", "does": "siege", "due": "siege"
+    },
+    {
+      "id": "rail", "head": "By rail",
+      "text": "The lit railway is where a train can take this army. Right-click a station dot to ride there: it takes the whole month. No train passes a red lamp.",
+      "deed": "Send one army by rail.", "does": "rail", "due": "train"
+    },
+    {
+      "id": "raid", "head": "A raid",
+      "text": "Open STAFF and take the air war into your own hands. In the planner choose bombers, a raid and a target. The card sets BY DAY beside BY NIGHT: losses, damage and the guns that wait.",
+      "deed": "Order one bombing raid.", "does": "raid", "due": "bombers", "after": "rail", "months": 2
+    },
+    {
+      "id": "build", "head": "Build and rest",
+      "text": "An army that stands a whole month rests and mends. Winter is for building: open the ARSENAL and place one order. Guns round a rail junction guard it against bombers.",
+      "deed": "Place one order in the ARSENAL.", "does": "order", "due": "month", "after": "raid", "months": 3,
+      "there": "Order an artillery corps. Guns round a rail junction guard it against bombers. An army that stands a whole month rests and mends."
+    }
+  ],
+  "closing": {
+    "id": "yours", "head": "The war is yours",
+    "text": "STAFF hands you each desk when you want it: research, building, envoys, agents, air, navy. GOALS shows what you are playing for. Every lesson is in the Guide."
+  },
+  "tips": [
+    { "id": "kept", "text": "It will keep marching each month until it arrives. Any other order ends the march.", "when": "kept" },
+    { "id": "cut", "text": "A red lamp: this line is cut. Send engineers to relay the track. Guns in this province would have stopped some of the bombers.", "when": "cut" }
+  ],
+  "names": {
+    "_about": "Each game's own word for a control, where it is not the list's. The browser game: END MONTH is its button; a railway journey is ordered on blue ground, not a station dot; a month card's line goes to its place by its pin; the arsenal is the BUILD page, which at Field command stands under STAFF (lesson 10's sentence is turned round to keep it to 30 words); the goals are on the REGION page; the Guide is the GUIDE on the top bar. The 3D game (the design director's ruling b425): the desks are YOUR STAFF and the raid is planned from the aircraft on the map; a month card's line goes to its place by its pin; the Guide is the GUIDE; from release 2 the month's news comes as seals at the map's edge, so lesson 1 says so in 3D, at 30 words. (Its closing note says YOUR STAFF, which ruling b429 made room for by cutting both \"the\"s from the desks; NEXT IN THE REAR and STAND THIS MONTH read the same in both games.)",
+    "browser": [
+      ["END THE MONTH", "END MONTH"],
+      ["Right-click a station dot to ride there", "Right-click blue ground to ride there"],
+      ["Click a line to go to its place", "Click a line's pin to go to its place"],
+      ["Click one line of the card.", "Click the pin on one line of the card."],
+      ["Winter is for building: open the ARSENAL and place one order.", "Winter is for building: place one order in BUILD{under}."],
+      ["in the ARSENAL", "under BUILD"],
+      ["GOALS shows what you are playing for", "REGION shows what you are playing for"],
+      ["in the Guide", "in the GUIDE"]
+    ],
+    "unreal": [
+      ["Open STAFF and take the air war into your own hands. In the planner choose bombers, a raid and a target.", "In YOUR STAFF, take the air war yourself. Click your aircraft on the map: choose bombers, a raid and a target."],
+      ["Click a line to go to its place", "Click a line's pin to go to its place"],
+      ["Click one line of the card.", "Click the pin on one line of the card."],
+      ["STAFF hands you each desk when you want it", "YOUR STAFF hands you each desk when you want it"],
+      ["in the Guide", "in the GUIDE"],
+      ["This card opens every month: read it first.", "Later news comes as seals: press one, or R."]
+    ]
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "_about": {
+    "what": "The grand campaign's navy, handled as pieces on the map like the armies. A fleet is picked up, its ships are laid out as cards by class, and it is given one of five orders: patrol a sea, raid shipping, escort a shipping lane, hunt submarines, or lie in harbour. It can also stand in to a coast and shell it. None of this touches the history campaigns.",
+    "harbour": "A computer's navy that keeps its harbours from the month an event has come (ruling 233(k)): the country, and the event's flag. The Italian fleet did not come out after Mussolini fell on 25 July 1943: its surface fleets lie in port and come out against no landing, and its submarines keep the sea. The computer's Italy in the grand campaign only; a player's fleets sail as he likes.",
+    "escort": "Cargoes on a lane are guarded by the fleets ordered to escort that lane, wherever on it they are, and each ship counts its full escort worth (navy.json: destroyers 1, carriers 3, cruisers 0.5, battleships nothing). A fleet that merely patrols or hunts in one of the lane's seas gives distant cover only: 'loose' of that worth.",
+    "hunt": "Submarines are sunk by destroyers and aircraft and by nothing else. Each month a nation's hunters in a sea sink this share of the enemy submarines at sea there: base + rate x H / (H + submarines x perSub + sea), never more than 'most'. H counts its destroyers (and 'carrier' for each carrier, whose aircraft search far): in full for a fleet ordered to hunt there ('hunter'), 'escort' for a fleet escorting a lane through that sea, 'loose' for one on patrol there, plus 'air' for each point of friendly air strength over the sea, the whole multiplied by what radar is worth. With no hunter at all nothing is sunk. A hunting fleet loses 'cost' destroyers for each submarine it sinks.",
+    "screen": "A fleet of heavy ships needs destroyers round it. With fewer than 'per' destroyers for each battleship, carrier and cruiser, a fleet at sea where enemy submarines are at work may be torpedoed: each month the chance of losing one heavy ship is submarines x risk x the share of the screen that is missing, never more than 'most'.",
+    "bombard": "A fleet at sea can shell an enemy coast on the sea it is in, once a month, and a coast is shelled once a month at most. 'guns' is the weight of each class of ship. Against troops the organisation cut is weight / (scale + perDiv x enemy divisions there), never more than max, less in cover (the ground raid's table in airwar.json), 'dug' of it for troops dug in and 'fort' for fortress troops; 'str' of the cut is also lost in men and guns and no corps is driven below 'floor'. Against a city the share of the province's output stopped for a month is weight / scale, never more than max. Shelling costs the fleet 'ready' of its fitness for sea and needs 'minReady' to begin and at least 'least' weight of guns. A fortified coast answers: 'reply' of the fleet's cruisers and destroyers for each level of the fortress.",
+    "ai": "A computer admiral shells troops on a coast its own army (or an ally's) stands beside, when its fleet is on patrol there with readiness of 'ready' or better and its side is the stronger in that sea. A fleet lying in harbour with the guns for it puts to sea for the month to shell such a coast in any sea within its reach, but only where its side would be 'sortie' times the enemy's strength with it there; raiders keep to their own work. bombard false stops it, and sortie 0 keeps the harbour fleets in. Ruling 52, the grand campaign: a patrol fleet that is not tied to a station and has nothing better than its usual beat is not left idle on it. With 'guard' it sails as the escort of a lane of its own side's that the raiders are bleeding and no fleet of its side is sailing with, anywhere in its reach (its own nation's lane first); failing that, with 'hunt', its destroyers hunt in the sea of its beat where most enemy submarines are at work, while no enemy surface ships are out on that beat. It keeps out of a sea the enemy's bombers command, as on patrol. The moment an enemy fleet it can beat is at sea on its beat it goes back to that. 'allies' (ruling 233(v)): a computer admiral whose own staff has named no crossing that month covers the named crossing of an ally in the same war under the same tests (a patrol fleet stands off the beach the ally's army means to land on, and on the way to it, where its side would be no weaker than the enemy there)."
+  },
+  "escort": { "loose": 0.25 },
+  "harbour": { "ITA": "event:mussolini-falls" },
+  "hunt": { "base": 0.004, "rate": 0.12, "sea": 20, "perSub": 1, "hunter": 1, "escort": 0.5, "loose": 0.25, "carrier": 3, "air": 0.15, "most": 0.25, "cost": 0.12 },
+  "screen": { "per": 1.5, "risk": 0.01, "most": 0.4 },
+  "bombard": {
+    "guns": { "bb": 10, "cv": 0, "ca": 3, "dd": 0.4, "ss": 0 },
+    "least": 20,
+    "ready": 0.1,
+    "minReady": 0.4,
+    "troops": { "scale": 150, "perDiv": 10, "max": 0.3, "str": 0.25, "dug": 0.6, "fort": 0.4, "floor": 0.3 },
+    "city": { "scale": 250, "max": 0.45 },
+    "reply": 0.012
+  },
+  "ai": { "bombard": true, "ready": 0.75, "sortie": 1.5, "guard": true, "hunt": true, "allies": true },
+  "roles": {
+    "bb": "The big guns. They win fleet actions and shell a coast. They cannot find a submarine.",
+    "cv": "Aircraft at sea. Strong in a fleet action, and their aircraft search wide for submarines and guard a convoy.",
+    "ca": "Scouts and raiders. Useful guns in a fleet action and against a coast, some worth with a convoy.",
+    "dd": "The escorts. They guard convoys, hunt submarines and screen the heavy ships from torpedoes.",
+    "ss": "Raiders of shipping. Battleships cannot bring them to action: only destroyers and aircraft sink them."
+  },
+  "brief": {
+    "bb": "Fleet action · shore guns",
+    "cv": "Aircraft · convoy cover",
+    "ca": "Scout · raider · guns",
+    "dd": "Escort · sub hunter · screen",
+    "ss": "Shipping raider"
+  },
+  "orders": {
+    "patrol": { "label": "Patrol", "blurb": "Hold the sea: bring enemy fleets to battle and keep it open for your troopships." },
+    "raid": { "label": "Raid shipping", "blurb": "Hunt the enemy's merchant ships and keep clear of his fleet." },
+    "escort": { "label": "Escort a lane", "blurb": "Sail with the convoys on one shipping lane and guard them the whole way." },
+    "hunt": { "label": "Hunt submarines", "blurb": "Destroyers and carrier aircraft comb one sea for submarines." },
+    "port": { "label": "In harbour", "blurb": "Safe, and refitting quickly." },
+    "passage": { "label": "In passage", "blurb": "At sea on its way to a new base, more than a month's steaming off: it can be found and attacked on the way, and strikes, patrols and escorts nothing until it comes in. It can be turned back." }
+  }
+}

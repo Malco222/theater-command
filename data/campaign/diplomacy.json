@@ -1,0 +1,422 @@
+{
+  "_about": "Diplomacy. Every nation sits on a seven-step alignment track from Allied member to Axis member. A neutral's public opinion runs from -100 (Allies) to +100 (Axis). Each month it drifts back toward its 'home' leaning and is pushed by whoever is winning the war (momentum x bandwagon). At +/-leanAt it starts leaning (trade and treaties); at +/-joinAt it asks to join that bloc; below +/-backAt it steps back to neutrality. Players spend political capital to court neutrals; 'resist' makes some of them much harder to move. Events are history written as data: each fires once, in its window, only if its conditions still hold. In free play (open.json) the window only says when an event may first happen, an event never brings a country at peace into a war, an event marked mode 'history' is left out (the nation decides that for itself), and one marked mode 'open' happens only there. Besides annex, cede, war, spawn, opinion and join, an event can 'wake' a country that has stood aside until now (it enters at the given place on the track), and 'partition' one that ends: each share is [who takes it, the regions], the first taker on the list still in the war gets whatever of those regions the country still holds, and ground someone else already holds stays theirs. Conditions include 'war:A,B' (those two are at war), 'dormant:A' and 'anyHeld:bloc,place,place' (that bloc holds at least one of the places) and 'allHeld:bloc,place,place' (it holds them all), and 'since:event:id,n' (that event happened at least n months ago). 'reform' remakes a nation's armed forces from that month on: for each nation named, the new quality of its troops, strength of its air force, whether its command is still slow, and how many corps it can put into one attack. An event with nothing but a text is a piece of news. 'liberate' hands over ground an occupier has left: each named region he still holds with none of his troops in it passes to the first nation on the list still at war with him. 'peace' ends the war between two nations: each hands back the other's ground and takes its troops home. A partition marked 'occupied' leaves each piece of the country to whoever has troops standing in it, and the shares divide the rest.",
+  "leanAt": 30,
+  "backAt": 20,
+  "joinAt": 70,
+  "pull": 0.08,
+  "momentumPer": 30,
+  "stepEvery": 2,
+  "leaders": { "allies": "UK", "axis": "GER" },
+  "majors": ["GER", "ITA", "UK", "FRA", "SOV"],
+  "pcIncome": { "_major": 3, "_minor": 1 },
+  "pcCap": 30,
+  "court": { "cost": 6, "opinion": 12, "home": 6 },
+  "americas": {
+    "_about": "The Axis courts the Americas (ruling 223, Brian's ask of 17 November 2026; the grand campaign on the wider world only). Once 'backer' is at war with a member of the Axis, or leans to or stands with the Allies, the envoys of the Axis leader (or, if the player has it, of the first great power of the Axis still standing) go each month to the neutral named in 'of' most ready to listen: those beside the backer's ground or the Canal, Argentina for its leaning, and Chile, which kept its ties with the Axis until January 1943. (The computer's envoys court nobody else, so these are weighed above every other neutral.) They go at every stop of the dial, and the first month a country of the Axis courts one the news says so. Whether such a country can be won over at all is one roll for each country and each campaign, the same every month: 'join' is the share by stop of the dial (stops 1 and 2 none), times the country's 'readiness' (the design director's b391: Mexico, Argentina and Chile carry the stop's figure; the eight of the Caribbean and Central America, every one of which declared war on the Axis in December 1941, a third of it). No more than 'most' countries of the Americas join the Axis in one campaign: a thorn, not a collapse. One that the roll favours joins the Axis after 'months' months of the Axis courting it, so long as it is still a neutral that can be courted; one it does not favour may lean, but never joins the Axis by courting. A player's own Axis country courts by hand, or by his staff, as it always has, and the computer's envoys stay home while he has the leader. While the Axis courts such a country (it courted it this month or last), the backer courts it back at no cost: a computer-run backer each month, a player's at no cost to him. Once the backer is at war with the Axis, a country that joined this way is at war with the backer too, and it keeps its own small army: no computer-run country ships a corps to its harbours or bases an air group on its fields. Nothing here happens in the history campaigns, so their hashes stand.",
+    "backer": "USA",
+    "of": ["MEX", "CUB", "HAI", "DOM", "GUA", "ELS", "HON", "NIC", "COS", "PAN", "ARG", "CHL"],
+    "join": { "1": 0, "2": 0, "3": 0.03, "4": 0.06, "5": 0.1 },
+    "readiness": { "MEX": 1, "ARG": 1, "CHL": 1, "_default": 0.3333 },
+    "most": 1,
+    "months": 6
+  },
+  "tradeIncome": 1,
+  "resist": { "SOV": 0.3, "SUI": 0.5, "IRL": 0.6, "SWE": 0.7, "USA": 0.15 },
+  "home": {
+    "HUN": 40, "ESP": 35, "TUR": -35, "ROM": 0, "BUL": 15, "YUG": -5, "GRE": -20, "FIN": 5,
+    "SWE": 0, "SUI": 0, "IRL": 0, "POR": -10, "NOR": -15, "DEN": -5, "BEL": -20, "NED": -15, "LUX": -10,
+    "EST": 0, "LAT": 0, "LIT": 0, "SOV": 0, "VIC": 10, "IRQ": -35, "IRN": 5,
+    "MEX": -10, "CUB": -25,
+    "BRA": -10, "ARG": 10, "CHL": 0, "PER": -5, "COL": -15, "VEN": -10,
+    "GUA": -20, "ELS": -20, "HON": -20, "NIC": -25, "COS": -25, "PAN": -25, "HAI": -25, "DOM": -25,
+    "ECU": -10, "BOL": 0, "PAR": 5, "URU": -15
+  },
+  "bandwagon": {
+    "_default": 2, "HUN": 3, "ROM": 3, "BUL": 3, "ESP": 2.5, "FIN": 2, "YUG": 1.5, "TUR": 1, "SWE": 1, "POR": 1,
+    "GRE": 0.5, "SUI": 0.5, "IRL": 0.5, "VIC": 1.5, "IRQ": 1, "IRN": 1, "EST": 0, "LAT": 0, "LIT": 0, "SOV": 0,
+    "USA": 0, "MEX": 0.5, "CUB": 0.5,
+    "BRA": 0.5, "ARG": 0.5, "CHL": 0.5, "PER": 0.5, "COL": 0.5, "VEN": 0.5,
+    "GUA": 0.5, "ELS": 0.5, "HON": 0.5, "NIC": 0.5, "COS": 0.5, "PAN": 0.5, "HAI": 0.5, "DOM": 0.5,
+    "ECU": 0.5, "BOL": 0.5, "PAR": 0.5, "URU": 0.5
+  },
+  "events": [
+    {
+      "id": "baltic", "from": 10, "to": 14,
+      "if": ["alive:SOV", "peace:SOV,GER", "fallen:POL"],
+      "annex": { "by": "SOV", "nations": ["EST", "LAT", "LIT"] },
+      "spawn": [["SOV", "8th Army", "inf", 3, "Latvia"], ["SOV", "11th Army", "inf", 3, "Lithuania"]],
+      "text": "The Soviet Union occupies the Baltic states under the secret terms of its pact with Germany."
+    },
+    {
+      "id": "bessarabia", "from": 10, "to": 14,
+      "if": ["alive:SOV", "peace:SOV,GER", "fallen:POL", "alive:ROM", "atPeace:ROM", "notInBloc:ROM", "holds:ROM,Bessarabia"],
+      "cede": { "from": "ROM", "to": "SOV", "regions": ["Bessarabia", "Bukovina"] },
+      "spawn": [["SOV", "9th Army", "inf", 3, "Bessarabia"]],
+      "opinion": { "ROM": 35 },
+      "text": "Moscow hands Romania an ultimatum. Bessarabia and northern Bukovina pass to the Soviet Union, and Bucharest looks to Berlin for protection."
+    },
+    {
+      "id": "finland", "from": 13, "to": 18,
+      "if": ["alive:GER", "momentum>=:0.5", "alive:FIN", "atPeace:FIN", "notInBloc:FIN", "flag:event:baltic"],
+      "opinion": { "FIN": 15 },
+      "text": "Alarmed by the fate of the Baltic states, Finland grants German troops the right of transit."
+    },
+    {
+      "id": "vienna", "from": 12, "to": 16,
+      "if": ["alive:GER", "momentum>=:0.5", "alive:HUN", "alive:ROM", "atPeace:HUN", "atPeace:ROM", "step>=:HUN,1", "holds:ROM,Transylvania"],
+      "cede": { "from": "ROM", "to": "HUN", "regions": ["Transylvania"] },
+      "opinion": { "HUN": 10, "ROM": -10 },
+      "text": "Germany and Italy settle the Hungarian claim on Romania at Vienna. Northern Transylvania goes to Hungary."
+    },
+    {
+      "id": "antonescu", "from": 13, "to": 18,
+      "if": ["alive:GER", "momentum>=:0.5", "alive:ROM", "atPeace:ROM", "notInBloc:ROM", "flag:event:bessarabia"],
+      "opinion": { "ROM": 25 },
+      "text": "King Carol abdicates. General Antonescu takes power in Romania and invites a German military mission."
+    },
+    {
+      "id": "tripartite", "from": 15, "to": 20,
+      "if": ["alive:GER", "momentum>=:0.5"],
+      "opinion": { "HUN": 15, "ROM": 15 },
+      "join": { "bloc": "axis", "nations": ["HUN", "ROM"], "minOpinion": 45 },
+      "text": "Berlin invites the states of the Danube to sign the Tripartite Pact."
+    },
+    {
+      "id": "bulgaria", "from": 19, "to": 24,
+      "if": ["alive:GER", "momentum>=:0.5", "inBloc:ROM,axis", "alive:BUL", "atPeace:BUL"],
+      "opinion": { "BUL": 20 },
+      "join": { "bloc": "axis", "nations": ["BUL"], "minOpinion": 45 },
+      "text": "German troops gather on the Danube and Sofia is pressed to choose a side."
+    },
+    {
+      "id": "belgrade-coup", "from": 20, "to": 20, "past": true,
+      "if": ["alive:YUG", "atPeace:YUG", "notInBloc:YUG", "alive:GER", "alive:GRE", "flag:war:ITA:GRE"],
+      "text": "Officers in Belgrade overthrow the regent for leaning toward the Axis, and crowds cheer the young King. Berlin now counts Yugoslavia an enemy."
+    },
+    {
+      "id": "rashid-ali", "from": 20, "to": 21, "mode": "open",
+      "_note": "Ruling 228(3c), the historian's realism audit item 11: Iraq's coup of 1 April 1941 and its war with Britain, at stops 1 and 2 only. Iraq leaves its leaning to Britain and goes to war with her on its own account, in no alliance: Germany sent a few aircraft but never counted Iraq an ally, and an Iraq in the Axis would be a front of Germany's own that held up the attack in the east. The declaration is told in the event's own words (the UI director's, ruling 228 section 4).",
+      "if": ["stop:1,2", "by:21", "alive:IRQ", "atPeace:IRQ", "notInBloc:IRQ", "alive:UK", "war:UK,GER"],
+      "enter": {"nations": ["IRQ"], "align": "independent"},
+      "war": [["IRQ", "UK"]],
+      "tell": "war",
+      "text": "Rashid Ali takes Iraq into war with Britain. He and four army colonels have seized power in Baghdad, the Regent has fled, and Iraqi troops with guns hold the plateau above the RAF station at Habbaniya. He looks to Berlin and Rome for help. While Iraq is against Britain, no oil comes by the Gulf route."
+    },
+    {
+      "id": "iraq-armistice", "from": 22, "to": 22, "mode": "open", "past": true,
+      "_note": "Ruling 228(3c): the armistice of 31 May 1941. Britain holds Iraq by turn 22 in every history war: Iraq is out of the war and its ground in British hands, the British columns from Basra and Transjordan marching in as the terms are made.",
+      "if": ["stop:1,2", "by:22", "alive:IRQ", "war:IRQ,UK", "flag:event:rashid-ali"],
+      "partition": {"nation": "IRQ", "shares": [[["UK"], ["Iraq", "Baghdad", "Rutbah"]]], "marchIn": true},
+      "text": "Iraq has signed an armistice at Baghdad. Rashid Ali has fled to Iran, the Regent is back, and British troops hold Mosul and Kirkuk."
+    },
+    {
+      "id": "iran-1941", "from": 24, "to": 24, "mode": "open",
+      "_note": "Ruling 228(3a, 3b): Britain and the Soviet Union enter Iran together in August 1941, at stops 1 and 2. Iran's army stops fighting within four days; the Soviet zone is Iran (Tabriz), the British Kermanshah. The Persian Corridor opens with it (resources.json).",
+      "if": ["stop:1,2", "alive:IRN", "notInBloc:IRN", "war:UK,GER", "war:SOV,GER"],
+      "partition": {"nation": "IRN", "shares": [[["SOV"], ["Iran"]], [["UK"], ["Kermanshah"]]], "marchIn": true},
+      "band": "SOV",
+      "text": "British and Soviet troops have entered Iran. The Shah would not send his Germans home or let supplies through, and his army stopped fighting within four days. The Red Army holds Tabriz and the north, and the British hold Kermanshah and the south-west. Aid for the Soviet Union can now come through Iran as well as round the North Cape."
+    },
+    {
+      "id": "iran-1941-staffs", "from": 1, "to": 99, "mode": "open",
+      "_note": "Ruling 228(3b): at stops 3 to 5 the British and Soviet staffs enter Iran once both are at war with Germany and Iran is not with the Axis, for the road was the reason they went in. A player's own Britain or Soviet Union goes in by its player's hand.",
+      "if": ["stop:3,4,5", "computer:UK", "computer:SOV", "alive:IRN", "notInBloc:IRN", "war:UK,GER", "war:SOV,GER"],
+      "partition": {"nation": "IRN", "shares": [[["SOV"], ["Iran"]], [["UK"], ["Kermanshah"]]], "marchIn": true},
+      "band": "SOV",
+      "text": "British and Soviet troops have entered Iran. The Shah would not send his Germans home or let supplies through, and his army stopped fighting within four days. The Red Army holds Tabriz and the north, and the British hold Kermanshah and the south-west. Aid for the Soviet Union can now come through Iran as well as round the North Cape."
+    },
+    {
+      "id": "italy-east", "from": 22, "to": 24, "mode": "history",
+      "if": ["alive:ITA", "alive:SOV", "inBloc:ITA,axis", "flag:war:GER:SOV"],
+      "war": [["ITA", "SOV"]],
+      "text": "Rome follows Berlin into the war in the east and promises an Italian army for the Russian front."
+    },
+    {
+      "id": "pearl-harbor", "from": 28, "to": 90,
+      "if": ["alive:GER", "dormant:USA"],
+      "wake": { "nations": ["USA"], "align": "allies" },
+      "war": [["USA", "GER"], ["USA", "ITA"]],
+      "text": "Japan attacks the American fleet at Pearl Harbor, and Germany and Italy declare war on the United States. America is in the war, with the greatest industry on earth behind it."
+    },
+    {
+      "id": "pearl-harbor-world", "from": 28, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:USA", "openTo:USA,allies", "anyPeace:USA,GER,ITA", "binds:USA"],
+      "enter": { "nations": ["USA"], "align": "allies" },
+      "war": [["USA", "GER"], ["USA", "ITA"]],
+      "text": "Japan attacks the American fleet at Pearl Harbor, and Germany and Italy declare war on the United States. America is in the war, with the greatest industry on earth behind it."
+    },
+    {
+      "id": "cuba-war", "from": 28, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:CUB", "war:USA,GER", "peace:CUB,GER", "openTo:CUB,allies"],
+      "enter": { "nations": ["CUB"], "align": "allies" },
+      "war": [["CUB", "GER"]],
+      "text": "Cuba follows the United States into the war: Havana declares war on Germany and opens its harbours and airfields to the American fleet."
+    },
+    {
+      "id": "mexico-war", "from": 33, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:MEX", "war:USA,GER", "peace:MEX,GER", "openTo:MEX,allies"],
+      "enter": { "nations": ["MEX"], "align": "allies" },
+      "war": [["MEX", "GER"]],
+      "text": "German submarines have sunk Mexican tankers in the Gulf. Mexico declares war on the Axis and joins the Allies."
+    },
+    {
+      "id": "isthmus-war", "from": 28, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "war:USA,GER"],
+      "enter": { "nations": ["PAN", "COS", "NIC", "HON", "ELS", "GUA", "HAI", "DOM"], "align": "allies" },
+      "war": [["PAN", "GER"], ["COS", "GER"], ["NIC", "GER"], ["HON", "GER"], ["ELS", "GER"], ["GUA", "GER"], ["HAI", "GER"], ["DOM", "GER"]],
+      "text": "The republics of Central America and the Caribbean follow the United States into the war within the week. Their armies are small, but their harbours and airfields guard the approaches to the Canal."
+    },
+    {
+      "id": "brazil-war", "from": 36, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:BRA", "war:USA,GER", "peace:BRA,GER", "openTo:BRA,allies"],
+      "enter": { "nations": ["BRA"], "align": "allies" },
+      "war": [["BRA", "GER"]],
+      "text": "German submarines have sunk Brazilian ships within sight of the coast, and crowds fill the streets of Rio. Brazil declares war on the Axis and joins the Allies."
+    },
+    {
+      "id": "bolivia-war", "from": 44, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:BOL", "war:USA,GER", "peace:BOL,GER", "openTo:BOL,allies"],
+      "enter": { "nations": ["BOL"], "align": "allies" },
+      "war": [["BOL", "GER"]],
+      "text": "Bolivia, whose tin already goes to the Allied factories, declares war on the Axis and joins the Allies."
+    },
+    {
+      "id": "colombia-war", "from": 51, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:COL", "war:USA,GER", "peace:COL,GER", "openTo:COL,allies"],
+      "enter": { "nations": ["COL"], "align": "allies" },
+      "war": [["COL", "GER"]],
+      "text": "German submarines have sunk Colombian ships in the Caribbean. Colombia declares war on Germany and joins the Allies."
+    },
+    {
+      "id": "americas-war-1945", "from": 66, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "war:USA,GER"],
+      "enter": { "nations": ["ECU", "PAR", "PER", "URU", "VEN"], "align": "allies" },
+      "war": [["ECU", "GER"], ["PAR", "GER"], ["PER", "GER"], ["URU", "GER"], ["VEN", "GER"]],
+      "text": "Ecuador, Paraguay, Peru, Uruguay and Venezuela declare war on the Axis: only a country at war by March has a seat at the founding conference of the United Nations."
+    },
+    {
+      "id": "turkey-war-1945", "from": 66, "to": 66, "mode": "open",
+      "_note": "Ruling 228 item 17, b528: a declaration, not a front. Turkey declared on 23 February 1945 to sit at the founding conference, with Germany beaten and no Axis army near its frontier; no Turkish soldier fought. At stops 1 and 2 it fires in that month if no Axis army stands on Turkish ground or ground bordering it; a computer Turkey's corps then keep to Turkish ground ('stay'). A player's Turkey is never moved.",
+      "if": ["stop:1,2", "by:66", "alive:GER", "alive:TUR", "peace:TUR,GER", "openTo:TUR,allies", "noArmyNear:axis,TUR"],
+      "enter": { "nations": ["TUR"], "align": "allies" },
+      "war": [["TUR", "GER"], ["TUR", "JAP"]],
+      "tell": "war",
+      "stay": ["TUR"],
+      "text": "Turkey declares war on Germany and Japan. No Turkish army will march: the declaration buys Ankara a seat at the founding conference of the United Nations."
+    },
+    {
+      "id": "turkey-war-late", "from": 66, "to": 99, "mode": "open",
+      "_note": "b528 at stops 3 to 5: the same declaration, from February 1945 in the first month when, as well, Allied armies stand on Germany's home ground (the reason the record gives).",
+      "if": ["stop:3,4,5", "alive:GER", "alive:TUR", "peace:TUR,GER", "openTo:TUR,allies", "noArmyNear:axis,TUR", "armyOn:allies,GER"],
+      "enter": { "nations": ["TUR"], "align": "allies" },
+      "war": [["TUR", "GER"], ["TUR", "JAP"]],
+      "tell": "war",
+      "stay": ["TUR"],
+      "text": "Turkey declares war on Germany and Japan. No Turkish army will march: the declaration buys Ankara a seat at the founding conference of the United Nations."
+    },
+    {
+      "id": "argentina-war", "from": 67, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:ARG", "war:USA,GER", "peace:ARG,GER", "openTo:ARG,allies"],
+      "enter": { "nations": ["ARG"], "align": "allies" },
+      "war": [["ARG", "GER"]],
+      "text": "Argentina, the last of the American republics to break with the Axis, declares war on Germany and joins the Allies."
+    },
+    {
+      "id": "usa-italy", "from": 28, "to": 99, "mode": "open",
+      "if": ["alive:USA", "alive:ITA", "war:USA,GER", "war:ITA,UK", "peace:USA,ITA"],
+      "war": [["USA", "ITA"]],
+      "text": "Italy is fighting beside Germany, and the United States is at war with Germany. Washington and Rome are now at war too."
+    },
+    {
+      "id": "darlan", "from": 14, "to": 99,
+      "if": ["alive:VIC", "anyHeld:allies,Casablanca,Fez,Marrakech,Oran,Algiers,Constantine"],
+      "partition": {
+        "nation": "VIC",
+        "shares": [
+          [["USA", "UK"], ["Casablanca", "Fez", "Marrakech", "Colomb-Bechar", "Oran"]],
+          [["UK", "USA"], ["Algiers", "Constantine", "Laghouat", "Biskra", "Ouargla", "Syria", "Lebanon", "Damascus", "Palmyra", "Deir ez-Zor"]],
+          [["GER", "ITA"], ["Tunis", "Lyon", "Auvergne", "Limousin", "Toulouse", "Languedoc", "Marseille"]],
+          [["ITA", "GER"], ["Sfax", "Mareth", "Riviera", "Savoy", "Corsica"]]
+        ]
+      },
+      "spawn": [["GER", "Division von Broich", "inf", 1, "Tunis"], ["ITA", "Superga Division", "inf", 1, "Sfax"], ["ITA", "Saharan Group", "inf", 1, "Mareth"]],
+      "text": "After three days of fighting Admiral Darlan orders a ceasefire, and French North Africa comes over to the Allies. Germany and Italy occupy the rest of France, and Axis troops fly into Tunis."
+    },
+    {
+      "id": "africa-cleared", "from": 40, "to": 99,
+      "if": ["flag:event:darlan", "allHeld:allies,Tunis,Sfax,Mareth,Tripoli"],
+      "text": "The last Axis troops in Africa have laid down their arms. General Alexander signals London: \"We are masters of the North African shores.\""
+    },
+    {
+      "id": "red-army-1943", "from": 46, "to": 70,
+      "if": ["alive:SOV", "war:SOV,GER"],
+      "reform": { "SOV": { "quality": 0.8, "slowCommand": false, "maxAttack": 14, "air": 100 } },
+      "text": "Two years of war have remade the Red Army. Its generals now handle tank armies and whole fronts in a single operation, and the factories beyond the Urals send them more tanks, guns and aircraft than Germany can build."
+    },
+    {
+      "id": "italy-loses-heart", "from": 47, "to": 70,
+      "if": ["alive:ITA", "war:ITA,UK", "anyHeld:allies,Tunis"],
+      "reform": { "ITA": { "quality": 0.45 } },
+      "text": "With Africa lost, a quarter of a million men gone into captivity at Tunis and the bombers over Sicily and Rome, the Italian army has no heart left for this war. Its divisions will not fight as they did."
+    },
+    {
+      "id": "mussolini-falls", "from": 48, "to": 70, "past": true,
+      "if": ["alive:ITA", "computer:ITA,47", "anyHeld:allies,Sicily,Sardinia,Calabria,Apulia,Naples,Rome"],
+      "text": "The Fascist Grand Council has voted against Mussolini. The King has dismissed him and had him arrested, and Marshal Badoglio forms a government. \"The war goes on,\" says Rome, and nobody believes it."
+    },
+    {
+      "id": "italian-armistice", "from": 49, "to": 70,
+      "if": ["alive:ITA", "since:event:mussolini-falls,1", "anyHeld:allies,Sicily,Sardinia,Calabria,Apulia,Naples,Rome"],
+      "partition": { "nation": "ITA", "shares": [[["GER", "UK", "USA"], ["Rome"]], [["UK", "USA", "GER"], ["Sardinia", "Corsica"]]] },
+      "stake": [47],
+      "text": "Italy has signed an armistice with the Allies and is out of the war. German troops disarm the Italian army, seize Rome and take over Italy's garrisons from the Riviera to Rhodes. Sardinia and Corsica are given up."
+    },
+    {
+      "id": "luftwaffe-1944", "from": 55, "to": 90,
+      "if": ["alive:GER", "war:GER,USA"],
+      "reform": {"GER": {"air": 45}},
+      "text": "The Luftwaffe has lost the daylight sky. Since American fighters began escorting the bombers all the way to Berlin its fighter arm has been losing pilots it cannot replace, and what is left is kept over the Reich. The armies at the front will fight without it."
+    },
+    {
+      "id": "allied-armies-1944", "from": 57, "to": 90,
+      "if": ["alive:UK", "war:GER,USA"],
+      "reform": {"USA": {"quality": 1.0, "air": 140}, "UK": {"air": 90}},
+      "text": "The Allied armies of 1944 are not those of 1942. The Americans have learned their trade in Tunisia, Sicily and Italy, and behind every attack now stand guns, tanks and fighter-bombers in numbers no German commander can match."
+    },
+    {
+      "id": "german-army-1944", "from": 57, "to": 90,
+      "if": ["alive:GER", "war:GER,SOV"],
+      "reform": {"GER": {"quality": 1.15}},
+      "text": "Nearly five years of war have worn the German army down. Its divisions are rebuilt with boys, older men and the half-recovered, short of lorries and fuel. They still fight with skill, but this is no longer the army of 1941."
+    },
+    {
+      "id": "gustav-line-broken", "from": 50, "to": 90, "past": true,
+      "if": ["flag:event:italian-armistice", "taken:allies,Cassino,event:italian-armistice"],
+      "text": "The Gustav Line is broken. The ruins of the abbey on Monte Cassino are in Allied hands, and the road to Rome lies open."
+    },
+    {
+      "id": "rome-liberated", "from": 50, "to": 90, "past": true,
+      "if": ["flag:event:italian-armistice", "taken:allies,Rome,event:italian-armistice"],
+      "text": "Rome is free: the first of the Axis capitals to fall. Allied columns drive past the Colosseum through cheering crowds."
+    },
+    {
+      "id": "fortitude", "from": 57, "to": 57, "mode": "history",
+      "if": ["war:GER,USA", "fallen:FRA"],
+      "text": "Across the Channel from Calais, Kent fills with tanks made of rubber and a phantom army under General Patton. German intelligence counts eighty Allied divisions in England where there are barely forty, and expects them at the Pas de Calais."
+    },
+    {
+      "id": "paris-liberated", "from": 58, "to": 90, "mode": "history", "past": true,
+      "if": ["fallen:FRA", "flag:harbour:58", "allHeld:allies,Paris"],
+      "text": "Paris is free. The city rose against its garrison, General Leclerc's French 2nd Armoured Division drove in to finish it, and General de Gaulle has walked down the Champs-Elysees to Notre-Dame through a million people."
+    },
+    {
+      "id": "brussels-liberated", "from": 58, "to": 90, "mode": "history", "past": true,
+      "if": ["flag:harbour:58", "allHeld:allies,Brussels"],
+      "text": "Brussels is free. The Guards Armoured Division drove seventy-five miles in a day to reach it, and the crowds would not let the tanks through."
+    },
+    {
+      "id": "france-frees-itself", "from": 62, "to": 90, "mode": "history", "past": true,
+      "if": ["flag:harbour:58", "allHeld:allies,Paris,Marseille"],
+      "liberate": {"from": "GER", "to": ["USA", "UK"], "regions": ["Paris", "Lille", "Calais", "Somme", "Rouen", "Normandy", "Cotentin", "Rennes", "Brittany", "Nantes", "Champagne", "Sedan", "Verdun", "Aube", "Burgundy", "Orleans", "Touraine", "Maine", "Berry", "Lyon", "Auvergne", "Limousin", "Poitou", "Bordeaux", "Gascony", "Toulouse", "Languedoc", "Marseille", "Riviera", "Savoy", "Jura"]},
+      "text": "Behind the retreating German armies the French Forces of the Interior take over town after town. South of the Loire and west of the Rhone, France has freed itself."
+    },
+    {
+      "id": "atlantic-pockets", "from": 64, "to": 90, "mode": "history", "past": true,
+      "if": ["flag:harbour:58", "allHeld:allies,Paris,Marseille"],
+      "liberate": {"from": "GER", "to": ["USA", "UK"], "regions": ["Paris", "Lille", "Calais", "Somme", "Rouen", "Normandy", "Cotentin", "Rennes", "Brittany", "Nantes", "Champagne", "Sedan", "Verdun", "Aube", "Burgundy", "Orleans", "Touraine", "Maine", "Berry", "Lyon", "Auvergne", "Limousin", "Poitou", "Bordeaux", "Gascony", "Toulouse", "Languedoc", "Marseille", "Riviera", "Savoy", "Jura"]},
+      "text": "The German garrisons left behind on the Atlantic coast of France, cut off since the summer and watched by the French Forces of the Interior, hold nothing now but their own perimeters."
+    },
+    {
+      "id": "arnhem", "from": 63, "to": 63, "mode": "history", "past": true,
+      "if": ["flag:harbour:58", "allHeld:allies,Brabant", "allHeld:axis,Gelderland"],
+      "text": "Operation Market Garden has failed at the last bridge. Three airborne divisions were dropped along a single road to the Rhine at Arnhem, and the tanks sent up it to join them did not arrive in time. The war will not be over by Christmas."
+    },
+    {
+      "id": "bulge", "from": 65, "to": 65, "mode": "history", "past": true,
+      "if": ["flag:harbour:58", "allHeld:allies,Paris", "allHeld:axis,Ardennes"],
+      "text": "Out of the fog and snow of the Eifel two panzer armies have broken through the thin American line in the Ardennes. The front bends back fifty miles toward the Meuse: the newspapers are calling it the Bulge. At Bastogne the surrounded garrison was asked to surrender and answered in one word: Nuts."
+    },
+    {
+      "id": "bulge-closed", "from": 66, "to": 68, "mode": "history", "past": true,
+      "if": ["flag:event:bulge", "allHeld:allies,Ardennes"],
+      "text": "The Bulge is gone. The last German offensive in the West has cost the Reich its reserve of tanks and fuel, and the Ardennes are back in Allied hands."
+    },
+    {
+      "id": "aachen", "from": 63, "to": 63, "mode": "history", "past": true,
+      "if": ["flag:harbour:58", "allHeld:allies,Liege"],
+      "text": "Aachen has surrendered to the US First Army after three weeks of fighting from house to house: the first German city to fall. Beyond it the West Wall still holds."
+    },
+    {
+      "id": "leningrad-relieved", "from": 54, "to": 70, "mode": "history", "past": true,
+      "if": ["war:GER,SOV", "allHeld:allies,Leningrad,Novgorod"],
+      "text": "The siege of Leningrad is over. After nearly nine hundred days the German guns have been driven out of range of the city, and Moscow fires a salute of 324 guns. More than half a million of its people died of hunger and cold."
+    },
+    {
+      "id": "crimea-freed", "from": 57, "to": 70, "mode": "history", "past": true,
+      "if": ["war:GER,SOV", "allHeld:allies,Crimea"],
+      "text": "Sevastopol has fallen and the Crimea is Soviet again. What is left of the German Seventeenth Army is taken off the beaches of Cape Chersonese under fire, or surrenders there."
+    },
+    {
+      "id": "minsk-freed", "from": 59, "to": 70, "mode": "history", "past": true,
+      "if": ["war:GER,SOV", "allHeld:allies,Minsk,Vitebsk"],
+      "text": "Minsk is free, and the tanks of two Soviet fronts have met west of it. Behind them the German Fourth Army is cut off in the forests: Army Group Centre has ceased to exist. It is the greatest defeat the German army has ever suffered."
+    },
+    {
+      "id": "lublin-freed", "from": 60, "to": 70, "mode": "history", "past": true,
+      "if": ["war:GER,SOV", "allHeld:allies,Lublin"],
+      "spawn": [["SOV", "Polish 1st Army", "inf", 4, "Lublin"]],
+      "text": "The Red Army is over the Bug and in Lublin, and a Polish committee backed by Moscow has set itself up there as the country's government. The Polish 1st Army, raised in the Soviet Union, marches with it. Outside the city, at Majdanek, the soldiers have found a German death camp with its gas chambers still standing."
+    },
+    {
+      "id": "warsaw-rising", "from": 60, "to": 60, "mode": "history",
+      "if": ["war:GER,SOV", "allHeld:allies,Lublin", "allHeld:axis,Warsaw"],
+      "text": "Warsaw has risen. With Soviet guns heard across the Vistula, the Polish Home Army has come out into the streets against the German garrison and holds much of the city centre."
+    },
+    {
+      "id": "romania-changes-sides", "from": 61, "to": 70, "mode": "history", "past": true,
+      "if": ["alive:ROM", "war:ROM,SOV", "allHeld:allies,Moldavia"],
+      "partition": {"nation": "ROM", "occupied": true, "shares": [[["SOV"], ["Bucharest", "Ploiesti", "Dobruja", "Oltenia", "Banat", "Moldavia", "Bessarabia", "Bukovina", "Transylvania"]]]},
+      "spawn": [["SOV", "Romanian 1st Army", "inf", 4, "Bucharest"], ["SOV", "Romanian 4th Army", "inf", 4, "Bucharest"]],
+      "text": "King Michael has had Marshal Antonescu arrested and Romania has changed sides. Its army turns its guns on the Germans, the Red Army drives for Bucharest and the oilfields of Ploiesti, and the German Sixth Army, destroyed once at Stalingrad, is cut off for the second time."
+    },
+    {
+      "id": "bulgaria-changes-sides", "from": 61, "to": 70, "mode": "history",
+      "if": ["alive:BUL", "flag:event:romania-changes-sides"],
+      "partition": {"nation": "BUL", "occupied": true, "shares": [[["SOV"], ["Sofia", "Plovdiv", "Varna"]]]},
+      "spawn": [["SOV", "Bulgarian 1st Army", "inf", 3, "Sofia"]],
+      "text": "The Soviet Union has declared war on Bulgaria and crossed the Danube without a shot fired. A new government in Sofia has declared war on Germany, and the Bulgarian army marches with the Red Army into Yugoslavia."
+    },
+    {
+      "id": "finland-armistice", "from": 61, "to": 70, "mode": "history",
+      "if": ["alive:FIN", "war:FIN,SOV", "allHeld:allies,Karelia"],
+      "cede": {"from": "FIN", "to": "SOV", "regions": ["Karelia", "Petsamo"]},
+      "peace": [["FIN", "SOV"]],
+      "text": "Finland is out of the war. Marshal Mannerheim, now President, has signed an armistice with Moscow: the frontier of 1940 is restored, Petsamo is given up, and the German troops in the north are to leave or be driven out."
+    },
+    {
+      "id": "warsaw-rising-crushed", "from": 62, "to": 62, "mode": "history",
+      "if": ["flag:event:warsaw-rising", "allHeld:axis,Warsaw"],
+      "text": "After sixty-three days the Warsaw rising is over. The Home Army has laid down its arms, some two hundred thousand of the city's people are dead, and what is left of Warsaw is being blown up street by street. The Red Army watched from across the river."
+    },
+    {
+      "id": "slovak-rising", "from": 61, "to": 61, "mode": "history", "past": true,
+      "if": ["alive:SVK", "war:GER,SOV", "allHeld:allies,Lwow"],
+      "text": "Slovakia has risen. Part of the Slovak army and thousands of partisans hold the mountains round Banska Bystrica against the German divisions sent in to disarm them, and the Red Army is fighting its way toward them through the Dukla Pass."
+    },
+    {
+      "id": "belgrade-freed", "from": 63, "to": 70, "mode": "history", "past": true,
+      "if": ["war:GER,SOV", "allHeld:allies,Belgrade"],
+      "text": "Belgrade is free. Tito's partisans and the tanks of the Red Army fought their way into the city together, and the German army group in Greece is marching north through the mountains to get out before the door shuts."
+    },
+    {
+      "id": "horthy", "from": 63, "to": 63, "mode": "history", "past": true,
+      "if": ["alive:HUN", "war:HUN,SOV", "allHeld:allies,Transylvania"],
+      "text": "Admiral Horthy has announced on Budapest radio that Hungary is asking for an armistice. Within hours German troops have seized the Castle and the Regent's son, and the Arrow Cross leader Szalasi is put in power. Hungary fights on to the end."
+    },
+    {
+      "id": "budapest-ring", "from": 65, "to": 70, "mode": "history", "past": true,
+      "if": ["alive:HUN", "war:HUN,SOV", "allHeld:allies,Debrecen", "allHeld:axis,Budapest"],
+      "text": "The ring has closed round Budapest. Two Soviet fronts have met west of the city on the Danube, and some seventy thousand German and Hungarian soldiers and nearly a million civilians are shut in. The Soviet officers sent forward under a white flag with terms did not come back alive."
+    }
+  ]
+}

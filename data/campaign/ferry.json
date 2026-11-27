@@ -1,0 +1,26 @@
+{
+  "_note": "Moving an air group to any airfield of its side's with one order (release 2; Brian 24 November 2026 22:08Z: 'move any air unit to any airfield you want that is yours or an allies but it tells you how many turns it will take and if there is risk of being intercepted'; the design director's rulings of 21:49Z and 22:10Z; src/campaign/ferry.ts). The switch is the game's flag 'ferry' (stage.json 'ferry', forced by TC_FERRY=1; setFerry in a test). Off, nothing here is read. On: the order finds a chain of its own side's and its allies' airfields, each hop no longer than the group's ferry range measured on the globe between the fields themselves (not on the chart, which stretches the far north: it puts Greenland to Iceland at about 2,000 km where the fields are about 1,240 km apart); the group flies 'perMonth' hops a month, out of the fight while it is on its way; where no chain reaches across an ocean it goes crated by sea, by the existing rule. No route is written down anywhere: only where the fields are. Marks: L read in the record (historian/ferry-routes-1124.md, through a summary or a secondary page), D derived by the historian or by us from the record, M a field's position from common reference, G a guess for the historian to size from the record later, U not yet known (kept at 0 with its row in place).",
+  "range": {
+    "_note": "Ferry range in km: the longest hop between two fields a group of this type flies in one go, with drop tanks and no fighting. 'bmr' 3,870 (L): the B-17s' Hamilton Field to Hickam leg (AAF VII-7 prints 2,398 miles, another page '2,400-mile', 3,859 to 3,862 km; 21 B-17s flew it on 13 May 1941, 'uneventful', L), the longest leg the record has bombers fly, rounded up to the next 10 km so that the leg they flew is inside it (the two fields' positions below put it at 3,862 km); the medium bombers of Bolero crossed by the North Atlantic legs, so for them it is a G. 'ftr' 1,400 (G, sized from L): the North Atlantic legs the Bolero fighters flew in 1942 and the P-47s in 1943, the longest Reykjavik to Prestwick at 842 statute miles (1,355 km, D from the fields' positions; the historian's table), the shorter Goose Bay to Bluie West 1 and Bluie West 1 to Reykjavik about 775 miles each (L); any fighter type the record does not show crossing is a G at this figure. 'types' (read only with the Fighter types switch on, fighters.ts typeMix): a group flies at the range of the shortest-legged type in it. The P-38s 2,000 (L for the flight, D for the distance): 'The longest jump from Hilo to Christmas involved a flight of six and a half hours' (F, AAF VII-7), about 2,000 km on the globe; the P-47s 1,400 (L: the 1943 North Atlantic crossing, as 'ftr').",
+    "ftr": 1400,
+    "bmr": 3870,
+    "types": { "p38_fg": 2000, "p38_jl": 2000, "p47_cd": 1400, "p47_d25": 1400 }
+  },
+  "perMonth": 4,
+  "_perMonth": "Hops a group flies in a month (G, calibrated to the record's fair-weather ferry time, historian/ferry-routes-1124.md part 1): the P-47s of July-August 1943 flew the four ocean legs from Presque Isle (Goose Bay, Bluie West 1, Reykjavik, Prestwick) in about 19-20 days, 12 of them waiting on the weather at Goose Bay (F, D); nine B-17s flew five or six hops Hickam to the Philippines in 8-11 days (L). About one hop a day in fair weather, with waits of days to two weeks (D). Four a month is the 1943 crossing's pace with room for one long wait. A closed sky over either end of a hop holds it for the month (weather, ruling 127), whatever is left of the four.",
+  "safer": 1,
+  "_safer": "The search's preference (G): where the quickest chain has a hop within reach of enemy fighters the player's side knows of, and a chain with no such hop takes at most this many more turns, the order takes the safer chain and says so. One more turn and no more (the design director's 22:10Z).",
+  "losses": { "ftr": 0, "bmr": 0 },
+  "_losses": "Aircraft forced down on the way, by cause, a share of the group a hop (U, 0 until the historian reads them: the record's 4.12% of all aircraft lost on the North Atlantic route in 1942, about 7% of the P-38s, 1.14% in 1943, are all causes together, weather first). At 0 nothing is rolled and no die is drawn.",
+  "fields": {
+    "_note": "Where the airfield of a province stands, where it is not at the province's own point on the chart (M: well-known positions, latitude and longitude; the historian's distance table of 24 November was worked from the same fields). San Francisco's is Hamilton Field and Pearl Harbor's Hickam Field, the ends of the B-17s' leg of May 1941 (the far side's chart only). Every other province's field is measured from its own point. Positions only: no route, no hop, no pair is written here, and a province with no airfield is never a stop.",
+    "Iceland": [64.13, -21.94],
+    "Greenland": [61.16, -45.43],
+    "Labrador": [53.32, -60.42],
+    "Newfoundland": [48.54, -58.55],
+    "Clydeside": [55.51, -4.59],
+    "Azores": [38.76, -27.09],
+    "San Francisco": [38.06, -122.51],
+    "Pearl Harbor": [21.32, -157.94]
+  }
+}

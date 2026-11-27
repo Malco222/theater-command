@@ -1,0 +1,13 @@
+{
+ "_about": "The stage switch 'airQuality' (off as shipped; the harness turns it on with TC_AIRQ=1): an air force's quality in air.json's 'nations', set from the record where the default sells it short. One row a nation, each with the facts it rests on and their source. Off, air.json's quality stands, as in release 1. Not behind the switch 'Fighter types': it is a fact of the pilots, not the aeroplanes. The design director's ruling of 22 Nov 2026, 06:26Z.",
+ "rows": {
+  "FIN": {
+   "quality": 1.0,
+   "was": 0.7,
+   "mark": "likely",
+   "facts": "Winter War about 190-200 claimed for 26-30 fighters lost; 1941-44 about 1,600 claimed for 200-250 lost",
+   "source": "historian/fighter-types-signoff-1122.md s4",
+   "why": "The best exchange of any air force against the Soviets, even halved for over-claiming; air.json gives Finland the 0.7 default."
+  }
+ }
+}

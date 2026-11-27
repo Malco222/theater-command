@@ -1,0 +1,146 @@
+{
+ "what": "Each gun's own flash (release 2, behind the land battle's -TheaterLandGunFlash; Brian, 23 November: 'how does the gun fire look when they shoot? can we make the mussel flash realistic?'). Laid over battle-fx.json for that battle alone (FBattleEffects::LayOver): each number here is added to the recipe, the rest stay. The scene names a gun by its row and its look, 'mg:star' (LandPlay World::GunLook, chosen in LandBattle by the shooter's army, role, figure and model); the kit draws the row as ever and the look's pieces after it with dice of their own (TheaterFxCore GunLookOf, LookFlame, LookLaid). Every look's numbers: on; flame_m (its flame's length, 0 the row's); narrow (its width as a share of the row's: a flash hider's cone is under 1); licks (its sideways licks as a share); flicker (each round of a burst flickers, as a machine gun's); hot_m (a burst's close flame a round); far_k (a round's far flicker's size); tracer (0: none); star, star_m, star_wide, star_lean, star_far_m (spikes round the bore: their count, length, half-width as a share of their length, degrees off the bore, and how far from the eye they are still drawn past the close flash's reach); jets, jet_m, jet_back_m, jet_wide, jet_dust (a muzzle brake's two side jets, their length, how far back the brake sits, their width, and the dust they blow aside); haze, haze_r, haze_s, haze_within_m (the pale puff a shot leaves to hang); prone_under_m, prone_dust, dust_within_m (a muzzle that low kicks the ground's dust up, that opaque on the dustiest ground); lamp_w, lamp_back_m, lamp_r, lamp_within_m (the flash's glow on the firer's face and hands, at dusk and night only, on the flash's own frame); day_k, day_pale (by day its size as a share of dusk's and how far its colours go toward pale yellow-white); streak (1: its tracer a short travelling streak even close in). The art director's round 1, 17:06Z: the cone, tongue, SMG, tank MG and brake PASS; the MG 42 star 4 to 6 short straight spikes rolled anew each shot; by day half the size and paler; the rifle haze gone in 1 to 2 s, its dust kick the giveaway (tan on dry ground, white on snow, none on wet); rifles no tracer; lamps 2 to 3 m, the flash's frame alone. Round 2, 17:19Z, PASS, with two carries made: the kick off snow a bright bluish-white (snow_kick), the star's spikes white at the root running out to yellow tips.",
+ "muzzle": {
+  "look": {
+   "snow_kick": [
+    244,
+    248,
+    255
+   ],
+   "haze_colour": [
+    196,
+    198,
+    200
+   ],
+   "star": {
+    "_what": "The MG 42 (and the MG 34 on its bipod or tripod): its muzzle booster's cone throws the flash out round the bore in four or five bright spikes near square to it, so a burst at night is a big flickering star, 20 rounds a second. The brightest small arm on the field.",
+    "on": 1,
+    "flicker": 1,
+    "hot_m": 0.6,
+    "narrow": 0.8,
+    "licks": 0.5,
+    "far_k": 1.4,
+    "star": 6,
+    "star_m": 0.2,
+    "star_wide": 0.1,
+    "star_lean": 70,
+    "star_far_m": 250,
+    "haze": 0.12,
+    "haze_r": 0.8,
+    "prone_under_m": 0.8,
+    "prone_dust": 0.75,
+    "lamp_w": 240,
+    "lamp_back_m": 0.9,
+    "lamp_r": 2.5,
+    "streak": 1,
+    "day_k": 0.5,
+    "day_pale": 0.6
+   },
+   "cone": {
+    "_what": "A light machine gun with a conical flash hider (the Bren, the DP, the BAR, the Japanese Type 96 and 99): a short narrow cone of flame along the bore, few licks, a slower rhythm (8 to 10 a second).",
+    "on": 1,
+    "flicker": 1,
+    "hot_m": 0.36,
+    "narrow": 0.55,
+    "licks": 0.3,
+    "far_k": 0.8,
+    "haze": 0.1,
+    "haze_r": 0.7,
+    "prone_under_m": 0.8,
+    "prone_dust": 0.75,
+    "lamp_w": 150,
+    "lamp_back_m": 0.8,
+    "lamp_r": 2.3,
+    "day_k": 0.5,
+    "day_pale": 0.6,
+    "streak": 1
+   },
+   "open": {
+    "_what": "A machine gun with no flash hider (the M1919 and the Maxim on their tripods and sledges, the Vickers, the Breda, the FM 24/29): a long ragged orange tongue with licks thrown wide.",
+    "on": 1,
+    "flicker": 1,
+    "hot_m": 0.62,
+    "narrow": 1.15,
+    "licks": 1.2,
+    "far_k": 1.2,
+    "haze": 0.12,
+    "haze_r": 0.8,
+    "prone_under_m": 0.9,
+    "prone_dust": 0.75,
+    "lamp_w": 200,
+    "lamp_back_m": 0.9,
+    "lamp_r": 2.5,
+    "day_k": 0.5,
+    "day_pale": 0.6,
+    "streak": 1
+   },
+   "tank": {
+    "_what": "A machine gun in a tank's mantlet or ball mount, or on her roof: a short flame out of the armour, no dust and no glow on a face (the gunner is inside).",
+    "on": 1,
+    "flicker": 1,
+    "hot_m": 0.34,
+    "narrow": 0.7,
+    "licks": 0.5,
+    "far_k": 0.8,
+    "day_k": 0.5,
+    "day_pale": 0.6,
+    "streak": 1
+   },
+   "smg": {
+    "_what": "A squad leader's sub-machine gun (the MP 40, the Sten, the Thompson, the PPSh): a burst of pistol rounds, each a small yellow flicker with no tracer, the PPSh's faster.",
+    "on": 1,
+    "flicker": 1,
+    "flame_m": 0.15,
+    "hot_m": 0.22,
+    "narrow": 0.8,
+    "licks": 0.5,
+    "far_k": 0.6,
+    "tracer": 0,
+    "haze": 0.1,
+    "haze_r": 0.5,
+    "prone_under_m": 0.5,
+    "prone_dust": 0.6,
+    "lamp_w": 120,
+    "lamp_back_m": 0.5,
+    "lamp_r": 2.0,
+    "day_k": 0.5,
+    "day_pale": 0.6,
+    "haze_s": [
+     1.0,
+     2.0
+    ]
+   },
+   "rifle": {
+    "_what": "A full-power service rifle (the Kar 98k, the Lee-Enfield, the Mosin, the M1, the Arisaka, the Carcano): one round fireball and tongue, a little bigger than the plain row's, and a pale haze that hangs where he fired, so a firing line soon has a thin veil over it; firing prone, a kick of the ground's dust.",
+    "on": 1,
+    "flame_m": 0.32,
+    "narrow": 1.1,
+    "haze": 0.1,
+    "haze_r": 0.5,
+    "haze_s": [
+     1.0,
+     2.0
+    ],
+    "prone_under_m": 0.5,
+    "prone_dust": 0.8,
+    "lamp_w": 160,
+    "lamp_back_m": 0.7,
+    "lamp_r": 2.0,
+    "tracer": 0,
+    "day_k": 0.5,
+    "day_pale": 0.6
+   },
+   "brake": {
+    "_what": "A gun with a muzzle brake (the Tiger's and the Panther's, the long Panzer IV's and the StuG's, the ZiS-3 and the SU-76, the 25-pounder): the gas turned out to either side in two flat jets, the flame ahead shorter, and the dust blown out in two low fans beside the gun.",
+    "on": 1,
+    "flame_m": 0.85,
+    "narrow": 0.9,
+    "jets": 1,
+    "jet_m": 1.5,
+    "jet_back_m": 0.2,
+    "jet_wide": 0.22,
+    "jet_dust": 0.55
+   }
+  }
+ }
+}

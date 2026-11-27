@@ -1,0 +1,352 @@
+{
+  "_about": "A neutral's bargains (release 2; Brian's yes of 22 November 2026; the design director's frame of 03:42 UTC and rulings of 03:47 and 03:55 UTC; the form, rules-builder/release2/bargains-legions-form.md; the record, historian/neutrals-bargains-1939-45.md, accepted by the design director). The grand campaign only, with stage.json 'bargains' on. A country at peace outside both alliances has goods or a right that the countries at war want, and sells it to one of them a term at a time. No second economy: the buyer pays the seller production points a month for the share of the goods that arrives; the goods are supply and oil in a great power's depots (resources.json, as its 'deals' pay), or money for a buyer that keeps no stocks ('asMoney' production points for each point of them); a 'base' lets the buyer's air groups use that place's airfield, which the right counts as of class 'field'. 'output' is the share of a country's production that the good keeps going, as navy.json's ore share does for Germany: a country that has had it and goes without it loses that share once 'lag' months have passed (the stocks it held; the historian's table, section 3, Speer's memo of November 1943). The goods go by trade.ts's way between the two countries, so the sea sinks or shuts them as it does trade. 'replaces' names a deal of resources.json that follows the bargain's buyer instead of its own row while the seller sells: the Swedish ore (with navy.json's ore share), and Romania's oil while Romania is neutral. 'carve' takes a share of a sea lane's supply out of the lane and makes it the bargain's goods: Argentina's meat and grain, a tenth of the Atlantic lane's supply to Britain (the historian's option (a)). 'inLane' names the buyers whose lanes already carry these goods: to them the bargain is money only (option (b)).",
+  "_rows": "The named bargains: 'seller', 'name' (as the news says it), 'sign' (the map's sign, a key of the art director's kit, signs/goods-<key>.svg: ore, oil, chrome, wolfram, beef, base, harbour, exports), 'gives' a month, 'sizes' [from turn, supply] by year where the record's flow changed, 'record' [from turn, to turn, buyer or null], the record's buyer by date (one buyer a term: where both sides bought, the one whose need the record names; the other side's buying is its pre-emptive bid), read at stops 1 and 2. From the historian's table, section 1, with these readings of the rules builder's: wolfram's 3% of German output is shared between Spain and Portugal by their tons to Germany in 1941-43 (Portugal 5,325, Spain 2,914: 0.018 and 0.012); Brazil's airfields are dated from January 1941 (the table: '1941-42'). Every other country at peace outside both alliances that is not a great power ('generic.never' too) sells its exports: supply, or oil where 'generic.oil' says so, of 'generic.share' times its wealth (trade.ts wealthOf) as the campaign opens, named as the record names them ('generic.names', section 9).",
+  "_terms": "A round of bids opens for a bargain when no term runs and somebody can bid, when a term ends, or when its buyer can no longer take it (at war with the seller, fallen, or its way shut 'cutMonths' running); at stops 1 and 2 also when the record names another buyer. It is open for 'round' month: the bids come in, and the seller chooses as the next month opens; a term then runs 'term' months. A seller in the player's seat chooses for himself: until he does, the round stays open with the bids that can still be taken, and he is reminded once. Nothing is chosen for him.",
+  "_judge": "A computer-run seller takes the bid with the best score, price x (1 + lean x L + winning x W + fear x F), none at 0 or below: 'lean' the seller's opinion toward the bidder's alliance (-1 to 1), 'winning' how the war goes for that alliance (-1 to 1), 'fear' 1 when the bidder and those fighting beside it have more divisions on the ground next to the seller's home than the seller has at home. At stops 1 and 2 it sells to the record's buyer of the date while that buyer bids, at that buyer's bid. Who may bid: a country at war, the buyer of a deal the bargain replaces, and at stops 1 and 2 the record's buyer of the date. A computer-run country bids once a round: 'bid.share' of what the goods are worth to it (each point of supply or oil at 'bid.unit' to a power that keeps stocks, money as it gets it to any other, the production share it keeps at its own income, a base right at the floor) plus 'bid.deny' of their worth to a bidder at war with it, at least 'bid.floor' (no bid where they are worth less), at most 'bid.most' of its income. The player bids in steps of 'bid.step' from the floor up to the same most.",
+  "_price": "Each month of a term the seller's opinion moves 'pull' toward its buyer's alliance and its leaning a third of that (not a seat in the player's hands: its path is his). Every great power at war with the buyer loses 'patience.fall' of its patience with the seller (from 100) each month the seller's goods reach its enemy, and gains 'patience.heal' back in any other month; the seller hears of it at 'patience.half' and at 0. At stops 4 and 5 a computer-run great power whose patience is spent presses a claim on the seller's ground next to its own by the ambitions of claims.ts (warned first, marching only when the moment holds); at stops 1 to 3 it is news only.",
+  "term": 12,
+  "round": 1,
+  "cutMonths": 2,
+  "asMoney": 1,
+  "generic": {
+    "share": 0.3,
+    "sign": "exports",
+    "never": [
+      "ROM"
+    ],
+    "names": {
+      "CHL": "Chilean copper and nitrates",
+      "BOL": "Bolivian tin",
+      "VEN": "Venezuelan oil",
+      "MEX": "Mexican oil",
+      "BRA": "Brazilian rubber and quartz",
+      "YUG": "Yugoslav copper, bauxite and lead"
+    },
+    "oil": [
+      "VEN",
+      "MEX"
+    ],
+    "inLane": {
+      "VEN": [
+        "UK",
+        "FRA",
+        "ITA"
+      ],
+      "MEX": [
+        "FRA",
+        "ITA"
+      ]
+    },
+    "record": {
+      "YUG": [
+        [
+          1,
+          19,
+          "GER"
+        ]
+      ]
+    }
+  },
+  "judge": {
+    "lean": 0.5,
+    "winning": 0.5,
+    "fear": 1
+  },
+  "bid": {
+    "unit": 0.5,
+    "deny": 0.5,
+    "share": 0.5,
+    "floor": 0.5,
+    "most": 0.1,
+    "step": 0.5
+  },
+  "pull": 0.5,
+  "patience": {
+    "fall": 4,
+    "heal": 2,
+    "half": 50
+  },
+  "rows": [
+    {
+      "id": "swe-ore",
+      "seller": "SWE",
+      "name": "Swedish iron ore",
+      "sign": "ore",
+      "gives": {
+        "sup": 5
+      },
+      "sizes": [
+        [
+          1,
+          5
+        ],
+        [
+          17,
+          4.5
+        ],
+        [
+          29,
+          4.2
+        ],
+        [
+          41,
+          5
+        ],
+        [
+          53,
+          3.5
+        ]
+      ],
+      "output": {
+        "GER": 0.08
+      },
+      "lag": 0,
+      "replaces": "ore",
+      "record": [
+        [
+          1,
+          63,
+          "GER"
+        ],
+        [
+          64,
+          999,
+          null
+        ]
+      ]
+    },
+    {
+      "id": "rom-oil",
+      "seller": "ROM",
+      "name": "Romanian oil",
+      "sign": "oil",
+      "gives": {
+        "oil": 9
+      },
+      "replaces": "ploiesti",
+      "record": [
+        [
+          1,
+          15,
+          "GER"
+        ]
+      ]
+    },
+    {
+      "id": "rom-oil-ita",
+      "seller": "ROM",
+      "name": "Romanian oil for Italy",
+      "sign": "oil",
+      "gives": {
+        "oil": 6
+      },
+      "replaces": "ploiesti-ita",
+      "record": [
+        [
+          1,
+          15,
+          "ITA"
+        ]
+      ]
+    },
+    {
+      "id": "tur-chrome",
+      "seller": "TUR",
+      "name": "Turkish chrome",
+      "sign": "chrome",
+      "gives": {},
+      "output": {
+        "GER": 0.04
+      },
+      "lag": 6,
+      "record": [
+        [
+          1,
+          4,
+          null
+        ],
+        [
+          5,
+          40,
+          "UK"
+        ],
+        [
+          41,
+          56,
+          "GER"
+        ],
+        [
+          57,
+          64,
+          "UK"
+        ],
+        [
+          65,
+          999,
+          null
+        ]
+      ]
+    },
+    {
+      "id": "esp-wolfram",
+      "seller": "ESP",
+      "name": "Spanish wolfram",
+      "sign": "wolfram",
+      "gives": {},
+      "output": {
+        "GER": 0.012
+      },
+      "lag": 6,
+      "record": [
+        [
+          1,
+          9,
+          null
+        ],
+        [
+          10,
+          60,
+          "GER"
+        ],
+        [
+          61,
+          999,
+          "UK"
+        ]
+      ]
+    },
+    {
+      "id": "por-wolfram",
+      "seller": "POR",
+      "name": "Portuguese wolfram",
+      "sign": "wolfram",
+      "gives": {},
+      "output": {
+        "GER": 0.018
+      },
+      "lag": 6,
+      "record": [
+        [
+          1,
+          4,
+          null
+        ],
+        [
+          5,
+          58,
+          "GER"
+        ],
+        [
+          59,
+          999,
+          null
+        ]
+      ]
+    },
+    {
+      "id": "por-azores",
+      "seller": "POR",
+      "name": "the Azores",
+      "sign": "base",
+      "gives": {
+        "base": "Azores",
+        "field": 2
+      },
+      "record": [
+        [
+          1,
+          49,
+          null
+        ],
+        [
+          50,
+          999,
+          "UK"
+        ]
+      ]
+    },
+    {
+      "id": "sui-goods",
+      "seller": "SUI",
+      "name": "Swiss goods",
+      "sign": "exports",
+      "gives": {
+        "sup": 1
+      },
+      "record": [
+        [
+          1,
+          62,
+          "GER"
+        ],
+        [
+          63,
+          999,
+          null
+        ]
+      ]
+    },
+    {
+      "id": "arg-beef",
+      "seller": "ARG",
+      "name": "Argentine beef and grain",
+      "sign": "beef",
+      "gives": {},
+      "carve": {
+        "lane": "atlantic",
+        "share": 0.1
+      },
+      "record": [
+        [
+          1,
+          2,
+          null
+        ],
+        [
+          3,
+          999,
+          "UK"
+        ]
+      ]
+    },
+    {
+      "id": "irl-food",
+      "seller": "IRL",
+      "name": "Irish food",
+      "sign": "beef",
+      "gives": {
+        "sup": 1
+      },
+      "record": [
+        [
+          1,
+          999,
+          "UK"
+        ]
+      ]
+    },
+    {
+      "id": "bra-airfields",
+      "seller": "BRA",
+      "name": "Brazil's airfields",
+      "sign": "base",
+      "gives": {
+        "base": "Natal",
+        "field": 2
+      },
+      "record": [
+        [
+          1,
+          16,
+          null
+        ],
+        [
+          17,
+          36,
+          "USA"
+        ]
+      ]
+    }
+  ],
+  "_second": "Second wave (the design director, 03:47 and 03:55 UTC): passage across a seller's ground (Sweden's transit, turns 11 to 48; Japan's passage for Soviet lend-lease; Turkey's Straits), Spain's harbours for U-boats (turns 5 to 30), and Swedish ball bearings once the historian sizes their share."
+}

@@ -1,0 +1,928 @@
+{
+ "_about": "Ruling 215 (the design director, 17 November 2026, 17:01Z, with the riders of 17:08Z) on the Pacific planner's paper 19, what stopped Japan in China: the data, for the rules builder to lift into the game's files at step 13, when Japan and China are on the chart. Until then the game loads none of it: the mark would close the book in China on the first day of a war with no China. The blocks are keyed by the data file each belongs in, as the far-side rig lays a seats file (tools/trial/seats.mjs: objects by key, lists appended), so the rig can take this file as it stands. (a) the dated choice: Japan's offensive of 1944 (history.json dates, theatre, theatres, bookIf; open.json ops.JAP), with 'wait', which by the book keeps its front from any general offensive until it goes (staff.ts, decide). (f) the mark that closes the book in China if China has fallen. (c) the record's line (history.json 'lines', read by src/campaign/line.ts): the historian's spans for every Chinese province Japan held (/mnt/project-files/historian/china-line-record.json, 'line', as of 17:31Z on 17 November 2026, on the map builder's finer chart of China with part 4's cuts: Yochow, Lintsing, Anyang, Sintai, Lishih, Shangtu and Tungkun first-day, and the rest; the 'what' and 'confidence' of each span are left there. On the 98-province chart the new names are simply absent, and the line plays as it did), the floor widened by the rider of 17:08Z to the 1944 offensive's ground while Japan holds it. open.json temper.JAP is ruling 202(l)'s row, which 215(b) keeps beside the staff's line. Ruling 219(3) (the design director, 18:33Z; laid at the director's word of 19:20Z, b375): the record's short operations of 1939 to 1941 as dated great choices in the form 216(a) gave the 1944 offensive, from the planner's china-raids-219.json as run in runs-219/final-221 (all six tests pass in all six wars at stops 1 and 2): nanning (with its landing at Pakhoi, the historian's raid span of months 3 to 15, by the 5th Division brought to Taihoku in month 2: china-setup.json), wuyuan, ichang, coast41, yencheng and changsha41. Each is a great choice that declares on nobody, so it goes on its date and opens the China front, and the line confines it to the record's raid ground. Their 'if' cannot hold (war and peace with China at once), so off the book they never go; the book reads 'bookIf'. Ruling 224 (the design director, 19:19Z, b375; the planner's rows of 20:06Z, run in runs-224): at stops 1 and 2 the 1941 coast raid is three landings from Japan's own ports, dated 20, the month every span opens. The 48th Division sails from Formosa for Foochow, or Wenchow if Foochow is held too strongly to storm, and takes Foochow by land; a 13th Army force sails from Taihoku for Ningpo; a 13th Army detachment sails from Taihoku for Wenchow, or Ningpo if Wenchow is already Japan's. Each sails alone, in the order the lift serves them; their three rows of month 19 are in china-setup.json. Japan's great choices and their dates stand under 'JAP+' (src/campaign/far-rows.ts: a code followed by '+' lays over what stands under the code), after far-pacific-war.json's, so that the strike south has the first call of a month in the staff's list; Japan's temper stands under 'JAP'.",
+ "_back": "The line's 'back' (the design director, 00:12Z and 00:16Z of 21 November 2026, on the trace of ruling 216's second test; the historian's ichigo-withdrawal-1945.md): the floor's month province by province, as the south's line has it (line.ts, floorUntil): first for the ground of the 1944 offensive, then for every span of the floor's kinds (the design director, 00:42Z, on the trace of China's gains of 1945). The floor is there to keep China out while the invader's rows hold their span, so its end is the span's own end as drawn: it binds only while a span of its kinds covers the month, and each figure here is two months past its span's last, so that the span decides in every draw of a stop with slack (a span's months move a month either way; the figure does not). It is not a number chosen to pass anything. China's staff neither attacks nor enters such a province while its span runs: the rows there march home as the span's last month closes (ai.ts, lineHome), the ground goes back the month after (ruling 219), and China comes in behind the withdrawal as the record has it, where one floor month for all (69) let it come one to three months ahead. The corridor's spans end at Nanning and Foochow 69, Liuchow, Wuchow, Kweihsien, Lungchow and Wenchow 70, Kweilin and Chuanhsien 71; what was held to the surrender (Loyang, Chumatien, Changsha, Hengyang, Lingling, Kukong, Kanchow) runs to the line's last month, and China's staff is shut out of it to the end. The day-one and lasting ground has its figure too, by the same rule: all 43 of those spans run to the line's last month, the record held that ground to the surrender, and with one floor month (69) China's staff walked into 16 to 37 provinces of it with nobody on them in the last four months of the three by-the-book wars read. So China's staff is shut out of it to the end at the book's stops. The floor's own month is what a province with no figure reads, and no province of the floor's kinds is left without one.",
+ "_japan": "(e) Japan's nation row (world.json, the planner's and the historian's at step 13): quality 1.0, air 60, resilience 0.95. Not laid here: on the rig a row under a nation's code replaces the whole row.",
+ "_ops1121": "The dated choices the book lacked (the design director's rulings of 00:40Z and 03:44Z of 21 November 2026 on the second rules builder's traces of the six China tests; the historian's china-coast-1941-and-field-armies.md and china-1944-45-operations.md), in the form ruling 219(3) gave the raids of 1939 to 1941: each goes on its date at the book's stops, and the line's spans, which already held their ground, confine it. 'chekiang42': the 13th Army from Hangchow (15 May 1942) and the 11th from Nanchang (about 1 June), dated 33, the month before Chuchow's, Shangjao's and Linchwan's spans open, and pressed three months (Wenchow's span opens in 35). 'coast44': the landings at Wenchow (about 9 September 1944, span from 61) and Foochow (about 4 October, span from 62), a side-show beside the 1944 offensive, as the expedition to Norway is in open.json: it opens no front of its own, and its landings have their two months, so Foochow's sails when its span opens. 'kukong45': Kukong in late January 1945 (span from 65) and Kanchow about 7 February (span from 66), dated 64 and pressed three months; the 1944 offensive's own push of eight months ends before them. 'laohokow45': Siangyang in late March 1945 (span 67 to 68), dated 66. Their rows are in china-setup.json. Changteh's one month of 1943 (span 52) is not ruled and has no choice here.",
+ "_side1121": "The 1941 coast raid a side-show (the design director's ruling of 13:39Z of 21 November 2026, on the second rules builder's trace of the guard table's six). The record's Chekiang and Fukien landings of April 1941 were a blockade landing of one or two divisions beside the main front, the same kind as 'coast44'. As a great choice 'coast41' waited while the staff was busy: at stop 2 in two wars of the six Ningpo fell by land the month before the choice was due there, the staff was busy from then on, and the landing forces stayed at Formosa and Taihoku though they read 7.7 and 4.45 against the plan's 1.2. As a side-show it goes in its month beside whatever the army is doing, opens no front of its own, and has no ratio, preparation or push, as 'coast44' has none.",
+ "_book1122": "China's dated attacks of 1944-45 at the book's stops (the design director's rulings of 07:42Z, 07:44Z, 07:46Z, 07:48Z, 07:55Z, 08:10Z and 08:12Z of 22 November 2026 on the second rules builder's Nanning trace; the historian's china-1944-guangxi-takers.md, canton-rows-1939-45.md and waichow-1938-45.md). The month list gives leave and does not say who goes where: in two wars of three at the first stop the 23rd Army's rows took Liuchow together and Nanning, open beside them, never fell. So the record's takers are laid as dated attacks, as British Borneo's are, each naming its own choice ('book'), read by src/campaign/stations.ts: a row is asked in its own month as written, once its choice has gone and while China keeps the book, and not at a place the list keeps shut. They are appended to the table of far-pacific-war.json (history.stations.attacks) as this file is laid. The 104th Division (the chart's '21st Army (Canton)') and the 22nd Division go up the West River together, Wuchow in September 1944 (61) and Kweihsien in October (62), and split at Kweiping: the 104th north to Liuchow, the 22nd west up the Yu River to Nanning (63) and on to Lungchow and the Indochina road (64). Kweilin (63) falls to the 11th Army from Chuanhsien, the rows that hold the 58th and the 40th; Liuchow (63) to the 11th Army's 3rd and 13th from the north and west with the 104th from the south-east; Tushan (64) to the 3rd and 13th, and the list shuts it again the month after. In January 1945 (65) the 104th goes east of Canton to Waichow (Huizhou and Haifeng, one province on the chart), and Kukong falls to the 40th from the north with the 23rd Army's brigades from Canton; in February (66) Kanchow to the 27th Division from Kukong's side, by Suichwan. Kukong and Kanchow name the choice of 1945, the others that of 1944. Waichow was China's for most of the war: one span, Japan's from January 1945 to the end; the raids of May 1941 and February 1942 were out within weeks and are not laid. The 23rd Independent Mixed Brigade, which led on the Nanning road, has no row; the 22nd's carries it. After Liuchow the 104th is its staff's until the book calls it east.",
+ "_tushan64": "Tushan's dated attack ends in month 64 (the design director's ruling of 11:41Z of 22 November 2026 on the six read on bdc0c86a): the record's advance reached Tushan early in December 1944 and gave it up within days. LIKELY: laid on that ruling, for the historian to confirm with the China rows. With no last month the row was asked every month from 65 to 72 and refused by the month list each time.",
+ "_station51": "The 51st Division's station at Rabaul (the design director's rulings of 08:10Z, 5, and 08:48Z, 2, of 22 November 2026; the historian's canton-rows-1939-45.md). The division stood at Canton from September 1941 and left for Rabaul in November 1942 (39). It is one row at every stop (china-setup.json, '_canton'), and at the book's stops the book stands it at Rabaul from 39: a row of the stations with its own last month (stations.ts `lateBinds`, the first rules builder's late rows), laid at the table's end by 'history.stations.rows' below. It goes by the record's shipping as every station does, and only onto ground its side holds with no enemy in the field: with Rabaul not Japan's it stays where it stands, its staff's. The record's road on from Rabaul (Lae from early 1943) is not laid: no step is written without the historian's months. At stops 3 to 5 no station binds anybody.",
+ "history": {
+  "dates": {
+   "JAP+": {
+    "ichigo": 56,
+    "nanning": 3,
+    "wuyuan": 5,
+    "ichang": 9,
+    "coast41": 20,
+    "yencheng": 22,
+    "changsha41": 24,
+    "chekiang42": 33,
+    "coast44": 61,
+    "kukong45": 64,
+    "laohokow45": 66
+   }
+  },
+  "theatre": {
+   "JAP:ichigo": "china",
+   "JAP:nanning": "china",
+   "JAP:wuyuan": "china",
+   "JAP:ichang": "china",
+   "JAP:coast41": "china",
+   "JAP:yencheng": "china",
+   "JAP:changsha41": "china",
+   "JAP:chekiang42": "china",
+   "JAP:coast44": "china",
+   "JAP:kukong45": "china",
+   "JAP:laohokow45": "china"
+  },
+  "theatres": {
+   "china": {
+    "name": "China",
+    "after": []
+   }
+  },
+  "bookIf": {
+   "JAP:ichigo": [
+    "war:JAP,CHN",
+    "alive:CHN"
+   ],
+   "JAP:nanning": [
+    "war:JAP,CHN",
+    "alive:CHN"
+   ],
+   "JAP:wuyuan": [
+    "war:JAP,CHN",
+    "alive:CHN"
+   ],
+   "JAP:ichang": [
+    "war:JAP,CHN",
+    "alive:CHN"
+   ],
+   "JAP:coast41": [
+    "war:JAP,CHN",
+    "alive:CHN"
+   ],
+   "JAP:yencheng": [
+    "war:JAP,CHN",
+    "alive:CHN"
+   ],
+   "JAP:changsha41": [
+    "war:JAP,CHN",
+    "alive:CHN"
+   ],
+   "JAP:chekiang42": [
+    "war:JAP,CHN",
+    "alive:CHN"
+   ],
+   "JAP:coast44": [
+    "war:JAP,CHN",
+    "alive:CHN"
+   ],
+   "JAP:kukong45": [
+    "war:JAP,CHN",
+    "alive:CHN"
+   ],
+   "JAP:laohokow45": [
+    "war:JAP,CHN",
+    "alive:CHN"
+   ]
+  },
+  "marks": [
+   {
+    "theatre": "china",
+    "until": 72,
+    "if": [
+     "alive:CHN"
+    ],
+    "why": "China has fallen"
+   }
+  ],
+  "lines": [
+   {
+    "id": "china",
+    "theatre": "china",
+    "land": "CHN",
+    "taker": "JAP",
+    "until": 72,
+    "floor": {
+     "until": 69,
+     "kinds": [
+      "day one",
+      "lasting",
+      "ichigo"
+     ]
+    },
+    "back": {
+     "Nanning": 71,
+     "Lungchow": 72,
+     "Foochow": 71,
+     "Wenchow": 72,
+     "Changsha": 74,
+     "Loyang": 74,
+     "Hengyang": 74,
+     "Lingling": 74,
+     "Kweilin": 73,
+     "Liuchow": 72,
+     "Tushan": 66,
+     "Kukong": 74,
+     "Kanchow": 74,
+     "Waichow": 74,
+     "Chumatien": 74,
+     "Wuchow": 72,
+     "Chuanhsien": 73,
+     "Kweihsien": 72,
+     "Peiping": 74,
+     "Tientsin": 74,
+     "Tangshan": 74,
+     "Paoting": 74,
+     "Shihkiachwang": 74,
+     "Kalgan": 74,
+     "Silingol": 74,
+     "Suiyuan": 74,
+     "Paotow": 74,
+     "Tatung": 74,
+     "Taiyuan": 74,
+     "Linfen": 74,
+     "Tsinan": 74,
+     "Tsingtao": 74,
+     "Chefoo": 74,
+     "Kaifeng": 74,
+     "Hsuchow": 74,
+     "Haichow": 74,
+     "Pengpu": 74,
+     "Nanking": 74,
+     "Wuhu": 74,
+     "Shanghai": 74,
+     "Hangchow": 74,
+     "Anking": 74,
+     "Kiukiang": 74,
+     "Hankow": 74,
+     "Sinyang": 74,
+     "Nanchang": 74,
+     "Canton": 74,
+     "Amoy": 74,
+     "Swatow": 74,
+     "Hainan": 74,
+     "Ichang": 74,
+     "Ningpo": 74,
+     "Yochow": 74,
+     "Lintsing": 74,
+     "Anyang": 74,
+     "Sintai": 74,
+     "Lishih": 74,
+     "Shangtu": 74,
+     "Shasi": 74,
+     "Yencheng": 74,
+     "Tungkun": 74
+    },
+    "spans": {
+     "Peiping": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Tientsin": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Tangshan": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Paoting": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Shihkiachwang": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Kalgan": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Silingol": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Suiyuan": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Paotow": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Tatung": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Taiyuan": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Linfen": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Tsinan": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Tsingtao": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Chefoo": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Kaifeng": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Hsuchow": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Haichow": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Pengpu": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Nanking": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Wuhu": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Shanghai": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Hangchow": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Anking": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Kiukiang": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Hankow": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Sinyang": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Nanchang": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Canton": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Amoy": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Swatow": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Hainan": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Ichang": [
+      {
+       "from": 10,
+       "to": 72,
+       "kind": "lasting"
+      }
+     ],
+     "Ningpo": [
+      {
+       "from": 20,
+       "to": 72,
+       "kind": "lasting"
+      }
+     ],
+     "Nanning": [
+      {
+       "from": 3,
+       "to": 14,
+       "kind": "raid"
+      },
+      {
+       "from": 63,
+       "to": 69,
+       "kind": "ichigo"
+      }
+     ],
+     "Lungchow": [
+      {
+       "from": 4,
+       "to": 15,
+       "kind": "raid"
+      },
+      {
+       "from": 64,
+       "to": 70,
+       "kind": "ichigo"
+      }
+     ],
+     "Wuyuan": [
+      {
+       "from": 6,
+       "to": 7,
+       "kind": "raid"
+      }
+     ],
+     "Siangyang": [
+      {
+       "from": 10,
+       "to": 10,
+       "kind": "raid"
+      },
+      {
+       "from": 67,
+       "to": 68,
+       "kind": "raid"
+      }
+     ],
+     "Foochow": [
+      {
+       "from": 20,
+       "to": 25,
+       "kind": "raid"
+      },
+      {
+       "from": 62,
+       "to": 69,
+       "kind": "ichigo"
+      }
+     ],
+     "Wenchow": [
+      {
+       "from": 20,
+       "to": 21,
+       "kind": "raid"
+      },
+      {
+       "from": 35,
+       "to": 36,
+       "kind": "raid"
+      },
+      {
+       "from": 61,
+       "to": 70,
+       "kind": "ichigo"
+      }
+     ],
+     "Changsha": [
+      {
+       "from": 25,
+       "to": 26,
+       "kind": "raid"
+      },
+      {
+       "from": 58,
+       "to": 72,
+       "kind": "ichigo"
+      }
+     ],
+     "Chuchow": [
+      {
+       "from": 34,
+       "to": 36,
+       "kind": "raid"
+      }
+     ],
+     "Changteh": [
+      {
+       "from": 52,
+       "to": 52,
+       "kind": "raid"
+      }
+     ],
+     "Loyang": [
+      {
+       "from": 57,
+       "to": 72,
+       "kind": "ichigo"
+      }
+     ],
+     "Hengyang": [
+      {
+       "from": 60,
+       "to": 72,
+       "kind": "ichigo"
+      }
+     ],
+     "Lingling": [
+      {
+       "from": 61,
+       "to": 72,
+       "kind": "ichigo"
+      }
+     ],
+     "Kweilin": [
+      {
+       "from": 63,
+       "to": 71,
+       "kind": "ichigo"
+      }
+     ],
+     "Liuchow": [
+      {
+       "from": 63,
+       "to": 70,
+       "kind": "ichigo"
+      }
+     ],
+     "Tushan": [
+      {
+       "from": 64,
+       "to": 64,
+       "kind": "ichigo"
+      }
+     ],
+     "Kukong": [
+      {
+       "from": 65,
+       "to": 72,
+       "kind": "ichigo"
+      }
+     ],
+     "Kanchow": [
+      {
+       "from": 66,
+       "to": 72,
+       "kind": "ichigo"
+      }
+     ],
+     "Waichow": [
+      {
+       "from": 65,
+       "to": 72,
+       "kind": "ichigo"
+      }
+     ],
+     "Yochow": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Lintsing": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Anyang": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Sintai": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Lishih": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Shangtu": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Shasi": [
+      {
+       "from": 10,
+       "to": 72,
+       "kind": "lasting"
+      }
+     ],
+     "Yencheng": [
+      {
+       "from": 23,
+       "to": 72,
+       "kind": "lasting"
+      }
+     ],
+     "Shangjao": [
+      {
+       "from": 34,
+       "to": 36,
+       "kind": "raid"
+      }
+     ],
+     "Chumatien": [
+      {
+       "from": 57,
+       "to": 72,
+       "kind": "ichigo"
+      }
+     ],
+     "Wuchow": [
+      {
+       "from": 61,
+       "to": 70,
+       "kind": "ichigo"
+      }
+     ],
+     "Chuanhsien": [
+      {
+       "from": 61,
+       "to": 71,
+       "kind": "ichigo"
+      }
+     ],
+     "Kweihsien": [
+      {
+       "from": 62,
+       "to": 70,
+       "kind": "ichigo"
+      }
+     ],
+     "Linchwan": [
+      {
+       "from": 34,
+       "to": 36,
+       "kind": "raid"
+      }
+     ],
+     "Tungkun": [
+      {
+       "from": 1,
+       "to": 72,
+       "kind": "day one"
+      }
+     ],
+     "Pakhoi": [
+      {
+       "from": 3,
+       "to": 15,
+       "kind": "raid"
+      }
+     ]
+    }
+   }
+  ],
+  "stations": {
+   "rows": [
+    { "nat": "JAP", "corps": "23rd Army (51st Division)", "steps": [[39, ["Rabaul"]]], "until": 73 }
+   ],
+   "attacks": [
+    { "month": 61, "name": "Wuchow, up the West River", "at": ["Wuchow"], "force": ["21st Army (Canton)", "23rd Army (22nd Division)"], "from": ["Canton"], "book": "JAP:ichigo" },
+    { "month": 62, "name": "Kweihsien and Kweiping", "at": ["Kweihsien"], "force": ["21st Army (Canton)", "23rd Army (22nd Division)"], "from": ["Wuchow"], "book": "JAP:ichigo" },
+    { "month": 63, "name": "Kweilin", "at": ["Kweilin"], "force": ["11th Army (34th, 58th and 68th Divisions)", "11th Army (40th and 116th Divisions)"], "from": ["Chuanhsien"], "book": "JAP:ichigo" },
+    { "month": 63, "name": "Liuchow", "at": ["Liuchow"], "force": ["11th Army (3rd and 13th Divisions)", "21st Army (Canton)"], "from": ["Kweilin", "Kweihsien"], "book": "JAP:ichigo" },
+    { "month": 63, "name": "Nanning", "at": ["Nanning"], "force": ["23rd Army (22nd Division)"], "from": ["Kweihsien"], "book": "JAP:ichigo" },
+    { "month": 64, "until": 64, "name": "Tushan", "at": ["Tushan"], "force": ["11th Army (3rd and 13th Divisions)"], "from": ["Liuchow"], "book": "JAP:ichigo" },
+    { "month": 64, "name": "Lungchow and the road to Indochina", "at": ["Lungchow"], "force": ["23rd Army (22nd Division)"], "from": ["Nanning"], "book": "JAP:ichigo" },
+    { "month": 65, "name": "Waichow and the coast east of Canton", "at": ["Waichow"], "force": ["21st Army (Canton)"], "from": ["Canton", "Tungkun"], "book": "JAP:ichigo" },
+    { "month": 65, "name": "Kukong", "at": ["Kukong"], "force": ["11th Army (40th and 116th Divisions)", "23rd Army (independent mixed brigades, for Kukong)"], "from": ["Lingling", "Chuanhsien", "Canton"], "book": "JAP:kukong45" },
+    { "month": 66, "name": "Kanchow", "at": ["Kanchow"], "force": ["11th Army (27th Division)"], "from": ["Kukong"], "book": "JAP:kukong45" }
+   ]
+  }
+ },
+ "open": {
+  "ops": {
+   "JAP+": [
+    {
+     "id": "ichigo",
+     "name": "The 1944 offensive in China",
+     "if": [
+      "war:JAP,CHN",
+      "alive:CHN"
+     ],
+     "from": 56,
+     "to": 66,
+     "ratio": 0.8,
+     "prep": 2,
+     "chance": 0.3,
+     "season": [
+      4,
+      5,
+      6
+     ],
+     "push": 8,
+     "wait": true
+    },
+    {
+     "id": "nanning",
+     "name": "The South Kwangsi operation (Nanning and Lungchow)",
+     "if": [
+      "war:JAP,CHN",
+      "peace:JAP,CHN"
+     ],
+     "from": 3,
+     "to": 15,
+     "ratio": 0.8,
+     "prep": 0,
+     "chance": 0.3,
+     "push": 2,
+     "landings": [
+      {
+       "corps": "21st Army (5th Division)",
+       "with": [
+        "Formosa Army"
+       ],
+       "to": [
+        "Pakhoi"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "wuyuan",
+     "name": "The Wuyuan raid",
+     "if": [
+      "war:JAP,CHN",
+      "peace:JAP,CHN"
+     ],
+     "from": 5,
+     "to": 7,
+     "ratio": 0.8,
+     "prep": 0,
+     "chance": 0.3,
+     "push": 1
+    },
+    {
+     "id": "ichang",
+     "name": "The Ichang operation",
+     "if": [
+      "war:JAP,CHN",
+      "peace:JAP,CHN"
+     ],
+     "from": 9,
+     "to": 72,
+     "ratio": 0.8,
+     "prep": 0,
+     "chance": 0.3,
+     "push": 2
+    },
+    {
+     "id": "coast41",
+     "name": "The spring raids of 1941 on the Chekiang and Fukien coast",
+     "side": true,
+     "if": [
+      "war:JAP,CHN",
+      "peace:JAP,CHN"
+     ],
+     "from": 20,
+     "to": 72,
+     "chance": 0.3,
+     "landings": [
+      {
+       "corps": "23rd Army (48th Division)",
+       "to": [
+        "Foochow",
+        "Wenchow"
+       ]
+      },
+      {
+       "corps": "13th Army (Chekiang landing force)",
+       "to": [
+        "Ningpo"
+       ]
+      },
+      {
+       "corps": "13th Army (Wenchow detachment)",
+       "to": [
+        "Wenchow",
+        "Ningpo"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "yencheng",
+     "name": "North Kiangsu (Yencheng)",
+     "if": [
+      "war:JAP,CHN",
+      "peace:JAP,CHN"
+     ],
+     "from": 22,
+     "to": 72,
+     "ratio": 0.8,
+     "prep": 0,
+     "chance": 0.3,
+     "push": 1
+    },
+    {
+     "id": "changsha41",
+     "name": "The Changsha operation of 1941",
+     "if": [
+      "war:JAP,CHN",
+      "peace:JAP,CHN"
+     ],
+     "from": 24,
+     "to": 26,
+     "ratio": 0.8,
+     "prep": 0,
+     "chance": 0.3,
+     "push": 1
+    },
+    {
+     "id": "chekiang42",
+     "name": "The Chekiang-Kiangsi operation of 1942",
+     "if": [
+      "war:JAP,CHN",
+      "peace:JAP,CHN"
+     ],
+     "from": 33,
+     "to": 35,
+     "ratio": 0.8,
+     "prep": 0,
+     "chance": 0.3,
+     "push": 3
+    },
+    {
+     "id": "coast44",
+     "name": "The coast landings of 1944 (Wenchow and Foochow)",
+     "side": true,
+     "if": [
+      "war:JAP,CHN",
+      "peace:JAP,CHN"
+     ],
+     "from": 61,
+     "to": 63,
+     "chance": 0.3,
+     "landings": [
+      {
+       "corps": "13th Army (Wenchow force, 1944)",
+       "to": [
+        "Wenchow"
+       ]
+      },
+      {
+       "corps": "Foochow landing force (1944, with naval landing troops)",
+       "to": [
+        "Foochow"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "kukong45",
+     "name": "The Canton-Hankow railway and the Kiangsi airfields (Kukong and Kanchow)",
+     "if": [
+      "war:JAP,CHN",
+      "peace:JAP,CHN"
+     ],
+     "from": 64,
+     "to": 66,
+     "ratio": 0.8,
+     "prep": 0,
+     "chance": 0.3,
+     "push": 3
+    },
+    {
+     "id": "laohokow45",
+     "name": "The Laohokow operation (Siangyang)",
+     "if": [
+      "war:JAP,CHN",
+      "peace:JAP,CHN"
+     ],
+     "from": 66,
+     "to": 68,
+     "ratio": 0.8,
+     "prep": 0,
+     "chance": 0.3,
+     "push": 2
+    }
+   ]
+  },
+  "temper": {
+   "JAP": {
+    "attackAt": 1.2,
+    "persist": 0.9,
+    "minOdds": 1.3
+   }
+  }
+ }
+}

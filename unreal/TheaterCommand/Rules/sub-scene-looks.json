@@ -1,0 +1,178 @@
+{
+  "_about": "The month's submarine scene (D1, ruling 241): LOOK ONLY. Read by Rules/sub-scene.ts and by no rule; nothing here changes a rule, a random draw, a save or the news. Rows by navy and year: a row stands from its 'from' (YYYY-MM) until the next row of the same navy; a row with a 'basin' stands only in that basin and is preferred there. '_default' is any navy without rows of its own (the small navies). Marks: [H] read in a good source or standard, [M] one source or sources differ a little, [L] the staff's reading, [P] published and not re-read, [OEG] US Navy OEG Report 51; the historian's check of 22 November 05:20Z (/mnt/project-files/historian/convoy-war-history-check-1122.md) is cited as [historian]. Lengths, beams and draughts in metres; speeds in metres a second; depths in metres below the surface. Until the rules record hunters, attackers and escorts per sea (form D1's record-only fields, which the rules builder adds under subScene), these rows stand in for them.",
+  "caption": {
+    "grt": 5200,
+    "check": "to be checked by the historian before shipping",
+    "_src": "About 5,200 GRT a ship: 14,687,231 GRT over 2,828 ships [P: Roskill] = 5,193. The historian locked 5,200 (H) at 05:20Z on 22 November and suggests 'by submarines', not 'by U-boats'; the caption still carries the check mark until the pre-check lifts it."
+  },
+  "beats": {
+    "_about": "Screen seconds for each beat of the scene (form D1): the convoy in columns or the torpedoed fleet (8 s), a torpedo fan (10 s: its firing 4 and its hits 6), a depth-charge run (12 s: the drop 6 and the bursts 6), and only for a booked kill the boat's end (10 s). A beat's battle-time window is played at (to - from) / screen; 'pace' is the most a window may be sped up before it is cut in two.",
+    "convoy": 8, "fire": 4, "hits": 6, "drop": 6, "bursts": 6, "charges": 12, "end": 10, "pace": 4.5, "least": 30, "most": 45
+  },
+  "most": { "heavy": 3, "boats": 3, "hits": 3, "escorts": 8, "merchants": 60 },
+  "convoy": {
+    "_about": "Merchant ship look: a tramp of about 5,000 GRT [L]. Columns about 900 m apart, ships about 550 m apart (field-side-read §3; the historian: speeds as held, spacings L).",
+    "mv": { "name": "merchant ship", "len": 128, "beam": 17, "draught": 7.5, "turn": 0.05 },
+    "colGap": 900, "rowGap": 550
+  },
+  "heavy": {
+    "_about": "Heavy ships and destroyers of a fleet, the sizes the fleet recordings use (sea.json classes).",
+    "bb": { "len": 240, "beam": 33, "speed": 7.2, "turn": 0.05 },
+    "cv": { "len": 240, "beam": 32, "speed": 7.7, "turn": 0.05 },
+    "ca": { "len": 180, "beam": 20, "speed": 7.7, "turn": 0.08 },
+    "dd": { "len": 110, "beam": 11, "speed": 8.2, "turn": 0.12 }
+  },
+  "basins": {
+    "_about": "Which navies' boats work in which waters, by date [P: Blair; Hezlet; Boyd & Yoshida; to be checked]. Used only when the rules have not recorded the attackers (form D1): the first navy listed that is at war with the side struck. Seas not listed fall to 'atlantic' (the world chart's American and Atlantic seas) or, on the far chart, to 'pacific'.",
+    "seas": {
+      "north": ["nsea", "norw", "barents", "skag", "denmark", "iceland"],
+      "baltic": ["baltic", "bothnia", "finland"],
+      "med": ["wmed", "tyrr", "adriatic", "ionian", "aegean", "emed", "central", "libyan"],
+      "black": ["black"],
+      "indian": ["andaman", "bengal", "ceylon", "arabian", "persian", "cindian", "mascarene", "somali", "sindian", "redsea", "zanzibar", "eindian", "mentawai", "westaus", "bight", "aden", "mozambique"],
+      "pacific": ["california", "cascadia", "tehuantepec", "panama", "guayaquil", "callao", "atacama", "valparaiso", "fjords", "eqpacific", "sepacific"]
+    },
+    "navies": {
+      "atlantic": [["GER", "1939-09", "1945-05"], ["ITA", "1940-08", "1943-09"], ["UK", "1939-09", "1945-05"], ["USA", "1941-12", "1945-05"]],
+      "north": [["UK", "1939-09", "1945-05"], ["GER", "1939-09", "1945-05"], ["SOV", "1941-06", "1945-05"], ["NOR", "1940-06", "1945-05"]],
+      "baltic": [["SOV", "1939-11", "1945-05"], ["GER", "1939-09", "1945-05"], ["POL", "1939-09", "1939-10"]],
+      "med": [["UK", "1940-06", "1945-05"], ["ITA", "1940-06", "1943-09"], ["GER", "1941-09", "1944-09"], ["FRA", "1940-06", "1940-06"], ["GRE", "1940-10", "1945-05"]],
+      "black": [["SOV", "1941-06", "1944-09"], ["GER", "1942-10", "1944-09"], ["ROM", "1941-06", "1944-08"]],
+      "pacific": [["USA", "1941-12", "1945-08"], ["JAP", "1941-12", "1945-08"], ["NED", "1941-12", "1942-03"], ["UK", "1944-01", "1945-08"]],
+      "indian": [["JAP", "1942-01", "1945-08"], ["GER", "1943-01", "1945-05"], ["UK", "1944-01", "1945-08"]]
+    }
+  },
+  "boats": {
+    "_about": "A navy's boat by year: her class, size and speeds (surf surfaced, dived submerged), draught, torpedoes carried, the fan she fires, the range she fires it from, how she attacks at night, her usual depth when hunted (deep), crush depth, how many boats attack a convoy together (pack; OEG 10.1.4: about 2 in 1941-42, 1.7 for US groups of 3), and whether a shadower reports to the others (Germany 1940 to early 1944).",
+    "GER": [
+      { "from": "1939-09", "cls": "Type VIIB", "len": 66.5, "beam": 6.2, "draught": 4.7, "surf": 8.9, "dived": 4.0, "tubes": 14, "fan": 3, "range": 900, "attack": "periscope", "deep": 80, "crush": 220, "pack": 1, "report": false, "_src": "[P: Rossler]; submerged day attacks to June 1940 [history §1]" },
+      { "from": "1940-07", "cls": "Type VIIC", "len": 67.1, "beam": 6.2, "draught": 4.7, "surf": 9.1, "dived": 3.9, "tubes": 14, "fan": 3, "range": 700, "attack": "surfaced", "deep": 100, "crush": 250, "pack": 2, "report": true, "_src": "[H: historian] 17.7/7.6 kn, 14 torpedoes; night surface attacks, a fan of 2-4 from close in [P: Blair]" },
+      { "from": "1943-07", "cls": "Type VIIC", "len": 67.1, "beam": 6.2, "draught": 4.7, "surf": 9.1, "dived": 3.9, "tubes": 14, "fan": 2, "range": 1200, "attack": "periscope", "deep": 150, "crush": 250, "pack": 2, "report": true, "_src": "boats forced deep [OEG T2]" },
+      { "from": "1944-03", "cls": "Type VIIC", "len": 67.1, "beam": 6.2, "draught": 4.7, "surf": 9.1, "dived": 3.9, "tubes": 14, "fan": 2, "range": 1200, "attack": "periscope", "deep": 150, "crush": 250, "pack": 1, "report": false, "_src": "packs given up [history §1]" }
+    ],
+    "ITA": [
+      { "from": "1940-06", "cls": "Marcello class", "len": 73.0, "beam": 7.2, "draught": 5.1, "surf": 8.9, "dived": 4.1, "tubes": 16, "fan": 2, "range": 1500, "attack": "periscope", "deep": 80, "crush": 160, "pack": 1, "report": false, "_src": "[L]; trained for submerged attack [P: Blair]" },
+      { "from": "1940-06", "basin": "med", "cls": "Adua class", "len": 60.2, "beam": 6.5, "draught": 4.6, "surf": 7.7, "dived": 3.9, "tubes": 12, "fan": 2, "range": 1500, "attack": "periscope", "deep": 80, "crush": 160, "pack": 1, "report": false, "_src": "[L]" }
+    ],
+    "UK": [
+      { "from": "1939-09", "cls": "T class", "len": 84.3, "beam": 7.8, "draught": 4.5, "surf": 7.8, "dived": 4.6, "tubes": 16, "fan": 4, "range": 1800, "attack": "periscope", "deep": 60, "crush": 150, "pack": 1, "report": false, "_src": "[L]" },
+      { "from": "1940-06", "basin": "med", "cls": "U class", "len": 58.2, "beam": 4.9, "draught": 4.6, "surf": 5.8, "dived": 4.6, "tubes": 8, "fan": 4, "range": 1600, "attack": "periscope", "deep": 60, "crush": 120, "pack": 1, "report": false, "_src": "[L]; the boats worked alone, routed by Ultra [historian H]" }
+    ],
+    "USA": [
+      { "from": "1941-12", "cls": "Gato class", "len": 95.0, "beam": 8.3, "draught": 5.2, "surf": 10.4, "dived": 4.5, "tubes": 24, "fan": 3, "range": 1600, "attack": "periscope", "deep": 90, "crush": 150, "pack": 1, "report": false, "_src": "[L]" },
+      { "from": "1943-10", "cls": "Balao class", "len": 95.0, "beam": 8.3, "draught": 5.2, "surf": 10.4, "dived": 4.5, "tubes": 24, "fan": 3, "range": 1400, "attack": "surfaced", "deep": 120, "crush": 180, "pack": 2, "report": false, "_src": "packs of 3 led at sea from October 1943 [P: Blair]; 1.7 attackers per contact [OEG 10.1.4]; night surface attacks by radar [L]" }
+    ],
+    "JAP": [
+      { "from": "1941-12", "cls": "Type B1 (I-15 class)", "len": 108.7, "beam": 9.3, "draught": 5.1, "surf": 12.0, "dived": 4.1, "tubes": 17, "fan": 3, "range": 2000, "attack": "periscope", "deep": 80, "crush": 150, "pack": 1, "report": false, "_src": "[L]; aimed at warships [P: Boyd & Yoshida]" }
+    ],
+    "SOV": [
+      { "from": "1939-09", "cls": "Shch class", "len": 58.8, "beam": 6.2, "draught": 3.9, "surf": 6.4, "dived": 4.3, "tubes": 10, "fan": 2, "range": 1200, "attack": "periscope", "deep": 60, "crush": 90, "pack": 1, "report": false, "_src": "[L]; Soviet boats worked alone [form D2]" }
+    ],
+    "FRA": [
+      { "from": "1939-09", "cls": "Redoutable class", "len": 92.3, "beam": 8.1, "draught": 4.4, "surf": 8.7, "dived": 5.1, "tubes": 13, "fan": 3, "range": 1500, "attack": "periscope", "deep": 80, "crush": 120, "pack": 1, "report": false, "_src": "[L]" }
+    ],
+    "_default": [
+      { "from": "1939-09", "cls": "coastal submarine", "len": 60.0, "beam": 5.5, "draught": 3.8, "surf": 6.5, "dived": 4.0, "tubes": 6, "fan": 2, "range": 1200, "attack": "periscope", "deep": 50, "crush": 100, "pack": 1, "report": false, "_src": "[L] a small navy's boat" }
+    ]
+  },
+  "torpedoes": {
+    "_about": "A navy's torpedo by year: its name, running speed and whether it leaves a wake (wakeless: electric or oxygen).",
+    "GER": [
+      { "from": "1939-09", "fish": "G7e", "speed": 15.4, "wakeless": true, "_src": "30 kn, about 5 km, no wake [H: historian]" },
+      { "from": "1940-07", "fish": "G7a", "speed": 20.6, "wakeless": false, "_src": "40 kn over 7.5 km, a wake of bubbles; the 44 kn setting not used early [M: historian]; used at night [L]" },
+      { "from": "1942-01", "fish": "G7e", "speed": 15.4, "wakeless": true, "_src": "[H: historian]" }
+    ],
+    "ITA": [ { "from": "1940-06", "fish": "533 mm steam torpedo", "speed": 23.1, "wakeless": false, "_src": "[L]" } ],
+    "UK": [ { "from": "1939-09", "fish": "Mark VIII", "speed": 23.4, "wakeless": false, "_src": "45.5 kn [L]" } ],
+    "USA": [
+      { "from": "1941-12", "fish": "Mark 14", "speed": 23.7, "wakeless": false, "_src": "46 kn [L]" },
+      { "from": "1944-07", "fish": "Mark 18", "speed": 14.9, "wakeless": true, "_src": "electric, 29 kn, in service from late 1943 [L]" }
+    ],
+    "JAP": [ { "from": "1941-12", "fish": "Type 95", "speed": 25.2, "wakeless": true, "_src": "oxygen, 49 kn, almost no wake [M]" } ],
+    "SOV": [ { "from": "1939-09", "fish": "53-38", "speed": 22.9, "wakeless": false, "_src": "[L]" } ],
+    "FRA": [ { "from": "1939-09", "fish": "550 mm 23D", "speed": 22.6, "wakeless": false, "_src": "[L]" } ],
+    "_default": [ { "from": "1939-09", "fish": "533 mm steam torpedo", "speed": 21.6, "wakeless": false, "_src": "[L]" } ]
+  },
+  "escorts": {
+    "_about": "A navy's escorts and hunters by year: the class (one size for every escort piece in a scene), how many sail with a convoy (n) and how many hunt together (group), the speed they run in at, their kit: the depth-charge pattern, the depths it is set to (shallow when the boat is missed, as the patterns of the day were; never her own keel unless the kill is booked), the sinking rate (Mk VII about 3 m/s, the heavy charge about 5 m/s [H: historian]), an ahead-thrower, radar, starshell, and the range at which asdic contact is lost running in ([OEG T2] 176, 192, 223 and 279 yd). A missed pattern's charges all burst at least CLEAR (100 m, Rules/sub-scene.ts) across the water from every boat.",
+    "UK": [
+      { "from": "1939-09", "cls": "V and W class destroyer", "len": 95.1, "beam": 9.0, "speed": 7.7, "turn": 0.12, "n": [1, 2], "group": [2, 3], "pattern": 5, "spread": 80, "set": [30, 60], "sink": 3.0, "ahead": null, "radar": false, "starshell": true, "contact": [1300, 1900], "lost": 150, "_src": "1-2 escorts to about 15 W [P: Roskill]; 5-charge pattern" },
+      { "from": "1940-07", "cls": "Flower class corvette", "len": 62.5, "beam": 10.1, "speed": 7.7, "turn": 0.12, "n": [2, 5], "group": [2, 3], "pattern": 5, "spread": 80, "set": [30, 60], "sink": 3.0, "ahead": null, "radar": false, "starshell": true, "contact": [1300, 1900], "lost": 150, "_src": "16 kn [historian]; 2-5 escorts [OEG]" },
+      { "from": "1941-04", "cls": "Flower class corvette", "len": 62.5, "beam": 10.1, "speed": 7.7, "turn": 0.12, "n": [4, 8], "group": [3, 4], "pattern": 10, "spread": 120, "set": [30, 75], "sink": 3.0, "ahead": null, "radar": true, "starshell": true, "contact": [1300, 2100], "lost": 160, "_src": "4-8 escorts [OEG T3]; Type 271 radar 1941 [historian]; patterns of 10 [M]" },
+      { "from": "1942-07", "cls": "Flower class corvette", "len": 62.5, "beam": 10.1, "speed": 7.7, "turn": 0.12, "n": [4, 8], "group": [3, 4], "pattern": 10, "spread": 120, "set": [40, 90], "sink": 3.0, "ahead": null, "radar": true, "starshell": true, "contact": [1300, 2100], "lost": 161, "_src": "lost at 176 yd [OEG T2]" },
+      { "from": "1943-01", "cls": "River class frigate", "len": 91.9, "beam": 11.1, "speed": 8.2, "turn": 0.11, "n": [6, 8], "group": [4, 6], "pattern": 14, "spread": 140, "set": [45, 110], "sink": 3.0, "ahead": "Hedgehog", "radar": true, "starshell": true, "contact": [1400, 2300], "lost": 176, "_src": "6.4-6.8 escorts [OEG T5]; pattern of 14 [P]; Hedgehog, first kill Nov 1942 [historian M]; lost at 192 yd [OEG T2]" },
+      { "from": "1943-07", "cls": "River class frigate", "len": 91.9, "beam": 11.1, "speed": 8.2, "turn": 0.11, "n": [6, 8], "group": [4, 6], "pattern": 14, "spread": 140, "set": [60, 140], "sink": 3.0, "ahead": "Hedgehog", "radar": true, "starshell": true, "contact": [1400, 2300], "lost": 204, "_src": "lost at 223 yd [OEG T2]" },
+      { "from": "1944-03", "cls": "Loch class frigate", "len": 93.6, "beam": 11.7, "speed": 8.2, "turn": 0.11, "n": [6, 8], "group": [4, 6], "pattern": 14, "spread": 140, "set": [60, 160], "sink": 5.1, "ahead": "Hedgehog", "radar": true, "starshell": true, "contact": [1400, 2300], "lost": 255, "_src": "lost at 279 yd [OEG T2]; Squid kills only from late July 1944 [historian L], drawn here as the ahead-thrower" }
+    ],
+    "CAN": [
+      { "from": "1940-07", "cls": "Flower class corvette", "len": 62.5, "beam": 10.1, "speed": 7.7, "turn": 0.12, "n": [3, 6], "group": [2, 3], "pattern": 10, "spread": 120, "set": [30, 75], "sink": 3.0, "ahead": null, "radar": false, "starshell": true, "contact": [1300, 1900], "lost": 160, "_src": "Canadian groups later with radar and HF/DF [P: Milner]" },
+      { "from": "1943-04", "cls": "River class frigate", "len": 91.9, "beam": 11.1, "speed": 8.2, "turn": 0.11, "n": [5, 7], "group": [4, 5], "pattern": 14, "spread": 140, "set": [45, 110], "sink": 3.0, "ahead": "Hedgehog", "radar": true, "starshell": true, "contact": [1400, 2300], "lost": 176, "_src": "[L]" }
+    ],
+    "USA": [
+      { "from": "1941-09", "cls": "Wickes class destroyer", "len": 95.8, "beam": 9.7, "speed": 7.7, "turn": 0.12, "n": [3, 5], "group": [2, 3], "pattern": 9, "spread": 120, "set": [30, 75], "sink": 3.0, "ahead": null, "radar": true, "starshell": true, "contact": [1300, 2000], "lost": 160, "_src": "[L]" },
+      { "from": "1943-04", "cls": "Buckley class destroyer escort", "len": 93.3, "beam": 11.3, "speed": 8.2, "turn": 0.12, "n": [4, 6], "group": [4, 5], "pattern": 13, "spread": 140, "set": [45, 110], "sink": 3.0, "ahead": "Hedgehog", "radar": true, "starshell": true, "contact": [1400, 2300], "lost": 176, "_src": "US attacks sank 5% of boats attacked in 1943, 30% in 1944 [OEG T8]; kit [L]" }
+    ],
+    "GER": [
+      { "from": "1939-09", "cls": "UJ-boat (armed trawler)", "len": 55.0, "beam": 8.5, "speed": 5.7, "turn": 0.12, "n": [2, 4], "group": [2, 3], "pattern": 6, "spread": 90, "set": [30, 80], "sink": 3.0, "ahead": null, "radar": false, "starshell": true, "contact": [1000, 1600], "lost": 150, "_src": "[L]" }
+    ],
+    "ITA": [
+      { "from": "1940-06", "cls": "Spica class torpedo boat", "len": 81.4, "beam": 8.2, "speed": 7.7, "turn": 0.12, "n": [2, 6], "group": [1, 2], "pattern": 6, "spread": 90, "set": [25, 60], "sink": 3.0, "ahead": null, "radar": false, "starshell": true, "contact": [700, 1200], "lost": 150, "sonar": 0.5, "_src": "2-8 escorts for 1-6 merchants [historian M/L]; few had working sonar to 1941, about half the British [historian L]" },
+      { "from": "1942-01", "cls": "Ciclone class torpedo boat", "len": 87.8, "beam": 9.9, "speed": 7.7, "turn": 0.12, "n": [2, 6], "group": [1, 2], "pattern": 8, "spread": 100, "set": [30, 75], "sink": 3.0, "ahead": null, "radar": false, "starshell": true, "contact": [900, 1500], "lost": 150, "sonar": 0.75, "_src": "more had sonar from 1942, Italian and German sets [historian L]" }
+    ],
+    "JAP": [
+      { "from": "1941-12", "cls": "Kamikaze class destroyer", "len": 102.6, "beam": 9.2, "speed": 7.7, "turn": 0.12, "n": [1, 3], "group": [1, 2], "pattern": 6, "spread": 90, "set": [25, 40], "sink": 3.0, "ahead": null, "radar": false, "starshell": true, "contact": [800, 1400], "lost": 150, "_src": "charges set shallow to mid-1943 [L]" },
+      { "from": "1943-07", "cls": "Etorofu class kaibokan", "len": 77.7, "beam": 9.1, "speed": 7.7, "turn": 0.12, "n": [2, 4], "group": [2, 3], "pattern": 8, "spread": 100, "set": [30, 90], "sink": 3.0, "ahead": null, "radar": false, "starshell": true, "contact": [900, 1500], "lost": 150, "_src": "[L]" },
+      { "from": "1944-03", "cls": "Type C kaibokan", "len": 67.5, "beam": 8.4, "speed": 7.7, "turn": 0.12, "n": [3, 6], "group": [2, 4], "pattern": 12, "spread": 120, "set": [30, 100], "sink": 3.0, "ahead": null, "radar": true, "starshell": true, "contact": [1000, 1600], "lost": 150, "_src": "[L]" }
+    ],
+    "SOV": [
+      { "from": "1939-09", "cls": "Uragan class patrol ship", "len": 71.5, "beam": 7.4, "speed": 7.7, "turn": 0.12, "n": [1, 3], "group": [1, 2], "pattern": 6, "spread": 90, "set": [25, 60], "sink": 3.0, "ahead": null, "radar": false, "starshell": true, "contact": [800, 1400], "lost": 150, "_src": "[L]" }
+    ],
+    "FRA": [
+      { "from": "1939-09", "cls": "Bourrasque class destroyer", "len": 105.8, "beam": 9.6, "speed": 7.7, "turn": 0.12, "n": [2, 4], "group": [2, 3], "pattern": 6, "spread": 90, "set": [25, 60], "sink": 3.0, "ahead": null, "radar": false, "starshell": true, "contact": [1000, 1600], "lost": 150, "_src": "[L]" }
+    ],
+    "_default": [
+      { "from": "1939-09", "cls": "torpedo boat", "len": 70.0, "beam": 7.5, "speed": 7.2, "turn": 0.12, "n": [1, 3], "group": [1, 2], "pattern": 4, "spread": 70, "set": [25, 50], "sink": 3.0, "ahead": null, "radar": false, "starshell": true, "contact": [700, 1200], "lost": 150, "_src": "[L] a small navy's escort" }
+    ]
+  },
+  "convoys": {
+    "_about": "How many merchant ships sail together, in how many columns, and how fast, by the navy that owns the convoy and the year [history §1, §2, §4; L where marked].",
+    "UK": [
+      { "from": "1939-09", "n": [30, 40], "cols": [8, 9], "speed": 3.9, "_src": "SC 7: 35 ships [historian M]; slow convoys 7 kn [OEG T1]" },
+      { "from": "1941-04", "n": [40, 50], "cols": [9, 10], "speed": 3.9, "_src": "[L]" },
+      { "from": "1942-07", "n": [40, 60], "cols": [10, 12], "speed": 3.9, "_src": "[L]" },
+      { "from": "1940-06", "basin": "med", "n": [4, 14], "cols": [2, 4], "speed": 6.2, "_src": "Malta convoys, Pedestal 14 [historian]" }
+    ],
+    "ITA": [ { "from": "1940-06", "n": [1, 6], "cols": [1, 2], "speed": 4.1, "_src": "1-6 merchants [historian M]" } ],
+    "JAP": [
+      { "from": "1941-12", "n": [4, 10], "cols": [2, 3], "speed": 3.6, "_src": "[L]" },
+      { "from": "1944-01", "n": [6, 15], "cols": [3, 4], "speed": 3.6, "_src": "[L]" }
+    ],
+    "GER": [ { "from": "1939-09", "n": [2, 8], "cols": [1, 2], "speed": 3.6, "_src": "[L] coastal convoys" } ],
+    "USA": [ { "from": "1941-12", "n": [20, 40], "cols": [5, 8], "speed": 4.1, "_src": "[L]" } ],
+    "SOV": [ { "from": "1939-09", "n": [3, 8], "cols": [1, 2], "speed": 3.6, "_src": "[L]" } ],
+    "FRA": [ { "from": "1939-09", "n": [10, 30], "cols": [4, 6], "speed": 3.9, "_src": "[L]" } ],
+    "_default": [ { "from": "1939-09", "n": [3, 8], "cols": [1, 2], "speed": 3.6, "_src": "[L]" } ]
+  },
+  "air": {
+    "_about": "A navy's anti-submarine aircraft by year and the share of its kills that are theirs, until the rules record hunters and aircraft per sea (huntersIn): the kills are split between ships and aircraft as wholeShares splits them (navy.ts:1650).",
+    "UK": [
+      { "from": "1939-09", "name": "flying boat", "share": 0.15, "_src": "[L]" },
+      { "from": "1942-06", "name": "bomber with searchlight", "share": 0.3, "_src": "Leigh light, first kill 5 July 1942 [historian H]" },
+      { "from": "1943-04", "name": "very-long-range bomber", "share": 0.45, "_src": "[L]" }
+    ],
+    "USA": [
+      { "from": "1941-12", "name": "flying boat", "share": 0.25, "_src": "[L]" },
+      { "from": "1943-03", "name": "escort carrier's torpedo bomber", "share": 0.45, "_src": "[L]" }
+    ],
+    "GER": [ { "from": "1939-09", "name": "seaplane", "share": 0.15, "_src": "[L]" } ],
+    "ITA": [ { "from": "1940-06", "name": "flying boat", "share": 0.2, "_src": "[L]" } ],
+    "JAP": [ { "from": "1941-12", "name": "flying boat", "share": 0.15, "_src": "[L]" } ],
+    "SOV": [ { "from": "1939-09", "name": "flying boat", "share": 0.1, "_src": "[L]" } ],
+    "FRA": [ { "from": "1939-09", "name": "flying boat", "share": 0.1, "_src": "[L]" } ],
+    "_default": [ { "from": "1939-09", "name": "patrol aircraft", "share": 0.1, "_src": "[L]" } ]
+  },
+  "ends": {
+    "_about": "How a booked kill ends, as a share 'crushed' (the rest 'scuttled'): by escorts and by aircraft [L]. The form allows only these two in D1.",
+    "escort": 0.55, "air": 0.35
+  }
+}

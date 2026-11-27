@@ -1,0 +1,7 @@
+{
+  "_about": "The wolf pack and convoy battle's campaign side (release 2; ruling 241 of 22 November 2026, on the production lead's form naval-battles/wolfpack-r2/form.md). Read only where a grand campaign carries the flag 'convoyBattle' (stage.json): off, nothing here is read.",
+  "_swing": "Every month on a convoy route the share of its cargoes sunk (navy.ts convoyWar's L) is multiplied by a swing, drawn on its own key ('convoySwing:<route>') after the convoy's own rolls, so no other roll moves: uniform between 'low' and 'high', mean 1, so the staff's expectation is unmoved (ruling 241 Q1; ruling 217's seam (2)). The width and its even shape are the design director's marked judgment, to be replaced by the OEG study's spread of losses per convoy attacked if the historian finds one. A night the player fights picks its swing inside the same bounds. The share so swung is held under laneLoss's own cap.",
+  "swing": { "low": 0.8, "high": 1.2 },
+  "_hand": "The routes whose nights a player may fight (form section 1). The convoys to Libya stay settled by the staff until the historian has checked their rows (history section 2; ruling 241).",
+  "hand": ["atlantic"]
+}

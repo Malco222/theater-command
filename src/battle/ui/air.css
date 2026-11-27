@@ -1,0 +1,98 @@
+/* The air battle page's own touches on the shared battle screen. battle.css stays the land thread's: everything here
+   is scoped to .air, so the field and sea pages never see it. */
+
+/* ---- The top bar: one row at 1280 and up; the title and its subtitle wrap rather than cut (the UI director, air 8) ---- */
+.air.battle { grid-template-columns: minmax(0, 1fr); overflow: hidden; }
+.air .bbar { flex-wrap: nowrap; gap: 12px; }
+.air .btitle { flex: 1 1 220px; min-width: 0; }
+.air .btitle .tc-title-3 { line-height: 22px; }
+.air .btitle .nw { white-space: nowrap; }
+.air .bclock, .air .bspeed, .air .bacts { flex: none; }
+/* The clock box says the state over the time: PAUSED in brass, RUNNING in paper (ruling 226, mark 8). */
+.air .bclock { min-width: 64px; }
+.air .bclock .tc-label { color: var(--brass-300); }
+.air .bclock .tc-label.is-run { color: var(--paper-300); }
+/* How near each side is to breaking off: a bar a side in its nation's colour, no numbers (ruling 226, mark 3). */
+@media (max-width: 1279px) { .air .bbar { flex-wrap: wrap; } }
+/* Under 1440 the title takes the type scale's next size down, so it holds one line (the UI director, 19:36Z). */
+/* Under 1440 the title takes the type scale's next size down, so it holds one line (the UI director, 19:36Z); to leave
+   it the room for the longest ("The fight for the sky over Alsace"), the two orders at the right take the small
+   buttons the clock's already are, and the balance gives way first. */
+@media (max-width: 1439px) {
+  .air .bbar { gap: 10px; }
+  .air .btitle { flex: 1 1 auto; }
+  .air .btitle .tc-title-3 { font-size: 16px; line-height: 20px; white-space: nowrap; }
+      .air .bacts .tc-btn { height: var(--control-sm); padding: 0 var(--space-3); font-size: 11px; }
+}
+
+/* A group's card: its name, then what it flies underneath ("Kampfgeschwader 5" / "Bombers"). */
+.air .ucard { min-width: 216px; }
+.air .ucard .uwhat { display: grid; min-width: 0; }
+.air .ucard .uwhat b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; line-height: 16px; }
+.air .ucard .uwhat small { font: 400 11px/14px var(--font-typed); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.air .ucard .bsign { flex: none; width: 34px; height: 18px; }
+
+/* The orders for the groups in hand, over the field's lower left: height, the escort's and the hunt's, the bombs. */
+.air .airorders { position: absolute; left: 12px; bottom: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 6px 10px; max-width: calc(100% - 24px); }
+.air .airorders .tc-seg > * { height: 28px; padding: 0 12px; font-size: 12px; }
+
+/* Under the dispatch at the top of the field: his own side near breaking off, in amber, and the clock's tag. */
+.air .ftop { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); display: grid; justify-items: center; gap: 6px; pointer-events: none; max-width: calc(100% - 32px); }
+.air .fwarn { padding: 5px 12px; border: 1px solid var(--amber); border-radius: 2px; background: rgba(14, 11, 8, .82); color: var(--amber); font: 700 13px/18px var(--font-typed); text-align: center; text-wrap: balance; }
+.air .ftag { position: absolute; left: 12px; top: 12px; height: var(--control-sm); box-sizing: border-box; padding: 0 10px; border-radius: 2px; background: var(--paper-100); color: var(--ink-900, #1d1610); font: 700 12px/18px var(--font-typed); letter-spacing: .1em; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+.air .ftag .tc-key { opacity: 1; }
+/* The aim slip (the UI director, 20:53Z): pinned at the field's top left under the tag's place, whether the tag shows or not. */
+.air .faim { position: absolute; left: 12px; top: calc(12px + var(--control-sm) + 8px); max-width: 340px; padding: 7px 10px 8px; display: grid; gap: 2px; pointer-events: none; font: 400 13px/18px var(--font-serif); }
+.air .faim[hidden], .air .faim [hidden] { display: none; }
+.air .faim .tc-label { color: var(--brass-700); }
+.air .faim b { font-weight: 700; }
+.air .faim #aimLost, .air .faim #aimNow { font: 400 12px/17px var(--font-typed); text-wrap: balance; }
+.air .faim #aimLost { white-space: nowrap; }
+
+/* The controls line folds once under 1440, before "Arrows" (the UI director's fold rule); the dot at the fold goes. */
+.air .keys .kfold { display: none; }
+@media (max-width: 1439px) { .air .keys .kfold { display: block; flex-basis: 100%; height: 0; } }
+
+/* The chooser: the staff's chance at a card's top right, under the title when the card is narrow; the forces wrap
+   between words, a number never parting from its noun; what changed since the last battle, above the cards. */
+.air .offers { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+.air .offer { align-content: start; }
+.air .offer .otop { flex-wrap: wrap; row-gap: 2px; }
+.air .offer .otop b { flex: 1 1 auto; min-width: 0; }
+.air .offer .ochance { flex: none; margin-left: auto; white-space: nowrap; color: var(--paper-200); font-size: 13px; }
+.air .offer .omid .fact { white-space: normal; }
+/* Which side he flies, and what each side sends up: two lines on every card (the UI director, 21:25Z). */
+.air .offer .omid .fact { flex-basis: 100%; }
+.air .offer .oaim { display: block; margin-top: 2px; font-size: 15px; line-height: 1.4; color: var(--paper-200); text-wrap: pretty; }
+.air .since { margin: 0 0 12px; padding: 10px 14px; }
+.air .since ul { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+.air .since li { font: 400 14px/20px var(--font-serif); color: var(--ink-900, #1d1610); }
+
+/* The after card's lines wrap without leaving a word alone (the UI director, 18:50Z). */
+.veil .flines li { text-wrap: pretty; }
+
+/* The top bar in land's form (the UI director, b384 review 2): the balance bar, its line, and how near each side is to
+   breaking off as its third row, his from the left, theirs from the right, the label between. */
+.air .bbal { flex: 1 1 300px; min-width: 0; max-width: 420px; overflow: hidden; }
+.air .bends > span:not(.tc-data) { font-size: 11px; letter-spacing: .06em; white-space: nowrap; }
+.air .bends .tc-data { white-space: nowrap; }
+/* Under 1,440 the bar takes a line of its own under the rest of the top bar, names and all (the UI director, 20:47Z). */
+@media (max-width: 1439px) {
+  .air .bbar { flex-wrap: wrap; row-gap: 6px; }
+  .air .bbal { order: 10; flex: 1 1 100%; max-width: none; grid-template-columns: minmax(0, 640px); justify-content: center; }
+}
+.air .bbreak { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin-top: 2px; }
+.air .bbreak .tc-label { font-size: 12px; line-height: 14px; color: var(--paper-300); white-space: nowrap; }
+.air .bbar2 { display: flex; height: 6px; border: 1px solid var(--line); border-radius: 2px; background: var(--desk-800); overflow: hidden; }
+.air .bbar2.is-theirs { justify-content: flex-end; }
+.air .bbar2 i { display: block; height: 100%; width: 0; transition: width .3s; }
+/* The staff's chance on its own line under each raid card's title, left-aligned, so the cards read alike (review 5). */
+.air .offer .otop { flex-direction: column; align-items: flex-start; }
+.air .offer .otop .ochance { margin-left: 0; }
+/* The same raid alone and escorted (b401 as re-ruled): the two cards side by side under one heading, and what the
+   escort is worth under them, read from the two cards' own numbers. */
+.air .pair { margin-top: 18px; }
+.air .pair .phead { margin: 0 0 8px; }
+.air .pair .ptwo { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.air .offer .olost { display: block; margin-top: 4px; font-size: 13px; color: var(--paper-200); }
+.air .pair .pworth { margin: 10px 0 0; font: 400 15px/1.45 var(--font-serif); color: var(--paper-200); text-wrap: pretty; }

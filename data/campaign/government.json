@@ -1,0 +1,100 @@
+{
+  "_about": "Government and the war cabinet (the grand campaign). Every nation has a form of government. The player's has a war cabinet of ministers he appoints and decrees he can carry, both paid for in political capital (the same that courts neutrals and signs trade agreements), and the cabinet's trust in him, which rises with ground won and jobs done and falls with ground lost and jobs ignored. Every few months the cabinet, or an ally, sets a directive: an optional job with a deadline and a reward. Computer nations keep a caretaker cabinet and no decrees, so none of this moves their wars. Rules in src/campaign/government.ts.",
+  "forms": {
+    "democracy": { "name": "Parliamentary democracy", "blurb": "The cabinet answers to a parliament and a free press. It gives its confidence quickly and takes it back as fast: good news and bad both count for more.", "capital": 0, "swing": 1.25, "start": 60, "fallsAt": 20, "crisis": "loses a vote of confidence" },
+    "oneparty": { "name": "One-party state", "blurb": "The party is the state, and the leader's word is its law: 1 more political capital a month. The cabinet's confidence moves slowly either way, and it takes a great deal to shake it.", "capital": 1, "swing": 0.75, "start": 70, "fallsAt": 12, "crisis": "is purged after a plot against the leadership" },
+    "authoritarian": { "name": "Authoritarian government", "blurb": "A strong man, a regent or a king's ministers rule with the army behind them. The cabinet follows while the news is good.", "capital": 0, "swing": 1, "start": 60, "fallsAt": 16, "crisis": "is dismissed by the head of state" }
+  },
+  "nations": {
+    "_default": "authoritarian",
+    "GER": "oneparty", "ITA": "oneparty", "SOV": "oneparty",
+    "UK": "democracy", "FRA": "democracy", "USA": "democracy", "CAN": "democracy", "CHL": "democracy", "COL": "democracy", "URU": "democracy", "COS": "democracy", "NED": "democracy", "BEL": "democracy", "NOR": "democracy", "DEN": "democracy", "SWE": "democracy", "FIN": "democracy", "SUI": "democracy", "IRL": "democracy", "LUX": "democracy"
+  },
+  "capital": { "lowTrust": 35, "lowShare": 0.5, "lowIncome": 0.08, "highTrust": 75, "highAdd": 1 },
+  "trust": {
+    "rest": 55, "drift": 0.1,
+    "province": 1, "home": 1.5, "win": 0.5, "defeat": 0.5, "capitalTaken": 6, "debt": 2, "ringed": 3,
+    "cap": 5, "crisisMonths": 3, "afterCrisis": 45
+  },
+  "appoint": { "cost": 6, "costMinor": 3, "start": 6, "wait": 4 },
+  "seats": [
+    { "id": "staff", "name": "Chief of the General Staff" },
+    { "id": "arms", "name": "Minister of Armaments" },
+    { "id": "foreign", "name": "Foreign Minister" },
+    { "id": "finance", "name": "Minister of Finance" }
+  ],
+  "ministers": [
+    { "id": "caretaker", "seat": "*", "name": "A caretaker", "plus": "Keeps the office running", "minus": "Changes nothing", "effects": {} },
+    { "id": "organiser", "wing": "hawk", "seat": "staff", "name": "The organiser", "plus": "Replacements reach the armies 15% faster", "minus": "He fights the cabinet for every man: half a point less political capital a month", "effects": { "drafts": 1.15, "capital": -0.5 } },
+    { "id": "reformer", "wing": "dove", "seat": "staff", "name": "The reformer", "plus": "Research goes 10% faster", "minus": "Depots are stripped for his experiments: replacements 5% slower", "effects": { "research": 1.1, "drafts": 0.95 } },
+    { "id": "industrialist", "wing": "hawk", "seat": "arms", "name": "The industrialist", "plus": "New corps cost 8% less", "minus": "His firms take their share: income down 2%", "effects": { "cost": 0.92, "income": 0.98 } },
+    { "id": "planner", "wing": "dove", "seat": "arms", "name": "The planner", "plus": "Every factory is given a quota: income up 5%", "minus": "The army waits its turn: new corps cost 4% more", "effects": { "income": 1.05, "cost": 1.04 } },
+    { "id": "merchant", "wing": "dove", "seat": "foreign", "name": "The merchant", "plus": "Trade agreements pay 25% more", "minus": "The cabinet distrusts his friends abroad: its trust falls 0.3 a month", "effects": { "trade": 1.25, "trust": -0.3 } },
+    { "id": "statesman", "wing": "hawk", "seat": "foreign", "name": "The statesman", "plus": "He carries parliament, party or court with him: 1 more political capital a month", "minus": "Trade is beneath him: agreements pay 10% less", "effects": { "capital": 1, "trade": 0.9 } },
+    { "id": "taxman", "wing": "hawk", "seat": "finance", "name": "The taxman", "plus": "Nothing escapes him: income up 6%", "minus": "Nobody thanks him: the cabinet's trust falls 0.5 a month", "effects": { "income": 1.06, "trust": -0.5 } },
+    { "id": "paymaster", "wing": "dove", "seat": "finance", "name": "The paymaster", "plus": "Wages, pensions and bread prices are kept steady: the cabinet's trust rises 0.5 a month, and a directive missed costs half the trust", "minus": "It costs money: income down 3%", "effects": { "trust": 0.5, "income": 0.97, "missed": 0.5 } }
+  ],
+  "decree": { "wait": 6 },
+  "tracks": [
+    {
+      "id": "economy", "name": "The economy",
+      "steps": [
+        { "id": "peace", "name": "Peacetime economy", "text": "Shops are full and factories work one shift.", "effects": {} },
+        { "id": "war", "name": "War economy", "text": "Factories go over to war work: income up 6%. The shortages are felt: the cabinet's trust falls 0.5 a month, and holding the country to it takes half a point of political capital a month.", "cost": 8, "needs": "war", "effects": { "income": 1.06, "trust": -0.5, "capital": -0.5 } },
+        { "id": "total", "name": "Total mobilisation", "text": "Everything for the front: income up 12%. The country is driven hard: the cabinet's trust falls 1.2 a month, and holding the country to it takes 1.5 political capital a month.", "cost": 12, "needs": "long", "effects": { "income": 1.12, "trust": -1.2, "capital": -1.5 } }
+      ]
+    },
+    {
+      "id": "service", "name": "The call-up",
+      "steps": [
+        { "id": "reserve", "name": "Volunteers and reservists", "text": "The army is fed from the trained classes.", "effects": {} },
+        { "id": "conscription", "name": "General conscription", "text": "Every fit man is called: replacements 20% faster, and 15% more men come of age for the army each month. Workers leave the benches: income down 2%.", "cost": 6, "needs": "war", "effects": { "drafts": 1.2, "men": 1.15, "income": 0.98 } },
+        { "id": "levy", "name": "The last levy", "text": "Boys and old men are called up: replacements 45% faster, and 40% more men reach the army each month. Income down 6%, and the cabinet's trust falls 0.5 a month.", "cost": 10, "needs": "pressed", "effects": { "drafts": 1.45, "men": 1.4, "income": 0.94, "trust": -0.5 } }
+      ]
+    }
+  ],
+  "needs": { "longMonths": 12, "pressedHome": 0.1, "pressedMonths": 30 },
+  "directives": {
+    "first": 3, "every": 4, "retry": 2,
+    "success": { "trust": 4 },
+    "missed": { "base": 3, "step": 2, "most": 11, "rest": 9, "restMost": 55, "aside": 0.5 },
+    "take": { "months": { "village": 4, "town": 4, "city": 5, "capital": 6 }, "capital": { "village": 3, "town": 4, "city": 6, "capital": 10 }, "money": { "village": 0.2, "town": 0.25, "city": 0.4, "capital": 0.6 }, "odds": 1.5, "least": 0.6, "reach": 2, "hard": { "months": 2, "reward": 1.5 }, "again": 12 },
+    "hold": { "months": 4, "capital": 6, "siegeCapital": 9, "threat": 1, "lost": 4, "fresh": 2 },
+    "raise": { "months": 6, "grow": 1.2, "least": 5, "capital": 5 },
+    "trade": { "months": 5, "capital": 4, "money": 0.2 },
+    "relief": { "months": 5, "capital": 4, "corps": "inf", "pressed": 0.15, "overrun": 0.9 },
+    "spare": { "months": 4, "capital": 5, "worn": 0.85, "share": 0.04 },
+    "build": { "months": 3, "capital": 4 },
+    "agent": { "months": 3, "capital": 3 },
+    "small": { "quiet": 6, "missed": 2 }
+  },
+  "wings": {
+    "top": 2,
+    "hawks": { "won": 0.15, "wins": 0.15, "lost": 0.25 },
+    "doves": { "defeats": 0.25, "losses": 0.4, "spare": 0.02, "rest": 2 }
+  },
+  "promise": {
+    "every": 6, "months": [2, 3, 4, 6], "reach": 4, "memory": 3, "deep": [1, 0.5, 0.25, 0.125],
+    "fullOdds": 2, "oddsMost": 5, "perDepth": 1.5, "perMonth": 0.6, "haste": 0.25, "back": 0.5,
+    "size": { "village": 0.7, "town": 0.85, "city": 1, "capital": 1.4 },
+    "bands": [
+      { "id": "safe", "name": "A safe promise", "under": 1, "trust": 1, "capital": 1, "money": 0, "price": 2 },
+      { "id": "fair", "name": "A fair promise", "under": 2.5, "trust": 3, "capital": 3, "money": 0.15, "price": 4 },
+      { "id": "bold", "name": "A bold promise", "under": 4, "trust": 6, "capital": 6, "money": 0.4, "price": 7 },
+      { "id": "daring", "name": "A daring promise", "under": 99, "trust": 9, "capital": 10, "money": 0.8, "price": 10 }
+    ]
+  },
+  "head": { "every": 8, "answer": 2, "streak": 2, "winnable": 1.5, "chance": 0.5, "sacked": 5, "refused": 4, "watch": 6, "vindicated": 6, "wrong": 3 },
+  "notes": {
+    "forms": "'capital' is political capital a month the form adds to the nation's own; 'swing' multiplies every gain and loss of trust; 'start' is the trust a cabinet begins with; at or under 'fallsAt' for 'trust.crisisMonths' months running the cabinet falls.",
+    "capital": "Political capital is the nation's own (diplomacy.json: what it earns a month and the most it can hold). Under 'lowTrust' the cabinet doubts the player: it withholds 'lowShare' of the political capital he would earn each month and 'lowIncome' of the treasury's income; at 'highTrust' or over it adds 'highAdd'. A decree that costs capital to keep ('capital' below zero in its effects) lapses a step when there is none left to pay for it.",
+    "trust": "Each month trust moves 'drift' of the way back toward 'rest', then by the month's news: 'province' for each province gained, 'home' for each home province lost, 'win' and 'defeat' for each battle, 'capitalTaken' for an enemy capital, 'debt' while the treasury is in debt, 'ringed' while the capital is under siege. No single cause moves it more than 'cap' in a month.",
+    "appoint": "'cost' in political capital to put a minister in a seat ('costMinor' for a country that is not a great power), and 'wait' months before that seat can change again. The player's country opens its campaign with at least 'start' political capital.",
+    "ministers": "Each has a seat ('*' for any), a gain and a price. 'effects' multiply income, drafts (replacements), cost (new corps), research, trade and men (the class that comes of age each month, manpower.json), or add to capital and trust each month; 'missed' multiplies the trust a missed directive costs. What ministers and decrees add to trust or take from it is felt in full under every form of government.",
+    "tracks": "Decrees in steps. Each step replaces the one before. 'needs': 'war' at war; 'long' at war for 'needs.longMonths' months or with home ground lost; 'pressed' with 'needs.pressedHome' of the home country lost or 'needs.pressedMonths' months of war. Stepping down is free; the track cannot be raised again for 'decree.wait' months.",
+    "directives": "The first comes 'first' months into the player's campaign and another 'every' months after one ends ('retry' if nothing fitted). 'missed': trust lost for one ignored, 'base' and 'step' more for each ignored in a row, to 'most'; and for each ignored in a row the level trust settles at falls by 'rest', to 'restMost', until one is carried out: five in a row bring any cabinet down. One set aside costs 'aside' of that, and the next comes on the day it would have. take: months and rewards by the size of the town, money as a share of a month's income; the cabinet reckons a town from the attack card: what the card would read against it with the player's corps within 'reach' provinces brought up (as many as the roads carry; works, ground and the quality of the troops all counted), and names it only where that is 'odds' to 1 or better; with none such it may name one down to 'least', as a hard one, with 'hard.months' more months and 'hard.reward' times the reward; a town it asked for and did not get is not named again for 'again' months unless there is no other. hold: a province of the player's own with troops in it, under siege, or which an enemy who has attacked the player or an ally within 'fresh' months could attack at 'threat' to 1 or better with his corps in reach brought up (the attack card as his staff would read it), but not past 'lost' to 1, where nothing would hold it; it counts only if the place was attacked or besieged while the order ran, and is withdrawn otherwise; 'siegeCapital' is the reward where the siege had already begun. raise: the army, in the field or forming, brought to 'grow' times its strength or by 'least' divisions, but never by more than the treasury and the months of income can pay for, and never twice running. trade: a country with nothing else to do is asked to sign a trade agreement. relief: an ally who has lost 'pressed' of its home asks for an attack on the enemy pressing it; one that has lost 'overrun' of it asks to be liberated; the reward is a corps of this kind. spare: with the doves on top and the army's corps under 'worn' of their strength on average, the cabinet asks that no more than 'share' of the army's men be lost in battle over 'months' months. build and agent: small jobs for a quiet time: order one building in a town, or recruit one agent. They are asked only of a country at peace, or of one that has fought no battle of its own, as attacker or defender, and begun no new war, for 'small.quiet' months, and never of a treasury that could not pay for the thing today. One missed costs 'small.missed' trust, flat (half that set aside), however many directives stand ignored, and is not itself counted as a directive ignored: it does not raise the price of the next or lower the level trust settles at.",
+    "wings": "Hawks and doves. Every minister but a caretaker sits with one wing ('wing' on his row); the lean of the table is hawks less doves, from -4 to 4. Each point of lean toward the hawks makes ground won count 'won' more and battles won 'wins' more with the cabinet, and home ground lost 'lost' more. Each point toward the doves makes battles lost count 'defeats' more, raises the level trust settles at by 'rest', and costs 'losses' points of trust for every hundredth of the army's men lost in battle in a month beyond 'spare'. At 'top' points of lean a wing is on top and shapes the directives: hawks ask for towns, doves ask to hold, to build up, to trade, to spare the army and to help an ally, and never for a town: a table of doves that finds nothing of its own to ask for asks for nothing.",
+    "promise": "Call your shot. The player may promise the cabinet an enemy town within 'reach' provinces of his ground or his troops, in one of 'months' months (the month he promises in is the first), once every 'every' months. The odds are what the attack card would read against the town with his corps within the whole reach brought up, and the cabinet takes the best reading of today and of the opening of each of the last 'memory' months, so marching the army back before promising changes nothing. For a town beyond the front the reading counts by 'deep' for its depth. Boldness is two points for every halving of the odds under 'fullOdds' (to 'oddsMost'), 'perDepth' for each province of depth past the first, less 'perMonth' for each month allowed past the shortest. The band whose 'under' it falls below sets the terms: 'trust' and 'price' in points of trust (kept or broken), 'capital' in political capital and 'money' as a share of a month's income, both times 'size' for the town; what it pays when kept is up to 'haste' more for the shortest day than for the longest. A safe promise kept does not forgive a directive ignored. Taking a promise back costs 'back' of its price.",
+    "head": "The cabinet wants a head. No more often than every 'every' months, with a chance of 'chance' in a month that gives it cause, the cabinet names a general who has lost 'streak' battles running that could have been won (one is enough in a month a directive was failed) and asks for his dismissal; the player has 'answer' months. A battle that could have been won is a defence lost to an attack the card gave less than an even chance on the day (about 1.2 to 1 in the open, more against prepared positions), or an attack of his own thrown back at 'winnable' to 1 or better and better than even; others are not held against him. Dismissed: trust rises 'sacked'. Stood by, or left unanswered: trust falls 'refused', and for 'watch' months the cabinet watches him: a battle won earns 'vindicated' points of trust and the mark (commanders.json, trait 'vindicated'), a battle lost first that could have been won costs 'wrong' more. Once the player has stood by him the count starts afresh: the cabinet does not ask again over the same battles."
+  }
+}

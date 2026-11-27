@@ -1,0 +1,28 @@
+{
+  "_about": "The atomic project (release 2; Brian 25 November 2026 01:14Z, 'lets do number 1': a late, very expensive research project that any big industrial power can attempt; ruling 230 (4e): plain, sober words, no spectacle, no count of the dead, its effect a weight on the enemy's will to fight through the surrender rules, never a city-burning loop; the historian's late-war-tech-230.md section 4 for its price). Three rows of the Industry branch (tech.json, marked 'atom') and the plants, which are not research but a share of the nation's earnings drawn every month toward one fixed bill: the same bill takes a large industry two years and a small one forever, a gate on size, never on the nation. The grand campaign only, behind the switch stage.json 'atomBomb' (the flag 'atom', switchable in any month). Off: the rows leave the tree, the plants draw nothing, nothing here is read.",
+  "rows": { "physics": "atomphysics", "chain": "chainreaction", "weapon": "atomweapon" },
+  "_plants": "bill: the work the plants need in all, in the game's money as income() counts it (650: the first mover's cost, the design director's change 2 of 25 November: in the off arm of the stop 3 gate, 96 wars, the United States begun December 1941 at full pace, its chain reaction done July 1943, has its plants done in August to September 1945, the median war's own earnings, 640 giving August and 660 September; the record's plants were 80 to 85% of the project's money and ran March 1943 to July 1945). pace: the share of the nation's gross earnings each pace draws. make: the share drawn while the finished plants make more bombs (G, a stand-in: the design director, change 4). every: months of making for one more bomb. most: bombs in hand at most. site.fac: the least factories the plants' province must have. harm: the site's work goes down by its town's ruin, its wrecked factories and (with the air campaigns) its works held down, the largest of the three.",
+  "plants": {
+    "bill": 650,
+    "pace": { "steady": 0.15, "full": 0.25, "crash": 0.35 },
+    "make": 0.1,
+    "every": 2,
+    "most": 2,
+    "site": { "fac": 1 }
+  },
+  "_strike": "A strike: one a month at most, armed against a city and carried by the nation's next bombing raid on it that month, with Four-engined bombers researched (need). The raid flies through the air rules like any raid (air.ts fly: fighters in reach, guns, radar, escort): the bomb is with one of the bombers that set out, so it reaches the release as often as the raid's bombers did, and is lost otherwise (the design director, 25 November, change 1). The target is a city ('city' in towns.ts townSize: never a capital, since a government must be left to give in; never a mere town or village) on the home ground of a country at war with it. ruin: the points of city damage it leaves (citydamage.ts, capped at damage.json 'most'). Nothing else: the raid does no ordinary bombing, and is not counted as a raid in the bombing term of the will to fight (priced once).",
+  "strike": {
+    "need": "heavybombers",
+    "ruin": 100
+  },
+  "_will": "G (stand-ins of the design director, 25 November, ask 1: read at the gate, never fitted). What strikes take from the struck country's will to fight (resources.ts willLost, beside privation, all-out war and the bombing of its cities): the first strike 'first', the second 'second', each after that 'later', 'most' in all. It does not wear off. 'press': for this many months after a strike the country may ask for terms though its capital stands free and it still holds most of its home ground (game.ts checkCollapse), and if no enemy is at its borders it gives in to the last country that struck it.",
+  "will": { "first": 0.25, "second": 0.15, "later": 0.05, "most": 0.45, "press": 6 },
+  "_sabotage": "G (stand-ins). An act of sabotage on a factory of the plants' province (the player's agents, or the other side's saboteurs against the player's plants) sets the plants back by this many months of their work at the present pace. weight: how many more times the other side's saboteurs pick the player's plants province than one of its factories counts for.",
+  "sabotage": { "months": 3, "weight": 3 },
+  "_raid": "G (a stand-in). worth: what a raid's cut of the plants' province is worth to an air staff beside its factories' output, for every whole share cut (the forecast's 'worth', air.ts), while the province's plants are being built.",
+  "raid": { "worth": 300 },
+  "_ai": "G (stand-ins). A computer-run nation's staff at stops 3 to 5 (the book stops follow 'book'). It takes up the rows and begins the plants only when the war has lasted 'war' months against a great power, its earnings could finish the plants within 'months' at full pace, and its collapse score is under 'calm' of what it will bear; it stops the plants while in debt or past 'calm'. 'first': how far ahead of the rest of the tree the rows go when it wants them (tech.ts staffPick).",
+  "ai": { "war": 12, "months": 36, "calm": 0.6, "first": 100 },
+  "_book": "The stops that follow the book (1 and 2): only this nation, its computer-run staff, on the record's clock, as turns (September 1939 = 1): physics Dec 1941 (the S-1 decision), chain reaction Dec 1942 (the first pile), plants from Mar 1943 (Oak Ridge and Hanford), weapon and plants done Jul 1945 (Trinity), first used Aug 1945. The plants draw their share in those months like anyone's. Nobody else's staff takes the project up at those stops.",
+  "book": { "nat": "USA", "physics": 28, "chain": 40, "plants": 43, "ready": 71, "use": 72 }
+}

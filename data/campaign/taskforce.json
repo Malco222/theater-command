@@ -1,0 +1,5 @@
+{
+  "_about": "Task forces (release 2; Brian 24 November 2026 18:24Z, 'i like these', of the idea: 'a squadron you split off keeps a standing job, like guarding a convoy lane, until you change it'). src/campaign/taskforce.ts. One of the player's fleets at sea on a job (a patrol, a raid or a submarine hunt in a sea, or the escort of a shipping lane) is made a task force, and the job is written down with it. At the start of each of his months a task force worn below 'refit' readiness comes into harbour to refit; one in harbour at 'back' readiness or better goes back to its job; one driven off its job (a battle lost) goes back the same way once fit. A new order of his rewrites the job, and an order into harbour ends it. 'refit' and 'back' are a computer admiral's own figures (navy.ts navalAI: home under 0.5, out again at NAVY.ready.sortieAt).",
+  "refit": 0.5,
+  "back": 0.75
+}

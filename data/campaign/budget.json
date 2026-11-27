@@ -1,0 +1,60 @@
+{
+  "_about": "The budget: where a nation's money comes from and what its armed forces cost to keep. These rules are in force in the grand campaign; the historical scenarios keep the simpler arithmetic of production.json so that history's timetable holds. 'scale' is how the interface shows money: one production point is shown as that many, so that a province's yield reads as a whole number. 'land' is what a province gives each month by its ground, before anything is built on it; 'port' and 'oil' are added for a harbour and an oilfield; 'capital' is what the seat of government brings in for as long as it is held. A factory gives one point at home (production.json). 'occupied' and 'overseas' are the shares of land, port and oil yields that reach the treasury from conquered ground and from colonies. 'farColony' is the share of what a colony on the far side of the world pays its own country that reaches the treasury, by part, on top of 'overseas' (the design director's rider b462 to ruling 231: India's purse paid for India's army, and London drew little on it); no province stands there while the far side's switch is off, the colonies of the old chart and of the Americas pay as before, and so does ground a conqueror holds; an ally that keeps such a colony for its fallen country (the wider world's 'protector') is paid the same share of what a keeper gets. Its 'home' names the provinces out there that carry the colony mark and were part of their country's own economy (Japan's Korea, Formosa and Karafuto: a fifth of her rice, and real works in Korea's north; and America's Hawaii, an incorporated territory and no colony, ruling 234(e)3): they pay their country as home ground does, with no share taken, and their factories count with the home country's where a staff's corps form. Where the tenth is taken, ruling 214's 'landFactor' is not (ruling 234(e)3, one cut and not two): a factored country's far colony pays as any country's does, and the factor falls on the rest of its ground. Its 'guard' is the share of a town's own guard (siege.json) that stands on such ground, the same tenth (ruling 234's rider b547: the record's colonial towns were held by the garrisons the rows already bring, not by a home town's division), and 'posts' names the far posts whose garrison the historian has given (ruling 234(b)1 and rider b541): there the record's figure is the whole defence, and the town keeps no guard beside it; Japan's island garrisons are such posts (rider b614, the historian's table by half-year), on colonial ground and on her home islands of the far side alike (Marcus Island, Iwo Jima, Chichi Jima), and Ulithi, where the record has nobody, is a post with no row. 'upkeep' is the monthly cost of keeping forces in being: corps by the division at full strength, ships by the hull, aircraft by the machine; 'peace' is the share of it a nation at peace pays. 'debt' is what happens when the treasury is empty: 'floor' is how many months of income a nation can owe before its creditors stop lending, 'rest' the share of the monthly rest unpaid corps lose at that point, 'desert' the share of each corps that melts away a month, and 'aiMargin' how many months of a new formation's upkeep a computer-run nation wants to see in its monthly surplus before it orders one.",
+  "scale": 100,
+  "capital": 2,
+  "land": {
+    "urban": 0.3,
+    "plains": 0.18,
+    "forest": 0.12,
+    "hills": 0.1,
+    "marsh": 0.06,
+    "mountain": 0.06,
+    "desert": 0.03
+  },
+  "port": 0.12,
+  "_landFactor": "Ruling 214 (the design director, 17 Nov 2026; map-tables/land-factor-214.json, from the table of ruling 213): a smaller power's land and harbours pay by its worth, not by the count of its provinces. landFactor[code] multiplies the land and harbour pay of every province whose owner on the first day was that country, home and colonies alike. It goes with the ground, not the flag: the province keeps the factor whoever holds it, so no great power's first day moves. A country not listed is 1. Oil, factories, the capital's pay, victory points, supply, men and trade are untouched (trade reads a country's land before the factor). The grand campaign only.",
+  "landFactor": { "MGL": 0.02, "SAU": 0.04, "AUS": 0.1, "IRN": 0.15, "BRA": 0.16, "SAF": 0.17, "MEX": 0.17, "PER": 0.17, "VEN": 0.18, "CHL": 0.18, "CAN": 0.2, "NZL": 0.21, "POR": 0.21, "MAN": 0.4, "ARG": 0.47, "NED": 0.6 },
+  "oil": 1.5,
+  "occupied": 0.5,
+  "overseas": 0.5,
+  "farColony": {
+    "land": 0.1, "port": 0.1, "oil": 0.1, "fac": 0.1,
+    "home": ["Karafuto", "Formosa", "Taihoku", "Seoul", "Pyongyang", "Hamhung", "Chongjin", "Pusan", "Kwangju", "Sinuiju", "Kangnung", "Kanggye", "Pearl Harbor", "Honolulu", "Maui", "Hawaii", "Kauai"],
+    "guard": 0.1,
+    "posts": ["Guam", "Kuching", "Tarakan", "Balikpapan", "Rabaul", "Ambon", "Port Moresby", "Hong Kong", "Manila", "Rangoon", "Batavia", "Koepang", "Palembang", "Medan", "Wake", "Hanoi", "Saigon", "Hue", "Vientiane", "Colombo", "Singapore", "Truk", "Palau", "Saipan", "Kwajalein", "Eniwetok", "Eastern Marshalls", "Ulithi", "Yap", "Ponape", "Marcus Island", "Iwo Jima", "Chichi Jima"]
+  },
+  "_farHome": "Rulings b466, b471 and b472 (the design director, 18 Nov 2026): the share at which a country's own home ground on the far side of the world counts. It is one factor on the whole of what that ground pays (factories, land, harbours and an oilfield's money) and on the factories a staff's corps form by, as the far colony's tenth above covers all four parts. The old chart's Soviet Union already carries the Soviet war economy, so with the far side on her ground beyond the old chart would be counted twice (first-day income 81.45 for 41.35, lines on 114 factories for 57). The share is a tenth, the same tenth the far colonies pay, so the game has one far-side number. It was fitted to ruling 228 item 5's bands with the far side on (Soviet output over German at stops 1 and 2 with nobody playing, 24 wars each: 1.1 to 1.6 in 1942, 0.9 to 1.3 in 1943). 1942 is the share's year: the median war reads 1.12 at stop 1 and 1.15 at stop 2. 1943 reads 1.33 and 1.37 and is read again when ruling 172's German step is on main (pacific-six/ruling-231/b466). The share goes with the ground: a conqueror's is reckoned on the same count. The factories that go east ahead of the enemy (traits.json 'urals') count whole wherever they land. An oilfield's oil is ruling 194's and is not touched. No province stands there while the far side's switch is off.",
+  "farHome": { "SOV": 0.1 },
+  "upkeep": {
+    "corps": {
+      "inf": 0.04,
+      "mtn": 0.04,
+      "cav": 0.04,
+      "fort": 0.025,
+      "mot": 0.06,
+      "arm": 0.1,
+      "art": 0.06,
+      "eng": 0.05,
+      "mg": 0.04,
+      "mor": 0.045
+    },
+    "ships": {
+      "bb": 0.08,
+      "cv": 0.08,
+      "ca": 0.03,
+      "dd": 0.008,
+      "ss": 0.005
+    },
+    "air": {
+      "ftr": 0.0006,
+      "bmr": 0.001
+    },
+    "peace": 0.5
+  },
+  "debt": {
+    "floor": 3,
+    "rest": 0.5,
+    "desert": 0.03,
+    "aiMargin": 1
+  }
+}

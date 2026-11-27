@@ -1,0 +1,62 @@
+{
+ "_about": "Ruling 221 (the design director, 17 November 2026, 18:39Z) on the Pacific planner's paper 20, what Szechwan costs Japan when history is loose: the data that turns on its five switches, for the rules builder to lift into the game's files at step 13, when Japan and China are on the chart. Until then the game loads none of it. The blocks are keyed by the data file each belongs in, as the far-side rig lays a seats file (objects by key, lists appended), so the rig can take this file as it stands. H: a setup row marked 'stay' keeps its hold when a general offensive's release frees the ground it stands on, at every stop; the mark goes on paper 17's eight Japanese garrison rows, listed in '_stay' as [nation, row name, province] (they are the Pacific seat builder's rows, so the mark is laid on them, not here). L: China's ground takes the long supply line as the Soviet Union's does (east.json 'lineOwners'), counted from Japan's frontier and from the harbours it holds, with none of the Russian winter, at the stops without the book ('lineStops'). S: a computer staff reckons that line in its sums of strength as it reckons the winter ('lineReckon'). F: troops lifted off the coast of a country their own is fighting are landed at the nearest harbour their country holds on that ground, not taken home ('nearRefuge'), at every stop and for a player's army too; it reaches every country's refuge, so history's hashes and the grand wars were run with it on. R: China among the staffs that will not be ringed and that rest worn corps (rivals.json 'ring.staffs' and 'relief.staffs'), at every stop.",
+ "east": {
+  "lineOwners": ["CHN"],
+  "lineStops": [3, 4, 5],
+  "lineReckon": true,
+  "nearRefuge": true
+ },
+ "rivals": {
+  "ring": { "staffs": ["CHN"] },
+  "relief": { "staffs": ["CHN"] }
+ },
+ "_stay": [
+  ["JAP", "North China Area Army reserve (27th Division)", "Peiping"],
+  ["JAP", "Mongolia Garrison Army (26th Division)", "Tatung"],
+  ["JAP", "Tsingtao garrison (independent mixed brigades)", "Tsingtao"],
+  ["JAP", "13th Army (15th Division, Nanking)", "Nanking"],
+  ["JAP", "Shanghai garrison (independent mixed brigades)", "Shanghai"],
+  ["JAP", "21st Army detachment (Swatow)", "Swatow"],
+  ["JAP", "Amoy naval garrison", "Amoy"],
+  ["JAP", "Hainan garrison (naval landing forces)", "Hainan"]
+ ],
+ "_b423": "Ruling b423 (the design director, 18 November 2026, 01:13Z), a rider on 221: at stops 3 to 5 the dated rows that serve only the book's operations come held and stayed. They are the record's rows for the South Kwangsi landing (the 5th Division, brought to Formosa in month 2), Hong Kong (the 38th Division), the coast landings of 1941 (three forces) and the strike south (the 25th Army's 5th and 18th Divisions, which JAP:south takes when it is built). At stops 1 and 2 nothing changes: the book's landings use them. A hold binds Japan's staff, never a player's own corps (b417). The rows are named in 'setup-1939'.bookOnly as [nation, row name]; game.ts reads it where a dated row is raised.",
+ "setup-1939": {
+  "bookOnly": {
+   "stops": [3, 4, 5],
+   "rows": [
+    ["JAP", "21st Army (5th Division)"],
+    ["JAP", "38th Division (Canton)"],
+    ["JAP", "23rd Army (48th Division)"],
+    ["JAP", "13th Army (Chekiang landing force)"],
+    ["JAP", "13th Army (Wenchow detachment)"],
+    ["JAP", "25th Army (5th Division)"],
+    ["JAP", "25th Army (18th Division)"]
+   ]
+  }
+ },
+ "_riderB": "Rider B of 20:45Z, 20 November 2026, to ruling 234 (the design director), mending a fault against rulings 216(3) and 218(a): China's pool row and its last levy were ruled to raise new corps as well as fill the old ones, and as built neither raised one, because a corps asked a treasury China never holds. 'manpower'.ownMen names the nations whose corps of the arms that need no industry are formed from the reserve's own men: paid for in men, as every corps is, and in no points. At every stop, since 216(3) and 218(a) are bound to none. No number is new. manpower.ts (ownMen) and economy.ts (paidInMen) read it.",
+ "manpower": {
+  "ownMen": ["CHN"]
+ },
+ "_riderC": "Rider C of 20:45Z, 20 November 2026, to ruling 234 (the design director), sized by her note of 20:50Z on the historian's paper (historian/japan-china-garrison-1939-41.md, row L): ground taken has to be held. Every province a country holds of ground that is neither its own nor an ally's, beyond the old chart, asks a garrison of 'each' of a division's worth (divisions by strength) standing in that ground; the ground held on the first day counts. A computer staff names the garrison from its own corps there, the rear first, and its sums of strength count only the corps left free. At the stops in 'stops', where the reading decides; at the book's stops the record's rows hold the garrisons already. A garrison is a choice and not a vow: a great choice in preparation or being pressed draws on the garrison of the ground its enemies own. staff.ts (garrisonMonth, fronts) reads it. Rider of 22:30Z (the same day) and the note of 22:28Z: the ground is the Pacific's as the landing rules read it (pacific.json, 'shores') and no farther, and 'by' gives the record's figure for a province of each region of the south, the middle of the historian's range (historian/japan-south-garrison-1942.md: about a quarter to a third of China's, where no enemy field army pressed the ground once it was taken). A city asks what its province asks. Portuguese Timor (Dili) is read with the eastern islands and the Andamans (Port Blair) with Burma, as the historian's rows have them. The note of 22:33Z sizes the rest of the Pacific's ground the same way (historian/pacific-garrison-rest.md): Thailand where it is taken against its will, Indochina (0.1; the record's 0.25 after the coup of March 1945 that ended the French government waits for a state the game can read), New Guinea and the Bismarcks with the Solomons, the Gilberts and Nauru, the mandates and Guam, Hong Kong with Okinawa, Karafuto, the Kurils and Formosa, and Iwo Jima, the Bonins and Marcus, which ask nothing. Japan's home islands held by another while the war goes on ask 'each', as China does, and so does any Pacific ground no row names.",
+ "_riderC1121": "The design director, 05:14Z of 21 November 2026, on rider C's ask in China: the record's figures by region, not one flat figure. Japan's army in China held about 20 of its 25 or so in 1939 and 1940 and kept about a quarter free (historian/haichow-yencheng-and-free-share.md, section 3; historian/japan-china-garrison-1939-41.md): the North China Area Army about 13 across the 23 provinces it held on the first day, the 13th Army about 4.5 and the 11th Army's stay-at-home part about 2.5 across the 11 of the centre. Two lines of 'by' name those provinces as the chart is cut and are marked 'own', so that each place asks the line's figure itself (a line not so marked gives a figure to a province of the first chart, which its parts share); ground taken later, and the south, ask as before. The pick stays the rule's own.",
+ "open": {
+  "garrison": { "each": 0.5, "stops": [3, 4, 5], "by": [
+   { "name": "the Philippines", "each": 0.2, "places": ["Aparri", "Lingayen", "Manila", "Bataan", "Legaspi", "Mindoro", "Leyte", "Cebu", "Panay", "Palawan", "Del Monte", "Davao", "Zamboanga", "Jolo"] },
+   { "name": "Malaya with Singapore", "each": 0.2, "places": ["Kota Bharu", "Penang", "Ipoh", "Kuantan", "Kuala Lumpur", "Johore", "Singapore"] },
+   { "name": "Sumatra", "each": 0.15, "places": ["Atjeh", "Medan", "Pakanbaru", "Padang", "Djambi", "Palembang", "Oosthaven"] },
+   { "name": "Java", "each": 0.2, "places": ["Batavia", "Bandoeng", "Semarang", "Soerabaja"] },
+   { "name": "Borneo and the eastern islands", "each": 0.05, "places": ["Kuching", "Brunei", "Jesselton", "Sandakan", "Pontianak", "Bandjermasin", "Balikpapan", "Tarakan", "Makassar", "Kendari", "Palu", "Menado", "Ambon", "Morotai", "Halmahera", "Bali", "Flores", "Koepang", "Dili", "Vogelkop", "Sarmi", "Mimika", "Merauke", "Hollandia", "Biak"] },
+   { "name": "Burma", "each": 0.1, "places": ["Rangoon", "Moulmein", "Mergui", "Prome", "Toungoo", "Yenangyaung", "Mandalay", "Akyab", "Kalewa", "Lashio", "Myitkyina", "Port Blair"] },
+   { "name": "Thailand, taken against its will", "each": 0.1, "places": ["Bangkok", "Chiang Mai", "Phitsanulok", "Korat", "Udon", "Kra", "Singora"] },
+   { "name": "Indochina", "each": 0.1, "places": ["Hanoi", "Vinh", "Hue", "Qui Nhon", "Cam Ranh", "Saigon", "Phnom Penh", "Battambang", "Pakse", "Vientiane", "Luang Prabang"] },
+   { "name": "New Guinea and the Bismarcks, the Solomons, the Gilberts and Nauru", "each": 0.05, "places": ["Port Moresby", "Milne Bay", "Buna", "Lae", "Madang", "Wewak", "Kerema", "Rabaul", "Cape Gloucester", "Admiralty Islands", "Bougainville", "Guadalcanal", "New Georgia", "Tarawa", "Nauru"] },
+   { "name": "the mandates and Guam", "each": 0.05, "places": ["Kwajalein", "Eniwetok", "Eastern Marshalls", "Truk", "Saipan", "Palau", "Ulithi", "Yap", "Ponape", "Guam"] },
+   { "name": "Hong Kong, Okinawa, Karafuto, the Kurils and Formosa", "each": 0.1, "places": ["Hong Kong", "Okinawa", "Karafuto", "Etorofu", "Paramushiro", "Formosa", "Taihoku"] },
+   { "name": "Iwo Jima, the Bonins and Marcus", "each": 0, "places": ["Iwo Jima", "Chichi Jima", "Marcus Island"] },
+   { "name": "North China, as held on the first day (13 across its 23 provinces)", "each": 0.5652, "own": true, "places": ["Peiping", "Tientsin", "Kalgan", "Tatung", "Tangshan", "Paoting", "Tsinan", "Lintsing", "Silingol", "Shangtu", "Shihkiachwang", "Suiyuan", "Taiyuan", "Tsingtao", "Chefoo", "Sintai", "Anyang", "Linfen", "Paotow", "Lishih", "Haichow", "Hsuchow", "Kaifeng"] },
+   { "name": "central China, as held on the first day (about 7 across its 11 provinces)", "each": 0.6364, "own": true, "places": ["Pengpu", "Nanking", "Anking", "Wuhu", "Shanghai", "Hangchow", "Kiukiang", "Hankow", "Nanchang", "Sinyang", "Yochow"] }
+  ] }
+ }
+}

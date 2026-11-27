@@ -1,0 +1,989 @@
+{
+ "_about": "The record's line in the south (ruling 234(a)), written by tools/make-south-line.mjs from the Pacific planner's south-line.json and never by hand; the game lays it over history.json's 'lines' only where the far side's switch is on (src/campaign/far-rows.ts) and reads it in src/campaign/line.ts. At the stops that keep the book, while the Pacific's book stands, computer against computer: Japan's side neither attacks, enters nor lands on a province of the five 'lands' before a span's first month or after its last, nor ever on one no span names (the ceiling); and the Allied computer staffs do not retake a province a span of the floor's kinds covers before its own month under 'back', or before the floor's last month where it has none (the floor). 'ground': the line is drawn only on the Pacific's ground (pacific.json 'shores') and on the provinces named here, in a span or under 'shut'. 'stays': when a span ends Japan's corps keep what they hold. 'field': the floor also covers a province where Japan's army holds the field while the town holds out. 'slides': at a stop with slack the whole calendar moves with the month of Japan's strike south. Kinds: 'opening' (December 1941 to August 1942), 'tried' (Port Moresby and Midway: open to attack, no floor), 'release' (the march on India of March 1944), 'later'.",
+ "_source": {
+  "pacific-planner/south-line.json": "2026-11-18T17:23Z"
+ },
+ "history": {
+  "lines": [
+   {
+    "id": "south",
+    "theatre": "pacific",
+    "land": "",
+    "lands": [
+     "AUS",
+     "NED",
+     "NZL",
+     "POR",
+     "UK",
+     "USA"
+    ],
+    "taker": "JAP",
+    "until": 72,
+    "floor": {
+     "until": 72,
+     "kinds": [
+      "opening",
+      "release",
+      "later"
+     ]
+    },
+    "ground": "pacific",
+    "stays": true,
+    "field": true,
+    "slides": "JAP:south",
+    "back": {
+     "Kota Bharu": 74,
+     "Penang": 73,
+     "Ipoh": 73,
+     "Kuantan": 74,
+     "Kuala Lumpur": 73,
+     "Johore": 74,
+     "Singapore": 76,
+     "Brunei": 70,
+     "Miri": 70,
+     "Tarawa": 51,
+     "Rangoon": 69,
+     "Toungoo": 68,
+     "Loikaw": 68,
+     "Prome": 69,
+     "Yenangyaung": 66,
+     "Meiktila": 66,
+     "Mandalay": 65,
+     "Taunggyi": 65,
+     "Lashio": 65,
+     "Myitkyina": 50,
+     "Bhamo": 62,
+     "Kalewa": 60,
+     "Akyab": 40,
+     "Guadalcanal": 36,
+     "New Georgia": 46,
+     "Aparri": 69,
+     "Lingayen": 65,
+     "Legaspi": 68,
+     "Davao": 69,
+     "Jolo": 68,
+     "Manila": 66,
+     "Bataan": 66,
+     "Zamboanga": 67,
+     "Cebu": 67,
+     "Panay": 67,
+     "Mindoro": 64,
+     "Leyte": 62,
+     "Del Monte": 69,
+     "Palawan": 66,
+     "Guam": 59,
+     "Attu": 45,
+     "Kiska": 48,
+     "Tarakan": 69,
+     "Balikpapan": 71,
+     "Morotai": 61,
+     "Vogelkop": 59,
+     "Biak": 57,
+     "Sarmi": 57,
+     "Hollandia": 56,
+     "Cape Gloucester": 52,
+     "Lae": 49,
+     "Bougainville": 51,
+     "Admiralty Islands": 54,
+     "Buna": 40,
+     "Madang": 56,
+     "Aitape": 56,
+     "Maingkwan": 50,
+     "Tamu": 60
+    },
+    "shut": [
+     "Adak",
+     "Adelaide",
+     "Albany WA",
+     "Albury",
+     "Alice Springs",
+     "Anchorage",
+     "Apia",
+     "Arctic Slope",
+     "Auckland",
+     "Ballarat",
+     "Bendigo",
+     "Big Delta",
+     "Bourke",
+     "Brisbane",
+     "Bristol Bay",
+     "Broken Hill",
+     "Broome",
+     "Bunbury",
+     "Bundaberg",
+     "Cairns",
+     "Canberra",
+     "Cape York",
+     "Carnarvon",
+     "Charleville",
+     "Charters Towers",
+     "Chittagong",
+     "Christchurch",
+     "Cloncurry",
+     "Cold Bay",
+     "Comilla",
+     "Cooktown",
+     "Copper River",
+     "Cordova",
+     "Dacca",
+     "Daly Waters",
+     "Darwin",
+     "Derby",
+     "Dubbo",
+     "Dunedin",
+     "Dutch Harbor",
+     "Emerald",
+     "Esperance",
+     "Espiritu Santo",
+     "Exmouth Gulf",
+     "Fairbanks",
+     "Fiji",
+     "Fort Hertz",
+     "Funafuti",
+     "Galena",
+     "Gauhati",
+     "Geraldton",
+     "Grafton",
+     "Griffith",
+     "Halls Creek",
+     "Hawaii",
+     "Hobart",
+     "Honolulu",
+     "Horsham",
+     "Hughenden",
+     "Invercargill",
+     "Jorhat",
+     "Juneau",
+     "Kalgoorlie",
+     "Katherine",
+     "Kauai",
+     "Kerema",
+     "Ketchikan",
+     "Kodiak",
+     "Kotzebue",
+     "Kuskokwim",
+     "Launceston",
+     "Ledo",
+     "Longreach",
+     "Mackay",
+     "Marble Bar",
+     "Marree",
+     "Maryborough",
+     "Maui",
+     "McGrath",
+     "Meekatharra",
+     "Melbourne",
+     "Merauke",
+     "Merredin",
+     "Mildura",
+     "Moree",
+     "Mount Gambier",
+     "Napier",
+     "Nelson",
+     "Nenana",
+     "New Caledonia",
+     "Newcastle NSW",
+     "Nome",
+     "Normanton",
+     "Nullarbor",
+     "Oodnadatta",
+     "Parkes",
+     "Pearl Harbor",
+     "Perth",
+     "Port Augusta",
+     "Port Hedland",
+     "Port Lincoln",
+     "Port Pirie",
+     "Rockhampton",
+     "Roma",
+     "Sale",
+     "Samoa",
+     "Seward",
+     "Shepparton",
+     "Sydney",
+     "Sylhet",
+     "Tamworth",
+     "Tennant Creek",
+     "Tezpur",
+     "Toowoomba",
+     "Townsville",
+     "Wagga Wagga",
+     "Wellington",
+     "Wollongong",
+     "Wyndham",
+     "Yukon Flats"
+    ],
+    "spans": {
+     "Kota Bharu": [
+      {
+       "from": 28,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Penang": [
+      {
+       "from": 28,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Ipoh": [
+      {
+       "from": 28,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Kuantan": [
+      {
+       "from": 28,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Kuala Lumpur": [
+      {
+       "from": 29,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Johore": [
+      {
+       "from": 29,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Singapore": [
+      {
+       "from": 30,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Kuching": [
+      {
+       "from": 28,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Brunei": [
+      {
+       "from": 28,
+       "to": 70,
+       "kind": "opening"
+      }
+     ],
+     "Miri": [
+      {
+       "from": 28,
+       "to": 70,
+       "kind": "opening"
+      }
+     ],
+     "Jesselton": [
+      {
+       "from": 29,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Sandakan": [
+      {
+       "from": 29,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Hong Kong": [
+      {
+       "from": 28,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Tarawa": [
+      {
+       "from": 28,
+       "to": 51,
+       "kind": "opening"
+      }
+     ],
+     "Mergui": [
+      {
+       "from": 28,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Moulmein": [
+      {
+       "from": 29,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Rangoon": [
+      {
+       "from": 31,
+       "to": 69,
+       "kind": "opening"
+      }
+     ],
+     "Toungoo": [
+      {
+       "from": 31,
+       "to": 68,
+       "kind": "opening"
+      }
+     ],
+     "Loikaw": [
+      {
+       "from": 32,
+       "to": 68,
+       "kind": "opening"
+      }
+     ],
+     "Prome": [
+      {
+       "from": 31,
+       "to": 69,
+       "kind": "opening"
+      }
+     ],
+     "Yenangyaung": [
+      {
+       "from": 32,
+       "to": 68,
+       "kind": "opening"
+      }
+     ],
+     "Meiktila": [
+      {
+       "from": 32,
+       "to": 67,
+       "kind": "opening"
+      }
+     ],
+     "Mandalay": [
+      {
+       "from": 32,
+       "to": 67,
+       "kind": "opening"
+      }
+     ],
+     "Taunggyi": [
+      {
+       "from": 32,
+       "to": 68,
+       "kind": "opening"
+      }
+     ],
+     "Lashio": [
+      {
+       "from": 32,
+       "to": 67,
+       "kind": "opening"
+      }
+     ],
+     "Kengtung": [
+      {
+       "from": 33,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Myitkyina": [
+      {
+       "from": 33,
+       "to": 60,
+       "kind": "opening"
+      }
+     ],
+     "Bhamo": [
+      {
+       "from": 33,
+       "to": 64,
+       "kind": "opening"
+      }
+     ],
+     "Kalewa": [
+      {
+       "from": 33,
+       "to": 64,
+       "kind": "opening"
+      }
+     ],
+     "Akyab": [
+      {
+       "from": 33,
+       "to": 65,
+       "kind": "opening"
+      }
+     ],
+     "Port Blair": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Guadalcanal": [
+      {
+       "from": 33,
+       "to": 42,
+       "kind": "opening"
+      }
+     ],
+     "New Georgia": [
+      {
+       "from": 39,
+       "to": 48,
+       "kind": "later"
+      }
+     ],
+     "Aparri": [
+      {
+       "from": 28,
+       "to": 70,
+       "kind": "opening"
+      }
+     ],
+     "Lingayen": [
+      {
+       "from": 28,
+       "to": 65,
+       "kind": "opening"
+      }
+     ],
+     "Legaspi": [
+      {
+       "from": 28,
+       "to": 68,
+       "kind": "opening"
+      }
+     ],
+     "Davao": [
+      {
+       "from": 28,
+       "to": 69,
+       "kind": "opening"
+      }
+     ],
+     "Jolo": [
+      {
+       "from": 28,
+       "to": 68,
+       "kind": "opening"
+      }
+     ],
+     "Manila": [
+      {
+       "from": 29,
+       "to": 67,
+       "kind": "opening"
+      }
+     ],
+     "Bataan": [
+      {
+       "from": 29,
+       "to": 66,
+       "kind": "opening"
+      }
+     ],
+     "Zamboanga": [
+      {
+       "from": 31,
+       "to": 67,
+       "kind": "opening"
+      }
+     ],
+     "Cebu": [
+      {
+       "from": 32,
+       "to": 68,
+       "kind": "opening"
+      }
+     ],
+     "Panay": [
+      {
+       "from": 32,
+       "to": 67,
+       "kind": "opening"
+      }
+     ],
+     "Mindoro": [
+      {
+       "from": 30,
+       "to": 64,
+       "kind": "opening"
+      }
+     ],
+     "Leyte": [
+      {
+       "from": 33,
+       "to": 64,
+       "kind": "opening"
+      }
+     ],
+     "Del Monte": [
+      {
+       "from": 33,
+       "to": 69,
+       "kind": "opening"
+      }
+     ],
+     "Palawan": [
+      {
+       "from": 33,
+       "to": 66,
+       "kind": "opening"
+      }
+     ],
+     "Guam": [
+      {
+       "from": 28,
+       "to": 60,
+       "kind": "opening"
+      }
+     ],
+     "Wake": [
+      {
+       "from": 28,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Attu": [
+      {
+       "from": 34,
+       "to": 45,
+       "kind": "opening"
+      }
+     ],
+     "Kiska": [
+      {
+       "from": 34,
+       "to": 47,
+       "kind": "opening"
+      }
+     ],
+     "Tarakan": [
+      {
+       "from": 29,
+       "to": 70,
+       "kind": "opening"
+      }
+     ],
+     "Menado": [
+      {
+       "from": 29,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Balikpapan": [
+      {
+       "from": 29,
+       "to": 71,
+       "kind": "opening"
+      }
+     ],
+     "Samarinda": [
+      {
+       "from": 30,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Kendari": [
+      {
+       "from": 29,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Ambon": [
+      {
+       "from": 29,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Pontianak": [
+      {
+       "from": 29,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Singkawang": [
+      {
+       "from": 29,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Sintang": [
+      {
+       "from": 30,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Ketapang": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Bandjermasin": [
+      {
+       "from": 30,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Amoentai": [
+      {
+       "from": 30,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Sampit": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Makassar": [
+      {
+       "from": 30,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Palu": [
+      {
+       "from": 30,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Palembang": [
+      {
+       "from": 30,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Pangkalpinang": [
+      {
+       "from": 30,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Benkoelen": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Bali": [
+      {
+       "from": 30,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Koepang": [
+      {
+       "from": 30,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Batavia": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Bandoeng": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Semarang": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Soerabaja": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Oosthaven": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Djambi": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Padang": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Pakanbaru": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Padang Sidempoean": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Medan": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Pematang Siantar": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Atjeh": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Halmahera": [
+      {
+       "from": 32,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Morotai": [
+      {
+       "from": 32,
+       "to": 61,
+       "kind": "opening"
+      }
+     ],
+     "Vogelkop": [
+      {
+       "from": 32,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Biak": [
+      {
+       "from": 32,
+       "to": 59,
+       "kind": "opening"
+      }
+     ],
+     "Sarmi": [
+      {
+       "from": 32,
+       "to": 58,
+       "kind": "opening"
+      }
+     ],
+     "Hollandia": [
+      {
+       "from": 32,
+       "to": 56,
+       "kind": "opening"
+      }
+     ],
+     "Flores": [
+      {
+       "from": 33,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Mimika": [
+      {
+       "from": 36,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Dili": [
+      {
+       "from": 30,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Rabaul": [
+      {
+       "from": 29,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Cape Gloucester": [
+      {
+       "from": 30,
+       "to": 53,
+       "kind": "opening"
+      }
+     ],
+     "Lae": [
+      {
+       "from": 31,
+       "to": 49,
+       "kind": "opening"
+      }
+     ],
+     "Bougainville": [
+      {
+       "from": 31,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Admiralty Islands": [
+      {
+       "from": 32,
+       "to": 55,
+       "kind": "opening"
+      }
+     ],
+     "Buna": [
+      {
+       "from": 35,
+       "to": 41,
+       "kind": "opening"
+      }
+     ],
+     "Madang": [
+      {
+       "from": 40,
+       "to": 56,
+       "kind": "later"
+      }
+     ],
+     "Wewak": [
+      {
+       "from": 40,
+       "to": 69,
+       "kind": "later"
+      }
+     ],
+     "Aitape": [
+      {
+       "from": 40,
+       "to": 56,
+       "kind": "later"
+      }
+     ],
+     "Nauru": [
+      {
+       "from": 36,
+       "to": 72,
+       "kind": "opening"
+      }
+     ],
+     "Maingkwan": [
+      {
+       "from": 50,
+       "to": 55,
+       "kind": "later"
+      }
+     ],
+     "Tamu": [
+      {
+       "from": 55,
+       "to": 60,
+       "kind": "release"
+      }
+     ],
+     "Port Moresby": [
+      {
+       "from": 33,
+       "to": 33,
+       "kind": "tried"
+      },
+      {
+       "from": 35,
+       "to": 38,
+       "kind": "tried"
+      }
+     ],
+     "Midway": [
+      {
+       "from": 34,
+       "to": 34,
+       "kind": "tried"
+      }
+     ],
+     "Milne Bay": [
+      {
+       "from": 36,
+       "to": 36,
+       "kind": "tried"
+      }
+     ],
+     "Imphal": [
+      {
+       "from": 55,
+       "to": 59,
+       "kind": "release"
+      }
+     ],
+     "Kohima": [
+      {
+       "from": 55,
+       "to": 59,
+       "kind": "release"
+      }
+     ]
+    }
+   }
+  ]
+ }
+}

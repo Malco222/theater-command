@@ -1,0 +1,25 @@
+{
+  "_about": "Volunteer legions (release 2; Brian's yes of 22 November 2026, the design director's frame of 03:42 UTC and rulings of 03:47 and 03:55 UTC; the record is the historian's table, historian/volunteer-legions-1939-45.md). A country at peace outside both alliances may send one legion at a time, of a division at most, to fight under the flag and staff of a country at war: its patron. The legion is a corps of the patron's army with its own name and its home's flag. Its men come from its home's reserve (manpower.ts), first to raise it and then as its drafts; the patron pays its upkeep and its drafts' equipment. It goes home on recall or at its tour's end, and its men go back to the reserve and teach the home army what they learned. Switched by stage.json 'legions'.",
+  "_cost": "Political capital a country pays to send a legion: as courting (diplomacy.json court.cost).",
+  "cost": 6,
+  "_leanAt": "The player may send one to a patron his public opinion leans toward by at least this many points (opinion is -100 for the Allies to +100 for the Axis), or to a friend (relations.json) that has been attacked.",
+  "leanAt": 30,
+  "_send": "A computer-run country at stops 3 to 5 sends one when it leans this far toward the patron and leans against the enemy, or when a friend has been attacked. At stops 1 and 2 it sends the record's legions by their dates and no others.",
+  "send": 50,
+  "_backAt": "A computer-run country at stops 3 to 5 calls its legion home when its leaning toward the patron falls under this.",
+  "backAt": 20,
+  "_tour": "Months a legion serves before it comes home (the historian: the Blue Division's 28 months, the Eagle Squadrons' 24, the AVG's contracts of 12; tour 24 fits). At stops 1 and 2 the record's dates instead.",
+  "tour": 24,
+  "_train": "A legion home again teaches the army: every corps of its home gains this share of the legion's experience, never more than the legion's own.",
+  "train": 0.25,
+  "_legionFall": "Each month a legion fights a great power, that power's patience with its home falls by this many points (bargains.ts patience, with the bargains switched on; a claim at stops 4 and 5).",
+  "legionFall": 2,
+  "_generic": "A legion the record does not name: 'share' of the reserve its country opened the war with (manpower.ts), rounded to a twentieth of a division, at least 'least' and at most 'est', a division (Spain's reserve of about 17 divisions' worth gives a division, Sweden's a little under one, Denmark's a third); 'xp' its experience when raised; 'spare' divisions' worth a computer-run country's reserve must still hold beyond it; and its name after the home's adjective.",
+  "generic": { "est": 1, "share": 0.1, "least": 0.1, "xp": 0.15, "spare": 2, "name": "{adj} Volunteer Legion" },
+  "_rows": "The record's legions (the historian's table): 'est' the share of a division it was (worth = men / 15,000 x quality), 'from' and 'to' the months it was in the line (turn 1 = September 1939), 'then' the row that carried on with its men the month after, 'no' its division's number. A legion is sent the month before 'from' and is in the line from 'from'.",
+  "rows": [
+    { "id": "esp-blue", "home": "ESP", "patron": "GER", "against": "SOV", "name": "Blue Division", "est": 1.0, "xp": 0.25, "from": 23, "to": 51, "then": "esp-legion", "no": 250, "_why": "18,946 men when formed, kept near 17,000; about 45,000 served in all, by 27 marching battalions. Jul 1941 to Nov 1943 (H men, L quality)." },
+    { "id": "esp-legion", "home": "ESP", "patron": "GER", "against": "SOV", "name": "Blue Legion", "est": 0.12, "from": 52, "to": 55, "_why": "2,269 men who stayed when the division went home; ordered home 3 Mar 1944 (M)." },
+    { "id": "swe-corps", "home": "SWE", "patron": "FIN", "against": "SOV", "name": "Swedish Volunteer Corps", "est": 0.4, "xp": 0.15, "from": 6, "to": 7, "_why": "9,640 men; in the line on the Salla front 28 Feb to 13 Mar 1940 (H-M)." }
+  ]
+}

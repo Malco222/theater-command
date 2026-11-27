@@ -1,0 +1,28 @@
+{
+  "_about": {
+    "what": "Trade agreements, in the grand campaign. Two countries at peace with each other can sign one; it pays both of them every month. In the history campaigns trade stays the flat sum of diplomacy.json.",
+    "worth": "An agreement is worth 'base' + 'scale' x the square root of the two countries' wealth multiplied together, where wealth is what a country's provinces pay it a month. By sea it is worth 'far' less for every sea crossed after the first, down to 'farLeast' of its worth. Each side's own commerce buildings add to its share (buildings.json).",
+    "houses": "A country can keep as many agreements as it has trading houses: 'major' for a great power, 'minor' for any other, and one more for each merchant quarter in a harbour town or the capital, up to 'most' in all.",
+    "sign": "Signing costs the player 'pc' political capital. A country outside both alliances whose people stand at 'cold' or worse against the signer's alliance will not sign, and ends an agreement it has.",
+    "route": "Goods go across the border where the two countries' home ground touches, and nothing is lost. Otherwise they take whichever open way leaves most of the agreement's worth. By sea, from a harbour of one to a harbour of the other by the safest way (a country with no harbour on the map uses any coast): a sea closed to either country cannot be used, and enemy ships and aircraft sink a share on the way: the chance of meeting them x 'loss', never more than 'most'; from 'raided' upward the agreement is marked as raided. By a border between their colonies, which leaves 'colony' of the worth. Or overland across up to 'transit.most' other countries at peace with both, each taking a toll of 'transit.toll'; colonies carry no such traffic. With no way open the agreement pays nothing while that lasts.",
+    "pairs": "Agreements history had standing in 1939. They are signed first when the campaign opens, where the two can trade; every country then fills its remaining houses with the best partners it can find.",
+    "never": "Pairs that will not sign with each other whatever the state of the war.",
+    "ai": "A computer-run country with a free trading house signs with the partner that would pay it most and also has one free. It does not sign with the player unasked, and it gives up an agreement with another computer-run country through which nothing is getting."
+  },
+  "base": 0.15,
+  "scale": 0.028,
+  "far": 0.07,
+  "farLeast": 0.5,
+  "colony": 0.7,
+  "transit": { "toll": 0.1, "most": 3 },
+  "houses": { "major": 3, "minor": 2, "most": 8 },
+  "sign": { "pc": 2 },
+  "cold": 55,
+  "sea": { "loss": 1.5, "most": 0.7, "raided": 0.04 },
+  "pairs": [
+    ["GER", "ITA"], ["GER", "SOV"], ["GER", "SWE"], ["GER", "ROM"], ["GER", "HUN"],
+    ["UK", "FRA"], ["UK", "POR"], ["UK", "NOR"], ["UK", "IRL"],
+    ["FRA", "BEL"], ["FRA", "SUI"], ["ITA", "ESP"], ["ITA", "YUG"], ["SOV", "TUR"], ["NED", "BEL"], ["SWE", "FIN"], ["DEN", "NOR"]
+  ],
+  "never": [["UK", "VIC"]]
+}

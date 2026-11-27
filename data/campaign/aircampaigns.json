@@ -1,0 +1,2372 @@
+{
+ "_about": "Ruling 236.2 (the design director, b545, b549, b550): air campaigns, the grand campaign with the switch g.flags.ac on. A campaign is a standing order to an air force, flown every month until it is called off. 'sky': the battle for the sky over a province is held once the side fighting for it has had 'own' (airwar.json sky.own, b446's 1.5 to 1) times the defender's aircraft in reach over it for 'months' months running, or has won the fight itself each of those months where the defender has radar over its own ground (b446's guard), or at once when the defender's airfields there are knocked out (every fighter group in reach grounded, its field wrecked, or worn to readiness 'knocked', the floor, on a field this side has bombed since last month); held, it stays held while the holder keeps 'keep' times the defender's numbers and fights there at least every 'idle' + 1 months. 'stock': the damage bombs leave in a province carries over (every raid, b549) and comes back each month at the historian's rate for the target ('repair', air-campaign-236: 'perMonth', and 'dispersed' for Germany from 'dispersal.from'), at most 'most' of its output held down. 'use' says which repair row each raid reads: a raid by night is an area raid on the city's works, a raid by day a precision raid on its works ('aircraft'), an oilfield's refinery, or the fuel plants of a works province when the campaign aims at oil. 'dispersal': from March 1944 Germany's works were spread out: each raid on them does 'cut' of what it did (the feature builder's reading: the historian gives no number), and they come back at the 'dispersed' rate. 'will': each city or capital whose works are held down wears its country's will to fight by 'per' times the share held down, 'most' at most for the country (b549: small; bombing never broke a nation by itself). 'book': the historian's 54 doctrine rows, as he wrote them, read two ways (b549): at the stops that follow the book, each row's 'fly' phases open and close on their months for every country the player does not fly, on the provinces named (a province not on the map is passed over); at stops 3 to 5 the computer-opponent builder's staff reads them as doctrine. A row without 'fly' says in 'book' why the book does not open it as a campaign. 'share' is the part of the country's groups of that kind in reach of the targets that the campaign takes (1 all); 'bombers' puts its bombers in reach on a fight for the sky (raids on the airfields); 'escort' is the part of its fighters in reach that ride with a day raid; 'aim' oil or rail; 'kind' sky over the row's own kind. 'bands': the loss bands the record's commanders bore, a raid's losses over what it sent (the historian's part 4).",
+ "on": true,
+ "onAbout": "A new grand campaign opens with air campaigns flown (g.flags.ac), as the design director ruled on 22 November (b623, b636). Read by name at the start (airCampaignsShipped). Scenarios, history campaigns and saved games keep what they had.",
+ "sky": {
+  "months": 2,
+  "keep": 1,
+  "knocked": 0.3,
+  "idle": 1
+ },
+ "stock": {
+  "most": 0.6,
+  "least": 0.005
+ },
+ "use": {
+  "night": "city",
+  "day": "aircraft",
+  "oilfield": "refinery",
+  "oil": "synthetic"
+ },
+ "dispersal": {
+  "nat": "GER",
+  "from": 55,
+  "cut": 0.75,
+  "rows": [
+   "aircraft",
+   "engines",
+   "tanks"
+  ]
+ },
+ "will": {
+  "per": 0.02,
+  "most": 0.04
+ },
+ "bands": [
+  {
+   "from": 0.15,
+   "words": "Heavier than any air force bore: every one stopped within one to three raids."
+  },
+  {
+   "from": 0.08,
+   "words": "Heavy: air forces flying at this rate stopped or changed course within a month or two."
+  },
+  {
+   "from": 0.03,
+   "words": "Bearable while new aircraft and crews matched the losses: about 5% a raid could be kept up, 7% for long could not."
+  },
+  {
+   "from": 0,
+   "words": "Light: kept up as long as there were targets."
+  }
+ ],
+ "repair": {
+  "airfield": {
+   "target": "airfield",
+   "firstRaid": "runways and grass in hours to 2 days; aircraft and buildings in weeks",
+   "perMonth": 1.0,
+   "repeat": "Had to be hit again daily or near it to keep shut; Manston was given up after August 1940's raids",
+   "conf": "high"
+  },
+  "track": {
+   "target": "rail track",
+   "firstRaid": "hours to 2 days",
+   "perMonth": 1.0,
+   "repeat": "Cut lines stayed cut only under daily attack",
+   "conf": "high"
+  },
+  "yard": {
+   "target": "rail yard",
+   "firstRaid": "through traffic in 2 to 7 days; full in 2 to 4 weeks",
+   "perMonth": 0.7,
+   "repeat": "Under the Transportation Plan (April to June 1944) French rail traffic fell to about a third; German car loadings fell by about half from August to December 1944, and further by March 1945",
+   "conf": "medium-high"
+  },
+  "bridge": {
+   "target": "large bridge",
+   "firstRaid": "3 to 8 weeks (ferries and pontoons in days)",
+   "perMonth": 0.35,
+   "repeat": "The Seine bridges below Paris were all down by D-Day",
+   "conf": "medium-high"
+  },
+  "port": {
+   "target": "port",
+   "firstRaid": "most of its capacity in 1 to 3 weeks; months if sunken ships or mines block the channel",
+   "perMonth": 0.5,
+   "repeat": "Liverpool lost about half its capacity for some days after May 1941; Japan's ports were shut by mines in 1945, which repair could not lift",
+   "conf": "medium"
+  },
+  "aircraft": {
+   "target": "aircraft works",
+   "firstRaid": "most output back in 4 to 8 weeks; machine tools mostly survived the buildings",
+   "perMonth": 0.4,
+   "dispersed": 0.6,
+   "repeat": "After Big Week (February 1944) German fighter output fell for about two months and then rose to its peak in September 1944",
+   "conf": "medium-high"
+  },
+  "engines": {
+   "target": "aero-engine works",
+   "firstRaid": "2 to 3 months",
+   "perMonth": 0.3,
+   "dispersed": 0.45,
+   "repeat": "Japan's Nakajima engine works at Musashino kept building through eight raids from November 1944",
+   "conf": "medium-low"
+  },
+  "bearings": {
+   "target": "ball bearings",
+   "firstRaid": "3 to 6 months to full at the works",
+   "perMonth": 0.25,
+   "repeat": "Stocks, imports from Sweden and Switzerland, redesign and dispersal meant no weapon went short (the bombing survey)",
+   "conf": "medium-high"
+  },
+  "tanks": {
+   "target": "tank and vehicle works",
+   "firstRaid": "4 to 8 weeks",
+   "perMonth": 0.4,
+   "dispersed": 0.6,
+   "repeat": "German tank output peaked in December 1944; Gorky's motor works, bombed in June 1943, was back in about three months",
+   "conf": "medium"
+  },
+  "synthetic": {
+   "target": "oil, synthetic plant",
+   "firstRaid": "partial in 2 to 3 weeks, full in 4 to 8",
+   "perMonth": 0.3,
+   "repeat": "Under raids every 2 to 4 weeks from 12 May 1944 it never came back: German aviation fuel fell from about 175,000 tons in April 1944 to about 10,000 tons by September, with some recovery in November before falling again; 350,000 men were put to repairs",
+   "conf": "high"
+  },
+  "refinery": {
+   "target": "oil, refinery",
+   "firstRaid": "2 to 6 weeks",
+   "perMonth": 0.5,
+   "repeat": "Ploesti had spare capacity and was back above its old output within weeks of 1 Aug 1943; the 1944 campaign, raid after raid, cut it to about a fifth by August",
+   "conf": "medium-high"
+  },
+  "steel": {
+   "target": "steel and coke",
+   "firstRaid": "1 to 3 months",
+   "perMonth": 0.35,
+   "repeat": "The Battle of the Ruhr (1943) cost Germany some months' growth in steel, not its supply",
+   "conf": "medium-low"
+  },
+  "power": {
+   "target": "power station",
+   "firstRaid": "1 to 3 months",
+   "perMonth": 0.35,
+   "repeat": "Seldom attacked; the bombing survey judged the German grid a missed target",
+   "conf": "medium-low"
+  },
+  "city": {
+   "target": "city works (area raid)",
+   "firstRaid": "main works back to about 80% in 2 to 5 months",
+   "perMonth": 0.25,
+   "repeat": "Hamburg (July 1943) was back to about 80% in five months; Coventry's works mostly back in 6 to 8 weeks after November 1940. Japan's cities burned in 1945 did not come back, short of everything",
+   "conf": "medium"
+  }
+ },
+ "book": [
+  {
+   "nat": "GER",
+   "kind": "sky",
+   "what": "Opening blow on the enemy's airfields on the first days of each main offensive",
+   "targets": "airfields",
+   "time": "day",
+   "from": 1,
+   "to": 65,
+   "conf": "high",
+   "note": "Poland 1, Norway 8, the West 9, the Balkans 20, the Soviet Union 22 (the largest), Blue 34, Citadel 47, and Bodenplatte on 1 Jan 1945 (65). Flown the day the offensive opens, then the sky over the main effort.",
+   "book": "The staff flies it: its fight for the sky over the front where its offensive opens (raidStaff)."
+  },
+  {
+   "nat": "GER",
+   "kind": "support",
+   "what": "Close support and interdiction behind every main offensive",
+   "targets": "troops, rail, bridges",
+   "time": "day",
+   "from": 1,
+   "to": 69,
+   "conf": "high",
+   "note": "The Luftwaffe's main work all war. Night ground-attack units from October 1943 (50) in the east.",
+   "book": "The staff flies it: close support behind its main effort (closeStaff) and its raids on the front."
+  },
+  {
+   "nat": "GER",
+   "kind": "sea",
+   "what": "Anti-shipping and mining off Britain and in the Atlantic",
+   "targets": "shipping, ports, mines",
+   "time": "both",
+   "from": 3,
+   "to": 50,
+   "conf": "high",
+   "note": "Magnetic mines from November 1939 (3); the Channel convoys in July and early August 1940 (11-12); Fw 200s over the Atlantic from August 1940 (12) to late 1943 (50).",
+   "book": "At sea: the sea staff flies it."
+  },
+  {
+   "nat": "GER",
+   "kind": "sky",
+   "what": "The battle for the sky over southern England",
+   "targets": "Fighter Command's airfields, radar, aircraft works",
+   "time": "day",
+   "from": 12,
+   "to": 13,
+   "conf": "high",
+   "theatre": "GER-west",
+   "share": [
+    [
+     12,
+     0.85
+    ]
+   ],
+   "bases": [
+    [
+     12,
+     [
+      "Calais",
+      "Somme",
+      "Rouen",
+      "Normandy",
+      "Cotentin",
+      "Paris",
+      "Orleans",
+      "Brittany",
+      "Flanders",
+      "Brussels",
+      "Holland",
+      "Sorlandet",
+      "Jutland"
+     ]
+    ]
+   ],
+   "note": "Adlertag 13 Aug 1940 to 6 Sep 1940. Escorted.",
+   "fly": [
+    {
+     "from": 12,
+     "to": 12,
+     "regions": [
+      "Kent",
+      "Hampshire",
+      "London"
+     ],
+     "bombers": true
+    },
+    {
+     "from": 13,
+     "to": 13,
+     "regions": [
+      "Kent",
+      "Hampshire",
+      "London"
+     ],
+     "bombers": true
+    }
+   ]
+  },
+  {
+   "nat": "GER",
+   "kind": "strategic",
+   "what": "London and the ports by day",
+   "targets": "London's docks and works",
+   "time": "day",
+   "from": 13,
+   "to": 14,
+   "conf": "high",
+   "theatre": "GER-west",
+   "share": [
+    [
+     13,
+     0.8
+    ]
+   ],
+   "bases": [
+    [
+     13,
+     [
+      "Calais",
+      "Somme",
+      "Rouen",
+      "Normandy",
+      "Cotentin",
+      "Paris",
+      "Orleans",
+      "Brittany",
+      "Flanders",
+      "Brussels",
+      "Holland",
+      "Sorlandet",
+      "Jutland"
+     ]
+    ]
+   ],
+   "note": "7 Sep 1940 to the end of September; fighter-bombers only by day in October 1940 (14).",
+   "fly": [
+    {
+     "from": 13,
+     "to": 14,
+     "regions": [
+      "London"
+     ],
+     "escort": 0.5
+    }
+   ]
+  },
+  {
+   "nat": "GER",
+   "kind": "strategic",
+   "what": "The night Blitz on Britain",
+   "targets": "London, then the ports and the industrial towns (Coventry 14 Nov 1940, Liverpool, Bristol, Plymouth, Clydeside, Birmingham)",
+   "time": "night",
+   "from": 13,
+   "to": 21,
+   "conf": "high",
+   "theatre": "GER-west",
+   "share": [
+    [
+     13,
+     0.5
+    ]
+   ],
+   "bases": [
+    [
+     13,
+     [
+      "Paris",
+      "Orleans",
+      "Rouen",
+      "Somme",
+      "Normandy",
+      "Brittany",
+      "Brussels",
+      "Flanders",
+      "Holland"
+     ]
+    ]
+   ],
+   "note": "7 Sep 1940 to 10/11 May 1941. Ended as the bombers went east for Barbarossa.",
+   "fly": [
+    {
+     "from": 13,
+     "to": 21,
+     "regions": [
+      "London",
+      "Midlands",
+      "Lancashire",
+      "Clydeside",
+      "Hampshire",
+      "West Country",
+      "Yorkshire",
+      "Northumbria"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "GER",
+   "kind": "sea",
+   "what": "The Mediterranean: Malta and the convoys",
+   "targets": "Malta's airfields and harbour, shipping",
+   "time": "both",
+   "from": 17,
+   "to": 38,
+   "conf": "high",
+   "theatre": "GER-med",
+   "share": [
+    [
+     17,
+     0.7
+    ],
+    [
+     28,
+     0.6
+    ]
+   ],
+   "bases": [
+    [
+     17,
+     [
+      "Sicily"
+     ]
+    ],
+    [
+     22,
+     [
+      "Athens",
+      "Crete"
+     ]
+    ],
+    [
+     28,
+     [
+      "Sicily"
+     ]
+    ],
+    [
+     34,
+     [
+      "Crete",
+      "Derna",
+      "Benghazi"
+     ]
+    ],
+    [
+     38,
+     [
+      "Sicily"
+     ]
+    ]
+   ],
+   "note": "X Fliegerkorps January to May 1941 (17-21); II Fliegerkorps December 1941 to May 1942 (28-33); the last blitz in October 1942 (38).",
+   "fly": [
+    {
+     "from": 17,
+     "to": 21,
+     "regions": [
+      "Malta"
+     ],
+     "kind": "sky",
+     "bombers": true
+    },
+    {
+     "from": 28,
+     "to": 33,
+     "regions": [
+      "Malta"
+     ],
+     "kind": "sky",
+     "bombers": true
+    },
+    {
+     "from": 38,
+     "to": 38,
+     "regions": [
+      "Malta"
+     ],
+     "kind": "sky",
+     "bombers": true
+    }
+   ]
+  },
+  {
+   "nat": "GER",
+   "kind": "strategic",
+   "what": "Moscow by night",
+   "targets": "Moscow",
+   "time": "night",
+   "from": 23,
+   "to": 28,
+   "conf": "high",
+   "theatre": "GER-east",
+   "share": [
+    [
+     23,
+     0.06
+    ],
+    [
+     25,
+     0.02
+    ]
+   ],
+   "bases": [
+    [
+     23,
+     [
+      "Minsk",
+      "Vitebsk",
+      "Mogilev"
+     ]
+    ],
+    [
+     26,
+     [
+      "Smolensk",
+      "Vyazma",
+      "Bryansk"
+     ]
+    ]
+   ],
+   "note": "From 21/22 Jul 1941; small after the first weeks.",
+   "fly": [
+    {
+     "from": 23,
+     "to": 28,
+     "regions": [
+      "Moscow"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "GER",
+   "kind": "sea",
+   "what": "The Arctic convoys",
+   "targets": "shipping",
+   "time": "both",
+   "from": 31,
+   "to": 37,
+   "conf": "high",
+   "note": "March to September 1942 (PQ 17 in July, PQ 18 in September).",
+   "book": "At sea: the sea staff flies it."
+  },
+  {
+   "nat": "GER",
+   "kind": "strategic",
+   "what": "Reprisal raids on English towns (the Baedeker raids)",
+   "targets": "historic towns",
+   "time": "night",
+   "from": 32,
+   "to": 34,
+   "conf": "high",
+   "theatre": "GER-west",
+   "share": [
+    [
+     32,
+     0.15
+    ]
+   ],
+   "bases": [
+    [
+     32,
+     [
+      "Holland",
+      "Brabant",
+      "Brussels",
+      "Somme",
+      "Rouen"
+     ]
+    ]
+   ],
+   "note": "April to June 1942, after Luebeck.",
+   "fly": [
+    {
+     "from": 32,
+     "to": 34,
+     "regions": [
+      "West Country",
+      "Yorkshire",
+      "Kent"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "GER",
+   "kind": "strategic",
+   "what": "Fighter-bomber hit-and-run raids on the south coast",
+   "targets": "coastal towns, rail",
+   "time": "day",
+   "from": 31,
+   "to": 46,
+   "conf": "medium-high",
+   "theatre": "GER-west",
+   "share": [
+    [
+     31,
+     0.05
+    ]
+   ],
+   "bases": [
+    [
+     31,
+     [
+      "Calais",
+      "Somme",
+      "Normandy",
+      "Cotentin"
+     ]
+    ]
+   ],
+   "note": "March 1942 to June 1943.",
+   "fly": [
+    {
+     "from": 31,
+     "to": 46,
+     "regions": [
+      "Kent",
+      "Hampshire",
+      "West Country"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "GER",
+   "kind": "strategic",
+   "what": "Soviet war industry by night",
+   "targets": "Gorky's motor and tank works, Yaroslavl's rubber, Saratov's refinery",
+   "time": "night",
+   "from": 46,
+   "to": 46,
+   "conf": "medium-high",
+   "theatre": "GER-east",
+   "share": [
+    [
+     46,
+     0.08
+    ]
+   ],
+   "bases": [
+    [
+     46,
+     [
+      "Bryansk",
+      "Orel",
+      "Smolensk"
+     ]
+    ]
+   ],
+   "note": "June 1943 only, then the bombers went back to the front.",
+   "fly": [
+    {
+     "from": 46,
+     "to": 46,
+     "regions": [
+      "Gorky",
+      "Yaroslavl",
+      "Saratov"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "GER",
+   "kind": "strategic",
+   "what": "London by night again (Operation Steinbock)",
+   "targets": "London",
+   "time": "night",
+   "from": 53,
+   "to": 57,
+   "conf": "high",
+   "theatre": "GER-west",
+   "share": [
+    [
+     53,
+     0.15
+    ],
+    [
+     54,
+     0.125
+    ],
+    [
+     55,
+     0.1
+    ],
+    [
+     56,
+     0.075
+    ],
+    [
+     57,
+     0.05
+    ]
+   ],
+   "bases": [
+    [
+     53,
+     [
+      "Somme",
+      "Champagne",
+      "Brussels",
+      "Brabant",
+      "Holland",
+      "Brittany"
+     ]
+    ]
+   ],
+   "note": "21/22 Jan 1944 to May 1944.",
+   "fly": [
+    {
+     "from": 53,
+     "to": 57,
+     "regions": [
+      "London"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "GER",
+   "kind": "strategic",
+   "what": "Flying bombs on London and Antwerp (flown by a Luftwaffe flak regiment)",
+   "targets": "London, Antwerp",
+   "time": "both",
+   "from": 58,
+   "to": 67,
+   "conf": "high",
+   "note": "13 Jun 1944 to March 1945. The rockets of September 1944 on were the army's.",
+   "book": "No air groups: a flak regiment flew the flying bombs, a late weapon (ruling 230)."
+  },
+  {
+   "nat": "GER",
+   "kind": "defence",
+   "what": "Defence of the Reich",
+   "targets": "night fighters, then day fighters at home",
+   "time": "both",
+   "from": 11,
+   "to": 69,
+   "conf": "high",
+   "note": "Night fighters from July 1940; day fighters against the Americans from 1943; home defence first from autumn 1943 (50), fighters taken from the fronts.",
+   "book": "Home defence is what fighter groups on patrol do: no campaign."
+  },
+  {
+   "nat": "UK",
+   "kind": "strategic",
+   "what": "Day raids on the German fleet only",
+   "targets": "warships at sea and in harbour",
+   "time": "day",
+   "from": 1,
+   "to": 4,
+   "conf": "high",
+   "note": "Stopped after 18 Dec 1939.",
+   "book": "At sea: the sea staff flies it."
+  },
+  {
+   "nat": "UK",
+   "kind": "strategic",
+   "what": "Leaflets and reconnaissance at night",
+   "targets": "none (leaflets)",
+   "time": "night",
+   "from": 1,
+   "to": 9,
+   "conf": "high",
+   "note": "Bombs first fell on Germany on land on 19/20 Mar 1940 (Sylt).",
+   "book": "No bombs: leaflets only."
+  },
+  {
+   "nat": "UK",
+   "kind": "strategic",
+   "what": "Night bombing of Germany",
+   "targets": "oil, rail and aircraft works (1940-41); industrial cities (area bombing from February 1942); the Ruhr (March to July 1943); Hamburg (July and August 1943); Berlin (November 1943 to March 1944); oil and transport (June 1944 to April 1945)",
+   "time": "night",
+   "from": 9,
+   "to": 69,
+   "conf": "high",
+   "theatre": "UK-home",
+   "share": [
+    [
+     9,
+     0.25
+    ],
+    [
+     17,
+     0.3
+    ],
+    [
+     41,
+     0.38
+    ],
+    [
+     56,
+     0.114
+    ],
+    [
+     59,
+     0.38
+    ],
+    [
+     60,
+     0.23
+    ],
+    [
+     65,
+     0.27
+    ]
+   ],
+   "bases": [
+    [
+     9,
+     [
+      "Lincolnshire",
+      "Yorkshire",
+      "East Anglia"
+     ]
+    ]
+   ],
+   "note": "From 15/16 May 1940. Oil first in January to March 1941. The area directive of 14 Feb 1942, Harris from 22 Feb (30). Under SHAEF's direction for the invasion April to September 1944.",
+   "fly": [
+    {
+     "from": 9,
+     "to": 29,
+     "regions": [
+      "Ruhr",
+      "Rhineland",
+      "Hamburg",
+      "Bremen",
+      "Westphalia"
+     ]
+    },
+    {
+     "from": 30,
+     "to": 42,
+     "regions": [
+      "Ruhr",
+      "Rhineland",
+      "Hamburg",
+      "Bremen",
+      "Westphalia",
+      "Frankfurt",
+      "Hanover"
+     ]
+    },
+    {
+     "from": 43,
+     "to": 46,
+     "regions": [
+      "Ruhr",
+      "Westphalia",
+      "Rhineland"
+     ]
+    },
+    {
+     "from": 47,
+     "to": 48,
+     "regions": [
+      "Hamburg",
+      "Ruhr"
+     ]
+    },
+    {
+     "from": 49,
+     "to": 50,
+     "regions": [
+      "Hanover",
+      "Frankfurt",
+      "Ruhr",
+      "Rhineland"
+     ]
+    },
+    {
+     "from": 51,
+     "to": 55,
+     "regions": [
+      "Berlin"
+     ]
+    },
+    {
+     "from": 58,
+     "to": 63,
+     "regions": [
+      "Ruhr",
+      "Rhineland",
+      "Westphalia"
+     ],
+     "aim": "oil"
+    },
+    {
+     "from": 64,
+     "to": 69,
+     "regions": [
+      "Ruhr",
+      "Rhineland",
+      "Saxony",
+      "Dresden",
+      "Magdeburg"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "UK",
+   "kind": "sky",
+   "what": "Fighter sweeps over France to draw the Luftwaffe (Circus, Rhubarb)",
+   "targets": "the German fighters in France",
+   "time": "day",
+   "from": 17,
+   "to": 46,
+   "conf": "medium-high",
+   "theatre": "UK-home",
+   "share": [
+    [
+     17,
+     0.2
+    ],
+    [
+     29,
+     0.15
+    ],
+    [
+     41,
+     0.1
+    ]
+   ],
+   "bases": [
+    [
+     17,
+     [
+      "Kent",
+      "London",
+      "Hampshire"
+     ]
+    ]
+   ],
+   "note": "From January 1941; cut back on 13 Nov 1941 (27); smaller in 1942 (Dieppe, August 1942, the biggest day); merged into the invasion's air plan in 1943.",
+   "fly": [
+    {
+     "from": 17,
+     "to": 27,
+     "regions": [
+      "Calais",
+      "Somme"
+     ]
+    },
+    {
+     "from": 28,
+     "to": 46,
+     "regions": [
+      "Calais"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "UK",
+   "kind": "strategic",
+   "what": "Day raids by Bomber Command, with fighter escort",
+   "targets": "oil, rail, defences, cities",
+   "time": "day",
+   "from": 60,
+   "to": 69,
+   "conf": "medium-high",
+   "theatre": "UK-home",
+   "share": [
+    [
+     60,
+     0.15
+    ]
+   ],
+   "bases": [
+    [
+     60,
+     [
+      "Lincolnshire",
+      "Yorkshire",
+      "East Anglia"
+     ]
+    ]
+   ],
+   "note": "From August 1944 (Homberg, 27 Aug), when the escort and the Allied sky allowed.",
+   "fly": [
+    {
+     "from": 60,
+     "to": 69,
+     "regions": [
+      "Ruhr",
+      "Rhineland"
+     ],
+     "aim": "oil",
+     "escort": 0.5
+    }
+   ]
+  },
+  {
+   "nat": "UK",
+   "kind": "sky",
+   "what": "Home defence with radar and Fighter Command",
+   "targets": "the sky over Britain",
+   "time": "both",
+   "from": 1,
+   "to": 69,
+   "conf": "high",
+   "note": "The Battle of Britain July to October 1940 (11-14).",
+   "book": "Home defence is what fighter groups on patrol do: no campaign."
+  },
+  {
+   "nat": "UK",
+   "kind": "support",
+   "what": "Ground support and interdiction (the tactical air forces)",
+   "targets": "troops, rail, bridges, airfields",
+   "time": "day",
+   "from": 9,
+   "to": 69,
+   "conf": "high",
+   "note": "France May 1940; the Western Desert from June 1940 and as a tactical air force from Crusader, November 1941 (27); Tunisia, Sicily, Italy 1943-45; 2nd Tactical Air Force from June 1943 (46) for Normandy and on; Burma 1943-45.",
+   "book": "The staff flies it: support behind its main effort."
+  },
+  {
+   "nat": "UK",
+   "kind": "interdiction",
+   "what": "Rail and bridges in France before the invasion (the Transportation Plan)",
+   "targets": "rail yards, bridges",
+   "time": "both",
+   "from": 56,
+   "to": 58,
+   "conf": "high",
+   "theatre": "UK-home",
+   "share": [
+    [
+     56,
+     0.4
+    ]
+   ],
+   "bases": [
+    [
+     56,
+     [
+      "Lincolnshire",
+      "Yorkshire",
+      "East Anglia",
+      "Champagne",
+      "Lille",
+      "Flanders",
+      "Kent",
+      "Hampshire",
+      "Normandy",
+      "Brussels",
+      "Brabant",
+      "Gelderland",
+      "Rhineland",
+      "Westphalia"
+     ]
+    ]
+   ],
+   "note": "April to June 1944.",
+   "fly": [
+    {
+     "from": 56,
+     "to": 58,
+     "regions": [
+      "Rouen",
+      "Paris",
+      "Somme",
+      "Calais",
+      "Lille",
+      "Orleans"
+     ],
+     "aim": "rail"
+    }
+   ]
+  },
+  {
+   "nat": "UK",
+   "kind": "sea",
+   "what": "Coastal Command against the U-boats and shipping; the Malta strikes on the Libyan convoys",
+   "targets": "U-boats, shipping",
+   "time": "both",
+   "from": 1,
+   "to": 69,
+   "conf": "high",
+   "note": "Malta's strikes late 1940 to 1943; Coastal Command's strike wings from November 1942 (39).",
+   "book": "At sea: the sea staff flies it."
+  },
+  {
+   "nat": "USA",
+   "kind": "strategic",
+   "what": "Day precision bombing from England (the Eighth Air Force)",
+   "targets": "U-boat bases, rail, airfields in France (August 1942 to January 1943); Germany from 27 Jan 1943; aircraft works and ball bearings (from June 1943); oil (from 12 May 1944); transport (late 1944-45)",
+   "time": "day",
+   "from": 36,
+   "to": 69,
+   "conf": "high",
+   "theatre": "USA-eur",
+   "share": [
+    [
+     36,
+     0.35
+    ],
+    [
+     41,
+     0.4
+    ]
+   ],
+   "bases": [
+    [
+     36,
+     [
+      "East Anglia",
+      "Midlands"
+     ]
+    ]
+   ],
+   "note": "First raid 17 Aug 1942 (Rouen). Deep raids beyond escort June to 14 Oct 1943 (46-50), then shallow raids under escort; deep again only with escorts from 11 Jan 1944 (53); Big Week 20-25 Feb 1944 (54); Berlin from March 1944 (55).",
+   "fly": [
+    {
+     "from": 36,
+     "to": 40,
+     "regions": [
+      "Nantes",
+      "Rouen",
+      "Lille"
+     ]
+    },
+    {
+     "from": 41,
+     "to": 45,
+     "regions": [
+      "Bremen",
+      "Hamburg",
+      "Ruhr"
+     ]
+    },
+    {
+     "from": 46,
+     "to": 52,
+     "regions": [
+      "Franconia",
+      "Bavaria",
+      "Hanover",
+      "Ruhr"
+     ]
+    },
+    {
+     "from": 53,
+     "to": 56,
+     "regions": [
+      "Hanover",
+      "Saxony",
+      "Franconia",
+      "Bavaria",
+      "Berlin"
+     ],
+     "escort": 0.6
+    },
+    {
+     "from": 57,
+     "to": 63,
+     "regions": [
+      "Saxony",
+      "Magdeburg",
+      "Ruhr",
+      "Upper Silesia"
+     ],
+     "aim": "oil",
+     "escort": 0.6
+    },
+    {
+     "from": 64,
+     "to": 69,
+     "regions": [
+      "Rhineland",
+      "Frankfurt",
+      "Ruhr",
+      "Saxony"
+     ],
+     "aim": "rail",
+     "escort": 0.6
+    }
+   ]
+  },
+  {
+   "nat": "USA",
+   "kind": "strategic",
+   "what": "Day precision bombing from Italy (the Fifteenth Air Force)",
+   "targets": "south German and Austrian aircraft works; Ploesti oil (April to August 1944); rail",
+   "time": "day",
+   "from": 51,
+   "to": 69,
+   "conf": "high",
+   "theatre": "USA-eur",
+   "share": [
+    [
+     51,
+     0.15
+    ],
+    [
+     53,
+     0.2
+    ]
+   ],
+   "bases": [
+    [
+     48,
+     [
+      "Benghazi"
+     ]
+    ],
+    [
+     51,
+     [
+      "Tunis",
+      "Apulia"
+     ]
+    ],
+    [
+     52,
+     [
+      "Apulia"
+     ]
+    ]
+   ],
+   "note": "From November 1943. The one low-level raid on Ploesti from Libya was 1 Aug 1943 (48).",
+   "fly": [
+    {
+     "from": 51,
+     "to": 55,
+     "regions": [
+      "Vienna",
+      "Upper Austria",
+      "Bavaria"
+     ]
+    },
+    {
+     "from": 56,
+     "to": 60,
+     "regions": [
+      "Ploiesti"
+     ],
+     "aim": "oil"
+    },
+    {
+     "from": 61,
+     "to": 69,
+     "regions": [
+      "Vienna",
+      "Upper Austria",
+      "Bavaria",
+      "Moravia"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "USA",
+   "kind": "support",
+   "what": "Tactical air forces: ground support and interdiction",
+   "targets": "troops, rail, bridges, airfields",
+   "time": "day",
+   "from": 39,
+   "to": 69,
+   "conf": "high",
+   "note": "North Africa from Torch (39); Italy, Strangle March to May 1944 (55-57); the Ninth Air Force from October 1943 (50), the Seine bridges May 1944 (57), Normandy and on.",
+   "book": "The staff flies it: support behind its main effort."
+  },
+  {
+   "nat": "USA",
+   "kind": "sky",
+   "what": "The battle for the sky over New Guinea and the Solomons",
+   "targets": "Japanese airfields and air groups; shipping",
+   "time": "day",
+   "from": 36,
+   "to": 58,
+   "conf": "high",
+   "theatre": "USA-pac",
+   "share": [
+    [
+     36,
+     0.5
+    ],
+    [
+     41,
+     0.55
+    ],
+    [
+     53,
+     0.35
+    ]
+   ],
+   "bases": [
+    [
+     36,
+     [
+      "Port Moresby",
+      "Milne Bay",
+      "Guadalcanal",
+      "Espiritu Santo"
+     ]
+    ],
+    [
+     40,
+     [
+      "Buna"
+     ]
+    ],
+    [
+     46,
+     [
+      "Lae",
+      "New Georgia"
+     ]
+    ],
+    [
+     51,
+     [
+      "Bougainville"
+     ]
+    ],
+    [
+     54,
+     [
+      "Hollandia",
+      "Biak"
+     ]
+    ]
+   ],
+   "note": "Guadalcanal from August 1942 (36); the Fifth Air Force from September 1942; Bismarck Sea March 1943 (43); Wewak August 1943 (48); Rabaul October and November 1943 (50-51).",
+   "fly": [
+    {
+     "from": 36,
+     "to": 58,
+     "regions": [
+      "Lae",
+      "Wewak",
+      "Rabaul"
+     ],
+     "bombers": true
+    }
+   ]
+  },
+  {
+   "nat": "USA",
+   "kind": "sky",
+   "what": "Carrier strikes on enemy airfields before each landing",
+   "targets": "airfields",
+   "time": "day",
+   "from": 51,
+   "to": 72,
+   "conf": "high",
+   "note": "From Tarawa, November 1943 (51); the Japanese home islands from February 1945 (66). (The Doolittle raid, 18 Apr 1942, was a single raid, not a campaign.)",
+   "book": "Carrier wings: the sea staff flies them."
+  },
+  {
+   "nat": "USA",
+   "kind": "strategic",
+   "what": "B-29s from China and India (XX Bomber Command)",
+   "targets": "steel and coke (Yawata, Anshan), aircraft (Omura), Formosa; Southeast Asia's ports and rail from India",
+   "time": "day",
+   "from": 58,
+   "to": 67,
+   "conf": "high",
+   "theatre": "USA-pac",
+   "share": [
+    [
+     58,
+     0.06
+    ]
+   ],
+   "bases": [
+    [
+     58,
+     [
+      "Kharagpur",
+      "Chengtu"
+     ]
+    ],
+    [
+     66,
+     [
+      "Kharagpur"
+     ]
+    ]
+   ],
+   "note": "15 Jun 1944 to 15 Jan 1945 from Chengtu; from India only, February and March 1945.",
+   "fly": [
+    {
+     "from": 58,
+     "to": 65,
+     "regions": [
+      "Fukuoka",
+      "Anshan",
+      "Formosa"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "USA",
+   "kind": "strategic",
+   "what": "B-29s from the Marianas (XXI Bomber Command)",
+   "targets": "aircraft engine and airframe works by day (24 Nov 1944 to February 1945); cities by night with fire (from 9/10 Mar 1945); oil refineries by night (June to August 1945); mines in Japan's waters (from 27 Mar 1945)",
+   "time": "both",
+   "from": 63,
+   "to": 72,
+   "conf": "high",
+   "theatre": "USA-pac",
+   "share": [
+    [
+     63,
+     0.1
+    ],
+    [
+     65,
+     0.25
+    ]
+   ],
+   "bases": [
+    [
+     63,
+     [
+      "Saipan",
+      "Guam"
+     ]
+    ],
+    [
+     68,
+     [
+      "Saipan",
+      "Guam",
+      "Iwo Jima"
+     ]
+    ]
+   ],
+   "note": "Day precision from high altitude to February 1945 (63-66); low-level night fire raids from March 1945 (67); day precision again under P-51s from Iwo Jima from April 1945 (68).",
+   "fly": [
+    {
+     "from": 63,
+     "to": 66,
+     "regions": [
+      "Tokyo",
+      "Nagoya",
+      "Osaka"
+     ]
+    },
+    {
+     "from": 67,
+     "to": 72,
+     "regions": [
+      "Tokyo",
+      "Nagoya",
+      "Osaka",
+      "Fukuoka"
+     ],
+     "night": true
+    }
+   ]
+  },
+  {
+   "nat": "SOV",
+   "kind": "strategic",
+   "what": "Day bombing of Finland (the Winter War)",
+   "targets": "Helsinki, towns, rail",
+   "time": "day",
+   "from": 3,
+   "to": 7,
+   "conf": "high",
+   "theatre": "SOV",
+   "share": [
+    [
+     3,
+     0.25
+    ]
+   ],
+   "bases": [
+    [
+     3,
+     [
+      "Leningrad",
+      "Estonia"
+     ]
+    ]
+   ],
+   "note": "30 Nov 1939 to 13 Mar 1940.",
+   "fly": [
+    {
+     "from": 3,
+     "to": 7,
+     "regions": [
+      "Helsinki"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "SOV",
+   "kind": "support",
+   "what": "Ground attack and the battle for the sky over the front",
+   "targets": "troops, guns, crossings; the sky over the main effort",
+   "time": "day",
+   "from": 22,
+   "to": 72,
+   "conf": "high",
+   "note": "The Soviet air war's core. Air armies from May 1942 (33). The sky over the main effort held from the Kuban and Kursk, spring and summer 1943 (44-47); full command of it in Bagration, June 1944 (58).",
+   "book": "The staff flies it: support behind its main effort."
+  },
+  {
+   "nat": "SOV",
+   "kind": "sky",
+   "what": "Strikes on enemy airfields as an operation opens",
+   "targets": "airfields",
+   "time": "day",
+   "from": 22,
+   "to": 72,
+   "conf": "medium",
+   "note": "Finland 25 Jun 1941; the failed dawn strike at Kursk 5 Jul 1943 (47); Bagration (58); the Vistula-Oder (65); Manchuria August 1945 (72).",
+   "book": "The staff flies it: its fight for the sky over the front where its offensive opens."
+  },
+  {
+   "nat": "SOV",
+   "kind": "strategic",
+   "what": "Long-range bombing by night",
+   "targets": "rail junctions and airfields behind the front; now and then cities in reach (Berlin, Koenigsberg, Danzig, Helsinki, Budapest, Bucharest)",
+   "time": "night",
+   "from": 22,
+   "to": 69,
+   "conf": "medium-high",
+   "theatre": "SOV",
+   "share": [
+    [
+     22,
+     0.1
+    ],
+    [
+     65,
+     0.08
+    ]
+   ],
+   "bases": [
+    [
+     22,
+     [
+      "Crimea"
+     ]
+    ],
+    [
+     24,
+     [
+      "Estonia"
+     ]
+    ],
+    [
+     26,
+     [
+      "Moscow",
+      "Ryazan",
+      "Tula",
+      "Yaroslavl"
+     ]
+    ],
+    [
+     51,
+     [
+      "Kursk",
+      "Kharkov",
+      "Smolensk"
+     ]
+    ]
+   ],
+   "note": "Naval aviation on Romanian oil and Constanta June to August 1941 (22-24); Berlin from Saaremaa August and early September 1941 (24-25); long-range aviation as its own command from March 1942 (31); Koenigsberg April 1943 (44); Helsinki February 1944 (54). Day raids with long-range bombers ended in summer 1941 (see stand-downs).",
+   "fly": [
+    {
+     "from": 24,
+     "to": 25,
+     "regions": [
+      "Berlin"
+     ]
+    },
+    {
+     "from": 44,
+     "to": 44,
+     "regions": [
+      "Konigsberg"
+     ]
+    },
+    {
+     "from": 54,
+     "to": 54,
+     "regions": [
+      "Helsinki"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "SOV",
+   "kind": "support",
+   "what": "Night harassment over the front with light biplanes",
+   "targets": "troops, rear areas",
+   "time": "night",
+   "from": 26,
+   "to": 69,
+   "conf": "high",
+   "note": "From late 1941.",
+   "book": "The staff flies it: support over the front."
+  },
+  {
+   "nat": "SOV",
+   "kind": "sea",
+   "what": "Anti-shipping in the Baltic, Black Sea and Arctic",
+   "targets": "shipping",
+   "time": "day",
+   "from": 22,
+   "to": 69,
+   "conf": "medium",
+   "note": "Strongest 1944.",
+   "book": "At sea: the sea staff flies it."
+  },
+  {
+   "nat": "JAP",
+   "kind": "strategic",
+   "what": "Day bombing of Chinese cities",
+   "targets": "Chongqing and the cities of the interior",
+   "time": "day",
+   "from": 1,
+   "to": 48,
+   "conf": "high",
+   "theatre": "JAP",
+   "share": [
+    [
+     1,
+     0.4
+    ],
+    [
+     17,
+     0.3
+    ],
+    [
+     25,
+     0.05
+    ]
+   ],
+   "bases": [
+    [
+     1,
+     [
+      "Hankow"
+     ]
+    ],
+    [
+     5,
+     [
+      "Hankow",
+      "Loyang"
+     ]
+    ]
+   ],
+   "note": "From February 1938 (before turn 1) to August 1943. Peaks: Operation 101, May to September 1940 (9-13), with the new long-range Zero escort from August 1940; Operation 102, July and August 1941 (23-24).",
+   "fly": [
+    {
+     "from": 1,
+     "to": 48,
+     "regions": [
+      "Chungking"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "JAP",
+   "kind": "sky",
+   "what": "Opening blows on enemy airfields",
+   "targets": "Pearl Harbor, Clark Field, Malaya's and Java's airfields",
+   "time": "day",
+   "from": 28,
+   "to": 30,
+   "conf": "high",
+   "note": "7-8 Dec 1941 (28), then airfield by airfield through the south to February 1942 (30).",
+   "book": "Japan's opening blows belong to its opening (ruling 234)."
+  },
+  {
+   "nat": "JAP",
+   "kind": "sea",
+   "what": "Anti-shipping by land-based torpedo bombers and the carriers",
+   "targets": "warships and shipping; Darwin's harbour (19 Feb 1942); Colombo and Trincomalee (April 1942)",
+   "time": "day",
+   "from": 28,
+   "to": 44,
+   "conf": "high",
+   "note": "Force Z sunk 10 Dec 1941.",
+   "book": "At sea: the sea staff flies it."
+  },
+  {
+   "nat": "JAP",
+   "kind": "sky",
+   "what": "The battle for the sky over New Guinea and the Solomons",
+   "targets": "Port Moresby, Henderson Field, Allied air groups and shipping",
+   "time": "day",
+   "from": 30,
+   "to": 52,
+   "conf": "high",
+   "theatre": "JAP",
+   "share": [
+    [
+     30,
+     0.3
+    ],
+    [
+     41,
+     0.45
+    ],
+    [
+     53,
+     0.2
+    ]
+   ],
+   "bases": [
+    [
+     30,
+     [
+      "Rabaul",
+      "Lae"
+     ]
+    ],
+    [
+     36,
+     [
+      "Rabaul",
+      "Bougainville"
+     ]
+    ],
+    [
+     45,
+     [
+      "Wewak",
+      "Rabaul",
+      "Bougainville"
+     ]
+    ]
+   ],
+   "note": "Port Moresby from February 1942 (30); Guadalcanal August 1942 to February 1943 (36-42); I-Go, 7-16 Apr 1943 (44); RO-Go, November 1943 (51).",
+   "fly": [
+    {
+     "from": 30,
+     "to": 52,
+     "regions": [
+      "Port Moresby",
+      "Guadalcanal"
+     ],
+     "bombers": true
+    }
+   ]
+  },
+  {
+   "nat": "JAP",
+   "kind": "strategic",
+   "what": "Raids on northern Australia",
+   "targets": "Darwin and its airfields",
+   "time": "both",
+   "from": 30,
+   "to": 51,
+   "conf": "high",
+   "theatre": "JAP",
+   "share": [
+    [
+     30,
+     0.03
+    ]
+   ],
+   "bases": [
+    [
+     30,
+     [
+      "Koepang",
+      "Kendari",
+      "Ambon"
+     ]
+    ]
+   ],
+   "note": "19 Feb 1942 to November 1943, 64 raids on Darwin.",
+   "fly": [
+    {
+     "from": 30,
+     "to": 51,
+     "regions": [
+      "Darwin"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "JAP",
+   "kind": "strategic",
+   "what": "Raids on Calcutta",
+   "targets": "Calcutta's docks",
+   "time": "both",
+   "from": 40,
+   "to": 52,
+   "conf": "medium-high",
+   "theatre": "JAP",
+   "share": [
+    [
+     40,
+     0.03
+    ]
+   ],
+   "bases": [
+    [
+     40,
+     [
+      "Rangoon",
+      "Meiktila",
+      "Yenangyaung"
+     ]
+    ]
+   ],
+   "note": "At night in December 1942 (40); by day in December 1943 (52).",
+   "fly": [
+    {
+     "from": 40,
+     "to": 40,
+     "regions": [
+      "Calcutta"
+     ],
+     "night": true
+    },
+    {
+     "from": 52,
+     "to": 52,
+     "regions": [
+      "Calcutta"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "JAP",
+   "kind": "support",
+   "what": "Army air support in China and Burma",
+   "targets": "troops, airfields",
+   "time": "day",
+   "from": 1,
+   "to": 72,
+   "conf": "medium",
+   "note": "Small. Its largest was Ichi-Go, April to December 1944 (56-64).",
+   "book": "The staff flies it: support behind its main effort."
+  },
+  {
+   "nat": "JAP",
+   "kind": "sea",
+   "what": "Special attack (suicide) on ships",
+   "targets": "ships",
+   "time": "day",
+   "from": 62,
+   "to": 72,
+   "conf": "high",
+   "note": "From 25 Oct 1944 (Leyte); the mass Kikusui raids off Okinawa, 6 Apr to 22 Jun 1945 (68-70).",
+   "book": "At sea: the sea staff flies it."
+  },
+  {
+   "nat": "JAP",
+   "kind": "defence",
+   "what": "Home defence against the B-29s",
+   "targets": "the sky over Japan",
+   "time": "both",
+   "from": 58,
+   "to": 72,
+   "conf": "medium",
+   "note": "From June 1944; weak, and fighters were held back for the invasion from mid-1945.",
+   "book": "Home defence is what fighter groups on patrol do: no campaign."
+  },
+  {
+   "nat": "ITA",
+   "kind": "strategic",
+   "what": "Malta",
+   "targets": "airfields, harbour, dockyard",
+   "time": "both",
+   "from": 10,
+   "to": 38,
+   "conf": "high",
+   "theatre": "ITA",
+   "share": [
+    [
+     10,
+     0.12
+    ],
+    [
+     17,
+     0.1
+    ],
+    [
+     29,
+     0.15
+    ]
+   ],
+   "bases": [
+    [
+     10,
+     [
+      "Sicily"
+     ]
+    ]
+   ],
+   "note": "From 11 Jun 1940, high-level by day; with the Germans January to May 1941 (17-21) and December 1941 to May 1942 (28-33); the last blitz October 1942 (38).",
+   "fly": [
+    {
+     "from": 10,
+     "to": 38,
+     "regions": [
+      "Malta"
+     ],
+     "kind": "sky",
+     "bombers": true
+    }
+   ]
+  },
+  {
+   "nat": "ITA",
+   "kind": "sea",
+   "what": "Against the British fleet and convoys",
+   "targets": "warships and shipping",
+   "time": "day",
+   "from": 11,
+   "to": 49,
+   "conf": "high",
+   "note": "High-level bombing from July 1940 (Calabria); torpedo bombers from August 1940 (12) to September 1943 (49), Italy's most telling air arm.",
+   "book": "At sea: the sea staff flies it."
+  },
+  {
+   "nat": "ITA",
+   "kind": "strategic",
+   "what": "Long-range raids on British oil and bases",
+   "targets": "Haifa's and Bahrain's refineries, Alexandria, Gibraltar",
+   "time": "both",
+   "from": 11,
+   "to": 40,
+   "conf": "medium-high",
+   "theatre": "ITA",
+   "share": [
+    [
+     11,
+     0.03
+    ]
+   ],
+   "bases": [
+    [
+     11,
+     [
+      "Rhodes",
+      "Sardinia"
+     ]
+    ]
+   ],
+   "note": "Haifa from July 1940; Bahrain 19 Oct 1940 (14); Gibraltar at night 1940-43. On the chart (the historian, b569): Rhodes (Maritza, Gadurra) and Sardinia (Elmas, Decimomannu, Alghero) had real air bases, but neither has an airfield on today's chart and nothing else on it reaches Haifa, Bahrain or Gibraltar; so the row flies Alexandria from Libya's fields and leaves those out.",
+   "fly": [
+    {
+     "from": 11,
+     "to": 40,
+     "regions": [
+      "Alexandria"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "ITA",
+   "kind": "strategic",
+   "what": "The Italian air corps over Britain",
+   "targets": "Harwich, Ramsgate, east-coast ports",
+   "time": "both",
+   "from": 14,
+   "to": 17,
+   "conf": "high",
+   "theatre": "ITA",
+   "share": [
+    [
+     14,
+     0.08
+    ]
+   ],
+   "bases": [
+    [
+     14,
+     [
+      "Brussels",
+      "Flanders"
+     ]
+    ]
+   ],
+   "note": "October 1940 to January 1941.",
+   "fly": [
+    {
+     "from": 14,
+     "to": 17,
+     "regions": [
+      "Kent"
+     ]
+    }
+   ]
+  },
+  {
+   "nat": "ITA",
+   "kind": "support",
+   "what": "Ground support",
+   "targets": "troops",
+   "time": "day",
+   "from": 10,
+   "to": 49,
+   "conf": "high",
+   "note": "North Africa June 1940 to May 1943 (10-45); Greece October 1940 to April 1941 (14-20); Russia August 1941 to January 1943 (24-41).",
+   "book": "The staff flies it: support behind its main effort."
+  },
+  {
+   "nat": "FRA",
+   "kind": "sky",
+   "what": "Fighter cover over the armies",
+   "targets": "the sky over the front",
+   "time": "day",
+   "from": 1,
+   "to": 10,
+   "conf": "high",
+   "note": "September 1939 to June 1940.",
+   "book": "The staff flies it: support over the front."
+  },
+  {
+   "nat": "FRA",
+   "kind": "strategic",
+   "what": "No bombing of Germany by choice; leaflets and reconnaissance only",
+   "targets": "none",
+   "time": "night",
+   "from": 1,
+   "to": 9,
+   "conf": "high",
+   "note": "For fear of reprisal on French towns. The Baku oil plan of spring 1940 was never flown.",
+   "book": "No bombs, by choice: leaflets only."
+  },
+  {
+   "nat": "FRA",
+   "kind": "support",
+   "what": "Support and interdiction in the battle of France",
+   "targets": "bridges, columns",
+   "time": "both",
+   "from": 9,
+   "to": 10,
+   "conf": "high",
+   "note": "May and June 1940: the Meuse bridges at Sedan (14 May), the low-level Breguet attacks, the LeO 451s by night. Small raids on Italy in June 1940.",
+   "book": "The staff flies it: support behind its main effort."
+  }
+ ],
+ "bookAbout": "Rider b569 (3) and (4), with the historian's shares and bases (historian/air-shares-b569.json and .md): at the stops that follow the book a row takes its 'share' (dated rows [from turn, share]) of the front-line aircraft of its nation's 'theatre', of every kind together, as the historian gives it; a bombing row fills it with bombers, a fight for the sky with each kind it flies at that share. Its escort takes 'escort' of the theatre's fighters (the feature builder's reading). A theatre is: Germany's west, east and Mediterranean by 'split' (the historian's whole-Luftwaffe split by date); the RAF at home, its groups on British home ground; America's Europe and Pacific, its groups on either side of the world; any other nation's, its whole air force. Groups are whole: a row takes one, and another only while that comes nearer its share than stopping does. Groups in reach of the row's targets go first. A group out of reach is moved on the row's month to the field its side holds nearest any of the row's 'bases' for that month, in reach of the targets, one with room first; if the side holds none, the row flies without it.",
+ "split": {
+  "GER": [
+   [
+    1,
+    {
+     "east": 0.5,
+     "west": 0.5,
+     "med": 0
+    }
+   ],
+   [
+    5,
+    {
+     "east": 0.05,
+     "west": 0.95,
+     "med": 0
+    }
+   ],
+   [
+    17,
+    {
+     "east": 0,
+     "west": 0.7,
+     "med": 0.3
+    }
+   ],
+   [
+    22,
+    {
+     "east": 0.6,
+     "west": 0.25,
+     "med": 0.1
+    }
+   ],
+   [
+    28,
+    {
+     "east": 0.6,
+     "west": 0.25,
+     "med": 0.15
+    }
+   ],
+   [
+    29,
+    {
+     "east": 0.55,
+     "west": 0.25,
+     "med": 0.2
+    }
+   ],
+   [
+    41,
+    {
+     "east": 0.4,
+     "west": 0.35,
+     "med": 0.25
+    }
+   ],
+   [
+    53,
+    {
+     "east": 0.35,
+     "west": 0.55,
+     "med": 0.1
+    }
+   ],
+   [
+    65,
+    {
+     "east": 0.5,
+     "west": 0.5,
+     "med": 0
+    }
+   ]
+  ]
+ },
+ "sources": [
+  "Tooze, The Wages of Destruction (2006); Wagenfuehr's armaments series in the US Strategic Bombing Survey, The Effects of Strategic Bombing on the German War Economy (1945)",
+  "Harrison (ed.), The Economics of World War II (1998); Harrison, Accounting for War (1996)",
+  "Postan, British War Production (HMSO, 1952)",
+  "War Production Board, Wartime Production Achievements and the Reconversion Outlook (1945)",
+  "US Strategic Bombing Survey, The Effects of Strategic Bombing on Japan's War Economy (1946); Cohen, Japan's Economy in War and Reconstruction (1949)",
+  "Middlebrook and Everitt, The Bomber Command War Diaries (1985); Webster and Frankland, The Strategic Air Offensive against Germany (HMSO, 1961)",
+  "Craven and Cate, The Army Air Forces in World War II; Freeman, The Mighty Eighth War Diary (1981)",
+  "Overy, The Air War 1939-1945 (1980) and The Bombing War (2013); Hardesty, Red Phoenix (1982); Bergerud, Fire in the Sky (2000)"
+ ],
+ "fields": {
+  "_about": "Rider b574 (the design director, 22:11Z) and the historian's list (historian/med-airfields-b574.md): the record's Mediterranean air war was flown from fields today's chart does not seed. With the switch on, these provinces have an airfield of at least this class (1 a landing ground, 2 an airfield, 3 an air base; airwar.json fields.sizes) all war; every one existed all war and served whoever held the province, so whoever holds it in the game uses it, as everywhere. With the switch off they are not read. Pantelleria is not on the chart: it folds into Sicily, which has its air base. Gambut is counted with Tobruk's El Adem.",
+  "rows": [
+   { "region": "Tripoli", "from": 1, "class": 3, "why": "Castel Benito (high)." },
+   { "region": "Benghazi", "from": 1, "class": 3, "why": "Benina and Berka; the 1943 Ploesti raid flew from here (high)." },
+   { "region": "Derna", "from": 1, "class": 2, "why": "Derna and Martuba (high)." },
+   { "region": "Tobruk", "from": 1, "class": 3, "why": "El Adem and Gambut (high)." },
+   { "region": "Agedabia", "from": 1, "class": 1, "why": "Landing grounds that followed the front (medium)." },
+   { "region": "El Agheila", "from": 1, "class": 1, "why": "Marble Arch (medium)." },
+   { "region": "Bardia", "from": 1, "class": 1, "why": "Landing grounds that followed the front (medium)." },
+   { "region": "Mersa Matruh", "from": 1, "class": 2, "why": "Matruh's fields (high)." },
+   { "region": "El Alamein", "from": 1, "class": 2, "why": "The Alamein fields (high)." },
+   { "region": "Sidi Barrani", "from": 1, "class": 1, "why": "Sidi Barrani's landing ground (high)." },
+   { "region": "Rhodes", "from": 1, "class": 2, "why": "Maritza, Gadurra and Calato, the Aegean command's base (high)." },
+   { "region": "Sardinia", "from": 1, "class": 3, "why": "Elmas, Decimomannu and four more, home to the torpedo and bomber groups (high)." },
+   { "region": "Crete", "from": 1, "class": 2, "why": "Maleme and Heraklion (high)." },
+   { "region": "Corsica", "from": 1, "class": 2, "why": "The Allied fields of 1943-44 (high)." },
+   { "region": "Tunis", "from": 1, "class": 3, "why": "El Aouina and Bizerte (medium-high)." },
+   { "region": "Sfax", "from": 1, "class": 2, "why": "Kairouan and Gabes (medium-high)." }
+  ]
+ },
+ "radar": {
+  "_about": "Ruling 236 riders b553 and b558 (Brian, 20:43Z: \"if you had radar then your fighters are much better at intercepting bombing raids\"), inside the switch; the historian's rows, historian/radar-night-b553.json. (a) Warning: the record's two chains (air.json radar.chains: Chain Home from 1, the Kammhuber Line from 24) stay on their months at every stop. At the stops that follow the book each other great power's chain comes in on its 'record' row's month whatever its research, over the row's 'regions' only where it names them ('where' is the card's phrase for that ground; 'plural' makes the raid report say 'give warning'). At stops 3 to 5 a nation holding Early-warning radar ('tech') has a chain over all the ground it holds, catching 'ground' of what a raid on its fields would. Without a chain only air.json radar.without (7 in 10) of the defending fighters meet a raid. (b) 'night': what a nation's fighters count for by night, as a share of their worth by day, in place of air.json combat.night.fighters (0.03): the historian's dated rows [from turn, figure], a row holding until the next. At the stops that follow the book they run by date; at stops 3 to 5 Fighter control ('control') is the gate: without it the nation keeps its first figure, with it the figure for the month. The regions are the historian's (historian/radar-night-b553.json, regions_b558); the optional middle Soviet step of August 1942 (six cities) is left out, as the director ruled. (c) b569(2): at stops 3 to 5 a staff whose ground was bombed by night within 'need' months takes Fighter control first in its research, once it holds Early-warning radar, every nation alike.",
+  "tech": "earlywarning",
+  "control": "gci",
+  "ground": 0.5,
+  "need": 3,
+  "record": [
+   {
+    "nat": "GER",
+    "from": 1,
+    "name": "the Freya stations",
+    "by": "the coast's warning service",
+    "ground": 0.5,
+    "plural": true,
+    "regions": [
+     "Hamburg",
+     "Schleswig-Holstein",
+     "Bremen"
+    ],
+    "where": "its North Sea coast"
+   },
+   {
+    "nat": "SOV",
+    "from": 23,
+    "name": "the Redut stations",
+    "by": "the air defence of Moscow and Leningrad",
+    "ground": 0.5,
+    "plural": true,
+    "regions": [
+     "Moscow",
+     "Leningrad"
+    ],
+    "where": "Moscow and Leningrad"
+   },
+   {
+    "nat": "SOV",
+    "from": 41,
+    "name": "the Redut stations",
+    "by": "the air armies' warning service",
+    "ground": 0.5,
+    "plural": true
+   },
+   {
+    "nat": "USA",
+    "from": 29,
+    "name": "the Aircraft Warning Service",
+    "by": "the Army's fighter commands",
+    "ground": 0.5
+   },
+   {
+    "nat": "JAP",
+    "from": 41,
+    "name": "the coast radars and picket boats",
+    "by": "the home islands' air defence",
+    "ground": 0.5,
+    "plural": true
+   },
+   {
+    "nat": "ITA",
+    "from": 41,
+    "name": "the German radar stations",
+    "by": "the German air force in Italy",
+    "ground": 0.5,
+    "plural": true
+   }
+  ],
+  "night": {
+   "UK": [
+    [
+     1,
+     0.001
+    ],
+    [
+     17,
+     0.003
+    ],
+    [
+     19,
+     0.008
+    ],
+    [
+     41,
+     0.015
+    ],
+    [
+     53,
+     0.023
+    ]
+   ],
+   "GER": [
+    [
+     1,
+     0.001
+    ],
+    [
+     14,
+     0.004
+    ],
+    [
+     30,
+     0.011
+    ],
+    [
+     41,
+     0.022
+    ],
+    [
+     47,
+     0.01
+    ],
+    [
+     49,
+     0.033
+    ],
+    [
+     57,
+     0.02
+    ],
+    [
+     63,
+     0.008
+    ]
+   ],
+   "USA": [
+    [
+     1,
+     0.003
+    ],
+    [
+     58,
+     0.012
+    ]
+   ],
+   "SOV": [
+    [
+     1,
+     0.001
+    ],
+    [
+     41,
+     0.002
+    ],
+    [
+     53,
+     0.004
+    ]
+   ],
+   "JAP": [
+    [
+     1,
+     0.001
+    ],
+    [
+     58,
+     0.003
+    ]
+   ],
+   "ITA": [
+    [
+     1,
+     0.001
+    ],
+    [
+     47,
+     0.003
+    ]
+   ],
+   "_default": [
+    [
+     1,
+     0.001
+    ]
+   ]
+  },
+  "nightWhy": {
+   "UK": "1 to 16: no ground control at night and no working airborne radar (the AI Mk III Blenheims). 17: the first ground-control (GCI) stations and the Beaufighter with AI Mk IV. 19: the two together, March 1941, rising to the best month of the Blitz in May 1941. 41: centimetric radar in Mosquitos (from early 1943). 53: Mosquitos with AI Mk VIII and X against Steinbock, 1944.",
+   "GER": "1 to 13: searchlights and few night fighters. 14: the searchlight belt and Freya line (October 1940), then the Himmelbett boxes in 1941. 30: Lichtenstein airborne radar in service (February 1942), general by late 1942. 41: the full Himmelbett and Lichtenstein system of 1943. 47: Window blinds Wuerzburg and Lichtenstein (Hamburg, 24/25 Jul 1943) for about two months. 49: free hunting in the bomber stream (Tame Boar and Wild Boar) with SN-2 radar, the peak of the night defence. 57: France's warning lost after D-Day, fuel short, British intruders and jamming. 63: the collapse of late 1944 and 1945.",
+   "USA": "No night raids on American soil. Overseas, the P-70 and early navy night fighters to 1944; the P-61 with SCR-720 radar from mid-1944 (58).",
+   "SOV": "Night fighters without radar, under searchlights, most of the war; most German night losses over Soviet cities were to guns.",
+   "JAP": "Night fighters with upward-firing guns and few radar sets against the B-29 fire raids from 1944.",
+   "ITA": "No night-fighter arm of note; German night fighters in Italy in 1943."
+  }
+ },
+ "gunners": {
+  "_about": "Rulings 237 b557 and b559 (accepted), the historian's historian/gunner-kills-b557.md: the defending fighters the bombers' gunners bring down, for each bomber the fighters bring down (real losses, never the gunners' claims). With the switch on these take the place of ruling 227's day figure (airwar.json day.kill x the nation's bomber defence); with it off 227 stands as it is. The game flies one kind of bomber a nation, so the historian's kinds are read from what the game knows ('map'). 'night': any bomber by night. 'ground': a strike on troops ('ground' and 'line'), the two-seat ground-attack aircraft with a rear gunner. 'box': the nations whose day bombers fly as heavy boxes, 'alone' when no escort reached the target, 'escorted' when one did (keyed by the raid's escort, not the year, so it works at every stop). 'b29': that nation's day raids from 'from' on Japan's home islands ('regions', held by 'vs'); elsewhere its heavy-box rows stand (the historian, 21:08Z: the B-24s and B-25s flew the day raids on the Philippines, New Guinea, Borneo and Formosa). 'day': every other day raid, by nation, rows [from turn, ratio] (a row holds until the next).",
+  "night": 0.05,
+  "ground": 0.07,
+  "box": {
+   "nats": [
+    "USA"
+   ],
+   "alone": 0.4,
+   "escorted": 0.2
+  },
+  "b29": {
+   "nat": "USA",
+   "vs": [
+    "JAP"
+   ],
+   "from": 58,
+   "ratio": 0.5,
+   "regions": [
+    "Sapporo",
+    "Kushiro",
+    "Aomori",
+    "Akita",
+    "Sendai",
+    "Niigata",
+    "Tokyo",
+    "Yokohama",
+    "Nagano",
+    "Shizuoka",
+    "Nagoya",
+    "Kanazawa",
+    "Kyoto",
+    "Osaka",
+    "Okayama",
+    "Hiroshima",
+    "Shimonoseki",
+    "Shikoku",
+    "Fukuoka",
+    "Nagasaki",
+    "Kumamoto",
+    "Kagoshima"
+   ]
+  },
+  "day": {
+   "_default": [
+    [
+     1,
+     0.07
+    ],
+    [
+     29,
+     0.15
+    ]
+   ],
+   "UK": [
+    [
+     1,
+     0.15
+    ],
+    [
+     17,
+     0.07
+    ],
+    [
+     29,
+     0.15
+    ]
+   ]
+  },
+  "map": {
+   "Light and medium bombers with hand-held guns, 1939-41 (0.07)": "Every nation's day bombers from September 1939 to December 1941 (turns 1 to 28), and Britain's in 1941 (17 to 28: the Blenheims' day raids).",
+   "Bombers with power turrets by day, 1939-40 (0.15)": "Britain's day bombers from September 1939 to December 1940 (1 to 16: the Wellingtons and Hampdens).",
+   "Medium bombers in formation with more guns, 1942-45 (0.15)": "Every nation's day bombers from January 1942 (29), America's excepted.",
+   "Heavy bomber boxes (0.4 beyond escort, 0.2 escorted all the way)": "America's day bombers, every month, keyed by whether an escort reached the target. The game's one American bomber is the heavy; its B-25s and B-26s are not told apart.",
+   "B-29 by day over Japan (0.5)": "America's day raids on Japan's home islands while Japan holds them, from June 1944 (58); elsewhere the heavy-box rows.",
+   "Any bomber by night (0.05)": "Every night raid.",
+   "Ground-attack aircraft with a rear gunner (0.07)": "Every nation's strikes on troops ('ground' and 'line'), whatever the year: the game's bombers flying close support stand for the Il-2s and Ju 87s."
+  }
+ }
+}

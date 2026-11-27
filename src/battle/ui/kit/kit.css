@@ -1,0 +1,546 @@
+/* Theater Command: the kit every menu shares. One look: a map table under a lamp.
+   Three materials, each with one job:
+     desk  (dark, opaque)  what you work at: pages, trays, cards
+     paper (cream)         what you read: the date card, dispatches, tooltips
+     brass                 what you press, and what is finished
+   Every value comes from tokens.css. State classes (.is-hover, .is-pressed, .is-focus) mirror the real
+   states so a specimen can show them side by side. */
+
+.tc, .tc * { box-sizing: border-box; }
+/* What is hidden stays hidden, whatever a component's own display says (the UI director, air newcomer review 1). */
+[hidden] { display: none !important; }
+.tc { font-family: var(--font-serif); font-size: 15px; line-height: 22px; color: var(--paper-100); -webkit-font-smoothing: antialiased; font-variant-numeric: lining-nums tabular-nums; }
+:where(.tc) button { font: inherit; color: inherit; margin: 0; }
+
+/* ---- type ---- */
+.tc-display { font: 700 56px/60px var(--font-serif); letter-spacing: .06em; }
+.tc-title-1 { font: 400 34px/40px var(--font-serif); margin: 0; text-wrap: balance; }
+.tc-title-2 { font: 700 24px/30px var(--font-serif); margin: 0; }
+.tc-title-3 { font: 700 18px/24px var(--font-serif); margin: 0; }
+.tc-figure { font: 700 30px/32px var(--font-serif); font-variant-numeric: lining-nums tabular-nums; }
+.tc-prose { font: 400 15px/22px var(--font-serif); margin: 0; max-width: 68ch; }
+.tc-quiet { font: italic 400 15px/22px var(--font-serif); color: var(--text-muted); margin: 0; max-width: 68ch; }
+.tc-label { font: 700 11px/14px var(--font-typed); letter-spacing: .14em; text-transform: uppercase; color: var(--brass-500); }
+.tc-data { font: 400 14px/18px var(--font-typed); }
+.tc-data b, .tc-data-strong { font: 700 14px/18px var(--font-typed); }
+.tc-micro { font: 400 11px/14px var(--font-typed); color: var(--text-muted); }
+.tc-muted { color: var(--text-muted); }
+.tc-faint { color: var(--text-faint); }
+/* red's rule (ruling 149): alarm as a signal means one thing, act by a date or lose something.
+   A plain fact, such as a locked thing's reason or a unit's worst ground, takes paper or ink with its sign. */
+.tc-bad { color: var(--alarm); }
+.tc-good { color: var(--gain); }
+.tc-warn { color: var(--amber); }
+
+/* ---- the veil: the lamp turns down on the map behind a card ---- */
+.tc-veil { position: absolute; inset: 0; background: rgba(14, 11, 8, .62); }
+
+/* ---- panel: opaque desk, brass edge, four corner clamps ---- */
+.tc-panel {
+  --clamp: var(--brass-500);
+  position: relative;
+  background:
+    /* corner clamps: two bars a corner, 14 long and 2 thick, 5 in from the edge */
+    linear-gradient(var(--clamp), var(--clamp)) 5px 5px / 14px 2px no-repeat,
+    linear-gradient(var(--clamp), var(--clamp)) 5px 5px / 2px 14px no-repeat,
+    linear-gradient(var(--clamp), var(--clamp)) calc(100% - 5px) 5px / 14px 2px no-repeat,
+    linear-gradient(var(--clamp), var(--clamp)) calc(100% - 5px) 5px / 2px 14px no-repeat,
+    linear-gradient(var(--clamp), var(--clamp)) 5px calc(100% - 5px) / 14px 2px no-repeat,
+    linear-gradient(var(--clamp), var(--clamp)) 5px calc(100% - 5px) / 2px 14px no-repeat,
+    linear-gradient(var(--clamp), var(--clamp)) calc(100% - 5px) calc(100% - 5px) / 14px 2px no-repeat,
+    linear-gradient(var(--clamp), var(--clamp)) calc(100% - 5px) calc(100% - 5px) / 2px 14px no-repeat,
+    /* the lamp falls from above: a little lighter at the top */
+    linear-gradient(180deg, rgba(255, 236, 190, .045), rgba(255, 236, 190, 0) 160px),
+    var(--desk-900);
+  border: 1px solid var(--brass-700);
+  border-radius: var(--radius-plate);
+  box-shadow: var(--shadow-panel), inset 0 1px 0 rgba(255, 236, 190, .07);
+  padding: var(--space-6);
+}
+.tc-panel--page { padding: var(--space-8); }
+.tc-panel--bare { --clamp: rgba(0, 0, 0, 0); }
+/* the whole screen, for the one chart that must be seen whole and may never scroll (the research tree):
+   the 1600 by 1000 frame less 14 a side and 12 top and bottom. The veil lies behind it. */
+.tc-panel--full { width: var(--card-full); height: 976px; }
+
+/* ---- header plate: eyebrow, title, a rule with a lit marker, the close stud ---- */
+.tc-head { position: relative; padding-right: 48px; margin-bottom: var(--space-6); }
+.tc-head .tc-label { display: block; margin-bottom: var(--space-1); }
+.tc-head .tc-sub { margin-top: var(--space-2); }
+.tc-rule { height: 1px; border: 0; margin: var(--space-4) 0 0; background: linear-gradient(90deg, var(--brass-300) 0 56px, var(--brass-700) 56px 60%, rgba(138, 107, 59, 0)); }
+.tc-close { position: absolute; top: -4px; right: -4px; width: 32px; height: 32px; border-radius: var(--radius-pill); border: 1px solid var(--brass-700); background: var(--desk-700); color: var(--paper-100); cursor: pointer; display: grid; place-items: center; }
+.tc-close::before { content: ""; width: 12px; height: 12px; background: linear-gradient(45deg, rgba(0,0,0,0) 44%, currentColor 44% 56%, rgba(0,0,0,0) 56%), linear-gradient(-45deg, rgba(0,0,0,0) 44%, currentColor 44% 56%, rgba(0,0,0,0) 56%); }
+.tc-close:hover, .tc-close.is-hover { border-color: var(--brass-300); color: var(--brass-100); background: var(--desk-600); }
+
+/* ---- buttons: one primary a screen. On a question that can lose something, the answer that loses
+        nothing carries the brass and takes Enter and Esc; the answer that loses something is the dark button. ---- */
+.tc-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  height: var(--control-md); padding: 0 var(--space-4);
+  font: 700 13px/16px var(--font-typed); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap;
+  color: var(--paper-100); background: linear-gradient(180deg, #35291d, var(--desk-700));
+  border: 1px solid var(--brass-700); border-radius: var(--radius-plate);
+  box-shadow: inset 0 1px 0 rgba(255, 236, 190, .08), 0 2px 0 rgba(0, 0, 0, .5);
+  cursor: pointer; transition: background-color 80ms, border-color 80ms, color 80ms, box-shadow 80ms, transform 60ms;
+}
+.tc-btn:hover, .tc-btn.is-hover { border-color: var(--brass-300); color: var(--brass-100); background: linear-gradient(180deg, #463726, var(--desk-600)); }
+.tc-btn:active, .tc-btn.is-pressed { transform: translateY(2px); box-shadow: inset 0 2px 4px rgba(0, 0, 0, .5); background: var(--desk-800); border-color: var(--brass-500); }
+.tc-btn:focus-visible, .tc-btn.is-focus { outline: 2px solid var(--paper-100); outline-offset: 2px; }
+.tc-btn[disabled], .tc-btn.is-off { color: var(--text-faint); background: var(--desk-800); border-color: var(--line); box-shadow: none; cursor: default; transform: none; }
+
+.tc-btn--primary { color: var(--on-brass); background: linear-gradient(180deg, #ecc884, var(--brass-300) 45%, #c79d55); border-color: #8a6a35; box-shadow: inset 0 1px 0 rgba(255, 244, 214, .7), var(--shadow-plate); }
+/* the lamp on a dark button: the one thing the staff points a newcomer at (FIRST COMMAND until its lessons are done).
+   Lit, not brass: the brass button of the screen stays the only one. At most one a screen. */
+.tc-btn.is-lit { border-color: var(--brass-300); color: var(--brass-100); box-shadow: var(--shadow-lit); }
+.tc-btn--primary:hover, .tc-btn--primary.is-hover { color: var(--on-brass); background: linear-gradient(180deg, var(--brass-100), #ecc884 45%, var(--brass-300)); border-color: var(--brass-100); box-shadow: inset 0 1px 0 rgba(255, 250, 235, .8), var(--shadow-plate), 0 0 18px rgba(224, 184, 114, .38); }
+.tc-btn--primary:active, .tc-btn--primary.is-pressed { background: linear-gradient(180deg, #b98f4b, #c79d55); box-shadow: inset 0 2px 5px rgba(60, 40, 10, .55); border-color: #8a6a35; }
+
+.tc-btn--danger { color: var(--paper-100); background: linear-gradient(180deg, #a03a2b, var(--alarm-deep)); border-color: #b9523f; }
+.tc-btn--danger:hover, .tc-btn--danger.is-hover { color: #fff3e6; background: linear-gradient(180deg, #b64634, #9a3526); border-color: var(--alarm); }
+
+.tc-btn--grave { color: var(--alarm); border-color: #7a3527; }
+.tc-btn--grave:hover, .tc-btn--grave.is-hover { color: #f3a184; border-color: var(--alarm); }
+.tc-btn--quiet { height: auto; padding: 2px 0; background: none; border: 0; border-bottom: 1px solid var(--brass-700); border-radius: 0; box-shadow: none; color: var(--brass-300); letter-spacing: .06em; }
+.tc-btn--quiet:hover, .tc-btn--quiet.is-hover { background: none; color: var(--brass-100); border-bottom-color: var(--brass-100); }
+
+.tc-btn--lg { height: var(--control-lg); padding: 0 var(--space-6); font-size: 15px; letter-spacing: .12em; }
+.tc-btn--sm { height: var(--control-sm); padding: 0 var(--space-3); font-size: 11px; }
+.tc-btn--pill { border-radius: var(--radius-pill); }
+
+/* a key the button answers to */
+.tc-key { display: inline-block; min-width: 22px; padding: 1px 5px; font: 700 11px/14px var(--font-typed); letter-spacing: .06em; text-align: center; border: 1px solid currentColor; border-bottom-width: 2px; border-radius: 3px; opacity: .8; }
+
+/* ---- tabs: index cards along one rule, never two rows ---- */
+.tc-tabs { display: flex; gap: var(--space-1); border-bottom: 1px solid var(--brass-700); }
+.tc-tab { position: relative; height: var(--control-md); padding: 0 var(--space-4); display: inline-flex; align-items: center; gap: var(--space-2); font: 700 13px/16px var(--font-typed); letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; color: var(--text-muted); background: none; border: 1px solid rgba(0, 0, 0, 0); border-bottom: 0; border-radius: var(--radius-plate) var(--radius-plate) 0 0; cursor: pointer; }
+.tc-tab:hover, .tc-tab.is-hover { color: var(--paper-100); background: var(--desk-800); }
+.tc-tab.is-on { color: var(--paper-100); background: var(--desk-800); border-color: var(--brass-700); }
+.tc-tab.is-on::after { content: ""; position: absolute; left: -1px; right: -1px; bottom: -1px; height: 3px; background: var(--brass-300); }
+.tc-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-pill); display: inline-grid; place-items: center; font: 700 11px/1 var(--font-typed); letter-spacing: 0; color: var(--on-brass); background: var(--brass-300); }
+
+/* ---- segments: choose one of a few ---- */
+.tc-seg { display: inline-flex; border: 1px solid var(--brass-700); border-radius: var(--radius-plate); overflow: hidden; background: var(--desk-800); }
+.tc-seg > * { height: 34px; padding: 0 var(--space-4); display: inline-flex; align-items: center; gap: var(--space-2); font: 700 13px/16px var(--font-typed); letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); background: none; border: 0; border-left: 1px solid var(--line); cursor: pointer; }
+.tc-seg > *:first-child { border-left: 0; }
+.tc-seg > *:hover, .tc-seg > .is-hover { color: var(--paper-100); background: var(--desk-700); }
+.tc-seg > .is-on { color: var(--on-brass); background: linear-gradient(180deg, #ecc884, var(--brass-300)); }
+
+/* ---- cards and rows inside a panel ---- */
+.tc-card { position: relative; background: var(--desk-800); border: 1px solid var(--line); border-radius: var(--radius-plate); padding: var(--space-3); transition: background-color 80ms, border-color 80ms; }
+.tc-card.is-press { cursor: pointer; }
+.tc-card.is-press:hover, .tc-card.is-hover { background: var(--desk-700); border-color: var(--brass-500); }
+.tc-card.is-on { background: var(--desk-700); border-color: var(--brass-300); box-shadow: inset 0 0 0 1px var(--brass-300); }
+.tc-card.is-off { background: none; border-style: dashed; }
+.tc-card.is-off .tc-title-3, .tc-card.is-off .tc-data { color: var(--text-faint); }
+/* why a thing is locked: the padlock and one line. A fact, so never the alarm colour. */
+.tc-why { display: flex; gap: 6px; align-items: flex-start; font: 400 12px/15px var(--font-typed); color: var(--text-muted); }
+.tc-why svg, .tc-why .tc-ico { flex: none; width: 13px; height: 13px; margin-top: 1px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tc-paper .tc-why, .tc-tip .tc-why { color: var(--ink-600); }
+.tc-sect { display: flex; align-items: baseline; gap: var(--space-3); margin: 0 0 var(--space-3); }
+.tc-sect::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+/* ---- picture well: a model stands in lamplight, never in a black hole ---- */
+.tc-well { position: relative; aspect-ratio: 4 / 3; border-radius: var(--radius-plate); border: 1px solid var(--brass-700); background: radial-gradient(ellipse 80% 60% at 50% 38%, #5b4a35 0%, #3a2e21 45%, #1d1610 100%); box-shadow: var(--shadow-well); overflow: hidden; display: grid; place-items: center; }
+.tc-well::after { content: ""; position: absolute; left: 14%; right: 14%; bottom: 14%; height: 12%; border-radius: 50%; background: radial-gradient(ellipse at center, rgba(0, 0, 0, .55), rgba(0, 0, 0, 0) 70%); }
+.tc-well > * { position: relative; z-index: 1; }
+
+/* ---- a figure with its sign: money, months, men ---- */
+.tc-stat { display: inline-flex; align-items: center; gap: var(--space-1); font: 700 14px/18px var(--font-typed); white-space: nowrap; }
+.tc-stat svg, .tc-ico { width: 16px; height: 16px; flex: none; stroke: var(--brass-500); fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.tc-stat small { font: 400 11px/14px var(--font-typed); color: var(--text-muted); }
+
+/* ---- meters ---- */
+.tc-meter { display: grid; grid-template-columns: 76px 1fr auto; align-items: center; gap: var(--space-2); }
+.tc-meter .tc-label { color: var(--text-muted); letter-spacing: .1em; }
+.tc-meter i { display: block; height: 6px; border-radius: var(--radius-pill); background: var(--track); overflow: hidden; }
+.tc-meter i b { display: block; height: 100%; border-radius: var(--radius-pill); background: var(--gain); }
+.tc-meter.is-mid i b { background: var(--amber); }
+.tc-meter.is-low i b { background: var(--alarm); }
+.tc-meter.is-rest i b { background: var(--steel); }
+.tc-meter.is-work i b { background: var(--brass-300); }
+.tc-meter span:last-child { font: 400 12px/14px var(--font-typed); color: var(--paper-100); }
+
+/* ---- tags and stamps ---- */
+.tc-tag { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; font: 700 11px/1 var(--font-typed); letter-spacing: .1em; text-transform: uppercase; border-radius: 3px; color: var(--paper-100); background: var(--desk-600); }
+.tc-tag--won { background: var(--gain-deep); }
+.tc-tag--lost { background: var(--alarm-deep); }
+.tc-tag--note { background: var(--steel-deep); }
+.tc-tag--brass { background: var(--brass-300); color: var(--on-brass); }
+/* the small tag: an edge and no ground, for a fact that repeats down a chart (NEW UNIT, +1 TEAM) */
+.tc-tag--edge { height: 17px; padding: 0 5px; letter-spacing: .08em; background: none; border: 1px solid var(--brass-700); color: var(--brass-300); white-space: nowrap; flex: none; }
+/* two more edge plates, for how well a thing is known: only reported (dashed amber), and last seen (grey) */
+.tc-tag--rep { height: 17px; padding: 0 5px; letter-spacing: .08em; background: none; border: 1px dashed var(--amber); color: var(--amber); white-space: nowrap; flex: none; }
+.tc-tag--past { height: 17px; padding: 0 5px; letter-spacing: .08em; background: none; border: 1px solid var(--line); color: var(--text-muted); white-space: nowrap; flex: none; }
+.tc-stamp { display: inline-block; justify-self: start; padding: 4px 12px 2px; font: 700 26px/30px var(--font-serif); letter-spacing: .08em; text-transform: uppercase; color: var(--alarm-deep); border: 3px solid var(--alarm-deep); border-radius: 3px; transform: rotate(-6deg); background: rgba(226, 215, 188, .9); }
+.tc-stamp--won { color: var(--gain-deep); border-color: var(--gain-deep); }
+
+/* ---- paper: what you read ---- */
+.tc-paper { background: linear-gradient(180deg, #e9dfc6, var(--paper-200)); color: var(--ink-900); border: 1px solid var(--paper-300); border-radius: var(--radius-paper); box-shadow: var(--shadow-panel); padding: var(--space-4); }
+.tc-paper .tc-label { color: var(--ink-900); }
+/* the labels long printed in deep red: the date card's month, the dossier's labels, the title band. No new label takes it. */
+.tc-paper .tc-label--print { color: var(--alarm-deep); }
+.tc-paper .tc-muted, .tc-paper .tc-quiet, .tc-paper .tc-micro { color: var(--ink-600); }
+.tc-paper .tc-bad { color: var(--alarm-deep); }
+.tc-paper--banded { border-top: 6px solid var(--alarm-deep); }
+/* a band across a card, the month card's largest news. Red is a dated warning and nothing else. Brass is news with no date: WAR, FALLEN, FREED
+   (ruling 160; the colours are the art director's, and so are the band's measures on the month card). */
+.tc-band { position: relative; padding: var(--space-3) var(--space-4) var(--space-3) 22px; color: var(--paper-100); background: linear-gradient(90deg, #79291d, #512118); border: 1px solid var(--alarm-deep); }
+.tc-band::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: #d0563d; }
+.tc-band .tc-label { color: var(--paper-200); }
+.tc-band h4 { font: 700 18px/24px var(--font-serif); margin: 0; }
+.tc-band--news { background: linear-gradient(90deg, #6c5024, #553f1d); border-color: var(--brass-700); }
+.tc-band--news::before { background: var(--brass-300); }
+
+/* ---- tooltip: a slip of paper pinned beside the thing ---- */
+.tc-tip { position: relative; max-width: 320px; padding: var(--space-3) var(--space-4); background: var(--paper-200); color: var(--ink-900); border: 1px solid var(--paper-300); border-radius: var(--radius-paper); box-shadow: var(--shadow-panel); }
+.tc-tip::before { content: ""; position: absolute; left: 22px; top: -6px; width: 10px; height: 10px; background: var(--paper-200); border-left: 1px solid var(--paper-300); border-top: 1px solid var(--paper-300); transform: rotate(45deg); }
+.tc-tip h4 { font: 700 16px/20px var(--font-serif); margin: 0 0 2px; }
+.tc-tip p { font: 400 14px/20px var(--font-serif); margin: 0; color: var(--ink-900); }
+.tc-tip .tc-micro { color: var(--ink-600); margin-top: var(--space-2); display: flex; gap: var(--space-2); align-items: center; }
+
+/* ---- alerts: one stack down the right edge. Each slip is as wide as its words and no wider,
+        so it never hides a flag; all share one height and each carries a sign. ---- */
+.tc-alerts { display: grid; gap: var(--space-1); justify-items: end; }
+.tc-alert { height: var(--control-sm); display: inline-flex; align-items: center; gap: 7px; padding: 0 var(--space-3) 0 var(--space-1); background: var(--desk-900); border: 1px solid var(--brass-700); border-radius: var(--radius-pill); box-shadow: 0 4px 10px rgba(0, 0, 0, .5); font: 700 11px/14px var(--font-typed); text-transform: uppercase; white-space: nowrap; color: var(--paper-100); cursor: pointer; }
+.tc-alert:hover, .tc-alert.is-hover { border-color: var(--brass-300); color: var(--brass-100); }
+.tc-alert > span:first-child { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--desk-700); }
+.tc-alert .tc-ico { width: 13px; height: 13px; stroke: var(--brass-300); }
+.tc-alert.is-due { border-color: var(--amber); }
+.tc-alert.is-due .tc-ico { stroke: var(--amber); }
+.tc-alert.is-bad { border-color: var(--alarm); }
+.tc-alert.is-bad .tc-ico { stroke: var(--alarm); }
+
+/* ---- the frame: the six doors, the two pills, the map strip ---- */
+.tc-doors { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 7px 10px 0; height: 74px; }
+.tc-door { position: relative; display: grid; justify-items: center; align-content: start; gap: 3px; padding: 0; background: none; border: 0; cursor: pointer; }
+.tc-door > span:first-child { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--brass-500); background: radial-gradient(circle at 50% 35%, var(--desk-700), var(--desk-800)); }
+.tc-door .tc-ico { width: 22px; height: 22px; stroke: var(--brass-300); }
+.tc-door em { font: 700 11px/14px var(--font-typed); font-style: normal; letter-spacing: .08em; text-transform: uppercase; color: var(--paper-100); }
+.tc-door .tc-count { position: absolute; top: -2px; left: 50%; margin-left: 10px; }
+.tc-door:hover > span:first-child, .tc-door.is-hover > span:first-child { border-color: var(--brass-300); background: var(--desk-600); box-shadow: var(--shadow-lit); }
+.tc-door:hover em, .tc-door.is-hover em { color: var(--brass-100); }
+.tc-door:focus-visible { outline: 2px solid var(--paper-100); outline-offset: 2px; border-radius: var(--radius-plate); }
+.tc-hero { display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: center; height: 50px; padding: 0 var(--space-4) 0 5px; text-align: left; color: var(--paper-100); background: var(--desk-900); border: 1px solid var(--brass-700); border-radius: var(--radius-pill); box-shadow: 0 6px 16px rgba(0, 0, 0, .55); cursor: pointer; }
+.tc-hero > span:first-child { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--brass-500); background: var(--desk-700); font: 700 18px/1 var(--font-serif); color: var(--brass-300); }
+.tc-hero > span:first-child .tc-ico { width: 22px; height: 22px; stroke: var(--brass-300); }
+.tc-hero b { display: block; font: 700 19px/21px var(--font-serif); letter-spacing: .04em; text-transform: uppercase; }
+.tc-hero small { display: flex; gap: 6px; align-items: center; white-space: nowrap; font: 400 11px/14px var(--font-typed); color: var(--text-muted); }
+.tc-hero:hover, .tc-hero.is-hover { border-color: var(--brass-300); }
+.tc-hero.is-lit { border-color: var(--brass-300); box-shadow: var(--shadow-lit), 0 6px 16px rgba(0, 0, 0, .55); }
+.tc-hero.is-lit > span:first-child { background: linear-gradient(180deg, #ecc884, var(--brass-300)); border-color: var(--brass-100); }
+.tc-hero.is-lit > span:first-child .tc-ico { stroke: var(--on-brass); }
+.tc-hero:focus-visible { outline: 2px solid var(--paper-100); outline-offset: 2px; }
+.tc-strip { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--brass-700); border-radius: var(--radius-plate); overflow: hidden; background: var(--desk-800); }
+.tc-strip > * { height: var(--control-sm); padding: 0; font: 700 11px/14px var(--font-typed); text-transform: uppercase; color: var(--paper-100); background: none; border: 0; border-left: 1px solid var(--line); cursor: pointer; }
+.tc-strip > *:first-child { border-left: 0; }
+.tc-strip > *:hover, .tc-strip > .is-hover { background: var(--desk-700); color: var(--brass-100); }
+/* a gauge on paper: sign, name, bar, word */
+.tc-gauge { display: grid; gap: 2px; }
+.tc-gauge > span:first-child { display: flex; align-items: center; gap: 5px; font: 700 11px/14px var(--font-typed); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-600); }
+.tc-gauge .tc-ico { width: 14px; height: 14px; stroke: var(--ink-600); }
+.tc-gauge i { display: block; height: 6px; border-radius: 3px; background: rgba(42, 33, 24, .18); overflow: hidden; }
+.tc-gauge i b { display: block; height: 100%; border-radius: 3px; background: var(--gain-deep); }
+.tc-gauge.is-mid i b { background: #a8650f; }
+.tc-gauge.is-low i b { background: var(--alarm-deep); }
+.tc-gauge > span:last-child { font: 400 12px/14px var(--font-typed); color: var(--ink-900); }
+
+/* ---- the four states of a thing you can earn: done, in work, ready, locked.
+        Told apart by sign and edge as well as colour. ---- */
+.tc-node { position: relative; display: grid; grid-template-columns: 28px 1fr; align-items: center; gap: var(--space-2); min-height: 56px; padding: var(--space-2) var(--space-3); border-radius: var(--radius-plate); border: 1.5px solid var(--line); background: var(--desk-800); cursor: pointer; }
+.tc-node b { display: block; font: 700 16px/20px var(--font-serif); color: var(--paper-100); }
+.tc-node small { display: block; font: 400 12px/15px var(--font-typed); color: var(--text-muted); }
+.tc-node .tc-sign { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid currentColor; }
+.tc-node .tc-sign svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tc-node.is-done { background: linear-gradient(180deg, #4a3a22, #3b2e1b); border-color: var(--brass-500); }
+.tc-node.is-done .tc-sign { color: var(--on-brass); background: var(--brass-500); border-color: var(--brass-500); }
+.tc-node.is-done small { color: var(--brass-500); }
+.tc-node.is-work { background: var(--desk-700); border-color: var(--brass-300); box-shadow: var(--shadow-lit); }
+.tc-node.is-work .tc-sign { color: var(--brass-300); }
+.tc-node.is-work small { color: var(--brass-300); }
+.tc-node.is-ready { border-color: var(--paper-100); }
+.tc-node.is-ready .tc-sign { color: var(--paper-100); }
+.tc-node.is-ready:hover, .tc-node.is-ready.is-hover { background: var(--desk-700); border-color: var(--brass-100); }
+.tc-node.is-locked { background: none; border: 1.5px dashed var(--text-faint); cursor: default; }
+.tc-node.is-locked b { color: var(--text-faint); }
+.tc-node.is-locked small, .tc-node.is-locked .tc-sign { color: var(--text-faint); }
+.tc-node .tc-bar { grid-column: 1 / -1; height: 4px; border-radius: var(--radius-pill); background: var(--track); overflow: hidden; }
+.tc-node .tc-bar i { display: block; height: 100%; background: var(--brass-300); border-radius: var(--radius-pill); }
+/* the middle size is the chart card: one line, 38 tall, so sixteen rows fit a screen 1000 tall.
+   In order: the state's sign, the name, a small tag, rivets, one typed fact. */
+.tc-node--mid { min-height: 0; height: 38px; display: flex; align-items: center; gap: var(--space-2); padding: 0 10px 0 8px; }
+.tc-node--mid .tc-sign { flex: none; width: 22px; height: 22px; }
+.tc-node--mid .tc-sign svg { width: 11px; height: 11px; }
+.tc-node--mid > span:not([class]) { flex: 1; min-width: 0; }
+.tc-node--mid b { flex: 1; min-width: 0; font-size: 14px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-node--mid small { display: none; }
+.tc-node--mid .tc-bar { position: absolute; left: 38px; right: 10px; bottom: 5px; height: 3px; }
+.tc-node--mid.is-work > :not(.tc-bar) { transform: translateY(-3px); }
+.tc-node--far { min-height: 0; width: 30px; height: 30px; padding: 0; border-radius: 50%; display: grid; grid-template-columns: 1fr; place-items: center; }
+.tc-node--far b, .tc-node--far small, .tc-node--far .tc-bar { display: none; }
+.tc-node--far .tc-sign { border: 0; width: 100%; height: 100%; background: none; }
+.tc-node--far.is-done { background: var(--brass-500); }
+.tc-node--far.is-done .tc-sign { background: none; }
+/* the paths between: line style says the state without colour */
+.tc-path { fill: none; stroke-linecap: round; }
+.tc-path.is-done { stroke: var(--brass-500); stroke-width: 2.5; }
+.tc-path.is-work { stroke: var(--brass-300); stroke-width: 2.5; stroke-dasharray: 7 5; }
+.tc-path.is-ready { stroke: var(--paper-100); stroke-width: 1.5; }
+.tc-path.is-locked { stroke: var(--text-faint); stroke-width: 1.5; stroke-dasharray: 1.5 5; }
+/* the roads of the chosen card: every line in and out lights at once */
+.tc-path.is-lit { stroke: var(--brass-100); stroke-width: 2; stroke-dasharray: none; filter: drop-shadow(0 0 4px rgba(244, 222, 168, .7)); }
+/* a dot where a line leaves a card and where it arrives: r 2.6, or 3 when lit */
+.tc-port { stroke: none; fill: var(--text-faint); }
+.tc-port.is-done { fill: var(--brass-500); }
+.tc-port.is-work { fill: var(--brass-300); }
+.tc-port.is-ready { fill: var(--paper-100); }
+.tc-port.is-lit { fill: var(--brass-100); }
+
+/* the chosen node: a pale edge and a second line inside it. It keeps its state's own edge style. */
+.tc-node.is-on { outline: 1px solid var(--brass-300); outline-offset: -5px; border-color: var(--brass-100); box-shadow: 0 0 14px rgba(244, 222, 168, .22); }
+.tc-node.is-on.is-ready { background: var(--desk-700); }
+.tc-node.is-on.is-work { box-shadow: var(--shadow-lit); }
+
+/* one typed fact at the right end of a chart card: "8 mo", "4 of 12" */
+.tc-fact { flex: none; display: inline-flex; align-items: center; gap: 4px; font: 400 12px/1 var(--font-typed); color: var(--paper-300); white-space: nowrap; }
+.tc-fact svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tc-fact.is-work { color: var(--brass-100); font-weight: 700; }
+/* a caution that repeats down a chart is amber type after the clock, never a filled tag */
+.tc-fact.is-ahead { color: var(--amber); }
+
+/* a rivet: a need that has no line of its own. The sign is the branch it comes from. */
+.tc-rivet { flex: none; width: 17px; height: 17px; border-radius: 50%; display: inline-grid; place-items: center; vertical-align: middle; border: 1px dashed var(--text-faint); color: var(--text-faint); }
+.tc-rivet svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tc-rivet.is-met { border: 0; background: var(--brass-500); color: var(--on-brass); box-shadow: inset 0 1px 0 rgba(255, 244, 214, .45); }
+
+/* ---- the weather: three skies, told apart by sign, word and fill. The weather takes no side,
+   so it never wears alarm, gain or amber: a closed sky can be the player's best friend. ---- */
+.tc-skydisc { flex: none; width: 30px; height: 30px; border-radius: 50%; display: inline-grid; place-items: center; border: 1.5px solid var(--brass-500); color: var(--brass-300); background: var(--desk-900); }
+.tc-skydisc svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tc-skydisc.is-cloud { border-color: var(--paper-300); color: var(--paper-100); }
+.tc-skydisc.is-closed { background: var(--paper-100); border-color: var(--paper-100); color: var(--ink-900); }
+.tc-skydisc--sm { width: 18px; height: 18px; border-width: 1px; }
+.tc-skydisc--sm svg { width: 11px; height: 11px; stroke-width: 2; }
+/* the sky's plate on the map: one a zone in sight, only in the sky view. Solid, like every plate. */
+.tc-sky { display: inline-flex; align-items: center; gap: 9px; height: var(--control-lg); padding: 0 13px 0 7px; background: var(--desk-900); border: 1px solid var(--brass-700); border-radius: var(--radius-plate); box-shadow: 0 2px 0 rgba(0, 0, 0, .45), 0 6px 16px rgba(0, 0, 0, .45); color: var(--paper-100); white-space: nowrap; }
+.tc-sky > span:last-child { display: grid; gap: 2px; }
+.tc-sky b { font: 700 15px/18px var(--font-serif); }
+.tc-sky u { margin-left: 8px; font: 400 12px/18px var(--font-typed); text-decoration: none; color: var(--paper-300); }
+/* one line on a card: the sign, then the words */
+.tc-skyline { display: flex; align-items: baseline; gap: var(--space-2); }
+.tc-skyline svg { flex: none; align-self: center; width: 16px; height: 16px; fill: none; stroke: var(--brass-300); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+/* a picture in a list, with the sky's disc on it: in its middle when closed, small in the lower left under cloud */
+.tc-pic { position: relative; display: inline-block; line-height: 0; }
+.tc-pic > .tc-skydisc { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+.tc-pic > .tc-skydisc--sm { left: 4px; top: auto; bottom: 4px; transform: none; }
+/* a target under a closed sky: grey picture, faint name, cannot be chosen. Its flag is never dimmed. */
+.is-sky-closed { cursor: default; }
+.is-sky-closed .tc-pic > img { filter: grayscale(1) brightness(.62); }
+.is-sky-closed b { color: var(--text-faint); }
+
+/* ---- one line on a card that explains a figure: a sign, then one sentence (WHAT YOU FACE on the battle card).
+   Facts first and no good or bad colour: red is kept for a warning with a date. ---- */
+.tc-signline { display: flex; align-items: flex-start; gap: var(--space-2); font: 400 15px/22px var(--font-serif); color: var(--paper-100); }
+.tc-signline svg { flex: none; width: 16px; height: 16px; margin-top: 3px; fill: none; stroke: var(--brass-300); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tc-signline.is-unknown { font-style: italic; color: var(--text-muted); }
+.tc-signline.is-unknown svg { stroke: var(--text-faint); }
+.tc-paper .tc-signline { color: var(--ink-900); }
+.tc-paper .tc-signline svg { stroke: var(--ink-600); }
+
+/* ---- what a division carries: four signs with a level each, one row, under its picture ---- */
+.tc-carry { display: grid; grid-template-columns: repeat(4, 1fr); height: 20px; }
+.tc-carry > span { display: flex; align-items: center; justify-content: center; gap: 5px; font: 700 12px/1 var(--font-typed); color: var(--paper-100); border-left: 1px solid var(--line); }
+.tc-carry > span:first-child { border-left: 0; }
+.tc-carry svg { flex: none; width: 16px; height: 16px; fill: none; stroke: var(--brass-300); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---- the first hour: the staff's note, its slip, a tip, the pointer, the Guide's rows.
+   The look is the art director's (art-director/first-hour/first-hour-look-brief.md); the words are the design director's. ---- */
+/* a staff officer's note clipped to the edge of the table: tc-paper with a brass clip. Its height is its words. */
+.tc-note { position: relative; width: 340px; padding: 18px 16px 12px; }
+.tc-note::before { content: ""; position: absolute; left: 26px; top: -8px; width: 44px; height: 15px; border-radius: 4px; background: linear-gradient(180deg, #ecc884, #c79d55 60%, #a27f45); box-shadow: 0 2px 3px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 244, 214, .75); }
+.tc-note__head { display: flex; align-items: center; gap: var(--space-2); margin-bottom: 6px; }
+.tc-note__head .tc-micro { flex: 1; letter-spacing: .08em; }
+.tc-note h4 { font: 700 18px/24px var(--font-serif); margin: 0 0 4px; }
+.tc-note p { font: 400 15px/22px var(--font-serif); margin: 0; }
+/* the deed that earns the stamp: a box to tick and one typed line, under a dashed rule */
+.tc-deed { display: flex; align-items: center; gap: 9px; margin-top: 11px; padding-top: 10px; border-top: 1px dashed rgba(92, 80, 64, .45); font: 400 13px/18px var(--font-typed); }
+.tc-deed > i { flex: none; width: 18px; height: 18px; border: 1.5px solid var(--ink-600); border-radius: 2px; display: grid; place-items: center; color: var(--gain-deep); }
+.tc-deed > i svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tc-note.is-done .tc-deed > i { border-color: var(--gain-deep); }
+.tc-note .tc-stamp { position: absolute; right: 14px; bottom: 8px; }
+.tc-stamp--sm { padding: 3px 10px 1px; font-size: 22px; line-height: 26px; }
+/* the one thing pressed on paper: a quiet word that puts the paper away (LATER, CLOSE) */
+.tc-paper .tc-btn--quiet { font-size: 11px; line-height: 14px; padding: 0 0 1px; letter-spacing: .1em; color: var(--ink-600); }
+.tc-paper .tc-btn--quiet:hover, .tc-paper .tc-btn--quiet.is-hover { color: var(--ink-900); border-bottom-color: var(--ink-900); }
+/* the slip: the same note in the margin beside a card that veils the map */
+.tc-note--slip { width: 148px; padding: 16px 11px 10px; }
+.tc-note--slip::before { left: 14px; width: 34px; }
+.tc-note--slip .tc-note__head { flex-wrap: wrap; row-gap: 1px; margin-bottom: 7px; }
+.tc-note--slip .tc-note__head .tc-label { flex-basis: 100%; }
+.tc-note--slip h4 { font-size: 16px; line-height: 20px; }
+.tc-note--slip p { font-size: 14px; line-height: 20px; }
+.tc-note--slip .tc-deed { font-size: 12px; line-height: 16px; align-items: flex-start; }
+.tc-note--slip .tc-stamp { right: 8px; bottom: 6px; padding: 2px 8px 0; font-size: 17px; line-height: 21px; }
+/* a tip: one line under a TIP tag (tc-tag--note), with no count, no LATER and no deed */
+.tc-note--tip { padding: 16px 16px 13px; }
+/* a note laid on a card of its own (lesson 1): the card's width, no clip; the card's own button is its deed */
+/* It lies as a strip (the art director's lesson 1): STAFF NOTE and the count over the heading in a column
+   176 wide, a dashed rule, then the sentences at a measure of 820 at most, their two lines balanced.
+   Set that way it is 68 high. */
+.tc-note--laid { display: grid; grid-template-columns: 176px minmax(0, 1fr); column-gap: 28px; align-content: center; width: auto; min-height: 68px; padding: 11px 17px; box-shadow: none; }
+.tc-note--laid::before { display: none; }
+.tc-note--laid .tc-note__head { grid-column: 1; grid-row: 1; align-self: end; margin: 0 0 2px; }
+.tc-note--laid h4 { grid-column: 1; grid-row: 2; align-self: start; margin: 0; }
+.tc-note--laid p { grid-column: 2; grid-row: 1 / span 2; box-sizing: content-box; display: flex; align-items: center; max-width: 820px; min-height: 44px; padding-left: 28px; border-left: 1px dashed rgba(92, 80, 64, .45); text-wrap: balance; }
+
+/* the pointer: four brass corner clamps round the one thing a note points at. Put it inside a box the size of
+   the thing; it stands 6 clear of it. On the map it is drawn on the ground, under every piece, flag and plate. */
+.tc-pointer { --arm: 12px; --pb: var(--brass-300); --pc: rgba(14, 11, 8, .9); position: absolute; inset: -9px; pointer-events: none; background-repeat: no-repeat; filter: drop-shadow(0 0 5px rgba(224, 184, 114, .75));
+  background-image: linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)), linear-gradient(var(--pb), var(--pb)),
+    linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc)), linear-gradient(var(--pc), var(--pc));
+  background-position: left 1.5px top 1.5px, left 1.5px top 1.5px, right 1.5px top 1.5px, right 1.5px top 1.5px, left 1.5px bottom 1.5px, left 1.5px bottom 1.5px, right 1.5px bottom 1.5px, right 1.5px bottom 1.5px,
+    left top, left top, right top, right top, left bottom, left bottom, right bottom, right bottom;
+  background-size: calc(var(--arm) + 1.5px) 3px, 3px calc(var(--arm) + 1.5px), calc(var(--arm) + 1.5px) 3px, 3px calc(var(--arm) + 1.5px), calc(var(--arm) + 1.5px) 3px, 3px calc(var(--arm) + 1.5px), calc(var(--arm) + 1.5px) 3px, 3px calc(var(--arm) + 1.5px),
+    calc(var(--arm) + 6px) 6px, 6px calc(var(--arm) + 6px), calc(var(--arm) + 6px) 6px, 6px calc(var(--arm) + 6px), calc(var(--arm) + 6px) 6px, 6px calc(var(--arm) + 6px), calc(var(--arm) + 6px) 6px, 6px calc(var(--arm) + 6px); }
+.tc-pointer--lg { --arm: 16px; }
+
+/* a step in a list of things done in order (the Guide's ten lessons): 38 tall, one line */
+.tc-step { display: flex; align-items: center; gap: var(--space-3); height: 38px; padding: 0 12px 0 8px; border: 1px solid var(--line); border-radius: var(--radius-plate); background: var(--desk-800); }
+.tc-step > i { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--text-faint); color: var(--text-faint); font: 700 11px/1 var(--font-typed); font-style: normal; }
+.tc-step > i svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tc-step > b { flex: 1; min-width: 0; font: 700 14px/18px var(--font-serif); color: var(--paper-100); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-step > u { flex: none; text-decoration: none; font: 700 11px/1 var(--font-typed); letter-spacing: .1em; text-transform: uppercase; color: var(--brass-100); }
+.tc-step.is-done { border-color: var(--brass-700); }
+.tc-step.is-done > i { background: var(--brass-500); border-color: var(--brass-500); color: var(--on-brass); }
+.tc-step.is-done > b { color: var(--paper-200); }
+.tc-step.is-now { border-color: var(--brass-300); background: var(--desk-700); cursor: pointer; }
+.tc-step.is-now > i { border-color: var(--brass-300); color: var(--brass-300); }
+.tc-step.is-now > b { color: var(--brass-100); }
+.tc-step.is-now.is-lit { box-shadow: var(--shadow-lit); }
+.tc-step.is-later { border-style: dashed; background: none; }
+.tc-step.is-later > b { font-weight: 400; color: var(--text-muted); }
+.tc-step.is-later > u { font: 400 12px/1 var(--font-typed); letter-spacing: 0; text-transform: none; color: var(--text-faint); }
+/* how many notes wait, on the corner of a button */
+.tc-btn > .tc-count { position: absolute; top: -9px; right: -9px; box-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
+.tc-btn:has(> .tc-count) { position: relative; }
+
+/* ---- the HUD's parts (sixth issue): what is read at a glance each month ---- */
+/* the fact strip: the first answers about the thing in hand, each a sign and its figure, always in the same order */
+.tc-facts { display: flex; border: 1px solid var(--line); border-radius: var(--radius-plate); background: var(--desk-800); }
+.tc-facts > div { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 14px 0 10px; border-left: 1px solid var(--line); min-width: 0; font: 700 13px/17px var(--font-typed); color: var(--paper-100); white-space: nowrap; }
+.tc-facts > div:first-child { border-left: 0; }
+.tc-facts > .is-wide { flex: 1; overflow: hidden; }
+.tc-facts > div > svg { flex: none; width: 17px; height: 17px; fill: none; stroke: var(--brass-300); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.tc-facts small { font: 400 12px/17px var(--font-typed); color: var(--text-muted); }
+.tc-facts > .is-bad { color: var(--alarm); } .tc-facts > .is-bad > svg { stroke: var(--alarm); }
+.tc-facts > .is-due { color: var(--amber); } .tc-facts > .is-due > svg { stroke: var(--amber); }
+.tc-paper .tc-facts { background: rgba(42, 33, 24, .06); border-color: rgba(42, 33, 24, .28); }
+.tc-paper .tc-facts > div { border-color: rgba(42, 33, 24, .28); color: var(--ink-900); }
+.tc-paper .tc-facts > div > svg { stroke: var(--ink-600); } .tc-paper .tc-facts small { color: var(--ink-600); }
+
+/* a grid of facts for a card: each cell a sign, a figure and what it counts */
+.tc-factgrid { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: var(--radius-plate); background: var(--desk-800); }
+.tc-factgrid > div { display: grid; grid-template-columns: 18px 1fr; gap: 0 8px; align-items: center; padding: 6px 8px 6px 10px; border-left: 1px solid var(--line); border-top: 1px solid var(--line); }
+.tc-factgrid > div:nth-child(3n + 1) { border-left: 0; }
+.tc-factgrid > div:nth-child(-n + 3) { border-top: 0; }
+.tc-factgrid svg { grid-row: span 2; width: 18px; height: 18px; fill: none; stroke: var(--brass-300); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.tc-factgrid b { font: 700 17px/20px var(--font-serif); font-variant-numeric: lining-nums; color: var(--paper-100); white-space: nowrap; }
+.tc-factgrid span { font: 400 11px/13px var(--font-typed); color: var(--text-muted); white-space: nowrap; }
+.tc-factgrid > div.is-word { padding-top: 5px; padding-bottom: 5px; }
+.tc-factgrid > div.is-word svg { grid-row: auto; }
+.tc-factgrid > div.is-word b { font: 400 15px/20px var(--font-serif); }
+.tc-factgrid .is-none svg { stroke: var(--text-faint); }
+.tc-factgrid > div.is-none b { font: italic 400 15px/20px var(--font-serif); color: var(--text-muted); }
+
+/* moves left this month: one pip a move, spent pips hollow */
+.tc-pips { display: inline-flex; gap: 3px; align-items: center; }
+.tc-pips u { width: 9px; height: 9px; border-radius: 2px; background: var(--brass-300); text-decoration: none; }
+.tc-pips u.is-spent { background: none; box-shadow: inset 0 0 0 1px var(--brass-700); }
+.tc-paper .tc-pips u { background: var(--ink-900); } .tc-paper .tc-pips u.is-spent { background: none; box-shadow: inset 0 0 0 1px var(--ink-600); }
+
+/* the pointer's slip: where the pointer is, who is there, and the one figure the next click turns on */
+.tc-slipcard { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; padding: 8px 12px 8px 13px; border-radius: var(--radius-paper); }
+.tc-slipcard .pl { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.tc-slipcard .pl b { font: 700 17px/22px var(--font-serif); }
+.tc-slipcard .pl span { display: inline-flex; align-items: center; gap: 6px; font: 400 12px/16px var(--font-typed); color: var(--ink-600); }
+.tc-slipcard .pl img { width: 20px; align-self: center; }
+.tc-slipcard .ln { font: 400 12px/17px var(--font-typed); color: var(--ink-900); white-space: nowrap; }
+.tc-slipcard .act { display: flex; align-items: center; gap: 7px; margin-top: 3px; font: 700 12px/16px var(--font-typed); color: var(--ink-900); white-space: nowrap; }
+.tc-slipcard .act .tc-key { font-size: 10px; line-height: 12px; opacity: 1; color: var(--ink-600); }
+.tc-slipcard .also { grid-column: 1; display: flex; gap: 6px; align-items: flex-start; margin-top: 2px; font: 400 12px/16px var(--font-typed); color: var(--ink-600); white-space: nowrap; }
+.tc-slipcard .also svg { flex: none; width: 13px; height: 13px; margin-top: 1px; fill: none; stroke: var(--ink-600); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tc-slipcard .fig { grid-row: 1 / span 4; grid-column: 2; align-self: center; display: grid; justify-items: end; gap: 3px; padding-left: 12px; border-left: 1px solid rgba(42, 33, 24, .3); min-width: 94px; }
+.tc-slipcard .fig b { font: 700 24px/26px var(--font-serif); font-variant-numeric: lining-nums; white-space: nowrap; }
+.tc-slipcard .fig i { position: relative; display: block; width: 100%; height: 6px; border-radius: 3px; background: rgba(42, 33, 24, .2); }
+.tc-slipcard .fig i u { display: block; height: 100%; border-radius: 3px 0 0 3px; background: var(--steel-deep); }
+/* a range (the staff's estimate) is a band; the tick marks where the chance is even */
+.tc-slipcard .fig i u.band { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
+.tc-slipcard .fig i s { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink-900); }
+.tc-slipcard .fig .wk { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; width: 100%; }
+.tc-slipcard .fig .wk u { height: 6px; border-radius: 1px; background: rgba(42, 33, 24, .2); }
+.tc-slipcard .fig .wk u.is-on { background: var(--ink-900); }
+.tc-slipcard .fig span { font: 700 10px/12px var(--font-typed); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-600); white-space: nowrap; }
+.tc-slipcard.is-no .fig b { font-size: 18px; line-height: 22px; }
+
+/* ---- the rooms' parts (seventh issue): a ruled list, round pips for a skill, the lean track ---- */
+.tc-rows { display: grid; }
+.tc-rows > * { padding: 8px 0; border-top: 1px solid var(--line); }
+.tc-rows > *:first-child { border-top: 0; padding-top: 0; }
+.tc-pips--round u { border-radius: 50%; width: 8px; height: 8px; }
+.tc-lamp { display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--brass-700); }
+.tc-lamp.is-lit { background: var(--brass-300); box-shadow: 0 0 7px rgba(224, 184, 114, .75); }
+.tc-lean { position: relative; height: 14px; }
+.tc-lean::before { content: ""; position: absolute; left: 0; right: 0; top: 6px; height: 2px; border-radius: 1px; background: var(--track); }
+.tc-lean i { position: absolute; top: 2px; width: 1px; height: 10px; background: var(--brass-700); }
+.tc-lean i.is-mid { top: 4px; height: 6px; background: var(--line); }
+.tc-lean b { position: absolute; top: 1px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--brass-300); box-shadow: 0 0 0 2px var(--desk-900), 0 1px 3px rgba(0, 0, 0, .6); }
+.tc-lean.is-right::after, .tc-lean.is-left::after { content: ""; position: absolute; top: 3px; width: 3px; height: 8px; border-radius: 1px; background: var(--brass-300); }
+.tc-lean.is-right::after { right: -1px; } .tc-lean.is-left::after { left: -1px; }
+
+/* ---- a tally (the agent's card, eighth issue): a ruled list whose figures stand in columns under small typed heads.
+   Each row: a mark 16 wide (a lamp, a flag, a sign), a name, then one or two figures. Set the columns' widths
+   with --c1 and --c2. A row that is pressed is a button; is-on is the one in force; is-off is refused and says why. ---- */
+.tc-tally { --c1: 44px; --c2: 62px; display: grid; }
+.tc-tally > * { display: grid; grid-template-columns: 16px minmax(0, 1fr) var(--c1) var(--c2); column-gap: 8px; align-items: center; min-height: 26px; margin: 0; padding: 0; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; font: 700 14px/18px var(--font-serif); color: var(--paper-100); }
+.tc-tally > button { cursor: pointer; }
+.tc-tally > button:hover, .tc-tally > button.is-hover { background: rgba(224, 184, 114, .07); }
+.tc-tally > * > :first-child { justify-self: center; }
+.tc-tally > * > img { width: 16px; height: auto; box-shadow: 0 0 0 1px rgba(0, 0, 0, .55); }
+.tc-tally > * > svg { width: 14px; height: 14px; fill: none; stroke: var(--text-faint); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tc-tally > * > span { padding: 4px 0; }
+.tc-tally > * > b { font: 700 13px/17px var(--font-typed); text-align: right; white-space: nowrap; }
+.tc-tally > * > b small { font: 400 11px/14px var(--font-typed); color: var(--text-muted); }
+.tc-tally > * > b.is-due { color: var(--amber); }
+.tc-tally > * > b.is-none { font-weight: 400; color: var(--text-faint); }
+.tc-tally > .tc-tally__head { min-height: 17px; border-top: 0; font: 700 10px/14px var(--font-typed); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
+.tc-tally > .tc-tally__head > span { grid-column: 1 / span 2; justify-self: start; padding: 0; color: var(--brass-500); letter-spacing: .14em; font-size: 11px; }
+.tc-tally > .tc-tally__head > b { font: inherit; color: inherit; }
+.tc-tally > .is-on > span { color: var(--brass-300); }
+.tc-tally > .is-off { cursor: default; color: var(--text-faint); }
+.tc-tally > .is-off:hover { background: none; }
+.tc-tally > .is-off > small { grid-column: 3 / -1; padding: 4px 0; font: 400 11px/14px var(--font-typed); color: var(--text-muted); text-align: right; }
+.tc-tally > .tc-tally__more { min-height: 22px; font: 400 11px/14px var(--font-typed); color: var(--text-muted); }
+.tc-tally > .tc-tally__more > span { grid-column: 2 / -1; justify-self: start; padding: 0; }
+
+/* ---- scrolling ---- */
+.tc-scroll { overflow: auto; scrollbar-width: thin; scrollbar-color: var(--brass-700) var(--desk-800); }
+.tc-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.tc-scroll::-webkit-scrollbar-track { background: var(--desk-800); border-radius: 4px; }
+.tc-scroll::-webkit-scrollbar-thumb { background: var(--brass-700); border-radius: 4px; }
+.tc-scroll::-webkit-scrollbar-thumb:hover { background: var(--brass-500); }
+
+/* ---- motion: quick, and off when the player asks ---- */
+@keyframes tc-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes tc-lit { 0%, 100% { box-shadow: var(--shadow-plate), 0 0 0 rgba(224, 184, 114, 0); } 50% { box-shadow: var(--shadow-plate), 0 0 22px rgba(224, 184, 114, .55); } }
+@keyframes tc-thump { 0% { opacity: 0; transform: rotate(-6deg) scale(1.7); } 70% { opacity: 1; transform: rotate(-6deg) scale(.96); } 100% { transform: rotate(-6deg) scale(1); } }
+.tc-anim-rise { animation: tc-rise 160ms ease-out both; }
+.tc-anim-lit { animation: tc-lit 2s ease-in-out infinite; }
+@keyframes tc-lit-edge { 0%, 100% { box-shadow: 0 0 0 1px #e0b872, 0 0 0 rgba(224, 184, 114, 0); } 50% { box-shadow: 0 0 0 1px #e0b872, 0 0 22px rgba(224, 184, 114, .55); } }
+.tc-btn.is-lit.tc-anim-lit { animation-name: tc-lit-edge; }
+.tc-anim-thump { animation: tc-thump 220ms cubic-bezier(.2, .9, .3, 1.2) both; }
+@keyframes tc-point { 0%, 100% { inset: -9px; } 50% { inset: -13px; } }
+.tc-anim-point { animation: tc-point 2s ease-in-out infinite; }
+/* the pointer is the one loop while it stands: every lit thing keeps its light and holds still */
+.has-pointer .tc-anim-lit { animation: none; }
+@keyframes tc-note-in { from { opacity: 0; transform: translateX(var(--from, -12px)); } to { opacity: 1; transform: none; } }
+.tc-anim-note { animation: tc-note-in 220ms ease-out both; }
+@media (prefers-reduced-motion: reduce) { .tc-anim-rise, .tc-anim-lit, .tc-anim-thump, .tc-anim-point, .tc-anim-note { animation: none; } .tc-btn { transition: none; } }

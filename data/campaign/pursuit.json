@@ -1,0 +1,5 @@
+{
+  "_about": "The pursuit of a beaten army (Units decide, #7 step 4(b); the design director's rulings of 24 November 2026, 12:41Z and 12:43Z; the historian's historian/prisoner-share-1124.md). Off unless Units decide is on. Who is faster comes from the ground's own march costs (ground.json and moveCost, without the march road): a faster enemy that gets across a road out first takes the men on foot who can go no other way; a faster pursuit with the road open takes a share of the men on foot who do not ride.",
+  "share": 0.25,
+  "_share": "D: about a quarter of a mostly-foot army taken as it fell back with its road open and a faster enemy behind (Second Alamein, about 30,000 of 116,000: the total L, the split U). Taken of each corps' men on foot who do not ride, as a share of men, never a draw on whole corps. Refit once the split is read."
+}

@@ -1,0 +1,5 @@
+{
+  "_about": "Breaking a corps up (release 2; Brian 24 November 2026 18:02Z: \"when I click on a unit stack, I want to be able to see each individual unit apart of it. that way i can break it up if needed\"). The player's own order, in his month, for one of his own corps standing in the field: the divisions he picks are split off as a corps of their own where it stands, with their own share of the men, the experience and the numbers, the corps' morale, rest, works and moves; the general stays with the corps. Nothing is lost or gained: the men of the two add up to the men of the one. A part rejoins the corps it came from, or another part of it, standing in the same place, never making a corps bigger than the corps was before it was broken up (so no corps is made bigger than it was raised and no road takes more men). No computer nation breaks its corps up. Switch: stage.json 'breakUp'.",
+  "_detached": "How a part split off is named: one division takes its own division's name; more take the corps' name with this after it.",
+  "detached": "detachment"
+}

@@ -1,0 +1,11 @@
+{
+  "_note": "The League: a third alliance, of smaller nations, that belongs to neither the Axis nor the Allies. The grand campaign only. It is a pact of mutual defence: its members are allies of one another, war declared on one member by an outsider is war with them all, and none of them can be courted or annexed by treaty while it stands. A member that goes to war of its own accord goes alone. 'never' lists the great powers, which neither found it nor join it. For computer-run nations it is rare. 'found.shock' is the chance that the countries of one circle of friends (relations.json) still outside both blocs, at peace and leaning to neither side found the League in the month after one of their friends is attacked; 'found.month' is the small chance each month, from month 'found.after' on, that such a circle founds it unprovoked; 'found.least' is how many founders it takes. Once it exists, a small country at peace that leans to neither side may join each month: 'join.friend' is the chance for a friend of a member, 'join.threat' for a country with a nation at war on its border, and 'join.most' is how many members it can hold. The player is not bound by the dice: a small country in the player's hands can found the League with any willing partner, join it if it exists, and as a member invite others for 'invite.cost' political capital each. A country says yes if it is a friend of a member or has a nation at war on its border, and no if it is at war, leans toward a bloc or sees no danger. 'deter' is what the League is worth as a deterrent: a computer-run staff weighing an operation against a member that others would stand by takes the decision that much less often (0.5 halves its chance each month).",
+  "name": "the League",
+  "full": "the League of Free Nations",
+  "color": "#2a9d8f",
+  "never": ["GER", "ITA", "UK", "FRA", "SOV", "USA", "VIC"],
+  "found": { "shock": 0.25, "month": 0.001, "after": 3, "least": 2 },
+  "join": { "friend": 0.06, "threat": 0.015, "most": 8 },
+  "invite": { "cost": 3 },
+  "deter": 0.5
+}

@@ -1,0 +1,88 @@
+/* The convoy night's practice page (convoy-page.ts). Everything is scoped to .convoy, beside the kit's own rules. */
+:root { color-scheme: dark; }
+body { margin: 0; background: var(--desk-950); }
+.convoy { min-height: 100vh; box-sizing: border-box; }
+.convoy .nw { white-space: nowrap; }
+
+/* ---- The chooser ---- */
+.convoy.choose { max-width: var(--card-lg); margin: 0 auto; padding: var(--space-8) var(--space-6); display: grid; gap: var(--space-6); }
+.convoy .chead { display: grid; gap: var(--space-1); }
+.convoy .intro { padding: var(--space-4) var(--space-6); color: var(--ink-900); }
+.convoy .intro p { margin: 0; }
+.convoy .offers { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-4); }
+.convoy .offer { text-align: left; padding: var(--space-4) var(--space-6); cursor: pointer; display: grid; gap: var(--space-2); align-content: start; border: 1px solid var(--line); }
+.convoy .offer.is-on { --clamp: var(--brass-300); border-color: var(--brass-300); box-shadow: var(--shadow-lit); }
+.convoy .offer .otitle { font: 700 20px/26px var(--font-serif); }
+.convoy .offer .oabout { margin: 0; color: var(--paper-200); }
+.convoy .offer .ofacts { font-size: 14px; }
+.convoy .cfoot { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: center; justify-content: space-between; }
+/* (the side picked is the segment's own lit '.is-on': the kit's segment rule would wipe a button's brass) */
+.convoy .cside { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+
+/* ---- The night ---- */
+.convoy.night { height: 100vh; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
+/* (the bar's height never follows what it says: the clock's block is one width, its note a box of two lines, the facts
+   at least two lines; on a narrower screen the score goes under the facts, never the clock under the title) */
+.convoy .nbar { display: grid; grid-template-columns: minmax(0, 1fr) auto 460px; grid-template-areas: "title score clock"; gap: var(--space-1) var(--space-6); align-items: center; padding: var(--space-2) var(--space-4); background: var(--desk-900); border-bottom: 1px solid var(--line); }
+.convoy .ntitle { grid-area: title; min-width: 0; }
+.convoy .nfacts { font-size: 13px; line-height: 18px; min-height: 36px; color: var(--paper-200); }
+.convoy .nscore { grid-area: score; display: flex; gap: var(--space-4); font: 400 13px/18px var(--font-typed); }
+.convoy .nscore b { color: var(--brass-100); }
+.convoy .nclock { grid-area: clock; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "speeds note" "staff staff"; gap: var(--space-1) var(--space-2); align-items: center; }
+.convoy .nspeeds, .convoy .nstaffbtns { display: flex; gap: var(--space-1); align-items: center; }
+.convoy .nspeeds { grid-area: speeds; }
+.convoy .nstaffbtns { grid-area: staff; }
+.convoy .nnote { grid-area: note; font-size: 12px; line-height: 16px; height: 32px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+@media (max-width: 1599px) {
+  .convoy .nbar { grid-template-columns: minmax(0, 1fr) 460px; grid-template-areas: "title clock" "score clock"; }
+}
+.convoy [data-staffrun] small { font: italic 400 12px/14px var(--font-serif); text-transform: none; letter-spacing: 0; color: var(--text-muted); }
+.convoy [data-staffrun].is-lit small { color: var(--paper-200); }
+
+/* The sea, and the orders beside it (never over it: nothing on the sea is hidden under the panel). */
+.convoy .nmain { position: relative; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.convoy .nsea { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.convoy .nsea canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+.convoy .ntags { position: absolute; top: var(--space-3); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: calc(100% - 24px); pointer-events: none; }
+.convoy .ntag { padding: 4px 12px; font: 700 12px/16px var(--font-typed); letter-spacing: .12em; color: var(--brass-100); background: rgba(14,11,8,.82); border: 1px solid var(--brass-700); border-radius: var(--radius-plate); display: none; text-align: center; }
+.convoy .nstaff { padding: 6px 16px; font: 700 13px/18px var(--font-typed); letter-spacing: .1em; color: var(--on-brass); background: linear-gradient(180deg, #ecc884, var(--brass-300)); border: 1px solid var(--brass-100); border-radius: var(--radius-plate); box-shadow: var(--shadow-lit); display: none; text-align: center; }
+/* (the log on a dark plate: the names on the sea are put clear of it, and a piece under it is dimmed, still clickable) */
+.convoy .nlog { position: absolute; left: var(--space-3); bottom: var(--space-3); max-width: min(720px, calc(100% - 24px)); font-size: 13px; line-height: 18px; pointer-events: none; text-shadow: 0 1px 2px #000; color: var(--paper-200); background: rgba(8,10,14,.78); border: 1px solid var(--line); border-radius: var(--radius-plate); padding: 6px 10px; }
+.convoy .nlog:empty { display: none; }
+.convoy .nlog .is-good { color: var(--gain); }
+.convoy .nlog .is-bad { color: var(--alarm); }
+.convoy .nlog .is-warn { color: var(--amber); }
+.convoy .nkey { margin-top: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-plate); font-size: 12px; line-height: 16px; color: var(--paper-200); }
+.convoy .nkey .tc-label { margin-bottom: var(--space-1); }
+.convoy .nkey .krow { display: flex; align-items: center; gap: 6px; }
+.convoy .nkey svg { flex: none; }
+
+.convoy .nside { width: 320px; overflow-y: auto; background: var(--desk-900); border-left: 1px solid var(--line); padding: var(--space-3); }
+.convoy .nside.is-folded { width: auto; padding: var(--space-2) 6px; }
+.convoy .nside.is-folded .norders, .convoy .nside.is-folded .nkey { display: none !important; }
+.convoy .nside .nunfold { display: none; }
+.convoy .nside.is-folded .nunfold { display: inline-flex; writing-mode: vertical-rl; height: auto; padding: var(--space-3) 0; width: var(--control-sm); }
+.convoy .norders { padding: var(--space-3) var(--space-4); }
+.convoy .norders p { margin: var(--space-2) 0; font-size: 14px; line-height: 20px; }
+.convoy .ohead { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); }
+.convoy .ofold { font-size: 11px; }
+.convoy .obtns { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.convoy .ohint { font-size: 13px; }
+.convoy .nkeys { padding: var(--space-1) var(--space-4); font-size: 12px; line-height: 20px; background: var(--desk-900); border-top: 1px solid var(--line); }
+.convoy .nkeys .ncam { color: var(--paper-200); }
+
+/* The hand-over's question, and the staff at work: on the page, over the night. */
+.convoy .nask { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; background: rgba(14,11,8,.66); }
+.convoy .askcard { width: min(500px, calc(100% - 32px)); display: grid; gap: var(--space-3); }
+.convoy .askcard p { margin: 0; }
+.convoy .askcard.working { --clamp: var(--brass-300); border-color: var(--brass-300); box-shadow: var(--shadow-panel), var(--shadow-lit); }
+
+/* ---- The after card ---- */
+.convoy.afterc { display: grid; place-items: center; padding: var(--space-8) var(--space-4); }
+.convoy .acard { width: min(var(--card-sm), 100%); padding: var(--space-6) var(--space-8); display: grid; gap: var(--space-3); box-sizing: border-box; }
+.convoy .awin { color: var(--brass-100); }
+.convoy .alines p { margin: 0; }
+.convoy .afacts { margin: 0; padding-left: 18px; font-size: 14px; }
+.convoy .averdict, .convoy .acamp { margin: 0; }
+.convoy .acamp { font-size: 14px; }
+.convoy .abtns { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: flex-end; }

@@ -1,0 +1,1857 @@
+{
+ "carried": 302,
+ "fresh": 215,
+ "byCountry": {
+  "UK": 48,
+  "CHN": 27,
+  "BRA": 21,
+  "SOV": 21,
+  "USA": 18,
+  "CAN": 16,
+  "BEL": 14,
+  "ITA": 14,
+  "FRA": 11,
+  "PER": 9,
+  "COL": 8,
+  "POR": 7,
+  "SAF": 6,
+  "AFG": 5,
+  "MEX": 5,
+  "BOL": 4,
+  "MAN": 4,
+  "ARG": 3,
+  "PAR": 3,
+  "ECU": 2,
+  "GUA": 2,
+  "IRN": 2,
+  "MGL": 2,
+  "THA": 2,
+  "AUS": 1,
+  "JAP": 1,
+  "URU": 1,
+  "VEN": 1
+ },
+ "byRiver": {
+  "Kasai": 5,
+  "Pilcomayo": 5,
+  "Webi Shebeli": 5,
+  "Awash": 4,
+  "Japura": 4,
+  "Kistna": 4,
+  "Narbada": 4,
+  "Omo": 4,
+  "Red River of the South": 4,
+  "Tapajos": 4,
+  "Xingu": 4,
+  "Yellow River": 4,
+  "Araguaia": 3,
+  "Chenab": 3,
+  "Chulym": 3,
+  "Fraser": 3,
+  "Godavari": 3,
+  "Helmand": 3,
+  "Hungshui": 3,
+  "Jumna": 3,
+  "Lomami": 3,
+  "Maranon": 3,
+  "Niger": 3,
+  "Nonni": 3,
+  "North Saskatchewan": 3,
+  "Ogowe": 3,
+  "Ruvuma": 3,
+  "South Saskatchewan": 3,
+  "Tennessee": 3,
+  "Uruguay": 3,
+  "Vaal": 3,
+  "Volta": 3,
+  "Yangtze": 3,
+  "Amu Darya": 2,
+  "Angara": 2,
+  "Congo": 2,
+  "East River": 2,
+  "Ganges": 2,
+  "Hudson": 2,
+  "Indus": 2,
+  "Irtysh": 2,
+  "Ishim": 2,
+  "Jurua": 2,
+  "Kama": 2,
+  "Kialing": 2,
+  "Mackenzie": 2,
+  "Meklong": 2,
+  "Mekong": 2,
+  "Mississippi": 2,
+  "Okavango": 2,
+  "Panuco": 2,
+  "Purus": 2,
+  "Putumayo": 2,
+  "Red River": 2,
+  "Rio Negro": 2,
+  "Saskatchewan": 2,
+  "Selenga": 2,
+  "Siang": 2,
+  "Snake": 2,
+  "Sutlej": 2,
+  "Tocantins": 2,
+  "Ucayali": 2,
+  "Uele": 2,
+  "Upper Nile": 2,
+  "Ussuri": 2,
+  "Usumacinta": 2,
+  "White Nile": 2,
+  "Yuan": 2,
+  "Arkansas": 1,
+  "Athabasca": 1,
+  "Benue": 1,
+  "Chindwin": 1,
+  "Hwai": 1,
+  "Irrawaddy": 1,
+  "Juba": 1,
+  "Kafue": 1,
+  "Kaladan": 1,
+  "Kan": 1,
+  "Karun": 1,
+  "Limpopo": 1,
+  "Missouri": 1,
+  "Murrumbidgee": 1,
+  "Ob": 1,
+  "Ottawa": 1,
+  "Rio Grande": 1,
+  "Sacramento": 1,
+  "Sao Francisco": 1,
+  "Shari": 1,
+  "Sittang": 1,
+  "Tana": 1,
+  "Tobol": 1,
+  "Tumen": 1,
+  "Ural": 1,
+  "Wei": 1,
+  "Yalung": 1,
+  "Yenisei": 1,
+  "Yukon": 1,
+  "Yungting": 1,
+  "Zambezi": 1
+ },
+ "crossings": [
+  [
+   "Upstate New York",
+   "USA",
+   "Burlington",
+   "USA",
+   "Hudson",
+   "middle"
+  ],
+  [
+   "Minnesota",
+   "USA",
+   "Hibbing",
+   "USA",
+   "Mississippi",
+   "great"
+  ],
+  [
+   "Kansas",
+   "USA",
+   "Dodge City",
+   "USA",
+   "Arkansas",
+   "middle"
+  ],
+  [
+   "Tennessee",
+   "USA",
+   "Memphis",
+   "USA",
+   "Tennessee",
+   "middle"
+  ],
+  [
+   "Tennessee",
+   "USA",
+   "Tupelo",
+   "USA",
+   "Tennessee",
+   "middle"
+  ],
+  [
+   "Tennessee",
+   "USA",
+   "Birmingham",
+   "USA",
+   "Tennessee",
+   "middle"
+  ],
+  [
+   "Louisiana",
+   "USA",
+   "New Orleans",
+   "USA",
+   "Mississippi",
+   "great"
+  ],
+  [
+   "Arkansas",
+   "USA",
+   "Dallas",
+   "USA",
+   "Red River of the South",
+   "middle"
+  ],
+  [
+   "Oklahoma",
+   "USA",
+   "Dallas",
+   "USA",
+   "Red River of the South",
+   "middle"
+  ],
+  [
+   "North Texas",
+   "USA",
+   "Lawton",
+   "USA",
+   "Red River of the South",
+   "middle"
+  ],
+  [
+   "Montana",
+   "USA",
+   "Butte",
+   "USA",
+   "Missouri",
+   "great"
+  ],
+  [
+   "Idaho",
+   "USA",
+   "Pendleton",
+   "USA",
+   "Snake",
+   "middle"
+  ],
+  [
+   "Northern California",
+   "USA",
+   "Sacramento",
+   "USA",
+   "Sacramento",
+   "middle"
+  ],
+  [
+   "Ottawa",
+   "CAN",
+   "Petawawa",
+   "CAN",
+   "Ottawa",
+   "middle"
+  ],
+  [
+   "Saskatchewan",
+   "CAN",
+   "North Battleford",
+   "CAN",
+   "South Saskatchewan",
+   "middle"
+  ],
+  [
+   "Alberta",
+   "CAN",
+   "Edson",
+   "CAN",
+   "North Saskatchewan",
+   "middle"
+  ],
+  [
+   "Vancouver",
+   "CAN",
+   "Bellingham",
+   "USA",
+   "Fraser",
+   "middle"
+  ],
+  [
+   "Vancouver",
+   "CAN",
+   "Kamloops",
+   "CAN",
+   "Fraser",
+   "middle"
+  ],
+  [
+   "Vancouver",
+   "CAN",
+   "Kelowna",
+   "CAN",
+   "Fraser",
+   "middle"
+  ],
+  [
+   "Mackenzie",
+   "CAN",
+   "Fort Nelson",
+   "CAN",
+   "Mackenzie",
+   "great"
+  ],
+  [
+   "Mackenzie",
+   "CAN",
+   "Watson Lake",
+   "CAN",
+   "Mackenzie",
+   "great"
+  ],
+  [
+   "Chihuahua",
+   "MEX",
+   "Marfa",
+   "USA",
+   "Rio Grande",
+   "middle"
+  ],
+  [
+   "Chiapas",
+   "MEX",
+   "Peten",
+   "GUA",
+   "Usumacinta",
+   "middle"
+  ],
+  [
+   "Peten",
+   "GUA",
+   "Villahermosa",
+   "MEX",
+   "Usumacinta",
+   "middle"
+  ],
+  [
+   "Caqueta",
+   "COL",
+   "Alto Orinoco",
+   "VEN",
+   "Rio Negro",
+   "great"
+  ],
+  [
+   "Caqueta",
+   "COL",
+   "Quito",
+   "ECU",
+   "Japura",
+   "middle"
+  ],
+  [
+   "Caqueta",
+   "COL",
+   "Napo",
+   "ECU",
+   "Japura",
+   "middle"
+  ],
+  [
+   "Caqueta",
+   "COL",
+   "Rio Negro",
+   "BRA",
+   "Rio Negro",
+   "great"
+  ],
+  [
+   "Caqueta",
+   "COL",
+   "Pasto",
+   "COL",
+   "Japura",
+   "middle"
+  ],
+  [
+   "Caqueta",
+   "COL",
+   "Leticia",
+   "COL",
+   "Putumayo",
+   "middle"
+  ],
+  [
+   "Caqueta",
+   "COL",
+   "Iquitos",
+   "PER",
+   "Putumayo",
+   "middle"
+  ],
+  [
+   "Piura",
+   "PER",
+   "Loreto",
+   "PER",
+   "Maranon",
+   "middle"
+  ],
+  [
+   "Cuzco",
+   "PER",
+   "Ayacucho",
+   "PER",
+   "Ucayali",
+   "middle"
+  ],
+  [
+   "Loreto",
+   "PER",
+   "Acre",
+   "BRA",
+   "Jurua",
+   "middle"
+  ],
+  [
+   "Loreto",
+   "PER",
+   "Chiclayo",
+   "PER",
+   "Maranon",
+   "middle"
+  ],
+  [
+   "Madre de Dios",
+   "PER",
+   "Pucallpa",
+   "PER",
+   "Purus",
+   "middle"
+  ],
+  [
+   "Madre de Dios",
+   "PER",
+   "Cerro de Pasco",
+   "PER",
+   "Ucayali",
+   "middle"
+  ],
+  [
+   "Potosi",
+   "BOL",
+   "Camiri",
+   "BOL",
+   "Pilcomayo",
+   "middle"
+  ],
+  [
+   "Beni",
+   "BOL",
+   "Mato Grosso",
+   "BRA",
+   "Tapajos",
+   "middle"
+  ],
+  [
+   "Chaco Boreal",
+   "PAR",
+   "Gran Chaco",
+   "ARG",
+   "Pilcomayo",
+   "middle"
+  ],
+  [
+   "Chaco Boreal",
+   "PAR",
+   "Tarija",
+   "BOL",
+   "Pilcomayo",
+   "middle"
+  ],
+  [
+   "Gran Chaco",
+   "ARG",
+   "Villa Concepcion",
+   "PAR",
+   "Pilcomayo",
+   "middle"
+  ],
+  [
+   "Maranhao",
+   "BRA",
+   "Tapajos",
+   "BRA",
+   "Xingu",
+   "middle"
+  ],
+  [
+   "Para",
+   "BRA",
+   "Tapajos",
+   "BRA",
+   "Xingu",
+   "middle"
+  ],
+  [
+   "Para",
+   "BRA",
+   "Santarem",
+   "BRA",
+   "Xingu",
+   "middle"
+  ],
+  [
+   "Rio Negro",
+   "BRA",
+   "Leticia",
+   "COL",
+   "Japura",
+   "middle"
+  ],
+  [
+   "Acre",
+   "BRA",
+   "Pucallpa",
+   "PER",
+   "Jurua",
+   "middle"
+  ],
+  [
+   "Guapore",
+   "BRA",
+   "Tapajos",
+   "BRA",
+   "Tapajos",
+   "middle"
+  ],
+  [
+   "Guapore",
+   "BRA",
+   "Mato Grosso",
+   "BRA",
+   "Tapajos",
+   "middle"
+  ],
+  [
+   "Tapajos",
+   "BRA",
+   "Sertao",
+   "BRA",
+   "Tocantins",
+   "middle"
+  ],
+  [
+   "Tapajos",
+   "BRA",
+   "Porto Velho",
+   "BRA",
+   "Tapajos",
+   "middle"
+  ],
+  [
+   "Mato Grosso",
+   "BRA",
+   "Goias",
+   "BRA",
+   "Xingu",
+   "middle"
+  ],
+  [
+   "Mato Grosso",
+   "BRA",
+   "Sertao",
+   "BRA",
+   "Tocantins",
+   "middle"
+  ],
+  [
+   "Goias",
+   "BRA",
+   "Cuiaba",
+   "BRA",
+   "Araguaia",
+   "middle"
+  ],
+  [
+   "Chongjin",
+   "JAP",
+   "Fusung",
+   "MAN",
+   "Tumen",
+   "middle"
+  ],
+  [
+   "Heiho",
+   "MAN",
+   "Chalantun",
+   "MAN",
+   "Nonni",
+   "middle"
+  ],
+  [
+   "Peiping",
+   "CHN",
+   "Tientsin",
+   "CHN",
+   "Yungting",
+   "middle"
+  ],
+  [
+   "Pengpu",
+   "CHN",
+   "Yencheng",
+   "CHN",
+   "Yellow River",
+   "great"
+  ],
+  [
+   "Nanking",
+   "CHN",
+   "Yencheng",
+   "CHN",
+   "Yellow River",
+   "great"
+  ],
+  [
+   "Swatow",
+   "CHN",
+   "Kanchow",
+   "CHN",
+   "East River",
+   "middle"
+  ],
+  [
+   "Swatow",
+   "CHN",
+   "Kukong",
+   "CHN",
+   "East River",
+   "middle"
+  ],
+  [
+   "Hankow",
+   "CHN",
+   "Yochow",
+   "CHN",
+   "Yangtze",
+   "great"
+  ],
+  [
+   "Hengyang",
+   "CHN",
+   "Lingling",
+   "CHN",
+   "Siang",
+   "middle"
+  ],
+  [
+   "Hengyang",
+   "CHN",
+   "Ningtu",
+   "CHN",
+   "Kan",
+   "middle"
+  ],
+  [
+   "Kweilin",
+   "CHN",
+   "Chuanhsien",
+   "CHN",
+   "Siang",
+   "middle"
+  ],
+  [
+   "Kunming",
+   "CHN",
+   "Szemao",
+   "CHN",
+   "Red River",
+   "middle"
+  ],
+  [
+   "Kunming",
+   "CHN",
+   "Mienning",
+   "CHN",
+   "Red River",
+   "middle"
+  ],
+  [
+   "Hanchung",
+   "CHN",
+   "Tienshui",
+   "CHN",
+   "Kialing",
+   "middle"
+  ],
+  [
+   "Lanchow",
+   "CHN",
+   "Ningsia",
+   "CHN",
+   "Yellow River",
+   "great"
+  ],
+  [
+   "Sining",
+   "CHN",
+   "Minhsien",
+   "CHN",
+   "Yellow River",
+   "great"
+  ],
+  [
+   "Tihwa",
+   "CHN",
+   "Oirot-Tura",
+   "SOV",
+   "Irtysh",
+   "great"
+  ],
+  [
+   "Iman",
+   "SOV",
+   "Spassk",
+   "SOV",
+   "Ussuri",
+   "middle"
+  ],
+  [
+   "Ulan-Ude",
+   "SOV",
+   "Irkutsk",
+   "SOV",
+   "Angara",
+   "middle"
+  ],
+  [
+   "Phnom Penh",
+   "FRA",
+   "Kratie",
+   "FRA",
+   "Mekong",
+   "great"
+  ],
+  [
+   "Bangkok",
+   "THA",
+   "Mergui",
+   "UK",
+   "Meklong",
+   "middle"
+  ],
+  [
+   "Moulmein",
+   "UK",
+   "Paknampo",
+   "THA",
+   "Meklong",
+   "middle"
+  ],
+  [
+   "Yenangyaung",
+   "UK",
+   "Loikaw",
+   "UK",
+   "Sittang",
+   "middle"
+  ],
+  [
+   "Kalewa",
+   "UK",
+   "Chittagong",
+   "UK",
+   "Kaladan",
+   "middle"
+  ],
+  [
+   "Myitkyina",
+   "UK",
+   "Maingkwan",
+   "UK",
+   "Chindwin",
+   "middle"
+  ],
+  [
+   "Broken Hill",
+   "AUS",
+   "Shepparton",
+   "AUS",
+   "Murrumbidgee",
+   "middle"
+  ],
+  [
+   "Izhevsk",
+   "SOV",
+   "Molotov",
+   "SOV",
+   "Kama",
+   "middle"
+  ],
+  [
+   "Uralsk",
+   "SOV",
+   "Guryev",
+   "SOV",
+   "Ural",
+   "middle"
+  ],
+  [
+   "Kurgan",
+   "SOV",
+   "Kustanay",
+   "SOV",
+   "Tobol",
+   "middle"
+  ],
+  [
+   "Berezovo",
+   "SOV",
+   "Salekhard",
+   "SOV",
+   "Ob",
+   "great"
+  ],
+  [
+   "Surgut",
+   "SOV",
+   "Tyukalinsk",
+   "SOV",
+   "Irtysh",
+   "great"
+  ],
+  [
+   "Tomsk",
+   "SOV",
+   "Yeniseisk",
+   "SOV",
+   "Chulym",
+   "middle"
+  ],
+  [
+   "Abakan",
+   "SOV",
+   "Leninsk-Kuznetsky",
+   "SOV",
+   "Chulym",
+   "middle"
+  ],
+  [
+   "Yeniseisk",
+   "SOV",
+   "Kemerovo",
+   "SOV",
+   "Chulym",
+   "middle"
+  ],
+  [
+   "Yeniseisk",
+   "SOV",
+   "Kansk",
+   "SOV",
+   "Yenisei",
+   "great"
+  ],
+  [
+   "Tura",
+   "SOV",
+   "Bratsk",
+   "SOV",
+   "Angara",
+   "middle"
+  ],
+  [
+   "Kustanay",
+   "SOV",
+   "Kokchetav",
+   "SOV",
+   "Ishim",
+   "middle"
+  ],
+  [
+   "Ahwaz",
+   "IRN",
+   "Abadan",
+   "IRN",
+   "Karun",
+   "middle"
+  ],
+  [
+   "Zahedan",
+   "IRN",
+   "Girishk",
+   "AFG",
+   "Helmand",
+   "middle"
+  ],
+  [
+   "Herat",
+   "AFG",
+   "Kalat-i-Ghilzai",
+   "AFG",
+   "Helmand",
+   "middle"
+  ],
+  [
+   "Faizabad",
+   "AFG",
+   "Kulyab",
+   "SOV",
+   "Amu Darya",
+   "middle"
+  ],
+  [
+   "Karachi",
+   "UK",
+   "Bhuj",
+   "UK",
+   "Indus",
+   "great"
+  ],
+  [
+   "Lahore",
+   "UK",
+   "Rawalpindi",
+   "UK",
+   "Chenab",
+   "middle"
+  ],
+  [
+   "Srinagar",
+   "UK",
+   "Simla",
+   "UK",
+   "Chenab",
+   "middle"
+  ],
+  [
+   "Leh",
+   "UK",
+   "Simla",
+   "UK",
+   "Chenab",
+   "middle"
+  ],
+  [
+   "Simla",
+   "UK",
+   "Jullundur",
+   "UK",
+   "Sutlej",
+   "middle"
+  ],
+  [
+   "Jhansi",
+   "UK",
+   "Cawnpore",
+   "UK",
+   "Jumna",
+   "middle"
+  ],
+  [
+   "Jubbulpore",
+   "UK",
+   "Raipur",
+   "UK",
+   "Narbada",
+   "middle"
+  ],
+  [
+   "Hyderabad",
+   "UK",
+   "Bezwada",
+   "UK",
+   "Kistna",
+   "middle"
+  ],
+  [
+   "Kankan",
+   "FRA",
+   "Siguiri",
+   "FRA",
+   "Niger",
+   "great"
+  ],
+  [
+   "Lome",
+   "FRA",
+   "Accra",
+   "UK",
+   "Volta",
+   "middle"
+  ],
+  [
+   "Lome",
+   "FRA",
+   "Kumasi",
+   "UK",
+   "Volta",
+   "middle"
+  ],
+  [
+   "Lome",
+   "FRA",
+   "Kintampo",
+   "UK",
+   "Volta",
+   "middle"
+  ],
+  [
+   "Fort-Lamy",
+   "FRA",
+   "Moundou",
+   "FRA",
+   "Shari",
+   "middle"
+  ],
+  [
+   "Qena",
+   "UK",
+   "Aswan",
+   "UK",
+   "Upper Nile",
+   "great"
+  ],
+  [
+   "Wadi Halfa",
+   "UK",
+   "Atbara",
+   "UK",
+   "Upper Nile",
+   "great"
+  ],
+  [
+   "Juba",
+   "UK",
+   "Buta",
+   "BEL",
+   "Uele",
+   "middle"
+  ],
+  [
+   "Juba",
+   "UK",
+   "Paulis",
+   "BEL",
+   "Uele",
+   "middle"
+  ],
+  [
+   "Addis Ababa",
+   "ITA",
+   "Lekemti",
+   "ITA",
+   "Omo",
+   "middle"
+  ],
+  [
+   "Addis Ababa",
+   "ITA",
+   "Jimma",
+   "ITA",
+   "Omo",
+   "middle"
+  ],
+  [
+   "Addis Ababa",
+   "ITA",
+   "Ginir",
+   "ITA",
+   "Awash",
+   "middle"
+  ],
+  [
+   "Addis Ababa",
+   "ITA",
+   "Asba Tafari",
+   "ITA",
+   "Awash",
+   "middle"
+  ],
+  [
+   "Dessie",
+   "ITA",
+   "Harar",
+   "ITA",
+   "Awash",
+   "middle"
+  ],
+  [
+   "Dessie",
+   "ITA",
+   "Asba Tafari",
+   "ITA",
+   "Awash",
+   "middle"
+  ],
+  [
+   "Jimma",
+   "ITA",
+   "Shashamanna",
+   "ITA",
+   "Omo",
+   "middle"
+  ],
+  [
+   "Jimma",
+   "ITA",
+   "Yavello",
+   "ITA",
+   "Omo",
+   "middle"
+  ],
+  [
+   "Gabredarre",
+   "ITA",
+   "Neghelli",
+   "ITA",
+   "Webi Shebeli",
+   "middle"
+  ],
+  [
+   "Gabredarre",
+   "ITA",
+   "Dolo",
+   "ITA",
+   "Webi Shebeli",
+   "middle"
+  ],
+  [
+   "Gabredarre",
+   "ITA",
+   "Ginir",
+   "ITA",
+   "Webi Shebeli",
+   "middle"
+  ],
+  [
+   "Neghelli",
+   "ITA",
+   "Shashamanna",
+   "ITA",
+   "Juba",
+   "middle"
+  ],
+  [
+   "Nairobi",
+   "UK",
+   "Nanyuki",
+   "UK",
+   "Tana",
+   "middle"
+  ],
+  [
+   "Gulu",
+   "UK",
+   "Watsa",
+   "BEL",
+   "White Nile",
+   "great"
+  ],
+  [
+   "Lindi",
+   "UK",
+   "Mocimboa da Praia",
+   "POR",
+   "Ruvuma",
+   "middle"
+  ],
+  [
+   "Lindi",
+   "UK",
+   "Vila Cabral",
+   "POR",
+   "Ruvuma",
+   "middle"
+  ],
+  [
+   "Garoua",
+   "FRA",
+   "Ngaoundere",
+   "FRA",
+   "Benue",
+   "middle"
+  ],
+  [
+   "Libreville",
+   "FRA",
+   "Lambarene",
+   "FRA",
+   "Ogowe",
+   "middle"
+  ],
+  [
+   "Lambarene",
+   "FRA",
+   "Mitzic",
+   "FRA",
+   "Ogowe",
+   "middle"
+  ],
+  [
+   "Franceville",
+   "FRA",
+   "Mitzic",
+   "FRA",
+   "Ogowe",
+   "middle"
+  ],
+  [
+   "Leopoldville",
+   "BEL",
+   "Coquilhatville",
+   "BEL",
+   "Kasai",
+   "middle"
+  ],
+  [
+   "Matadi",
+   "BEL",
+   "Cabinda",
+   "POR",
+   "Congo",
+   "great"
+  ],
+  [
+   "Coquilhatville",
+   "BEL",
+   "Kikwit",
+   "BEL",
+   "Kasai",
+   "middle"
+  ],
+  [
+   "Kamina",
+   "BEL",
+   "Malange",
+   "POR",
+   "Kasai",
+   "middle"
+  ],
+  [
+   "Kamina",
+   "BEL",
+   "Henrique de Carvalho",
+   "POR",
+   "Kasai",
+   "middle"
+  ],
+  [
+   "Serpa Pinto",
+   "POR",
+   "Tsumeb",
+   "SAF",
+   "Okavango",
+   "middle"
+  ],
+  [
+   "Lusaka",
+   "UK",
+   "Mongu",
+   "UK",
+   "Kafue",
+   "middle"
+  ],
+  [
+   "Mongu",
+   "UK",
+   "Tsumeb",
+   "SAF",
+   "Okavango",
+   "middle"
+  ],
+  [
+   "Bulawayo",
+   "UK",
+   "Louis Trichardt",
+   "SAF",
+   "Limpopo",
+   "middle"
+  ],
+  [
+   "Ladysmith",
+   "SAF",
+   "Johannesburg",
+   "SAF",
+   "Vaal",
+   "middle"
+  ],
+  [
+   "Johannesburg",
+   "SAF",
+   "Vryheid",
+   "SAF",
+   "Vaal",
+   "middle"
+  ],
+  [
+   "Klerksdorp",
+   "SAF",
+   "Kimberley",
+   "SAF",
+   "Vaal",
+   "middle"
+  ],
+  [
+   "Albany",
+   "USA",
+   "Burlington",
+   "USA",
+   "Hudson",
+   "middle"
+  ],
+  [
+   "Fort Smith",
+   "USA",
+   "Dallas",
+   "USA",
+   "Red River of the South",
+   "middle"
+  ],
+  [
+   "Boise",
+   "USA",
+   "Pendleton",
+   "USA",
+   "Snake",
+   "middle"
+  ],
+  [
+   "The Pas",
+   "CAN",
+   "Prince Albert",
+   "CAN",
+   "Saskatchewan",
+   "middle"
+  ],
+  [
+   "Medicine Hat",
+   "CAN",
+   "North Battleford",
+   "CAN",
+   "South Saskatchewan",
+   "middle"
+  ],
+  [
+   "Churchill",
+   "CAN",
+   "Dauphin",
+   "CAN",
+   "Saskatchewan",
+   "middle"
+  ],
+  [
+   "Calgary",
+   "CAN",
+   "Edson",
+   "CAN",
+   "North Saskatchewan",
+   "middle"
+  ],
+  [
+   "Lethbridge",
+   "CAN",
+   "Drumheller",
+   "CAN",
+   "South Saskatchewan",
+   "middle"
+  ],
+  [
+   "Kamloops",
+   "CAN",
+   "Edson",
+   "CAN",
+   "Athabasca",
+   "middle"
+  ],
+  [
+   "Whitehorse",
+   "CAN",
+   "Dawson City",
+   "CAN",
+   "Yukon",
+   "great"
+  ],
+  [
+   "San Luis Potosi",
+   "MEX",
+   "Poza Rica",
+   "MEX",
+   "Panuco",
+   "middle"
+  ],
+  [
+   "Poza Rica",
+   "MEX",
+   "Morelia",
+   "MEX",
+   "Panuco",
+   "middle"
+  ],
+  [
+   "Chimbote",
+   "PER",
+   "Pucallpa",
+   "PER",
+   "Maranon",
+   "middle"
+  ],
+  [
+   "Camiri",
+   "BOL",
+   "Tarija",
+   "BOL",
+   "Pilcomayo",
+   "middle"
+  ],
+  [
+   "Salto",
+   "URU",
+   "Gualeguaychu",
+   "ARG",
+   "Uruguay",
+   "middle"
+  ],
+  [
+   "Tefe",
+   "BRA",
+   "Rio Branco",
+   "BRA",
+   "Purus",
+   "middle"
+  ],
+  [
+   "Cuiaba",
+   "BRA",
+   "Goiania",
+   "BRA",
+   "Araguaia",
+   "middle"
+  ],
+  [
+   "Goiania",
+   "BRA",
+   "Corumba",
+   "BRA",
+   "Araguaia",
+   "middle"
+  ],
+  [
+   "Sichang",
+   "CHN",
+   "Hweitseh",
+   "CHN",
+   "Yangtze",
+   "great"
+  ],
+  [
+   "Wanhsien",
+   "CHN",
+   "Mienyang",
+   "CHN",
+   "Kialing",
+   "middle"
+  ],
+  [
+   "Tsunyi",
+   "CHN",
+   "Lingling",
+   "CHN",
+   "Yuan",
+   "middle"
+  ],
+  [
+   "Tsunyi",
+   "CHN",
+   "Chuanhsien",
+   "CHN",
+   "Yuan",
+   "middle"
+  ],
+  [
+   "Tushan",
+   "CHN",
+   "Poseh",
+   "CHN",
+   "Hungshui",
+   "middle"
+  ],
+  [
+   "Tali",
+   "CHN",
+   "Mienning",
+   "CHN",
+   "Mekong",
+   "great"
+  ],
+  [
+   "Liuchow",
+   "CHN",
+   "Kweihsien",
+   "CHN",
+   "Hungshui",
+   "middle"
+  ],
+  [
+   "Liuchow",
+   "CHN",
+   "Poseh",
+   "CHN",
+   "Hungshui",
+   "middle"
+  ],
+  [
+   "Peian",
+   "MAN",
+   "Chalantun",
+   "MAN",
+   "Nonni",
+   "middle"
+  ],
+  [
+   "Tsetserleg",
+   "MGL",
+   "Cheremkhovo",
+   "SOV",
+   "Selenga",
+   "middle"
+  ],
+  [
+   "Tsetserleg",
+   "MGL",
+   "Slyudyanka",
+   "SOV",
+   "Selenga",
+   "middle"
+  ],
+  [
+   "Ishim",
+   "SOV",
+   "Petropavlovsk Kazakh",
+   "SOV",
+   "Ishim",
+   "middle"
+  ],
+  [
+   "Spassk",
+   "SOV",
+   "Tetyukhe",
+   "SOV",
+   "Ussuri",
+   "middle"
+  ],
+  [
+   "Jullundur",
+   "UK",
+   "Ambala",
+   "UK",
+   "Sutlej",
+   "middle"
+  ],
+  [
+   "Ambala",
+   "UK",
+   "Dehra Dun",
+   "UK",
+   "Jumna",
+   "middle"
+  ],
+  [
+   "Ghazni",
+   "AFG",
+   "Maimana",
+   "AFG",
+   "Helmand",
+   "middle"
+  ],
+  [
+   "Surat",
+   "UK",
+   "Indore",
+   "UK",
+   "Narbada",
+   "middle"
+  ],
+  [
+   "Indore",
+   "UK",
+   "Bhusawal",
+   "UK",
+   "Narbada",
+   "middle"
+  ],
+  [
+   "Gwalior",
+   "UK",
+   "Cawnpore",
+   "UK",
+   "Jumna",
+   "middle"
+  ],
+  [
+   "Bilaspur",
+   "UK",
+   "Katni",
+   "UK",
+   "Narbada",
+   "middle"
+  ],
+  [
+   "Bhagalpur",
+   "UK",
+   "Rajshahi",
+   "UK",
+   "Ganges",
+   "great"
+  ],
+  [
+   "Bhagalpur",
+   "UK",
+   "Dinajpur",
+   "UK",
+   "Ganges",
+   "great"
+  ],
+  [
+   "Sholapur",
+   "UK",
+   "Belgaum",
+   "UK",
+   "Kistna",
+   "middle"
+  ],
+  [
+   "Warangal",
+   "UK",
+   "Chanda",
+   "UK",
+   "Godavari",
+   "middle"
+  ],
+  [
+   "Warangal",
+   "UK",
+   "Jagdalpur",
+   "UK",
+   "Godavari",
+   "middle"
+  ],
+  [
+   "Belgaum",
+   "UK",
+   "Gulbarga",
+   "UK",
+   "Kistna",
+   "middle"
+  ],
+  [
+   "Bhamo",
+   "UK",
+   "Tamu",
+   "UK",
+   "Irrawaddy",
+   "great"
+  ],
+  [
+   "Port-Francqui",
+   "BEL",
+   "Tshikapa",
+   "BEL",
+   "Kasai",
+   "middle"
+  ],
+  [
+   "Kindu",
+   "BEL",
+   "Ponthierville",
+   "BEL",
+   "Congo",
+   "great"
+  ],
+  [
+   "Kindu",
+   "BEL",
+   "Lusambo",
+   "BEL",
+   "Lomami",
+   "middle"
+  ],
+  [
+   "Watsa",
+   "BEL",
+   "Torit",
+   "UK",
+   "White Nile",
+   "great"
+  ],
+  [
+   "Parakou",
+   "FRA",
+   "Kontagora",
+   "UK",
+   "Niger",
+   "great"
+  ],
+  [
+   "Makurdi",
+   "UK",
+   "Jebba",
+   "UK",
+   "Niger",
+   "great"
+  ],
+  [
+   "Livingstone",
+   "UK",
+   "Sinoia",
+   "UK",
+   "Zambezi",
+   "great"
+  ],
+  [
+   "Shasi",
+   "CHN",
+   "Yochow",
+   "CHN",
+   "Yangtze",
+   "great"
+  ],
+  [
+   "Macheng",
+   "CHN",
+   "Chumatien",
+   "CHN",
+   "Hwai",
+   "middle"
+  ],
+  [
+   "Koshan",
+   "MAN",
+   "Chalantun",
+   "MAN",
+   "Nonni",
+   "middle"
+  ],
+  [
+   "Pingliang",
+   "CHN",
+   "Minhsien",
+   "CHN",
+   "Wei",
+   "middle"
+  ],
+  [
+   "Hweitseh",
+   "CHN",
+   "Likiang",
+   "CHN",
+   "Yalung",
+   "middle"
+  ],
+  [
+   "Jacobabad",
+   "UK",
+   "Rahimyar Khan",
+   "UK",
+   "Indus",
+   "great"
+  ],
+  [
+   "Chanda",
+   "UK",
+   "Gulbarga",
+   "UK",
+   "Godavari",
+   "middle"
+  ],
+  [
+   "Gulbarga",
+   "UK",
+   "Kurnool",
+   "UK",
+   "Kistna",
+   "middle"
+  ],
+  [
+   "Khanabad",
+   "AFG",
+   "Kulyab",
+   "SOV",
+   "Amu Darya",
+   "middle"
+  ],
+  [
+   "Sarapul",
+   "SOV",
+   "Bugulma",
+   "SOV",
+   "Kama",
+   "middle"
+  ],
+  [
+   "Shashamanna",
+   "ITA",
+   "Ginir",
+   "ITA",
+   "Webi Shebeli",
+   "middle"
+  ],
+  [
+   "Ginir",
+   "ITA",
+   "Asba Tafari",
+   "ITA",
+   "Webi Shebeli",
+   "middle"
+  ],
+  [
+   "Songea",
+   "UK",
+   "Vila Cabral",
+   "POR",
+   "Ruvuma",
+   "middle"
+  ],
+  [
+   "Kongolo",
+   "BEL",
+   "Lusambo",
+   "BEL",
+   "Lomami",
+   "middle"
+  ],
+  [
+   "Manono",
+   "BEL",
+   "Lusambo",
+   "BEL",
+   "Lomami",
+   "middle"
+  ],
+  [
+   "Passo Fundo",
+   "BRA",
+   "Lages",
+   "BRA",
+   "Uruguay",
+   "middle"
+  ],
+  [
+   "Passo Fundo",
+   "BRA",
+   "Uniao da Vitoria",
+   "BRA",
+   "Uruguay",
+   "middle"
+  ],
+  [
+   "Diamantina",
+   "BRA",
+   "Uberlandia",
+   "BRA",
+   "Sao Francisco",
+   "middle"
+  ],
+  [
+   "Red Deer",
+   "CAN",
+   "Edson",
+   "CAN",
+   "North Saskatchewan",
+   "middle"
+  ]
+ ]
+}

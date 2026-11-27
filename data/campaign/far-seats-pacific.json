@@ -1,0 +1,1338 @@
+{
+ "_about": "The six Pacific seats of ruling 209 (China, Australia, New Zealand, Thailand, Manchukuo, Mongolia), in the shapes of the files the rules builder lifts them into at step 13. Top-level keys are the target files. Written by make_seats.py from the historian's and the planner's files, so it is never edited by hand. The paper beside it (seats.md) says what each block is and what is still open.",
+ "_state": "draft for the design director's ruling, 2026-11-17; nothing here has touched a shared file",
+ "_sources": {
+  "CHN corps": "the Pacific planner's rows, /mnt/project-files/pacific-planner/first-day-corps.json ('china'): China's front is the plan's own (rider of 15:03Z, point 3). One division of a row is four of the record's. The rows are the planner's places with the historian's weights, checked by the historian at 15:32Z.",
+  "every other corps, the fleets, the nation figures, each first ability and unit": "the historian, /mnt/project-files/historian/seats-209-pacific.json, with each figure's mark and source in seats-209-pacific.md",
+  "commanders.names": "the clerk, /mnt/project-files/map-tables/officer-names-208b-world.json, unchanged",
+  "setup-1939.formations": "the historian's dated rows for Australia's territories (seats-209-pacific.json, arrivals_aus_territories), less the optional one",
+  "colours": "the art director, /mnt/project-files/art-director/world/far-side-colours.json; China keeps its jade",
+  "door texts, 'builtin' ability rows, the unit's cost, idle, parts, pairs, relations, diplomacy, government, clients": "the seat builder's, each named in seats.md for whoever passes it",
+  "CHN corps, the three rows of the west (item 7 of the rider of 19:25Z, 20 November 2026, to ruling 234)": "the historian, /mnt/project-files/historian/sinkiang-karakoram-1937-45.md, section 4: the record's people on ground the chart had empty. Sinkiang Provincial Army at Tihwa (Sheng Shicai's, Soviet-armed, 10,000 to 20,000 men: strength L, who and where H); Qinghai Army at Sining (Ma Bufang's Hui and Salar cavalry and infantry, 20,000 to 30,000 at home: strength L, who and where H); Hexi Cavalry at Liangchow (Ma Buqing's cavalry in the Kansu corridor, 10,000 to 20,000: strength L, who H, Liangchow as its base M). All three held and all war (held H, all war M): regional armies loyal to their own generals, which stayed home. One division of a row is four of the record's, about 40,000 men at full. Carried by hand, at the end of the list, until the planner's first-day-corps.json and make_seats.py write the same. Named and not built: the Soviet regiment at Hami (1937 to 1943) and Sinkiang as Moscow's guarded sphere."
+ },
+ "grand": {
+  "nations": [
+   {
+    "id": "CHN",
+    "small": true,
+    "years": {
+     "1939": "Two years into Japan's war, and losing. The coast, the railways and the old capital are gone. Sixty-two thin divisions short of guns, a small air force, no navy. Hold the mountains, give ground, and outlast an enemy who cannot garrison a country this size."
+    }
+   },
+   {
+    "id": "AUS",
+    "small": true,
+    "years": {
+     "1939": "At war beside Britain from the first evening. Nine very thin divisions of part-time Militia, five cruisers and five old destroyers guard a continent. Raise volunteers for Britain's war, or keep them home and watch Japan, whom you cannot stop alone."
+    }
+   },
+   {
+    "id": "NZL",
+    "small": true,
+    "years": {
+     "1939": "At war beside Britain from the first night. One thin division of part-time Territorials and one cruiser at home. You cannot defend yourself against a great power, and nobody expects you to. Raise your one volunteer division and send it where it counts."
+    }
+   },
+   {
+    "id": "THA",
+    "small": true,
+    "years": {
+     "1939": "The one country of South-East Asia that is nobody's colony. Five thin divisions and a coastal navy, with France to the east, Britain to the south and west, and Japan looking for a road through you. You cannot beat any of them."
+    }
+   },
+   {
+    "id": "MAN",
+    "small": true,
+    "years": {
+     "1939": "A state made by Japan, with Japan's army on its soil and Japan's officials in its ministries. Four thin divisions, the steel of Anshan and the coal of Fushun, and the Soviet Union on three sides. Without Japan you cannot stand."
+    }
+   },
+   {
+    "id": "MGL",
+    "small": true,
+    "years": {
+     "1939": "A people's republic recognised by hardly anyone but Moscow. Two cavalry divisions fought beside the Red Army at Khalkhin Gol, where Japan's attack on your border was broken. Watch the eastern frontier: Japan's army in Manchuria is still there."
+    }
+   }
+  ]
+ },
+ "door": {
+  "path": {
+   "CHN": "At war with Japan from the first day, in neither alliance. Join the Allies, join the Axis, or fight on alone. Open Your path on the top bar.",
+   "AUS": "A dominion: at war with Germany beside Britain from the first day, and a member of the Allies for good. Britain's later wars are yours to join when you choose.",
+   "NZL": "A dominion: at war with Germany beside Britain from the first day, and a member of the Allies for good. Britain's later wars are yours to join when you choose.",
+   "MAN": "Japan's client. At war with China from the first day, and with the Soviet Union and Mongolia in any month Japan is: there you have no say. War on you is war on Japan. Every other war is your own choice. You join no League.",
+   "MGL": "The Soviet Union's client. At war with Japan and Manchukuo in any month the Soviet Union is: there you have no say. War on you is war on the Soviet Union. Every other war is your own choice. You join no League."
+  }
+ },
+ "world": {
+  "nations": {
+   "CHN": {
+    "name": "China",
+    "adj": "Chinese",
+    "color": "#4f9a8c",
+    "quality": 0.45,
+    "air": 4,
+    "resilience": 0.97,
+    "align": "independent"
+   },
+   "AUS": {
+    "name": "Australia",
+    "adj": "Australian",
+    "color": "#e0c63a",
+    "quality": 0.9,
+    "air": 7,
+    "resilience": 0.9,
+    "align": "allies",
+    "seaSupply": true,
+    "sealift": 1
+   },
+   "NZL": {
+    "name": "New Zealand",
+    "adj": "New Zealand",
+    "color": "#a3c94f",
+    "quality": 0.9,
+    "air": 1,
+    "resilience": 0.9,
+    "align": "allies",
+    "seaSupply": true,
+    "sealift": 1
+   },
+   "THA": {
+    "name": "Thailand",
+    "adj": "Thai",
+    "color": "#b565b3",
+    "quality": 0.5,
+    "air": 3,
+    "resilience": 0.2,
+    "align": "independent"
+   },
+   "MAN": {
+    "name": "Manchukuo",
+    "adj": "Manchukuoan",
+    "color": "#cf9630",
+    "quality": 0.4,
+    "air": 0,
+    "resilience": 0.2,
+    "align": "leaning_axis"
+   },
+   "MGL": {
+    "name": "Mongolia",
+    "adj": "Mongolian",
+    "color": "#8478d8",
+    "quality": 0.45,
+    "air": 0,
+    "resilience": 0.6,
+    "align": "independent"
+   }
+  },
+  "order": [
+   "CHN",
+   "AUS",
+   "NZL",
+   "THA",
+   "MAN",
+   "MGL"
+  ],
+  "follow": {
+   "AUS": "UK",
+   "NZL": "UK"
+  },
+  "clients": {
+   "MAN": {
+    "patron": "JAP",
+    "wars": [
+     "CHN",
+     "SOV",
+     "MGL"
+    ]
+   },
+   "MGL": {
+    "patron": "SOV",
+    "wars": [
+     "JAP",
+     "MAN"
+    ]
+   }
+  },
+  "idle": {
+   "AUS": 7,
+   "NZL": 1,
+   "MAN": 3,
+   "MGL": 2
+  },
+  "parts": {
+   "names": {
+    "asia": "Asia",
+    "pacific": "the Pacific"
+   },
+   "of": {
+    "CHN": "asia",
+    "THA": "asia",
+    "MAN": "asia",
+    "MGL": "asia",
+    "AUS": "pacific",
+    "NZL": "pacific"
+   }
+  },
+  "pairs": [
+   [
+    "AUS",
+    "NZL"
+   ]
+  ],
+  "corps": [
+   [
+    "CHN",
+    "17th Army Group (the Ningsia cavalry)",
+    "cav",
+    1,
+    "Ningsia",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "35th Army (the Suiyuan army)",
+    "inf",
+    1,
+    "Wuyuan",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "22nd Army (the Yulin garrison)",
+    "inf",
+    1,
+    "Yulin",
+    {
+     "xp": 0.1,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "18th Group Army (the Eighth Route Army)",
+    "inf",
+    2,
+    "Yenan",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "2nd War Area (the Shansi Army)",
+    "inf",
+    1,
+    "Yenan",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "10th War Area (Shensi)",
+    "inf",
+    2,
+    "Sian",
+    {
+     "xp": 0.1,
+     "str": 0.6,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "34th Army Group (Tungkwan)",
+    "inf",
+    2,
+    "Tungkwan",
+    {
+     "xp": 0.1,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "1st War Area (Honan)",
+    "inf",
+    3,
+    "Loyang",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "14th Army Group (the Chungtiao Mountains)",
+    "inf",
+    2,
+    "Loyang",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "5th War Area (the Nanyang basin)",
+    "inf",
+    1,
+    "Nanyang",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "Shantung-Kiangsu War Area (north Kiangsu)",
+    "inf",
+    1,
+    "Yencheng",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "31st Army Group",
+    "inf",
+    1,
+    "Chumatien",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "5th War Area (Hupeh)",
+    "inf",
+    1,
+    "Siangyang",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "5th War Area (northern Anhwei)",
+    "inf",
+    1,
+    "Fowyang",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "5th War Area: 21st Army Group (the Tapieh mountains)",
+    "inf",
+    1,
+    "Macheng",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "33rd Army Group",
+    "inf",
+    2,
+    "Siangyang",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "River Defence Army (Ichang and the gorges)",
+    "inf",
+    2,
+    "Ichang",
+    {
+     "xp": 0.15,
+     "str": 0.6,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "River Defence Army (Shasi)",
+    "inf",
+    1,
+    "Shasi",
+    {
+     "xp": 0.15,
+     "str": 0.6,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "9th War Area: 15th Army Group",
+    "inf",
+    2,
+    "Changsha",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "9th War Area: 27th Army Group",
+    "inf",
+    2,
+    "Changsha",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "9th War Area: 20th Army Group (west of the Tungting Lake)",
+    "inf",
+    1,
+    "Changteh",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "19th Army Group (facing Nanchang)",
+    "inf",
+    2,
+    "Linchwan",
+    {
+     "xp": 0.1,
+     "str": 0.5
+    }
+   ],
+   [
+    "CHN",
+    "1st Army Group (Yunnan's divisions at the front)",
+    "inf",
+    1,
+    "Kanchow",
+    {
+     "xp": 0.1,
+     "str": 0.5
+    }
+   ],
+   [
+    "CHN",
+    "3rd War Area: 32nd Army Group",
+    "inf",
+    2,
+    "Shangjao",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "3rd War Area: 10th Army Group",
+    "inf",
+    1,
+    "Chuchow",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "3rd War Area: 23rd Army Group and the New Fourth Army",
+    "inf",
+    1,
+    "Chuchow",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "3rd War Area (the Chekiang coast)",
+    "inf",
+    1,
+    "Ningpo",
+    {
+     "xp": 0.1,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "25th Army Group (Fukien)",
+    "inf",
+    1,
+    "Nanping",
+    {
+     "xp": 0.1,
+     "str": 0.5
+    }
+   ],
+   [
+    "CHN",
+    "Foochow garrison",
+    "inf",
+    1,
+    "Foochow",
+    {
+     "xp": 0.1,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "12th Army Group (Kwangtung)",
+    "inf",
+    3,
+    "Kukong",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "East River garrison (Waichow)",
+    "inf",
+    1,
+    "Waichow",
+    {
+     "xp": 0.1,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "16th Army Group (Kwangsi): Nanning",
+    "inf",
+    1,
+    "Nanning",
+    {
+     "xp": 0.1,
+     "str": 0.5
+    }
+   ],
+   [
+    "CHN",
+    "16th Army Group (Kwangsi): Wuchow",
+    "inf",
+    1,
+    "Wuchow",
+    {
+     "xp": 0.1,
+     "str": 0.5
+    }
+   ],
+   [
+    "CHN",
+    "Southern Kwangtung garrison",
+    "inf",
+    1,
+    "Pakhoi",
+    {
+     "xp": 0.1,
+     "str": 0.4,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "9th War Area, second line",
+    "inf",
+    1,
+    "Hengyang",
+    {
+     "xp": 0.1,
+     "str": 0.5
+    }
+   ],
+   [
+    "CHN",
+    "9th War Area, second line (southern Kiangsi)",
+    "inf",
+    1,
+    "Ningtu",
+    {
+     "xp": 0.1,
+     "str": 0.5
+    }
+   ],
+   [
+    "CHN",
+    "Kwangsi Army reserve",
+    "inf",
+    2,
+    "Kweilin",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "Central reserve",
+    "inf",
+    2,
+    "Chungking",
+    {
+     "xp": 0.15,
+     "str": 0.6
+    }
+   ],
+   [
+    "CHN",
+    "Chungking garrison",
+    "inf",
+    2,
+    "Chungking",
+    {
+     "xp": 0.15,
+     "str": 0.6,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "Szechwan training divisions",
+    "inf",
+    3,
+    "Chengtu",
+    {
+     "xp": 0.05,
+     "str": 0.4
+    }
+   ],
+   [
+    "CHN",
+    "Yunnan Army",
+    "inf",
+    3,
+    "Kunming",
+    {
+     "xp": 0.1,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "AUS",
+    "1st and 2nd Divisions, Militia (New South Wales)",
+    "inf",
+    2,
+    "Sydney",
+    {
+     "xp": 0.05,
+     "str": 0.35
+    }
+   ],
+   [
+    "AUS",
+    "1st Cavalry Division, Militia (New South Wales)",
+    "cav",
+    1,
+    "Sydney",
+    {
+     "xp": 0.05,
+     "str": 0.3
+    }
+   ],
+   [
+    "AUS",
+    "3rd and 4th Divisions, Militia (Victoria)",
+    "inf",
+    2,
+    "Melbourne",
+    {
+     "xp": 0.05,
+     "str": 0.35
+    }
+   ],
+   [
+    "AUS",
+    "2nd Cavalry Division, Militia (Victoria)",
+    "cav",
+    1,
+    "Melbourne",
+    {
+     "xp": 0.05,
+     "str": 0.3
+    }
+   ],
+   [
+    "AUS",
+    "Northern Command (the Queensland brigades)",
+    "inf",
+    1,
+    "Brisbane",
+    {
+     "xp": 0.05,
+     "str": 0.3
+    }
+   ],
+   [
+    "AUS",
+    "Western Command (the Western Australian brigades)",
+    "inf",
+    1,
+    "Perth",
+    {
+     "xp": 0.05,
+     "str": 0.3
+    }
+   ],
+   [
+    "AUS",
+    "Darwin garrison (the Darwin Mobile Force)",
+    "inf",
+    1,
+    "Darwin",
+    {
+     "xp": 0.05,
+     "str": 0.2,
+     "hold": 1
+    }
+   ],
+   [
+    "NZL",
+    "Territorial Force (the three military districts)",
+    "inf",
+    1,
+    "Wellington",
+    {
+     "xp": 0.05,
+     "str": 0.4
+    }
+   ],
+   [
+    "THA",
+    "1st Division and the Royal Guards",
+    "inf",
+    1,
+    "Bangkok",
+    {
+     "xp": 0.05,
+     "str": 0.6,
+     "hold": 1
+    }
+   ],
+   [
+    "THA",
+    "Eastern divisions (Prachinburi, facing Cambodia)",
+    "inf",
+    2,
+    "Bangkok",
+    {
+     "xp": 0.05,
+     "str": 0.5
+    }
+   ],
+   [
+    "THA",
+    "North-eastern divisions (Korat)",
+    "inf",
+    1,
+    "Korat",
+    {
+     "xp": 0.05,
+     "str": 0.5
+    }
+   ],
+   [
+    "THA",
+    "Northern divisions (Phitsanulok)",
+    "inf",
+    1,
+    "Phitsanulok",
+    {
+     "xp": 0.05,
+     "str": 0.4
+    }
+   ],
+   [
+    "MAN",
+    "Manchukuo Imperial Army (the district armies)",
+    "inf",
+    2,
+    "Hsinking",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "MAN",
+    "Hsingan Army (Mongol cavalry)",
+    "cav",
+    1,
+    "Hailar",
+    {
+     "xp": 0.1,
+     "str": 0.4
+    }
+   ],
+   [
+    "MAN",
+    "Eastern district (the war on the guerrillas)",
+    "inf",
+    1,
+    "Tunghwa",
+    {
+     "xp": 0.1,
+     "str": 0.4
+    }
+   ],
+   [
+    "MGL",
+    "6th and 8th Cavalry Divisions (Khalkhin Gol)",
+    "cav",
+    1,
+    "Choibalsan",
+    {
+     "xp": 0.2,
+     "str": 0.5
+    }
+   ],
+   [
+    "MGL",
+    "Ulan Bator garrison and the western cavalry",
+    "cav",
+    1,
+    "Ulan Bator",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "Sinkiang Provincial Army",
+    "inf",
+    1,
+    "Tihwa",
+    {
+     "xp": 0.1,
+     "str": 0.4,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "Qinghai Army",
+    "cav",
+    1,
+    "Sining",
+    {
+     "xp": 0.15,
+     "str": 0.6,
+     "hold": 1
+    }
+   ],
+   [
+    "CHN",
+    "Hexi Cavalry",
+    "cav",
+    1,
+    "Liangchow",
+    {
+     "xp": 0.15,
+     "str": 0.4,
+     "hold": 1
+    }
+   ]
+  ],
+  "fleets": [
+   {
+    "nat": "AUS",
+    "name": "Australian Fleet",
+    "base": "Sydney",
+    "port": "Sydney",
+    "home": "tasman",
+    "zone": "tasman",
+    "duty": "patrol",
+    "ships": {
+     "bb": 0,
+     "cv": 0,
+     "ca": 5,
+     "dd": 5,
+     "ss": 0
+    },
+    "admiral": "John Crace"
+   },
+   {
+    "nat": "NZL",
+    "name": "New Zealand Fleet",
+    "base": "Auckland",
+    "port": "Auckland",
+    "home": "nzwaters",
+    "zone": "nzwaters",
+    "duty": "patrol",
+    "ships": {
+     "bb": 0,
+     "cv": 0,
+     "ca": 1,
+     "dd": 0,
+     "ss": 0
+    },
+    "admiral": "James Rivett-Carnac"
+   },
+   {
+    "nat": "THA",
+    "name": "Thai Fleet",
+    "base": "Bangkok",
+    "port": "Bangkok",
+    "home": "siam",
+    "zone": "siam",
+    "duty": "patrol",
+    "ships": {
+     "bb": 0,
+     "cv": 0,
+     "ca": 2,
+     "dd": 4,
+     "ss": 4
+    },
+    "admiral": "Sindh Kamalanavin"
+   }
+  ]
+ },
+ "traits": {
+  "nations": {
+   "CHN": {
+    "traits": [
+     {
+      "id": "guerrilla",
+      "name": "War behind the lines",
+      "text": "Japan holds the cities and the railways. The villages and hills between them belong to Chinese guerrillas, Communist and Nationalist alike. Every month an enemy corps standing in occupied Chinese mountains, hills and forests loses part of its strength to raids and ambushes.",
+      "partisans": 0.04
+     },
+     {
+      "id": "interior",
+      "name": "A country too large to conquer",
+      "builtin": true,
+      "text": "China has lost its coast, its capital and most of its industry, and fights on from the mountains of the interior.",
+      "rule": "China asks for terms only when 97% of what it holds of worth is lost. Most countries ask at about half."
+     }
+    ]
+   },
+   "AUS": {
+    "traits": [
+     {
+      "id": "dominion",
+      "name": "A dominion of the Crown",
+      "builtin": true,
+      "text": "Australia went to war on the same evening as Britain, 3 September 1939.",
+      "rule": "At war with Britain's enemies from the first day. Led by the computer it follows Britain into each new war while the two stand in one alliance; in a player's hands it goes to a new war only when its player says so."
+     }
+    ],
+    "unit": {
+     "id": "aif",
+     "label": "AIF division",
+     "word": "AIF",
+     "kind": "inf",
+     "divs": 1,
+     "cost": 15,
+     "months": 4,
+     "most": 4,
+     "attack": 1.1,
+     "defence": 1.1,
+     "text": "Volunteers for service anywhere, raised because the law keeps the Militia at home. Four divisions were raised in 1939 and 1940. They held Tobruk, fought at El Alamein and turned the Japanese back in New Guinea."
+    }
+   },
+   "NZL": {
+    "traits": [
+     {
+      "id": "dominion",
+      "name": "A dominion of the Crown",
+      "builtin": true,
+      "text": "New Zealand dated its war from the same hour as Britain's, 3 September 1939.",
+      "rule": "At war with Britain's enemies from the first day. Led by the computer it follows Britain into each new war while the two stand in one alliance; in a player's hands it goes to a new war only when its player says so."
+     }
+    ],
+    "unit": {
+     "id": "nzdiv",
+     "label": "New Zealand Division",
+     "word": "New Zealand",
+     "kind": "inf",
+     "divs": 1,
+     "cost": 15,
+     "months": 4,
+     "most": 1,
+     "attack": 1.1,
+     "defence": 1.1,
+     "text": "The country's main field army abroad: one division of volunteers that sailed in January 1940 and fought in Greece, Crete, the desert and Italy, known above all for its attacks by night."
+    }
+   },
+   "THA": {
+    "traits": [
+     {
+      "id": "rice",
+      "name": "Rice, teak and tin",
+      "text": "One of the world's great rice exporters, with the teak of the north and the tin and rubber of the south, sold to whoever sends ships for them. It pays while Thailand is at peace.",
+      "income": 0.6,
+      "incomeAt": "peace"
+     },
+     {
+      "id": "bend",
+      "name": "Bends before the storm",
+      "builtin": true,
+      "text": "A small kingdom that has kept its independence by giving way to the stronger power in time, as it agreed a cease-fire within hours of Japan's landings in December 1941.",
+      "rule": "Thailand asks for terms early: when 20% of what it holds of worth is lost."
+     }
+    ]
+   },
+   "MAN": {
+    "traits": [
+     {
+      "id": "client",
+      "name": "Made and held by Japan",
+      "builtin": true,
+      "text": "Japan's army made the state in 1932, commands its soldiers and stands on its soil.",
+      "rule": "At war with China from the first day, beside Japan. The month Japan is at war with the Soviet Union or Mongolia, Manchukuo is too, whoever leads it. A country at war with Manchukuo is at war with Japan."
+     },
+     {
+      "id": "works",
+      "name": "Coal and steel for another's army",
+      "builtin": true,
+      "text": "The steel of Anshan, the coal of Fushun and the arsenal at Mukden, built up to feed Japan's army.",
+      "rule": "Three factories, two at Mukden and one at Anshan, pay into its budget as any factory does."
+     }
+    ]
+   },
+   "MGL": {
+    "traits": [
+     {
+      "id": "steppe",
+      "name": "Horsemen of the steppe",
+      "text": "Cavalry that lives off the grass and crosses country no lorry can, as the Mongolian divisions crossed the Gobi beside the Red Army's tanks in August 1945.",
+      "attack": 1.1,
+      "when": {
+       "kinds": [
+        "cav"
+       ],
+       "terrain": [
+        "plains"
+       ]
+      }
+     },
+     {
+      "id": "client",
+      "name": "The protocol of 1936",
+      "builtin": true,
+      "text": "Bound to the Soviet Union by a pact of mutual help, with Soviet troops in the country from 1937.",
+      "rule": "The month the Soviet Union is at war with Japan or Manchukuo, Mongolia is too, whoever leads it. A country at war with Mongolia is at war with the Soviet Union. It follows the Soviet Union into no other war."
+     }
+    ]
+   }
+  }
+ },
+ "government": {
+  "nations": {
+   "AUS": "democracy",
+   "NZL": "democracy",
+   "CHN": "oneparty",
+   "MGL": "oneparty"
+  }
+ },
+ "commanders": {
+  "names": {
+   "CHN": {
+    "first": [
+     "Wang",
+     "Li",
+     "Chang",
+     "Liu",
+     "Chen",
+     "Yang",
+     "Huang",
+     "Chao",
+     "Wu",
+     "Chou",
+     "Hsu",
+     "Sun"
+    ],
+    "last": [
+     "Te-ming",
+     "Yung-fu",
+     "Chih-hua",
+     "Kuo-liang",
+     "Wen-pin",
+     "Hai-ching",
+     "Shou-ming",
+     "Tsu-yin",
+     "Chen-hsi",
+     "Pao-shan",
+     "Ming-te",
+     "Shih-lin",
+     "Hsin-chih",
+     "Chung-hsin",
+     "Kuang-hsien",
+     "Hsiao-wu",
+     "Tien-chi",
+     "Feng-chih",
+     "Lien-fang",
+     "Han-chang"
+    ]
+   },
+   "AUS": {
+    "first": [
+     "William",
+     "Lionel",
+     "Thomas",
+     "Reginald",
+     "Norman",
+     "Leslie",
+     "Albert",
+     "Harold"
+    ],
+    "last": [
+     "Ward",
+     "Kirby",
+     "Taylor",
+     "Gibbs",
+     "Spencer",
+     "Murray",
+     "Hayes",
+     "Pearce",
+     "Barnes",
+     "Morgan",
+     "Dunn",
+     "Cameron"
+    ]
+   },
+   "NZL": {
+    "first": [
+     "Donald",
+     "Ernest",
+     "Gordon",
+     "Alexander",
+     "Hugh",
+     "Leonard",
+     "Keith",
+     "Rangi"
+    ],
+    "last": [
+     "Wallace",
+     "Thomson",
+     "Anderson",
+     "Kerr",
+     "Barclay",
+     "Reid",
+     "Morrison",
+     "Hunter",
+     "Gray",
+     "Young",
+     "Tamihana",
+     "Paora"
+    ]
+   },
+   "THA": {
+    "first": [
+     "Somchai",
+     "Prasert",
+     "Chalerm",
+     "Sombat",
+     "Boonchu",
+     "Sanan",
+     "Wichai",
+     "Chamnan"
+    ],
+    "last": [
+     "Suwannarat",
+     "Thongdee",
+     "Srisawat",
+     "Chaiwong",
+     "Wongsakul",
+     "Rattanaphon",
+     "Sukprasert",
+     "Kaewmanee",
+     "Jantarasuk",
+     "Phromma",
+     "Boonmee",
+     "Intharawong"
+    ]
+   },
+   "MAN": {
+    "first": [
+     "Kuan",
+     "Tung",
+     "Fu",
+     "Lang",
+     "Kao",
+     "Han",
+     "Yu",
+     "Tsui"
+    ],
+    "last": [
+     "Te-lin",
+     "Hung-sheng",
+     "Hsiu-feng",
+     "Shu-tang",
+     "Wen-hai",
+     "Yung-an",
+     "Pao-lin",
+     "Chih-yuan",
+     "Kuo-chen",
+     "Tien-fu",
+     "Ching-hsiang",
+     "En-ho"
+    ]
+   },
+   "MGL": {
+    "first": [
+     "Dorjiin",
+     "Batyn",
+     "Gombyn",
+     "Luvsangiin",
+     "Tserengiin",
+     "Dashiin",
+     "Sodnomyn",
+     "Namsrain"
+    ],
+    "last": [
+     "Ochir",
+     "Tsend",
+     "Jamts",
+     "Lkhagva",
+     "Puntsag",
+     "Dashdorj",
+     "Tseveen",
+     "Togtokh",
+     "Purev",
+     "Chimed",
+     "Sanj",
+     "Nyam"
+    ]
+   }
+  }
+ },
+ "relations": {
+  "pairs": [
+   [
+    "AUS",
+    "NZL",
+    "neighbours across the Tasman and comrades in arms of the last war"
+   ],
+   [
+    "UK",
+    "AUS",
+    "a dominion of the Crown"
+   ],
+   [
+    "UK",
+    "NZL",
+    "a dominion of the Crown"
+   ],
+   [
+    "SOV",
+    "MGL",
+    "the pact of mutual help of 1936"
+   ],
+   [
+    "JAP",
+    "MAN",
+    "the protocol of 1932, which puts its defence in Japan's hands"
+   ]
+  ]
+ },
+ "diplomacy": {
+  "home": {
+   "THA": 10,
+   "MGL": 0,
+   "MAN": 40,
+   "CHN": 0
+  },
+  "bandwagon": {
+   "THA": 2,
+   "MGL": 0,
+   "MAN": 0,
+   "CHN": 0
+  }
+ },
+ "setup": {
+  "wars": [
+   [
+    "CHN",
+    "JAP"
+   ],
+   [
+    "CHN",
+    "MAN"
+   ]
+  ]
+ },
+ "setup-1939": {
+  "formations": [
+   [
+    20,
+    "AUS",
+    "Lark Force (2/22nd Battalion)",
+    "inf",
+    1,
+    "Rabaul",
+    {
+     "xp": 0,
+     "str": 0.15,
+     "hold": 1,
+     "est": 0.15
+    }
+   ],
+   [
+    19,
+    "AUS",
+    "49th Battalion (Port Moresby)",
+    "inf",
+    1,
+    "Port Moresby",
+    {
+     "xp": 0,
+     "str": 0.1,
+     "hold": 1,
+     "est": 0.1
+    }
+   ],
+   [
+    29,
+    "AUS",
+    "30th Brigade (39th and 53rd Battalions)",
+    "inf",
+    1,
+    "Port Moresby",
+    {
+     "xp": 0,
+     "str": 0.15,
+     "est": 0.15
+    }
+   ]
+  ]
+ }
+}

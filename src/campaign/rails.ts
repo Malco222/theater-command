@@ -1,0 +1,398 @@
+// Railways, and the damage bombing leaves behind.
+//
+// The net is laid by tools/build-rails.mjs from data/campaign/rails.mjs: a line to every province outside the
+// desert and main lines between the cities. In the grand campaign troops go by rail only along it, and each
+// province's line is either working or cut. No train runs into, out of or through a province whose line is cut.
+// Lines are cut by troops driven out of a province, by order, and by bombing; only engineers relay them.
+//
+// An army lives off its railhead: the nearest province joined by working track to one of its depots or supplied
+// ports. A couple of provinces of road beyond it cost nothing. Further than that the army fights weaker, until
+// the line is brought forward.
+//
+// Heavy bombing also wrecks factories outright, and a wrecked factory earns nothing until engineers rebuild it.
+// The historical scenarios have none of this: there the trains run wherever friendly ground is joined.
+//
+// Both interfaces read the same functions: where the lines run, which are cut, and how far each province is
+// from the player's railhead.
+
+import railData from '../generated/campaign-rails.json';
+import americasRails from '../generated/world-americas-rails.json';
+import wholeRails from '../generated/world-whole-rails.json';
+import { FAR_STAGE } from './stage';
+import data from '../../data/campaign/railways.json';
+import { Rng, hashString } from '../core/rng';
+import { KIND, type Corps, type Game, type Region } from './types';
+import { groundRules } from './ground';
+import { downBetween } from './rivers';
+import { allied, atWar, headline, inDesert, lineOwner } from './game';
+import { besieged } from './siege';
+import { junctionOpenTo, worksBurnt } from './prizes';
+
+/** A line between two neighbouring provinces (a is the lower id), and the point where it crosses from one into the other. */
+export interface RailLink { a: number; b: number; x: number; y: number }
+
+export const RAILWAYS = data as unknown as {
+  wreck: { chance: number; unguarded: number; fastCaptor: number };
+  /** [furthest by road from the railhead, attack, defence] */
+  railhead: [number, number, number][];
+  bomb: { scale: number; most: number };
+  ruin: { over: number; chance: number; most: number };
+};
+
+/** The lines of the map of Europe. */
+export const RAIL_LINKS: RailLink[] = (railData as unknown as { links: number[][] }).links.map(([a, b, x, y]) => ({ a, b, x, y }));
+/** Those of the wider world (tools/build-rails.mjs world), whose provinces are numbered on from Europe's. */
+export const WORLD_RAIL_LINKS: RailLink[] = ((FAR_STAGE ? wholeRails : americasRails) as unknown as { links: number[][] }).links.map(([a, b, x, y]) => ({ a, b, x, y }));
+const ALL_LINKS: RailLink[] = [...RAIL_LINKS, ...WORLD_RAIL_LINKS];
+/** The lines on a game's map: Europe's, and the wider world's where the campaign is played on it. */
+export const railLinks = (g: Game): RailLink[] => (g.flags.world === 1 ? ALL_LINKS : RAIL_LINKS);
+const NET = new Map<number, number[]>();
+for (const l of ALL_LINKS) for (const [p, q] of [[l.a, l.b], [l.b, l.a]]) (NET.get(p) ?? NET.set(p, []).get(p)!).push(q);
+const NONE: number[] = [];
+
+/** The provinces a province's railway runs to. Geography: the same in every game. */
+export const railsAt = (r: number): number[] => NET.get(r) ?? NONE;
+/** Whether any railway runs through a province. None crosses the desert, and a few islands have none. */
+export const onNet = (r: number): boolean => NET.has(r);
+
+const KEYS: string[] = [];
+const key = (r: number): string => (KEYS[r] ??= `rail:${r}`);
+/** Whether a province's railway is cut. Never outside the grand campaign. */
+export const railCut = (g: Game, r: number): boolean => groundRules(g) && g.flags[key(r)] !== undefined;
+/** The month a province's railway was cut, or undefined while it works. */
+export const cutOn = (g: Game, r: number): number | undefined => (groundRules(g) ? g.flags[key(r)] : undefined);
+
+/**
+ * What cut a line (the design director's ruling 112(c)): bombers, an agent, saboteurs, troops tearing it up as they
+ * fall back, troops burning it in a hasty retreat under a scorched earth order, or an order. It is kept beside the
+ * cut for the page to show and changes no rule. A cut made before the cause was kept has none.
+ */
+export type RailCause = 'bombed' | 'agent' | 'saboteurs' | 'retreat' | 'hasty' | 'order';
+const CAUSES: RailCause[] = ['bombed', 'agent', 'saboteurs', 'retreat', 'hasty', 'order'];
+/** The cause in words, to follow "The railway is cut: ". */
+export const CAUSE_WORDS: Record<RailCause, string> = {
+  bombed: 'bombed', agent: 'blown by an agent', saboteurs: 'blown by saboteurs', retreat: 'torn up in a retreat', hasty: 'burnt in a hasty retreat', order: 'cut by order',
+};
+const WKEYS: string[] = [];
+const whyKey = (r: number): string => (WKEYS[r] ??= `railwhy:${r}`);
+/** What cut a province's railway, or null for a whole line and for a cut whose cause was never kept. */
+export const cutCause = (g: Game, r: number): RailCause | null => (railCut(g, r) ? CAUSES[(g.flags[whyKey(r)] ?? 0) - 1] ?? null : null);
+// The anti-aircraft guns that stood in a province the month bombers cut its line (ruling 125): their level plus
+// one, kept beside the cut for the page to say and changing no rule. A cut made before it was kept has none.
+const AKEYS: string[] = [];
+const gunsKey = (r: number): string => (AKEYS[r] ??= `railaa:${r}`);
+/** The level of guns a bombed line was cut through (0 where none stood), or null for a whole line, another cause, or a cut whose guns were never kept. */
+export const cutThroughGuns = (g: Game, r: number): number | null => (cutCause(g, r) === 'bombed' && g.flags[gunsKey(r)] !== undefined ? g.flags[gunsKey(r)] - 1 : null);
+
+/**
+ * Cuts the railway of a province, whoever does it and however: retreating troops, an order, bombers, agents and
+ * saboteurs. Returns false where there is no line or it is already cut. The cause is kept with the cut; and where
+ * the player's own country did it, he has the report of it whether or not he can see the place (ruling 113).
+ */
+export function cutRail(g: Game, r: number, cause?: RailCause, by?: string): boolean {
+  if (!groundRules(g) || !onNet(r) || railCut(g, r)) return false;
+  g.flags[key(r)] = g.turn;
+  if (cause) g.flags[whyKey(r)] = CAUSES.indexOf(cause) + 1;
+  if (by && by === g.human && g.intel) (g.intel.cuts ??= {})[r] = cause ? { t: g.turn, how: 'report', why: cause } : { t: g.turn, how: 'report' };
+  g.supplyDirty = true;
+  return true;
+}
+
+/** Relays the railway of a province. */
+export function mendRail(g: Game, r: number): boolean {
+  if (!railCut(g, r)) return false;
+  delete g.flags[key(r)];
+  delete g.flags[whyKey(r)];
+  delete g.flags[gunsKey(r)];
+  delete g.flags[hastyKey(r)];
+  g.supplyDirty = true;
+  return true;
+}
+
+// A hasty cut: track torn up by troops under a scorched earth order as they are driven off (prizes.ts). Nobody needs
+// engineers for it: the new holder's own railwaymen make it good after a month or two. But ground whose line was
+// burned is slow to carry an invader's trains: inside the Soviet Union the gauge is converted only from the month
+// the line is made good (game.ts).
+const HKEYS: string[] = [];
+const hastyKey = (r: number): string => (HKEYS[r] ??= `railhasty:${r}`);
+const GKEYS: string[] = [];
+const goodKey = (r: number): string => (GKEYS[r] ??= `railgood:${r}`);
+
+/** Cuts a province's railway in haste: it is made good without engineers after so many months. False where there is no line or it is cut already. */
+export function cutRailHasty(g: Game, r: number, months: number, by?: string): boolean {
+  if (!cutRail(g, r, 'hasty', by)) return false;
+  g.flags[hastyKey(r)] = g.turn + months;
+  return true;
+}
+
+/** Months until a hastily cut line is made good without engineers, or 0 for a line that is whole or needs engineers. */
+export const hastyLeft = (g: Game, r: number): number => (railCut(g, r) && g.flags[hastyKey(r)] !== undefined ? Math.max(1, g.flags[hastyKey(r)] - g.turn) : 0);
+
+/** The month a province's burned line was made good, if that is later than `since`; otherwise `since`. */
+export function lineSince(g: Game, r: number, since: number): number {
+  const good = g.flags[goodKey(r)];
+  return good !== undefined && good > since ? good : since;
+}
+
+/** As a nation's month closes, the hasty cuts on its ground that have had their time are made good. Returns the provinces. */
+export function mendHasty(g: Game, nat: string): number[] {
+  const out: number[] = [];
+  if (!groundRules(g)) return out;
+  for (const r of g.regions) {
+    if (r.ctrl !== nat) continue;
+    const due = g.flags[hastyKey(r.id)];
+    if (due === undefined || g.turn < due) continue;
+    if (mendRail(g, r.id)) { g.flags[goodKey(r.id)] = g.turn; out.push(r.id); } else delete g.flags[hastyKey(r.id)];
+  }
+  return out;
+}
+
+/** Whether a train of this nation can run from one province to the next: a line between them, both ends friendly and whole, the bridges standing. */
+export function railOpen(g: Game, nat: string, a: number, b: number): boolean {
+  if (!railsAt(a).includes(b) || railCut(g, a) || railCut(g, b) || downBetween(g, a, b)) return false;
+  // The station is in the town: no train runs through a province whose town is under siege, whoever is winning there.
+  // A great junction is the exception: it lies outside the town, and the army that holds the field runs its trains through.
+  const end = (r: Region): boolean => (allied(g, nat, r.ctrl) && !besieged(g, r)) || junctionOpenTo(g, nat, r);
+  return end(g.regions[a]) && end(g.regions[b]);
+}
+
+/** Whether the news of a railway matters to the player: it was theirs, or they took it. */
+const concerns = (g: Game, ...nats: string[]): boolean => g.human !== null && g.nations[g.human].alive && nats.includes(g.human);
+
+// ---- Cutting the line -----------------------------------------------------------------------
+
+/** Why this nation cannot tear up the railway of a province, or null if it can. */
+export function whyNotCutRail(g: Game, nat: string, region: number): string | null {
+  if (!groundRules(g)) return 'There are no railways to cut in this campaign.';
+  const r = g.regions[region];
+  if (!r) return 'Pick a province.';
+  if (!onNet(region)) return `No railway runs through ${r.name}.`;
+  if (railCut(g, region)) return `The railway at ${r.name} is already cut.`;
+  if (!allied(g, nat, r.ctrl)) return `${r.name} is not in friendly hands.`;
+  if (!r.units.some((u) => u.nat === nat && !u.dead)) return `There are no troops of yours at ${r.name} to tear up the track.`;
+  if (!g.nations[nat].atWar.length) return 'Nobody tears up their own railways in peacetime.';
+  return null;
+}
+
+/** Tears up the railway of a province by order of the nation whose troops stand there. */
+export function tearUp(g: Game, nat: string, region: number): boolean {
+  if (whyNotCutRail(g, nat, region) || !cutRail(g, region, 'order', nat)) return false;
+  const r = g.regions[region];
+  if (concerns(g, nat)) headline(g, 'info', `${g.nations[nat].adj} troops tear up the railway at ${r.name}. No train runs through until engineers relay it.`, nat, region, { arm: 'land' });
+  return true;
+}
+
+/** The chance that the track is torn up when a province is lost: whether the loser still has troops next door, and who took it. */
+export function wreckChance(g: Game, taken: Region, by: string): number {
+  const W = RAILWAYS.wreck;
+  const near = taken.nb.some((j) => g.regions[j].units.some((u) => !u.dead && atWar(g, u.nat, by)));
+  // The town guard tears up no railway (ruling 211(g)): the track is torn up by troops as they fall back, and
+  // where the loser has no corps next door nobody is there to do it ('unguarded' is 0).
+  if (!near && W.unguarded <= 0) return 0;
+  let p = near ? W.chance : W.unguarded;
+  // Fast troops are on the junctions before the demolition parties have finished.
+  if (taken.units.some((u) => !u.dead && allied(g, u.nat, by) && KIND[u.kind].mobile)) p += W.fastCaptor;
+  return Math.max(0.05, Math.min(0.95, p));
+}
+
+/**
+ * When a province changes hands in war, the side driven out of it may tear up the track as it goes. The dice are
+ * the province's own for the month, so nothing else in the war shifts.
+ */
+export function railOnCapture(g: Game, taken: Region, by: string, from: string, again = false): void {
+  if (!groundRules(g) || !onNet(taken.id) || railCut(g, taken.id)) return;
+  // (`again`: the province was taken in war already this month, game.ts takenInWarThisMonth: the side driven out's own dice.)
+  const roll = new Rng(hashString(again ? `rail:${g.seed}:${g.turn}:${taken.id}:${from}` : `rail:${g.seed}:${g.turn}:${taken.id}`)).next();
+  if (roll >= wreckChance(g, taken, by) || !cutRail(g, taken.id, 'retreat', from)) return;
+  if (concerns(g, by, from)) headline(g, 'battle', `${g.nations[from].adj} troops tear up the railway at ${taken.name} as they fall back.`, from, taken.id, { arm: 'land', won: by, lost: from });
+}
+
+/** The chance that a raid cuts the line of the province it bombs: the bombers that got through, less what the guns stop. */
+export function railBombChance(g: Game, target: number, through: number, gunsStop = 0): number {
+  if (!groundRules(g) || !onNet(target) || railCut(g, target) || through <= 0) return 0;
+  return Math.min(RAILWAYS.bomb.most, through / RAILWAYS.bomb.scale) * (1 - gunsStop);
+}
+
+/**
+ * How many bombing raids, by day or by night, a side has flown on a province this month already: the number of the
+ * raid about to be flown there, 0 for the first. Read from the month's air reports (fly() files each raid's report
+ * after its dice).
+ */
+export function raidsBefore(g: Game, by: string, target: number): number {
+  let n = 0;
+  for (let i = g.airReports.length - 1; i >= 0 && g.airReports[i].turn >= g.turn; i--) {
+    const r = g.airReports[i];
+    if (r.turn === g.turn && r.region === target && r.attNat === by && (r.mission === 'bomb' || r.mission === 'night')) n++;
+  }
+  return n;
+}
+
+/**
+ * A bombing raid's own throw (patch 1.5.2, the design director 25 Nov 04:24Z #2): keyed on the raid's number, so that
+ * each raid on a province in a month throws afresh and the chance its card shows is true. The first keeps the key it
+ * always had.
+ */
+function raidThrow(g: Game, what: string, target: number, by: string): number {
+  const n = raidsBefore(g, by, target);
+  return new Rng(hashString(`${what}:${g.seed}:${g.turn}:${target}:${by}${n ? `:${n}` : ''}`)).next();
+}
+
+/**
+ * A raid on a province's rail yards and junctions. Returns true if the line is cut. `guns` is the level of the
+ * anti-aircraft guns that stand there: it is kept with the cut for the page to say (the rule is in `gunsStop`).
+ * `roll`, from 0 to 1, stands in for the dice: an air battle's own throw, so the line its field showed cut is cut.
+ */
+export function bombRail(g: Game, by: string, target: number, through: number, gunsStop = 0, guns?: number, roll?: number): boolean {
+  const p = railBombChance(g, target, through, gunsStop);
+  if (p <= 0) return false;
+  if (!((roll ?? raidThrow(g, 'railbomb', target, by)) < p && cutRail(g, target, 'bombed', by))) return false;
+  if (guns !== undefined) g.flags[gunsKey(target)] = Math.max(0, Math.round(guns)) + 1;
+  return true;
+}
+
+// ---- The railhead ---------------------------------------------------------------------------
+
+/**
+ * How many provinces of road lie between each province a nation can draw supply in and its nearest working
+ * railway: 0 on the working net, -1 where it draws no supply at all. The working net is everything joined by
+ * whole, friendly track to a depot or a supplied port. Worked out the first time it is asked for after the
+ * supply picture is drawn, and kept until the picture is drawn again. Null outside the grand campaign and for
+ * a nation with no army.
+ */
+export function railheads(g: Game, nat: string): Int16Array | null {
+  if (!groundRules(g)) return null;
+  const have = g.railhead[nat];
+  if (have) return have;
+  const ok = g.supply[nat];
+  if (!ok) return null;
+  const d = new Int16Array(g.regions.length).fill(-1);
+  const net: number[] = [];
+  for (let i = 0; i < ok.length; i++) if (ok[i] === 2) { d[i] = 0; net.push(i); }
+  for (let i = 0; i < net.length; i++) {
+    const a = net[i];
+    if (g.flags[key(a)] !== undefined) continue; // the stores are there, but no train leaves
+    for (const j of railsAt(a)) {
+      if (d[j] === 0 || !ok[j] || g.flags[key(j)] !== undefined || downBetween(g, a, j)) continue;
+      d[j] = 0; net.push(j);
+    }
+  }
+  // Beyond the railhead everything comes by road: a step for every province.
+  const q = net.slice();
+  for (let i = 0; i < q.length; i++) {
+    for (const j of g.regions[q[i]].nb) {
+      if (d[j] >= 0 || !ok[j]) continue;
+      d[j] = d[q[i]] + 1; q.push(j);
+    }
+  }
+  return (g.railhead[nat] = d);
+}
+
+/** Forgets every nation's railheads: called whenever the supply picture is drawn, so that they are counted from it afresh. */
+export function resetRailheads(g: Game): void {
+  g.railhead = {};
+}
+
+/** Counts every nation's railheads now, from the supply picture as it stands. */
+export function computeRailheads(g: Game): void {
+  resetRailheads(g);
+  for (const id of Object.keys(g.supply)) railheads(g, id);
+}
+
+/** How far a nation's troops in a province are from their railhead, and what that makes them worth. */
+export interface Railhead { /** Provinces of road to the nearest working railway: 0 on it. */ road: number; attack: number; defence: number }
+const AT_HOME: Railhead = { road: 0, attack: 1, defence: 1 };
+
+/**
+ * What a nation's troops in a province are worth for their distance from the railhead. Call ensureSupply first.
+ * The desert has its own supply line, counted from the ports, and so has an invader deep inside the Soviet Union,
+ * counted from the frontier: neither is counted twice.
+ */
+export function railheadAt(g: Game, nat: string, region: number): Railhead {
+  if (!groundRules(g)) return AT_HOME;
+  const r = g.regions[region];
+  if (inDesert(r)) return AT_HOME;
+  if (lineOwner(g, r.owner) && !lineOwner(g, nat)) return AT_HOME;
+  const road = railheads(g, nat)?.[region] ?? 0;
+  if (road <= 0) return AT_HOME;
+  for (const [far, attack, defence] of RAILWAYS.railhead) if (road <= far) return { road, attack, defence };
+  return { road, attack: 1, defence: 1 };
+}
+
+/** The same for one corps where it stands. A corps that is cut off altogether has worse troubles, counted elsewhere. */
+export const railheadOf = (g: Game, c: Corps): Railhead => (c.supplied ? railheadAt(g, c.nat, c.reg) : AT_HOME);
+
+// ---- Factories in ruins ---------------------------------------------------------------------
+
+const ruinKey = (r: number): string => `ruin:${r}`;
+/** How many of a province's factories lie wrecked by bombing. Always 0 outside the grand campaign. */
+export const ruinedAt = (g: Game, r: Region): number => (groundRules(g) ? Math.min(r.fac, g.flags[ruinKey(r.id)] ?? 0) : 0);
+/** The factories of a province that are at work: not wrecked by bombing, and not standing idle in a factory district blown up or burned (prizes.ts). */
+export const workingFactories = (g: Game, r: Region): number => r.fac - ruinedAt(g, r) - worksBurnt(g, r);
+/** The most of a province's factories that bombing can wreck outright. */
+export const ruinMost = (r: Region): number => Math.ceil(r.fac * RAILWAYS.ruin.most);
+
+/** The chance that a raid which stopped this share of a province's output also wrecks one of its factories outright. */
+export function ruinChance(g: Game, r: Region, stopped: number): number {
+  const U = RAILWAYS.ruin;
+  if (!groundRules(g) || stopped <= U.over || ruinedAt(g, r) >= ruinMost(r)) return 0;
+  return Math.min(0.95, stopped * U.chance);
+}
+
+/** A heavy raid on a province's industry. Returns true if a factory is wrecked. `roll`, as for bombRail, stands in for the dice. */
+export function bombFactories(g: Game, by: string, r: Region, stopped: number, roll?: number): boolean {
+  const p = ruinChance(g, r, stopped);
+  if (p <= 0 || (roll ?? raidThrow(g, 'ruin', r.id, by)) >= p) return false;
+  g.flags[ruinKey(r.id)] = ruinedAt(g, r) + 1;
+  return true;
+}
+
+/** Wrecks one working factory of a province outright, by a saboteur's hand. False where no more can be wrecked. */
+export function wreckFactory(g: Game, r: Region): boolean {
+  if (!groundRules(g) || r.fac <= 0 || ruinedAt(g, r) >= ruinMost(r)) return false;
+  g.flags[ruinKey(r.id)] = ruinedAt(g, r) + 1;
+  return true;
+}
+
+/** Engineers put one wrecked factory back to work. */
+export function rebuildFactory(g: Game, r: Region): boolean {
+  const n = ruinedAt(g, r);
+  if (n <= 0) return false;
+  if (n <= 1) delete g.flags[ruinKey(r.id)]; else g.flags[ruinKey(r.id)] = n - 1;
+  return true;
+}
+
+// ---- For the province panel -----------------------------------------------------------------
+
+/** The railway of one province, as the province panel shows it. */
+export interface RailNote {
+  /** Whether a railway runs through the province at all. */
+  line: boolean;
+  /** The provinces its lines run to. */
+  to: number[];
+  cut: boolean;
+  /** The month it was cut. */
+  since?: number;
+  /** Months until a line torn up in haste (scorched earth) is made good without engineers; 0 for a whole line or one only engineers can relay. */
+  hasty: number;
+  /** For the nation asked about: provinces of road from here to its nearest working railway, 0 on it, -1 where it draws no supply. */
+  road: number;
+  /** What that nation's troops here are worth for it. */
+  attack: number;
+  defence: number;
+  /** Factories wrecked by bombing, and the factories the province has. */
+  ruined: number;
+  factories: number;
+}
+
+/** The state of a province's railway and what it means to one nation's troops there. Null outside the grand campaign. */
+export function railNote(g: Game, region: number, nat: string | null = g.human): RailNote | null {
+  if (!groundRules(g)) return null;
+  const r = g.regions[region];
+  const head = nat ? railheadAt(g, nat, region) : AT_HOME;
+  const raw = nat ? railheads(g, nat)?.[region] ?? -1 : -1;
+  return {
+    line: onNet(region), to: railsAt(region), cut: railCut(g, region), since: cutOn(g, region), hasty: hastyLeft(g, region),
+    road: raw < 0 ? -1 : head.road, attack: head.attack, defence: head.defence,
+    ruined: ruinedAt(g, r), factories: r.fac,
+  };
+}

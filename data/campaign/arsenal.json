@@ -1,0 +1,117 @@
+{
+  "_about": "The arsenal: everything a nation can order in the grand campaign beyond the four classic corps of production.json, and the works a province can be given. The historical scenarios do not use it. 'land' adds kinds of corps. 'needs' is how many factories the province a corps is raised in must have: infantry and mountain troops can be raised anywhere at home, heavier equipment only where there is industry. 'air' is aircraft by the wing: 'count' machines with crews, ordered by a nation that has a home province with 'factories' factories (its aircraft industry) and stationed on airfields. 'ships' are laid down in a home port whose shipyard is of level 'yard' or better; 'count' hulls join the fleet based there, or the nation's main fleet of that kind; 'tp' is troopships, each order adding one corps a month to the nation's sea lift, up to 'lift.most' orders. 'works' are built in a province: a factory in a city (a province that is urban, the capital, already has industry or is worth two victory points), at 'cost' plus 'step' for each one already added there, up to 'most' new ones; shipyards, anti-aircraft guns and airfields in levels 1 to 3 at the listed 'cost' for each level. 'yards' is the shipyard level history left in each port. A level of anti-aircraft guns stops 'cut' of the bombing of that province's industry and adds 'flak' to the bombers' losses; a level of airfields lets 'holds' more aircraft fly from the province. 'upkeep' is the monthly cost of a level. 'lights' (searchlights, levels 1 to 3, built on any ground the nation holds) is offered, built and billed only with the switch 'cityDefences' (stage.json; what a level does is in citydefences.json): a quarter of the guns' price to build and about a third of their upkeep (city defences, the design director's ruling of 25 Nov 2026 02:23Z, choice 10, A). Costs are in production points (shown times a hundred); months are how long the order takes. 'guns' is what artillery does in a land battle: each division in the attack takes 'soften' off the worth of the defender's fortifications and trenches, up to 'softenMost'; each division in the defence adds 'thicken' to the other defenders, up to 'thickenMost'. 'ai' is what a computer-run nation will do with it: put guns on its most bombed industry once it has been raided; and, facing 'facing' dug-in enemy corps or more, raise artillery corps until it has one to every 'per' of its other corps, 'most' at the most, and none while its field army is under 'fit' of the largest it has been (an army being worn away wants men in the line before guns).",
+  "land": {
+    "art": { "label": "Artillery corps", "divs": 2, "cost": 66, "months": 5, "blurb": "Massed guns. Breaks fortified lines and fieldworks in the attack, but cannot take ground without infantry or tanks. Thickens any defence it stands in. Slow, weak if caught alone, and as dear as a corps of tanks." },
+    "eng": { "label": "Engineer corps", "divs": 1, "cost": 18, "months": 3, "blurb": "Bridging columns, sappers and labour battalions. Rebuilds blown bridges, fortifies provinces, lays minefields, and in an assault breaches fortifications and clears mines. A poor fighter on its own, and it cannot take ground without infantry or tanks." }
+  },
+  "needs": { "inf": 0, "mtn": 0, "cav": 0, "eng": 0, "mot": 1, "art": 1, "arm": 2 },
+  "teams": {
+    "_about": "Release 2 (Brian, 21 Nov 03:57Z): support teams built apart from the infantry, off unless the game's 'teams' flag is set (src/campaign/teams.ts). One division's worth each. card: what each division of them is worth on the attack card (perDiv, at most 'most'): mg, a defence stiffened against men on foot; mor, the share of the defence's fieldworks the attack's mortars break up. A computer staff orders one only where it buys more on the card for its price than the corps or refit the same money would (the design director's 19:48Z of 25 November 2026; src/campaign/orderworth.ts). frontage: how many stand in one front sector (the staff sends no more there); in an attack each takes a place on the roads as any corps does (the design director's 21:33Z of 25 November 2026). First figures, for the design director to rule.",
+    "mg": { "label": "Machine-gun brigade", "name": "Machine-Gun Brigade", "divs": 1, "cost": 16, "months": 3, "blurb": "Heavy machine guns on tripods. Fires from behind the line and stiffens a defence against men on foot, most from fieldworks. Cannot take ground on its own: it goes in beside infantry or tanks, and is lost if caught alone." },
+    "mor": { "label": "Mortar brigade", "name": "Mortar Brigade", "divs": 1, "cost": 18, "months": 3, "blurb": "Heavy mortars. Lobs its bombs from behind the line and breaks up the fieldworks an attack goes in against. Cannot take ground on its own: it goes in beside infantry or tanks, and is lost if caught alone." },
+    "card": { "mg": { "perDiv": 0.04, "most": 0.1 }, "mor": { "perDiv": 0.05, "most": 0.15 } },
+    "frontage": 2
+  },
+  "air": {
+    "ftr": { "label": "Fighter wing", "count": 100, "cost": 12, "months": 3, "factories": 2, "blurb": "A hundred fighters with their pilots. Fighters left on defence go up against every raid within their range, and escort your own bombers." },
+    "bmr": { "label": "Bomber wing", "count": 100, "cost": 18, "months": 4, "factories": 3, "blurb": "A hundred bombers. They support the armies, bomb enemy industry and airfields, and strike at shipping." }
+  },
+  "ships": {
+    "dd": { "label": "Destroyer flotilla", "count": 4, "cost": 10, "months": 8, "yard": 1, "blurb": "Four destroyers. The escorts that keep convoys alive and hunt submarines, and the screen of every battle fleet." },
+    "ss": { "label": "Submarine flotilla", "count": 4, "cost": 8, "months": 7, "yard": 1, "blurb": "Four submarines. Sent raiding, they sink the cargoes an enemy across the sea lives on." },
+    "tp": { "label": "Troopships", "count": 1, "cost": 14, "months": 6, "yard": 1, "blurb": "Shipping to carry one more corps across the sea each month, for transport or for a landing." },
+    "ca": { "label": "Cruiser", "count": 1, "cost": 12, "months": 14, "yard": 2, "blurb": "One cruiser. A raider on the trade routes and the workhorse of a fleet that has to be everywhere." },
+    "cv": { "label": "Aircraft carrier", "count": 1, "cost": 36, "months": 22, "yard": 3, "blurb": "One carrier. Its aircraft find the enemy first, cover convoys far from land and count for much in a fleet action." },
+    "bb": { "label": "Battleship", "count": 1, "cost": 40, "months": 26, "yard": 3, "blurb": "One battleship. Nothing else afloat can stand against it in a gun action, and nothing takes longer to build." }
+  },
+  "lift": { "most": 4 },
+  "smallAir": {
+    "_about": "Ruling 213(d), with the works rates of 218(d), the grand campaign only (the historian's historian/aircraft-works-213.json). For a smaller power (not one of diplomacy.json's majors) 'works' stands in place of the two- and three-factory test of 'air': it gives the month (1 = September 1939) from which its own works build fighters ('ftr') and bombers ('bmr'), null for never; a works once open stays open while the country stands. 'rate' is the most its works build a month, in air points (fighters, bombers), 'perPoint' aircraft to a point: a wing takes as many months as its works need to build it, and a works builds one wing of a kind at a time; 'earlier' is the rate up to and including month 'until'. A smaller power not listed has no works. 'gifts' are the record's aircraft from abroad, player and computer alike: [month, receiver, air points, 'ftr', 'bmr' or 'mixed' (half each), givers]. A row arrives in its month only while one of its givers stands and is not at war with the receiver (else it is lost, as it is if the receiver has fallen; a receiver not on the map waits for it), as a new air group (or two, for a mixed row) on the receiver's best airfield; with no airfield it waits until there is one.",
+    "perPoint": 35,
+    "works": {
+      "POL": {"ftr": 1, "bmr": 1, "rate": [0.15, 0.3]},
+      "NED": {"ftr": 1, "bmr": 1, "rate": [0.1, 0.05]},
+      "BEL": {"ftr": 1, "bmr": 1, "rate": [0.05, 0.05]},
+      "YUG": {"ftr": 1, "bmr": 1, "rate": [0.1, 0.15]},
+      "SWE": {"ftr": 50, "bmr": 1, "rate": [0.25, 0.35], "earlier": {"until": 30, "rate": [0, 0.1]}},
+      "SUI": {"ftr": 1, "bmr": 37, "rate": [0.25, 0.15]},
+      "FIN": {"ftr": 1, "bmr": 21, "rate": [0.1, 0.05]},
+      "HUN": {"ftr": 13, "bmr": 49, "rate": [1.0, 0.4], "earlier": {"until": 48, "rate": [0.2, 0]}},
+      "ROM": {"ftr": 1, "bmr": 1, "rate": [0.5, 0.25]},
+      "ESP": {"ftr": 1, "bmr": null, "rate": [0.05, null]},
+      "CAN": {"ftr": 6, "bmr": 3, "rate": [1.7, 4.0], "earlier": {"until": 48, "rate": [1.7, 0.6]}},
+      "AUS": {"ftr": 35, "bmr": 21, "rate": [0.35, 0.8], "earlier": {"until": 32, "rate": [0, 0.3]}}
+    },
+    "gifts": [
+      [6, "BUL", 2, "mixed", ["GER"]],
+      [6, "TUR", 2, "mixed", ["UK", "FRA"]],
+      [7, "SWE", 2, "ftr", ["USA"]],
+      [8, "SWE", 2, "ftr", ["ITA"]],
+      [12, "ARG", 1, "ftr", ["ARG"]],
+      [14, "SAF", 2, "mixed", ["UK"]],
+      [14, "THA", 1, "bmr", ["JAP"]],
+      [22, "SAF", 4, "mixed", ["UK"]],
+      [24, "NZL", 1, "bmr", ["UK"]],
+      [28, "SWE", 2, "ftr", ["ITA"]],
+      [34, "BRA", 3, "mixed", ["USA"]],
+      [34, "MEX", 1, "bmr", ["USA"]],
+      [34, "SAF", 3, "mixed", ["UK", "USA"]],
+      [35, "NZL", 2, "mixed", ["USA"]],
+      [37, "MAN", 1, "ftr", ["JAP"]],
+      [40, "THA", 1, "ftr", ["JAP"]],
+      [40, "TUR", 3, "mixed", ["UK", "GER"]],
+      [41, "CHN", 3, "mixed", ["USA"]],
+      [46, "NZL", 2, "mixed", ["USA"]],
+      [46, "SAF", 3, "mixed", ["UK", "USA"]],
+      [48, "BUL", 4, "ftr", ["GER"]],
+      [48, "POR", 2, "ftr", ["UK"]],
+      [52, "BUL", 3, "ftr", ["GER"]],
+      [55, "NZL", 3, "ftr", ["USA"]],
+      [56, "CHN", 3, "mixed", ["USA"]],
+      [58, "SAF", 2, "mixed", ["UK", "USA"]],
+      [62, "BRA", 2, "ftr", ["USA"]],
+      [64, "CHN", 3, "mixed", ["USA"]],
+      [68, "MEX", 1, "ftr", ["USA"]]
+    ],
+    "abroad": {
+      "_note": "Wings bought abroad (Brian, 21 November 2026: every battle mechanic applies to all playable nations; the design director's shape of 21 November 13:11Z, the historian's historian/aircraft-export-orders-1938-41.md). A smaller power may order a wing its own works do not build this month from a great power that stands, is not at war with it and is not allied to a country at war with it (an ally first, then the nearest): 'price' times the wing's price, 'months' from order to squadron by kind (the record's middles for new-built export orders: fighters 4 to 8, bombers 8 to 12; exports ran 1.3 to 2 times the home price), one wing of a kind on order at a time, a second waits for the first. It arrives as the dated rows do. The seller loses nothing. Release 1: the PLAYER'S own order only (he runs his building himself); no staff buys abroad, so a war fought by staffs alone is the war it was. All three numbers are marked L (the prices low, single dates middling to low): they move with the record, never to fit a bar. Four-engined bombers, jets and rockets stay as 'plans' has them.",
+      "on": true,
+      "price": 1.5,
+      "months": { "ftr": 6, "bmr": 10 }
+    }
+  },
+  "works": {
+    "factory": { "label": "Factory", "cost": 30, "step": 5, "months": 8, "most": { "city": 3, "town": 2 }, "blurb": "One more factory: more income every month, and heavier equipment can be raised where there is industry." },
+    "yard": { "label": "Shipyard", "cost": [0, 20, 30, 45], "months": 8, "blurb": "Slipways and docks. Level 1 builds destroyers, submarines and troopships, level 2 cruisers, level 3 carriers and battleships." },
+    "aa": { "label": "Anti-aircraft guns", "cost": [0, 8, 12, 18], "months": 2, "upkeep": 0.05, "cut": 0.15, "flak": 0.012, "blurb": "Heavy guns round the factories and the rail yards. Each level stops part of the bombing of this province, its railway included, and brings down more of the bombers." },
+    "field": { "label": "Airfields", "cost": [0, 10, 15, 22], "months": 3, "upkeep": 0.04, "holds": 500, "blurb": "Runways, hangars and control rooms. An air fleet can be founded here for fighter patrols, and each level lets more aircraft fly from the province." },
+    "strip": { "label": "Field strip", "cost": [0, 3, 4, 5], "months": 1, "upkeep": 0.02, "holds": 500, "blurb": "Grass, steel mat or coral, laid in weeks: fighters can be based here, and each level lets 500 more aircraft fly from the province. Bombers need a concrete airfield. (Offered only with airfields as targets.)" },
+    "lights": { "label": "Searchlights", "cost": [0, 2, 3, 5], "months": 1, "upkeep": 0.015, "blurb": "Searchlights to hold the night bombers in their beams, by night and under a clear sky only. They help the night fighters a little, and where Fighter control's radar lays the guns, each level lights one level of anti-aircraft guns." }
+  },
+  "yards": {
+    "Hamburg": 3, "Bremen": 3, "Schleswig-Holstein": 3, "Stettin": 1, "Konigsberg": 1,
+    "Clydeside": 3, "Northumbria": 3, "Ulster": 3, "Lancashire": 2, "London": 2, "Hampshire": 2,
+    "Brittany": 3, "Nantes": 3, "Marseille": 2, "Rouen": 1,
+    "Liguria": 3, "Naples": 2, "Apulia": 2, "Friuli": 3,
+    "Leningrad": 3, "Nikolaev": 3, "Crimea": 1, "Murmansk": 1, "Arkhangelsk": 1,
+    "Rotterdam": 2, "Holland": 2, "Antwerp": 1, "Zealand": 2, "Oslo": 1, "Cadiz": 2, "Catalonia": 1, "Athens": 1, "Danzig Corridor": 1,
+    "Norfolk": 3, "New York": 3, "Philadelphia": 3, "Boston": 3, "Bath": 1, "San Francisco": 3, "Puget Sound": 3, "Los Angeles": 1,
+    "Nova Scotia": 1, "Vancouver": 1, "Esquimalt": 1,
+    "Rio de Janeiro": 1, "Buenos Aires": 1, "Santiago": 1, "Lima": 1
+  },
+  "guns": { "soften": 0.15, "softenMost": 0.6, "thicken": 0.05, "thickenMost": 0.2 },
+  "ai": {
+    "aaAfterRaid": true,
+    "guns": { "per": 6, "most": 10, "facing": 3, "fit": 0.9 },
+    "_programme": "Rulings 68(b) and 70(a): a computer staff's own orders of ships and aircraft, in the grand campaign from stop 'fromStop' of the history dial (below it history's schedules are the whole of its building). It buys from this arsenal as a player does, at these prices and under the same rules of yard, factory and technology, after its corps, guns and works, one order a month for its navy and one for its air force. It pays in two ways: with its share ('rate' of the month's income set aside for the navy, and as much for the air force, while there is something the arsenal would build for it; never taking the treasury below the staff's reserve nor holding more than the dearest thing it wants costs), and with idle money (what the treasury holds over the price of a corps of infantry and the reserve, or over the reserve alone while it has no men for a corps). By its war and its character: destroyers when a convoy route that feeds it lost 'bled' of its cargo last month; fighters first while its factories are being bombed; submarines when it is at war with a nation a convoy route feeds and has submarines out raiding; a carrier when its navy has carriers; and wings of fighters and bombers until what it has bought stands at 'share' of its air force's own establishment. 'each' is the most of a kind it has on order at a time.",
+    "programme": { "fromStop": 3, "bled": 0.1, "share": 0.5, "rate": { "ship": 0.06, "air": 0.06 }, "each": { "dd": 1, "ss": 1, "cv": 1, "ftr": 1, "bmr": 1 } }
+  },
+  "plans": {
+    "_note": "Brian, 18 November: the smaller nations build no battleships or carriers until they hold a great power's plans. 'great' build both as before (the tech tree still holds carriers back); 'kin' hold the plans of the power named (the dominions Britain's, Vichy and Free France France's) and build as a great power does. Any other country gets them by taking ground a great power owns, in a war with it, or by a spy's theft (intel.json, bbPlans and cvPlans). Plans of carriers open carriers without the country's own research. Ships a country starts with stay. The grand campaign only. 'techs' (rider b542, Brian: heavy bombers, jets and rockets 'should all be treated like the battleships'): technologies a smaller nation cannot research; it gains each with a great power's plans, where that power has researched it, and the kin wherever their great power has.",
+    "on": true,
+    "hulls": ["bb", "cv"],
+    "techs": ["heavybombers", "jets", "rockets", "guided"],
+    "great": ["GER", "UK", "USA", "SOV", "FRA", "ITA", "JAP"],
+    "kin": { "CAN": "UK", "AUS": "UK", "NZL": "UK", "SAF": "UK", "IND": "UK", "VIC": "FRA", "FFR": "FRA" }
+  }
+}

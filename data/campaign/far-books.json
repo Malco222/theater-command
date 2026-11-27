@@ -1,0 +1,122 @@
+{
+  "_about": "Japan's books (rulings 194, 195 and 196; the Pacific planner's papers 03, 03b and 06): the far side's rows for oil, laid over resources.json and navy.json while the far side's switch is on (src/campaign/far-rows.ts). Kept by hand. Japan keeps stocks as the six powers do. Oil (194): 2 a month at home (Akita's field 1, small wells and plants 1), 34 months in store as the code counts a month on the first day, with the fleet in harbour (about 17 months of the need of a fleet at war), and tanks that hold as much; a lane from America for nine tenths of its need, stopped by war with America and by the freeze (pacific.ts: August 1941 where the stop keeps the book); and the southern oil lane, which carries what the seven oilfields of the south yield to Japan while it holds them (33 to their owners, 19.8 to a conqueror), through the seas between Borneo and Kyushu, less what raiders sink there, and not at all while one of those seas is closed to Japan. Until its fleet is mobilised Japan's navy burns a peacetime allowance, wherever its ships lie ('need.navy', a row by nation; the historian's paper sub-patrols-japan-oil.md, 6c, laid as found by the design director, 13:43Z of 22 November 2026): 1.25 in 2.1 of what they would burn all at sea, the record's million and a quarter barrels a month against the 2,900 barrels an hour of the fleet mobilised in September 1941, through the month of the freeze, and a war's need from the month after or once Japan is at war with America, Britain or the Dutch (pacific.ts fleetAtPeace). The depots' first day and the tanks are counted as before. Supplies (195 and its rider): Japan's home ground gives 62 in 100 of what its people need ('ratio'), colonies and occupied ground on the far side give nobody anything at home with no ship (resources.ts overTheWater), and five lanes bring shares of Japan's need: Korea 19 in 100 through the Yellow Sea and the Tsushima Strait while Pusan is Japan's, Formosa 5 through the East China Sea while Japan holds either province of the island (Taihoku with Keelung, Formosa with Takao), the rice of Indochina and Siam 8 while no enemy holds Saigon, the rest of the south 9 while no enemy holds Singapore (stopped by the freeze until Singapore is Japan's), and 4 on America's row until the freeze or war. None runs through a sea closed to Japan. The stock is everyone's: 3 months on the first day, room for 6. Terms (196): a computer Japan asks for terms at its month's opening when an enemy holds a twentieth of its home ground by worth and privation has worn all it can off its will to fight ('will.terms', a row by nation, and Japan's is the only row); a player's Japan is spared. America's submarines raid at a quarter of their worth in the far side's seas until September 1943 where the stop keeps the book, and elsewhere until America's twenty-second month at war with Japan (navy.json 'subs'). One measure for the boat (the design director, 18:04Z of 22 November 2026; navy.json beats 'patrol', rows of [from this turn, boats out, of this many on hand]): of a navy's submarines at sea in the far side's seas, the boats out on patrol are the boats that raid, are hunted, threaten an unscreened fleet, burn as ships at sea and weigh in holding a sea; the rest are on passage or refitting and burn at the harbour's rate. The peacetime allowance's base, what the ships would burn all at sea in a war, reads the same measure (18:23Z). One boat in three for America, Britain, the Dutch and Japan, the historian's own figure (sub-patrols-japan-oil.md, S11, section 4), until his rows by navy and year replace it. The beats' rows and the pools stay boats on hand. The Pacific sea lanes (the design director's ruling of 04:33Z, 25 November 2026, as amended at 12:39Z and 13:00Z): the Hawaii lane, the South Pacific lane and the Cape lane are laid as the last three rows of the lanes list, where ships can sail, with no cargo figure read and so none laid ('_lanes').",
+  "resources.json": {
+    "nations": ["JAP"],
+    "oil": {
+      "home": {"JAP": 1},
+      "start": {"JAP": 34},
+      "caps": {"JAP": 34},
+      "_plants": "Japan's synthetic fuel plants at full build (the design director's ruling of 20:41Z, 22 November 2026; the historian's japan-oil-1941-45-partial.md). The record: the synthetic plans 'failed to yield significant results' (USSBS, firm); 1 million barrels in 1943, 8% of the target, over half of it in Manchuria (likely: a firmer figure replaces it when found). Imports peaked at 1.75 million barrels a month in August 1943 (firm), a rate of 21 million a year, so the plants made 1 / 21 = 0.0476 of the peak year's import rate. The southern oil lane at its full is 19.8 a month, so the plants make 19.8 / 21 = 0.94 a month, against the 3.5 the technology tree gives Japan's fourteen factories. Every factory of the homeland makes an equal share of it once the tree's fuel chemistry is had. GAP, named and not filled: the record's plants came in late and by steps; the build-up by year is not found, so no date of ours is laid and the yield comes with the technology.",
+      "plants": {"JAP": 0.94},
+      "need": {"navy": {"JAP": {"draw": 1.25, "war": 2.1}}}
+    },
+    "sup": {
+      "ratio": {"JAP": 0.62}
+    },
+    "will": {
+      "terms": {"JAP": {"home": 0.05}}
+    },
+    "_lanes": "The Pacific sea lanes laid as data (the design director's rulings of 04:33Z, 12:39Z and 13:00Z, 25 November 2026; the Pacific planner's brief batch3-lanes-brief.md; the names are the UI director's, 12:57Z): the last three rows of the list, america-hawaii (the Hawaii lane), america-australia (the South Pacific lane) and britain-india (the Cape lane). FLAGGED, NOT READ: the six shares, 'oil' and 'sup' on each of the three rows, stand at 0 because no cargo figure has been read for any of them (the historian's files give troop passages on these routes and no tons of cargo). A 0 here stands for 'not read' and is no read zero: the lane is on the pages and open to the player's escorts and raiders, the stores page says its shipping is not counted in the game, and it brings nothing to any book. The ruling of 12:39Z: a staff counts a lane only while it carries something laid (oil, supplies, fields or a convoy route of its id), which is the navy's rule to read (navy.ts cargoLaid), so that a missing figure decides nothing at sea. The South Pacific lane's receiver is America (13:00Z, part C: about three quarters of the stores were for America's own forces there), so it names no seller, since a lane cannot be cut by a war with its own receiver; Australia's quarter waits for Australia's books. The Cape lane is laid east of the Cape only until it carries cargo, then through all eleven seas from the Clyde. The seas of each row are read from the chart, each next to the last (the South Pacific lane by Hawaii, Samoa and Fiji, the way the record's Pensacola convoy went; the way south of Hawaii is memory and is not laid, 13:00Z part D). 'landing' (true on the three rows, and on no other): the row's harbours, in 'held' or 'ports', are where its ships land, not where they load, so a lane cut at them says it has no port left to land at (the UI director's words, 12:57Z, part 3). G, design choices on the pattern of the rows above, not figures: what stops each lane, which is who holds a place and who is at war, never the month (the Hawaii lane while Pearl Harbor is not in friendly hands; the South Pacific lane while none of Brisbane, Sydney and Melbourne is in American or allied hands; the Cape lane while an enemy holds Cape Town, or Bombay and Karachi both). 'draw' is empty on the three rows, so the map draws no line for them yet: a lane's line cannot yet end at a harbour overseas.",
+    "lanes": [
+      {"id": "america-japan", "name": "the American trade", "from": "America", "source": "USA", "key": "America", "to": "JAP", "zones": [], "oil": 0.9, "sup": 0.04, "freeze": {}, "text": "Oil bought in California and shipped across the Pacific, nine tenths of what Japan burns, with cotton, machines and scrap. It ends the day America will sell no more."},
+      {"id": "south-oil", "name": "the southern oil lane", "from": "the oilfields of the south", "to": "JAP", "zones": ["schina", "luzonsea", "luzonstrait", "echina"], "oil": 0, "sup": 0, "fields": ["Palembang", "Balikpapan", "Medan", "Soerabaja", "Brunei", "Yenangyaung", "Tarakan"], "closes": true, "text": "The oil of Sumatra, Borneo, Java and Burma, by tanker through the South China Sea to the home islands. It is Japan's only while the tankers get home."},
+      {"id": "korea-japan", "name": "the Korea lane", "from": "Korea, Manchuria and north China", "to": "JAP", "zones": ["yellow", "tsushima"], "oil": 0, "sup": 0.19, "held": ["Pusan"], "key": "Pusan", "closes": true, "text": "Rice, coal, ore and soybeans from Korea, Manchuria and north China, across the Yellow Sea and the Tsushima Strait. It runs while Pusan is Japan's."},
+      {"id": "formosa-japan", "name": "Formosa's lane", "from": "Formosa", "to": "JAP", "zones": ["echina"], "oil": 0, "sup": 0.05, "ports": ["Taihoku", "Formosa"], "key": "Formosa", "closes": true, "text": "Rice and sugar from Formosa, across the East China Sea. It runs while Japan holds a harbour of the island."},
+      {"id": "rice-japan", "name": "the rice lane", "from": "Indochina and Siam", "to": "JAP", "zones": ["schina", "luzonsea", "luzonstrait", "echina"], "oil": 0, "sup": 0.08, "past": ["Saigon"], "key": "Saigon", "spared": true, "closes": true, "text": "The rice of Indochina and Siam, loaded at Saigon and carried north through the South China Sea. An enemy in Saigon stops it."},
+      {"id": "south-japan", "name": "the southern lane", "from": "Malaya and the Indies", "to": "JAP", "zones": ["schina", "luzonsea", "luzonstrait", "echina"], "oil": 0, "sup": 0.09, "past": ["Singapore"], "key": "Singapore", "freeze": {"until": "Singapore"}, "closes": true, "text": "Rubber, tin, bauxite and ore from Malaya and the Indies, past Singapore and north through the South China Sea. The freeze stops it until Singapore is Japan's."},
+      {"id": "america-hawaii", "name": "the Hawaii lane", "from": "the West Coast", "to": "USA", "zones": ["hawaii", "calrun", "california"], "oil": 0, "sup": 0, "held": ["Pearl Harbor"], "landing": true, "draw": [], "text": "Fuel, food and stores from the harbours of California to Oahu, across the Hawaiian Approaches. It runs while Pearl Harbor is in friendly hands."},
+      {"id": "america-australia", "name": "the South Pacific lane", "from": "America", "to": "USA", "zones": ["california", "calrun", "hawaii", "line", "samoa", "fiji", "tasman"], "oil": 0, "sup": 0, "ports": ["Brisbane", "Sydney", "Melbourne"], "landing": true, "draw": [], "text": "Stores for America's own forces in Australia, from the West Coast by Hawaii, Samoa and Fiji to the harbours of eastern Australia. It runs while one of those harbours is in American or allied hands."},
+      {"id": "britain-india", "name": "the Cape lane", "from": "India", "to": "UK", "zones": ["arabian", "cindian", "sindian"], "oil": 0, "sup": 0, "ports": ["Bombay", "Karachi"], "past": ["Cape Town"], "landing": true, "draw": [], "text": "Troops and stores out to India and India's goods home to Britain, by the long way round the Cape of Good Hope. An enemy in Cape Town, or in both Bombay and Karachi, stops it."}
+    ]
+  },
+  "navy.json": {
+    "subs": {"USA": {"share": 0.25, "book": 49, "month": 22, "foe": "JAP"}},
+    "sail": {
+      "_about": "The ship move's month (the design director's rulings of 13:56Z and 18:23Z, 22 November 2026; the historian's troop-sailing-times.md). A corps shipped from port to port crosses at most 'reach' seas in a month; a port further off is reached by ports its own side or an ally holds, a month a leg. The reach is the middle of the record's troop-convoy passages, each counted at its own pace for thirty days: seas crossed on this chart x 30 / its days, at the middle of the range of days. The five passages below read 8.1, 6.5, 10.9, 9.5 and 9.5: the middle is 9.5, and a sea is crossed whole, so 9. A test counts them again on the chart (tests/far-ship-month.test.ts). Sea relief reads the same reach (yield.ts). The book's own dated sailings are the record's and are not held to it.",
+      "reach": 9,
+      "passages": [
+        {"ports": ["San Francisco", "Brisbane"], "days": [15, 22], "note": "1942, the West Coast to Australia"},
+        {"ports": ["Pearl Harbor", "Brisbane"], "days": [23, 23], "note": "1941, the Pensacola convoy"},
+        {"ports": ["Fukuoka", "Singapore"], "days": [9, 24], "note": "1943-45, the Hi convoys from Moji"},
+        {"ports": ["Shanghai", "Manila", "Halmahera"], "days": [22, 22], "note": "1944, the Take Ichi convoy"},
+        {"ports": ["Clydeside", "Freetown", "Cape Town", "Port Sudan"], "days": [43, 52], "note": "1941-42, the WS convoys round the Cape"}
+      ]
+    },
+    "beats": {
+      "USA": {
+        "far": {"war": 28}, "pools": ["Pacific Submarine Fleet", "Asiatic Fleet"], "patrol": [[0, 1, 3]],
+        "groups": [
+          {"name": "Central Pacific Submarine Fleet", "base": "Pearl Harbor", "port": "Pearl Harbor", "home": "hawaii", "zone": "honshu", "duty": "raid", "ships": {"ss": 0},
+            "bases": [[35, "Midway", "Midway", "midway"], [54, "Eastern Marshalls", "Majuro", "marshalls"], [61, "Saipan", "Saipan", "marianas"], [62, "Guam", "Guam", "marianas"]],
+            "hunts": {"to": "JAP", "seas": [[28, ["honshu", "kyushu", "bonin", "marianas", "truk"]], [41, ["truk", "wcarolines", "marianas", "honshu", "formosa", "luzonstrait"]], [53, ["luzonstrait", "schina", "formosa", "philsea", "honshu"]], [70, ["japansea", "tsushima", "honshu", "kyushu"]]]}},
+          {"name": "Asiatic Submarine Fleet", "base": "Manila", "port": "Manila", "home": "luzonsea", "zone": "luzonsea", "duty": "raid", "ships": {"ss": 0},
+            "bases": [[29, "Soerabaja", "Soerabaja", "java"]],
+            "hunts": {"to": "JAP", "seas": [[28, ["luzonsea", "schina", "celebes", "makassar", "java"]]]}},
+          {"name": "South West Pacific Submarine Fleet", "base": "Perth", "port": "Fremantle", "home": "westaus", "zone": "java", "duty": "raid", "ships": {"ss": 0},
+            "bases": [[67, "Bataan", "Subic Bay", "luzonsea"]],
+            "hunts": {"to": "JAP", "seas": [[31, ["java", "makassar", "celebes", "flores", "banda", "molucca", "timor"]], [47, ["schina", "natuna", "makassar", "celebes", "java"]], [53, ["schina", "natuna", "luzonsea", "palawan", "java"]]]}},
+          {"name": "Brisbane Submarine Fleet", "base": "Brisbane", "port": "Brisbane", "home": "tasman", "zone": "bismarck", "duty": "raid", "ships": {"ss": 0},
+            "bases": [[50, "Milne Bay", "Milne Bay", "solomon"], [55, "Brisbane", "Brisbane", "tasman"], [60, "Biak", "Mios Woendi", "ngnorth"]],
+            "hunts": {"to": "JAP", "seas": [[32, ["bismarck", "solomon"]], [60, ["molucca", "celebes", "philsea", "schina"]]]}}
+        ],
+        "rows": [[28, 22, 29, 0, 0], [31, 27, 0, 10, 0], [32, 30, 0, 10, 12], [40, 70, 0, 26, 12], [47, 85, 0, 30, 12], [53, 100, 0, 30, 12], [60, 105, 0, 40, 12], [68, 130, 0, 35, 12], [72, 140, 0, 30, 12]]
+      },
+      "NED": {
+        "far": {"war": 28}, "pools": ["Dutch East Indies Fleet"], "patrol": [[0, 1, 3]],
+        "groups": [
+          {"name": "East Indies Submarine Fleet", "base": "Soerabaja", "port": "Soerabaja", "home": "java", "zone": "schina", "duty": "raid", "ships": {"ss": 0},
+            "hunts": {"to": "JAP", "seas": [[28, ["schina", "natuna", "makassar"]]]}}
+        ],
+        "rows": [[28, 15], [31, 0]]
+      },
+      "UK": {
+        "far": {"war": 28}, "pools": ["China Fleet"], "patrol": [[0, 1, 3]],
+        "groups": [
+          {"name": "Ceylon Submarine Fleet", "base": "Trincomalee", "port": "Trincomalee", "home": "ceylon", "zone": "bengal", "duty": "raid", "ships": {"ss": 0},
+            "hunts": {"to": "JAP", "seas": [[48, ["bengal", "andaman", "malacca", "mentawai"]]]}},
+          {"name": "8th Submarine Fleet", "base": "Perth", "port": "Fremantle", "home": "westaus", "zone": "java", "duty": "raid", "ships": {"ss": 0},
+            "bases": [[69, "Bataan", "Subic Bay", "luzonsea"]],
+            "hunts": {"to": "JAP", "seas": [[61, ["java", "flores", "natuna"]], [69, ["siam", "schina", "natuna"]]]}},
+          {"name": "4th Submarine Fleet", "base": "Perth", "port": "Fremantle", "home": "westaus", "zone": "java", "duty": "raid", "ships": {"ss": 0},
+            "hunts": {"to": "JAP", "seas": [[68, ["java", "flores", "eindian"]]]}}
+        ],
+        "rows": [[48, 9, 0, 0], [53, 12, 0, 0], [60, 15, 0, 0], [61, 15, 11, 0], [68, 15, 11, 9]]
+      },
+      "JAP": {
+        "_all": "The record gives Japan's boats by command only for the first month, the 63 of December 1941, where America's, Britain's and the Netherlands' rows are dated counts through the war. So the row is marked ('far.all') as the first month's count and no ceiling: every boat the 6th Fleet has goes to the Advance Submarine Fleet the month it is built, and the boats out are the patrol share of what the group has (the design director's ruling of 21:00Z and 21:04Z, 22 November 2026). Before it Japan had 141 boats on hand in August 1945 against the record's 46 or so, and 71 of them lay in the 6th Fleet's harbour all war, where no hunter reached them.",
+        "_patrol": "Japan's boats out, like for like with the record (the design director's ruling of 21:00Z and 21:04Z, 22 November 2026; the historian's sub-patrol-shares-1942-45.md, Vice Admiral Miwa to USSBS, Nav. No. 72). 'About 64 submarines including the oldest style which was not operational and including training submarines; about forty or forty-five submarines completely operational', and against the Marshalls and Gilberts 'approximately 20 Japanese submarines, one-third on station at any time'. The game's boats on hand are all 63, old and training boats too, so a third of the 40 to 45 operational is 40/64/3 to 45/64/3 of all on hand, 0.208 to 0.234; the middle of the counts is laid, 85 boats out of 384, 0.221 (the director's 21:23Z: facts at their middles from the counts, not from the rounded words). One operation of late 1943 is the only share found: no yearly figure. America's row is its own (one boat in three on hand on patrol); Britain's and the Netherlands' were not found and keep America's third.",
+        "far": {"war": 28, "all": true}, "pools": ["6th Fleet"], "patrol": [[0, 85, 384]],
+        "groups": [
+          {"name": "Advance Submarine Fleet", "base": "Kwajalein", "port": "Kwajalein", "home": "marshalls", "zone": "hawaii", "duty": "raid", "ships": {"ss": 0},
+            "bases": [[54, "Saipan", "Saipan", "marianas"], [59, "Hiroshima", "Kure", "inland"]],
+            "hunts": {"to": "USA", "after": "fleet", "seas": [
+              [28, ["hawaii", "calrun", "npacific", "coral", "tasman", "cindian", "ceylon"]],
+              [41, ["aleutian", "solomon", "eastsol", "bismarck", "coral", "newhebrides"]],
+              [47, ["gilberts", "marshalls", "solomon", "eastsol", "bismarck", "coral", "newhebrides"]],
+              [53, ["bismarck", "ngnorth", "solomon", "marianas", "truk", "wcarolines", "marshalls", "gilberts", "eniwetok"]],
+              [59, ["marianas", "truk", "wcarolines", "leyte", "philsea"]],
+              [65, ["ryukyu", "luzonstrait", "schina", "bonin", "marianas", "truk", "wcarolines"]],
+              [71, ["schina", "luzonstrait"]]]}}
+        ],
+        "_rows": "Japan's boats from 1943 (the design director's ruling of 20:03Z, 22 November 2026; the historian's japan-subs-building-and-duty-1943-45.md, the 1946 loss table grouped by sea and half-year). The row that sent every boat home in January 1943 is struck: of 110 boats lost from that month, 96 were lost at sea beside the American landings, in every half-year, and 7 in harbour, in the yards or by accident. The group's seas by half-year are where those losses lie, most first (January 1943: the Aleutians 4, the Solomons, Bismarcks and New Guinea 3, the Coral Sea and New Hebrides 2; July 1943: the Gilberts and Marshalls 7, the Solomons 6, the Coral Sea 3; January 1944: the Bismarcks and the line north of the Admiralties 12, the Marianas and Carolines 9, the Marshalls and Gilberts 7; July 1944: the Marianas and Carolines 9, east of Leyte 5; January 1945: the Ryukyus 8, the Luzon Strait and South China Sea 4, the Bonins 3, the Marianas and Carolines 3; July 1945: the South China Sea 2). Its boats were sent against the fleet and the landings ('after'), so at stops 1 and 2 it goes to the listed sea where America's fleet or a landing stands that month. Its base is the 6th Fleet's: Kwajalein to February 1944, Saipan to July 1944, then home (Kure, the Combined Fleet's own port). Counts of boats by duty (pickets, supply runs, raids) were not found.",
+        "rows": [[28, 63]]
+      }
+    },
+    "_building": "Japan's submarines built (the design director's rulings of 20:03Z and 20:04Z, 22 November 2026; the historian's japan-subs-building-and-duty-1943-45.md). The only count by date is CINCPAC-CINCPOA Bulletin 142-45, 'Submarine Construction, 1941-1944': boats ANNOUNCED by half-year, laid here as built and so marked (no fixed tie between the two dates). I and RO boats only, as the 1946 loss table counts them; the small HA boats are out (2 in the first half of 1944, 11 in the second). 1942 16 and 18; 1943 15 and 20; 1944 10 and 8: 87. 1945 is the war's 111 ocean-going boats completed from December 1941, less those 87: 24 (derived, rough: announced against completed), January to August. Each half-year is laid in whole boats a month, the larger months first. The first row is the eight between the far chart's 55 on the first day and the record's 63 of December 1941 (48 I, 15 RO), a boat a month from May 1941. To the 6th Fleet, the pool the Advance Submarine Fleet draws on; at every stop, as America's rows are.",
+    "building": [
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 21, "to": 28, "perMonth": 1},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 29, "to": 32, "perMonth": 3},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 33, "to": 34, "perMonth": 2},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 35, "to": 40, "perMonth": 3},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 41, "to": 43, "perMonth": 3},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 44, "to": 46, "perMonth": 2},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 47, "to": 48, "perMonth": 4},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 49, "to": 52, "perMonth": 3},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 53, "to": 56, "perMonth": 2},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 57, "to": 58, "perMonth": 1},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 59, "to": 60, "perMonth": 2},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 61, "to": 64, "perMonth": 1},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 65, "to": 72, "perMonth": 3}
+    ]
+  }
+}

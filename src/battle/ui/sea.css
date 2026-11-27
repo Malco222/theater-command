@@ -1,0 +1,124 @@
+/* The fleet action page's own touches on the shared battle screen. battle.css stays the land thread's: everything here
+   is scoped to .sea, so the field battle page never sees it. */
+
+/* The page is the desk at night in every theme: the browser's own controls and scrollbars follow it. */
+:root { color-scheme: dark; }
+
+/* ---- The chooser ---- */
+.sea .nw { white-space: nowrap; }
+.sea .offer .otop .tc-data { white-space: nowrap; }
+/* A card's title wraps in balance, so "The action in the North Sea" never leaves one word alone (the UI director, b467). */
+.sea .offer .otop .tc-title-3 { text-wrap: balance; }
+.sea .offer .oside { display: block; }
+/* Every card's parts on the same lines as its neighbours': the name, what it is, then the fleets and the staff's chance,
+   however the names wrap. Up to three cards a row at 1280 and up: five practice actions lie three and two. */
+.sea .offer { grid-row: span 3; grid-template-rows: subgrid; row-gap: 4px; align-content: start; }
+
+/* ---- The top bar: one row at 1280 and up (the UI director, 7) ---- */
+.sea.battle { grid-template-columns: minmax(0, 1fr); overflow: hidden; }
+.sea .bbar { flex-wrap: nowrap; gap: 12px; }
+/* The title is as wide as its longest line. Where the bar's middle would be squeezed under its floor, its facts fold at
+   the dot on purpose (sea-page.ts fitTitle: .is-folded, each fact a line of its own, the dot gone by the fold rule), so
+   the box shrinks to its longest line and the rest goes to the middle (the UI director, keep-together review). It holds
+   three lines' height whether folded or not, so the bar is one height at every width, whichever title is shown. */
+.sea .btitle { flex: none; min-width: 0; max-width: none; min-height: 60px; align-content: center; }
+.sea .btitle.is-folded .facts > span { flex-direction: column; }
+.sea .btitle .tc-title-3 { line-height: 24px; } /* wraps rather than cut (the fold rule) */
+/* Under 1440 the title takes the type scale's next size down (the prose size, bold) so it holds one line, and keeps
+   its line height, so the bar is one height at every width (the UI director, round 2). */
+@media (max-width: 1439px) { .sea .btitle .tc-title-3 { font-size: 15px; } }
+/* Under 1440 the bar is 83 high whatever the title, the height the longest sea's name needs once the odds fold, so the
+   sea never starts lower in one action than in another (the UI director, 2b1f0e3). */
+@media (max-width: 1439px) { .sea .bbar { min-height: 83px; } }
+/* And at any width where the facts have folded and a long sea's name would still push the buttons off the bar. */
+.sea .btitle.is-small .tc-title-3 { font-size: 15px; }
+/* The same: under 1536 the clock's buttons drop their key letters, so the date and the fleets hold one line beside the
+   title. Space and 1 2 3 join the keys band below the sea instead (the UI director, b467); 1, 2 and 3 stay in the
+   buttons' tooltips too. */
+/* At sea the caps show from 1536: between 1440 and 1535 they cost the break gauges about 120 (the UI director, b467). */
+@media (max-width: 1535px) { .sea .bspeed .tc-key { display: none; } }
+@media (min-width: 1536px) { .sea .keys .fact:has(.knarrow) { display: none; } }
+/* The hint line folds once under 1536, before "Arrows" (the fold rule: the dot at the fold goes). */
+.sea .keys .kbreak { display: none; flex-basis: 100%; height: 0; }
+@media (max-width: 1535px) { .sea .keys .kbreak { display: block; } }
+.sea .bclock { flex: none; }
+.sea .bspeed { flex: none; }
+/* The middle of the bar (the odds, the two break bars, the nations) keeps 16 clear of the buttons, the bar's gap and this
+   margin, and narrows to fit (the UI director, keep-together mend 1). Where a break gauge would be under 56 the title's
+   facts fold first (fitTitle); the floor, 294, keeps each gauge at 32 or more whatever the title (b467). */
+.sea .bbal { flex: 1 1 360px; min-width: 294px; max-width: 420px; margin-right: 4px; grid-template-columns: minmax(0, 1fr); }
+.sea .bends { display: grid; grid-template-columns: auto minmax(0, max-content) auto; justify-content: space-between; column-gap: 6px; align-items: start; }
+.sea .bends #ratio { white-space: normal; min-width: 0; }
+/* The odds always on two lines, the card's over now's, at every width from the first second, as the land's are, so the
+   bars never jump when a button's word grows (the UI director, b467). Now's line keeps room for its longest figures. */
+.sea .bends #ratio .facts > span { flex-direction: column; }
+.sea .bends #ratio .fact + .fact { min-width: calc(13ch + 1.4em); }
+/* WITHDRAW holds END THE CHASE's box from the first second, its word centred in it, the word not in use hidden: the
+   button keeps one width all action, so the bar is laid once and its ends never move (the UI director, b467). */
+.sea .wdbtn { display: inline-grid; align-items: center; justify-items: center; }
+.sea .wdbtn > .wd-word { grid-area: 1 / 1; }
+.sea .wdbtn > .wd-word.is-off { visibility: hidden; }
+/* A question under the buttons is as wide as its two answers need, never under the kit's 320: END THE CHASE and KEEP
+   FIGHTING side by side need 344, so KEEP FIGHTING stays on its paper and the box inside the page's edge (the second
+   Playtester, b467 snag 1). Its words take the box's width and give it none. */
+.sea .wask { width: max-content; min-width: 320px; max-width: calc(100vw - 28px); }
+.sea .wask p { width: 0; min-width: 100%; }
+/* Where a break gauge would be thinner than 56 the subtitle folds from the first second (sea-page.ts fitTitle); what is
+   still short after that stands, never under 32: the middle's floor of 294 above (the UI director, b467). */
+/* The clock says what it is doing (ruling 226, 8): RUNNING in paper, PAUSED in brass. */
+.sea .bclock .tc-label { color: var(--paper-300); }
+.sea .bclock .tc-label.is-paused { color: var(--brass-300); }
+/* The clock's box holds its widest word, ACTION OVER, from the first second, so neither the clock starting nor the
+   action ending moves the bar: it is laid once (the UI director, b467; the design director, b476). */
+.sea .bclock #clockState, .sea .bclock .room { grid-area: 1 / 1; }
+.sea .bclock .room { visibility: hidden; }
+.sea .bclock #time { grid-area: 2 / 1; }
+/* Where even the title's fold and its smaller size leave the buttons short of room, the box keeps only RUNNING's width
+   and ACTION OVER folds onto two lines over the time (fitTitle, the fold rule). */
+.sea .bclock.is-folded .room:not(.room-live) { display: none; }
+.sea .bclock.is-folded #clockState { width: 0; min-width: 100%; }
+
+/* ---- The top of the sea: our fleet's warning, then the dispatch, at the centre; the clock's tag at the top left, at
+   the zoom group's height and mirroring it (the UI director, sea-226 mend 1) ---- */
+.sea .ftop { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: min(720px, calc(100% - 32px)); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; z-index: 1; }
+.sea .ftop .dispatch { position: static; transform: none; max-width: 100%; }
+.sea .ftag { position: absolute; left: 12px; top: 12px; z-index: 1; pointer-events: none; display: flex; align-items: center; gap: 8px; padding: 3px 10px; border-radius: 2px; background: var(--paper-100); color: var(--ink-900, #2d241a); font: 700 12px/16px var(--font-typed); letter-spacing: .1em; text-transform: uppercase; box-shadow: 0 2px 8px rgba(0, 0, 0, .45); }
+.sea .ftag .tc-key { opacity: 1; letter-spacing: .04em; }
+.sea .ftag[hidden], .sea .fwarn[hidden] { display: none; }
+.sea .fwarn { padding: 6px 14px; border-radius: 2px; background: var(--amber); color: #2a1a06; font: 700 14px/20px var(--font-serif); box-shadow: 0 2px 8px rgba(0, 0, 0, .45); text-align: center; }
+.sea .bacts { flex: none; }
+/* WITHDRAW greyed while the player's own fleet is breaking off (b458 review): the kit's grave hover comes after its
+   greyed rule and would light the button up under the pointer as though it could be pressed, so it stays grey here. */
+.sea .bacts .tc-btn[disabled], .sea .bacts .tc-btn[disabled]:hover { color: var(--text-faint); background: var(--desk-800); border-color: var(--line); box-shadow: none; cursor: default; }
+@media (max-width: 1279px) { .sea .bbar { flex-wrap: wrap; } }
+
+/* ---- The tray: chips narrow to fit up to twelve at 1280; past that the row shows whole chips only, and a small card
+   at its end says "9 more ▸" and turns the page (the UI director, round 2). sea-page.ts trayMore counts with these
+   widths: a chip at least 99 pixels, the more card 92, the gap 6. ---- */
+.sea .traywrap { position: relative; min-width: 0; }
+.sea .tray { overflow: hidden; gap: 6px; }
+.sea .ucard { flex: none; width: var(--chip, 140px); min-width: 0; max-width: none; padding: 7px 8px; gap: 3px; }
+.sea .ucard .uwhat { display: grid; min-width: 0; }
+.sea .ucard .uwhat b { font-size: 13px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sea .ucard .uwhat small { display: flex; align-items: center; gap: 4px; min-width: 0; font: 400 12px/15px var(--font-typed); color: var(--text-muted); }
+/* The fleet's name is never cut (b458, 6): sea-page.ts sizeChips makes the chip as wide as the longest of the tray's
+   fleet names needs, taking the kit's next size down where the names' own width will not hold it at 12. */
+.sea .ucard .uwhat small span { white-space: nowrap; }
+.sea .tray.is-smallfleet .ucard .uwhat small span { font-size: 11px; }
+.sea .ucard .bsign { flex: none; width: 28px; height: 14px; }
+/* A meter's name and number on one line, its bar full width beneath, so a narrow chip keeps all three. */
+.sea .ucard .tc-meter { grid-template-columns: 1fr auto; grid-template-areas: "l n" "b b"; row-gap: 2px; column-gap: 6px; }
+.sea .ucard .tc-meter > .tc-label { grid-area: l; }
+.sea .ucard .tc-meter > i { grid-area: b; }
+.sea .ucard .tc-meter > span:last-child { grid-area: n; }
+.sea .ucard .ustate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Every chip one width, the one that holds the longest name on one line (sea-page.ts sizeChips): a name never wraps,
+   and the tray pages the rest with "N more". "N more" in paper, as on land. */
+.sea .tmore { flex: none; width: 112px; display: grid; place-items: center; padding: 6px 4px; font: 700 12px/16px var(--font-typed); letter-spacing: .08em; text-transform: uppercase; text-align: center; white-space: nowrap; color: var(--paper-200); }
+.sea .tmore[hidden] { display: none; }
+.sea .tmore:hover { color: var(--paper-100); }
+
+/* ---- Speed for the chosen ships, over the field's lower right, clear of the ports' names at the left ---- */
+.sea .seaspeed { position: absolute; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 10px; padding: 6px 10px; }
+.sea .seaspeed[hidden] { display: none; }
+.sea .seaspeed .tc-seg > * { height: 28px; padding: 0 12px; font-size: 12px; }
