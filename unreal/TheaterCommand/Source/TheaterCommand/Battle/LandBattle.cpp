@@ -4164,6 +4164,15 @@ void ALandBattle::MakeMen()
 	bLeaveWalk = LandParts::OnTrial("leave") && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoLeave"));
 	Crowd->SetLeaveWalk(bLeaveWalk);
 	UE_LOG(LogTheater, Log, TEXT("Land battle: men who leave with their block %s"), bLeaveWalk ? TEXT("walk or run off ON (-TheaterLandTrial=leave, release 2)") : TEXT("as before (stopped and cut)"));
+	// Bullet hits (-TheaterLandHits; Brian, 25 November: "if a soldier gets hit by a bullet can we have some effect showing
+	// him hit"): the jolt, no two neighbours falling alike, the wounded who stay down (LandMen::Crowd::SetHits). Off: as before.
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandHits")))
+	{
+		LandMen::Crowd::Hits Hits;
+		Hits.bJolt = Hits.bVariety = Hits.bWounded = Hits.bFlinch = true;
+		Crowd->SetHits(Hits);
+		UE_LOG(LogTheater, Display, TEXT("Land battle: bullet hits ON (jolt, varied falls, wounded who stay down)"));
+	}
 	std::string Error;
 	// (the men's ground is the field's, and the shell holes' own face where one is torn: their floors and rims stand a
 	// little over the drawn ground, and a body laid across a rim lies on it, not sunk in it)

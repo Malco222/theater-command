@@ -1257,6 +1257,104 @@ for fall and skin for skin the same as with none).
   from his pose as struck, a little less or more, and nothing holds it so (in the band's battle 10 of its 1053 limbs
   under half a metre away, none toward).
 
+## Bullet hits on the men (effects, off until passed)
+
+Brian, 25 November: "if a soldier gets hit by a bullet can we have some effect showing him hit", "right now the just
+drop"; and his rule that no two men do the same thing at the same time. Behind `-TheaterLandHits`
+(`LandMen::Crowd::SetHits`, four parts, each testable alone). Off: every man is posed and falls as before, to the bit
+(`Tools/land_hits/run.sh` hashes every man's bones once a battle second, and every fall, over four battles, against
+the base revision and between g++ and clang++). The plan and the measure it starts from:
+`battle-fx/hits/hit-plan.md`, `battle-fx/hits/falls-today.md`. The puff on his body (the kit), the effects' and the
+feed's halves and the blasts' knock-down come in a later build.
+
+- **The jolt (`bJolt`).** A man killed by a rifle or an mg round is jolted away from the shot as his fall begins, a
+  layer over his pose (his stance's, the fall's 0.12 s blend from it, then the fall), in life's seconds:
+  `A·wt·e^(1-wt)` (w 18 to 22, peak at 0.05 s), faded from 0.2 s and nothing at all from 0.33 s, so a thrifty frame,
+  a thread or the scrubber's quiet replay pose him alike, and the fall opens with a hit, not limp. The soldier
+  modeller's bone rules: `spine_01`, `spine_02` and `chest` bent away from the shot (16 degrees in all, shared 3, 3.5 and
+  3.5 tenths; up to 1.7 times that struck from a side, so his outline leans away at a distance) and twisted toward the struck shoulder (14 degrees; the shooter's side, by his dice when the shot is from
+  ahead or behind); `neck` and `head` turned back half as much and the head 40 ms behind (it holds still, then follows
+  at half); never `pelvis` (pouches and feet hang on it) and never the clavicles (collar and strap weights). The rifle
+  hangs on bone `weapon` under the root, so it is moved with the chest and his fists keep it. Away from the shooter's
+  track as it fired (his kill's `by`, `k`, `j`); none known, from the front. Rifle 1, mg 0.8 and a second kick half as
+  big 70 to 110 ms later, times 0.7 to 1.3 by his own dice (a salt of its own: `ChooseFall`'s dice keep their order).
+  A leg fall (`die_leg_*`, or a clip whose `hit` is a thigh or a calf) buckles that knee 15 to 25 degrees with half the
+  bend and no twist. Bones by name: a file without one skips it.
+- **No two neighbours alike (`bVariety`).** No fall a body within 15 m showed in the last 8 s, nor one a body within
+  4 m still lies in, where any other clip is left (sections or none; a wounded man's fall counts). Where none is left
+  (prone has 4 clips, cover 5) the same clip at his own rate (0.85 to 0.95 or 1.05 to 1.15) and start (0 to 0.1 s in),
+  never mirrored (`ManInfo::FallRate`, `FallSkip`). A rifle's or an mg's kill gives him a hit place by his own dice
+  (head 1 in 10, gut 3 in 20, leg 3 in 20: `ManInfo::HitPart`), whose kind weighs four times, the Fates still spreading
+  them. The soldier modeller's rules (`hits/NOTES-from-soldiers.md`, 25 November), hard where another clip is left:
+  a standing fall opens in the pose its clip's `start` names, so one opening at the shoulder (`fire_stand`) only for a
+  man aiming or firing (`ManInfo::bFallAimed`), those opening in `idle` three times as likely for one who was not;
+  never a thrown fall (`die_thrown_*`, or `hit.blast`) for a bullet; and room for where a fall carries him (its end
+  offset over half a metre, e.g. `die_side_b` 1.07 m to his left): no other man or body within 0.55 m of the way and a
+  third of a metre on, nor (`Crowd::SetRoom`, the scene's) a wall, hedge or vehicle. (`Crowd::SetRoom` is there for
+  the scene to give the walls, hedges and vehicles a fall's room and a crawl are checked against; the scene does not call
+  it yet, so in the game only men and bodies are checked, and a fall or a crawl can carry a man into a wall, a hedge or
+  a vehicle.) A man walking (a gait under 1.6
+  m/s of life) or halted from a gait within 1.5 s of life takes the standing falls (one halted in cover the cover
+  ones), so the stand-only clips bullets never reached come into play; a man running the running ones. The walking
+  line is measured: the men killed in a gait went (life m/s) under 1.6: 19 of 25 (normandy-1944), 10 of 19
+  (prokhorovka-1943), 54 of 90 and 14 of 22 in the air recordings; over 2.2: 2, 4, 28 and 4. So run falls drop from
+  38%, 23%, 38% and 27% of bullet deaths to 3%, 4%, 7% and 6%: only the men truly running keep `die_run_*`. A man lying in a file with no prone falls takes the kneeling ones: none goes limp
+  where a deaths map exists. New falls (`die_prone_d`-`g`, `die_cover_d`-`f`) come in through the file's `deaths` map
+  with no change here. Bailed crews shot (`LandBail.cpp`) are LandBail's own poses: left as they were.
+- **Where he was struck (`Crowd::StruckPlace`).** For the effects' puff: by his fall's clip, its `hit` (`{bone, side,
+  at, push, from, blast}`; `at` a rest-pose point on the bone, skinned with it; `push` also turns the jolt) where the
+  file has it, else by name (`die_head_*` the head; `die_gut_*` `spine_01`; `die_leg_*` the thigh), else his chest
+  12 cm toward the shooter; as posed now (ask it after `Update`). The kind word says how he falls (`die_back` = struck
+  in front), never where. A man not falling: his stance's height (standing 1.35, running 1.3, kneeling or in cover
+  0.85, lying 0.25 m). Not wired in `PlayEffects` yet: the puff is the next build's.
+- **Flinch clips by name.** Where a file has the soldier modeller's `hit_flinch_f`/`_b`/`_l`/`_r` (`_kneel_*`,
+  `_run_*`, `hit_flinch_prone`; the letter where the round came from), the jolt plays it, its difference from its
+  `additive_base` laid over his pose, in place of the code's turn; else the code's. Bones and the 0.12 s blend as above.
+- **Wounded who stay down (`bWounded`).** A man with `wd` (struck, not killed) and no `cy` (no bearers), read from a
+  whole recording and from live deltas (`Extend` reads `wd`, `back` and `cy`, and a later delta corrects them), as the
+  feed's `Track::Wounded` has it; the drill sends it behind its own option later, the cloud test writes such rows by
+  hand. A wound's fall writes the Fates, so he is stepped alone (a carried man, one past `back`, or one killed first
+  is not). At `wd`: a fall that does not kill him, chosen as a dead man's is, through the Fates and the neighbours'
+  rules (`wound_arm`/`_gut`/`_leg` by name where the file has them; else his stance's falls, never thrown, the
+  `die_crawl_*` stand-ins, held propped at their end, the likeliest), the jolt over it. Then each his own by his dice:
+  on his back a loop by name (`wounded_clutch_*`, `wounded_writhe`, stand-in `wounded_waiting`) lined up on him about
+  his pelvis where it lies as he does; face down, seven in ten drag themselves 1.5 to 3.5 m on (`wounded_crawl`, else
+  `crawl`; a metre where that is blocked; none where no room), the body carried along; else his fall's last frame held.
+  Held or done dragging he breathes and stirs at his own phase and rate: the head lifted and turned, an arm reaching
+  (to the wound on his back), a knee drawn, never quite still, never the pelvis or the clavicles. Never face down to
+  his back. No shot, flash or sound from him while down. Killed down there: he goes still where he lies. At `back` he
+  gets up from where he lies: `get_up_face`/`_back` by name, else `go_prone` backwards over 2.2 s, its first pose laid
+  on his (the lying pose blended out over 0.4 s) and eased back to his place at a shuffle (pelvis under 13 cm a frame
+  at 30 fps, Life 2). No clip gets up from lying on his back yet, so a man who will get up takes a fall ending face
+  down until `get_up_back` comes. A still frame shows a held face-down man much as the dead (pictures): he reads alive
+  by his motion; the soldier modeller's `wounded_*` loops are the real cure.
+- **With the rules' wounded option (release 2's bearers).** The drill gives a man struck and not killed `wd` and, from
+  then, the stance `wounded` (with bearers, `cy` and his stance `carried` once they have him; a light case `back`).
+  Off, LandMen plays that stance as before (`wounded_waiting`, else `carried_wounded`, else `fire_prone` held; no fall
+  between). With `-TheaterLandHits` one authority a man: a man with `cy` is the bearers' (the stance plays, no wound's
+  fall); any other man with `wd` is this build's from `wd` to `back` (his fall, what he does down there, his get-up), and
+  the rules' stances wait meanwhile, `wounded` among them. Down there he lies where he went down whatever his track does
+  after `wd` (his place and facing held, eased back to the track's over the get-up); `d` while he lies: still where he
+  lies, no second fall; `wd` after `d`: never down. In a live battle the drill gives `wd` when he falls but `cy` only
+  when a stretcher pair starts carrying him, so `cy` comes in a later delta: then (and if a later delta takes `wd`
+  back) the hold on his place ends at once and he is the bearers' (`LetGo`: their stance from lying, the lying pose
+  blended out over a second, his pelvis laid where it lay and his place eased onto his track); the hits never take him
+  again. Up at `back` (or let go there because the rules have him lie) he eases onto his track whatever distance it went
+  while he lay: on his feet first, then at a slow walk's 0.8 m/s (1.6 s at least), never let go at once; he glides
+  that last of it in his stance's own clip (no walk is played for it). Checked in `Tools/land_hits` (the rules' wounded
+  men: no man falls twice, none down wounded stands or slides; live, `cy` a delta after his wound: he goes with his
+  track, pelvis under 13 cm a frame; up after his track walked 0, 2 and 10 m, standing or prone at back: pelvis under
+  13 cm a frame, on his track in the end). The blasts' knock-down (`kd`) is not on this line; when it joins, its
+  stand-in steps aside for a man whose round carries `wd` (its own rule) and this build does not touch its clips or times.
+- **The graze flinch (`bFlinch`).** Kept for the switch; nothing yet (the men read misses only as shots; a near miss
+  needs the rounds' `l` and each block's men at its time in `Book`).
+- **Pictures.** `Tools/land_hits/land_hits_picture.cpp` and `land_hits_pictures.py` (the crowd's own skinning, a small
+  orthographic painter): a German rifleman hit from the front, from his left and running, at 0, 0.02, 0.033, 0.05,
+  0.1, 0.2, 0.4 and 1.0 s, today above and the jolt alone below (variety off: the same fall) with today's outline in
+  white; three wounded men and a dead one at 0.5, 2, 5 and 20 s, close and at about 50 m; and a dense moment of
+  normandy-1944-air from a battle camera's slant while the last men still fall, today and every part on. In
+  `battle-fx/hits/pictures/`.
+
 ## The fighters on call over the field (release 2, off until passed)
 
 The effects brief of 23 November (Brian's ask through the coordinator): the ground-attack fighters on call "fired on"
