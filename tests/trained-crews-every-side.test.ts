@@ -127,15 +127,19 @@ describe('the trained crews edge reads every side by the same facts', () => {
     // a while the roster holds more rows than the group has bombers. The edge reads every row on it. The figure is the
     // one trainedEdge gives on the untouched base 8410c3e2d for the player's own group with this roster and f.bmr 53,
     // 60 and 74 (scratch out/c7-base.txt): the same as at full strength. The schooled rows are at the tail, so a
-    // reading of only the first f.bmr rows would give 0 at 53.
+    // reading of only the first f.bmr rows would give 0 at 53. The same rows the other way round (the schooled rows at
+    // the head) read the same on the base too (out/c11-base.txt), so a reading of only the last f.bmr rows is caught.
     const g = createGame(1, 'GER');
     const mine = bombers(g, 'GER'), theirs = bombers(g, 'UK');
-    realRoster(mine); realRoster(theirs);
-    for (const bmr of [74, 60, 53]) {
-      mine.bmr = bmr; theirs.bmr = bmr;
-      expect(mine.bombers!.on).toHaveLength(REAL.length);
-      expect(trainedEdge(g, mine)).toBe(REAL_EDGE);
-      expect(trainedEdge(g, theirs)).toBe(REAL_EDGE);
+    for (const hrs of [REAL, [...REAL].reverse()]) {
+      realRoster(mine); realRoster(theirs);
+      give(mine, hrs); give(theirs, hrs);
+      for (const bmr of [74, 60, 53]) {
+        mine.bmr = bmr; theirs.bmr = bmr;
+        expect(mine.bombers!.on).toHaveLength(REAL.length);
+        expect(trainedEdge(g, mine)).toBe(REAL_EDGE);
+        expect(trainedEdge(g, theirs)).toBe(REAL_EDGE);
+      }
     }
   });
 
