@@ -179,12 +179,14 @@ export interface LandUnit extends UnitBase {
   /** (wayround) The enemy block whose ground undid its step back this tick (spread): read and cleared by its next move. */
   barred?: number;
   /**
-   * (wayround) The way round an enemy block in its line that it chose: that block, where it stood then, and the side
-   * across its own way it goes round by (`side`, as its way lay then; `over`, that side as a direction on the field, so
-   * the end it chose stays the same end however its way turns). Kept while that block stands there and this one is
-   * falling back in order (sim.ts wayRound, move).
+   * (wayround) The way round an enemy block in its line that it chose: that block, and the side across its own way
+   * it goes round by (`side`, as its way lay then; `over`, that side as a direction on the field, so the end it chose
+   * stays the same end however its way turns; `near`, that end is the nearer one: that block's middle lies to the
+   * other side of its lane, at the choice or since). Kept while that block still stands ahead on its road, by this
+   * one's own sight, however far it has moved, until that block crosses its lane to the side chosen, and while this
+   * one is falling back in order (sim.ts wayRound, move).
    */
-  round?: { by: number; at: [number, number]; side: 1 | -1; over: [number, number] };
+  round?: { by: number; side: 1 | -1; over: [number, number]; near: boolean };
   /** The friend it made way for this tick (LAND.queue): next tick it waits rather than step back into that friend's way. */
   yieldTo?: number;
   /** Where its attack has it stand, as last worked out: its own stretch, which a friend coming on later stands beside (b439). */

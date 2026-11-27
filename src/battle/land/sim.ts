@@ -3965,14 +3965,29 @@ export class LandBattle implements BattleSim<LandUnit> {
    * turned, spread() leaves the pair alone once their middles are `clear` apart: half this block's width and the
    * other's half-diagonal one way, half its depth, that half-diagonal and LAND.apart the other, the longer of the two
    * blocks' own reckonings. So the block steps across its way, to the side it already leans to (the nearer end),
-   * until its lane passes that far from the enemy's middle, then goes on; once it is that far past it along its way
-   * the round is done. The end is chosen once and kept while that enemy stands there (within LAND.apart of where it
-   * stood): no change of mind between the ends. An end is closed where the step across leaves the field, crosses
-   * ground this block cannot, ends in another enemy block's ground (shares, spread()'s own reckoning) or leads
-   * through the ground of one it is not against already; and the further end is closed where the enemy block does
-   * not stand wholly ahead (level with it, the step to that end is through the block itself: in one pursuit a block
-   * shoved its enemy sideways for four minutes so). With both closed nothing is chosen and the block does as it did
-   * before. No figure is new.
+   * until its lane passes that far from the enemy's middle, then goes on; once it is level with that block along its
+   * way the round is done. The end is chosen once and kept while its reason holds: that same enemy block still
+   * stands ahead on its road, by this block's own sight (ahead: its middle further along this block's way than this
+   * block's own; on its road: this block's lane not clear of it by the other side than the one chosen). Never by
+   * how far that block has moved since: a pursuer that comes on ahead of it is gone round by the end chosen, and if
+   * it keeps heading the block off the block makes no ground, which the rules for a block that cannot get away take
+   * as they do today (the design director, 26 November 2026 23:54Z; as first built the way round was forgotten once
+   * that block had moved LAND.apart, and in one pursuit a block chose its way round the pursuer before it eight
+   * times in eighty seconds, stopping each time). Nor is one chosen round a block that is not ahead. And going round
+   * a block by the side it now stands on is no reason: where it goes by the nearer end (that block's middle to the
+   * other side of its lane, at the choice or since) and that block crosses its lane to the side chosen, the way
+   * round ends there (his ruling of 27 November 2026 00:31Z: the kept end had become the further end with the
+   * pursuer beside it). A way round by the further end is chosen with that block on that side, so that does not
+   * end it: it is held while that block is ahead, as every way round, and while the end is still open by this
+   * block's own sight; the nearer end opening later does not unseat it; and "wholly ahead" is its test at the
+   * choice only (00:52Z, 01:07Z). No change of mind between the ends while it is kept. An end is closed where the step across leaves the field, crosses ground this block cannot,
+   * ends in another enemy block's ground (shares, spread()'s own reckoning) or leads through the ground of one it is
+   * not against already; where its lane on from there, until it is past the block it goes round, is barred by
+   * another enemy block (a pocket: in one pursuit a block went to and fro between two pursuers, the nearer end of
+   * each leading back against the other, eight ways round in two minutes; the same ruling); and the further end is
+   * closed where the enemy block does not stand wholly ahead (level with it, the step to that end is through the
+   * block itself: in one pursuit a block shoved its enemy sideways for four minutes so). With both closed nothing
+   * is chosen and the block does as it did before. No figure is new.
    */
   private shares(u: LandUnit, e: LandUnit, x: number, y: number, face: number): boolean {
     // (spread() reads a pair in the frame of whichever comes first among the blocks: `u` as it would stand at (x, y) faced `face`)
@@ -3994,48 +4009,81 @@ export class LandBattle implements BattleSim<LandUnit> {
       Math.hypot(u.w / 2 + half(e), u.d / 2 + half(e) + LAND.apart), Math.hypot(e.w / 2 + half(u), e.d / 2 + half(u) + LAND.apart));
     const stands = (e: LandUnit | undefined): e is LandUnit => !!e && fighting(e) && e.kind !== 'fort';
     let R = u.round;
-    if (R) { const e = this.unit(R.by); if (!stands(e) || dist(e.x, e.y, R.at[0], R.at[1]) > LAND.apart) R = u.round = undefined; }
+    // (ahead: that block's middle further along this one's way than its own)
+    const ahead = (e: LandUnit): boolean => (e.x - u.x) * hx + (e.y - u.y) * hy > 0;
     // The step across that takes its lane clear of this enemy toward (ox, oy), a side of its way: where it ends.
     const across = (e: LandUnit, ox: number, oy: number): [number, number] => {
       const by = clear(e) + 1 - ((u.x - e.x) * ox + (u.y - e.y) * oy);
       return [u.x + ox * by, u.y + oy * by];
     };
+    const face = Math.atan2(hx, hy), pace = u.w / 2;
+    // That block's end toward (ox, oy), a side of its way: open?
+    // (By its own sight, as every reading of the enemy in a block's move: an enemy block still hidden is not known to
+    // it, nor is its ground. One that bars it unseen gives it no way round to choose, and one standing unseen at an
+    // end closes no end; it finds that block when it comes on it, as it would any other. The design director, 22:35Z.)
+    const open = (e: LandUnit, ox: number, oy: number): boolean => {
+      const m = this.going(u), f = this.field;
+      const others = this.units.filter((o) => o !== e && o.side !== u.side && stands(o) && !o.hid);
+      // (an enemy block it stands against already is no bar to stepping away from it)
+      const apartFrom = others.filter((o) => !this.shares(u, o, u.x, u.y, face));
+      // (it makes the step across faced along it and comes out of it faced along its way: its box as it lies either way)
+      const lies = (o: LandUnit, x: number, y: number): boolean => this.shares(u, o, x, y, face) || this.shares(u, o, x, y, face + Math.PI / 2);
+      const [px, py] = across(e, ox, oy);
+      if (px < 5 || px > f.w - 5 || py < 5 || py > f.h - 5) return false;
+      if (!this.bears(m, px, py) || !this.dry(m, u.x, u.y, px, py)) return false;
+      if (others.some((o) => lies(o, px, py))) return false;
+      // Nor through the ground of an enemy block it is not against, on the step across: read every half width of its own.
+      const leg = dist(u.x, u.y, px, py);
+      for (let k = 1; pace > 0 && k * pace < leg; k++) {
+        const x = u.x + (px - u.x) * k * pace / leg, y = u.y + (py - u.y) * k * pace / leg;
+        if (apartFrom.some((o) => lies(o, x, y))) return false;
+      }
+      // Nor into a pocket: its lane on from there, until it is past that block (the round done), barred by another
+      // enemy block. Barred as its lane round this one is reckoned clear: that block stands ahead of where the
+      // step ends, its middle nearer that lane than the two may stand however either is turned (`clear`). By
+      // the boxes as they lie when it chooses, a pursuer that turns to meet it bars the lane after all.
+      const on = clear(e) - ((u.x - e.x) * hx + (u.y - e.y) * hy);
+      if (others.some((o) => {
+        const along = (o.x - px) * hx + (o.y - py) * hy, off = (o.x - px) * nx + (o.y - py) * ny;
+        return along > 0 && Math.hypot(off, Math.max(0, along - on)) < clear(o);
+      })) return false;
+      return true;
+    };
+    // The further end only where that block stands wholly ahead of this one along its way (their boxes, as they
+    // lie): level with it, the step across to the further end would be through the block itself.
+    const before = (e: LandUnit): boolean => {
+      const c = Math.abs(Math.cos(e.face - face)), sn = Math.abs(Math.sin(e.face - face));
+      return (e.x - u.x) * hx + (e.y - u.y) * hy >= u.d / 2 + (e.w / 2) * sn + (e.d / 2) * c;
+    };
+    // Kept while its reason holds: that block stands, this one knows of it, it is still ahead, and it is still on its
+    // road (its lane not clear of that block's ground by the other side than the one it chose). However far that
+    // block has moved. Level with it or past it, the round is done. And it goes round no block by the side that block
+    // now stands on: going by the nearer end (`near`: that block's middle to the other side of its lane, when it
+    // chose or since), the round ends where that block's middle has crossed its lane to the side chosen. Going by
+    // the further end it was chosen with that block on that side, and is held while that end is still open by the
+    // reading that opened it (a seen enemy block come to bar the step across or the lane on ends it); the nearer end
+    // opening later does not unseat it. "Wholly ahead" is that end's test at the choice only: read again on the
+    // boxes as they lie it flips as a pursuer turns to meet the block, and the same end is dropped and chosen again
+    // with a stop each time. A pursuer that comes level while the block crosses its front holds it by its ground
+    // until level (ahead, as every way round).
+    if (R) {
+      const e = this.unit(R.by);
+      const lean = e ? (u.x - e.x) * R.over[0] + (u.y - e.y) * R.over[1] : 0;
+      if (lean > 0) R.near = true;
+      if (!stands(e) || e.hid || !ahead(e) || lean <= -(clear(e) + 0.5)
+        || (R.near ? lean < 0 : !open(e, R.over[0], R.over[1]))) R = u.round = undefined;
+    }
     if (barred !== undefined && R?.by !== barred) {
       const e = this.unit(barred);
-      if (stands(e)) {
-        const m = this.going(u), f = this.field, face = Math.atan2(hx, hy), pace = u.w / 2;
-        const others = this.units.filter((o) => o !== e && o.side !== u.side && stands(o));
-        // (an enemy block it stands against already is no bar to stepping away from it)
-        const apartFrom = others.filter((o) => !this.shares(u, o, u.x, u.y, face));
-        // (it makes the step across faced along it and comes out of it faced along its way: its box as it lies either way)
-        const lies = (o: LandUnit, x: number, y: number): boolean => this.shares(u, o, x, y, face) || this.shares(u, o, x, y, face + Math.PI / 2);
-        const open = (side: 1 | -1): boolean => {
-          const [px, py] = across(e, nx * side, ny * side);
-          if (px < 5 || px > f.w - 5 || py < 5 || py > f.h - 5) return false;
-          if (!this.bears(m, px, py) || !this.dry(m, u.x, u.y, px, py)) return false;
-          if (others.some((o) => lies(o, px, py))) return false;
-          // Nor through the ground of an enemy block it is not against, on the step across: read every half width of its own.
-          const leg = dist(u.x, u.y, px, py);
-          for (let k = 1; pace > 0 && k * pace < leg; k++) {
-            const x = u.x + (px - u.x) * k * pace / leg, y = u.y + (py - u.y) * k * pace / leg;
-            if (apartFrom.some((o) => lies(o, x, y))) return false;
-          }
-          return true;
-        };
+      if (stands(e) && !e.hid && ahead(e)) {
         const first: 1 | -1 = (u.x - e.x) * nx + (u.y - e.y) * ny >= 0 ? 1 : -1, other: 1 | -1 = first === 1 ? -1 : 1;
-        // The further end only where that block stands wholly ahead of this one along its way (their boxes, as they
-        // lie): level with it, the step across to the further end would be through the block itself.
-        const c = Math.abs(Math.cos(e.face - face)), sn = Math.abs(Math.sin(e.face - face));
-        const before = (e.x - u.x) * hx + (e.y - u.y) * hy >= u.d / 2 + (e.w / 2) * sn + (e.d / 2) * c;
-        const side = open(first) ? first : before && open(other) ? other : null;
+        const side = open(e, nx * first, ny * first) ? first : before(e) && open(e, nx * other, ny * other) ? other : null;
         // (both ends closed: the way round it kept, if any, stands; else none)
-        if (side !== null) R = u.round = { by: e.id, at: [e.x, e.y], side, over: [nx * side, ny * side] };
+        if (side !== null) R = u.round = { by: e.id, side, over: [nx * side, ny * side], near: side === first };
       }
     }
     if (!R) return null;
     const e = this.unit(R.by)!;
-    // Past it along its way: done.
-    if ((u.x - e.x) * hx + (u.y - e.y) * hy > clear(e)) { u.round = undefined; return null; }
     // Its lane is clear of that block's ground, by the side it chose (as that side lay when it chose it): straight on.
     const [ox, oy] = R.over;
     if ((u.x - e.x) * ox + (u.y - e.y) * oy >= clear(e) + 0.5) return null;
