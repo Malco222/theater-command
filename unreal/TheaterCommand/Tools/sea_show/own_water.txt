@@ -6,8 +6,9 @@
 # rules' recorder (tools/sea-record) writes no mark of the switch in a recording, hence the list; a hand-made stand-in may
 # say it in its field instead (ownWater true). Add each recording the naval thread makes with the switch on.
 #
-# The naval thread's own-water recordings (naval-battles/own-water-r2/recordings, 25 November 14:56Z, made with the reviewed
-# rules, switch on; their md5s as the naval thread sent them), kept in Tools/sea_show/own-water under these names.
+# The naval thread's own-water recordings (naval-battles/own-water-r2/recordings, 25 November, made with the reviewed rules,
+# switch on; light-ships, two-lines and two-lines-sailors as re-delivered at 17:52Z, the same moves with the words' fields
+# mended; their md5s in recordings/own-water-r2/README.md), kept in Tools/sea_show/recordings/own-water-r2 under these names.
 own-water-light-ships
 own-water-samar
 own-water-samar-sailors

@@ -15,6 +15,11 @@ class UTexture2D;
  * words (the UI director's ruling of 21 November: "the battle bar is the release 1 card's bar, moving"). The knot is
  * the scene's (ASeaBattle::GetBar, eased there); this only draws, and takes no input.
  *
+ * And the torpedo words (the naval rules behind their "Friendly torpedoes" switch; Battle/SeaWordsCore words them,
+ * ASeaBattle::GetTorpedoWords places them): a small plain-cream tag over the leading ship of each of the player's own
+ * pieces holding its salvo or turning clear of one, and, while the camera's subject is such a piece, its line at the foot
+ * of the screen, clear of the bar and of the month scene's own words; tags never on one another (SeaWords::Lay).
+ *
  * The month's submarine scene (D1, ruling 241; ASeaBattle::BeginMonthScene) is played inside the campaign: there the
  * screen also shows the scene's caption, the month's lines, low over the sea as it ends, and takes the keys and the
  * pointer, any key or click skipping the scene back to the map.

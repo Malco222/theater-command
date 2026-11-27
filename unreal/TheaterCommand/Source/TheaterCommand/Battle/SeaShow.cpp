@@ -460,9 +460,23 @@ namespace SeaShow
 			else { B = &V; break; }
 		}
 		const double Fr = B ? Clamp((ShownT - A->T) / std::max(1e-6, B->T - A->T), 0.0, 1.0) : 0.0;
+		const bool bReached = A->T != NowFrom;
+		NowFrom = A->T;
 		for (const auto& Pair : A->Pieces)
 		{
 			Piece P = Pair.second;
+			// (the torpedo words' phrases: the rules' name of the piece a view reached names, heldForName and clearFromName, as
+			// it gives them; never read in deciding)
+			if (bReached && P.HeldFor >= 0 && !P.HeldForName.empty()) RulesNamed[P.HeldFor] = Phrase{ A->T, P.HeldForName };
+			if (bReached && P.ClearFrom >= 0 && !P.ClearFromName.empty()) RulesNamed[P.ClearFrom] = Phrase{ A->T, P.ClearFromName };
+			// (the torpedo words' held fields as the view reached gives them, until the piece's salvo is told after it)
+			const auto Told = SalvoToldAt.find(Pair.first);
+			if (Told != SalvoToldAt.end() && Told->second > A->T + 1e-9)
+			{
+				if (P.HeldFor >= 0) P.bHeldLetGo = true;
+				P.HeldFor = -1;
+				P.HeldForName.clear();
+			}
 			if (B)
 			{
 				auto Next = B->Pieces.find(Pair.first);
@@ -932,6 +946,17 @@ namespace SeaShow
 		if (E.What == "sea:torpedo")
 		{
 			++Check.TorpedoEvents;
+			// (the rules have let the piece fire: told after the view reached, its held fields are taken off now, SalvoToldAt)
+			SalvoToldAt[E.Unit] = E.T;
+			// (the torpedo words' phrases: the log's line of its salvo, "Four destroyers of Force H fire torpedoes at ...")
+			if (!E.Text.empty()) SalvoSaid[E.Unit] = Phrase{ E.T, E.Text };
+			const auto HeldNow = E.T > NowFrom + 1e-9 ? Now.find(E.Unit) : Now.end();
+			if (HeldNow != Now.end())
+			{
+				if (HeldNow->second.HeldFor >= 0) HeldNow->second.bHeldLetGo = true;
+				HeldNow->second.HeldFor = -1;
+				HeldNow->second.HeldForName.clear();
+			}
 			auto It = Lines.find(E.Unit);
 			if (It == Lines.end()) return;
 			const double Running = E.Running > 0.0 ? E.Running : F.TorpTravel;
@@ -956,6 +981,9 @@ namespace SeaShow
 			const int Salvo = ++TorpSalvos;
 			Check.SalvoTubes.push_back(0);
 			Check.SalvoTracks.push_back(0);
+			Check.SalvoPiece.push_back(E.Unit);
+			Check.SalvoDropped.push_back(0);
+			LastSalvo[E.Unit] = Salvo;
 			const size_t First = Holding.size();
 			int Fired = 0;
 			for (const int Key : It->second.Line)
@@ -3689,7 +3717,7 @@ namespace SeaShow
 		}
 	}
 
-	bool Show::WayClear(const Vec& A, const Vec& B, int Side, int Except, double* Least, int OnlyPiece, std::vector<int>* Foul) const
+	bool Show::WayClear(const Vec& A, const Vec& B, int Side, int Except, double* Least, int OnlyPiece, std::vector<int>* Foul, int* First) const
 	{
 		bool bClear = true;
 		const double LoX = std::min(A.X, B.X), HiX = std::max(A.X, B.X), LoY = std::min(A.Y, B.Y), HiY = std::max(A.Y, B.Y);
@@ -3708,7 +3736,11 @@ namespace SeaShow
 			{
 				bClear = false;
 				if (Foul) Foul->push_back(O.Key);
-				else if (!Least) return false;
+				else if (!Least)
+				{
+					if (First && *First < 0) *First = O.Key;
+					return false;
+				}
 			}
 		}
 		return bClear;
@@ -3847,10 +3879,12 @@ namespace SeaShow
 			}
 		}
 		if (!W.bClear && !bAll) return false;
-		if (!WayClear(W.P, W.End, R.Side, From.Except, nullptr, OnlyPiece, bAll ? &W.Foul : nullptr)) W.bClear = false;
+		if (!WayClear(W.P, W.End, R.Side, From.Except, nullptr, OnlyPiece, bAll ? &W.Foul : nullptr, bAll ? nullptr : &W.FirstFoul)) W.bClear = false;
 		if (!W.bClear && !bAll) return false;
 		const double Run = std::max(0.0, std::min(W.Ends, std::max(W.AimAt, R.Arrive)) - ShownT);
-		if (!HeadsClear(W.P, W.Dir, Speed, Speed * Run, R.Side, R.bBoat ? -1 : From.Except, R.bBoat ? From.Except : -1, OnlyPiece, bAll ? &W.Foul : nullptr)) W.bClear = false;
+		if (!HeadsClear(W.P, W.Dir, Speed, Speed * Run, R.Side, R.bBoat ? -1 : From.Except, R.bBoat ? From.Except : -1, OnlyPiece, bAll ? &W.Foul : nullptr,
+		                bAll ? nullptr : &W.FirstFoul))
+			W.bClear = false;
 		return W.bClear;
 	}
 
@@ -3904,7 +3938,7 @@ namespace SeaShow
 		return Ways;
 	}
 
-	bool Show::HeadsClear(const Vec& Start, const Vec& Dir, double Speed, double Length, int Side, int Her, int Skip, int OnlyPiece, std::vector<int>* Foul) const
+	bool Show::HeadsClear(const Vec& Start, const Vec& Dir, double Speed, double Length, int Side, int Her, int Skip, int OnlyPiece, std::vector<int>* Foul, int* First) const
 	{
 		// Each ship of her side near its way as she steams on over the head's run (Foreseen), as much as WayDoubt slower or
 		// faster than now (a second either way at the least; the ship it leaves as she is, her tracks outrunning her). The
@@ -3980,7 +4014,11 @@ namespace SeaShow
 			const Hull& O = Pair.second;
 			if (O.Side != Side || O.Key == Skip || O.Doing == Fate::Gone || (OnlyPiece >= 0 && O.Piece != OnlyPiece)) continue;
 			if (!Crosses(O)) continue;
-			if (!Foul) return false;
+			if (!Foul)
+			{
+				if (First && *First < 0) *First = O.Key;
+				return false;
+			}
 			bClear = false;
 			if (std::find(Foul->begin(), Foul->end(), O.Key) == Foul->end()) Foul->push_back(O.Key);
 		}
@@ -4038,6 +4076,7 @@ namespace SeaShow
 		R.Scatter.erase(R.Scatter.begin() + static_cast<std::ptrdiff_t>(Tube));
 		R.Ends.erase(R.Ends.begin() + static_cast<std::ptrdiff_t>(Tube));
 		R.RulesOnly.erase(R.RulesOnly.begin() + static_cast<std::ptrdiff_t>(Tube));
+		if (Tube < R.Across.size()) R.Across.erase(R.Across.begin() + static_cast<std::ptrdiff_t>(Tube)); // (the words' note kept in step)
 	}
 
 	int Show::WhyHeld(const Held& R, size_t Tube, const std::vector<FirePlace>& From) const
@@ -4087,10 +4126,12 @@ namespace SeaShow
 		}
 		if (Why == 0) ++Check.TracksDroppedOwn;
 		else if (Why == 1) ++Check.TracksDroppedWater;
+		if (R.Salvo >= 1 && R.Salvo <= static_cast<int>(Check.SalvoDropped.size())) ++Check.SalvoDropped[static_cast<size_t>(R.Salvo - 1)];
 		R.Ks.erase(R.Ks.begin() + static_cast<std::ptrdiff_t>(Tube));
 		R.Scatter.erase(R.Scatter.begin() + static_cast<std::ptrdiff_t>(Tube));
 		R.Ends.erase(R.Ends.begin() + static_cast<std::ptrdiff_t>(Tube));
 		R.RulesOnly.erase(R.RulesOnly.begin() + static_cast<std::ptrdiff_t>(Tube));
+		if (Tube < R.Across.size()) R.Across.erase(R.Across.begin() + static_cast<std::ptrdiff_t>(Tube)); // (the words' note kept in step)
 		// (none of hers ever drawn: she turns away under smoke as she gives them up, L5)
 		Hull* H = FindHull(R.Ship);
 		if (R.Ks.empty() && !R.bFiredAny && !R.bBoat && H && H->Doing != Fate::Gone) H->ScreenUntil = ShownT + 60.0;
@@ -4106,9 +4147,13 @@ namespace SeaShow
 		PlacesOf(R, From);
 		const bool bJudge = ShownT >= R.NextJudge - 1e-9;
 		if (bJudge) R.NextJudge = ShownT + 1.0 - 1e-6;
+		// (for the torpedo words, each tube still held: the piece of the first own ship found across its way, at the first
+		// place a ship holds it; noted as she looks, never read in deciding)
+		std::vector<int> Across;
 		for (size_t Tube = 0; Tube < R.Ks.size();)
 		{
 			bool bFired = false, bOwnOut = false;
+			int By = -1;
 			for (const FirePlace& P : From)
 			{
 				if (P.bIfOut && !bOwnOut) continue;
@@ -4116,6 +4161,11 @@ namespace SeaShow
 				if (!PlanTube(R, Tube, P, -1, W))
 				{
 					if (!P.bPoint && W.bOutside) bOwnOut = true;
+					if (By < 0 && W.FirstFoul >= 0)
+					{
+						const Hull* O = FindHull(W.FirstFoul);
+						if (O) By = O->Piece;
+					}
 					continue;
 				}
 				if (static_cast<int>(Torps.size()) >= TrackRoom) DropTube(R, Tube, true);
@@ -4125,9 +4175,52 @@ namespace SeaShow
 			}
 			if (bFired) continue;
 			if (bJudge && !R.RulesOnly[Tube] && WhyHeld(R, Tube, From) == 1) R.RulesOnly[Tube] = 1;
+			Across.push_back(By);
 			++Tube;
 		}
+		R.Across.swap(Across);
 		return !R.Ks.empty();
+	}
+
+	void Show::TubesNow(std::map<int, TubesOut>& Out) const
+	{
+		Out.clear();
+		auto TracksOf = [this](int Salvo) { return Salvo >= 1 && Salvo <= static_cast<int>(Check.SalvoTracks.size()) ? Check.SalvoTracks[static_cast<size_t>(Salvo - 1)] : 0; };
+		// Each piece's latest salvo and the tracks drawn of it.
+		for (const auto& Pair : LastSalvo)
+		{
+			TubesOut& T = Out[Pair.first];
+			T.Salvo = Pair.second;
+			T.Fired = TracksOf(Pair.second);
+		}
+		// Its tubes still held, the salvos they are of, and who stands across them as each ship last looked.
+		std::map<int, std::vector<int>> HeldSalvos;
+		std::map<int, std::map<int, int>> Votes;
+		for (const Held& R : Holding)
+		{
+			if (R.Ks.empty()) continue;
+			TubesOut& T = Out[R.Piece];
+			T.Held += static_cast<int>(R.Ks.size());
+			std::vector<int>& Of = HeldSalvos[R.Piece];
+			if (std::find(Of.begin(), Of.end(), R.Salvo) == Of.end()) Of.push_back(R.Salvo);
+			for (size_t K = 0; K < R.Ks.size() && K < R.Across.size(); ++K)
+				if (R.Across[K] >= 0) ++Votes[R.Piece][R.Across[K]];
+		}
+		for (const auto& Pair : HeldSalvos)
+		{
+			TubesOut& T = Out[Pair.first];
+			for (const int Salvo : Pair.second) T.HeldFired += TracksOf(Salvo);
+			// (the piece across the most of its held tubes, another piece's ships before its own, then the lowest)
+			const auto Vote = Votes.find(Pair.first);
+			if (Vote == Votes.end()) continue;
+			int Best = -1, Most = 0;
+			for (const auto& One : Vote->second)
+			{
+				if (One.first == Pair.first) continue;
+				if (One.second > Most) { Best = One.first; Most = One.second; }
+			}
+			T.Across = Best >= 0 ? Best : Vote->second.count(Pair.first) ? Pair.first : -1;
+		}
 	}
 
 	Show::Torp* Show::TrackForHit(int Piece, const Hull& Struck)
@@ -4220,6 +4313,7 @@ namespace SeaShow
 				R->Scatter.pop_back();
 				R->Ends.pop_back();
 				R->RulesOnly.pop_back();
+				if (R->Across.size() > R->Ks.size()) R->Across.pop_back(); // (the words' note kept in step)
 			}
 			return &Torps.back();
 		}

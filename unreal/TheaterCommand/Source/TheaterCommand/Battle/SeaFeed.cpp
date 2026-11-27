@@ -10,6 +10,15 @@ namespace SeaFeed
 		return Side == "att" ? 0 : Side == "def" ? 1 : -1;
 	}
 
+	bool FriendlyTorpedoes(const Recording& Rec)
+	{
+		if (Rec.Board.bOwnWater) return true;
+		for (const Frame& F : Rec.Views)
+			for (const SeaShow::Piece& P : F.Pieces)
+				if (P.HeldFor >= 0 || P.ClearFrom >= 0) return true;
+		return false;
+	}
+
 	double KnotOf(const Top& H)
 	{
 		if (!(H.LostAtt >= 0.0) || !(H.LostDef >= 0.0) || !std::isfinite(H.LostAtt) || !std::isfinite(H.LostDef)) return -1.0;
@@ -59,6 +68,9 @@ namespace SeaFeed
 		Out.TorpRadius = J["torp"]["radius"].Num(Out.TorpRadius);
 		Out.StrikeWindup = J["strike"]["windup"].Num(Out.StrikeWindup);
 		Out.StrikeRadius = J["strike"]["radius"].Num(Out.StrikeRadius);
+		// (the naval rules' "Friendly torpedoes" switch, where the field says it: TC.seaStart's, or a stand-in's ownWater; the
+		// rules' recorder writes no mark of it. The torpedo words' gate alone: FriendlyTorpedoes)
+		Out.bOwnWater = J["ownWater"].Truth(false);
 		// A convoy's night (ruling 241, form.md §5): light{sun, moon, vis}, each a number or an object. sun: the sun's height
 		// (degrees, below 0 at night), or {up}; moon: the share of her lit, or {lit, up, from} (her height and bearing,
 		// degrees); vis: how far a ship is seen (metres). And the boats' and the depth charges' own: subs{scope, deep,
@@ -183,6 +195,15 @@ namespace SeaFeed
 			const Json& Echo = X["echo"];
 			P.EchoOn = Echo.IsObject() && Echo["on"].IsNumber() ? Echo["on"].Int() : -1;
 			P.EchoKind = Echo.IsObject() ? Echo["kind"].Str("") : std::string();
+			// The torpedo words' fields (the naval rules behind their "Friendly torpedoes" switch; Battle/SeaWordsCore), as each
+			// view says: a view without them clears them, and without the switch there are none. A turn clear is read only with
+			// the second the heads pass her (clearUntil); an id below 0 is none.
+			P.HeldFor = X["heldFor"].IsNumber() ? std::max(-1, X["heldFor"].Int()) : -1;
+			P.HeldForName = P.HeldFor >= 0 ? X["heldForName"].Str("") : std::string();
+			P.ClearFrom = X["clearFrom"].IsNumber() && X["clearUntil"].IsNumber() && std::isfinite(X["clearUntil"].Num()) ? std::max(-1, X["clearFrom"].Int()) : -1;
+			P.ClearUntil = P.ClearFrom >= 0 ? X["clearUntil"].Num() : -1.0;
+			P.ClearFromName = P.ClearFrom >= 0 ? X["clearFromName"].Str("") : std::string();
+			P.bOrdered = X["ordered"].Truth(false);
 			Kept.Still[P.Id] = P;
 		}
 

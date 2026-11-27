@@ -124,6 +124,10 @@ namespace SeaShow
 		/** The men in the water: the most the show keeps at once (each one man while there is room: Brian's standing rule,
 		 * 22 November 04:14Z, the real numbers; past it each ship's men are thinned, and the share is told). */
 		int MenMost = 2400;
+		/** Whether the battle was fought with the naval rules' "Friendly torpedoes" switch on (field.ownWater, where the field
+		 * says it: TC.seaStart's, or a stand-in's; the rules' recorder writes no mark of it). The torpedo words' gate
+		 * (SeaFeed::FriendlyTorpedoes); the show itself never reads it. */
+		bool bOwnWater = false;
 	};
 
 	/** One piece as a view gives it (battle-bridge.ts unitOut for a sea piece). */
@@ -164,6 +168,20 @@ namespace SeaShow
 		double KeelNext = -1.0;
 		bool bScope = false;
 		int ConvoyColumn = -1;
+		/** The torpedo words' fields (the naval rules behind their "Friendly torpedoes" switch, 25 November; Battle/SeaWordsCore
+		 * words them): the own piece in its line of fire it holds its salvo for (heldFor, -1 none) and that piece as the rules
+		 * name it; the own piece whose running salvo it turns clear of (clearFrom, -1 none), the battle second its heads
+		 * pass her and the launcher as the rules name it; under an order of the player's own (ordered). As each view says (none
+		 * without the switch), but for the held ones once the piece's salvo is told after its view (the rules have let it
+		 * fire: SalvoToldAt); the show itself never reads them. */
+		int HeldFor = -1, ClearFrom = -1;
+		std::string HeldForName, ClearFromName;
+		double ClearUntil = -1.0;
+		bool bOrdered = false;
+		/** The view reached holds her (heldFor), but her salvo has been told since, so her held fields are taken off (above):
+		 * the torpedo words' alone (Battle/SeaWordsCore: until the view that ends it, the view's hold still wins over its own
+		 * turn clear while the scene holds some of her tubes); never read from a view, and the show itself never reads it. */
+		bool bHeldLetGo = false;
 		/** Whether the player's side has her (Show::SetMine), where the view says it. A boat: the escorts of the other side
 		 * running in on her now (heard, their pieces; bHeard once a view has said it, and then it stands as last told), and
 		 * the enemy piece her deck gun is on while she is up (gun, -1 none: as each view says). An escort: the piece its echo
@@ -333,6 +351,30 @@ namespace SeaShow
 		int Piece = -1, Ship = -1;
 		Vec End;
 		bool bRunOn = false, bFromPoint = false;
+	};
+
+	/**
+	 * What the scene shows of a piece's torpedoes now, for the torpedo words (Battle/SeaWordsCore; Show::TubesNow): read
+	 * only, the show itself never reads it. Its latest salvo told (its number in the order told, 0 none) and the tracks
+	 * drawn of it so far (each in the water from its launch); its tubes the scene still holds, of any of its salvos (the
+	 * scene's own holds, after the rules let a salvo go: an own ship in the way from where she fires), and the tracks drawn
+	 * of the salvos it holds them of; and the own piece whose ship stands across its held tubes' way, as each of its ships
+	 * last looked (the first own ship found across each held tube's way, at the first place a ship holds it: the piece
+	 * standing across the most of them, another piece before its own, then the lowest; -1 none found).
+	 */
+	struct TubesOut
+	{
+		int Salvo = 0, Fired = 0;
+		int Held = 0, HeldFired = 0;
+		int Across = -1;
+	};
+
+	/** Words the battle has said of a piece (the torpedo words' phrases; the show itself never reads them): the battle
+	 * second they were said and the words. */
+	struct Phrase
+	{
+		double T = -1.0;
+		std::string Text;
 	};
 
 	/**
@@ -705,6 +747,9 @@ namespace SeaShow
 		// them. By torpedo hit drawn, in order: how far from her side the head of the track as fired at the battle's moment lay
 		// (the hit's shadow: the jump the track a hit ended made before any ship held hers; -1 none).
 		std::vector<int> SalvoTubes, SalvoTracks;
+		// (and by salvo, the same order: the piece that fired it, and its tubes never drawn (DropTube), so a salvo's tubes still
+		// held are its tubes less those drawn and those dropped: the torpedo words' test holds Show::TubesNow to them)
+		std::vector<int> SalvoPiece, SalvoDropped;
 		std::vector<double> HitShadowGap;
 		double GaveWay = 0.0;       // ship-seconds followers eased their way for a ship of their own line crossing ahead
 		double KeptClear = 0.0;     // ship-seconds any ship held an alteration of course or way to keep clear of another
@@ -822,6 +867,13 @@ namespace SeaShow
 		double WindFrom() const { return WindFromR; }
 		/** A piece's column as shown now: its middle and its leader's heading; false where there is none afloat. */
 		bool PieceMiddle(int PieceId, Vec& OutAt, double& OutFace) const;
+		/** A piece's leading ship as shown now (the head of its column, where the torpedo words' tag stands): her key, -1 where
+		 * it has none in its line. */
+		int LeaderOf(int PieceId) const
+		{
+			const auto It = Lines.find(PieceId);
+			return It == Lines.end() || It->second.Line.empty() ? -1 : It->second.Line.front();
+		}
 		/** A ship as shown now, by her key. */
 		const ShipOut* Ship(int Key) const;
 		/** The pieces as the battle has them now (interpolated), for labels and the camera. */
@@ -836,6 +888,14 @@ namespace SeaShow
 		 * view draws every charge alike. Read only. */
 		struct ChargeDown { int Escort = -1, Boat = -1; Vec At, Off; double Bursts = 0.0, Dropped = 0.0; std::string Kind; bool bOnBoat = false; };
 		void ChargesDown(std::vector<ChargeDown>& Out) const;
+		/** The torpedo words' picture (Battle/SeaWordsCore), read only: what the scene shows of each piece's torpedoes now
+		 * (TubesOut), by piece, for each piece that has told a salvo or holds tubes (Out emptied first). */
+		void TubesNow(std::map<int, TubesOut>& Out) const;
+		/** The torpedo words' phrases, by piece, read only: its name as the rules last gave it in a view the picture has
+		 * reached (another piece's heldForName or clearFromName, which name the piece meant), and the log's line of its latest
+		 * salvo (its sea:torpedo's text), each as last told. */
+		const std::map<int, Phrase>& NamesGiven() const { return RulesNamed; }
+		const std::map<int, Phrase>& SalvoLines() const { return SalvoSaid; }
 
 	private:
 		struct View
@@ -1026,6 +1086,9 @@ namespace SeaShow
 			double Told = 0.0, Arrive = 0.0, Running = 75.0, Fan = 3.5;
 			std::vector<double> Ks, Scatter, Ends;
 			std::vector<char> RulesOnly; // (per tube: at some judging of its hold the rules' ships alone were in its way, WhyHeld)
+			// (per tube still held, as she last looked (FireTubes): the piece of the first own ship found across its way, at the
+			// first place a ship holds it, -1 none; the torpedo words' alone, TubesNow: never read in deciding)
+			std::vector<int> Across;
 			Vec WaterP;
 			double WaterHalf = 5.0, Radius = 800.0;
 			bool bFiredAny = false;
@@ -1053,6 +1116,8 @@ namespace SeaShow
 			double Speed = 0.0, Ends = 0.0, AimAt = 0.0;
 			bool bClear = false, bCut = false, bOutside = false;
 			std::vector<int> Foul;
+			// (not every ship asked: the first own ship found across it, -1 none; for the torpedo words, Held::Across)
+			int FirstFoul = -1;
 		};
 
 		enum class Leg { Deck, Form, Out, Attack, Home, Gone, Cover };
@@ -1132,6 +1197,16 @@ namespace SeaShow
 		std::vector<Shadow> Shadows;
 		std::vector<Held> Holding;
 		int TorpSalvos = 0;
+		/** By piece: the battle second its last salvo was told (sea:torpedo); and the second of the view the pieces are taken
+		 * from now (Interpolate). A piece whose salvo is told after that view holds it no longer (the rules have let it fire,
+		 * as the next view says): its held fields are taken off as the salvo is told, so the torpedo words' tag goes off as
+		 * its first track leaves, not at the next view. */
+		std::map<int, double> SalvoToldAt;
+		double NowFrom = -1.0;
+		/** The torpedo words' alone (TubesNow, NamesGiven, SalvoLines; never read in deciding): by piece, its latest salvo's
+		 * number; the rules' name of it as a view reached last gave it (Interpolate); and its latest salvo's line in the log. */
+		std::map<int, int> LastSalvo;
+		std::map<int, Phrase> RulesNamed, SalvoSaid;
 		std::map<int, Plane> Air;
 		std::vector<Strike> Strikes;
 		std::map<int, Owed> Debt;         // by piece: hits the battle has taken off its hull not yet drawn
@@ -1388,11 +1463,12 @@ namespace SeaShow
 		 * of a side as each steams on, turning as she is or easing her helm, her way as much as WayDoubt faster or slower than
 		 * now (Her, the ship it leaves, by 3 m; the rest by 5 m; Skip left out; only OnlyPiece's, where 0 or more); Foul,
 		 * where given, every ship that would come across it (each once), else it stops at the first. */
-		bool HeadsClear(const Vec& Start, const Vec& Dir, double Speed, double Length, int Side, int Her, int Skip, int OnlyPiece, std::vector<int>* Foul = nullptr) const;
+		bool HeadsClear(const Vec& Start, const Vec& Dir, double Speed, double Length, int Side, int Her, int Skip, int OnlyPiece, std::vector<int>* Foul = nullptr,
+		                int* First = nullptr) const;
 		/** Whether a track's line from A to B clears every ship of a side (but Except; only OnlyPiece's, where 0 or more) by
 		 * TrackClear beyond her half beam; Least, where given, the least it clears any by; Foul, where given, every ship it
 		 * does not clear. */
-		bool WayClear(const Vec& A, const Vec& B, int Side, int Except, double* Least, int OnlyPiece, std::vector<int>* Foul = nullptr) const;
+		bool WayClear(const Vec& A, const Vec& B, int Side, int Except, double* Least, int OnlyPiece, std::vector<int>* Foul = nullptr, int* First = nullptr) const;
 		/** The track of a piece a torpedo hit on a ship ends: of those running, the nearest her that has run at least a third
 		 * of its salvo's run with its way to her clear of its own side, else the nearest that has run so long, else the
 		 * nearest; none running, a held tube of the piece fired at her now from a clear stretch short of her side, or one
