@@ -8,6 +8,8 @@
 // the card named opens, not a month before or after. The shutting side's line reads only its own sight (how long its
 // side has held the sea), never Britain's stores. With the switch off, nothing of it is said or written.
 import { describe, expect, it } from 'vitest';
+import HUD from '../unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignHUD.cpp?raw';
+import SESSION from '../unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignSession.cpp?raw';
 import { seaPicture } from '../src/campaign/carriers';
 import { addCorps, computeSupply, createGame, declareWar, portKeep, removeCorps, startPhase } from '../src/campaign/game';
 import { SIGHT, fogOn, sightOf } from '../src/campaign/intel';
@@ -711,5 +713,22 @@ describe('item 6: "by the start of" where the count can only be the latest month
     expect(texts(portCardLines(g, MALTA, 'UK'))[0]).toBe('Cut off by sea, and the port\'s stores are spent: the garrison goes hungry, losing order every month, and is lost at the start of May unless the sea is opened.');
     expect(portCorpsLine(g, ninth)).toBe('Hungry: Malta\'s stores are spent. Lost at the start of May unless ships get through.');
     expect(portCutOff(g, MALTA, 'UK')!.garrison).toEqual([{ id: ninth.id, lost: 21, by: false }]);
+  });
+});
+
+describe('item 8: the 3D cards (C++ for the Mac pass, not compiled here)', () => {
+  it('the bridge gives the province\'s portCut and the corps\' portLine; the session reads both, and the HUD draws them in their tones', () => {
+    const { g, cs: [ninth] } = malta('UK');
+    month(g, 17);
+    TC().load(saveGame(g));
+    const view = TC().view() as { corps: { id: number; portLine?: string }[] };
+    expect(view.corps.find((c) => c.id === ninth.id)!.portLine).toBe('Living on Malta\'s stores through February.');
+    expect(((TC().province as Call)(MALTA) as { portCut: { tone: string }[] }).portCut.map((l) => l.tone)).toEqual(['warn', 'note']);
+    expect(SESSION).toContain('Object->TryGetArrayField(TEXT("portCut"), PortCut)');
+    expect(SESSION).toContain('Entry->TryGetStringField(TEXT("tone"), Line.Tone);');
+    expect(SESSION).toContain('Unit->TryGetStringField(TEXT("portLine"), C.PortLine);');
+    expect(HUD).toContain('for (const FPortCutLine& Line : Info.PortCut)');
+    expect(HUD).toContain('const FLinearColor Tone = Line.Tone == TEXT("bad") ? Alarm : Line.Tone == TEXT("warn") ? BrightBrass : Muted;');
+    expect(HUD).toContain('.Text(FText::FromString(Card.PortLine)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bGoing ? Muted : Faint).AutoWrapText(true)');
   });
 });
