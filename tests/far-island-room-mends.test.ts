@@ -232,7 +232,7 @@ describe("an offered formation whose island has no room for it (the offers page,
     expect(o.why).toBe('Palau is full: it has room for about 30,000 men and 30,000 of yours are there.');
     // Part full: the room, those there, what more can go, and the row's own men.
     palau.units.find((u) => u.name === 'Fill Palau')!.str = 0.9;
-    expect(formationOffers(g).find((x) => x.id === 169)!.why).toBe('Palau has room for 2 divisions, about 30,000 men, and 27,000 of yours are there: only 3,000 more can go, and you are sending 5,000.');
+    expect(formationOffers(g).find((x) => x.id === 169)!.why).toBe('Palau has room for 2 divisions, about 30,000 men, and 27,000 of yours are there: only 3,000 more fit, and this takes 5,000.'); // (the UI director, 00:19Z, 27 November 2026, U5)
   }, 300000);
 });
 

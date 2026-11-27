@@ -321,8 +321,10 @@ export const engRoom = (g: Game, r: Region | undefined | null): number => Math.m
  * those already on the island are not counted as there, and the corps in its town are. "Of yours" is dropped where an
  * ally's corps stand there too. Engineers are told their own count in corps (section 4). Null for ground that is no
  * island of the table, with the far side off, and where room is not what stops the order.
+ * `forms`: a formation offered to form there, which is not sent: "only {3,000} more fit, and this takes {5,000}" (the
+ * UI director, 00:19Z, 27 November 2026, U5; the full form passes as it is).
  */
-export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[]): string | null {
+export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[], o: { forms?: boolean } = {}): string | null {
   const isle = islandOf(g, r);
   if (!isle || !r || !corps.length) return null;
   const nat = corps[0].nat, room = isle.room * MEN_PER_DIV, line = corps.filter((c) => c.kind !== 'eng');
@@ -338,11 +340,13 @@ export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[
     // (What he sends would read at or under what can go once rounded: say the shortfall instead, the UI director's
     // answer of 21:37Z 26 November 2026, as the rifles' fifth read.)
     const short = roomFigure(Math.round(sending), 'near') <= (there === 0 ? roomFigure(Math.max(0, Math.round(left)), 'near') : canGo(left, there));
-    const sends = short ? `you are sending ${roomMen(sending - left)} men more than fit` : `you are sending ${roomMen(sending)}`;
+    // (A formation offered: "this takes", U5. Its shortfall and its line with none there read the same verb: a reading.)
+    const verb = o.forms ? 'this takes' : 'you are sending', more = o.forms ? 'more fit' : 'more can go';
+    const sends = short ? `${verb} ${roomMen(sending - left)} men more than fit` : `${verb} ${roomMen(sending)}`;
     if (there === 0) return `${r.name} has ${roomWords(isle.room)}: ${sends}.`;
     if (left < 1000) return `${r.name} is full: it has room for about ${roomMen(room)} men and ${roomMen(there, 'up')}${yours} are there.`;
     if (short) return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(there, 'up')}${yours} are there: ${sends}.`;
-    return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(there, 'up')}${yours} are there: only ${canGo(left, there).toLocaleString('en-US')} more can go, and ${sends}.`;
+    return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(there, 'up')}${yours} are there: only ${canGo(left, there).toLocaleString('en-US')} ${more}, and ${sends}.`;
   }
   const riding = corps.length - line.length;
   if (!riding) return null;

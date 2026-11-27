@@ -5525,11 +5525,12 @@ function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
     if (old) return null;
     if (!reg) return `There is nowhere for it to form: ${posting?.name ?? row[5]} is not yours, and you hold no harbour on that ground, nor your capital.`;
     if (!o.join && !rowFits(g, nat, reg, row, o)) {
-      // (On an island at stops 3 to 5 the row is refused for its men: the section 3 line for the row's own men, the
-      // words sceptic's lean of 26 November 2026, laid until the UI director rules on this form. The row is no corps on
+      // (On an island at stops 3 to 5 the row is refused for its men: the section 3 line for the row's own men, in the
+      // offer's words, "only {3,000} more fit, and this takes {5,000}": a formation is not sent, it forms there (the UI
+      // director, 00:19Z, 27 November 2026, U5). The row is no corps on
       // the board yet, so it is never told to split. A row made from corps on the board, and other ground: the old line.)
       const isle = !stopDef(g).book && !rowOut(g, nat, o).length && islandOf(g, reg)
-        ? roomRefusal(g, reg, rowCorps(g, nat, row, o).map((c) => ({ ...c, name: row[2], dead: true }) as Corps)) : null;
+        ? roomRefusal(g, reg, rowCorps(g, nat, row, o).map((c) => ({ ...c, name: row[2], dead: true }) as Corps), { forms: true }) : null;
       return isle ?? `There is no room for another corps at ${reg.name}, or near it.`;
     }
     return null;
