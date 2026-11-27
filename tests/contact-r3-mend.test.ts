@@ -1,0 +1,76 @@
+// The contact rule, round 3, the mender's cases: the sceptics' findings that needed no ruling (reports
+// /home/user/runs/contact2/r3/reports/r2-rule-sceptic3.json and r3-telling-sceptic3.json). Seed 1, the first day, the
+// old chart: the Neumark emptied of Germany's corps, Poland's Army Poznan beside it in Poznan, as tests/contact-r3.test.ts
+// sets it. Each case was seen to fail under the sceptic's own case or mutation, then to pass.
+import { afterEach, describe, expect, it } from 'vitest';
+import setup from '../data/campaign/setup-1939.json';
+import { setFromWait } from '../src/campaign/arrivalwaits';
+import { divisionsOf } from '../src/campaign/armies';
+import { addCorps, atWar, createGame, relocate, ruleHolds, startPhase } from '../src/campaign/game';
+import { startOpen } from '../src/campaign/staff';
+import type { Corps, Game, Region } from '../src/campaign/types';
+
+const ROWS = (setup as any).expeditions as any[];
+let added = 0;
+const addRow = (row: any[]): number => { ROWS.push(row); added++; return ROWS.length - 1; };
+const clear = (): void => { while (added > 0) { ROWS.pop(); added--; } };
+afterEach(() => { clear(); });
+
+const W = 'W Force (New Zealand Division and 1st Armoured Brigade)';
+const month = (g: Game, t: number): void => { g.turn = t; startPhase(g, 'GER'); };
+const add = (g: Game, name: string, at: Region, divs = 1): Corps => addCorps(g, 'GER', name, 'inf', divs, at.id, {});
+
+function board(on = true): { g: Game; nm: Region } {
+  clear();
+  const g = startOpen(createGame(1, null));
+  if (on) expect(setFromWait(g, true)).toBe(true);
+  const nm = g.byName.Neumark;
+  for (const u of [...nm.units]) relocate(g, u, g.byName.Bavaria);
+  expect(nm.units).toEqual([]);
+  expect(atWar(g, 'GER', 'POL')).toBe(true);
+  return { g, nm };
+}
+
+/** A lent corps of Germany's whose loan is over in month 2, in the Neumark (alone, beside Poland) or elsewhere. */
+const lend = (g: Game, name: string, at: Region, divs = 1): { c: Corps; j: number } => {
+  const c = add(g, name, at, divs);
+  const j = addRow([1, 'GER', name, 'inf', divs, 'Neumark', { until: 2 }]);
+  g.flags[`sent:${j}`] = 1;
+  g.flags[`lent:${j}`] = c.id;
+  return { c, j };
+};
+
+// ---- S1-1: a held lent corps holds its divisions for a row of the same pass -----------------------------------------
+
+describe("S1-1: a lent corps the one test holds is no corps 'on its way out' to a row that names one of its divisions", () => {
+  const D = '77th Infantry Division';
+  const run = (on: boolean, alone = true): { g: Game; lent: Corps; j: number; i: number; holders: Corps[] } => {
+    const { g, nm } = board(on);
+    const { c: lent, j } = lend(g, `Lent Test Group (${D})`, alone ? nm : g.byName.Bavaria);
+    expect(divisionsOf(g, lent).map((d) => d.name)).toEqual([D]);
+    const i = addRow([2, 'GER', D, 'inf', 1, 'Magdeburg', {}]);
+    month(g, 2);
+    const holders = g.corps.filter((c) => !c.dead && c.nat === 'GER' && divisionsOf(g, c).some((d) => d.name === D));
+    return { g, lent, j, i, holders };
+  };
+
+  it('switch on, the lent corps held alone beside the enemy: the division is laid ONCE, and stays with the held corps', () => {
+    const { g, lent, j, holders } = run(true);
+    expect([lent.dead, g.flags[`lent:${j}`], g.flags[`wait:${j}`]]).toEqual([false, lent.id, 2]);
+    expect(holders).toEqual([lent]);
+    // (The held corps keeps it for contact: the row's claim of it is a hold of the rule's own, on the claim path.)
+    expect(ruleHolds(g).filter((h) => h.path === 'claim').map((h) => h.corps)).toEqual([[lent.name]]);
+  });
+
+  it('switch on, the lent corps not beside the enemy: its loan ends and the row raises the division, once', () => {
+    const { lent, holders } = run(true, false);
+    expect(lent.dead).toBe(true);
+    expect(holders).toHaveLength(1);
+  });
+
+  it('switch off: as the base, the loan ends and the row raises the division, once', () => {
+    const { lent, holders } = run(false);
+    expect(lent.dead).toBe(true);
+    expect(holders).toHaveLength(1);
+  });
+});

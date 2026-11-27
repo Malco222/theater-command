@@ -6221,7 +6221,13 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // (The far side: no row takes a corps standing on a live front of its staff's plan, by its name any more than by a list: the rulings of 05:30Z and 05:35Z, above.)
     // (Nor one that cannot leave where it is: at sea, shut in a town the enemy stands round, marching with an ally's army, at home out of the line.)
     const fixed = (x: Corps): boolean => x.sail !== undefined || x.joint !== undefined || x.leave !== undefined || !!x.school || (x.town !== undefined && g.regions[x.reg].units.some((u) => atWar(g, u.nat, nat))) || (farOn(g) && onLiveFront(g, nat, x));
-    const claims = once ? heldAlready(g, nat, row, o, n, reg, home, (x) => spoken!.has(x.name) || leaving(x), fixed, leavingNow, g.flags.fromWait === 1 ? (xs) => noteHold(g, nat, i, 'claim', xs, false, null) : undefined) : [];
+    // (Under the switch 'fromWait': a lent corps whose loan's end the one test holds this pass stays where it stands
+    // with its divisions, `loanHeld`, so it is no corps on its way out: it holds them, and a claim of one keeps it there
+    // for contact, as for any corps in a fight. A division is laid once. Read against the loans' own superset of who
+    // leaves, as `loanHeld` reads it where the loan is read, so no loop is made. Switch off: nothing is read.)
+    const heldLoan = (x: Corps): boolean => g.flags.fromWait === 1 && x.id > 0 && ((setup as any).expeditions as any[]).some((r2, j) =>
+      j !== take && !!g.flags[`sent:${j}`] && g.flags[`lent:${j}`] === x.id && !!loanHeld(g, nat, r2, rowWords(g, nat, r2).o, j, x.id, leaving));
+    const claims = once ? heldAlready(g, nat, row, o, n, reg, home, (x) => spoken!.has(x.name) || (leaving(x) && !heldLoan(x)), fixed, leavingNow, g.flags.fromWait === 1 ? (xs) => noteHold(g, nat, i, 'claim', xs, false, null) : undefined) : [];
     // (A row another row took a share of before it landed, o.takes: a division of it that stays with its corps is the
     // weaker by that share there, as one that comes or is raised new is where the row lands.)
     // (Once for each corps, by the number of its divisions the row names: two of one corps are not cut one after the other.)
