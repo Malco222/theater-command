@@ -17,7 +17,7 @@ import { enginesOf, escortRoles, fighterWay, passesOn, pickPass, type Pass, type
 import { collideWords, drawFall, fallWords } from './falls';
 import { ShipBook, splitWings } from './ships';
 import { TroopBook, TROOPS, type MarkNews, type MarkWhat } from './troops';
-import { coolOf, crewOf, fateOf, fighterEngines, freshMemory, hitOf, kindOf, ramShare, seaAt, type FateMemory, type Scene } from './fates';
+import { backAmong, coolOf, crewOf, fateOf, fighterEngines, freshMemory, hitOf, kindOf, ramShare, seaAt, type FateMemory, type Scene } from './fates';
 import { bomberGuns, fighterGuns, type GunKind } from './guns';
 import type { AirAim, AirHitWho, AirShown, AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
 import type { BomberSeat } from '../../campaign/types';
@@ -1360,18 +1360,27 @@ export class AirSim implements BattleSim<AirUnit> {
   private fated(lost: Loss[]): void {
     const F = SKY.fate;
     const pair = new Map<Loss, Loss>(), meant = new Set<Loss>();
+    // Release 2, 'bailouts': for a fighter that rammed on purpose, B, the share of such rammers whose pilot the count
+    // brings back (the design director, 27 November 2026 01:00Z, reading 1: "read B there by the same formula"). A ram
+    // on purpose may hold a pilot brought back; one by accident, or two of one group, never does (B 0 there).
+    const ramBack = new Map<Loss, number>();
     for (const a of lost) {
       if (pair.has(a) || a.u.air !== 'ftr') continue;
       for (const b of lost) {
         if (b === a || pair.has(b) || b.u.side === a.u.side || b.fall.back) continue;
-        const fire = a.u.fire.find((f) => f.on === b.u.id);
-        // On purpose: the bomber it was firing on, by its nation and the month.
-        const m = b.u.air === 'bmr' && fire ? this.ramMeant(a.u, b.u, fire.pass) : 0;
-        // By accident: never one whose pilot the rules bring back.
-        const p = a.fall.back ? 0 : b.u.air === 'bmr' ? (fire ? (fire.pass === 'headon' ? F.ram.headon : F.ram.other) : 0) : a.u.contacts.includes(b.u.id) ? F.ram.tangle : 0;
+        const { m, p } = this.ramOdds(a, b, a.fall.back);
         if (m + p <= 0) continue;
         const x = this.lookRng.next();
-        if (x < m + p) { pair.set(a, b); pair.set(b, a); if (x < m) { meant.add(a); meant.add(b); } break; }
+        if (x < m + p) {
+          pair.set(a, b); pair.set(b, a);
+          if (x < m) {
+            meant.add(a); meant.add(b);
+            // B by the formula the saved ways read (fates.ts backAmong): the count's own share for this fall, and the
+            // weight of a ram on purpose for a pilot brought back and for one not, as the pairing holds them here.
+            if (this.bailouts) ramBack.set(a, backAmong(a.saved, this.ramOdds(a, b, true).m, 1, this.ramOdds(a, b, false).m, 1));
+          }
+          break;
+        }
       }
     }
     // Two of one group lost in the same moment: bombers of a tight box by day, one swerving from its hit into the next,
@@ -1393,7 +1402,7 @@ export class AirSim implements BattleSim<AirUnit> {
       // stream (the historian). Seen falling a moment first, so the eye can follow it down onto this one (the art director).
       const near = u.air === 'bmr' && !s && u.state === 'steady' && !this.place.night
         ? this.recent.find((r) => r.box === u.id && !r.used && this.t - r.t >= F.near.min) : undefined;
-      const sc = this.sceneOf(L, near);
+      const sc = this.sceneOf(L, near, ramBack.get(L));
       const fate = fateOf(this.lookRng, sc, this.fates, other ? { fid: other.fid, cause: 'ram' } : undefined);
       // A loss strikes at most one other (a fighter falling through a box it fired on is listed once for each box).
       if (fate.how === 'struck' && near) for (const r of this.recent) if (r.fid === near.fid) r.used = true;
@@ -1438,13 +1447,27 @@ export class AirSim implements BattleSim<AirUnit> {
     }
   }
 
+  /**
+   * The pairing's odds for a fighter a and a loss b of the other side, lost in the same moment, for a pilot the rules
+   * bring back or not ('back'): m, on purpose (the bomber it was firing on, by its nation and the month); p, by
+   * accident (head-on, otherwise, or two fighters locked in a fight), never one whose pilot the rules bring back. Read
+   * by the pairing, and with 'bailouts' by the look for a ram on purpose (fated: B).
+   */
+  private ramOdds(a: Loss, b: Loss, back: boolean): { m: number; p: number } {
+    const F = SKY.fate;
+    const fire = a.u.fire.find((f) => f.on === b.u.id);
+    const m = b.u.air === 'bmr' && fire ? this.ramMeant(a.u, b.u, fire.pass) : 0;
+    const p = back ? 0 : b.u.air === 'bmr' ? (fire ? (fire.pass === 'headon' ? F.ram.headon : F.ram.other) : 0) : a.u.contacts.includes(b.u.id) ? F.ram.tangle : 0;
+    return { m, p };
+  }
+
   /** The chance a fighter lost in the same moment as the bomber it was firing on rammed it on purpose (fates.ts ramShare). */
   private ramMeant(a: AirUnit, b: AirUnit, pass?: Pass): number {
     return ramShare(a.nat, this.when, enginesOf(b.model), pass);
   }
 
   /** One loss's situation (fates.ts Scene). */
-  private sceneOf(L: Loss, near: { fid: number; how: FallHow; foe?: boolean } | undefined): Scene {
+  private sceneOf(L: Loss, near: { fid: number; how: FallHow; foe?: boolean } | undefined, meantBack?: number): Scene {
     const { u, s, by } = L;
     const engines = u.air === 'bmr' ? enginesOf(u.model) : fighterEngines(u.model);
     const at = s ? this.stragAt(u, s) : { x: u.x, y: u.y };
@@ -1470,6 +1493,8 @@ export class AirSim implements BattleSim<AirUnit> {
       ...(this.bailouts ? { bailouts: true } : {}),
       // With 'bailouts' a fighter's fall carries the share the count drew its pilot back at, to price who got out once.
       ...(this.bailouts && u.air === 'ftr' ? { backShare: L.saved } : {}),
+      // And a fighter that rammed on purpose, the share of such rammers brought back, from the pairing (fated).
+      ...(this.bailouts && meantBack !== undefined ? { meantBack } : {}),
     };
   }
 

@@ -21,7 +21,7 @@ import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game } from '../src/campaign/types';
 import type { FieldEvent } from '../src/battle/core/types';
 import { SKY } from '../src/battle/air/book';
-import { backOf, crewOf, fateOf, freshMemory, GOT, HOWS, restOut, type Scene } from '../src/battle/air/fates';
+import { backAmong, backOf, crewOf, fateOf, freshMemory, GOT, HOWS, ramShare, restOut, type Scene } from '../src/battle/air/fates';
 import { AIR } from '../src/campaign/air';
 import { bomberGuns } from '../src/battle/air/guns';
 import { airBattle, airLooks, AirSim, MORE_LOOKS } from '../src/battle/air/sim';
@@ -247,10 +247,11 @@ const scene = (o: Partial<Scene> = {}): Scene => ({
 const fighter = (o: Partial<Scene> = {}): Scene => scene({ air: 'ftr', engines: 1, nat: 'UK', model: 'Hurricane', gun: 'cannon20', crew: 1, backShare: o.over === 'own' ? AIR.pilots.home : AIR.pilots.away, ...o });
 /** Book figures a test sets, put back after it. */
 function withBook<T>(set: () => void, go: () => T): T {
-  const was = { glide: SKY.fate.out.glide, base: structuredClone(SKY.fate.base), crews: SKY.fall.crews, dated: SKY.fall.crewsDated, byKit: SKY.fall.crewsByKit };
+  const was = { glide: SKY.fate.out.glide, base: structuredClone(SKY.fate.base), crews: SKY.fall.crews, dated: SKY.fall.crewsDated, byKit: SKY.fall.crewsByKit, meant: SKY.fate.ram.meant, acc: [SKY.fate.ram.headon, SKY.fate.ram.other, SKY.fate.ram.tangle], landTwo: SKY.fate.landTwo };
   try { set(); return go(); } finally {
     SKY.fate.out.glide = was.glide; SKY.fate.base.ftr = was.base.ftr; SKY.fate.base.bmr = was.base.bmr;
     SKY.fall.crews = was.crews; SKY.fall.crewsDated = was.dated; SKY.fall.crewsByKit = was.byKit;
+    SKY.fate.ram.meant = was.meant; [SKY.fate.ram.headon, SKY.fate.ram.other, SKY.fate.ram.tangle] = was.acc; SKY.fate.landTwo = was.landTwo;
   }
 }
 
@@ -1035,5 +1036,205 @@ describe('(i) the design director\'s 18:47Z, item 2: priced once', () => {
     expect(none.c / none.n).toBeGreaterThan(0.25);
     expect(most.n).toBeGreaterThan(0);
     expect(most.c).toBe(0);
+  });
+});
+
+// The design director, 27 November 2026 01:00Z, reading 1: "For the meant-ram rows: if the code can bring a meant
+// rammer back, read B there by the same formula; if it cannot, leave it as built." It can (sim.ts fated: a ram on
+// purpose is weighed m whether or not the pilot is back; only the accident's p is 0 for a pilot brought back). So a
+// rammer's B is read by the saved ways' formula (fates.ts backAmong) over the pairing's own weights, and a rammer not
+// brought back is drawn at R = max(0, (S - B x K) / (1 - B)), K 1. A collision by accident, or of two of one group,
+// never pairs a pilot brought back: B 0, R = S, as built.
+// The scenes: no battle of the set flies a meant row (none of its rammers' nations and months is in the table), so each
+// row is flown on the fates test's Kent raid with its sides named again (the attacker's bombers flown as American
+// B-17s, the defender's Hurricanes under the row's nation) at a month inside the row. Sizes fixed before running: 60
+// battles a row at the book's own shares (each row's n is printed; no row reaches 2,000 rammers: about two a battle at
+// the highest share, 0.2), and one row, the Soviet 1941-42, flown again with every row's share set to the test figure
+// 1 (every fighter lost in the same moment as the bomber it fired on rams it), 270 battles, which reaches 2,000 (first
+// written at 240 battles: its own size check failed at 1,959 rammers, every share check having passed, so raised to 270).
+describe('(j) the design director\'s 01:00Z, reading 1: a ram on purpose reads its B', () => {
+  const near = (k: number, n: number, want: number, what: string) =>
+    expect(Math.abs(k / n - want), `${what}: ${k}/${n} against ${want}`).toBeLessThanOrEqual(4 * Math.sqrt((want * (1 - want)) / n) + 1e-12);
+  const F = SKY.fate;
+  /** A month inside a row of the table, as { year, month } (months from 0). */
+  const inside = (r: { from: number; to: number }) => {
+    const d = (r.from + Math.min(r.to, r.from + 2)) / 2, year = Math.floor(d);
+    return { year, month: Math.floor((d - year) * 12 + 1e-9) };
+  };
+  /** The fates test's Kent raid at the month, its attacker named American and flying B-17s, its defender named `nat`. */
+  const kentAs = (nat: string, when: { year: number; month: number }): Ticket => {
+    const t = structuredClone(TK[1]), m0 = t.place.models!, g0 = t.place.guns!;
+    t.place.when = when;
+    t.place.nat = 'USA';
+    t.att.forces = t.att.forces.map((f) => ({ ...f, nat: 'USA' }));
+    t.def.forces = t.def.forces.map((f) => ({ ...f, nat }));
+    t.place.models = { USA: { ftr: m0.GER.ftr, bmr: 'B17' }, [nat]: m0.UK };
+    t.place.guns = { USA: { ftr: g0.GER.ftr, bmr: bomberGuns('B17', 'USA', when) }, [nat]: g0.UK };
+    return t;
+  };
+  type Tot = { n: number; back: number; shown: number; not: number; notShown: number; accN: number; accShown: number; s: number; B: number; R: number[] };
+  const tot = new Map<string, Tot>();
+  /** Flies k0 .. k0 + n - 1 of a row's battles, switch on, and checks every fall a ram on purpose made. */
+  const flyRow = (key: string, nat: string, when: { year: number; month: number }, p: number, k0: number, n: number) => {
+    const tk = kentAs(nat, when), s = tk.place.saved.def;
+    // B by the formula, over the pairing's weights for a ram on purpose: m for a pilot brought back and m for one not.
+    const B = backAmong(s, p, 1, p, 1), R = ([0, 1, 2] as const).map((b) => restOut(Math.min(0.95, F.out.collide * F.outBand[b]), B, 1));
+    const t = tot.get(key) ?? { n: 0, back: 0, shown: 0, not: 0, notShown: 0, accN: 0, accShown: 0, s, B, R };
+    for (let k = k0; k < k0 + n; k++) {
+      const h = flown(at(key, tk, k), true).history();
+      for (const e of lostOf(h)) {
+        const f = fallOf(e);
+        expect(f.chutes + (f.out ?? 0), `${key}:${k}`).toBeLessThanOrEqual(f.crew!);
+        expect(f.captured).toBe(f.back || f.over !== 'enemy' ? 0 : f.chutes + (f.out ?? 0));
+        if (f.air !== 'ftr' || f.how !== 'collide') continue;
+        if (!f.meant) { if (!f.back && e.side === 'def') { t.accN++; if (f.chutes) t.accShown++; } continue; }
+        // Every rammer here is a defender, over his own ground (no attacker in these raids fires on a bomber).
+        expect([e.side, f.over]).toEqual(['def', 'own']);
+        t.n++;
+        const o = f.chutes + (f.out ?? 0);
+        t.shown += o;
+        // K: a rammer the count brings back is under his parachute, as every pilot brought back is.
+        if (f.back) { t.back++; expect([f.chutes, f.out ?? 0, f.chuteAt?.length], `${key}:${k} t ${e.t}`).toEqual([1, 0, 1]); }
+        else {
+          t.not++; t.notShown += o;
+          // Over his own ground the men brought back outrun the share at every height (S at most 0.11, B about 0.5): R is 0.
+          if (Math.max(...R) === 0) expect(o, `${key}:${k} t ${e.t}: a rammer not brought back, R 0`).toBe(0);
+        }
+      }
+    }
+    tot.set(key, t);
+  };
+  const ROWS = F.ram.meant.map((r) => ({ r, key: `meant-${r.nat}-${r.from.toFixed(2)}`, when: inside(r) }));
+  it('the rows are the book\'s, each read at its month (ramShare), and the code can bring a rammer back: the pairing weighs a ram on purpose the same for a pilot brought back and one not, so B is the count\'s own share', () => {
+    expect(ROWS.length).toBe(5);
+    for (const { r, when } of ROWS) {
+      expect(ramShare(r.nat, when, 4, r.pass), `${r.nat} ${when.year}/${when.month}`).toBe(r.p);
+      const s = AIR.pilots.home;
+      expect(Math.abs(backAmong(s, r.p, 1, r.p, 1) - s)).toBeLessThan(1e-12);
+    }
+  });
+  for (const { r, key, when } of ROWS) for (const k0 of [0, 30]) {
+    it(`${r.nat} from ${r.from.toFixed(2)} (p ${r.p}${r.four ? ', four-engined' : ''}${r.pass ? `, pass ${r.pass}` : ''}), at ${when.year}/${when.month}, battles ${k0} to ${k0 + 29}: every rammer brought back under his parachute; every one not brought back over his own ground shows none (R 0); chutes + out <= crew and captured as ever on every fall`, () => {
+      flyRow(key, r.nat, when, r.p, k0, 30);
+    });
+  }
+  const TF = 'meant-SOV-test-figure-1';
+  for (const k0 of [0, 30, 60, 90, 120, 150, 180, 210, 240]) {
+    it(`the Soviet 1941-42 row with every row's share at the test figure 1, battles ${k0} to ${k0 + 29}: the same checks on every fall`, () => {
+      withBook(() => { SKY.fate.ram.meant = SKY.fate.ram.meant.map((m) => ({ ...m, p: 1 })); }, () => flyRow(TF, 'SOV', ROWS[0].when, 1, k0, 30));
+    });
+  }
+  it('the shares: of all rammers on purpose, the share brought back at B and the share shown out at B + (1 - B) x R (B, since R is 0 over his own ground); those not brought back at R; and a collision by accident still at its full share S', () => {
+    for (const key of [...ROWS.map((x) => x.key), TF]) {
+      const t = tot.get(key)!;
+      expect(t, key).toBeDefined();
+      const what = `${key} (s ${t.s}, B ${t.B.toFixed(4)}, R by band ${t.R.map((x) => x.toFixed(3)).join(' ')})`;
+      console.log(`(j) ${what}: rammers ${t.n}, brought back ${t.back}, shown out ${t.shown}; not brought back ${t.not}, shown out ${t.notShown}; by accident, defenders not brought back ${t.accN}, shown out ${t.accShown}`);
+      expect(t.n, key).toBeGreaterThan(0);
+      near(t.back, t.n, t.B, `${what}, brought back`);
+      near(t.shown, t.n, t.B + (1 - t.B) * Math.max(...t.R), `${what}, all shown out`);
+      near(t.notShown, Math.max(1, t.not), Math.max(...t.R), `${what}, not brought back shown out`);
+    }
+    expect(tot.get(TF)!.n).toBeGreaterThanOrEqual(2_000);
+    // By accident: unit draws, each band and ground, 20,000 a cell: a pilot not brought back at S itself (B 0), as at a8a34088f.
+    for (const over of ['own', 'enemy'] as const) for (const band of [0, 1, 2] as const) {
+      const rng = new Rng(1_300 + band + (over === 'own' ? 0 : 10)), want = Math.min(0.95, F.out.collide * F.outBand[band]);
+      let k = 0;
+      for (let i = 0; i < 20_000; i++) { const f = fateOf(rng, fighter({ over, band, alt: SKY.bands.alt[band] }), freshMemory(), { fid: 1, cause: 'ram' }); expect(f.how).toBe('collide'); if (f.chutes) k++; }
+      near(k, 20_000, want, `by accident, ${over} band ${band}`);
+    }
+    // And in the battles: defenders not brought back from a collision by accident show a parachute (at S, not R = 0).
+    const acc = [...tot.values()].reduce((a, t) => [a[0] + t.accN, a[1] + t.accShown], [0, 0]);
+    console.log(`(j) collisions by accident, defenders not brought back, all rows: ${acc[1]}/${acc[0]} under a parachute`);
+  });
+  // Collisions by accident in battles: the fates test's Kent raid as it is (no meant row), the accident's shares at the
+  // test figure 1, 90 battles (first written at 30: it could not tell S from R = 0 at 132 falls, its planted fault MJ2
+  // surviving, so raised before it was committed).
+  const acc = { n: 0, k: 0, want: 0, v: 0 };
+  for (const k0 of [0, 30, 60]) {
+    it(`collisions by accident in battles, Kent at the accident's test figure 1, battles ${k0} to ${k0 + 29}: no ram on purpose`, () => {
+      withBook(() => { SKY.fate.ram.headon = 1; SKY.fate.ram.other = 1; SKY.fate.ram.tangle = 1; }, () => {
+        for (let i = k0; i < k0 + 30; i++) for (const e of lostOf(flown(at('kent-accident', TK[1], i), true).history())) {
+          const f = fallOf(e);
+          if (f.air !== 'ftr' || f.how !== 'collide' || f.back || e.side !== 'def') continue;
+          expect(f.meant).toBeUndefined();
+          const alt = (e.extra as { alt: number }).alt, band = [0, 1, 2].reduce((b, j) => (Math.abs(SKY.bands.alt[j] - alt) < Math.abs(SKY.bands.alt[b] - alt) ? j : b), 0);
+          const S = Math.min(0.95, F.out.collide * F.outBand[band]);
+          acc.n++; acc.want += S; acc.v += S * (1 - S); if (f.chutes) acc.k++;
+        }
+      });
+    });
+  }
+  it('collisions by accident in battles: a defender not brought back shown out at S itself (by the band nearest his height), never at the R = 0 a B would give', () => {
+    console.log(`(j) by accident (test figures 1), Kent, defenders not brought back: ${acc.k}/${acc.n} under a parachute against ${acc.want.toFixed(1)} at S`);
+    expect(acc.n).toBeGreaterThan(300);
+    expect(Math.abs(acc.k - acc.want)).toBeLessThanOrEqual(4 * Math.sqrt(acc.v));
+  });
+  it('the look of a ram on purpose in unit draws, each band and ground, 20,000 a cell (B carried as the pairing carries it, Scene.meantBack): brought back at B, all shown out at B + (1 - B) x R, those not brought back at R', () => {
+    for (const over of ['own', 'enemy'] as const) for (const band of [0, 1, 2] as const) {
+      const s = over === 'own' ? AIR.pilots.home : AIR.pilots.away, B = backAmong(s, 0.2, 1, 0.2, 1);
+      const S = Math.min(0.95, F.out.collide * F.outBand[band]), R = restOut(S, B, 1);
+      const rng = new Rng(1_500 + band + (over === 'own' ? 0 : 10)), die = new Rng(1_600 + band + (over === 'own' ? 0 : 10));
+      let back = 0, shown = 0, not = 0, notShown = 0;
+      for (let i = 0; i < 20_000; i++) {
+        const isBack = die.chance(B);
+        const f = fateOf(rng, fighter({ over, band, alt: SKY.bands.alt[band], back: isBack, meantBack: B }), freshMemory(), { fid: 1, cause: 'ram' });
+        expect(f.how).toBe('collide');
+        expect(f.chutes).toBeLessThanOrEqual(1);
+        shown += f.chutes;
+        if (isBack) { back++; expect(f.chutes).toBe(1); } else { not++; notShown += f.chutes; }
+      }
+      const what = `${over} band ${band} (S ${S.toFixed(3)}, B ${B.toFixed(4)}, R ${R.toFixed(4)})`;
+      near(back, 20_000, B, `${what}, brought back`);
+      near(shown, 20_000, B + (1 - B) * R, `${what}, all shown out`);
+      near(notShown, not, R, `${what}, not brought back`);
+    }
+  });
+});
+
+// The design director, 01:00Z, reading 5: "the landing's 0 for a crew of 2 must be the crew rule's own sized figure. If it
+// is an empty cell falling to 0, mark it G, read it at both ends, and the historian sizes it." It is: the landing's one
+// die, int(max(1, ceil(crew / 3))), was sized by no source and for a crew of 2 runs out at 0. So the hole H-LAND-TWO
+// (book.ts SKY.fate.landTwo, G) holds today's 0, read by the crew's rule for a crew of 2 only, with the switch on.
+describe('(k) the design director\'s 01:00Z, reading 5: the landing\'s figure for a crew of two, a named hole read at both ends', () => {
+  const glides = () => HOWS.map((x) => (x === 'glide' ? 1 : 0));
+  it('the hole holds today\'s value, 0, and at 0 the landing is die for die what the formula gives, every crew, switch on and off', () => {
+    expect(SKY.fate.landTwo).toBe(0);
+    for (const crew of [2, 3, 4, 5, 7, 10]) for (const bailouts of [false, true]) for (let seed = 1; seed <= 300; seed++) {
+      withBook(() => { SKY.fate.base.bmr = glides(); }, () => {
+        const f = fateOf(new Rng(seed), scene({ crew, bailouts }), freshMemory());
+        const g = fateOf(new Rng(seed), scene({ crew, bailouts: false }), freshMemory());
+        expect(f).toEqual(g);
+      });
+    }
+  });
+  it('read at both ends (0: nobody of two lost; 1: one of the two always lost): the Fulmar\'s second man after a glide, and a two-man bomber\'s glide; crews of 3, 4, 5 and 10 and the switch off the same at both ends', () => {
+    const N = 4_000;
+    const ends = (v: number) => withBook(() => { SKY.fate.landTwo = v; SKY.fate.base.ftr = glides(); SKY.fate.base.bmr = glides(); }, () => {
+      let second = 0, dive = 0;
+      const others: unknown[] = [];
+      for (let seed = 1; seed <= N; seed++) {
+        const over = seed % 2 ? 'own' as const : 'enemy' as const;
+        // The Fulmar, pilot not brought back (a glide: B 0), crew 1 and 2 on the same dice: the rest is the second man.
+        const one = fateOf(new Rng(seed), fighter({ model: 'Fulmar', crew: 1, over }), freshMemory());
+        const two = fateOf(new Rng(seed), fighter({ model: 'Fulmar', crew: 2, over }), freshMemory());
+        expect(two.how).toBe('glide');
+        second += (two.out ?? 0) + two.chutes - (one.out ?? 0) - one.chutes;
+        const b = fateOf(new Rng(seed), scene({ crew: 2 }), freshMemory());
+        expect(b.how).toBe('glide');
+        dive += b.out ?? 0;
+        if (seed <= 300) for (const crew of [3, 4, 5, 10]) others.push(fateOf(new Rng(seed), scene({ crew }), freshMemory()));
+        if (seed <= 300) others.push(fateOf(new Rng(seed), scene({ crew: 2, bailouts: false }), freshMemory()));
+      }
+      return { second, dive, others };
+    });
+    const lo = ends(0), hi = ends(1);
+    console.log(`(k) H-LAND-TWO at 0: the Fulmar's second man out of ${lo.second}/${N} glides, a two-man bomber's men out ${lo.dive}/${2 * N}; at 1: ${hi.second}/${N}, ${hi.dive}/${2 * N}`);
+    // At 0 (today) nobody of two is lost: he always climbs out, and both bomber men do (out.glide 0: nobody jumps).
+    expect([lo.second, lo.dive]).toEqual([N, 2 * N]);
+    // At 1 one of the two is always lost: the second man never climbs out, a two-man bomber brings one man out.
+    expect([hi.second, hi.dive]).toEqual([0, N]);
+    // Every other crew, and the switch off, the same at both ends.
+    expect(hi.others).toEqual(lo.others);
   });
 });

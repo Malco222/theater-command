@@ -315,6 +315,15 @@ export const SKY = {
      * ground too (D1). Hole H-FTR-LAND (the historian's H3); mark G, a game placeholder, no source.
      */
     ftrLand: 0.6,
+    /**
+     * The men a forced landing or a ditching loses of a crew of two (the Fulmar's pilot and observer; the two-seat dive
+     * bombers): the share of such landings that lose one of the two. Hole H-LAND-TWO; mark G, a game placeholder, not
+     * the historian's. The landing's one die (fates.ts landLost) loses up to a third of a crew, int(max(1, ceil(crew /
+     * 3))), a formula no source sized; for a crew of two it runs out at 0, so nobody of two is ever lost, and 0 holds
+     * that value (the design director, 27 November 2026 01:00Z, reading 5: "mark it G, read it at both ends, and the
+     * historian sizes it"). Its range: 0, nobody lost; 1, one of the two always lost. Release 2, 'bailouts' only.
+     */
+    landTwo: 0,
     /** A burning one blows apart on the way down: the chance, times 'loaded' with bombs aboard, and when, as a share of its fall. */
     boom: { burn: 0.12, flamer: 0.35, loaded: 2, at: [0.2, 0.65] as [number, number] },
     /** Air seconds after the hit before the fire shows: an engine smokes first; a flamer goes up at once. */
@@ -332,7 +341,9 @@ export const SKY = {
      *   die as today. Over the sea the ditching stays as today (hole H-GLIDE-SEA). If the historian's answer to H1 does
      *   not fit outBand's shape (0.3, 1, 1.1), it goes back to the design director before any second height table is made.
      * - a fighter pilot the rules do not bring back gets out of a breakup or a collision at 'breakup' and 'collide'
-     *   (0.1 each) times 'outBand', on either ground (D11; mark G, a game placeholder).
+     *   (0.1 each) times 'outBand', on either ground (D11; mark G, a game placeholder). That is S, the share of all
+     *   such pilots; a ram on purpose may hold a pilot brought back, so a rammer not brought back is drawn at the rest
+     *   of it (fates.ts backOf, sc.meantBack; the design director, 27 November 2026 01:00Z, reading 1).
      */
     out: { explode: 0, flamer: 0.2, burn: 0.55, wing: 0.2, tail: 0.3, pilot: 0.35, spin: 0.35, glide: 0, breakup: 0.1, struck: 0.25, collide: 0.1 } as Record<string, number>,
     /** By height, low, middle, high. Release 2, 'bailouts': read for a fighter pilot's getting out too, on either ground (D3; mark G, until the historian's H2 by height). */
