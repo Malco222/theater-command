@@ -1,6 +1,7 @@
 import type { Rng } from '../core/rng';
 import type { ColumnRun } from './columns';
 import type { Dump } from './logistics';
+import type { DumpFire } from './dumpfires';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
 
 /** The arms of a corps. 'mg' and 'mor' are the support teams (release 2, src/campaign/teams.ts): off unless switched on. */
@@ -497,6 +498,11 @@ export interface Corps extends Storied {
    * run (a fraction while they wear out), and the month it last took any. Never set with the switch off.
    */
   kit?: { from: string; n: number; turn: number };
+  /**
+   * (Release 2, heldline.ts, behind its switch) The 'held the line' medal: it held its ground against long odds, where,
+   * when, and the chance it had of holding (0 to 1). Its morale settles higher for the rest of the war (morale.ts levelOf).
+   */
+  held?: { at: number; turn: number; chance: number };
   /** It took over fieldworks left on this ground this month (the grand campaign): it keeps them at the month's end though it marched. */
   relief?: boolean;
   /**
@@ -1204,6 +1210,8 @@ export interface Stories {
   told: Record<string, number>;
   /** Bomber crews who have finished a tour, by nation: where the player sends them, and those at the schools and selling bonds. */
   crews?: Record<string, CrewsHome>;
+  /** (Release 2, diary.ts, behind its switch) The player's war diary: one entry for each month gone, by its turn. */
+  diary?: { t: number; text: string }[];
   /** The holders of each nation's highest award for valour (valour.ts), oldest first. */
   heroes?: Hero[];
   /**
@@ -1888,6 +1896,8 @@ export interface Game {
   columns?: Record<string, ColumnRun[]>;
   /** Release 2 (logistics.ts), forward dumps on: the dumps stocked or being stocked beyond the railheads. Absent otherwise. */
   dumps?: Dump[];
+  /** (Release 2, dumpfires.ts, behind its switch) Forward dumps set burning by enemy aircraft this month or last. Absent otherwise. */
+  dumpFires?: DumpFire[];
   /** Release 2 (logistics.ts), moving the lorries on: the front each player nation sends its lorries to first, by nation. Absent otherwise. */
   lorryFirst?: Record<string, string>;
   /** Release 2 (ruling 241 D1), record only, written only while the submarine scene's viewing setting is on: this month's and last month's hunts, torpedoings and convoy months, for the scene to stage. Absent otherwise. */

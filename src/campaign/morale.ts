@@ -13,6 +13,7 @@
  * A historical scenario keeps no morale: its corps carry none, every multiplier here is exactly 1 for them, and so
  * its wars come out as they did before this rule was written. The numbers and words are in data/campaign/morale.json.
  */
+import heldData from '../../data/campaign/heldline.json';
 import data from '../../data/campaign/morale.json';
 import { clamp } from '../core/math';
 import type { Corps, Game, Region } from './types';
@@ -60,7 +61,10 @@ export function openMorale(g: Game): void {
 }
 
 /** Where a corps' morale settles when nothing is happening to it: its row's own will where the record gives it one (the far side), the common level otherwise. */
-export const levelOf = (c: Corps): number => c.will ?? MORALE.level;
+// (Release 2, heldline.ts) A corps that held the line against long odds settles a little higher for the rest of the war;
+// 'held' is never set with that switch off.
+const HELD_LIFT = (heldData as { lift: number }).lift;
+export const levelOf = (c: Corps): number => (c.held ? Math.min(1, (c.will ?? MORALE.level) + HELD_LIFT) : c.will ?? MORALE.level);
 
 /** The morale of a fresh formation: as far above its own level as any other's is above the common one. */
 const fresh = (c: Corps): number => (c.will === undefined ? MORALE.start : r3(clamp(MORALE.start - MORALE.level + c.will, 0, 1)));

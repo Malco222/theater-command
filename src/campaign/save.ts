@@ -99,6 +99,8 @@ export function saveGame(g: Game): string {
     columns: g.columns,
     // Forward dumps and the front the lorries go to first (release 2, logistics.ts): absent while those switches are off.
     dumps: g.dumps,
+    // Dumps set burning (release 2, dumpfires.ts): absent while that switch is off or nothing burns.
+    dumpFires: g.dumpFires?.length ? g.dumpFires : undefined,
     lorryFirst: g.lorryFirst,
     // A neutral's bargains (release 2): absent while the switch is off, so such a save is written as it always was.
     bargains: g.bargains,
@@ -321,6 +323,7 @@ function readSave(text: string, promote: boolean): Game | null {
   if (d.patrolSunk && typeof d.patrolSunk === 'object') g.patrolSunk = d.patrolSunk;
   if (d.columns && typeof d.columns === 'object') g.columns = d.columns;
   if (Array.isArray(d.dumps) && d.dumps.length) g.dumps = d.dumps;
+  if (Array.isArray(d.dumpFires) && d.dumpFires.length) g.dumpFires = d.dumpFires;
   if (d.lorryFirst && typeof d.lorryFirst === 'object') g.lorryFirst = d.lorryFirst;
   if (d.bargains && typeof d.bargains === 'object') g.bargains = { rows: {}, patience: {}, generic: {}, got: {}, ...d.bargains };
   if (d.legions && typeof d.legions === 'object') g.legions = { abroad: {}, done: {}, ...d.legions };

@@ -18,6 +18,7 @@ import { fuelMet } from './resources';
 import { railheads } from './rails';
 import { airOver, columnsOn, columnsSettable, type ColumnRun } from './columns';
 import { SIGHT, sightOf } from './intel';
+import { FIRES, bookFire, dumpFiresOn, fadeFires } from './dumpfires';
 import type { Game } from './types';
 
 export const LOGI = data as unknown as {
@@ -227,6 +228,9 @@ export function tendDumps(g: Game, nat: string): { dump: Dump; road: Int16Array 
   if (!dumpsOn(g) || !g.dumps?.length) return [];
   const me = g.human;
   const out: { dump: Dump; road: Int16Array }[] = [];
+  // (Release 2, dumpfires.ts) A nation's dumps set burning before last month are out.
+  const fires = dumpFiresOn(g);
+  if (fires) fadeFires(g, nat);
   g.dumps = g.dumps.filter((d) => {
     if (d.nat !== nat) return true;
     const r = g.regions[d.region], who = r.ctrl;
@@ -236,10 +240,15 @@ export function tendDumps(g: Game, nat: string): { dump: Dump; road: Int16Array 
       return false;
     }
     if (d.fill <= 0 && d.stock > 0) {
-      const burnt = d.stock * Math.min(1, LOGI.dumps.bombed * airOver(g, nat, d.region).air);
+      const over = airOver(g, nat, d.region);
+      const burnt = d.stock * Math.min(1, LOGI.dumps.bombed * over.air);
       if (burnt >= 1) {
         d.stock -= burnt;
-        if (me === nat && burnt >= 3) headline(g, 'info', `Enemy aircraft bombed our forward dump at ${r.name}: ${Math.round(burnt)} division-months of supply burned, ${Math.round(d.stock)} left.`, me, d.region, { arm: 'air', lost: me });
+        // (Release 2, dumpfires.ts) Enough of it went up to set it burning: its side's corps near it are slower this month.
+        const fire = fires && burnt >= FIRES.least;
+        if (fire) bookFire(g, { nat, region: d.region, turn: g.turn, burnt: Math.round(burnt * 10) / 10, ...(over.mine > 0 ? { mine: 1 as const } : {}) });
+        if (me === nat && burnt >= 3) headline(g, 'info', `Enemy aircraft bombed our forward dump at ${r.name}: ${Math.round(burnt)} division-months of supply burned, ${Math.round(d.stock)} left.${fire ? ' It is still burning, and the corps it feeds will move slower this month for want of fuel and shells.' : ''}`, me, d.region, { arm: 'air', lost: me });
+        else if (fire && me && over.mine > 0 && atWar(g, me, nat)) headline(g, 'info', `Our aircraft have set the ${g.nations[nat].adj} forward dump at ${r.name} burning: ${Math.round(burnt)} division-months of their supply went up, and their troops near it will be slow this month.`, me, d.region, { arm: 'air' });
       }
       out.push({ dump: d, road: dumpRoads(g, nat, d.region) });
     }

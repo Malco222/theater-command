@@ -1,0 +1,7 @@
+{
+  "_note": "The 'held the line' medal (release 2; Brian's yes of 27 November 2026 13:40Z to the playtester's idea). src/campaign/heldline.ts. A corps that held its ground where the attack's chance of carrying it was at least 'chance' (the battle's own win chance, from the two sides' power and the run of luck the ground allows, as the attack card shows it: so a defence that had at most one chance in four) earns it, once. It is felt at once ('felt', on morale's own scale, beside the battle's own 'held'), and for the rest of the war its morale settles 'lift' higher than it would (morale.json 'level'). Every army's corps alike: it is about the fight, not the flag.",
+  "chance": 0.75,
+  "felt": 0.06,
+  "lift": 0.05,
+  "ribbon": ["#3a3a2a", "#c8102e"]
+}

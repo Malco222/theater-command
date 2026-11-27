@@ -194,6 +194,9 @@ import { airNamesOn, setAirNames } from '../../../src/campaign/airnames';
 import { markedOn, setMarked } from '../../../src/campaign/marked';
 import { thePlace } from '../../../src/campaign/bombers';
 import { kitLine, pressedOn, setPressed } from '../../../src/campaign/pressed';
+import { diaryEntries, diaryOn, setDiary } from '../../../src/campaign/diary';
+import { chanceWords as heldChanceWords, heldOn, heldRibbon, setHeld } from '../../../src/campaign/heldline';
+import { FIRES, burningAt, dumpFiresOn, setDumpFires } from '../../../src/campaign/dumpfires';
 import { cancelDump, dumpPlaces, dumpPrice, dumpsOf, dumpsOn as dumpsAreOn, dumpsView, firstFront, frontsAt, logisticsSet, lorryPool, orderDump, poolOn as lorryPoolOn, setLogistics, setLorryFirst, shiftOn as lorryShiftOn, wagonsOn as wagonsAreOn, whyNoDump, LOGI, type LogisticsSwitch } from '../../../src/campaign/logistics';
 import { railheads } from '../../../src/campaign/rails';
 import { fuelMet, laneNotCounted } from '../../../src/campaign/resources';
@@ -812,7 +815,9 @@ function drawView(step = false) {
       ...((c as { town?: unknown }).town && c.nat === s.human ? { apOut: (() => { try { return apForOrders(s, c); } catch { return 0; } })() } : {}),
       // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
       xp: Math.round(c.xp * 100), grade: grade(c.xp), nick: c.nick ?? null,
-      honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'] })),
+      honours: [...honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'] })),
+        // (Release 2, heldline.ts, behind its switch) The 'held the line' medal, as one more ribbon.
+        ...(() => { const h = heldRibbon(s, c); return h ? [h] : []; })()],
       dim: false,
       // (Version 84) the weapons it carries; and whether it has begun to dig where the first month's digging shows no works (the open desert)
       carry: carriedBy(s, c), digging: !c.dug && ((c as { digging?: number }).digging ?? 0) > 0,
@@ -980,6 +985,12 @@ function drawView(step = false) {
           const worth = r.worth ?? (r.won ? 1 : 0);
           if (known && worth > 0) out.set(reg.id, (out.get(reg.id) ?? 0) + worth);
         }
+        // (Release 2, dumpfires.ts, behind its switch) Forward dumps set burning this month or last, where the player can know of it.
+        if (dumpFiresOn(s)) for (const f of s.dumpFires ?? []) {
+          if (f.turn < s.turn - 1 || !s.regions[f.region]) continue;
+          const known = !s.human || f.nat === s.human || allied(s, f.nat, s.human) || f.mine === 1 || seen[f.region] > 0;
+          if (known) out.set(f.region, (out.get(f.region) ?? 0) + FIRES.smoke);
+        }
         return [...out].flat();
       } catch { return []; }
     })(),
@@ -1069,7 +1080,7 @@ function drawView(step = false) {
     columns: (() => { try { return columnsView(s).map((v) => ({ nat: v.nat, side: v.side, path: v.points.flat(), lorries: v.lorries, lost: v.lost, share: Math.round(v.share * 100) / 100, hits: v.hits.flatMap((h) => [h.x, h.y, h.by === 'air' ? 1 : 2, h.lost]), horse: v.horse, fill: v.fill, fromDump: v.fromDump })); } catch { return []; } })(),
     // (Release 2, logistics.ts) The forward dumps the player can see: where, whose, the division-months in them, and
     // whether they are still being brought up. Empty while the dumps are off.
-    dumps: (() => { try { return dumpsView(s).map((d) => ({ nat: d.nat, side: d.side, x: d.x, y: d.y, region: d.region, stock: d.stock, filling: d.filling })); } catch { return []; } })(),
+    dumps: (() => { try { return dumpsView(s).map((d) => ({ nat: d.nat, side: d.side, x: d.x, y: d.y, region: d.region, stock: d.stock, filling: d.filling, ...(burningAt(s, d.nat, d.region) ? { burning: 1 } : {}) })); } catch { return []; } })(),
     // (Release 2, nicknames.ts) Whether the names corps earn are shown on the flags on the table.
     nickFlags: nicknamesOn(s),
     // (Release 2, airnames.ts) Whether new air groups are named with their arms' own numbers and words.
@@ -1124,6 +1135,8 @@ function drawView(step = false) {
     // (Release 2, pressed.ts) Whether captured tanks are pressed into service; (airpages.ts) whether a bomber group's page has THE CREWS.
     pressedTanks: pressedOn(s),
     crewRoll: crewRollOn(s),
+    // (Release 2) The war diary (diary.ts), the 'held the line' medal (heldline.ts) and supply dumps that burn (dumpfires.ts).
+    warDiary: diaryOn(s), heldLine: heldOn(s), dumpFires: dumpFiresOn(s),
     // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
     townQueue: townQueueOn(s),
     // (Release 2, citydefences.ts) Whether searchlights can be built, the guns fight by night by what they see and a
@@ -5737,6 +5750,26 @@ function battleReportPage(s: Game, id: number): Page | null {
 }
 
 /** The month's report: what every nation did while the player waited, each with a way to go and look. */
+/** (Release 2, diary.ts) The war diary: one entry for each month gone, the latest first, by year. Null with the switch off. */
+function diaryPage(s: Game): Page | null {
+  if (!s.human || !diaryOn(s)) return null;
+  const all = diaryEntries(s);
+  const years: { heading: string; text: string; rows: PageRow[] }[] = [];
+  for (const e of all) {
+    const y = String(turnToDate(e.t).year);
+    const last = years[years.length - 1];
+    if (last?.heading === y) last.text += `\n\n${e.text}`;
+    else years.push({ heading: y, text: e.text, rows: [] });
+  }
+  return {
+    id: 'diary', title: `THE WAR DIARY  \u00B7  ${(s.nations[s.human]?.name ?? s.human).toUpperCase()}`,
+    headline: all.length ? `${all.length} month${all.length === 1 ? '' : 's'} set down` : 'Nothing set down yet',
+    note: 'Kept month by month as the war goes: the best of each month and the worst of it, in the words of the time.',
+    top: lastMonth ? [{ label: "THE MONTH'S REPORT", act: 'open:reports', ok: true, tip: '' }] : [],
+    sections: years.length ? years : [{ heading: 'THE FIRST ENTRY', text: 'The first entry is set down when your next month opens.', rows: [] }],
+  };
+}
+
 function reportsPage(s: Game): Page | null {
   if (!lastMonth) return null;
   const row = (r: { nat: string; note: string; region: number }): PageRow => ({
@@ -5767,7 +5800,8 @@ function reportsPage(s: Game): Page | null {
     id: 'reports', title: `THE MONTH'S REPORT  \u00B7  ${lastMonth.date.toUpperCase()}`,
     headline: lastMonth.rows.length ? `${mine.length ? `${mine.length} report${mine.length === 1 ? '' : 's'} from your own fronts` : 'Nothing touched your own fronts'}, ${rest.length} from elsewhere` : 'A quiet month',
     note: 'What every nation did while your month was closed, as it was shown on the table. Your own fronts come first.',
-    top: [],
+    // (Release 2, diary.ts) The war diary's door, where it is on.
+    top: diaryOn(s) ? [{ label: 'THE WAR DIARY', act: 'open:diary', ok: true, tip: 'One entry for each month: its best and its worst, set down at the time.' }] : [],
     sections: [
       { heading: 'FORMATIONS OFFERED', text: '', rows: offered },
       { heading: 'YOUR FRONTS', text: mine.length ? '' : 'No enemy moved against you, and none of your ground changed hands.', rows: mine },
@@ -7535,7 +7569,7 @@ function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
   const p = id === 'repairs' ? repairsPage(s) : id === 'lorries' ? lorriesPage(s) : id === 'atom' ? atomPage(s) : id === 'staff' ? staffPage(s) : id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : id === 'home' ? homePage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
-    : id === 'spies' ? spiesPage(s, region) : id === 'crossings' ? crossingsPage(s) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : part[0] === 'battle' ? battleReportPage(s, Number(part[1])) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'fleetattack' ? fleetAttackPage(s, Number(part[1]), Number(part[2])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
+    : id === 'spies' ? spiesPage(s, region) : id === 'crossings' ? crossingsPage(s) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : id === 'diary' ? diaryPage(s) : part[0] === 'battle' ? battleReportPage(s, Number(part[1])) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'fleetattack' ? fleetAttackPage(s, Number(part[1]), Number(part[2])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
     : part[0] === 'raid' ? raidPage(s, part[1] as AirMission, Number(part[2]))
@@ -8259,6 +8293,30 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       : "Bomber crews by name are off: the group's page has no list of its crews. Their tours go on as before.";
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'diaryrule') {
+    // (Release 2, diary.ts) The war diary, switched in any month: words only.
+    ok = setDiary(s, part[1] === 'on');
+    note = diaryOn(s)
+      ? "The war diary is on: as each of your months opens, one entry for the month gone, its best and its worst, in the news and on THE WAR DIARY (from the month's report)."
+      : 'The war diary is off, and what was set down in it is gone.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'heldlinerule') {
+    // (Release 2, heldline.ts) The 'held the line' medal, switched in any month.
+    ok = setHeld(s, part[1] === 'on');
+    note = heldOn(s)
+      ? "Held the line is on: a corps that holds its ground when the attack had three chances in four of carrying it, or better, earns the medal, and its morale settles a little higher for the rest of the war. The same for every army."
+      : 'Held the line is off: no medal is given, and those given are taken back.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'dumpfiresrule') {
+    // (Release 2, dumpfires.ts) Supply dumps that burn, switched in any month (they work only where the forward dumps do).
+    ok = setDumpFires(s, part[1] === 'on');
+    note = dumpFiresOn(s)
+      ? `Supply dumps that burn are on: a forward dump badly bombed burns on the map, and its side's corps near it have ${FIRES.slow === 1 ? 'one move' : `${FIRES.slow} moves`} less the month after. The same for every army.${dumpsAreOn(s) ? '' : ' They work only with the forward dumps on.'}`
+      : 'Supply dumps that burn are off: a bombed dump loses what burned, and no more.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'pressedtanksrule') {
     // (Release 2, pressed.ts) Captured tanks pressed into service, switched in any month.
     ok = setPressed(s, part[1] === 'on');
@@ -8974,10 +9032,16 @@ function record(id: number) {
     xp: Math.round(c.xp * 100),
     grade: grade(c.xp),
     notes,
-    honours: honoursOf(s, c).map((a) => ({
+    honours: [...honoursOf(s, c).map((a) => ({
       title: awardTitle(s, a), name: honourDef(a.hon)?.name ?? '', citation: citation(s, a), date: dateOf(a.turn),
       ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'], old: !!a.old,
     })),
+      // (Release 2, heldline.ts, behind its switch) The 'held the line' medal and its citation.
+      ...(() => {
+        const h = heldRibbon(s, c);
+        if (!h || !c.held) return [];
+        return [{ title: h.title, name: 'Held the line', citation: `${c.name} held its ground at ${s.regions[c.held.at]?.name ?? 'the line'} with ${heldChanceWords(c.held.chance)} of holding it, and was still in the line when it was over.`, date: dateOf(c.held.turn), ribbon: h.ribbon, old: false }];
+      })()],
     diary: (c.log ?? []).slice(-14).reverse().map((line) => ({ date: dateOf(line[0]), text: diaryText(s, c, line) })),
   };
 }
@@ -9457,6 +9521,10 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, offerCalls(g
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).homeFront = () => homeBoard(game());
 // (Release 2, airpages.ts) The bomber crews' page: TC.crewRoll(on) at any time; the options page uses act('crewrollrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).crewRoll = (on: boolean) => { const s = game(); setCrewRoll(s, !!on); return { on: crewRollOn(s) }; };
+// (Release 2) The war diary, the 'held the line' medal and supply dumps that burn: TC.<name>(on) at any time; the options page uses act('<id>rule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).warDiary = (on: boolean) => { const s = game(); setDiary(s, !!on); return { on: diaryOn(s) }; };
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).heldLine = (on: boolean) => { const s = game(); setHeld(s, !!on); return { on: heldOn(s) }; };
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).dumpFires = (on: boolean) => { const s = game(); setDumpFires(s, !!on); return { on: dumpFiresOn(s) }; };
 // (Release 2, pressed.ts) Captured tanks pressed into service: TC.pressedTanks(on) at any time; the options page uses
 // act('pressedtanksrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).pressedTanks = (on: boolean) => { const s = game(); setPressed(s, !!on); return { on: pressedOn(s) }; };
@@ -9500,6 +9568,9 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   pressedtanksrule: (s) => setPressed(s, true) && pressedOn(s),
   // (Release 2, airpages.ts: the bomber crews' page, switched in any month; it shows records and moves nothing.)
   crewrollrule: (s) => setCrewRoll(s, true) && crewRollOn(s),
+  diaryrule: (s) => setDiary(s, true) && diaryOn(s),
+  heldlinerule: (s) => setHeld(s, true) && heldOn(s),
+  dumpfiresrule: (s) => setDumpFires(s, true) && dumpFiresOn(s),
 };
 function r2Ship(ids: string[]) {
   const s = game();
