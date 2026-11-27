@@ -1735,6 +1735,41 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		bReel = !ReelShots.empty();
 		bRideStrip = ReelRide.bOn;
 	}
+	// (the sea free eye, Battle/SEA-FREE-EYE.md: a camera the player flies, -TheaterSeaFreeEye=1, taken only in a full
+	// battle watched live, never in the month's scene nor a picture run; -TheaterSeaFreeEyeRide=1 and
+	// -TheaterSeaFreeEyeDrive= (tour, or a drive file: the Mac's check) only with it; their values in force written back
+	// for the "Sea look:" line. Off, nothing of it runs.)
+	{
+		const SeaFreeEye::Taken FreeTaken = SeaFreeEye::Take(SeaLook, !bMonthScene && ShotFolder.IsEmpty());
+		bFreeEye = FreeTaken.bOn;
+		bFreeRide = FreeTaken.bRide;
+		Free = FreeEye::Eye();
+		Free.Set = SeaFreeEye::SeaSettings(16.0 / 9.0); // (its lenses fitted again to the window's shape at each take, its ceiling each frame)
+		FreeState = SeaFreeEye::State();
+		FreeState.bRide = bFreeRide;
+		FreeFloor = SeaFreeEye::SeaFloor(); // (today's still face: the swell's lane hands it FleetWaves::SampleNear on the scene's Near)
+		bFreeNow = false;
+		FreeHero = -1;
+		FreeRealNow = 0.0;
+		FreeCeiling = SeaFreeEye::EyeMost;
+		FunnelsFree = SeaFreeEye::Refresh();
+		WrecksFree = SeaFreeEye::Refresh();
+		if (bFreeEye && FreeTaken.Drive != "off")
+		{
+			std::string DriveText = FreeTaken.Drive == "tour" ? std::string(SeaFreeEye::TourText()) : std::string();
+			FString DriveFile;
+			if (FreeTaken.Drive != "tour" && FFileHelper::LoadFileToString(DriveFile, UTF8_TO_TCHAR(FreeTaken.Drive.c_str())))
+			{
+				DriveText = TCHAR_TO_UTF8(*DriveFile);
+			}
+			std::string DriveError = DriveText.empty() ? std::string("no such file") : std::string();
+			if (DriveText.empty() || !SeaFreeEye::ParseDrive(DriveText, FreeState.D, DriveError))
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Sea battle: -TheaterSeaFreeEyeDrive=%s does not read (%s): no drive."), UTF8_TO_TCHAR(FreeTaken.Drive.c_str()), UTF8_TO_TCHAR(DriveError.c_str()));
+				FreeState.D = SeaFreeEye::Drive();
+			}
+		}
+	}
 	// S6 hook (heavy weather; the look bible's S6, the release 2 ocean plan steps 6(b) and 12(b)): the bow sheets under
 	// -TheaterSeaSpray=1, and the hulls' ice under -TheaterSeaIce=1 (the frost set on the stage below). Both off by default:
 	// nothing is drawn. The gale is false here until step 14(c) lands it (the sea gale switch, another thread's, which is not
@@ -2085,6 +2120,15 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 			SkyWeather->SetDayLight(Day.UnlitShare); // (step 11: the dome, the sheets and the rain dim with the day)
 		}
 	}
+	if (bFreeEye)
+	{
+		// (the sea free eye: its ceiling under this battle's sky, 150 m under a deck the dome draws, fixed for the battle
+		// as the day is laid once; the player's side for Tab, as the views' "me")
+		double DeckBase = -1.0;
+		const bool bDeck = SkyWeather && SkyWeather->DeckDrawn(DeckBase);
+		FreeCeiling = SeaFreeEye::Ceiling(bDeck, DeckBase);
+		FreeSide = SeaFeed::SideOf(S.Rec.Views.front().Head.Me) == 1 ? 1 : 0;
+	}
 	if (Effects)
 	{
 		// (the sky is set: the kit's far smoke pales into the haze the screen shows at the horizon; in field mode the
@@ -2251,6 +2295,22 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 		if (ACampaignGameMode* Campaign = Cast<ACampaignGameMode>(UGameplayStatics::GetGameMode(this)))
 		{
 			Campaign->DuckForScene(true);
+		}
+	}
+	else if (bFreeEye)
+	{
+		// (the sea free eye: the screen focused so the camera's keys come to it, under GameAndUI, not UI only: the keys it
+		// leaves unhandled, Escape, Space, M, N, H, 1-5 and the rest, go on to the campaign exactly as with the switch off;
+		// HideScreen gives the campaign's own mode back)
+		if (APlayerController* Controller = Here->GetFirstPlayerController(); Controller && Screen.IsValid())
+		{
+			FInputModeGameAndUI Mode;
+			Mode.SetWidgetToFocus(Screen);
+			Mode.SetHideCursorDuringCapture(false);
+			Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			Controller->SetInputMode(Mode);
+			Controller->SetShowMouseCursor(true);
+			bOwnInput = true;
 		}
 	}
 	UE_LOG(LogTheater, Display, TEXT("Sea battle: %s, %s (%s), %d views, %.0f s, the sun at %.0f degrees and %.0f up at %.1f h, %d shots%s%s."), *RecordKey,
@@ -4156,7 +4216,9 @@ void ASeaBattle::DrawWrecks()
 	// Two meshes: what is near the eye (LiveReach), every man going over the side or up a net and the boats, laid every
 	// frame and throwing shadows; the rest laid twice a second and at a cut, as it barely moves at that distance. A thing
 	// new since the far mesh was laid is laid with the near until the next.
-	const bool bFarDue = TicksSinceCut == 0 || Now - WrecksFarAt >= WreckFarEvery || Now < WrecksFarAt;
+	// (the sea free eye: while it owns the camera, at its cut, once it has moved half LiveReach, or half a real second)
+	const bool bFarDue = bFreeNow ? SeaFreeEye::FarWreckDue(WrecksFree, FreeRealNow, SeaFreeEye::Vec{ EyeBoard.X, EyeBoard.Y, EyeBoard.Z }, TicksSinceCut == 0, 0.5 * LiveReach)
+	                              : (TicksSinceCut == 0 || Now - WrecksFarAt >= WreckFarEvery || Now < WrecksFarAt);
 	if (bFarDue)
 	{
 		WrecksFarAt = Now;
@@ -5219,12 +5281,20 @@ void ASeaBattle::RunTrails()
 	// what she has while she stays a little inside the count, so plumes are not stopped and started as ships pass.
 	// (chosen again at once when the camera cuts, and the ships the shot is of first of all: the hero destroyer of the
 	// funnels picture went without, Samar r2e frame 01)
-	if (bFunnels && (Now - FunnelsChosenAt >= 4.0 || ShotNow != FunnelsShot))
+	// (the sea free eye: while it owns the camera, chosen again on its own cut, a change of the ship it follows, or once
+	// it has moved 1 km or 4 real seconds have passed, never on the director's shot changing unseen; its hero first)
+	const bool bFunnelsFree = bFunnels && bFreeNow;
+	if (bFunnelsFree ? SeaFreeEye::FunnelsDue(FunnelsFree, FreeRealNow, SeaFreeEye::Vec{ BoardOf(EyeAt).X, BoardOf(EyeAt).Y, BoardOf(EyeAt).Z }, TicksSinceCut == 0, FreeHero)
+	                 : (bFunnels && (Now - FunnelsChosenAt >= 4.0 || ShotNow != FunnelsShot)))
 	{
 		FunnelsChosenAt = Now;
 		FunnelsShot = ShotNow;
 		int32 Hero = -1, Second = -1;
-		if (Shots.IsValidIndex(ShotNow))
+		if (bFunnelsFree)
+		{
+			Hero = FreeHero;
+		}
+		else if (Shots.IsValidIndex(ShotNow))
 		{
 			Hero = Shots[ShotNow].Subject;
 			Second = Shots[ShotNow].Kind == ESeaShot::Funnels ? Shots[ShotNow].Other : -1;
@@ -6701,13 +6771,27 @@ void ASeaBattle::AimEye()
 	}
 	const int32 WasWindow = UnderWindow;
 	UnderWindow = bUnderEye ? (Standing != INDEX_NONE ? Standing : static_cast<int32>(Shots[Want].Way.X)) : INDEX_NONE; // U1 hook
+	// SeaFreeEye block begins (Battle/SEA-FREE-EYE.md: with -TheaterSeaFreeEye=1 and the camera his, everything above ran
+	// as the director's, untouched, and ShotNow still follows his plan below; the free eye's picture replaces From, To and
+	// Lens, and none of the director's under windows is this picture's; his own dive, U, keeps the director's)
+	bool bFreeCut = false;
+	bFreeNow = false;
+	if (bFreeEye)
+	{
+		FreeAim(Standing == FSeaUnder::ByHandWindow, From, To, Lens, bFreeNow, bFreeCut);
+		if (bFreeNow)
+		{
+			UnderWindow = INDEX_NONE;
+		}
+	}
+	// SeaFreeEye block ends
 	// A cut: a new shot whose eye is not where the last left it, the first, or after a skip. (The ride strip's pictures
 	// follow on from each other, the eye carried with her: no cut, the history kept.) U1 hook (under water): through the
 	// sea's face, and from one window to another, always a clean cut.
 	const FVector Looking = (To - From).GetSafeNormal();
 	const bool bMoved = FVector::Dist(From, EyeAt) > 25.0 * UnitsPerMetre || FMath::Abs(Lens - EyeLens) > 2.0 ||
 		FVector::DotProduct(Looking, EyeFacing.Vector()) < FMath::Cos(FMath::DegreesToRadians(3.0));
-	if (bEyeCut || (Want != ShotNow && bMoved) || ((From.Z < 0.0) != (EyeAt.Z < 0.0)) || (UnderWindow != WasWindow && bMoved))
+	if (SeaFreeEye::CutNow(bFreeNow, bEyeCut, bFreeCut, Want != ShotNow, bMoved, (From.Z < 0.0) != (EyeAt.Z < 0.0), UnderWindow != WasWindow))
 	{
 		bEyeCut = false;
 		TicksSinceCut = 0;
@@ -7343,6 +7427,7 @@ void ASeaBattle::Tick(float DeltaSeconds)
 		return;
 	}
 	FSeaBattleState& S = *State;
+	FreeDt = DeltaSeconds; // (the sea free eye: real seconds, unclamped; the core holds them to a quarter second itself)
 	const double Dt = FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);
 	// (the frame before this one, timed on the real clock: the battle's own frames, from its second second on; a gap
 	// over half a minute is the game held, not a frame)
@@ -7435,7 +7520,7 @@ void ASeaBattle::Tick(float DeltaSeconds)
 	// charges sinking, the sounds) and the U key; through the face, the lamps said again this same frame.
 	if (Under)
 	{
-		Under->Tick(S.Show, S.BattleT, EyeAt, EyeFacing, UnderWindow, bSkipping || bSkippedOn, !bMonthScene && ShotFolder.IsEmpty());
+		Under->Tick(S.Show, S.BattleT, EyeAt, EyeFacing, UnderWindow, bSkipping || bSkippedOn, !bMonthScene && ShotFolder.IsEmpty() && !bFreeEye);
 		if (Under->Crossed())
 		{
 			RoomCheckedAt = -10.0;
@@ -7527,8 +7612,154 @@ void ASeaBattle::UnderKey(bool bShift)
 	// skipping the scene (a modifier alone it lets by).
 	if (Under && State.IsValid())
 	{
-		Under->PressU(bShift, State->Show, State->BattleT, EyeAt);
+		// (the sea free eye: a U that gave the free camera back dives from the director's eye of the frame shown, never
+		// from where the free eye was flown, so the free eye never aims a dive (Q9); off, bFreeNow is false: EyeAt)
+		Under->PressU(bShift, State->Show, State->BattleT, bFreeNow ? FreeDirAt : EyeAt);
 	}
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The sea free eye (Battle/SEA-FREE-EYE.md): the screen's hands to the glue, and the glue's frame to AimEye. Every rule is
+// the glue's (Battle/SeaFreeEyeGlue, tested in the cloud by Tools/sea_free_eye); these only move values.
+
+bool ASeaBattle::FreeKey(SeaFreeEye::KeyName Key, bool bDown, bool bShift, bool bRepeat, bool bChord)
+{
+	if (!bFreeEye)
+	{
+		return false;
+	}
+	// (the screen's answer is the glue's rule: a release Handled only for a key whose press the screen took)
+	SeaFreeEye::KeyTaken Taken = SeaFreeEye::KeyTaken::NotMine;
+	const bool bHandled = SeaFreeEye::ScreenKey(FreeState, Key, bDown, bShift, bRepeat, bChord, Taken);
+	bool bDive = false;
+	if (Taken == SeaFreeEye::KeyTaken::Under)
+	{
+		// (the lead's ruling on Q9: U while he has the free camera first gives it back to the director, as C does, and
+		// then works exactly as today; while a drive plays, nothing)
+		SeaFreeEye::UnderPressed(FreeState, bDive);
+	}
+	if (bDive)
+	{
+		UnderKey(bShift);
+	}
+	return bHandled;
+}
+
+void ASeaBattle::FreeWheel(float Notches)
+{
+	if (bFreeEye && FMath::IsFinite(Notches))
+	{
+		FreeState.H.Wheel += Notches;
+	}
+}
+
+void ASeaBattle::FreeGesture(double SlideRight, double SlideAhead, double Pinch, double Twist)
+{
+	if (bFreeEye)
+	{
+		FreeState.H.SlideRight += FMath::IsFinite(SlideRight) ? SlideRight : 0.0;
+		FreeState.H.SlideAhead += FMath::IsFinite(SlideAhead) ? SlideAhead : 0.0;
+		FreeState.H.Pinch += FMath::IsFinite(Pinch) ? Pinch : 0.0;
+		FreeState.H.Twist += FMath::IsFinite(Twist) ? Twist : 0.0;
+	}
+}
+
+void ASeaBattle::FreeClick(const FVector2D& Share, bool bDouble)
+{
+	UWorld* Here = GetWorld();
+	APlayerController* Controller = Here ? Here->GetFirstPlayerController() : nullptr;
+	int32 ViewW = 0, ViewH = 0;
+	if (Controller)
+	{
+		Controller->GetViewportSize(ViewW, ViewH);
+	}
+	FVector WorldAt = FVector::ZeroVector, WorldWay = FVector::ZeroVector;
+	if (!bFreeEye || !Controller || ViewW <= 0 || ViewH <= 0 ||
+		!Controller->DeprojectScreenPositionToWorld(static_cast<float>(Share.X * ViewW), static_cast<float>(Share.Y * ViewH), WorldAt, WorldWay))
+	{
+		return;
+	}
+	// (the board's ray: its start as a place, BoardOf; its way only swapped as the axes are, never scaled as a place is)
+	const FVector At = BoardOf(WorldAt);
+	SeaFreeEye::Ray Along;
+	Along.From = SeaFreeEye::Vec{ At.X, At.Y, At.Z };
+	Along.Way = SeaFreeEye::Vec{ WorldWay.Y, WorldWay.X, WorldWay.Z };
+	SeaFreeEye::ClickAt(FreeState.H, Along, bDouble);
+}
+
+void ASeaBattle::FreeLetGoKeys()
+{
+	SeaFreeEye::ScreenLostKeys(FreeState);
+}
+
+void ASeaBattle::FreeAim(bool bHandDive, FVector& From, FVector& To, double& Lens, bool& bOutFree, bool& bOutCut)
+{
+	bOutFree = false;
+	bOutCut = false;
+	FreeDirAt = From; // (the director's eye of this frame, whoever has the camera: a U that gives it back dives from it)
+	if (!bFreeEye || !State.IsValid())
+	{
+		return;
+	}
+	FSeaBattleState& S = *State;
+	int32 ViewW = 1600, ViewH = 900;
+	UWorld* Here = GetWorld();
+	if (APlayerController* Controller = Here ? Here->GetFirstPlayerController() : nullptr)
+	{
+		Controller->GetViewportSize(ViewW, ViewH);
+	}
+	FreeRealNow += FMath::Max(0.0, FreeDt);
+	// (each hull's length as the stage fitted her, else the show's)
+	SeaFreeEye::Lengths Long;
+	Long.Of = [](const void* Context, int Key) -> double
+	{
+		const double* Found = static_cast<const TMap<int32, double>*>(Context)->Find(Key);
+		return Found ? *Found : 0.0;
+	};
+	Long.Context = &DrawnLong;
+	const FVector DirEye = BoardOf(From), DirLook = BoardOf(To);
+	SeaFreeEye::Scene In;
+	In.Ships = &S.Show.Ships();
+	In.Long = &Long;
+	In.MySide = FreeSide;
+	In.RealDt = FreeDt;
+	In.Aspect = ViewW > 0 && ViewH > 0 ? static_cast<double>(ViewW) / static_cast<double>(ViewH) : 16.0 / 9.0;
+	In.DirEye = SeaFreeEye::Vec{ DirEye.X, DirEye.Y, DirEye.Z };
+	In.DirLook = SeaFreeEye::Vec{ DirLook.X, DirLook.Y, DirLook.Z };
+	In.DirLens = Lens;
+	In.bHandDive = bHandDive;
+	In.Floor = &FreeFloor;
+	In.BoardSize = S.Show.Board().Size;
+	In.CeilingNow = FreeCeiling;
+	// (the drive starts at the bench's first counted frame, or at once without a bench)
+	In.bDriveMayStart = BenchUntil <= 0.0 || RealT >= ThreadsFrom;
+	const SeaFreeEye::Shot Out = SeaFreeEye::Step(FreeState, Free, In);
+	for (const std::string& Line : SeaFreeEye::TakeSaid(FreeState))
+	{
+		UE_LOG(LogTheater, Display, TEXT("%s"), UTF8_TO_TCHAR(Line.c_str()));
+	}
+	FreeHero = Out.Hero;
+	if (Out.bTaken)
+	{
+		// (taken: the free eye's own refreshes start afresh on its first frame)
+		FunnelsFree = SeaFreeEye::Refresh();
+		WrecksFree = SeaFreeEye::Refresh();
+	}
+	if (Out.bGiveBack)
+	{
+		// (C or U: the director's first frame back is a cut, and his funnels are chosen again on it)
+		bEyeCut = true;
+		FunnelsShot = -2;
+	}
+	if (!Out.bFree)
+	{
+		return;
+	}
+	bOutFree = true;
+	bOutCut = Out.bCut;
+	From = World(Out.Eye.X, Out.Eye.Y, Out.Eye.Z);
+	To = World(Out.Look.X, Out.Look.Y, Out.Look.Z);
+	Lens = Out.Lens;
 }
 
 bool ASeaBattle::RunMonthScene()

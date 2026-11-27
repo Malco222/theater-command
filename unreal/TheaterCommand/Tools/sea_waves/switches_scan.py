@@ -73,6 +73,10 @@ TABLE = [
     ("TheaterSeaThunder=", "0, 1 (thunder at its true delay, past the 8 s cap)", "0", "own", "shore R5", False),
     ("TheaterSeaSpotters=", "0, 1 (the spotter pair)", "0", "with Shore", "shore R5", False),
     ("TheaterSeaBlastFan=", "0, 1 (the blast fan on the water)", "0", "own", "shore R5", False),
+    # (the sea free eye: the camera he flies himself, a full battle watched live only; its two others only with it)
+    ("TheaterSeaFreeEye=", "0, 1 (a full sea battle watched live only)", "0", "own", "FE1", True),
+    ("TheaterSeaFreeEyeRide=", "0 / 1 (only with -TheaterSeaFreeEye=1)", "0", "with FreeEye", "FE1", True),
+    ("TheaterSeaFreeEyeDrive=", "off / tour / a drive file (only with -TheaterSeaFreeEye=1)", "off", "with FreeEye", "FE1", True),
     # (the ship detail plan, round 1: the ships at sea, review pictures until the art director's Mac check, and the reel's two)
     ("TheaterSeaShipLight=", "0 or off; 1 or on (the file's shade on each point, the ships' top light 0.10); or a top light from 0.0 to 0.30 to at most four places (0.08, 0.12, the map's 0.26); anything else refused, off", "0", "review", "R1.3", True),
     ("TheaterSeaShipSkin=", "0, 1 (the rust ramp and the ruled salt, M_MapSurface's own wear on the sea's steel ink)", "0", "review", "R1.4", True),
