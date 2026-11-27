@@ -218,23 +218,32 @@ describe("the player's offer stays in the list for the same half year as the com
     }
     // Room on Formosa in month 6: the computer forms the row in that month; the player is offered it, open through the
     // last month the computer's own count gives it, the same four months waited.
-    const last = halfYearLast(c, fifthId, due);
+    const last = halfYearLast(c, fifthId, due), counted = c.flags[rw];
     for (const g of [p, c]) for (const x of g.corps.filter((y) => /^Test filler Taihoku/.test(y.name) && !y.dead)) removeCorps(g, x);
     month(p, 6);
     month(c, 6);
     expect([c.flags[`sent:${fifthId}`], c.regions[row(c, FIFTH)!.reg].name]).toEqual([1, 'Taihoku']);
     expect(offer(p, FIFTH)).toMatchObject({ since: 6, last, why: null });
     expect(offerLines(p, offer(p, FIFTH)!).map((l) => l.text).slice(-1)).toEqual(['Offered in February 1940, open until August 1940.']);
+    // (The months counted by month 6, read from the count itself: the computer's months 2 to 5, the same in both seats;
+    // the month it was offered, which had room, is not among them.)
+    const at6 = p.flags[rw];
+    expect(at6).toBe(counted);
     // Taihoku full again from month 7 (and every harbour still full): FORM IT shut for room. Each such month is counted
     // for the standing offer as for a computer's row with no room, through the same count, and its last month moves on
-    // with it; the month it was offered, which had room, is not.
+    // with it; the month it was offered, which had room, is not. Walked past the month that was its last when it was
+    // offered (12) and on to month 14: the offer stands, made in month 6, and no word says it has lapsed (the
+    // sceptic's F4, 27 November 2026).
     const { going, out } = fifth(p), tk = p.byName.Taihoku;
     for (let k = 0; standing(p, tk) < STACK || fits(p, tk, 'JAP', going, { out }); k++) addCorps(p, 'JAP', `Test refill ${k}`, 'inf', 1, 'Taihoku', {});
-    for (let t = 7; t <= 10; t++) {
+    const news = p.headlines.length;
+    for (let t = 7; t <= 14; t++) {
       month(p, t);
-      expect([t, p.flags[rw], offer(p, FIFTH)?.why]).toEqual([t, 4 + (t - 6), 'There is no room for another corps at Taihoku, or near it.']);
+      expect([t, p.flags[rw], offer(p, FIFTH)?.since, offer(p, FIFTH)?.why]).toEqual([t, at6 + (t - 6), 6, 'There is no room for another corps at Taihoku, or near it.']);
       expect(offer(p, FIFTH)!.last).toBe(halfYearLast(p, fifthId, due));
+      expect([t, offer(p, FIFTH)!.last! >= t]).toEqual([t, true]);
     }
+    expect([p.flags[`sent:${fifthId}`], p.headlines.slice(news).map((h) => h.text).filter((x) => x.includes(FIFTH))]).toEqual([undefined, []]);
   });
 });
 
