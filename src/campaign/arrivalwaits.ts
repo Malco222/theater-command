@@ -149,6 +149,9 @@ export function tellWait(g: Game, i: number, at: Region | undefined): void {
 export function rowDone(g: Game, i: number): void {
   delete g.flags[toldKey(i)]; delete g.flags[atKey(i)]; delete g.flags[frontKey(i)];
   fromOf(ROWS()[i]).forEach((_, k) => { delete g.flags[idKey(i, k)]; });
+  // (And the far side's count of the months it waited for room, game.ts `roomwait:<i>`: the design director, 00:20Z,
+  // 27 November 2026, D1. Kept on the far side alone, so with it off nothing is deleted.)
+  delete g.flags[`roomwait:${i}`];
 }
 
 /**
