@@ -1376,7 +1376,7 @@ struct FCampaignView
 	bool bWarDiary = false; // (release 2, diary.ts; Brian 27 November 2026 13:40Z) the war diary
 	bool bHeldLine = false; // (release 2, heldline.ts; Brian 27 November 2026 13:40Z) the 'held the line' medal
 	bool bDumpFires = false; // (release 2, dumpfires.ts; Brian 27 November 2026 13:40Z) supply dumps that burn
-	bool bTrueReachOn = false, bTrueReachCan = false, bTrueReachLate = false; // (release 2, game.ts trueReach; the design director's gate 27 November 2026 15:53Z) true reach, and whether it can still be switched (a September 1939 war's first month)
+	bool bTrueReachOn = false, bTrueReachCan = false; // (release 2, game.ts trueReach; the design director's gate 27 November 2026 15:53Z) true reach, and whether it can still be switched (a September 1939 war's first month)
 	bool bTownQueue = false; // (release 2, townqueue.ts) the player can queue the next buildings for his towns
 	bool bCityDefences = false; // (release 2, citydefences.ts) searchlights, the guns by night by what they see, a garrison's town works (the town's guns on tanks: sub-switch flakGround, off)
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
