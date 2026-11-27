@@ -95,3 +95,17 @@ describe("T3-1: ruleHolds counts the player's own hold that was never told as un
     expect(ruleHolds(g).filter((h) => h.path === 'draw').map(({ turn, ...h }) => h)).toEqual([{ nat: 'GER', i, row: 'Test Theatre Army', path: 'draw', corps: ['Held Test Corps'], waits: false, written: null, told: false, untold: true }]);
   });
 });
+
+// ---- T3-2: two loans ending in one pass are no relief to each other -------------------------------------------------
+
+describe('T3-2: the lent corps whose loans end in the same pass keep nothing for each other', () => {
+  it('two lent corps alone together beside the enemy, both loans over this month: the Neumark is not left empty', () => {
+    const { g, nm } = board();
+    const a = lend(g, 'Lent Test Corps A', nm);
+    const b = lend(g, 'Lent Test Corps B', nm);
+    month(g, 2);
+    // (As built both are held; finding S1-2 asks the director whether a loan held first is relief for the next one read.
+    // Under either reading at least one stays, and with the leaving set emptied neither does.)
+    expect([a.c, b.c].filter((c) => !c.dead && c.reg === nm.id).length).toBeGreaterThan(0);
+  });
+});
