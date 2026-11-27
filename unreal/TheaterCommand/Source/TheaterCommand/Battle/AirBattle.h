@@ -25,7 +25,7 @@ class UDecalComponent;
 class UInstancedStaticMeshComponent;
 class UStaticMesh;
 namespace AirShow { struct Fx; struct Shape; struct Group; struct PlaneOut; }
-namespace AirSheen { struct Sheen; }
+namespace AirSheen { struct Sheen; struct OwnFinish; }
 class USceneComponent;
 class USkyLightComponent;
 class USoundAttenuation;
