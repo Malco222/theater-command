@@ -23,8 +23,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -50,6 +52,100 @@ namespace
 		char Line[256];
 		std::snprintf(Line, sizeof(Line), Format, A, B, C);
 		return Line;
+	}
+
+	/**
+	 * The looks each of the convoy battle's real nights must tell (the design director's ruling of 03:40Z, 26 November, on
+	 * convoy_looks: each look proved on the night that tells it, every look told at least once on a real night and drawn
+	 * every time it is told), read from the table run.sh names (CONVOY_LOOKS_NIGHTS: Tools/convoy_looks/night_looks.txt; a
+	 * line each, tab apart: the recording's file name without .json, as the known lists name it, and the looks it must tell,
+	 * space apart, of "pattern" (a depth-charge pattern dropped: its charges bursting), "ahead" (an ahead-thrown salvo with a
+	 * hit booked from it: its bombs bursting on her) and "starshell"). A night in the table is a real night: it must tell
+	 * every look of its line, and every look it tells, of its line or not, is drawn every time it is told; across the real
+	 * nights played each look is told on one at the least. A real night is also any recording played from the real nights'
+	 * folder run.sh names (CONVOY_LOOKS_REAL: Tools/sea_show/recordings), in the table or not: one there with no line in the
+	 * table fails, its looks are still each drawn every time told, and it counts across the real nights; so the table
+	 * emptied or cut short never stops the real nights being asked. A recording neither in the table nor in that folder (a
+	 * stand-in) is checked as before (the night's own check, the looks told at least one and each told drawn). The table not
+	 * named, not read, or with a line that is not a night and its looks, or the folder not named, fails the run.
+	 */
+	const char* const LookNames[] = { "pattern", "ahead", "starshell" };
+	std::map<std::string, std::set<std::string>> NightLooks;
+	bool bNightLooksRead = false;
+	std::string NightLooksWhy;
+	// (the real nights' folder, as run.sh names it: empty, not named)
+	std::string RealFolder;
+	// (the real nights played, and on which of them each look was told)
+	std::set<std::string> RealPlayed;
+	std::map<std::string, std::set<std::string>> ToldOnReal;
+
+	void ReadNightLooks()
+	{
+		const char* TablePath = std::getenv("CONVOY_LOOKS_NIGHTS");
+		if (!TablePath || !*TablePath)
+		{
+			NightLooksWhy = "not named";
+			return;
+		}
+		std::ifstream TableIn(TablePath);
+		if (!TableIn)
+		{
+			NightLooksWhy = std::string("cannot read ") + TablePath;
+			return;
+		}
+		std::string Row;
+		int Line = 0;
+		while (std::getline(TableIn, Row))
+		{
+			++Line;
+			if (!Row.empty() && Row.back() == '\r') Row.pop_back();
+			if (Row.empty() || Row[0] == '#') continue;
+			const size_t Tab = Row.find('\t');
+			const std::string Night = Tab == std::string::npos ? std::string() : Row.substr(0, Tab);
+			std::set<std::string> Looks;
+			std::string Odd;
+			if (Tab != std::string::npos)
+			{
+				std::istringstream Words(Row.substr(Tab + 1));
+				std::string Word;
+				while (Words >> Word)
+				{
+					bool bKnown = false;
+					for (const char* Name : LookNames) bKnown = bKnown || Word == Name;
+					if (!bKnown) Odd = Word;
+					Looks.insert(Word);
+				}
+			}
+			if (Night.empty() || Night.find_first_of(" \t") != std::string::npos || Looks.empty() || !Odd.empty() || NightLooks.count(Night))
+			{
+				NightLooksWhy = "line " + std::to_string(Line) + " is not a night and its looks" + (Odd.empty() ? std::string() : " (no look \"" + Odd + "\")") +
+				                (NightLooks.count(Night) ? " (" + Night + " twice)" : std::string()) + ": " + Row;
+				NightLooks.clear();
+				return;
+			}
+			NightLooks[Night] = Looks;
+		}
+		bNightLooksRead = true;
+	}
+
+	/** Whether a recording lies in the real nights' folder (CONVOY_LOOKS_REAL), the same folder however its path is spelt. */
+	bool InRealFolder(const std::string& Path)
+	{
+		if (RealFolder.empty()) return false;
+		std::error_code Err;
+		const std::filesystem::path Folder = std::filesystem::weakly_canonical(RealFolder, Err);
+		if (Err) return false;
+		const std::filesystem::path File = std::filesystem::weakly_canonical(Path, Err);
+		return !Err && File.parent_path() == Folder;
+	}
+
+	/** The night as the table names it: the recording's file name without .json. */
+	std::string NightOf(const std::string& Path)
+	{
+		const size_t Slash = Path.find_last_of("/\\");
+		std::string Night = Path.substr(Slash == std::string::npos ? 0 : Slash + 1);
+		if (Night.size() > 5 && Night.compare(Night.size() - 5, 5, ".json") == 0) Night.resize(Night.size() - 5);
+		return Night;
 	}
 
 	/** A charge as the looks drew it going in: its escort, when it lands, where, whether the ahead thrower's (its ring's
@@ -246,6 +342,34 @@ namespace
 		int RescuesTold = 0;
 		bool bPatternTold = false, bAheadHitTold = false, bStarTold = false;
 		std::map<int, double> ToldAtScope;
+		// (and each of them one by one, for a night in the looks table, each drawn every time it is told: each pattern dropped,
+		// when, by which escort's piece and where the battle laid it (its point, where it tells one); each ahead-thrown hit,
+		// when and from which; each starshell, when)
+		struct PatternTold
+		{
+			double T = 0.0;
+			int Escort = -1;
+			bool bPlace = false;
+			double X = 0.0, Y = 0.0;
+			// (the boat's piece it was laid on, the depth it was set to and its sinking time, as the battle tells them: below
+			// 0, not told)
+			int On = -1;
+			double Set = -1.0, Sinking = -1.0;
+			int N = 0; // (its charges, as the battle tells them; 0, not told)
+		};
+		std::vector<PatternTold> PatternsToldAt;
+		std::vector<std::pair<double, int>> AheadHitsToldAt;
+		std::vector<double> StarsToldAt;
+		// (every depth-charge blow told: when, from which escort's piece, on which boat's; and the views' times, the battle's
+		// steps, for the rules' moment a pattern bursts at)
+		struct BlowTold
+		{
+			double T = 0.0;
+			int From = -1, On = -1;
+		};
+		std::vector<BlowTold> BlowsToldAt;
+		std::vector<double> ViewTimes;
+		for (const SeaFeed::Frame& V : Rec.Views) ViewTimes.push_back(V.Head.T);
 		{
 			std::map<int, std::string> DiveWas;
 			std::map<int, double> AheadAt;
@@ -263,15 +387,23 @@ namespace
 				{
 					RescuesTold += E.What == "sea:rescue" ? 1 : 0;
 					bStarTold = bStarTold || E.What == "sea:starshell";
+					if (E.What == "sea:starshell") StarsToldAt.push_back(E.T);
 					if (E.What == "sea:depthCharge")
 					{
 						if (E.Kind == "ahead") AheadAt[E.Unit] = E.T;
-						else bPatternTold = true;
+						else
+						{
+							bPatternTold = true;
+							PatternsToldAt.push_back({ E.T, E.Unit, E.bAim || E.bAt, E.bAim ? E.AimX : E.X, E.bAim ? E.AimY : E.Y, E.On, E.Set, E.Sinking, E.N });
+						}
 					}
 					if (E.What == "sea:depthChargeHit")
 					{
+						BlowsToldAt.push_back({ E.T, E.From, E.Unit });
 						const auto Thrown = AheadAt.find(E.From);
-						bAheadHitTold = bAheadHitTold || (Thrown != AheadAt.end() && E.T - Thrown->second <= 60.0);
+						const bool bAheadHit = Thrown != AheadAt.end() && E.T - Thrown->second <= 60.0;
+						bAheadHitTold = bAheadHitTold || bAheadHit;
+						if (bAheadHit) AheadHitsToldAt.push_back({ E.T, E.From });
 					}
 				}
 			}
@@ -283,6 +415,31 @@ namespace
 		double JumpWorst = 0.0, JumpRawWorst = 0.0, ClimbHeaveLow = 99.0, ClimbHeaveHigh = -99.0, StoodBy = 0.0, ClimbOffDrawnLow = 99.0, ClimbOffDrawnHigh = -99.0;
 		std::vector<Landing> Landings;
 		int Drops = 0, PatternBursts = 0, AheadBursts = 0, Stars = 0;
+		// (the looks drawn one by one, for the looks table: each pattern's drop (when, its escort's piece and own number, its
+		// charges, their run and their sinking time, and its run's middle, the Fx's Aim), each charge's burst (when, its escort's piece and own number, an ahead
+		// bomb's or not, when it was due as laid) and each starshell (when))
+		struct DropDrawn
+		{
+			double T = 0.0;
+			int Piece = -1, Key = 0, N = 0;
+			double Run = 0.0, Sinking = 0.0;
+			double MidX = 0.0, MidY = 0.0;
+		};
+		struct BurstDrawn
+		{
+			double T = 0.0;
+			int Piece = -1, Key = 0;
+			bool bAhead = false;
+			double Due = 0.0;
+			// (the depth it was laid at, the Fx's Aim; and the depth it was drawn at as it burst: the view under the water's own
+			// rule, going down at the charge's rate to its burst (sea_under_test's NowOf), from the show's list of charges in the
+			// water the frame before, carried on to the burst's frame; +1 where it was not in that list)
+			double LaidZ = 0.0, DrawnZ = 1.0;
+		};
+		std::vector<DropDrawn> PatternDrops;
+		std::vector<BurstDrawn> BurstsDrawn;
+		std::vector<SeaShow::Show::ChargeDown> DownBefore; // (the show's charges in the water, the frame before)
+		std::vector<double> StarsDrawnAt;
 		// (a struck boat's flag: frames it should fly, those it does not, those it streams to windward in a breeze, those any of
 		// it is near the sea, those it is still up after hauled down; her men on her casing against it as the looks ride her)
 		int FlagFrames = 0, FlagMissing = 0, FlagBreezy = 0, FlagWindward = 0, FlagUnder = 0, FlagStaysUp = 0, HandFrames = 0, HandsWorstKey = 0, HandsLate = 0;
@@ -611,6 +768,22 @@ namespace
 			}
 			for (const SeaShow::Fx& E : Night.Effects)
 			{
+				// (an escort's own number is her piece's id times 64 and her place in its line, SeaShow::ShipOut::Key; below 0, none)
+				const int EscortPiece = E.Key >= 0 ? E.Key / 64 : -1;
+				if (E.Kind == SeaShow::FxKind::ChargeDrop && E.What == "pattern")
+					PatternDrops.push_back({ T, EscortPiece, E.Key, static_cast<int>(std::lround(E.Size)), E.Until, E.Sinking, E.Aim.X, E.Aim.Y });
+				if (E.Kind == SeaShow::FxKind::ChargeBurst)
+				{
+					double DrawnZ = 1.0;
+					for (const SeaShow::Show::ChargeDown& C : DownBefore)
+						if (C.Escort == E.Key && std::hypot(C.At.X - E.Aim.X, C.At.Y - E.Aim.Y) < 0.01)
+							DrawnZ = std::min(0.0, C.At.Z + std::max(0.0, C.Bursts - T) * std::max(0.5, Board.ChargeSink));
+					BurstsDrawn.push_back({ T, EscortPiece, E.Key, E.What == "ahead", E.Until, E.Aim.Z, DrawnZ });
+				}
+				if (E.Kind == SeaShow::FxKind::Starshell) StarsDrawnAt.push_back(T);
+			}
+			for (const SeaShow::Fx& E : Night.Effects)
+			{
 				// (as FConvoyLooks::Effect: a boat forced up blows her tanks, one diving floods them; a boat scuttled is brought up
 				// and blown; a rescue's nets kept until its time is over)
 				if (E.Kind == SeaShow::FxKind::Dive && E.What == "surface" && E.Text == "forced") Blow(Boats[E.Key].State, true);
@@ -737,6 +910,7 @@ namespace
 					ShowCheck(LitBy(Lit, P3(E.At.X, E.At.Y, 0.0)) > 0.2, Said("a starshell at %.1f s lights the sea under it (%.2f)", T, LitBy(Lit, P3(E.At.X, E.At.Y, 0.0))));
 				}
 			}
+			Night.ChargesDown(DownBefore);
 			Night.Effects.clear();
 			if (T >= EndT - 1e-9) break;
 			T = std::min(EndT, T + Step);
@@ -777,6 +951,177 @@ namespace
 		ShowCheck((bPatternTold || bAheadHitTold || bStarTold) && (!bPatternTold || PatternBursts > 0) && (!bAheadHitTold || AheadBursts > 0) && (!bStarTold || Stars > 0),
 		          Said("the night has pattern bursts (%.0f), ahead bursts (%.0f) and a starshell (%.0f)", PatternBursts, AheadBursts, Stars) +
 		              Said(" where told (%.0f, %.0f, %.0f)", bPatternTold ? 1.0 : 0.0, bAheadHitTold ? 1.0 : 0.0, bStarTold ? 1.0 : 0.0));
+		// A real night, one in the looks table or played from the real nights' folder (the design director's ruling of 03:40Z,
+		// 26 November): it has its line in the table and tells every look of it, and every look it tells is drawn every time it
+		// is told, each telling matched to its own drawing, never before it and at most LooksLate s after: a pattern its drop by
+		// that escort, laid where the battle laid it (its run's middle within a charge's lethal reach of the point the battle
+		// tells, where it tells one: a pattern drawn off it, as hunted's Escort 9's was drawn 75-176 m off it from her drawn
+		// stern on round 6a's recordings, is not the battle's pattern), and every one of its charges bursting, those of hers due
+		// as laid from its first going in to its last, sunk (a burst on the boat a hit is booked on is one of them); an ahead-thrown hit its bombs bursting by that escort; a
+		// starshell its shell. A night neither in the table nor from that folder (a stand-in): the check above.
+		const std::string NightName = NightOf(Path);
+		const auto Listed = NightLooks.find(NightName);
+		const bool bRealFolder = InRealFolder(Path);
+		if (Listed != NightLooks.end() || bRealFolder)
+		{
+			RealPlayed.insert(NightName);
+			// (a real night by its folder must have its line: the table never left short of a night played from there)
+			if (bRealFolder) ShowCheck(Listed != NightLooks.end(), NightName + " (a real night: Tools/sea_show/recordings) has its line in the looks table");
+			const std::set<std::string> NoLooks;
+			const std::set<std::string>& LineLooks = Listed != NightLooks.end() ? Listed->second : NoLooks;
+			const double LooksLate = 2.0, LooksEarly = 0.1;
+			auto InTime = [LooksLate, LooksEarly](double DrawnT, double ToldT) { return DrawnT >= ToldT - LooksEarly && DrawnT <= ToldT + LooksLate; };
+			int PatternsDrawn = 0, ChargesDue = 0, ChargesBurst = 0, PatternsOff = 0;
+			double PatternLate = 0.0, PatternOffMost = 0.0;
+			const double OnPlace = Board.ChargeLethal;
+			std::vector<bool> DropTaken(PatternDrops.size(), false);
+			for (const PatternTold& Pt : PatternsToldAt)
+			{
+				const double ToldT = Pt.T;
+				const int Escort = Pt.Escort;
+				const DropDrawn* Drop = nullptr;
+				for (size_t I = 0; I < PatternDrops.size() && !Drop; ++I)
+				{
+					if (DropTaken[I] || PatternDrops[I].Piece != Escort || !InTime(PatternDrops[I].T, ToldT)) continue;
+					DropTaken[I] = true;
+					Drop = &PatternDrops[I];
+				}
+				if (!Drop) continue;
+				int Burst = 0;
+				for (const BurstDrawn& B : BurstsDrawn)
+					if (!B.bAhead && B.Key == Drop->Key && B.Due >= ToldT + Drop->Sinking - 0.5 && B.Due <= ToldT + Drop->Run + Drop->Sinking + 0.5) ++Burst;
+				ChargesDue += Drop->N;
+				ChargesBurst += std::min(Burst, Drop->N);
+				PatternLate = std::max(PatternLate, Drop->T - ToldT);
+				const double Off = Pt.bPlace ? std::hypot(Drop->MidX - Pt.X, Drop->MidY - Pt.Y) : 0.0;
+				PatternOffMost = std::max(PatternOffMost, Off);
+				PatternsOff += Off > OnPlace ? 1 : 0;
+				PatternsDrawn += Burst >= Drop->N && Off <= OnPlace ? 1 : 0;
+			}
+			// Each pattern laid all at once on the spot the battle tells bursts at the battle's moment, every charge at the
+			// depth the battle set it to (the review of 27 November, of naval round 6b: the check above takes its window from
+			// the drop's own run and sinking, and moves with them; a run timed at her drawn speed again, first-pack's charges
+			// bursting up to 17 s after its blow, passed it). The moment from the recording alone: the battle's blow from that
+			// escort on that boat where it tells one after the drop (within SeaShow::LateHitWithin of the rules' moment), else
+			// the rules' moment (sim.ts: chargePattern's charges due at the drop and their sinking time rounded up to the whole
+			// second, burstCharges bursting them at the first step of the battle, a view, at or after that). Every pattern
+			// burst drawn of that escort from its drop to its next drop (or the night's end): exactly the charges the battle
+			// tells, each in the frame of that moment (within a frame after it), laid at the set depth and drawn at it as it
+			// burst (the view under the water's rule, from the frame before: going down at the charge's rate to its burst).
+			// A pattern whose set depth or sinking the battle does not tell fails it: the rules' moment cannot be had.
+			int AtOnceTold = 0, AtOnceRight = 0, AtOnceCharges = 0, AtOnceChargesRight = 0, NoSpot = 0;
+			double AtOnceEarly = 0.0, AtOnceLate = 0.0, AtOnceZOff = 0.0;
+			for (const PatternTold& Pt : PatternsToldAt)
+			{
+				if (!Pt.bPlace)
+				{
+					++NoSpot; // (where the battle tells no spot: laid from her stern as she runs, not all at once)
+					continue;
+				}
+				++AtOnceTold;
+				const bool bFigures = Pt.Set >= 0.0 && Pt.Sinking >= 0.0;
+				const double Whole = std::ceil(std::max(0.0, Pt.Sinking) - 1e-9);
+				double Moment = Pt.T + Whole;
+				for (const double ViewT : ViewTimes)
+					if (ViewT >= Pt.T + Whole - 1e-6)
+					{
+						Moment = ViewT;
+						break;
+					}
+				double Blow = -1.0;
+				for (const BlowTold& B : BlowsToldAt)
+					if (Blow < 0.0 && B.From == Pt.Escort && B.On == Pt.On && B.T >= Pt.T - 1e-9 && B.T <= Moment + SeaShow::LateHitWithin + 1e-9) Blow = B.T;
+				const double Want = Blow >= 0.0 ? Blow : Moment;
+				const int Charges = std::clamp(Pt.N > 0 ? Pt.N : 10, 1, 30);
+				const DropDrawn* Drop = nullptr;
+				for (const DropDrawn& D : PatternDrops)
+					if (!Drop && D.Piece == Pt.Escort && InTime(D.T, Pt.T)) Drop = &D;
+				double NextDrop = 1e18;
+				if (Drop)
+					for (const DropDrawn& D : PatternDrops)
+						if (D.Key == Drop->Key && D.T > Drop->T + 1e-9) NextDrop = std::min(NextDrop, D.T);
+				int Burst = 0, Right = 0;
+				double Early = 0.0, Late = 0.0, ZOff = 0.0;
+				for (const BurstDrawn& B : BurstsDrawn)
+				{
+					if (!Drop || B.bAhead || B.Key != Drop->Key || B.T < Drop->T - 1e-9 || B.T >= NextDrop - 1e-9) continue;
+					++Burst;
+					const double Off = B.T - Want;
+					const double Deep = bFigures ? std::max(std::fabs(B.LaidZ + Pt.Set), std::fabs(B.DrawnZ + Pt.Set)) : 1e9;
+					Early = std::max(Early, -Off);
+					Late = std::max(Late, Off);
+					ZOff = std::max(ZOff, Deep);
+					Right += bFigures && Off >= -1e-6 && Off <= Step + 1e-6 && Deep <= 0.5 ? 1 : 0;
+				}
+				AtOnceCharges += Charges;
+				AtOnceChargesRight += std::min(Right, Charges);
+				AtOnceEarly = std::max(AtOnceEarly, Early);
+				AtOnceLate = std::max(AtOnceLate, Late);
+				AtOnceZOff = std::max(AtOnceZOff, ZOff);
+				const bool bRight = bFigures && Drop && Burst == Charges && Right == Charges;
+				AtOnceRight += bRight ? 1 : 0;
+				std::printf("%s: the pattern of piece %d dropped at %.1f s on piece %d, set %.0f m, sinking %.1f s: the rules' moment %.1f s, the battle's blow %s; %d of its %d "
+				            "charges drawn bursting (%d of them in that frame, at the set depth), the earliest %.3f s before it, the latest %.3f s after it, the farthest %.2f m "
+				            "off the set depth%s\n",
+				            NightName.c_str(), Pt.Escort, Pt.T, Pt.On, Pt.Set, Pt.Sinking, Moment, Blow >= 0.0 ? Said("%.1f s", Blow).c_str() : "not told", Burst, Charges, Right,
+				            Early, Late, ZOff, bRight ? "" : bFigures ? (Drop ? " (WRONG)" : " (no drop drawn)") : " (its set depth or sinking not told)");
+			}
+			int AheadDrawn = 0;
+			double AheadLate = 0.0;
+			for (const auto& [ToldT, Escort] : AheadHitsToldAt)
+			{
+				double First = -1.0;
+				for (const BurstDrawn& B : BurstsDrawn)
+					if (B.bAhead && B.Piece == Escort && InTime(B.T, ToldT) && (First < 0.0 || B.T < First)) First = B.T;
+				if (First < 0.0) continue;
+				++AheadDrawn;
+				AheadLate = std::max(AheadLate, First - ToldT);
+			}
+			int StarsDrawn = 0;
+			double StarLate = 0.0;
+			std::vector<bool> StarTaken(StarsDrawnAt.size(), false);
+			for (const double ToldT : StarsToldAt)
+			{
+				for (size_t I = 0; I < StarsDrawnAt.size(); ++I)
+				{
+					if (StarTaken[I] || !InTime(StarsDrawnAt[I], ToldT)) continue;
+					StarTaken[I] = true;
+					++StarsDrawn;
+					StarLate = std::max(StarLate, StarsDrawnAt[I] - ToldT);
+					break;
+				}
+			}
+			const int Told[3] = { static_cast<int>(PatternsToldAt.size()), static_cast<int>(AheadHitsToldAt.size()), static_cast<int>(StarsToldAt.size()) };
+			std::string Line;
+			for (const std::string& Look : LineLooks) Line += (Line.empty() ? "" : " ") + Look;
+			if (Line.empty()) Line = "no line";
+			const std::string Real = NightName + " (the looks table: " + Line + "): ";
+			ShowCheck(AtOnceRight == AtOnceTold,
+			          Real +
+			              "every pattern laid all at once on the spot the battle tells bursts at the battle's moment (its blow, else the rules' moment: the first view at or after "
+			              "the drop and its whole seconds of sinking), every charge in that frame and at its set depth: " +
+			              Said("%.0f of %.0f", AtOnceRight, AtOnceTold) +
+			              Said(" (%.0f of %.0f charges; the earliest %.3f s before it,", AtOnceChargesRight, AtOnceCharges, AtOnceEarly) +
+			              Said(" the latest %.3f s after it, against a frame of %.3f;", AtOnceLate, Step) + Said(" the farthest %.2f m off its set depth, against 0.5;", AtOnceZOff) +
+			              Said(" %.0f told with no spot, not laid all at once)", NoSpot));
+			for (int K = 0; K < 3; ++K)
+			{
+				const std::string Look = LookNames[K];
+				if (Told[K] > 0) ToldOnReal[Look].insert(NightName);
+				if (LineLooks.count(Look)) ShowCheck(Told[K] > 0, Real + "tells " + Look + ", as its line says" + Said(" (told %.0f times)", Told[K]));
+				else if (Told[K] > 0) std::printf("  note  %s tells %s (%d times), not in its line of the looks table: add it there\n", NightName.c_str(), Look.c_str(), Told[K]);
+			}
+			ShowCheck(PatternsDrawn == Told[0], Real + Said("every pattern told drawn, its drop by its escort, laid where the battle laid it and every one of its charges bursting: %.0f of %.0f",
+			                                                PatternsDrawn, Told[0]) +
+			                                        Said(" (%.0f of %.0f charges burst; drawn at most %.2f s after it was told;", ChargesBurst, ChargesDue, PatternLate) +
+			                                        Said(" %.0f laid off its point, its run's middle as far as %.1f m from it, against %.1f)", PatternsOff, PatternOffMost, OnPlace));
+			ShowCheck(AheadDrawn == Told[1],
+			          Real + Said("every ahead-thrown hit told drawn, its bombs bursting by its escort: %.0f of %.0f (at most %.2f s after it was told)", AheadDrawn, Told[1], AheadLate));
+			ShowCheck(StarsDrawn == Told[2], Real + Said("every starshell told drawn: %.0f of %.0f (at most %.2f s after it was told)", StarsDrawn, Told[2], StarLate));
+			std::printf("%s's looks as the table asks (%s): pattern told %d, drawn %d (%d of %d charges burst); ahead-thrown hits told %d, drawn %d; starshells told %d, drawn %d; the latest "
+			            "%.2f s after its telling\n",
+			            NightName.c_str(), Line.c_str(), Told[0], PatternsDrawn, ChargesBurst, ChargesDue, Told[1], AheadDrawn, Told[2], StarsDrawn, std::max({ PatternLate, AheadLate, StarLate }));
+		}
 		// A boat that struck (sea:surrender): her flag, her men on her casing, her vents. Where the night has none, nothing asked.
 		int StruckBoats = 0;
 		for (const auto& [Key, B] : Boats)
@@ -1249,12 +1594,36 @@ int main(int ArgC, char** ArgV)
 	SeaSailors::Crew Sailors;
 	const bool bCrews = ReadCrews(Sailors);
 	ShowCheck(bCrews, "the gun crews' sailor files, every navy's (CONVOY_LOOKS_CONTENT: the game's Content)");
+	ReadNightLooks();
+	ShowCheck(bNightLooksRead, "the real nights' looks table read, every line a night and its looks (CONVOY_LOOKS_NIGHTS: Tools/convoy_looks/night_looks.txt)" +
+	                               (bNightLooksRead ? std::string() : ": " + NightLooksWhy));
+	if (const char* Folder = std::getenv("CONVOY_LOOKS_REAL")) RealFolder = Folder;
+	ShowCheck(!RealFolder.empty(), "the real nights' folder named, each recording played from it a real night (CONVOY_LOOKS_REAL: Tools/sea_show/recordings)");
 	for (int I = 1; I < ArgC; ++I)
 	{
 		Status = std::max(Status, PlayNight(ArgV[I]));
 		Status = std::max(Status, PlayUnseen(ArgV[I]));
 		if (bCrews) Status = std::max(Status, PlayGunCrews(ArgV[I], Sailors));
 	}
+	// Across the real nights played (the looks table's, and every recording played from the real nights' folder), each look
+	// told on one of them at the least, and so drawn there every time it is told (each night's own checks, above): the design
+	// director's ruling of 03:40Z, 26 November, that every look is still told on a real night, so that each of its checks
+	// still bites. (No real night played, a checkout without the real nights' recordings: nothing to ask, and said so.)
+	if (!RealPlayed.empty())
+	{
+		std::string Played;
+		for (const std::string& Night : RealPlayed) Played += (Played.empty() ? "" : ", ") + Night;
+		for (const char* Look : LookNames)
+		{
+			std::string On;
+			for (const std::string& Night : ToldOnReal[Look]) On += (On.empty() ? "" : ", ") + Night;
+			ShowCheck(!ToldOnReal[Look].empty(), std::string("across the real nights played (") + Played + "), " + Look + " told on one of them at the least (on " + (On.empty() ? "none" : On) + ")");
+			std::printf("the real nights' looks: %s told on %s\n", Look, On.empty() ? "none of them" : On.c_str());
+		}
+	}
+	else std::printf("the real nights' looks: no real night played (none of the looks table, none from the real nights' folder), so nothing asked across them\n");
+	for (const auto& Row : NightLooks)
+		if (!RealPlayed.count(Row.first)) std::printf("  note  %s is in the looks table but was not played\n", Row.first.c_str());
 	ShowCheck(!bCrews || CrewNights == 0 || (CrewManned > 0 && CrewEligible > 0 && CrewRams > 0 && CrewShut == CrewRounds),
 	          Said("the nights' gun crews at their guns (%.0f gun-frames), the loader's ram heard (%.0f times) before %.0f rounds he could load", CrewManned, CrewRams, CrewEligible) +
 	              Said("; %.0f of the %.0f rounds fired at a manned gun with the breech shut", CrewShut, CrewRounds));

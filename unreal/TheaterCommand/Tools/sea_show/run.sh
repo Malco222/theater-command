@@ -17,7 +17,7 @@ $CXX ${SEA_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
 # (with the stand-ins: a hand-made convoy night until the battle's own recordings of one land, ruling 241; and the D1 stager's
 # Italian flying boat on a British boat, June 1942, so the aircraft-on-a-boat check is run every time, not only when asked;
 # and the real nights: the naval rules' wolf pack against a convoy (D2), fought by the computer on both sides and recorded
-# in the scene's own names (naval-battles/wolfpack-r2/recordings, naval round 5 of 25 November: September 1940, March 1943,
+# in the scene's own names (naval-battles/wolfpack-r2/recordings, naval round 6a of 26 November: September 1940, March 1943,
 # January 1944; each a 720 s window of its night on the night's own clock), so every change is played against the battle's
 # own convoy nights)
 # (a checkout without the recordings plays the rest: a glob that matches nothing drops out, never a path that is not there)

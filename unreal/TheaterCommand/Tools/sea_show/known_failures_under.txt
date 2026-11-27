@@ -8,12 +8,21 @@
 # ever; a listed check that passes says to take its line off, and so does a line for a night played on which no check of
 # that name ran (its check gone or renamed). Take each line off when its rules fix lands.
 #
-# Blows laid off her (first-pack, naval round 5's recordings of 25 November): the rules lay a depth-charge pattern where the
-# boat was when they drop it; its charges burst about 35 s later, by which time she has moved on about 40 m; and the rules
-# still book the blow on her, as a blow books anywhere within 180 m. So 2 blows land on her with no charge drawn near her:
-# the nearest charge 27.1 m from her keel, against the check's 13.3 m (twice the charge's 6.4 m lethal reach, and half a
-# metre), the same watched and staged. Ruled the rules' fault by the design director at 19:30Z, 25 November; the check stays
-# as it is. Until naval round 6 (the pattern laid ahead on her last-held course and speed; each charge booked by its own
-# distance at the burst). The bound as measured: 27.1 m (it reads 27.09 m on both lines).
-convoy-first-pack	watched: on a night whose every booked blow comes as its pattern, laid on her, bursts at her, each bursts by a charge drawn within twice its reach of her keel (none laid off her)	27.1
-convoy-first-pack	staged: on a night whose every booked blow comes as its pattern, laid on her, bursts at her, each bursts by a charge drawn within twice its reach of her keel (none laid off her)	27.1
+# Blows laid off her (hunted, naval round 6a's recordings of 26 November): at the battle's blow on Boat 5 (6,540 s, Escort
+# 9's pattern of ten dropped at 6,504 s, set at 102 m) the nearest charge drawn lies 18.29 m from her drawn keel, against
+# the check's 13.3 m (twice the charge's 6.4 m lethal reach, and half a metre), the same watched and staged. The scene's
+# part is mended (naval round 6b, SeaShow.cpp, sea:depthCharge: the pattern laid all at once on the spot and burst all at
+# once at the battle's moment, as sim.ts's chargePattern and burstCharges lay and burst it, so every charge is at its set
+# depth at the blow; before it, run over 28.6 s at her drawn speed, the nearest was still sinking and lay 26.76 m off).
+# What is left is her drawn place: the battle turns her 142 degrees in one 3 s step at 6,306 s and 180 degrees (straight
+# back) in one at 6,507 s, and the scene brings her round in her turning circle, so she is drawn 15.27 m off where the
+# battle has her at the blow; the same check measured against her battle place reads 9.62 m, inside 13.3 m; with her turning circle taken
+# away in a scratch probe (her class's turn and rudder a hundred times over, so she turns at once as the rules turn her)
+# she is drawn 1.39 m off her battle place, the nearest charge 9.16 m from her keel, and the check passes, watched and
+# staged. Cause: the rules turn the boat instantly (steer, sim.ts); the scene draws her turning circle (DD 00:44Z), until
+# naval C4. The bound as measured: 18.3 m (it reads 18.29 m on both lines). First-pack's two pass (the nearest charge
+# 8.42 m from Boat 6's keel at its blow of 13,926 s); round 5's two first-pack lines (27.1 m, the design director's 19:30Z
+# ruling of 25 November) came off with round 5's recordings. A line goes here only for a failure the rules' side by a
+# ruling that covers it.
+convoy-hunted	watched: on a night whose every booked blow comes as its pattern, laid on her, bursts at her, each bursts by a charge drawn within twice its reach of her keel (none laid off her)	18.3
+convoy-hunted	staged: on a night whose every booked blow comes as its pattern, laid on her, bursts at her, each bursts by a charge drawn within twice its reach of her keel (none laid off her)	18.3

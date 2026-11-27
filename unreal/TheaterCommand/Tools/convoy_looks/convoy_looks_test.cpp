@@ -862,6 +862,41 @@ namespace
 				Check(bInBefore, "every charge in the water before its burst " + W);
 			}
 		}
+		for (const int N : { 5, 10, 14 })
+		{
+			// laid all at once over the spot the battle tells (the show's Run 0, as the naval rules lay a pattern): every
+			// charge goes in at the drop, lands where the show bursts it, each rail charge rolled off over its own place
+			const double Heading = 124.0, Spread = 120.0, Beam = 10.0, Sinking = 36.0;
+			DropIn In;
+			In.N = N;
+			In.Spread = Spread;
+			In.Sinking = Sinking;
+			In.Until = 0.0;
+			In.At = P3(9864.0, 15668.0, 1.0);
+			In.Vel = AheadOf(Heading) * 4.2;
+			In.Aim = In.At + AheadOf(Heading) * (Spread * 0.5);
+			In.Beam = Beam;
+			In.Long = 95.0;
+			const std::vector<DropShot> P = DropPlan(In, 7);
+			const std::string W = F("(%.0f charges laid at once)", N);
+			Check(static_cast<int>(P.size()) == N, "a pattern of so many charges " + W);
+			double Worst = 0.0, WorstStern = 0.0, Latest = 0.0;
+			for (int K = 0; K < static_cast<int>(P.size()); ++K)
+			{
+				const DropShot& S = P[K];
+				const P3 Burst = ShowBurst(P3(In.At.X, In.At.Y, 0.0), Heading, K, N, Spread, Beam);
+				Worst = std::max(Worst, std::hypot(S.To.X - Burst.X, S.To.Y - Burst.Y));
+				if (S.Side == 0)
+				{
+					WorstStern = std::max(WorstStern, std::hypot(S.From.X - Burst.X, S.From.Y - Burst.Y));
+				}
+				Latest = std::max(Latest, S.Dt);
+				Check(S.To.Z == 0.0 && S.From.Z > 1.0 && S.Dt + S.Flight < Sinking, "from her deck, into the sea before its burst " + W);
+			}
+			Check(Latest == 0.0, F("every charge goes in at the drop (the last %.2f s after it)", Latest) + " " + W);
+			Check(Worst < 2.0, F("each lands where the show bursts it (within %.2f m)", Worst) + " " + W);
+			Check(WorstStern < 2.5, F("each rail charge rolled off over its own place (within %.2f m)", WorstStern) + " " + W);
+		}
 		{
 			// thrown to either side, well out on its arc
 			DropIn In;
