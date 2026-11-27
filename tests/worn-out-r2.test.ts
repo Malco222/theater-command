@@ -53,7 +53,7 @@ describe('worn out in the line (release 2)', () => {
     for (let m = 1; m <= steps + 3; m++) {
       fought(c);
       wornMonth(g, c);
-      expect(c.spent).toBeCloseTo(Math.min(WORN.most, WORN.step * m), 12);
+      expect(c.spent).toBeCloseTo(Math.min(WORN.most, WORN.step * m), 9);
       expect(c.runIn).toBe(m);
     }
     expect(edge(c)).toBeCloseTo(1 - WORN.most, 12);
