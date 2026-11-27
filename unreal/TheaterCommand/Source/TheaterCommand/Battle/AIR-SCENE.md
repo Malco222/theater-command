@@ -1606,3 +1606,11 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    on a copy). The grey and the alphas are the
    cloud painter's guess of how M_ScrewHaze lights them; the Mac's eye is the judge, and BlurRgb and BlurAlpha
    (AirScrew.h) are the numbers to turn.
+   Mended after review (the test only; no game code changed, the row off as before): the cloud test's check that the
+   tips' arc turns measured the arc laid over the disc, and the disc changes the tips' band by itself when it turns, so
+   it passed with the arc standing still or drawn as an even ring. It now turns the arc alone over the sky (its band
+   changes 2.7, 1.3 and 0.4 levels a frame at 50, 150 and 280 m; a still arc 0, an even ring 0.11 at most), checks that
+   round its ring the arc is strongest just behind each blade (alpha 85 against 19, falling once a blade), and reads from
+   AirBattle.cpp that the arc is laid into the turning disc's own section 0. And B1's rule that no blade mark is left
+   standing was the test's own copy: the test now also reads the game's lines (the marks looked up by the triangle, the
+   near shape's keep test with `!bMark`). Each new check fails on a broken copy and passes on the branch.

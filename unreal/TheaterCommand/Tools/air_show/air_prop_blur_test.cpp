@@ -21,9 +21,12 @@
 //      most, fainter than "flyPropSpin"'s haze) and is grey (no yellow: red and blue within a level);
 //   B5 close to (50, 150, 280 m) the tips' arc is seen (the tips' band 5 levels or more toward the tips' paint, 3 at
 //      280 m where the band is under a pixel wide) and faint (no pixel moved more than 40 levels by it), on the old disc
-//      and on "flyPropSpin"'s smear, and it turns with the disc;
+//      and on "flyPropSpin"'s smear; and it turns: strongest just behind each blade and faint before the next (not an
+//      even ring), and the arc alone over the sky changes a frame later (the disc under it is left out, as it changes
+//      the band by itself when it turns);
 //   B6 the row off draws what it drew before: the Unreal side read from its source (it cannot be built here), every new
-//      branch behind the row, the row off unless asked, never sent to the land rules.
+//      branch behind the row, the row off unless asked, never sent to the land rules; and the game's own lines for what
+//      B1 and B5 hold (the near shape's keep test drops a marked triangle; the arc laid into the turning disc's section).
 #include "Battle/AirScrew.h"
 
 #include <algorithm>
@@ -525,7 +528,40 @@ int main(int Argc, char** Argv)
 		int Most = 0;
 		for (const unsigned char A : Arcs.Alpha) Most = std::max<int>(Most, A);
 		Check(Most <= AirScrew::TipMost && Arcs.Triangles.size() == 384 * 3, "the arc no stronger than TipMost (100 of 255), 384 triangles", std::to_string(Most) + ", " + std::to_string(Arcs.Triangles.size() / 3));
+		// (an arc behind each blade, not an even ring: round its middle ring, the one coloured, the alpha climbs from the
+		// faint ring to its most just behind a blade and falls at the next, once a blade; an even ring would be the same
+		// picture at every turn and could not be seen to turn)
+		{
+			const size_t Round = static_cast<size_t>(AirScrew::NearRound);
+			int Low = 255, High = 0, Falls = 0;
+			for (size_t K = 0; K < Round && Arcs.Alpha.size() == 3 * Round; ++K)
+			{
+				const int Here = Arcs.Alpha[Round + K], Next = Arcs.Alpha[Round + (K + 1) % Round];
+				Low = std::min(Low, Here);
+				High = std::max(High, Here);
+				Falls += Next < Here ? 1 : 0;
+			}
+			Check(Arcs.Alpha.size() == 3 * Round && High > 0 && High >= 3 * Low && Falls == 3,
+			      "the arc strongest just behind each blade, faint before the next (round its middle ring the most 3 times the least or more, falling once a blade)",
+			      std::to_string(High) + " and " + std::to_string(Low) + ", " + std::to_string(Falls) + " falls for 3 blades");
+		}
 		const Layer Old = OldDisc(R, 3), Smear = LayerOf(AirScrew::MakeDisc(R, 3, false)), Arc = LayerOf(Arcs);
+		// (and it turns: a frame later at 60 fps, 1.9 turns a second, the tips' band of the arc alone over the sky changes.
+		// The arc alone, as the disc under it changes the band by itself when it turns, the old disc's ring at 0.9 of the
+		// radius and the smear both: over a disc the band changes as much with the arc standing still. A still arc changes
+		// it not at all, an even ring 0.11 of a level at most.)
+		for (const double M : { 50.0, 150.0, 280.0 })
+		{
+			const int W = Width(R, M, PerRadian);
+			const std::vector<double> Band = Share(R, AirScrew::TipRings[0], AirScrew::TipRings[2], M, W, PerRadian);
+			const std::vector<Rgb> ArcNow = Picture({ &Arc }, M, 0.0, W, Sky, PerRadian), ArcLater = Picture({ &Arc }, M, 1.9 * 360.0 / 60.0, W, Sky, PerRadian);
+			double Turned = 0.0;
+			for (size_t K = 0; K < ArcNow.size(); ++K) Turned = std::max(Turned, Band[K] * std::fabs(ArcNow[K][0] - ArcLater[K][0]));
+			// (at 280 m the tips' band is under a pixel wide, the sky in most of each of its pixels)
+			const double Want = M < 200.0 ? 0.5 : 0.2;
+			Check(Turned >= Want, "the tips' arc at " + std::to_string(static_cast<int>(M)) + " m turns (the arc alone over the sky, its band " + Fmt("%.1f", Want) + " levels a frame or more)",
+			      Fmt("%.2f levels a frame", Turned));
+		}
 		for (const Layer* Disc : { &Old, &Smear })
 		{
 			const std::string Which = Disc == &Old ? "the old disc" : "flyPropSpin's smear";
@@ -538,19 +574,14 @@ int main(int Argc, char** Argv)
 				double Moved = 0.0;
 				for (size_t K = 0; K < With.size(); ++K)
 					for (int C = 0; C < 3; ++C) Moved = std::max(Moved, std::fabs(With[K][static_cast<size_t>(C)] - Without[K][static_cast<size_t>(C)]));
-				// (and it turns: a frame later at 60 fps, 1.9 turns a second, the band's picture changes)
-				const std::vector<Rgb> Later = Picture({ Disc, &Arc }, M, 1.9 * 360.0 / 60.0, W, Sky, PerRadian);
-				double Turned = 0.0;
-				for (size_t K = 0; K < With.size(); ++K) Turned = std::max(Turned, Band[K] * std::fabs(With[K][0] - Later[K][0]));
 				const std::string At = Which + " at " + std::to_string(static_cast<int>(M)) + " m";
-				std::printf("  %s: the tips' band red over blue %.1f without the arc, %.1f with it; the most a pixel moves by it %.1f; a frame later the band changes %.1f\n",
-				            At.c_str(), Bare.Yellow, Tipped2.Yellow, Moved, Turned);
+				std::printf("  %s: the tips' band red over blue %.1f without the arc, %.1f with it; the most a pixel moves by it %.1f\n",
+				            At.c_str(), Bare.Yellow, Tipped2.Yellow, Moved);
 				// (at 280 m the tips' band is under a pixel wide, the sky in most of each of its pixels)
 				const double Want = M < 200.0 ? 5.0 : 3.0;
 				Check(Tipped2.Yellow - Bare.Yellow >= Want && Moved <= 40.0,
 				      "the tips' arc on " + At + " seen and faint (" + std::to_string(static_cast<int>(Want)) + " levels or more toward the paint, no pixel moved over 40)",
 				      Fmt("%.1f toward the paint, %.1f the most", Tipped2.Yellow - Bare.Yellow, Moved));
-				Check(Turned >= 1.0, "the tips' arc on " + At + " turns with the disc", Fmt("%.1f levels a frame", Turned));
 			}
 		}
 	}
@@ -577,11 +608,29 @@ int main(int Argc, char** Argv)
 		Check(Count(Battle, "AirParts::TakeScrews(Near, Made, Kind, Middle, Fit, UnitsPerMetre, bBlur);") == 1
 				&& Count(Battle, "if (bPropBlur)") == 1 && Count(Battle, "AirScrew::BladeDecals(") == 1 && Count(Battle, "AirScrew::TipColour(") == 1,
 			"the near shape's marks and tips' paint taken only with the row on (off: the near shape of before)");
+		// (B1 holds the test's own copy of TakeScrews' keep rule; these are the game's: the marks found on the triangles
+		// Find read, each looked up by its own triangle, and a marked triangle not kept. Off, Marks is empty: no change.)
+		Check(Count(Battle, "Marks = AirScrew::BladeDecals(Points, Paints, Are, Triangles, Found.Screws);") == 1
+				&& Count(Battle, "const bool bMark = !Marks.empty() && Marks[static_cast<size_t>(T / 3)];") == 1
+				&& Count(Battle, "if (!Found.BladeTriangle[static_cast<size_t>(T / 3)] && !bBlur && !bMark)") == 1,
+			"the near shape keeps no marked triangle, as B1's rule (the marks by the triangle, the keep test with !bMark)");
 		Check(Count(Battle, "Away.bBlurDisc = bBlur;") == 1 && Count(Battle, "AirScrew::MakeBlurDisc(") == 2 && Count(Battle, "Shape.bBlurDisc ? AirScrew::MakeBlurDisc(") == 1
 				&& Count(Battle, "Far->bBlurDisc ? AirScrew::MakeBlurDisc(") == 1,
 			"the faint far disc only on a far shape the row stripped, on the copies and on an aircraft's own mesh");
 		Check(Count(Battle, "AirScrew::MakeTipArcs(") == 1 && Count(Battle, "const bool bTips = State && State->PropBlurOn == 1 && Screw.Tip.A > 0;") == 1,
 			"the tips' arc only on the near disc, only with the row on (the far copies never)");
+		{
+			// (the arc turns with the disc: laid into the disc's own points after DiscOf and made with them as the turning
+			// disc's section 0, nothing reset or made between; B5 turns it in the picture, this is where the game lays it)
+			const size_t DiscAt = Battle.find("AirParts::DiscOf(Screw.Radius, Screw.Blades, Points, Triangles, Normals, Colours, bSmear);");
+			const size_t ArcAt = Battle.find("AirParts::LayDisc(AirScrew::MakeTipArcs(Screw.Radius, Screw.Blades, Tip), FVector::ZeroVector, Points, Triangles, Normals, Colours);");
+			const size_t MadeAt = ArcAt == std::string::npos ? ArcAt
+				: Battle.find("Disc->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);", ArcAt);
+			const bool bLaid = DiscAt != std::string::npos && ArcAt != std::string::npos && MadeAt != std::string::npos && DiscAt < ArcAt;
+			const std::string Between = bLaid ? Battle.substr(DiscAt + 1, MadeAt - DiscAt - 1) : std::string();
+			Check(bLaid && Count(Between, "Reset()") == 0 && Count(Between, "CreateMeshSection(") == 0,
+				"the tips' arc laid into the turning disc's own section 0, after its disc, nothing reset or made between");
+		}
 		Check(Count(Battle, "return State && (State->PropSpinOn == 1 || State->PropBlurOn == 1) ? ScrewHaze.Get() : nullptr;") == 1
 				&& Count(Battle, "const bool bFeatheredFar = (S.PropSpinOn == 1 || S.PropBlurOn == 1) && P.bFeathered && !P.DeadEngines.empty() && ScrewHazeInk();") == 1
 				&& Count(Battle, "if (S.PropSpinOn == 1 || S.PropBlurOn == 1)") == 1 && Count(Battle, "if (State && (State->PropSpinOn == 1 || State->PropBlurOn == 1))") == 1,
