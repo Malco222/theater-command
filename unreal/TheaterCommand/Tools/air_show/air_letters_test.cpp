@@ -508,6 +508,29 @@ int main(int Argc, char** Argv)
 				}
 			}
 			Check(bAll, bNear ? "near: the letter F reads the right way round as her own letter and in her codes, each side" : "far: the letter F reads the right way round as her own letter and in her codes, each side", Said);
+			// (her codes in their order on each side, seen from outside it: the first letter left of the second, so that
+			// "VK" reads VK on both sides; on her starboard face right is forward, on her port face right is aft)
+			int Swapped = 0, Seen = 0;
+			for (const char* C = AirLetters::L24; *C; ++C)
+			{
+				for (const char* Side : { "port", "starboard" })
+				{
+					const double Right = std::strcmp(Side, "starboard") == 0 ? 1.0 : -1.0;
+					const AirLetters::Level* First = Sheet.LevelOf(std::string("code.") + Side + ".1." + *C, bNear);
+					const AirLetters::Level* Second = Sheet.LevelOf(std::string("code.") + Side + ".2." + *C, bNear);
+					if (!First || !Second) continue;
+					auto Middle = [](const AirLetters::Level& L)
+					{
+						double X = 0.0;
+						for (size_t I = 0; I < L.Points.size(); I += 3) X += L.Points[I];
+						return X / static_cast<double>(L.Points.size() / 3);
+					};
+					++Seen;
+					if (!(Right * Middle(*First) < Right * Middle(*Second))) ++Swapped;
+				}
+			}
+			std::snprintf(Line, sizeof Line, "%d of %d sides' codes swapped", Swapped, Seen);
+			Check(Seen == 48 && Swapped == 0, bNear ? "near: her codes' first letter left of their second, seen from either side" : "far: her codes' first letter left of their second, seen from either side", Line);
 		}
 		const AirLetters::Level* Tri = Sheet.LevelOf("wing.T", bNear);
 		if (Tri)
