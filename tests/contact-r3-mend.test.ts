@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
 import { setFromWait } from '../src/campaign/arrivalwaits';
 import { divisionsOf } from '../src/campaign/armies';
-import { addCorps, atWar, createGame, relocate, ruleHolds, startPhase } from '../src/campaign/game';
+import { addCorps, atWar, createGame, declareWar, relocate, ruleHolds, startPhase, theatreName } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
@@ -72,5 +72,26 @@ describe("S1-1: a lent corps the one test holds is no corps 'on its way out' to 
     const { lent, holders } = run(false);
     expect(lent.dead).toBe(true);
     expect(holders).toHaveLength(1);
+  });
+});
+
+// ---- T3-1: the reader counts the player's own hold that was not told ------------------------------------------------
+
+describe("T3-1: ruleHolds counts the player's own hold that was never told as untold", () => {
+  it("his own theatre draw passes over a corps the test holds: no sentence exists, so it is told false, and untold", () => {
+    clear();
+    const g = startOpen(createGame(1, null));
+    setFromWait(g, true);
+    g.human = 'GER';
+    declareWar(g, 'GER', 'GRE');
+    const balkans = g.regions.filter((r) => theatreName(r) === 'the Balkans');
+    const greek = (r: Region): boolean => r.ctrl === 'GRE' || r.units.some((u) => u.nat === 'GRE');
+    const line = balkans.find((r) => !greek(r) && !atWar(g, 'GER', r.ctrl) && r.nb.some((j) => greek(g.regions[j])))!;
+    for (const u of [...line.units]) if (u.nat === 'GER') relocate(g, u, g.byName.Bavaria);
+    const held = add(g, 'Held Test Corps', line, 3);
+    const i = addRow([2, 'GER', 'Test Theatre Army', 'inf', 1, 'Magdeburg', { from: 'the Balkans' }]);
+    month(g, 2);
+    expect(held.divs).toBe(3);
+    expect(ruleHolds(g).filter((h) => h.path === 'draw').map(({ turn, ...h }) => h)).toEqual([{ nat: 'GER', i, row: 'Test Theatre Army', path: 'draw', corps: ['Held Test Corps'], waits: false, written: null, told: false, untold: true }]);
   });
 });
