@@ -3057,6 +3057,11 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
         ? { label: 'Height', value: 'You will be above them', effect: `No warning reaches them in time: your fighters dive on them from above, about ${hx} to 1 your way on height alone.` }
         : { label: 'Height', value: 'Level', effect: 'Ground observers warn them in time to climb to your height, not above it: neither side has the height.' });
   }
+  // (The place a town raid's guns lines name. City defences, the switch on: the town, "Level 2 guns ring Metz", as the
+  // card's town line names it (the UI director's answer of 25 Nov 2026 22:29Z, question 1). The switch off: the
+  // province, "Level 2 guns ring Lorraine", as his game prints it, so that the row off is his card and his report word
+  // for word. The design director, 27 Nov 2026 04:22Z: "put the town naming under citydefencesrule".)
+  const gunsTown = m === 'town' ? (cityDefences(g) ? townName(g.regions[target]) : placeName(place)) : '';
   if (out.guns.all || out.standing) {
     // (The UI director, 25 Nov 2026 19:10Z, section B: the built guns first, the standing light guns named apart.)
     const n = (x: number): string => x.toLocaleString('en-US'), S = n(out.standing);
@@ -3071,8 +3076,10 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     // names, so one card never reads as two sets of guns: a town raid round {Leipzig}, a harbour raid round {the harbour
     // of Bremen}, the factories as today, round {Rhineland}. Her rule of 26 Nov 2026 04:32Z: the place takes the news's
     // article wherever it prints, and this line is new in release 2, so always, with no guard: round {the Ruhr}, round
-    // {the harbour of the Cotentin}; a place without one is unchanged, round {Kent}. The town's name is as it is.)
-    const flakAt = m === 'town' ? townName(g.regions[target]) : m === 'harbour' ? harbourOf(placeName(place)) : placeName(place);
+    // {the harbour of the Cotentin}; a place without one is unchanged, round {Kent}. The town's name is as it is.
+    // A town raid's place is `gunsTown` below, the place its guns line names: the town under city defences' switch,
+    // the province with it off, as his game prints it. The design director, 27 Nov 2026 04:22Z.)
+    const flakAt = m === 'town' ? gunsTown : m === 'harbour' ? harbourOf(placeName(place)) : placeName(place);
     const flakWords = (): string => {
       // (Her 21:22Z marks, case e: the clause, where it knows of guns built there, on the line, an airfield raid and a
       // fight for the sky flown with bombers (they hit its airfields) as on troops.)
@@ -3126,8 +3133,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     out.lines.push({ label: 'The town', value: `Troops inside ${placeName(townName(r))} fight ${Math.round((townBonus(g, r) - 1) * 100)}% stronger${townWorksPhrase(g, r)}${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ''}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling('raid')}% in all` });
   }
   // (The town's guns name the town, as the card's town line does, in all three forms: the UI director's answer of 25 Nov
-  // 2026 22:29Z, question 1, "Level {2} guns ring {Metz}". One card names one place.)
-  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(townName(g.regions[target])), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+  // 2026 22:29Z, question 1, "Level {2} guns ring {Metz}". One card names one place. Under city defences' switch only:
+  // with it off the line names the province, as his game prints it: `gunsTown` above.)
+  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(gunsTown), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: aaLine(`the factories of ${placeName(place)}`), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   // City defences: the searchlights' line, a night raid with lights built and the switch on (the UI director's words,
   // section 2). One line, the reading that governs: cloud, then no guns, then no Fighter control, then too many bombers.

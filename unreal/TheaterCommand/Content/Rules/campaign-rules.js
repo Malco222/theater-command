@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 73b175ba2 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c1351b12a 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -60216,6 +60216,7 @@
       const hx = out.height.h.toFixed(1);
       out.lines.push(out.height.x < 0 ? { label: "Height", value: "The defenders will be above you", effect: `They are warned in time to climb above your fighters and dive on them: about ${hx} to 1 their way on height alone.` } : out.height.x > 0 ? { label: "Height", value: "You will be above them", effect: `No warning reaches them in time: your fighters dive on them from above, about ${hx} to 1 your way on height alone.` } : { label: "Height", value: "Level", effect: "Ground observers warn them in time to climb to your height, not above it: neither side has the height." });
     }
+    const gunsTown = m === "town" ? cityDefences(g2) ? townName(g2.regions[target]) : placeName2(place3) : "";
     if (out.guns.all || out.standing) {
       const n = (x) => x.toLocaleString("en-US"), S3 = n(out.standing);
       const split = `${n(out.guns.light)} light and ${n(out.guns.heavy)} heavy, and the ${S3} light guns every target has.`;
@@ -60226,7 +60227,7 @@
       };
       const seen2 = known ? known.seen ?? -1 : -1;
       const counts = m === "bomb" || night || m === "harbour" || m === "town";
-      const flakAt = m === "town" ? townName(g2.regions[target]) : m === "harbour" ? harbourOf(placeName2(place3)) : placeName2(place3);
+      const flakAt = m === "town" ? gunsTown : m === "harbour" ? harbourOf(placeName2(place3)) : placeName2(place3);
       const flakWords = () => {
         const not = m === "ground" ? "troops in the field" : m === "line" ? "the line" : m === "airfield" ? "the airfield" : m === "superiority" ? "the airfields" : "";
         if (!counts) return not && (known ? seen2 > 0 : gunsAt(g2, target) > 0) ? `Only the ${S3} light guns every target has: the guns built here guard the town, not ${not}.` : Only;
@@ -60260,7 +60261,7 @@
       const r = g2.regions[target], gone = breachOf(g2, r);
       out.lines.push({ label: "The town", value: `Troops inside ${placeName2(townName(r))} fight ${Math.round((townBonus(g2, r) - 1) * 100)}% stronger${townWorksPhrase(g2, r)}${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ""}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; bombs never break more than ${breachCeiling("raid")}% in all` });
     }
-    if (out.aa && m === "town") out.lines.push({ label: "Anti-aircraft guns", value: aaLine(townName(g2.regions[target])), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
+    if (out.aa && m === "town") out.lines.push({ label: "Anti-aircraft guns", value: aaLine(gunsTown), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
     else if (out.aa) out.lines.push({ label: "Anti-aircraft guns", value: aaLine(`the factories of ${placeName2(place3)}`), effect: dark ? `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing. ${dark}` : `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
     if (cn && cn.lights > 0) {
       const where = placeName2(place3);
