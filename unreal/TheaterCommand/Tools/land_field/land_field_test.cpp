@@ -27,6 +27,9 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#if defined(__GLIBC__)
+#include <malloc.h>
+#endif
 #include <memory>
 #include <sstream>
 #include <string>
@@ -1806,6 +1809,443 @@ namespace
 		}
 		ScorchPictures(G, FN, Sk, RB);
 	}
+
+	/**
+	 * On trial, "lodged" (LandField::Ground::AddFlatten): the corn and grass laid over outward round shell holes. Three
+	 * grounds of the same field are built here (the word off; the word on; the word on again, its rounds given in another
+	 * order) so that the word's own ground (with any LAND_FIELD_FLATTEN rounds, for the pictures) is left as it is.
+	 */
+	void LodgedTrial(const LandField::Field& Fd, const std::string& Name)
+	{
+		using LandField::Placed;
+		const auto Same = [](const Placed& A, const Placed& B) {
+			return A.Kind == B.Kind && A.X == B.X && A.Y == B.Y && A.Z == B.Z && A.Yaw == B.Yaw && A.Scale == B.Scale && A.ScaleZ == B.ScaleZ && A.Tint.R == B.Tint.R && A.Tint.G == B.Tint.G
+				&& A.Tint.B == B.Tint.B && A.Lodge == B.Lodge;
+		};
+		std::printf("  lodged (on trial): shell holes' blasts laying the corn and grass over\n");
+		// (the barrage's middle: the look scout's wheat at Normandy, the rye's edge on the steppe at Prokhorovka)
+		double CX = 0.5 * Fd.Width(), CY = 0.5 * Fd.Depth();
+		if (Name == "normandy-1944")
+		{
+			CX = 2440.0;
+			CY = 680.0;
+		}
+		else if (Name == "prokhorovka-1943")
+		{
+			CX = 1968.0;
+			CY = 716.0;
+		}
+		const double BoxX0 = CX - 64.0, BoxY0 = CY - 64.0, BoxX1 = CX + 64.0, BoxY1 = CY + 64.0;
+		LandField::Field Off = Fd;
+		bool bOff = Off.Trial != "all";
+		{
+			std::string Kept;
+			for (size_t P = 0; P <= Off.Trial.size();)
+			{
+				size_t E = Off.Trial.find(',', P);
+				if (E == std::string::npos) E = Off.Trial.size();
+				const std::string Word = Off.Trial.substr(P, E - P);
+				if (Word != "lodged" && !Word.empty()) Kept += (Kept.empty() ? "" : ",") + Word;
+				P = E + 1;
+			}
+			Off.Trial = Kept;
+		}
+		LandField::Ground On(Fd);
+		std::vector<Placed> Plain, Bare;
+		On.Clutter(BoxX0, BoxY0, BoxX1, BoxY1, Bare);
+		// The rounds: 200 near the eye over 10 s, mixed (light mortars, 105s, 150s and a few heavier), each its Outer as the
+		// effects engineer passes it (2.5 x its rim in corn, 1.8 x in grass, at most 15 m).
+		struct Round
+		{
+			double X, Y, Core, Outer;
+		};
+		std::vector<Round> Rounds;
+		{
+			unsigned Lcg = 777u;
+			auto Draw = [&Lcg]() { Lcg = Lcg * 1664525u + 1013904223u; return (Lcg >> 8) / 16777216.0; };
+			for (int K = 0; K < 200; ++K)
+			{
+				const double A = 6.2832 * Draw(), Rr = 38.0 * std::sqrt(Draw()), Kind = Draw();
+				const double Core = Kind < 0.45 ? 1.0 : Kind < 0.8 ? 2.2 : Kind < 0.95 ? 3.5 : 4.5;
+				const double RX = CX + Rr * std::cos(A), RY = CY + Rr * std::sin(A);
+				Rounds.push_back({ RX, RY, Core, std::min(15.0, (On.CornAt(RX, RY) ? 2.5 : 1.8) * Core) });
+			}
+		}
+		if (bOff)
+		{
+			LandField::Ground Without(Off);
+			Without.Clutter(BoxX0, BoxY0, BoxX1, BoxY1, Plain);
+			long Differ = Plain.size() == Bare.size() ? 0 : 1;
+			for (size_t N = 0; N < Plain.size() && N < Bare.size(); ++N) Differ += Same(Plain[N], Bare[N]) ? 0 : 1;
+			Check(Differ == 0 && !Plain.empty(), "lodged: the word on with no round lays every clutter thing as the word off, every field of its record",
+			      Fmt("%.0f differ of %.0f", static_cast<double>(Differ), static_cast<double>(Plain.size())));
+			// (and with the word off AddFlatten does nothing at all)
+			for (const Round& R : Rounds) Without.AddFlatten(R.X, R.Y, R.Core, R.Outer);
+			std::vector<Placed> After;
+			Without.Clutter(BoxX0, BoxY0, BoxX1, BoxY1, After);
+			long Moved = After.size() == Plain.size() ? 0 : 1;
+			for (size_t N = 0; N < Plain.size() && N < After.size(); ++N) Moved += Same(Plain[N], After[N]) ? 0 : 1;
+			Check(Moved == 0 && Without.Flattened() == 0, "lodged: with the word off AddFlatten keeps nothing and changes nothing",
+			      Fmt("%.0f rounds kept, ", static_cast<double>(Without.Flattened())) + Fmt("%.0f things changed", static_cast<double>(Moved)));
+		}
+		else
+			Plain = Bare;
+		// A moving eye over the barrage, as the scene drives the carpet (every kind laid, each its own mesh): first with no
+		// round, then with the 200 rounds falling over its first 10 s; each frame's time and ops, and the meshes kept here
+		// as the engine would keep them, op by op.
+		constexpr int Kinds = static_cast<int>(LandField::Base::Count);
+		double WorstMs[2] = {}, SumMs[2] = {}, AddUs = 0.0;
+		long WorstOps[2] = {}, SumOps[2] = {}, BadOps = 0, Needless = 0, Reposes = 0, Mismatch = 0, SquaresChecked = 0, ThingsChecked = 0, Lodges = 0;
+		constexpr int Frames = 60 * 14;
+		for (int Walk = 0; Walk < 2; ++Walk)
+		{
+			LandCarpet::Squares Cp;
+			Cp.Reach.assign(Kinds, 1e9);
+			Cp.CopyOf = [](const Placed& P) { return static_cast<int32_t>(P.Kind); };
+			std::vector<std::vector<std::pair<bool, Placed>>> Mesh(Kinds);
+			std::vector<LandCarpet::Op> Out;
+			double EX = CX - 20.0, EY = CY - 6.0;
+			for (int Frame = 0; Frame < Frames; ++Frame)
+			{
+				const double Now = Frame / 60.0;
+				EX += 1.5 / 60.0;
+				if (Walk == 1 && Frame % 3 == 0 && Frame / 3 < static_cast<int>(Rounds.size()))
+				{
+					const Round& R = Rounds[static_cast<size_t>(Frame / 3)];
+					const auto T1 = std::chrono::steady_clock::now();
+					On.AddFlatten(R.X, R.Y, R.Core, R.Outer);
+					AddUs += Seconds(T1) * 1e6;
+				}
+				Out.clear();
+				const auto T0 = std::chrono::steady_clock::now();
+				const LandCarpet::Tally Tl = Cp.Update(On, EX, EY, EX + 60.0, EY, Frame == 0, 4, Now, Out);
+				const double Ms = Seconds(T0) * 1000.0;
+				Lodges += Walk == 1 ? Tl.Lodged : 0;
+				if (Frame > 0)
+				{
+					WorstMs[Walk] = std::max(WorstMs[Walk], Ms);
+					SumMs[Walk] += Ms;
+					WorstOps[Walk] = std::max(WorstOps[Walk], static_cast<long>(Out.size()));
+					SumOps[Walk] += static_cast<long>(Out.size());
+				}
+				int32_t PopDue = -1;
+				for (const LandCarpet::Op& O : Out)
+				{
+					if (O.Copy < 0 || O.Copy >= Kinds)
+					{
+						if (O.Copy == -1 && O.Slot == -1)
+							for (auto& M : Mesh) M.clear();
+						else
+							++BadOps;
+						continue;
+					}
+					auto& M = Mesh[static_cast<size_t>(O.Copy)];
+					if (PopDue >= 0 && (!O.bPop || O.Copy != PopDue)) ++BadOps;
+					PopDue = -1;
+					if (O.bPop)
+					{
+						if (M.empty() || O.Slot + 1 != static_cast<int32_t>(M.size())) ++BadOps;
+						else
+							M.pop_back();
+						continue;
+					}
+					if (O.Slot == static_cast<int32_t>(M.size()))
+					{
+						M.push_back({ true, O.Thing });
+						continue;
+					}
+					if (O.Slot < 0 || O.Slot > static_cast<int32_t>(M.size()))
+					{
+						++BadOps;
+						continue;
+					}
+					auto& Place = M[static_cast<size_t>(O.Slot)];
+					if (O.bRepose)
+					{
+						++Reposes;
+						if (Place.second.X != O.Thing.X || Place.second.Y != O.Thing.Y || Place.second.Kind != O.Thing.Kind) ++BadOps;
+						if (Same(Place.second, O.Thing)) ++Needless;
+						Place.second = O.Thing;
+						continue;
+					}
+					Place.second = O.Thing; // (a move of the mesh's last thing; its pop follows)
+					PopDue = O.Copy;
+				}
+				BadOps += PopDue >= 0 ? 1 : 0;
+			}
+			if (Walk == 0) continue;
+			// Made before the rounds and laid over since, or made after them: each held square as the field lays it now.
+			std::map<std::tuple<int, float, float>, Placed> Laid;
+			for (const auto& M : Mesh)
+				for (const auto& P : M) Laid[{ static_cast<int>(P.second.Kind), P.second.X, P.second.Y }] = P.second;
+			for (int J = static_cast<int>(std::floor((EY - 70.0) / 16.0)); J <= static_cast<int>(std::floor((EY + 70.0) / 16.0)); ++J)
+				for (int I = static_cast<int>(std::floor((EX - 70.0) / 16.0)); I <= static_cast<int>(std::floor((EX + 130.0) / 16.0)); ++I)
+				{
+					if (!Cp.Holds(I, J)) continue;
+					++SquaresChecked;
+					std::vector<Placed> Fresh;
+					On.Clutter(I * 16.0, J * 16.0, (I + 1) * 16.0, (J + 1) * 16.0, Fresh);
+					for (const Placed& P : Fresh)
+					{
+						++ThingsChecked;
+						const auto Found = Laid.find({ static_cast<int>(P.Kind), P.X, P.Y });
+						if (Found == Laid.end() || !Same(Found->second, P)) ++Mismatch;
+					}
+				}
+		}
+		std::printf("    a moving eye over a barrage of %zu rounds in 10 s (%zu kept): updates %.3f ms mean, worst %.2f ms, worst %ld ops (%.1f a frame); "
+		            "the same walk with no round %.3f ms mean, worst %.2f ms, worst %ld ops (%.1f a frame); %ld squares laid over again, %ld things re-posed in place\n",
+			Rounds.size(), On.Flattened(), SumMs[1] / (Frames - 1), WorstMs[1], WorstOps[1], static_cast<double>(SumOps[1]) / (Frames - 1), SumMs[0] / (Frames - 1), WorstMs[0], WorstOps[0],
+			static_cast<double>(SumOps[0]) / (Frames - 1), Lodges, Reposes);
+		std::printf("    AddFlatten: %.1f microseconds a call (mean of %zu, mid-walk)\n", AddUs / static_cast<double>(Rounds.size()), Rounds.size());
+		Check(BadOps == 0, "lodged: the carpet's ops through a barrage kept straight (a re-pose only of a held thing in its own place)", Fmt("%.0f wrong", static_cast<double>(BadOps)));
+		Check(Needless == 0 && Reposes > 0, "lodged: a laying-over update sends ops only for things whose record changed",
+		      Fmt("%.0f re-posed, ", static_cast<double>(Reposes)) + Fmt("%.0f of them unchanged", static_cast<double>(Needless)));
+		Check(Mismatch == 0 && SquaresChecked > 0, "lodged: a carpet square made before the rounds and laid over since equals one made after them, thing for thing",
+		      Fmt("%.0f of ", static_cast<double>(Mismatch)) + Fmt("%.0f things in ", static_cast<double>(ThingsChecked)) + Fmt("%.0f squares differ", static_cast<double>(SquaresChecked)));
+		// The rounds laid: against the field with none (the word off, checked equal above).
+		std::vector<Placed> Over;
+		On.Clutter(BoxX0, BoxY0, BoxX1, BoxY1, Over);
+		long Count = Over.size() == Plain.size() ? 0 : 1, Shifted = 0, Outside = 0, Stiff = 0, Leaning = 0, Single = 0, Outward = 0;
+		double LeanSum = 0.0;
+		for (size_t N = 0; N < Over.size() && N < Plain.size(); ++N)
+		{
+			const Placed& A = Over[N];
+			const Placed& B = Plain[N];
+			if (A.Kind != B.Kind || A.X != B.X || A.Y != B.Y)
+			{
+				++Count;
+				continue;
+			}
+			if (A.Z != B.Z || A.Scale != B.Scale || A.Tint.R != B.Tint.R || A.Tint.G != B.Tint.G || A.Tint.B != B.Tint.B) ++Shifted;
+			if (Same(A, B)) continue;
+			const LandField::Base K = A.Kind;
+			if (K == LandField::Base::Stone || K == LandField::Base::Trodden || K == LandField::Base::Stubble || K == LandField::Base::Sward || K == LandField::Base::Rosette) ++Stiff;
+			int Within = 0;
+			double Way = 0.0;
+			for (size_t R = 0; R < On.Flattened(); ++R)
+			{
+				double RX = 0.0, RY = 0.0, Reach = 0.0;
+				On.FlattenRound(R, RX, RY, Reach);
+				const double Bearing = std::atan2(A.Y - RY, A.X - RX);
+				if (std::hypot(A.X - RX, A.Y - RY) < On.FlattenEdge(R, Bearing) + 1e-3)
+				{
+					++Within;
+					Way = Bearing;
+				}
+			}
+			Outside += Within == 0 ? 1 : 0;
+			if (A.Lodge > 0.15f)
+			{
+				++Leaning;
+				LeanSum += A.Lodge;
+				if (Within == 1)
+				{
+					++Single;
+					const double Off2 = std::remainder(static_cast<double>(A.Yaw) - Way, 6.283185307179586);
+					Outward += std::fabs(Off2) <= 35.0 * 3.141592653589793 / 180.0 ? 1 : 0;
+				}
+			}
+		}
+		// (every field of every thing in the box, hashed: the same from gcc and clang, thing for thing)
+		uint64_t Print = 1469598103934665603ull;
+		for (const Placed& Th : Over)
+		{
+			const float Fs[7] = { Th.X, Th.Y, Th.Z, Th.Yaw, Th.Scale, Th.ScaleZ, Th.Lodge };
+			uint8_t Bytes[sizeof(Fs) + 4] = {};
+			std::memcpy(Bytes, Fs, sizeof(Fs));
+			Bytes[sizeof(Fs)] = static_cast<uint8_t>(Th.Kind);
+			Bytes[sizeof(Fs) + 1] = Th.Tint.R;
+			Bytes[sizeof(Fs) + 2] = Th.Tint.G;
+			Bytes[sizeof(Fs) + 3] = Th.Tint.B;
+			for (const uint8_t Byte : Bytes) Print = (Print ^ Byte) * 1099511628211ull;
+		}
+		std::printf("    in a 128 m box over the barrage: %zu things, %ld laid over (mean %.0f degrees); every field hashed %016llx\n", Over.size(), Leaning,
+			Leaning ? LeanSum / Leaning * 57.29578 : 0.0, static_cast<unsigned long long>(Print));
+		Check(Count == 0 && Shifted == 0, "lodged: no clutter thing added or taken away, none moved, resized or tinted (the same things in the same order, X, Y, Z, Scale, Tint)",
+		      Fmt("%.0f added, taken or reordered, ", static_cast<double>(Count)) + Fmt("%.0f moved", static_cast<double>(Shifted)));
+		Check(Outside == 0, "lodged: no thing outside every round's wandering edge changed in any field", Fmt("%.0f changed outside", static_cast<double>(Outside)));
+		Check(Stiff == 0, "lodged: stones, trodden earth, stubble, the short sward and the docks never lean", Fmt("%.0f changed", static_cast<double>(Stiff)));
+		Check(Single >= 20 && Outward >= Single * 9 / 10, "lodged: things laid over lie outward from the burst (within 35 degrees, 9 in 10 at least; those in one round's reach)",
+		      Fmt("%.0f of ", static_cast<double>(Outward)) + Fmt("%.0f", static_cast<double>(Single)));
+		// The same rounds in another order (a shuffle), on a third ground: every thing the same.
+		{
+			LandField::Ground Again(Fd);
+			std::vector<Round> Shuffled = Rounds;
+			unsigned Lcg = 4242u;
+			for (size_t N = Shuffled.size(); N > 1; --N)
+			{
+				Lcg = Lcg * 1664525u + 1013904223u;
+				std::swap(Shuffled[N - 1], Shuffled[(Lcg >> 8) % N]);
+			}
+			for (const Round& R : Shuffled) Again.AddFlatten(R.X, R.Y, R.Core, R.Outer);
+			std::vector<Placed> Other;
+			Again.Clutter(BoxX0, BoxY0, BoxX1, BoxY1, Other);
+			long Differ = Other.size() == Over.size() ? 0 : 1;
+			for (size_t N = 0; N < Other.size() && N < Over.size(); ++N) Differ += Same(Other[N], Over[N]) ? 0 : 1;
+			Check(Differ == 0, "lodged: the same rounds in another order lay every thing the same (the strongest wins, whatever the order)",
+			      Fmt("%.0f differ; ", static_cast<double>(Differ)) + Fmt("%.0f rounds kept in one order, ", static_cast<double>(On.Flattened())) + Fmt("%.0f in the other", static_cast<double>(Again.Flattened())));
+			// (a small round within a big one's flattest: nothing more, the strongest counts, they do not add)
+			const Round& Big = *std::max_element(Rounds.begin(), Rounds.end(), [](const Round& A, const Round& B) { return A.Outer < B.Outer; });
+			const size_t Was = Again.Flattened();
+			Again.AddFlatten(Big.X + 0.8, Big.Y, 0.5, 1.0);
+			std::vector<Placed> Third;
+			Again.Clutter(BoxX0, BoxY0, BoxX1, BoxY1, Third);
+			long Added = Third.size() == Other.size() ? 0 : 1;
+			for (size_t N = 0; N < Other.size() && N < Third.size(); ++N) Added += Same(Other[N], Third[N]) ? 0 : 1;
+			Check(Added == 0 && Again.Flattened() == Was, "lodged: a small round inside a big one's flattest changes nothing and is not kept", Fmt("%.0f things changed", static_cast<double>(Added)));
+			// (a burst far off the field, or not a number, is not kept: no square's number can overflow)
+			const size_t Before = Again.Flattened();
+			Again.AddFlatten(1e12, CY, 2.0, 5.0);
+			Again.AddFlatten(CX, -1e11, 2.0, 5.0);
+			Again.AddFlatten(-40.0, CY, 2.0, 5.0);
+			Again.AddFlatten(std::nan(""), CY, 2.0, 5.0);
+			Check(Again.Flattened() == Before, "lodged: a burst more than 30 m off the field (or not a number) is not kept",
+			      Fmt("%.0f kept", static_cast<double>(Again.Flattened() - Before)));
+			// A hot spot (the contract review's case): 70 heavy rounds 19 m round an 8 m square, none reaching within 3 m of
+			// its middle, then a light mortar at its middle. Every thing within 3 m of the middle must lie as with the
+			// mortar alone (on a fourth ground): the square's cap keeps those reaching deepest into it, not the widest.
+			LandField::Ground Fourth(Fd);
+			{
+				const double HX = std::floor((CX - 150.0) / 8.0) * 8.0 + 4.0, HY = std::floor(CY / 8.0) * 8.0 + 4.0;
+				for (int K = 0; K < 70; ++K)
+				{
+					const double A = 6.283185307179586 * K / 70.0;
+					Again.AddFlatten(HX + 19.0 * std::cos(A), HY + 19.0 * std::sin(A), 5.0, 12.5);
+				}
+				Again.AddFlatten(HX, HY, 1.0, 2.5);
+				Fourth.AddFlatten(HX, HY, 1.0, 2.5);
+				std::vector<Placed> Hot, Alone;
+				Again.Clutter(HX - 3.0, HY - 3.0, HX + 3.0, HY + 3.0, Hot);
+				Fourth.Clutter(HX - 3.0, HY - 3.0, HX + 3.0, HY + 3.0, Alone);
+				long Near = 0, HotDiffer = Hot.size() == Alone.size() ? 0 : 1, Lean = 0;
+				for (size_t N = 0; N < Hot.size() && N < Alone.size(); ++N)
+				{
+					if (std::hypot(Hot[N].X - HX, Hot[N].Y - HY) >= 3.0) continue;
+					++Near;
+					Lean += Alone[N].Lodge > 0.0f ? 1 : 0;
+					HotDiffer += Same(Hot[N], Alone[N]) ? 0 : 1;
+				}
+				Check(HotDiffer == 0 && Lean > 0, "lodged: at a hot spot (70 heavy rounds round a square) a light round in its middle still lays its things over as alone",
+				      Fmt("%.0f differ of ", static_cast<double>(HotDiffer)) + Fmt("%.0f within 3 m, ", static_cast<double>(Near)) + Fmt("%.0f laid over", static_cast<double>(Lean)));
+			}
+			// The ground changed by more than the blasts while a square is held (a burn added mid-battle, with a round at the
+			// same place): the carpet makes the square again whole, and every held square equals the field's, thing for thing.
+			{
+				LandCarpet::Squares Cb;
+				Cb.Reach.assign(Kinds, 1e9);
+				Cb.CopyOf = [](const Placed& P) { return static_cast<int32_t>(P.Kind); };
+				std::vector<std::vector<Placed>> Meshes(Kinds);
+				std::vector<LandCarpet::Op> Ops;
+				long Wrong = 0;
+				const auto Apply = [&]() {
+					for (const LandCarpet::Op& O : Ops)
+					{
+						if (O.Copy == -1 && O.Slot == -1)
+						{
+							for (auto& M : Meshes) M.clear();
+							continue;
+						}
+						if (O.Copy < 0 || O.Copy >= Kinds)
+						{
+							++Wrong;
+							continue;
+						}
+						auto& M = Meshes[static_cast<size_t>(O.Copy)];
+						if (O.bPop)
+						{
+							if (M.empty() || O.Slot + 1 != static_cast<int32_t>(M.size())) ++Wrong;
+							else
+								M.pop_back();
+						}
+						else if (O.Slot == static_cast<int32_t>(M.size()))
+							M.push_back(O.Thing);
+						else if (O.Slot >= 0 && O.Slot < static_cast<int32_t>(M.size()))
+							M[static_cast<size_t>(O.Slot)] = O.Thing;
+						else
+							++Wrong;
+					}
+				};
+				const double BX = CX + 3.0, BY = CY;
+				for (int Frame = 0; Frame < 240; ++Frame)
+				{
+					if (Frame == 60)
+					{
+						Fourth.AddFlatten(BX, BY, 2.2, 5.5);
+						Fourth.AddBurn(BX, BY, 2.0, 5.0); // (within the round's reach: a burn reaching farther is not the carpet's to lay again, AddBurn)
+					}
+					Ops.clear();
+					Cb.Update(Fourth, CX - 10.0, CY, CX + 30.0, CY, Frame == 0, 4, Frame / 60.0, Ops);
+					Apply();
+				}
+				std::map<std::tuple<int, float, float>, Placed> Held;
+				size_t Laid = 0;
+				for (const auto& M : Meshes)
+				{
+					Laid += M.size();
+					for (const Placed& P : M) Held[{ static_cast<int>(P.Kind), P.X, P.Y }] = P;
+				}
+				size_t Fresh = 0;
+				long Stale = 0;
+				for (int J = static_cast<int>(std::floor((CY - 90.0) / 16.0)); J <= static_cast<int>(std::floor((CY + 90.0) / 16.0)); ++J)
+					for (int I = static_cast<int>(std::floor((CX - 100.0) / 16.0)); I <= static_cast<int>(std::floor((CX + 110.0) / 16.0)); ++I)
+					{
+						if (!Cb.Holds(I, J)) continue;
+						std::vector<Placed> Now;
+						Fourth.Clutter(I * 16.0, J * 16.0, (I + 1) * 16.0, (J + 1) * 16.0, Now);
+						for (const Placed& P : Now)
+						{
+							++Fresh;
+							const auto Found = Held.find({ static_cast<int>(P.Kind), P.X, P.Y });
+							if (Found == Held.end() || !Same(Found->second, P)) ++Stale;
+						}
+					}
+				Check(Wrong == 0 && Stale == 0 && Laid == Fresh && Fresh > 0, "lodged: a burn added mid-battle where a round fell: the held squares made again whole, each equal to the field's",
+				      Fmt("%.0f wrong ops, ", static_cast<double>(Wrong)) + Fmt("%.0f stale, ", static_cast<double>(Stale)) + Fmt("%.0f laid against ", static_cast<double>(Laid)) + Fmt("%.0f in the field", static_cast<double>(Fresh)));
+			}
+			// The cost: an 8 m square of the clutter laid with 0, 1 and 20 rounds reaching into it (away from the barrage).
+			const double SX = std::floor((CX + 150.0) / 8.0) * 8.0, SY = std::floor(CY / 8.0) * 8.0;
+			auto Time = [&Again, SX, SY]() {
+				std::vector<Placed> Sq8;
+				const auto T2 = std::chrono::steady_clock::now();
+				for (int K = 0; K < 300; ++K)
+				{
+					Sq8.clear();
+					Again.Clutter(SX, SY, SX + 8.0, SY + 8.0, Sq8);
+				}
+				return std::make_pair(Seconds(T2) * 1e6 / 300.0, Sq8.size());
+			};
+			const auto None = Time();
+			Again.AddFlatten(SX + 4.0, SY + 4.0, 2.2, 5.5);
+			const auto One = Time();
+			for (int K = 0; K < 19; ++K) Again.AddFlatten(SX + 0.4 + 7.2 * ((K % 5) / 4.0), SY + 0.4 + 7.2 * ((K / 5) / 3.0), 0.6, 1.5);
+			const auto Twenty = Time();
+			std::printf("    Clutter of one 8 m square (%zu things): %.0f microseconds with no round in reach, %.0f with 1, %.0f with 20\n", None.second, None.first, One.first, Twenty.first);
+			// Memory: 5,000 rounds over the whole field.
+#if defined(__GLIBC__)
+			const size_t Heap0 = mallinfo2().uordblks;
+#else
+			const size_t Heap0 = 0;
+#endif
+			const size_t Kept0 = Again.Flattened();
+			unsigned Lcg2 = 99u;
+			auto Draw2 = [&Lcg2]() { Lcg2 = Lcg2 * 1664525u + 1013904223u; return (Lcg2 >> 8) / 16777216.0; };
+			const auto T3 = std::chrono::steady_clock::now();
+			for (int K = 0; K < 5000; ++K)
+			{
+				const double Core = 1.0 + 3.5 * Draw2() * Draw2();
+				Again.AddFlatten(Fd.Width() * Draw2(), Fd.Depth() * Draw2(), Core, std::min(15.0, 2.2 * Core));
+			}
+			const double Each = Seconds(T3) * 1e6 / 5000.0;
+#if defined(__GLIBC__)
+			const size_t Heap1 = mallinfo2().uordblks;
+#else
+			const size_t Heap1 = 0;
+#endif
+			std::printf("    5,000 more rounds over the field: %.1f microseconds a call, %zu kept, the heap %.2f MB larger (glibc's count)\n", Each, Again.Flattened() - Kept0,
+				(static_cast<double>(Heap1) - static_cast<double>(Heap0)) / 1048576.0);
+		}
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -2022,6 +2462,16 @@ int main(int Argc, char** Argv)
 		{
 			double BX = 0.0, BY = 0.0, BCore = 0.0, BOuter = 0.0;
 			if (std::sscanf(At, "%lf %lf %lf %lf", &BX, &BY, &BCore, &BOuter) == 4) GroundMade.AddBurn(BX, BY, BCore, BOuter);
+			At = std::strchr(At, ';');
+			if (At) ++At;
+		}
+	// (shell holes' blasts for a picture, LAND_FIELD_FLATTEN="x y core outer; ...": the growth laid over round them, on
+	// trial "lodged"; the picture also takes the clutter away within 1.2 x core, the holes' bare earth, word or not)
+	if (const char* Blasts = std::getenv("LAND_FIELD_FLATTEN"))
+		for (const char* At = Blasts; At && *At;)
+		{
+			double BX = 0.0, BY = 0.0, BCore = 0.0, BOuter = 0.0;
+			if (std::sscanf(At, "%lf %lf %lf %lf", &BX, &BY, &BCore, &BOuter) == 4) GroundMade.AddFlatten(BX, BY, BCore, BOuter);
 			At = std::strchr(At, ';');
 			if (At) ++At;
 		}
@@ -2537,7 +2987,7 @@ int main(int Argc, char** Argv)
 		std::printf("  far crowns (GS9), triangles:%s\n", Line.c_str());
 		Check(Crowns > 0 && Bad.empty(), "the trees far off as crowns of 30 to 48 triangles, inside the tree, faces out, darker beneath", Bad.empty() ? Fmt("%.0f trees", Crowns) : "wrong:" + Bad);
 		// (on trial "farcrowns": the crown CrownLobed makes in CrownOf's place, by the class it reads from the far mesh:
-		// a broadleaf in lobes, 48 to 66 triangles; a conifer in two skirts, 30 to 40; a palm as CrownOf's)
+		// a broadleaf in lobes, 48 to 66 triangles; a conifer in three skirts of eight sides, 54; a palm as CrownOf's)
 		if (F.Tried("farcrowns"))
 		{
 			std::string Lobed, Wrong;
@@ -2646,7 +3096,7 @@ int main(int Argc, char** Argv)
 				Lobed += std::string(" ") + BaseNames[static_cast<int>(B)] + " (" + Bm.Name + ", " + (Class == 0 ? "broadleaf" : Class == 1 ? "conifer" : Class == 2 ? "palm" : Class == 3 ? "column" : "none") +
 					Fmt(", width/height %.2f,", Narrow) + Fmt(" foot/top %.2f)", Taper) + Fmt(" far %.0f,", static_cast<double>(Bm.Far.Tris())) + Fmt(" crown %.0f ->", static_cast<double>(Was)) + Fmt(" %.0f", static_cast<double>(Now)) +
 					(bMeasured ? Fmt(", heart %.2f", HeartLeast) + Fmt("-%.2f of cap", Heart) + Fmt(" (%.2f of the lightest),", Whole) + Fmt(" lobes span %.0f%% of its leaves", 100.0 * Cover) : std::string()) + ";";
-				const bool bFits = Class == 0 ? Now >= 48 && Now <= 66 : Class == 1 ? Now >= 30 && Now <= 40 : Class == 3 ? Now >= 30 && Now <= 66 : Now == Was;
+				const bool bFits = Class == 0 ? Now >= 48 && Now <= 66 : Class == 1 ? Now == 54 : Class == 3 ? Now >= 30 && Now <= 66 : Now == Was;
 				if (!bFits || !bFinite || !bInside || !bOut || !bDark || !bHeart || Cover < 0.8)
 					Wrong += std::string(" ") + BaseNames[static_cast<int>(B)] + (!bFits ? " (triangles)" : "") + (!bFinite ? " (not finite)" : "") + (!bInside ? " (outside the tree)" : "") + (!bOut ? " (a face in)" : "") +
 						(!bDark ? " (not darker beneath)" : "") + (!bHeart ? " (heart)" : "") + (Cover < 0.8 ? " (cover)" : "");
@@ -2679,7 +3129,7 @@ int main(int Argc, char** Argv)
 					const double Nb = static_cast<double>(G.Instances(B).size());
 					std::printf("    dumped %s (%s): %zu standing, mean scale %.3f across, %.3f up\n", BaseNames[static_cast<int>(B)], Bm.Name.c_str(), G.Instances(B).size(), Sc / Nb, Sz / Nb);
 				}
-			Check(Wrong.empty(), "the trial \"farcrowns\": each tree's crown by its class (lobes 48 to 66 triangles, a column's 30 to 66, a conifer's skirts 30 to 40, a palm as before), finite, inside the tree, faces out, darker beneath, its heart 0.40 to 0.55 of its cap, its lobes at the height of 80% of its leaves", Wrong.empty() ? std::string("all") : "wrong:" + Wrong);
+			Check(Wrong.empty(), "the trial \"farcrowns\": each tree's crown by its class (lobes 48 to 66 triangles, a column's 30 to 66, a conifer's three skirts 54, a palm as before), finite, inside the tree, faces out, darker beneath, its heart 0.40 to 0.55 of its cap, its lobes at the height of 80% of its leaves", Wrong.empty() ? std::string("all") : "wrong:" + Wrong);
 		}
 	}
 	Check(BadCards.empty() && Carded == 10, "the hedge shrubs and the trees have their leaf cards, each point its place on the leaves' picture, and no other mesh has any",
@@ -3260,6 +3710,13 @@ int main(int Argc, char** Argv)
 						continue;
 					}
 					auto& Place = M[static_cast<size_t>(O.Slot)];
+					if (O.bRepose)
+					{
+						// (on trial, "lodged": a held thing re-posed in its own place, laid over)
+						if (O.bHide || !Place.first || Place.second.X != O.Thing.X || Place.second.Y != O.Thing.Y || Place.second.Kind != O.Thing.Kind) ++BadOps;
+						Place.second = O.Thing;
+						continue;
+					}
 					if (bCompact)
 					{
 						const auto& Back = M.back().second;
@@ -3433,6 +3890,8 @@ int main(int Argc, char** Argv)
 			      Fmt("worst %.2f ms against %.2f ms, ", WorstCut, OldWorst) + Fmt("%.0f frames", SlowestFill));
 		}
 	}
+	// (on trial, "lodged": the growth laid over round shell holes, LodgedTrial)
+	if (F.Tried("lodged")) LodgedTrial(F, Key);
 
 	// The footprint shade under a tank, a gun, a standing man and a prone one (LandShade, the art director's cut 4 fix
 	// 3): laid without a fold or an overlap (it multiplies, so an overlap would be a dark seam), deepest under the

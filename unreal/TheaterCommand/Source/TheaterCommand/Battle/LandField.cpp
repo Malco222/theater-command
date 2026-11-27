@@ -839,6 +839,57 @@ namespace LandField
 		};
 		std::unordered_map<uint64_t, std::vector<Burn>> BurnSquares;
 		std::vector<Col> BaseMean;
+		/** Ground laid over by shells' blasts (on trial, "lodged": Ground::AddFlatten; none unless the game gives some).
+		 * A round: its burst, the hole's rim (Core) and where all stands again (Outer); Plateau, within which every thing
+		 * that may lie lies its fullest whatever the edge's wander; Reach, past which nothing moves; its edge's wander
+		 * round the burst (Lobe and Phase, from its own place: no shared draw). Lodgings: those kept, as they came (for
+		 * the carpet); LodgeSquares: the same by the clutter's 8 m squares each one's reach meets, at most LodgeKeep a
+		 * square, those reaching deepest into it (LodgeNearer).
+		 * LodgeCap: each base's most lean (radians; 0, never), made at the first round. */
+		struct Lodging
+		{
+			float X = 0.0f, Y = 0.0f, Core = 0.0f, Outer = 0.0f, Plateau = 0.0f, Reach = 0.0f;
+			float Phase[3] = {};
+			uint8_t Lobe[3] = {};
+		};
+		bool bLodged = false;
+		std::vector<Lodging> Lodgings;
+		std::unordered_map<uint64_t, std::vector<Lodging>> LodgeSquares;
+		std::vector<float> LodgeCap;
+		/** A square keeps at most this many rounds, those reaching deepest into it (LodgeNearer's first). */
+		static constexpr size_t LodgeKeep = 64;
+		/** Whether round A reaches deeper into the 8 m square whose middle is MX, MY than round B (its burst's distance
+		 * from the middle less its reach the smaller; alike, LodgeFirst): a total order of the square's own, so the
+		 * rounds it keeps never hang on the order they came in; and a round wholly under another (LodgeUnder) never comes
+		 * before it, so dropping the one under is never undone by the cap. */
+		static bool LodgeNearer(const Lodging& A, const Lodging& B, double MX, double MY)
+		{
+			const double GA = std::hypot(static_cast<double>(A.X) - MX, static_cast<double>(A.Y) - MY) - A.Reach;
+			const double GB = std::hypot(static_cast<double>(B.X) - MX, static_cast<double>(B.Y) - MY) - B.Reach;
+			if (GA != GB) return GA < GB;
+			return LodgeFirst(A, B);
+		}
+		/** A round's edge at a bearing (radians from east), as a share over its Outer: some 20 % at most either way, in
+		 * lobes 3 to 6 and 9 to 14 round it and a lopsided stretch, each its own. */
+		static double LodgeWander(const Lodging& L, double Bearing)
+		{
+			return 0.1 * std::sin(L.Lobe[0] * Bearing + L.Phase[0]) + 0.06 * std::sin(L.Lobe[1] * Bearing + L.Phase[1]) + 0.04 * std::sin(L.Lobe[2] * Bearing + L.Phase[2]);
+		}
+		/** Whether round A comes before round B where they lay a thing over alike: the wider first, then by place; so a
+		 * thing's lean and its way never hang on the order the rounds came in. */
+		static bool LodgeFirst(const Lodging& A, const Lodging& B)
+		{
+			if (A.Outer != B.Outer) return A.Outer > B.Outer;
+			if (A.X != B.X) return A.X < B.X;
+			if (A.Y != B.Y) return A.Y < B.Y;
+			return A.Core < B.Core;
+		}
+		/** Whether round B lays every thing round A over at least as far as A does and wins where alike: A's whole reach
+		 * inside B's plateau, B first. */
+		static bool LodgeUnder(const Lodging& A, const Lodging& B)
+		{
+			return LodgeFirst(B, A) && std::hypot(static_cast<double>(A.X) - B.X, static_cast<double>(A.Y) - B.Y) + A.Reach <= B.Plateau;
+		}
 
 		std::vector<HedgeLine> HedgeOut;
 		std::vector<HedgeOpening> OpeningOut;
@@ -908,6 +959,8 @@ namespace LandField
 		void TakeUpTallLowKit();
 		void MakeFeet();
 		void AddBurn(double X, double Y, double Core, double Outer);
+		void AddFlatten(double X, double Y, double Core, double Outer);
+		void LodgeAt(Placed& P, uint64_t H, const std::vector<Lodging>& Rounds, const GrassFoot* Foot0, const GrassFoot* Foot1) const;
 		void MakeSites();
 		struct House ChurchYard(V2 C, double Yaw) const;
 		void LayChurch(V2 C, double Yaw, int Hurt);
@@ -1583,6 +1636,7 @@ namespace LandField
 		bTone = !Fd.Trial.empty() && Fd.Tried("fieldtone"); // (each field its own tone: on trial)
 		bPlough = Sp && !Fd.Trial.empty() && Fd.Tried("ploughland"); // (the steppe's fallows as ploughland: on trial)
 		bRoadLine = !Fd.Trial.empty() && Fd.Tried("roadline"); // (the lanes' staircases straightened: on trial)
+		bLodged = !Fd.Trial.empty() && Fd.Tried("lodged"); // (the growth laid over round shell holes: on trial, AddFlatten)
 		std::vector<uint8_t> RgOf(Fd.Grounds.size(), RgOpen), RoadOf(Fd.Grounds.size(), 0);
 		FxOfCell.assign(Fd.Grounds.size(), 0);
 		for (size_t K = 0; K < Fd.Grounds.size(); ++K)
@@ -2553,6 +2607,154 @@ namespace LandField
 		for (int J = J0; J <= J1; ++J)
 			for (int I = I0; I <= I1; ++I)
 				BurnSquares[SquareKeyIJ(I, J)].push_back({ static_cast<float>(X), static_cast<float>(Y), static_cast<float>(Core), static_cast<float>(Outer) });
+	}
+
+	void Ground::Impl::AddFlatten(double X, double Y, double Core, double Outer)
+	{
+		if (!bLodged || !std::isfinite(X) || !std::isfinite(Y) || !std::isfinite(Core) || !std::isfinite(Outer) || !(Outer > 0.0)) return;
+		// (a burst more than 30 m off the field touches none of its clutter: not kept, so no square's number can overflow)
+		if (X < -30.0 || Y < -30.0 || X > FW + 30.0 || Y > FH + 30.0) return;
+		Outer = std::min(Outer, 20.0);
+		Core = std::clamp(Core, 0.0, Outer);
+		if (LodgeCap.empty())
+		{
+			// (how far each base may lie: the corn all but flat, kinked low; the tall grass and the flowers a little less;
+			// the tufts less again, their blades already splayed; the bracken pressed, not laid; a region's own slot when it
+			// is blades taller than wide. Never: stones, the cow paths' earth, stubble and the short sward, whose patches
+			// would stand up as walls, the dock already flat)
+			LodgeCap.assign(Bases.size(), 0.0f);
+			const auto Deg = [](double D) { return static_cast<float>(D * Pi / 180.0); };
+			for (size_t B = 0; B < Bases.size(); ++B)
+			{
+				const Base K = static_cast<Base>(B);
+				if (K == Base::Wheat || K == Base::Stalks) LodgeCap[B] = Deg(84.0);
+				else if (K == Base::TallGrass) LodgeCap[B] = Deg(75.0);
+				else if (K == Base::Poppies || K == Base::Flowers) LodgeCap[B] = Deg(72.0);
+				else if (K == Base::Tuft) LodgeCap[B] = Deg(66.0);
+				else if (K == Base::Fern) LodgeCap[B] = Deg(40.0);
+				else if (K >= Base::Clut0 && K < Base::Count && Bases[B].Paint == 2 && Bases[B].Height >= 0.2f && Bases[B].Height >= Bases[B].Radius) LodgeCap[B] = Deg(65.0);
+			}
+		}
+		Lodging L;
+		L.X = static_cast<float>(X);
+		L.Y = static_cast<float>(Y);
+		L.Core = static_cast<float>(Core);
+		L.Outer = static_cast<float>(Outer);
+		L.Plateau = static_cast<float>(std::max(Core, Core + 0.52 * (0.8 * Outer - Core)));
+		L.Reach = static_cast<float>(Core + 1.08 * std::max(1.2 * Outer - Core, 0.0) + 0.05);
+		uint32_t BX = 0, BY = 0;
+		std::memcpy(&BX, &L.X, 4);
+		std::memcpy(&BY, &L.Y, 4);
+		const uint64_t Own = Hash(Seed ^ 0x10D6EDull, BX, BY);
+		L.Lobe[0] = static_cast<uint8_t>(3 + static_cast<int>(4.0 * Unit(Hash(Own, 1))));
+		L.Lobe[1] = static_cast<uint8_t>(9 + static_cast<int>(6.0 * Unit(Hash(Own, 2))));
+		L.Lobe[2] = 1;
+		for (int K = 0; K < 3; ++K) L.Phase[K] = static_cast<float>(2.0 * Pi * Unit(Hash(Own, 3 + static_cast<uint64_t>(K))));
+		const int I0 = static_cast<int>(std::floor((X - L.Reach) / ClutterSquare)), I1 = static_cast<int>(std::floor((X + L.Reach) / ClutterSquare));
+		const int J0 = static_cast<int>(std::floor((Y - L.Reach) / ClutterSquare)), J1 = static_cast<int>(std::floor((Y + L.Reach) / ClutterSquare));
+		// (only the squares its reach's circle meets)
+		const auto Meets = [&](int I, int J) {
+			const double CX = std::clamp(X, I * ClutterSquare, (I + 1) * ClutterSquare), CY = std::clamp(Y, J * ClutterSquare, (J + 1) * ClutterSquare);
+			return Sq(CX - X) + Sq(CY - Y) < Sq(static_cast<double>(L.Reach));
+		};
+		// (a round wholly under one already kept, or the same again, changes nothing: not kept)
+		for (int J = J0; J <= J1; ++J)
+			for (int I = I0; I <= I1; ++I)
+			{
+				if (!Meets(I, J)) continue;
+				const auto Found = LodgeSquares.find(SquareKeyIJ(I, J));
+				if (Found == LodgeSquares.end()) continue;
+				for (const Lodging& O : Found->second)
+					if (LodgeUnder(L, O) || (O.X == L.X && O.Y == L.Y && O.Core == L.Core && O.Outer == L.Outer)) return;
+			}
+		Lodgings.push_back(L);
+		for (int J = J0; J <= J1; ++J)
+			for (int I = I0; I <= I1; ++I)
+			{
+				if (!Meets(I, J)) continue;
+				std::vector<Lodging>& Here = LodgeSquares[SquareKeyIJ(I, J)];
+				Here.erase(std::remove_if(Here.begin(), Here.end(), [&L](const Lodging& O) { return LodgeUnder(O, L); }), Here.end());
+				Here.push_back(L);
+				// (a square keeps the LodgeKeep reaching deepest into it: past that, the edges of those reaching least are lost)
+				if (Here.size() > LodgeKeep)
+				{
+					const double MX = (I + 0.5) * ClutterSquare, MY = (J + 0.5) * ClutterSquare;
+					std::sort(Here.begin(), Here.end(), [MX, MY](const Lodging& A, const Lodging& B) { return LodgeNearer(A, B, MX, MY); });
+					Here.pop_back();
+				}
+			}
+	}
+
+	/** A thing laid over by the blasts' rounds reaching into its square (on trial, "lodged"): the round laying it over
+	 * most wins outright, its way too (alike: LodgeFirst), each thing its own reach, lean and scatter from its own number
+	 * H; then shortened where lying it out would put it into a house, a wall, a bank or a rise of the ground, or (with
+	 * "feet") a bush's or a trunk's footing. Its place, its kind and its tint stay; Yaw turned away from the burst; a
+	 * flower snapped near the hole and the bracken pressed lower (ScaleZ). */
+	void Ground::Impl::LodgeAt(Placed& P, uint64_t H, const std::vector<Lodging>& Rounds, const GrassFoot* Foot0, const GrassFoot* Foot1) const
+	{
+		const size_t B = static_cast<size_t>(P.Kind);
+		const double Cap = B < LodgeCap.size() ? LodgeCap[B] : 0.0;
+		if (Cap <= 0.0) return;
+		const double X = P.X, Y = P.Y;
+		const double Dither = 0.16 * (Unit(Hash(H, 0x10D6E1ull)) - 0.5);
+		double Best = 0.0, Way = 0.0, WonD = 0.0;
+		const Lodging* Won = nullptr;
+		for (const Lodging& L : Rounds)
+		{
+			const double DX = X - L.X, DY = Y - L.Y, D2 = DX * DX + DY * DY;
+			if (D2 >= static_cast<double>(L.Reach) * L.Reach) continue;
+			const double D = std::sqrt(D2), Bearing = std::atan2(DY, DX);
+			double F = 1.0;
+			if (D > L.Plateau)
+			{
+				const double Edge = L.Outer * (1.0 + LodgeWander(L, Bearing));
+				const double S = (D - L.Core) / std::max(Edge - L.Core, 0.05) + Dither;
+				F = 1.0 - 0.85 * Smooth(0.6, 0.92, S) - 0.15 * Smooth(0.92, 1.0, S);
+				if (S >= 1.0) F = 0.0;
+			}
+			if (F <= 0.0) continue;
+			if (F > Best || (F == Best && Won && LodgeFirst(L, *Won)))
+			{
+				Best = F;
+				Way = Bearing;
+				WonD = D;
+				Won = &L;
+			}
+		}
+		if (!Won) return;
+		// (each thing its own: how far it lies at most, 80 degrees give or take 8; near the edge some stand. A flower near
+		// the hole, within 1.5 x its rim, has its stem snapped: it lies as far as it may, pressed into the grass)
+		const bool bSnapped = (P.Kind == Base::Poppies || P.Kind == Base::Flowers) && WonD < 1.5 * Won->Core;
+		double Tip = bSnapped ? Cap : std::min(Cap, (80.0 + 16.0 * (Unit(Hash(H, 0x10D6E2ull)) - 0.5)) * Pi / 180.0 * Best);
+		if (!bSnapped && Tip < 14.0 * Pi / 180.0 * Unit(Hash(H, 0x10D6E3ull))) return;
+		Way += 20.0 * Pi / 180.0 * (Unit(Hash(H, 0x10D6E4ull)) + Unit(Hash(H, 0x10D6E5ull)) - 1.0);
+		// (not into what stands there: its laid-over length asked at its middle and its tip, the lean eased until clear)
+		const double Tall = static_cast<double>(Bases[B].Height) * P.ScaleZ, Cs = std::cos(Way), Sn = std::sin(Way);
+		const auto Clear = [&](double T) {
+			for (const double Along : { 0.5, 1.0 })
+			{
+				const double PX = X + Cs * Tall * std::sin(T) * Along, PY = Y + Sn * Tall * std::sin(T) * Along;
+				if (InRaster(PX, PY) && (OccR[Pix(PX, PY)] & (OcHouse | OcWall))) return false;
+				if (Top(PX, PY, nullptr) > P.Z + Along * Tall * std::cos(T) + 0.03) return false;
+				for (const GrassFoot* Ft = Foot0; Ft && Ft != Foot1; ++Ft)
+					if (Sq(PX - Ft->X) + Sq(PY - Ft->Y) < Sq(Ft->R + 0.1)) return false;
+			}
+			return true;
+		};
+		double Eased = 0.0;
+		for (const double Share : { 1.0, 0.7, 0.45, 0.2 })
+			if (Clear(Tip * Share))
+			{
+				Eased = Tip * Share;
+				break;
+			}
+		if (Eased <= 0.0) return;
+		P.Lodge = static_cast<float>(Eased);
+		P.Yaw = static_cast<float>(Way < 0.0 ? Way + 2.0 * Pi : Way);
+		if (P.Kind == Base::Fern) P.ScaleZ = static_cast<float>(P.ScaleZ * (1.0 - 0.45 * std::min(1.0, Eased / Cap)));
+		if (bSnapped) P.ScaleZ = static_cast<float>(P.ScaleZ * 0.55);
+		// (its Tint is never touched: the game picks a thing's mesh by its tint once, when its square is made, and a
+		// lying thing seen paler is the lighting's, its face turned to the sky; see the painter and the materials)
 	}
 }
 
@@ -8418,15 +8620,17 @@ namespace LandField
 						const double Height = Clamp01((P.Z - Zb) / std::max(1.0, Zt - Zb));
 						const double Outward = Clamp01(std::hypot(P.X - Hub.X, P.Y - Hub.Y) / std::max(0.5, T.CR));
 						const double Grain = Noise3(P.X * 1.7, P.Y * 1.7, P.Z * 1.7, 0x7EAF);
-						// (lit by the crown's height first, the whole crown's top over its underside, then by the lump's own)
-						const double Lit = 0.58 + 0.36 * Height + 0.08 * Outward + 0.14 * Clamp01(Q.Z);
+						// (lit by the crown's height first, the whole crown's top over its underside, then by the lump's own;
+						// its sunlit caps kept low, so that a far-level wood is no lighter over the near-level wood before it
+						// than the old far level was: the art director's Normandy high view, 26 November)
+						const double Lit = 0.58 + 0.21 * Height + 0.08 * Outward + 0.07 * Clamp01(Q.Z);
 						Col Cc = Varied(T.Leaf, Lit * (1.0 + 0.06 * Grain), 0.02 * Grain);
 						Cc = Mixed(Cc, Dark, 0.55 * Clamp01(-1.1 * Q.Z) * (1.0 - 0.5 * Height) + 0.25 * std::pow(1.0 - Height, 1.5));
 						// (its sunlit tops lighter in the leaves' own hue, not toward a yellow: the near tree's leaves on their
 						// cards read cooler and greyer than their paint, so the far tree, which has no cards, is taken a little
 						// cooler and a third of the way to its grey, and stays no warmer, no more saturated and no fatter than the
 						// near tree it follows at the switch, nor more saturated than the grass)
-						Cc = Mixed(Cc, Scaled(T.Leaf, 1.3), 0.5 * T.Light * Clamp01(Q.Z) * (0.4 + 0.6 * Height));
+						Cc = Mixed(Cc, Scaled(T.Leaf, 1.3), 0.3 * T.Light * Clamp01(Q.Z) * (0.4 + 0.6 * Height));
 						Cc = Varied(Cc, 0.95, -0.05);
 						const double Grey = 0.299 * Cc.R + 0.587 * Cc.G + 0.114 * Cc.B;
 						Cc = Mixed(Cc, Rgb(Grey, Grey, Grey), 0.33);
@@ -10431,6 +10635,23 @@ namespace LandField
 	}
 
 	void Ground::AddBurn(double X, double Y, double Core, double Outer) { In->AddBurn(X, Y, Core, Outer); }
+	void Ground::AddFlatten(double X, double Y, double Core, double Outer) { In->AddFlatten(X, Y, Core, Outer); }
+	size_t Ground::Flattened() const { return In->Lodgings.size(); }
+	bool Ground::FlattenRound(size_t K, double& X, double& Y, double& Reach) const
+	{
+		if (K >= In->Lodgings.size()) return false;
+		const Impl::Lodging& L = In->Lodgings[K];
+		X = L.X;
+		Y = L.Y;
+		Reach = L.Reach;
+		return true;
+	}
+	double Ground::FlattenEdge(size_t K, double Bearing) const
+	{
+		if (K >= In->Lodgings.size()) return 0.0;
+		const Impl::Lodging& L = In->Lodgings[K];
+		return L.Core + 1.08 * std::max(L.Outer * (1.0 + Impl::LodgeWander(L, Bearing)) - L.Core, 0.05);
+	}
 
 	void Ground::Clutter(double X0, double Y0, double X1, double Y1, std::vector<Placed>& Out) const
 	{
@@ -10462,6 +10683,13 @@ namespace LandField
 				{
 					const auto Charred = G.BurnSquares.find(SquareKeyIJ(I, J));
 					if (Charred != G.BurnSquares.end()) Burnt = &Charred->second;
+				}
+				// (on trial, "lodged": the blasts' rounds that reach into this square)
+				const std::vector<Impl::Lodging>* Lodged = nullptr;
+				if (!G.LodgeSquares.empty())
+				{
+					const auto Blown = G.LodgeSquares.find(SquareKeyIJ(I, J));
+					if (Blown != G.LodgeSquares.end()) Lodged = &Blown->second;
 				}
 				// (ploughland, on trial: a fallow's weeds and damp read once at the square's nine points 4 m apart, for the
 				// field asked, and between them as the paint's own points are; each a noise of its place, so any box the same)
@@ -10853,6 +11081,8 @@ namespace LandField
 					}
 					// (under snow: buried, or its tips showing through, frosted)
 					if (G.SnowLay && !G.SnowLay->Clutter(P, Seen)) continue;
+					// (on trial, "lodged": laid over outward round a shell hole; its stalks below lie the same way)
+					if (Lodged) G.LodgeAt(P, H, *Lodged, Foot0, Foot1);
 					Out.push_back(P);
 					// (the same corn stalk by stalk, on the same ground, for the lens close by)
 					if (Gr.Kind == Base::Wheat)
@@ -11214,9 +11444,9 @@ namespace LandField
 		const uint64_t Seed = Hash(static_cast<uint64_t>(From.Points()), static_cast<uint64_t>(std::lround(R.High * 100.0)), 0xC40);
 		auto PointAt = [&From](size_t K) { return V3{ From.Positions[K * 3], From.Positions[K * 3 + 1], From.Positions[K * 3 + 2] }; };
 		// The trunk: a three-sided stub from the ground to the crown's foot, a little into it, no higher; the stem's own
-		// colour (a birch's white).
-		auto Stub = [&](double Top) {
-			const double Rt = std::clamp(R.TrunkR * 0.8, 0.12, 0.6);
+		// colour (a birch's white); a conifer's (Girth 0.5) half as thick, its stem a thin line under its skirts.
+		auto Stub = [&](double Top, double Girth) {
+			const double Rt = std::clamp(R.TrunkR * 0.8 * Girth, 0.12 * Girth, 0.6);
 			uint32_t Foot[3], Head[3];
 			for (int K = 0; K < 3; ++K)
 			{
@@ -11236,38 +11466,43 @@ namespace LandField
 		};
 		if (R.Class == 1)
 		{
-			// A conifer: two stacked skirts of eight sides, the lower as wide as the far mesh's lowest boughs, tapering to
-			// the tip. Seen from above a round dark crown with snow on its upper side: some of each skirt's eight upward faces
-			// snow and the rest dark bough, so that the snow's share of the crown's upward face is some 0.7 of the near
-			// firs' (the far mesh's own share is about 1.4 times the near tree's, so about half the far mesh's), and the
-			// dark green of the boughs between and the darker underside show through, as on the near tree.
+			// A conifer: three stacked skirts of eight sides, blunt, the lowest as wide as the near tree's lowest boughs,
+			// each higher one narrower, the top one a small cone to the tip. Its body the far mesh's leaf at 0.7 (darker
+			// than the near fir's own paint, which its own shade darkens and a crown, casting none, has not), its
+			// underside darker. In snow: its tip lighter (the top cone's point, fading down into the bough) and each
+			// upward face of the two lower skirts snow along its rim, fading up to the dark bough at the skirt's apex, so
+			// that from above the crown reads as dark tiers with snow on their rims and a lighter point, and from the
+			// side its body stays dark: no face all snow from rim to apex, which seen from high is a sunlit sliver, the
+			// same way on every crown, a hatch over the wood. And its rims more ragged than in summer, the snow's weight
+			// on them: the far mesh's own snow is whiter than the near tree's (its paint some 233 against 191) and covers
+			// more of it (from straight above some 0.72 of it against 0.45), which a crown must not take over whole.
 			std::vector<double> Foot;
 			for (const size_t K : R.In)
 				if (From.Positions[K * 3 + 2] < R.Lo[2] + 0.4 * Tall) Foot.push_back(std::hypot(From.Positions[K * 3] - CX, From.Positions[K * 3 + 1] - CY));
 			std::sort(Foot.begin(), Foot.end());
-			// (as wide as the far mesh's lowest boughs reach, and a little more: the far mesh's boughs are a little
-			// narrower than the near tree's, some 0.85 of them on the winter spruce)
-			const double Rb = std::min(1.08 * R.Reach - std::hypot(CX, CY), std::max(0.3, Foot.empty() ? 0.25 * Wide : 1.08 * Foot.back()));
-			const Col Snow = Rgb(R.Snow[0], R.Snow[1], R.Snow[2]);
-			// (its boughs darker than the far mesh's paint, its underside darker still: the near fir is dark inside from
-			// its own shade, which a crown, casting none, has not; so that a far fir in a picture is within a tenth of the
-			// near firs' brightness and shows their dark green between its snow)
+			// (as wide as the far mesh's lowest boughs reach and more: the far mesh's boughs are some 0.85 of the near
+			// tree's on the winter spruce, and a crown as slim as them reads slimmer than the near fir; at 1.13 its height
+			// over the width of its outline is the near mesh's own, seen from 10 to 60 degrees down)
+			const double Rb = std::min(1.13 * R.Reach - std::hypot(CX, CY), std::max(0.3, Foot.empty() ? 0.25 * Wide : 1.13 * Foot.back()));
+			// (its snow as the near fir shows it, a third of the way from the far mesh's paint to the bough: no whiter
+			// than the near tree's)
+			const Col Snow = Mixed(Rgb(R.Snow[0], R.Snow[1], R.Snow[2]), Leaf, 0.33);
 			const Col Bough = Scaled(Leaf, 0.7), Under = Varied(Leaf, 0.45, -0.06);
+			const bool bSnowed = R.SnowUp > 0.0;
+			// (a rim's snow 0.6 of the way from the bough to the snow on the winter spruce, less on a tree with less snow
+			// on it: seen from straight above, the snow's amount on the crown some 0.7 of the near firs')
+			const Col SnowedRim = Mixed(Bough, Snow, std::min(1.0, 0.83 * R.SnowUp));
 			// (from the ground up: a far mesh's lowest boughs may dip under it)
 			const double Z0 = std::max(0.0, R.Lo[2]);
-			Stub(Z0 + 0.05 * Tall);
+			Stub(Z0 + 0.05 * Tall, 0.5);
 			struct Skirt
 			{
 				double Rim, Radius, Apex, Hollow;
-				int SnowRim;
 			};
-			// (the share of each skirt's upward faces under snow, by count: on the lower some 0.6 of the far mesh's own share,
-			// on the upper, which the snow lies on more, 0.8 of it; seen from above, weighed by how much of each face shows,
-			// some 0.5 of the far mesh's share, 0.7 of the near firs')
-			const Skirt Skirts[2] = { { Z0 + 0.03 * Tall, Rb, Z0 + 0.66 * Tall, Z0 + 0.2 * Tall, static_cast<int>(std::lround(8.0 * 0.6 * R.SnowUp)) },
-				{ Z0 + 0.42 * Tall, 0.64 * Rb, R.Hi[2], Z0 + 0.55 * Tall, static_cast<int>(std::lround(8.0 * 0.8 * R.SnowUp)) } };
+			const Skirt Skirts[3] = { { Z0 + 0.03 * Tall, Rb, Z0 + 0.42 * Tall, Z0 + 0.16 * Tall }, { Z0 + 0.28 * Tall, 0.72 * Rb, Z0 + 0.80 * Tall, Z0 + 0.37 * Tall },
+				{ Z0 + 0.68 * Tall, 0.36 * Rb, R.Hi[2], Z0 + 0.76 * Tall } };
 			constexpr int Sides = 8;
-			for (int Sk = 0; Sk < 2; ++Sk)
+			for (int Sk = 0; Sk < 3; ++Sk)
 			{
 				const Skirt& S = Skirts[Sk];
 				const double Turn = 2.0 * Pi * Unit(Hash(Seed, static_cast<uint64_t>(Sk)));
@@ -11279,23 +11514,26 @@ namespace LandField
 				for (int K = 0; K < Sides; ++K)
 				{
 					const double A = Turn + 2.0 * Pi * K / Sides;
-					// (each rim corner a little in or out and up or down, so the skirt's edge is not one ruled line)
-					const double J = 1.0 + 0.06 * (2.0 * Unit(Hash(Seed, static_cast<uint64_t>(Sk), static_cast<uint64_t>(K))) - 1.0);
-					const double Dz = 0.04 * Tall * (2.0 * Unit(Hash(Seed ^ 0x5C1, static_cast<uint64_t>(Sk), static_cast<uint64_t>(K))) - 1.0);
+					// (each rim corner a little in or out and up or down, so the skirt's edge is not one ruled line; in snow
+					// more, 0.2 of its reach and 0.08 of the tree's height, so that from high no two crowns' tiers line up)
+					const double J = 1.0 + (bSnowed ? 0.2 : 0.06) * (2.0 * Unit(Hash(Seed, static_cast<uint64_t>(Sk), static_cast<uint64_t>(K))) - 1.0);
+					const double Dz = (bSnowed ? 0.08 : 0.04) * Tall * (2.0 * Unit(Hash(Seed ^ 0x5C1, static_cast<uint64_t>(Sk), static_cast<uint64_t>(K))) - 1.0);
 					Out8[K] = V3{ std::cos(A), std::sin(A), 0.0 };
-					Ring[K] = V3{ CX, CY, std::max(S.Rim + Dz, Z0) } + Out8[K] * (S.Radius * J);
+					// (never out past 1.145 of the far tree's reach: the crown no wider than the tree a step nearer, give or
+					// take its widening)
+					Ring[K] = V3{ CX, CY, std::max(S.Rim + Dz, Z0) } + Out8[K] * (bSnowed ? std::min(S.Radius * J, 1.145 * R.Reach - std::hypot(CX, CY)) : S.Radius * J);
 					Down[K] = Bd.Vert(Ring[K], Unit3(Out8[K] * 0.4 + V3{ 0, 0, -1 }), Under);
 				}
 				for (int K = 0; K < Sides; ++K)
 				{
 					const int J = (K + 1) % Sides;
 					const V3 Mid = (Ring[K] + Ring[J]) * 0.5;
-					// (each upward face one colour, snow or dark bough, its corners its own: the snow's corners shared with the
-					// boughs' would spread a pale wash over every face, and the dark green would not show from any side)
-					const bool bSnow = (K + 1) * S.SnowRim / Sides > K * S.SnowRim / Sides;
-					const Col Face = bSnow ? Mixed(Snow, Leaf, 0.12) : Bough;
-					const uint32_t ApexI = Bd.Vert(Apex, { 0, 0, 1 }, Face);
-					const uint32_t UpK = Bd.Vert(Ring[K], Unit3(Out8[K] + V3{ 0, 0, Slope }), Face), UpJ = Bd.Vert(Ring[J], Unit3(Out8[J] + V3{ 0, 0, Slope }), Face);
+					// (each upward face its own corners: in snow a lower skirt's rim corners its snow and its apex the bough,
+					// the top cone's point 0.6 of the way to the snow and its rim the bough; out of snow all bough)
+					const Col RimPaint = bSnowed && Sk < 2 ? SnowedRim : Bough;
+					const Col TipPaint = bSnowed && Sk == 2 ? Mixed(Bough, Snow, 0.6) : Bough;
+					const uint32_t ApexI = Bd.Vert(Apex, { 0, 0, 1 }, TipPaint);
+					const uint32_t UpK = Bd.Vert(Ring[K], Unit3(Out8[K] + V3{ 0, 0, Slope }), RimPaint), UpJ = Bd.Vert(Ring[J], Unit3(Out8[J] + V3{ 0, 0, Slope }), RimPaint);
 					TriFacing(Out, ApexI, UpK, UpJ, Unit3(Mid - V3{ CX, CY, Mid.Z }) + V3{ 0, 0, 0.2 });
 					TriFacing(Out, HollowI, Down[J], Down[K], V3{ 0, 0, -1 });
 				}
@@ -11460,7 +11698,7 @@ namespace LandField
 		}
 		double FootZ = 1e9;
 		for (const Lobe& Lb : Lobes) FootZ = std::min(FootZ, Lb.O.Z - 0.55 * Lb.RZ);
-		Stub(std::max(0.3, FootZ));
+		Stub(std::max(0.3, FootZ), 1.0);
 		// (a little greyer than the far mesh's, never more saturated than the grass beside it)
 		auto Greyer = [](const Col& C) { const double G = 0.299 * C.R + 0.587 * C.G + 0.114 * C.B; return Mixed(C, Rgb(G, G, G), 0.06); };
 		for (size_t L = 0; L < Lobes.size(); ++L)

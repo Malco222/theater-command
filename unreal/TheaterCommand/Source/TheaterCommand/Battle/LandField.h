@@ -521,6 +521,9 @@ namespace LandField
 		float X = 0.0f, Y = 0.0f, Z = 0.0f;
 		float Yaw = 0.0f, Scale = 1.0f, ScaleZ = 1.0f;
 		Rgb8 Tint;
+		/** Clutter laid over by a shell's blast (Ground::AddFlatten, on trial "lodged"): radians from upright, the thing
+		 * tipped over about its foot toward its own local +X after Yaw (Yaw then turned away from the burst). 0 upright. */
+		float Lodge = 0.0f;
 	};
 
 	/** A region's kit house's footing (Ground::Footings): the stone under its walls from the lowest ground beneath its
@@ -676,6 +679,25 @@ namespace LandField
 		 * asked for, from one thread; a square already laid by its caller is not laid again by this.
 		 */
 		void AddBurn(double X, double Y, double Core, double Outer);
+		/**
+		 * A shell's burst at X, Y (on trial, "lodged"; with the word off nothing at all): the corn and the grass round it
+		 * laid over outward, away from the burst, for the rest of the battle (Placed::Lodge). Core: the hole's rim (inside
+		 * it the game shows bare earth), metres; Outer: where all stands again (about 2.5 x Core in corn, 1.8 x Core in
+		 * grass; at most 20 m), its edge wandering some 20 % round the burst. Within Core and a little beyond, the growth
+		 * lies almost flat (some 80 degrees, each thing its own); toward Outer less and less, some standing. Where rounds
+		 * overlap the one laying a thing over most counts for it, whatever the order they came in, before or after its
+		 * square was laid. Stones, trodden earth, stubble and the short sward never move; nothing is added or taken away.
+		 * Game thread only, any time, any number of times (a round wholly under one already there is not kept); never
+		 * read by At, HeightAt or the other any-thread questions. The clutter's squares already laid are laid again by
+		 * their caller: LandCarpet reads Flattened and FlattenRound for that.
+		 */
+		void AddFlatten(double X, double Y, double Core, double Outer);
+		/** The rounds AddFlatten kept, in the order they came (a round not kept, wholly under another, is not counted). */
+		size_t Flattened() const;
+		/** Round K's burst and the farthest any thing may be laid over by it, metres (false past the last). */
+		bool FlattenRound(size_t K, double& X, double& Y, double& Reach) const;
+		/** Round K's edge at a bearing from its burst (radians from east): past it nothing is laid over by it (tests). */
+		double FlattenEdge(size_t K, double Bearing) const;
 
 		/** The hedgerows' and walls' lines (tests, maps). */
 		const std::vector<HedgeLine>& Hedges() const;
