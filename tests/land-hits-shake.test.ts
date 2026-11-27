@@ -7,10 +7,11 @@ import { describe, expect, it } from 'vitest';
 import { LAND, LandBattle, PRACTICE_GROUNDS, practiceTicket, withTeams } from '../src/battle/land';
 import { LiveBattle } from '../src/battle/land/live';
 
-type Tick = { dmg: number; nerve: number; own: number; n: number };
+type Tick = { dmg: number; nerve: number; own: number; w: number; n: number };
 type Peek = { tickNerve(h: Tick): number };
+// (one tick's blows on one block, tallied as landBlow tallies them with hitsShake on: own, w and n)
 const tick = (blows: [number, number][]): Tick =>
-  blows.reduce((h, [dmg, nerve]) => ({ dmg: h.dmg + dmg, nerve: h.nerve + nerve, own: h.own + nerve * dmg, n: h.n + 1 }), { dmg: 0, nerve: 0, own: 0, n: 0 });
+  blows.reduce((h, [dmg, nerve]) => ({ dmg: h.dmg + dmg, nerve: h.nerve + nerve, own: h.own + nerve * dmg, w: h.w + nerve, n: h.n + 1 }), { dmg: 0, nerve: 0, own: 0, w: 0, n: 0 });
 const ticket = (terrain = 'urban', seed = 3) => withTeams(practiceTicket(PRACTICE_GROUNDS.find((p) => p.terrain === terrain)!, { seed }));
 
 describe('only the hits that land shake a unit', () => {
@@ -32,6 +33,24 @@ describe('only the hits that land shake a unit', () => {
     expect(p.tickNerve(tick([[0.003, 2.5]]))).toBeCloseTo(2.5, 12);
     // no harm at all: the weights' mean (only what was held back for the air reads it)
     expect(p.tickNerve(tick([[0, 2], [0, 4]]))).toBe(3);
+  });
+
+  it('on, tallies every blow where it lands (landBlow), a support team\'s as any other, so the teams rule\'s mix agrees', () => {
+    const b = new LandBattle(ticket());
+    const p = b as unknown as { tickNerve(h: object): number; landBlow(h: object, u: object, blow: { dmg: number; nerve: number }): void };
+    b.hitsShake = true; b.teamsRule = true;
+    const team = b.units.find((u) => u.team === 'mg' || u.team === 'mor')!, line = b.units.find((u) => !u.team && u.side === team.side)!;
+    const h = { dmg: 0, nerve: 0, from: [], blind: true, team: 0, teamNerve: 0 };
+    p.landBlow(h, team, { dmg: 0.002, nerve: 2 });
+    p.landBlow(h, line, { dmg: 0.001, nerve: 1 });
+    // each weight on its own harm; the teams rule's own mix, the others' sum on the others' harm and the team's own, is the same here
+    expect(p.tickNerve(h) * 0.003).toBeCloseTo(0.002 * 2 + 0.001 * 1, 12);
+    expect(p.tickNerve(h)).toBeCloseTo(((0.003 - h.team) * h.nerve + h.teamNerve) / 0.003, 12);
+    // off: nothing of hitsShake's is tallied, and the tick reads h.nerve as before
+    const c = new LandBattle(ticket()), q = c as unknown as typeof p, k = { dmg: 0, nerve: 0, from: [], blind: true, team: 0, teamNerve: 0 } as Record<string, unknown>;
+    q.landBlow(k, line, { dmg: 0.001, nerve: 1 });
+    expect('own' in k || 'w' in k || 'n' in k).toBe(false);
+    expect(q.tickNerve(k)).toBe(k.nerve);
   });
 
   it('reads its refits in place of the values they name only while on (DD 26 Nov 13:36Z)', () => {
