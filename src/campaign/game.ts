@@ -82,6 +82,7 @@ import { floorWords, witherAt, witherDrop, witherFed, witherMonth, withered } fr
 import { pressTanks, pressedMonth, pressedOn, pressedWords } from './pressed';
 import { slowedByFire, FIRES } from './dumpfires';
 import { heldTheLine, heldWords } from './heldline';
+import { edge, wornMonth } from './wornout';
 import { diaryMonth } from './diary';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
@@ -1931,6 +1932,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // Tanks that cannot get over a river whose bridges are down are no help to the infantry that does.
   const armsA = wide ? combinedArms(g, land ? attackers.filter((c) => !noCrossing(g, c.kind, c.reg, target.id)) : attackers, target, false) : null, armsD = wide && !town ? combinedArms(g, defenders, target, true) : null;
   let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1, shortA = 1, shortD = 1, spied = '', streets = false;
+  // (Release 2, wornout.ts) The most any corps of each side has lost of its edge to its months in the line: 0 with the switch off.
+  let spentA = 0, spentD = 0;
   // (Brian, 22 November, release 2: 'Busier, mostly watchers'.) An enemy watcher on the player's ground that mapped its defences.
   let watched: { nat: string; by: string; found: boolean; mul: number } | null = null;
   // Armies that have outrun their railhead: how far the worst of them is from it, and what it is worth there.
@@ -2011,6 +2014,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (wide) { const spy = intelAttack(g, c.nat, target); if (spy) { p *= spy.mul; if (spy.foe) { if (!watched || (watched.by !== spy.foe && c.nat === spy.foe)) watched = { nat: spy.foe, by: c.nat, found: !!spy.found, mul: spy.mul }; } else spied = spy.agent; } }
     // Troops in good heart hit harder, and shaken ones do not (the grand campaign: nobody else carries morale).
     p *= heart(c);
+    // (Release 2, wornout.ts, behind its switch) Months in the line wear a corps' edge down: exactly 1 with the switch off.
+    if (c.spent) { p *= edge(c); spentA = Math.max(spentA, c.spent); }
     if (g.nations[c.nat].slowCommand) p *= 0.85;
     p *= techMul(g, c.nat, 'doctrine');
     if (opts.sea !== undefined) p *= opts.sea;
@@ -2097,6 +2102,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (wide) { const gift = traitDefence(g, d, target); if (gift !== 1) { p *= gift; giftD = Math.max(giftD, gift); } }
     if (wide) { const short = shortDefence(g, d); if (short !== 1) { p *= short; shortD = Math.min(shortD, short); } }
     p *= heart(d);
+    if (d.spent) { p *= edge(d); spentD = Math.max(spentD, d.spent); }
     const proud = storyDefence(g, d, target, attackers);
     if (proud !== 1) { p *= proud; proudD = Math.max(proudD, proud); }
     const lead = cmdDefence(g, d);
@@ -2442,6 +2448,14 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     const value = [say(heartA, 'Attackers'), say(heartD, heartA === null ? 'Defenders' : 'defenders')].filter(Boolean).join(', ');
     const effect = [fx(heartA, 'Attack'), fx(heartD, 'defence')].filter(Boolean).join(', ');
     lines.push({ label: 'Morale', value, effect: effect ? effect[0].toUpperCase() + effect.slice(1) : undefined });
+  }
+  // (Release 2, wornout.ts) Worn out in the line: said only where a corps of either side has lost some of its edge.
+  if (spentA > 0 || spentD > 0) {
+    const pct = (x: number): number => Math.round(x * 100);
+    lines.push({
+      label: 'Worn out', value: [spentA > 0 ? `Attackers worn by months in the line` : '', spentD > 0 ? `${spentA > 0 ? 'defenders' : 'Defenders'} worn by months in the line` : ''].filter(Boolean).join(', '),
+      effect: [spentA > 0 ? `Attack cut by up to ${pct(spentA)}%` : '', spentD > 0 ? `${spentA > 0 ? 'defence' : 'Defence'} cut by up to ${pct(spentD)}%` : ''].filter(Boolean).join(', '),
+    });
   }
   if (spied) lines.push({ label: 'Intelligence', value: `Agent ${spied} has mapped the defences of ${target.name}`, effect: `Attack up ${Math.round(INTEL.battle.attack * 100)}%` });
   // (The tell for a hidden watcher: the battle shows that the enemy knew the defences, and so where to hunt.)
@@ -6421,6 +6435,8 @@ export function startPhase(g: Game, nat: string): void {
     const schooled = schoolMonth(g, c, knew);
     // How worn its uniforms and kit look after the month gone (release 2, looks only): a whole term at school is a refit.
     wearMonth(g, c, had, schooled);
+    // (Release 2, wornout.ts, behind its switch) Its months in the line wear its edge down; a month at rest brings it back.
+    wornMonth(g, c);
     c.fought = false;
     if (c.blows !== undefined) delete c.blows;
     if (c.gaveWay) delete c.gaveWay;

@@ -1,0 +1,5 @@
+{
+  "_note": "Worn out in the line (release 2; Brian's yes of 27 November 2026 17:10Z; the design director's ruling of 17:15Z, ideas-batch3-ruling-1127.md Q2). src/campaign/wornout.ts. Each month a corps spends in the line (it fought, or an army at war with it holds the ground next door or stands in its province: stories.ts inLine, the same front the uniforms wear on) takes 'step' more off its fighting power, to 'most' at the worst. No count of months comes first. One whole month at rest (morale.ts restedMonth: in supply, no march, no fight) brings it all back. Every army alike; where the computer's staff rests its worn corps (ai.ts relieve, the staffs rivals.json names), a corps worn to 'most' counts as worn, read through the battle's own edge(). The figures are design figures for the design director to rule with the form; the historian is asked for the record.",
+  "step": 0.02,
+  "most": 0.1
+}
