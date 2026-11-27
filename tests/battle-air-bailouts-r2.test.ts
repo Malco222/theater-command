@@ -26,6 +26,7 @@ import { AIR } from '../src/campaign/air';
 import { bomberGuns } from '../src/battle/air/guns';
 import { airBattle, airLooks, AirSim, MORE_LOOKS } from '../src/battle/air/sim';
 import { airTicket, raidGroups } from '../src/battle/air/ticket';
+import { drawFall } from '../src/battle/air/falls';
 import type { Fall } from '../src/battle/air/types';
 import { Rng } from '../src/core/rng';
 import { digest, fly, runs as pilotRuns, type Run, type Ticket } from './battle-air-pilot-raids';
@@ -117,6 +118,22 @@ const B44 = (() => {
   return t;
 })();
 const KENT40 = raid('GER', 'bomb', 'Kent', 14);
+/** A month inside a row of the meant-ram table (book.ts SKY.fate.ram.meant), as { year, month } (months from 0). */
+const inside = (r: { from: number; to: number }) => {
+  const d = (r.from + Math.min(r.to, r.from + 2)) / 2, year = Math.floor(d);
+  return { year, month: Math.floor((d - year) * 12 + 1e-9) };
+};
+/** The fates test's Kent raid at the month, its attacker named American and flying B-17s, its defender named `nat` (parts (a) and (j)). */
+const kentAs = (nat: string, when: { year: number; month: number }): Ticket => {
+  const t = structuredClone(TK[1]), m0 = t.place.models!, g0 = t.place.guns!;
+  t.place.when = when;
+  t.place.nat = 'USA';
+  t.att.forces = t.att.forces.map((f) => ({ ...f, nat: 'USA' }));
+  t.def.forces = t.def.forces.map((f) => ({ ...f, nat }));
+  t.place.models = { USA: { ftr: m0.GER.ftr, bmr: 'B17' }, [nat]: m0.UK };
+  t.place.guns = { USA: { ftr: g0.GER.ftr, bmr: bomberGuns('B17', 'USA', when) }, [nat]: g0.UK };
+  return t;
+};
 const DARK = (() => { const t = structuredClone(TK[0]); t.place.night = true; t.place.models!.GER.bmr = 'Lancaster'; return t; })();
 const SHIPS = strikes();
 const SET: Battle[] = [
@@ -151,6 +168,21 @@ const BASELINE: Record<string, number> = {
   'alsace-he111p:5': 2027141903, 'alsace-he111p:6': 3021589, 'alsace-he111p:7': 2543374693, 'kent-1940-he111h:0': 462132052,
   'kent-1940-he111h:1': 3001818742, 'kent-1940-he111h:2': 4214231639, 'night:0': 2069444584, 'night:1': 1238753718,
   'harbour:0': 3921217764, 'carriers:0': 1169743217, 'harbour:1': 1881678120, 'carriers:1': 2407036934,
+};
+
+/**
+ * The set above holds no ram on purpose, so with the switch off nothing there reads a field a ram on purpose might
+ * carry (the third mend's sceptic, ca: a fall's B carried without the switch survived part (a)). These are the five
+ * rows of the meant-ram table (book.ts SKY.fate.ram.meant), each Kent as part (j) flies it at a month inside the row,
+ * battles 0 to 9, switch off: the same hash as BASELINE (every tick's view(), history(), outcome(), over.lines), taken
+ * at the head 78fd87433 (and the same at a8a34088f). 116 falls of these 50 battles are rams on purpose.
+ */
+const MEANT_OFF: Record<string, number[]> = {
+  'meant-SOV-1941.42': [3406350152, 2465839585, 3359667683, 49872625, 2585266030, 1686629021, 462960260, 60698100, 4064559928, 3066600255],
+  'meant-SOV-1943.00': [462501890, 841922219, 3114041673, 2522016623, 293032566, 1030479687, 2847124662, 3067042210, 1499830868, 1257155935],
+  'meant-JAP-1944.42': [3852909730, 1554199103, 1032019029, 2455711495, 1097591905, 1589629547, 2629176832, 1545934976, 1579429210, 2570514602],
+  'meant-JAP-1944.83': [3717678574, 3217599065, 3793129163, 3642867215, 1097591905, 1589629547, 2629176832, 1545934976, 3262617850, 1893762008],
+  'meant-GER-1944.00': [2160119284, 3253853610, 3341831804, 323899235, 608852728, 401444141, 1151134842, 3807904345, 2959671501, 1807603846],
 };
 
 /** FNV-1a over a string, carried on from `h`. */
@@ -293,6 +325,20 @@ describe('(a) switch off: every battle of the set is byte for byte what the head
       expect(w.views).toBeGreaterThan(100);
     }
   });
+  for (const r of SKY.fate.ram.meant) {
+    const key = `meant-${r.nat}-${r.from.toFixed(2)}`, when = inside(r);
+    it(`the rams on purpose, switch off: Kent as part (j) flies it, ${r.nat} at ${when.year}/${when.month}, battles 0 to 9 hash as the head 78fd87433 gave`, () => {
+      const tk = kentAs(r.nat, when);
+      let meant = 0;
+      const got = Array.from({ length: 10 }, (_, k) => {
+        const w = whole(at(key, tk, k));
+        meant += lostOf(w.sim.history()).filter((e) => fallOf(e).meant).length;
+        return w.hash;
+      });
+      expect(got, key).toEqual(MEANT_OFF[key]);
+      expect(meant, `${key}: rams on purpose in the ten battles`).toBeGreaterThan(0);
+    });
+  }
 });
 
 describe('(b) switch on: the count is untouched, battle by battle', () => {
@@ -1056,22 +1102,6 @@ describe('(j) the design director\'s 01:00Z, reading 1: a ram on purpose reads i
   const near = (k: number, n: number, want: number, what: string) =>
     expect(Math.abs(k / n - want), `${what}: ${k}/${n} against ${want}`).toBeLessThanOrEqual(4 * Math.sqrt((want * (1 - want)) / n) + 1e-12);
   const F = SKY.fate;
-  /** A month inside a row of the table, as { year, month } (months from 0). */
-  const inside = (r: { from: number; to: number }) => {
-    const d = (r.from + Math.min(r.to, r.from + 2)) / 2, year = Math.floor(d);
-    return { year, month: Math.floor((d - year) * 12 + 1e-9) };
-  };
-  /** The fates test's Kent raid at the month, its attacker named American and flying B-17s, its defender named `nat`. */
-  const kentAs = (nat: string, when: { year: number; month: number }): Ticket => {
-    const t = structuredClone(TK[1]), m0 = t.place.models!, g0 = t.place.guns!;
-    t.place.when = when;
-    t.place.nat = 'USA';
-    t.att.forces = t.att.forces.map((f) => ({ ...f, nat: 'USA' }));
-    t.def.forces = t.def.forces.map((f) => ({ ...f, nat }));
-    t.place.models = { USA: { ftr: m0.GER.ftr, bmr: 'B17' }, [nat]: m0.UK };
-    t.place.guns = { USA: { ftr: g0.GER.ftr, bmr: bomberGuns('B17', 'USA', when) }, [nat]: g0.UK };
-    return t;
-  };
   type Tot = { n: number; back: number; shown: number; not: number; notShown: number; accN: number; accShown: number; s: number; B: number; R: number[] };
   const tot = new Map<string, Tot>();
   /** Flies k0 .. k0 + n - 1 of a row's battles, switch on, and checks every fall a ram on purpose made. */
@@ -1189,6 +1219,59 @@ describe('(j) the design director\'s 01:00Z, reading 1: a ram on purpose reads i
       near(shown, 20_000, B + (1 - B) * R, `${what}, all shown out`);
       near(notShown, not, R, `${what}, not brought back`);
     }
+  });
+  // The third mend's sceptic, ca: the test above feeds Scene.meantBack by hand, and the battles above have rammers only
+  // over their own ground, where R is 0 for any B near the count's share; so nothing read the B the pairing itself
+  // hands the look (a B from 1 - s, or from the bomber's share, survived). These read it through fated() itself: the
+  // fates test's Kent raid opened with the switch on, its first defending fighter named Soviet at February 1942 (the
+  // table's first row, p 0.2) firing head-on on a bomber, the pair lost in one moment, again and again.
+  /** Rams on purpose drawn through fated(): the B the pairing carried into each rammer's scene, and the share of rammers not brought back shown out. */
+  const ramsThrough = (over: 'own' | 'enemy', band: 0 | 1 | 2, want: number, seed: number) => {
+    const sim = airBattle(TK[1], { bailouts: true });
+    // The sim's own fields, reached past TypeScript's private: the month it reads, the moment's memory, the look's words.
+    const S = sim as unknown as { when: { year: number; month: number }; recent: unknown[]; fated(lost: unknown[]): void; sceneOf(L: unknown, near: unknown, meantBack?: number): Scene; say: unknown; shownSay: unknown };
+    S.when = { year: 1942, month: 2 };
+    const a = sim.units.find((u) => u.air === 'ftr' && u.side === 'def')!, b = sim.units.find((u) => u.air === 'bmr' && u.side === 'att')!;
+    a.nat = 'SOV'; a.band = band; b.band = band;
+    a.fire = [{ on: b.id, rate: 1, pass: 'headon' } as (typeof a.fire)[number]];
+    a.contacts = [];
+    const carried: number[] = [];
+    const sceneOf0 = S.sceneOf.bind(sim);
+    S.sceneOf = (L: unknown, near: unknown, meantBack?: number) => { if ((L as { u: unknown }).u === a && meantBack !== undefined) carried.push(meantBack); return sceneOf0(L, near, meantBack); };
+    let got: Lost[] = [];
+    S.say = (what: string, _u: unknown, _t: string, extra?: unknown) => { if (what === 'air:lost') got.push(extra as Lost); };
+    S.shownSay = () => {};
+    const saved = over === 'own' ? AIR.pilots.home : AIR.pilots.away, rng = new Rng(seed);
+    let meant = 0, not = 0, notShown = 0, fid = 1, tries = 0;
+    while (meant < want && tries++ < 400_000) {
+      S.recent = [];
+      got = [];
+      S.fated([
+        { u: a, fall: drawFall(rng, 'ftr', over, saved), by: b.id, s: null, alt: SKY.bands.alt[band], fid: fid++, seat: -1, gun: null, models: 1, saved },
+        { u: b, fall: drawFall(rng, 'bmr', over === 'own' ? 'enemy' : 'own', 0), by: a.id, s: null, alt: SKY.bands.alt[band], fid: fid++, seat: -1, gun: null, models: 1, saved: 0 },
+      ]);
+      for (const e of got) if (e.air === 'ftr' && e.how === 'collide' && e.meant) { meant++; if (!e.back) { not++; notShown += e.chutes + (e.out ?? 0); } }
+    }
+    return { saved, carried, meant, not, notShown };
+  };
+  for (const over of ['own', 'enemy'] as const) it(`the B the pairing hands the look, ${over} ground: every ram on purpose carries B by the formula over the pairing's own weights, the count's own share for its fall`, () => {
+    const t = ramsThrough(over, 1, 500, 4_200 + (over === 'own' ? 0 : 1));
+    expect(t.meant).toBeGreaterThanOrEqual(500);
+    expect(t.carried.length).toBe(t.meant);
+    for (const B of t.carried) expect(Math.abs(B - t.saved), `${over}: B ${B} against the count's share ${t.saved}`).toBeLessThan(1e-12);
+  });
+  // The 20,000 are drawn with the table's shares at the test figure 1 (as the Soviet row above), so that every pair the
+  // pairing weighs is a ram on purpose: the same 20,000 rams in a fifth of the draws (at the row's 0.2 it ran 85 s at a
+  // load of 31). The pairing weighs a pilot brought back and one not the same at any share, so B is the same.
+  it('through fated(), the enemy\'s ground, high band (the one cell where R > 0), 20,000 rams on purpose (the table\'s shares at the test figure 1): a rammer not brought back shown out at R', () => {
+    const t = withBook(() => { SKY.fate.ram.meant = SKY.fate.ram.meant.map((m) => ({ ...m, p: 1 })); }, () => ramsThrough('enemy', 2, 20_000, 4_300));
+    expect(t.carried.length).toBe(t.meant);
+    for (const B of t.carried) expect(Math.abs(B - t.saved)).toBeLessThan(1e-12);
+    const S = Math.min(0.95, F.out.collide * F.outBand[2]), R = restOut(S, t.saved, 1);
+    console.log(`(j) through fated(), enemy high: rams on purpose ${t.meant}, not brought back ${t.not}, shown out ${t.notShown} (${(t.notShown / t.not).toFixed(4)} against R ${R.toFixed(4)})`);
+    expect(t.meant).toBeGreaterThanOrEqual(20_000);
+    expect(R).toBeGreaterThan(0);
+    near(t.notShown, t.not, R, 'enemy high, not brought back');
   });
 });
 
