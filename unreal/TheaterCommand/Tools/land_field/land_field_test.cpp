@@ -1622,6 +1622,26 @@ int main(int Argc, char** Argv)
 	std::printf("  %d parcels in the field and its band, mean %.0f m across; %d lanes, %.1f km; %.1f km of banks and walls; %d gates; %d hedges opened by the recording's vehicles\n", T.Parcels, T.ParcelMean, T.Lanes,
 	            T.LaneKm, T.HedgeKm, T.Gates, T.WayGaps);
 	if (!T.LaneShape.empty()) std::printf("  %s\n", T.LaneShape.c_str());
+	// (on trial, "roadline": the bocage's lanes and the jungle's track wander, the art director's ruling of 26 November:
+	// somewhere in any 200 m the line 4 m (the bocage) or 6 m (the jungle) off its chord, where its bends are full and the
+	// rules' road cells leave them room; read from each lane's shape in the log line)
+	if (F.Tried("roadline") && (LookLaid == "bocage" || LookLaid == "jungle"))
+	{
+		const double Want = LookLaid == "bocage" ? 4.0 : 6.0;
+		double Worst = 1e9;
+		int Read = 0;
+		for (size_t At = T.LaneShape.find(" m where its bends are full"); At != std::string::npos; At = T.LaneShape.find(" m where its bends are full", At + 1))
+		{
+			const size_t From = T.LaneShape.rfind('(', At);
+			if (From == std::string::npos) continue;
+			Worst = std::min(Worst, std::atof(T.LaneShape.c_str() + From + 1));
+			++Read;
+		}
+		// (a lane whose bends are nowhere full, eased in or held in by its cells all along, is not read: there the limit
+		// wins, as the art director rules, and the log's lane line gives how far it wanders all the same)
+		Check(Read == 0 || Worst >= Want, "the lanes wander (trial roadline): somewhere in any 200 m off their chord as far as the art director asks, where their bends are full",
+		      Read > 0 ? Fmt("%.0f lanes with their bends full somewhere, least %.1f m (asked %.0f m)", static_cast<double>(Read), Worst, Want) : Fmt("no lane with its bends full in 200 m (held by its cells or eased in): none read (asked %.0f m)", Want));
+	}
 	std::printf("  village: %d houses, barns and byres (%d damaged), church %s, %d farmsteads\n", T.Houses, T.Damaged, T.bChurch ? "yes" : "no", T.Farmsteads);
 	{
 		// What the fields grow, by their ground in the field (a 4 m sample): mid-July, the harvest barely begun (the
