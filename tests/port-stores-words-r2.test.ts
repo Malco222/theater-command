@@ -1278,15 +1278,15 @@ describe('03:13Z, item 2: a crew lost in battle, the count on the rule\'s own cl
     expect([record.length, record[0].endsWith(':UK:16:1:ESP'), bare]).toEqual([1, true, 18]);
   });
 
-  it('the shutting side, seeing Gibraltar whole: its count follows the same clock, "is hungry by April and lost by the start of June" once the crew is gone, and so it is', () => {
+  it('the shutting side, seeing Gibraltar whole: its count follows the same clock, "is hungry by May and lost by the start of July" once the crew is lost in May, and so it is', () => {
     const { g, gib, ninth, crew } = gibCrewed('ITA', true);
     g.flags.nofog = 1;
     const rows: unknown[] = [];
-    for (let t = 16; t <= 22; t++) {
+    for (let t = 16; t <= 23; t++) {
       g.turn = t;
       phase(g, 'ITA');
       if (t === 17) { sail(g, 'ITA', 'iberia', ['2nd Fleet']); g.supplyDirty = true; }
-      if (t === 20) crewBeaten(g, gib, crew, 'ITA');
+      if (t === 21) crewBeaten(g, gib, crew, 'ITA');
       // (Italy's player reads his card in his own month.)
       rows.push([t, texts(portCardLines(g, gib, 'ITA'))]);
       phase(g, 'UK');
@@ -1301,12 +1301,15 @@ describe('03:13Z, item 2: a crew lost in battle, the count on the rule\'s own cl
       // The crew living: counted for all of its 16 months.
       [18, line('June 1942', 'August 1942')], [18, true, false],
       [19, line('June 1942', 'August 1942')], [19, true, false],
-      // April, read after the battle: the draws after it read the port's own two from the January fill. (Counted with
-      // the keep the stores were filled with, the line said "hungry by June 1942 and lost by the start of August 1942".)
-      [20, line('April', 'June')], [20, false, false],
-      [21, line('April', 'June')], [21, false, false],
-      // Struck off as June opens, in Britain's month.
-      [22, line('April', 'June')], [22, false, true],
+      [20, line('June 1942', 'August 1942')], [20, true, false],
+      // May, read after the battle: the draws before it fed the garrison on the crew's stores through April, and those
+      // after it read the port's own two from the January fill. (The build, which kept no record of a crew lost in
+      // battle, read the port's own two for every month: "is hungry by April and lost by the start of June", a month
+      // before each, and in July no line.)
+      [21, line('May', 'July')], [21, false, false],
+      [22, line('May', 'July')], [22, false, false],
+      // Struck off as July opens, in Britain's month.
+      [23, line('May', 'July')], [23, false, true],
     ]);
   });
 });
