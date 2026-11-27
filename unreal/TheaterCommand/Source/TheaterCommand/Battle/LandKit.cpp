@@ -2279,6 +2279,8 @@ namespace LandKit
 		 * the skin under it does not step by more than that between three samples in a row, across or up (a pistol
 		 * port's boss, a hatch's lip: a round turret's own curve is a few millimetres, a rivet's head under a
 		 * centimetre), so a mark made larger is moved clear of a fitting rather than laid over it.
+		 * AtLeast (metres, half its width; a captured tank's back mark, the art director's floor of 27 November 2026): none
+		 * at all where the skin takes the mark only smaller than that.
 		 */
 		struct MarkSkin
 		{
@@ -2289,7 +2291,8 @@ namespace LandKit
 		};
 		size_t PaintMark(Mesh& Out, const V3& Pivot, const std::vector<MarkPiece>& Pieces, const V3& At, const V3& Facing, double Radius,
 			double Dust, double Step, double Lift, uint64_t Seed, const MarkSkin& Skin = MarkSkin(), bool bHand = false, bool bMustFit = false,
-			double* Moved = nullptr, double* Scale = nullptr, bool bReadable = false, double Clear = 0.0, double FlakeMost = 0.12, double StepMost = 0.0)
+			double* Moved = nullptr, double* Scale = nullptr, bool bReadable = false, double Clear = 0.0, double FlakeMost = 0.12, double StepMost = 0.0,
+			double AtLeast = 0.0)
 		{
 			const V3 F = Facing.Unit(V3(1.0, 0.0, 0.0));
 			// (on a wall its top is toward the sky; on a roof, toward her front)
@@ -2511,7 +2514,7 @@ namespace LandKit
 					bFound = true;
 				}
 			}
-			if (!bFound && bMustFit)
+			if ((!bFound && bMustFit) || Size < AtLeast)
 			{
 				return 0;
 			}
@@ -4169,7 +4172,7 @@ namespace LandKit
 				{
 					CaptorDust = std::max(CaptorDust, Mk.Dust);
 				}
-				auto PaintCaptor = [&](int BodyIx, const V3& Place, const V3& Facing, double Size, double DustWord, uint64_t Which, double* Sized) -> size_t {
+				auto PaintCaptor = [&](int BodyIx, const V3& Place, const V3& Facing, double Size, double DustWord, uint64_t Which, double* Sized, double AtLeast) -> size_t {
 					if (BodyIx < 0 || static_cast<size_t>(BodyIx) >= Bodies.size() || CaptorPieces.empty() || Bodies[static_cast<size_t>(BodyIx)].bTrack) return 0;
 					Body& Bo = Bodies[static_cast<size_t>(BodyIx)];
 					MarkSkin Skin;
@@ -4179,7 +4182,7 @@ namespace LandKit
 					Skin.DustColour = bFileDust ? DustColour : Dust;
 					const uint64_t CaptorSeed = Mix(Which + 1, static_cast<uint64_t>(Level) + 1, 0x43415054ull);
 					return PaintMark(Level == 0 ? Bo.Near : Bo.Far, Bo.Pivot, CaptorPieces, Place, Facing, Size, DustWord > 0.0 ? DustWord : 45.0, Level == 0 ? 0.03 : 0.12,
-						Level == 0 ? 0.004 : 0.012, CaptorSeed, Skin, MarkByHand(CaptorKind), false, nullptr, Sized, false, 0.05, 0.085);
+						Level == 0 ? 0.004 : 0.012, CaptorSeed, Skin, MarkByHand(CaptorKind), false, nullptr, Sized, false, 0.05, 0.085, 0.0, AtLeast);
 				};
 				for (size_t I = 0; I < Marks.size(); ++I)
 				{
@@ -4206,7 +4209,7 @@ namespace LandKit
 						// is its size for the far level and for whoever reads her marks' places: the picture sheet's
 						// ruler, the kit's test)
 						double Sized = 1.0;
-						if (Size > 0.0 && PaintCaptor(BodyIx, Place, Mk.Facing, Size, Mk.Dust, I, &Sized) > 0)
+						if (Size > 0.0 && PaintCaptor(BodyIx, Place, Mk.Facing, Size, Mk.Dust, I, &Sized, 0.0) > 0)
 						{
 							Size *= Sized;
 						}
@@ -4228,7 +4231,7 @@ namespace LandKit
 					{
 						if (I < CaptorPlaces.size() && CaptorPlaces[I].first > 0.0)
 						{
-							PaintCaptor(BodyIx, CaptorPlaces[I].second, Mk.Facing, CaptorPlaces[I].first, Mk.Dust, I, nullptr);
+							PaintCaptor(BodyIx, CaptorPlaces[I].second, Mk.Facing, CaptorPlaces[I].first, Mk.Dust, I, nullptr, 0.0);
 						}
 					}
 					else
@@ -4328,7 +4331,8 @@ namespace LandKit
 					// bounded: it is an air mark, and a captured vehicle is the one whose shape lies to whoever looks
 					// down on her. At most 0.6 m across, never over three quarters of the clear plate's shorter side,
 					// 5 cm clear of hatches and edges. Where the plate takes no mark of the size wanted, the largest of
-					// a few smaller ones it does take.
+					// a few smaller ones it does take; but her back plate none under a quarter of a metre across (her
+					// ruling of 27 November 2026, the floor below).
 					if (Level == 0)
 					{
 						// (her plate's whole run through a place, along the mark's up or across it, and the way from the place
@@ -4855,20 +4859,26 @@ namespace LandKit
 							CaptorFind(RoofPart, 2, 1.0, 0.3, true, CaptorRoof);
 							const double Real = MarkReal(CaptorKind, Kind, R["role"].Str(), Name, false);
 							CaptorFind(BackPart, 0, -1.0, Real > 0.0 ? 1.5 * Real : 0.25, false, CaptorBack);
-						// (a mark no wider than the clear it must keep each side is a speck, not a mark: none)
-						for (CaptorPlate* Speck : { &CaptorRoof, &CaptorBack })
+						// (a roof mark no wider than the clear it must keep each side is a speck, not a mark: none)
+						if (CaptorRoof.Size <= 0.05)
 						{
-							if (Speck->Size <= 0.05)
-							{
-								*Speck = CaptorPlate();
-							}
+							CaptorRoof = CaptorPlate();
+						}
+						// Her back mark has a floor (the art director's ruling of 27 November 2026): under a quarter of a metre
+						// across, her smallest captor's mark at its real size, NO back mark. Smaller it is a speck low in a corner
+						// of her plate and reads as a blemish, and her turret's marks show plainly from behind. The floor is for
+						// the mark as painted, so the painting keeps it too where her skin would take the mark only smaller.
+						const double BackLeast = 0.125;
+						if (CaptorBack.Size < BackLeast)
+						{
+							CaptorBack = CaptorPlate();
 						}
 						for (int Which = 0; Which < 2; ++Which)
 						{
 							CaptorPlate& Pl = Which == 0 ? CaptorRoof : CaptorBack;
 							const int PartIx = Which == 0 ? RoofPart : BackPart;
 							double Sized = 1.0;
-							if (Pl.Size > 0.0 && PaintCaptor(Parts[static_cast<size_t>(PartIx)].Body, Pl.At, Pl.Facing, Pl.Size, CaptorDust, 1000 + static_cast<uint64_t>(Which), &Sized) > 0)
+							if (Pl.Size > 0.0 && PaintCaptor(Parts[static_cast<size_t>(PartIx)].Body, Pl.At, Pl.Facing, Pl.Size, CaptorDust, 1000 + static_cast<uint64_t>(Which), &Sized, Which == 1 ? BackLeast : 0.0) > 0)
 							{
 								Pl.Size *= Sized;
 								Mark Laid;
@@ -4889,8 +4899,8 @@ namespace LandKit
 					}
 					else
 					{
-						if (CaptorRoof.Size > 0.0) PaintCaptor(Parts[static_cast<size_t>(RoofPart)].Body, CaptorRoof.At, CaptorRoof.Facing, CaptorRoof.Size, CaptorDust, 1000, nullptr);
-						if (CaptorBack.Size > 0.0) PaintCaptor(Parts[static_cast<size_t>(BackPart)].Body, CaptorBack.At, CaptorBack.Facing, CaptorBack.Size, CaptorDust, 1001, nullptr);
+						if (CaptorRoof.Size > 0.0) PaintCaptor(Parts[static_cast<size_t>(RoofPart)].Body, CaptorRoof.At, CaptorRoof.Facing, CaptorRoof.Size, CaptorDust, 1000, nullptr, 0.0);
+						if (CaptorBack.Size > 0.0) PaintCaptor(Parts[static_cast<size_t>(BackPart)].Body, CaptorBack.At, CaptorBack.Facing, CaptorBack.Size, CaptorDust, 1001, nullptr, 0.0);
 					}
 				}
 			}
