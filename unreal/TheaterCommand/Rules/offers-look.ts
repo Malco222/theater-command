@@ -25,7 +25,7 @@
 // the rows without a second call. campaign-bridge.ts adds the calls to TC with Object.assign(TC, offerCalls(game, view)).
 
 import { formationOffers, orderDeclineFormation, orderTakeFormation, whyNotAnswerOffers, type RowOffer } from '../../../src/campaign/turn';
-import { loansEnding, rowsAwaitingWar, theName } from '../../../src/campaign/game';
+import { loansEnding, placeName, rowsAwaitingWar, theName } from '../../../src/campaign/game';
 import { menWords } from '../../../src/campaign/manpower';
 import { turnToDate } from '../../../src/core/ticket';
 import { KIND, type Game } from '../../../src/campaign/types';
@@ -123,6 +123,11 @@ export function offerLines(s: Game, o: RowOffer): OfferLine[] {
     // (A row that joins a standing corps forms no corps of its own: it joins it where it stands.)
     const where = o.joins ? `, to join your ${o.joins}${at ? ` ${at}` : ''}` : at ? `, to form ${at}` : '';
     out.push({ text: `${kindWord(o.kind)}, ${menWords(o.men)} men${where}.`, tone: '' });
+    // (Sent on by sea from a full island of the table, the rule's own answer (`moved`, 'sea'): why the place moved, in
+    // the UI director's words of 18:04Z, 27 November 2026, the row's second line, plain, in every month it stands so.
+    // Both names from the rule's readers: the full place as the islands' sentences name it, the harbour as the line
+    // above prints it. Not for a row sent on by land: her list, its own question.)
+    if (o.moved && o.moved.by === 'sea') out.push({ text: `${placeName(s.regions[o.moved.from].name, true)} has no room for it. ${s.regions[o.moved.to].name} is your nearest harbour with room.`, tone: '' });
     for (const t of o.takes) out.push({ text: `Takes your ${t.name} at ${place(t.region)}, ${menWords(t.men)} men.`, tone: '' });
     // (Every figure is menWords'. Where the corps taken and the formation read the same in round figures, 14,142 and
     // 13,500 both "14,000", no line is added: the player sees no gap to read as men thrown away.)

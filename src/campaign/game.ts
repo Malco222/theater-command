@@ -4805,7 +4805,7 @@ const sharesWar = (g: Game, nat: string, friend: string): boolean => !!g.nations
  * struck for it: the historian mends the rows (form B3 of 25 November 2026, (c)). The ground a row is sent on to is
  * counted by its own room, an island's among it, as is a corps come in from the sea.)
  */
-function roomNear(g: Game, nat: string, at: Region, record = false, going: readonly Corps[] = [], out: readonly Corps[] = [], row = false): Region | null {
+function roomNear(g: Game, nat: string, at: Region, record = false, going: readonly Corps[] = [], out: readonly Corps[] = [], row = false, said?: { sea: boolean }): Region | null {
   const rows = (r: Region): number => placed(g, r, nat).filter((u) => u.kind !== 'eng').length;
   // (No room: with the row's corps, whether they fit; with none at hand, no room for a division. Named for what it
   // asks: the design director, 00:20Z, 27 November 2026, D6.)
@@ -4835,9 +4835,12 @@ function roomNear(g: Game, nat: string, at: Region, record = false, going: reado
   // harbour with room by the sea's own distance. Where no held ground anywhere has room, it waits until one does."
   // Its room is asked through `fits` with the row's own corps. A row comes by date, so the sea's state is not asked,
   // as it is not for the row's own place: a reading. Ground that is no island, and the far side off: as it was.)
+  // (`said`: told that the answer is the sea branch's, for the offer's line, `rowPlace`; the place is not changed by it.)
   if (row && going.length && islandOf(g, at)) {
-    return g.regions.filter((r) => r.port && r.id !== at.id && held(r) && !hostileUnits(g, r, nat).length && !noRoom(r))
+    const by = g.regions.filter((r) => r.port && r.id !== at.id && held(r) && !hostileUnits(g, r, nat).length && !noRoom(r))
       .sort((a, b) => chartDist(g, a, at) - chartDist(g, b, at) || a.id - b.id)[0] ?? null;
+    if (by && said) said.sea = true;
+    return by;
   }
   return null;
 }
@@ -5305,16 +5308,19 @@ const rowOut = (g: Game, nat: string, o: any): Corps[] => {
   return names.length ? g.corps.filter((c) => c.nat === nat && !c.dead && names.includes(c.name)) : [];
 };
 
-function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: Region; fell: boolean; ashore: { at: Region; adds: number | null } | null; waits: boolean; shifted: boolean; home: boolean; moved: { from: number; to: number } | null } {
+function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: Region; fell: boolean; ashore: { at: Region; adds: number | null } | null; waits: boolean; shifted: boolean; home: boolean; moved: { from: number; to: number; by: 'land' | 'sea' } | null } {
   let reg = at, fell = false, shifted = false;
   // (Sent on for room: the place it would have formed on, held, with no room for it, and the place `roomNear` chose
   // instead, said once here where the choice is made, for the offer's page (`RowOffer.moved`). The design director,
   // 17:53Z, 27 November 2026, 1: "Okinawa full means 'to form at Kagoshima' with FORM IT lit, as a computer's row
   // would." Never with the far side off.)
-  let moved: { from: number; to: number } | null = null;
+  // (`by`: the way `roomNear` answered, by land or by the sea branch: the UI director's line is for the sea's answer
+  // alone, 18:04Z, 27 November 2026.)
+  let moved: { from: number; to: number; by: 'land' | 'sea' } | null = null;
   const onFor = (r: Region): Region => {
-    const to = roomNear(g, nat, r, true, rowCorps(g, nat, row, o), rowOut(g, nat, o), true);
-    if (to && to !== r && farOn(g)) moved = { from: r.id, to: to.id };
+    const how = { sea: false };
+    const to = roomNear(g, nat, r, true, rowCorps(g, nat, row, o), rowOut(g, nat, o), true, how);
+    if (to && to !== r && farOn(g)) moved = { from: r.id, to: to.id, by: how.sea ? 'sea' : 'land' };
     return to ?? r;
   };
   // (It has fallen back to forming at home, its own place lost or at peace: a division is laid once, drawn.ts.)
@@ -5610,11 +5616,14 @@ export interface RowOffer {
   /**
    * A formation offered whose own place is held ground with no room for it, sent on by the rule (`rowPlace`, through
    * `roomNear`) to another place with room, where it would form this month: `from` the full place's region, `to` the
-   * place chosen (`region`). Null where it was not moved: its place not held, a row that joins, room at its place, or
-   * no room anywhere. Never set with the far side off; absent for the end of a loan and the formations list. The
-   * fact for the UI director's line saying why the place moved (the design director, 17:53Z, 27 November 2026, 1).
+   * place chosen (`region`), `by` how `roomNear` answered: 'sea' from its sea branch (the nearest held harbour with
+   * room for the row's own corps, by the sea's own distance, for an island of the table), 'land' from ground joined
+   * by land. Null where it was not moved: its place not held, a row that joins, room at its place, or no room
+   * anywhere. Never set with the far side off; absent for the end of a loan and the formations list. The fact for the
+   * UI director's line saying why the place moved, printed for 'sea' alone (offers-look.ts `offerLines`; the design
+   * director, 17:53Z, 27 November 2026, 1; the UI director, 18:04Z).
    */
-  moved?: { from: number; to: number } | null;
+  moved?: { from: number; to: number; by: 'land' | 'sea' } | null;
 }
 
 /**

@@ -12,8 +12,9 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; (globalThis as any).TC_OFFERS = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, createGame, men, placed, relocate, rowCorps, rowOffers, setWar, startPhase } from '../src/campaign/game';
-import { fits, roomLeft } from '../src/campaign/islands';
+import { addCorps, createGame, men, placed, relocate, removeCorps, rowCorps, rowOffers, setWar, startPhase } from '../src/campaign/game';
+import { fits, islandOf, roomLeft } from '../src/campaign/islands';
+import { chartDist } from '../src/campaign/wrap';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { MEN_PER_DIV, STACK, type Corps, type Game, type Region } from '../src/campaign/types';
@@ -42,6 +43,8 @@ const sixteenth = (g: Game): { going: Corps[]; out: Corps[] } => {
   const row = rows[index(NOV41[2])], o = rowOffers(g).find((x) => x.id === index(NOV41[2]));
   return { going: rowCorps(g, 'JAP', row, row[6] ?? {}), out: o ? o.takes.map((t) => g.corps.find((c) => c.id === t.id)!) : g.corps.filter((c) => c.nat === 'JAP' && !c.dead && (row[6].from as string[]).includes(c.name)) };
 };
+/** The 14th Army's 16th Division's offer as the rule gives it. */
+const of = (x: Game) => rowOffers(x).find((o) => o.id === index(NOV41[2]))!;
 /** A ground's fighting corps of Japan's side, as the five are counted on any ground (engineers apart). */
 const standing = (g: Game, r: Region): number => placed(g, r, 'JAP').filter((u) => u.kind !== 'eng').length;
 /**
@@ -83,6 +86,8 @@ const singapore = (): Game => {
 };
 
 const FIFTH = '21st Army (5th Division)';
+/** The UI director's line for an offer sent on by sea, her paper of 18:04Z, 27 November 2026, on this board's places. */
+const MOVED_LINE = 'Okinawa has no room for it. Kagoshima is your nearest harbour with room.';
 const NOV41 = ['25th Army (18th Division)', '14th Army (48th Division)', '14th Army (16th Division)', '16th Army (2nd Division)', '4th Tank Regiment'];
 const GARRISON = 'Tientsin-Pukow railway garrison (21st Division, less its Bataan detachment)';
 const ONE_NOTE = 'It would be formed out of corps you have, as history formed it. It waits for your answer until its last month, or until a corps it needs is gone.';
@@ -210,7 +215,8 @@ describe('the offers page', () => {
     const { going, out } = sixteenth(g), okinawa = g.byName.Okinawa, kagoshima = g.byName.Kagoshima;
     expect([fits(g, okinawa, 'JAP', going, { out }), roomLeft(g, okinawa, 'JAP') * MEN_PER_DIV < men(going[0]), standing(g, okinawa), fits(g, kagoshima, 'JAP', going, { rows: standing(g, kagoshima), out })]).toEqual([false, true, STACK, true]);
     const r = open(g).sections[0].rows.find((x: any) => x.title === NOV41[2]);
-    expect(words(r)).toEqual([NOV41[2], ['plain: Infantry, 8,000 men, to form at Kagoshima.', 'plain: Takes your General reserve (16th Division, home from China) at Osaka, 15,000 men.',
+    // (The second line is the UI director's, 18:04Z, 27 November 2026: why the place moved.)
+    expect(words(r)).toEqual([NOV41[2], ['plain: Infantry, 8,000 men, to form at Kagoshima.', `plain: ${MOVED_LINE}`, 'plain: Takes your General reserve (16th Division, home from China) at Osaka, 15,000 men.',
       'plain: The other 8,000 are lost with the old corps.', 'muted: Offered in November 1941, open until May 1942.'],
     [`FORM IT lit -> offers:take:${index(NOV41[2])}`, `DECLINE lit -> offers:decline:${index(NOV41[2])}`]]);
     expect(TC().act('offers:ask:take')).toMatchObject({ ok: true });
@@ -322,7 +328,6 @@ describe('an offer sent on by sea: card and result agree, in every seat', () => 
   }, 600000);
 
   it('the fact the page is handed: from Okinawa to Kagoshima when Okinawa is full; none with room on Okinawa; none with no room anywhere, where FORM IT is grey with the old tip', () => {
-    const of = (x: Game) => rowOffers(x).find((o) => o.id === index(NOV41[2]))!;
     const g = war();
     months(g, 1, 30);
     const okinawa = g.byName.Okinawa, kagoshima = g.byName.Kagoshima;
@@ -330,7 +335,8 @@ describe('an offer sent on by sea: card and result agree, in every seat', () => 
     expect(of(g)).toMatchObject({ region: okinawa.id, why: null, moved: null });
     // Okinawa full: the rule sends it on to Kagoshima, and says so once, in its own placing (`rowPlace`).
     okinawaFull(g);
-    expect(of(g)).toMatchObject({ region: kagoshima.id, why: null, moved: { from: okinawa.id, to: kagoshima.id } });
+    expect(of(g)).toMatchObject({ region: kagoshima.id, why: null });
+    expect(of(g).moved).toEqual({ from: okinawa.id, to: kagoshima.id, by: 'sea' });
     // No room anywhere: it is not sent on; it waits at Okinawa, FORM IT grey with the old tip.
     const n = war();
     months(n, 1, 30);
@@ -339,6 +345,66 @@ describe('an offer sent on by sea: card and result agree, in every seat', () => 
     expect(of(n)).toMatchObject({ region: okinawa.id, why, moved: null });
     const r = open(n).sections[0].rows.find((x: any) => x.title === NOV41[2]);
     expect([r.lines[0], r.buttons[0]]).toEqual(['Infantry, 8,000 men, to form on Okinawa.', { label: 'FORM IT', act: `offers:take:${index(NOV41[2])}`, ok: false, tip: why }]);
+  }, 600000);
+});
+
+// (The UI director's line for an offer sent on by sea, her paper of 18:04Z, 27 November 2026,
+// pacific-japan/wip/island-room-in-men-UI-MARKS.md, "The offer moved to a harbour": "the row's second line, plain:
+// Okinawa has no room for it. Kagoshima is your nearest harbour with room." ... "in every month the offer stands
+// moved. It is gone in the month Okinawa has room for it again, when the first line reads 'on Okinawa'.")
+describe("the UI director's line for an offer sent on by sea", () => {
+  it('the row\'s second line, plain, in every month the offer stands moved, and gone in the month Okinawa has room again', () => {
+    const g = war();
+    months(g, 1, 26);
+    okinawaFull(g);
+    const lines = (): unknown[] => { const r = open(g).sections[0].rows.find((x: any) => x.title === NOV41[2]); return words(r)[1] as unknown[]; };
+    for (const t of [27, 28]) {
+      months(g, t, t);
+      expect([t, ...lines().slice(0, 2)]).toEqual([t, 'plain: Infantry, 8,000 men, to form at Kagoshima.', `plain: ${MOVED_LINE}`]);
+    }
+    // Room on Okinawa again in month 29: the first line reads "on Okinawa", and the line is gone.
+    for (const c of g.corps.filter((x) => /^Test garrison/.test(x.name) && !x.dead)) removeCorps(g, c);
+    months(g, 29, 29);
+    expect(of(g).moved).toBeNull();
+    expect(lines()).toEqual(['plain: Infantry, 8,000 men, to form on Okinawa.', 'plain: Takes your General reserve (16th Division, home from China) at Osaka, 15,000 men.',
+      'plain: The other 8,000 are lost with the old corps.', 'muted: Offered in November 1941, open until May 1942.']);
+  }, 600000);
+
+  // (Her fact to confirm, by a run: "'with room' must mean room for the whole formation ... If the rule can choose a
+  // harbour with less room than the formation takes, tell me before the line ships." The sea branch asks `fits` with
+  // the row's own corps: a harbour with room for less than the whole formation is passed over, and the line names the
+  // next one, where the corps forms whole.)
+  it('"your nearest harbour with room" is room for the whole formation: a nearer harbour with less room is passed over, the line names the next, and the corps forms there whole', () => {
+    // Japan's harbours by the sea's own distance from Okinawa, at the board's month, as the sea branch orders them.
+    const board = (): Game => { const g = war(); months(g, 1, 30); okinawaFull(g); return g; };
+    const near = (g: Game): Region[] => g.regions.filter((r) => r.port && r.ctrl === 'JAP' && r !== g.byName.Okinawa).sort((a, b) => chartDist(g, a, g.byName.Okinawa) - chartDist(g, b, g.byName.Okinawa) || a.id - b.id);
+    const formed = (g: Game, name: string): unknown[] => {
+      const r = open(g).sections[0].rows.find((x: any) => x.title === name);
+      const said = (words(r)[1] as string[]).slice(0, 2), ok = r.buttons[0].ok;
+      TC().act(`offers:take:${index(name)}`);
+      const h = loadGame(TC().save().text)!;
+      const c = h.corps.filter((x) => x.nat === 'JAP' && !x.dead && x.name === name);
+      return [said, ok, c.map((x) => [h.regions[x.reg].name, men(x)])];
+    };
+    // (a) A mainland harbour with five corps standing: Kagoshima, the nearest, packed by count until the rule's own
+    // `fits` (five rows) refuses the row there. It is passed over for Taihoku, the next, which has room for it whole.
+    const a = board();
+    const [k1, t1] = near(a);
+    expect([k1.name, !!islandOf(a, k1), t1.name, !!islandOf(a, t1)]).toEqual(['Kagoshima', false, 'Taihoku', true]);
+    const { going, out } = sixteenth(a), whole = men(going[0]);
+    for (let k = 0; standing(a, k1) < STACK || fits(a, k1, 'JAP', going, { rows: standing(a, k1), out }); k++) addCorps(a, 'JAP', `Pack ${k}`, 'inf', 1, k1.id, {});
+    expect([standing(a, k1), fits(a, k1, 'JAP', going, { rows: standing(a, k1), out }), fits(a, t1, 'JAP', going, { rows: standing(a, t1), out }), roomLeft(a, t1, 'JAP') * MEN_PER_DIV >= whole]).toEqual([STACK, false, true, true]);
+    expect(formed(a, NOV41[2])).toEqual([['plain: Infantry, 8,000 men, to form at Taihoku.', 'plain: Okinawa has no room for it. Taihoku is your nearest harbour with room.'], true, [['Taihoku', whole]]]);
+    // (b) And an island harbour of the table with room for one man fewer than the formation takes: Taihoku, the next
+    // after Kagoshima, so filled by men that its room left is the row's men less one. It is passed over too, for the
+    // next harbour, Nagasaki, which has room for the whole formation; the corps forms there whole.
+    const b = board();
+    const [k2, t2, n2] = near(b);
+    for (let k = 0; standing(b, k2) < STACK || fits(b, k2, 'JAP', going, { rows: standing(b, k2), out }); k++) addCorps(b, 'JAP', `Pack ${k}`, 'inf', 1, k2.id, {});
+    const left = roomLeft(b, t2, 'JAP') * MEN_PER_DIV, fill = addCorps(b, 'JAP', 'Fill Taihoku', 'inf', 1, t2.id, {});
+    fill.str = (left - (whole - 1)) / MEN_PER_DIV;
+    expect([t2.name, Math.round(roomLeft(b, t2, 'JAP') * MEN_PER_DIV), fits(b, t2, 'JAP', going, { rows: standing(b, t2), out }), n2.name, fits(b, n2, 'JAP', going, { rows: standing(b, n2), out })]).toEqual(['Taihoku', whole - 1, false, 'Nagasaki', true]);
+    expect(formed(b, NOV41[2])).toEqual([['plain: Infantry, 8,000 men, to form at Nagasaki.', 'plain: Okinawa has no room for it. Nagasaki is your nearest harbour with room.'], true, [['Nagasaki', whole]]]);
   }, 600000);
 });
 
