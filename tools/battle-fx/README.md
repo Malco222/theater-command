@@ -2176,6 +2176,11 @@ as `fx-film.json` is; the shipped `fx.json` is unchanged. Without the words ever
   at least 10 levels darker than the sky 6 to 11 px wide over 9 to 13 rows at 4.5 to 6 s (up to 26 levels), at 100 m
   5 to 7 px wide over 5 to 7 rows, at 150 m 3 px over 5 rows; gone by 10.5 s. At its biggest (817 px, 69 x 32 px at
   60 m) it is under a twentieth of the shot's own smoke at 1 to 2 s (17,000 to 27,000 px, 250 to 300 px across).
+  The round-4 mend (27 November): smoke stays in the air where it was made, never made where the muzzle has left. A
+  gun on the move lays none: the land scene finds the vehicle whose `muzzle` socket fired (the nearest within 3 m)
+  and passes `Muzzle(..., bMoving)` (only with the word). One that fired at the halt and then moves off, or turns her
+  hull, turret or traverse a degree, gets `Battle::WispStop(Now, At)`: the wisp's puffs not yet born are cut
+  (`Bit::CutAt`, never drawn), those in the air drift and fade where they are. No dice. A towed gun never moves.
 - **The breech's puff** (`steam.breech`): a `Steam` row, grey-brown (written 120,114,108, lands 120,112,102), 0.8 to
   1.3 m from a 0.25 m breech, 1 to 1.8 s rags, alpha 0.45, held to 3 px. The land scene calls it at a towed gun's or an open
   self-propelled gun's `case_clang`, at her `breech` socket, back toward her loader. `steam.<row>.least_px` is new
@@ -2196,12 +2201,14 @@ as `fx-film.json` is; the shipped `fx.json` is unchanged. Without the words ever
   shared 196,156,82 lands 208,172,55 on the game's curve, 177,151,112 under the land grade, glint 4).
 - Who does what at a `case_clang` is `TheaterFx::AfterShotOf` (plain): a towed gun (kind `gun`) with a breech, a puff;
   an open self-propelled gun (kind `tank` with a `crew.loader` socket) a puff if her model has a breech, and her case
-  over the side; a closed tank (kind `tank`, no loader's place, a `commander` socket) with her hatch open over half,
+  over the side (an open gun fires by the howitzer's row, so the scene passes her `Muzzle` `bCaseOverSide`, only
+  with the word, and with `ground_cases.spg` in the recipe the row's case behind her muzzle is not thrown: one case a
+  shot, over her side; a towed howitzer still leaves hers); a closed tank (kind `tank`, no loader's place, a `commander` socket) with her hatch open over half,
   fumes on her shots 2, 5, 7, 10, 12 ... and one shot in eight, stopped, a case.
 - Test: `unreal/TheaterCommand/Tools/fx_ten/run.sh` (g++ and clang++, the strict flags, `-ffp-contract=off`). The dump
   of five scripted fights (land guns, a broadside close on the water, a flak barrage of every kind, turrets far off,
   guns on sand) with the shipped recipe is held to `golden-default.sha256`, printed by the kit before this batch. The
-  test (76 checks) has each part on and off: it fires when it should and only then, its sizes and lives, its own
+  test (80 checks) has each part on and off: it fires when it should and only then, its sizes and lives, its own
   dice (the kit's shared `Seeds` as before), every piece without it laid the same with it, and its cap in the densest
   case (a six-minute barrage of all three flak kinds, forty guns firing for five minutes, a battery of six open guns
   for five minutes).
