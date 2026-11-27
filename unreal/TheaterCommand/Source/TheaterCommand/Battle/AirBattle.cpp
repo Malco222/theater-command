@@ -980,11 +980,8 @@ bool AAirBattle::Open(const FString& Why)
 					SheenMade->SetScalarParameterValue(TEXT("SheenGlare"), static_cast<float>(SheenLook.Glare));
 					SheenMade->SetScalarParameterValue(TEXT("SheenGraze"), static_cast<float>(SheenLook.Graze));
 					SheenInk = SheenMade;
-					SheenSunSet();
-					const FVector SheenUp = TowardSun().GetSafeNormal();
-					UE_LOG(LogTheater, Display, TEXT("Air battle: B-17 paint sheen: on (the Battle rules card's B-17 paint sheen, or -TheaterAirB17Sheen): M_AirPaint, gain %.2f, floor %.2f, specular %.2f, metal %.2f from %.2f, glare guard %.2f, grazing guard %.2f (-TheaterAirB17SheenInk=gain,floor,spec,metal,glare,graze,metalfrom); her sun %.0f deg up; from %s."),
-						SheenLook.Gain, SheenLook.Floor, SheenLook.Spec, SheenLook.Metal, SheenLook.MetalFrom, SheenLook.Glare, SheenLook.Graze, FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(SheenUp.Z, -1.0, 1.0))),
-						UTF8_TO_TCHAR(SheenNow->SourceSha256.substr(0, 12).c_str()));
+					// (her glare guard's sun is set, and she is announced, once the stage is raised and the key light aimed:
+					// after HideTheTable below, since a stage battle's sun is the stage's)
 				}
 			}
 		}
@@ -1091,6 +1088,17 @@ bool AAirBattle::Open(const FString& Why)
 	Small->RegisterComponent();
 	OpenTroops(); // (release 2: the column under a raid on troops, where the sky has marks: AirBattleTroops.cpp)
 	HideTheTable();
+	if (SheenInk && SheenNow)
+	{
+		// (the B-17's sheen: her glare guard follows the sun the key light was just aimed from, a stage battle's too;
+		// nothing here with her row off, since SheenInk is then null)
+		SheenSunSet();
+		const AirSheen::Tune& SheenLook = SheenNow->Look;
+		const FVector SheenUp = TowardSun().GetSafeNormal();
+		UE_LOG(LogTheater, Display, TEXT("Air battle: B-17 paint sheen: on (the Battle rules card's B-17 paint sheen, or -TheaterAirB17Sheen): M_AirPaint, gain %.2f, floor %.2f, specular %.2f, metal %.2f from %.2f, glare guard %.2f, grazing guard %.2f (-TheaterAirB17SheenInk=gain,floor,spec,metal,glare,graze,metalfrom); her sun %.0f deg up; from %s."),
+			SheenLook.Gain, SheenLook.Floor, SheenLook.Spec, SheenLook.Metal, SheenLook.MetalFrom, SheenLook.Glare, SheenLook.Graze, FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(SheenUp.Z, -1.0, 1.0))),
+			UTF8_TO_TCHAR(SheenNow->SourceSha256.substr(0, 12).c_str()));
+	}
 	LayDeckShade();
 	LayDeckSheet();
 	LayCirrus();

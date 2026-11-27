@@ -478,6 +478,14 @@ int main(int Argc, char** Argv)
 		const size_t Sentinel = Battle.find("K2_GetScalarParameterValue(TEXT(\"SheenEdge\"))"), FirstSet = Battle.find("SheenMade->SetScalarParameterValue(");
 		Check(Count(Battle, "M_AirPaint.M_AirPaint") == 1 && Gate != std::string::npos && Load != std::string::npos && Gate < Load && Load - Gate < 300 && Sentinel < FirstSet,
 			"M_AirPaint loaded only with the row on, its sentinel read before anything is set");
+		// (her glare guard's sun: set once the key light is aimed, after HideTheTable, a stage battle's sun with it; and
+		// not before Raise, where a stage battle's TowardSun is still the default 30 degrees)
+		const size_t Hide = Battle.find("\tHideTheTable();\n\tif (SheenInk && SheenNow)\n\t{");
+		const size_t SunAfter = Hide == std::string::npos ? std::string::npos : Battle.find("\t\tSheenSunSet();", Hide);
+		const size_t Raised = Battle.find("\tRaise();\n");
+		Check(Count(Battle, "\tHideTheTable();\n") == 1 && Hide != std::string::npos && SunAfter != std::string::npos && SunAfter - Hide < 400 && Raised != std::string::npos && Raised < Hide
+				&& Count(Battle, "SheenSunSet();") == 2 && Count(Battle, "Air battle: B-17 paint sheen: on (") == 1 && Battle.find("Air battle: B-17 paint sheen: on (") > Hide,
+			"her glare guard's sun set (and said) after Raise and HideTheTable, where the key light is aimed; again only with the deck's shade");
 		Check(Count(Battle, "SetMaterial(0, PlaneInk)") == 0 && Count(Battle, "SetMaterial(1, PlaneInk)") == 0 && Count(Battle, "InkFor(Made->Shape)") == 3 && Count(Battle, "InkFor(ShapeKey)") == 1
 				&& Count(Battle, "InkFor(Lit->Shape)") == 1 && Count(Battle, "InkFor(Shape)") == 1 && Count(Battle, "if (SheenInk)\n\t{\n\t\tQuad(TEXT(\"AirWarmSheen\")") == 1,
 			"every section and copy of her shapes on InkFor; the sheen's ink warmed under the black");
