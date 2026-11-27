@@ -1275,27 +1275,37 @@ describe('(j) the design director\'s 01:00Z, reading 1: a ram on purpose reads i
   });
   // The design director, 27 November 2026 06:30Z, (ii): "Add one pin at the game's own ram table figure, with n sized
   // to the 30 s limit and its tolerance stated from that n before the run." The table as the book holds it (row 1, the
-  // Soviet 1941-42, p 0.2; nothing set by the test). Speed measured first (count and seconds only, at a load of 30 to
-  // 31 on 4 CPUs, 06:33Z to 06:34Z): 1,164 to 1,254 rams on purpose a second. n = 10,000 in all (8.6 s at the slower
-  // speed, under a third of the limit): 1,000 over his own ground (seed 4_410) and 9,000 over the enemy's (seed 4_400),
-  // both at the high band. Stated before the run (06:35:32Z): every B the pairing carried is the count's share to
-  // 1e-12 (no tolerance); and over the enemy's ground the share of rammers not brought back who are shown out is within
-  // tol = 4 x sqrt(R (1 - R) / N) of the law's R, N = 9,000 x (1 - 0.1) = 8,100 the expected count not brought back,
-  // R = (0.11 - 0.1) / 0.9 = 0.0111: tol = 0.0046588, the band 0.00645 to 0.01577; a right code fails it about once in
-  // 10,000 (6.3e-5 by the normal, 9.5e-5 by the exact binomial). R = 0 and R = S = 0.11 both lie outside it.
-  it('through fated(), at the game\'s own ram table figure (row 1, p 0.2, nothing set), high band: every B the pairing carries is the count\'s share on both grounds (1,000 own, 9,000 enemy), and over the enemy\'s ground a rammer not brought back is shown out at R within 4 SE stated from n', () => {
-    const nOwn = 1_000, nEnemy = 9_000;
-    expect(SKY.fate.ram.meant[0]).toMatchObject({ nat: 'SOV', p: 0.2 });
+  // Soviet 1941-42, p 0.2; nothing set by the test). First written (0ee03a8ef) at 9,000 rams over the enemy's ground and
+  // 1,000 over his own, sized from a probe in a file of its own; the second reader found it timed out inside this part.
+  // Mended from the speed measured again (27 November, load 30 to 42 on 4 CPUs, 10,000 rams): alone 17.2 to 22.6 s;
+  // inside part (j) run whole 66.2 to 74.6 s, timed out each time, with about 3.5 times the CPU time for the same draws
+  // (after the battles flown above it; not the heap, not the load). n from the worst, 7.455 ms a ram, for a quarter of
+  // the limit: 1,000 rams over the enemy's ground (seed 4_400), 7.5 s at that speed; and 1 over his own (seed 4_410): the
+  // B the pairing carries reads no die, so one ram reads it (the share does no work there, R 0). Stated before the run
+  // (07:45:11Z): R is the literal 1 / 90, from the book's own figures (book.ts line 348 out.collide 0.1, line 350
+  // outBand[2] 1.1, data/campaign/air.json line 50 away 0.1): S = min(0.95, 0.1 x 1.1) = 0.11, R = (0.11 - 0.1) / 0.9;
+  // if those figures change the pin fails, saying so, and does not move with them. tol = 4 x sqrt(R (1 - R) / N), N =
+  // 1,000 x 0.9 = 900: 0.0139763, the band -0.00287 to 0.02509 (0 to 22 of 900 shown out); a right code fails it about
+  // once in 3,700 (exact binomial). PLAINLY: at this n the band does not rule out R of 0 and holds almost nothing; it
+  // catches a share above about 0.025, such as R = S (B never read), and no error of 10 or 30 percent. The working parts
+  // are the B check and the exact check of restOut at the book's figures. A band for a 10 percent error needs about
+  // 158,000 rams (272 to 1,180 s), not a test.
+  it('through fated(), at the game\'s own ram table figure (row 1, p 0.2, nothing set), high band: every B the pairing carries is the count\'s share on both grounds (1 own, 1,000 enemy), restOut at the book\'s figures is the literal R = 1/90, and over the enemy\'s ground a rammer not brought back is shown out within 4 SE of it stated from n (a band that holds only a share far too high)', () => {
+    const nOwn = 1, nEnemy = 1_000, R = 1 / 90, N = nEnemy * (1 - 0.1), tol = 4 * Math.sqrt((R * (1 - R)) / N);
+    const restate = (what: string) => `the book's ${what} changed: this pin's literal R = 1/90 was stated from it (STATED-BEFORE-THE-RUN-2, 07:45:11Z); state R and its band again before a run, do not let them move`;
+    expect(F.out.collide, restate('out.collide (book.ts line 348, 0.1)')).toBe(0.1);
+    expect(F.outBand[2], restate('outBand[2] (book.ts line 350, 1.1)')).toBe(1.1);
+    expect(AIR.pilots.away, restate('pilots.away (data/campaign/air.json line 50, 0.1)')).toBe(0.1);
+    expect(AIR.pilots.home, restate('pilots.home (data/campaign/air.json line 49, 0.5)')).toBe(0.5);
+    expect(SKY.fate.ram.meant[0], restate('ram table row 1 (book.ts line 379, SOV p 0.2), which this pin\'s n was timed at')).toMatchObject({ nat: 'SOV', p: 0.2 });
+    expect(Math.abs(restOut(0.11, 0.1, 1) - R), `restOut(0.11, 0.1, 1) is ${restOut(0.11, 0.1, 1)}, the rule gives 1/90`).toBeLessThan(1e-12);
     const own = ramsThrough('own', 2, nOwn, 4_410), enemy = ramsThrough('enemy', 2, nEnemy, 4_400);
-    for (const [what, t, n] of [['own', own, nOwn], ['enemy', enemy, nEnemy]] as const) {
+    for (const [what, t, n, B0] of [['own', own, nOwn, 0.5], ['enemy', enemy, nEnemy, 0.1]] as const) {
       expect(t.meant, what).toBeGreaterThanOrEqual(n);
       expect(t.carried.length, what).toBe(t.meant);
-      for (const B of t.carried) expect(Math.abs(B - t.saved), `${what}: B ${B} against the count's share ${t.saved}`).toBeLessThan(1e-12);
+      for (const B of t.carried) expect(Math.abs(B - B0), `${what}: B ${B} against the count's share ${B0}`).toBeLessThan(1e-12);
     }
-    const S = Math.min(0.95, F.out.collide * F.outBand[2]), R = restOut(S, enemy.saved, 1);
-    const N = nEnemy * (1 - enemy.saved), tol = 4 * Math.sqrt((R * (1 - R)) / N);
     console.log(`(j) at the game's figure, enemy high: rams on purpose ${enemy.meant}, not brought back ${enemy.not}, shown out ${enemy.notShown} (${(enemy.notShown / enemy.not).toFixed(4)} against R ${R.toFixed(4)}, tol ${tol.toFixed(5)}); own: rams on purpose ${own.meant}`);
-    expect(R).toBeGreaterThan(0);
     expect(Math.abs(enemy.notShown / enemy.not - R), `enemy high at the game's figure: ${enemy.notShown}/${enemy.not} against R ${R}, tol ${tol}`).toBeLessThanOrEqual(tol);
   });
 });
