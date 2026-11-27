@@ -2664,6 +2664,7 @@ int main(int Argc, char** Argv)
 		                   std::to_string(C.ChargeDrops) + " of " + std::to_string(ChargeEvents) + ", " + std::to_string(C.ChargeBursts) + " charges burst", "all" });
 		Limits.push_back({ "every depth-charge hit the battle booked bursts on the boat", C.ChargeBurstsBooked == ChargeHits && C.ChargeHitUnmatched == 0 && P.ChargesOffBoat == 0,
 		                   std::to_string(C.ChargeBurstsBooked) + " of " + std::to_string(ChargeHits) + ", " + std::to_string(C.ChargeHitUnmatched) + " with no attack before it, " +
+		                       std::to_string(C.ChargeHitLate) + " matched to the pattern laid on her that burst before it (within " + Num(SeaShow::LateHitWithin, 0) + " s), " +
 		                       std::to_string(P.ChargesOffBoat) + " out of her reach",
 		                   "all, on her" });
 		Limits.push_back({ "every charge listed going down (for the view under the water) still to burst, under the sea", P.ChargesListedOdd == 0,
@@ -2672,6 +2673,21 @@ int main(int Argc, char** Argv)
 		                   std::to_string(C.AirBlowsOnBoats) + " of " + std::to_string(C.AirOnBoats) + " let go on her, aircraft up " + std::to_string(C.MostPlanes) + " at the most", "all, seen" });
 		Limits.push_back({ "every star shell and rescue shown", C.Starshells == Starshells && C.Rescues == Rescues,
 		                   std::to_string(C.Starshells) + " of " + std::to_string(Starshells) + " star shells, " + std::to_string(C.Rescues) + " of " + std::to_string(Rescues) + " rescues", "all" });
+	}
+	// A depth-charge blow told after the pattern laid on her burst (SeaShow::LateHitWithin, the lead's ruling of 12:40Z,
+	// 27 November): matched to that pattern only on a hand-made stand-in (Tools/sea_show/stand-ins), whose blows are told
+	// 5-8 s after the rules' moment; every other recording (the real nights of Tools/sea_show/recordings, the fleet actions
+	// of Content/Data/SeaBattles, any other) tells its blows at the rules' moment itself, and is held to none. Asked of every
+	// recording, the count printed each time.
+	{
+		const size_t Slash = Path.find_last_of("/\\");
+		const std::string Folder = Slash == std::string::npos ? std::string() : Path.substr(0, Slash);
+		const size_t Up = Folder.find_last_of("/\\");
+		const bool bStandIn = (Up == std::string::npos ? Folder : Folder.substr(Up + 1)) == "stand-ins";
+		Limits.push_back({ "no depth-charge blow matched to its pattern after the pattern burst, but on a stand-in", bStandIn || C.ChargeHitLate == 0,
+		                   std::to_string(C.ChargeHitLate) + " matched so (within " + Num(SeaShow::LateHitWithin, 0) + " s after the burst; " +
+		                       (bStandIn ? "a stand-in: counted" : "not a stand-in: held to none") + ")",
+		                   "0, but on a stand-in (Tools/sea_show/stand-ins)" });
 	}
 	// Enemy boats unseen until found (SetMine, the views' "me"): drawn only once the battle has told what finds her, and
 	// nothing of her out while she is not. Where the player's side has no enemy boat but there are boats (a hunt of his own

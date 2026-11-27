@@ -45,7 +45,13 @@ d564d19ae78f5c72e9e57e2da8007e3677d801f7663bd3d23f2e3c508d92bdfe  file Source/Th
 # 55419eb6, into release 2 by b2e59242, pre-check CLEAR 25 Nov 02:21Z) moves MountOf's Troopship bow-gun deck from 12.53 m to
 # 12.75 m, where that gun's crew stand. MountOf is read only by SeaBattle and DeckCrewCore (the sea scene's crews, no switch);
 # the air stage's ShipLooks reads only HitLookFamily. Pearl and Midway draw nothing from it.
-21fec7dae058122ba0227298c2b54132ff3b245d365f125bd1a3ef3f805347b1  file Source/TheaterCommand/Battle/ConvoyLooksCore.cpp
+# Re-pinned at the convoy round 6a join (onto d57656614, in the join's own commit): cdbd869c4 (the sea scene's naval round 6a,
+# wonnkr's convoy-r5, which had no pearl_pin) changes ConvoyLook::DropPlan so a pattern laid all at once, as the battle lays
+# one on the spot it tells, draws each rail charge from over that charge's own place along the pattern, not flung the
+# pattern's length from one stern; a pattern laid over time is drawn as before. DropPlan is read only by ConvoyLooks.cpp and
+# SeaUnderCore.cpp (the sea scene's convoy looks and its eye under the water; no new switch). The air stage's ShipLooks reads
+# only HitLookFamily, so Pearl and Midway draw nothing from it.
+126dc6c1a999129ec5e5171368aa608b64176d541252f079772b4084e85af8b7  file Source/TheaterCommand/Battle/ConvoyLooksCore.cpp
 6b34770296d2f660bc5f9fffd86117633d85f6c7eeb31fa5d704d55b446d9624  file Source/TheaterCommand/Battle/ShipGuns.h
 f4b1190a7eaa4992913579bda8f45d7f9519d0494d386213c968274ed04844d1  file Source/TheaterCommand/Battle/ShipGuns.cpp
 # LandMen.h and .cpp re-pinned at the release 2 join (2f89c8e5): the land lane's byte copies as release 2 carries them, the

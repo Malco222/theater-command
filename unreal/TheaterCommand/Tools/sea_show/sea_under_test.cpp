@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <map>
@@ -24,16 +25,7 @@ using namespace SeaUnder;
 namespace
 {
 	constexpr double Pi = 3.14159265358979323846;
-	int Checks = 0, Failed = 0;
-
-	void Check(const std::string& What, bool bOk, const std::string& Got)
-	{
-		++Checks;
-		Failed += bOk ? 0 : 1;
-		std::printf("  %s  %s: %s\n", bOk ? "ok  " : "FAIL", What.c_str(), Got.c_str());
-	}
-
-	void Note(const std::string& What, const std::string& Got) { std::printf("  note  %s: %s\n", What.c_str(), Got.c_str()); }
+	int Checks = 0, Failed = 0, KnownFailed = 0;
 
 	std::string Num(double X, int Places = 1)
 	{
@@ -41,6 +33,55 @@ namespace
 		std::snprintf(Text, sizeof(Text), "%.*f", Places, X);
 		return Text;
 	}
+
+	/**
+	 * The real nights' known failures under the water, kept as sea_show_test keeps the show's (the same rule, a list of its
+	 * own): the naval rules' side of a failure on one of the convoy battle's real nights, until its rules fix lands, read
+	 * from the list run.sh names (SEA_UNDER_KNOWN: Tools/sea_show/known_failures_under.txt; a line each, tab apart: the
+	 * recording's file name without .json, the check's name as printed here, and the most its Measure may read). Within
+	 * that it prints KNOWN and fails nothing; past it, a check with no Measure, or any check not listed, fails as ever; one
+	 * listed that passes is told, to be taken off the list, and so is one listed for a night played that no check of that
+	 * name ran on (its check gone or renamed). KnownNight is the recording being played (empty for the test's own cases: never
+	 * known).
+	 */
+	std::map<std::pair<std::string, std::string>, double> Known;
+	std::set<std::pair<std::string, std::string>> Ran;
+	std::set<std::string> KnownPlayed;
+	std::string KnownNight;
+
+	void ReadKnown()
+	{
+		const char* KnownPath = std::getenv("SEA_UNDER_KNOWN");
+		if (!KnownPath) return;
+		std::ifstream KnownIn(KnownPath);
+		std::string Row;
+		while (std::getline(KnownIn, Row))
+		{
+			if (Row.empty() || Row[0] == '#') continue;
+			const size_t Tab1 = Row.find('\t'), Tab2 = Tab1 == std::string::npos ? std::string::npos : Row.find('\t', Tab1 + 1);
+			if (Tab1 == 0 || Tab2 == std::string::npos) continue;
+			Known[{ Row.substr(0, Tab1), Row.substr(Tab1 + 1, Tab2 - Tab1 - 1) }] = std::atof(Row.c_str() + Tab2 + 1);
+		}
+	}
+
+	void Check(const std::string& What, bool bOk, const std::string& Got, double Measure = -1.0)
+	{
+		++Checks;
+		if (!KnownNight.empty()) Ran.insert({ KnownNight, What });
+		const auto Listed = KnownNight.empty() ? Known.end() : Known.find({ KnownNight, What });
+		if (!bOk && Listed != Known.end() && Measure >= 0.0 && Measure <= Listed->second + 1e-9)
+		{
+			std::printf("  KNOWN %s: %s (known on this night, the rules' side: %s against up to %s)\n", What.c_str(), Got.c_str(), Num(Measure, 2).c_str(),
+			            Num(Listed->second, 1).c_str());
+			++KnownFailed;
+			return;
+		}
+		Failed += bOk ? 0 : 1;
+		std::printf("  %s  %s: %s%s\n", bOk ? "ok  " : "FAIL", What.c_str(), Got.c_str(),
+		            Listed == Known.end() ? "" : bOk ? " (listed as known: take it off the list)" : (" (past its known bound, " + Num(Listed->second, 1) + ")").c_str());
+	}
+
+	void Note(const std::string& What, const std::string& Got) { std::printf("  note  %s: %s\n", What.c_str(), Got.c_str()); }
 
 	std::string ReadAll(const std::string& Path)
 	{
@@ -220,6 +261,19 @@ namespace
 	{
 		int Met = 0, Off = 0, BookedNear = 0, BookedOff = 0, LaidOff = 0;
 		double WorstOff = 0.0, WorstBooked = 0.0, FarthestLaid = 0.0;
+		// (of those laid off her, the ones with no charge of her escort's in the water at all: FarthestLaid, the measure, is
+		// then past any bound (1e18); and the farthest of the others, a real distance, for the words)
+		int LaidNone = 0;
+		double FarthestFound = 0.0;
+
+		/** The words for the blows laid off her: how many, how many with no charge of hers in the water, how far the nearest. */
+		std::string LaidWords() const
+		{
+			std::string Out = std::to_string(LaidOff) + " laid off her";
+			if (LaidOff > LaidNone) Out += ", the nearest charge to her as far as " + Num(FarthestFound, 1) + " m";
+			if (LaidNone > 0) Out += ", " + std::to_string(LaidNone) + " with no charge of hers in the water";
+			return Out;
+		}
 
 		void Take(const SeaShow::Fx& E, const std::vector<Drum>& Before, const std::map<int, BoatNow>& Boats, double Lethal)
 		{
@@ -246,6 +300,8 @@ namespace
 				{
 					++LaidOff;
 					FarthestLaid = std::max(FarthestLaid, DrumFar);
+					if (DrumFar >= 1e17) ++LaidNone;
+					else FarthestFound = std::max(FarthestFound, DrumFar);
 				}
 			}
 			else { ++Met; WorstOff = std::max(WorstOff, Best); Off += Best > 1.5 ? 1 : 0; }
@@ -1052,6 +1108,7 @@ int main(int ArgC, char** ArgV)
 	}
 	const std::string Source = ArgV[1];
 	std::printf("the view under the water (U1)\n");
+	ReadKnown();
 	// THE GAME'S OWN LINES THIS MIRRORS
 	{
 		int Found = 0;
@@ -1466,6 +1523,10 @@ int main(int ArgC, char** ArgV)
 			return 2;
 		}
 		std::printf("%s\n", Path.c_str());
+		// (the night as the known list names it: the file's name without .json)
+		KnownNight = Path.substr(Path.find_last_of("/\\") == std::string::npos ? 0 : Path.find_last_of("/\\") + 1);
+		if (KnownNight.size() > 5 && KnownNight.compare(KnownNight.size() - 5, 5, ".json") == 0) KnownNight.resize(KnownNight.size() - 5);
+		KnownPlayed.insert(KnownNight);
 		bool bBoats = false;
 		for (const SeaFeed::Frame& V : Rec.Views)
 			for (const SeaShow::Piece& P : V.Pieces) bBoats = bBoats || P.Class == "ss";
@@ -1892,11 +1953,11 @@ int main(int ArgC, char** ArgV)
 			      std::to_string(Bursts.BookedNear) + " such, worst " + Num(Bursts.WorstBooked, 2) + " m");
 			if (bLaysOnHer)
 				Check(How + ": on a night whose every booked blow comes as its pattern, laid on her, bursts at her, each bursts by a charge drawn within twice its reach of her keel (none laid off her)",
-				      Bursts.LaidOff == 0, std::to_string(Bursts.LaidOff) + " laid off her" + (Bursts.LaidOff ? ", the nearest charge to her as far as " + Num(Bursts.FarthestLaid, 1) + " m" : std::string()) +
-				                               " (" + std::to_string(BlowsAtPattern) + " blows booked as their patterns burst at her)");
+				      Bursts.LaidOff == 0, Bursts.LaidWords() + " (" + std::to_string(BlowsAtPattern) + " blows booked as their patterns burst at her)",
+				      Bursts.FarthestLaid); // (its measure, for the known list: how far off her the nearest charge lay, m; past any bound where none of hers was in the water)
 			else if (Bursts.LaidOff > 0)
 				Note(How + ": booked blows with no charge of the escort's drawn within twice its reach of her keel (the pattern laid off her: the show's boat and drop places, an ask), burst by her",
-				     std::to_string(Bursts.LaidOff) + ", the nearest charge to her as far as " + Num(Bursts.FarthestLaid, 1) + " m (" + std::to_string(BlowsElse) +
+				     Bursts.LaidWords() + " (" + std::to_string(BlowsElse) +
 				         " blows the battle booked off a pattern's own burst at her)");
 			Check(How + ": no charge drawn sliding sideways faster than 3 m a second", Fast == 0, std::to_string(Fast) + " frames, the fastest " + Num(FastestSideways, 2) + " m/s");
 			Check(How + ": the look within its budgets (160 motes, 12 globes, 40 drums, 240 bubbles and air, 6 shafts)", OverBudget == 0, std::to_string(OverBudget) + " frames over");
@@ -2092,6 +2153,17 @@ int main(int ArgC, char** ArgV)
 			}
 		}
 	}
-	std::printf("%d checks, %d failed\n%s\n", Checks, Failed, Failed ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");
+	KnownNight.clear();
+	// (a line for a night played that no check of its name ran on: its check gone or renamed, to be taken off or mended)
+	for (const auto& Line : Known)
+		if (KnownPlayed.count(Line.first.first) && !Ran.count(Line.first))
+			std::printf("  note  listed as known on %s, but no check of that name ran there (take its line off the list, or mend its name): %s\n",
+			            Line.first.first.c_str(), Line.first.second.c_str());
+	std::printf("%d checks, %d failed", Checks, Failed);
+	if (KnownFailed) std::printf(", %d known (the rules' side, each within its bound)", KnownFailed);
+	std::printf("\n");
+	if (Failed) std::printf("SOME CHECKS FAILED\n");
+	else if (KnownFailed) std::printf("ALL CHECKS PASSED (%d known failures, each within its bound)\n", KnownFailed);
+	else std::printf("ALL CHECKS PASSED\n");
 	return Failed ? 1 : 0;
 }
