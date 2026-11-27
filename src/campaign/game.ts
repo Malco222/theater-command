@@ -56,7 +56,7 @@ import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willB
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
 import { formedLine, joinedLine, nationDone, notFormedLine, rowDone, tellWait, waitedOn } from './arrivalwaits';
-import { portsDone, portsMonth, portsStarved, portsWatched } from './portcut';
+import { portCrewGone, portsDone, portsMonth, portsStarved, portsWatched } from './portcut';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -2500,6 +2500,9 @@ function reportUnit(c: Corps): ReportUnit {
 }
 
 export function removeCorps(g: Game, c: Corps): void {
+  // (Release 2, portcut.ts) A fortress crew lost in a port cut off by sea, whatever took it, is kept for the count of the
+  // port's stores. Words only; nothing with the switch off.
+  portCrewGone(g, c);
   c.dead = true;
   // (The whole-world chart: a withered island garrison's count goes with it. Ruling 173(e), wither.ts.)
   if (farOn(g)) witherDrop(g, c, true);

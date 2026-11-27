@@ -34,14 +34,17 @@
 //   portHad:<id>      the month the player's corps stood in the port as his month opened: a nation with corps there as the
 //                     month opened hears of the corps the port loses that month (ruling 2). Set afresh at each of his
 //                     months; cleared when the switch is turned off and when the player falls.
-//   portCrew:<id>:<corps>:<nat>:<months>:<raised>
-//                     the month a fortress crew of the port's side starved there (the fortress rows), with its months of
-//                     stores, its nation and the month it was raised in the key: the rule reads the stores of the crews
-//                     living at each draw (game.ts portKeep), so that the months it fed the garrison on the crew's stores
-//                     are still counted once the crew is gone (the UI director's 01:14Z, item 3). Written in any port of
-//                     the kind, as the crew's nation is charged. Cleared once the port's stores are filled again or it is
-//                     no longer of the kind, when the switch is turned off, when its holder falls, and when the player
-//                     falls.
+//   portCrew:<id>:<corps>:<nat>:<months>:<raised>[:<seen>]
+//                     a fortress crew of the port's side lost there (the fortress rows), whatever took it: starved,
+//                     beaten in battle, ordered out, gone with its country (the UI director's 01:14Z, item 3, and 03:13Z,
+//                     item 2). The month of the last draw of the supply picture that saw it living, with its months of
+//                     stores, its nation and the month it was raised in the key, and the nation whose draw that was where
+//                     it is not the crew's own (`seen`; a crew that starves goes in its own nation's reckoning, after its
+//                     own draw): the rule reads the stores of the crews living at each draw (game.ts portKeep), so that
+//                     the months it fed the garrison on the crew's stores are still counted once the crew is gone, and
+//                     the draws after it are counted without it. Written in any port of the kind as the crew is struck off
+//                     (game.ts removeCorps). Cleared once the port's stores are filled again, it changes hands or it is no
+//                     longer of the kind, when the switch is turned off, when its holder falls, and when the player falls.
 // None begins with "stores:", so a load never touches them (save.ts keeps the supply picture's own marks by that prefix).
 import { turnToDate } from '../core/ticket';
 import { AIR } from './air';
@@ -83,7 +86,15 @@ const toldKey = (id: number): string => `portTold:${id}`;
 const shutKey = (z: number, nat: string): string => `seaShut:${z}:${nat}`;
 const lostKey = (id: number, c: Corps): string => `portLost:${id}:${c.id}:${c.nat}:${c.name}`;
 const hadKey = (id: number): string => `portHad:${id}`;
-const crewKey = (id: number, c: Corps, months: number): string => `portCrew:${id}:${c.id}:${c.nat}:${months}:${c.born ?? 1}`;
+const crewKey = (id: number, c: Corps, months: number, seen: string): string => `portCrew:${id}:${c.id}:${c.nat}:${months}:${c.born ?? 1}${seen === c.nat ? '' : `:${seen}`}`;
+/**
+ * The last draw of the supply picture whose reckoning reads it, per game: the month and the nation whose month it
+ * opened (portsMonth reads straight after each nation's draw, game.ts startPhase). Not saved: a game loaded, or one whose
+ * telling has just been switched on, is in a nation's month after its draw (lastDraw). Let go whenever a reading is
+ * missed, so that it never names a draw older than the last.
+ */
+const reading = new WeakMap<Game, { turn: number; nat: string }>();
+const lastDraw = (g: Game): { turn: number; nat: string } => reading.get(g) ?? { turn: g.turn, nat: g.order[Math.min(g.phase, g.order.length - 1)] };
 /** A sea's record while the switch watches it open (`seaShut:`): a hold that begins after it is one the switch saw begin. */
 const WATCHED_OPEN = -1;
 /** The telling's own flags, by their prefixes. */
@@ -98,6 +109,7 @@ const portFlag = (k: string): boolean => PORT_FLAGS.some((p) => k.startsWith(p))
  */
 export function setPortStores(g: Game, on: boolean): boolean {
   if (g.flags.open !== 1) return false;
+  reading.delete(g);
   if (on) {
     const was = portStoresOn(g);
     g.flags.portStores = 1;
@@ -121,7 +133,7 @@ export function portsDone(g: Game, nat: string): void {
   for (const r of g.regions) if (g.flags[toldKey(r.id)] !== undefined && (r.ctrl === nat || nat === g.human)) delete g.flags[toldKey(r.id)];
   // (The lines kept for the player's month, and the ports he had corps in, are his alone: they go when he falls. So do
   // the holds the switch watched for him: given his seat back, he is watched afresh, and a sea already shut then is a
-  // hold whose start the switch did not see. The crews starved in a port go with its holder, and with the player, whose
+  // hold whose start the switch did not see. The crews lost in a port go with its holder, and with the player, whose
   // months no longer read them or clear them.)
   for (const k of Object.keys(g.flags)) {
     if (nat === g.human ? k.startsWith('portLost:') || k.startsWith('portHad:') || k.startsWith('seaShut:') || k.startsWith('portCrew:') : k.startsWith('portCrew:') && g.regions[+k.split(':')[1]]?.ctrl === nat) delete g.flags[k];
@@ -153,7 +165,7 @@ export interface PortCut {
   /**
    * The months the port's stores feed its garrison after the last fill (game.ts portKeep). For the shutting side, as
    * its own sight gives them (sightKeep): the port's own two (DESERT.stores) with the fortress rows off; under them, the
-   * stores of the row the port holds only where it sees the port whole (with those of a crew starved there since its
+   * stores of the row the port holds only where it sees the port whole (with those of a crew lost there since its
    * side's hold began: the keep the stores were filled with), and null where it does not.
    */
   keep: number | null;
@@ -356,15 +368,17 @@ function garrisonOf(g: Game, r: Region): Corps[] {
 
 /**
  * A fortress crew of the port's side whose stores the rule reads as the port's: its months, its nation, the month it
- * was raised (a crew never leaves its works) and the month the rule starves it if no ship gets in (Infinity where it
- * does not: on an island of the whole world's table it withers and holds on, game.ts startPhase).
+ * was raised (a crew never leaves its works) and the last month a draw sees it: for one living, the month the rule
+ * starves it if no ship gets in (Infinity where it does not: on an island of the whole world's table it withers and
+ * holds on, game.ts startPhase); for one gone, the month of the last draw that saw it (`portCrew:`). `seen`: the nation
+ * whose draw in that month is the last to see it (its own, for a crew that starves in its own nation's reckoning).
  */
-interface PortCrew { months: number; nat: string; from: number; to: number }
+interface PortCrew { months: number; nat: string; from: number; to: number; seen: string }
 
 /**
  * The port's crews as the rule's draws read them, if no ship gets in: those living, each to the reckoning that eats
  * the last of its stores (fortrows.ts crewMonth: a month a fill comes before its reckoning feeds it and its count
- * starts again; every other month eats one), and those starved there since the stores were last filled (`portCrew:`).
+ * starts again; every other month eats one), and those lost there since the stores were last filled (`portCrew:`).
  * None with the fortress rows off.
  */
 function crewsOf(g: Game, r: Region, last: number | null, uncharged?: string): PortCrew[] {
@@ -378,19 +392,22 @@ function crewsOf(g: Game, r: Region, last: number | null, uncharged?: string): P
     const done = charged(g, c.nat, uncharged);
     const next = done || last === g.turn ? g.turn + 1 : g.turn;
     const eaten = !done && last === g.turn ? 0 : storesEaten(g, c);
-    out.push({ months, nat: c.nat, from: c.born ?? 1, to: far && witherAt(g, c, enemyAshore(g, c)) ? Infinity : next + Math.max(1, Math.ceil(months - eaten - 1e-9)) - 1 });
+    out.push({ months, nat: c.nat, from: c.born ?? 1, to: far && witherAt(g, c, enemyAshore(g, c)) ? Infinity : next + Math.max(1, Math.ceil(months - eaten - 1e-9)) - 1, seen: c.nat });
   }
-  return out.concat(starvedHere(g, r));
+  return out.concat(lostHere(g, r));
 }
 
-/** The crews starved in the port since its stores were last filled, as the record keeps them (`portCrew:`). */
-function starvedHere(g: Game, r: Region): PortCrew[] {
+/**
+ * The crews lost in the port since its stores were last filled, whatever took them, as the record keeps them
+ * (`portCrew:`). None the port has changed hands since: its stores are no longer the side's that lost the crew.
+ */
+function lostHere(g: Game, r: Region): PortCrew[] {
   const out: PortCrew[] = [];
   const head = `portCrew:${r.id}:`;
   for (const k of Object.keys(g.flags)) {
-    if (!k.startsWith(head)) continue;
-    const [, , , nat, months, from] = k.split(':');
-    out.push({ months: +months, nat, from: +from, to: g.flags[k] });
+    if (!k.startsWith(head) || r.since >= g.flags[k]) continue;
+    const [, , , nat, months, from, seen] = k.split(':');
+    out.push({ months: +months, nat, from: +from, to: g.flags[k], seen: seen ?? nat });
   }
   return out;
 }
@@ -398,14 +415,15 @@ function starvedHere(g: Game, r: Region): PortCrew[] {
 /**
  * The keep the rule reads at the draw of nation `nat`'s month m (game.ts computeSupply, as each nation's month opens):
  * the stores of the largest crew there then, or the port's own two. A crew is there from the draw of its own nation's
- * month in the month it was raised, and through the draw of its nation's month in the month it starves.
+ * month in the month it was raised, and through the last draw that sees it: for a crew that starves, its own nation's
+ * in the month it starves; for one lost otherwise, the last draw made before it was lost (`seen`).
  */
 function keepAt(g: Game, crews: PortCrew[], m: number, nat: string): number {
   const at = g.order.indexOf(nat);
   let most: number | null = null;
   for (const x of crews) {
-    const o = g.order.indexOf(x.nat);
-    if ((m > x.from || (m === x.from && at >= o)) && (m < x.to || (m === x.to && at <= o)) && (most === null || x.months > most)) most = x.months;
+    const o = g.order.indexOf(x.nat), s = g.order.indexOf(x.seen);
+    if ((m > x.from || (m === x.from && at >= o)) && (m < x.to || (m === x.to && at <= s)) && (most === null || x.months > most)) most = x.months;
   }
   return most ?? DESERT.stores;
 }
@@ -442,14 +460,37 @@ function refillTo(g: Game, r: Region, nats: string[], uncharged?: string): numbe
  * it sees the port whole, and the crew with it; where it does not, null: a crew it cannot see may keep the stores
  * longer than the port's own two (Malta's three, Gibraltar's 16), so that neither the month the garrison goes hungry
  * nor the latest month it is lost can be given, and the count waits (the review of the 23:50Z build, finding 2). Seen
- * whole, a crew starved there since its side's hold began counts too: the stores were filled with its keep, and the
- * rule fed the garrison on it (the UI director's 01:14Z, item 3).
+ * whole, a crew lost there since its side's hold began counts too, whatever took it: the stores were filled with its
+ * keep, and the rule fed the garrison on it until the crew was gone (the UI director's 01:14Z, item 3, and 03:13Z, item
+ * 2). The months counted from the hold are the rule's clock as that sight gives it (heldFed).
  */
 function sightKeep(g: Game, r: Region, sight: number, since: number | null): number | null {
   if (sight < SIGHT.full) return fortRows(g) ? null : DESERT.stores;
   let keep = portKeep(g, r);
-  for (const x of starvedHere(g, r)) if (since === null || x.to >= since) keep = Math.max(keep, x.months);
+  for (const x of lostHere(g, r)) if (since === null || x.to >= since) keep = Math.max(keep, x.months);
   return keep;
+}
+
+/**
+ * The latest month the stores can feed the garrison through, counted from the shutting side's hold (`since`, the latest
+ * the holder's last fill can have come) by the rule's own clock, as its own sight gives it (the UI director's 03:13Z,
+ * item 2): with the fortress rows off, or no crew, the port's own two from then. Seen whole under them, the keep each
+ * draw reads (keepAt): each crew living there for the whole of its stores from the fill, the latest it can starve; and a
+ * crew lost since the hold began, whatever took it, for the draws that saw it (`portCrew:`), and not after. Each nation
+ * of the garrison by its own draw, the soonest of them: the garrison is hungry by the month after.
+ */
+function heldFed(g: Game, r: Region, since: number, keep: number): number {
+  if (!fortRows(g)) return since + keep;
+  const far = farOn(g);
+  const crews: PortCrew[] = [];
+  for (const c of [...r.units, ...(r.garr ?? [])]) {
+    if (c.dead || c.kind !== 'fort' || !allied(g, c.nat, r.ctrl)) continue;
+    const months = crewStores(c);
+    if (months !== null) crews.push({ months, nat: c.nat, from: c.born ?? 1, to: far && witherAt(g, c, enemyAshore(g, c)) ? Infinity : since + Math.max(1, Math.ceil(months - 1e-9)), seen: c.nat });
+  }
+  for (const x of lostHere(g, r)) if (x.to >= since) crews.push(x);
+  const nats = [...new Set(garrisonOf(g, r).map((c) => c.nat))];
+  return Math.min(...(nats.length ? nats : [r.ctrl]).map((nat) => fedTo(g, crews, since, nat)));
 }
 
 /**
@@ -509,7 +550,7 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
     // month opens) is first seen in the new month, after a fill of the old one, and the rule acts a month sooner than
     // counted. Which of the two it was, the shutting side cannot tell from its own sight: only the holder's draws, and
     // whether his lanes reached the sea at them, say when his ships last got in.)
-    const heldHungry = since === null || keep === null ? null : since + keep + 1;
+    const heldHungry = since === null || keep === null ? null : heldFed(g, r, since, keep) + 1;
     return {
       region: r.id, holder, keep, shut, side: 'shutting', state: null, cut: false, lastFilled: null, feedsTo: null, hungry: null, refill: null, lost: null, lostBy: null, garrison: [], fleetInReach: null,
       heldSince: since, heldHungry, heldLost: heldHungry === null ? null : heldHungry + hungryRun() - 1,
@@ -739,10 +780,12 @@ function holdsMonth(g: Game, sweep: boolean): void {
  * corps there. Nothing with the switch off, or with nobody at the table.
  */
 export function portsMonth(g: Game, nat: string): void {
-  if (!portStoresOn(g) || !g.human || !g.nations[g.human]?.alive) return;
+  if (!portStoresOn(g) || !g.human || !g.nations[g.human]?.alive) { reading.delete(g); return; }
   const me = g.human, mine = nat === me;
+  // (The draw just made: a crew lost from now until the next was last seen by it. portCrewGone.)
+  reading.set(g, { turn: g.turn, nat });
   holdsMonth(g, mine);
-  // (A crew starved in a port counts only until the port's stores are filled again, and only while it is of the kind.)
+  // (A crew lost in a port counts only until the port's stores are filled again, and only while it is of the kind.)
   for (const k of Object.keys(g.flags)) {
     if (!k.startsWith('portCrew:')) continue;
     const r = g.regions[+k.split(':')[1]];
@@ -776,6 +819,25 @@ export function portsMonth(g: Game, nat: string): void {
 }
 
 /**
+ * A corps struck off the roster, whatever took it (game.ts removeCorps: starved in its reckoning, beaten in battle,
+ * ordered out of its works, gone with its country): a fortress crew of the port's side in a port of the kind is kept
+ * for the count (`portCrew:`), with the month and the nation of the last draw that saw it living (the UI director's
+ * 03:13Z, item 2). The rule reads the crews living at each draw (game.ts portKeep, computeSupply): every draw made
+ * before the loss fed the garrison on the crew's stores, and every draw after it reads the stores without it, whatever
+ * took it. So the counts read it as the rule's draws did (keepAt). Called as the corps goes, while it still stands in
+ * its port. Nothing with the switch off, or with nobody at the table.
+ */
+export function portCrewGone(g: Game, c: Corps): void {
+  if (!portStoresOn(g) || c.dead || !fortRow(g, c) || !g.human || !g.nations[g.human]?.alive) return;
+  const r = g.regions[c.reg];
+  if (!r || !watched(g, r) || !allied(g, c.nat, r.ctrl)) return;
+  const months = crewStores(c);
+  if (months === null) return;
+  const at = lastDraw(g);
+  g.flags[crewKey(r.id, c, months, at.nat)] = at.turn;
+}
+
+/**
  * The corps of a nation standing in ports of the kind as its month's reckoning begins (game.ts startPhase), so that
  * those the reckoning strikes off are told after it. Null with the switch off, or with no player at the table.
  */
@@ -805,13 +867,8 @@ export function portsStarved(g: Game, nat: string, before: Corps[] | null, surre
   const by = new Map<number, Corps[]>();
   for (const c of before) if (c.dead) { const l = by.get(c.reg); if (l) l.push(c); else by.set(c.reg, [c]); }
   for (const [reg, lost] of by) {
-    // (A fortress crew starved in the port, whoever hears of it: the rule's later draws read the stores without it, and
-    // the counts read them with it for the months it fed the garrison. The UI director's 01:14Z, item 3.)
+    // (A fortress crew starved in the port was kept for the count as it was struck off, whoever hears of it: portCrewGone.)
     const r = g.regions[reg];
-    for (const c of lost) {
-      const months = fortRow(g, c) && allied(g, c.nat, r.ctrl) ? crewStores(c) : null;
-      if (months !== null) g.flags[crewKey(reg, c, months)] = g.turn;
-    }
     if (surrendered?.has(reg)) continue;
     if (!involved(g, r, lost) && g.flags[hadKey(reg)] !== g.turn) continue;
     const f = portCutOff(g, reg, null);

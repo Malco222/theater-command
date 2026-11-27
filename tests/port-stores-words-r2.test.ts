@@ -11,12 +11,13 @@ import { describe, expect, it } from 'vitest';
 import HUD from '../unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignHUD.cpp?raw';
 import SESSION from '../unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignSession.cpp?raw';
 import { seaPicture } from '../src/campaign/carriers';
-import { addCorps, computeSupply, createGame, declareWar, portKeep, removeCorps, startPhase } from '../src/campaign/game';
-import { storesEaten } from '../src/campaign/fortrows';
+import { addCorps, computeSupply, createGame, declareWar, portKeep, removeCorps, resolveBattle, startPhase } from '../src/campaign/game';
+import { crewStores, storesEaten } from '../src/campaign/fortrows';
 import { SIGHT, fogOn, sightOf } from '../src/campaign/intel';
 import { closedTo, seaSide, zoneOf } from '../src/campaign/navy';
 import { PORTSTORES_ROW, monthSaid, portCardLines, portCorpsLine, portCutOff, portStoresOn, portsDone, setPortStores, type PortLine } from '../src/campaign/portcut';
 import { saveGame } from '../src/campaign/save';
+import { fieldCtrl, joinTown } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game } from '../src/campaign/types';
 import { skyAtSea } from '../src/campaign/weather';
@@ -1162,5 +1163,149 @@ describe('03:13Z, item 1: the remedy line while a crew\'s clock runs, "at least 
     const { g: h, crew } = crewed('UK');
     for (let t = 17; t <= 19; t++) month(h, t);
     expect([crew.dead, texts(portCardLines(h, MALTA, 'UK'))[1]]).toEqual([true, REMEDY('May')]);
+  });
+});
+
+describe('03:13Z, item 2: a crew lost in battle, the count on the rule\'s own clock', () => {
+  /**
+   * Under the fortress rows: Gibraltar held by its fortress crew in the field (the book's Gibraltar garrison, 16 months
+   * of stores) and a British 9th Corps in the town; the stores filled by a real draw in December 1940 (turn 16); Italy
+   * and Germany at war with Britain, France's fleet in harbour, and Italy's 1st Fleet in the Western Mediterranean. Her
+   * 2nd Fleet off the Iberian coast from the first, or with `watch` only from Italy's January (so that the switch sees
+   * the hold begin, and her own January draw finds the Iberian waters still open and fills the stores).
+   */
+  function gibCrewed(human: string, watch = false): { g: Game; gib: number; ninth: Corps; crew: Corps } {
+    const g = grand(human, true, true);
+    const r = g.byName.Gibraltar;
+    const crew = r.units.find((c) => c.kind === 'fort')!;
+    expect([crew.name, crew.nat, crewStores(crew)]).toEqual(['Gibraltar garrison', 'UK', 16]);
+    const ninth = addCorps(g, 'UK', '9th Corps', 'inf', 2, 'Gibraltar', {});
+    r.units.splice(r.units.indexOf(ninth), 1);
+    joinTown(g, r, ninth);
+    g.turn = 16;
+    g.supplyDirty = true;
+    computeSupply(g);
+    declareWar(g, 'ITA', 'UK');
+    declareWar(g, 'GER', 'UK');
+    for (const f of g.fleets) if (f.nat === 'FRA') f.stance = 'port';
+    sail(g, 'ITA', 'wmed', ['1st Fleet']);
+    if (!watch) sail(g, 'ITA', 'iberia', ['2nd Fleet']);
+    g.supplyDirty = true;
+    expect(g.flags[`stores:${r.id}`]).toBe(16);
+    return { g, gib: r.id, ninth, crew };
+  }
+  /**
+   * The battle, in the attacker's own month: a landing from Sardinia (Italy's) or an attack from Cadiz (Spain's) on the
+   * crew, worn to 12 in 100 of its strength. Beaten and shattered, it is destroyed (game.ts resolveBattle), and the
+   * attackers do not stay: Gibraltar stays British, the 9th in its town, and no army stands round it.
+   */
+  function crewBeaten(g: Game, gib: number, crew: Corps, by: 'ITA' | 'ESP'): void {
+    const att = addCorps(g, by, by === 'ITA' ? '30th Corps' : '1st Spanish Corps', 'inf', 4, by === 'ITA' ? 'Sardinia' : 'Cadiz', {});
+    crew.str = 0.12;
+    const rep = resolveBattle(g, [att], g.regions[gib], by === 'ITA' ? { sea: zoneOf(g, 'wmed'), occupy: 0 } : { occupy: 0 });
+    expect([rep.defenders.map((d) => [d.name, d.fate]), crew.dead, g.regions[gib].ctrl, fieldCtrl(g, g.regions[gib])]).toEqual([[['Gibraltar garrison', 'destroyed']], true, 'UK', 'UK']);
+  }
+  const OURS = /^(No ship reaches |Ships reach |Cut off (on|in) |.*'s stores are spent and no ship)/;
+  const ours = (g: Game, from: number): string[] => g.headlines.slice(from).map((h) => h.text).filter((t) => OURS.test(t));
+  const HELD_G = 'Cut off by sea: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast, and no ship reaches the harbour.';
+  const STORES_G = (through: string, lost: string): string => `${HELD_G} The garrison lives on the port's stores through ${through}; unless the sea is opened, it then goes hungry and is lost at the start of ${lost}.`;
+  const SPENT_G = (lost: string): string => `Cut off by sea, and the port's stores are spent: the garrison goes hungry, losing order every month, and is lost at the start of ${lost} unless the sea is opened.`;
+  const REMEDY_G = (feeds: string): string => `A fleet of yours at sea there, strong enough to open the Western Mediterranean or the waters off the Iberian coast, lets the ships in and fills the stores: one such month feeds the garrison ${feeds}.`;
+  const NEWS_SPENT = (lost: string): string => `Gibraltar's stores are spent and no ship has got through: the garrison goes hungry, and is lost at the start of ${lost} unless the sea is opened.`;
+  const LIVING_G = (through: string): string => `Living on Gibraltar's stores through ${through}.`;
+  const HUNGRY_G = (lost: string): string => `Hungry: Gibraltar's stores are spent. Lost at the start of ${lost} unless ships get through.`;
+  /** Britain's player at Gibraltar from January to the month the 9th is struck off, the crew lost in battle in `by`'s April. */
+  function play(by: 'ITA' | 'ESP'): { rows: unknown[]; record: string[]; bare: number | null } {
+    const { g, gib, ninth, crew } = gibCrewed('UK');
+    const rows: unknown[] = [];
+    let bare: number | null = null;
+    for (let t = 17; ; t++) {
+      const h0 = g.headlines.length;
+      g.turn = t;
+      phase(g, 'ITA');
+      if (t === 20 && by === 'ITA') crewBeaten(g, gib, crew, 'ITA');
+      phase(g, 'UK');
+      if (t === 20 && by === 'ESP') {
+        declareWar(g, 'ESP', 'UK');
+        phase(g, 'ESP');
+        crewBeaten(g, gib, crew, 'ESP');
+      }
+      rows.push([t, ninth.supplied, Math.round(ninth.org * 100) / 100, ninth.dead, ours(g, h0), texts(portCardLines(g, gib, 'UK')), ninth.dead ? null : portCorpsLine(g, ninth)]);
+      if (t === 20) {
+        // (The same month read without the record: the count the build made, from the port's own two.)
+        const h = structuredClone(g);
+        for (const k of Object.keys(h.flags)) if (k.startsWith('portCrew:')) delete h.flags[k];
+        bare = portCutOff(h, gib, 'UK')!.feedsTo;
+      }
+      if (ninth.dead) break;
+    }
+    return { rows, record: Object.keys(g.flags).filter((k) => k.startsWith('portCrew:')), bare };
+  }
+  const BEFORE = (t: number): unknown[] => [t, true, 1, false, t === 17 ? ['No ship reaches Gibraltar: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast. The garrison lives on the port\'s stores through April 1942; unless the sea is opened, it then goes hungry and is lost at the start of July 1942.'] : [], [STORES_G('April 1942', 'July 1942'), REMEDY_G('at least through April 1942')], LIVING_G('April 1942')];
+
+  it('Italy\'s landing in her April, before Britain\'s draw: the draw reads the stores without the crew, the garrison is hungry from April, and every line says so in the month the rule acts', () => {
+    const { rows, record, bare } = play('ITA');
+    // (January to March, the crew living: the garrison lives on its 16 months, and a fill now would come after
+    // Britain's reckoning, leaving the crew to starve in April 1942 as it would have.)
+    expect(rows).toEqual([
+      BEFORE(17), BEFORE(18), BEFORE(19),
+      // April: the crew destroyed in Italy's month, before Britain's draw, which reads the port's own two, four months
+      // after the fill: the 9th goes hungry. The month the stores run out is told in it.
+      [20, false, 0.6, false, [NEWS_SPENT('June')], [SPENT_G('June'), REMEDY_G('through June')], HUNGRY_G('June')],
+      [21, false, 0.2, false, [], [SPENT_G('June'), REMEDY_G('through July')], HUNGRY_G('June')],
+      // Struck off as June opens, the month every line named.
+      [22, false, -0.2, true, ['Cut off in Gibraltar, the 9th Corps has starved and is lost.'], [], null],
+    ]);
+    // The record: the last draw that saw the crew living was Italy's in April, and the count read it so. (Without it,
+    // the count read the port's own two from December, "through February", and never told the month the stores ran out.)
+    expect([record.length, record[0].endsWith(':UK:16:1:ITA'), bare]).toEqual([1, true, 18]);
+  });
+
+  it('Spain\'s attack from Cadiz in her April, after Britain\'s draw: that draw fed the garrison on the crew\'s stores, it is hungry from May, and every line counts April as fed', () => {
+    const { rows, record, bare } = play('ESP');
+    expect(rows).toEqual([
+      BEFORE(17), BEFORE(18), BEFORE(19),
+      // April, read after the battle: Britain's draw, before it, fed the 9th on the crew's stores for April. The draws
+      // after it read the port's own two: no month after April is fed. (Without the record, the build's count said here
+      // that the stores were spent, of a garrison fed this month.)
+      [20, true, 1, false, [], [STORES_G('April', 'July'), REMEDY_G('through June')], LIVING_G('April')],
+      // May: the stores are spent, and it is told in the month they are.
+      [21, false, 0.6, false, [NEWS_SPENT('July')], [SPENT_G('July'), REMEDY_G('through July')], HUNGRY_G('July')],
+      [22, false, 0.2, false, [], [SPENT_G('July'), REMEDY_G('through August')], HUNGRY_G('July')],
+      [23, false, -0.2, true, ['Cut off in Gibraltar, the 9th Corps has starved and is lost.'], [], null],
+    ]);
+    expect([record.length, record[0].endsWith(':UK:16:1:ESP'), bare]).toEqual([1, true, 18]);
+  });
+
+  it('the shutting side, seeing Gibraltar whole: its count follows the same clock, "is hungry by April and lost by the start of June" once the crew is gone, and so it is', () => {
+    const { g, gib, ninth, crew } = gibCrewed('ITA', true);
+    g.flags.nofog = 1;
+    const rows: unknown[] = [];
+    for (let t = 16; t <= 22; t++) {
+      g.turn = t;
+      phase(g, 'ITA');
+      if (t === 17) { sail(g, 'ITA', 'iberia', ['2nd Fleet']); g.supplyDirty = true; }
+      if (t === 20) crewBeaten(g, gib, crew, 'ITA');
+      // (Italy's player reads his card in his own month.)
+      rows.push([t, texts(portCardLines(g, gib, 'ITA'))]);
+      phase(g, 'UK');
+      rows.push([t, ninth.supplied, ninth.dead]);
+    }
+    expect(g.flags[`stores:${gib}`]).toBe(17);
+    const line = (hungry: string, lost: string): string[] => [`Your fleets have held the Western Mediterranean and the waters off the Iberian coast since January. Counting from then, the garrison of Gibraltar is hungry by ${hungry} and lost by the start of ${lost}, unless ships get through.`];
+    expect(rows).toEqual([
+      [16, []], [16, true, false],
+      // (January: the Iberian waters are shut after Italy's month opens; the hold is seen to begin as Britain's opens.)
+      [17, []], [17, true, false],
+      // The crew living: counted for all of its 16 months.
+      [18, line('June 1942', 'August 1942')], [18, true, false],
+      [19, line('June 1942', 'August 1942')], [19, true, false],
+      // April, read after the battle: the draws after it read the port's own two from the January fill. (Counted with
+      // the keep the stores were filled with, the line said "hungry by June 1942 and lost by the start of August 1942".)
+      [20, line('April', 'June')], [20, false, false],
+      [21, line('April', 'June')], [21, false, false],
+      // Struck off as June opens, in Britain's month.
+      [22, line('April', 'June')], [22, false, true],
+    ]);
   });
 });
