@@ -1308,6 +1308,84 @@ describe('(j) the design director\'s 01:00Z, reading 1: a ram on purpose reads i
     console.log(`(j) at the game's figure, enemy high: rams on purpose ${enemy.meant}, not brought back ${enemy.not}, shown out ${enemy.notShown} (${(enemy.notShown / enemy.not).toFixed(4)} against R ${R.toFixed(4)}, tol ${tol.toFixed(5)}); own: rams on purpose ${own.meant}`);
     expect(Math.abs(enemy.notShown / enemy.not - R), `enemy high at the game's figure: ${enemy.notShown}/${enemy.not} against R ${R}, tol ${tol}`).toBeLessThanOrEqual(tol);
   });
+  // The design director's standing rule: a pin with a surviving mutant is a loosened pin. Two survived the pin above: the
+  // call site fates.ts line 322 reading the middle band (R 0 at the high band; the second reader's M1) and the divide
+  // dropped there (R 0.0100, 10 percent low; the mender's P1), which no band inside 30 s can hold. So the odds the code
+  // truly uses at that call site are read exactly, with no chance in it, through fated() itself at the game's own ram
+  // table figure (nothing set): the sim's own look stream forks its own G (fork GOT); the test answers that G's FIRST
+  // roll and nothing else. G's first call for a ram on purpose whose pilot is not brought back is chance(q) at line 323
+  // (oneOut, from fateOf line 408), and that roll is its next(): so he is shown out iff q > 0 and roll < q, and the
+  // outcome flips exactly where the roll crosses q. Roll 0 says whether q is above 0 (exact); a bisection of 40 steps
+  // finds q to 2^-40; restOut is never called here. Stated before the run (STATED-BEFORE-THE-RUN-3, 13:12:53Z), the
+  // literals from the book's lines: S = min(0.95, out.collide 0.1 (book.ts 348) x outBand (book.ts 350: 0.3, 1, 1.1)),
+  // B the count's share (data/campaign/air.json 49 and 50: home 0.5, away 0.1), R = max(0, (S - B) / (1 - B)): 0 in
+  // every cell over his own ground, 0 at the enemy's low and middle bands, 1/90 at the enemy's high band.
+  it('through fated(), at the game\'s own ram table figure, the odds the code truly uses for a rammer not brought back shown out, read at the call site (fates.ts 322 to 323) by the roll of its own die, set by the test and bisected, no chance in it: 0 over his own ground and at the enemy\'s low and middle bands, the literal 1/90 at the enemy\'s high band, each to 2^-40', () => {
+    const STEPS = 40, WIDTH = 2 ** -STEPS, TOP = 1 - 2 ** -53;
+    const restate = (what: string) => `${what}: the literal was stated from book.ts lines 348 and 350 and data/campaign/air.json lines 49 and 50 (STATED-BEFORE-THE-RUN-3, 13:12:53Z); if the book changed, state it again before a run, do not let it move`;
+    /** One cell's sim, as ramsThrough makes it; returns a reader: one ram on purpose whose pilot is not brought back, the first roll of its G set to `roll`. */
+    const cell = (over: 'own' | 'enemy', band: 0 | 1 | 2, seed: number) => {
+      const sim = airBattle(TK[1], { bailouts: true });
+      const S = sim as unknown as { when: { year: number; month: number }; recent: unknown[]; fated(lost: unknown[]): void; lookRng: Rng; say: unknown; shownSay: unknown };
+      S.when = { year: 1942, month: 2 };
+      const a = sim.units.find((u) => u.air === 'ftr' && u.side === 'def')!, b = sim.units.find((u) => u.air === 'bmr' && u.side === 'att')!;
+      a.nat = 'SOV'; a.band = band; b.band = band;
+      a.fire = [{ on: b.id, rate: 1, pass: 'headon' } as (typeof a.fire)[number]];
+      a.contacts = [];
+      let got: Lost[] = [];
+      S.say = (what: string, _u: unknown, _t: string, extra?: unknown) => { if (what === 'air:lost') got.push(extra as Lost); };
+      S.shownSay = () => {};
+      // The sim's own look stream; only its fork GOT is touched: the G the code forks, its first roll answered by the test.
+      let roll = 0, calls: [string, number?][] = [];
+      const look = S.lookRng, fork0 = look.fork.bind(look);
+      look.fork = (label: number) => {
+        const G = fork0(label);
+        if (label !== GOT) return G;
+        let first = true;
+        const next0 = G.next.bind(G), chance0 = G.chance.bind(G);
+        G.chance = (p: number) => { calls.push(['chance', p]); return chance0(p); };
+        G.next = () => { calls.push([first ? 'next, the roll set' : 'next']); if (first) { first = false; return roll; } return next0(); };
+        return G;
+      };
+      const saved = over === 'own' ? AIR.pilots.home : AIR.pilots.away, rng = new Rng(seed);
+      let fid = 1;
+      return (r: number): { shown: number; calls: [string, number?][] } => {
+        roll = r;
+        for (let tries = 0; tries < 10_000; tries++) {
+          S.recent = []; got = []; calls = [];
+          S.fated([
+            { u: a, fall: drawFall(rng, 'ftr', over, saved), by: b.id, s: null, alt: SKY.bands.alt[band], fid: fid++, seat: -1, gun: null, models: 1, saved },
+            { u: b, fall: drawFall(rng, 'bmr', over === 'own' ? 'enemy' : 'own', 0), by: a.id, s: null, alt: SKY.bands.alt[band], fid: fid++, seat: -1, gun: null, models: 1, saved: 0 },
+          ]);
+          const f = got.find((e) => e.air === 'ftr');
+          if (!f || f.how !== 'collide' || !f.meant || f.back) continue;
+          expect([got.length, f.crew], `${over} band ${band}: the pair, the rammer crew 1`).toEqual([2, 1]);
+          return { shown: f.chutes + (f.out ?? 0), calls };
+        }
+        throw new Error(`${over} band ${band}: no ram on purpose with its pilot not brought back in 10,000 calls of fated()`);
+      };
+    };
+    const LIT = { own: [0, 0, 0], enemy: [0, 0, 1 / 90] } as const;
+    const read: string[] = [];
+    for (const over of ['own', 'enemy'] as const) for (const band of [0, 1, 2] as const) {
+      const lit = LIT[over][band], ram = cell(over, band, 4_600 + band + (over === 'enemy' ? 10 : 0)), what = `${over} ground band ${band}`;
+      const at0 = ram(0);
+      expect(at0.shown, restate(`${what}: at roll 0 shown out ${at0.shown}, so q is ${at0.shown ? 'above 0' : '0'}; the literal is ${lit}`)).toBe(lit > 0 ? 1 : 0);
+      let lo = 0, hi = 1;
+      for (let i = 0; i < STEPS; i++) { const mid = (lo + hi) / 2; if (ram(mid).shown) lo = mid; else hi = mid; }
+      const q = (lo + hi) / 2;
+      read.push(`${what} ${q.toExponential(12)}`);
+      expect(Math.abs(q - lit), restate(`${what}: the odds read at the call site, ${q} (in [${lo}, ${hi}]), against the literal ${lit}, width 2^-${STEPS}`)).toBeLessThanOrEqual(WIDTH);
+      if (over === 'enemy' && band === 2) {
+        expect(ram(TOP).shown, `${what}: at the top roll 1 - 2^-53 nobody is shown out`).toBe(0);
+        // The record: G's first call is chance, with the odds; its next() is the roll the test set.
+        expect(at0.calls[0]?.[0], `${what}: G's first call (the order: ${at0.calls.map((c) => c[0]).join(', ')})`).toBe('chance');
+        expect(Math.abs((at0.calls[0]?.[1] ?? NaN) - lit), restate(`${what}: the odds handed to G.chance, ${at0.calls[0]?.[1]}, against the literal 1/90`)).toBeLessThan(1e-12);
+        expect(at0.calls[1]?.[0], `${what}: G's second call`).toBe('next, the roll set');
+      }
+    }
+    console.log(`(j) the odds read at the call site, 2^-${STEPS} wide: ${read.join('; ')}`);
+  });
 });
 
 // The design director, 01:00Z, reading 5: "the landing's 0 for a crew of 2 must be the crew rule's own sized figure. If it
