@@ -5,10 +5,11 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, createGame, men, placed, removeCorps, retreatTarget, rowCorps, startPhase, whyNoRoom } from '../src/campaign/game';
+import { addCorps, createGame, men, placed, removeCorps, retreatTarget, rowCorps, startPhase, whyNoRoom, whyNoSwap } from '../src/campaign/game';
 import { saveGame } from '../src/campaign/save';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 import { fits, islandOf, roomForDivision, roomRefusal, swapRefusal } from '../src/campaign/islands';
+import { garrison } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -209,5 +210,22 @@ describe('U1: under 1,000 there, both figures whole and the line adds up', () =>
     expect(TC().bySeaWhy([big.id], guam.id).why).toBe('Guam has room for 2 divisions, about 30,000 men, and 750 of yours are there: only 29,250 more can go, and you are sending 30,000.');
     const out = corps(g, 'USA', 'Goes Out (a test row)', guam, 1, 600 / 15000);
     expect(swapRefusal(g, guam, big, out)).toBe('Guam has room for 2 divisions, about 30,000 men, and 750 of yours stay there after the swap: only 29,250 more can go, and Big has 30,000.');
+  }, 300000);
+});
+
+describe('U3: a march order reads the march sentence in 3D as on the page; the swap sentence only where a swap is asked', () => {
+  it('Pearl Harbor, 11,000 in its town and a corps of 15,000 in its field: the 24th Division Group marches from Honolulu', () => {
+    const g = war('USA');
+    const pearl = g.byName['Pearl Harbor'], hon = g.byName['Honolulu'];
+    clear(g, pearl);
+    expect(garrison(g, corps(g, 'USA', 'Inside', pearl, 1, 11000 / 15000))).toBe(true);
+    const field = corps(g, 'USA', 'Field', pearl, 1, 1);
+    const group = corps(g, 'USA', '24th Division Group', hon, 2);
+    const march = 'Pearl Harbor has room for 2 divisions, about 30,000 men, and 26,000 of yours are there: only 4,000 more can go, and you are sending 30,000.';
+    expect(whyNoRoom(g, group, pearl)).toBe(march);
+    TC().load(saveGame(g));
+    expect(TC().move([group.id], pearl.id).note).toBe(march);
+    // Asked to change places with the corps in the field, the swap's own sentence (game.ts whyNoSwap).
+    expect(whyNoSwap(g, group, field)).toBe('Pearl Harbor has room for 2 divisions, about 30,000 men, and 11,000 of yours stay there after the swap: only 19,000 more can go, and 24th Division Group has 30,000.');
   }, 300000);
 });

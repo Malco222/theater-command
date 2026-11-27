@@ -568,7 +568,10 @@ describe("the island's sentences on a live board", () => {
       corps(g, 'UK', 'Stays', sg, 1, 0.8); corps(g, 'UK', 'Also Stays', sg, 1, 0.8);
       const ninth = corps(g, 'UK', '9th Corps', jo, 5, 0.9);
       TC().load(saveGame(g));
-      expect(TC().move([ninth.id], sg.id).note, "swap refused (two of 12,000 there; a corps of 67,500 marches from Johore)").toBe("Singapore has room for 5 divisions, about 75,000 men, and 12,000 of yours stay there after the swap: only 63,000 more can go, and 9th Corps has 67,500.");
+      // (A march reads the march's sentence; the swap's only where a swap is asked, for the corps he picked: the UI
+      // director, 00:19Z, 27 November 2026, U3 and U4.)
+      expect(TC().move([ninth.id], sg.id).note, "march refused (two of 12,000 there; a corps of 67,500 marches from Johore)").toBe("Singapore has room for 5 divisions, about 75,000 men, and 24,000 of yours are there: only 51,000 more can go, and you are sending 68,000.");
+      expect(whyNoSwap(g, ninth, sg.units.find((u) => u.name === 'Stays')!), "swap asked (Stays picked)").toBe("Singapore has room for 5 divisions, about 75,000 men, and 12,000 of yours stay there after the swap: only 63,000 more can go, and 9th Corps has 67,500.");
     }
     // Board B: seed 3, Japan seated, its first month, at war with America by hand; landings from Kwajalein.
     {

@@ -156,11 +156,11 @@ import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
 import { LANE_NO_STAFF, LANE_UNCOUNTED, laneCarries } from '../../../src/campaign/navy';
 import { NAVY, subScene } from '../../../src/campaign/navy';
-import { chanceOn, headline, offersOn, whyNoSwap } from '../../../src/campaign/game';
+import { chanceOn, headline, offersOn } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
 import { CHART_NOW, answersOf, attachWorld, closedCountry, motherLine, patronOf } from '../../../src/campaign/world';
-import { islandOf, roomRefusal, roomSays, swapRefusal } from '../../../src/campaign/islands';
+import { islandOf, roomRefusal, roomSays } from '../../../src/campaign/islands';
 import { FAR_PATHS } from '../../../src/campaign/far-rows';
 // (Release 2, Japan and the Pacific: ruling 201's two lines, read where the war between the alliances goes on after a great power's fall.)
 import { warGoesOn } from '../../../src/campaign/domination';
@@ -2912,14 +2912,8 @@ function move(ids: number[], to: number, army = '', armyIds: number[] = []) {
     // where nobody there can change places with the corps, in the UI director's words (rulings 173(b), 179(s); counted
     // in men since the design director's 14:28Z of 25 November 2026: islands.ts roomRefusal).
     if (!others.length && !moved.length && !note) { try { note = whyNoRoom(s, c, s.regions[to]) ?? ''; } catch { note = ''; } }
-    // (An island counted in men: where a corps there could change places with this one but for the island's room, the
-    // swap's own sentence, counting only the men who stay: the UI director's answer of 21:37Z 26 November 2026, 4.)
-    if (!others.length && !moved.length && note) {
-      try {
-        const r = s.regions[to], b = r && s.regions[c.reg]?.nb.includes(to) ? r.units.find((u) => canOrder(s, u) && swapRefusal(s, r, c, u) !== null && whyNoSwap(s, c, u) === swapRefusal(s, r, c, u)) : undefined;
-        if (b) note = swapRefusal(s, r, c, b) ?? note;
-      } catch { /* the march's own sentence stands */ }
-    }
+    // (A march order reads the march's sentence, as the page does; the swap's sentence is said only where a swap is
+    // asked, game.ts whyNoSwap for the corps he picked: the UI director, 00:19Z, 27 November 2026, U3 and U4.)
     if (!others.length || moved.length) return;
     const other = others[0], from = c.reg, key = `${c.id}:${to}:${s.turn}`;
     if (swapAsked === key) {
