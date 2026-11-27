@@ -2951,7 +2951,8 @@ export class Drill {
       const shell = !!by && ((by.kind === 'arm' && !this.mgKill(by, u, sq.lost + owe.length)) || (by.kind === 'art' && by.team !== 'mg' && by.team !== 'snp'));
       if (sq.of !== undefined && !shell) nB = Math.min(nB, cand.filter((m) => !armoured(m)).length - owe.length);
       if (nB > 0 && b.escort) {
-        const crushed = this.crushOf(sq, cand);
+        // (the base's own call, Drill.thin: only a tank of the booked striker's block may crush him; ground's mend)
+        const crushed = this.crushOf(sq, cand, by);
         if (crushed) {
           const [v, m, tu] = crushed;
           cand.splice(cand.indexOf(m), 1);
