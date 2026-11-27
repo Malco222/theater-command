@@ -231,5 +231,5 @@ describe('the burst marks (where a shell or bomb bursts, and its crater) are dra
     const s = seen[0], nudged = fight(s.f, false, 1500);
     expect(nudged.steps.length).toBe(1520);
     expect(nudged.steps.findIndex((x, i) => x !== s.as.steps[i])).toBe(1500);
-  });
+  }, 600_000); // (1,520 steps digested whole: some 30 s alone, longer on a busy machine)
 });
