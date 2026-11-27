@@ -94,7 +94,7 @@ function gibraltar(human: string, place: (g: Game) => void): { g: Game; gib: num
   return { g, gib: g.byName.Gibraltar.id, ninth };
 }
 /** The telling's own flags. */
-const OWN = /^(portTold|portSpent|seaShut|portLost|portHad|portCrew|portDraw):/;
+const OWN = /^(portTold|portSpent|portRing|seaShut|portLost|portHad|portCrew|portDraw):/;
 const news = (g: Game, from = 0): string[] => g.headlines.slice(from).map((h) => h.text).filter((t) => /Malta|Gibraltar|stores/.test(t) && !/memorial|wireless|honour|ring broke|Rats of/.test(t));
 const texts = (ls: PortLine[]): string[] => ls.map((l) => l.text);
 
@@ -528,7 +528,7 @@ describe('who is told', () => {
     expect([g.flags[`portTold:${MALTA}`], g.flags[`portSpent:${MALTA}`]]).toEqual([17, 19]);
     expect(setPortStores(g, false)).toBe(true);
     expect(Object.keys(g.flags).filter((k) => k === 'portStores' || OWN.test(k))).toEqual([]);
-    expect(saveGame(g)).not.toMatch(/portStores|portTold|portSpent|seaShut|portLost|portHad|portCrew|portDraw/);
+    expect(saveGame(g)).not.toMatch(/portStores|portTold|portSpent|portRing|seaShut|portLost|portHad|portCrew|portDraw/);
   });
 });
 
@@ -1469,11 +1469,11 @@ describe('03:13Z, item 2: a crew lost in battle, the count on the rule\'s own cl
     const strip = (g: Game): string => {
       const h = structuredClone(g) as Game;
       h.headlines = h.headlines.filter((x) => !told.some((t) => t.text === x.text && t.turn === x.turn));
-      for (const k of Object.keys(h.flags)) if (/^(portStores$|portTold:|portSpent:|seaShut:|portLost:|portHad:|portCrew:|portDraw:)/.test(k) || k === 'newsweek') delete h.flags[k];
+      for (const k of Object.keys(h.flags)) if (/^(portStores$|portTold:|portSpent:|portRing:|seaShut:|portLost:|portHad:|portCrew:|portDraw:)/.test(k) || k === 'newsweek') delete h.flags[k];
       return saveGame(h);
     };
     expect(strip(on.g)).toBe(strip(off.g));
-    expect(saveGame(off.g)).not.toMatch(/portStores|portTold|portSpent|seaShut|portLost|portHad|portCrew|portDraw/);
+    expect(saveGame(off.g)).not.toMatch(/portStores|portTold|portSpent|portRing|seaShut|portLost|portHad|portCrew|portDraw/);
   }, 600000);
 });
 
@@ -1573,7 +1573,7 @@ describe('12:24Z, items 1 and 2: a port in its holder\'s pocket is left to the p
   const wordsOnly = (g: Game): string => {
     const h = structuredClone(g) as Game;
     h.headlines = h.headlines.filter((x) => !OURS.test(x.text));
-    for (const k of Object.keys(h.flags)) if (/^(portStores$|portTold:|portSpent:|seaShut:|portLost:|portHad:|portCrew:|portDraw:)/.test(k) || k === 'newsweek') delete h.flags[k];
+    for (const k of Object.keys(h.flags)) if (/^(portStores$|portTold:|portSpent:|portRing:|seaShut:|portLost:|portHad:|portCrew:|portDraw:)/.test(k) || k === 'newsweek') delete h.flags[k];
     return saveGame(h);
   };
   const SURROUNDED = (months: string): string => `Gibraltar is surrounded: no road and no ship reaches it from the rest of the United Kingdom. 6 British corps are cut off there, with stores for ${months}; after that the troops go hungry.`;
@@ -1608,8 +1608,10 @@ describe('12:24Z, items 1 and 2: a port in its holder\'s pocket is left to the p
     expect(wordsOnly(g)).toBe(wordsOnly(off.g));
   });
 
-  it('the ring broken by Spain\'s peace in her January: the record goes at Britain\'s February, and the port\'s lines come back that month on the rule\'s own clock, the sea still shut', () => {
-    const { rows, shipped } = play(false, true, 17);
+  it('the ring broken by Spain\'s peace in her January: the record goes at Britain\'s February, and the port\'s lines come back that month on the rule\'s own clock, the sea still shut; the port\'s first news told once, after the ring\'s own line (the UI director\'s 12:24Z, item 7)', () => {
+    const { g, rows, shipped } = play(false, true, 17);
+    const FIRST = 'No ship reaches Gibraltar: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast. The garrison lives on the port\'s stores through February; unless the sea is opened, it then goes hungry and is lost at the start of May.';
+    const BROKEN = 'The ring round Gibraltar is broken: the roads are open to the British troops there again.';
     const STORES = 'Cut off by sea: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast, and no ship reaches the harbour. The garrison lives on the port\'s stores through February; unless the sea is opened, it then goes hungry and is lost at the start of May.';
     const SPENT = 'Cut off by sea, and the port\'s stores are spent: the garrison goes hungry, losing order every month, and is lost at the start of May unless the sea is opened.';
     const REMEDY = (through: string): string => `A fleet of yours at sea there, strong enough to open the Western Mediterranean or the waters off the Iberian coast, lets the ships in and fills the stores: one such month feeds the garrison through ${through}.`;
@@ -1618,8 +1620,9 @@ describe('12:24Z, items 1 and 2: a port in its holder\'s pocket is left to the p
       [16, true, [true, 1], [], [], null, null],
       [17, true, [true, 1], [], [], null, null],
       // February: the ring broken as Britain's month opens. The window feeds the garrison through February on the
-      // December fill, and every line counts it.
-      [18, false, [true, 1], [], [STORES, REMEDY('April')], 'Living on Gibraltar\'s stores through February.', 'Living on Gibraltar\'s stores through February.'],
+      // December fill, and every line counts it; the port's first news, of which he was told nothing while the ring
+      // stood, told now, once. (60448c05e told none: the month after the fill was January, the ring's.)
+      [18, false, [true, 1], [FIRST], [STORES, REMEDY('April')], 'Living on Gibraltar\'s stores through February.', 'Living on Gibraltar\'s stores through February.'],
       // March: the stores are spent, and it is told in the month they are.
       [19, false, [false, 0.6], ['Gibraltar\'s stores are spent and no ship has got through: the garrison goes hungry, and is lost at the start of May unless the sea is opened.'], [SPENT, REMEDY('May')], HUNGRY, HUNGRY],
       [20, false, [false, 0.2], [], [SPENT, REMEDY('June')], HUNGRY, HUNGRY],
@@ -1627,7 +1630,14 @@ describe('12:24Z, items 1 and 2: a port in its holder\'s pocket is left to the p
       // struck-off line gives way to it.)
       [21, false, null, [], [], null, null],
     ]);
-    expect(shipped).toEqual([SURROUNDED('2 months'), 'The ring round Gibraltar is broken: the roads are open to the British troops there again.', 'The ring closes at Gibraltar: 5 British corps, 150,000 men, are cut off from all supply.', 'Cut off and out of supply, the British army at Gibraltar lays down its arms: 6 corps, 101,332 men.']);
+    expect(shipped).toEqual([SURROUNDED('2 months'), BROKEN, 'The ring closes at Gibraltar: 5 British corps, 150,000 men, are cut off from all supply.', 'Cut off and out of supply, the British army at Gibraltar lays down its arms: 6 corps, 101,332 men.']);
+    // In the news after the ring's own line, both in Britain's February, and only once in the war.
+    const all = g.headlines.map((h) => h.text);
+    expect(all.filter((x) => x === FIRST)).toHaveLength(1);
+    expect(all.indexOf(BROKEN)).toBeGreaterThan(-1);
+    expect(all.indexOf(FIRST)).toBeGreaterThan(all.indexOf(BROKEN));
+    expect(g.headlines[all.indexOf(FIRST)].turn).toBe(18);
+    expect(g.headlines[all.indexOf(BROKEN)].turn).toBe(18);
   });
 
   it('the shutting side is not the pocket\'s nation: Italy\'s player, seeing Gibraltar whole, keeps his line while the ring stands, from the hold the switch saw begin, the latest at both ends; and so with Spain\'s peace in her January (the UI director\'s 12:24Z, item 2)', () => {

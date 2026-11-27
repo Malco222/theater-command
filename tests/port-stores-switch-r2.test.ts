@@ -25,7 +25,7 @@ type Call = (...a: unknown[]) => unknown;
 const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
 const grand = (seed = 3, human: string | null = 'UK'): Game => startOpen(createGame(seed, human));
 const fromSave = (): Game => loadGame((TC().save() as { text: string }).text)!;
-const OURS = /^(portStores|portTold:|portSpent:|seaShut:|portLost:|portHad:|portCrew:|portDraw:)/;
+const OURS = /^(portStores|portTold:|portSpent:|portRing:|seaShut:|portLost:|portHad:|portCrew:|portDraw:)/;
 
 async function sha256(text: string): Promise<string> {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -140,7 +140,7 @@ describe('switched off, the war is the war without it', () => {
       const g = war(b.seed, b.reach, false);
       const text = saveGame(g);
       expect([g.turn, text.length]).toEqual([b.turn, b.length]);
-      expect(text).not.toMatch(/portStores|portTold|portSpent|seaShut|portLost|portHad|portCrew|portDraw/);
+      expect(text).not.toMatch(/portStores|portTold|portSpent|portRing|seaShut|portLost|portHad|portCrew|portDraw/);
       expect(await sha256(text)).toBe(b.sha);
     }, 600000);
   }
