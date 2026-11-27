@@ -179,8 +179,9 @@ namespace SeaShow
 		double ClearUntil = -1.0;
 		bool bOrdered = false;
 		/** The view reached holds her (heldFor), but her salvo has been told since, so her held fields are taken off (above):
-		 * the torpedo words' alone (Battle/SeaWordsCore: until the view that ends it, the view's hold still wins over its own
-		 * turn clear while the scene holds some of her tubes); never read from a view, and the show itself never reads it. */
+		 * for the torpedo words' test alone (the words themselves no longer read it: while she turns clear the turning-clear
+		 * words win whoever holds her tubes, the UI director, 27 November 07:14Z); never read from a view, and the show itself
+		 * never reads it. */
 		bool bHeldLetGo = false;
 		/** Whether the player's side has her (Show::SetMine), where the view says it. A boat: the escorts of the other side
 		 * running in on her now (heard, their pieces; bHeard once a view has said it, and then it stands as last told), and
@@ -360,13 +361,19 @@ namespace SeaShow
 	 * scene's own holds, after the rules let a salvo go: an own ship in the way from where she fires), and the tracks drawn
 	 * of the salvos it holds them of; and the own piece whose ship stands across its held tubes' way, as each of its ships
 	 * last looked (the first own ship found across each held tube's way, at the first place a ship holds it: the piece
-	 * standing across the most of them, another piece before its own, then the lowest; -1 none found).
+	 * standing across the most of them, another piece before its own, then the lowest; -1 none found). And her own piece's
+	 * ships across her held tubes' way (the UI director, 27 November 07:14Z: a blocker of her own piece is told by its count
+	 * and kind, never by the piece's name): of each held tube whose first ship found is her own piece's, every ship of her
+	 * own piece across its way at that place, on its line or as its head runs; how many, each counted once, and their class
+	 * where all are of one (empty where they are of more than one, or none is found).
 	 */
 	struct TubesOut
 	{
 		int Salvo = 0, Fired = 0;
 		int Held = 0, HeldFired = 0;
 		int Across = -1;
+		int OwnAcross = 0;
+		std::string OwnClass;
 	};
 
 	/** Words the battle has said of a piece (the torpedo words' phrases; the show itself never reads them): the battle
@@ -1087,8 +1094,11 @@ namespace SeaShow
 			std::vector<double> Ks, Scatter, Ends;
 			std::vector<char> RulesOnly; // (per tube: at some judging of its hold the rules' ships alone were in its way, WhyHeld)
 			// (per tube still held, as she last looked (FireTubes): the piece of the first own ship found across its way, at the
-			// first place a ship holds it, -1 none; the torpedo words' alone, TubesNow: never read in deciding)
+			// first place a ship holds it, -1 none; the torpedo words' alone, TubesNow: never read in deciding); and, in step with
+			// it, where that piece is her own, every ship of her own piece across its way there, that one first (their keys, none
+			// otherwise: the words count her own piece's ships so found, TubesOut::OwnAcross)
 			std::vector<int> Across;
+			std::vector<std::vector<int>> AcrossShips;
 			Vec WaterP;
 			double WaterHalf = 5.0, Radius = 800.0;
 			bool bFiredAny = false;

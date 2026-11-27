@@ -17,7 +17,6 @@ namespace SeaWords
 		F.ClearFromName = P.ClearFromName;
 		F.bOrdered = P.bOrdered;
 		F.bRouting = P.State == "routing";
-		F.bHeldLetGo = P.bHeldLetGo;
 		return F;
 	}
 
@@ -82,6 +81,13 @@ namespace SeaWords
 			F.Across = Own->second.Held > 0 ? Own->second.Across : -1;
 			const auto Name = F.Across >= 0 ? Pic.Phrases.find(F.Across) : Pic.Phrases.end();
 			if (Name != Pic.Phrases.end()) F.AcrossName = Name->second;
+			// (her own piece in the way: her own ships so found, and their class, never her piece's phrase)
+			if (F.Across >= 0 && F.Across == P.Id)
+			{
+				F.bAcrossOwn = true;
+				F.OwnAcross = Own->second.OwnAcross;
+				F.OwnClass = Own->second.OwnClass;
+			}
 		}
 		if (F.ClearFrom >= 0)
 		{
@@ -107,6 +113,31 @@ namespace SeaWords
 	std::string SecondsWords(int Seconds)
 	{
 		return std::to_string(Seconds) + (Seconds == 1 ? " second" : " seconds");
+	}
+
+	std::string CountWords(int Count)
+	{
+		static const char* const Words[] = { "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten" };
+		if (Count < 1) return std::string();
+		return Count <= 10 ? std::string(Words[Count - 1]) : std::to_string(Count);
+	}
+
+	std::string KindWord(const std::string& Class)
+	{
+		// (as the log names them: "a battleship of the 1st Fleet", "a cruiser of the Home Fleet", "four destroyers of Force H")
+		if (Class == "bb") return "battleships";
+		if (Class == "cv") return "carriers";
+		if (Class == "ca") return "cruisers";
+		if (Class == "dd") return "destroyers";
+		if (Class == "ss") return "submarines";
+		if (Class == "mv") return "merchant ships";
+		return "ships";
+	}
+
+	std::string OwnPhrase(int Ships, const std::string& Class, const std::string& Her)
+	{
+		if (Ships < 1) return std::string();
+		return CountWords(Ships) + " of " + Her + " own " + KindWord(Class);
 	}
 
 	int ShipsByName(const std::string& Name)
@@ -141,16 +172,18 @@ namespace SeaWords
 		if (F.ShowsHeld())
 		{
 			// Held: by the rules, naming the piece they hold her for; else by the scene, naming the piece whose ship stands
-			// across her held tubes' way, "the rest of" her torpedoes once some of that salvo is in the water.
+			// across her held tubes' way, "the rest of" her torpedoes once some of that salvo is in the water; her own piece
+			// in the way, never by its phrase: the count and kind of her own ships there, "of their own".
 			Out.What = Kind::Held;
 			Out.Tag = HeldTag;
 			const bool bRules = F.RulesHeld();
-			const std::string& Name = bRules ? F.HeldForName : F.AcrossName;
+			const bool bOwn = !bRules && F.bAcrossOwn;
+			const std::string Name = bRules ? F.HeldForName : bOwn ? OwnPhrase(F.OwnAcross, F.OwnClass, Her) : F.AcrossName;
 			if (!Name.empty())
 			{
 				// (the verb by the ships of the piece in the way: as its name counts them where it does, so the phrase and its
-				// verb agree, else as the views have it afloat, else more)
-				const int Counted = ShipsByName(Name);
+				// verb agree, else as the views have it afloat, else more; her own ships by their count)
+				const int Counted = bOwn ? F.OwnAcross : ShipsByName(Name);
 				const int Named = Counted >= 1 ? Counted : NamedShips >= 1 ? NamedShips : 2;
 				const std::string Fires = F.bOrdered ? std::string("Your order stands: ") + Agree(Ships, "she fires", "they fire") : std::string(Agree(Ships, "She fires", "They fire"));
 				const std::string Rest = !bRules && F.bHeldAway ? "the rest of " : "";
@@ -182,7 +215,7 @@ namespace SeaWords
 	{
 		const Fields F = FieldsOf(P, Pic);
 		int Named = -1;
-		const int Meant = F.RulesHeld() ? F.HeldFor : F.ShowsHeld() ? F.Across : -1;
+		const int Meant = !F.ShowsHeld() ? -1 : F.RulesHeld() ? F.HeldFor : F.Across;
 		if (Meant >= 0)
 		{
 			const auto It = Pieces.find(Meant);

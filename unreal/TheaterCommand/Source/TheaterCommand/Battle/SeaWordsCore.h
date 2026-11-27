@@ -32,11 +32,18 @@
  *    latest salvo is in the water, then "Turning clear of torpedoes fired by {phrase}."; each with the count to clearUntil
  *    (when she turns back on screen; rounded up, never below 0), and no ", once the torpedoes have passed". Routing, the
  *    same "about to be fired by" and "fired by", no count. The tag "Turning clear of torpedoes" in both.
- *  - Both at once: a piece turning clear while the scene still holds some of her own tubes shows the turning-clear tag
- *    and line (they explain the turn the player sees); when the turn ends with tubes still held, the held ones come back.
- *    The rules' own hold still wins over a turn clear, as built, and so does the view's that holds her until the view
- *    that ends it, her salvo told since, while the scene holds some of it (light ships: Destroyers 4 held, "the rest of",
- *    416.3 to 418 s, turning clear from 418 s, as the UI director checked it).
+ *  - Both at once: a piece turning clear while some of her tubes are held shows the turning-clear tag and line (they
+ *    explain the turn the player sees), whoever holds them, the rules or the scene (the UI director, 27 November 07:14Z,
+ *    on the build 11f75827: the rules' own hold no longer wins over a turn clear; light ships, Destroyers 4 410 to 416 s,
+ *    heldFor 6 then 5 with clearFrom 2 and her helm over, turns clear with the count to clearUntil); when the turn ends
+ *    with tubes still held, the held tag and line come back.
+ *  - Her own ships in the way (the same ruling): where the scene's blocker is her own piece, the line never names that
+ *    piece; it tells the count and kind of her own ships across her held tubes' way, "of their own" ("Holding the rest of
+ *    their torpedoes while three of their own destroyers are in the line of fire."; one: "one of their own destroyers
+ *    ... is"; ships of more than one kind: "three of their own ships"), the count one to ten in words, figures from 11,
+ *    the kind her ships' class as the log names it (battleships, carriers, cruisers, destroyers, submarines, merchant
+ *    ships), before any torpedo is in the water as after. Another piece's ships keep its phrase, and where both stand in
+ *    the way another piece's are named, as built.
  *  - Never silence: no own piece holds tubes or turns clear without its tag.
  *
  * The fields are the piece's extra in each view, live or recorded (SeaFeed reads them into SeaShow::Piece, as each view
@@ -87,9 +94,12 @@ namespace SeaWords
 		int Across = -1;
 		std::string AcrossName;
 		bool bLauncherAway = false;
-		/** The view reached holds her, but her salvo has been told since (the rules have let her fire: HeldFor is off;
-		 * SeaShow::Piece::bHeldLetGo). */
-		bool bHeldLetGo = false;
+		/** The piece in the way her own (Across her own piece): her own ships found across her held tubes' way, each once
+		 * (SeaShow::TubesOut::OwnAcross; below 1 none, so no line), and their class where all are of one ("dd"; empty where
+		 * of more than one: "ships"). Her line then tells them so, never by her piece's phrase (OwnPhrase). */
+		bool bAcrossOwn = false;
+		int OwnAcross = 0;
+		std::string OwnClass;
 
 		/** Held by the rules (their heldFor), by the scene (her tubes it still holds), either. */
 		bool RulesHeld() const { return HeldFor >= 0; }
@@ -97,10 +107,9 @@ namespace SeaWords
 		bool Held() const { return RulesHeld() || SceneHolds(); }
 		bool Clearing() const { return ClearFrom >= 0; }
 		bool Any() const { return Held() || Clearing(); }
-		/** What her words show: held while the rules hold her (their hold wins over a turn clear), or the scene does and she
-		 * is not turning clear, or is, but the view reached still holds her (her salvo told since: its hold wins over its own
-		 * turn clear until the view that ends it); else turning clear, while she is. */
-		bool ShowsHeld() const { return RulesHeld() || (SceneHolds() && (!Clearing() || bHeldLetGo)); }
+		/** What her words show: turning clear while she is, whoever holds her tubes (the rules or the scene: the UI director,
+		 * 27 November 07:14Z); else held while any is held. */
+		bool ShowsHeld() const { return Held() && !Clearing(); }
 	};
 	/** The rules' fields alone, as the show's piece has them (no picture). */
 	Fields FieldsOf(const SeaShow::Piece& P);
@@ -129,6 +138,15 @@ namespace SeaWords
 	/** The whole seconds from Now to Until, rounded up (the count never says she takes up her orders before she does),
 	 * never below 0. */
 	int SecondsLeft(double Until, double Now);
+	/** A count as the rules and the log write it: "one" to "ten" in words, figures from 11 ("12"); "" below 1. */
+	std::string CountWords(int Count);
+	/** The kind of ships of a class, more than one, as the log names them: "battleships", "carriers", "cruisers",
+	 * "destroyers", "submarines", "merchant ships"; any other class, or none (ships of more than one kind), "ships". */
+	std::string KindWord(const std::string& Class);
+	/** Her own ships in the way, as her held line tells them (the UI director, 27 November 07:14Z): the count and kind
+	 * "of their own" ("three of their own destroyers", "one of their own destroyers"; ships of more than one kind, "three
+	 * of their own ships"), Her the piece's own "her" or "their"; "" for none. */
+	std::string OwnPhrase(int Ships, const std::string& Class, const std::string& Her);
 	/** "1 second", "12 seconds", "0 seconds". */
 	std::string SecondsWords(int Seconds);
 	/** The ships a piece's name itself gives, as the rules or the log name it: 1 where it opens "a ", "an " or "one ", the
@@ -146,11 +164,12 @@ namespace SeaWords
 	 * none), at battle time Now. NamedShips: the ships afloat now of the piece the held line names (heldFor while the rules
 	 * hold her, else the scene's blocker; below 1 not known). The verb after the name agrees with the phrase itself where it
 	 * gives a number ("a cruiser ... is", "two destroyers ... are", even in the second the rules keep the name after a ship
-	 * of it has gone down), else with NamedShips, else "are". The rules' hold wins over turning clear; turning clear wins
-	 * over the scene's hold, but for the view's hold let go (Fields::ShowsHeld). A piece routing turns clear with no count
-	 * and no orders to take up: "Breaking off, and turning clear of torpedoes (about to be) fired by ...", ordered or not,
-	 * one ship or more (its tag the same; held, its words the same). A piece with no ship afloat, or not the player's, says
-	 * nothing; a line needs the name of the piece it speaks of (the tag stands without it).
+	 * of it has gone down), else with NamedShips, else "are"; her own ships in the way agree with their count ("one of their
+	 * own destroyers is"). Turning clear wins over any hold, the rules' or the scene's (Fields::ShowsHeld). A piece routing
+	 * turns clear with no count and no orders to take up: "Breaking off, and turning clear of torpedoes (about to be) fired
+	 * by ...", ordered or not, one ship or more (its tag the same; held, its words the same). A piece with no ship afloat,
+	 * or not the player's, says nothing; a line needs the name of the piece it speaks of, or her own ships' count (the tag
+	 * stands without it).
 	 */
 	Said Of(const Fields& F, int Side, int Mine, int Ships, int NamedShips, double Now);
 	/** The same for a piece of the show, with the picture, the piece it names looked up among Pieces (the show's pieces now). */
