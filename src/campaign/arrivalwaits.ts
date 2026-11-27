@@ -190,7 +190,8 @@ export function tellPlace(g: Game, i: number, at: Region): void {
  * form of section 1 (DRAFT for the UI director: no marked sentence exists for a loan's end). `way` is how the loan would
  * have ended: 'gone' (it leaves for other fronts), 'back' (its divisions go back to the corps they came out of), 'down'
  * (a garrison whose record ends in a surrender), 'home' (a regiment its division's row awaits, whose loan's end he is
- * asked about: the question waits with it, and is put the month after it leaves the front). Its flags go where the
+ * asked about: the question waits with it, and is put the month after it leaves the front), 'rejoin' (such a regiment
+ * whose loan's end is no offer: it goes home to its division, game.ts `comeHome`). Its flags go where the
  * loan ends (`rowDone`), or, for 'home', where his answer ends it.
  */
 export function tellLoan(g: Game, i: number, c: Corps, way: LoanWay): void {
@@ -211,6 +212,8 @@ export function loanHeldLine(g: Game, c: Corps, way: LoanWay): string {
   const at = `it is at the front in ${placeOf(g, c)}`;
   const line = way === 'home'
     ? `${named(c.name, true)}, lent to the campaign, has come to the end of its loan this month, but ${at}. It stays, and you are asked whether to let it go home to its division the month after it leaves the front.`
+    : way === 'rejoin'
+    ? `${named(c.name, true)}, lent to the campaign, has come to the end of its loan this month, but ${at}. It stays, and goes home to its division the month after it leaves the front.`
     : way === 'down'
     ? `${named(c.name, true)} is due to lay down its arms this month, but ${at}. It fights on, and lays them down the month after it leaves the front.`
     : way === 'back'

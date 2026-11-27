@@ -5887,7 +5887,7 @@ function standInsOf(g: Game, nat: string, row: any[]): Corps[] {
 }
 
 /** How a loan would have ended this month, had the one contact test not held its corps (`loanHeld`, arrivalwaits.ts `tellLoan`). */
-export type LoanWay = 'gone' | 'back' | 'down' | 'home';
+export type LoanWay = 'gone' | 'back' | 'down' | 'home' | 'rejoin';
 
 /**
  * A loan's end held by the one contact test (the design director's "3 RULED IN", 01:37Z, 27 November 2026), read where
@@ -5908,7 +5908,10 @@ function loanHeld(g: Game, nat: string, row: any[], o: any, i: number, id: numbe
   if (o.until) {
     if (g.flags[leaveKey(i)] !== undefined || g.flags[keptKey(i)] || !lentOver(g, nat, row, o)) return null;
     const drawn = g.flags.open === 1 && !!c.drew?.length && divisionsOf(g, c).every((d) => c.drew!.some((r) => r.name[0] === d.name && r.from !== c.id && !r.conv));
-    way = hisOffers(g, nat) && awaitedBy(nat, row[2]) >= 0 ? 'home' : o.ends === 'surrender' && farOn(g) ? 'down' : drawn ? 'back' : 'gone';
+    // ('rejoin': a regiment a division's row awaits, on the far side, whose loan's end is no offer: the base sends it
+    // home to its division as it goes, `comeHome`, so the hold says so. Sceptic finding S1-9 (b).)
+    way = hisOffers(g, nat) && awaitedBy(nat, row[2]) >= 0 ? 'home' : o.ends === 'surrender' && farOn(g) ? 'down' : drawn ? 'back'
+      : farOn(g) && awaitedBy(nat, row[2]) >= 0 && !(g.flags.open === 1 && (c.drew || c.rowed)) ? 'rejoin' : 'gone';
   } else if (o.war && g.flags.open === 1 && !warOn(g, o.war) && !g.atSea?.some((v) => v.corps.id === id) && (c.drew || c.rowed)) way = 'back';
   else return null;
   return corpsInContact(g, nat, c, new Set(endingNow(g, leaving))) ? { c, way } : null;
@@ -5969,7 +5972,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
       if (held) {
         tellLoan(g, i, held.c, held.way);
         g.flags[`wait:${i}`] = g.turn;
-        noteHold(g, nat, i, held.way === 'gone' ? 'loanGone' : held.way === 'back' ? 'loanBack' : held.way === 'down' ? 'loanDown' : 'loanHome', [held.c], true);
+        noteHold(g, nat, i, held.way === 'gone' || held.way === 'rejoin' ? 'loanGone' : held.way === 'back' ? 'loanBack' : held.way === 'down' ? 'loanDown' : 'loanHome', [held.c], true);
       }
       else if (o.until && id > 0 && !loanStays(g, nat, row, o, i, take === i) && (take === i || lentOver(g, nat, row, o))) {
         const c = g.corps.find((x) => x.id === id && x.nat === nat);

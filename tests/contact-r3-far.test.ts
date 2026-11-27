@@ -24,11 +24,11 @@ const month = (g: Game, t: number): void => { g.turn = t; startPhase(g, 'GER'); 
 const HOME = 'The Lent Test Regiment, lent to the campaign, has come to the end of its loan this month, but it is at the front in the Grenzmark. It stays, and you are asked whether to let it go home to its division the month after it leaves the front.';
 
 /** Germany seated with offers on; a regiment lent until month 2, awaited by a division's row of month 9. */
-function board(o: { on?: boolean; relief?: boolean } = {}): { g: Game; j: number; reg: Corps } {
+function board(o: { on?: boolean; relief?: boolean; offers?: boolean } = {}): { g: Game; j: number; reg: Corps } {
   const g = startOpen(createGame(3, null));
   expect(farOn(g)).toBe(true);
   g.human = 'GER';
-  g.flags.offers = 1;
+  if (o.offers ?? true) g.flags.offers = 1;
   if (o.on ?? true) expect(setFromWait(g, true)).toBe(true);
   const gz = g.byName.Grenzmark;
   for (const u of [...gz.units]) relocate(g, u, g.byName.Bavaria);
@@ -82,5 +82,27 @@ describe("R3-2 on the far side: the player's own loan whose end is an offer", ()
     expect(g.flags[`leave:${j}`]).toBe(2);
     expect(g.flags[`wait:${j}`]).toBeUndefined();
     expect(g.flags[`rowTold:${j}`]).toBeUndefined();
+  });
+});
+
+// (Finding S1-9 (b) of the rule sceptic 3: with offers off, the base sends the player's awaited regiment home to its
+// division at its loan's end (`comeHome`), so the hold must not tell him it is due to leave for other fronts.)
+describe("R3-2 on the far side, offers off: the player's awaited regiment held by the one test is told it goes home", () => {
+  const REJOIN = 'The Lent Test Regiment, lent to the campaign, has come to the end of its loan this month, but it is at the front in the Grenzmark. It stays, and goes home to its division the month after it leaves the front.';
+  it('held: it stays, the wait is written, and the hold is told in the home form, with no offer in it', () => {
+    const { g, j, reg } = board({ offers: false });
+    month(g, 2);
+    expect(g.flags[`leave:${j}`]).toBeUndefined();
+    expect(g.flags[`wait:${j}`]).toBe(2);
+    expect(reg.dead).toBe(false);
+    expect(g.headlines.filter((h: any) => /Lent Test Regiment/.test(h.text)).map((h: any) => h.text)).toEqual([REJOIN]);
+  });
+
+  it('switch off: it goes home to its division in the month the loan is over, as before (the base)', () => {
+    const { g, j, reg } = board({ offers: false, on: false });
+    month(g, 2);
+    expect(reg.dead).toBe(true);
+    expect(g.flags[`lent:${j}`]).toBe(-1);
+    expect(g.flags[`home:${j}`]).toBeGreaterThan(0);
   });
 });
