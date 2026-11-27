@@ -373,6 +373,16 @@ describe('an offer sent on by sea: card and result agree, in every seat', () => 
     const first = g.byName[at()], { going } = sixteenth(g);
     for (let k = 0; standing(g, first) < STACK || fits(g, first, 'JAP', going, {}); k++) addCorps(g, 'JAP', `Test fallback ${k}`, 'inf', 1, first.id, {});
     expect([of(g).why, at() === first.name, of(g).moved, lines()[0], lines().some((l) => /has no room for it/.test(l))]).toEqual([null, false, null, `Infantry, 8,000 men, to form at ${at()}.`, false]);
+    // (The design director's check of 20:19Z, 27 November 2026, on F3: "No moved line is right if the card's "to form
+    // at X" names the fallback place, read from the same function that forms it. Pin one such card. If a card names its
+    // own unheld place, that is a fault.") The page's card names the place, no card names Okinawa, and FORM IT pressed
+    // forms the corps there and nowhere else.
+    const there = at(), r = open(g).sections[0].rows.find((x: any) => x.title === NOV41[2]);
+    expect([r.lines[0], r.buttons[0].label, r.buttons[0].ok]).toEqual([`Infantry, 8,000 men, to form at ${there}.`, 'FORM IT', true]);
+    expect(open(g).sections.flatMap((sec: any) => sec.rows).filter((x: any) => x.lines.some((l: string) => /Okinawa/.test(l))).map((x: any) => x.title)).toEqual([]);
+    expect(TC().act(`offers:take:${index(NOV41[2])}`)).toMatchObject({ ok: true, note: `${NOV41[2]} is formed.` });
+    const h = loadGame(TC().save().text)!;
+    expect(h.corps.filter((c) => c.nat === 'JAP' && !c.dead && c.name === NOV41[2]).map((c) => h.regions[c.reg].name)).toEqual([there]);
   }, 600000);
 });
 
