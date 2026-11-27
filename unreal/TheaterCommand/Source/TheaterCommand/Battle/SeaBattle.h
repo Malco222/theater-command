@@ -9,6 +9,8 @@
 #include "Battle/SeaLookSwitches.h" // (the release 2 ocean, step 0: the sea's look in force)
 #include "Battle/SeaMarksPool.h" // (the release 2 ocean, step 1(a): DrawMarks' meshes kept)
 #include "Battle/SeaReel.h" // (the ship detail plan, R1.1: the BEFORE reel's measured shots)
+#include "Battle/FreeEye.h" // (the sea free eye: the camera thread's free camera core)
+#include "Battle/SeaFreeEyeGlue.h" // (the sea free eye: the sea's side of it, -TheaterSeaFreeEye=)
 #include "Battle/HeavyWeather.h" // S6 hook (heavy weather: bow spray and ship ice)
 #include "Battle/SeaNight.h" // (the release 2 ocean, step 11: night fighting's looks, -TheaterSeaNightFight=)
 #include "Battle/SeaDayCore.h" // (the release 2 ocean, step 11: the battle's light from its field, -TheaterSeaDay=field)
@@ -99,6 +101,19 @@ public:
 	void SkipMonthScene() { bMonthEnding = bMonthScene; }
 	/** U1 hook (under water): the month scene's U and Shift+U, handed over by its screen (which takes every key there). */
 	void UnderKey(bool bShift);
+	/** The sea free eye (Battle/SEA-FREE-EYE.md): on in this battle (-TheaterSeaFreeEye=1 in a full battle watched live),
+	 * and the screen's hands handed over: a key by its plain name, the screen's FKey turned, with Control, Command or
+	 * Option held (bChord) (true: Handled, by the glue's SeaFreeEye::ScreenKey: a release only for a key whose press the
+	 * screen took; U gives the free camera back first, then goes to UnderKey as today), the wheel's notches, a trackpad's
+	 * slide (picture widths and heights), pinch and twist (degrees), a click or a double click at a point of the picture
+	 * (its share of the width and the height, 0..1 from the top left), and every held key let go (the screen lost the
+	 * keys). */
+	bool HasFreeEye() const { return bFreeEye; }
+	bool FreeKey(SeaFreeEye::KeyName Key, bool bDown, bool bShift, bool bRepeat, bool bChord);
+	void FreeWheel(float Notches);
+	void FreeGesture(double SlideRight, double SlideAhead, double Pinch, double Twist);
+	void FreeClick(const FVector2D& Share, bool bDouble);
+	void FreeLetGoKeys();
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
@@ -326,6 +341,24 @@ private:
 	 * shot to settle. */
 	bool bEyeCut = true;
 	int32 TicksSinceCut = 0;
+	/** The sea free eye (Battle/SEA-FREE-EYE.md), off unless -TheaterSeaFreeEye=1 in a full battle watched live: the core
+	 * (its Set the sea's, SeaFreeEye::SeaSettings), the glue's state (his hands, the pick, the lock, the division ids, the
+	 * drive, the lens's ease), the floor (the drawn sea, never under its still face), the frame's real seconds unclamped,
+	 * the real clock, the ceiling under this battle's sky, the player's side, whether it owns the camera this frame (set in
+	 * AimEye), the ship it follows, and the refreshes it drives while it owns the camera (the funnels and the far wrecks). */
+	FreeEye::Eye Free;
+	SeaFreeEye::State FreeState;
+	SeaFreeEye::SeaFloor FreeFloor;
+	bool bFreeEye = false, bFreeRide = false, bFreeNow = false;
+	double FreeDt = 0.0, FreeRealNow = 0.0, FreeCeiling = SeaFreeEye::EyeMost;
+	int32 FreeSide = 0, FreeHero = -1;
+	SeaFreeEye::Refresh FunnelsFree, WrecksFree;
+	/** The director's eye of the last frame (centimetres, the world's axes), whoever had the camera: a U that gives the free
+	 * camera back dives from it (UnderKey), never from where the free eye was flown (Q9). */
+	FVector FreeDirAt = FVector::ZeroVector;
+	/** The free eye's frame, from AimEye: the director's From, To and Lens in (centimetres, the world's axes, horizontal
+	 * degrees); the free eye's out when it owns the camera (bOutFree), with its own cut (bOutCut). */
+	void FreeAim(bool bHandDive, FVector& From, FVector& To, double& Lens, bool& bOutFree, bool& bOutCut);
 	/** Where each ship last stood (board metres) and her heading, for a shot on a ship the show no longer draws. */
 	TMap<int32, FVector4> LastSeen;
 

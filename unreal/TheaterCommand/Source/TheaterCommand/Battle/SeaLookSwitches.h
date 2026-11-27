@@ -22,7 +22,8 @@ namespace SeaLookSwitches
 		/** Its value at tier 0 (release 1.5's sea). */
 		const char* Today;
 		/** What turns it on: a tier ("1", "2", "3"), "tier" (it is the tier), "own" (independent of the tier), "with
-		 * Swell" or "with Day" (with that switch), "review" (review pictures only), "extra" (one at a time) or "none". */
+		 * Swell", "with Day" or "with FreeEye" (only with that switch), "review" (review pictures only), "extra" (one at a
+		 * time) or "none". */
 		const char* OnAt;
 		/** The plan's step that builds it. */
 		const char* Step;
@@ -68,6 +69,12 @@ namespace SeaLookSwitches
 		{ "TheaterSeaCoast", "off", "extra", "14", false },
 		{ "TheaterSeaTurrets=", "0", "own", "16", false },
 		{ "TheaterSeaStepDown=", "0", "1", "15", false },
+		// (the sea free eye, Battle/SEA-FREE-EYE.md: the camera he flies himself, on only in a full battle watched live;
+		// its ride on a locked ship's heading and the Mac's scripted drive count only with -TheaterSeaFreeEye=1, which
+		// SeaFreeEye::Take holds them to; all three read by OpenOn)
+		{ "TheaterSeaFreeEye=", "0", "own", "FE1", true },
+		{ "TheaterSeaFreeEyeRide=", "0", "with FreeEye", "FE1", true },
+		{ "TheaterSeaFreeEyeDrive=", "off", "with FreeEye", "FE1", true },
 		// (the ship detail plan, round 1: the ships at sea, each for review pictures until the art director's Mac check; the
 		// light, the file's shade on each point and the top light, which takes a value (off or 0, none; 1 or on, 0.10; or a
 		// top light from 0.0 to 0.30: TakeReviewNumber); the skin, the rust ramp and the material's own wear; the shade,

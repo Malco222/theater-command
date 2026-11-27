@@ -802,6 +802,12 @@ double FSeaWeather::OverviewHeight() const
 	return SeaSky::OverviewHeight(bOn && Switches.Draw != SeaSky::Clouds::Off && Chosen.Day.bDeck, Sky.Base);
 }
 
+bool FSeaWeather::DeckDrawn(double& OutBase) const
+{
+	OutBase = Sky.Base;
+	return bOn && Switches.Draw != SeaSky::Clouds::Off && Chosen.Day.bDeck;
+}
+
 void FSeaWeather::SayFrameTimes() const
 {
 	if (Repaints <= 0)

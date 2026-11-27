@@ -1,0 +1,9 @@
+# The director's text the sea free eye must leave as it was (Tools/sea_free_eye, the plan's check C9): SHA-256 of each
+# piece of Source/TheaterCommand/Battle/SeaBattle.cpp, found by its signature, from its first line to its closing "}"
+# and the newline after it. AimEye is the one director function the free eye edits: its text before the cut line (with
+# the free block, "// SeaFreeEye block begins" to "// SeaFreeEye block ends", left out) and after it, both computed on
+# the base (d5cb46ea3, where AimEye has no free block) and holding at the branch's head.
+c10de490fd87f1819e1453ee21b1ee9c6a205c8be4095b73a7b96cd9f2edc52c PlanShots
+9834f048312fe7f67a9492d00d218ecf600e99b78c323562d4a5cf339dc0ee80 ShotEye
+8f6eacf5a85b1a4cdab7a570cc43c299d3a0a828e3f8b60d6ec16504c4a92d9a AimEye before its cut line
+272ee3083b5b4b9b4b46518b67bd720652c079b547f0d45e3e0fefd684273d4a AimEye after its cut line
