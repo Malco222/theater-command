@@ -14,11 +14,12 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; (globalThis as any).TC_OFFERS = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, createGame, men, placed, removeCorps, rowCorps, rowOffers, setWar, startPhase } from '../src/campaign/game';
+import { addCorps, createGame, halfYearLast, men, placed, removeCorps, rowCorps, rowOffers, setWar, startPhase } from '../src/campaign/game';
 import { fits, roomLeft } from '../src/campaign/islands';
 import { startOpen } from '../src/campaign/staff';
 import { MEN_PER_DIV, STACK, type Corps, type Game, type Region } from '../src/campaign/types';
 import setup from '../data/campaign/setup-1939.json';
+import { offerLines } from '../unreal/TheaterCommand/Rules/offers-look';
 
 const rows = (setup as any).expeditions as any[][];
 const war = (human: string | null): Game => startOpen(createGame(5, human));
@@ -157,13 +158,32 @@ describe("the player's offer stays in the list for the same half year as the com
     expect([c.flags[`sent:${fifthId}`], c.regions[row(c, FIFTH)!.reg].name]).toEqual([1, 'Taihoku']);
   });
 
-  it("an offer made late in the half year has only what is left of it: room on Formosa in month 6 gives an offer open through month 8", () => {
+  it("an offer made late in the half year keeps the months its row waited for room: room on Formosa in month 6, after months 2 to 5 without, gives an offer open through month 12, gone in month 13", () => {
+    // (Moved by D1, the design director's ruling of 17:53Z, 27 November 2026, 3: "Months waited for room come off the
+    // player's offer (offerLast) exactly as off the computer's half year." Before her ruling this read `last: 8`, the
+    // due month and six, with the four months waited for room lost to the offer.)
     const g = war('JAP');
     fill(g);
     months(g, 1, 5);
     for (const c of g.corps.filter((x) => /^Test filler Taihoku/.test(x.name) && !x.dead)) removeCorps(g, c);
     month(g, 6);
-    expect(offer(g, FIFTH)).toMatchObject({ since: 6, last: 8 });
+    // Its due month is its date, October 1939 (month 2); it waited for room in months 2 to 5, counted by the rule
+    // (`roomwait`); its last month is the rule's own function of the two: the due month, six, and the months waited.
+    const due = rows[fifthId][0], waited = g.flags[`roomwait:${fifthId}`];
+    expect([due, waited]).toEqual([2, 6 - due]);
+    const last = halfYearLast(g, fifthId, due);
+    expect([last, due + 6 + waited]).toEqual([12, 12]);
+    expect(offer(g, FIFTH)).toMatchObject({ since: 6, last, why: null });
+    // The page prints it: "Offered in February 1940, open until August 1940."
+    expect(offerLines(g, offer(g, FIFTH)!).map((l) => l.text).slice(-1)).toEqual(['Offered in February 1940, open until August 1940.']);
+    months(g, 7, last);
+    expect(offer(g, FIFTH)).toMatchObject({ since: 6, last });
+    expect(offerLines(g, offer(g, FIFTH)!).map((l) => [l.text, l.tone]).slice(-1)).toEqual([['Offered in February 1940. This is its last month.', 'amber']]);
+    // Gone in the month after, with the lapse sentence, which reads the same last month.
+    const news = g.headlines.length;
+    month(g, last + 1);
+    expect([offer(g, FIFTH), g.flags[`sent:${fifthId}`], row(g, FIFTH)]).toEqual([undefined, 2, undefined]);
+    expect(g.headlines.slice(news).map((h) => h.text).filter((t) => t.includes(FIFTH))).toEqual([`The offer to form ${FIFTH} has lapsed: its time has passed.`]);
   });
 });
 
