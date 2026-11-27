@@ -793,8 +793,13 @@ namespace LandField
 		double RainWet = 0.0;
 		/** Each field's own tone and state over its crop's paint (on trial, "fieldtone"): Toned. */
 		bool bTone = false;
-		/** The steppe's fallows (and the rules' works on it) as ploughland (on trial, "ploughland"): FallowAt, LandSteppe::FallowColour. */
+		/** The steppe's fallows as ploughland (on trial, "ploughland"): FallowAt, LandSteppe::FallowColour, the furrows' Mesh::Uvs. */
 		bool bPlough = false;
+		/**
+		 * The rules' works on the steppe dug and thrown up in heaps, their outline wandering into the grass (SteppeColour's
+		 * works branch; on trial, "diggings", and with "ploughland" too, which painted them first). No furrow, no Uvs.
+		 */
+		bool bDiggings = false;
 		/** The lanes' staircases straightened before their smoothing (on trial, "roadline"): MakeLanes. */
 		bool bRoadLine = false;
 		struct RegionHost;
@@ -1635,6 +1640,7 @@ namespace LandField
 		if (RainWet > 0.0) bWet = true; // (rain's wet ground, wherever it falls: Wetted)
 		bTone = !Fd.Trial.empty() && Fd.Tried("fieldtone"); // (each field its own tone: on trial)
 		bPlough = Sp && !Fd.Trial.empty() && Fd.Tried("ploughland"); // (the steppe's fallows as ploughland: on trial)
+		bDiggings = bPlough || (Sp && !Fd.Trial.empty() && Fd.Tried("diggings")); // (the steppe's works dug in heaps: on trial)
 		bRoadLine = !Fd.Trial.empty() && Fd.Tried("roadline"); // (the lanes' staircases straightened: on trial)
 		bLodged = !Fd.Trial.empty() && Fd.Tried("lodged"); // (the growth laid over round shell holes: on trial, AddFlatten)
 		std::vector<uint8_t> RgOf(Fd.Grounds.size(), RgOpen), RoadOf(Fd.Grounds.size(), 0);
@@ -6031,9 +6037,9 @@ namespace LandField
 			C = Varied(C, 1.0 + 0.08 * N2 + 0.05 * Broad, 0.02 * N1);
 			break;
 		case RgWorks:
-			if (bPlough)
+			if (bDiggings)
 			{
-				// (ploughland: the earth dug and thrown up in heaps and scrapes, trodden grass between, its outline wandering
+				// (diggings, and ploughland: the earth dug and thrown up in heaps and scrapes, trodden grass between, its outline wandering
 				// and fading into the grass, not the rules' cells dug out to a ruler)
 				// (the art director's mend 1: the heaps were cut from the fine mottle N2, a value noise 7 m to its lattice
 				// on the world's axes, and drew its squares as a maze. Now every field cut here is a round noise turned off
