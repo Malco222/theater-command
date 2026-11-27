@@ -802,6 +802,60 @@ namespace LandField
 		bool bDiggings = false;
 		/** The lanes' staircases straightened before their smoothing (on trial, "roadline"): MakeLanes. */
 		bool bRoadLine = false;
+		/**
+		 * With it the word moves the road and what must follow it, and nothing is dealt anew (the art director's ruling of
+		 * 26 November): the village, the farmsteads, the parcels and their crops, the hedges, the woods, the hay are all
+		 * dealt on the lanes' old line as they are with the word off, and then carried onto the new line (CarryRoad): what
+		 * lies within CarryNear of an old lane goes with it (its place across and along the lane kept), and from there the
+		 * carry eases off to nothing at CarryFar. RoadNew: the new line until CarryRoad lays it. The world as dealt is kept
+		 * beside the world carried (the ...Was members, the lanes' old line among them), and SwapWorld changes one for the
+		 * other, so the plantings are dealt where they were dealt (and then carried, CarryPlanted) and the hedges' openings
+		 * are made where the recorded ways now cross them.
+		 */
+		std::vector<Lane> RoadNew, LanesWas;
+		std::vector<LaneSeg> LSegsWas;
+		SegGrid LGridWas, BGridWas, CarryGrid;
+		std::vector<uint8_t> RgnWas, OccRWas;
+		std::vector<int32_t> PidWas;
+		std::vector<float> DistEWas, LaneDWas, CarryDX, CarryDY;
+		std::vector<struct House> HousesWas;
+		std::vector<Run> RunsWas;
+		std::vector<BankSeg> BSegsWas;
+		/** The hedges' lines and openings as dealt (for the cow paths, dealt where they were dealt and then carried). */
+		std::vector<HedgeLine> HedgeOutWas;
+		std::vector<HedgeOpening> OpeningOutWas;
+		/** The hedges dealt in the world as dealt, exactly as with the word off (their runs, banks, gateways, breaches and
+		 * walls' marks kept there for the plantings dealt on them); a region's walls dealt so and carried. */
+		void DealHedges();
+		/** While DealHedges deals: the gateways' and the breaches' gaps cut in each hedge's points, and the gates hung, as
+		 * dealt (MakeHedges then carries them and deals none anew). */
+		bool bHedgesAsDealt = false;
+		std::vector<std::vector<char>> HedgeGapsWas;
+		Line GatePostsWas;
+		std::vector<double> GateYawsWas;
+		/** Each old lane's points' places on the new line (their nearest there, in order) and the new line's way there. */
+		std::vector<Line> CarryTo, CarryWay;
+		/** The old lanes' segments (CarryK: each one's first point on its lane), filed within CarryFar of them. */
+		std::vector<LaneSeg> CarrySegs;
+		std::vector<uint32_t> CarryK;
+		int CarryNX = 0, CarryNY = 0;
+		static constexpr double CarryNear = 34.0, CarryFar = 74.0, CarryStep = 4.0, CarryExact = 6.0, CarryEvenAt = 20.0, CarryEven = 10.0;
+		/** How far the carry moves a place (exactly, from the lanes); CarriedAt the same from its 4 m lattice (for the raster). */
+		V2 CarriedBy(V2 P) const;
+		V2 CarriedAt(V2 P) const;
+		void CarryRoad();
+		void SwapWorld();
+		/** The instances planted since From (per base) in the world as dealt, carried onto the new line (none left on a
+		 * recorded way), and the walls laid since WallsFrom. */
+		void CarryPlanted(const std::vector<size_t>& From, size_t WallsFrom, size_t OutFrom);
+		/** How far a place lies past the nearest lane's floor (exactly, not by its pixel), and past the nearest bank's foot,
+		 * in the world given (the one carried, or the one as dealt). */
+		double LaneEdgeOf(const SegGrid& Grid, const std::vector<LaneSeg>& Segs, const std::vector<Lane>& Of, V2 P) const;
+		double BankRoomOf(const SegGrid& Grid, const std::vector<BankSeg>& Segs, const std::vector<Run>& Of, V2 P) const;
+		/** On trial ("roadline"): a lane findable from the general's height, its middle out of the village closed over by the
+		 * trees' crowns for no more than LaneShutMost at a time; where it is longer, a window opened (OpenOverLanes). */
+		static constexpr double LaneShutMost = 40.0;
+		void OpenOverLanes();
 		struct RegionHost;
 		/** A place as a region sees it (the parcel, its edges, the lanes and ways; with LandField's noises if bNoise). */
 		LandScape::Spot SpotAt(double X, double Y, bool bNoise) const;
@@ -1957,6 +2011,7 @@ namespace LandField
 					L.push_back(Far);
 				}
 			}
+			const Line Banded = L; // (on trial, "roadline": the staircase as it stands, from which the line is also laid as before)
 			// The rules' roads in the cells step: straight for a few cells, then one cell aside, so a road a little off the
 			// grid's axes is a staircase of 25 m jogs, which three passes of Chaikin only round (a zig-zag from above: Brian's
 			// Prokhorovka, 25 November). On trial ("roadline"): the staircase straightened first. Its corners are found on
@@ -2135,17 +2190,222 @@ namespace LandField
 			// and the ones beside them), and a few metres over some 80 m; none at the ends (they meet other lanes), and
 			// little in the village, whose houses front the lane.
 			// (none where the land was surveyed: its roads run the section lines straight)
-			const double Total = LineLength(L), Wanders = Rg && Rg->Surveyed() ? 0.0 : 1.0;
-			Line W(L.size());
-			double S = 0.0;
-			for (size_t K = 0; K < L.size(); ++K)
+			const double Wanders = Rg && Rg->Surveyed() ? 0.0 : 1.0;
+			auto WanderOf = [&](const Line& At) {
+				const double Total = LineLength(At);
+				Line Off(At.size());
+				double S = 0.0;
+				for (size_t K = 0; K < At.size(); ++K)
+				{
+					if (K > 0) S += Len(At[K] - At[K - 1]);
+					const V2 Way = Unit2(At[std::min(K + 1, At.size() - 1)] - At[K > 0 ? K - 1 : 0]);
+					const double Amp = 2.5 * std::min({ 1.0, S / 40.0, (Total - S) / 40.0 });
+					double Bend = 12.0 * Smooth(0.0, 1.0, std::min({ 1.0, S / 110.0, (Total - S) / 110.0 }));
+					if (Fd.bTown) Bend *= Smooth(Fd.TownR * 0.9, Fd.TownR * 1.5, std::hypot(At[K].X - Fd.TownX, At[K].Y - Fd.TownY));
+					Off[K] = Perp(Way) * Wanders * (Amp * Noise(S / 80.0, Index * 7.31, Seed ^ 0xE1) + Bend * Noise(S / 260.0, Index * 3.77 + 0.5, Seed ^ 0xE2));
+				}
+				return Off;
+			};
+			Line W = WanderOf(L);
+			// (on trial, "roadline": the bocage's lanes and the jungle's track wander slowly instead, the art director's ruling
+			// of 26 November: bends of 150 to 215 m, each a curve of one steady turn, no two neighbours of the same length,
+			// reach or turn, swinging from side to side of the straight line, so that somewhere in any 200 m the lane lies 4 m
+			// (the bocage) or 6 m (the jungle) or more off the chord between that stretch's ends, and it turns no more than 12
+			// degrees in 25 m; eased in (a bend leans across its way) from the wander before: over 200 m from the ends, over
+			// the field's first 250 m, and from 0.9 to 2.2 of the village's radius (eased slower than that, a bend of 10 m
+			// reach would turn the lane past 15 degrees in 25 m where it eases). The steppe's, the desert's and the other
+			// looks' lines as they were. The cell limits below clip it where they must, and win.)
+			const bool bBocageLane = LookIs == LandScape::Look::Bocage, bJungleTrack = LookIs == LandScape::Look::Jungle;
+			const bool bBends = bRoadLine && (bBocageLane || bJungleTrack) && L.size() >= 3;
+			std::vector<char> BendFull(L.size(), 0); // (where its bends are not eased off)
+			if (bBends)
 			{
-				if (K > 0) S += Len(L[K] - L[K - 1]);
-				const V2 Way = Unit2(L[std::min(K + 1, L.size() - 1)] - L[K > 0 ? K - 1 : 0]);
-				const double Amp = 2.5 * std::min({ 1.0, S / 40.0, (Total - S) / 40.0 });
-				double Bend = 12.0 * Smooth(0.0, 1.0, std::min({ 1.0, S / 110.0, (Total - S) / 110.0 }));
-				if (Fd.bTown) Bend *= Smooth(Fd.TownR * 0.9, Fd.TownR * 1.5, std::hypot(L[K].X - Fd.TownX, L[K].Y - Fd.TownY));
-				W[K] = Perp(Way) * Wanders * (Amp * Noise(S / 80.0, Index * 7.31, Seed ^ 0xE1) + Bend * Noise(S / 260.0, Index * 3.77 + 0.5, Seed ^ 0xE2));
+				const double Total = LineLength(L);
+				// (the slope where a bend crosses its line's middle, across per metre along: 0.72 to 1.3 of this)
+				const double Slant = bBocageLane ? 0.36 : 0.46;
+				// Each bend's start, length, its slope (across, per metre along) where it starts, and the change of slope per metre.
+				struct LaneBend
+				{
+					double BendAt = 0.0, BendLong = 150.0, BendY = 0.0, BendSlope = 0.0, BendBow = 0.0;
+				};
+				// (the bends drawn 64 ways, and the drawing kept whose line strays least past the word's limits, the
+				// stretches the cells leave room on its side taken: the bends taken from the cells' slack)
+				auto DrawBends = [&](uint64_t Way0) {
+					std::vector<LaneBend> Swings;
+					uint64_t Draw = Hash(Seed ^ 0xB3D7, static_cast<uint64_t>(Index), Way0);
+					auto Next = [&Draw]() {
+						Draw = Mix(Draw + 0x9E3779B97F4A7C15ull);
+						return Unit(Draw);
+					};
+					// (each bend one steady turn, from the slope it starts with to the opposite slope drawn for its end, 150 to 215 m
+					// long; its length, its reach off its own chord and its turn each apart from the bend's before it, 18 m, 1.5 m and
+					// 4 degrees at least, so no two neighbours are alike; of eight such drawings the one that ends nearest the line's
+					// middle, so the bends swing about it and do not drift off it)
+					double At0 = 0.0, Across0 = 0.0, LongWas = 0.0, ReachWas = 0.0, TurnWas = 0.0;
+					double Slope0 = (Next() < 0.5 ? -1.0 : 1.0) * Slant * Lerp(0.72, 1.3, Next());
+					for (int Q = 0; At0 < Total && Q < 400; ++Q)
+					{
+						double Long = 0.0, Slope1 = 0.0, Across1 = 1e18;
+						for (int Try = 0; Try < 8; ++Try)
+						{
+							double L1 = 0.0, S1 = 0.0;
+							for (int Again = 0; Again < 64; ++Again)
+							{
+								L1 = Lerp(150.0, 215.0, Next());
+								S1 = (Slope0 < 0.0 ? 1.0 : -1.0) * Slant * Lerp(0.72, 1.3, Next());
+								const double Turn = std::fabs(S1 - Slope0), Reach = Turn * L1 / 8.0;
+								if (Q == 0 || (std::fabs(L1 - LongWas) >= 18.0 && std::fabs(Reach - ReachWas) >= 1.5 && std::fabs(Turn - TurnWas) >= 0.07)) break;
+							}
+							const double A1 = Across0 + 0.5 * L1 * (Slope0 + S1);
+							if (std::fabs(A1) < std::fabs(Across1))
+							{
+								Across1 = A1;
+								Long = L1;
+								Slope1 = S1;
+							}
+						}
+						Swings.push_back({ At0, Long, Across0, Slope0, (Slope1 - Slope0) / Long });
+						TurnWas = std::fabs(Slope1 - Slope0);
+						ReachWas = TurnWas * Long / 8.0;
+						Across0 = Across1;
+						Slope0 = Slope1;
+						At0 += Long;
+						LongWas = Long;
+					}
+					Line Bowed(L.size());
+					double S = 0.0;
+					size_t Q = 0;
+					for (size_t K = 0; K < L.size(); ++K)
+					{
+						if (K > 0) S += Len(L[K] - L[K - 1]);
+						while (Q + 1 < Swings.size() && S >= Swings[Q + 1].BendAt) ++Q;
+						const LaneBend& Sw = Swings[Q];
+						const double T = S - Sw.BendAt, Y = Sw.BendY + Sw.BendSlope * T + 0.5 * Sw.BendBow * T * T;
+						double BendEase = Smooth(0.0, 1.0, std::min({ 1.0, S / 200.0, (Total - S) / 200.0 }));
+						if (Fd.bTown) BendEase *= Smooth(Fd.TownR * 0.9, Fd.TownR * 2.2, std::hypot(L[K].X - Fd.TownX, L[K].Y - Fd.TownY));
+						// (and beyond the field's edge the wander as before, the ring's land laid as before; the one eased into the
+						// other over the field's first 250 m)
+						const double Inside = Smooth(0.0, 250.0, std::min({ L[K].X, L[K].Y, FW - L[K].X, FH - L[K].Y }));
+						const V2 Way = Unit2(L[std::min(K + 1, L.size() - 1)] - L[K > 0 ? K - 1 : 0]);
+						Bowed[K] = W[K] * (1.0 - Inside * BendEase) + Perp(Way) * (Y * BendEase * Inside);
+						BendFull[K] = BendEase * Inside >= 0.99;
+					}
+					return Bowed;
+				};
+				// (how far a drawing strays: its points past 22 m from their cells, its cells past 15 m beside it, and its points
+				// past 12 m from the lane as dealt, in metres. The margins inside the word's limits (23.5 m, 16.5 m) are a choice:
+				// a drawing with room to spare is not halved where the line is measured below, and one near the line as dealt
+				// keeps to where the rules' cells leave room, and its banks to where their hedges were dealt)
+				Line Dealt = Resample(Chaikin(Banded, 3), 2.0);
+				{
+					const Line Wd = WanderOf(Dealt);
+					for (size_t K = 0; K < Dealt.size(); ++K) Dealt[K] = Dealt[K] + Wd[K];
+				}
+				auto Strays = [&](const Line& Bowed) {
+					Line X(L.size());
+					for (size_t K = 0; K < L.size(); ++K) X[K] = L[K] + Bowed[K];
+					double Sum = 0.0;
+					for (const V2& P : X)
+						if (P.X >= 0.0 && P.Y >= 0.0 && P.X <= FW && P.Y <= FH) Sum += std::max(0.0, NearestOf(RoadMid, P) - 0.88 * Fd.Cell) + 2.0 * std::max(0.0, NearestOf(Dealt, P) - 12.0);
+					for (const V2& C0 : RoadMid) Sum += 4.0 * std::max(0.0, NearestOf(X, C0) - 0.6 * Fd.Cell);
+					return Sum;
+				};
+				// (each drawing judged as the cells will leave it: scaled where its points would pass 23.5 m from their cells or
+				// touch the wet, as below; kept, the one with the most stretches of 200 m (in the field, off the village, past
+				// the ends' first 110 m) that lie as far off their chord as asked (and none short where its bends are full, if
+				// it can), less those it leaves its cells' centres more than 16 m beside it and turns past 14 degrees in 24 m;
+				// then the one that strays least: the bends' phase and side taken where the cells leave them room)
+				const double LimOf = 0.94 * Fd.Cell, CsOf = Fd.Cell / 25.0;
+				std::vector<double> ScaleOf(L.size(), 1.0);
+				auto ScaledOf = [&](const Line& Bowed) {
+					const int N = static_cast<int>(L.size());
+					std::vector<double> Most(L.size(), 1.0), Low(L.size(), 1.0);
+					for (size_t K = 0; K < L.size(); ++K)
+					{
+						const V2 P = L[K];
+						if (P.X < 0.0 || P.Y < 0.0 || P.X > FW || P.Y > FH) continue;
+						auto Keeps = [&](double F) { return NearestOf(RoadMid, P + Bowed[K] * F) <= LimOf && !WetAt(P + Bowed[K] * F); };
+						if (Keeps(1.0)) continue;
+						double Lo = 0.0, Hi = 1.0;
+						for (int It = 0; It < 10; ++It)
+						{
+							const double Mid = 0.5 * (Lo + Hi);
+							(Keeps(Mid) ? Lo : Hi) = Mid;
+						}
+						Most[K] = Lo;
+					}
+					for (int K = 0; K < N; ++K)
+						for (int Q = std::max(0, K - 20); Q <= std::min(N - 1, K + 20); ++Q) Low[static_cast<size_t>(K)] = std::min(Low[static_cast<size_t>(K)], Most[static_cast<size_t>(Q)]);
+					Line X(L.size());
+					for (int K = 0; K < N; ++K)
+					{
+						double Sum = 0.0;
+						int Num = 0;
+						for (int Q = std::max(0, K - 30); Q <= std::min(N - 1, K + 30); ++Q, ++Num) Sum += Low[static_cast<size_t>(Q)];
+						ScaleOf[static_cast<size_t>(K)] = Sum / Num;
+						X[static_cast<size_t>(K)] = L[static_cast<size_t>(K)] + Bowed[static_cast<size_t>(K)] * (Sum / Num);
+					}
+					return X;
+				};
+				auto ReachOf = [&](const Line& X) {
+					std::vector<double> At(X.size(), 0.0);
+					for (size_t K = 1; K < X.size(); ++K) At[K] = At[K - 1] + Len(X[K] - X[K - 1]);
+					const double Need = bBocageLane ? 4.0 : 6.0;
+					double Far = 0.0;
+					for (size_t A = 0, B = 0; A < X.size(); ++A)
+					{
+						if (At[A] < 110.0 || At[A] + 200.0 > At.back() - 110.0) continue;
+						B = std::max(B, A);
+						while (B + 1 < X.size() && At[B] < At[A] + 200.0) ++B;
+						double Off = 0.0;
+						bool bIn = true;
+						for (size_t K = A; K <= B && bIn; ++K)
+						{
+							bIn = X[K].X >= 0.0 && X[K].Y >= 0.0 && X[K].X <= FW && X[K].Y <= FH && !(Fd.bTown && std::hypot(X[K].X - Fd.TownX, X[K].Y - Fd.TownY) <= 1.5 * Fd.TownR);
+							double T;
+							Off = std::max(Off, SegDist(X[K], X[A], X[B], T));
+						}
+						if (bIn) Far += std::min(Off, Need) >= Need ? 1.0 : 0.25 * Off / Need;
+						// (a stretch whose bends are full and still lies short of the ask counts heavily against it)
+						bool bAllFull = bIn;
+						for (size_t K = A; K <= B && bAllFull; ++K) bAllFull = BendFull[K] != 0 && ScaleOf[K] >= 0.98;
+						if (bAllFull && Off < Need) Far -= 1000.0;
+					}
+					return Far;
+				};
+				// (and how much it turns past 14 degrees in any 24 m, in the field and off the village: a little, 2 degrees in all, let pass)
+				auto SharpOf = [&](const Line& X) {
+					double Past = 0.0;
+					for (size_t K = 0; K + 13 < X.size(); ++K)
+					{
+						const V2 Mid6 = X[K + 6];
+						if (Mid6.X < 0.0 || Mid6.Y < 0.0 || Mid6.X > FW || Mid6.Y > FH || (Fd.bTown && std::hypot(Mid6.X - Fd.TownX, Mid6.Y - Fd.TownY) <= 1.1 * Fd.TownR)) continue;
+						const V2 U0 = X[K + 1] - X[K], U1 = X[K + 13] - X[K + 12];
+						const double Turn = std::fabs(std::atan2(U0.X * U1.Y - U0.Y * U1.X, Dot(U0, U1))) * 180.0 / Pi;
+						Past += std::max(0.0, Turn - 14.0);
+					}
+					return Past;
+				};
+				Line Best;
+				double Fewest = 1e18, Farthest = -1e18;
+				for (uint64_t Way0 = 0; Way0 < 64; ++Way0)
+				{
+					Line Bowed = DrawBends(Way0);
+					const Line X = ScaledOf(Bowed);
+					int Wide = 0;
+					for (const V2& C0 : RoadMid)
+						if (C0.X >= 0.0 && C0.Y >= 0.0 && C0.X <= FW && C0.Y <= FH && NearestOf(X, C0) > 16.0 * CsOf) ++Wide;
+					const double Reach = ReachOf(X), Off = Strays(Bowed), Sharp = std::max(0.0, SharpOf(X) - 2.0);
+					// (each cell's centre left more than 16 m beside it as dear as 20 stretches short, each degree past the turn as 10)
+					const double Worth = Reach - 20.0 * Wide - 10.0 * Sharp;
+					if (Worth > Farthest + 0.5 || (Worth > Farthest - 0.5 && Off < Fewest))
+					{
+						Farthest = Worth;
+						Fewest = Off;
+						Best = std::move(Bowed);
+					}
+				}
+				W = Best;
 			}
 			// (on trial, "roadline": the wander kept within the rules' road cells and the ones beside them, its line no
 			// farther than 23.5 m from the nearest of its own cells' centres in the field and off the water and the marsh;
@@ -2193,7 +2453,9 @@ namespace LandField
 					{
 						double Sum = 0.0;
 						int Num = 0;
-						for (int Q = std::max(0, K - 15); Q <= std::min(N - 1, K + 15); ++Q, ++Num) Sum += Least[static_cast<size_t>(Q)];
+						// (the bends' held in over 60 m either way, so they ease in and out no faster than they bend)
+						const int Evens = bBends ? 30 : 15;
+						for (int Q = std::max(0, K - Evens); Q <= std::min(N - 1, K + Evens); ++Q, ++Num) Sum += Least[static_cast<size_t>(Q)];
 						Scale[static_cast<size_t>(K)] = Sum / Num;
 					}
 				};
@@ -2216,16 +2478,71 @@ namespace LandField
 				}
 			}
 			for (size_t K = 0; K < L.size(); ++K) W[K] = bRoadLine ? L[K] + W[K] * Scale[K] : L[K] + W[K];
+			for (size_t K = 0; K < L.size(); ++K) BendFull[K] = BendFull[K] && Scale[K] >= 0.98; // (and where its cells leave them room)
 			Lane Ln;
 			Ln.P = Resample(W, 2.0);
+			// (on trial, "roadline": the line also laid as before, the lane as dealt: the village, the farmsteads, the fields
+			// and their hedges are laid on it, and then carried onto the new line, CarryRoad)
+			Lane Was;
+			if (bRoadLine)
+			{
+				const Line Lo = Resample(Chaikin(Banded, 3), 2.0), Wo = WanderOf(Lo);
+				Line Pts(Lo.size());
+				for (size_t K = 0; K < Lo.size(); ++K) Pts[K] = Lo[K] + Wo[K];
+				Was.P = Resample(Pts, 2.0);
+			}
 			bool bVillage = false;
-			for (const V2& Q : Ln.P)
+			for (const V2& Q : bRoadLine ? Was.P : Ln.P)
 				if (Fd.bTown && std::hypot(Q.X - Fd.TownX, Q.Y - Fd.TownY) < Fd.TownR) bVillage = true;
 			Ln.Half = bVillage ? 2.6 : 2.0 + 0.4 * Unit(Hash(Seed, 0x1A4E, static_cast<uint64_t>(Index)));
 			if (Sp) Ln.Half = (bVillage ? 3.4 : 2.8) + 0.8 * Unit(Hash(Seed, 0x1A4E, static_cast<uint64_t>(Index))); // (wide, rutted, unfenced)
 			if (Rg) Ln.Half = Rg->LaneHalf(bVillage, Unit(Hash(Seed, 0x1A4E, static_cast<uint64_t>(Index))));
-			if (bRoadLine) Count.LaneShape += std::string(Count.LaneShape.empty() ? "lanes' shape (trial roadline): " : "; ") + "lane " + std::to_string(Index) + " " + LaneShapeOf(Ln.P, RoadMid, FW, FH);
-			Lanes.push_back(std::move(Ln));
+			if (bRoadLine)
+			{
+				// (and how far it wanders: in every 200 m of it in the field, 110 m clear of its ends and off the village (1.5
+				// of its radius), the farthest its line lies off the chord between that stretch's ends; the least of those, and
+				// for the bends the least where they are full and the cells leave them room, and in how many of the stretches)
+				std::vector<double> Along(W.size(), 0.0);
+				for (size_t K = 1; K < W.size(); ++K) Along[K] = Along[K - 1] + Len(W[K] - W[K - 1]);
+				auto Open = [&](V2 P) { return P.X >= 0.0 && P.Y >= 0.0 && P.X <= FW && P.Y <= FH && !(Fd.bTown && std::hypot(P.X - Fd.TownX, P.Y - Fd.TownY) <= 1.5 * Fd.TownR); };
+				double LeastOff = 1e18, LeastFull = 1e18;
+				int Spans = 0, FullSpans = 0;
+				for (size_t A = 0, B = 0; A < W.size(); ++A)
+				{
+					if (Along[A] < 110.0 || Along[A] + 200.0 > Along.back() - 110.0) continue;
+					B = std::max(B, A);
+					while (B + 1 < W.size() && Along[B] < Along[A] + 200.0) ++B;
+					double Off = 0.0;
+					bool bOpen = true, bFull = true;
+					for (size_t K = A; K <= B && bOpen; ++K)
+					{
+						bOpen = Open(W[K]);
+						bFull = bFull && BendFull[K];
+						double T;
+						Off = std::max(Off, SegDist(W[K], W[A], W[B], T));
+					}
+					if (!bOpen) continue;
+					LeastOff = std::min(LeastOff, Off);
+					++Spans;
+					if (!bFull) continue;
+					LeastFull = std::min(LeastFull, Off);
+					++FullSpans;
+				}
+				char Buf[160];
+				if (LeastOff > 1e17) std::snprintf(Buf, sizeof(Buf), ", off its chord in any 200 m: none in the open");
+				else if (!bBends) std::snprintf(Buf, sizeof(Buf), ", off its chord in any 200 m: least %.1f m", LeastOff);
+				else if (LeastFull > 1e17) std::snprintf(Buf, sizeof(Buf), ", off its chord in any 200 m: least %.1f m (none of its %d stretches with its bends full)", LeastOff, Spans);
+				else
+					std::snprintf(Buf, sizeof(Buf), ", off its chord in any 200 m: least %.1f m (%.1f m where its bends are full, %d of its %d stretches)", LeastOff, LeastFull, FullSpans, Spans);
+				Count.LaneShape += std::string(Count.LaneShape.empty() ? "lanes' shape (trial roadline): " : "; ") + "lane " + std::to_string(Index) + " " + LaneShapeOf(Ln.P, RoadMid, FW, FH) + Buf;
+			}
+			if (bRoadLine)
+			{
+				Was.Half = Ln.Half;
+				RoadNew.push_back(std::move(Ln));
+				Lanes.push_back(std::move(Was));
+			}
+			else Lanes.push_back(std::move(Ln));
 			++Index;
 		}
 		LGrid.Init(-Band - 60.0, -Band - 60.0, FW + Band + 60.0, FH + Band + 60.0, 10.0);
@@ -2248,6 +2565,650 @@ namespace LandField
 			LaneOut.push_back(std::move(Out));
 		}
 		Count.Lanes = static_cast<int>(Lanes.size());
+	}
+
+	// ====================================================================== the trial "roadline": the world carried onto the new line
+
+	V2 Ground::Impl::CarriedBy(V2 P) const
+	{
+		const std::vector<uint32_t>* Near = CarryGrid.At(P.X, P.Y);
+		if (!Near || Near->empty()) return { 0.0, 0.0 };
+		// (the nearest of each lane's old segments)
+		struct Nigh
+		{
+			int NighLane = -1;
+			uint32_t SegId = 0;
+			double SegD = 1e18, SegT = 0.0;
+		};
+		std::array<Nigh, 24> Of;
+		size_t Many = 0;
+		double Least = 1e18;
+		for (const uint32_t Id : *Near)
+		{
+			const LaneSeg& S = CarrySegs[Id];
+			double T;
+			const double D = SegDist(P, S.A, S.B, T);
+			size_t K = 0;
+			while (K < Many && Of[K].NighLane != S.Lane) ++K;
+			if (K == Many)
+			{
+				if (Many == Of.size()) continue;
+				Of[Many++].NighLane = S.Lane;
+			}
+			if (D < Of[K].SegD) Of[K] = { S.Lane, Id, D, T };
+			Least = std::min(Least, D);
+		}
+		if (Least >= CarryFar) return { 0.0, 0.0 };
+		// (by the lane, each lane's carry exactly: the place along its old line and across it kept on the new, so its banks
+		// and what stands on them go with it; the lanes near enough to share a place weighed by how much nearer each is)
+		V2 Sum{ 0.0, 0.0 };
+		double Weight = 0.0;
+		for (size_t K = 0; K < Many; ++K)
+		{
+			const Nigh& N = Of[K];
+			if (N.SegD >= CarryFar) continue;
+			const LaneSeg& S = CarrySegs[N.SegId];
+			const size_t Q = CarryK[N.SegId], L = static_cast<size_t>(N.NighLane);
+			const V2 U = Unit2(S.B - S.A), At = Lerp2(S.A, S.B, N.SegT);
+			const double Across = Dot(Perp(U), P - At), Along = Dot(U, P - At);
+			const V2 To = Lerp2(CarryTo[L][Q], CarryTo[L][Q + 1], N.SegT), Way = Unit2(Lerp2(CarryWay[L][Q], CarryWay[L][Q + 1], N.SegT));
+			const V2 Moved = To + Way * Along + Perp(Way) * Across - P;
+			const double Wt = std::exp(-(N.SegD - Least) / 5.0);
+			Sum = Sum + Moved * Wt;
+			Weight += Wt;
+		}
+		if (Weight <= 0.0) return { 0.0, 0.0 };
+		const V2 Exact = Sum * (1.0 / Weight);
+		// (farther off, each lane's old points' moves evened over that lane, wider the farther, and the lanes weighed as
+		// above: the nearest segment changes at a bend's inner side, and the exact carry would tear the ground there)
+		std::array<V2, 24> EvenOf{};
+		std::array<double, 24> EvenOfW{};
+		if (Least > CarryExact)
+			for (const uint32_t Id : *Near)
+			{
+				const LaneSeg& S = CarrySegs[Id];
+				size_t K = 0;
+				while (K < Many && Of[K].NighLane != S.Lane) ++K;
+				if (K == Many || Of[K].SegD >= CarryFar) continue;
+				double T;
+				const double D = SegDist(P, S.A, S.B, T);
+				const size_t Q = CarryK[Id], L = static_cast<size_t>(S.Lane);
+				const double Wt = std::exp(-(D - Of[K].SegD) / CarryEven);
+				EvenOf[K] = EvenOf[K] + Lerp2(CarryTo[L][Q] - S.A, CarryTo[L][Q + 1] - S.B, T) * Wt;
+				EvenOfW[K] += Wt;
+			}
+		V2 Even{ 0.0, 0.0 };
+		double EvenW = 0.0;
+		for (size_t K = 0; K < Many; ++K)
+		{
+			if (EvenOfW[K] <= 0.0) continue;
+			const double Wt = std::exp(-(Of[K].SegD - Least) / 5.0);
+			Even = Even + EvenOf[K] * (Wt / EvenOfW[K]);
+			EvenW += Wt;
+		}
+		const double ToEven = EvenW > 0.0 ? Smooth(CarryExact, CarryEvenAt, Least) : 0.0;
+		const V2 Moved = ToEven > 0.0 ? Lerp2(Exact, Even * (1.0 / EvenW), ToEven) : Exact;
+		return Moved * (1.0 - Smooth(CarryNear, CarryFar, Least));
+	}
+
+	V2 Ground::Impl::CarriedAt(V2 P) const
+	{
+		if (CarryNX < 2 || CarryNY < 2) return { 0.0, 0.0 };
+		const double FX = (P.X - RX0) / CarryStep, FY = (P.Y - RY0) / CarryStep;
+		const int I = std::clamp(static_cast<int>(std::floor(FX)), 0, CarryNX - 2), J = std::clamp(static_cast<int>(std::floor(FY)), 0, CarryNY - 2);
+		const double A = Clamp01(FX - I), B = Clamp01(FY - J);
+		const size_t K = static_cast<size_t>(J) * static_cast<size_t>(CarryNX) + static_cast<size_t>(I), KN = K + static_cast<size_t>(CarryNX);
+		auto Mix2 = [A, B](float V00, float V10, float V01, float V11) { return (V00 * (1.0 - A) + V10 * A) * (1.0 - B) + (V01 * (1.0 - A) + V11 * A) * B; };
+		return { Mix2(CarryDX[K], CarryDX[K + 1], CarryDX[KN], CarryDX[KN + 1]), Mix2(CarryDY[K], CarryDY[K + 1], CarryDY[KN], CarryDY[KN + 1]) };
+	}
+
+	void Ground::Impl::SwapWorld()
+	{
+		std::swap(Lanes, LanesWas);
+		std::swap(LSegs, LSegsWas);
+		std::swap(LGrid, LGridWas);
+		std::swap(Rgn, RgnWas);
+		std::swap(Pid, PidWas);
+		std::swap(OccR, OccRWas);
+		std::swap(LaneD, LaneDWas);
+		std::swap(DistE, DistEWas);
+		std::swap(Houses, HousesWas);
+		std::swap(Runs, RunsWas);
+		std::swap(BSegs, BSegsWas);
+		std::swap(BGrid, BGridWas);
+	}
+
+	/**
+	 * On trial ("roadline"), once the village, the farmsteads and the parcels are dealt on the lanes' old line: the new
+	 * line laid in its place and what was dealt carried onto it. Each old lane's points find their places on the new line
+	 * (the nearest, in order); a place within CarryNear of an old lane keeps its place along and across it on the new, so
+	 * the lane's floor, its banks, the houses fronting it, a farmstead's yard and the fields' edges go with it; from there
+	 * the carry eases off to nothing at CarryFar. The houses (on new floors), the walls, the yards' wells and carts, the
+	 * steppe's and a region's kit are carried, and the raster with them: each pixel near a lane takes what lay where the
+	 * carry brings it from, but the water and the marsh, and the recorded ways and the hedge cutters' cuts, stay where
+	 * they are. The world as dealt is kept (SwapWorld).
+	 */
+	void Ground::Impl::CarryRoad()
+	{
+		// Each old lane's points' places on the new line, its ends on the new line's (they are the same).
+		CarryTo.assign(Lanes.size(), {});
+		CarryWay.assign(Lanes.size(), {});
+		for (size_t L = 0; L < Lanes.size(); ++L)
+		{
+			const Line& O = Lanes[L].P;
+			const Line& N = RoadNew[L].P;
+			Line& To = CarryTo[L];
+			Line Way(O.size());
+			To.resize(O.size());
+			size_t From = 0;
+			for (size_t K = 0; K < O.size(); ++K)
+			{
+				double Best = 1e18, BestT = 0.0;
+				size_t BestJ = From;
+				for (size_t J = From; J + 1 < N.size() && J <= From + 60; ++J)
+				{
+					double T;
+					const double D = SegDist(O[K], N[J], N[J + 1], T);
+					if (D < Best)
+					{
+						Best = D;
+						BestJ = J;
+						BestT = T;
+					}
+				}
+				To[K] = N.size() >= 2 ? Lerp2(N[BestJ], N[BestJ + 1], BestT) : O[K];
+				Way[K] = N.size() >= 2 ? Unit2(N[BestJ + 1] - N[BestJ]) : V2{ 1.0, 0.0 };
+				From = BestJ;
+			}
+			if (!N.empty() && !O.empty())
+			{
+				To.front() = N.front();
+				To.back() = N.back();
+			}
+			// (the new line's way evened over a few points either way, so the carry turns smoothly round its bends)
+			Line& Ev = CarryWay[L];
+			Ev.resize(O.size());
+			for (size_t K = 0; K < O.size(); ++K)
+			{
+				V2 Sum{ 0.0, 0.0 };
+				for (size_t Q = K > 2 ? K - 2 : 0; Q <= std::min(K + 2, O.size() - 1); ++Q) Sum = Sum + Way[Q];
+				Ev[K] = Unit2(Sum);
+			}
+		}
+		CarrySegs.clear();
+		CarryK.clear();
+		CarryGrid.Init(-Band - CarryFar - 60.0, -Band - CarryFar - 60.0, FW + Band + CarryFar + 60.0, FH + Band + CarryFar + 60.0, 10.0);
+		for (size_t L = 0; L < Lanes.size(); ++L)
+			for (size_t K = 0; K + 1 < Lanes[L].P.size(); ++K)
+			{
+				LaneSeg S;
+				S.A = Lanes[L].P[K];
+				S.B = Lanes[L].P[K + 1];
+				S.Lane = static_cast<int>(L);
+				CarryGrid.Add(static_cast<uint32_t>(CarrySegs.size()), S.A, S.B, CarryFar);
+				CarrySegs.push_back(S);
+				CarryK.push_back(static_cast<uint32_t>(K));
+			}
+		CarryNX = static_cast<int>(std::ceil(NX * Res / CarryStep)) + 2;
+		CarryNY = static_cast<int>(std::ceil(NY * Res / CarryStep)) + 2;
+		CarryDX.assign(static_cast<size_t>(CarryNX) * static_cast<size_t>(CarryNY), 0.0f);
+		CarryDY.assign(CarryDX.size(), 0.0f);
+		for (int J = 0; J < CarryNY; ++J)
+			for (int I = 0; I < CarryNX; ++I)
+			{
+				const V2 D = CarriedBy({ RX0 + I * CarryStep, RY0 + J * CarryStep });
+				const size_t K = static_cast<size_t>(J) * static_cast<size_t>(CarryNX) + static_cast<size_t>(I);
+				CarryDX[K] = static_cast<float>(D.X);
+				CarryDY[K] = static_cast<float>(D.Y);
+			}
+		// The world as dealt, kept.
+		LanesWas = Lanes;
+		LSegsWas = LSegs;
+		LGridWas = LGrid;
+		RgnWas = Rgn;
+		PidWas = Pid;
+		OccRWas = OccR;
+		LaneDWas = LaneD;
+		DistEWas = DistE;
+		HousesWas = Houses;
+		HedgeOutWas = HedgeOut;
+		// The new line laid.
+		for (size_t L = 0; L < Lanes.size() && L < RoadNew.size(); ++L) RoadNew[L].Half = Lanes[L].Half;
+		Lanes = std::move(RoadNew);
+		RoadNew.clear();
+		LSegs.clear();
+		LaneOut.clear();
+		Count.LaneKm = 0.0;
+		LGrid.Init(-Band - 60.0, -Band - 60.0, FW + Band + 60.0, FH + Band + 60.0, 10.0);
+		for (size_t L = 0; L < Lanes.size(); ++L)
+		{
+			const Lane& Ln = Lanes[L];
+			Count.LaneKm += LineLength(Ln.P) / 1000.0;
+			std::vector<std::pair<double, double>> Out;
+			for (size_t K = 0; K < Ln.P.size(); ++K)
+			{
+				Out.push_back({ Ln.P[K].X, Ln.P[K].Y });
+				if (K + 1 == Ln.P.size()) break;
+				LaneSeg S;
+				S.A = Ln.P[K];
+				S.B = Ln.P[K + 1];
+				S.Lane = static_cast<int>(L);
+				LGrid.Add(static_cast<uint32_t>(LSegs.size()), S.A, S.B, Ln.Half + LaneWall + 3.5);
+				LSegs.push_back(S);
+			}
+			LaneOut.push_back(std::move(Out));
+		}
+		// What was dealt, carried: the houses (each on its floor where it now stands), the walls, the yards, their wells and
+		// carts, the kit's things.
+		for (House& H : Houses)
+		{
+			const V2 D = CarriedBy(H.C);
+			if (Len(D) < 1e-4) continue;
+			H.C = H.C + D;
+			FloorOf(H);
+			if (H.bBoards)
+			{
+				const double C = std::cos(H.Yaw), S = std::sin(H.Yaw);
+				for (int F = 0; F < 4; ++F)
+					for (int J = 0; J < 18; ++J)
+					{
+						const double T = J / 17.0;
+						const double Uu = F == 0 ? H.Long * (0.5 - T) : F == 1 ? H.Long * (T - 0.5) : F == 2 ? 0.5 * H.Long : -0.5 * H.Long;
+						const double Vv = F == 0 ? 0.5 * H.Deep : F == 1 ? -0.5 * H.Deep : F == 2 ? H.Deep * (T - 0.5) : H.Deep * (0.5 - T);
+						const double X = H.C.X + Uu * C - Vv * S, Y = H.C.Y + Uu * S + Vv * C;
+						H.Lie[F][J] = static_cast<float>(Carve(X, Y, Terrain(X, Y), nullptr));
+					}
+			}
+		}
+		for (WallRun& W : Walls)
+			for (V2& P : W.P) P = P + CarriedBy(P);
+		for (HedgeLine& H : HedgeOut)
+			for (auto& [X, Y] : H.Points)
+			{
+				const V2 D = CarriedBy({ X, Y });
+				X += D.X;
+				Y += D.Y;
+			}
+		for (YardBox& Y : Yards) Y.O = Y.O + CarriedBy(Y.O);
+		for (Spot& S : Props) S.P = S.P + CarriedBy(S.P);
+		for (KitSpot& K : Kits) K.P = K.P + CarriedBy(K.P);
+		for (RegionKit& K : RegionKits) K.K.P = K.K.P + CarriedBy(K.K.P);
+		// The raster carried: each pixel takes what lay where the carry brings it from (the water and the marsh stay, and
+		// the recorded ways and the cuts are where they are), then the new line's floor and its distances laid.
+		const size_t N = static_cast<size_t>(NX) * static_cast<size_t>(NY);
+		constexpr uint8_t Fixed = OcMan | OcVehicle | OcCut;
+		auto Wet = [](uint8_t G) { return G == RgWater || G == RgMarsh; };
+		std::vector<uint8_t> Lost(N, 0); // (1: to take a field's from its neighbours, 2: a lane's)
+		for (int J = 0; J < NY; ++J)
+			for (int I = 0; I < NX; ++I)
+			{
+				const V2 X{ RX0 + (I + 0.5) * Res, RY0 + (J + 0.5) * Res };
+				V2 Q = X;
+				for (int It = 0; It < 10; ++It)
+				{
+					const V2 Next = X - CarriedAt(Q);
+					const bool bDone = Len(Next - Q) < 0.02;
+					Q = Next;
+					if (bDone) break;
+				}
+				const size_t Kx = static_cast<size_t>(J) * static_cast<size_t>(NX) + static_cast<size_t>(I), Ks = Pix(Q.X, Q.Y);
+				if (Ks == Kx || Wet(RgnWas[Kx])) continue;
+				if (Wet(RgnWas[Ks]))
+				{
+					if (RgnWas[Kx] == RgLane) Lost[Kx] = 1;
+					continue;
+				}
+				Rgn[Kx] = RgnWas[Ks];
+				Pid[Kx] = PidWas[Ks];
+				OccR[Kx] = static_cast<uint8_t>((OccRWas[Kx] & Fixed) | (OccRWas[Ks] & ~Fixed));
+			}
+		LaneD.assign(N, 1e6f);
+		for (const LaneSeg& S : LSegs)
+		{
+			const double Half = Lanes[static_cast<size_t>(S.Lane)].Half, Reach = Half + 10.0;
+			const int I0 = std::max(0, static_cast<int>((std::min(S.A.X, S.B.X) - Reach - RX0) / Res));
+			const int I1 = std::min(NX - 1, static_cast<int>((std::max(S.A.X, S.B.X) + Reach - RX0) / Res));
+			const int J0 = std::max(0, static_cast<int>((std::min(S.A.Y, S.B.Y) - Reach - RY0) / Res));
+			const int J1 = std::min(NY - 1, static_cast<int>((std::max(S.A.Y, S.B.Y) + Reach - RY0) / Res));
+			for (int J = J0; J <= J1; ++J)
+				for (int I = I0; I <= I1; ++I)
+				{
+					double T;
+					const double D = SegDist({ RX0 + (I + 0.5) * Res, RY0 + (J + 0.5) * Res }, S.A, S.B, T) - Half;
+					float& Cur = LaneD[static_cast<size_t>(J) * NX + I];
+					Cur = std::min(Cur, static_cast<float>(D));
+				}
+		}
+		for (size_t K = 0; K < N; ++K)
+		{
+			const bool bOn = LaneD[K] < LaneWall + 0.3 && Rgn[K] != RgWater;
+			if (bOn && Rgn[K] != RgLane)
+			{
+				Rgn[K] = RgLane;
+				Lost[K] = 2;
+			}
+			else if (!bOn && Rgn[K] == RgLane) Lost[K] = 1;
+		}
+		// (what was lost taken from its neighbours: a lane's id from the lane beside it, a field's from the field)
+		for (const uint8_t Want : { static_cast<uint8_t>(2), static_cast<uint8_t>(1) })
+		{
+			std::vector<size_t> Front;
+			for (size_t K = 0; K < N; ++K)
+			{
+				if (Lost[K] != Want) continue;
+				const int I = static_cast<int>(K % static_cast<size_t>(NX)), J = static_cast<int>(K / static_cast<size_t>(NX));
+				const size_t Next[4] = { I > 0 ? K - 1 : K, I + 1 < NX ? K + 1 : K, J > 0 ? K - static_cast<size_t>(NX) : K, J + 1 < NY ? K + static_cast<size_t>(NX) : K };
+				for (const size_t Q : Next)
+					if (!Lost[Q] && (Rgn[Q] == RgLane) == (Want == 2)) Front.push_back(Q);
+			}
+			for (size_t Head = 0; Head < Front.size(); ++Head)
+			{
+				const size_t K = Front[Head];
+				const int I = static_cast<int>(K % static_cast<size_t>(NX)), J = static_cast<int>(K / static_cast<size_t>(NX));
+				const size_t Next[4] = { I > 0 ? K - 1 : K, I + 1 < NX ? K + 1 : K, J > 0 ? K - static_cast<size_t>(NX) : K, J + 1 < NY ? K + static_cast<size_t>(NX) : K };
+				for (const size_t Q : Next)
+					if (Lost[Q] == Want)
+					{
+						Lost[Q] = 0;
+						Pid[Q] = Pid[K];
+						if (Want == 1) Rgn[Q] = Rgn[K];
+						Front.push_back(Q);
+					}
+			}
+		}
+	}
+
+	double Ground::Impl::LaneEdgeOf(const SegGrid& Grid, const std::vector<LaneSeg>& Segs, const std::vector<Lane>& Of, V2 P) const
+	{
+		double Edge = 1e6;
+		if (const std::vector<uint32_t>* Near = Grid.At(P.X, P.Y))
+			for (const uint32_t Id : *Near)
+			{
+				const LaneSeg& S = Segs[Id];
+				double T;
+				Edge = std::min(Edge, SegDist(P, S.A, S.B, T) - Of[static_cast<size_t>(S.Lane)].Half);
+			}
+		return Edge;
+	}
+
+	double Ground::Impl::BankRoomOf(const SegGrid& Grid, const std::vector<BankSeg>& Segs, const std::vector<Run>& Of, V2 P) const
+	{
+		double Room = 1e6;
+		if (const std::vector<uint32_t>* Near = Grid.At(P.X, P.Y))
+			for (const uint32_t Id : *Near)
+			{
+				const BankSeg& S = Segs[Id];
+				const Run& R = Of[S.Run];
+				double T;
+				Room = std::min(Room, SegDist(P, R.P[S.K], R.P[S.K + 1], T) - 0.5 * BankEdge * std::max(R.W[S.K], R.W[S.K + 1]));
+			}
+		return Room;
+	}
+
+	void Ground::Impl::CarryPlanted(const std::vector<size_t>& From, size_t WallsFrom, size_t OutFrom)
+	{
+		// (a bocage hedge's shrub where it was dealt: on the line of a hedgerow's or a lane bank's run, as dealt; and where
+		// it is carried, on the new one's)
+		auto OnBocageOf = [](const SegGrid& Grid, const std::vector<BankSeg>& Segs, const std::vector<Run>& Of, V2 Q) {
+			if (const std::vector<uint32_t>* Near = Grid.At(Q.X, Q.Y))
+				for (const uint32_t Id : *Near)
+				{
+					const BankSeg& S = Segs[Id];
+					const Run& R = Of[S.Run];
+					double T;
+					if ((R.Kind == HkHedgerow || R.Kind == HkLaneBank) && SegDist(Q, R.P[S.K], R.P[S.K + 1], T) < 0.6) return true;
+				}
+			return false;
+		};
+		for (size_t B = 0; B < Inst.size() && B < From.size(); ++B)
+		{
+			std::vector<Placed>& L = Inst[B];
+			size_t Kept = From[B];
+			for (size_t K = From[B]; K < L.size(); ++K)
+			{
+				Placed P = L[K];
+				const V2 Was{ P.X, P.Y }, D = CarriedBy(Was);
+				V2 At = Was + D;
+				// (nothing carried onto a recorded way: as Plant keeps them off it; a shrub men push through, one that stood on a
+				// man's way where it was dealt, off the vehicles' only. Nor nearer the new lane's floor than it stood to the old
+				// one's, within its walls and their tops (LaneWall and 1.1 m past its floor), nor onto a house or a wall it did not stand on, nor a haycock onto a gateway's
+				// trodden ground; and what stood on a hedge's bank where it was dealt stands on one where it is carried, not in
+				// a gap opened there. Where the place it is carried to fails, it is carried a little less or more, along its own
+				// carry; and where none will do, it is left out.)
+				const Base Kind = static_cast<Base>(B);
+				if (Len(D) > 1e-4 && Kind != Base::Gate)
+				{
+					const double Body = Kind <= Base::Bramble ? 0.35 : Kind <= Base::Apple ? 0.4 : Kind == Base::Cart ? 1.6 : Kind == Base::Haycock ? 1.0 : 0.8;
+					const bool bPushed = Kind <= Base::Bramble && (WayRoom(Was) < Body || (Kind != Base::Bramble && OnBocageOf(BGridWas, BSegsWas, RunsWas, Was)));
+					const bool bInWas = InRaster(Was.X, Was.Y);
+					const uint8_t OccWas = bInWas ? OccRWas[Pix(Was.X, Was.Y)] : 0;
+					const double EdgeWas = LaneEdgeOf(LGridWas, LSegsWas, LanesWas, Was), BankWas = BankRoomOf(BGridWas, BSegsWas, RunsWas, Was);
+					// (and what stood off a lane as drawn where it was dealt, its floor and walls or a region's lane ground, stands
+					// off one as drawn where it is carried; a tree always)
+					const bool bLaneWas = EdgeWas < LaneWall || (bInWas && RgnWas[Pix(Was.X, Was.Y)] == RgLane);
+					auto Fits = [&](V2 Q) {
+						// (a hedge's shrub on a hedgerow's or a lane bank's line where it is carried is one men push through)
+						const bool bThrough = bPushed || (Kind < Base::Bramble && OnBocageOf(BGrid, BSegs, Runs, Q));
+						if (WayRoom(Q, bThrough || KitLowAt(Kind)) < Body) return false;
+						const double Edge = LaneEdgeOf(LGrid, LSegs, Lanes, Q);
+						if (Edge < LaneWall + 1.1 && Edge < EdgeWas - 0.1) return false;
+						if ((!bLaneWas || (Kind >= Base::Oak && Kind <= Base::Apple)) && Edge < LaneWall + 3.0)
+						{
+							Drawn What = Drawn::Crop;
+							Top(Q.X, Q.Y, &What);
+							if (What == Drawn::Lane) return false;
+						}
+						if (BankWas < 0.0 && BankRoomOf(BGrid, BSegs, Runs, Q) > 0.3) return false;
+						if (bPushed && WayRoom(Q) < Body && !OnBocageOf(BGrid, BSegs, Runs, Q)) return false;
+						if (!InRaster(Q.X, Q.Y)) return true;
+						const uint8_t Occ = OccR[Pix(Q.X, Q.Y)];
+						if (!bLaneWas && Rgn[Pix(Q.X, Q.Y)] == RgLane)
+						{
+							Drawn What = Drawn::Crop;
+							Top(Q.X, Q.Y, &What);
+							if (What == Drawn::Lane) return false;
+						}
+						if (Occ & (OcHouse | OcWall) & ~OccWas) return false;
+						return !(Kind == Base::Haycock && (Occ & OcGate) && !(OccWas & OcGate));
+					};
+					bool bFound = false;
+					for (const double F : { 1.0, 0.85, 1.15, 0.7, 1.3, 0.5, 0.3, 0.0 })
+						if (Fits(Was + D * F))
+						{
+							At = Was + D * F;
+							bFound = true;
+							break;
+						}
+					// (and else nudged round the place it is carried to, as the planting nudges a shrub off a man's way: as far as
+					// 2.4 m)
+					for (double R = 0.3; R <= 2.4 + 1e-9 && !bFound; R += 0.3)
+						for (int Q = 0; Q < 12 && !bFound; ++Q)
+						{
+							const V2 Try = Was + D + V2{ std::cos(Q * Pi / 6.0), std::sin(Q * Pi / 6.0) } * R;
+							if (Fits(Try))
+							{
+								At = Try;
+								bFound = true;
+							}
+						}
+					if (!bFound) continue;
+				}
+				P.X = static_cast<float>(At.X);
+				P.Y = static_cast<float>(At.Y);
+				P.Z = static_cast<float>(Top(At.X, At.Y, nullptr));
+				L[Kept++] = P;
+			}
+			L.resize(Kept);
+		}
+		// (a wall laid while the world as dealt was in: carried, and its line marked)
+		for (size_t W = WallsFrom; W < Walls.size(); ++W)
+		{
+			WallRun& R = Walls[W];
+			for (V2& P : R.P) P = P + CarriedBy(P);
+			for (size_t K = 0; K + 1 < R.P.size(); ++K)
+			{
+				const V2 A = R.P[K], B = R.P[K + 1];
+				const double Reach = 0.5 * R.Thick + 0.6;
+				const int I0 = std::max(0, static_cast<int>((std::min(A.X, B.X) - Reach - RX0) / Res));
+				const int I1 = std::min(NX - 1, static_cast<int>((std::max(A.X, B.X) + Reach - RX0) / Res));
+				const int J0 = std::max(0, static_cast<int>((std::min(A.Y, B.Y) - Reach - RY0) / Res));
+				const int J1 = std::min(NY - 1, static_cast<int>((std::max(A.Y, B.Y) + Reach - RY0) / Res));
+				for (int J = J0; J <= J1; ++J)
+					for (int I = I0; I <= I1; ++I)
+					{
+						double T;
+						if (SegDist({ RX0 + (I + 0.5) * Res, RY0 + (J + 0.5) * Res }, A, B, T) < Reach) OccR[static_cast<size_t>(J) * NX + I] |= OcWall;
+					}
+			}
+		}
+		for (size_t H = OutFrom; H < HedgeOut.size(); ++H)
+			for (auto& [X, Y] : HedgeOut[H].Points)
+			{
+				const V2 D = CarriedBy({ X, Y });
+				X += D.X;
+				Y += D.Y;
+			}
+	}
+
+	void Ground::Impl::DealHedges()
+	{
+		// (the world as dealt swapped in and the word laid aside: MakeHedges as with the word off, its runs, banks and
+		// marks left in the world as dealt; what it lays besides set aside or, a region's walls, carried)
+		const Tally Was = Count;
+		const size_t WallsFrom = Walls.size(), OutFrom = HedgeOut.size(), OpenFrom = OpeningOut.size(), CrossFrom = CrossOut.size();
+		std::vector<size_t> From;
+		for (const std::vector<Placed>& L : Inst) From.push_back(L.size());
+		SwapWorld();
+		bRoadLine = false;
+		bHedgesAsDealt = true;
+		MakeHedges();
+		bHedgesAsDealt = false;
+		bRoadLine = true;
+		SwapWorld();
+		if (Rg && !Rg->Hedges())
+		{
+			From.assign(Inst.size(), 0);
+			CarryPlanted(From, WallsFrom, OutFrom);
+			return;
+		}
+		Count = Was;
+		HedgeOutWas.insert(HedgeOutWas.end(), HedgeOut.begin() + static_cast<std::ptrdiff_t>(OutFrom), HedgeOut.end());
+		OpeningOutWas.assign(OpeningOut.begin() + static_cast<std::ptrdiff_t>(OpenFrom), OpeningOut.end());
+		Walls.resize(WallsFrom);
+		HedgeOut.resize(OutFrom);
+		OpeningOut.resize(OpenFrom);
+		CrossOut.resize(CrossFrom);
+	}
+
+	/**
+	 * On trial ("roadline"), once the bases are built (their crowns' size): each lane's middle out of the village walked
+	 * every 2 m, and where the trees' crowns (a tree's base's radius times its scale round its trunk, and 25 cm) close it over for
+	 * more than LaneShutMost, a window 4 m long opened at the place along the first LaneShutMost of that stretch where it
+	 * costs the least crown: the trees over it taken out, the rest as dealt. Nothing is planted, nothing moved.
+	 */
+	void Ground::Impl::OpenOverLanes()
+	{
+		struct OverLane
+		{
+			Base OfBase = Base::Oak;
+			size_t InBase = 0;
+			V2 TrunkAt;
+			double CrownR = 0.0;
+			bool bOpened = false;
+		};
+		std::vector<OverLane> Overs;
+		SegGrid Over;
+		Over.Init(-Band - 20.0, -Band - 20.0, FW + Band + 20.0, FH + Band + 20.0, 8.0);
+		for (const Base B : { Base::Oak, Base::Elm, Base::Ash, Base::Beech, Base::Pollard, Base::Apple, Base::Birch })
+		{
+			const double Round = Bases[static_cast<size_t>(B)].Radius;
+			const std::vector<Placed>& L = Inst[static_cast<size_t>(B)];
+			for (size_t K = 0; K < L.size(); ++K)
+			{
+				const V2 At{ L[K].X, L[K].Y };
+				const double R = Round * L[K].Scale + 0.25; // (and a hand's breadth more, so a window is open for certain)
+				if (!InRaster(At.X, At.Y) || LaneD[Pix(At.X, At.Y)] > R) continue;
+				Over.Add(static_cast<uint32_t>(Overs.size()), At, At, R);
+				Overs.push_back({ B, K, At, R, false });
+			}
+		}
+		if (Overs.empty()) return;
+		auto Shut = [&](V2 P, std::vector<uint32_t>* Over1) {
+			bool bShut = false;
+			if (const std::vector<uint32_t>* Near = Over.At(P.X, P.Y))
+				for (const uint32_t Id : *Near)
+				{
+					const OverLane& C = Overs[Id];
+					if (C.bOpened || Len(C.TrunkAt - P) >= C.CrownR) continue;
+					bShut = true;
+					if (!Over1) break;
+					Over1->push_back(Id);
+				}
+			return bShut;
+		};
+		const int Most = static_cast<int>(LaneShutMost / 2.0);
+		size_t CrownsOut = 0;
+		for (const Lane& Ln : Lanes)
+		{
+			const Line M = Resample(Ln.P, 2.0);
+			std::vector<char> Open(M.size(), 1), Free(M.size(), 1);
+			for (size_t K = 0; K < M.size(); ++K)
+				Free[K] = M[K].X >= 0.0 && M[K].Y >= 0.0 && M[K].X <= FW && M[K].Y <= FH &&
+				          !(Fd.bTown && std::hypot(M[K].X - Fd.TownX, M[K].Y - Fd.TownY) <= Fd.TownR * 1.05);
+			for (int Pass = 0; Pass < 400; ++Pass)
+			{
+				for (size_t K = 0; K < M.size(); ++K) Open[K] = !Free[K] || !Shut(M[K], nullptr);
+				// (the first stretch closed over for longer than LaneShutMost)
+				size_t A = 0, Run = 0;
+				bool bLong = false;
+				for (size_t K = 0; K < M.size() && !bLong; ++K)
+				{
+					if (Open[K])
+					{
+						Run = 0;
+						continue;
+					}
+					if (Run++ == 0) A = K;
+					bLong = static_cast<int>(Run) > Most;
+				}
+				if (!bLong) break;
+				// (the window: two points side by side within its first LaneShutMost, the least crown over them)
+				double Least = 1e18;
+				std::vector<uint32_t> Best;
+				for (size_t K = A + 1; K + 1 < M.size() && K <= A + static_cast<size_t>(Most); ++K)
+				{
+					std::vector<uint32_t> Ids;
+					Shut(M[K], &Ids);
+					Shut(M[K + 1], &Ids);
+					std::sort(Ids.begin(), Ids.end());
+					Ids.erase(std::unique(Ids.begin(), Ids.end()), Ids.end());
+					double Cost = 0.0;
+					for (const uint32_t Id : Ids) Cost += Overs[Id].CrownR * Overs[Id].CrownR;
+					if (Cost <= Least)
+					{
+						Least = Cost;
+						Best = std::move(Ids);
+					}
+				}
+				for (const uint32_t Id : Best) Overs[Id].bOpened = true;
+				CrownsOut += Best.size();
+				if (Best.empty()) break;
+			}
+		}
+		if (!CrownsOut) return;
+		for (const Base B : { Base::Oak, Base::Elm, Base::Ash, Base::Beech, Base::Pollard, Base::Apple, Base::Birch })
+		{
+			std::vector<char> Gone(Inst[static_cast<size_t>(B)].size(), 0);
+			for (const OverLane& C : Overs)
+				if (C.OfBase == B && C.bOpened) Gone[C.InBase] = 1;
+			std::vector<Placed>& L = Inst[static_cast<size_t>(B)];
+			size_t Kept = 0;
+			for (size_t K = 0; K < L.size(); ++K)
+				if (!Gone[K]) L[Kept++] = L[K];
+			L.resize(Kept);
+		}
+		Count.Instances -= CrownsOut;
+		Count.LaneShape += "; crowns taken off the lanes' middles for a window in every " + std::to_string(static_cast<int>(LaneShutMost)) + " m: " + std::to_string(CrownsOut);
 	}
 
 	// ====================================================================== the region raster
@@ -4039,6 +5000,7 @@ namespace LandField
 		{
 			// A region's ground has no hedgerows: its own walls and terraces, if any, along its parcels' edges.
 			BGrid.Init(-Band - 20.0, -Band - 20.0, FW + Band + 20.0, FH + Band + 20.0, 8.0);
+			if (bRoadLine) return; // (on trial, "roadline": dealt in the world as dealt and carried, DealHedges)
 			Inst.assign(static_cast<size_t>(Base::Count), {});
 			RegionHost H(*this, false);
 			Rg->Walls(H);
@@ -4051,6 +5013,9 @@ namespace LandField
 			Inst.assign(static_cast<size_t>(Base::Count), {});
 			return;
 		}
+		// (on trial, "roadline": the hedges traced, and what closes their points found, in the world as dealt, on the lanes'
+		// old line; then carried onto the new, where the recorded ways' openings, the gateways and the breaches are made)
+		if (bRoadLine) SwapWorld();
 		auto Kind = [this](int32_t P) { return Parcels[static_cast<size_t>(P)].Kind; };
 		auto Keep = [&Kind](int32_t A, int32_t B) {
 			const int KA = Kind(A), KB = Kind(B);
@@ -4094,19 +5059,6 @@ namespace LandField
 				}
 				Hs.push_back(std::move(H));
 			}
-		// (on trial, "roadline": a lane bank's own distance from the lanes' floors, not its 2 m pixel's, which lies up to 1.4 m
-		// nearer or farther: along a lane that runs aslant the raster the pixels' test cut its banks every few metres)
-		auto LaneEdgeAt = [this](V2 P) {
-			double Edge = 1e6;
-			if (const std::vector<uint32_t>* Near = LGrid.At(P.X, P.Y))
-				for (const uint32_t Id : *Near)
-				{
-					const LaneSeg& S = LSegs[Id];
-					double T;
-					Edge = std::min(Edge, SegDist(P, S.A, S.B, T) - Lanes[static_cast<size_t>(S.Lane)].Half);
-				}
-			return Edge;
-		};
 		// What closes each hedge's points.
 		for (Hedge& H : Hs)
 		{
@@ -4130,7 +5082,7 @@ namespace LandField
 					// None in the village, the yards or the water, and none across another lane.
 					const uint8_t G = Rgn[Px];
 					if (G == RgVillage || G == RgYard || G == RgWater || G == RgMarsh) H.Keep[K] = 0;
-					if ((bRoadLine ? LaneEdgeAt(P) : LaneD[Px]) < LaneWall + 0.35) H.Keep[K] = 0;
+					if (LaneD[Px] < LaneWall + 0.35) H.Keep[K] = 0;
 					const int32_t B = H.Beyond[K];
 					if (B >= 0)
 					{
@@ -4139,6 +5091,68 @@ namespace LandField
 					}
 				}
 				else if (LaneD[Px] < LaneWall + 0.6) H.Keep[K] = 0;
+			}
+		}
+		if (bRoadLine)
+		{
+			SwapWorld();
+			for (Hedge& H : Hs)
+			{
+				for (V2& P : H.P) P = P + CarriedBy(P);
+				// (where a bank went round a tight bend of the line as dealt, the carry onto the straighter line can fold it
+				// back on itself: its points along the lane beside it kept going one way, those that turn back laid on the
+				// straight between the last before and the first beyond)
+				const size_t N = H.P.size();
+				std::vector<int> OnLane(N, -1);
+				std::vector<double> Along(N, 0.0);
+				for (size_t K = 0; K < N; ++K)
+					if (const std::vector<uint32_t>* Near = LGrid.At(H.P[K].X, H.P[K].Y))
+					{
+						double Best = 1e18;
+						for (const uint32_t Id : *Near)
+						{
+							const LaneSeg& Sg = LSegs[Id];
+							double T;
+							const double E = SegDist(H.P[K], Sg.A, Sg.B, T) - Lanes[static_cast<size_t>(Sg.Lane)].Half;
+							if (E < Best && E < 8.0)
+							{
+								Best = E;
+								OnLane[K] = Sg.Lane;
+								Along[K] = Id + T;
+							}
+						}
+					}
+				std::vector<char> Back(N, 0);
+				for (size_t A = 0; A < N;)
+				{
+					size_t B = A;
+					while (B + 1 < N && OnLane[A] >= 0 && OnLane[B + 1] == OnLane[A]) ++B;
+					if (OnLane[A] >= 0 && B >= A + 2)
+					{
+						const double Way = Along[B] >= Along[A] ? 1.0 : -1.0;
+						double Far = Along[A];
+						for (size_t K = A + 1; K <= B; ++K)
+						{
+							if ((Along[K] - Far) * Way > 0.0) Far = Along[K];
+							else Back[K] = 1;
+						}
+					}
+					A = B + 1;
+				}
+				for (size_t K = 1; K < N;)
+				{
+					if (!Back[K])
+					{
+						++K;
+						continue;
+					}
+					size_t E = K;
+					while (E + 1 < N && Back[E + 1]) ++E;
+					if (E + 1 < N)
+						for (size_t Q = K; Q <= E; ++Q) H.P[Q] = Lerp2(H.P[K - 1], H.P[E + 1], static_cast<double>(Q - K + 1) / static_cast<double>(E - K + 2));
+					K = E + 1;
+				}
+				for (size_t K = 1; K < H.P.size(); ++K) H.S[K] = H.S[K - 1] + Len(H.P[K] - H.P[K - 1]);
 			}
 		}
 		// The recording's vehicles drove through: their hedges are open where they crossed, bank and all.
@@ -4197,6 +5211,10 @@ namespace LandField
 					}
 				}
 			}
+		// (on trial, "roadline": the hedges' points open before their gateways and breaches are cut, as dealt)
+		std::vector<std::vector<char>> KeepOpen;
+		if (bHedgesAsDealt)
+			for (const Hedge& H : Hs) KeepOpen.push_back(H.Keep);
 		// A field gate in most parcels: on its lane where it has one, else into a neighbour.
 		struct Span
 		{
@@ -4247,6 +5265,7 @@ namespace LandField
 		for (size_t P = 0; P < Parcels.size(); ++P)
 		{
 			const ParcelInfo& Q = Parcels[P];
+			if (bRoadLine) break; // (on trial, "roadline": the gateways as dealt, carried, below)
 			if (!IsFarmland(Q.Kind) || Q.Area < 2200.0 || bGated[P]) continue;
 			const auto Found = Spans.find(static_cast<int32_t>(P));
 			if (Found == Spans.end()) continue;
@@ -4318,7 +5337,7 @@ namespace LandField
 		};
 		for (Hedge& H : Hs)
 		{
-			if (H.Kind != HkHedgerow && H.Kind != HkLaneBank) continue;
+			if ((H.Kind != HkHedgerow && H.Kind != HkLaneBank) || bRoadLine) continue; // (on trial, "roadline": the breaches as dealt, below)
 			std::vector<double> Over;
 			for (size_t K = 0; K + 1 < H.P.size(); ++K)
 			{
@@ -4399,6 +5418,74 @@ namespace LandField
 						if (Ax * Ax + Al * Al < 1.0 && InRaster(Middle.X + DX, Middle.Y + DY)) OccR[Pix(Middle.X + DX, Middle.Y + DY)] |= OcGate;
 					}
 			}
+		}
+		// (on trial, "roadline": the gateways and the breaches kept as dealt, DealHedges; then, on the new line, cut where
+		// they were dealt along the same hedges, their gates hung and their ground trodden where the carry brings them)
+		if (bHedgesAsDealt)
+		{
+			HedgeGapsWas.assign(Hs.size(), {});
+			for (size_t Hi = 0; Hi < Hs.size(); ++Hi)
+			{
+				HedgeGapsWas[Hi].assign(Hs[Hi].P.size(), 0);
+				for (size_t K = 0; K < Hs[Hi].P.size(); ++K) HedgeGapsWas[Hi][K] = KeepOpen[Hi][K] && !Hs[Hi].Keep[K];
+			}
+			GatePostsWas.clear();
+			GateYawsWas.clear();
+			for (const GateAt& G : Gates)
+			{
+				GatePostsWas.push_back(G.P);
+				GateYawsWas.push_back(G.Yaw);
+			}
+		}
+		if (bRoadLine)
+		{
+			for (size_t Hi = 0; Hi < Hs.size() && Hi < HedgeGapsWas.size(); ++Hi)
+				for (size_t K = 0; K < Hs[Hi].P.size() && K < HedgeGapsWas[Hi].size(); ++K)
+					if (HedgeGapsWas[Hi][K]) Hs[Hi].Keep[K] = 0;
+			auto TurnedBy = [this](V2 P, double Yaw) {
+				const V2 U{ std::cos(Yaw), std::sin(Yaw) }, To = U + CarriedBy(P + U) - CarriedBy(P);
+				return std::atan2(To.Y, To.X);
+			};
+			for (size_t G = 0; G < GatePostsWas.size(); ++G) Gates.push_back({ GatePostsWas[G] + CarriedBy(GatePostsWas[G]), TurnedBy(GatePostsWas[G], GateYawsWas[G]) });
+			Count.Gates = static_cast<int>(Gates.size());
+			for (const HedgeOpening& O : OpeningOutWas)
+			{
+				HedgeOpening Moved = O;
+				const V2 At{ O.X, O.Y };
+				const V2 To = At + CarriedBy(At);
+				Moved.X = To.X;
+				Moved.Y = To.Y;
+				Moved.Yaw = TurnedBy(At, O.Yaw);
+				OpeningOut.push_back(Moved);
+			}
+			// (where the carry draws two breaches in line on one hedge nearer than 40 m, the one fewer men gathered at is no
+			// longer counted a breach: its gap stays as dealt)
+			for (size_t A = 0; A < OpeningOut.size(); ++A)
+				for (size_t B = A + 1; B < OpeningOut.size(); ++B)
+				{
+					const HedgeOpening &Oa = OpeningOut[A], &Ob = OpeningOut[B];
+					if (Oa.Kind != 1 || Ob.Kind != 1) continue;
+					const V2 D{ Ob.X - Oa.X, Ob.Y - Oa.Y }, Ua{ std::cos(Oa.Yaw), std::sin(Oa.Yaw) }, Ub{ std::cos(Ob.Yaw), std::sin(Ob.Yaw) };
+					const bool bInLine = std::fabs(D.X * Ua.Y - D.Y * Ua.X) < 3.0 && std::fabs(D.X * Ub.Y - D.Y * Ub.X) < 3.0 && std::fabs(std::remainder(Ob.Yaw - Oa.Yaw, Pi)) < 0.35;
+					if (!bInLine || std::fabs(Dot(D, Ua)) >= 40.0) continue;
+					OpeningOut[Oa.Men < Ob.Men ? A : B].Kind = -1;
+				}
+			OpeningOut.erase(std::remove_if(OpeningOut.begin(), OpeningOut.end(), [](const HedgeOpening& O) { return O.Kind < 0; }), OpeningOut.end());
+			Count.Breaches = static_cast<int>(std::count_if(OpeningOut.begin(), OpeningOut.end(), [](const HedgeOpening& O) { return O.Kind == 1; }));
+			for (int J = 0; J < NY; ++J)
+				for (int I = 0; I < NX; ++I)
+				{
+					const V2 X{ RX0 + (I + 0.5) * Res, RY0 + (J + 0.5) * Res };
+					V2 Q = X;
+					for (int It = 0; It < 10; ++It)
+					{
+						const V2 Next = X - CarriedAt(Q);
+						const bool bDone = Len(Next - Q) < 0.02;
+						Q = Next;
+						if (bDone) break;
+					}
+					if (OccRWas[Pix(Q.X, Q.Y)] & OcGate) OccR[static_cast<size_t>(J) * static_cast<size_t>(NX) + static_cast<size_t>(I)] |= OcGate;
+				}
 		}
 		// What stays, laid: banks (with their shrubs and trees later) and walls.
 		for (Hedge& H : Hs)
@@ -4649,6 +5736,14 @@ namespace LandField
 	void Ground::Impl::MakeCowPaths()
 	{
 		if (Sp || Rg || Parcels.empty()) return;
+		// (on trial, "roadline": the paths dealt in the world as dealt, along the hedges and from the gateways as dealt, and
+		// then carried onto the new line)
+		auto AsDealt = [this]() {
+			SwapWorld();
+			std::swap(HedgeOut, HedgeOutWas);
+			std::swap(OpeningOut, OpeningOutWas);
+		};
+		if (bRoadLine) AsDealt();
 		auto Grazed = [this](V2 P) {
 			if (!InRaster(P.X, P.Y)) return false;
 			const size_t K = Pix(P.X, P.Y);
@@ -4782,6 +5877,26 @@ namespace LandField
 					CowBits.push_back(B);
 				}
 				Along += Lg;
+			}
+		}
+		if (bRoadLine)
+		{
+			AsDealt();
+			CGrid.Init(-Band - 20.0, -Band - 20.0, FW + Band + 20.0, FH + Band + 20.0, 8.0);
+			Metres = 0.0;
+			for (size_t K = 0; K < CowA.size(); ++K)
+			{
+				CowA[K] = CowA[K] + CarriedBy(CowA[K]);
+				CowB[K] = CowB[K] + CarriedBy(CowB[K]);
+				CGrid.Add(static_cast<uint32_t>(K), CowA[K], CowB[K], CowHalf[K] + 0.3);
+				Metres += Len(CowB[K] - CowA[K]);
+			}
+			for (Placed& B : CowBits)
+			{
+				const V2 D = CarriedBy({ B.X, B.Y });
+				B.X = static_cast<float>(B.X + D.X);
+				B.Y = static_cast<float>(B.Y + D.Y);
+				B.Z = static_cast<float>(Top(B.X, B.Y, nullptr));
 			}
 		}
 		Count.CowPathKm = Metres / 1000.0;
@@ -4940,8 +6055,23 @@ namespace LandField
 				// under it, its walls run down past the ground's fall)
 				if (L.size() > Was && H.Model >= 0 && H.Model < static_cast<int>(HouseModels.size()) && HouseModels[static_cast<size_t>(H.Model)].Kind == 10) L.back().Z = static_cast<float>(H.Floor + 0.03);
 			}
-			RegionHost Host(*this, false);
-			Rg->Plants(Host);
+			// (on trial, "roadline": the region's plantings dealt in the world as dealt, on the lanes' old line, and carried)
+			std::vector<size_t> Dealt;
+			const size_t WallsWas = Walls.size(), OutWas = HedgeOut.size();
+			if (bRoadLine)
+			{
+				for (const std::vector<Placed>& L : Inst) Dealt.push_back(L.size());
+				SwapWorld();
+			}
+			{
+				RegionHost Host(*this, false);
+				Rg->Plants(Host);
+			}
+			if (bRoadLine)
+			{
+				SwapWorld();
+				CarryPlanted(Dealt, WallsWas, OutWas);
+			}
 			for (const std::vector<Placed>& L : Inst) Count.Instances += L.size();
 			return;
 		}
@@ -5003,6 +6133,15 @@ namespace LandField
 				++Count.HouseModels;
 			}
 		Count.HouseKinds = static_cast<int>(HouseModels.size());
+		// (on trial, "roadline": the hedges' plantings, the woods', the orchards' and the hay dealt in the world as dealt, on
+		// the lanes' old line, and then carried onto the new; the yards' and the steppe's kit after, already carried)
+		std::vector<size_t> Dealt;
+		const size_t WallsWas = Walls.size(), OutWas = HedgeOut.size();
+		if (bRoadLine)
+		{
+			for (const std::vector<Placed>& L : Inst) Dealt.push_back(L.size());
+			SwapWorld();
+		}
 		auto Clear = [this](double X, double Y, uint8_t Bits) {
 			if (!InRaster(X, Y)) return false;
 			const size_t P = Pix(X, Y);
@@ -5584,6 +6723,11 @@ namespace LandField
 					}
 				}
 			}
+		}
+		if (bRoadLine)
+		{
+			SwapWorld();
+			CarryPlanted(Dealt, WallsWas, OutWas);
 		}
 		// The yards' wells and carts.
 		for (const Spot& S : Props)
@@ -10303,7 +11447,14 @@ namespace LandField
 		MakeSites();
 		FileHouses();
 		MakeParcels();
+		// (on trial, "roadline": all of it dealt on the lanes' old line, and now carried onto the new)
+		if (bRoadLine)
+		{
+			MakeDistances();
+			CarryRoad();
+		}
 		MakeDistances();
+		if (bRoadLine) DealHedges();
 		MakeHedges();
 		MakeCowPaths();
 		MakePlants();
@@ -10316,6 +11467,7 @@ namespace LandField
 		MakeBases();
 		SeatKitHouses();
 		TakeUpTallLowKit();
+		if (bRoadLine) OpenOverLanes();
 		MakeFeet();
 		MakeTiles();
 		MakeRing();
