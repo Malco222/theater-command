@@ -1,0 +1,34 @@
+# The looks each of the convoy battle's real nights must tell (Tools/sea_show/recordings, D2): the design director's ruling
+# of 03:40Z, 26 November, on convoy_looks: "prove each look on the night that tells it ... Every look must still be told at
+# least once on a real night and drawn every time it is told, so each check still bites." convoy_looks_show reads this
+# table (run.sh names it in CONVOY_LOOKS_NIGHTS). Each line, tab apart: the recording's file name without .json (as the
+# known lists name a night) and the looks it must tell, space apart, of:
+#   pattern    a depth-charge pattern dropped (sea:depthCharge, not "ahead"): its drop, laid where the battle laid it (its
+#              run's middle within a charge's lethal reach of the point it tells), and every one of its charges bursting
+#   ahead      an ahead-thrown salvo with a hit booked from the same escort within 60 s (sea:depthChargeHit): its bombs
+#              bursting on her (the show bursts an ahead salvo's bombs only on such a hit)
+#   starshell  a star shell fired (sea:starshell): its shell lit and sinking
+# A night in this table is a real night: it must tell every look of its line, every look it tells (of its line or not) is
+# drawn every time it is told, and across the real nights played each look is told on one at the least. Every recording in
+# Tools/sea_show/recordings is a real night too (run.sh names the folder, CONVOY_LOOKS_REAL): one there with no line here
+# fails the run, so this table emptied or cut short never stops the real nights being asked. A recording neither here nor
+# there (a stand-in) is checked as before. A line that is not a night and its looks, or the table not named or not read,
+# fails the run. Each line says what its night tells on naval round 6a's recordings of 26 November (counted from the
+# recordings' events).
+#
+# first-pack (seed 23998, 13,359-14,079 s): the star shell at 13,572 s (Escort 4, piece 48), and Escort 4's pattern of ten
+# on Boat 6 (piece 54) at 13,887 s, the hit booked from it at 13,926 s. No ahead-thrown salvo.
+convoy-first-pack	starshell pattern
+# hunted (seed 111107, 6,225-6,945 s): Escort 9's (piece 53) pattern of ten on Boat 5 (piece 61) at 6,504 s and the hit at
+# 6,540 s, 36 s after it. Pattern only: the design director confirmed the table as built at 13:24Z, 26 November
+# (first-pack star shell and pattern, hunted pattern, hunters ahead; "never bend windows for a check"). Its three
+# ahead-thrown salvoes (6,372 s by Escort 4 on Boat 4; 6,420 s and 6,462 s by Escort 9 on Boat 5) have no hit booked
+# within 60 s of any of them (the one hit, at 6,540 s, is the pattern's), and the escorts' ahead-thrower is the field's
+# hedgehog (kit.UK.hedgehog), a contact bomb: the show bursts its bombs only on a hit, as the rules book it. So hunted
+# tells no ahead look, and its line does not ask one; hunters' line does. No star shell: a radar night (the field fires
+# star shell only for a boat found by sight under a moon below 0.6).
+convoy-hunted	pattern
+# hunters (seed 79431, 1,437-2,157 s): the ahead bursts, told here: Escort 8 (piece 52) throws ahead at Boat 14 (piece 67)
+# at 1,905 s and the hit is booked from it at 1,929 s, 24 s after. (The night's other two, at 1,437 s by Escort 8 on Boat 1
+# and at 1,725 s by Escort 9 on Boat 6, have no hit.) No pattern, no star shell.
+convoy-hunters	ahead

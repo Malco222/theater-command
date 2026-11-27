@@ -6,19 +6,10 @@
 # passes the battle's own). Within its bound the failure prints KNOWN and fails nothing; past it, or any check not listed
 # failing, fails the run as ever; a listed check that passes says to take its line off. Take each line off when its rules
 # fix lands (a stand-in's lines, which keep a rules' side case on purpose, stay).
+# (sea_under_test keeps its own list in this same form: known_failures_under.txt, named in SEA_UNDER_KNOWN.)
 #
-# The line: the battle gives up a boat's ship (Untold) while its views still count her afloat, 1 to 1 (first-pack piece 49 at
-# 2289 s, hunted 61 at 8430 s, hunters 62 at 11589 s).
-convoy-first-pack	the line's ships as many as the battle's	2880
-convoy-hunted	the line's ships as many as the battle's	2880
-convoy-hunters	the line's ships as many as the battle's	2880
-# The gun hits: told on a boat forced up from 110 m while she is still some 90 m down, drawn by her hunter's next round once
-# her casing is clear (2 m/s up on the battle's own depth as it tells her rise, the sea stopping her at her trim: hunted piece
-# 61 hit at 8331 s, hunters 62 at 11550 s). The bounds as the review set them, from d2fix-r1 (46.1 and 53.5 s).
-convoy-hunted	every gun hit told drawn on the ship struck within 30 s	46.1
-convoy-hunters	every gun hit told drawn on the ship struck within 30 s	53.5
-# The salvos: two gun hits booked on hunters' piece 62 in 60 s against five salvos drawn (2 for 5: one hit over a fifth).
-convoy-hunters	most salvos miss (hits only as the battle books them)	1.0
+# The real nights: none listed now: the six of 24 November (the line's ships on all three nights, the gun hits on hunted and
+# hunters, the salvos on hunters) came off on 25 November, each passing and saying so on naval round 5's recordings.
 #
 # The blocked destroyer column (a stand-in, Tools/sea_show/stand-ins/destroyer_column.py, the review of 25 November): made
 # without the rules' own-water switch, the cruiser of another piece lies stopped 200 m short of the aim across the column's
@@ -26,6 +17,7 @@ convoy-hunters	most salvos miss (hits only as the battle books them)	1.0
 # drawn, each judged over its hold (the cruiser in the salvo's water ahead of its heads, at some look all that stood in its
 # way: the rules' side); and the tracks that remain, round the cruiser's ends, pass the battleship's ends, so her third
 # hit's track jumps 200 m to her side against the 46 m the battle's moment's own would have (153.8 m past it). Not to be
-# taken off: the stand-in keeps the case.
+# taken off: the stand-in keeps the case. The jump's bound is its measure rounded up to 0.1 m: 153.9 (at the convoy round 6a
+# join, from 154, the review of 27 November: past 153.8, within 153.9, on g++ and clang++).
 destroyer-column-blocked	every torpedo the battle fired drawn (held tubes fired once clear)	4
-destroyer-column-blocked	every torpedo hit's jump no longer than the battle's own	154
+destroyer-column-blocked	every torpedo hit's jump no longer than the battle's own	153.9

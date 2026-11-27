@@ -544,6 +544,19 @@ namespace SeaShow
 				H.P = Lead - Ahead(P.Face) * H.Back;
 				H.Hdg = H.CourseHdg = P.Face;
 				H.Spd = P.Speed;
+				// (a boat at the depth the battle has her from the first, as Trim lays it on its first call: the start's settling
+				// passes (KeepClear) come before it, and a boat held deep keeps no water at the surface there either, HeldDeep.
+				// Laid at the surface for them, hunters' Boat 1, told deep at 110 m as the window opens with Escort 8 199 m
+				// astern of her on her course and throwing ahead at her, was pushed 97.5 m across from her place and the escort
+				// as far the other way: naval round 6a's recordings, 26 November)
+				if (H.Class == "ss")
+				{
+					if (!P.Dive.empty()) H.Dive = P.Dive;
+					H.bScope = P.bScope;
+					const double Up = SurfacedKeel(H.Class);
+					const double Want = P.Keel >= 0.0 ? P.Keel : H.Dive == "deep" ? F.DeepKeel : H.Dive == "periscope" ? F.ScopeKeel : Up;
+					H.Keel = H.KeelTo = Clamp(Want, Up, std::max(Up, F.CrushKeel));
+				}
 				// (a boat's deck gun: an American fleet boat's aft of her tower, as the battle modeller's boat has it, lying
 				// stowed facing aft from the first; any other's forward of it, facing forward)
 				H.bAftGun = H.Class == "ss" && H.Nation == "USA";
@@ -1356,17 +1369,45 @@ namespace SeaShow
 			const double Set = E.Set >= 0.0 ? E.Set : Clamp(Keel, 10.0, F.CrushKeel);
 			const double Sinks = E.Sinking >= 0.0 ? E.Sinking : Set / (bAhead ? 7.0 : std::max(0.5, F.ChargeSink));
 			const double Spread = E.Spread > 0.0 ? E.Spread : bAhead ? 40.0 : 120.0;
-			// A pattern goes in as she runs over the spot: rolled off her stern rails and thrown to either side, one after
-			// another over the length of the pattern at her speed.
+			// A pattern: rolled off her stern rails and thrown to either side. Where the battle tells the spot, the pattern
+			// lies over it, its middle there and its length along her course as the battle has it: the pattern the battle
+			// laid, drawn where the battle laid it (its zone, Spread across, on the spot), whatever her drawn hull's place and
+			// heading then. Laid from her drawn stern on her drawn heading instead, hunted's Escort 9, turned 144 degrees in
+			// one 3 s step by the battle at 6,495 s, drawn 84 m off her place and 76 degrees off her heading as she dropped at
+			// 6,504 s, drew nine of her pattern's ten charges 75-176 m off the spot it was laid on; and first-pack's Escort 4,
+			// 38 m short of the spot as she dropped at 13,887 s, began it 83 m short (naval round 6a's recordings, 26 November).
+			// It goes in all at once, at the moment the battle tells it, and bursts all at once at the battle's moment, as the
+			// naval rules lay and burst it (sim.ts: chargePattern lays one pattern on the spot, due at the drop and its sinking
+			// time rounded up to the whole second; burstCharges bursts it, and books any blow, at the first step of the battle
+			// at or after that, the step being the spacing of its views): every charge at its set depth at the battle's blow.
+			// A pattern told between the views (a staged scene telling its own moments, not stepping) bursts at its drop and
+			// sinking. Run over its length at her speed instead, hunted's Escort 9's pattern of 6,504 s, at her drawn 4.2 m/s
+			// a 28.6 s run, put the charge nearest Boat 5 in 6.35 s into it, due 4.35 s after the battle's blow of 6,540 s and
+			// still sinking at 85.9 m of its 102 m a second before it; run at her battle speed of 7.0 m/s, a 17.1 s run, due
+			// 1.8 s after the blow and at about 96.6 m at it (naval round 6b, 26 November). Where the battle tells no spot,
+			// from her stern as she is, one after another over its length at her speed.
+			const bool bOverSpot = !bAhead && (E.bAim || E.bAt);
 			const double Speed = std::max(3.0, H->Spd);
-			const double Run = bAhead ? 0.0 : Spread / Speed;
-			Fx& D = Emit(FxKind::ChargeDrop, bAhead ? PlaceOn(*H, 0.3, 0.0, 3.0) : PlaceOn(*H, -0.5, 0.0, 1.0), bAhead ? "ahead" : "pattern", H->Key);
-			D.Aim = bAhead ? Middle : PlaceOn(*H, -0.5, 0.0, 0.0) + Ahead(H->Hdg) * (Spread * 0.5);
+			const double Run = bAhead || bOverSpot ? 0.0 : Spread / Speed;
+			double Step = 0.0;
+			for (size_t K = 1; K < Views.size(); ++K)
+			{
+				const double Gap = Views[K].T - Views[K - 1].T;
+				if (Gap > 1e-6 && (Step <= 0.0 || Gap < Step)) Step = Gap;
+			}
+			bool bOnStep = false;
+			for (const View& V : Views) bOnStep = bOnStep || std::fabs(V.T - E.T) < 1e-6;
+			const double Whole = std::ceil(Sinks - 1e-9);
+			const double Moment = !bOnStep ? E.T + Sinks : Step > 0.0 ? E.T + Step * std::ceil(Whole / Step - 1e-9) : E.T + Whole;
+			const double RunHdg = bOverSpot && P ? P->Face : H->Hdg;
+			const Vec RunFrom = bOverSpot ? Middle - Ahead(RunHdg) * (Spread * 0.5) : PlaceOn(*H, -0.5, 0.0, 0.0);
+			Fx& D = Emit(FxKind::ChargeDrop, bAhead ? PlaceOn(*H, 0.3, 0.0, 3.0) : Vec(RunFrom.X, RunFrom.Y, 1.0), bAhead ? "ahead" : "pattern", H->Key);
+			D.Aim = bAhead ? Middle : RunFrom + Ahead(RunHdg) * (Spread * 0.5);
 			D.Aim.Z = 0.0;
-			D.Vel = Ahead(H->Hdg) * H->Spd;
+			D.Vel = Ahead(bAhead ? H->Hdg : RunHdg) * H->Spd;
 			D.Size = N;
 			D.Spread = Spread;
-			D.Sinking = Sinks;
+			D.Sinking = bOverSpot ? Moment - E.T : Sinks;
 			D.Until = Run;
 			D.Side = H->Side;
 			++Check.ChargeDrops;
@@ -1375,7 +1416,6 @@ namespace SeaShow
 				AheadAt[E.Unit] = E.T;
 				return;
 			}
-			const Vec Stern = PlaceOn(*H, -0.5, 0.0, 0.0);
 			for (int K = 0; K < N; ++K)
 			{
 				const double Share = N > 1 ? static_cast<double>(K) / (N - 1) : 0.0;
@@ -1396,9 +1436,10 @@ namespace SeaShow
 				Vec Scatter(ScatterX, ScatterY, 0.0);
 				const double ScatterOff = Scatter.Length();
 				if (ScatterOff > ChargeScatterMost) Scatter = Scatter * (ChargeScatterMost / ScatterOff);
-				C.At = Stern + Ahead(H->Hdg) * (Share * Spread) + RightOf(H->Hdg) * Side + Scatter;
+				C.At = RunFrom + Ahead(RunHdg) * (Share * Spread) + RightOf(RunHdg) * Side + Scatter;
 				C.At.Z = -Set;
-				C.Bursts = E.T + Share * Run + Sinks;
+				C.Bursts = bOverSpot ? Moment : E.T + Share * Run + Sinks;
+				C.bAtOnce = bOverSpot;
 				C.Dropped = E.T;
 				C.Laid = C.At;
 				C.Due = C.Bursts;
@@ -1451,7 +1492,16 @@ namespace SeaShow
 			const bool bAhead = !Best && E.T - AheadT <= 60.0;
 			if (!Best)
 			{
-				if (!bAhead) ++Check.ChargeHitUnmatched;
+				// (a blow told on her after the pattern this escort laid all at once on her, this boat, burst at the rules'
+				// moment, 0 to LateHitWithin s before it, is that pattern's: drawn at her now, as below, one burst at her keel.
+				// A pattern that names no boat is matched to none. No recording of the battle tells one, its blows at the rules'
+				// moment; the hand-made nights do, their blows told 5-8 s after it: wolf-pack's Boat A 165 s, its pattern of
+				// 140 s due at 160 s; sub-air's boats 141.6 s and 212.5 s, theirs due at 134.2 s and 205.1 s)
+				const auto Burst = PatternBurstAt.find(E.From);
+				const bool bAfterBurst = !bAhead && Burst != PatternBurstAt.end() && Burst->second.second >= 0 && Burst->second.second == E.Unit &&
+				                         E.T >= Burst->second.first - 1e-9 && E.T - Burst->second.first <= LateHitWithin;
+				if (bAfterBurst) ++Check.ChargeHitLate;
+				else if (!bAhead) ++Check.ChargeHitUnmatched;
 				const int Bombs = bAhead ? 2 + (Roll.U() < 0.4 ? 1 : 0) : 1;
 				Hull* By = NearestOf(E.From, Near.X, Near.Y);
 				for (int K = 0; K < Bombs; ++K)
@@ -1462,7 +1512,10 @@ namespace SeaShow
 					C.Boat = E.Unit;
 					C.Side = By ? By->Side : (E.Side >= 0 ? 1 - E.Side : -1);
 					C.Kind = bAhead ? "ahead" : "pattern";
-					C.At = Near + Vec(Roll.Bell() * 2.0, Roll.Bell() * 2.0, 0.0) * static_cast<double>(K);
+					// (a blow matched to its pattern's burst: its one burst at her keel, drawing no dice, so the night's dice fall
+					// as they did when it was matched to a charge still in the water; an ahead salvo's bombs and a blow with no
+					// attack before it draw theirs as ever)
+					C.At = bAfterBurst ? Near : Near + Vec(Roll.Bell() * 2.0, Roll.Bell() * 2.0, 0.0) * static_cast<double>(K);
 					C.At.Z = -Keel;
 					C.bHit = K == 0;
 					C.Bursts = E.T + K * 0.4;
@@ -2119,6 +2172,7 @@ namespace SeaShow
 			}
 			Charge C = Charges[K];
 			Charges.erase(Charges.begin() + static_cast<long>(K));
+			if (C.bAtOnce) PatternBurstAt[C.Piece] = { C.Bursts, C.Boat };
 			if (C.bOnBoat)
 			{
 				if (const Hull* Boat = NearestOf(C.Boat, C.At.X, C.At.Y))
@@ -3425,7 +3479,12 @@ namespace SeaShow
 				Hull* H = FindHull(Key);
 				if (!H) continue;
 				H->bFiring = false;
-				const double Train = H->Class == "bb" ? 3.0 : H->Class == "ca" ? 6.0 : bOneGun ? 8.0 : 12.0; // degrees a second
+				// (degrees a second; a merchant's gun 15: her stern gun comes round from where it lies stowed to the farthest
+				// bearing its mount takes, MerchantGunArc, within the battle's own 10 s gun cycle, so the round the battle tells her
+				// gunners firing is drawn while it tells them, her gun's mark held a cycle and a view. At a boat's 8, hunters'
+				// Merchant 10, told on Boat 14 up on the surface from 2,040 s to 2,049 s ("Merchant 10's gunners open fire"), her
+				// bearing 104 degrees off the stern gun as it lay stowed, drew no round: naval round 6a's recordings, 26 November)
+				const double Train = H->Class == "bb" ? 3.0 : H->Class == "ca" ? 6.0 : H->Class == "mv" ? 15.0 : bOneGun ? 8.0 : 12.0;
 				const bool bTold = H == Firer;
 				Hull* On = nullptr;
 				if (bTold) On = Struck;

@@ -750,9 +750,11 @@ namespace ConvoyLook
 			const bool bRail = K % 2 == 0;
 			S.Side = bRail ? 0 : ((K / 2) % 2 == 0 ? 1 : -1);
 			S.Dt = Share * Until;
-			// (her stern when it goes: where the pattern went in, and on along her way)
-			const P3 Stern = In.At + In.Vel * S.Dt;
+			// (her stern when it goes: where the pattern went in, and on along her way; a pattern laid all at once, as the
+			// battle lays one on the spot it tells, from over each charge's own place along it, so no rail charge is drawn
+			// flung the pattern's length from one stern)
 			const P3 Track = P3(In.At.X, In.At.Y, 0.0) + Fore * (Share * Spread);
+			const P3 Stern = Until > 0.0 ? In.At + In.Vel * S.Dt : P3(Track.X, Track.Y, In.At.Z);
 			if (bRail)
 			{
 				// [EST] off the rails at her stern, 2 m over the sea, into her wake just astern

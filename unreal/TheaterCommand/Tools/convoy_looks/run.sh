@@ -29,11 +29,32 @@ $CXX ${CONVOY_LOOKS_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$S
   "$SRC/Battle/DeckCrewCore.cpp" "$SRC/Battle/SeaSailors.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/convoy_looks_show"
 # (the gun crews against the show: the sailor files the scene reads, from the game's Content)
 export CONVOY_LOOKS_CONTENT="$ROOT/Content"
+# (the looks each real night must tell, the design director's ruling of 03:40Z, 26 November: Tools/convoy_looks/night_looks.txt,
+# a night and its looks a line; convoy_looks_show holds each night in it to its line, draws every look it tells every time it
+# is told, and asks each look told on one real night played at the least; the table not read fails the run. A real night is
+# also every recording played from the real nights' folder, Tools/sea_show/recordings, in the table or not: one with no line
+# there fails, and each counts across the real nights, so the table emptied or cut short never stops them being asked)
+export CONVOY_LOOKS_NIGHTS="${CONVOY_LOOKS_NIGHTS:-$HERE/night_looks.txt}"
+export CONVOY_LOOKS_REAL="$ROOT/Tools/sea_show/recordings"
 # (a checkout without the real nights' recordings plays the rest: a glob that matches nothing drops out)
 shopt -s nullglob
+STATUS=0
 if [ "$#" -eq 0 ]; then
   set -- "$ROOT/Tools/sea_show/stand-ins/convoy-night.json" "$ROOT/Tools/sea_show/stand-ins/wolf-pack-surrender.json" "$ROOT/Tools/sea_show/stand-ins/wolf-pack-abeam.json" \
     "$ROOT/Tools/sea_show/stand-ins/wolf-pack-abandon.json" "$ROOT"/Tools/sea_show/recordings/*.json
+  # (where the real nights' recordings are here at all, every night of the table is among them, so none of its lines goes
+  # unasked for a name that matches no recording; a recording there with no line in the table convoy_looks_show fails)
+  REAL=("$ROOT"/Tools/sea_show/recordings/*.json)
+  if [ "${#REAL[@]}" -gt 0 ] && [ -r "$CONVOY_LOOKS_NIGHTS" ]; then
+    while IFS=$'\t' read -r NIGHT _; do
+      case "$NIGHT" in '' | '#'*) continue ;; esac
+      if [ ! -f "$ROOT/Tools/sea_show/recordings/$NIGHT.json" ]; then
+        echo "FAIL: the looks table's night $NIGHT has no recording in Tools/sea_show/recordings"
+        STATUS=1
+      fi
+    done < "$CONVOY_LOOKS_NIGHTS"
+  fi
 fi
 shopt -u nullglob
-"$OUT/convoy_looks_show" "$@"
+"$OUT/convoy_looks_show" "$@" || STATUS=1
+exit $STATUS

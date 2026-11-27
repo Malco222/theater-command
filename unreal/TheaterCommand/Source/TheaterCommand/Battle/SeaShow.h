@@ -691,6 +691,18 @@ namespace SeaShow
 		std::vector<Lot> Lots;
 	};
 
+	/**
+	 * A depth-charge blow told on a boat after the pattern laid on her burst all at once at the rules' moment (sim.ts's
+	 * burstCharges books the blow at that very step): the most seconds after that burst it may come and still be that
+	 * pattern's, laid by the same escort on the same boat, drawn as one burst at her (Checks::ChargeHitLate counts them).
+	 * 15 s because the hand-made stand-in nights tell their blows 5-8 s after the rules' moment (wolf-pack's Boat A at 165 s,
+	 * 5.0 s after its pattern's burst at 160 s; sub-air's boats at 141.6 s and 212.5 s, 7.4 s after theirs at 134.2 s and
+	 * 205.1 s), with room over the 8 s, as the 15 s a blow is matched to a charge still in the water in. No recording of the
+	 * battle tells one: its blows come at the rules' moment itself, and the cloud test holds every recording that is not a
+	 * stand-in to none.
+	 */
+	constexpr double LateHitWithin = 15.0;
+
 	/** The seamanship's own checks, kept as the show runs (the cloud test reads them). */
 	struct Checks
 	{
@@ -711,6 +723,7 @@ namespace SeaShow
 		// A convoy's night (ruling 241): the events told, and what the show made of them.
 		int DiveEvents = 0, SonarEvents = 0, ChargeEvents = 0, ChargeHitEvents = 0, ReportEvents = 0, StarshellEvents = 0, RescueEvents = 0;
 		int ChargeDrops = 0, ChargeBursts = 0, ChargeBurstsBooked = 0, ChargeHitUnmatched = 0, Dives = 0, Starshells = 0, Rescues = 0;
+		int ChargeHitLate = 0; // blows told on her after the pattern laid on her burst, within LateHitWithin: matched to that pattern
 		int AirOnBoats = 0, AirBlowsOnBoats = 0; // aircraft told on a boat (sea:air), and their blows let go on her while she was afloat
 		// A boat's deck gun and a merchant's gun (the convoy battle's "gun"): their actions told (sea:gun), their hits told
 		// (sea:gunHit: the events, and the hits they name), and the rounds the show fired from each; of those rounds, the ones
@@ -1179,6 +1192,7 @@ namespace SeaShow
 			std::string Kind;
 			bool bHit = false;
 			bool bOnBoat = false; // (the battle's blow told before it bursts: it bursts where she is then, Off from her)
+			bool bAtOnce = false; // (of a pattern laid all at once over the spot the battle tells, bursting at the rules' moment)
 			Vec Off;
 			// (U1 hook (under water): where and when its pattern set it to burst as it went in, kept where the battle's blow
 			// moves it; Due -1 for one no pattern laid, put by her for a blow told with none of hers to take)
@@ -1225,6 +1239,9 @@ namespace SeaShow
 		std::vector<Zone> Zones;
 		std::vector<Charge> Charges;   // depth charges sinking, not yet burst
 		std::map<int, double> AheadAt; // by escort piece: battle time of its last ahead-thrown salvo (a hit bursts them)
+		// (by escort piece: the battle time its last pattern laid over the spot burst, all at once at the rules' moment, and
+		// the boat's piece it was laid on: a blow on her from it told after that moment is that pattern's)
+		std::map<int, std::pair<double, int>> PatternBurstAt;
 		ShipGuns::Gunnery Gunners;   // L9: the ships' anti-aircraft guns
 		bool bGunsUp = false;        // aircraft were up for them last frame
 		double GunDue = 0.0;         // battle seconds since they were last laid
