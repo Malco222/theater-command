@@ -84,6 +84,11 @@ struct FLandBattleState
 	LandBurn::Director Burns;
 	/** Effects (R2): the crews getting out of knocked-out tanks, -TheaterLandBailOut (LandBail). */
 	LandBail::Book Bails;
+	/** Effects (R2): the blood mist at a bullet's strike, -TheaterLandHitMist: on, the battle time the men's strikes were
+	 * last asked up to (under 0: not yet), and this frame's (LandMen::Crowd::StrikesIn, handed to the kit's Struck). */
+	bool bHitMist = false;
+	double StruckAsked = -1.0;
+	std::vector<LandMen::Crowd::Strike> StrikesNow;
 	/** Effects (R2): the fighters on call over the field, -TheaterLandAirSupport (LandAir; the scene's FlyOver,
 	 * Battle/LandBattleAir.cpp): the plan, and what the effects kit has been told of it. */
 	struct FAirSupport

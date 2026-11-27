@@ -4170,8 +4170,19 @@ void ALandBattle::MakeMen()
 	{
 		LandMen::Crowd::Hits Hits;
 		Hits.bJolt = Hits.bVariety = Hits.bWounded = Hits.bFlinch = true;
+		Hits.bArrive = true; // (Effects (R2): a bullet's man falls when its round arrives, not when it was fired)
 		Crowd->SetHits(Hits);
-		UE_LOG(LogTheater, Display, TEXT("Land battle: bullet hits ON (jolt, varied falls, wounded who stay down)"));
+		UE_LOG(LogTheater, Display, TEXT("Land battle: bullet hits ON (jolt, varied falls, wounded who stay down, struck as the round arrives)"));
+	}
+	// Effects (R2), the blood mist (-TheaterLandHitMist; Brian, 26 November: "i do want a better look when a guy gets
+	// hit", "like a puff or mist of blood"): each bullet's strike on a man handed to the effects kit (Crowd::StrikesIn,
+	// FBattleEffects::Struck; its recipe row men.struck). Off: nothing asked, nothing drawn, as before.
+	S.bHitMist = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandHitMist"));
+	S.StruckAsked = -1.0;
+	if (S.bHitMist)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: blood mist at a bullet's strike ON (-TheaterLandHitMist; %s)"),
+			FParse::Param(FCommandLine::Get(), TEXT("TheaterLandHits")) ? TEXT("struck as the round arrives") : TEXT("without -TheaterLandHits: at the fall, as the round is fired, no jolt"));
 	}
 	std::string Error;
 	// (the men's ground is the field's, and the shell holes' own face where one is torn: their floors and rims stand a
@@ -7907,6 +7918,24 @@ void ALandBattle::Tick(float DeltaSeconds)
 		// (release 2, "teamguns": the support teams' weapons at their key men as just posed, before the fire below,
 		// whose flashes leave their muzzles; their swing and lay by life's clock)
 		MakeTeamGuns(Real * S.SpeedNow);
+		// (Effects (R2), the blood mist, -TheaterLandHitMist: each man a bullet struck since the last frame handed to the
+		// kit where it struck him and the way it went, before the kit's frame begins, so it is drawn this frame. A seek back
+		// asks again from where it lands, a jump forward only its last half second: no burst of old strikes)
+		if (S.bHitMist && Effects)
+		{
+			if (S.StruckAsked < 0.0 || Shown < S.StruckAsked)
+			{
+				S.StruckAsked = Shown;
+			}
+			S.StruckAsked = FMath::Max(S.StruckAsked, Shown - 0.5);
+			S.StrikesNow.clear();
+			S.Men->StrikesIn(S.StruckAsked, Shown, S.StrikesNow);
+			for (const LandMen::Crowd::Strike& Hit : S.StrikesNow)
+			{
+				Effects->Struck(World(Hit.At.X, Hit.At.Y, Hit.At.Z), WorldWay(Hit.Dir.X, Hit.Dir.Y, Hit.Dir.Z).GetSafeNormal(), LandParts::Wide(Hit.Gun), LandParts::Wide(Hit.Part));
+			}
+			S.StruckAsked = Shown;
+		}
 	}
 	MenMs += (LandParts::Seconds() - Mark) * 1000.0;
 	Mark = LandParts::Seconds();

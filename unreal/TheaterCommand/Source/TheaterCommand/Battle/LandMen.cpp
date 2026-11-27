@@ -4140,6 +4140,38 @@ namespace LandMen
 			return { At.X, At.Y, 0.f };
 		}
 
+		// ---------------------------------------------------------------------------------------------------------
+		// Effects (R2), the blood mist: a bullet's round, its flight, and when he is struck (Hits::bArrive, Strike).
+		// ---------------------------------------------------------------------------------------------------------
+		/** A small arm's round (the rules' w): rifle, mg, a sub-machine gun's or a pistol's. */
+		static bool BulletWord(const std::string& W) { return W == "rifle" || W == "mg" || W == "smg" || W == "pistol"; }
+
+		/** Where his killer stood as the round was fired (his track at its time), false where not known. */
+		bool KillerAt(const Man& M, double& OutX, double& OutY) const
+		{
+			if (M.KillT < 0.0) return false;
+			const auto Found = TrackOf.find({ M.KillBy, M.KillK, M.KillJ });
+			if (Found == TrackOf.end()) return false;
+			const TrackData& Tr = Tracks[static_cast<size_t>(Found->second)];
+			if (Tr.T.empty()) return false;
+			size_t Cursor = Tr.CursorAt(M.KillT);
+			float F = 0.f, V = 0.f;
+			Tr.At(M.KillT, Cursor, OutX, OutY, F, V);
+			return true;
+		}
+
+		/** When his fall starts: the rules' d, or with bArrive and a bullet's round from a known firer, when it arrives
+		 * (d + range / 760 m/s of life, at most 0.5 s of it, on the battle's clock, never past 0.5 battle seconds). */
+		double FallTime(const Man& M) const
+		{
+			if (!HitsNow.bArrive || M.Info.Dead < 0.0 || !BulletWord(M.KillWeapon)) return M.Info.Dead;
+			double SX = 0.0, SY = 0.0;
+			if (!KillerAt(M, SX, SY)) return M.Info.Dead;
+			const double Range = std::hypot(SX - M.KillX, SY - M.KillY);
+			const double Flight = std::min(std::min(Range / 760.0, 0.5) / Life, 0.5);
+			return M.Info.Dead + (Flight > 0.0 ? Flight : 0.0);
+		}
+
 		void StartFall(Man& M, double D)
 		{
 			if (HitsNow.bWounded && M.Info.WoundStarted >= 0.0 && M.UpAt < 0.0)
@@ -5325,13 +5357,14 @@ namespace LandMen
 					}
 				}
 			}
-			if (M.State == Man::Alive && M.Info.Dead >= 0.0 && Now >= M.Info.Dead)
+			// (Effects (R2), Hits::bArrive: a bullet's kill falls when its round arrives, FallTime; else at d, as before)
+			if (M.State == Man::Alive && M.Info.Dead >= 0.0 && Now >= M.Info.Dead && (!HitsNow.bArrive || Now >= FallTime(M)))
 			{
-				StartFall(M, M.Info.Dead);
+				StartFall(M, HitsNow.bArrive ? FallTime(M) : M.Info.Dead);
 				if (!bQuiet && M.FallClip < 0)
 				{
 					Event Ev;
-					Ev.T = M.Info.Dead;
+					Ev.T = HitsNow.bArrive ? FallTime(M) : M.Info.Dead;
 					Ev.Man = static_cast<int>(&M - Men.data());
 					Ev.Fx = "slump";
 					Ev.Army = M.Info.Army;
@@ -6396,6 +6429,48 @@ namespace LandMen
 		OutPart = "body";
 		return true;
 	}
+
+	void Crowd::StrikesIn(double After, double To, std::vector<Strike>& Out) const
+	{
+		const Impl& I = *Inner;
+		if (!(To > After)) return;
+		for (size_t K = 0; K < I.Men.size(); ++K)
+		{
+			const Impl::Man& M = I.Men[K];
+			if (M.bRider || !M.S) continue;
+			const int Man = static_cast<int>(K);
+			// (his fall, where a bullet's round killed him; his going down wounded, where the rules gave no round)
+			for (int Which = 0; Which < 2; ++Which)
+			{
+				const bool bKill = Which == 0;
+				const double T = bKill ? M.Info.FallStarted : M.Info.WoundStarted;
+				if (!(T > After && T <= To)) continue;
+				if (bKill && (M.KillT < 0.0 || !Impl::BulletWord(M.KillWeapon))) continue;
+				Strike S;
+				S.Man = Man;
+				S.T = T;
+				S.bKilled = bKill;
+				S.Gun = bKill ? M.KillWeapon : std::string("other");
+				if (!StruckPlace(Man, S.At, S.Part)) continue;
+				// (the round's way: from his killer as he fired, a metre over the ground there, to where it struck; else
+				// level from his front)
+				const double Sf = std::sin(static_cast<double>(M.F)), Cf = std::cos(static_cast<double>(M.F));
+				S.Dir = { static_cast<float>(-Sf), static_cast<float>(-Cf), 0.f };
+				double SX = 0.0, SY = 0.0;
+				const bool bKnown = bKill && I.KillerAt(M, SX, SY);
+				const double Flat = bKnown ? std::hypot(static_cast<double>(S.At.X) - SX, static_cast<double>(S.At.Y) - SY) : 0.0;
+				if (bKnown && Flat >= 1.0)
+				{
+					const double SZ = (I.GroundAt ? static_cast<double>(I.GroundAt(SX, SY).Height) : static_cast<double>(S.At.Z) - 1.0) + 1.0;
+					const Vec3 Way { static_cast<float>(static_cast<double>(S.At.X) - SX), static_cast<float>(static_cast<double>(S.At.Y) - SY), static_cast<float>(static_cast<double>(S.At.Z) - SZ) };
+					S.Dir = Unit(Way);
+					S.Range = static_cast<float>(Flat);
+				}
+				Out.push_back(S);
+			}
+		}
+	}
+
 	int Crowd::Gored() const { return Inner->GoredN; }
 	uint32_t Crowd::MeshNo(int Man) const { return Inner->Men[static_cast<size_t>(Man)].MeshNo; }
 

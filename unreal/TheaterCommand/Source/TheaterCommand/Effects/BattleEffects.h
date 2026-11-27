@@ -265,6 +265,11 @@ public:
 	 * going off glowing at a shallow angle, slowing, veering and wobbling as it tumbles; where it comes down in
 	 * sight it kicks up a little of Ground's dust. The bright gouge it leaves is the model's to show. */
 	void Glance(const FVector& WorldAt, const FVector& Incoming, const FVector& Normal, float CalibreMm = 75.0f, const FString& Ground = TEXT("earth"));
+	/** Effects (R2), the blood mist (-TheaterLandHitMist): a bullet striking a man at WorldAt (LandMen's StruckPlace),
+	 * going along Way: a puff of cloth dust where it goes in and, where it passes through, a fine dull red-pink mist
+	 * thrown on from the far side, gone within the second (TheaterFx::Battle::Struck). Weapon "rifle", "mg", "smg",
+	 * "pistol" or "other"; Part the bone struck ("head", a limb's, else the body). No men.struck row: nothing. */
+	void Struck(const FVector& WorldAt, const FVector& Way, const FString& Weapon, const FString& Part);
 	/** Oil burning on the sea where a ship went down (Kind "sunk"), or where a ship on fire left the line ("burning"):
 	 * low flames on the water and a tall black column leaning down the wind (SetWind; one wind for every column),
 	 * kept even when the screen is full and drawn kilometres off, so the far columns stay on the horizon. One call for

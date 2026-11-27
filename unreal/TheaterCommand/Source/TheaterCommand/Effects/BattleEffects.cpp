@@ -738,6 +738,14 @@ void FBattleEffects::Glance(const FVector& WorldAt, const FVector& Incoming, con
 	});
 }
 
+void FBattleEffects::Struck(const FVector& WorldAt, const FVector& Way, const FString& Weapon, const FString& Part)
+{
+	Do([=, this]()
+	{
+		Core.Struck(Time(), ToFx(WorldAt), ToFxWay(Way), Named(Weapon).c_str(), Named(Part).c_str());
+	});
+}
+
 void FBattleEffects::OilFire(int32 Id, const FVector& WorldAt, float ReachMetres, const FString& Kind, double UntilSeconds, float SinceSeconds)
 {
 	Do([=, this]()

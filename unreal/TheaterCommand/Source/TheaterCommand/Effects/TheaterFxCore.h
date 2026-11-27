@@ -662,6 +662,21 @@ namespace TheaterFx
 		 * going off glowing and tumbling at a shallow angle; where it comes down in sight it kicks up a little of the
 		 * Ground. No burst, no smoke. CalibreMm sizes it (held to 20..460). No glance row in the recipe: nothing. */
 		void Glance(double Now, const Vec& At, const Vec& Incoming, const Vec& Normal, double CalibreMm = 75.0, const char* Ground = "earth");
+		/**
+		 * Effects (R2), the blood mist (men.struck; -TheaterLandHitMist): a bullet striking a man at At (on his body:
+		 * LandMen's StruckPlace), going along Dir. On the side it enters, a small pale puff of cloth dust off the tunic,
+		 * gone in a quarter second. Where it passes through (its own dice, by Weapon, "rifle", "mg", "smg", "pistol" or
+		 * "other", and Part, the bone struck: "head", a limb's, else the body; Through 1 or 0 decides it instead), a fine
+		 * dull red-pink mist thrown on along Dir from the far side, widening as it goes and most of it gone by 0.3 to
+		 * 0.5 s, and a few heavier dark drops falling short within a metre; a head strike a shorter, denser puff. Ten
+		 * pieces at the most, all gone within the second; no lamp, no mark, nothing left lying. Own dice: every other
+		 * effect draws as before. Nothing without men.struck.on in the recipe, past within_m of the eye, or with the
+		 * screen's room past room_share full.
+		 */
+		void Struck(double Now, const Vec& At, const Vec& Dir, const char* Weapon, const char* Part, int Through = -1);
+		/** The pieces the last Struck laid (0: none), and whether its round passed through: for tests. */
+		int StruckPieces() const { return StruckLaid; }
+		bool StruckThrough() const { return bStruckThrough; }
 		/** Oil burning on the sea where a ship went down (Kind "sunk"), or a ship on fire where she left the line
 		 * ("burning"): low flames across the slick and a tall black column leaning down the wind, kept even when the
 		 * screen is full, so a far column on the horizon never blinks out. Reach is the oil's reach in metres (the sea
@@ -1367,6 +1382,7 @@ namespace TheaterFx
 		double GlanceAt = -1.0e18; int GlanceSame = 0; // (the moment of the last ricochet, and how many shots began to be followed at that moment: glance.most_a_frame)
 		static constexpr int OwnColumnId = 1 << 28;
 		int MaxPuffs = 3000;
+		int StruckLaid = 0; bool bStruckThrough = false; // (Effects (R2): the last Struck's pieces, and whether it passed through)
 		int Sides = 16, PointsPerPuff = 33;
 		std::vector<double> RingCos, RingSin, Ring2Cos, Ring2Sin, Ring3Cos, Ring3Sin, Ring5Cos, Ring5Sin; // (made once at Setup, so no puff works out a cosine a side each frame)
 		int LastDrawn = 0;
