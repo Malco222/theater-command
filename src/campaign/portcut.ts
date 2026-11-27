@@ -15,16 +15,16 @@
 //                     the player has no part in it any more, when the switch is turned off, and when its holder or the
 //                     player falls (portsDone).
 //   seaShut:<z>:<nat> the month sea z became shut to nation nat, read at every nation's month as it opens: the start of
-//                     the hold the shutting side sees on the port's card ("held ... since"). -1 (OPEN) while the switch
-//                     watches the sea open to it; the month it became shut only where the switch watched it open
-//                     before; 0 where the sea was already shut when the switch first watched it (its first look, as it
-//                     is turned on or at the first month it reads the seas; a port newly of the kind; a nation newly
-//                     holding one): a hold whose start the switch did not see, which gives no month (the UI director's
-//                     23:50Z, item 5). Kept for every nation but the player that holds a port of this kind on that
-//                     sea, whatever its wars and the player's, so that a hold begun before the player's war with the
-//                     holder is seen to begin. Cleared when no port of the kind asks for it, when the switch is turned
-//                     off, when the nation falls, and when the player falls (so that a player given his seat back is
-//                     watched afresh).
+//                     the hold the shutting side sees on the port's card ("held ... since"). -1 (WATCHED_OPEN) while
+//                     the switch watches the sea open to it; the month it became shut only where the switch watched it
+//                     open before; 0 where the sea was already shut when the switch first watched it (its first look,
+//                     as it is turned on or at the first month it reads the seas; a port newly of the kind; a nation
+//                     newly holding one): a hold whose start the switch did not see, which gives no month (the UI
+//                     director's 23:50Z, item 5). Kept for every nation but the player that holds a port of this kind
+//                     on that sea, whatever its wars and the player's, so that a hold begun before the player's war
+//                     with the holder is seen to begin. Cleared when no port of the kind asks for it, when the switch
+//                     is turned off, when the nation falls, and when the player falls (so that a player given his seat
+//                     back is watched afresh).
 //   portLost:<id>:<corps>:<nat>:<name>
 //                     the month a corps of the port's garrison starved there, kept from its nation's reckoning to the
 //                     player's own, so that the corps a port loses in one month are told in one line ("Several"),
@@ -75,7 +75,7 @@ const shutKey = (z: number, nat: string): string => `seaShut:${z}:${nat}`;
 const lostKey = (id: number, c: Corps): string => `portLost:${id}:${c.id}:${c.nat}:${c.name}`;
 const hadKey = (id: number): string => `portHad:${id}`;
 /** A sea's record while the switch watches it open (`seaShut:`): a hold that begins after it is one the switch saw begin. */
-const OPEN = -1;
+const WATCHED_OPEN = -1;
 /** The telling's own flags, by their prefixes. */
 const PORT_FLAGS = ['portTold:', 'seaShut:', 'portLost:', 'portHad:'];
 const portFlag = (k: string): boolean => PORT_FLAGS.some((p) => k.startsWith(p));
@@ -184,10 +184,10 @@ export interface PortCut {
  * own clock: siege.ts) and no friendly ground beside it by land (where the roads may feed the garrison whatever the stores).
  */
 function watched(g: Game, r: Region): boolean {
-  return kept(g, r) && !!g.nations[r.ctrl].atWar.length;
+  return portOfKind(g, r) && !!g.nations[r.ctrl].atWar.length;
 }
 /** The same port, its holder's wars aside: one whose seas the record of the holds watches (holdsMonth). */
-function kept(g: Game, r: Region): boolean {
+function portOfKind(g: Game, r: Region): boolean {
   if (!r.overseas || !r.port || !worksKept(r)) return false;
   if (!g.nations[r.ctrl]?.alive) return false;
   if (siegeRules(g) && fieldCtrl(g, r) !== r.ctrl) return false;
@@ -356,7 +356,7 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
     // start there is no month to give, and the count waits: the UI director's 23:50Z, item 5. A sea still watched open
     // at the last reading, or never read, gives none either.)
     const starts = r.seas.map((z) => g.flags[shutKey(z, holder)]);
-    const last = starts.some((x) => x === undefined || x === OPEN) ? null : Math.max(...(starts as number[]));
+    const last = starts.some((x) => x === undefined || x === WATCHED_OPEN) ? null : Math.max(...(starts as number[]));
     const since = last === 0 ? null : last;
     const keep = sightKeep(g, r, sightOf(g, viewer)[r.id]);
     const heldHungry = since === null || keep === null ? null : since + keep + 1;
@@ -532,9 +532,10 @@ const involved = (g: Game, r: Region, extra: Corps[] = []): boolean => {
 
 /**
  * The record of each hold, at every nation's month as it opens (after its draw of the supply picture): every sea of
- * every port of the kind (kept) held by a nation other than the player, whatever its wars and the player's, so that a
- * hold begun before the player's war with the holder is seen to begin. A sea open to the holder keeps OPEN; one shut
- * keeps the month it became shut. At the player's own month, records no port of the kind still asks for go.
+ * every port of the kind (portOfKind) held by a nation other than the player, whatever its wars and the player's, so
+ * that a hold begun before the player's war with the holder is seen to begin. A sea open to the holder keeps
+ * WATCHED_OPEN; one shut keeps the month it became shut. At the player's own month, records no port of the kind still
+ * asks for go.
  *
  * Only a hold the switch saw begin has a month (the UI director's 23:50Z, item 5): a sea shut to its holder keeps the
  * month only where the reading before watched it open. A sea already shut the first time a reading watches it (the
@@ -547,13 +548,13 @@ function holdsMonth(g: Game, sweep: boolean): void {
   const want = new Set<string>();
   for (const r of g.regions) {
     // (His own ports he never shuts: a hold on them is nobody's at his table.)
-    if (r.ctrl === me || !kept(g, r)) continue;
+    if (r.ctrl === me || !portOfKind(g, r)) continue;
     for (const z of r.seas) {
       const k = shutKey(z, r.ctrl);
       if (want.has(k)) continue;
       want.add(k);
       const was = g.flags[k];
-      g.flags[k] = !closedTo(g, z, r.ctrl) ? OPEN : was === undefined ? 0 : was === OPEN ? g.turn : was;
+      g.flags[k] = !closedTo(g, z, r.ctrl) ? WATCHED_OPEN : was === undefined ? 0 : was === WATCHED_OPEN ? g.turn : was;
     }
   }
   if (sweep) for (const k of Object.keys(g.flags)) if (k.startsWith('seaShut:') && !want.has(k)) delete g.flags[k];
