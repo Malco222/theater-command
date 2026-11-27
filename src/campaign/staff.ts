@@ -1590,6 +1590,11 @@ export function plansKnown(g: Game, nat: string, viewer: string | null = g.human
   return knowsBooks(g, nat, viewer) ? 'agent' : null;
 }
 
+/** The months of a main effort as the news says them: the month it is named and its army masses, the month its attacks begin, and its last month. One reader for every line that tells of the same order. */
+export function effortMonths(e: Effort): { mass: string; strike: string; last: string } {
+  return { mass: turnToDate(e.from).label, strike: turnToDate(e.from + 1).label, last: turnToDate(e.to).label };
+}
+
 /** What the player is told when a staff whose plans he knows names its main effort: an ally's, or an enemy's whose books his agent reads. */
 function effortNamed(g: Game, e: Effort): void {
   const me = g.human;
@@ -1598,7 +1603,7 @@ function effortNamed(g: Game, e: Effort): void {
   // (Release 2, intercepts.ts, behind its switch: where he does not read its plans, he may overhear the order.)
   if (!how) { interceptEffort(g, e); return; }
   const who = g.nations[e.nat]?.name ?? e.nat;
-  const until = turnToDate(e.to).label;
+  const until = effortMonths(e).last;
   const name = e.name.replace(/^the /, '');
   if (how === 'ally') {
     if (atWar(g, me, e.enemy) || allied(g, me, e.enemy)) headline(g, 'info', `${who}'s staff has named its main effort: ${e.name}, against ${g.nations[e.enemy]?.name ?? e.enemy}, until ${until}.`, e.nat, e.first);

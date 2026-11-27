@@ -26,7 +26,7 @@ import { allied, atWar, headline } from './game';
 import { agentsOf, doubleIn } from './intel';
 import { doublesOn } from './secretwar';
 import { techById, techOf } from './tech';
-import { turnToDate } from '../core/ticket';
+import { effortMonths, type Effort } from './staff';
 import type { Game } from './types';
 
 /** The switch: a grand campaign's own, off unless the release 2 ship list or the player turns it on. */
@@ -77,7 +77,7 @@ function falsePlace(g: Game, of: string, viewer: string, target: number): number
 }
 
 /** What the player hears of a main effort named against him or an ally, where he does not read its staff's plans. Called by staff.ts effortNamed. */
-export function interceptEffort(g: Game, e: { nat: string; enemy: string; first: number; to: number }): void {
+export function interceptEffort(g: Game, e: Effort): void {
   const me = g.human;
   if (!interceptsOn(g) || me === null || !g.nations[me]?.alive || e.nat === me || !atWar(g, me, e.nat)) return;
   if (!(e.enemy === me || allied(g, me, e.enemy))) return;
@@ -86,7 +86,9 @@ export function interceptEffort(g: Game, e: { nat: string; enemy: string; first:
   const trick = deceives(g, e.nat, me);
   const place = trick ? falsePlace(g, e.nat, me, e.first) : e.first;
   if (place === null) return;
-  const until = turnToDate(e.to).label;
+  // (The UI director, 18:11Z: the line tells what the signal says, never what the staff's orders are, so it stays true
+  // of a trick; the months are the effort's own, read as the agent's line reads them, never "this month".)
+  const m = effortMonths(e);
   const who = g.nations[e.nat].adj;
-  headline(g, 'event', `Intercepted: the ${who} staff's orders name ${g.regions[place].name}. Its army is to mass opposite it this month and attack there until ${until}.${trick ? ' The signal came through unusually clear.' : ''}`, e.nat, place);
+  headline(g, 'event', `Intercepted: a signal from the ${who} staff orders its army to mass opposite ${g.regions[place].name} in ${m.mass} and attack there from ${m.strike} through ${m.last}.${trick ? ' The signal came through unusually clear.' : ''}`, e.nat, place);
 }

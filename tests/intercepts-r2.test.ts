@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { counterRows, deceives, intelRows, interceptEffort, interceptsOn, setIntercepts } from '../src/campaign/intercepts';
 import { createGame } from '../src/campaign/game';
-import { startOpen } from '../src/campaign/staff';
+import { effortMonths, startOpen, type Effort } from '../src/campaign/staff';
 import { techOf } from '../src/campaign/tech';
 import { loadGame, saveGame } from '../src/campaign/save';
 import type { Agent, Game, Region } from '../src/campaign/types';
@@ -20,7 +20,7 @@ function places(g: Game): { border: Region; deep: Region } {
   const deep = g.regions.find((r) => r.ctrl === 'GER' && r.owner === 'GER' && !r.nb.some((j) => g.regions[j].ctrl !== 'GER') && !g.corps.some((c) => c.nat === 'GER' && (c.reg === r.id || r.nb.includes(c.reg))))!;
   return { border, deep };
 }
-const effort = (g: Game, first: number) => ({ nat: 'POL', enemy: 'GER', first, to: g.turn + 3 });
+const effort = (g: Game, first: number): Effort => ({ nat: 'POL', enemy: 'GER', target: first, first, from: g.turn, to: g.turn + 3, name: 'test', won: 0 });
 const heard = (g: Game, from: number): string[] => g.headlines.slice(from).map((h) => h.text).filter((t) => t.startsWith('Intercepted'));
 const build = (g: Game, nat: string, ...ids: string[]): void => { techOf(g, nat)!.done.push(...ids); };
 
@@ -49,7 +49,10 @@ describe('radio intercepts (release 2)', () => {
     interceptEffort(g, effort(g, border.id));
     const h = heard(g, n0);
     expect(h).toHaveLength(1);
-    expect(h[0]).toMatch(new RegExp(`^Intercepted: the ${g.nations.POL.adj} staff's orders name ${border.name}\\. Its army is to mass opposite it this month and attack there until `));
+    // The UI director's words (18:11Z): what the signal says, with the effort's own months from the one reader.
+    const m = effortMonths(effort(g, border.id));
+    expect(h[0]).toBe(`Intercepted: a signal from the ${g.nations.POL.adj} staff orders its army to mass opposite ${border.name} in ${m.mass} and attack there from ${m.strike} through ${m.last}.`);
+    expect(m.mass).not.toBe(m.strike);
     expect(h[0]).not.toMatch(/unusually clear/);
     // A sector his front does not touch: nothing.
     const n1 = g.headlines.length;
@@ -81,7 +84,8 @@ describe('radio intercepts (release 2)', () => {
     const h = heard(g, n);
     expect(h).toHaveLength(1);
     expect(h[0]).toMatch(/The signal came through unusually clear\.$/);
-    expect(h[0]).not.toContain(`name ${border.name}.`);
+    expect(h[0]).not.toContain(`opposite ${border.name} in`);
+    expect(h[0]).toMatch(/^Intercepted: a signal from the .* staff orders its army to mass opposite .* through .*\. The signal came through unusually clear\.$/);
     // His own double agent in their service: no trick.
     (g.intel.doubles ??= []).push({ id: 999, name: 'Test', of: 'POL', by: 'GER', since: g.turn - 1 });
     expect(deceives(g, 'POL', 'GER')).toBe(false);
