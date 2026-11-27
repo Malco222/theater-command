@@ -8,8 +8,8 @@
 // Poland's Army Poznan beside it in Poznan, as tests/contact-fact.test.ts sets it.
 import { afterEach, describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
-import { setFromWait } from '../src/campaign/arrivalwaits';
-import { addCorps, atFrontNow, atWar, createGame, relocate, rowHolds, rowLeaving, startPhase } from '../src/campaign/game';
+import { loanHeldLine, setFromWait } from '../src/campaign/arrivalwaits';
+import { addCorps, atFrontNow, atWar, createGame, relocate, rowHolds, rowLeaving, startPhase, theWords } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
@@ -175,6 +175,8 @@ describe("R3-2: a loan's end waits while the one test holds the lent corps, and 
     expect(g.flags[`rowTold:${j}`]).toBe(2);
     const said = g.headlines.filter((h: any) => h.turn === 2 && /Lent Test Corps/.test(h.text)).map((h: any) => h.text);
     expect(said).toEqual(['The Lent Test Corps, lent to the campaign, is due to leave for other fronts this month, but it is at the front in the Neumark. It stays, and goes the month after it leaves the front.']);
+    // (One maker of the sentence, `loanHeldLine`, read by the headline and by any reader that shows it.)
+    expect(theWords(loanHeldLine(g, lent, 'gone'))).toBe(said[0]);
     month(g, 3);
     expect(g.headlines.filter((h: any) => /Lent Test Corps, lent to the campaign/.test(h.text))).toHaveLength(1);
     add(g, 'GER', 'Relief Test Corps', 'inf', g.byName.Neumark, 2);

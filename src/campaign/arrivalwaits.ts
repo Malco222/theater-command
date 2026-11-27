@@ -199,6 +199,15 @@ export function tellLoan(g: Game, i: number, c: Corps, way: LoanWay): void {
   g.flags[atKey(i)] = c.reg;
   if (g.flags[toldKey(i)] !== undefined) return;
   g.flags[toldKey(i)] = g.turn;
+  headline(g, 'info', loanHeldLine(g, c, way), row[1], c.reg);
+}
+
+/**
+ * The headline of a loan's end held by the one test (`tellLoan`; DRAFT for the UI director: no marked sentence exists
+ * for a loan's end), in the form of section 1: the corps, how its loan would have ended this month, where it is at the
+ * front, and what it does instead. The one maker of the sentence: a reader that shows it calls this. Writes nothing.
+ */
+export function loanHeldLine(g: Game, c: Corps, way: LoanWay): string {
   const at = `it is at the front in ${placeOf(g, c)}`;
   const line = way === 'home'
     ? `${named(c.name, true)}, lent to the campaign, has come to the end of its loan this month, but ${at}. It stays, and you are asked whether to let it go home to its division the month after it leaves the front.`
@@ -207,7 +216,7 @@ export function tellLoan(g: Game, i: number, c: Corps, way: LoanWay): void {
     : way === 'back'
       ? `${named(c.name, true)}, lent to the campaign, is due to go back to the corps it came out of this month, but ${at}. It stays, and goes back the month after it leaves the front.`
       : `${named(c.name, true)}, lent to the campaign, is due to leave for other fronts this month, but ${at}. It stays, and goes the month after it leaves the front.`;
-  headline(g, 'info', line, row[1], c.reg);
+  return line;
 }
 
 // ---- 4 and 5. The month it forms -----------------------------------------------------------------------------------
