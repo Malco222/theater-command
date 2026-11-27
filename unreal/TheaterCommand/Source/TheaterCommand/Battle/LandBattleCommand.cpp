@@ -442,7 +442,7 @@ void ALandBattle::ShowGeneral()
 			R.bAttack = true;
 			R.bChosen = T.bChosen;
 			Along(R.Points, T.X, T.Y, T.SearchX, T.SearchY, 0.6);
-			if (R.Points.size() >= 2)
+			if (R.Points.size() >= 2 && FMath::Square(T.SearchX - T.X) + FMath::Square(T.SearchY - T.Y) > 0.25)
 			{
 				G.Routes.push_back(std::move(R));
 			}
@@ -469,14 +469,22 @@ void ALandBattle::ShowGeneral()
 			}
 		}
 		double Px = T.X, Py = T.Y;
+		// (the route's way on the ground, in metres: one that goes nowhere is no route. An order whose point was the
+		// block's own place came out as two points on one pixel, a dash of no length and a head of no size, and where
+		// such a piece is the first on the window's lowest layer the engine stops the game: "RenderBatch.NumIndices >
+		// 0", the Mac's P51 runs of 27 November 2026, each 3.0 s of battle after the order before the empty one, as that
+		// order's own route left the screen)
+		double RouteLong = 0.0;
 		for (const std::pair<double, double>& Corner : T.Path)
 		{
 			Along(R.Points, Px, Py, Corner.first, Corner.second, 0.6);
+			RouteLong += FMath::Sqrt(FMath::Square(Corner.first - Px) + FMath::Square(Corner.second - Py));
 			Px = Corner.first;
 			Py = Corner.second;
 		}
 		Along(R.Points, Px, Py, Ex, Ey, 0.6);
-		if (R.Points.size() >= 2)
+		RouteLong += FMath::Sqrt(FMath::Square(Ex - Px) + FMath::Square(Ey - Py));
+		if (R.Points.size() >= 2 && RouteLong > 0.5)
 		{
 			G.Routes.push_back(std::move(R));
 		}
@@ -984,7 +992,9 @@ void ALandBattle::GeneralRelease(const FVector2D& Pixel, int32 Button, bool bShi
 	// historian's check, 22 November)
 	if (G.Armed == "fire")
 	{
-		GiveGeneral(WideOf(Clip.FireInto(X, Y)), TEXT("fire"), -1, TArray<FVector2D>(), X, Y);
+		// (with the cover's own point, so the order on the air shows its way from each block to the cover. Given with no
+		// point the clipboard took each block's own place for it, a route from the block to itself: see the routes)
+		GiveGeneral(WideOf(Clip.FireInto(X, Y)), TEXT("fire"), -1, TArray<FVector2D>({ FVector2D(X, Y) }), X, Y);
 		G.Armed.clear();
 		return;
 	}
@@ -2164,7 +2174,7 @@ void ALandBattle::TickScript()
 		}
 		else
 		{
-			GiveGeneral(WideOf(Clip.FireInto(ScriptX, ScriptY)), TEXT("fire"), -1, TArray<FVector2D>(), ScriptX, ScriptY);
+			GiveGeneral(WideOf(Clip.FireInto(ScriptX, ScriptY)), TEXT("fire"), -1, TArray<FVector2D>({ FVector2D(ScriptX, ScriptY) }), ScriptX, ScriptY);
 			G.Armed.clear();
 			Say(FString::Printf(TEXT("%s fires into the cover at %.0f, %.0f, given directly (the place was off the screen)"), *NameOf(ScriptUnit), ScriptX, ScriptY));
 		}

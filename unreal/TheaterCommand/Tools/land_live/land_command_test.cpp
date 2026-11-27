@@ -250,6 +250,28 @@ int main(int Argc, char** Argv)
 		const std::string Into = G.FireInto(Foes[0]->X, Foes[0]->Y);
 		Check(IsJson(Into, "land:fire") && Into.find("\"target\"") == std::string::npos, "fire into cover names a point, not a target");
 		Give(Into, "land:fire");
+		// (on the air it shows its way to the cover: the scene sends it with the cover's own point. Sent with no point and
+		// no target a block's point is its own place, as for a hold; the scene once sent this order so, and its route ran
+		// from the block to itself, a dash of no length, which stopped the game on the Mac: the P51 runs of 27 November
+		// 2026, "RenderBatch.NumIndices > 0". The scene's routes now leave out a way of no length as well.)
+		{
+			const int FiringId = Mine[0]->Block;
+			const double CoverX = Foes[0]->X, CoverY = Foes[0]->Y;
+			G.Sent({ FiringId }, "attack", { { CoverX, CoverY } }, -1, Rec.Fought + 1.0);
+			G.Update(Rec, Screen);
+			const LandCommand::Tag* Firing = G.TagOf(FiringId);
+			Check(Firing && Firing->Says == LandCommand::Chip::Radio && Firing->OrderKind == "attack" && Firing->OrderTarget < 0 && Firing->OrderX == CoverX && Firing->OrderY == CoverY,
+				"fire into cover on the air goes to the cover's point");
+			Check(Firing && (Firing->OrderX - Firing->X) * (Firing->OrderX - Firing->X) + (Firing->OrderY - Firing->Y) * (Firing->OrderY - Firing->Y) > 0.25,
+				"fire into cover on the air has a way of some length from its block");
+			G.Sent({ FiringId }, "attack", {}, -1, Rec.Fought + 1.0);
+			G.Update(Rec, Screen);
+			Firing = G.TagOf(FiringId);
+			Check(Firing && Firing->OrderKind == "attack" && Firing->OrderX == Firing->X && Firing->OrderY == Firing->Y, "an order sent with no point and no target has its block's own place for its point");
+			// (and gone once the views have caught up, as above)
+			G.Update(Rec, Rec.Fought + 1.0);
+			G.Update(Rec, Screen);
+		}
 		G.Choose(Sent, false);
 		if (!Guns.empty())
 		{
