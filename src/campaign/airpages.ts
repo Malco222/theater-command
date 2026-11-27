@@ -666,10 +666,13 @@ function crewsPage(g: Game, id: number): Page | null {
     const toGo = tour - r.crew;
     return {
       nat: f.nat, title: called(r) || 'No name yet',
+      // (The UI director, 16:12Z 27 Nov: a second line that only says the crew's count again is cut. It is there for a
+      // bomber that has flown more than its crew, a veteran with a new crew, or for what its gunners have shot down.)
       lines: [
         `${r.grade} crew: ${num(r.crew)} of their ${tour}${toGo > 0 && toGo <= 5 ? `, ${toGo === 1 ? 'one' : num(toGo)} to go` : ''}.`,
-        `${num(r.missions)} ${r.missions === 1 ? word : words} flown${r.kills ? `, ${shot(r.kills)}` : ''}.`,
-      ],
+        r.missions !== r.crew ? `The bomber has flown ${num(r.missions)} ${r.missions === 1 ? word : words}${r.kills ? `, with ${shot(r.kills)}` : ''}.`
+          : r.kills ? `${shot(r.kills).replace(/^a/, 'A')}.` : '',
+      ].filter(Boolean),
       buttons: [],
     };
   });
