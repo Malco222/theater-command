@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 import HUD from '../unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignHUD.cpp?raw';
 import SESSION from '../unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignSession.cpp?raw';
 import { seaPicture } from '../src/campaign/carriers';
-import { addCorps, computeSupply, createGame, declareWar, portKeep, removeCorps, resolveBattle, startPhase } from '../src/campaign/game';
+import { addCorps, allied, computeSupply, createGame, declareWar, portKeep, removeCorps, resolveBattle, startPhase, trueReach } from '../src/campaign/game';
 import { crewStores, storesEaten } from '../src/campaign/fortrows';
 import { SIGHT, fogOn, sightOf } from '../src/campaign/intel';
 import { closedTo, seaSide, zoneOf } from '../src/campaign/navy';
@@ -1437,5 +1437,57 @@ describe('a port in a pocket (siege.ts pocketMonth): its holder\'s army on the p
     expect(rows[8].slice(5)).toEqual([HUNGRY_G('September'), HUNGRY_G('September')]);
     expect(rows[9].slice(0, 4)).toEqual([25, true, null, []]);
     expect(shipped).toEqual(['The stores of Gibraltar are spent: 5 British corps, 150,000 men, are out of supply and cannot hold out long.', 'Cut off and out of supply, the British army at Gibraltar lays down its arms: 5 corps, 92,120 men.']);
+  });
+});
+
+describe('the shutting side with true reach off, as the stage ships it: a count only where the rule\'s clock runs', () => {
+  /**
+   * Malta held by a British 9th Corps, its stores filled by a real draw in December 1940, and Italy's fleets across the
+   * Central Mediterranean, as in malta(), but with true reach off: Italy's player reads. Canada is at war with Germany
+   * alone, so that Italy's fleets are no enemy of hers and her own ships' lanes still reach Malta's sea; with true reach
+   * off, a quay of hers fills the stores for all (game.ts computeSupply). Or Canada with no ships.
+   */
+  function reachOff(canadaShips: boolean): unknown[] {
+    const g = grand('ITA');
+    delete g.flags.trueReach;
+    const [ninth] = garrison(g, 'Malta', ['9th Corps']);
+    expect([trueReach(g), g.nations.CAN.atWar, allied(g, 'CAN', 'UK')]).toEqual([false, ['GER'], true]);
+    if (!canadaShips) { g.nations.CAN.seaSupply = false; g.nations.CAN.sealift = 0; }
+    g.turn = 16;
+    g.supplyDirty = true;
+    computeSupply(g);
+    declareWar(g, 'ITA', 'UK');
+    sail(g, 'ITA', 'central');
+    g.supplyDirty = true;
+    const rows: unknown[] = [];
+    for (let t = 16; t <= 21; t++) {
+      g.turn = t;
+      phase(g, 'ITA');
+      // (Italy's player reads his card in his own month.)
+      const card = texts(portCardLines(g, MALTA, 'ITA'));
+      phase(g, 'UK');
+      phase(g, 'CAN');
+      rows.push([t, card, g.flags[`stores:${MALTA}`], ninth.dead ? null : ninth.supplied]);
+    }
+    return rows;
+  }
+
+  it('Canada\'s ships make a quay at Malta every month: the stores are filled at every draw, the rule\'s clock never starts, and Italy\'s card has no count', () => {
+    // (The build said "Your fleets have held the Central Mediterranean since December 1940. Counting from then, the
+    // garrison of Malta is hungry by March and lost by the start of May, unless ships get through." from December to
+    // May, of a garrison fed every month.)
+    expect(reachOff(true)).toEqual([16, 17, 18, 19, 20, 21].map((t) => [t, [], t, true]));
+  });
+
+  it('with no ships of Canada\'s, the stores are not filled, and the count is as laid: hungry from March, struck off as May opens', () => {
+    const line = (hungry: string, lost: string, since = 'December 1940'): string[] => [`Your fleets have held the Central Mediterranean since ${since}. Counting from then, the garrison of Malta is hungry by ${hungry} and lost by the start of ${lost}, unless ships get through.`];
+    expect(reachOff(false)).toEqual([
+      [16, line('March 1941', 'May 1941', 'December'), 16, true],
+      [17, line('March', 'May'), 16, true],
+      [18, line('March', 'May'), 16, true],
+      [19, line('March', 'May'), 16, false],
+      [20, line('March', 'May'), 16, false],
+      [21, line('March', 'May'), 16, null],
+    ]);
   });
 });

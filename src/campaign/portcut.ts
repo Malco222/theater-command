@@ -508,6 +508,29 @@ function seenEmpty(g: Game, r: Region, sight: number): boolean {
   return false;
 }
 
+/**
+ * True where, with true reach off, the port's stores are filled at every draw by ships other than the holder's (game.ts
+ * computeSupply, `if (!truly) g.flags[storesKey(r.id)] = g.turn`, whoever's ships make the quay): the draw of a nation
+ * with corps on the map that takes the port for a friend's, its own ships' lanes reaching one of the port's seas; or, in
+ * a side theatre, an ally of that nation's with ships, whose lanes reach one (the shared shipping). The quay test the
+ * rule makes there, so that the rule's clock never starts while it holds. Never with true reach on, where only ships
+ * that could carry the holder's stores fill them (computeSupply, forHolder).
+ */
+function filledByOthers(g: Game, r: Region): boolean {
+  if (trueReach(g)) return false;
+  const lanes = new Map<string, boolean>();
+  const reaches = (nat: string): boolean => {
+    if (!lanes.has(nat)) { const n = g.nations[nat]; lanes.set(nat, !!n && (n.seaSupply || n.sealift > 0) && ((o) => r.seas.some((z) => o[z] === 1))(openSeas(g, nat))); }
+    return lanes.get(nat)!;
+  };
+  const shipping = Object.values(g.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
+  for (const id of new Set(g.corps.map((c) => c.nat))) {
+    if (!allied(g, id, r.ctrl)) continue;
+    if (reaches(id) || (r.theatre >= 0 && shipping.some((a) => a !== id && allied(g, id, a) && reaches(a)))) return true;
+  }
+  return false;
+}
+
 /** True where a fleet of the nation's, with ships and free to sail, can reach one of these seas this month (navy.ts sail). */
 function fleetFor(g: Game, nat: string, seas: number[]): boolean {
   return g.fleets.some((f) => f.nat === nat && shipCount(f.ships) > 0 && !inPassage(f) && f.attacked !== g.turn && fleetReach(g, f).some((z) => seas.includes(z)));
@@ -523,8 +546,8 @@ function fleetFor(g: Game, nat: string, seas: number[]): boolean {
  * shutting side reads only its own sight: how long its side has held the port's seas (`seaShut:`), and the rule's count
  * from the start of that hold for a garrison at full order; never the holder's stores, nor a fortress crew it does not
  * see (sightKeep). It has a count only where every sea of the port is shut to the holder, each held by its own side:
- * with one sea open the stores are filled and the clock never starts. Reads only: nothing is drawn or
- * written. `uncharged` names a nation whose corps have not yet had this month's reckoning (the news, read as that
+ * with one sea open the stores are filled and the clock never starts; so too, with true reach off, where another
+ * nation's ships make a quay there (filledByOthers). Reads only: nothing is drawn or written. `uncharged` names a nation whose corps have not yet had this month's reckoning (the news, read as that
  * nation's month opens).
  */
 export function portCutOff(g: Game, regionId: number, viewer: string | null, uncharged?: string): PortCut | null {
@@ -540,6 +563,10 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
     // and the stores are filled (game.ts computeSupply, `r.seas.some((z) => open[z])`). And the count is its own side's
     // only where its own side holds every one of them: what it has held, and since when, is what its own forces know.
     if (shut.length !== r.seas.length || !shut.every((s) => s.by.some((b) => allied(g, b.nat, viewer)))) return null;
+    // (Nor does it run where, with true reach off, another nation's ships make a quay there: their fill is the holder's
+    // too, at every draw, whatever holds the sea against him. The UI director's 23:50Z: the shutting side's count only
+    // where the rule's clock runs.)
+    if (filledByOthers(g, r)) return null;
     // (The clock starts when the last of the port's seas was shut. A sea already shut when the switch first watched it
     // keeps 0: shut before any hold whose start the switch saw, so the last such start is the clock's; with no such
     // start there is no month to give, and the count waits: the UI director's 23:50Z, item 5. A sea still watched open
