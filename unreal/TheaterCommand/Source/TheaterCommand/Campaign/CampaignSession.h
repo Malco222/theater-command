@@ -428,6 +428,14 @@ public:
 	 * with a war running. Off, the rules delete their key, so the saved war is the one it always was.
 	 */
 	void SyncBattleRules();
+	/**
+	 * (Release 2, churned ground's record, churned.ts) TC.churnSwitch as tc.Map.FrontChurn stands, on the war the rules
+	 * hold: laid after every start and every load, and here at every change of the switch with a war in hand (the session
+	 * watches it from its making: the Options row, row frontchurn of the release 2 ship list, and the console both set it
+	 * mid-war). On, the rules keep the record from the next month's end; off, they delete it, so the saved war is the one
+	 * it always was. One setter for every change: the design director, 27 November 2026 21:26Z.
+	 */
+	void SyncFrontChurn();
 	/** TC.subScene(mark, view) asked on the rules' thread beside the war (it reads the war and changes nothing in it): not
 	 * an order, so IsAnswering stays false and the table takes its keys and orders meanwhile; anything else asked of the
 	 * rules waits for it first (Settle). Then, run on the game thread by Deliver, is given the mark to count from next
@@ -510,6 +518,8 @@ private:
 	FCampaignView View;
 	bool bReady = false;
 	bool bRunning = false;
+	/** The session's watch on tc.Map.FrontChurn (SyncFrontChurn), taken off as the session goes. */
+	FDelegateHandle FrontChurnWatch;
 	TArray<FGrandYear> Years;
 	TArray<FGrandLevel> Levels;
 	FString DefaultLevel;

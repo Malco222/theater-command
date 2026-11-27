@@ -54,29 +54,39 @@ namespace
 
 	/** (Release 2, churned ground's record, rules churned.ts: the design director's rulings of 27 November 2026.) The record
 	 * follows the map's own switch, tc.Map.FrontChurn, which row frontchurn of the release 2 ship list lays, so the two are
-	 * one switch with one setter: on, the rules keep it from the next month's end; off after on, they delete it. Asked
-	 * only where it would change something: with the switch on, or where the war's picture carries the record's list. A
-	 * war with the switch off that never had it is not touched, so it is saved byte for byte as before. The rules answer
-	 * null when nothing changed, else the new picture, which replaces Json. */
-	void ShipChurnRecord(FRulesHost& Host, FString& Json)
+	 * one switch with one setter: on, the rules keep it from the next month's end; off after on, they delete it. Laid at
+	 * the war's start, at a load, and at every change of the switch with a war in hand (FCampaignSession::SyncFrontChurn:
+	 * the Options row and the console both set it mid-war). Asked only where it would change something: with the switch
+	 * on, or where the war carries the record (bCarried: its picture has the record's list). A war with the switch off that
+	 * never had it is not touched, so it is saved byte for byte as before. The rules answer null when nothing changed,
+	 * else the new picture, which replaces Json; the answer says whether it did. */
+	bool ShipChurnRecord(FRulesHost& Host, FString& Json, bool bCarried)
 	{
 		const IConsoleVariable* Switch = IConsoleManager::Get().FindConsoleVariable(TEXT("tc.Map.FrontChurn"));
 		const bool bOn = Switch != nullptr && Switch->GetInt() != 0;
-		if (!bOn && !Json.Contains(TEXT("\"churned\":{"), ESearchCase::CaseSensitive))
+		if (!bOn && !bCarried)
 		{
-			return;
+			return false;
 		}
 		FString Laid, Error;
 		if (!Host.Call(TEXT("churnSwitch"), bOn ? TEXT("[true]") : TEXT("[false]"), Laid, Error))
 		{
 			UE_LOG(LogTheater, Display, TEXT("Churned ground: these rules keep no record of it (%s)"), *Error); // (the stand-in rules, or rules before it)
-			return;
+			return false;
 		}
-		if (!Laid.IsEmpty() && Laid != TEXT("null"))
+		if (Laid.IsEmpty() || Laid == TEXT("null"))
 		{
-			UE_LOG(LogTheater, Display, TEXT("Churned ground: the rules' record is now %s for this war (tc.Map.FrontChurn)"), bOn ? TEXT("kept") : TEXT("gone"));
-			Json = MoveTemp(Laid);
+			return false;
 		}
+		UE_LOG(LogTheater, Display, TEXT("Churned ground: the rules' record is now %s for this war (tc.Map.FrontChurn)"), bOn ? TEXT("kept") : TEXT("gone"));
+		Json = MoveTemp(Laid);
+		return true;
+	}
+
+	/** The picture carries churned ground's record (the rules send its list only with the record kept). */
+	bool CarriesChurn(const FString& Json)
+	{
+		return Json.Contains(TEXT("\"churned\":{"), ESearchCase::CaseSensitive);
 	}
 
 	/** (Speed, b414 mark 1: see FCampaignSession::MoveAside.) */
@@ -86,10 +96,25 @@ namespace
 		ECVF_Default);
 }
 
-FCampaignSession::FCampaignSession() = default;
+FCampaignSession::FCampaignSession()
+{
+	// (Release 2, churned ground's record: one setter for every change of tc.Map.FrontChurn, the Options row's or the
+	// console's, with a war in hand too; the design director, 27 November 2026 21:26Z. See SyncFrontChurn.)
+	if (IConsoleVariable* Switch = IConsoleManager::Get().FindConsoleVariable(TEXT("tc.Map.FrontChurn")))
+	{
+		FrontChurnWatch = Switch->OnChangedDelegate().AddLambda([this](IConsoleVariable*) { SyncFrontChurn(); });
+	}
+}
 
 FCampaignSession::~FCampaignSession()
 {
+	if (FrontChurnWatch.IsValid())
+	{
+		if (IConsoleVariable* Switch = IConsoleManager::Get().FindConsoleVariable(TEXT("tc.Map.FrontChurn")))
+		{
+			Switch->OnChangedDelegate().Remove(FrontChurnWatch);
+		}
+	}
 	// (the rules' thread uses the engine, which goes with the session)
 	if (AsideRun.IsValid())
 	{
@@ -460,7 +485,7 @@ bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& Vi
 		return false;
 	}
 	ShipWarSwitches(*Host, ViewJson);
-	ShipChurnRecord(*Host, ViewJson); // (release 2: churned ground's record follows tc.Map.FrontChurn)
+	ShipChurnRecord(*Host, ViewJson, CarriesChurn(ViewJson)); // (release 2: churned ground's record follows tc.Map.FrontChurn)
 	TellBattleRules(); // (release 2: the battle card follows the Battle rules card from the war's first month)
 	// (Speed: the same call takes about 0.25 to 0.6 s in a fast JavaScript engine on a laptop, and two or three times
 	// that where the engine cannot compile the rules as it runs them. This line says which the game has.)
@@ -527,7 +552,7 @@ bool FCampaignSession::Load(const FString& SaveText)
 	if (bRead)
 	{
 		ShipWarSwitches(*Host, Json);
-		ShipChurnRecord(*Host, Json); // (release 2: churned ground's record follows tc.Map.FrontChurn)
+		ShipChurnRecord(*Host, Json, CarriesChurn(Json)); // (release 2: churned ground's record follows tc.Map.FrontChurn)
 		TellBattleRules(); // (release 2: a war read in follows the Battle rules card as it stands now, not as it stood when saved)
 	}
 	if (!bRead || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
@@ -6202,6 +6227,28 @@ void FCampaignSession::SyncBattleRules()
 	Settle(); // (an order still being answered is answered first: the rules are told on this thread)
 	TellBattleRules();
 	RulesMemo.Reset(); // (a battle card asked before the click was priced as the rows stood then)
+}
+
+void FCampaignSession::SyncFrontChurn()
+{
+	if (!bRunning || !Host.IsValid())
+	{
+		return; // (no war in hand: the next start or load lays it)
+	}
+	if (!IsInGameThread())
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Churned ground: tc.Map.FrontChurn was changed off the game thread; the rules' record follows it at the next start or load"));
+		return;
+	}
+	Settle(); // (an order still being answered is answered first: the rules are told on this thread)
+	FString Json;
+	TSharedPtr<FJsonObject> Object;
+	if (ShipChurnRecord(*Host, Json, View.ChurnYear > 0)
+		&& FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) && Object.IsValid())
+	{
+		View = ParseView(Object); // (the setter answers with the picture itself: the record's list, or none)
+		OnViewChanged.Broadcast();
+	}
 }
 
 void FCampaignSession::TellBattleRules()
