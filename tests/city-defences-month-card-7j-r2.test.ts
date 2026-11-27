@@ -246,16 +246,25 @@ describe('7j, item 8: the article on sky, land and shore rows', () => {
     expect([lost(true).place, lost(true).head]).toEqual(['The Saar', '1 province lost to Poland']);
     expect([lost(false).place, lost(false).head]).toEqual(['Saar', '1 province lost to Poland']);
     expect(rest(lost(true))).toBe(rest(lost(false)));
-    const ring = (on: boolean): CardRow => {
-      const c = cardWith(on, (g) => pushed(g.headlines, { turn: g.turn, week: 2, kind: 'event', arm: 'land', nat: ME, won: ME, lost: 'POL', region: regionOf(g, 'Valdai'),
-        text: 'The ring closes at the Valdai: 2 Polish corps, 60,000 men, are cut off.' } as Headline));
+    const ring = (on: boolean, at = 'Valdai'): CardRow => {
+      const c = cardWith(on, (g) => pushed(g.headlines, { turn: g.turn, week: 2, kind: 'event', arm: 'land', nat: ME, won: ME, lost: 'POL', region: regionOf(g, at),
+        text: `The ring closes at ${at}: 2 Polish corps, 60,000 men, are cut off.` } as Headline));
       const r = rowsOf(c).filter((x) => x.kind === 'ON LAND');
       expect(r).toHaveLength(1);
       return r[0];
     };
-    expect([ring(true).place, ring(true).head]).toEqual(['The Valdai', 'The ring closes at the Valdai']);
+    // (7k, the UI director, 27 Nov 2026 05:53Z: "in" with the article for a province, "at" for a place named for its
+    // town, by the game's own inOrAt. A province with no article takes "in" bare, as inOrAt says it everywhere else.)
+    expect([ring(true).place, ring(true).head]).toEqual(['The Valdai', 'The ring closes in the Valdai']);
     expect([ring(false).place, ring(false).head]).toEqual(['Valdai', 'The ring closes at Valdai']);
     expect(rest(ring(true))).toBe(rest(ring(false)));
+    expect([ring(true, 'Ardennes').place, ring(true, 'Ardennes').head]).toEqual(['The Ardennes', 'The ring closes in the Ardennes']);
+    expect([ring(false, 'Ardennes').place, ring(false, 'Ardennes').head]).toEqual(['Ardennes', 'The ring closes at Ardennes']);
+    expect([ring(true, 'Stalingrad').place, ring(true, 'Stalingrad').head]).toEqual(['Stalingrad', 'The ring closes at Stalingrad']);
+    expect(ring(true, 'Stalingrad')).toEqual(ring(false, 'Stalingrad'));
+    expect([ring(true, 'Bavaria').place, ring(true, 'Bavaria').head]).toEqual(['Bavaria', 'The ring closes in Bavaria']);
+    expect([ring(false, 'Bavaria').place, ring(false, 'Bavaria').head]).toEqual(['Bavaria', 'The ring closes at Bavaria']);
+    for (const at of ['Ardennes', 'Bavaria']) expect(rest(ring(true, at))).toBe(rest(ring(false, at)));
   });
 
   it('built beyond her examples, same rule: a town that fell after the siege was laid, "The Valdai is taken", "The Azores are lost"', () => {
