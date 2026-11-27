@@ -8310,11 +8310,14 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     return { ok, note, fly, flies, open, view: view() };
   }
   if (part[0] === 'dumpfiresrule') {
-    // (Release 2, dumpfires.ts) Supply dumps that burn, switched in any month (they work only where the forward dumps do).
+    // (Release 2, dumpfires.ts) Supply dumps that burn, switched in any month. They need the forward dumps, which a war
+    // takes only as it opens: the setter will not turn them on in a war without them.
     ok = setDumpFires(s, part[1] === 'on');
     note = dumpFiresOn(s)
-      ? `Supply dumps that burn are on: a forward dump badly bombed burns on the map, and its side's corps near it have ${FIRES.slow === 1 ? 'one move' : `${FIRES.slow} moves`} less the month after. The same for every army.${dumpsAreOn(s) ? '' : ' They work only with the forward dumps on.'}`
-      : 'Supply dumps that burn are off: a bombed dump loses what burned, and no more.';
+      ? `Supply dumps that burn are on: a forward dump badly bombed burns on the map, and the corps that draw their supply on it have ${FIRES.slow === 1 ? 'one move' : `${FIRES.slow} moves`} less the month after. The same for every army.`
+      : part[1] === 'on' && !dumpsAreOn(s)
+        ? 'Supply dumps that burn need the forward dumps, which a war takes only as it opens. This war has none, so they stay off. They reach new wars.'
+        : 'Supply dumps that burn are off: a bombed dump loses what burned, and no more.';
     return { ok, note, fly, flies, open, view: view() };
   }
   if (part[0] === 'pressedtanksrule') {

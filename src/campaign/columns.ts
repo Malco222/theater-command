@@ -24,6 +24,7 @@ import { wrecked } from './airversion';
 import { grounded, skyAt, weatherOn } from './weather';
 import { SIGHT, sightOf } from './intel';
 import { aiDumps, clearDumps, dumpsOn, roadWear, shareOutLorries, tendDumps, wagonsOn } from './logistics';
+import { noteFed } from './dumpfires';
 import type { Corps, Game } from './types';
 
 export const COLUMNS = data as unknown as {
@@ -229,6 +230,8 @@ export function columnsMonth(g: Game, nat: string): void {
     }
     if (from) {
       from.dump.stock -= divs;
+      // (Release 2, dumpfires.ts) Where that dump was set burning this month, the corps drawing on it are noted.
+      noteFed(g, nat, from.dump.region, to);
       if (from.road[to] === 0) continue;
     }
     const path = roadFrom(g, from ? from.road : road, to, danger);

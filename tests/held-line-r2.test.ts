@@ -46,6 +46,27 @@ describe("the 'held the line' medal (release 2)", () => {
     expect(c.held!.chance).toBe(0.2);
   });
 
+  it('does not stack: the lift is one award, bounded at one lift, and the settle level never passes 1', () => {
+    // (The design director's gate, 27 Nov 14:12Z, item 3: an unbounded lasting lift is a runaway.)
+    const g = war();
+    setHeld(g, true);
+    const c = corps(g, 'GER');
+    c.mor = 0.5;
+    c.will = 0.98;
+    for (let i = 0; i < 5; i++) heldTheLine(g, report(), [c], 0.9);
+    expect(levelOf(c)).toBe(1);
+    c.will = MORALE.level;
+    expect(levelOf(c)).toBeCloseTo(MORALE.level + HELD.lift, 12);
+    expect(c.mw?.filter((e) => e[0] === 'heldline').length).toBe(1);
+  });
+
+  it('will not go on outside the grand campaign, where nothing keeps morale', () => {
+    const g = createGame(3, 'GER');
+    expect(g.flags.open).not.toBe(1);
+    expect(setHeld(g, true)).toBe(false);
+    expect(heldOn(g)).toBe(false);
+  });
+
   it('not with a better chance of holding, not where the ground was carried, not for a walk-in, a fort or a corps destroyed', () => {
     const g = war();
     setHeld(g, true);

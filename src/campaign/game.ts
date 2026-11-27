@@ -6324,7 +6324,7 @@ export function startPhase(g: Game, nat: string): void {
   cutOffNews(g);
   // Supply columns (release 2, columns.ts): the month's lorries go out from the railhead to the corps beyond it, and some are caught on the road.
   columnsMonth(g, nat);
-  // (Release 2, dumpfires.ts) Where its forward dumps were set burning, its corps near them move slower this month.
+  // (Release 2, dumpfires.ts) Where its forward dumps were set burning, the corps that drew on them move slower this month.
   const slowed = slowedByFire(g, nat);
   // The month's production comes in, and in the grand campaign the forces are paid out of it. Losses are made good
   // from what is left. A treasury that is empty pays nobody: no drafts go out, the armies rest badly and men drift away.
@@ -6452,7 +6452,7 @@ export function startPhase(g: Game, nat: string): void {
     c.fought = false;
     if (c.blows !== undefined) delete c.blows;
     if (c.gaveWay) delete c.gaveWay;
-    c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + cmdAp(g, c) - (fuelSlows(g, c) ? 1 : 0) - (slowed?.has(c.reg) ? FIRES.slow : 0);
+    c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + cmdAp(g, c) - (fuelSlows(g, c) ? 1 : 0) - (slowed?.has(c.id) ? FIRES.slow : 0);
     // A corps with an ally's army marches in that army's month, not in its own (the grand campaign).
     if (jointHold(g, c)) c.ap = 0;
     // A garrison keeps to its town until it is ordered out.
