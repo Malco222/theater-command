@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of baf9f3623 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c8bd97290 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -76369,7 +76369,7 @@
   function wornLine(c) {
     if (!c.spent) return "";
     const pct14 = Math.round(c.spent * 100), months4 = c.runIn ?? 0;
-    return `Worn out: ${pct14}% weaker${months4 ? ` after ${months4} months in the line` : ""}. A month at rest brings it back.`;
+    return `Worn out: ${pct14}% weaker${months4 ? ` after ${months4} ${months4 === 1 ? "month" : "months"} in the line` : ""}. A month at rest brings it back.`;
   }
 
   // ../../data/campaign/fieldhospitals.json
@@ -130585,7 +130585,7 @@ ${standing6}`,
     }
     if (part[0] === "wornoutrule") {
       ok2 = setWorn(s, part[1] === "on");
-      note4 = wornOn(s) ? `Worn out in the line is on: every month a corps spends in the line takes a little more of its edge, up to ${Math.round(WORN.most * 100)}%, and a month at rest brings it all back. The same for every army.` : "Worn out in the line is off: every corps has its edge back.";
+      note4 = wornOn(s) ? `Worn out in the line is on: every month a corps fights, or marches or goes without supply with the enemy next door, it loses a little of its edge, up to ${Math.round(WORN.most * 100)}% weaker. A whole month in supply with no march and no fight brings it all back, even in the line. The same for every army.` : "Worn out in the line is off: every corps has its edge back.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
     if (part[0] === "interceptsrule") {
