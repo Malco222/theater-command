@@ -20,8 +20,10 @@ Reports, each with PASS or FAIL:
                  fell in a month-end step's window (FAILS if any did). The others (the load, a close, the engine's clear-out)
                  are not month ends: they are listed as information only. The bar is "no frame of a month end".
   4. THE BAR     every end-month line of steps.jsonl: the month turned (before.month and after.month present and different) and
-                 the verdict is DID, as the expect word "does" asked before "frames-under" took its place; fps_low >= --bar
-                 (4.0, a longest frame of 0.25 s). And the months the run's end-months reached are the reference's, month for
+                 the verdict is DID, as the expect word "does" asked before "frames-under" took its place; the lower of fps_low
+                 and engine_low >= --bar (4.0, a longest frame of 0.25 s). fps_low is the step player's tick-to-tick clock,
+                 which can read one long frame as two shorter ones; engine_low (in steps.jsonl from the tool mend of 27 Nov
+                 on) is the engine's own frame length. A steps.jsonl without engine_low is read on fps_low alone, and said so. And the months the run's end-months reached are the reference's, month for
                  month, where there is one, and hold every month of --months (June 1940 and April 1941, the month ends the bar
                  was set on; --months '' asks for none). FAILS if any end-month is under or did not turn its month, or the
                  months differ or lack one (a run that stalled, skipped or stopped early measured nothing there).
@@ -125,6 +127,13 @@ def find_steps(log):
             return candidate
     return None
 
+
+
+def low(s):
+    """An end-month line's lowest frame rate: the worse of the tick-to-tick clock (fps_low) and the engine's own frame
+    length (engine_low, from the tool mend of 27 November on). None when neither is there."""
+    vals = [s[k] for k in ('fps_low', 'engine_low') if s.get(k) is not None]
+    return min(vals) if vals else None
 
 def main(argv):
     bar, over, late_ms, allow_missing, ref_check, paths = 4.0, 250, 5, False, True, []
@@ -249,12 +258,13 @@ def main(argv):
     ref_months = [month_of(s, 'after') for s in ref.steps if s.get('verb') == 'end-month'] if ref else None
     for r in runs:
         ends = [s for s in r.steps if s.get('verb') == 'end-month']
-        under = [s for s in ends if s.get('fps_low') is None or s['fps_low'] < bar]
+        under = [s for s in ends if low(s) is None or low(s) < bar]
         dead = [s for s in ends if not month_turned(s)]
         for s in ends:
-            print('  %s step %3d %-16s fps_low %5.1f  longest %.2f s  %s%s%s' % (
+            print('  %s step %3d %-16s fps_low %5.1f  engine_low %s  longest %.2f s  %s%s%s' % (
                 r.name(), s.get('n', 0), month_of(s, 'after'), s.get('fps_low') or 0.0,
-                (1.0 / s['fps_low']) if s.get('fps_low') else 0.0, 'ok' if s not in under else 'UNDER',
+                '%5.1f' % s['engine_low'] if s.get('engine_low') is not None else '  n/a',
+                (1.0 / low(s)) if low(s) else 0.0, 'ok' if s not in under else 'UNDER',
                 '  MONTH DID NOT TURN (%s, from %s)' % (s.get('verdict'), month_of(s, 'before') or 'no month') if s in dead else '',
                 '  [expect %s: pass %s]' % (s.get('expect'), s.get('pass')) if str(s.get('expect', '')).startswith('frames-under') else ''))
         months = [month_of(s, 'after') for s in ends]
@@ -275,16 +285,17 @@ def main(argv):
             said = 'differ from the reference' if differ else "the reference's"
         if lacking:
             said += ', lacking ' + ', '.join(lacking)
-        lowest = min((s.get('fps_low') or 0.0 for s in ends), default=0.0)
-        print('  %s: %d end-month lines, lowest fps_low %.1f, %d under %.1f, %d that did not turn the month, months %s: %s%s' % (
-            r.name(), len(ends), lowest, len(under), bar, len(dead), said,
+        lowest = min((low(s) or 0.0 for s in ends), default=0.0)
+        clock = 'the worse of fps_low and engine_low' if any(s.get('engine_low') is not None for s in ends) else 'fps_low alone (tick clock: no engine_low in this steps.jsonl)'
+        print('  %s: %d end-month lines, lowest %.1f on %s, %d under %.1f, %d that did not turn the month, months %s: %s%s' % (
+            r.name(), len(ends), lowest, clock, len(under), bar, len(dead), said,
             'reference, expected to break the bar' if r is ref else verdict(bool(ends) and not under and not dead and not differ and not lacking),
             '' if ends else '  (no end-month lines: no steps.jsonl)'))
 
     # 5. the reference breaks the bar
     if ref and ref_check:
         ref_ends = [s for s in ref.steps if s.get('verb') == 'end-month']
-        broke = [s for s in ref_ends if s.get('fps_low') is not None and s['fps_low'] < bar]
+        broke = [s for s in ref_ends if low(s) is not None and low(s) < bar]
         print('\n5. REFERENCE %s breaks the bar: %d of %d end-month lines under %.1f: %s' % (
             ref.name(), len(broke), len(ref_ends), bar, verdict(bool(broke))))
     print('\nOVERALL: ' + ('FAIL' if failed else 'PASS'))
