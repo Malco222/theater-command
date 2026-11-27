@@ -83,6 +83,7 @@ import { pressTanks, pressedMonth, pressedOn, pressedWords } from './pressed';
 import { slowedByFire, FIRES } from './dumpfires';
 import { heldTheLine, heldWords } from './heldline';
 import { edge, wornMonth } from './wornout';
+import { hospOn, woundedBook, woundedMonth } from './fieldhospitals';
 import { diaryMonth } from './diary';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
@@ -3105,8 +3106,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       : attOut !== null && R < 1.2 ? pursuitScale(attackers, attackers.map((c, i) => attPart(c, i)), attackers.map((c) => attPlain(c)), 0.6, 1, opts.field.att, attOut)
       : fieldScale(attackers, attackers.map((c, i) => Math.min(0.6, attFrac * attW[i] * tollFor(a.faced?.toll, c) * cmdLoss(g, c))), opts.field.att, opts.field.whole);
   attackers.forEach((c, i) => {
-    const before = men(c);
+    const before = men(c), had = c.str;
     c.str *= 1 - Math.min(0.6, attFrac * attW[i] * attK * tollFor(a.faced?.toll, c) * cmdLoss(g, c));
+    // (Release 2, fieldhospitals.ts, behind its switch) Of what the fight took, the wounded who can come back.
+    woundedBook(g, c, had - c.str);
     c.org = clamp(c.org - (0.1 + 0.08 / RL) * cmdSteady(g, c) * nerve(c), 0, 1);
     c.xp = Math.min(1, c.xp + 0.05);
     c.fought = true;
@@ -3129,9 +3132,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       : defOut !== null && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c) => defPlain(c)), 0.8, a.weight, opts.field.def, defOut)
       : fieldScale(defenders, defenders.map((c, i) => Math.min(0.8, defPart(c, i)) * a.weight), opts.field.def, opts.field.whole);
   defenders.forEach((c, i) => {
-    const before = men(c);
+    const before = men(c), had = c.str;
     // (The grand campaign: a light blow costs the defence in proportion to its weight. Everywhere else the weight is 1.)
     c.str *= 1 - Math.min(0.8, defK * defFrac * defW[i] * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * a.weight;
+    woundedBook(g, c, had - c.str);
     c.org = clamp(c.org - clamp(0.18 + 0.14 * RL, 0.2, 0.75) * stood * cmdSteady(g, c) * nerve(c) * a.weight, 0, 1);
     c.xp = Math.min(1, c.xp + 0.04);
     c.fought = true;
@@ -6346,13 +6350,18 @@ export function startPhase(g: Game, nat: string): void {
   // The player's ministers and his decrees on the call-up quicken them, or slow them (the grand campaign).
   const drafts = draftsMul(g, nat) * traitDrafts(g, nat) * supDrafts(g, nat) * civicDrafts(g, nat) * govMul(g, nat, 'drafts');
   // A hospital in a resting corps' province, or beside it, sends more of its men back and rests it better.
-  const ward = (c: Corps): { drafts: number; org: number } => (restedMonth(g, c) ? hospitalWorth(hospitalNear(g, c, (h) => h === nat || allied(g, h, nat))) : { drafts: 1, org: 0 });
+  // (Release 2, fieldhospitals.ts: under its switch the quicker drafts, which stood in for the wounded, go; the rest stays.)
+  const friendlyTo = (h: string): boolean => h === nat || allied(g, h, nat);
+  const ward = (c: Corps): { drafts: number; org: number } => (restedMonth(g, c) ? ((w) => (hospOn(g) ? { drafts: 1, org: w.org } : w))(hospitalWorth(hospitalNear(g, c, friendlyTo))) : { drafts: 1, org: 0 });
   // A corps that has spent the whole month out of the line takes in its drafts faster (the grand campaign).
   // (A fortress crew living on its port's stores is cut off for its drafts and its rest, 07:12Z.)
   const stored = new Set(army.filter((c) => onPortStores(g, c)));
   // (A corps the stood war rows drew the record's divisions out of by share is made good only to the share still its
   // own: drawn.ts ownShare, the design director's ruling of 19:03Z, 25 November 2026.)
   const wantOf = (c: Corps): number => (c.supplied && !stored.has(c) && !(c.lean && nat === g.human) && !shutIn(g, c) && !inPocket(g, c) ? Math.min(Math.max(0, (c.full ?? 1) * ownShare(c) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * columnShare(g, c) * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0);
+  // (Release 2, fieldhospitals.ts, behind its switch) The wounded who recover rejoin first, free, while the corps' drafts
+  // can reach it; the drafts then fill only what they leave short. Cut off, some of the waiting wounded are lost.
+  if (hospOn(g)) for (const c of army) if (c.wd) woundedMonth(g, c, c.supplied && !stored.has(c) && !shutIn(g, c) && !inPocket(g, c), (c.full ?? 1) * ownShare(c) - c.str, hospitalNear(g, c, friendlyTo));
   // A volunteer legion's drafts come from its own home's reserve, not the patron's (legions.ts; release 2, switched off in release 1).
   const want = army.map((c) => (c.vol ? 0 : wantOf(c)));
   const volWant = army.map((c) => (c.vol ? wantOf(c) : 0));

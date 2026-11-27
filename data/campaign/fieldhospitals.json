@@ -1,0 +1,7 @@
+{
+  "_note": "Field hospitals (release 2; Brian's yes of 27 November 2026 17:10Z; the design director's notes of 17:15Z, ideas-batch3-ruling-1127.md). src/campaign/fieldhospitals.ts. Of what a corps loses in a battle (its strength the fight took, not the men taken prisoner after it), 'wounded' are wounded men who can come back. Each month a share 'back' of a corps' wounded rejoins it, free (no men from the reserve, nothing from the treasury), while the corps is in supply: the supply's own reach, as the month's supply picture has it (true reach where that row is on), stands for the chain of field hospitals and the trains that carry the wounded. A Medicine building in its province or next door (buildings.json 'hospital') raises that share by 'raise' a level. Cut off, its wounded wait, and 'lost' of them a month never come back. A corps destroyed loses its wounded. Every army alike. Under this switch the Medicine building no longer speeds a resting corps' drafts (that stood in for the wounded: price once); its extra rest stays. The figures are the builder's placeholders for the design director to rule with the form; the historian is asked for the record.",
+  "wounded": 0.6,
+  "back": 0.25,
+  "lost": 0.15,
+  "raise": 0.25
+}
