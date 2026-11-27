@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 24c5babd1 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 0e07d0ca8 2026-11-27. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -4996,13 +4996,17 @@
       }
     }
     /**
-     * A man the rules take from sq lying in the path of an enemy tank on the move, close under her nose (Drill.thin): her,
-     * him and her block. Any enemy tank near the block will do: which enemy took the man is the drill's to choose.
+     * A man the rules take from sq lying in the path of a tank on the move, close under her nose (Drill.thin): her, him
+     * and her block. Only a tank of the block the rules booked the loss to (by, Drill.strikerOf) may crush him (the
+     * design director, 27 November 2026, 05:03Z: "A crush is drawn only where the crushing block IS the booked striker.
+     * Otherwise the loss is drawn the ordinary way, to the booked block"): the drawing names the block the battle's own
+     * books name. Before this any enemy tank near would do, and the man was drawn under a block that had not struck his.
      */
-    crushOf(sq, cand) {
+    crushOf(sq, cand, by2) {
       const C = DR.escort.clear, u = sq.u;
+      if (!by2) return void 0;
       for (const bq of this.squads.values()) {
-        if (bq.u.side === u.side || bq.u.kind !== "arm" || !live(bq.u)) continue;
+        if (bq.u.id !== by2.id || bq.u.side === u.side || bq.u.kind !== "arm" || !live(bq.u)) continue;
         if (Math.hypot(bq.u.x - u.x, bq.u.y - u.y) > C.within + (Math.max(u.w, u.d) + Math.max(bq.u.w, bq.u.d)) / 2) continue;
         for (const v of bq.men) {
           if (v.role !== "tank" || !this.stands(bq, v) || (v.went ?? 0) <= DR.escort.moving) continue;
@@ -5056,7 +5060,7 @@
       const from = by2 ? [by2.x, by2.y] : [u.x, u.y];
       let burst;
       if (b.escort) {
-        const crushed = this.crushOf(sq, cand);
+        const crushed = this.crushOf(sq, cand, by2);
         if (crushed) {
           const [v, m, tu] = crushed;
           cand.splice(cand.indexOf(m), 1);
