@@ -11,7 +11,7 @@ import setup from '../data/campaign/setup-1939.json';
 import { arrivalWaitOf, loanHeldLine, setFromWait } from '../src/campaign/arrivalwaits';
 import { divisionsOf } from '../src/campaign/armies';
 import { recordBattle } from '../src/campaign/drawn';
-import { addCorps, atWar, createGame, relocate, startPhase, theWords } from '../src/campaign/game';
+import { addCorps, atWar, createGame, declareWar, relocate, startPhase, theWords } from '../src/campaign/game';
 import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { farOn } from '../src/campaign/world';
@@ -148,6 +148,21 @@ describe("W4-2: a held loan carries a standing line on the corps' own cards ever
     delete g.flags.offers;
     month(g, 2);
     expect(arrivalWaitOf(g, c)).toEqual(line('This corps was due to go home to its division in October 1939. It goes the month after it leaves the front.'));
+  });
+
+  it('the line stops the month the hold ends even where the loan goes on: a war row held after its war ended, its war begun again', () => {
+    // (Her B2: "The line stops the month the hold ends." A row lent for a war (Germany and the United States, not at war
+    // in October 1939) whose divisions go back into the corps beside it: held in month 2. In month 3 the war is on, so
+    // the loan is not over and nothing holds it; the loan is not ended either, so only the hold's own month says so.)
+    const { g, c, j } = board({ drawnFrom: ['Parent Test Corps'], words: { until: undefined, war: ['GER', 'USA'] } });
+    month(g, 2);
+    expect(g.flags[`wait:${j}`]).toBe(2);
+    expect(arrivalWaitOf(g, c)).toEqual(line('This corps was due to go back into the Parent Test Corps in October 1939. It goes back the month after it leaves the front.'));
+    declareWar(g, 'GER', 'USA');
+    expect(atWar(g, 'GER', 'USA')).toBe(true);
+    month(g, 3);
+    expect([c.dead, g.flags[`lent:${j}`]]).toEqual([false, c.id]);
+    expect(arrivalWaitOf(g, c)).toBeNull();
   });
 
   it('the line stops with the corps (her B3: the memorial line is enough)', () => {
