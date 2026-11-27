@@ -981,6 +981,10 @@ void SAirBattleScreen::Do(const FString& Action)
 
 FReply SAirBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event)
 {
+	if (Battle.IsValid() && Battle->AwaitsOpen())
+	{
+		return FReply::Handled(); // (the row flyCurtainFirst: the black up before the scene is made; nothing to press yet)
+	}
 	if (Battle.IsValid() && Battle->GetState() && Battle->GetState()->bFlying)
 	{
 		Battle->Press(TEXT("skip")); // (any click during the flyover takes command)
@@ -1014,7 +1018,7 @@ FReply SAirBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPoi
 FReply SAirBattleScreen::OnMouseButtonDoubleClick(const FGeometry& Geometry, const FPointerEvent& Event)
 {
 	// (the second press of a double click comes here in place of OnMouseButtonDown)
-	if (!Battle.IsValid() || Event.GetEffectingButton() != EKeys::LeftMouseButton)
+	if (!Battle.IsValid() || Event.GetEffectingButton() != EKeys::LeftMouseButton || Battle->AwaitsOpen())
 	{
 		return FReply::Unhandled();
 	}
@@ -1075,7 +1079,7 @@ FReply SAirBattleScreen::OnMouseMove(const FGeometry& Geometry, const FPointerEv
 
 FReply SAirBattleScreen::OnMouseWheel(const FGeometry& Geometry, const FPointerEvent& Event)
 {
-	if (Battle.IsValid())
+	if (Battle.IsValid() && !Battle->AwaitsOpen())
 	{
 		Battle->Zoom(Event.GetWheelDelta());
 	}
@@ -1087,6 +1091,10 @@ FReply SAirBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& E
 	if (!Battle.IsValid())
 	{
 		return FReply::Unhandled();
+	}
+	if (Battle->AwaitsOpen())
+	{
+		return FReply::Handled(); // (the row flyCurtainFirst: the black up before the scene is made; nothing to press yet)
 	}
 	const FAirBattleState* S = Battle->GetState();
 	const FKey Key = Event.GetKey();

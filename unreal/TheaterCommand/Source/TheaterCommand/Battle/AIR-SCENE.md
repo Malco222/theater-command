@@ -1934,3 +1934,69 @@ why are they green?", then of the first matt pictures 03:12Z: "thats white. it s
    other aircraft carries no mark and is drawn as before. Test: air_prop_blur_test's "the blade marks mend" (the marks
    found before the row's test, the tips' paint inside it; fails on the old lines). The Mac's still to judge it: a close
    B-17 at the P48 nose-art eye, engines turning, no still red disc anywhere on her.
+
+64. **The air battle's hitch: lines that name it, and four rows to take it apart** (release 2; the Mac's timing legs of
+   26 November on build 172f19ae0, `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=box -TheaterSpeedLog`: in every leg
+   the press was one frame of 174 to 368 ms with the campaign's last picture frozen before the opening's black was up,
+   and one draw-side freeze of about a second fell inside the ground's paint, 13.6 to 18.2 s of the pool's work begun in
+   the press). Numbered 64: 60 and 61 are each taken twice on other builds, 63 is the opening's, and 62 was passed over
+   there; 64 is the next number no build has used.
+   **The naming lines** (no row; written only while the speed log is, `-TheaterSpeedLog` or tc.Speed.Log 1, through
+   TheaterSpeed::IsLogging; with it off not one line or measurement is added):
+   - "Air hitch: before Open (BeginReplay key | BeginLiveCall TC.function), frame F, T ms in all, in the press's frame
+     before the black can go up; each step in ms: ..." once a press, as Open is reached: the work done ahead of Open, and
+     so ahead of the black under `flyCurtainFirst` (a replay's recording read from disk and ReadRecording; a live press's
+     bridge call, the answer read with the show and the desk, and TC.battleSpeed). The press's other work in its caller
+     (the raid card, the scramble offer, a battle of your own; the scene's actor spawned) is not in it.
+   - "Air hitch: the press (Open), frame F, T ms in all; each step in ms: ..." once as a battle is made (the mix and the
+     sound, the inks, the effects kits, the ground (Raise), the clouds, LayZenith, LayHazeBand, OpenTroops, HideTheTable,
+     the deck's shade and sheet, cirrus and rain, the eye and its grade, the first aim and SkyLowerOnce, the warm sheets
+     and the screen).
+   - "Air hitch: under the black, frame F (N under it), T ms: game G, draw D, graphics chip C ms; ..." each frame the black
+     holds, and "Air hitch: the shapes made under the black, frame F, each in ms ...: ..." once.
+   - "Air hitch: ground paint begun on the pool S s after it was asked for (...)", then for each of the three pictures
+     its rows, its shading and its smaller copies, each in seconds since asked.
+   - "Air hitch: a long frame, frame F, T ms: ground paint P; the black B; K frames since the eye last cut (why)." on each
+     frame over 33.4 ms and the frame after it, so a freeze is laid beside the paint's phase, the black and the last cut.
+   - "Air hitch: the eye cut, frame F: why." at the opening, a jump the sky saw, and back to the map.
+   - "Air hitch: loaded what in T ms (frame F)." around the first loads of the flag, hit, tally marks and each sound.
+   The rows (Battle rules card, each off; keys begin "fly" only so FLandLive::Start passes them over; never sent to the
+   land rules; none is on the release 2 ship list). Off, each is the build as before: the row is read and nothing else
+   happens.
+   - **The black first, then the scene** (`flyCurtainFirst`; `-TheaterAirCurtainFirst`, `-TheaterAirNoCurtainFirst`).
+     The black is put up and shown two frames with the battle's clock held, then the scene is made behind it
+     (AAirBattle::CurtainFirstHold, CurtainFirstWaits; a live battle's ships are laid once it is made); the screen takes
+     no press until then (AwaitsOpen). With `-TheaterAirNoCurtain` (the old opening) the row does nothing. The card has no
+     title in its first frames, as today's first black frame has none. Log: "Air battle: the black first, then the scene
+     (...): frame F." and "Air battle: the scene made under the black, N frames after it was put up (row flyCurtainFirst)."
+   - **The map rests under an air battle** (`flyMapHold`; `-TheaterAirMapHold`, `-TheaterAirNoMapHold`). The hidden map's
+     per-frame update held while the battle is up (ACampaignMapActor::HoldUpdates, as the land battle holds it) and let
+     go as the map comes back; its lettering and smoke catch up in one update. Log: "Air battle: the hidden map's
+     per-frame update held while the battle is up (...)."
+   - **The ground is painted early** (`flyPaintEarly`; `-TheaterAirPaintEarly`, `-TheaterAirNoPaintEarly`). A replay's
+     ground begun on the pool as the replay is queued (ReplayWhenReady), some 2 s before the battle asks for it, and
+     used only if the battle's own ask is the same place field for field and the same plans (AirGroundKeep::SamePlace);
+     else dropped and painted again. Live raids are not changed (their place comes only with the rules' opening answer).
+     The recording is read once more on the game thread as the replay is queued. Log: "Air battle ground: K's pictures
+     begun as the replay was queued (...)", then "... begun S s before the battle asked for them are this ground's" or
+     "... are not this battle's ground; painted again".
+   - **The ground is kept once painted** (`flyGroundKeep`; `-TheaterAirGroundKeep`, `-TheaterAirNoGroundKeep`). The three
+     painted pictures kept in Saved/AirGround, one file a ground (about 48 MB; the six last used, by order.txt, the rest
+     deleted) named by a key of everything the painter reads and the painter's version and text (PainterVersion,
+     PainterText: the hash of AirLand.h and .cpp, which the cloud test checks); a later flight of the same ground
+     reads them on the pool instead of painting. A file whose header, key, count, sizes, length or check does not match
+     is refused and the ground painted and kept again. Written beside its place and moved in, as the campaign's save is.
+     Same bytes as painting. Log: "Air battle ground: read from the kept file, not painted, Saved/AirGround/<key>.ground
+     (...)" (or "none kept yet: painted, and kept", or "the kept file refused (why): painted, and kept again").
+   The cloud test: Tools/air_show/air_ground_keep_test.cpp in run.sh (Battle/AirGroundKeep.h, std only: the key moves with
+   every field the painter reads and with the painter's version and text; pack and unpack are the same bytes on Bremen's
+   and a town's ground; a file cut short, a byte changed, a wrong key, count or size refused; the order keeps six and
+   drops the rest; SamePlace; and AirLand.h and .cpp still hash to PainterText, so a change to the painter, a merge
+   too, fails here until PainterText is set anew and PainterVersion raised). The Unreal side could not be compiled here.
+   For the Mac (each leg one launch to the raid's end, the stock words
+   `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=box -TheaterSpeedLog` and at most one row's word): first the stock
+   words alone (the naming lines name the press's steps and each long frame's company), then each row's word on its own.
+   Send back the log of each; the build's NOTES.md (beside its bundle) says what each leg should show. Every such leg is
+   a replay, so one more is flown by hand: a campaign launched with `-TheaterSpeedLog -TheaterAirCurtainFirst`, and a raid
+   flown with FLY IT YOURSELF (or a battle of your own), for the "before Open (BeginLiveCall ...)" line: if its T is large,
+   a later curtain build puts the black up before the bridge's call.

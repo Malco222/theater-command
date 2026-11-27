@@ -208,5 +208,14 @@ if [ "$(grep -c 'TEXT("realDogfights"), TEXT("Real dogfights")' "$DOG_RULES")" !
 else
   echo "dogfights: the row on the card, off unless asked (-TheaterAirDogfights), read as each battle begins, never sent to the land rules"
 fi
+# The ground kept on disk (Battle/AirGroundKeep.h; release 2, the air battle's hitch, rows flyPaintEarly and
+# flyGroundKeep), on Bremen's place: the key changes with each thing the painter reads and with nothing else, a kept
+# ground packed and unpacked (and through a file) is the same bytes, a file cut short, lengthened or altered is refused,
+# and the folder keeps the six grounds last used. It also fails while Battle/AirLand.h and .cpp do not hash to
+# AirGroundKeep::PainterText (it prints what they hash to): a change to the painter, a merge too, sets that anew.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_ground_keep_test.cpp" "$SRC/Battle/AirLand.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  -o "$OUT/air_ground_keep_test"
+"$OUT/air_ground_keep_test" "$ROOT/Content/Data/AirBattles/bremen-b17.json" "$ROOT/Content/Data/AirGround/towns.json" "$OUT" "$SRC" || STATUS=1
 echo "tracks in $OUT"
 exit $STATUS

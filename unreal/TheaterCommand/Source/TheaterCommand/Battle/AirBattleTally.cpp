@@ -96,7 +96,9 @@ bool AAirBattle::TallyReady()
 		return TallyInk != nullptr;
 	}
 	bTallyTried = true;
+	const double LoadBegan = FPlatformTime::Seconds();
 	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_TallyMark.M_TallyMark"));
+	NoteLoad(TEXT("M_TallyMark (the aces' victories)"), LoadBegan); // (release 2, the hitch's naming lines: said only while the speed log is written)
 	if (!Base)
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Air battle: aces: no M_TallyMark (Tools/build_content.sh makes it), so no ace's victories are painted."));

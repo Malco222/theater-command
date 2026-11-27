@@ -32,6 +32,7 @@ class USoundAttenuation;
 class USoundBase;
 struct FAirBattleState;
 struct FAirLandMade;
+struct FAirLandAsk;
 class UTexture2D;
 
 /**
@@ -143,6 +144,8 @@ public:
 
 	// What the battle screen reads and asks.
 	const FAirBattleState* GetState() const { return State.Get(); }
+	/** (the row flyCurtainFirst) The black is up and the scene not yet made: the screen takes no press until it is. */
+	bool AwaitsOpen() const { return bCurtainWaiting; }
 	/** Drag with the left button: the camera turns round what it looks at (pixels of the viewport). */
 	void Orbit(const FVector2D& DeltaPixels);
 	/** The wheel: nearer or farther. */
@@ -1042,6 +1045,53 @@ private:
 	TArray<TObjectPtr<UProceduralMeshComponent>> WarmShelf;
 	UPROPERTY()
 	TArray<TObjectPtr<UObject>> WarmKeep;
+	/**
+	 * (Release 2, the hitch: the Mac's timing legs of 26 November, build 172f19ae0.) The naming lines, written only while
+	 * the speed log is (-TheaterSpeedLog), each beginning "Air hitch:" (AirParts::Hitch in AirBattle.cpp). HitchNote, each
+	 * frame from Tick: after a long frame (over 33 ms, as the speed log counts them) and on the one frame after it (the
+	 * draw thread's time is sometimes booked a frame late), the ground paint's phase, the black, and the frames since the
+	 * eye last cut. LandPhaseName: the ground paint's phase in words. NoteLoad: a load by name, with its ms.
+	 */
+	void HitchNote(float DeltaSeconds);
+	FString LandPhaseName() const;
+	static void NoteLoad(const TCHAR* What, double Began);
+	bool bHitchLastLong = false;
+	/**
+	 * (Release 2, the hitch: the Battle rules card's "The black first, then the scene", row flyCurtainFirst; on for a run
+	 * -TheaterAirCurtainFirst, off -TheaterAirNoCurtainFirst.) On, Open's first call only puts up the black (the clock held,
+	 * the screen shown) and returns; Tick runs Open itself once the black has been shown two frames (CurtainFirstWaits),
+	 * so the press's frame of 174 to 368 ms is spent behind the black, not on the campaign's last picture. A live battle's
+	 * ships are laid then (CurtainThen). Off (the default), Open runs at once, as before.
+	 */
+	bool CurtainFirstHold(const FString& Why);
+	bool CurtainFirstWaits();
+	bool bCurtainWaiting = false;
+	bool bCurtainOpening = false;
+	uint64 CurtainShownFrame = 0;
+	FString CurtainWhy;
+	TFunction<void()> CurtainThen;
+	/**
+	 * (Release 2, the hitch: the Battle rules card's "The map rests under an air battle", row flyMapHold; on for a run
+	 * -TheaterAirMapHold, off -TheaterAirNoMapHold.) On, the hidden campaign map's per-frame update (its lettering,
+	 * standards and smoke, 0.5 to 4 ms a frame in the Mac's legs) is held while the air battle is up, as the land battle
+	 * holds it (ACampaignMapActor::HoldUpdates), and let go as the map comes back (ShowTheTable). Off, it runs, as before.
+	 */
+	void MapHoldBegin(ACampaignMapActor* Map);
+	void MapHoldEnd(ACampaignMapActor* Map);
+	bool bMapHeld = false;
+	/**
+	 * (Release 2, the hitch: the Battle rules card's "The ground is painted early", row flyPaintEarly; on for a run
+	 * -TheaterAirPaintEarly, off -TheaterAirNoPaintEarly.) On, a replay's ground paint is begun as the replay is queued
+	 * (PaintEarly, from ReplayWhenReady), about 2 s before the battle opens, from the recording's own board; PaintLand
+	 * then takes it (PaintEarlyAdopt) only if the battle asks for the very same place and town plans, else paints as
+	 * before, so the pictures are the same bytes. StartPaint: the paint begun on the pool (PaintLand's own, moved).
+	 * Off, the paint is begun in the press, as before.
+	 */
+	void PaintEarly(const FString& Key);
+	bool PaintEarlyAdopt(const FAirLandAsk& Ask);
+	void StartPaint(const FAirLandAsk& Ask);
+	TSharedPtr<FAirLandAsk> LandEarly;
+	TFuture<void> PaintDropped;
 	/** The sun a hard small disc while the battle stands (the art director, build 1750); the lamp kept, put back with the table. */
 	void TheSun(UDirectionalLightComponent& Key);
 	/** Toward the battle's sun, a unit vector in the world: the set piece's own sun where its stage stands; over a raid with

@@ -300,6 +300,35 @@ namespace
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)
 		{ TEXT("wrecks"), TEXT("Old wrecks"), TEXT("A field fought over before keeps the burnt-out tanks and armoured vehicles those battles left on it. Off: the field is cleared between battles."), TEXT("TheaterLandNoOldWrecks"), false, TEXT("TheaterLandRuleOldWrecks") },
+		// (The air battle's hitch, release 2: the Mac's timing legs of 26 November, build 172f19ae0, every leg's press a
+		// frame of 174 to 368 ms on the campaign's last picture, frozen, before the opening's black was up. On: the black is
+		// put up first and shown two frames, and the scene is made behind it (AAirBattle::CurtainFirstHold). Looks only:
+		// the battle's clock is held while the black stands, so nothing the rules count changes. Off until the Mac passes it;
+		// -TheaterAirCurtainFirst turns it on for a run, -TheaterAirNoCurtainFirst off. The air battle reads it as a battle
+		// opens; it is never sent to the land rules.)
+		{ TEXT("flyCurtainFirst"), TEXT("The black first, then the scene"), TEXT("An air battle puts up its black title card before it builds its sky, clouds and sound, so the map never stands frozen while the battle is made. Off: the battle is made first, then the card goes up."), TEXT("TheaterAirNoCurtainFirst"), false, TEXT("TheaterAirCurtainFirst") },
+		// (The air battle's hitch, release 2: under an air battle the hidden campaign map kept its per-frame update, 0.5 to
+		// 4 ms of every frame in the Mac's legs of 26 November, where the land battle holds it. On: held while the air battle
+		// is up and let go as the map comes back (AAirBattle::MapHoldBegin). Looks only: the map's lettering and smoke catch
+		// up in one update. Off until the Mac passes it; -TheaterAirMapHold turns it on for a run, -TheaterAirNoMapHold off.
+		// The air battle reads it as it hides the map; it is never sent to the land rules.)
+		{ TEXT("flyMapHold"), TEXT("The map rests under an air battle"), TEXT("While an air battle is up, the campaign map hidden under it stops redrawing its lettering, standards and smoke each frame, and catches up as it comes back. Off: the hidden map keeps working under the battle."), TEXT("TheaterAirNoMapHold"), false, TEXT("TheaterAirMapHold") },
+		// (The air battle's hitch, release 2: in each of the Mac's legs of 26 November one draw-side freeze of about a second
+		// fell inside the ground's paint, 13.6 to 18.2 s of the pool's work begun in the press; the paint as its cause is
+		// likely, not proved. On: a replayed battle's ground is begun as the replay is queued, some 2 s earlier, and used
+		// only if the battle asks for the very same ground (AAirBattle::PaintEarly), so the pictures are the same bytes.
+		// A live raid's place comes only with the rules' opening answer, so a live raid paints as before. Looks only. Off
+		// until the Mac passes it; -TheaterAirPaintEarly turns it on for a run, -TheaterAirNoPaintEarly off. Never sent to
+		// the land rules.)
+		{ TEXT("flyPaintEarly"), TEXT("The ground is painted early"), TEXT("A replayed air battle starts painting its ground as soon as it is queued, so the painted fields and town are ready sooner. Off: the ground is painted as the battle opens."), TEXT("TheaterAirNoPaintEarly"), false, TEXT("TheaterAirPaintEarly") },
+		// (The air battle's hitch, release 2: the ground's pictures under a raid with no stage are the pool's work of 13.6
+		// to 18.2 s, and a freeze of about a second fell inside it in every one of the Mac's legs of 26 November. On: the
+		// three pictures, once painted, are kept in the project's Saved/AirGround (about 48 MB a ground, the six last used)
+		// under a key of everything the painter reads, and a later flight of the same ground reads them on the pool instead
+		// of painting (AAirBattle::StartPaint, Battle/AirGroundKeep.h); a file that does not match is refused and the ground
+		// painted. Looks only: the same bytes. Off until the Mac passes it; -TheaterAirGroundKeep turns it on for a run,
+		// -TheaterAirNoGroundKeep off. Never sent to the land rules.)
+		{ TEXT("flyGroundKeep"), TEXT("The ground is kept once painted"), TEXT("An air battle's painted ground (its fields, woods, rivers and town) is kept on disk, so a later raid on the same place shows it at once instead of painting it again. Off: every raid paints its ground afresh."), TEXT("TheaterAirNoGroundKeep"), false, TEXT("TheaterAirGroundKeep") },
 		// (Release 2, the scramble offer: Brian, 24 November 2026 22:21Z, "i want every air battle playable". In the enemy's
 		// month the campaign stops where an enemy raid on his ground meets his fighters and offers SCRAMBLE: taken, he flies
 		// the defence in the battle in the air (AAirBattle, his side 'def'), and the month runs on with what the battle
