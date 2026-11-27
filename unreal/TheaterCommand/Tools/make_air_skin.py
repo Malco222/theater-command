@@ -24,8 +24,9 @@ What it writes (one line, keys in a fixed order, no time stamp: the same inputs 
                  that the C++ law is tied to this file (Tools/air_show/air_b17_skin_test.cpp)
 With --sheen-out (the paint sheen, row flyB17Sheen; Battle/AirSheen), in the same run and from the same bytes, a second
 file: sheen_of, base_sha256, base_fnv64, source_sha256 (the overlay's very own), coat [gloss, metal] (the medians over
-her near paint-0 points), near and far {gloss, metal} integers 0-100 a point (roughness x 100, metal x 100), as the
-model thread has them. When the model thread re-issues its file, ONE run with --out and --sheen-out remakes both.
+her near paint-0 points), metal_paints (the FITTINGS, the only paints whose points keep their metal: the art director's
+"metal on true fittings only"), near and far {gloss, metal} integers 0-100 a point (roughness x 100, metal x 100), as
+the model thread has them but for metal 0 off her fittings. --sheen-out is refused without --out. When the model thread re-issues its file, ONE run with --out and --sheen-out remakes both.
 Never marks, never anything by month or year: the game's own star and bar stays, and paint never depends on the date.
 
 It refuses (exit 2) unless the base's sha256 begins 5e1f39002423, the two files' points, facings, triangles, part and
@@ -242,17 +243,33 @@ def make(base_bytes, skin_bytes, with_gloss_metal=False, base_sha_prefix=BASE_SH
     return text, figures
 
 
+# The paints whose points may carry metal in the sheen file (the art director, 27 November 2026 00:16Z: "metal on true
+# fittings only"; the lead's ruling R1): a list of what MAY shine, so that a paint added later is matt until someone
+# names it here. Every other paint's points (her coat, rivet heads, seams, paint points, markings) are written with
+# metal 0; their gloss is kept. The model thread's file keeps its own metal values (worn rivets among them) for a later
+# close-up step.
+FITTINGS = ("steel", "blade", "line", "engine", "exhaust", "gunmetal", "hub", "head")
+
+
 def make_sheen(base_bytes, skin_bytes, base_sha_prefix=BASE_SHA_PREFIX):
     """The paint sheen's file (row flyB17Sheen; Battle/AirSheen) from the same two files' bytes: the skin's own gloss
     (roughness x 100) and metal (x 100) a point, near and far, and her coat's (the median of each over the near paint-0
-    points). Refused (Refused) wherever make() refuses (it is run first, on the very same bytes, so the two files are
-    always made from one pair of inputs), and where gloss or metal is missing, of the wrong length or outside 0-100.
-    Returns (text, figures)."""
+    points). Metal is kept only on the FITTINGS' points (by the skin's own paint a point, at each level) and written 0
+    on every other's; gloss is never touched. Refused (Refused) wherever make() refuses (it is run first, on the very
+    same bytes, so the two files are always made from one pair of inputs), where gloss or metal is missing, of the
+    wrong length or outside 0-100, and where the skin has no paint_names or lacks one of the FITTINGS. Returns (text,
+    figures); figures["zeroed"][level] counts, per paint name, the points whose metal was set to 0."""
     make(base_bytes, skin_bytes, base_sha_prefix=base_sha_prefix)
     base = loads(base_bytes, "base")
     skin = loads(skin_bytes, "skin")
+    names = skin.get("paint_names")
+    if not isinstance(names, list) or not names or not all(isinstance(x, str) for x in names):
+        raise Refused("the skin has no paint_names: the sheen cannot tell her fittings (%s) from her paint" % ", ".join(FITTINGS))
+    missing = [x for x in FITTINGS if x not in names]
+    if missing:
+        raise Refused("the skin's paint_names lack %s: the sheen's metal is kept on her fittings alone (%s)" % (", ".join(missing), ", ".join(FITTINGS)))
     levels = {}
-    figures = {}
+    figures = {"zeroed": {}}
     for level in ("near", "far"):
         s = skin[level]
         n = len(base[level]["paints"])
@@ -262,8 +279,20 @@ def make_sheen(base_bytes, skin_bytes, base_sha_prefix=BASE_SHA_PREFIX):
             if not isinstance(vals, list) or len(vals) != n:
                 raise Refused("%s %s: not one a point (the sheen needs the skin's gloss and metal)" % (level, key))
             out[key], _ = ints_0_100(vals, level + " " + key)
+        paints = s.get("paints")
+        if not isinstance(paints, list) or len(paints) != n:
+            raise Refused("%s paints: not one a point" % level)
+        zeroed = {}
+        metal = out["metal"]
+        for k, p in enumerate(paints):
+            if not isinstance(p, int) or isinstance(p, bool) or p < 0 or p >= len(names):
+                raise Refused("%s paints: %r at point %d names no paint" % (level, p, k))
+            if names[p] not in FITTINGS and metal[k] != 0:
+                zeroed[names[p]] = zeroed.get(names[p], 0) + 1
+                metal[k] = 0
         levels[level] = out
         figures[level] = {"points": n}
+        figures["zeroed"][level] = dict(sorted(zeroed.items()))
     paints = skin["near"]["paints"]
     zero = [k for k, p in enumerate(paints) if p == 0]
     if not zero:
@@ -278,6 +307,7 @@ def make_sheen(base_bytes, skin_bytes, base_sha_prefix=BASE_SHA_PREFIX):
         "base_fnv64": "%016x" % fnv64(base_bytes),
         "source_sha256": hashlib.sha256(skin_bytes).hexdigest(),
         "coat": coat,
+        "metal_paints": list(FITTINGS),
         "near": levels["near"],
         "far": levels["far"],
     }
@@ -296,6 +326,10 @@ def main(argv):
     a = ap.parse_args(argv)
     if not a.out and not a.sheen_out:
         print("make_air_skin: refused: nothing to write (give --out, --sheen-out or both)", file=sys.stderr)
+        return 2
+    if a.sheen_out and not a.out:
+        print("make_air_skin: refused: --sheen-out without --out (one run makes the overlay and the sheen file together, "
+              "from the same skin)", file=sys.stderr)
         return 2
     with open(a.base, "rb") as f:
         base_bytes = f.read()
@@ -320,6 +354,10 @@ def main(argv):
         text, figures = sheen
         with open(a.sheen_out, "w", encoding="ascii", newline="\n") as f:
             f.write(text)
+        for level in ("near", "far"):
+            zeroed = figures["zeroed"][level]
+            print("make_air_skin: sheen: %s: metal set to 0 off her fittings at %d points (%s)"
+                  % (level, sum(zeroed.values()), ", ".join("%s %d" % kv for kv in zeroed.items()) or "none"))
         print("make_air_skin: sheen: near %d points, far %d points, coat %d/%d, wrote %s, %d bytes, sha256 %s"
               % (figures["near"]["points"], figures["far"]["points"], figures["coat"][0], figures["coat"][1], a.sheen_out, len(text),
                  hashlib.sha256(text.encode("ascii")).hexdigest()))

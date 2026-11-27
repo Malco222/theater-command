@@ -46,6 +46,10 @@ def level(n, seed):
 
 def made_up():
     names = ["p%d" % i for i in range(46)]
+    # (the sheen's FITTINGS, the paints whose metal it keeps: paint 2 and 11 among them, so that the made-up points
+    # carry some metal and some not; the rest of the eight where no point wears them)
+    for at, name in zip((2, 11, 20, 21, 22, 23, 24, 25), ("steel", "exhaust", "blade", "line", "engine", "gunmetal", "hub", "head")):
+        names[at] = name
     base = {"kind": "aircraft", "colours": ["%02X%02X%02X" % (i * 5, i * 4, i * 3) for i in range(46)], "paint_names": names,
             "marks": [{"tag": "USA-BAR"}], "mark_months": [1, 2, 3], "near": level(12, 1), "far": level(6, 2)}
     skin = copy.deepcopy(base)
@@ -201,15 +205,25 @@ def sheen_tests():
     t2, _ = M.make_sheen(dump(base), dump(skin), base_sha_prefix="")
     check(t1 == t2, "sheen: two runs, the same bytes")
     d = json.loads(t1)
-    check(list(d.keys()) == ["sheen_of", "base_sha256", "base_fnv64", "source_sha256", "coat", "near", "far"], "sheen: top keys in their order")
+    check(list(d.keys()) == ["sheen_of", "base_sha256", "base_fnv64", "source_sha256", "coat", "metal_paints", "near", "far"], "sheen: top keys in their order")
+    check(d["metal_paints"] == list(M.FITTINGS) and M.FITTINGS == ("steel", "blade", "line", "engine", "exhaust", "gunmetal", "hub", "head"),
+          "sheen: metal_paints the eight fittings")
     o = json.loads(M.make(dump(base), dump(skin), base_sha_prefix="")[0])
     check(d["source_sha256"] == o["source_sha256"] and d["base_sha256"] == o["base_sha256"] and d["base_fnv64"] == o["base_fnv64"], "sheen: the overlay's sha256s and fnv64")
     for name in ("near", "far"):
         check(list(d[name].keys()) == ["gloss", "metal"], "sheen: %s keys" % name)
-        check(d[name]["gloss"] == skin[name]["gloss"] and d[name]["metal"] == skin[name]["metal"], "sheen: %s gloss and metal as the skin's" % name)
+        names = skin["paint_names"]
+        kept = [v if names[p] in M.FITTINGS else 0 for v, p in zip(skin[name]["metal"], skin[name]["paints"])]
+        check(d[name]["gloss"] == skin[name]["gloss"], "sheen: %s gloss as the skin's, every point" % name)
+        check(d[name]["metal"] == kept and any(kept) and kept != skin[name]["metal"], "sheen: %s metal the skin's on her fittings, 0 on every other paint" % name)
+        zeroed = {}
+        for v, p in zip(skin[name]["metal"], skin[name]["paints"]):
+            if names[p] not in M.FITTINGS and v:
+                zeroed[names[p]] = zeroed.get(names[p], 0) + 1
+        check(fig["zeroed"][name] == zeroed and sum(zeroed.values()) > 0, "sheen: %s points set to 0 counted per paint" % name)
     zero = [k for k, p in enumerate(skin["near"]["paints"]) if p == 0]
     g = sorted(skin["near"]["gloss"][k] for k in zero)
-    m = sorted(skin["near"]["metal"][k] for k in zero)
+    m = sorted(d["near"]["metal"][k] for k in zero)
     check(d["coat"] == [g[len(g) // 2], m[len(m) // 2]] and fig["coat"] == d["coat"], "sheen: coat the medians of the near paint-0 points")
     flat = t1.lower()
     for word in ("month", "year", "mark", "scheme", "\"from\"", "usa", "blend", "soot", "shade", "colours"):
@@ -246,6 +260,15 @@ def sheen_tests():
     b2 = copy.deepcopy(base)
     b2["near"]["paints"] = list(s["near"]["paints"])
     sheen_refused(b2, s, "no near paint-0 point")
+    b2, s = copy.deepcopy(base), copy.deepcopy(skin)
+    del b2["paint_names"]
+    del s["paint_names"]
+    sheen_refused(b2, s, "no paint_names")
+    for gone in M.FITTINGS:
+        b2, s = copy.deepcopy(base), copy.deepcopy(skin)
+        b2["paint_names"] = [x if x != gone else "other" for x in b2["paint_names"]]
+        s["paint_names"] = list(b2["paint_names"])
+        sheen_refused(b2, s, "paint_names without %s" % gone)
     # main: a refusal of the sheen writes neither file
     with tempfile.TemporaryDirectory() as tmp:
         bp, sp, op, hp = (os.path.join(tmp, n) for n in ("base.json", "skin.json", "out.json", "sheen.json"))
@@ -265,13 +288,17 @@ def sheen_tests():
                 with open(sp, "wb") as f:
                     f.write(dump(skin))
                 code2 = M.main(["--base", bp, "--skin", sp, "--out", op, "--sheen-out", hp])
+                both = os.path.exists(op) and os.path.exists(hp)
                 code3 = M.main(["--base", bp, "--skin", sp])
+                os.remove(hp)
+                code4 = M.main(["--base", bp, "--skin", sp, "--sheen-out", hp])
         finally:
             M.make.__defaults__ = kept
             M.make_sheen.__defaults__ = kept_sheen
         check(code == 2 and "metal" in err.getvalue(), "main: a skin without far metal refused (exit 2)")
-        check(code2 == 0 and os.path.exists(op) and os.path.exists(hp), "main: both written in one run")
+        check(code2 == 0 and both, "main: both written in one run")
         check(code3 == 2, "main: nothing asked to be written is refused")
+        check(code4 == 2 and not os.path.exists(hp), "main: --sheen-out without --out refused, nothing written")
     with tempfile.TemporaryDirectory() as tmp:
         bp, sp, op, hp = (os.path.join(tmp, n) for n in ("base.json", "skin.json", "out.json", "sheen.json"))
         s = copy.deepcopy(skin)
@@ -317,7 +344,12 @@ def real_tests(base_path, skin_path, overlay_path, sheen_path=None):
         h = json.loads(sheen)
         check(h["source_sha256"] == d["source_sha256"] and h["base_sha256"] == d["base_sha256"] and h["base_fnv64"] == d["base_fnv64"],
               "the sheen file names the overlay's very files")
-        check(len(h["near"]["gloss"]) == 143899 and len(h["far"]["metal"]) == 15534 and h["coat"] == [39, 18], "the sheen's counts and her coat")
+        check(len(h["near"]["gloss"]) == 143899 and len(h["far"]["metal"]) == 15534 and h["coat"] == [39, 0], "the sheen's counts and her coat (no metal: paint 0 is no fitting)")
+        names = json.loads(skin)["paint_names"]
+        sk = json.loads(skin)
+        for lv in ("near", "far"):
+            off = sum(1 for v, p in zip(h[lv]["metal"], sk[lv]["paints"]) if v and names[p] not in M.FITTINGS)
+            check(off == 0 and h["metal_paints"] == list(M.FITTINGS), "the sheen's %s metal on her fittings alone" % lv)
 
 
 def main():

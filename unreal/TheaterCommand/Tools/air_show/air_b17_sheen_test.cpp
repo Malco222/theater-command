@@ -18,10 +18,14 @@
 //   S5 the launch word's numbers;
 //   S6 (given build_content.py) M_AirPaint's nodes carry the law's names, defaults and constants;
 //   S7 (given the source folder) the Unreal side, read from its source: the row off unless asked, nothing read or keyed
-//      with it off.
+//      with it off;
+//   S8 metal on her true fittings alone (the art director, 27 November 2026 00:16Z; the lead's ruling R1): no point of
+//      a paint outside the file's metal_paints (the tool's FITTINGS) carries metal, at either level, and the points
+//      carrying all of their own at the start 0.5 counted per paint.
 #include "Battle/AirSheen.h"
 #include "Battle/AirSkin.h"
 #include "Battle/AirUnitColours.h"
+#include "Battle/LandJson.h"
 
 #include <algorithm>
 #include <cmath>
@@ -29,6 +33,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -145,7 +150,7 @@ int main(int Argc, char** Argv)
 	Check(Sh.Of == "B17Fine" && Sh.Near.Count() == NearN && Sh.Far.Count() == FarN, "laid on B17Fine, one a point");
 	Check(Sh.SourceSha256 == Skin.SourceSha256 && Sh.BaseSha256 == Skin.BaseSha256 && Sh.BaseFnv64 == Skin.BaseFnv64 && Sh.BaseFnv64 == AirSkin::Fnv64(BaseText),
 		"made from the overlay's very files (source and base sha256, the base's FNV-1a 64)", Sh.SourceSha256.substr(0, 16));
-	Check(Sh.CoatGloss == 39 && Sh.CoatMetal == 18, "her coat's finish 39/18 (the model file of 26 November)", std::to_string(Sh.CoatGloss) + "/" + std::to_string(Sh.CoatMetal));
+	Check(Sh.CoatGloss == 39 && Sh.CoatMetal == 0, "her coat's finish 39/0 (her gloss the model file's; no metal, her coat no fitting)", std::to_string(Sh.CoatGloss) + "/" + std::to_string(Sh.CoatMetal));
 	Check(Count(SheenText, "mark") == 0 && Count(SheenText, "month") == 0 && Count(SheenText, "year") == 0, "no marks, months or years in it");
 	{
 		struct Fault
@@ -299,7 +304,49 @@ int main(int Argc, char** Argv)
 		// (a point the file does not hold, her star and bar laid after it, wears her coat's finish)
 		const AirSheen::Carried Coat = AirSheen::Carry(Sh.CoatGloss, Sh.CoatMetal, 1.0);
 		const AirSheen::Finish F = AirSheen::Law(Coat.U, Coat.V, 0.9, 0.15, T, 0.0);
-		Check(std::fabs(F.Rough - 0.45) < 1e-6 && F.Metal == 0.0 && std::fabs(F.Spec - 0.25) < 1e-12, "her coat's finish (39/18): 0.45 rough (her own 0.39 floored), 0.25 specular, no metal", Num(F.Rough));
+		Check(std::fabs(F.Rough - 0.45) < 1e-6 && F.Metal == 0.0 && std::fabs(F.Spec - 0.25) < 1e-12, "her coat's finish (39/0): 0.45 rough (her own 0.39 floored), 0.25 specular, no metal", Num(F.Rough));
+	}
+
+	std::printf("S8 metal on her true fittings alone (the art director's ruling): her file's metal_paints, the base's paint names\n");
+	{
+		LandJson::Json Doc;
+		std::string W;
+		const bool bDoc = LandJson::Parse(SheenText, Doc, W);
+		const std::vector<std::string> Eight = { "steel", "blade", "line", "engine", "exhaust", "gunmetal", "hub", "head" };
+		std::vector<std::string> Kept;
+		for (size_t K = 0; bDoc && K < Doc["metal_paints"].Count(); ++K)
+		{
+			Kept.push_back(Doc["metal_paints"].At(K).Str(""));
+		}
+		Check(bDoc && Kept == Eight, "metal_paints: steel, blade, line, engine, exhaust, gunmetal, hub, head", W);
+		Check(Base.PaintNames.size() == Base.Colours.size(), "the base names every paint", std::to_string(Base.PaintNames.size()));
+		const std::map<std::string, int> WantNear = { { "line", 9792 }, { "gunmetal", 2474 }, { "steel", 1620 }, { "head", 1224 }, { "hub", 832 }, { "blade", 264 } };
+		const std::map<std::string, int> WantFar = { { "steel", 624 }, { "blade", 264 }, { "gunmetal", 178 }, { "hub", 160 } };
+		for (const bool bFar : { false, true })
+		{
+			const AirSheen::Level& L = Sh.LevelOf(bFar);
+			const AirSkin::Level& SkinL = Skin.LevelOf(bFar);
+			const AirUnitColours::Mesh& Me = bFar ? Base.Far : Base.Near;
+			int Off = 0, Total = 0;
+			std::map<std::string, int> Whole;
+			for (size_t K = 0; K < L.Count(); ++K)
+			{
+				const int Paint = SkinL.PaintAt(K, Me.Paints[K]);
+				const std::string Name = Paint >= 0 && static_cast<size_t>(Paint) < Base.PaintNames.size() ? Base.PaintNames[static_cast<size_t>(Paint)] : std::string("?");
+				const bool bFitting = std::find(Kept.begin(), Kept.end(), Name) != Kept.end();
+				Off += !bFitting && L.Metal[K] > 0 ? 1 : 0;
+				if (L.Metal[K] >= 55)
+				{
+					++Whole[Name];
+					++Total;
+				}
+			}
+			const std::string Lv = bFar ? "far" : "near";
+			std::string Got;
+			for (const auto& KV : Whole) Got += KV.first + " " + std::to_string(KV.second) + ", ";
+			Check(Off == 0, Lv + ": no point of a paint outside the eight carries metal (no rivet, seam or paint point over the start)", std::to_string(Off));
+			Check(Whole == (bFar ? WantFar : WantNear) && Total == (bFar ? 1226 : 16206), Lv + ": metal 0.55 or more on her fittings alone, counted", Got + std::to_string(Total));
+		}
 	}
 
 	std::printf("S4 no garbage between corners\n");
