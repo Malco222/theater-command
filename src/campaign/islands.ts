@@ -308,6 +308,30 @@ export function roomSays(g: Game, r: Region | undefined | null): string | null {
 }
 
 /**
+ * The head of the swap card on an island (the UI director, 15:02Z, section 2), the island's room and then the corps
+ * named as the news gives it, a capital at the sentence's head (her U8, 00:19Z, 27 November 2026: "in every island
+ * sentence"; words sceptic 2, W2-2): "Pearl Harbor has room for 2 divisions, about 30,000 men. The 24th Division Group
+ * cannot march in beside them." `c` null: "The corps". Null for ground that is no island of the table (and with the far
+ * side off), where the card keeps the sentence it had (ui/main.ts swapCard).
+ */
+export function swapHead(g: Game, r: Region | undefined | null, c: Corps | null): string | null {
+  const says = roomSays(g, r);
+  return says ? `${says} ${c ? named(c.name, true) : 'The corps'} cannot march in beside them.` : null;
+}
+
+/**
+ * The 3D game's offer to change places onto an island (campaign-bridge.ts move), the corps named as the news gives
+ * them (the UI director, 00:19Z, 27 November 2026, U8; words sceptic 2, W2-2): "Pearl Harbor has room for 2 divisions,
+ * about 30,000 men. Order the march again and the 24th Division Group changes places with the Hawaiian Division, which
+ * comes back to Honolulu." Null for ground that is no island of the table (and with the far side off), where the
+ * offer keeps the sentence it had.
+ */
+export function swapOffer(g: Game, r: Region | undefined | null, c: Corps, other: Corps, from: Region): string | null {
+  const says = roomSays(g, r);
+  return says ? `${says} Order the march again and ${named(c.name)} changes places with ${named(other.name)}, which comes back to ${from.name}.` : null;
+}
+
+/**
  * How many engineer corps a province takes apart from its fighting corps: two, or on an island of the table the
  * lesser of two and the island's room (the design director, 13:58Z 25 November 2026: "Wake, a room of one, takes one
  * engineer corps apart; a room of two or more takes two, as anywhere"). Two with the far side off. Counted in corps.

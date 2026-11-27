@@ -5,7 +5,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { addCorps, createGame, removeCorps, whyNoRoom } from '../src/campaign/game';
-import { refusedWhole } from '../src/campaign/islands';
+import { refusedWhole, swapHead } from '../src/campaign/islands';
 import { saveGame } from '../src/campaign/save';
 import { garrison } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
@@ -72,5 +72,26 @@ describe("round 2's mended sentences on live boards through the bridge", () => {
     const at = page.findIndex((l) => /^export function marchTo\(|function marchTo\(/.test(l));
     expect(at).toBeGreaterThan(0);
     expect(page.slice(at, at + 40).some((l) => /refusedWhole\(g, r, /.test(l))).toBe(true);
+  }, 300000);
+
+  it('W2-2: the offer to change places onto Pearl Harbor and the swap card\'s head name both corps as the news names them', () => {
+    const g = war('USA');
+    const pearl = g.byName['Pearl Harbor'], hon = g.byName['Honolulu'];
+    clear(g, pearl);
+    const hd = corps(g, 'USA', 'Hawaiian Division', pearl, 2, 1);
+    const d24 = corps(g, 'USA', '24th Division Group', hon);
+    TC().load(saveGame(g));
+    const m = TC().move([d24.id], pearl.id) as { moved: { id: number }[]; note: string };
+    say('W2-2 the offer to change places (bridge)', m.note);
+    expect(m.moved).toEqual([]);
+    expect(m.note).toBe('Pearl Harbor has room for 2 divisions, about 30,000 men. Order the march again and the 24th Division Group changes places with the Hawaiian Division, which comes back to Honolulu.');
+    expect(hd.reg).toBe(pearl.id);
+    // The swap card's head (ui/main.ts swapCard calls it: the page's wiring is a reading).
+    say('W2-2 the swap card head (islands.ts swapHead, the page)', swapHead(g, pearl, d24) ?? '');
+    expect(swapHead(g, pearl, d24)).toBe('Pearl Harbor has room for 2 divisions, about 30,000 men. The 24th Division Group cannot march in beside them.');
+    expect(swapHead(g, hon, d24)).toBeNull();
+    const page = PAGE.split('\n');
+    const at = page.findIndex((l) => /^function swapCard\(/.test(l));
+    expect(page.slice(at, at + 30).some((l) => /swapHead\(g, r, c \?\? null\)/.test(l))).toBe(true);
   }, 300000);
 });

@@ -244,7 +244,8 @@ describe('the player and Wake', () => {
     TC().load(saveGame(g));
     const tried = TC().move([c.id], singapore.id) as { moved: unknown[]; note: string };
     expect(tried.moved).toEqual([]);
-    expect(tried.note).toMatch(/^Singapore has room for 5 divisions, about 75,000 men\. Order the march again and Army changes places with Malaya Command/);
+    // (Both corps named as the news names them: the UI director, 00:19Z, 27 November 2026, U8; words sceptic 2, W2-2.)
+    expect(tried.note).toMatch(/^Singapore has room for 5 divisions, about 75,000 men\. Order the march again and the Army changes places with the Malaya Command/);
     expect(TC().province(singapore.id).island).toEqual({ room: 5, line: 'Singapore has room for 5 divisions, about 75,000 men.' });
     const swapped = TC().move([c.id], singapore.id) as { moved: { id: number }[]; note: string };
     expect(swapped.moved).toHaveLength(2);

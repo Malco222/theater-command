@@ -160,7 +160,7 @@ import { chanceOn, headline, offersOn } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
 import { CHART_NOW, answersOf, attachWorld, closedCountry, motherLine, patronOf } from '../../../src/campaign/world';
-import { islandOf, refusedWhole, roomSays, stayBehind } from '../../../src/campaign/islands';
+import { islandOf, refusedWhole, roomSays, stayBehind, swapOffer } from '../../../src/campaign/islands';
 import { FAR_PATHS } from '../../../src/campaign/far-rows';
 // (Release 2, Japan and the Pacific: ruling 201's two lines, read where the war between the alliances goes on after a great power's fall.)
 import { warGoesOn } from '../../../src/campaign/domination';
@@ -2925,8 +2925,8 @@ function move(ids: number[], to: number, army = '', armyIds: number[] = []) {
     } else {
       swapAsked = key;
       // (An island of the Pacific is full at its own room, and says that: "Hong Kong has room for one division, about
-      // 15,000 men.")
-      note = `${roomSays(s, s.regions[to]) ?? `${s.regions[to].name} is full.`} Order the march again and ${c.name} changes places with ${other.name}, which comes back to ${s.regions[from].name}.`;
+      // 15,000 men.", its corps named as the news names them, U8: islands.ts swapOffer. Other ground: as it was.)
+      note = swapOffer(s, s.regions[to], c, other, s.regions[from]) ?? `${s.regions[to].name} is full. Order the march again and ${c.name} changes places with ${other.name}, which comes back to ${s.regions[from].name}.`;
     }
   };
   // (Rules 84.2.5) the fighting corps first: guns and engineers follow them onto enemy-held ground. (The code checker, 17
