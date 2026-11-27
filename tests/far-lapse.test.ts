@@ -129,7 +129,7 @@ describe("the player's offer stays in the list for the same half year as the com
     }
   };
 
-  it('the 21st Army\'s 5th Division, due in October 1939: its last month is April 1940 in every seat, and in May it is gone from the rule', () => {
+  it("the 21st Army's 5th Division, due in October 1939: with room the player's offer is open through April 1940 and in May it is gone from the rule; with no room anywhere neither seat strikes it, and when room comes the player is offered it and the computer forms it in that month", () => {
     // The player, with room: offered in month 2, open through month 8, lapsed in month 9.
     const p = war('JAP');
     months(p, 1, 8);
@@ -137,20 +137,32 @@ describe("the player's offer stays in the list for the same half year as the com
     month(p, 9);
     expect([offer(p, FIFTH), p.flags[`sent:${fifthId}`], row(p, FIFTH), row(p, FIFTH_OF) !== undefined]).toEqual([undefined, 2, undefined, true]);
 
-    // The player and the computer, with no room on Formosa: nothing is offered or formed, and the row is struck in
-    // month 9, its half year out.
-    // (FAILS at 1084839a0, named, until the design director rules: since b180e02e4 a row waiting for room is never
-    // struck for it, its half year not running out against room (game.ts expeditions `late` and `roomwait`, her D1 of
-    // 00:20Z, 27 November 2026: "No row is ever struck for room ... Where no held ground anywhere has room, it waits
-    // until one does."), so here both seats wait unstruck in month 9. The assertion is left as it stood: top-up 1.)
-    for (const human of ['JAP', null]) {
+    // The player and the computer, with no room on Formosa nor at any harbour of Japan's: nothing is offered or formed,
+    // and neither seat strikes it, in month 9 or after: it waits until there is room.
+    // (Moved by D1, the design director's ruling of 17:53Z, 27 November 2026, 2: "D1 decides. Re-pin far-lapse to the
+    // law: with no room anywhere, both seats wait unstruck." Her D1 of 00:20Z, 27 November 2026: "No row is ever struck
+    // for room ... Where no held ground anywhere has room, it waits until one does." Before her ruling this asserted
+    // the row struck in month 9, `sent` 2, in both seats.)
+    // (Each seat on its own board and walked on its own, so that each is shown: the computer's is not left unread
+    // behind the player's. Month by month: nothing sent, nothing formed, nothing offered, no word of it to anyone.)
+    const waits = (human: string | null): unknown[] => {
       const g = war(human);
       fill(g);
-      months(g, 1, 8);
-      expect([human, g.flags[`sent:${fifthId}`], row(g, FIFTH), offer(g, FIFTH)]).toEqual([human, undefined, undefined, undefined]);
-      month(g, 9);
-      expect([human, g.flags[`sent:${fifthId}`], row(g, FIFTH)]).toEqual([human, 2, undefined]);
-    }
+      const news = g.headlines.length, seen: unknown[] = [];
+      for (let t = 1; t <= 14; t++) {
+        month(g, t);
+        seen.push([t, g.flags[`sent:${fifthId}`], row(g, FIFTH), offer(g, FIFTH), row(g, FIFTH_OF) !== undefined]);
+      }
+      const told = g.headlines.slice(news).map((h) => h.text).filter((t) => t.includes(FIFTH) || /will not form/.test(t));
+      // Room on Formosa in month 15: the player is offered it in that month, the computer forms it in that month.
+      for (const c of g.corps.filter((x) => /^Test filler Taihoku/.test(x.name) && !x.dead)) removeCorps(g, c);
+      month(g, 15);
+      const then = human ? [offer(g, FIFTH)?.since, offer(g, FIFTH)?.why, row(g, FIFTH)] : [g.flags[`sent:${fifthId}`], g.regions[row(g, FIFTH)!.reg].name, offer(g, FIFTH)];
+      return [human, seen, told, then];
+    };
+    const unstruck = Array.from({ length: 14 }, (_, k) => [k + 1, undefined, undefined, undefined, true]);
+    expect(waits(null)).toEqual([null, unstruck, [], [1, 'Taihoku', undefined]]);
+    expect(waits('JAP')).toEqual(['JAP', unstruck, [], [15, null, undefined]]);
 
     // The computer, with room, forms it in its month, as it always did.
     const c = war(null);
