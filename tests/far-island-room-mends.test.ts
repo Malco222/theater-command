@@ -8,7 +8,7 @@ import { frontWatch, havenTakes, runAI } from '../src/campaign/ai';
 import { addCorps, createGame, declareWar, removeCorps, whyNoSwap } from '../src/campaign/game';
 import { troopshipsWanted } from '../src/campaign/desks';
 import { canRaise, deliver } from '../src/campaign/economy';
-import { roomLeft } from '../src/campaign/islands';
+import { fits, roomLeft } from '../src/campaign/islands';
 import { landingForce } from '../src/campaign/staff';
 import { followKey, frontsClear, sailedKey } from '../src/campaign/planfronts';
 import { startOpen } from '../src/campaign/staff';
@@ -222,6 +222,12 @@ describe("an offered formation whose island has no room for it (the offers page,
     clear(g, palau);
     corps(g, 'JAP', 'Fill Palau', palau, 2);
     for (const j of palau.nb) { const r = g.regions[j]; if (r.ctrl === 'JAP') corps(g, 'JAP', `Fill ${r.name}`, r, 5); }
+    // (A row for a full island goes by sea to the nearest held harbour with room, the design director, 00:20Z, 27
+    // November 2026, D1: it forms there and is told nothing. Refused only where no held harbour has room.)
+    const sent = formationOffers(g).find((x) => x.id === 169)!;
+    expect([sent.why, sent.region === palau.id]).toEqual([null, false]);
+    const five = { nat: 'JAP', kind: 'inf', divs: 1, str: 1 / 3 } as unknown as Corps;
+    for (const r of g.regions) if (r.port && r !== palau && r.ctrl === 'JAP') for (let n = 0; n < 8 && fits(g, r, 'JAP', [five], { rows: r.units.filter((u) => u.kind !== 'eng').length }); n++) corps(g, 'JAP', `Fill ${r.name} ${n}`, r);
     const o = formationOffers(g).find((x) => x.id === 169)!;
     expect(o.why).toBe('Palau is full: it has room for about 30,000 men and 30,000 of yours are there.');
     // Part full: the room, those there, what more can go, and the row's own men.
