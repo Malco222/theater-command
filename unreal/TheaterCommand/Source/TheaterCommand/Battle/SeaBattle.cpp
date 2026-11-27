@@ -4854,11 +4854,11 @@ void ASeaBattle::DrawWrecks()
 					{
 						// (into the copies of his new pose: a slot put away there before, or a new one)
 						SailorAway(*Had);
-						TArray<int32>& Free = SailorFree[Copy];
+						TArray<int32>& Spare = SailorFree[Copy];
 						const FTransform Put(Turn, Feet);
-						if (Free.Num() > 0)
+						if (Spare.Num() > 0)
 						{
-							Had->Slot = Free.Pop();
+							Had->Slot = Spare.Pop();
 							SailorCopies[Copy]->UpdateInstanceTransform(Had->Slot, Put, false, false, true);
 						}
 						else
