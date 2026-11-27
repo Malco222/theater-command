@@ -212,6 +212,8 @@ private:
 		/** It is the finer B-17 (Content/Models/B17Fine.json, the rule "b17Fine"): its close-up copy counts toward the
 		 * most a battle makes (B17FineNearMost). */
 		bool bFine = false;
+		/** With -TheaterAirB17FinePerFrame=N: Draw chose her this frame to have her close-up made (AirNear::MayMake). */
+		bool bMayMake = false;
 		bool bNear = false;
 		/** It casts its shadow (made casting; AirParts::ShadowFarM). */
 		bool bShadow = true;
@@ -988,6 +990,9 @@ private:
 	 * this aircraft may go to its close-up shape now: any aircraft but a finer B-17, one whose close-up shape is made,
 	 * or one while fewer than the most are made. */
 	static int32 B17FineNearMost();
+	/** At most how many finer B-17 close-ups are made in one frame, the nearest first (-TheaterAirB17FinePerFrame=N;
+	 * 0 unless asked: no limit, the battle's order, as before). With N, B17FineNearRoom lets only those Draw chose. */
+	static int32 B17FinePerFrame();
 	bool B17FineNearRoom(const FPlaneMade& Made);
 	/** Whether the log has said the most finer B-17 close-up shapes are made, this battle. */
 	bool bB17FineHeldSaid = false;

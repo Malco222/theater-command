@@ -44,6 +44,10 @@ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
   "$HERE/air_light_test.cpp" "$SRC/Battle/AirLight.cpp" -o "$OUT/air_light_test"
 "$OUT/air_light_test" "$ROOT"/Content/Models/*.json || STATUS=1
+# The finer B-17's close-ups (Battle/AirNear): made at most N a frame, the nearest first, with -TheaterAirB17FinePerFrame=N.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_near_test.cpp" -o "$OUT/air_near_test"
+"$OUT/air_near_test" "$SRC" || STATUS=1
 # The tallies (Battle/AirTally): which mark goes in which slot of an ace's victories or a bomber's record, against the
 # modeller's own layout (tallies.fill).
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \

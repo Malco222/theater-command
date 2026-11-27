@@ -1441,6 +1441,14 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    however near. (The first N to come near keep theirs, not the N nearest: taking a made copy down again was not written
    without a compiler.) Every bomber also keeps her own far section (about 3.5 MB each for her, 1.2 MB for the older
    B-17, arithmetic), which the guard does not limit.
+   Making a close-up is paid for in the frame it is made (the Mac, 27 Nov: 4 or 5 in one frame gave 49-64 ms, 8 gave
+   145 ms, 20 gave 201 ms; holding 20 to 24 cost nothing the 60 fps cap shows). `-TheaterAirB17FinePerFrame=N` (0 unless
+   asked: the old order): at most N are made a frame, the nearest first (ties by key, so the battle's order never
+   matters), under the same N of the guard; the rest wait a frame or two on their far shape. Draw chooses them before
+   its loop (Battle/AirNear.h, AirNear::MayMake; FPlaneMade::bMayMake) and B17FineNearRoom lets only those through; a
+   bomber first seen this frame waits for the next. Cloud test: Tools/air_show/air_near_test.cpp. The Mac's next run:
+   `-TheaterAirB17FinePerFrame=2 -TheaterAirB17FineNear=1000` against the R2 and R4b runs of 27 Nov; if no frame after
+   the opening tops 100 ms, both become the defaults in a one-line commit.
    `-TheaterAirB17Fine` on for a run, `-TheaterAirNoB17Fine` off, `-TheaterRulesFlip=b17Fine` clicks the card's switch.
    The cloud test: Tools/air_show/air_b17_fine_test.cpp in run.sh (row off reads the base's bytes and numbers, row on
    reads her everywhere), and the airscrews', light shapes', nose art's, figures' and earned colours' tests take
