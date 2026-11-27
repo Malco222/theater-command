@@ -1356,6 +1356,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("dumpFires"), Out.bDumpFires); // (release 2, dumpfires.ts)
 	Object->TryGetBoolField(TEXT("trueReachOn"), Out.bTrueReachOn); // (release 2, game.ts trueReach)
 	Object->TryGetBoolField(TEXT("trueReachCan"), Out.bTrueReachCan);
+	Object->TryGetBoolField(TEXT("trueReachLate"), Out.bTrueReachLate); // (a later start runs without it)
 	Object->TryGetBoolField(TEXT("townQueue"), Out.bTownQueue); // (release 2, townqueue.ts)
 	Object->TryGetBoolField(TEXT("cityDefences"), Out.bCityDefences); // (release 2, citydefences.ts)
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
