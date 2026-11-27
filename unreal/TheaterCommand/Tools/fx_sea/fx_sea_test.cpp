@@ -160,6 +160,34 @@ namespace
 		Check(AtDeck == Falling, "  ...at her deck's height", Say("%.0f of %.0f within 5 cm of %.1f m", AtDeck, Falling, DeckZ));
 		Check(Late == Falling && FirstBorn >= Now + Rise + 0.5 * Hang, "timed after the column's rise and most of its hang", Say("the first lump leaves %.2f s after the shell (rise %.2f + hang %.2f)", FirstBorn - Now, Rise, Hang));
 		Check(LastGone <= Now + Rise + Hang + Fall + Life + 0.01, "all of it gone within rise + hang + fall + its life", Say("the last piece gone %.2f s after the shell (%.2f)", LastGone - Now, Rise + Hang + Fall + Life));
+		{
+			// (the look review of 27 November: round bursts on one sheet in two read as snowballs on her deck from 600 m.
+			// Now one burst to a sheet in four, each a flat mound at most 0.4 as high as it is wide, alpha 0.5, 0.6 to 0.9 s;
+			// the sheets a hand's breadth (0.15 m) over her deck, soft to their rim)
+			int Bursts = 0, FlatOk = 0, AlphaOk = 0, LifeOk = 0, SheetsUp = 0;
+			double MostHigh = 0.0;
+			for (size_t I = First; I < X.Bits.size(); ++I)
+			{
+				const Bit& B = X.Bits[I];
+				if (B.Form == Bit::Shape::Upright)
+				{
+					++Bursts;
+					// (its height on the screen from the side, Flatten of its radius, over its width, at least its diameter)
+					const double High = B.Flatten / std::max(1.0, B.Stretch);
+					MostHigh = std::max(MostHigh, High);
+					FlatOk += B.Flatten <= 0.4 + 1e-9 && B.Stretch >= 1.0 ? 1 : 0;
+					AlphaOk += B.Alpha <= 0.5 + 1e-9 ? 1 : 0;
+					LifeOk += B.Life >= 0.6 - 1e-9 && B.Life <= 0.9 + 1e-9 ? 1 : 0;
+				}
+				else if (B.Form == Bit::Shape::Flat)
+				{
+					SheetsUp += std::fabs(B.From.Z - (DeckZ + 0.15)) < 1e-9 && B.Inner <= 0.15 + 1e-9 ? 1 : 0;
+				}
+			}
+			Check(Bursts == (Sheets + 3) / 4 && Bursts > 0, "a burst to one sheet in four", Say("%.0f bursts to %.0f sheets", Bursts, Sheets));
+			Check(FlatOk == Bursts && AlphaOk == Bursts && LifeOk == Bursts, "  ...each flat (no taller than 0.4 of its width), alpha 0.5, 0.6 to 0.9 s", Say("the tallest %.2f of its width; %.0f of %.0f at alpha 0.5 or under, %.0f within the life", MostHigh, AlphaOk, Bursts, LifeOk));
+			Check(SheetsUp == Sheets, "  ...the sheets 0.15 m over her deck, soft to their rim", Say("%.0f of %.0f", SheetsUp, Sheets));
+		}
 		const int Second = X.DeckDrench(Now + 0.5, Column + Vec(30.0, 0.0, 0.0), 406.0, Toward, DeckZ, 7);
 		const int Third = X.DeckDrench(Now + 0.7, Column + Vec(-30.0, 0.0, 0.0), 406.0, Toward, DeckZ, 7);
 		const int Other = X.DeckDrench(Now + 0.7, Column + Vec(400.0, 0.0, 0.0), 406.0, Toward, DeckZ, 8);

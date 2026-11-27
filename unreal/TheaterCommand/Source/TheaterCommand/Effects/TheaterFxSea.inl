@@ -138,6 +138,7 @@
 		const Vec HerWay = Her && Her->bVel ? Vec(Her->Vel.X, Her->Vel.Y, 0.0) : Vec();
 		const Vec WindL(Wind.X, Wind.Y, 0.0);
 		int Laid = 0;
+		int Sheets = 0;
 		double LastDown = Now;
 		for (int I = 0; I < N; ++I)
 		{
@@ -221,7 +222,7 @@
 			Bit S;
 			S.Form = Bit::Shape::Flat;
 			S.Born = DownAt;
-			S.From = Vec(Down_.X, Down_.Y, DeckZ + 0.08);
+			S.From = Vec(Down_.X, Down_.Y, DeckZ + 0.15); // (a hand's breadth over her deck, so it never cuts into it)
 			S.Vel = Way * SlideU;
 			S.Drag = 1.2;
 			S.Life = Settle * LifeU;
@@ -235,8 +236,8 @@
 			S.Alpha = Alpha * ThickU;
 			S.FadeIn = 0.05;
 			S.Hold = 0.3;
-			S.Heart = 0.6;
-			S.Inner = 0.3;
+			S.Heart = 0.45;
+			S.Inner = 0.15; // (soft to its rim: where it meets her deck it thins away, no hard line)
 			S.Rim = 0.0;
 			S.Rough = 0.3;
 			S.ShadeK = 0.0;
@@ -256,29 +257,34 @@
 			}
 			Bits.push_back(S);
 			++Laid;
-			if (I % 2 == 0)
+			if (Sheets++ % 4 == 0)
 			{
-				// (and a low burst of spray thrown back up off the deck where it struck)
+				// (and, with one sheet in four, a low flat burst of spray thrown off the deck where it struck: a flattened
+				// mound standing on her deck, drawn out along it, at most 0.4 as high as it is wide, never a round dome)
 				Bit Y;
+				Y.Form = Bit::Shape::Upright;
 				Y.Born = DownAt;
-				Y.From = Vec(Down_.X, Down_.Y, DeckZ + 0.3);
+				Y.From = Vec(Down_.X, Down_.Y, DeckZ + 0.15);
 				const double Ya = D.Bell();
-				const double Yb = D.U(1.5, 3.5);
+				const double Yb = D.U(0.3, 0.9);
 				Y.Vel = Side * (Ya * 1.5) + ZUp * Yb + Way * 1.0 + HerWay;
 				Y.Drag = 2.5;
 				Y.Gravity = 4.0;
 				Y.Windage = 0.5;
-				Y.Life = D.U(0.6, 1.1);
+				Y.Life = D.U(0.6, 0.9);
 				Y.R0 = PieceR * 0.4;
 				Y.R1 = PieceR * D.U(0.8, 1.2);
 				Y.Grow = 0.4;
+				Y.Flatten = D.U(0.25, 0.4);
+				Y.Stretch = D.U(1.6, 2.4);
+				Y.Along = Her ? Her->Pose.Fore : Side;
 				Y.Col = WaterCol;
 				Y.Col2 = FoamCol;
-				Y.Alpha = Alpha * 0.6;
+				Y.Alpha = 0.5;
 				Y.FadeIn = 0.03;
 				Y.Hold = 0.2;
-				Y.Heart = 0.6;
-				Y.Inner = 0.5;
+				Y.Heart = 0.45;
+				Y.Inner = 0.3;
 				Y.Rim = 0.0;
 				Y.ShadeK = 1.0;
 				Y.ShadowCol = Shade;

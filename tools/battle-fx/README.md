@@ -2143,6 +2143,10 @@ in `/mnt/project-files/effects-r2/seam/sea/` (README there: every call letter fo
   - The wind's drift is aimed for: an offshore wind of 8 m/s still lands every lump on her deck.
   - Each leaves a sheet (`sheet_r` 0.10) that drains in `life` (5) s, laid in her frame when she is ridden, so it
     goes with her at speed. A lump over the sea where she has steamed past falls on to the sea and lays no sheet.
+  - Sheets lie 0.15 m over her deck and are soft to their rim, so no hard line shows where one meets the deck. One
+    sheet in four throws a burst of spray: a flat mound (`Upright`, `Flatten` 0.25 to 0.4, drawn out 1.6 to 2.4 times
+    along her), alpha 0.5, gone in 0.6 to 0.9 s. The look review of 27 November saw round bursts on one sheet in two
+    as a row of snowballs on her deck from 600 m.
   - At most `most` (2) drenches falling on a ship. A 16-inch: 70 lumps (`puffs`, `piece_r` 0.06, `alpha` 0.95), 175
     pieces, the last gone 14.8 s after the shell. Nothing when her edge is out of reach.
 - **DeckWash** (items 9 and 10, row `sea_splash.runoff`; switches `-TheaterSeaDrench=1`, `-TheaterSeaAwash=1`).
