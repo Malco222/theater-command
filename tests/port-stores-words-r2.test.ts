@@ -1329,6 +1329,63 @@ describe('03:13Z, item 2: a crew lost in battle, the count on the rule\'s own cl
     expect([record.length, record[0].endsWith(':UK:16:1:ESP'), bare]).toEqual([1, true, 18]);
   });
 
+  it('the UI director\'s 12:24Z, item 6: Spain at war from her March, the ring closed as Britain\'s April opens, and her attack from Cadiz in her April destroys the crew while the ring\'s record stands; her peace in May. The record of the crew is kept through the pocket, so that every line counts April as fed, March to July', () => {
+    const { g, gib, ninth, crew } = gibCrewed('UK');
+    const rows: unknown[] = [], ring: unknown[] = [];
+    let record: string[] = [];
+    for (let t = 17; ; t++) {
+      const h0 = g.headlines.length;
+      g.turn = t;
+      phase(g, 'ITA');
+      phase(g, 'UK');
+      const stood = g.flags[`pkt:${gib}`] !== undefined;
+      if (t === 19) declareWar(g, 'ESP', 'UK');
+      if (t >= 19) phase(g, 'ESP');
+      if (t === 20) {
+        // (The battle while the ring's record stands.)
+        expect(g.flags[`pkt:${gib}`]).toBe(20);
+        crewBeaten(g, gib, crew, 'ESP');
+        record = Object.keys(g.flags).filter((k) => k.startsWith('portCrew:')).map((k) => `${k}=${g.flags[k]}`);
+      }
+      if (t === 21) expect(signPeace(g, 'ESP', 'UK')).toBe(true);
+      // (Whether the ring's record stood at Britain's reckoning, and as his card is read, after Spain's month.)
+      ring.push([t, stood, g.flags[`pkt:${gib}`] !== undefined]);
+      rows.push([t, ninth.supplied, Math.round(ninth.org * 100) / 100, ninth.dead, ours(g, h0), texts(portCardLines(g, gib, 'UK')), ninth.dead ? null : portCorpsLine(g, ninth)]);
+      if (ninth.dead) break;
+    }
+    // (The ring closes as Britain's April opens, with the crew's 16 months to run, past the port's window; the battle in
+    // Spain's April opens a siege, which ends the ring's record (siege.ts invest), though no army stays round the town;
+    // the siege raised, the ring closes again as Britain's May opens, and goes at Britain's June, after Spain's peace in
+    // her May.)
+    expect(ring).toEqual([[17, false, false], [18, false, false], [19, false, false], [20, true, false], [21, true, true], [22, false, false], [23, false, false]]);
+    const BY = (hungry: string, lost: string): string[] => [`${HELD_G} Unless the sea is opened, the garrison is hungry by ${hungry} and lost by the start of ${lost}.`, `Living on Gibraltar's stores: hungry by ${hungry}, and lost by the start of ${lost} unless ships get through.`];
+    expect(rows).toEqual([
+      BEFORE(17), BEFORE(18),
+      // March, read after Spain's month, with her at war: the ring is due to close as Britain's April opens, with no
+      // record yet, so the card and the corps line take the "by" form (the UI director's 12:24Z, item 3), the crew
+      // living: its 16 months, the latest at both ends.
+      [19, true, 1, false, [], [BY('May 1942', 'July 1942')[0], REMEDY_G('at least through April 1942')], BY('May 1942', 'July 1942')[1]],
+      // April, read after the battle: Britain's draw, before it, fed the 9th on the crew's stores for April, and the
+      // record of the crew, written while the ring's record stood, keeps that count. No ring's record stands now, and
+      // Spain is still at war beside the port: due again, the "by" form, hungry by May and lost by the start of July,
+      // as it is. (Without the record, the count read the port's own two from December: "the port's stores are spent"
+      // and "Hungry: ..." of a garrison fed this month.)
+      [20, true, 1, false, [], [BY('May', 'July')[0], REMEDY_G('through June')], BY('May', 'July')[1]],
+      // May: the ring closes again as Britain's month opens, its stores to run past the port's window, spent in April:
+      // the port's clock is the sooner, and the port keeps every line on it (item 1). The stores spent are told in the
+      // month they are. (Without the record, they were never told.)
+      [21, false, 0.6, false, [NEWS_SPENT('July')], [SPENT_G('July'), REMEDY_G('through July')], HUNGRY_G('July')],
+      // June: Spain's peace has broken the ring, the sea still shut: the same clock.
+      [22, false, 0.2, false, [], [SPENT_G('July'), REMEDY_G('through August')], HUNGRY_G('July')],
+      // Struck off as July opens, the month every line named.
+      [23, false, -0.2, true, ['Cut off in Gibraltar, the 9th Corps has starved and is lost.'], [], null],
+    ]);
+    // The record, written as the crew is struck off with the ring's record standing (portCrewGone reads every port of
+    // the kind whose holder is at war, a pocket or not): the last draw that saw it living was Spain's of April, after
+    // Britain's.
+    expect(record).toEqual([`portCrew:${gib}:${crew.id}:UK:16:1:ESP=20`]);
+  });
+
   it('the shutting side, seeing Gibraltar whole: its count follows the same clock, "is hungry by May and lost by the start of July" once the crew is lost in May, and so it is', () => {
     const { g, gib, ninth, crew } = gibCrewed('ITA', true);
     g.flags.nofog = 1;
