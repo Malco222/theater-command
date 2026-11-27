@@ -67,9 +67,14 @@ export function diaryEntry(g: Game): string | null {
   const win = all.filter((x) => x.won).sort((a, b) => b.theirs - a.theirs || a.r.id - b.r.id)[0];
   const loss = all.filter((x) => !x.won).sort((a, b) => b.ours - a.ours || a.r.id - b.r.id)[0];
   const words = (x: Fought): Record<string, string> => ({ place: x.r.regionName, unit: x.unit, adj: x.foe, theirs: round(x.theirs), ours: round(x.ours), prisoners: round(x.prisoners) });
-  // (A win with no prisoners is not told by the words that count them.)
-  const winText = win ? fill(pick(g, 'win', win.prisoners > 0 ? DIARY.win : DIARY.win.filter((t) => !t.includes('{prisoners}'))), words(win)) : pick(g, 'nowin', DIARY.noWin);
-  const lossText = loss ? fill(pick(g, 'loss', DIARY.loss), words(loss)) : pick(g, 'noloss', DIARY.noLoss);
+  // (A line that names a number is used only where that number comes to at least one 'round': a win with no prisoners
+  // is not told by the words that count them, nor a fight that cost almost nothing by the words that count the cost.)
+  const fit = (x: Fought, list: string[]): string[] => {
+    const left = list.filter((t) => (['theirs', 'ours', 'prisoners'] as const).every((k) => !t.includes(`{${k}}`) || x[k] >= DIARY.round / 2));
+    return left.length ? left : list;
+  };
+  const winText = win ? fill(pick(g, 'win', fit(win, DIARY.win)), words(win)) : pick(g, 'nowin', DIARY.noWin);
+  const lossText = loss ? fill(pick(g, 'loss', fit(loss, DIARY.loss)), words(loss)) : pick(g, 'noloss', DIARY.noLoss);
   return `${head} ${winText} ${lossText}`;
 }
 

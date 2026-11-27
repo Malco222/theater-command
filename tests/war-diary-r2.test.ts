@@ -63,6 +63,24 @@ describe('the war diary (release 2)', () => {
     expect(DIARY.noWin.some((t) => diaryEntry(g)!.includes(t))).toBe(true);
   });
 
+  it('names the enemy as an army, and counts only what was there to count', () => {
+    // (The Mac stills' staged war, 27 Nov 14:05Z: "saw the Belgian off" read wrong; a nation's adjective is not its men.)
+    const g = war();
+    const seen = new Set<string>();
+    for (let t = 2; t <= 60; t++) {
+      g.turn = t;
+      g.reports.length = 0;
+      // A win that cost us nothing and took no prisoners, and a loss that cost us almost nothing.
+      g.reports.push(report(g, 'Lodz', 'Decisive victory', [unit('XIV Corps', 'GER', 40000, 0)], [unit('Army Lodz', 'POL', 30000, 9000)]));
+      g.reports.push(report(g, 'Bzura', 'Decisive victory', [unit('Army Pomorze', 'POL', 30000, 5000)], [unit('X Corps', 'GER', 25000, 20)]));
+      const text = diaryEntry(g)!;
+      seen.add(text);
+      expect(text).not.toMatch(/the Polish (?!army)/);
+      expect(text).not.toMatch(/of ours|prisoners|some 100 /);
+    }
+    expect(seen.size).toBeGreaterThan(3);
+  });
+
   it('is set down once a month, told in the news, and throws none of the war\'s dice', () => {
     const g = war();
     setDiary(g, true);
