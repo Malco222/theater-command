@@ -28,7 +28,7 @@ import {
   orderCash, orderDrafts, orderSchool, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway, orderCrews, orderHero,
   invasions, previewDeclare, crossingStaffWord, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
   armyAt, corpsDetail, moodOf, prize, prizesNear, townIn, towns, attackOutlook, openingForce, corpsKnownAs, knowledgeOf,
-  fieldworksLeft, foldChoicesAt, orderFold, orderProbe, orderSwap, softenOptions, swapChoices,
+  fieldworksLeft, foldChoicesAt, orderFold, orderProbe, orderSwap, softenOptions, swapChoices, swapWhy,
   joinOffers, jointForce, lending, orderJoin, orderJoinAll, orderSendBack,
   fleetOptions, fleetView, lanesToGuard, orderBombard, orderEscort, orderMerge, orderSplit, previewBombard, whyNotSplit,
   footingOf, orderFootingTo, cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
@@ -3774,6 +3774,8 @@ function swapCard(corpsId: number, target: number): string {
   const c = g.corps.find((x) => x.id === corpsId);
   const r = g.regions[target];
   const vs = c ? swapChoices(g, c, target) : [];
+  // (With nobody there to change places with on an island for its room, the line for the corps whose swap leaves the
+  // most room: turn.ts swapWhy, the UI director, 00:19Z, 27 November 2026, U4.)
   // (An island of the Pacific is full at its own room, and the card says that: "Singapore has room for 5 divisions,
   // about 75,000 men.")
   const full = roomSays(g, r);
@@ -3781,7 +3783,7 @@ function swapCard(corpsId: number, target: number): string {
   const state = (x: Corps): string => `${num(men(x))} men at ${pct(x.str)} of its strength, ${x.dug ? `dug in, ${worksTag(x)}` : 'not dug in'}`;
   const rows = c ? vs.map((b) => `<div class="foldopt"><span class="grow"><b class="foldkeep">${esc(b.name)}</b><small>${esc(state(b))}. It marches to ${esc(g.regions[c.reg].name)}${c.dug ? ` and takes over the fieldworks ${esc(c.name)} stands in` : ''}${b.dug ? `; ${esc(c.name)} takes over its fieldworks` : ''}.</small></span><button class="btn small go" data-act="swap" data-a="${c.id}" data-b="${b.id}" title="${esc(c.name)} and ${esc(b.name)} change places.">Change places</button></div>`).join('') : '';
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${c ? `${esc(g.regions[c.reg].name)} and ${esc(r.name)}` : esc(r.name)} · ${date(g.turn)}</div><h2>Change places</h2></header>
-    <div class="body"><p class="sub" style="margin:0 0 10px">${full ? `${esc(full)} ${c ? esc(c.name) : 'The corps'} cannot march in beside them.` : `${esc(r.name)} holds every corps its roads will carry, so ${c ? esc(c.name) : 'the corps'} cannot march in beside them.`} It can change places with one of them in a single order${c ? ` (${esc(state(c))})` : ''}. Both march at the same moment, each spends the moves of its march, and each takes over the fieldworks the other leaves, so a worn corps comes out of the line and a fresh one goes in with nothing lost.</p>${rows || '<div class="empty">No corps there has the moves left to change places this month.</div>'}</div>
+    <div class="body"><p class="sub" style="margin:0 0 10px">${full ? `${esc(full)} ${c ? esc(c.name) : 'The corps'} cannot march in beside them.` : `${esc(r.name)} holds every corps its roads will carry, so ${c ? esc(c.name) : 'the corps'} cannot march in beside them.`} It can change places with one of them in a single order${c ? ` (${esc(state(c))})` : ''}. Both march at the same moment, each spends the moves of its march, and each takes over the fieldworks the other leaves, so a worn corps comes out of the line and a fresh one goes in with nothing lost.</p>${rows || `<div class="empty">${esc((c ? swapWhy(g, c, target) : null) ?? 'No corps there has the moves left to change places this month.')}</div>`}</div>
     <footer><button class="btn" data-act="close">Leave them where they are</button></footer>`;
 }
 

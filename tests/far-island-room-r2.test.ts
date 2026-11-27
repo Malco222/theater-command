@@ -11,7 +11,7 @@ import '../unreal/TheaterCommand/Rules/campaign-bridge';
 import { fits, islandOf, roomForDivision, roomRefusal, stayBehind, swapRefusal } from '../src/campaign/islands';
 import { garrison } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
-import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
+import { beginHuman, humanUp, stepAI, swapWhy } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
 import { chartDist } from '../src/campaign/wrap';
 import setup from '../data/campaign/setup-1939.json';
@@ -227,6 +227,30 @@ describe('U3: a march order reads the march sentence in 3D as on the page; the s
     expect(TC().move([group.id], pearl.id).note).toBe(march);
     // Asked to change places with the corps in the field, the swap's own sentence (game.ts whyNoSwap).
     expect(whyNoSwap(g, group, field)).toBe('Pearl Harbor has room for 2 divisions, about 30,000 men, and 11,000 of yours stay there after the swap: only 19,000 more can go, and 24th Division Group has 30,000.');
+  }, 300000);
+});
+
+describe('U4: the swap line names the corps he picked, and where the game picks, the one whose swap leaves the most room', () => {
+  it('Formosa with 600 and 20,000 of his there, either put down first, and the 9th Corps of 44,800 at Taihoku', () => {
+    for (const first of ['tiny', 'big']) {
+      const g = war('JAP');
+      const formosa = g.byName['Formosa'], taihoku = g.byName['Taihoku'];
+      clear(g, formosa);
+      const put = { tiny: () => corps(g, 'JAP', 'Tiny Guard', formosa, 1, 600 / 15000), big: () => corps(g, 'JAP', 'Goes Out Too', formosa, 2, 20000 / 30000) };
+      const a = put[first as 'tiny' | 'big'](), b = put[first === 'tiny' ? 'big' : 'tiny']();
+      const [tiny, big] = first === 'tiny' ? [a, b] : [b, a];
+      const ninth = corps(g, 'JAP', '9th Corps', taihoku, 3, 44800 / 45000);
+      const withTiny = 'Formosa has room for 3 divisions, about 45,000 men, and 20,000 of yours stay there after the swap: only 25,000 more can go, and 9th Corps has 44,800.';
+      const withBig = 'Formosa has room for 3 divisions, about 45,000 men, and 600 of yours stay there after the swap: only 44,400 more can go, and 9th Corps has 44,800.';
+      // He picked the corps: the line is that swap's.
+      expect(swapWhy(g, ninth, formosa.id, tiny), `${first} first, Tiny Guard picked`).toBe(withTiny);
+      expect(swapWhy(g, ninth, formosa.id, big), `${first} first, Goes Out Too picked`).toBe(withBig);
+      // The game picks: the swap that leaves the most room, whichever was put down first.
+      expect(swapWhy(g, ninth, formosa.id), `${first} first, the game picks`).toBe(withBig);
+      // A swap that is open has no line: a corps of 40,000 changes places with the 20,000 (600 stay).
+      ninth.str = 40000 / 45000;
+      expect(swapWhy(g, ninth, formosa.id)).toBeNull();
+    }
   }, 300000);
 });
 
