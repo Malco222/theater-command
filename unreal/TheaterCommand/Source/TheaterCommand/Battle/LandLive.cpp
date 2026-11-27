@@ -140,8 +140,8 @@ namespace
 		// A tag that would cover another steps up on a longer stalk, twice at most, then folds to its kind sign; nothing
 		// is hidden; a folded tag opens under the pointer (Battle/LandTagPlace.h). Looks only. Off until the Mac and
 		// the UI director pass it; -TheaterLandRuleTagRoom turns it on for a run. The rules do not read the key: the
-		// screen does (LandBattleScreen.cpp). Name and line are the ground thread's until she sets her own.)
-		{ TEXT("tagroom"), TEXT("Unit tags never cover one another"), TEXT("Where unit tags would print over each other, the farther one steps up on a longer stalk, and past two steps folds to a small sign that opens under the pointer. Off: every tag hangs over its unit, as before. Looks only: no result changes."), TEXT("TheaterLandNoTagRoom"), false, TEXT("TheaterLandRuleTagRoom") },
+		// screen does (LandBattleScreen.cpp). Name and line are hers, 17:56Z.)
+		{ TEXT("tagroom"), TEXT("Unit tags make room for each other"), TEXT("Where unit tags would run together, some rise on longer stalks, and where there is no room they fold to the unit's sign, which opens in full under the pointer. Off: tags are drawn where they stand, and may cover one another."), TEXT("TheaterLandNoTagRoom"), false, TEXT("TheaterLandRuleTagRoom") },
 		// (A free camera in battle, release 2: Brian, 26 November 2026 03:45Z, "I want to be able to see the ground level
 		// view but zoomed out so I can see it from a higher angle"; 04:13Z, "i want the camera angle to be like god mode
 		// ... a free camera mode where i can move where every i want"; 04:14Z, "if i click a specific unit it locks in on

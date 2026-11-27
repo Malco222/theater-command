@@ -1369,6 +1369,8 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	{
 		int32 At = 0;
 		bool bShort = false;
+		/** (false: a short mark that found no room anywhere, drawn where it is covered least, beneath the rest) */
+		bool bRoom = true;
 		double Rise = 0.0;
 		double BoxX = 0.0, BoxY = 0.0;
 	};
@@ -1396,8 +1398,9 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			Ask.Far = D.Far;
 			// (everything it draws: its frame where it is in hand, else its paper and its strength under it)
 			Ask.Full = D.Its->bChosen ? LandTagPlace::Box{ D.Left - 2.0, D.Upper - 2.0, D.PaperW + 4.0, TagH + 8.0 } : LandTagPlace::Box{ D.Left, D.Upper, D.PaperW, TagH + 3.0 };
-			Ask.ShortW = ShortW;
-			Ask.ShortH = ShortH;
+			// (its short mark likewise: in hand its frame stands 2 px round its paper and 3 px under its strength)
+			Ask.ShortW = ShortW + (D.Its->bChosen ? 4.0 : 0.0);
+			Ask.ShortH = ShortH + (D.Its->bChosen ? 5.0 : 0.0);
 			Ask.StalkX = FMath::Clamp(D.Top.X, 8.0 + ShortW * 0.5, FMath::Max(8.0 + ShortW * 0.5, Size.X - 8.0 - ShortW * 0.5));
 			Asked.push_back(Ask);
 		}
@@ -1409,6 +1412,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			FTagPut Put;
 			Put.At = static_cast<int32>(Got.Index);
 			Put.bShort = Got.bShort;
+			Put.bRoom = Got.bRoom;
 			Put.Rise = Got.bShort ? 0.0 : Got.Rise;
 			Put.BoxX = Got.Drawn.X;
 			Put.BoxY = Got.Drawn.Y;
@@ -1426,6 +1430,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		}
 	}
 	const FTagHung* Opened = nullptr;
+	double OpenedX = 0.0, OpenedY = 0.0;
 	for (const FTagPut& Put : Puts)
 	{
 		const FTagHung& D = Hung[Put.At];
@@ -1434,18 +1439,34 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			Lines(D.Ring, BrightBrass, 2.0f, 3);
 		}
 		const FLinearColor Side = D.bFoe ? Slate : Brass;
-		// (what is drawn of it: the full tag where it hangs, or its short mark)
-		const double DrawnX = Put.bShort ? Put.BoxX : D.Left, DrawnY = Put.bShort ? Put.BoxY : D.Upper + Put.Rise;
+		// (what is drawn of it: the full tag where it hangs, or its short mark's paper, inside its frame where in hand)
+		const double Rim = Put.bShort && D.Its->bChosen ? 2.0 : 0.0;
+		const double DrawnX = Put.bShort ? Put.BoxX + Rim : D.Left, DrawnY = Put.bShort ? Put.BoxY + Rim : D.Upper + Put.Rise;
 		const double DrawnW = Put.bShort ? ShortW : D.PaperW, DrawnH = Put.bShort ? ShortPaper : TagH;
 		if (!D.bPinned)
 		{
-			Lines({ D.Foot, D.Top }, Side * FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), 1.5f, 3);
-			Fill(D.Foot.X - 2.0, D.Foot.Y - 2.0, 4.0, 4.0, Side, 3);
-			// (stepped up, or folded above its place: the longer stalk, straight down to its block)
+			// Its stalk, so the eye can follow it home (the UI director, 27 November 2026 17:56Z: a short mark off its own
+			// foot keeps a stalk straight to its block, as a stepped tag does). At its own place: its own stalk, as ever.
+			// Higher: the longer stalk on from its top. Lower: the stalk from its block's foot to it, from under or above.
+			const FLinearColor StalkInk = Side * FLinearColor(1.0f, 1.0f, 1.0f, 0.8f);
 			const double Under = DrawnY + DrawnH + 3.0;
+			const double StalkX = FMath::Clamp(D.Top.X, DrawnX, DrawnX + DrawnW);
+			if (Under <= D.Top.Y + 4.0)
+			{
+				Lines({ D.Foot, D.Top }, StalkInk, 1.5f, 3);
+			}
+			else if (Under < D.Foot.Y - 0.5)
+			{
+				Lines({ D.Foot, FVector2D(StalkX, Under) }, StalkInk, 1.5f, 3);
+			}
+			else if (DrawnY > D.Foot.Y + 0.5)
+			{
+				Lines({ D.Foot, FVector2D(StalkX, DrawnY) }, StalkInk, 1.5f, 3);
+			}
+			Fill(D.Foot.X - 2.0, D.Foot.Y - 2.0, 4.0, 4.0, Side, 3);
 			if (Under < D.Top.Y - 0.5)
 			{
-				Lines({ D.Top, FVector2D(D.Top.X, Under) }, Side * FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), 1.5f, 3);
+				Lines({ D.Top, FVector2D(StalkX, Under) }, StalkInk, 1.5f, 3);
 			}
 		}
 		else
@@ -1467,34 +1488,42 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		else
 		{
 			// The short mark: its kind sign alone on its side's paper (an enemy not yet made out says "?"), in hand its
-			// frame, and its strength under it. It opens in full under the pointer, below.
+			// frame, and its strength under it. It opens in full under the pointer, below. One that found no room
+			// anywhere is drawn three layers down, beneath every tag and mark placed before it, so they stay whole (the
+			// UI director, 17:56Z): its frame with the ground prints, its paper with the routes, its sign with the stalks.
+			const int32 Low = Put.bRoom ? 0 : -3;
 			if (D.Its->bChosen)
 			{
-				Fill(DrawnX - 2.0, DrawnY - 2.0, DrawnW + 4.0, DrawnH + 4.0 + 4.0, BrightBrass, 4);
+				Fill(DrawnX - 2.0, DrawnY - 2.0, DrawnW + 4.0, DrawnH + 4.0 + 4.0, BrightBrass, 4 + Low);
 			}
-			Fill(DrawnX, DrawnY, DrawnW, DrawnH, D.bFoe ? Slate : Paper, 5);
+			Fill(DrawnX, DrawnY, DrawnW, DrawnH, D.bFoe ? Slate : Paper, 5 + Low);
 			if (!D.Its->bKnown)
 			{
-				Write(D.Name, DrawnX + (DrawnW - D.NameW) * 0.5, DrawnY + 1.0, TagFace, Cream, 6);
+				Write(D.Name, DrawnX + (DrawnW - D.NameW) * 0.5, DrawnY + 1.0, TagFace, Cream, 6 + Low);
 			}
 			else
 			{
-				KitSign(KindSign(*D.Its), DrawnX + 2.5, DrawnY + 1.5, 16.0, D.bFoe ? Cream : DeskInk, 6);
-				Fill(DrawnX, DrawnY + DrawnH, DrawnW, 3.0, Leather, 5);
-				Fill(DrawnX, DrawnY + DrawnH, DrawnW * FMath::Clamp(D.Its->Str, 0.0, 1.0), 3.0, D.bFoe ? Cream : D.Its->Mor < 0.4 ? Amber : Brass, 6);
+				KitSign(KindSign(*D.Its), DrawnX + 2.5, DrawnY + 1.5, 16.0, D.bFoe ? Cream : DeskInk, 6 + Low);
+				Fill(DrawnX, DrawnY + DrawnH, DrawnW, 3.0, Leather, 5 + Low);
+				Fill(DrawnX, DrawnY + DrawnH, DrawnW * FMath::Clamp(D.Its->Str, 0.0, 1.0), 3.0, D.bFoe ? Cream : D.Its->Mor < 0.4 ? Amber : Brass, 6 + Low);
 			}
 			if (D.Block == HoverBlock)
 			{
+				// (opened where the mark is, its paper's top on the mark's and centred on it, kept inside the field)
 				Opened = &D;
+				OpenedX = FMath::Clamp(DrawnX + DrawnW * 0.5 - D.PaperW * 0.5, 8.0, FMath::Max(8.0, Size.X - D.PaperW - 8.0));
+				OpenedY = FMath::Clamp(DrawnY, FieldTop, FMath::Max(FieldTop, FieldBottom - TagH - 4.0));
 			}
 		}
 		TagBoxes.Add({ FSlateRect(static_cast<float>(DrawnX - 2.0), static_cast<float>(DrawnY - 2.0), static_cast<float>(DrawnX + DrawnW + 2.0), static_cast<float>(DrawnY + DrawnH + 5.0)), D.Block });
 	}
-	// A folded tag under the pointer opens in full at its own place, over the rest; a click on it is a click on the tag.
+	// A folded tag under the pointer opens in full where its mark is, over the rest (the UI director, 17:56Z: opened at
+	// its unstepped place it would leave the pointer, shut and open again). It stays open while the pointer is on the
+	// mark or on the opened tag: both are its boxes, and the opened one is found first. A click on it is a click on the tag.
 	if (Opened)
 	{
-		DrawTag(*Opened, Opened->Left, Opened->Upper, 8);
-		TagBoxes.Add({ FSlateRect(static_cast<float>(Opened->Left - 2.0), static_cast<float>(Opened->Upper - 2.0), static_cast<float>(Opened->Left + Opened->PaperW + 2.0), static_cast<float>(Opened->Upper + TagH + 5.0)), Opened->Block });
+		DrawTag(*Opened, OpenedX, OpenedY, 8);
+		TagBoxes.Add({ FSlateRect(static_cast<float>(OpenedX - 2.0), static_cast<float>(OpenedY - 2.0), static_cast<float>(OpenedX + Opened->PaperW + 2.0), static_cast<float>(OpenedY + TagH + 5.0)), Opened->Block });
 	}
 
 	// ---- The corps coming up from next door (neighbours join the fight, release 2): who, where and how soon. ----

@@ -20,8 +20,10 @@
  *     two steps. (A tag whose own place is pressed against the top of the field steps down instead.)
  *  4. Past that it folds to its short mark, the kind sign alone on its side's paper. The short mark looks for room at
  *     its own foot, then by turns above and below it: one and two steps up, one down, three up, two down, four up,
- *     three down, five up (my reading where she names no place for it: with these nine, sixty tags 8 px apart in one
- *     row all find room; with the first five, a third of them did not).
+ *     three down, five up (the ground thread's reading, passed by her 17:56Z on two conditions the screen keeps: a
+ *     short mark off its own foot keeps a stalk straight to its block, and the mark of rule 5 is drawn beneath those
+ *     placed before it. With these nine, sixty tags 8 px apart in one row all find room; with the first five, a third
+ *     of them did not).
  *  5. Nothing is ever hidden: a tag with no room at all is drawn as its short mark where it is covered least.
  *  6. Nothing hops: a tag leaves its place at once only when that place is covered; it comes back to a better one
  *     only when a better one has been clear for 0.3 s. A step up or down is eased over 0.15 s where the way between
