@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2f28ac449 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6ca8a0f73 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -44232,6 +44232,23 @@
     if (sight2 >= SIGHT.glimpse) return !r.units.some((c) => !c.dead && allied(g2, c.nat, r.ctrl));
     return false;
   }
+  function filledByOthers(g2, r) {
+    if (trueReach(g2)) return false;
+    const lanes2 = /* @__PURE__ */ new Map();
+    const reaches2 = (nat) => {
+      if (!lanes2.has(nat)) {
+        const n = g2.nations[nat];
+        lanes2.set(nat, !!n && (n.seaSupply || n.sealift > 0) && ((o) => r.seas.some((z) => o[z] === 1))(openSeas(g2, nat)));
+      }
+      return lanes2.get(nat);
+    };
+    const shipping3 = Object.values(g2.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
+    for (const id of new Set(g2.corps.map((c) => c.nat))) {
+      if (!allied(g2, id, r.ctrl)) continue;
+      if (reaches2(id) || r.theatre >= 0 && shipping3.some((a) => a !== id && allied(g2, id, a) && reaches2(a))) return true;
+    }
+    return false;
+  }
   function fleetFor(g2, nat, seas) {
     return g2.fleets.some((f) => f.nat === nat && shipCount(f.ships) > 0 && !inPassage(f) && f.attacked !== g2.turn && fleetReach(g2, f).some((z) => seas.includes(z)));
   }
@@ -44245,6 +44262,7 @@
     if (!ours) {
       if (!viewer || !g2.nations[viewer] || !atWar(g2, viewer, holder)) return null;
       if (shut.length !== r.seas.length || !shut.every((s) => s.by.some((b) => allied(g2, b.nat, viewer)))) return null;
+      if (filledByOthers(g2, r)) return null;
       const starts2 = r.seas.map((z) => g2.flags[shutKey(z, holder)]);
       const last2 = starts2.some((x) => x === void 0 || x === WATCHED_OPEN) ? null : Math.max(...starts2);
       const since = last2 === 0 ? null : last2;
@@ -44276,18 +44294,21 @@
     const flag3 = g2.flags[`stores:${r.id}`];
     const his = flag3 !== void 0 && (!trueReach(g2) || keptStoresHis(g2, r));
     const last = his ? flag3 : null;
+    const pocket = siegeRules(g2) && pocketNat(g2, r) === holder;
+    const dry = pocket && pocketDry(g2, r, holder);
     const crews = last !== null ? crewsOf(g2, r, last, uncharged) : [];
     const feeds = /* @__PURE__ */ new Map();
     const fedFor = (nat) => {
-      if (!feeds.has(nat)) feeds.set(nat, last === null ? null : fedTo(g2, crews, last, nat));
+      if (!feeds.has(nat)) feeds.set(nat, last === null || dry && nat === holder ? null : fedTo(g2, crews, last, nat));
       return feeds.get(nat);
     };
     const corps = garrisonOf(g2, r);
     const counts = corps.map((c) => {
       const fed2 = fedFor(c.nat);
-      return { id: c.id, fed: fed2, lost: lostMonth(g2, c, fed2, uncharged), soonest: lostMonth(g2, c, fed2, uncharged, true) };
+      const worst = lostMonth(g2, c, fed2, uncharged, true);
+      return { id: c.id, fed: fed2, lost: lostMonth(g2, c, fed2, uncharged), soonest: pocket && !dry && c.nat === holder ? Math.min(worst, lostMonth(g2, c, null, uncharged, true)) : worst };
     });
-    const feedsTo = last === null ? null : counts.length ? Math.min(...counts.map((x) => x.fed)) : fedFor(holder);
+    const feedsTo = !counts.length ? fedFor(holder) : counts.some((x) => x.fed === null) ? null : Math.min(...counts.map((x) => x.fed));
     const state = last === g2.turn ? "filled" : feedsTo !== null && feedsTo >= g2.turn ? "stores" : "hungry";
     const lost = counts.length ? Math.min(...counts.map((x) => x.lost)) : null;
     return {
