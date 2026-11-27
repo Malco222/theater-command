@@ -211,11 +211,6 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, 
     if sway:
         tinted = times(m, tinted, wind_sheen(m, -900, 3200, press_floored=press_twin), 1000, -950)
         to_property(wind_sway(m, -900, 3600, press_twin=press_twin, press_upright=press_upright), "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
-        # (corn and grass laid over by a blast, on trial "lodged", lit as a mat facing the sky; told and left out if it
-        # fails; only in a build made with TC_LODGED=1, see LODGED: without it the material is node for node as before)
-        lying = windy(name + " (lying normal)", lambda: lying_normal(m, -900, 4400)) if LODGED else None
-        if lying is not None:
-            to_property(lying, "", unreal.MaterialProperty.MP_NORMAL)
     to_property(tinted, "", unreal.MaterialProperty.MP_BASE_COLOR)
     to_property(times(m, chipped, 0.85, 750, -700), "", unreal.MaterialProperty.MP_METALLIC)
     # (The art director, 19 November 2026: a rifleman seen with the sun behind him stood darker on his shaded side
@@ -256,7 +251,17 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, 
     connect(bump, "RGB", tooth, "B")
     connect(scalar(m, "Tooth", 0.35, -850, 1250), "", tooth, "Alpha")
     # (a posed man: his facing as posed, in the world; the men's ink has no tooth)
-    to_property(posed_facing if crowd else tooth, "", unreal.MaterialProperty.MP_NORMAL)
+    facing_out = posed_facing if crowd else tooth
+    if sway and LODGED:
+        # (corn and grass laid over by a blast, on trial "lodged", lit as a mat facing the sky: the tooth bent toward
+        # the sky as the thing lies, and exactly the tooth for all that stands. Made here, after the tooth, and fed to
+        # the Normal in its place: the Normal takes one feed, and the last one given wins, so a lying normal fed before
+        # the tooth was lost. Told and left out if it fails; only in a build made with TC_LODGED=1, see LODGED: without
+        # it the material is node for node as before)
+        lying = windy(name + " (lying normal)", lambda: lying_normal(m, -900, 4400, standing=tooth))
+        if lying is not None:
+            facing_out = lying
+    to_property(facing_out, "", unreal.MaterialProperty.MP_NORMAL)
 
     # (bare metal is smoother than paint: the lamp glints on the chips)
     to_property(lerp(m, scalar(m, "Roughness", 0.9, -450, 200), 0.34, chipped, -250, 200), "", unreal.MaterialProperty.MP_ROUGHNESS)
@@ -2092,12 +2097,14 @@ def wind_sway(m, x, y, leaves=False, press_twin=False, press_upright=False):
     return offset
 
 
-def lying_normal(m, x, y):
+def lying_normal(m, x, y, standing=None):
     """The normal of a thing laid over by a blast (on trial "lodged", LandField::Placed::Lodge), in the tangent space:
     a lying mat of corn or grass faces the sky whatever way its blades' own faces turned, so its normal is bent toward
     the world's up by 0.85 x (1 - saturate((up.z - 0.5) / 0.485)), up the instance's own +Z turned into the world. Within
     some 10 degrees of upright (all that stands today) the share is exactly 0 and the normal exactly the mesh's own
-    (0, 0, 1), as when nothing is connected. The painter does the same (land_field_picture.cpp)."""
+    (0, 0, 1), as when nothing is connected. The painter does the same (land_field_picture.cpp).
+    standing: the material's own normal for a thing that stands, where it has one (M_LandBlades' tooth), in place of
+    the mesh's own (0, 0, 1): the lying mat is bent from that, and what stands keeps it exactly."""
     upward = node(m, unreal.MaterialExpressionTransform, x, y,
                   transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
                   transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
@@ -2110,7 +2117,7 @@ def lying_normal(m, x, y):
                transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_WORLD,
                transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_TANGENT)
     connect(node(m, unreal.MaterialExpressionConstant3Vector, x + 750, y + 150, constant=unreal.LinearColor(0.0, 0.0, 1.0, 0.0)), "", sky, "")
-    own = node(m, unreal.MaterialExpressionConstant3Vector, x + 900, y + 300, constant=unreal.LinearColor(0.0, 0.0, 1.0, 0.0))
+    own = standing if standing is not None else node(m, unreal.MaterialExpressionConstant3Vector, x + 900, y + 300, constant=unreal.LinearColor(0.0, 0.0, 1.0, 0.0))
     return lerp(m, own, sky, share, x + 1200, y + 150)
 
 
