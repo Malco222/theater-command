@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 00b041181 2026-11-27. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 59cc3a5f6 2026-11-27. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -11085,7 +11085,10 @@
      * a block by the side it now stands on is no reason: where it goes by the nearer end (that block's middle to the
      * other side of its lane, at the choice or since) and that block crosses its lane to the side chosen, the way
      * round ends there (his ruling of 27 November 2026 00:31Z: the kept end had become the further end with the
-     * pursuer beside it). No change of mind between the ends while it is kept. An end is closed where the step across leaves the field, crosses ground this block cannot,
+     * pursuer beside it). A way round by the further end is chosen with that block on that side, so that does not
+     * end it: it is held while that block is ahead, as every way round, and while the end is still open by this
+     * block's own sight; the nearer end opening later does not unseat it; and "wholly ahead" is its test at the
+     * choice only (00:52Z, 01:07Z). No change of mind between the ends while it is kept. An end is closed where the step across leaves the field, crosses ground this block cannot,
      * ends in another enemy block's ground (shares, spread()'s own reckoning) or leads through the ground of one it is
      * not against already; where its lane on from there, until it is past the block it goes round, is barred by
      * another enemy block (a pocket: in one pursuit a block went to and fro between two pursuers, the nearer end of
@@ -11115,44 +11118,47 @@
       const stands = (e2) => !!e2 && fighting2(e2) && e2.kind !== "fort";
       let R = u.round;
       const ahead2 = (e2) => (e2.x - u.x) * hx + (e2.y - u.y) * hy > 0;
-      if (R) {
-        const e2 = this.unit(R.by);
-        const lean = e2 ? (u.x - e2.x) * R.over[0] + (u.y - e2.y) * R.over[1] : 0;
-        if (lean > 0) R.near = true;
-        if (!stands(e2) || e2.hid || !ahead2(e2) || lean <= -(clear(e2) + 0.5) || R.near && lean < 0) R = u.round = void 0;
-      }
       const across = (e2, ox2, oy2) => {
         const by2 = clear(e2) + 1 - ((u.x - e2.x) * ox2 + (u.y - e2.y) * oy2);
         return [u.x + ox2 * by2, u.y + oy2 * by2];
       };
+      const face = Math.atan2(hx, hy), pace = u.w / 2;
+      const open = (e2, ox2, oy2) => {
+        const m = this.going(u), f = this.field;
+        const others = this.units.filter((o) => o !== e2 && o.side !== u.side && stands(o) && !o.hid);
+        const apartFrom = others.filter((o) => !this.shares(u, o, u.x, u.y, face));
+        const lies = (o, x, y) => this.shares(u, o, x, y, face) || this.shares(u, o, x, y, face + Math.PI / 2);
+        const [px2, py2] = across(e2, ox2, oy2);
+        if (px2 < 5 || px2 > f.w - 5 || py2 < 5 || py2 > f.h - 5) return false;
+        if (!this.bears(m, px2, py2) || !this.dry(m, u.x, u.y, px2, py2)) return false;
+        if (others.some((o) => lies(o, px2, py2))) return false;
+        const leg = dist(u.x, u.y, px2, py2);
+        for (let k = 1; pace > 0 && k * pace < leg; k++) {
+          const x = u.x + (px2 - u.x) * k * pace / leg, y = u.y + (py2 - u.y) * k * pace / leg;
+          if (apartFrom.some((o) => lies(o, x, y))) return false;
+        }
+        const on = clear(e2) - ((u.x - e2.x) * hx + (u.y - e2.y) * hy);
+        if (others.some((o) => {
+          const along = (o.x - px2) * hx + (o.y - py2) * hy, off = (o.x - px2) * nx + (o.y - py2) * ny;
+          return along > 0 && Math.hypot(off, Math.max(0, along - on)) < clear(o);
+        })) return false;
+        return true;
+      };
+      const before = (e2) => {
+        const c = Math.abs(Math.cos(e2.face - face)), sn = Math.abs(Math.sin(e2.face - face));
+        return (e2.x - u.x) * hx + (e2.y - u.y) * hy >= u.d / 2 + e2.w / 2 * sn + e2.d / 2 * c;
+      };
+      if (R) {
+        const e2 = this.unit(R.by);
+        const lean = e2 ? (u.x - e2.x) * R.over[0] + (u.y - e2.y) * R.over[1] : 0;
+        if (lean > 0) R.near = true;
+        if (!stands(e2) || e2.hid || !ahead2(e2) || lean <= -(clear(e2) + 0.5) || (R.near ? lean < 0 : !open(e2, R.over[0], R.over[1]))) R = u.round = void 0;
+      }
       if (barred !== void 0 && R?.by !== barred) {
         const e2 = this.unit(barred);
         if (stands(e2) && !e2.hid && ahead2(e2)) {
-          const m = this.going(u), f = this.field, face = Math.atan2(hx, hy), pace = u.w / 2;
-          const others = this.units.filter((o) => o !== e2 && o.side !== u.side && stands(o) && !o.hid);
-          const apartFrom = others.filter((o) => !this.shares(u, o, u.x, u.y, face));
-          const lies = (o, x, y) => this.shares(u, o, x, y, face) || this.shares(u, o, x, y, face + Math.PI / 2);
-          const open = (side2) => {
-            const [px2, py2] = across(e2, nx * side2, ny * side2);
-            if (px2 < 5 || px2 > f.w - 5 || py2 < 5 || py2 > f.h - 5) return false;
-            if (!this.bears(m, px2, py2) || !this.dry(m, u.x, u.y, px2, py2)) return false;
-            if (others.some((o) => lies(o, px2, py2))) return false;
-            const leg = dist(u.x, u.y, px2, py2);
-            for (let k = 1; pace > 0 && k * pace < leg; k++) {
-              const x = u.x + (px2 - u.x) * k * pace / leg, y = u.y + (py2 - u.y) * k * pace / leg;
-              if (apartFrom.some((o) => lies(o, x, y))) return false;
-            }
-            const on = clear(e2) - ((u.x - e2.x) * hx + (u.y - e2.y) * hy);
-            if (others.some((o) => {
-              const along = (o.x - px2) * hx + (o.y - py2) * hy, off = (o.x - px2) * nx + (o.y - py2) * ny;
-              return along > 0 && Math.hypot(off, Math.max(0, along - on)) < clear(o);
-            })) return false;
-            return true;
-          };
           const first = (u.x - e2.x) * nx + (u.y - e2.y) * ny >= 0 ? 1 : -1, other2 = first === 1 ? -1 : 1;
-          const c = Math.abs(Math.cos(e2.face - face)), sn = Math.abs(Math.sin(e2.face - face));
-          const before = (e2.x - u.x) * hx + (e2.y - u.y) * hy >= u.d / 2 + e2.w / 2 * sn + e2.d / 2 * c;
-          const side = open(first) ? first : before && open(other2) ? other2 : null;
+          const side = open(e2, nx * first, ny * first) ? first : before(e2) && open(e2, nx * other2, ny * other2) ? other2 : null;
           if (side !== null) R = u.round = { by: e2.id, side, over: [nx * side, ny * side], near: side === first };
         }
       }
