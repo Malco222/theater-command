@@ -12,6 +12,14 @@
 // it. So until that mend is laid, no row in the data may be counting-only: this test reads every rifles row the data
 // lays (rifles.json and every seats file's "rifles.json" rows, and the rows as laid with the far side on, on a live
 // first day) and fails, naming the ruling, the moment one says binds: false.
+//
+// LIFTING THIS GUARD needs the UI director's words first (her eighth read, 13:37Z of 27 November 2026, in
+// pacific-japan/ui-ask-rifles-words-2-1126.md). A counting-only row is gated two ways today, on the fold card as in the
+// fold's news: with no men sent back the spare line shows ("N spare rifles go to the store."), and with men sent back
+// the rifles clause is dropped ("About N men over go back to the reserve."), though the store is given those rifles.
+// No player can read either form while this guard stands. Whoever lays a counting-only row asks her for the words of
+// BOTH forms before lifting it; her rule will match the news's: every rifle given to the store is said, whether or not
+// men are sent back.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
