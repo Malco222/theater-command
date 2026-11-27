@@ -3243,9 +3243,9 @@ def build_land_stalks_or_tell():
         unreal.log_error("Theater Command: M_LandStalks was not built (the corn keeps its bundles to the lens):\n" + traceback.format_exc())
         try:
             if eal.does_asset_exist(f"{MATERIALS}/M_LandStalks") and not eal.delete_asset(f"{MATERIALS}/M_LandStalks"):
-                unreal.log_error("Theater Command: and the half-built M_LandStalks could not be removed (delete_asset said no)")
+                unreal.log_error("Theater Command: and the half-built M_LandStalks could not be removed (delete_asset said no): delete it by hand, then run again with TC_REBUILD=M_LandStalks")
         except Exception:
-            unreal.log_error("Theater Command: and the half-built M_LandStalks could not be removed:\n" + traceback.format_exc())
+            unreal.log_error("Theater Command: and the half-built M_LandStalks could not be removed (delete it by hand, then run again with TC_REBUILD=M_LandStalks):\n" + traceback.format_exc())
         # (its failure is told to the loop below, which builds no blast press twin beside it in this run: the
         # environments thread's find of 27 November 2026, 16:35Z)
         return False
@@ -3346,9 +3346,9 @@ def build_land_leaves_or_tell():
         unreal.log_error("Theater Command: M_LandLeaves was not built (the ground battle draws its solid sprigs):\n" + traceback.format_exc())
         try:
             if eal.does_asset_exist(f"{MATERIALS}/M_LandLeaves") and not eal.delete_asset(f"{MATERIALS}/M_LandLeaves"):
-                unreal.log_error("Theater Command: and the half-built M_LandLeaves could not be removed (delete_asset said no)")
+                unreal.log_error("Theater Command: and the half-built M_LandLeaves could not be removed (delete_asset said no): delete it by hand, then run again with TC_REBUILD=M_LandLeaves")
         except Exception:
-            unreal.log_error("Theater Command: and the half-built M_LandLeaves could not be removed:\n" + traceback.format_exc())
+            unreal.log_error("Theater Command: and the half-built M_LandLeaves could not be removed (delete it by hand, then run again with TC_REBUILD=M_LandLeaves):\n" + traceback.format_exc())
         # (its failure is told to the loop below, which builds no blast press twin beside it in this run: the
         # environments thread's find of 27 November 2026, 16:35Z)
         return False
@@ -3409,9 +3409,9 @@ def build_land_blades_or_tell():
         unreal.log_error("Theater Command: M_LandBlades was not built (the grass and trees stand still in the wind):\n" + traceback.format_exc())
         try:
             if eal.does_asset_exist(f"{MATERIALS}/M_LandBlades") and not eal.delete_asset(f"{MATERIALS}/M_LandBlades"):
-                unreal.log_error("Theater Command: and the half-built M_LandBlades could not be removed (delete_asset said no)")
+                unreal.log_error("Theater Command: and the half-built M_LandBlades could not be removed (delete_asset said no): delete it by hand, then run again with TC_REBUILD=M_LandBlades")
         except Exception:
-            unreal.log_error("Theater Command: and the half-built M_LandBlades could not be removed:\n" + traceback.format_exc())
+            unreal.log_error("Theater Command: and the half-built M_LandBlades could not be removed (delete it by hand, then run again with TC_REBUILD=M_LandBlades):\n" + traceback.format_exc())
         # (its failure is told to the loop below, which builds no blast press twin beside it in this run: the
         # environments thread's find of 27 November 2026, 16:35Z)
         return False
@@ -3761,13 +3761,18 @@ for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_l
 # run (BUILT_THIS_RUN), so TC_REBUILD=M_LandBlades remakes M_LandBladesPress too and a change to the wind can never leave
 # the switched-on grass on the old sway. TC_REBUILD=M_LandBladesPress alone remakes only the twin. A twin whose plain
 # material is missing after the loop above (its build failed, or it was never built) is not built, and a twin of it
-# left from an earlier run is DELETED here, said in one line, so no old twin outlives its plain material. The game
-# too (LandBattle::LoadInks) takes a twin only if its plain material loads, so switched on or off it then draws the
-# same thing.)
+# left from an earlier run is DELETED here, said in one line, so no old twin outlives its plain material. So is one
+# beside a plain material that failed in this run and could not be removed (half built): the game then draws that one
+# material switched on or off, never an older twin beside it. The game too (LandBattle::LoadInks) takes a twin only if
+# its plain material loads, so switched on or off it then draws the same thing.)
 for name, build in (("M_LandBladesPress", lambda: build_pressed_or_tell("M_LandBladesPress", lambda: build_map_surface("M_LandBladesPress", sway=True, press_twin=True, press_upright=True))),
                     ("M_LandLeavesPress", lambda: build_pressed_or_tell("M_LandLeavesPress", lambda: build_land_leaves("M_LandLeavesPress", press_twin=True, press_upright=True))),
                     ("M_LandStalksPress", lambda: build_pressed_or_tell("M_LandStalksPress", lambda: build_land_stalks("M_LandStalksPress", press_twin=True, press_upright=True)))):
-    if not eal.does_asset_exist(f"{MATERIALS}/{name[:-len('Press')]}"):
+    plain_missing = not eal.does_asset_exist(f"{MATERIALS}/{name[:-len('Press')]}")
+    if plain_missing or name[:-len("Press")] in FAILED_THIS_RUN:
+        # (missing, or it raised half way in this run and still stands, half built or an older one: the twin is not
+        # built beside it, and a twin from an earlier run is deleted, so switched on or off the game draws the same)
+        plain_state = "is missing" if plain_missing else "failed in this run (see the red line above)"
         if eal.does_asset_exist(f"{MATERIALS}/{name}"):
             try:
                 press_gone = eal.delete_asset(f"{MATERIALS}/{name}")
@@ -3776,15 +3781,13 @@ for name, build in (("M_LandBladesPress", lambda: build_pressed_or_tell("M_LandB
             else:
                 press_why = "delete_asset said no"
             if press_gone:
-                unreal.log_warning(f"Theater Command: {MATERIALS}/{name} DELETED (an old one): its plain material {name[:-len('Press')]} is missing")
+                unreal.log_warning(f"Theater Command: {MATERIALS}/{name} DELETED (an old one): its plain material {name[:-len('Press')]} {plain_state}")
             else:
-                unreal.log_error(f"Theater Command: {MATERIALS}/{name} could NOT be deleted ({press_why}): its plain material {name[:-len('Press')]} is missing; the game will not use it (it loads a twin only with its plain material), delete it by hand")
+                unreal.log_error(f"Theater Command: {MATERIALS}/{name} could NOT be deleted ({press_why}): its plain material {name[:-len('Press')]} {plain_state}; "
+                                 + ("the game will not use it (it loads a twin only with its plain material), " if plain_missing else "")
+                                 + f"delete it by hand, then run again with TC_REBUILD={name[:-len('Press')]}")
         else:
-            unreal.log_warning(f"Theater Command: {MATERIALS}/{name} not built: its plain material {name[:-len('Press')]} is missing")
-    elif name[:-len("Press")] in FAILED_THIS_RUN:
-        # (its plain material raised half way in this run: what stands under that name may be half built or an older
-        # one, so the twin is not built beside it; said once, and an older twin is left as it was)
-        unreal.log_warning(f"Theater Command: {MATERIALS}/{name} not built: its plain material {name[:-len('Press')]} failed in this run (see the red line above)")
+            unreal.log_warning(f"Theater Command: {MATERIALS}/{name} not built: its plain material {name[:-len('Press')]} {plain_state}")
     elif REBUILD == "all" or name in REBUILD.split(",") or name[:-len("Press")] in BUILT_THIS_RUN or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         press_built = build()
         # (a twin built in a run that did not build its plain material, missing or named alone, takes this run's
