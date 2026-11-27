@@ -20,7 +20,7 @@ const POSES = new Set([...GAITS, 'drive', 'reverse', 'towed', 'fire_stand', 'fir
 const FOOT = new Set(['inf', 'mtn', 'eng', 'fort', 'cav']);
 const wrap = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
 /** What a team is doing inside (the drill's own record, read past its public face): each gun's work and the final line. */
-interface GunWork { ammo: number; jam?: number; mis?: [number, number]; at?: [number, number]; set: number }
+interface GunWork { ammo: number; jam?: number; mis?: [number, number]; at?: [number, number]; set: number; run?: { stage: string } }
 interface Inside { men: Array<{ n: number; k?: number; j?: number; role: string; pose: string; aim?: [number, number]; short?: number }>; tw?: { guns: Map<unknown, GunWork>; fpl?: { on: number; own: number } } }
 
 type Ground = Parameters<typeof sampleTicket>[0];
@@ -277,5 +277,47 @@ describe('machine gun and mortar teams at work (looks only, ruling 217)', () => 
   it('only poses the 3D game has, and every man within reach of his block', () => {
     expect(sum(work, 'badPose')).toBe(0);
     expect(sum(work, 'out')).toBe(0);
+  });
+});
+
+// A team set up by its own edge of the field (sent there by a plain move order) is still fed: its bearers' dump and the
+// lane out to it are kept on the field, and where the lane's corner would lie past the edge a bearer makes straight for
+// the dump instead (a corner pulled back onto the field could stand short of it and hold him there till his run ran out).
+describe('a support team set up by the edge of the field', () => {
+  const EDGE: Array<{ f: Fight; side: 'att' | 'def'; team: 'mg' | 'mor'; at: [number, number] }> = [
+    { f: { g: 'plains', seed: 5, att: 'USA', def: 'GER' }, side: 'def', team: 'mor', at: [1300, 1990] },
+    { f: { g: 'plains', seed: 1, att: 'USA', def: 'GER' }, side: 'def', team: 'mg', at: [1300, 1990] },
+  ];
+  const fight = (e: (typeof EDGE)[number], teamwork: boolean) => {
+    const b = new LandBattle(ticket(e.f)), d = b.drillOn({ sections: true, teamwork });
+    const u = b.units.find((x) => x.team === e.team && x.side === e.side)!;
+    (b as unknown as { command(o: object, s: string): unknown }).command({ do: 'move', units: [u.id], x: e.at[0], y: e.at[1], face: Math.PI }, e.side);
+    const inside = (d as unknown as { squads: Map<number, Inside> }).squads;
+    const runs = new Map<object, boolean>(), f2 = (p: [number, number]) => Math.min(p[0], p[1], b.field.w - p[0], b.field.h - p[1]);
+    let near = 0;
+    for (let k = 0; !b.over && k < 40000; k++) {
+      b.step();
+      const tw = inside.get(u.id)?.tw;
+      if (!tw) continue;
+      for (const w of tw.guns.values()) if (w.run) { if (w.at && f2(w.at) < 15) near++; runs.set(w.run, runs.get(w.run) || w.run.stage === 'load'); }
+    }
+    // (a run still under way as the battle ends is left out: it may yet load)
+    const open = new Set<object>(); const tw = inside.get(u.id)?.tw;
+    if (tw) for (const w of tw.guns.values()) if (w.run) open.add(w.run);
+    const done = [...runs].filter(([r]) => !open.has(r));
+    return { sig: sig(b), near, fed: done.filter(([, l]) => l).length, stalled: done.filter(([, l]) => !l).length };
+  };
+  const seen = EDGE.map((e) => ({ on: fight(e, true), off: fight(e, false) }));
+
+  it('fights the same with the gun crews drawn or not', () => {
+    for (const s of seen) expect(s.on.sig).toBe(s.off.sig);
+  });
+
+  it('is fed by its bearers on every run they finish', () => {
+    for (const s of seen) {
+      expect(s.on.near).toBeGreaterThan(0);
+      expect(s.on.fed).toBeGreaterThan(3);
+      expect(s.on.stalled).toBe(0);
+    }
   });
 });

@@ -4625,11 +4625,14 @@ export class Drill {
     m.spot = p; m.cover = L.cover; m.until = t + 0.5; m.hidden = undefined; m.aim = undefined;
     const d = Math.hypot(p[0] - m.x, p[1] - m.y);
     // (to the dump and back up, a bearer keeps to a lane outboard of his mates' rows: out to it first, then along it, and
-    // in to the gun only once level with it; each turn taken before he reaches the corner, so he never stops at it)
+    // in to the gun only once level with it; each turn taken before he reaches the corner, so he never stops at it. No lane
+    // past the field's edge: where its corner would lie off the field he makes straight for the dump, or the gun, instead,
+    // as a corner pulled back onto the field can stand short of both and hold him there till his run runs out)
     if (run && (run.stage === 'fetch' || run.stage === 'up')) {
       const dx = m.x - L.x, dy = m.y - L.y, ma = (dx * Math.cos(face) - dy * Math.sin(face)) * feed, ml = dx * Math.sin(face) + dy * Math.cos(face);
-      if (run.stage === 'fetch' && ma < S.lane - 0.8 && ml > -12) m.spot = this.onField(this.leash(sq, toWorld(L, face, feed * (S.lane + 1), Math.min(ml, -1) - 6), -4));
-      if (run.stage === 'up' && ml < -1.5) m.spot = this.onField(this.leash(sq, toWorld(L, face, feed * S.lane, 3), -4));
+      const lane = run.stage === 'fetch' ? (ma < S.lane - 0.8 && ml > -12 ? toWorld(L, face, feed * (S.lane + 1), Math.min(ml, -1) - 6) : undefined)
+        : ml < -1.5 ? toWorld(L, face, feed * S.lane, 3) : undefined;
+      if (lane) { const q = this.leash(sq, lane, -4), c = this.onField(q); if (c[0] === q[0] && c[1] === q[1]) m.spot = q; }
     }
     const under = t - sq.shelledAt < C.move.shelled || sq.harm > DR.pin.harm, down = this.crewDown(sq, m, false);
     if (run) {
