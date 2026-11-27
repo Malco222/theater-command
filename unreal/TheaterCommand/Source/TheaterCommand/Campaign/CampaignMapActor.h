@@ -25,6 +25,7 @@ class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UStaticMesh;
 class AArmyPiece;
+struct FSeasonTurnTable; // (release 2, the season turns: Campaign/CampaignSeasonTurn.cpp)
 class UTexture2D;
 struct FCampaignMeshBuffers;
 
@@ -1621,6 +1622,20 @@ private:
 	float WinterHard = 0.0f;
 	float RiversDrawnFor = -1.0f;
 	float MasksSentFor = -1.0f; // (tc.Speed.MonthSpread) the winter's hardness the masks picture was last sent with
+	// ---- (release 2, the season turns: Campaign/SeasonTurn.h has the reckoning, Campaign/CampaignSeasonTurn.cpp the
+	// rest; tc.Map.SeasonTurn, off as it comes) ----
+	/** The snow the month lays on the masks picture (its green), for the winter's hardness Hard: the season's own paint, as SetSeason sends it. */
+	void MakeSnowMasks(float Hard, TArray<FColor>& Pixels) const;
+	/** SetSeason tells the turn the month it shows, how hard the winter lies now and the month before, and whether the month has just stepped on by one in play. */
+	void NoteSeason(int32 Month, float Hard, float HardBefore, bool bStepped);
+	/** With tc.Map.SeasonTurn: the month's new masks are taken by the turn (true), which spreads their snow over the coming frames; otherwise (false) they are to be sent now, as before. */
+	bool TakeSeasonSnow(TArray<FColor>& Pixels);
+	/** With tc.Map.SeasonTurn: the mud of the rules' ground is painted into the ground picture (true); otherwise (false) it is the flat wash, as before. */
+	bool AskSeasonMud(const TArray<int32>& Regions);
+	/** A frame of the turn: the mud's field is worked out on another thread, and a spreading turn paints its next step. Nothing at all while no turn is in hand. */
+	void UpdateSeasonTurn();
+	TSharedPtr<FSeasonTurnTable, ESPMode::ThreadSafe> SeasonTurn;
+	// ---- (end release 2, the season turns) ----
 	TSet<int32> RiversHazedFor; // the provinces under the haze when the rivers were last drawn: a river under it is darker
 	bool bRiversNightFor = false; // and whether it was night then: by night it is darker still
 	/**
