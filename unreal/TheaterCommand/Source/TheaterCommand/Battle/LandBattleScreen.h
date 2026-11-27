@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Battle/LandFieldMap.h"
+#include "Battle/LandTagPlace.h"
 #include "Styling/SlateBrush.h"
 #include "Widgets/SLeafWidget.h"
 
@@ -86,6 +87,8 @@ private:
 		int32 Block = -1;
 	};
 	mutable TArray<FTagBox> TagBoxes;
+	/** Where each tag hung last frame (the trial word tagroom: no tag covers another, and none hops). */
+	mutable LandTagPlace::Placer TagPlacer;
 	/** The general's mouse button held (-1 none): his drags are his, not the camera's look aside. */
 	int32 GeneralHeld = -1;
 	/** His view's keys held (W A S D and the arrows, Q E), a bit each; and the middle button sliding the view. */
