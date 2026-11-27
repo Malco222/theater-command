@@ -272,6 +272,7 @@ namespace TheaterFx
 		uint8_t Glow = 0; // (a tracer's streak: 1 its body, 2 its pale core; by day both widen and the core whitens, to hold on a pale sky)
 		bool bHug = false; // rides the ground as it moves (skirts)
 		bool bKeep = false; // (an oil fire's column: never left out when the screen is full, the near ones going first)
+		bool bWisp = false; // (Effects (R2), -TheaterLandBarrelSmoke: a barrel's wisp, in its own room (after_wisp.most), not counted in the room the gates read)
 		double SunSide = 0.0; // (an oil column: its sunward side lifted toward LitCol, its far side kept dark, wherever the eye is)
 		double AxisWindage = 0.0; // (and the column's own axis: from Centre, carried by the wind at this share, so a puff knows which side of it it is)
 		int OilId = -1; // (a puff of an oil fire's column: the fire's id, so the column's width at its height is found each frame)
@@ -363,6 +364,35 @@ namespace TheaterFx
 		uint8_t FarRep = 0;
 		Vec FarAt;
 	};
+
+	/** Effects (R2), item 7 of the owner's film details (26 November, "do 2-11"): what a ground gun's crew lets out of
+	 * her as the spent case comes out after a shot (her model's case_clang), by what she is. The land scene asks it in
+	 * PlayArmourEvents; it is plain so the cloud test holds it. A towed gun (kind "gun") with a breech: a puff at the
+	 * breech. An open-topped self-propelled gun (kind "tank" with a loader's place, crew.loader: the M7, the Hummel,
+	 * the Sexton, the SU-76, the M10): a puff at her breech where her model has one, and her case thrown over her
+	 * side. A closed tank (kind "tank", no loader's place) kept her cases inside: with her hatch open (HatchOpen over
+	 * 0.5) and a hatch to let it out (her commander's place), only when she is stopped (the fumes are laid at one
+	 * place and do not ride with her), every second or third shot by her count a faint wisp of fumes out of it (shots
+	 * 2, 5, 7, 10, 12 ...), and one shot in eight a case pitched out of it. Each part only with its own word. Shot counts her shots from 1. */
+	struct AfterShot
+	{
+		bool bBreechPuff = false; // -TheaterLandBarrelSmoke
+		bool bOverSide = false;   // -TheaterLandCasesOut
+		bool bHatchFumes = false; // -TheaterLandHatchFumes
+		bool bHatchCase = false;  // -TheaterLandHatchFumes
+	};
+	struct AfterShotAsk
+	{
+		std::string Kind;              // her model's kind: tank, gun, carrier, car, aa
+		bool bBreech = false;          // her model has a breech socket
+		bool bLoader = false;          // and a crew.loader socket (an open fighting compartment)
+		bool bHatch = false;           // and a commander socket (a hatch over her turret)
+		double HatchOpen = 0.0;        // her hatch now, 0 shut to 1 open
+		bool bStopped = false;
+		int Shot = 0;
+		bool bBarrelSmoke = false, bHatchFumes = false, bCasesOut = false; // the words given
+	};
+	AfterShot AfterShotOf(const AfterShotAsk& Ask);
 
 	class Battle
 	{
@@ -457,7 +487,13 @@ namespace TheaterFx
 		/** A gun firing, its muzzle at At, pointing along Facing. Gun is a muzzle row ("tank_gun", "mg", "howitzer").
 		 * Ground (a grounds row) is what its blast throws up: on sand a tank or field gun's shot raises a veil of dust
 		 * in front of it that hides the gun and its line of sight for a second or two, then lingers. */
-		void Muzzle(double Now, const Vec& At, const Vec& Facing, const char* Gun, const char* Ground = "earth");
+		void Muzzle(double Now, const Vec& At, const Vec& Facing, const char* Gun, const char* Ground = "earth", bool bMoving = false, bool bCaseOverSide = false);
+		/** Effects (R2), -TheaterLandBarrelSmoke (Muzzle's bMoving, given only with the word: a gun on the move or turning
+		 * lays no wisp; smoke stays where it was made): the gun whose muzzle was at At when she fired has moved off or
+		 * traversed away. Her wisp's puffs not yet born are never laid; those already in the air drift and fade where
+		 * they are. -TheaterLandCasesOut (bCaseOverSide, given only with the word): an open self-propelled gun throws her
+		 * case over her side (the scene's ThrowCase "spg"), so her gun row's case behind the muzzle is not thrown. */
+		void WispStop(double Now, const Vec& At);
 		/** Dust thrown up behind a vehicle on dry ground: every frame, for each of its dust sockets (dust.left,
 		 * dust.right), where the socket is and the vehicle's velocity (metres a second). Id: any number that stays the
 		 * same for that socket. Ground is a grounds row; snow, mud and water throw none (dust.vehicles.by_ground).
@@ -643,6 +679,12 @@ namespace TheaterFx
 		/** That vent is on a moving ship: once a frame, where it is now, the way it blows and the ship's velocity
 		 * there (metres a second). Its steam is born at the vent as it moves and torn astern. */
 		void SteamMove(double Now, int Id, const Vec& At, const Vec& Way, const Vec& Velocity);
+		/** Effects (R2), item 7 of the owner's film details: a spent case thrown out of a vehicle by her crew, from At
+		 * (where it leaves her: over an open gun's side, out of a hatch) along Away (level), by the row ground_cases.<Kind>
+		 * ("spg", "tank"): its length within case_long_m, thrown and lying as the row says, at the row's odds. The towed
+		 * guns' cases as ever (within_m of the eye, most_lying, draw_within_m, three fifths of the screen's room). Its own
+		 * dice, from Key (any number for that vehicle), the place and the moment. No row: nothing. */
+		void ThrowCase(double Now, const Vec& At, const Vec& Away, const char* Kind, int Key);
 		/** Ammunition cooking off inside a burning tank (or a ship's gun mount, or aircraft parked on a deck), seen at
 		 * its hatch, At, Across metres wide, opening along Up: Pops sharp pops (held to 0..40) at ragged, quickening
 		 * moments over Over seconds, each a small flash by the flash rule, a grey-black puff, orange embers in short
@@ -894,7 +936,9 @@ namespace TheaterFx
 			Span Throw{ 2.0, 4.0 }, Up{ 1.0, 2.5 }, Lie{ 2.0, 4.0 }, Tumble{ 15.0, 30.0 };
 			Rgb Col, Dark;
 		};
-		bool CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& Out_) const; // (false: none for this gun, too far off, or no room)
+		// (false: none for this gun, too far off, or no room. Ground, when given, is what the gun stands on: none on a
+		// ground named in ground_cases.not_on, as the sea scene's turrets on "water" (Effects (R2), -TheaterSeaNoFalseCases))
+		bool CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& Out_, const char* Ground = nullptr) const;
 		void GroundCase(double T, const Vec& Breech, const Vec& Away, const CaseRow& C, Dice& D);
 		int LayCase(int Slot, const Bit& B, double Age, const Vec& P, double A, const View& Eye, int Room); // (a spent case's shadow, tube and mouth: the places it took)
 		/** Effects (R2), -TheaterLandGunFlash (Brian, 23 November: "how does the gun fire look when they shoot? can we make
@@ -1186,6 +1230,7 @@ namespace TheaterFx
 			Rgb Shadow;
 			double ShadowK = 0.0, SideShade = 0.0, Cap = 0.0, CapWide = 2.0, CapFrom = 0.62; // (SideShade: how far a rag thrown to the plume's side away from the sun goes to the shadow colour all over)
 			Span CapLife{ 3.0, 6.0 };
+			double LeastPx = 0.0; // (Effects (R2), a breech's puff and a hatch's fumes: least_px, a small rag held to so many pixels across, thinner to match; none in the shipped rows)
 		};
 		/** The fire.tongues row: a burning thing's flames as ragged tongues at seats of its own (see FireTongues). */
 		struct TongueRow
@@ -1445,6 +1490,15 @@ namespace TheaterFx
 		double CaseShadow = 0.5, CaseShine = 8.0;
 		std::vector<double> CaseUntil; // (when each long-lying case goes: past ground_cases.most_lying, new ones lie only briefly)
 		size_t MostLying = 200;
+		// (Effects (R2), -TheaterLandBarrelSmoke: each barrel's wisp still curling, where its gun stood and when its last puff goes; at most
+		// after_wisp.per_gun from one gun's place and after_wisp.most in all)
+		struct Wisping
+		{
+			Vec At;
+			double Until = 0.0;
+		};
+		std::vector<Wisping> BarrelWisps;
+		bool bCaseOverSide = false; // (Effects (R2), -TheaterLandCasesOut: the Muzzle laid now is an open gun's, her case over her side)
 		double CaseFar = 150.0; // (ground_cases.draw_within_m: past it a case is neither counted nor laid)
 		double CaseDetailPx = 3.0; // (ground_cases.detail_px: a case narrower on the screen is laid as its tube alone)
 		bool CaseDetailed(double Rad, double Deep, const View& Eye) const { return 2.0 * Rad * std::max(Eye.PixelsPerRadian, 1.0) >= CaseDetailPx * std::max(Deep, 1e-3); }
@@ -1677,6 +1731,7 @@ namespace TheaterFx
 		size_t InSight = 0, HeldAtDraw = 0;
 		size_t SeenBits = 0, SeenTwin = 0; // (of InSight and TwinBits, what was on the screen: see RoomSeen)
 		size_t CaseOff = 0; // (the places spent cases off the screen hold in the room asked: see RoomForCases)
+		size_t WispIn = 0, WispSeen = 0, WispSince = 0; // (Effects (R2): the barrels' wisps counted at the last Draw, of them on the screen, and laid since: left out of the room the gates read)
 		// (the eye given may be the frame before's: the campaign map reads the camera before it has moved for the frame.
 		// So what the eye moved and turned between the last two frames is allowed for again, twice over, before a bit
 		// is called off the screen. A still eye changes nothing. The pre-check, 14:55Z)
@@ -1709,7 +1764,7 @@ namespace TheaterFx
 		// one, by Bit::Serial, so the oldest smoke keeps its shadow when the room is short)
 		int ShadowRoom = 0, ShadowsWere = 0;
 		std::vector<std::pair<uint64_t, uint32_t>> ShadowCands;
-		size_t RoomAsked() const { return InSight + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + TwinBits; }
+		size_t RoomAsked() const { const size_t All = InSight + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + TwinBits; return All - std::min(All, WispIn + WispSince); }
 		/** FX5, room shares by kind (game.room_shares, off by default): the room every gate but the vehicles' dust reads.
 		 *  Off, RoomAsked. On, RoomAsked less the dust trails' own pieces, up to their share (dust.vehicles.most_of_room),
 		 *  so a column of tanks never thins the bursts, their smoke's slow fade or a fire: the cloud rig (11-22) had 120
@@ -1735,7 +1790,7 @@ namespace TheaterFx
 		 *  grit (spent cases) goes by this: build 1720's test barrage, off the screen behind the eye, held the room over
 		 *  three fifths full, and the machine gun in front of the eye threw no brass at all. The same as RoomAsked when
 		 *  the view's width is not known. */
-		size_t RoomSeen() const { return SeenBits + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + SeenTwin; }
+		size_t RoomSeen() const { const size_t All = SeenBits + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + SeenTwin; return All - std::min(All, WispSeen + WispSince); }
 		/** What a spent case is thrown by: the screen's room, and the brass lying off it. A barrage off the screen does
 		 *  not stop the brass; brass off the screen does, or guns firing beside the eye fill the room asked with cases
 		 *  nobody sees (three places each) and every shell throws half its shower for them. */
@@ -1977,6 +2032,8 @@ namespace TheaterFx
 		 * nor what it threw that falls back, nor a piece already under a row. */
 		void LingerFrom(size_t First, const LingerRow& RowIn, double T0, const Vec& Mid, double MidWindage, double Tall);
 		void MuzzleLaid(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn, const GunLook* Look = nullptr);
+		/** Effects (R2), -TheaterLandBarrelSmoke: the barrel's wisp after the shot, muzzle.<gun>.after_wisp (Muzzle lays it last). */
+		void AfterWisp(double Now, const Vec& At, const Vec& Facing, const char* GunIn);
 		void AirHitLaid(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind);
 		void AirFlakLaid(double Now, const Vec& At, const char* Kind);
 		Rgb SkyTail; // (what old smoke pales to once the scene has said what is behind it: see SetSky)

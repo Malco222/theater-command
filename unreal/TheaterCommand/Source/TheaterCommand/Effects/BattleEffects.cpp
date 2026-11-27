@@ -281,6 +281,13 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 	{
 		OverPaths.Add(FPaths::ProjectContentDir() / TEXT("Effects") / Name);
 	}
+	// Effects (R2), flak by its size (-TheaterAirFlakKinds; Brian, 26 November: "lets try to add more visual dramatic
+	// things"): light and medium flak each burst as their own row (battle-fx-flak.json), not as heavy. Read here, the
+	// one place every kit's overlays are laid, so the air scene's flak and the sea scene's take it alike.
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterAirFlakKinds")))
+	{
+		OverPaths.Add(FPaths::ProjectContentDir() / TEXT("Effects") / TEXT("battle-fx-flak.json"));
+	}
 	if (!Book.Load(Path, OverPaths))
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Battle effects: the recipe is missing or unreadable (%s); nothing will be drawn"), *Path);
@@ -477,11 +484,19 @@ void FBattleEffects::Skip(const FVector& WorldAt, const FVector& Heading, const 
 	});
 }
 
-void FBattleEffects::Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun, const FString& Ground)
+void FBattleEffects::Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun, const FString& Ground, bool bMoving, bool bCaseOverSide)
 {
 	Do([=, this]()
 	{
-		Core.Muzzle(Time(), ToFx(WorldAt), ToFxWay(Facing), Named(Gun).c_str(), Named(Ground).c_str());
+		Core.Muzzle(Time(), ToFx(WorldAt), ToFxWay(Facing), Named(Gun).c_str(), Named(Ground).c_str(), bMoving, bCaseOverSide);
+	});
+}
+
+void FBattleEffects::WispStop(const FVector& WorldAt)
+{
+	Do([=, this]()
+	{
+		Core.WispStop(Time(), ToFx(WorldAt));
 	});
 }
 
@@ -711,6 +726,14 @@ void FBattleEffects::SteamMove(int32 Id, const FVector& WorldAt, const FVector& 
 	Do([=, this]()
 	{
 		Core.SteamMove(Time(), Id, ToFx(WorldAt), ToFxWay(Way), ToFx(Velocity));
+	});
+}
+
+void FBattleEffects::ThrowCase(const FVector& WorldAt, const FVector& Away, const FString& Kind, int32 Key)
+{
+	Do([=, this]()
+	{
+		Core.ThrowCase(Time(), ToFx(WorldAt), ToFxWay(Away), Named(Kind).c_str(), Key);
 	});
 }
 

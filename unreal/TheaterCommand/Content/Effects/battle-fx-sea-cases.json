@@ -1,0 +1,6 @@
+{
+ "what": "No false brass at sea (release 2, behind the sea battle's -TheaterSeaNoFalseCases; item 11 of the owner's film details, 26 November). Laid over battle-fx.json for that battle alone (FBattleEffects::LayOver). A ship's big turrets fire by the howitzer's row (seed mode, 180 mm and over), whose ground case, a 0.4 m field-gun case, was thrown 2.5 m behind the muzzle within 40 m of the eye and left lying on the water, fixed in the world while she steamed on. A gun on a ground named here throws no case; the sea scene's every Muzzle passes 'water'.",
+ "ground_cases": {
+  "not_on": ["water"]
+ }
+}
