@@ -300,6 +300,7 @@ namespace
 		bool bShooter = false;
 		double SX = 0.0, SY = 0.0;
 		std::string W = "rifle";
+		std::string PoseAtWd;   // (the rules' own way: from wd the drill's stance, 'wounded', as the bearers' option writes it)
 	};
 
 	std::string Little(const std::vector<Man1>& Men)
@@ -319,7 +320,9 @@ namespace
 			const double T0 = 0.0, T1 = 40.0;
 			R << (I ? "," : "") << "{\"b\": 2, \"k\": " << K << ", \"r\": \"rifle\", \"at\": [[" << T0 << ", " << M.X - std::sin(M.F) * M.Go * Hit << ", "
 			  << M.Y - std::cos(M.F) * M.Go * Hit << ", " << M.F << "], [" << T1 << ", " << M.X + std::sin(M.F) * M.Go * (T1 - Hit) << ", "
-			  << M.Y + std::cos(M.F) * M.Go * (T1 - Hit) << ", " << M.F << "]], \"ch\": [[0, \"" << M.Pose << "\", \"" << M.Cover << "\", 0, 0, 0, 0]]";
+			  << M.Y + std::cos(M.F) * M.Go * (T1 - Hit) << ", " << M.F << "]], \"ch\": [[0, \"" << M.Pose << "\", \"" << M.Cover << "\", 0, 0, 0, 0]";
+			if (!M.PoseAtWd.empty() && M.Wd >= 0.0) R << ", [" << M.Wd << ", \"" << M.PoseAtWd << "\", \"none\", 0, 0, 0, 0]";
+			R << "]";
 			if (M.D >= 0.0) R << ", \"d\": " << M.D;
 			if (M.Wd >= 0.0) R << ", \"wd\": " << M.Wd;
 			if (M.Back >= 0.0) R << ", \"back\": " << M.Back;
@@ -818,8 +821,28 @@ namespace
 		Killed.Wd = 7.0;
 		Killed.D = 12.0;
 		Men.push_back(Killed);
+		// the rules' wounded option's men (wd and the stance 'wounded' from wd): one whose track walks on after wd, one
+		// killed (d) while he lies, one wounded after he was killed (wd after d: never down)
+		Man1 Rules;
+		Rules.X = 180.0;
+		Rules.Go = 1.5;
+		Rules.Pose = "fire_stand";
+		Rules.Wd = 8.0;
+		Rules.PoseAtWd = "wounded";
+		Men.push_back(Rules);
+		Man1 RulesD = Rules;
+		RulesD.X = 220.0;
+		RulesD.Go = 0.0;
+		RulesD.Pose = "fire_stand";
+		RulesD.D = 15.0;
+		Men.push_back(RulesD);
+		Man1 RulesLate = RulesD;
+		RulesLate.X = 260.0;
+		RulesLate.D = 5.0;
+		Men.push_back(RulesLate);
 		const int N = static_cast<int>(Men.size());
-		const int KilledIx = N - 1, StaysIx = N - 2, CarriedIx = N - 3;
+		const int RulesIx = N - 3, RulesDIx = N - 2, RulesLateIx = N - 1;
+		const int KilledIx = N - 4, StaysIx = N - 5, CarriedIx = N - 6;
 		std::string Rec = Little(Men);
 		// (the first man has rounds booked after his wound: he fires none while down)
 		{
@@ -845,6 +868,13 @@ namespace
 		std::vector<double> UpChest(static_cast<size_t>(N), 0.0);
 		bool bFinite = true;
 		int ShotsDown = 0;
+		// (one authority: a fall's start once a man at most; down wounded and not getting up, never on his feet; a man
+		// down wounded never carried along his track)
+		std::vector<double> FirstFall(static_cast<size_t>(N), -1.0), FirstWound(static_cast<size_t>(N), -1.0);
+		std::vector<int> FellTwice(static_cast<size_t>(N), 0), StoodDown(static_cast<size_t>(N), 0);
+		std::vector<double> Slid(static_cast<size_t>(N), 0.0);
+		std::vector<Vec3> DownFrom(static_cast<size_t>(N));
+		std::vector<int> bDownFrom(static_cast<size_t>(N), 0);
 		double KillJump = 0.0, KillHead = 0.0, KillHeadWas = -1.0;
 		auto Points = [&](int M) {
 			std::vector<Vec3> P;
@@ -875,6 +905,27 @@ namespace
 					// (his jolt, a third of a second from his death, is no pop: measured outside it)
 					if (KillHeadWas >= 0.0 && (T < 12.0 || T > 12.0 + 0.34 / 2.0 + 1.0 / 30.0)) KillHead = std::max(KillHead, std::fabs(Hz - KillHeadWas));
 					KillHeadWas = Hz;
+				}
+				{
+					const size_t K = static_cast<size_t>(I);
+					if (In.FallStarted >= 0.0)
+					{
+						if (FirstFall[K] < 0.0) FirstFall[K] = In.FallStarted;
+						else if (In.FallStarted != FirstFall[K]) FellTwice[K] = 1;
+					}
+					if (In.WoundStarted >= 0.0)
+					{
+						if (FirstWound[K] < 0.0) FirstWound[K] = In.WoundStarted;
+						else if (In.WoundStarted != FirstWound[K]) FellTwice[K] = 1;
+					}
+					const int Wk = S->ClipIndex(In.WoundClip);
+					const double WEnd = In.WoundStarted + (Wk >= 0 ? static_cast<double>(S->Clips[static_cast<size_t>(Wk)].Long) / 2.0 : 0.0);
+					if (In.WoundStarted >= 0.0 && T > WEnd + 0.5 && (In.Back < 0.0 || T < In.Back))
+					{
+						if (Pel.Z > 0.45f) StoodDown[K] = 1;
+						if (!bDownFrom[K]) { DownFrom[K] = Pel; bDownFrom[K] = 1; }
+						Slid[K] = std::max(Slid[K], std::hypot(static_cast<double>(Pel.X - DownFrom[K].X), static_cast<double>(Pel.Y - DownFrom[K].Y)) - static_cast<double>(In.Dragged));
+					}
 				}
 				if (In.WoundStarted < 0.0) continue;
 				const int Wc = S->ClipIndex(In.WoundClip);
@@ -978,6 +1029,32 @@ namespace
 		for (int I = 0; I < N; ++I) bOffNone = bOffNone && Off.Info(Ix[static_cast<size_t>(I)]).WoundStarted < 0.0;
 		Check(bOffNone, "wounded: off, no man goes down (as before)");
 		Check(bFinite, "wounded: no NaN");
+		// The rules' wounded option with these on: the build decides his fall (StartWound) and what he does down there;
+		// the rules' stance 'wounded' waits (as any stance while he is down); off, the rules' stance plays as before.
+		const ManInfo& Ru = C.Info(Ix[static_cast<size_t>(RulesIx)]);
+		const ManInfo& Rd = C.Info(Ix[static_cast<size_t>(RulesDIx)]);
+		const ManInfo& Rl = C.Info(Ix[static_cast<size_t>(RulesLateIx)]);
+		bool bOnce = true, bNeverStood = true, bNoSlide = true;
+		for (int I = 0; I < N; ++I)
+		{
+			const size_t K = static_cast<size_t>(I);
+			bOnce = bOnce && !FellTwice[K] && !(FirstFall[K] >= 0.0 && FirstWound[K] >= 0.0 && Men[K].D < Men[K].Wd);
+			bNeverStood = bNeverStood && !StoodDown[K];
+			bNoSlide = bNoSlide && Slid[K] < 0.5;
+		}
+		std::printf("  the rules' wounded: walking on %s at %.2f (%s), killed down there %s / %s, wounded after death %s; slid at most %.2f m past his drag\n",
+			Ru.WoundClip.c_str(), Ru.WoundStarted, Ru.WoundLoop.c_str(), Rd.WoundClip.c_str(), Rd.FallClip.c_str(), Rl.WoundStarted < 0.0 ? "never down" : "DOWN",
+			*std::max_element(Slid.begin(), Slid.end()));
+		Check(Ru.WoundStarted >= 8.0 && Ru.WoundStarted < 8.0 + 1.0 / 15.0 && C.LieOf(Ix[static_cast<size_t>(RulesIx)]) > 0.9f, "wounded, the rules' option: wd and the stance 'wounded' together, he goes down at wd once, by the hits' fall, and stays down");
+		Check(Slid[static_cast<size_t>(RulesIx)] < 0.5, Fmt("wounded, the rules' option: his track walks on after wd, he does not (%.2f m)", Slid[static_cast<size_t>(RulesIx)]));
+		Check(Rd.WoundStarted >= 0.0 && Rd.FallClip == "still", "wounded, the rules' option: d while he lies, he stays down and goes still (no second fall)");
+		Check(Rl.WoundStarted < 0.0, "wounded, the rules' option: wd after his death, never a wound's fall");
+		Check(bOnce, "wounded: no man falls twice (one fall's start, or one wound's, each man)");
+		Check(bNeverStood, "wounded: no man down wounded stands (pelvis under 0.45 m from his fall's end till back)");
+		Check(bNoSlide, "wounded: no man down wounded slides with his track (pelvis within half a metre of where he lay, past his own drag)");
+		const Playing OffR = Off.PlayingOf(Ix[static_cast<size_t>(RulesIx)]);
+		Check(Off.Info(Ix[static_cast<size_t>(RulesIx)]).WoundStarted < 0.0 && (OffR.Clip == "wounded_waiting" || OffR.Clip == "carried_wounded" || OffR.Clip == "fire_prone"),
+			"wounded, the rules' option, hits off: the rules' stance 'wounded' plays as before (" + OffR.Clip + ")");
 	}
 
 	/** A live battle: a wound sent in a later delta (wd, back) as the drill will send it, read by Extend. */

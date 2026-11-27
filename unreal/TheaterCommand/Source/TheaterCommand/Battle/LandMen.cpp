@@ -2236,6 +2236,8 @@ namespace LandMen
 			bool bCarried = false;
 			double WoundEnds = -1.0;
 			Vec3 WoundPivot;
+			double WoundX = 0.0, WoundY = 0.0;   // (where he went down, and his facing then: held while he lies)
+			float WoundF = 0.f;
 			Pose WoundEnd;
 			enum DownKind : uint8_t { Hold, Loop, Drag } DownHow = Hold;
 			int DownClip = -1;
@@ -4733,6 +4735,9 @@ namespace LandMen
 			M.Info.Wounded = M.Wd;
 			M.Info.Back = M.Back;
 			M.Info.WoundStarted = At;
+			M.WoundX = M.X;
+			M.WoundY = M.Y;
+			M.WoundF = M.F;
 			M.Info.WoundClip = C.Name;
 			M.Info.Dragged = 0.f;
 			Sample(C, C.Long, M.WoundEnd);
@@ -5262,6 +5267,19 @@ namespace LandMen
 				// would twitch at every kept point; as it is, his feet slip a little sideways where it wanders.)
 				M.F = F;
 				M.V = V;
+				// (bullet hits, bWounded: down wounded he lies where he went down, whatever his track does after wd;
+				// getting up at back, his place eases to the track's as the get-up's pivot does)
+				if (HitsNow.bWounded && M.Info.WoundStarted >= 0.0)
+				{
+					const float K = M.UpAt < 0.0 ? 1.f : UpLeft(M, Now);
+					if (K > 0.f)
+					{
+						M.X += (M.WoundX - M.X) * static_cast<double>(K);
+						M.Y += (M.WoundY - M.Y) * static_cast<double>(K);
+						M.F = static_cast<float>(static_cast<double>(M.F) + std::remainder(static_cast<double>(M.WoundF) - static_cast<double>(M.F), 2.0 * 3.14159265358979) * static_cast<double>(K));
+						M.V *= 1.f - K;
+					}
+				}
 			}
 			if (M.State == Man::Alive && M.Info.Dead >= 0.0 && Now >= M.Info.Dead)
 			{
