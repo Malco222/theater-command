@@ -7,9 +7,11 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { afterEach, describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
 import { answering, frontAnswering } from '../src/campaign/ai';
-import { setFromWait } from '../src/campaign/arrivalwaits';
-import { contactRead, corpsInContact } from '../src/campaign/drawn';
-import { addCorps, atWar, createGame, relocate, rowLeaving, ruleHolds, startPhase } from '../src/campaign/game';
+import { arrivalWaitOf, setFromWait } from '../src/campaign/arrivalwaits';
+import { divisionsOf } from '../src/campaign/armies';
+import { signPeace } from '../src/campaign/diplomacy';
+import { contactRead, corpsInContact, recordBattle } from '../src/campaign/drawn';
+import { addCorps, atWar, createGame, declareWar, relocate, rowLeaving, ruleHolds, startPhase } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import { farOn } from '../src/campaign/world';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -107,5 +109,31 @@ describe("S4-2: the player's lent regiment whose loan's end is his offer stays o
     month(g, 2);
     g.flags[`kept:${b.j}`] = 1;
     expect([...rowLeaving(g, 'GER', late)].map((x) => x.name)).not.toContain('Lent Regiment Test');
+  });
+});
+
+// ---- T4-1: a war row's loan held, let go by its war beginning again, then held again ------------------------------
+
+describe("T4-1: a war row's loan held a second time is told again, dated by its second hold", () => {
+  it('held in month 2, its war begun in month 3 (no telling flags left), its war over in month 4: a new headline and card', () => {
+    const { g, gz } = grenz({ human: true });
+    const { c, j } = lend(g, 'Lent Test Corps', gz, { war: ['GER', 'USA'] });
+    const p = addCorps(g, 'GER', 'Parent Test Corps', 'inf', 1, gz.id, {});
+    c.drew = divisionsOf(g, c).map((d) => ({ name: [d.name, d.short] as [string, string], no: d.no, from: p.id }));
+    recordBattle(g, gz, [c, ...g.byName.Poznan.units.filter((u) => u.nat === 'POL')]);
+    const heads = (t: number): string[] => g.headlines.filter((h: any) => h.turn === t && /Lent Test Corps/.test(h.text)).map((h: any) => h.text);
+    month(g, 2);
+    expect([g.flags[`wait:${j}`], g.flags[`rowTold:${j}`]]).toEqual([2, 2]);
+    expect(heads(2)).toHaveLength(1);
+    declareWar(g, 'GER', 'USA');
+    month(g, 3);
+    expect([c.dead, g.flags[`lent:${j}`], g.flags[`rowTold:${j}`], g.flags[`rowAt:${j}`]]).toEqual([false, c.id, undefined, undefined]);
+    expect(arrivalWaitOf(g, c)).toBeNull();
+    expect(signPeace(g, 'GER', 'USA')).toBe(true);
+    month(g, 4);
+    expect([g.flags[`wait:${j}`], g.flags[`rowTold:${j}`]]).toEqual([4, 4]);
+    expect(heads(4)).toEqual(['The Lent Test Corps, lent to the campaign, is due this month to go back into the Parent Test Corps, but it is at the front in the Grenzmark. It stays, and goes back the month after it leaves the front.']);
+    expect(arrivalWaitOf(g, c)?.whole).toBe('This corps was due to go back into the Parent Test Corps in December 1939. It goes back the month after it leaves the front.');
+    expect(ruleHolds(g).map((h) => [h.path, h.told, h.untold])).toEqual([['loanBack', true, false]]);
   });
 });

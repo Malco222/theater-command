@@ -6122,6 +6122,11 @@ function expeditions(g: Game, nat: string, take?: number): void {
       // (A loan's end of the player's that waited, told, and is now offered to him (`loanStays`): the hold is over, and its
       // telling flags go; his answer is the offer's. None exist with the switch never on.)
       if (!held && g.flags[leaveKey(i)] !== undefined && g.flags[`rowTold:${i}`] !== undefined) { rowDone(g, i); loanMarkGone(g, nat, i); }
+      // (A held loan of the player's that the one test no longer holds, its loan going on (a war row whose war has begun
+      // again): the hold is over, and its telling flags go, so a later hold is told again and dated by its own month. The
+      // telling sceptic's finding T4-1, round 4. The rule's own `wait:<i>` is left as it was: whether it goes too is the
+      // design director's (the rule sceptic's S4-3). Switch off: nothing.)
+      else if (!held && g.flags.fromWait === 1 && g.flags[`lent:${i}`] > 0 && g.flags[`rowTold:${i}`] !== undefined) rowDone(g, i);
       // (The far side: a division that awaits lent regiments keeps their shares for them while they are lent: `makeUp`.)
       if (o.awaits && farOn(g)) makeUp(g, nat, row, o);
       return;
