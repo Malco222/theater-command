@@ -36,3 +36,21 @@ describe("a rear guard raised on an island asks whether that corps fits, the fiv
     expect(rb.units.filter((u) => u.nat === 'JAP').map((u) => `${u.name} ${men(u)}`)).toContain('8th Base Force (Rabaul) 1500');
   });
 });
+
+type Glob = (p: string, o: { eager: boolean; as: string }) => Record<string, string>;
+const SOURCES = (import.meta as unknown as { glob: Glob }).glob('../src/**/*.ts', { eager: true, as: 'raw' });
+
+describe("a check with no corps at hand is named for what it asks, room for a division, never 'full' (rules sceptic 2, S2R-6; words sceptic 2, W2-6; the design director, 00:20Z, 27 November 2026, D6)", () => {
+  it("no line of code or comment within six lines before a roomForDivision call calls the room 'full'", () => {
+    const hits: string[] = [];
+    for (const [file, text] of Object.entries(SOURCES)) {
+      if (file.endsWith('/islands.ts')) continue;
+      const lines = text.split('\n');
+      lines.forEach((l, i) => {
+        if (!/roomForDivision\(/.test(l)) return;
+        for (let k = Math.max(0, i - 6); k <= i; k++) if (/\bfull\b(?! strength)/.test(lines[k])) hits.push(`${file.replace(/^.*\/src\//, 'src/')}:${k + 1}`);
+      });
+    }
+    expect([...new Set(hits)]).toEqual([]);
+  });
+});

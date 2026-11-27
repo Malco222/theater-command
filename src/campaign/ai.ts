@@ -1478,7 +1478,7 @@ function fallBack(g: Game, nat: string, cap = g.nations[nat].capital): void {
   const leaving = g.corps
     .filter((c) => c.nat === nat && c.kind !== 'fort' && !c.hold && given.has(c.reg) && home[c.reg] > 0)
     .sort((a, b) => home[a.reg] - home[b.reg]);
-  // Where the one road home is full of the nation's own troops, one of them goes a stage further to make room.
+  // Where the one road home has no room for a division of the nation's own troops, one of them goes a stage further to make room.
   const makeRoom = (r: Region, depth = 0): boolean => {
     if (roomForDivision(g, r, nat, placed(g, r, nat).length)) return true;
     if (depth > 3) return false;
@@ -3208,7 +3208,7 @@ export function gunsUp(g: Game, nat: string, enemies: Set<string>, targets: Set<
       if (v > bv) { bv = v; best = r; }
     }
     if (!best) continue;
-    // An army overseas has one road, and the sector at the end of it stands full. Its weakest corps on foot, one the
+    // An army overseas has one road, and the sector at the end of it has no room for a division. Its weakest corps on foot, one the
     // road would not carry into the attack in any case, steps back to where the guns stood and they take its place.
     if (scope && here.nb.includes(best.id) && !roomForDivision(g, best, nat, placed(g, best, nat).length)) {
       const out = best.units

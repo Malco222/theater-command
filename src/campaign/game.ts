@@ -4782,9 +4782,9 @@ const sharesWar = (g: Game, nat: string, friend: string): boolean => !!g.nations
 
 /**
  * Free play: where an army history dated is really put down. The place meant for it if there is room there; if
- * not, the nearest ground in the nation's own hands with room for one more corps, across the enemy's lines if
- * the place is a pocket. Nobody stacks a sixth corps in a province because a calendar said so. Null if every such
- * place is full.
+ * not, the nearest ground in the nation's own hands with room for the row's corps (`fits`; with no corps given, room for a division), across the
+ * enemy's lines if the place is a pocket. Nobody stacks a sixth corps in a province because a calendar said so. Null
+ * if no such place has room.
  *
  * (The whole-world chart: the record's own place is counted against five as it always was, `record`, though it be an
  * island of the Pacific with room for fewer. The record was written before the islands' table, and where its rows
@@ -4794,11 +4794,13 @@ const sharesWar = (g: Game, nat: string, friend: string): boolean => !!g.nations
  */
 function roomNear(g: Game, nat: string, at: Region, record = false, going: readonly Corps[] = [], out: readonly Corps[] = [], row = false): Region | null {
   const rows = (r: Region): number => placed(g, r, nat).filter((u) => u.kind !== 'eng').length;
-  const full = (r: Region): boolean => (going.length ? !fits(g, r, nat, going, { rows: rows(r), out }) : !roomForDivision(g, r, nat, rows(r)));
+  // (No room: with the row's corps, whether they fit; with none at hand, no room for a division. Named for what it
+  // asks: the design director, 00:20Z, 27 November 2026, D6.)
+  const noRoom = (r: Region): boolean => (going.length ? !fits(g, r, nat, going, { rows: rows(r), out }) : !roomForDivision(g, r, nat, rows(r)));
   // (The record's hand: at stops 1 and 2 its own place against five, island or not; record's hand. At stops 3 to 5 it
   // reads the room as every placing does: the design director, 21:37Z, 26 November 2026, 1, "at stops 3 to 5 the
   // record's place reads the room in men like every other placing; stops 1 and 2 as built".)
-  if (record && stopDef(g).book ? rows(at) < STACK : !full(at)) return at;
+  if (record && stopDef(g).book ? rows(at) < STACK : !noRoom(at)) return at;
   const held = (r: Region): boolean => r.ctrl === nat && fieldCtrl(g, r) === nat;
   const seen = new Uint8Array(g.regions.length);
   const q = [at.id];
@@ -4809,7 +4811,7 @@ function roomNear(g: Game, nat: string, at: Region, record = false, going: reado
       seen[j] = 1;
       q.push(j);
       const r = g.regions[j];
-      if (held(r) && !full(r)) return r;
+      if (held(r) && !noRoom(r)) return r;
     }
   }
   // (A dated row for an island of the table comes by sea: where no ground joined to it by land has room, it goes to
@@ -4821,7 +4823,7 @@ function roomNear(g: Game, nat: string, at: Region, record = false, going: reado
   // Its room is asked through `fits` with the row's own corps. A row comes by date, so the sea's state is not asked,
   // as it is not for the row's own place: a reading. Ground that is no island, and the far side off: as it was.)
   if (row && going.length && islandOf(g, at)) {
-    return g.regions.filter((r) => r.port && r.id !== at.id && held(r) && !hostileUnits(g, r, nat).length && !full(r))
+    return g.regions.filter((r) => r.port && r.id !== at.id && held(r) && !hostileUnits(g, r, nat).length && !noRoom(r))
       .sort((a, b) => chartDist(g, a, at) - chartDist(g, b, at) || a.id - b.id)[0] ?? null;
   }
   return null;
