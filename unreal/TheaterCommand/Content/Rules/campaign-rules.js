@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 87866abc1 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ae74b605a 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -115175,7 +115175,7 @@
         const who = force3 ? `${force3[1]} ${force3[2]}` : ring[1];
         row2.line = `The ring closes: ${who} ${/^(1|one|a|an) /i.test(who) ? "is" : "are"} cut off.`;
         row2.figures = [{ n: ring[2], label: "men cut off" }];
-        row2.head = `The ring closes at ${land2 ? theIn(bare) : row2.place}`;
+        row2.head = named7 && h.region !== void 0 ? `The ring closes ${inOrAt(g2.regions[h.region])}` : `The ring closes at ${land2 ? theIn(bare) : row2.place}`;
         row2.follows = `${cap18(ring[1])} ${/^(1|one|a|an) /i.test(ring[1]) ? "is" : "are"} cut off from all supply.`;
         row2.facts = row2.figures;
       }

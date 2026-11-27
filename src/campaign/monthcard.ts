@@ -41,7 +41,7 @@ import { allied, atWar, isPluralPlace, men, placeName, theName } from './game';
 import { CLASSES, NAVY, shipCount, shipList } from './navy';
 import { cityOrders } from './orders';
 import { besieged, garrisonOf, guardMen } from './siege';
-import { prizeOf, townName, townSize } from './towns';
+import { inOrAt, prizeOf, townName, townSize } from './towns';
 import { skyView, type SkyView } from './weather';
 import { menRules, raisable } from './manpower';
 import { bureauCost } from './research';
@@ -929,7 +929,10 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.line = `The ring closes: ${who} ${/^(1|one|a|an) /i.test(who) ? 'is' : 'are'} cut off.`;
       row.figures = [{ n: ring[2], label: 'men cut off' }];
       // (As the lead story it is told whole: where, who, and how many.)
-      row.head = `The ring closes at ${land ? theIn(bare) : row.place}`;
+      // (City defences, the switch on: "in" with the article for a province, "at" for a place named for its town, by the
+      // game's one helper inOrAt, as the navy's shelling line: "The ring closes in the Ardennes", "The ring closes at
+      // Stalingrad". The UI director, 27 Nov 2026 05:53Z. Off, as shipped.)
+      row.head = named && h.region !== undefined ? `The ring closes ${inOrAt(g.regions[h.region])}` : `The ring closes at ${land ? theIn(bare) : row.place}`;
       row.follows = `${cap(ring[1])} ${/^(1|one|a|an) /i.test(ring[1]) ? 'is' : 'are'} cut off from all supply.`;
       row.facts = row.figures;
     }
