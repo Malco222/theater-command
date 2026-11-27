@@ -5,7 +5,7 @@
 // anything from the drawing, and it must stay one-way: no rule may ever read a crater or a burst's spot. This test pins
 // it, as the director asked: "a test that moves every crater and shell spot and shows the rules record unchanged".
 // Each battle is fought live, as the 3D game steps it (LiveBattle.tick, a step at a time), with the gun crews drawn at
-// their posts (teamwork) and the drill book riding (life): three set pieces, and a river field with fighter-bombers on
+// their posts (teamwork) and the drill book riding (life): four set pieces, and a river field with fighter-bombers on
 // call to both sides, so bursts land in the water and bombs fall. Each is fought twice. In the second:
 //  - every burst is laid somewhere else, by turns (the n-th by the n-th way): off its drawn man by a move of its own
 //    (8 to 28 m, every way round, so bursts move against each other and against the drawn men, not as one); in the
@@ -23,6 +23,13 @@
 // read off its spot) and the views' crater zones. The drawn channels (men, tails, rounds, phases) are the drawing and
 // are not read. A rule that came to read a crater or a burst's spot, or kept one, would fail it. A control takes 1e-9
 // off one unit's nerve after contact and shows the record catches it at that very step.
+// Two shells can burst in the same step: one step settles every block's blows together (sim.ts, the step's hurt, each
+// block's in turn), and a blow that costs a block two models lays two shells (suffer, one shell a model). A rule that
+// read one burst against another of the same step is caught only in a battle that has such a step (the design director,
+// 27 November 20:41Z, on the replay's B1: a pin with a living mutant is a loosened pin). Prokhorovka, seed 2, the
+// defender seated, has one: a field gun's shell and a howitzer's on two blocks 193 m apart, at 117.6 s (found by a sweep
+// of 40 battles; gun-crews/teamwork-tick-proof-1127/PIN-MUTANTS.md). The first test holds that the fights still have such
+// a step, so a rules change that took it away fails here and another battle is found, never a pin quietly loosened.
 import { describe, expect, it } from 'vitest';
 import type { AirOnCall, Calibre, Zone } from '../src/battle/core';
 import { groundAt, sampleTicket, withTeams, type LandBattle } from '../src/battle/land';
@@ -34,6 +41,7 @@ const FIGHTS: Array<{ name: string; open: () => LiveBattle }> = [
   { name: 'Prokhorovka, seed 3', open: () => livePiece('prokhorovka-1943', 3, crews('att')) },
   { name: 'Prokhorovka, seed 4', open: () => livePiece('prokhorovka-1943', 4, crews('def')) },
   { name: 'Normandy, seed 2', open: () => livePiece('normandy-1944', 2, crews('def')) },
+  { name: 'Prokhorovka, seed 2 (two shells in one step)', open: () => livePiece('prokhorovka-1943', 2, crews('def')) },
   {
     name: 'plains with a river, fighter-bombers on call',
     open: () => liveTicket(withTeams(sampleTicket('plains', 1.3, {
@@ -133,7 +141,8 @@ function channels(d: LiveDelta): unknown {
 }
 
 type Mark = [number, number, string, string];
-interface Fought { steps: string[]; marks: Mark[]; ways: Record<string, number>; bombs: number; craters: number; added: number }
+/** pairs: each step in which two shells or more (from guns, not bombs) burst, and the least distance between them. */
+interface Fought { steps: string[]; marks: Mark[]; ways: Record<string, number>; bombs: number; craters: number; added: number; pairs: Array<[number, number]> }
 
 /** One battle fought live with the gun crews drawn. `move`: the marks laid elsewhere as the head of this file says.
  *  `nudge`: 1e-9 off one unit's nerve at that step, and the fight stopped a few steps on. */
@@ -160,7 +169,7 @@ function fight(f: (typeof FIGHTS)[number], move: boolean, nudge?: number): Fough
     };
   }
   const mine = new WeakSet<object>(), bases: Array<{ x: number; y: number; r: number; at: number; until: number; id: number; c: number }> = [];
-  const steps: string[] = [], marks: Mark[] = [];
+  const steps: string[] = [], marks: Mark[] = [], pairs: Array<[number, number]> = [];
   for (let k = 0; !sim.over && k < 40000 && (nudge === undefined || k < nudge + 20); k++) {
     if (nudge !== undefined && k === nudge) {
       // (a unit in the field whose nerve is off its ceiling, mor0, which recovery would put it straight back to)
@@ -170,6 +179,12 @@ function fight(f: (typeof FIGHTS)[number], move: boolean, nudge?: number): Fough
     }
     const x = L.tick(0.1, 1);
     for (const e of x.events) if (e.what === 'shell') marks.push([e.x ?? NaN, e.y ?? NaN, String(e.ground), String(e.cal)]);
+    const guns = x.events.filter((e) => e.what === 'shell' && e.cal !== 'bomb');
+    if (guns.length >= 2) {
+      let least = Infinity;
+      for (let i = 0; i < guns.length; i++) for (let j = i + 1; j < guns.length; j++) least = Math.min(least, Math.hypot((guns[i].x ?? 0) - (guns[j].x ?? 0), (guns[i].y ?? 0) - (guns[j].y ?? 0)));
+      pairs.push([k, least]);
+    }
     if (move) {
       const cs = sim.craters;
       for (const c of cs) if (!mine.has(c)) bases.push({ x: c.x, y: c.y, r: c.r, at: c.at ?? 0, until: c.until, id: c.id, c: Math.max(0, CALS.indexOf(c.cal ?? 'field')) });
@@ -191,7 +206,7 @@ function fight(f: (typeof FIGHTS)[number], move: boolean, nudge?: number): Fough
     }
     steps.push(digest(sim, new Set<unknown>([d, sim.craters]), false) + digest(channels(x), new Set(), true));
   }
-  return { steps, marks, ways, bombs: marks.filter((q) => q[3] === 'bomb').length, craters: sim.craters.length, added };
+  return { steps, marks, ways, bombs: marks.filter((q) => q[3] === 'bomb').length, craters: sim.craters.length, added, pairs };
 }
 
 describe('the burst marks (where a shell or bomb bursts, and its crater) are drawing: no rule reads them', () => {
@@ -218,6 +233,12 @@ describe('the burst marks (where a shell or bomb bursts, and its crater) are dra
     expect(moved, seenAs).toBeGreaterThanOrEqual(Math.floor(all * 0.85));
     expect(ground, seenAs).toBeGreaterThanOrEqual(12);
     expect(wet, seenAs).toBeGreaterThanOrEqual(2);
+    // Two shells bursting in one step: at the same steps in both fights (the rules lay them), the second fight's laid
+    // another distance apart (so a rule that read one against the other would read another figure).
+    const pairs = seen.flatMap((s) => s.as.pairs.map(([k, d], i) => ({ at: `${s.f.name}, step ${k}`, as: d, off: s.off.pairs[i]?.[1] ?? NaN })));
+    expect(pairs.length, 'no fight has two shells in one step: find a battle that does (PIN-MUTANTS.md)').toBeGreaterThanOrEqual(1);
+    for (const s of seen) expect(s.off.pairs.map((q) => q[0]), s.f.name).toEqual(s.as.pairs.map((q) => q[0]));
+    expect(pairs.filter((q) => Math.abs(q.off - q.as) > 1).length, JSON.stringify(pairs)).toBeGreaterThanOrEqual(1);
   });
 
   it('leaves the rules record the same at every step', () => {
