@@ -2288,7 +2288,74 @@ namespace LandKit
 		 * AtLeast (metres, half its width; a captured tank's back and roof marks, the art director's floor of 27 November
 		 * 2026): none
 		 * at all where the skin takes the mark only smaller than that.
+		 *
+		 * Whole (the German cross at its true proportions, Dress::bTrueCross; the art director's rulings of 27 November
+		 * 2026, 04:19Z): a mark is never cut by its plate's edge. Where neither its place nor the few moves above take it
+		 * whole, every place within the same reach is asked, on a grid of a twelfth of that reach, the nearest first, at
+		 * its size and then smaller (to half of it); where none takes it whole, none at all. With Whole the mark may also be
+		 * held to a size (a vehicle's two sides carry the same size), or only fitted and not painted. None given: as
+		 * before, point for point.
 		 */
+		struct MarkWhole
+		{
+			bool bTryOnly = false; // settle its size only: nothing is painted
+			double SizeMost = 0.0; // metres, half its width: no larger than this (0: as asked)
+			double Fitted = 0.0;   // given back: the size it takes whole, half its width (0: none)
+		};
+
+		/** A vehicle's two sides carry the same size (the art director, 27 November 2026, 04:20Z: "the smaller fit wins
+		 * for both"): of two places of the same part mirrored across her middle line (her file's x and height the same to
+		 * 5 cm, her side the other way, facing the other way), the smaller whole fit is both's. Try(I, Most): place I's
+		 * whole fit, half its width, held to no more than Most (0: as asked); 0 where it takes none; below 0 for a place
+		 * not painted at all, which pairs with none. Most, given back: the size a place is held to (above 0), -1 where it
+		 * carries none because its partner takes none, 0 where its own fit stands.
+		 * A place held to its partner's size may take the mark only smaller still (the skin is asked at other points
+		 * for another size), so it is asked again held, and its partner is then held to that, until both take the same:
+		 * the sizes only come down, through a handful of steps. A pair that has not agreed after eight rounds carries
+		 * none. */
+		template <class TryFit> void PairSettle(const std::vector<Mark>& Places, std::vector<double>& Most, TryFit Try)
+		{
+			std::vector<double> Fit(Places.size(), 0.0);
+			Most.assign(Places.size(), 0.0);
+			for (size_t I = 0; I < Places.size(); ++I)
+			{
+				Fit[I] = Try(I, 0.0);
+			}
+			for (size_t I = 0; I < Places.size(); ++I)
+			{
+				for (size_t J = I + 1; J < Places.size(); ++J)
+				{
+					const Mark& L = Places[I];
+					const Mark& G = Places[J];
+					const V3 Fl = L.Facing.Unit(), Fg = G.Facing.Unit();
+					const bool bMirrored = L.Part == G.Part && std::fabs(L.At.X - G.At.X) <= 0.05 && std::fabs(L.At.Z - G.At.Z) <= 0.05
+						&& std::fabs(L.At.Y + G.At.Y) <= 0.05 && L.At.Y * G.At.Y < 0.0 && std::fabs(L.At.Y) > 0.05 && std::fabs(Fl.X - Fg.X) <= 0.1
+						&& std::fabs(Fl.Z - Fg.Z) <= 0.1 && std::fabs(Fl.Y + Fg.Y) <= 0.1 && std::fabs(Fl.Y) > 0.1;
+					if (!bMirrored || Fit[I] < 0.0 || Fit[J] < 0.0)
+					{
+						continue;
+					}
+					bool bAgreed = false;
+					for (int Round = 0; Round < 8 && !bAgreed; ++Round)
+					{
+						const double Least = std::min(Fit[I], Fit[J]);
+						bAgreed = std::fabs(Fit[I] - Fit[J]) <= 1e-9;
+						for (const size_t K : { I, J })
+						{
+							if (Fit[K] > Least + 1e-9)
+							{
+								Most[K] = Least > 0.0 ? Least : -1.0;
+								Fit[K] = Least > 0.0 ? std::max(Try(K, Least), 0.0) : 0.0;
+							}
+						}
+					}
+					if (!bAgreed)
+					{
+						Most[I] = Most[J] = -1.0;
+					}
+				}
+			}
+		}
 		struct MarkSkin
 		{
 			const std::vector<uint32_t>* Raw = nullptr; // her body's points' places in her file's mesh
@@ -2299,8 +2366,12 @@ namespace LandKit
 		size_t PaintMark(Mesh& Out, const V3& Pivot, const std::vector<MarkPiece>& Pieces, const V3& At, const V3& Facing, double Radius,
 			double Dust, double Step, double Lift, uint64_t Seed, const MarkSkin& Skin = MarkSkin(), bool bHand = false, bool bMustFit = false,
 			double* Moved = nullptr, double* Scale = nullptr, bool bReadable = false, double Clear = 0.0, double FlakeMost = 0.12, double StepMost = 0.0,
-			double AtLeast = 0.0)
+			double AtLeast = 0.0, MarkWhole* Whole = nullptr)
 		{
+			if (Whole)
+			{
+				Whole->Fitted = 0.0;
+			}
 			const V3 F = Facing.Unit(V3(1.0, 0.0, 0.0));
 			// (on a wall its top is toward the sky; on a roof, toward her front)
 			const V3 Hint = std::fabs(F.Z) > 0.8 ? V3(1.0, 0.0, 0.0) : V3(0.0, 0.0, 1.0);
@@ -2442,7 +2513,8 @@ namespace LandKit
 				EndA = std::max(EndA, std::fabs(Sm.first));
 				EndU = std::max(EndU, std::fabs(Sm.second));
 			}
-			auto Fits = [&](const V3& Middle, double Size)
+			// (bBare: no room asked round it and no step read, only that every sample lies on her skin, on one face of it)
+			auto Fits = [&](const V3& Middle, double Size, bool bBare = false)
 			{
 				double Lo = 1e9, Hi = -1e9;
 				std::array<double, 169> Deep;
@@ -2453,7 +2525,7 @@ namespace LandKit
 				for (size_t K = 0; K < Samples.size(); ++K)
 				{
 					const auto& Sm = Samples[K];
-					const Hit H = Clear > 0.0 ? Cast(Middle + Across * (Sm.first * Size + Clear * Sm.first / std::max(EndA, 1e-6))
+					const Hit H = Clear > 0.0 && !bBare ? Cast(Middle + Across * (Sm.first * Size + Clear * Sm.first / std::max(EndA, 1e-6))
 						+ Up * (Sm.second * Size + Clear * Sm.second / std::max(EndU, 1e-6)))
 						: Cast(Middle + Across * (Sm.first * Size) + Up * (Sm.second * Size));
 					if (!H.T)
@@ -2472,7 +2544,7 @@ namespace LandKit
 					return false;
 				}
 				// (StepMost: no step in the skin under it, by three samples in a row across and up)
-				for (int Cell = 0; StepMost > 0.0 && Cell < 169; ++Cell)
+				for (int Cell = 0; StepMost > 0.0 && !bBare && Cell < 169; ++Cell)
 				{
 					const int Col = Cell % 13, Row = Cell / 13;
 					const double Mid = Deep[static_cast<size_t>(Cell)];
@@ -2493,8 +2565,10 @@ namespace LandKit
 				}
 				return true;
 			};
+			// (Whole held to a size: no larger than that, the same moves asked)
+			const double Held = Whole && Whole->SizeMost > 0.0 ? Whole->SizeMost : 1e9;
 			V3 Middle = Place;
-			double Size = Radius;
+			double Size = std::min(Radius, Held);
 			bool bFound = Fits(Middle, Size);
 			for (const double Shrink : { 1.0, 0.85, 0.7 })
 			{
@@ -2506,22 +2580,74 @@ namespace LandKit
 							 { 0.7071, -0.7071 }, { -0.7071, -0.7071 } })
 					{
 						const V3 Try = Place + Across * (Way.first * By) + Up * (Way.second * By);
-						if (Fits(Try, Radius * Shrink))
+						if (Fits(Try, std::min(Radius * Shrink, Held)))
 						{
 							Middle = Try;
-							Size = Radius * Shrink;
+							Size = std::min(Radius * Shrink, Held);
 							bFound = true;
 							break;
 						}
 					}
 				}
-				if (!bFound && Shrink > 0.7 && Fits(Place, Radius * Shrink * 0.85))
+				if (!bFound && Shrink > 0.7 && Fits(Place, std::min(Radius * Shrink * 0.85, Held)))
 				{
-					Size = Radius * Shrink * 0.85;
+					Size = std::min(Radius * Shrink * 0.85, Held);
 					bFound = true;
 				}
 			}
-			if ((!bFound && bMustFit) || Size < AtLeast)
+			// (Whole, where none of those took it: every place within the same reach is asked, the nearest first, at its size
+			// and then smaller, to half of it, with Clear round it; where none takes it so, the same on her skin alone, every
+			// sample of it on one face of her skin, which is not cut by an edge though it has less room round it. The
+			// Sherman's left turret side, taken by Germany, takes her true cross whole at 0.262 m 9 cm from her file's
+			// place, between the moves above.)
+			if (!bFound && Whole)
+			{
+				std::vector<std::pair<double, double>> Grid;
+				for (int Ia = -12; Ia <= 12; ++Ia)
+				{
+					for (int Iu = -12; Iu <= 12; ++Iu)
+					{
+						if (Ia * Ia + Iu * Iu <= 144)
+						{
+							Grid.push_back({ Ia / 12.0, Iu / 12.0 });
+						}
+					}
+				}
+				// (nearest first; of two as near, by the angle round from her up, so the same model always gives the same)
+				std::stable_sort(Grid.begin(), Grid.end(), [](const std::pair<double, double>& L, const std::pair<double, double>& G) {
+					const double Ll = L.first * L.first + L.second * L.second, Gl = G.first * G.first + G.second * G.second;
+					if (std::fabs(Ll - Gl) > 1e-9)
+					{
+						return Ll < Gl;
+					}
+					return std::atan2(L.first, L.second) < std::atan2(G.first, G.second);
+				});
+				for (const bool bBare : { false, true })
+				{
+					double Tried = -1.0;
+					for (const double Shrink : { 1.0, 0.85, 0.7, 0.6, 0.5 })
+					{
+						const double Try = std::min(Radius * Shrink, Held);
+						if (bFound || std::fabs(Try - Tried) < 1e-12)
+						{
+							continue;
+						}
+						Tried = Try;
+						for (const auto& At2 : Grid)
+						{
+							const V3 Where = Place + Across * (At2.first * Shift) + Up * (At2.second * Shift);
+							if (Fits(Where, Try, bBare))
+							{
+								Middle = Where;
+								Size = Try;
+								bFound = true;
+								break;
+							}
+						}
+					}
+				}
+			}
+			if ((!bFound && (bMustFit || Whole)) || Size < AtLeast)
 			{
 				return 0;
 			}
@@ -2532,6 +2658,14 @@ namespace LandKit
 			if (Scale)
 			{
 				*Scale = Size / Radius;
+			}
+			if (Whole)
+			{
+				Whole->Fitted = Size;
+				if (Whole->bTryOnly)
+				{
+					return 0;
+				}
 			}
 
 			const double DustShare = 0.1 + 0.3 * Clamp(Dust / 100.0, 0.0, 1.0);
@@ -4236,7 +4370,8 @@ namespace LandKit
 				{
 					CaptorDust = std::max(CaptorDust, Mk.Dust);
 				}
-				auto PaintCaptor = [&](int BodyIx, const V3& Place, const V3& Facing, double Size, double DustWord, uint64_t Which, double* Sized, double AtLeast) -> size_t {
+				auto PaintCaptor = [&](int BodyIx, const V3& Place, const V3& Facing, double Size, double DustWord, uint64_t Which, double* Sized, double AtLeast,
+									   MarkWhole* Whole = nullptr) -> size_t {
 					if (BodyIx < 0 || static_cast<size_t>(BodyIx) >= Bodies.size() || CaptorPieces.empty() || Bodies[static_cast<size_t>(BodyIx)].bTrack) return 0;
 					Body& Bo = Bodies[static_cast<size_t>(BodyIx)];
 					MarkSkin Skin;
@@ -4246,8 +4381,51 @@ namespace LandKit
 					Skin.DustColour = bFileDust ? DustColour : Dust;
 					const uint64_t CaptorSeed = Mix(Which + 1, static_cast<uint64_t>(Level) + 1, 0x43415054ull);
 					return PaintMark(Level == 0 ? Bo.Near : Bo.Far, Bo.Pivot, CaptorPieces, Place, Facing, Size, DustWord > 0.0 ? DustWord : 45.0, Level == 0 ? 0.03 : 0.12,
-						Level == 0 ? 0.004 : 0.012, CaptorSeed, Skin, MarkByHand(CaptorKind), false, nullptr, Sized, false, 0.05, 0.085, 0.0, AtLeast);
+						Level == 0 ? 0.004 : 0.012, CaptorSeed, Skin, MarkByHand(CaptorKind), false, nullptr, Sized, false, 0.05, 0.085, 0.0, AtLeast, Whole);
 				};
+				// (a captor's mark at her file's place I, with marks at their real size: the size asked and the place, at the
+				// middle of the plate's height there)
+				auto CaptorAsked = [&](size_t I, double& Size, V3& Place) {
+					const Mark& Mk = Marks[I];
+					const int BodyIx = Parts[static_cast<size_t>(Mk.Part)].Body;
+					const double Real = MarkReal(CaptorKind, Kind, R["role"].Str(), Name, Mk.Facing.Z > 0.7);
+					Size = Real > 0.0 ? 1.5 * Real : Size;
+					if (BodyIx >= 0 && static_cast<size_t>(BodyIx) < Bodies.size())
+					{
+						const Body& Bo = Bodies[static_cast<size_t>(BodyIx)];
+						V3 ToMiddle;
+						const double Tall = PlateHigh(Bo.Near, Bo.Pivot, Mk.At, Mk.Facing, Members[static_cast<size_t>(BodyIx)].size(), &ToMiddle);
+						if (Tall > 0.0)
+						{
+							Size = std::min(Size, std::max(std::min(0.75 * Tall, Tall - 0.10), 0.0) / 2.0);
+							Place = Mk.At + ToMiddle;
+						}
+					}
+				};
+				// With the German cross at its true proportions (Dress::bTrueCross; the art director's rulings of 27 November
+				// 2026, 04:19Z and 04:20Z), on the near level: no cross is cut by its plate's edge (PaintMark's Whole: where
+				// its wider arm does not fit, it shrinks whole), and her two sides carry the same size, the smaller whole fit
+				// for both (PairSettle). Each place's fit is settled first, nothing painted, then each is painted, held to its
+				// partner's where that is the smaller (asked again held, PairSettle). Off, or any other captor's mark: as before.
+				const bool bWholeCaptor = D.bTrueCross && D.bRealMarks && CaptorKind == "cross" && Level == 0;
+				std::vector<double> CaptorMost(Marks.size(), 0.0);
+				if (bWholeCaptor)
+				{
+					PairSettle(Marks, CaptorMost, [&](size_t I, double Most) {
+						double Size = Marks[I].Radius * 1.5;
+						V3 Place = Marks[I].At;
+						CaptorAsked(I, Size, Place);
+						if (Size <= 0.0)
+						{
+							return -1.0;
+						}
+						MarkWhole Try;
+						Try.bTryOnly = true;
+						Try.SizeMost = Most;
+						PaintCaptor(Parts[static_cast<size_t>(Marks[I].Part)].Body, Place, Marks[I].Facing, Size, Marks[I].Dust, I, nullptr, 0.0, &Try);
+						return Try.Fitted;
+					});
+				}
 				for (size_t I = 0; I < Marks.size(); ++I)
 				{
 					const Mark& Mk = Marks[I];
@@ -4256,24 +4434,14 @@ namespace LandKit
 					V3 Place = Mk.At;
 					if (D.bRealMarks && Level == 0)
 					{
-						const double Real = MarkReal(CaptorKind, Kind, R["role"].Str(), Name, Mk.Facing.Z > 0.7);
-						Size = Real > 0.0 ? 1.5 * Real : Size;
-						if (BodyIx >= 0 && static_cast<size_t>(BodyIx) < Bodies.size())
-						{
-							const Body& Bo = Bodies[static_cast<size_t>(BodyIx)];
-							V3 ToMiddle;
-							const double Tall = PlateHigh(Bo.Near, Bo.Pivot, Mk.At, Mk.Facing, Members[static_cast<size_t>(BodyIx)].size(), &ToMiddle);
-							if (Tall > 0.0)
-							{
-								Size = std::min(Size, std::max(std::min(0.75 * Tall, Tall - 0.10), 0.0) / 2.0);
-								Place = Mk.At + ToMiddle;
-							}
-						}
+						CaptorAsked(I, Size, Place);
 						// (painted here, on the near level: where the skin made it smaller to lie whole on one face, that
 						// is its size for the far level and for whoever reads her marks' places: the picture sheet's
 						// ruler, the kit's test)
 						double Sized = 1.0;
-						if (Size > 0.0 && PaintCaptor(BodyIx, Place, Mk.Facing, Size, Mk.Dust, I, &Sized, 0.0) > 0)
+						MarkWhole Whole;
+						Whole.SizeMost = std::max(CaptorMost[I], 0.0);
+						if (Size > 0.0 && CaptorMost[I] >= 0.0 && PaintCaptor(BodyIx, Place, Mk.Facing, Size, Mk.Dust, I, &Sized, 0.0, bWholeCaptor ? &Whole : nullptr) > 0)
 						{
 							Size *= Sized;
 						}
@@ -4421,7 +4589,11 @@ namespace LandKit
 							// the plate's own middle.
 							// (As first built, 26 November 2026, the place was the middle of the plate's clear pieces, which is not itself
 							// a clear place: a T-34's roof mark lay between her two hatches and under their rims.)
-							auto CaptorFind = [&](int PartIx, int Axis, double Sign, double Cap, bool bAirMark, CaptorPlate& Found) {
+							// (bOver, the German cross at its true proportions on her roof, below: what stands over the plate is
+							// counted as seen from above at a slant, and her file's engine deck is kept clear; Plain: the place
+							// found without it, kept where it is clear of all that)
+							auto CaptorFind = [&](int PartIx, int Axis, double Sign, double Cap, bool bAirMark, CaptorPlate& Found, bool bOver = false,
+												  const CaptorPlate* Plain = nullptr) {
 								Found = CaptorPlate();
 								if (PartIx < 0 || Parts[static_cast<size_t>(PartIx)].Body < 0 || Cap <= 0.05)
 								{
@@ -4674,6 +4846,7 @@ namespace LandKit
 								{
 									V3 P, Nm;
 									double Clear = 0.0, Bound = 0.0, Likely = 0.0, FromMiddle = 0.0;
+									double Room = 1e9; // (bOver: the largest mark what stands over the plate lets it take, 5 cm clear)
 								};
 								std::vector<CaptorSpot> Spots;
 								V3 Middle;
@@ -4757,6 +4930,56 @@ namespace LandKit
 									}
 									return std::sqrt(std::max(Least2, 0.0));
 								};
+								// With the German cross at its true proportions, her roof's (bOver; the art director's ruling of 27
+								// November 2026, 04:20Z, the captured Sherman's roof cross under her hatch ring and her machine gun:
+								// "clear of the hatch ring and the gun, or down a size, whole"): what stands over the plate is seen
+								// from above at a slant, as she was seen when ruled (the picture sheet's look from above, 58 degrees
+								// up the sky), so a thing stands off the mark's edge, across the plate, at least OverSlant of its own
+								// height above the plate (the slant's 0.625 metres across for each metre up) and 5 cm more. Read for
+								// every thing of hers higher than the plate, a gun on its post, a cupola's ring,
+								// another part that overhangs it; and her file's engine deck (its "engine" place, where her engine's
+								// smoke and first fire come out, on this part) stands as one of them, so no slide takes the mark onto
+								// its grilles ("Never onto the engine deck grilles"). Without it: the distance across the plate's
+								// flat alone, as before.
+								constexpr double OverSlant = 0.625;
+								std::vector<CaptorStander> Over;
+								if (bOver)
+								{
+									for (const CaptorStander& St : Standers)
+									{
+										if (Outward(St.P) > Lowest + 0.03)
+										{
+											Over.push_back(St);
+										}
+									}
+									for (const Socket& So : Sockets)
+									{
+										// (where the place found without it already lies over her engine's place, as on a car's
+										// bonnet, that is the plate she is marked on, and it does not count)
+										const V3 Dv = Plain ? So.At - Plain->At : V3();
+										const double Off = Dv.Dot(Dv) - (Plain ? Dv.Dot(Plain->Facing) * Dv.Dot(Plain->Facing) : 0.0);
+										const bool bMarkedThere = Plain && Plain->Size > 0.0 && Off <= (Plain->Size + 0.05) * (Plain->Size + 0.05);
+										if (So.Name == "engine" && So.Part == PartIx && !bMarkedThere)
+										{
+											Over.push_back({ So.At, false });
+										}
+									}
+								}
+								// (how far across the plate's flat the nearest thing over it stands from a place, less its height above
+								// the plate by OverSlant; huge where nothing is read)
+								auto OverAt = [&](const V3& P, const V3& Nm) {
+									double Room = 1e9;
+									for (const CaptorStander& St : Over)
+									{
+										const V3 Dv = St.P - P;
+										const double Above = Dv.Dot(Nm);
+										if (Above > (St.bOwn ? 0.015 : -0.01))
+										{
+											Room = std::min(Room, std::sqrt(std::max(Dv.Dot(Dv) - Above * Above, 0.0)) - OverSlant * std::max(Above, 0.0));
+										}
+									}
+									return Room;
+								};
 								// (the rule above: the mark a place takes, of the plate's whole run through it along the mark's up, how far
 								// its edge is along the mark's up and across it, and how far the nearest proud thing)
 								auto RuleOf = [Cap, bAirMark](double TallRun, double TallEdge, double WideEdge, double Clear) {
@@ -4811,11 +5034,29 @@ namespace LandKit
 									}
 									return RuleOf(Reaches[0] + Reaches[1], std::min(Reaches[0], Reaches[1]), std::min(Reaches[2], Reaches[3]), Clear);
 								};
+								// (the mark a place takes, and with bOver no larger than what stands over the plate lets it be, 5 cm clear of
+								// that too)
+								auto TakesOver = [&](const V3& P, const V3& Nm) {
+									const double Size = TakesAt(P, Nm, ClearAt(P, Nm));
+									return bOver ? std::min(Size, OverAt(P, Nm) - 0.05) : Size;
+								};
+								// (bOver: the place found without it, kept where it takes the same mark with it)
+								if (bOver && Plain && Plain->Size > 0.0 && TakesOver(Plain->At, Plain->Facing) >= Plain->Size - 1e-9)
+								{
+									Found = *Plain;
+									return;
+								}
 								for (CaptorSpot& Sp : Spots)
 								{
 									Sp.Clear = ClearAt(Sp.P, Sp.Nm);
 									Sp.Bound = RuleOf(2.0, 1.0, 1.0, Sp.Clear);
 									Sp.Likely = LikelyAt(Sp.P, Sp.Nm, Sp.Clear);
+									if (bOver)
+									{
+										Sp.Room = OverAt(Sp.P, Sp.Nm) - 0.05;
+										Sp.Bound = std::min(Sp.Bound, Sp.Room);
+										Sp.Likely = std::min(Sp.Likely, Sp.Room);
+									}
 									Sp.FromMiddle = (Sp.P - Middle).Length();
 								}
 								// (of two places, the one nearer her middle line, to the centimetre; then nearer the plate's middle; then by
@@ -4867,7 +5108,7 @@ namespace LandKit
 									{
 										continue;
 									}
-									const double Size = TakesAt(Spots[K].P, Spots[K].Nm, Spots[K].Clear);
+									const double Size = bOver ? std::min(TakesAt(Spots[K].P, Spots[K].Nm, Spots[K].Clear), Spots[K].Room) : TakesAt(Spots[K].P, Spots[K].Nm, Spots[K].Clear);
 									Answers.push_back({ Size, K });
 									Most = std::max(Most, Size);
 								}
@@ -4903,7 +5144,7 @@ namespace LandKit
 											for (const V3& Way : { Upright, -Upright, Sideways, -Sideways, Slant, -Slant, Aslant, -Aslant })
 											{
 												const V3 P = Found.At + Way * Pace;
-												const double Size = TakesAt(P, Fc, ClearAt(P, Fc));
+												const double Size = TakesOver(P, Fc);
 												if (Size > BetterSize + 1e-6)
 												{
 													BetterSize = Size;
@@ -4923,6 +5164,26 @@ namespace LandKit
 							CaptorFind(RoofPart, 2, 1.0, 0.3, true, CaptorRoof);
 							const double Real = MarkReal(CaptorKind, Kind, R["role"].Str(), Name, false);
 							CaptorFind(BackPart, 0, -1.0, Real > 0.0 ? 1.5 * Real : 0.25, false, CaptorBack);
+							// The German cross at its true proportions on her roof (Dress::bTrueCross; the art director's ruling of
+							// 27 November 2026, 04:20Z: "A broken cross is worse than a smaller one"): where something of hers
+							// stands over the place found, seen from above at a slant (CaptorFind's bOver), the cross slides to the
+							// clearest flat of the same plate that holds it at that size; where none does, it comes down to her
+							// sides' size (half as big again as its real size), where one holds that; else to the largest one does,
+							// whole, down to the floor below. Off, or any other captor's mark: as before.
+							if (D.bTrueCross && CaptorKind == "cross" && CaptorRoof.Size > 0.0)
+							{
+								const CaptorPlate Plain = CaptorRoof;
+								CaptorFind(RoofPart, 2, 1.0, 0.3, true, CaptorRoof, true, &Plain);
+								const double SidesSize = Real > 0.0 ? 1.5 * Real : 0.25;
+								if (CaptorRoof.Size >= Plain.Size - 0.005)
+								{
+									CaptorRoof.Size = std::min(CaptorRoof.Size, Plain.Size);
+								}
+								else if (CaptorRoof.Size >= SidesSize)
+								{
+									CaptorRoof.Size = SidesSize;
+								}
+							}
 						// Each has a floor (the art director's rulings of 27 November 2026, "one tank, one floor"): under a
 						// quarter of a metre across, her smallest captor's mark at its real size, NO mark on that plate. Smaller, a
 						// back mark is a speck low in a corner of her plate and reads as a blemish, and a roof mark is a speck from
@@ -4941,7 +5202,10 @@ namespace LandKit
 							CaptorPlate& Pl = Which == 0 ? CaptorRoof : CaptorBack;
 							const int PartIx = Which == 0 ? RoofPart : BackPart;
 							double Sized = 1.0;
-							if (Pl.Size > 0.0 && PaintCaptor(Parts[static_cast<size_t>(PartIx)].Body, Pl.At, Pl.Facing, Pl.Size, CaptorDust, 1000 + static_cast<uint64_t>(Which), &Sized, MarkLeast) > 0)
+							// (the German cross at its true proportions: whole, never cut by the plate's edge, as her sides')
+							MarkWhole Whole;
+							if (Pl.Size > 0.0 && PaintCaptor(Parts[static_cast<size_t>(PartIx)].Body, Pl.At, Pl.Facing, Pl.Size, CaptorDust, 1000 + static_cast<uint64_t>(Which), &Sized, MarkLeast,
+									D.bTrueCross && CaptorKind == "cross" ? &Whole : nullptr) > 0)
 							{
 								Pl.Size *= Sized;
 								Mark Laid;
@@ -5040,12 +5304,55 @@ namespace LandKit
 				// vehicle keeps the captor's big marks above; a captor the captured kit has no mark for (the British, the
 				// Italians) wears his own here, half as big again, as the captured kit's are.
 				std::vector<uint8_t> Kept(Painted.size(), 1);
+				// With the German cross at its true proportions (Dress::bTrueCross; the art director's rulings of 27 November
+				// 2026, 04:19Z and 04:20Z), her owner's crosses on the near level as her captor's above: none is cut by its
+				// plate's edge (PaintMark's Whole), and her two sides carry the same size, the smaller whole fit for both
+				// (PairSettle). Each place's fit is settled first, nothing painted, as the painting below asks it (at her
+				// file's place, its real size at most with marks at their real size, 5 cm clear of the plate's edge). Off,
+				// or any other mark: as before.
+				const bool bWholeCross = D.bTrueCross && MarkKind == "cross" && !bCaptured && Level == 0;
+				std::vector<double> CrossMost(Painted.size(), 0.0);
+				if (bWholeCross && !Pieces.empty())
+				{
+					PairSettle(Painted, CrossMost, [&](size_t I, double Most) {
+						const Mark& Mk = Painted[I];
+						const Part& Pt = Parts[static_cast<size_t>(Mk.Part)];
+						if (Pt.Body < 0 || !Pt.bShown || Bodies[static_cast<size_t>(Pt.Body)].bTrack)
+						{
+							return -1.0;
+						}
+						Body& Bo = Bodies[static_cast<size_t>(Pt.Body)];
+						MarkSkin Skin;
+						Skin.Raw = &Members[static_cast<size_t>(Pt.Body)];
+						Skin.Dirt = &Dirt;
+						Skin.Count = Members[static_cast<size_t>(Pt.Body)].size();
+						Skin.DustColour = bFileDust ? DustColour : Dust;
+						double Asked = Mk.Radius;
+						if (D.bRealMarks)
+						{
+							const double Real = MarkReal(MarkKind, Kind, R["role"].Str(), Name, Mk.Facing.Z > 0.7);
+							Asked = Real > 0.0 ? std::min(Mk.Radius, Real) : Mk.Radius;
+						}
+						MarkWhole Try;
+						Try.bTryOnly = true;
+						Try.SizeMost = Most;
+						PaintMark(Bo.Near, Bo.Pivot, Pieces, Mk.At, Mk.Facing, Asked, Mk.Dust > 0.0 ? Mk.Dust : 45.0, 0.03, 0.004, Mix(I + 1, 1, 0x4D41524Bull), Skin,
+							MarkByHand(MarkKind), PaintedMade[I] != 0, nullptr, nullptr, D.bAllMarks, D.bRealMarks ? 0.05 : 0.0, D.bRealMarks ? 0.085 : 0.12, 0.0, 0.0, &Try);
+						return Try.Fitted;
+					});
+				}
 				for (size_t I = 0; I < Painted.size() && !Pieces.empty(); ++I)
 				{
 					const Mark& Mk = Painted[I];
 					const Part& Pt = Parts[static_cast<size_t>(Mk.Part)];
 					if (Pt.Body < 0 || !Pt.bShown || Bodies[static_cast<size_t>(Pt.Body)].bTrack)
 					{
+						continue;
+					}
+					if (bWholeCross && CrossMost[I] < 0.0)
+					{
+						// (her other side takes no whole cross: none on this one either)
+						Kept[I] = 0;
 						continue;
 					}
 					Body& Bo = Bodies[static_cast<size_t>(Pt.Body)];
@@ -5059,6 +5366,8 @@ namespace LandKit
 					const uint64_t MarkSeed = Mix(I + 1, static_cast<uint64_t>(Level) + 1, 0x4D41524Bull);
 					size_t Added = 0;
 					bool bSized = false;
+					MarkWhole Whole;
+					Whole.SizeMost = bWholeCross ? std::max(CrossMost[I], 0.0) : 0.0;
 					if (D.bRealMarks && !bCaptured)
 					{
 						// Marks at their real size (Dress::bRealMarks; Brian, 26 November 2026: "the tank markings are way
@@ -5100,7 +5409,8 @@ namespace LandKit
 						if (!bSized)
 						{
 							Added = PaintMark(Level == 0 ? Bo.Near : Bo.Far, Bo.Pivot, Pieces, Mk.At, Mk.Facing, Mk.Radius, DustWord, Level == 0 ? 0.03 : 0.12,
-								Level == 0 ? 0.004 : 0.012, MarkSeed, Skin, MarkByHand(MarkKind), Level == 0 && PaintedMade[I], nullptr, nullptr, D.bAllMarks, 0.05, 0.085);
+								Level == 0 ? 0.004 : 0.012, MarkSeed, Skin, MarkByHand(MarkKind), Level == 0 && PaintedMade[I], nullptr, nullptr, D.bAllMarks, 0.05, 0.085, 0.0, 0.0,
+								bWholeCross ? &Whole : nullptr);
 							bSized = true;
 						}
 					}
@@ -5169,9 +5479,18 @@ namespace LandKit
 					{
 						Added = PaintMark(Level == 0 ? Bo.Near : Bo.Far, Bo.Pivot, Pieces, Mk.At, Mk.Facing, Mk.Radius * (bCaptured ? 1.5 : 1.0), DustWord,
 							Level == 0 ? 0.03 : 0.12, Level == 0 ? 0.004 : 0.012, MarkSeed, Skin, MarkByHand(MarkKind), Level == 0 && PaintedMade[I], nullptr, nullptr,
-							D.bAllMarks);
+							D.bAllMarks, 0.0, 0.12, 0.0, 0.0, bWholeCross ? &Whole : nullptr);
 					}
 					Kept[I] = Added > 0 || !(Level == 0 && PaintedMade[I]) ? 1 : 0;
+					if (bWholeCross && Whole.Fitted <= 0.0)
+					{
+						Kept[I] = 0; // (no whole cross on this plate: none, never one cut by its edge)
+					}
+					else if (bWholeCross)
+					{
+						// (the size she took whole, her own fit or her other side's: so at the far level, and for whoever reads it)
+						Painted[I].Radius = Whole.Fitted;
+					}
 				}
 				if (Level == 0)
 				{

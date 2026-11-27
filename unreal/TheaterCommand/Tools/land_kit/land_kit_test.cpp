@@ -453,6 +453,240 @@ namespace
 	}
 
 	/**
+	 * The German cross at its true proportions (Dress::bTrueCross; the art director's rulings of 27 November 2026, 04:19Z
+	 * and 04:20Z), read from a model as she was dressed and loaded: her two sides' crosses of one part, mirrored across
+	 * her middle line, are the same size (Unpaired, else); none is cut by its plate's edge (Cut); nothing of hers
+	 * stands over her roof cross as seen from above at a slant (OverRoof). Each given back empty where she keeps the
+	 * ruling. Text: her file; D: as Real was dressed.
+	 * A cut cross is told two ways. The kit's own: PaintMark leaves out each triangle with a corner that found no skin,
+	 * so a cut cross has points no triangle uses (read for every model). And measured afresh (bMeasure): her own skin
+	 * asked under the cross's outline at 13 by 13 places, finer than the kit asks it, which is for the vehicles this
+	 * test names: on a round turret or behind a skirt it reads a cross the kit has always called whole as cut.
+	 * Untold, given back true where her own points cannot be told from her marks' (a model whose bodies differ when
+	 * she is taken, which no battle fields): then nothing is read of a cut; with none given that is a cut.
+	 */
+	void CrossFits(const std::string& Text, const Dress& D, const Model& Real, std::string& Unpaired, std::string& Cut, std::string& OverRoof, bool bMeasure = true,
+		bool* Untold = nullptr)
+	{
+		for (size_t I = 0; I < Real.Painted.size(); ++I)
+		{
+			for (size_t J = I + 1; J < Real.Painted.size(); ++J)
+			{
+				const Mark& L = Real.Painted[I];
+				const Mark& G = Real.Painted[J];
+				if (L.Tag == "_roof" || L.Tag == "_back" || G.Tag == "_roof" || G.Tag == "_back" || L.Part != G.Part || std::fabs(L.At.X - G.At.X) > 0.06 || std::fabs(L.At.Z - G.At.Z) > 0.06
+					|| std::fabs(L.At.Y + G.At.Y) > 0.06 || L.At.Y * G.At.Y >= 0.0 || std::fabs(L.Facing.Unit().Y + G.Facing.Unit().Y) > 0.1)
+				{
+					continue;
+				}
+				if (std::fabs(L.Radius - G.Radius) > 1e-6 && Unpaired.empty())
+				{
+					char Buf[160];
+					std::snprintf(Buf, sizeof(Buf), "%.3f and %.3f m across at %.2f %.2f %.2f", 2.0 * L.Radius, 2.0 * G.Radius, L.At.X, L.At.Y, L.At.Z);
+					Unpaired = Buf;
+				}
+			}
+		}
+		// (her own points, body by body: her model loaded neither taken nor marked, whose bodies hold her own
+		// points alone, in the same order; every point after them is a mark's)
+		Dress Bare = D;
+		Bare.bMarks = false;
+		Bare.Captured.clear();
+		Model Plain;
+		std::string BareError;
+		bool bTold = Plain.Load(Text, Bare, BareError) && Plain.Bodies.size() == Real.Bodies.size();
+		for (size_t B = 0; bTold && B < Real.Bodies.size(); ++B)
+		{
+			const size_t Own = Plain.Bodies[B].Near.Count();
+			bTold = Real.Bodies[B].Near.Count() >= Own
+				&& std::equal(Plain.Bodies[B].Near.Points.begin(), Plain.Bodies[B].Near.Points.end(), Real.Bodies[B].Near.Points.begin());
+		}
+		if (Untold)
+		{
+			*Untold = !bTold;
+		}
+		else if (!bTold)
+		{
+			Cut = "her own points cannot be told from her marks'";
+		}
+		for (size_t B = 0; bTold && Cut.empty() && B < Real.Bodies.size(); ++B)
+		{
+			const Body& Bo = Real.Bodies[B];
+			const Mesh& Mine = Bo.Near;
+			const size_t Own = Plain.Bodies[B].Near.Count();
+			// (a point of a cross that found no skin under it: PaintMark leaves out every triangle it is a corner of)
+			std::vector<uint8_t> Used(Mine.Count(), 0);
+			std::vector<uint32_t> OwnTris;
+			for (size_t T = 0; T + 2 < Mine.Triangles.size(); T += 3)
+			{
+				const uint32_t I0 = Mine.Triangles[T], I1 = Mine.Triangles[T + 1], I2 = Mine.Triangles[T + 2];
+				Used[I0] = Used[I1] = Used[I2] = 1;
+				if (std::max({ I0, I1, I2 }) < Own)
+				{
+					OwnTris.insert(OwnTris.end(), { I0, I1, I2 });
+				}
+			}
+			size_t Unused = 0;
+			for (size_t P = Own; P < Mine.Count(); ++P)
+			{
+				Unused += Used[P] ? 0 : 1;
+			}
+			if (Unused > 0)
+			{
+				Cut = std::to_string(Unused) + " points of a cross on her " + Bo.Name + " found no skin under them";
+				break;
+			}
+			if (!bMeasure)
+			{
+				continue;
+			}
+			auto PointOf = [&Mine, &Bo](size_t I) { return V3(Mine.Points[I * 3], Mine.Points[I * 3 + 1], Mine.Points[I * 3 + 2]) + Bo.Pivot; };
+			// (each cross on this body, measured from its own points: its middle and size on its flat, then her own
+			// skin asked under it, as PaintMark asks it, 13 by 13 places over its outline: every one finds her skin,
+			// facing out, and all of them on one face of it, no deeper apart than the cross's round allows)
+			for (const Mark& Mk : Real.Painted)
+			{
+				if (Real.Parts[static_cast<size_t>(Mk.Part)].Body != static_cast<int>(B))
+				{
+					continue;
+				}
+				const V3 F = Mk.Facing.Unit();
+				const V3 Hint = std::fabs(F.Z) > 0.8 ? V3(1.0, 0.0, 0.0) : V3(0.0, 0.0, 1.0);
+				const V3 Upward = (Hint - F * F.Dot(Hint)).Unit();
+				const V3 Sideways = Upward.Cross(F).Unit();
+				double Lo[2] = { 1e9, 1e9 }, Hi[2] = { -1e9, -1e9 };
+				for (size_t P = Own; P < Mine.Count(); ++P)
+				{
+					const V3 Dv = PointOf(P) - Mk.At;
+					const double A = Dv.Dot(Sideways), U = Dv.Dot(Upward);
+					// (its own: within its reach, and nearer its place than any other cross's on this body)
+					if (std::fabs(Dv.Dot(F)) > 0.3 || A * A + U * U > (2.2 * Mk.Radius + 0.05) * (2.2 * Mk.Radius + 0.05))
+					{
+						continue;
+					}
+					bool bNearer = false;
+					for (const Mark& Other : Real.Painted)
+					{
+						bNearer = bNearer || (&Other != &Mk && Other.Part == Mk.Part && (PointOf(P) - Other.At).Length() < Dv.Length());
+					}
+					if (bNearer)
+					{
+						continue;
+					}
+					Lo[0] = std::min(Lo[0], A);
+					Hi[0] = std::max(Hi[0], A);
+					Lo[1] = std::min(Lo[1], U);
+					Hi[1] = std::max(Hi[1], U);
+				}
+				if (Hi[0] < Lo[0])
+				{
+					continue;
+				}
+				const double MidA = 0.5 * (Lo[0] + Hi[0]), MidU = 0.5 * (Lo[1] + Hi[1]);
+				const double Size = 0.5 * std::min(Hi[0] - Lo[0], Hi[1] - Lo[1]);
+				const double CastFront = 0.04, CastBack = 0.06 + 0.25 * Size;
+				double Shallow = 1e9, Deep = -1e9;
+				size_t Missed = 0;
+				for (int J = -6; J <= 6; ++J)
+				{
+					for (int I = -6; I <= 6; ++I)
+					{
+						const double A = I / 6.0, U = J / 6.0;
+						if (!((std::fabs(A) <= 1.0 && std::fabs(U) <= 0.5) || (std::fabs(A) <= 0.5 && std::fabs(U) <= 1.0)))
+						{
+							continue;
+						}
+						const V3 From = Mk.At + Sideways * (MidA + A * Size) + Upward * (MidU + U * Size) + F * CastFront;
+						double Nearest = CastFront + CastBack;
+						bool bHit = false;
+						for (size_t T = 0; T + 2 < OwnTris.size(); T += 3)
+						{
+							const V3 Pa = PointOf(OwnTris[T]);
+							const V3 E1 = PointOf(OwnTris[T + 1]) - Pa, E2 = PointOf(OwnTris[T + 2]) - Pa;
+							const V3 Pv = (-F).Cross(E2);
+							const double Det = E1.Dot(Pv);
+							if (std::fabs(Det) < 1e-12)
+							{
+								continue;
+							}
+							const V3 Sv = From - Pa;
+							const double Bu = Sv.Dot(Pv) / Det;
+							if (Bu < -1e-6 || Bu > 1.0 + 1e-6)
+							{
+								continue;
+							}
+							const V3 Qv = Sv.Cross(E1);
+							const double Bv = (-F).Dot(Qv) / Det;
+							const double Far = E2.Dot(Qv) / Det;
+							if (Bv < -1e-6 || Bu + Bv > 1.0 + 1e-6 || Far < 0.0 || Far >= Nearest || std::fabs(E1.Cross(E2).Unit().Dot(F)) < 0.2)
+							{
+								continue;
+							}
+							Nearest = Far;
+							bHit = true;
+						}
+						if (!bHit)
+						{
+							++Missed;
+							continue;
+						}
+						Shallow = std::min(Shallow, Nearest);
+						Deep = std::max(Deep, Nearest);
+					}
+				}
+				if (Missed > 0 || Deep - Shallow > 0.02 + 0.2 * Size + 0.004)
+				{
+					char Buf[200];
+					std::snprintf(Buf, sizeof(Buf), "her %s cross of %.3f m at %.2f %.2f %.2f: %zu of its places find no skin, %.3f m deep apart", Mk.Tag.c_str(), 2.0 * Size, Mk.At.X,
+						Mk.At.Y, Mk.At.Z, Missed, Deep > Shallow ? Deep - Shallow : 0.0);
+					Cut = Buf;
+					break;
+				}
+			}
+		}
+		for (const Mark& Mk : Real.Painted)
+		{
+			if (Mk.Tag != "_roof")
+			{
+				continue;
+			}
+			const V3 Fc = Mk.Facing.Unit();
+			const V3 Hint = std::fabs(Fc.Z) > 0.8 ? V3(1.0, 0.0, 0.0) : V3(0.0, 0.0, 1.0);
+			const V3 Upward = (Hint - Fc * Fc.Dot(Hint)).Unit();
+			const V3 Sideways = Upward.Cross(Fc).Unit();
+			// (the cross's outline: two bars, each the cross's length long and half of it wide)
+			auto OffOutline = [&Mk](double A, double U) {
+				auto OffBar = [](double X, double Y, double HalfX, double HalfY) {
+					const double Dx = std::max(std::fabs(X) - HalfX, 0.0), Dy = std::max(std::fabs(Y) - HalfY, 0.0);
+					return std::sqrt(Dx * Dx + Dy * Dy);
+				};
+				return std::min(OffBar(A, U, Mk.Radius, 0.5 * Mk.Radius), OffBar(A, U, 0.5 * Mk.Radius, Mk.Radius));
+			};
+			for (size_t B = 0; B < Real.Bodies.size() && OverRoof.empty(); ++B)
+			{
+				const Body& Bo = Real.Bodies[B];
+				const size_t Own = B < Plain.Bodies.size() ? Plain.Bodies[B].Near.Count() : Bo.Near.Count();
+				if (Bo.bTrack)
+				{
+					continue;
+				}
+				for (size_t P = 0; P < Own && P < Bo.Near.Count(); ++P)
+				{
+					const V3 Dv = V3(Bo.Near.Points[P * 3], Bo.Near.Points[P * 3 + 1], Bo.Near.Points[P * 3 + 2]) + Bo.Pivot - Mk.At;
+					const double Above = Dv.Dot(Fc);
+					if (Above > 0.03 && OffOutline(Dv.Dot(Sideways), Dv.Dot(Upward)) < 0.625 * Above)
+					{
+						char Buf[200];
+						std::snprintf(Buf, sizeof(Buf), "her %s stands %.2f m over her roof cross of %.3f m, %.3f m off its outline", Bo.Name.c_str(), Above, 2.0 * Mk.Radius,
+							OffOutline(Dv.Dot(Sideways), Dv.Dot(Upward)));
+						OverRoof = Buf;
+						break;
+					}
+				}
+			}
+		}
+	}
+	/**
 	 * Every battle model with mark places, worn by her own nation (a "_" file by the Americans and the Germans), and
 	 * the owners whose marks change with the month (the British: none, then the flash, then the star) or who wear
 	 * another's kit; and the same owners with no mark by the year (Dress::bAnyYear, the trial word "anyyear"; Brian,
@@ -965,6 +1199,17 @@ namespace
 		// low in a corner; both tanks' turret marks show from behind), and the same floor on her roof ("one tank, one
 		// floor": the tank destroyer's 0.23 and the half-track's 0.12 go; the tank destroyer's back mark went with the
 		// first floor, the half-track keeps hers of 0.375).
+		// With the German cross at its true proportions (the art director's rulings of 27 November 2026, 04:19Z and
+		// 04:20Z), each German captor's crosses as she wears them: her two sides' crosses of one part, mirrored across her
+		// middle line, are the same size ("the smaller fit wins for both"); none is cut by its plate's edge (every point
+		// of it lies on her skin: PaintMark leaves out each triangle with a corner that found none, so a cut cross has
+		// points no triangle uses); and nothing of hers stands over her roof cross as seen from above at a slant (every
+		// point of every body of hers 3 cm or more above the cross's flat stands off its outline, across that flat, at
+		// least 0.625 of its height above it), or else the roof cross is smaller or absent. As first built with the word
+		// on, the Sherman's left turret cross was cut at 0.375 m beside her right one's whole 0.262, and her roof cross of
+		// 0.435 lay under her machine gun on its post (seen from above at 58 degrees). The light tank's roof cross with
+		// the word on goes: her hatch ring stands 16 cm proud 21 cm behind its middle, and no flat of her turret's roof
+		// holds a quarter-metre cross clear of it, the floor.
 		{
 			struct Taken
 			{
@@ -981,7 +1226,7 @@ namespace
 					 Taken{ "Tiger", "USA", "GER", 0.5715, true, true }, Taken{ "LightTank", "GER", "UK", 0.375, false, true },
 					 Taken{ "M10", "GER", "USA", 0.375, false, false }, Taken{ "M3Halftrack", "GER", "USA", 0.375, true, false },
 					 Taken{ "T34", "GER", "SOV", 0.375, false, true, true }, Taken{ "Sherman", "GER", "USA", 0.375, true, true, true },
-					 Taken{ "LightTank", "GER", "UK", 0.375, false, true, true }, Taken{ "M10", "GER", "USA", 0.375, false, false, true },
+					 Taken{ "LightTank", "GER", "UK", 0.375, false, false, true }, Taken{ "M10", "GER", "USA", 0.375, false, false, true },
 					 Taken{ "M3Halftrack", "GER", "USA", 0.375, true, false, true } })
 			{
 				std::string Text, Error;
@@ -1100,6 +1345,12 @@ namespace
 							}
 						}
 					}
+					// (the German captor's true cross: her mirrored sides, cut crosses, and what stands over her roof cross)
+					std::string Unpaired, Cut, OverRoof;
+					if (K.bTrue && std::string(K.Captor) == "GER")
+					{
+						CrossFits(Text, D, Real, Unpaired, Cut, OverRoof);
+					}
 					if (!Was.Painted.empty())
 					{
 						Why = "with the word off a captor's mark is kept as a place of her own";
@@ -1152,6 +1403,18 @@ namespace
 					{
 						Why = "her painted captor cross is the cross as it was";
 					}
+					else if (!Unpaired.empty())
+					{
+						Why = "her two sides' crosses are not the same size (" + Unpaired + ")";
+					}
+					else if (!Cut.empty())
+					{
+						Why = "a cross cut by its plate's edge (" + Cut + ")";
+					}
+					else if (!OverRoof.empty())
+					{
+						Why = "something of hers stands over her roof cross seen from above (" + OverRoof + ")";
+					}
 				}
 				++AllCases;
 				std::printf("  %-11s taken by %-3s from %-3s%s  her captor's mark on her sides %.3f to %.3f m across (at most %.3f; as it was %.3f); her back %.3f (was 0.500), her roof %.3f (was 0.600)  %s\n",
@@ -1159,6 +1422,149 @@ namespace
 					Why.empty() ? "ok" : ("FAIL " + Why).c_str());
 				Failures += Why.empty() ? 0 : 1;
 			}
+		}
+		// Every model in the kit, as Germany's own and as taken by Germany, with the cross at its true proportions and marks
+		// at their real size: the art director's rulings of 27 November 2026 are every model's, so each is read here by
+		// CrossFits (her two sides the same size, no cross cut by its plate's edge as the kit tells a cut, nothing of hers
+		// over her roof cross).
+		// As first built the fits were tested on five taken vehicles only, and an armoured car taken by Germany wore
+		// 0.225 m on one side and 0.188 m on the other: the side held to its partner's size took the cross only smaller
+		// still, and its partner was not asked again.
+		{
+			std::vector<std::string> Names;
+			for (const auto& Entry : std::filesystem::directory_iterator(Content + "/Models/Battle"))
+			{
+				if (Entry.path().extension() == ".json")
+				{
+					Names.push_back(Entry.path().stem().string());
+				}
+			}
+			std::sort(Names.begin(), Names.end());
+			size_t Looks = 0, Crosses = 0, Bad = 0, Untolds = 0;
+			for (const std::string& Nm : Names)
+			{
+				std::string Text;
+				if (!ReadFile(Content + "/Models/Battle/" + Nm + ".json", Text))
+				{
+					continue;
+				}
+				for (const bool bTaken : { false, true })
+				{
+					Dress D;
+					D.Nation = "GER";
+					D.Captured = bTaken ? "SOV" : "";
+					D.Year = 1943;
+					D.Month = 7;
+					D.bMarks = true;
+					D.bRealMarks = true;
+					D.bTrueCross = true;
+					Model Real;
+					std::string Error;
+					if (!Real.Load(Text, D, Error) || Real.Painted.empty())
+					{
+						continue;
+					}
+					std::string Unpaired, Cut, OverRoof;
+					bool bUntold = false;
+					CrossFits(Text, D, Real, Unpaired, Cut, OverRoof, false, &bUntold);
+					++Looks;
+					Untolds += bUntold ? 1 : 0;
+					Crosses += Real.Painted.size();
+					const std::string Why = !Unpaired.empty() ? "her two sides' crosses are not the same size (" + Unpaired + ")"
+						: !Cut.empty() ? "a cross cut by its plate's edge (" + Cut + ")"
+						: !OverRoof.empty() ? "something of hers stands over her roof cross seen from above (" + OverRoof + ")" : std::string();
+					if (!Why.empty())
+					{
+						++Bad;
+						std::printf("  %-11s %s (true cross)  FAIL %s\n", Nm.c_str(), bTaken ? "taken by GER" : "Germany's own", Why.c_str());
+					}
+				}
+			}
+			++AllCases;
+			std::printf("  every model, Germany's own and taken by Germany (true cross): %zu looks, %zu crosses, %zu against the rulings (%zu looks not read for a cut)  %s\n",
+				Looks, Crosses, Bad, Untolds, Bad == 0 && Looks > 0 ? "ok" : "FAIL");
+			Failures += Bad == 0 && Looks > 0 ? 0 : 1;
+		}
+		// With the word off the fits take no part: every look the fits change with the word on is, with the word off, the
+		// look it was before them. Told by her painted marks: how many, their radii summed (tenths of a millimetre) and
+		// the |x| + |y| + |z| of their places summed (millimetres), as the kit gave them on 27 November 2026 before the
+		// fits were written (the same seventeen looks, Germany's own and taken by Germany, July 1943, marks at their real
+		// size). A look whose file is changed is read again from a tree that has none of the fits' code, never from this
+		// one. Each row is also read with the word on: a row the word no longer changes can tell nothing and is counted.
+		// As first built nothing here read a look with the word off against what it was: a copy of the kit that fitted
+		// the captor's crosses whole with the word off, and one that fitted her owner's, passed every check.
+		{
+			struct AsWas
+			{
+				const char* File;
+				bool bTaken;
+				size_t Count;
+				long long Wide;
+				long long Where;
+			};
+			size_t OffLooks = 0, OffBad = 0, OffBlind = 0;
+			for (const AsWas& Row : {
+				AsWas{ "ArmouredCar", true, 3, 4587, 8889 },
+				AsWas{ "FieldCar", true, 1, 2625, 2152 },
+				AsWas{ "Hanomag", true, 4, 7275, 12377 },
+				AsWas{ "Jeep", false, 3, 3650, 7286 },
+				AsWas{ "Jeep", true, 4, 5102, 9424 },
+				AsWas{ "Kubelwagen", false, 2, 1800, 5922 },
+				AsWas{ "Kubelwagen", true, 3, 2600, 8611 },
+				AsWas{ "LightTank", true, 3, 4738, 7404 },
+				AsWas{ "Panther", true, 4, 8622, 15291 },
+				AsWas{ "PanzerIV", true, 6, 11598, 18870 },
+				AsWas{ "SU85", true, 3, 6450, 10793 },
+				AsWas{ "Sherman", true, 6, 10424, 20487 },
+				AsWas{ "StuG3", true, 3, 5335, 9352 },
+				AsWas{ "T34", true, 3, 5605, 8987 },
+				AsWas{ "Tiger", true, 6, 13798, 22693 },
+				AsWas{ "WLA", false, 2, 1100, 2308 },
+				AsWas{ "WLA", true, 2, 400, 2288 } })
+			{
+				std::string Text, Error;
+				if (!ReadFile(Content + "/Models/Battle/" + Row.File + ".json", Text))
+				{
+					std::printf("  FAIL cannot read %s.json\n", Row.File);
+					++OffBad;
+					continue;
+				}
+				size_t Count[2] = { 0, 0 };
+				long long Wide[2] = { 0, 0 }, Where[2] = { 0, 0 };
+				bool bLoaded = true;
+				for (int Word = 0; Word < 2; ++Word)
+				{
+					Dress D;
+					D.Nation = "GER";
+					D.Captured = Row.bTaken ? "SOV" : "";
+					D.Year = 1943;
+					D.Month = 7;
+					D.bMarks = true;
+					D.bRealMarks = true;
+					D.bTrueCross = Word == 1;
+					Model Real;
+					bLoaded = Real.Load(Text, D, Error) && bLoaded;
+					Count[Word] = Real.Painted.size();
+					for (const Mark& Mk : Real.Painted)
+					{
+						Wide[Word] += std::llround(Mk.Radius * 10000.0);
+						Where[Word] += std::llround((std::fabs(Mk.At.X) + std::fabs(Mk.At.Y) + std::fabs(Mk.At.Z)) * 1000.0);
+					}
+				}
+				++OffLooks;
+				OffBlind += Count[1] == Count[0] && Wide[1] == Wide[0] && Where[1] == Where[0] ? 1 : 0;
+				if (!bLoaded || Count[0] != Row.Count || Wide[0] != Row.Wide || Where[0] != Row.Where)
+				{
+					++OffBad;
+					std::printf("  %-11s %s (the word off)  FAIL her marks are not as they were before the fits: %zu, %lld, %lld (were %zu, %lld, %lld)\n",
+						Row.File, Row.bTaken ? "taken by GER" : "Germany's own", Count[0], Wide[0], Where[0], Row.Count, Row.Wide, Row.Where);
+				}
+			}
+			++AllCases;
+			const bool bOffGood = OffBad == 0 && OffLooks > 0 && 2 * OffBlind < OffLooks;
+			std::printf("  the word off, the looks the fits change: %zu looks, %zu not as they were before the fits (%zu the word no longer changes)  %s\n",
+				OffLooks, OffBad, OffBlind, bOffGood ? "ok" : "FAIL");
+			Failures += bOffGood ? 0 : 1;
 		}
 		std::printf("  %zu looks checked, %zu mark triangles near in all: %s\n", AllCases, AllAdded, Failures ? "FAIL" : "ok");
 		return Failures;
