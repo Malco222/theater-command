@@ -9,6 +9,12 @@
 // length, span and height within half a pixel; each paint's share of the skin within three points of the far shape's;
 // and no more triangles than asked.
 #include "Battle/AirLight.h"
+#ifdef AIR_LIGHT_SCREWS
+// (built with -DAIR_LIGHT_SCREWS and Battle/AirScrew.cpp: each far part first loses its airscrews' blades and blur disc,
+// as the air battle's far shapes do with the Battle rules card's "Turning airscrews" on (row flyPropSpin), and the light
+// shape is made from what is left, as LightOf makes it, and held to it)
+#include "Battle/AirScrew.h"
+#endif
 
 #include <algorithm>
 #include <chrono>
@@ -96,6 +102,18 @@ int main(int Argc, char** Argv)
 		Far.Points = PartNumbers(Text, "far", "\"points\"");
 		for (const double V : PartNumbers(Text, "far", "\"triangles\"")) Far.Triangles.push_back(static_cast<int>(V));
 		for (const double V : PartNumbers(Text, "far", "\"paints\"")) Far.Tones.push_back(static_cast<uint32_t>(V));
+#ifdef AIR_LIGHT_SCREWS
+		{
+			std::vector<AirScrew::Vec3> Points;
+			for (size_t K = 0; K + 2 < Far.Points.size(); K += 3) Points.push_back({ Far.Points[K], Far.Points[K + 1], Far.Points[K + 2] });
+			const AirScrew::Stripped Cut = AirScrew::StripScrews(Points, AirScrew::FarPaints(Text), AirScrew::PaintKinds(Text), Far.Triangles);
+			std::vector<int> Kept;
+			for (size_t T = 0; T < Cut.Drop.size(); ++T)
+				if (!Cut.Drop[T]) Kept.insert(Kept.end(), { Far.Triangles[T * 3], Far.Triangles[T * 3 + 1], Far.Triangles[T * 3 + 2] });
+			std::printf("%s: far part without its airscrews, %zu triangles of %zu\n", Argv[A], Kept.size() / 3, Far.Triangles.size() / 3);
+			Far.Triangles = Kept;
+		}
+#endif
 		const int FarTriangles = static_cast<int>(Far.Triangles.size() / 3);
 		const int Most = AirLight::LightMost(FarTriangles);
 		if (Far.Points.empty() || Far.Tones.size() * 3 != Far.Points.size())
@@ -114,9 +132,22 @@ int main(int Argc, char** Argv)
 		const AirLight::Made Light = AirLight::Lighten(Far, Most);
 		const double Ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Began).count();
 		const AirLight::Apart Out = AirLight::Distance(Light.Points, Far.Points, Far.Triangles);
-		const AirLight::Apart Back = AirLight::Distance(Far.Points, Light.Points, Light.Triangles);
+#ifdef AIR_LIGHT_SCREWS
+		// (the far part's points its triangles still use: a blade's points are left in it, as in the game's far shape,
+		// but drawn by nothing)
+		std::vector<double> Drawn;
+		{
+			std::vector<bool> Used(Far.Points.size() / 3, false);
+			for (const int K : Far.Triangles) Used[static_cast<size_t>(K)] = true;
+			for (size_t K = 0; K < Used.size(); ++K)
+				if (Used[K]) Drawn.insert(Drawn.end(), { Far.Points[K * 3], Far.Points[K * 3 + 1], Far.Points[K * 3 + 2] });
+		}
+#else
+		const std::vector<double>& Drawn = Far.Points;
+#endif
+		const AirLight::Apart Back = AirLight::Distance(Drawn, Light.Points, Light.Triangles);
 		Box FarBox, LightBox;
-		FarBox.Take(Far.Points);
+		FarBox.Take(Drawn);
 		LightBox.Take(Light.Points);
 		double Extent = 0.0;
 		for (int K = 0; K < 3; ++K) Extent = std::max(Extent, std::fabs((FarBox.Hi[K] - FarBox.Lo[K]) - (LightBox.Hi[K] - LightBox.Lo[K])));

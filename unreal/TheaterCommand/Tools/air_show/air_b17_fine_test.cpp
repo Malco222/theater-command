@@ -320,7 +320,7 @@ int main(int Argc, char** Argv)
 	if (bSource)
 	{
 		const std::string Reader = "TEXT(\"Models\") / (Kind + TEXT(\".json\"))";
-		Check(Count(Battle, Reader) == 3 && Count(Colours, Reader) == 1, "four readers of a model's file by its shape's name: the airscrews, the tally, the bay, the earned colours",
+		Check(Count(Battle, Reader) == 4 && Count(Colours, Reader) == 1, "five readers of a model's file by its shape's name: the airscrews (near, and far with the row flyPropSpin), the tally, the bay, the earned colours",
 			std::to_string(Count(Battle, Reader)) + " in AirBattle.cpp, " + std::to_string(Count(Colours, Reader)) + " in AirBattleUnitColours.cpp");
 		Check(Count(Battle, "AirShow::FileOf(AirParts::Narrow(Named ? *Named : Model), true)") == 1 && Count(Battle, "State->B17FineOn == 1") >= 2,
 			"ModelFor names the finer file while the battle's row is on, and only then");

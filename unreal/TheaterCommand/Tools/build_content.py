@@ -76,7 +76,7 @@ def world_uv(material, tiling_name, tiling_default, x, y):
     return scaled
 
 
-def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, worn=False, alpha_rough=False, press_twin=False, press_upright=False):
+def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, worn=False, alpha_rough=False, press_twin=False, press_upright=False, air=False):
     """Land, sea and inked lines: the colour comes from the mesh itself, painted point by point in C++.
     The material adds what paint on a model has and a computer colour does not: a little unevenness and a slight tooth.
     (TK1: with soot, M_LandSteel, the far tanks', guns' and lorries' instanced pieces: the same surface, each point's
@@ -102,7 +102,11 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, 
     built as before.)
     (press_twin, press_upright: M_LandBladesPress,
     the same with the blast press, and the lean times how upright it stands (without TC_LODGED; with TC_LODGED=1 the
-    lodged stillness instead, on the wind's lean and on the press's capped lean): wind_sway.)"""
+    lodged stillness instead, on the wind's lean and on the press's capped lean): wind_sway.)
+    (With air, M_AirPaint, the finer B-17's paint with its own finish, the Battle rules card's "B-17 paint sheen" (row
+    flyB17Sheen): the same surface, its roughness, specular and metal from her finish a point, carried in the mesh's first
+    texture coordinate by Battle/AirSheen; at nothing carried, exactly PlaneInk's. Brian, 26 November 2026: "make the new
+    ones work".)"""
     m = new_material(name)
     # (the air battle draws its aircraft past 300 m with this surface by instancing, AS1; the ground battle its hedges,
     # trees and grass)
@@ -258,7 +262,8 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, 
         tinted = times(m, tinted, wind_sheen(m, -900, 3200, press_floored=press_twin), 1000, -950)
         to_property(wind_sway(m, -900, 3600, press_twin=press_twin, press_upright=press_upright), "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
     to_property(tinted, "", unreal.MaterialProperty.MP_BASE_COLOR)
-    to_property(times(m, chipped, 0.85, 750, -700), "", unreal.MaterialProperty.MP_METALLIC)
+    if not air:
+        to_property(times(m, chipped, 0.85, 750, -700), "", unreal.MaterialProperty.MP_METALLIC)
     # (The art director, 19 November 2026: a rifleman seen with the sun behind him stood darker on his shaded side
     # than the shadow he threw on the ground. What is not painted metal, the cloth and the flesh of a figure, gives
     # back a little of its own colour on the side turned from the sun: "FigureFill". And the edge of it that is
@@ -320,8 +325,79 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, 
         # moves with it, so a dark oily patch has a little sheen and a pale dusty one none, and stays within 0 to 1)
         rough = one_in(m, unreal.MaterialExpressionSaturate,
                        plus(m, rough, times(m, plus(m, mottle, -1.0, -250, 320), scalar(m, "WearRough", 1.3, -250, 380), -100, 340), 0, 260), 150, 260)
-    to_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
-    to_property(scalar(m, "Specular", 0.25, -450, 300), "", unreal.MaterialProperty.MP_SPECULAR)
+    if not air:
+        # (M_AirPaint wires its own roughness and specular below; the ground's roughness above is left unwired there)
+        to_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+        to_property(scalar(m, "Specular", 0.25, -450, 300), "", unreal.MaterialProperty.MP_SPECULAR)
+    if air:
+        # M_AirPaint (row flyB17Sheen): the finer B-17's own finish a point, carried in the mesh's first texture coordinate
+        # by Battle/AirSheen (U: how far below 0.9 her roughness is; V: her metal). U = V = 0 is PlaneInk exactly.
+        # The sums are AirSheen::Law's; air_b17_sheen_test reads this block's names and defaults (keep each scalar(...)
+        # on one line). "SheenEdge" is also the game's stale-asset sentinel (it reads the asset's default against
+        # AirSheen::Tune::Edge): whoever changes these nodes changes SheenEdge's default and Tune::Edge with it (say 20 to
+        # 20.5), or a Mac that keeps an older M_AirPaint is not told. A material that saves but does not compile is not
+        # caught by it either: the content build's own log says so.
+        rough_ink = scalar(m, "Roughness", 0.9, -450, 200)
+        spec_ink = scalar(m, "Specular", 0.25, -450, 300)
+        carried = node(m, unreal.MaterialExpressionTextureCoordinate, -1500, 1500)
+        depth = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1300, 1450, r=True, g=False, b=False, a=False)
+        bare = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1300, 1600, r=False, g=True, b=False, a=False)
+        on = one_in(m, unreal.MaterialExpressionSaturate, times(m, depth, scalar(m, "SheenEdge", 20.0, -1300, 1700), -1150, 1700), -1000, 1700)
+        own = plus(m, times(m, depth, -1.0, -1150, 1450), 0.9, -1000, 1450)
+        mixed = lerp(m, rough_ink, own, times(m, on, scalar(m, "SheenGain", 1.0, -1000, 1800), -850, 1750), -700, 1500)
+        glass = one_in(m, unreal.MaterialExpressionSaturate,
+                       times(m, plus(m, plus(m, depth, -0.9, -1000, 1950), scalar(m, "SheenGlassBelow", 0.12, -1150, 2000), -850, 1950), 20.0, -700, 1950), -550, 1950)
+        floor = times(m, times(m, scalar(m, "SheenFloor", 0.45, -700, 2100), on, -550, 2100),
+                      one_in(m, unreal.MaterialExpressionOneMinus, glass, -400, 1950), -400, 2100)
+        rough = node(m, unreal.MaterialExpressionMax, -250, 1600)
+        _feed(m, rough, "A", mixed)
+        _feed(m, rough, "B", floor)
+        spec = lerp(m, spec_ink, scalar(m, "SheenSpec", 0.25, -550, 2250), on, -250, 2250)
+        # (metal only from SheenMetalFrom up, 0.5 (the art director, 27 November 00:16Z: metal on true fittings only): a
+        # point at 0.45 carries none, one at 0.55 all of its own; the sheen file itself holds metal on her fittings alone,
+        # make_air_skin.py's FITTINGS, so no rivet, seam or paint point carries any: air_b17_sheen_test counts them)
+        fitting = one_in(m, unreal.MaterialExpressionSaturate,
+                         times(m, plus(m, bare, times(m, scalar(m, "SheenMetalFrom", 0.5, -1150, 2550), -1.0, -1000, 2550), -850, 2500), 20.0, -700, 2500), -550, 2500)
+        metal = times(m, times(m, one_in(m, unreal.MaterialExpressionSaturate, times(m, bare, scalar(m, "SheenMetal", 1.0, -1000, 2400), -850, 2400), -700, 2400),
+                               fitting, -550, 2450), on, -400, 2400)
+        # THE GLARE GUARD: where a low sun mirrors in her skin, her finish goes back to PlaneInk's, the one the art director
+        # passed (no sand, 22 November). "SheenSun" is the way to the sun, set by C++ as M_DeckShade's "SunWay" is; its
+        # default (0,0,0) makes the mirror term 0. The grazing term is off unless "SheenGraze" is set.
+        sun = vector(m, "SheenSun", (0.0, 0.0, 0.0, 0.0), -1500, 2600)
+        facing = node(m, unreal.MaterialExpressionVertexNormalWS, -1500, 2750)
+        eye = node(m, unreal.MaterialExpressionCameraVectorWS, -1500, 2900)
+        n_dot_s = node(m, unreal.MaterialExpressionDotProduct, -1300, 2650)
+        connect(facing, "", n_dot_s, "A")
+        connect(sun, "", n_dot_s, "B")
+        mirror_way = plus(m, times(m, facing, times(m, n_dot_s, 2.0, -1150, 2650), -1000, 2700), times(m, sun, -1.0, -1150, 2600), -850, 2650)
+        mirror = node(m, unreal.MaterialExpressionDotProduct, -700, 2700)
+        connect(eye, "", mirror, "A")
+        connect(mirror_way, "", mirror, "B")
+        n_dot_v = node(m, unreal.MaterialExpressionDotProduct, -1300, 2850)
+        connect(facing, "", n_dot_v, "A")
+        connect(eye, "", n_dot_v, "B")
+        sun_up = node_from(m, unreal.MaterialExpressionComponentMask, sun, -1300, 3000, r=False, g=False, b=True, a=False)
+        low = one_in(m, unreal.MaterialExpressionSaturate,
+                     times(m, plus(m, times(m, sun_up, -1.0, -1150, 3000), scalar(m, "SheenLowSun", 0.5, -1150, 3100), -1000, 3000), 4.1667, -850, 3000), -700, 3000)
+        glare = times(m, one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, mirror, -0.9, -550, 2700), 10.0, -400, 2700), -250, 2700),
+                      scalar(m, "SheenGlare", 1.0, -400, 2620), -100, 2700)
+        graze = times(m, one_in(m, unreal.MaterialExpressionOneMinus,
+                                one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, n_dot_v, -0.15, -1150, 2850), 4.0, -1000, 2850), -850, 2850), -700, 2850),
+                      scalar(m, "SheenGraze", 0.0, -700, 2950), -550, 2850)
+        worst = node(m, unreal.MaterialExpressionMax, -250, 2800)
+        _feed(m, worst, "A", glare)
+        _feed(m, worst, "B", graze)
+        guard = one_in(m, unreal.MaterialExpressionSaturate, times(m, worst, low, -100, 2850), 50, 2900)
+        rough = lerp(m, rough, rough_ink, guard, 350, 1700)
+        spec = lerp(m, spec, spec_ink, guard, 350, 2250)
+        metal = lerp(m, metal, 0.0, guard, 350, 2400)
+        # (chips, were Wear ever set: as M_MapSurface's; the air battle never sets it)
+        to_property(lerp(m, rough, 0.34, chipped, 500, 1600), "", unreal.MaterialProperty.MP_ROUGHNESS)
+        to_property(spec, "", unreal.MaterialProperty.MP_SPECULAR)
+        metal_any = node(m, unreal.MaterialExpressionMax, 500, 2400)
+        _feed(m, metal_any, "A", metal)
+        _feed(m, metal_any, "B", times(m, chipped, 0.85, 350, 2500))
+        to_property(metal_any, "", unreal.MaterialProperty.MP_METALLIC)
     finish(m)
 
 
@@ -360,6 +436,41 @@ def build_highlight():
     mel.connect_material_expressions(scalar(m, "Opacity", 1.0, -700, 320), "", faded, "B")
     mel.connect_material_property(faded, "", unreal.MaterialProperty.MP_OPACITY)
     finish(m)
+
+
+def build_screw_haze():
+    """AN AIRSCREW TURNING, ON THE AIR BATTLE'S COPIES (release 2, the Battle rules card's "Turning airscrews", rule
+    flyPropSpin; Brian, 26 November 2026 04:00Z: "the b-17 propellers didnt look like they were spinning"). M_Highlight's
+    look, light that is not shaded and see-through by the mesh's own alpha, made usable on instanced meshes: past 300 m
+    each aircraft is a copy in its shape's instanced mesh, and M_Highlight is not flagged for them, so the engine would
+    draw its default material there. A material of its own so that the map's M_Highlight is left as it is. Without it
+    the air battle takes the still blades out past 300 m and draws no haze, said once."""
+    m = new_material("M_ScrewHaze")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("used_with_instanced_static_meshes", True)
+    colour = mel.create_material_expression(m, unreal.MaterialExpressionVertexColor, -700, 0)
+    glow = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -450, 0)
+    connect(colour, "", glow, "A")
+    connect(scalar(m, "Brightness", 1.0, -700, 200), "", glow, "B")
+    to_property(glow, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    to_property(colour, "A", unreal.MaterialProperty.MP_OPACITY)
+    finish(m)
+
+
+def build_screw_haze_or_tell():
+    """M_ScrewHaze is the air battle's turning airscrews' alone, and the battle draws no far haze without it: whatever
+    goes wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_screw_haze()
+    except Exception:
+        unreal.log_error("Theater Command: M_ScrewHaze was not built (no far airscrew haze):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_ScrewHaze"):
+                eal.delete_asset(f"{MATERIALS}/M_ScrewHaze")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_ScrewHaze could not be removed:\n" + traceback.format_exc())
 
 
 def build_cloud():
@@ -3336,6 +3447,23 @@ def build_land_men_worn_or_tell(name, crowd):
             unreal.log_error(f"Theater Command: and the half-built {name} could not be removed:\n" + traceback.format_exc())
 
 
+def build_air_paint_or_tell():
+    """M_AirPaint (M_MapSurface with the finer B-17's own finish a point, the Battle rules card's "B-17 paint sheen", row
+    flyB17Sheen) is the air battle's alone, and the battle falls back to PlaneInk (her matt paint) without it, or with one
+    older than the build (its "SheenEdge" sentinel): whatever goes wrong in it is told, and the rest of the content is
+    built as before."""
+    import traceback
+    try:
+        build_map_surface("M_AirPaint", air=True)
+    except Exception:
+        unreal.log_error("Theater Command: M_AirPaint was not built (the B-17's sheen stays off):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_AirPaint"):
+                eal.delete_asset(f"{MATERIALS}/M_AirPaint")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_AirPaint could not be removed:\n" + traceback.format_exc())
+
+
 def build_land_leaves_or_tell():
     """M_LandLeaves is the ground battle's alone, and the battle falls back to its solid sprigs without it: whatever goes
     wrong in it is told, and the rest of the content is built as before."""
@@ -3729,11 +3857,13 @@ BUILT_THIS_RUN = set()  # (the materials the loop below built in this run: the b
 # Battle/AirSkyChip.inl, whose text its Custom node holds, or to M_Cloud's pixels, which it repeats.)
 # (Release 2, G10: M_LandFall, the rain and snow seen falling, the same: TC_REBUILD=M_LandFall after a change to
 # Effects/WeatherFallChip.inl, whose text its two Custom nodes hold.)
+# (M_ScrewHaze, the air battle's far airscrews' haze on its copies (row flyPropSpin), the same: built once when missing.)
+# (M_AirPaint, the finer B-17's sheen (row flyB17Sheen), the same: built once when missing; TC_REBUILD=M_AirPaint after a change to M_MapSurface or to its "if air:" block.)
 # (The wind and the clouds' shadows, release 2, 23 November: M_LandBlades, the grass, corn and trees the wind bends, and
 # M_LandCloudShade, the clouds' shadows on the field, the same; they and M_LandSurface, M_LandLeaves and M_LandStalks read
 # Tools/land_look/T_LandCloudWind.png: TC_REBUILD=M_LandBlades,M_LandCloudShade,M_LandSurface,M_LandLeaves,M_LandStalks
 # once, and again after make_sky_textures.py.)
-for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandWorn", build_land_worn_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandManWorn", lambda: build_land_men_worn_or_tell("M_LandManWorn", False)), ("M_LandCrowdWorn", lambda: build_land_men_worn_or_tell("M_LandCrowdWorn", True)), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_LandBlades", build_land_blades_or_tell), ("M_LandCloudShade", build_land_cloud_shade_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_LandFall", build_land_fall_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_HitMark", build_hit_mark), ("M_UnderSea", build_under_sea), ("M_SkyDome", build_sky_dome), ("M_NightSky", build_night_sky)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_AirPaint", build_air_paint_or_tell), ("M_LandWorn", build_land_worn_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandManWorn", lambda: build_land_men_worn_or_tell("M_LandManWorn", False)), ("M_LandCrowdWorn", lambda: build_land_men_worn_or_tell("M_LandCrowdWorn", True)), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_LandBlades", build_land_blades_or_tell), ("M_LandCloudShade", build_land_cloud_shade_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_ScrewHaze", build_screw_haze_or_tell), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_LandFall", build_land_fall_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea), ("M_HitMark", build_hit_mark), ("M_UnderSea", build_under_sea), ("M_SkyDome", build_sky_dome), ("M_NightSky", build_night_sky)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         # (a material after the 15 pinned ones is built in a try of its own: a fault in a new one never stops the
         # pinned materials, which the run before it has already written. The release 2 ocean plan, step 13)

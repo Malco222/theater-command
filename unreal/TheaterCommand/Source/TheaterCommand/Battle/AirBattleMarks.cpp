@@ -245,7 +245,10 @@ void AAirBattle::DrawMarks(const FVector& EyeAt)
 	if (!bMarkInksTried)
 	{
 		bMarkInksTried = true;
-		if (UMaterialInterface* Mark = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_HitMark.M_HitMark")))
+		const double LoadBegan = FPlatformTime::Seconds();
+		UMaterialInterface* const Mark = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_HitMark.M_HitMark"));
+		NoteLoad(TEXT("M_HitMark (the strike marks)"), LoadBegan); // (release 2, the hitch's naming lines: said only while the speed log is written)
+		if (Mark)
 		{
 			for (const FMarkLook& Look : MarkLooks)
 			{

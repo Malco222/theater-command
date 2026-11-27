@@ -74,7 +74,7 @@ What else the scene draws for the battle:
 - Each sculpted aircraft near the eye turns its airscrews: the blades the model was built with (Battle/AirScrew finds
   them by their paint) are taken out of its near shape and a see-through blur disc turns at each hub, 1.9 turns a
   second as a film's camera sees it (`-TheaterScrewTurns=` tries another), slower on an aircraft falling. Far shapes
-  keep their blades, too small to see turn. A blade is every paint whose name in the file's `paint_names` begins
+  keep their blades standing still (with the Battle rules card's Turning airscrews on, item 61, they do not). A blade is every paint whose name in the file's `paint_names` begins
   "blade" (the newer Kate, Val and Dauntless paint each blade in three), paint 9 in a file without names; a model's
   own painted blur disc (`blur`, `blur_tip`) is taken out with its blades, the turning disc standing in for both.
 - Each aircraft goes down the way the battle names it (the air rules' `how`, 11 ways): blown apart, burning, a flamer,
@@ -1441,6 +1441,14 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    however near. (The first N to come near keep theirs, not the N nearest: taking a made copy down again was not written
    without a compiler.) Every bomber also keeps her own far section (about 3.5 MB each for her, 1.2 MB for the older
    B-17, arithmetic), which the guard does not limit.
+   Making a close-up is paid for in the frame it is made (the Mac, 27 Nov: 4 or 5 in one frame gave 49-64 ms, 8 gave
+   145 ms, 20 gave 201 ms; holding 20 to 24 cost nothing the 60 fps cap shows). `-TheaterAirB17FinePerFrame=N` (0 unless
+   asked: the old order): at most N are made a frame, the nearest first (ties by key, so the battle's order never
+   matters), under the same N of the guard; the rest wait a frame or two on their far shape. Draw chooses them before
+   its loop (Battle/AirNear.h, AirNear::MayMake; FPlaneMade::bMayMake) and B17FineNearRoom lets only those through; a
+   bomber first seen this frame waits for the next. Cloud test: Tools/air_show/air_near_test.cpp. The Mac's next run:
+   `-TheaterAirB17FinePerFrame=2 -TheaterAirB17FineNear=1000` against the R2 and R4b runs of 27 Nov; if no frame after
+   the opening tops 100 ms, both become the defaults in a one-line commit.
    `-TheaterAirB17Fine` on for a run, `-TheaterAirNoB17Fine` off, `-TheaterRulesFlip=b17Fine` clicks the card's switch.
    The cloud test: Tools/air_show/air_b17_fine_test.cpp in run.sh (row off reads the base's bytes and numbers, row on
    reads her everywhere), and the airscrews', light shapes', nose art's, figures' and earned colours' tests take
@@ -1560,3 +1568,443 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    above onto one's tail, a short burst at a couple of hundred metres and the one in front going down; no fighter
    falling with nobody near him (run 1 has several). Send back the log's "Air battle: real dogfights: on" line, and from
    the speed log the frames a second over the fight (the new pilots think more often: 45 is the mark, as before).
+
+61. **Turning airscrews** (release 2; Brian, 26 November 2026 04:00Z: "the b-17 propellers didnt look like they were
+   spinning"; on 20 November "the japanese zero's propeller didnt spin"). Past 300 m from the eye (450 going out), the
+   whole of the Overview (434 to 832 m from its crowd), every aircraft is drawn from its far shape, as a copy, and that
+   shape kept every blade of every airscrew standing still; on the finer B-17 and on every newer model (the Bf 109 and
+   Fw 190 among them) its modeller's see-through blur disc was drawn solid too (its file's "clear" is not read, and the
+   copies' paint is opaque), dark, with the still blades through it. Only the near shape turned its discs. Looks only:
+   nothing the rules count reads it.
+   How: AAirBattle::PropSpinOn reads the Battle rules card's **Turning airscrews** (FLandLive's rule `flyPropSpin`; its
+   key begins "fly" only so that FLandLive::Start passes it over; never sent to the land rules) once a battle, as its
+   first shape is made. On, every shape is kept under a key of its own (`|screws`: the shapes are kept for the whole run,
+   so a battle with the row off draws what it drew before). Its far shape loses its blades and its blur disc
+   (AirScrew::StripScrews finds the far mesh's screws as the near mesh's are found: the same hubs on every aircraft,
+   Tools/air_show/air_prop_spin_test.cpp), and keeps everything else (boss, hub, cowl, spinner); its light shape is made
+   from that, with no haze (an airscrew is 2 or 3 pixels there). The copies draw each airscrew as an even, faint haze
+   (AirScrew::MakeDisc, 24 steps round, 288 triangles, colour 222224, alpha 0/70/60/0 out from the boss) on
+   M_ScrewHaze, M_Highlight's look flagged for instanced meshes (Tools/build_content.py builds it when it is missing; it
+   must be built on the Mac and its .uasset committed: without it the log says so once and the far shapes keep their
+   blades standing, as with the row off, so that no aircraft is ever drawn with no airscrew at all). Close to, the
+   turning disc keeps its 576 triangles and trails a stronger smear behind each blade (darkest at the blade, a sharp
+   edge ahead, a faint haze between), near black (8, 8, 8): both inks take a point's colour bytes as linear light, with
+   no Power 2.2 as M_MapSurface has, so the old disc's 30 was a mid grey. An engine dead and feathered
+   still shows its blades standing still: close to as before (BladesOf), and far off its bomber leaves the copies for
+   its own mesh, its far shape with the feathered screw's own blades (kept apart as they were taken out, section 6) and
+   the running ones' haze (section 5). The discs and the haze sort against the clouds as the air fight's effects do (0
+   seen from over the clouds' base, -30 from under it); before, a disc's 0 drew it over every cloud, the ones hiding its
+   own aircraft too.
+   Cost (counted, not timed): no draw call more per aircraft; one see-through draw more per copies' mesh that has haze
+   (its far shape with and without shadow: at most 2 a model, about 6 in the Bremen raid; with the row unitColours on,
+   each colour look is a shape of its own, so 2 a look); the light copies none. A
+   B-17's far copy 5,970 opaque triangles and 1,152 of haze, against 7,122; the finer B-17's 18,202 and 1,152, against
+   20,514; a Bf 109's 4,454 and 288 against 4,770. Each far shape's file is read once more as it is made (the finer
+   B-17's 10.3 MB), so the warm-up grows. A bomber feathered past 300 m: its own mesh, two or three draws, while it is
+   in view, and its whole far shape even past 1,500 m (not the light one).
+   What it promises, and what it does not: past 300 m, all of the Overview, a B-17's airscrew is 4 to 8 pixels across
+   in the picture the game draws, and its haze does not turn: no frozen blades and no black discs, a faint even blur
+   (12.6 and 11.6 levels darker than the sky at 434 and 832 m in the test's painter; against dark ground, about sRGB
+   80, it comes out a few levels lighter than the ground, arithmetic). Whether that reads as a turning airscrew is the
+   art director's call on the Mac. Only close to (rides, under 300 m) is a turn drawn.
+   `-TheaterAirPropSpin` on for a run, `-TheaterAirNoPropSpin` off, `-TheaterRulesFlip=flyPropSpin` clicks the card's
+   switch. The cloud test: air_prop_spin_test in run.sh (every aircraft in Content/Models and Old: one haze a screw, no
+   blade or blur triangle left far off and nothing else taken, each screw's blades kept apart; the near disc changes the
+   picture 64, 51 and 36 levels of 255 a frame at 60 fps at 50, 150 and 280 m against the old disc's 13, 12 and 11,
+   which the test checks fall short of 30; the haze stands 12.6 and 11.6 levels off the sky at 434 and 832 m; the row
+   off read from the source: those checks count lines of text, they show the guards are there, not how they behave, so
+   the Mac's run 1 against a build of the branch's base is the real proof that off is byte for byte as before) and
+   air_light_test built with -DAIR_LIGHT_SCREWS (every light shape, Content/Models and Old, held within half a pixel
+   of the far shape without its airscrews).
+   The pictures are the test's own software painter at the scene's real scale (about 1,050 pixels across, 1,008 a
+   radian), not the Mac's: TSR may even out the near smear (see-through draws write no motion), which only the Mac shows.
+   The Mac's run (build_content.sh first, for M_ScrewHaze): the Bremen raid, the Overview and a ride, at 1x and at 1/2
+   speed (keys 2 and 1), each launch to its end:
+   1. `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=both -TheaterAirNoPropSpin`
+   2. `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=both -TheaterAirPropSpin`
+   3. `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=both -TheaterAirPropSpin -TheaterAirB17Fine`
+   4. stills by hand: `-TheaterAirBattle=bremen-b17 -TheaterAirB17Fine -TheaterAirPropSpin`, and the same without
+      `-TheaterAirB17Fine`.
+   Pass: run 2's "time eye" lines' frames a second within 1 of run 1's, box and far, and no worst frame over 100 ms that
+   run 1 does not have; the log says "turning airscrews: on" with M_ScrewHaze, and no "are not its near ones". Send
+   back the "time eye" and "Speed:" lines (draw ms against run 1), the "turning airscrews" lines and the warm-up's lines.
+   By eye (a still each, for the art director): at the Overview no still Y of blades and no black disc with a yellow rim
+   on any B-17, Bf 109 or Fw 190, a faint grey haze at each engine; in a ride the near discs' smear seen to turn, not
+   shimmering; a bomber crossing 300 m with no jump from a turning disc to still blades; a feathered engine's blades
+   standing still, near and far; from under the clouds' base, the haze and discs behind a cloud, not over it (and, a
+   guess: ground smoke or rain behind a bomber may draw over its discs there, as over the air fight's tracers today);
+   no ghost trail behind the haze when the camera pans with the formation (TSR, a guess); no grey checkered discs
+   anywhere (M_ScrewHaze missing on a copy). Off: the picture exactly as before, compared with the branch's base.
+
+65. **Bomber markings** (release 2; Brian, 25 November 2026, of the approved studio pictures of the newer B-17: "Build it
+   into the game"; 26 November: "why is the video showing the old b-17s again", "i want the new ones in the game"). The
+   game held her shape only: plain olive and the star and bar. Now, with the Battle rules card's **Bomber markings** on
+   (FLandLive's rule `flyBomberMarks`, off by default; its key begins "fly" only so that FLandLive::Start passes it over),
+   every finer B-17 (the row b17Fine on) wears her group's white triangle with its black letter on her fin, both sides,
+   and on her upper starboard wing (apex forward, the letter reading the right way round seen from above with her nose
+   up), ridden, near and far: the 303rd Bomb Group's C, every other American B-17 group its own letter. Never by date:
+   the star and bar is hers in every month (the art director, 26 November 21:42Z), and nothing here reads the month.
+   Looks only: nothing the rules count reads it, and no random draw of the battle is made or moved.
+   How: each mark is a small vertex-painted mesh in her model file's frame (Content/Data/AirMarks/b17-fine-marks.json,
+   6.27 MB at bundle 2, made by `python3 -I Tools/air_marks/make_b17_marks.py --livery <B17Livery.json>` from the model thread's
+   livery file, sha256 2ae760cc..., whose marks were laid on her newer shape 12 to 16 mm off her skin, near and far;
+   the wing's triangle and letter are the tool's own, 1.5 m across at x 0.9, y 11.6 (the fin's 1.74 m would hang over
+   her trailing edge there), the far glyph laid flat and draped 12 and 16 mm over a smooth fit of her wing; it refuses a
+   model other than B17Fine.json sha256 5e1f39002423). Inks are the livery's own, the approved picture's: white DCD9CC,
+   black 17171A; on PlaneInk as painted metal (alpha 128, as her star), matt as her paint: no new material, texture or
+   content build. Each mark mesh ("unit.C": fin.T, fin.T.C, wing.T, wing.T.C) is made once (AAirBattle::MarkStill, by
+   her file and frame, behind the opening's curtain in WarmMarks) and drawn as an instanced copy with her own place and
+   her place a frame before (CopiesFor "marks|...", sent by SendCopies): the near level while she is on her near shape,
+   the far one on her far shape and as a copy (her light shape past 1.5 km wears none). A mark is drawn while it is
+   2.7 px or more on the screen (letters and codes 4.0; 0.9 of that while it was drawn, so that it does not flicker;
+   `-TheaterAirMarksMinPx=` and `-TheaterAirMarksLetterMinPx=`), always on the ridden one. About 280 to 580 triangles a
+   bomber at the far level (390 on average over the 24 letters), 1,400 to 3,000 at the near.
+   Who wears which letter is Battle/AirLetters' book (std only): every American B-17 group lettered at the battle's start
+   from the show's groups (history's first: the 303rd C and its squadrons VK BN PU GN; the rest by an FNV hash of the
+   group's name, the next free of the 24 letters A to Z without I and O on a clash), each bomber given hers by her key's
+   order in her group when the show first gives her, never changed after. From the show's aircraft alone, never the
+   scene's (whose order of making can differ between two runs of one recording): the same battle wears the same letters
+   on every run.
+   `-TheaterAirBomberMarks` on for a run, `-TheaterAirNoBomberMarks` off, `-TheaterRulesFlip=flyBomberMarks` clicks the
+   card's switch. Off (or the finer B-17 off): no file read, nothing made, placed or said; the card gains its line.
+   On with the file missing or bad: one warning, and she flies with the star alone.
+   The cloud test: air_letters_test in run.sh (under g++ and clang++): the file read as the game reads it, whole, made on
+   her file (its sha256), wound as her file's, every fifth point 3 to 40 mm off its level's skin, by the signed distance to her nearest face (5.0 to 25.8 measured),
+   her far side's letters and codes straight in from her side never under her, 2 to 125 mm off, over 40 mm one point in
+   a hundred at most (3.7 to 116.5 measured: a tall letter's tail or top reaching round her curve),
+   the letter F reading the right way round on both faces of her fin and on her wing from above, near and far, the wing's
+   triangle apex forward on her right wing, nothing over her star and bar; each recording played through the show with the
+   book taking every step, every third, every seventh from the fifth, and all hidden: the same wears; every American B-17
+   given hers; one letter a group, none shared, no code in two groups; the 303rd's first bomber C VK A; the same wears with
+   the date moved to 1943-03 and 1944-06; the show's own record the same with the book and without; thirty made-up groups
+   numbered two ways; no month or year in the book; and the Unreal side's guards from its source (lines of text: the
+   proof is the Mac's run with the row off against the base).
+   Bundle 2 (the file's "bundle": 2, 194 parts, 6.27 MB; the bundle-1 parts in it byte for byte as before): her
+   squadron's two letters and her own letter on both sides of her fuselage as the livery lays them, her own letter forward of
+   the star and bar and the squadron's two aft of it (the 303rd's first bomber reads "A, star, VK" from her port side,
+   each letter the right way round from either side), in the livery's code grey B9BAB4 (light grey, the livery's value "code"); her own letter again in
+   the livery's yellow C99A35 on her fin under the triangle. Squadron and letter from the book: her n-th bomber of the
+   group (n from 0, by key order) flies with squadron (n / 6) mod 4 and letter (n mod 6) + 6 x ((n / 24) mod 4) of the
+   24; the codes of a group not known to history from an FNV hash, none in two groups. Her "#" number (CampaignMiniatures'
+   paint) is not painted on a finer B-17 shape made with the row on at bundle 2: FMiniatureMesh::bNoPlaneNumber, set
+   only in ShapeFor beside bTorpedoLoad, and her shape key ends "|letters" (before "|screws"), her paint key "|nonumber";
+   off, every key and every paint is as before. The side letters J and Q (whose tails reached her wing root) are raised
+   to the foot of A and laid again 12 mm off her skin, near and far. At the far level the side letters and codes are laid
+   again as decals seen straight from her side (the tool's decal_side): her far side is a loft of a few flat faces, and
+   the livery's far glyphs, whose long triangles crossed its ridges, let her skin stand through them between their
+   corners (olive bites in the letters, seen in the check pictures); each is clipped to a grid whose lines stand at her
+   own faces' corners, set 12 mm off the outermost of her faces straight in, a cell raised where her skin stands out
+   over it (her wing fairing's edge), and her wing's root in front of the A's and J's feet left to hide them. About
+   1,100 to 3,700 triangles a bomber at the far level (2,000 on average, her fin's and wing's triangles counted), 4,200
+   to 7,000 at the near. Bundle 3 (the yellow serial, close up) is not built.
+   The Mac's run (no build_content.sh: no new content): the Bremen raid with the finer B-17.
+   1. `-TheaterAirBattle=bremen-b17 -TheaterAirB17Fine -TheaterAirNoBomberMarks -TheaterAirTimeEye=both`
+   2. `-TheaterAirBattle=bremen-b17 -TheaterAirB17Fine -TheaterAirBomberMarks -TheaterAirTimeEye=both`
+   3. the leg-144 raid with b17Fine, noseArt and flyBomberMarks on, and the same with flyBomberMarks off.
+   4. stills by hand with the row on: the 303rd from the riding eye at about 40, 60 and 150 m, and one Overview still.
+   Pass: run 1's log line for line as the base's (no "bomber markings" line); run 2 says "bomber markings: on ... bundle 2,
+   194 parts read in N ms" and "N bombers lettered, M mark meshes made ready"; on the 144-aircraft raid the worst 5 s no worse
+   than the row-off run's, and the draw thread at most 0.5 ms more in the steady stretch ("Speed:" lines). By eye: a white
+   wedge with a dark C on her right wing seen from behind and above, a white triangle with C on her fin both sides,
+   reading the right way round; nothing floating off her skin or sunk into it (a white sliver or a flicker of olive
+   through the white would say her frame is wrong); no letters in the Overview, a small white fleck on each fin and wing.
+
+66. **Worn B-17 paint** (release 2; Brian, 26 November 2026: "why is the video showing the old b-17s again", "i want
+   the new ones in the game"; the studio pictures he approved on 25 November). The finer B-17 (item 60) keeps her
+   shape and wears the model thread's paint for that very shape: the one army olive 5B5A44 over 9A9EA1 (the art
+   director, 21:42Z on 26 November), panel to panel tone through the file's own blend, oil and exhaust stains, grime and
+   engine fronts through soot, darker glass (1E262D), the far shape's airscrew domes hub grey (160 points repainted from
+   engine). Never by the year or month. Looks only: nothing the rules count reads it, and no random draw is made.
+   How: AAirBattle::B17SkinRead, right after B17FineRead at both battle starts, reads the Battle rules card's **Worn
+   B-17 paint** (FLandLive's rule `flyB17Skin`, off by default; its key begins "fly" so FLandLive::Start passes it
+   over). It first unsets Battle/AirSkin; with the row off (or the finer B-17 off) it returns there: no file read, no
+   memory, no line said, every key as before. On, it reads Content/Data/AirSkin/B17Fine.json once a run (about 1.3 MB;
+   LandJson, some 60 to 80 ms and a passing 60 MB or so of parse nodes, as the battle begins, never in a frame; kept
+   as about 0.5 MB of bytes), refuses one not of her counts (143,899 / 15,534 / 46) or holding any key by month, year,
+   scheme, mark or "from", and sets it. Every reader of her file then asks AirSkin, only while it holds an overlay:
+   the miniature kit's reader (CampaignMiniatures.cpp: her read kept apart under "|skin"; her colours, blend and soot
+   replaced by the overlay's and the repaint laid, where the counts are the overlay's; the law itself unchanged; her
+   schemes, were there any, stand aside, Livery 0), ShapeFor (her shape kept apart under "|skin"), the earned colours'
+   model (AirSkin::OntoModel: their bands carry the new stains, her four spinners still found near and far) and the
+   nose-art panel (it fades into her worn coat, AirSkin::PanelUnder, 5C5B45, not panels-fine.json's 4C4B35). Her
+   markings (the star and bar at three places) are her file's, untouched.
+   The overlay is made by `python3 -I Tools/make_air_skin.py --base Content/Models/B17Fine.json --skin <the model
+   thread's file> --out Content/Data/AirSkin/B17Fine.json`: it EXTRACTS (computes no paint of its own), refuses a base
+   whose sha256 does not begin 5e1f39002423 or whose points, facings, triangles, part or wear differ from the skin's,
+   and gives the same bytes from the same files. It also refuses (exit 2, nothing written) a file that is not JSON, a
+   colour that is not hex, and a skin holding a dated scheme ("schemes", a key holding "month", a key "from"): such
+   paint is refused aloud, never quietly dropped. First made from battle-models/air-bar-1126/issue-4/B17.json (sha256
+   f4d417ed0085e866...). A re-issued model file is one more run of that command and one commit. A re-export of
+   B17Fine.json itself fails the cloud test until the tool is run again.
+   Remade on 27 November from the model thread's pushed wear (the same path, sha256 2717c78061a7353b...: the art
+   director's "push the wear harder"; blend, soot and five colours moved, every geometry list, the 160 far repaints
+   and shade as before).
+   Remade again on 27 November (18:57Z) from SKIN 9, the coat the art director passed at 18:56Z
+   (battle-models/air-bar-1126/issue-4/B17-skin9.json, sha256 bd468b6d3342cb1c..., her page
+   finish-lists/AD-1856-SKIN-9-PASSES.md): against skin 2 only blend and soot moved (the wing tongues widen aft to the
+   eye, soot cleaner on the tail); colours, shade, gloss, metal and every geometry list as before. The sheen file was
+   made in the same run, so both record bd468b6d3342. Overlay sha256 14298379c624..., sheen file 817d734a3abd....
+   Cost: none on the graphics chip (the same points, triangles, material and draws: only the colour bytes differ).
+   Her shapes are made once more under "|skin" the first battle it is on (a second read of her 10.3 MB file each
+   level, as with any first battle).
+   What the owner sees, honestly: alone it reads as "the same aircraft, darker and evener" (the sceptic's renders, 87%
+   of her pixels change, median 7 L* darker). The cues of the approved picture that are big at the riding eye are
+   her markings (the fin triangle and letter, the yellow serial, the side codes): this ships WITH those.
+   The cloud test: air_b17_skin_test in run.sh (g++ and clang++; the overlay made for B17Fine.json's very bytes, every
+   fault refused, the law's check colours, the earned colours and the panel under it, the guards read from the
+   source: counted lines, not behaviour) and Tools/air_skin/test_make_air_skin.py.
+   The Mac's run, each launch to its end: (1) `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=both -TheaterAirB17Fine
+   -TheaterAirNoB17Skin` must match a build of the branch's base frame for frame and line for line; (2) the same with
+   `-TheaterAirB17Skin`: the log says "worn B-17 paint: on", its "time eye" lines within 1 frame a second of run 1 and
+   the first window's worst frame no worse; (3) stills, the riding eye and a front quarter, with and without the row,
+   for the art director (dark against the cloud from the film's eye; panel tones one coat, not a patchwork).
+   Contact shade (same row): the overlay's per-point shade (the model thread's, 0.12 to 1, kept x100) multiplies her
+   colour in linear light after blend and soot, as a figure's wear is multiplied (CampaignMiniatures.cpp's figure
+   branch), only under the skin. `-TheaterAirB17SkinShade=0..1` sets its strength (1 unless asked; 0 none; read once a run with
+   the file, as the command line does not change) so the Mac
+   can make the same still with and without it. Unknown until the Mac's stills: whether Lumen's own occlusion darkens
+   her creases a second time on top of it. Her earned colours' bands are laid without it (their model has no shade):
+   where a band crosses a shaded crease it is a little lighter than the coat beside it.
+67. **B-17 paint sheen** (release 2; Brian, 26 November 2026: "why is the video showing the old b-17s again", "i want
+   the new ones in the game", "make the new ones work"; the picture he approved on 25 November,
+   battle-models/air/b17-next-look/jump/skin-3-in-flight.jpg: worn olive with a cool, satin, worn-metal sheen on her
+   wing tops and back, glinting glass). Item 66's paint alone is flat (PlaneInk, 0.9 rough, 0.15 specular, the art
+   director's rule of 22 November, items 23 and 32); the model thread's own sheet of 26 November shows that the larger
+   step to the picture is the sheen. This item draws it for the finer B-17 alone, under the art director's principle of
+   26 November 21:42Z (the approved picture governs), and keeps out exactly what her 22 November rule was for: SAND, a
+   pale and WARM wash where a low sun mirrors in the paint. Never by the year or month. Looks only: nothing the rules
+   count reads it, and no random draw is made.
+   How: the Battle rules card's **B-17 paint sheen** (FLandLive's rule `flyB17Sheen`, off by default, needs Worn B-17
+   paint; `-TheaterAirB17Sheen` / `-TheaterAirNoB17Sheen`). AAirBattle::B17SheenRead, right after B17SkinRead at both
+   battle starts: with the row off it returns before anything is read or said; on, it reads
+   Content/Data/AirSkin/B17Fine-sheen.json once a run (the model thread's gloss = roughness x 100 and metal x 100, one a
+   point, near and far, and her coat's 39/18; Battle/AirSheen) and refuses one not made from her overlay's very source
+   file. Each of her shapes is then kept under "|sheen" and carries, in its FIRST TEXTURE COORDINATE, U = how far her
+   roughness is below 0.9 (times the square root of her contact shade) and V = her metal (AirParts::SheenOnto; her star
+   and bar, laid after her file's points, take her coat's): both on her close-up sections and on the static mesh behind
+   her far copies (the light shape past 1.5 km stays as it is). Her sections and copies draw with M_AirPaint
+   (Tools/build_content.py, `build_map_surface("M_AirPaint", air=True)`: M_MapSurface's own nodes with roughness,
+   specular and metal from U and V by AirSheen::Law's sums). At U = V = 0 those sums give PlaneInk's numbers exactly,
+   so anything that carries nothing (an earned-colours copy, for now) draws as today.
+   The law (defaults): her paint no smoother than 0.45 (SheenFloor), her glass alone smoother (0.07: it glints),
+   specular 0.25 where she carries a finish (SheenSpec), metal only over 0.5 (SheenMetalFrom 0.5: a point at 0.45 carries
+   none, one at 0.55 all of its own; the art director, 27 November 00:16Z: metal on true fittings only), and THE GLARE GUARD (on): within some 25 degrees of a low sun's mirror (sun under 15 degrees fully, none over
+   30; Bremen's December sun is some 13 degrees up all raid) her finish goes back to PlaneInk's. The grazing guard (a
+   look along her skin) is OFF: it would remove the approved picture's own cool-grey sky sheen on her wing tops.
+   Every number is a launch word, no rebuild: `-TheaterAirB17SheenInk=gain,floor,spec,metal,glare,graze,metalfrom`
+   (each optional, e.g. `=,,0.35` brighter, `=1,0.55` duller, `=,,,,,1` grazing guard on, `=,,,,0` glare guard off).
+   Fallbacks: M_AirPaint missing, or older than the build (its "SheenEdge" sentinel, read before anything is set), or
+   the sheen file missing, unreadable or not her paint's: one Warning, the row stays off for the battle, she wears
+   item 66's matt paint.
+   The files: one run of `python3 -I Tools/make_air_skin.py --base Content/Models/B17Fine.json --skin <the model
+   thread's B17.json> --out Content/Data/AirSkin/B17Fine.json --sheen-out Content/Data/AirSkin/B17Fine-sheen.json`
+   makes the overlay and the sheen file together from the same bytes (both or neither). A re-issued model file is that
+   one run and one commit.
+   Cost: 0 extra draw calls (the same sections; her copies' groups already differ by "|skin", so "|sheen" renames them,
+   it does not split them); 0 extra graphics memory on the far copies (their texture coordinate was there, zero); some
+   35 sums a pixel on her alone; 16 bytes a point on the CPU (2.3 MB for her near shape). A GUESS of 0.05 to 0.2 ms; the
+   Mac's time-eye lines decide (budget 0.5 ms). The first draw of M_AirPaint on her close-up sections is warmed under
+   the black (AirWarmSheen); her far copies' first draw is NOT proven warm (no living example): the first window's
+   worst frame decides.
+   What the owner sees, honestly: nicer, a satin cast and glinting glass, not yet the studio picture (no chips, grain or
+   streaks; evener than the studio picture up close; Lumen decides how pale and cool her wing tops go).
+   The cloud test: air_b17_sheen_test in run.sh (the file her overlay's; nothing carried is PlaneInk exactly; the glare
+   guard; no garbage between corners along every edge of her meshes; the launch word; metal on her fittings alone,
+   counted; M_AirPaint's nodes and the Unreal side read from their source), air_b17_sheen_grid with
+   air_b17_sheen_material.py (M_AirPaint's own nodes run as numbers against the law, case for case) and
+   Tools/air_skin/test_make_air_skin.py.
+   The Mac: editor closed, `TC_REBUILD=M_AirPaint Tools/build_content.sh` (it says "Theater Command: wrote
+   /Game/Campaign/Materials/M_AirPaint", never "M_AirPaint was not built"), then the C++ build; (1)
+   `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=both -TheaterAirB17Fine -TheaterAirB17Skin -TheaterAirNoB17Sheen`
+   matches the build before it frame for frame and line for line; (2) the same with `-TheaterAirB17Sheen`: the log
+   says "B-17 paint sheen: on ... her sun 13 deg up" or so and no Warning, time-eye within 0.5 ms, first window's
+   worst frame no worse; (3) stills with and without: the riding front quarter, a look toward the sun over her wing (as
+   today there), the Overview, the far-to-near swap at 300-450 m (no pop), an earned-colours B-17 (matt, by design),
+   her bay open, her rivet rows close up; ONE STILL with an escort fighter beside her in the same light (she is first,
+   not alone: if the two read as two paint worlds she waits for the fighters); and a slow 10 second ORBIT through the
+   sun's mirror (no patch that breathes, no matt hole where the glint should be, no edge). The art director's targets
+   (27 November 00:14Z): where her paint is pale (over 130) blue at least 0.95 of green AND red no more than green;
+   wing tops no paler than the picture's 181; nothing on her paint over 200 (glass or a fitting may glint); her sides
+   and fin stay olive (blue about 0.90 to 0.95 of green); no sparkle in the 60 m still. Glare guard on, grazing guard
+   off. Nothing is passed until these stills. (4) M_AirPaint renamed away once: one Warning, the look of run 1.
+   Her metal: only her true fittings carry any (the art director, 27 November 00:16Z): the sheen file is written with
+   metal 0 on every point whose paint is not steel, blade, line, engine, exhaust, gunmetal, hub or head
+   (make_air_skin.py's FITTINGS, recorded as "metal_paints"), so no rivet head, seam or paint point turns metal; worn
+   rivets show by tone, in blend and soot, as before. Her glass keeps its glint in a shaded nook (its depth is not
+   shaded). Her glare guard follows the sun the key light is aimed from (set after the stage is raised), so her finish
+   follows the sun's height as every lit surface does; her files hold no date. Her far feathered blades (section 6)
+   stay on PlaneInk, matt, as intended.
+
+**Silver Mustang** (release 2; Brian, 27 November 2026 01:23Z: "shouldnt the p-51 mustangs be silver with black paint?
+why are they green?", then of the first matt pictures 03:12Z: "thats white. it should be shiny silver", "metalic").
+   What he sees: every Mustang in bare polished metal (E0E3E5) with her black nose band, spinner, glare panel and wing and
+   tailplane bands; a bright streak along her back and the wings' leading curve that moves with the eye, darker below,
+   cool on top; her star and bar and number satin. The same in every month of the war (her file holds no schemes).
+   How: the Battle rules card's **Silver Mustang** (FLandLive's rule `flyMustangMetal`, off by default;
+   `-TheaterAirMustangMetal` / `-TheaterAirNoMustangMetal`). Her file is the air rules thread's issue-13
+   (battle-models/air-bar-1126/issue-13/Mustang.json, sha256 4b7fe030..., the art director's pick of 04:58Z: roughness
+   0.28, fuselage panels 0.25 to 0.32, wings 0.35, bare skin metal 100, paint metal 0), kept byte for byte as
+   Content/Models/MustangBare.json BESIDE the old Mustang.json, which the row off still draws: so the row off is every
+   Mustang as before. With the row on, ModelFor names every Mustang "MustangBare" (only the drawing: her flight is the
+   Mustang's, the same span and figures, so nothing counted moves), MustangMetalRead reads her file's own near and far
+   `gloss`, `metal` and `shade` (AirSheen::ReadOwn), OwnOnto carries them in her shapes' first texture coordinate as the
+   B-17's sheen does (AirSheen::Carry), and InkFor draws her on BareInk: the same M_AirPaint with her own numbers
+   (AirSheen::BareTune): a roughness floor of 0.25, not the B-17's 0.45 (her pick, 0.28, would be held at 0.45 satin),
+   and no glare guard on her (the art director: no glare guard on bare skin). Her paint and her marks keep metal 0.
+   Her far copies carry her finish too (StillOf draws them on InkFor), so she glints at 300 m; her light shapes past
+   1.5 km stay on PlaneInk. The sky light's lower half is already a tone, never black (SkyLowerOnce: 0.82 to 0.88 of the
+   weather's bounce), so her belly mirrors a pale under-sky, not a black hole. She rides the B-17 sheen's content build:
+   `TC_REBUILD=M_AirPaint Tools/build_content.sh`, nothing more. Numbers for stills without a rebuild:
+   `-TheaterAirMustangMetalInk=gain,floor,spec,metal,glare,graze,metalfrom` (the art director's fall-back if the Mac
+   shows sparkle: `=,0.32`). Cloud test: Tools/air_show/air_mustang_metal_test.cpp.
+   The Mac's stills the art director judges (her 04:58Z list): beside a B-17, sun high and at 14 degrees, from above and
+   the chase eye, at 300 m, a slow 10 s orbit, and the same shots with the row off.
+
+85. **Far airscrews a faint blur** (release 2; Brian, 27 November 2026 01:23:16Z: "yeah the far propellers don't move
+   and dont look good"; his picture of the Overview showed each far B-17's airscrew as a big solid disc with a yellow
+   rim). What draws those discs: past 300 m from the eye (450 going out) every aircraft is a copy of its far shape
+   (FMiniatureMesh's far mesh, AirParts::ShapeOf, StillOf, the copies' instanced mesh), all on the aircraft's own solid
+   ink (M_MapSurface). The newer models' far meshes carry their modeller's blur disc, painted blur (3A3A36) with a ring
+   of blur_tip (D9B224 yellow on the American and British ones, B4281F red on the Japanese), and the solid ink draws it
+   as a solid disc (the file's "clear" is not read), the blades standing still behind it. That is the base's drawing,
+   in every build played (a15b57beb, before "Turning airscrews"; that commit is not in this repository, and the far
+   path is the same in this branch's base) and in the next one with the row `flyPropSpin` off; and with that row on
+   whenever M_ScrewHaze is missing. It is not that row's drawing (its haze is grey, 222224, with no yellow), so this is
+   a row of its own and that one is left as it was. On the finer B-17 the solid disc stands 108 levels of 255 off the
+   sky at 434 m and 91 at 832 m, its rim 16 and 12 levels redder than blue on the disc's mean (the cloud test's own
+   painter, 1,008 pixels a radian, the disc 8.2 and 4.3 pixels across). And close to, on her near shape, each hub's 84
+   painted marks (decal and decal_rim, 42 and 42, about half the radius out on each blade) stayed where they were when
+   the blades were taken out to turn as the disc: standing still in the turning disc, with "Turning airscrews" on or
+   off. The Wellington has the same, on two hubs. Looks only: nothing the rules count reads it.
+   How: AAirBattle::PropBlurOn reads the Battle rules card's **Far airscrews a faint blur** (FLandLive's rule
+   `flyPropBlur`; its key begins "fly" so that FLandLive::Start passes it over; never sent to the land rules) once a
+   battle, beside PropSpinOn, as its first shape is made. On, every shape is kept under a key of its own (`|blur`), and:
+   - its far shape loses its blades and its blur disc as "Turning airscrews" takes them (AirScrew::StripScrews,
+     TakeFarScrews; the far machinery of that row runs with either row on: ScrewHazeInk, FarScrews for one on its own
+     mesh, a feathered bomber's own mesh with its blades standing, the sort against the clouds), and the copies draw
+     each airscrew as a faint grey disc in their place (AirScrew::MakeBlurDisc: the haze's rings and 288 triangles,
+     colour 28282A, alpha 0/30/42/0 out from the boss, the tips' band a little stronger) on M_ScrewHaze. It stands 6.3
+     and 5.7 levels off the sky at 434 and 832 m (that row's haze 12.5 and 11.5), red and blue within a level: a grey
+     shimmer at most, no yellow. Without M_ScrewHaze the log says so once and the far shapes stay as before.
+   - its near shape loses the marks inside its discs with the blades (AirScrew::BladeDecals: the finer B-17's 336, the
+     Wellington's 168, every mark either carries; no other aircraft has any, and no far mesh has a mark in a disc).
+   - its near discs (the old disc, or "Turning airscrews"' smear with that row on too) carry the tips' own paint as a
+     faint arc behind each blade, turning with it (AirScrew::MakeTipArcs, 384 triangles, alpha at most 100 of 255 just
+     behind the blade, a faint ring between): the paint read from the file (AirScrew::TipColour: blade_tip, else
+     blur_tip, where the near mesh paints it: C9A030 on the finer B-17 and the Wellington, yellow on the Dauntless,
+     Devastator, Hellcat, Hurricane, Mustang, Spitfire, Warhawk and Wildcat, red on the Betty, Kate, Nell, Val and Zero;
+     none, no arc, on the rest, the Bf 109 and Fw 190 among them), made linear as the aircraft's own ink makes it
+     (Power 2.2), since the airscrews' ink takes a colour's bytes as light. On the old disc the tips' band is 7.4, 5.7
+     and 3.6 levels toward the paint at 50, 150 and 280 m, no pixel moved more than 24 by it; only the near shape has
+     it (under 300 m), never the copies.
+   The near smear stays "Turning airscrews"' alone; both rows on, the far disc is this row's.
+   `-TheaterAirPropBlur` on for a run, `-TheaterAirNoPropBlur` off, `-TheaterRulesFlip=flyPropBlur` clicks the card's
+   switch.
+   The cloud test: Tools/air_show/air_prop_blur_test.cpp in run.sh (every aircraft in Content/Models and Old: the marks
+   found and nothing painted blade, blur or mark left standing in a disc with the row on; no mark in a far disc; the
+   tips' paint as filed; the far disc against today's solid one and against the haze at 434 and 832 m; the tips' arc
+   seen and faint at 50, 150 and 280 m on the old disc and the smear, and turning; the Unreal side's lines from their
+   source). air_prop_spin_test's lines for the far guards now read the shared ones ("either row on"). The row off was
+   proved on the plain C++ side: the base's and the head's air_screw_test, air_prop_spin_test and the light test built
+   with AIR_LIGHT_SCREWS give the same output (AirScrew's additions are new functions only, and PaintKinds' new Decal
+   list is read by nothing else); the Unreal side is read from its source, and the Mac's run 1 below against a build of
+   the branch's base is the real proof.
+   The Mac's run (build_content.sh first, for M_ScrewHaze): the Bremen raid with the finer B-17, the Overview and a ride:
+   1. `-TheaterAirBattle=bremen-b17 -TheaterAirB17Fine -TheaterAirTimeEye=both -TheaterAirNoPropBlur`
+   2. `-TheaterAirBattle=bremen-b17 -TheaterAirB17Fine -TheaterAirTimeEye=both -TheaterAirPropBlur`
+   3. stills by hand: `-TheaterAirBattle=bremen-b17 -TheaterAirB17Fine -TheaterAirPropBlur`, and the same with
+      `-TheaterAirPropSpin` too.
+   Pass: run 1 as before (the picture and the log); run 2's "time eye" frames a second within 1 of run 1's, the log
+   "far airscrews a faint blur: on" with M_ScrewHaze. By eye (a still each, for the art director): at the Overview no
+   solid disc and no yellow rim on any B-17, a faint grey shimmer at each engine, or none; close to, no marks standing
+   still in a turning disc, a faint yellow arc at the tips that turns; a bomber crossing 300 m with no jump that
+   catches the eye from the near disc's faint arc to the far grey disc; no grey checkered discs (M_ScrewHaze missing
+   on a copy). The grey and the alphas are the
+   cloud painter's guess of how M_ScrewHaze lights them; the Mac's eye is the judge, and BlurRgb and BlurAlpha
+   (AirScrew.h) are the numbers to turn.
+   Mended after review (the test only; no game code changed, the row off as before): the cloud test's check that the
+   tips' arc turns measured the arc laid over the disc, and the disc changes the tips' band by itself when it turns, so
+   it passed with the arc standing still or drawn as an even ring. It now turns the arc alone over the sky (its band
+   changes 2.7, 1.3 and 0.4 levels a frame at 50, 150 and 280 m; a still arc 0, an even ring 0.11 at most), checks that
+   round its ring the arc is strongest just behind each blade (alpha 85 against 19, falling once a blade), and reads from
+   AirBattle.cpp that the arc is laid into the turning disc's own section 0. And B1's rule that no blade mark is left
+   standing was the test's own copy: the test now also reads the game's lines (the marks looked up by the triangle, the
+   near shape's keep test with `!bMark`). Each new check fails on a broken copy and passes on the branch.
+
+   **The blade marks mend (a fault in his game, no row; 27 November 2026).** The art director's P48 stills of the close
+   B-17 (r2-play c6eb5a021, the same on his Play icon) showed a red disc in a white ring on her lower fuselage under the
+   wing root and two small red marks under the chin. They are the makers' marks painted on each airscrew blade (paints
+   decal 9E3A2F and decal_rim CFCABA, 84 triangles a hub on the finer B-17 and the Wellington; the only red-and-white
+   paint in B17Fine.json, all of it inside the four airscrew discs). The near shape has taken its blades out to turn as
+   a disc since release 1.5, whatever the rows, but left the marks behind, standing still about half the radius out.
+   Mend: TakeScrews finds the marks (BladeDecals) always and drops them with the blades; only the tips' arc waits for
+   "flyPropBlur". With the row off the near B-17 and Wellington lose those 672 still triangles and nothing else; every
+   other aircraft carries no mark and is drawn as before. Test: air_prop_blur_test's "the blade marks mend" (the marks
+   found before the row's test, the tips' paint inside it; fails on the old lines). The Mac's still to judge it: a close
+   B-17 at the P48 nose-art eye, engines turning, no still red disc anywhere on her.
+
+64. **The air battle's hitch: lines that name it, and four rows to take it apart** (release 2; the Mac's timing legs of
+   26 November on build 172f19ae0, `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=box -TheaterSpeedLog`: in every leg
+   the press was one frame of 174 to 368 ms with the campaign's last picture frozen before the opening's black was up,
+   and one draw-side freeze of about a second fell inside the ground's paint, 13.6 to 18.2 s of the pool's work begun in
+   the press). Numbered 64: 60 and 61 are each taken twice on other builds, 63 is the opening's, and 62 was passed over
+   there; 64 is the next number no build has used.
+   **The naming lines** (no row; written only while the speed log is, `-TheaterSpeedLog` or tc.Speed.Log 1, through
+   TheaterSpeed::IsLogging; with it off not one line or measurement is added):
+   - "Air hitch: before Open (BeginReplay key | BeginLiveCall TC.function), frame F, T ms in all, in the press's frame
+     before the black can go up; each step in ms: ..." once a press, as Open is reached: the work done ahead of Open, and
+     so ahead of the black under `flyCurtainFirst` (a replay's recording read from disk and ReadRecording; a live press's
+     bridge call, the answer read with the show and the desk, and TC.battleSpeed). The press's other work in its caller
+     (the raid card, the scramble offer, a battle of your own; the scene's actor spawned) is not in it.
+   - "Air hitch: the press (Open), frame F, T ms in all; each step in ms: ..." once as a battle is made (the mix and the
+     sound, the inks, the effects kits, the ground (Raise), the clouds, LayZenith, LayHazeBand, OpenTroops, HideTheTable,
+     the deck's shade and sheet, cirrus and rain, the eye and its grade, the first aim and SkyLowerOnce, the warm sheets
+     and the screen).
+   - "Air hitch: under the black, frame F (N under it), T ms: game G, draw D, graphics chip C ms; ..." each frame the black
+     holds, and "Air hitch: the shapes made under the black, frame F, each in ms ...: ..." once.
+   - "Air hitch: ground paint begun on the pool S s after it was asked for (...)", then for each of the three pictures
+     its rows, its shading and its smaller copies, each in seconds since asked.
+   - "Air hitch: a long frame, frame F, T ms: ground paint P; the black B; K frames since the eye last cut (why)." on each
+     frame over 33.4 ms and the frame after it, so a freeze is laid beside the paint's phase, the black and the last cut.
+   - "Air hitch: the eye cut, frame F: why." at the opening, a jump the sky saw, and back to the map.
+   - "Air hitch: loaded what in T ms (frame F)." around the first loads of the flag, hit, tally marks and each sound.
+   The rows (Battle rules card, each off; keys begin "fly" only so FLandLive::Start passes them over; never sent to the
+   land rules; none is on the release 2 ship list). Off, each is the build as before: the row is read and nothing else
+   happens.
+   - **The black first, then the scene** (`flyCurtainFirst`; `-TheaterAirCurtainFirst`, `-TheaterAirNoCurtainFirst`).
+     The black is put up and shown two frames with the battle's clock held, then the scene is made behind it
+     (AAirBattle::CurtainFirstHold, CurtainFirstWaits; a live battle's ships are laid once it is made); the screen takes
+     no press until then (AwaitsOpen). With `-TheaterAirNoCurtain` (the old opening) the row does nothing. The card has no
+     title in its first frames, as today's first black frame has none. Log: "Air battle: the black first, then the scene
+     (...): frame F." and "Air battle: the scene made under the black, N frames after it was put up (row flyCurtainFirst)."
+   - **The map rests under an air battle** (`flyMapHold`; `-TheaterAirMapHold`, `-TheaterAirNoMapHold`). The hidden map's
+     per-frame update held while the battle is up (ACampaignMapActor::HoldUpdates, as the land battle holds it) and let
+     go as the map comes back; its lettering and smoke catch up in one update. Log: "Air battle: the hidden map's
+     per-frame update held while the battle is up (...)."
+   - **The ground is painted early** (`flyPaintEarly`; `-TheaterAirPaintEarly`, `-TheaterAirNoPaintEarly`). A replay's
+     ground begun on the pool as the replay is queued (ReplayWhenReady), some 2 s before the battle asks for it, and
+     used only if the battle's own ask is the same place field for field and the same plans (AirGroundKeep::SamePlace);
+     else dropped and painted again. Live raids are not changed (their place comes only with the rules' opening answer).
+     The recording is read once more on the game thread as the replay is queued. Log: "Air battle ground: K's pictures
+     begun as the replay was queued (...)", then "... begun S s before the battle asked for them are this ground's" or
+     "... are not this battle's ground; painted again".
+   - **The ground is kept once painted** (`flyGroundKeep`; `-TheaterAirGroundKeep`, `-TheaterAirNoGroundKeep`). The three
+     painted pictures kept in Saved/AirGround, one file a ground (about 48 MB; the six last used, by order.txt, the rest
+     deleted) named by a key of everything the painter reads and the painter's version and text (PainterVersion,
+     PainterText: the hash of AirLand.h and .cpp, which the cloud test checks); a later flight of the same ground
+     reads them on the pool instead of painting. A file whose header, key, count, sizes, length or check does not match
+     is refused and the ground painted and kept again. Written beside its place and moved in, as the campaign's save is.
+     Same bytes as painting. Log: "Air battle ground: read from the kept file, not painted, Saved/AirGround/<key>.ground
+     (...)" (or "none kept yet: painted, and kept", or "the kept file refused (why): painted, and kept again").
+   The cloud test: Tools/air_show/air_ground_keep_test.cpp in run.sh (Battle/AirGroundKeep.h, std only: the key moves with
+   every field the painter reads and with the painter's version and text; pack and unpack are the same bytes on Bremen's
+   and a town's ground; a file cut short, a byte changed, a wrong key, count or size refused; the order keeps six and
+   drops the rest; SamePlace; and AirLand.h and .cpp still hash to PainterText, so a change to the painter, a merge
+   too, fails here until PainterText is set anew and PainterVersion raised). The Unreal side could not be compiled here.
+   For the Mac (each leg one launch to the raid's end, the stock words
+   `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=box -TheaterSpeedLog` and at most one row's word): first the stock
+   words alone (the naming lines name the press's steps and each long frame's company), then each row's word on its own.
+   Send back the log of each; the build's NOTES.md (beside its bundle) says what each leg should show. Every such leg is
+   a replay, so one more is flown by hand: a campaign launched with `-TheaterSpeedLog -TheaterAirCurtainFirst`, and a raid
+   flown with FLY IT YOURSELF (or a battle of your own), for the "before Open (BeginLiveCall ...)" line: if its T is large,
+   a later curtain build puts the black up before the bridge's call.

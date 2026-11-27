@@ -152,6 +152,9 @@ struct FMiniatureMesh
 	 * the file's shade, the rust ramp). As made, today's paint: the campaign map, Pearl Harbor, Midway and the air battles
 	 * never set it, and a model painted under it is kept apart from today's (its cache key says so). */
 	static ShipPaintCore::Options ShipPaint;
+	/** Set by the air battle while it builds a finer B-17 that wears her squadron's codes (the Battle rules card's "Bomber
+	 * markings", bundle 2): her file's "#" number, which stands where her codes go, is not painted. Off: as always. */
+	static bool bNoPlaneNumber;
 
 	/**
 	 * A real vehicle, built from its measurements: "PanzerIV", "T34", "Sherman", "Matilda". Metre is the size

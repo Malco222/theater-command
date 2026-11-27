@@ -246,10 +246,89 @@ namespace
 		// -TheaterAirDogfights turns it on for a run, -TheaterAirOldDogfights off. The air battle reads it once as it starts
 		// (AAirBattle::DogfightsRead); it is never sent to the land rules.)
 		{ TEXT("realDogfights"), TEXT("Real dogfights"), TEXT("Fighter pilots fight as the aces of the war did: each type flown to its own speed, turn and climb, bounces out of the sun and from above, fast fighters diving and zooming while nimble ones turn, short close bursts. Off: the older circling fights."), TEXT("TheaterAirOldDogfights"), false, TEXT("TheaterAirDogfights") },
+		// (Turning airscrews, release 2: Brian, 26 November 2026 04:00Z, "the b-17 propellers didnt look like they were
+		// spinning". Past 300 m from the eye, the whole of the Overview, every aircraft was drawn from its far shape, which
+		// kept its blades standing still and drew the newer models' own blur disc solid. On: no still blades at any distance,
+		// each airscrew an even haze on the copies (M_ScrewHaze, Tools/build_content.py) and a stronger smear close to; a dead
+		// engine feathered still shows its blades. Looks only: nothing the rules count reads it. Off until the Mac has
+		// timed it and the art director has passed it (AIR-SCENE.md item 61), then this row flips to on in one line;
+		// -TheaterAirPropSpin turns it on for a run, -TheaterAirNoPropSpin off. NOT a fly-it-yourself row: its key begins
+		// "fly" only so that FLandLive::Start passes it over with the air battles' other switches. The air battle reads it
+		// once a battle (AAirBattle::PropSpinOn); it is never sent to the land rules.)
+		{ TEXT("flyPropSpin"), TEXT("Turning airscrews"), TEXT("Every aircraft's airscrews are drawn turning at every distance: a soft haze far off, a blurred sweep close to; an engine stopped with its blades feathered shows them standing still. Off: past 300 m the blades stand still."), TEXT("TheaterAirNoPropSpin"), false, TEXT("TheaterAirPropSpin") },
+		// (Bomber markings, release 2: Brian, 25 November 2026, of the approved studio pictures of the newer B-17, "Build it
+		// into the game"; 26 November, "i want the new ones in the game". Every finer B-17 wears her group's white triangle and
+		// letter on her fin and upper right wing, her squadron's codes and her own letter on her side (and in yellow on her
+		// fin), her "#" number dropped, near and far, the same in every month of the war: Battle/AirLetters,
+		// AirBattleLetters.cpp, Content/Data/AirMarks. Looks only: nothing the rules count reads it. Off until the Mac has
+		// timed it and the art director has passed it (AIR-SCENE.md item 65); -TheaterAirBomberMarks turns it on for a run,
+		// -TheaterAirNoBomberMarks off. Its key begins "fly" only so that FLandLive::Start passes it over; the air battle
+		// reads it once a battle (AAirBattle::LettersOnNow), only while the finer B-17 flies.)
+		{ TEXT("flyBomberMarks"), TEXT("Bomber markings"), TEXT("Every finer B-17 wears her group's white triangle and letter on her fin and right wing, her squadron's two letters and her own letter on her side and fin, near and far off, the same in every month of the war. Off: olive with the star only."), TEXT("TheaterAirNoBomberMarks"), false, TEXT("TheaterAirBomberMarks") },
+		// (Worn B-17 paint, release 2: Brian, 26 November 2026, "i want the new ones in the game", the look he approved on
+		// 25 November. The finer B-17 keeps her shape (Content/Models/B17Fine.json) and wears the model thread's paint for
+		// it, Content/Data/AirSkin/B17Fine.json (Tools/make_air_skin.py; Battle/AirSkin): the one army olive 5B5A44 over
+		// 9A9EA1, panel tones and stains, dark glass. Never by the year or month. Looks only: nothing the rules count reads
+		// it. Needs Finer B-17. Off until the Mac's stills are judged with her markings (AIR-SCENE.md item 66), then this
+		// row flips to on in one line; -TheaterAirB17Skin turns it on for a run, -TheaterAirNoB17Skin off. NOT a
+		// fly-it-yourself row: its key begins "fly" only so that FLandLive::Start passes it over. The air battle reads it
+		// once as it starts (AAirBattle::B17SkinRead); it is never sent to the land rules.)
+		{ TEXT("flyB17Skin"), TEXT("Worn B-17 paint"), TEXT("The finer B-17s wear the approved worn olive: each panel its own shade, oil and exhaust stains behind the engines, dark glass and engine fronts. Needs Finer B-17. Off: her plain olive."), TEXT("TheaterAirNoB17Skin"), false, TEXT("TheaterAirB17Skin") },
+		// (B-17 paint sheen, release 2: Brian, 26 November 2026, "make the new ones work"; the look he approved on 25
+		// November has a cool satin sheen on her wing tops and back and glinting glass, which flat paint cannot draw. Her
+		// own finish a point (the model thread's gloss and metal, Content/Data/AirSkin/B17Fine-sheen.json, made by
+		// Tools/make_air_skin.py --sheen-out with her overlay; Battle/AirSheen) rides her meshes' first texture coordinate
+		// to M_AirPaint; where a low sun would glare off her she stays matt (the glare guard). Never by the year or month.
+		// Looks only: nothing the rules count reads it. Needs Worn B-17 paint. Off until the Mac's stills are judged
+		// (AIR-SCENE.md item 67); -TheaterAirB17Sheen turns it on for a run, -TheaterAirNoB17Sheen off,
+		// -TheaterAirB17SheenInk=gain,floor,spec,metal,glare,graze,metalfrom tunes it. NOT a fly-it-yourself row: its key
+		// begins "fly" only so that FLandLive::Start passes it over. The air battle reads it once as it starts
+		// (AAirBattle::B17SheenRead); it is never sent to the land rules.)
+		{ TEXT("flyMustangMetal"), TEXT("Silver Mustang"), TEXT("Every Mustang flies in bare polished metal with her black nose, spinner, glare panel and bands: a bright streak along her back and wings that moves with the eye, darker beneath, her markings satin. The same in every month of the war. Off: her painted coat, as before."), TEXT("TheaterAirNoMustangMetal"), false, TEXT("TheaterAirMustangMetal") },
+		{ TEXT("flyB17Sheen"), TEXT("B-17 paint sheen"), TEXT("The finer B-17s' worn paint takes a soft satin sheen, her metal fittings and glass catch the light, and where a low sun would glare off her she stays matt. Needs Worn B-17 paint. Off: her paint matt, as every aircraft's."), TEXT("TheaterAirNoB17Sheen"), false, TEXT("TheaterAirB17Sheen") },
+		// (Far airscrews a faint blur, release 2: Brian, 27 November 2026 01:23:16Z, "yeah the far propellers don't move and
+		// dont look good"; his picture of the Overview showed each far B-17's airscrew a big solid disc with a yellow rim,
+		// the modeller's blur disc drawn on the far shape's solid ink, as every build played draws it and as "Turning
+		// airscrews" does too without its haze's ink. On: past 300 m no solid disc and no still blades, each airscrew a
+		// faint grey disc on the copies (M_ScrewHaze); close to, the blades' painted marks (the finer B-17's, the
+		// Wellington's) go with the blades and the tips' paint is a faint arc on the turning disc. Looks only: nothing the
+		// rules count reads it. Off until the Mac and the art director have passed it (AIR-SCENE.md item 85);
+		// -TheaterAirPropBlur turns it on for a run, -TheaterAirNoPropBlur off. NOT a fly-it-yourself row: its key begins
+		// "fly" only so that FLandLive::Start passes it over. The air battle reads it once a battle (AAirBattle::PropBlurOn).)
+		{ TEXT("flyPropBlur"), TEXT("Far airscrews a faint blur"), TEXT("Past 300 m each aircraft's airscrews are drawn as a faint, see-through grey disc in place of the solid disc with its yellow rim and the blades standing still; close to, the blades' painted marks turn away with them and the yellow tips show as a faint arc. Off: the far airscrews as before."), TEXT("TheaterAirNoPropBlur"), false, TEXT("TheaterAirPropBlur") },
 		// (Old wrecks, Brian 23 November 20:09Z: starts off as Scarred ground does, until the effects thread's wrecks pass the
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)
 		{ TEXT("wrecks"), TEXT("Old wrecks"), TEXT("A field fought over before keeps the burnt-out tanks and armoured vehicles those battles left on it. Off: the field is cleared between battles."), TEXT("TheaterLandNoOldWrecks"), false, TEXT("TheaterLandRuleOldWrecks") },
+		// (The air battle's hitch, release 2: the Mac's timing legs of 26 November, build 172f19ae0, every leg's press a
+		// frame of 174 to 368 ms on the campaign's last picture, frozen, before the opening's black was up. On: the black is
+		// put up first and shown two frames, and the scene is made behind it (AAirBattle::CurtainFirstHold). Looks only:
+		// the battle's clock is held while the black stands, so nothing the rules count changes. Off until the Mac passes it;
+		// -TheaterAirCurtainFirst turns it on for a run, -TheaterAirNoCurtainFirst off. The air battle reads it as a battle
+		// opens; it is never sent to the land rules.)
+		{ TEXT("flyCurtainFirst"), TEXT("The black first, then the scene"), TEXT("An air battle puts up its black title card before it builds its sky, clouds and sound, so the map never stands frozen while the battle is made. Off: the battle is made first, then the card goes up."), TEXT("TheaterAirNoCurtainFirst"), false, TEXT("TheaterAirCurtainFirst") },
+		// (The air battle's hitch, release 2: under an air battle the hidden campaign map kept its per-frame update, 0.5 to
+		// 4 ms of every frame in the Mac's legs of 26 November, where the land battle holds it. On: held while the air battle
+		// is up and let go as the map comes back (AAirBattle::MapHoldBegin). Looks only: the map's lettering and smoke catch
+		// up in one update. Off until the Mac passes it; -TheaterAirMapHold turns it on for a run, -TheaterAirNoMapHold off.
+		// The air battle reads it as it hides the map; it is never sent to the land rules.)
+		{ TEXT("flyMapHold"), TEXT("The map rests under an air battle"), TEXT("While an air battle is up, the campaign map hidden under it stops redrawing its lettering, standards and smoke each frame, and catches up as it comes back. Off: the hidden map keeps working under the battle."), TEXT("TheaterAirNoMapHold"), false, TEXT("TheaterAirMapHold") },
+		// (The air battle's hitch, release 2: in each of the Mac's legs of 26 November one draw-side freeze of about a second
+		// fell inside the ground's paint, 13.6 to 18.2 s of the pool's work begun in the press; the paint as its cause is
+		// likely, not proved. On: a replayed battle's ground is begun as the replay is queued, some 2 s earlier, and used
+		// only if the battle asks for the very same ground (AAirBattle::PaintEarly), so the pictures are the same bytes.
+		// A live raid's place comes only with the rules' opening answer, so a live raid paints as before. Looks only. Off
+		// until the Mac passes it; -TheaterAirPaintEarly turns it on for a run, -TheaterAirNoPaintEarly off. Never sent to
+		// the land rules.)
+		{ TEXT("flyPaintEarly"), TEXT("The ground is painted early"), TEXT("A replayed air battle starts painting its ground as soon as it is queued, so the painted fields and town are ready sooner. Off: the ground is painted as the battle opens."), TEXT("TheaterAirNoPaintEarly"), false, TEXT("TheaterAirPaintEarly") },
+		// (The air battle's hitch, release 2: the ground's pictures under a raid with no stage are the pool's work of 13.6
+		// to 18.2 s, and a freeze of about a second fell inside it in every one of the Mac's legs of 26 November. On: the
+		// three pictures, once painted, are kept in the project's Saved/AirGround (about 48 MB a ground, the six last used)
+		// under a key of everything the painter reads, and a later flight of the same ground reads them on the pool instead
+		// of painting (AAirBattle::StartPaint, Battle/AirGroundKeep.h); a file that does not match is refused and the ground
+		// painted. Looks only: the same bytes. Off until the Mac passes it; -TheaterAirGroundKeep turns it on for a run,
+		// -TheaterAirNoGroundKeep off. Never sent to the land rules.)
+		{ TEXT("flyGroundKeep"), TEXT("The ground is kept once painted"), TEXT("An air battle's painted ground (its fields, woods, rivers and town) is kept on disk, so a later raid on the same place shows it at once instead of painting it again. Off: every raid paints its ground afresh."), TEXT("TheaterAirNoGroundKeep"), false, TEXT("TheaterAirGroundKeep") },
 		// (Release 2, the scramble offer: Brian, 24 November 2026 22:21Z, "i want every air battle playable". In the enemy's
 		// month the campaign stops where an enemy raid on his ground meets his fighters and offers SCRAMBLE: taken, he flies
 		// the defence in the battle in the air (AAirBattle, his side 'def'), and the month runs on with what the battle

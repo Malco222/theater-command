@@ -44,6 +44,10 @@ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
   "$HERE/air_light_test.cpp" "$SRC/Battle/AirLight.cpp" -o "$OUT/air_light_test"
 "$OUT/air_light_test" "$ROOT"/Content/Models/*.json || STATUS=1
+# The finer B-17's close-ups (Battle/AirNear): made at most N a frame, the nearest first, with -TheaterAirB17FinePerFrame=N.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_near_test.cpp" -o "$OUT/air_near_test"
+"$OUT/air_near_test" "$SRC" || STATUS=1
 # The tallies (Battle/AirTally): which mark goes in which slot of an ace's victories or a bomber's record, against the
 # modeller's own layout (tallies.fill).
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
@@ -102,6 +106,61 @@ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
 "$OUT/air_b17_fine_test" "$ROOT/Content/Models" "$ROOT/Content/Data/NoseArt" "$SRC" || STATUS=1
 mkdir -p "$OUT/b17fine"
 AIR_SHOW_B17_FINE=1 "$OUT/air_show_test" "$ROOT/Content/Data/AirBattles/bremen-b17.json" "$OUT/b17fine" || STATUS=1
+# Turning airscrews (the Battle rules card's "Turning airscrews", row flyPropSpin; Brian, 26 November 2026 04:00Z: "the
+# b-17 propellers didnt look like they were spinning"): every aircraft's far mesh, past 300 m the whole of the Overview,
+# loses its standing blades and its solid blur disc and keeps everything else; each screw's blades kept apart for an
+# engine feathered; the near disc's smear and the far haze drawn at the battle's real scale; the row off draws what it
+# drew before (its source). Content/Models and Old. Then the light shapes made from those far shapes, held to them.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_prop_spin_test.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_prop_spin_test"
+"$OUT/air_prop_spin_test" "$SRC" "$ROOT"/Content/Models/*.json "$ROOT"/Content/Models/Old/*.json || STATUS=1
+# Far airscrews a faint blur (the Battle rules card's row flyPropBlur; Brian, 27 November 2026 01:23:16Z: "yeah the far
+# propellers don't move and dont look good"): past 300 m the modeller's blur disc, drawn solid with its yellow rim, and
+# the still blades give way to a faint grey disc, 3 to 10 levels off the sky with no yellow; close to, the blades'
+# painted marks go with the blades (none left standing in a disc) and the tips' paint is a faint arc that turns; the
+# row off draws what it drew before (its source). Content/Models and Old.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_prop_blur_test.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_prop_blur_test"
+"$OUT/air_prop_blur_test" "$SRC" "$ROOT"/Content/Models/*.json "$ROOT"/Content/Models/Old/*.json || STATUS=1
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -DAIR_LIGHT_SCREWS -I"$SRC" \
+  "$HERE/air_light_test.cpp" "$SRC/Battle/AirLight.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_light_screws_test"
+"$OUT/air_light_screws_test" "$ROOT"/Content/Models/*.json "$ROOT"/Content/Models/Old/*.json || STATUS=1
+# Bomber markings (the Battle rules card's "Bomber markings", row flyBomberMarks; Brian, 25 November 2026, of the approved
+# studio pictures: "Build it into the game"): the markings' data file (Tools/air_marks/make_b17_marks.py) read as the
+# game reads it, made on her file, wound as it, on her skin near and far, reading the right way round, apex forward,
+# clear of her star and bar; who wears which letters, the same at any cadence, never by date, the show's record untouched.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_letters_test.cpp" "$SRC/Battle/AirLetters.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  -o "$OUT/air_letters_test"
+"$OUT/air_letters_test" "$ROOT/Content/Data/AirMarks/b17-fine-marks.json" "$ROOT/Content/Models" "$SRC" "$@" || STATUS=1
+# Worn B-17 paint (the Battle rules card's "Worn B-17 paint", row flyB17Skin; Brian, 26 November 2026: "i want the new
+# ones in the game"): the model thread's paint for her shape, Content/Data/AirSkin/B17Fine.json (Battle/AirSkin, made by
+# Tools/make_air_skin.py), read with her counts and made for B17Fine.json's very bytes; every fault refused, a key by
+# month or year among them; the law gives the tool's check colours; the earned colours' model and the nose-art panel
+# under it; the Unreal side from its source. Then the tool's own test on small made-up files.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_b17_skin_test.cpp" "$SRC/Battle/AirSkin.cpp" "$SRC/Battle/LandJson.cpp" "$SRC/Battle/AirUnitColours.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_b17_skin_test"
+"$OUT/air_b17_skin_test" "$ROOT/Content/Models/B17Fine.json" "$ROOT/Content/Data/AirSkin/B17Fine.json" "$SRC" || STATUS=1
+python3 -I -B "$ROOT/Tools/air_skin/test_make_air_skin.py" || STATUS=1
+# The B-17 paint sheen (the Battle rules card's "B-17 paint sheen", row flyB17Sheen; Brian, 26 November 2026: "make the
+# new ones work"): her own finish a point (the model thread's gloss and metal), Content/Data/AirSkin/B17Fine-sheen.json
+# (Battle/AirSheen, made by Tools/make_air_skin.py --sheen-out in the same run as her overlay), read with her counts and
+# made from the overlay's very files; M_AirPaint's law: nothing carried is PlaneInk's numbers exactly, the glare guard,
+# no garbage between corners; the launch word; M_AirPaint's nodes and the Unreal side from their source.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_b17_sheen_test.cpp" "$SRC/Battle/AirSheen.cpp" "$SRC/Battle/AirSkin.cpp" "$SRC/Battle/LandJson.cpp" "$SRC/Battle/AirUnitColours.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_b17_sheen_test"
+"$OUT/air_b17_sheen_test" "$ROOT/Content/Models/B17Fine.json" "$ROOT/Content/Data/AirSkin/B17Fine-sheen.json" "$ROOT/Content/Data/AirSkin/B17Fine.json" "$SRC" "$ROOT/Tools/build_content.py" || STATUS=1
+# ... and M_AirPaint's own nodes (build_content.py's "if air:" block, run on plain numbers) against AirSheen's law, case
+# for case on a fixed grid: wiring and all, not only names and defaults.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_b17_sheen_grid.cpp" "$SRC/Battle/AirSheen.cpp" "$SRC/Battle/LandJson.cpp" -o "$OUT/air_b17_sheen_grid"
+"$OUT/air_b17_sheen_grid" > "$OUT/air_b17_sheen_grid.txt" || STATUS=1
+python3 -I -B "$HERE/air_b17_sheen_material.py" "$ROOT/Tools/build_content.py" "$OUT/air_b17_sheen_grid.txt" || STATUS=1
+# The silver Mustang (row flyMustangMetal): her issue-13 file beside the old one, its finish read as the game reads it
+# (AirSheen::ReadOwn), M_AirPaint's law on her numbers under her own tune (floor 0.25, no glare guard), the Unreal side.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_mustang_metal_test.cpp" "$SRC/Battle/AirSheen.cpp" "$SRC/Battle/LandJson.cpp" -o "$OUT/air_mustang_metal_test"
+"$OUT/air_mustang_metal_test" "$ROOT/Content/Models/MustangBare.json" "$ROOT/Content/Models/Mustang.json" "$SRC" || STATUS=1
 # The sky's picture (the clouds as the scene lays and turns them, drawn by a small software painter): AIR_SKY_PICTURES=1.
 if [ "${AIR_SKY_PICTURES:-}" = "1" ]; then
   $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
@@ -153,5 +212,14 @@ if [ "$(grep -c 'TEXT("realDogfights"), TEXT("Real dogfights")' "$DOG_RULES")" !
 else
   echo "dogfights: the row on the card, off unless asked (-TheaterAirDogfights), read as each battle begins, never sent to the land rules"
 fi
+# The ground kept on disk (Battle/AirGroundKeep.h; release 2, the air battle's hitch, rows flyPaintEarly and
+# flyGroundKeep), on Bremen's place: the key changes with each thing the painter reads and with nothing else, a kept
+# ground packed and unpacked (and through a file) is the same bytes, a file cut short, lengthened or altered is refused,
+# and the folder keeps the six grounds last used. It also fails while Battle/AirLand.h and .cpp do not hash to
+# AirGroundKeep::PainterText (it prints what they hash to): a change to the painter, a merge too, sets that anew.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_ground_keep_test.cpp" "$SRC/Battle/AirLand.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  -o "$OUT/air_ground_keep_test"
+"$OUT/air_ground_keep_test" "$ROOT/Content/Data/AirBattles/bremen-b17.json" "$ROOT/Content/Data/AirGround/towns.json" "$OUT" "$SRC" || STATUS=1
 echo "tracks in $OUT"
 exit $STATUS

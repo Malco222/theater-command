@@ -9,9 +9,13 @@
 #include "Battle/AirBattleUnitColours.inl"
 #include "Battle/AirDogfightTypes.h"
 #include "Battle/AirGround.h"
+#include "Battle/AirGroundKeep.h"
 #include "Battle/AirLight.h"
+#include "Battle/AirNear.h"
 #include "Battle/AirLand.h"
 #include "Battle/AirScrew.h"
+#include "Battle/AirSheen.h"
+#include "Battle/AirSkin.h"
 #include "Battle/AirStage.h"
 #include "Battle/LandLive.h"
 #include "Battle/ShipGuns.h"
@@ -56,6 +60,8 @@
 #include "RenderingThread.h"
 #include "CoreGlobals.h" // (GGameThreadTime: the opening held, WarmTick)
 #include "RenderTimer.h" // (GRenderThreadTime, as TheaterSpeed reads it)
+#include "RHI.h" // (RHIGetGPUFrameCycles: the naming line under the black, as LandBattle.cpp reads it)
+#include "Campaign/TheaterSpeed.h" // (TheaterSpeed::IsLogging: the hitch's naming lines, AirParts::Hitch)
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "MeshDescription.h"
@@ -79,6 +85,7 @@
 #include "Widgets/Layout/SDPIScaler.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
@@ -92,6 +99,20 @@ struct FAirLandMade
 	std::vector<AirLand::Frame> Frames;
 	TArray<CampaignTextures::FLevels> Levels;
 	double Seconds = 0.0;
+	/** (release 2, the hitch's naming lines) Where the paint is, for the speed log's lines (AAirBattle::LandPhaseName):
+	 * 0 asked, not begun; picture K's rows 4K+1, its shading 4K+2, its smaller copies 4K+3; -1 done. Written on the pool. */
+	std::atomic<int32> Phase { 0 };
+	/** (the row flyGroundKeep) The kept file's name in Saved/AirGround once it is read or written, and what became of
+	 * it, for the log; written on the pool, read once the paint is done. Empty with the row off. */
+	FString KeptName;
+	FString KeepSaid;
+};
+
+/** (release 2, the hitch) What the ground's painter is asked to paint: the place and the book of town plans. */
+struct FAirLandAsk
+{
+	AirLand::Place P;
+	std::string Plans;
 };
 
 /** (1.5.1) The opening held (AAirBattle::WarmUp, WarmTick). */
@@ -105,6 +126,83 @@ namespace AirParts
 	static constexpr double WarmQuickMs = 80.0;
 	/** The black's easing off as the flyover begins (s). */
 	static constexpr double CurtainFade = 0.5;
+}
+
+/**
+ * (Release 2, the hitch's naming lines: the Mac's timing legs of 26 November, build 172f19ae0, and the two readers and
+ * their sceptics.) Lines that name what the air scene was doing about each long frame, written only while the speed log
+ * is (-TheaterSpeedLog, tc.Speed.Log 1); with it off nothing here says or changes anything. Each begins "Air hitch:".
+ */
+namespace AirParts
+{
+	namespace Hitch
+	{
+		/** The frame (GFrameCounter) of the eye's last cut, and its kind. */
+		static uint64 CutFrame = 0;
+		static const TCHAR* CutKind = TEXT("none yet");
+
+		/** A cut of the eye told to the renderer (TellCut): kept for the long frames' line, and said. With no kind given, the
+		 * eye's own aim cut it (AimEye's close view and its jumps, the overview drawn back off a fuel ball). */
+		static void NoteCut(const TCHAR* Kind)
+		{
+			CutFrame = GFrameCounter;
+			CutKind = Kind ? Kind : TEXT("the eye's own aim (AimEye)");
+			if (TheaterSpeed::IsLogging())
+			{
+				UE_LOG(LogTheater, Display, TEXT("Air hitch: the eye cut, frame %lld: %s."), static_cast<long long>(GFrameCounter), CutKind);
+			}
+		}
+
+		/** Each step's ms since the last, for one line at the end (the press, Open). */
+		struct FSteps
+		{
+			double At = FPlatformTime::Seconds();
+			double Began = At;
+			FString Line;
+			void Step(const TCHAR* Name)
+			{
+				const double Now = FPlatformTime::Seconds();
+				Line += FString::Printf(TEXT("%s%s %.1f"), Line.IsEmpty() ? TEXT("") : TEXT(", "), Name, 1000.0 * (Now - At));
+				At = Now;
+			}
+			double Ms() const { return 1000.0 * (FPlatformTime::Seconds() - Began); }
+		};
+
+		/** (the press's work before Open: BeginReplay's or BeginLiveCall's own steps, done in the press's frame ahead of Open,
+		 * and so ahead of the black under the row flyCurtainFirst) Their steps, and whose they are (empty: none since the
+		 * last Open). */
+		static FSteps& BeforeOpen()
+		{
+			static FSteps Steps;
+			return Steps;
+		}
+		static FString& BeforeOpenOf()
+		{
+			static FString Of;
+			return Of;
+		}
+		static void BeginBeforeOpen(const FString& Of)
+		{
+			BeforeOpen() = FSteps();
+			BeforeOpenOf() = Of;
+		}
+		/** Said as Open is reached (once a press; the scene made later under the black does not say it again). */
+		static void SayBeforeOpen()
+		{
+			if (BeforeOpenOf().IsEmpty())
+			{
+				return;
+			}
+			FSteps& Steps = BeforeOpen();
+			Steps.Step(TEXT("on to Open"));
+			if (TheaterSpeed::IsLogging())
+			{
+				UE_LOG(LogTheater, Display, TEXT("Air hitch: before Open (%s), frame %lld, %.0f ms in all, in the press's frame before the black can go up; each step in ms: %s."),
+					*BeforeOpenOf(), static_cast<long long>(GFrameCounter), Steps.Ms(), *Steps.Line);
+			}
+			BeforeOpenOf().Reset();
+		}
+	}
 }
 
 namespace AirParts
@@ -641,8 +739,9 @@ namespace AirParts
 	/** A cut, told to the renderer: this frame starts afresh, so the last shot's sharpening, light and exposure are not
 	 * carried into the new one (the camera and film director's note of 22 November: at each cut the upscaler's history,
 	 * the bounced light and the eye's adaptation smeared cloud, flak smoke and light for a frame or a few). */
-	static void TellCut(UWorld* Here)
+	static void TellCut(UWorld* Here, const TCHAR* Kind = nullptr)
 	{
+		Hitch::NoteCut(Kind);
 		if (APlayerController* Controller = Here ? Here->GetFirstPlayerController() : nullptr)
 		{
 			if (Controller->PlayerCameraManager)
@@ -737,10 +836,12 @@ void AAirBattle::ReplayWhenReady(const FString& Key)
 {
 	PendingReplay = Key;
 	SetActorTickEnabled(true);
+	PaintEarly(Key); // (the row flyPaintEarly: the ground's pictures begun now, some 2 s before the battle opens)
 }
 
 bool AAirBattle::BeginReplay(const FString& Key)
 {
+	AirParts::Hitch::BeginBeforeOpen(TEXT("BeginReplay ") + Key); // (the hitch's naming lines: this work's ms, said as Open is reached)
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterAirBattleShots="), ShotFolder);
 	// (the builder's film of a picture run: "-TheaterAirBattleRideHold=40" stays on each ride 40 s after its picture)
 	float Hold = 0.5f;
@@ -748,7 +849,9 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	RideHold = FMath::Clamp(static_cast<double>(Hold), 0.5, 300.0);
 	const FString File = FPaths::ProjectContentDir() / TEXT("Data/AirBattles") / Key + TEXT(".json");
 	FString Text;
-	if (!FFileHelper::LoadFileToString(Text, *File))
+	const bool bRead = FFileHelper::LoadFileToString(Text, *File);
+	AirParts::Hitch::BeforeOpen().Step(TEXT("the recording read from disk"));
+	if (!bRead)
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Air battle: no recorded battle %s (is Content/Data/AirBattles staged with the build?)"), *File);
 		if (!ShotFolder.IsEmpty())
@@ -761,11 +864,16 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	SkyFinish(false); // (a turn of the clouds painted aside on a battle begun before: done before its state goes)
 	State = MakeShared<FAirBattleState>();
 	B17FineRead(); // (the Battle rules card's "Finer B-17", read once as the battle begins: every shape it makes follows it)
+	B17SkinRead(); // (and its "Worn B-17 paint", after it: her paint for every shape the battle makes)
+	B17SheenRead(); // (and its "B-17 paint sheen", after that: her paint's own finish)
+	MustangMetalRead(); // (the Battle rules card's "Silver Mustang": her bare metal file and its finish)
 	TimeEyeKey = TimeEyeGroup = -1; // (the timing eye, -TheaterAirTimeEye, begun afresh with each battle)
 	TimeEyeFrom = -1.0;
 	bTimeEyeQuit = false;
 	std::string Error;
-	if (!AirFeed::ReadRecording(AirParts::Narrow(Text), State->Recording, Error))
+	const bool bParsed = AirFeed::ReadRecording(AirParts::Narrow(Text), State->Recording, Error);
+	AirParts::Hitch::BeforeOpen().Step(TEXT("ReadRecording"));
+	if (!bParsed)
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Air battle: %s: %s"), *File, *AirParts::Wide(Error));
 		State.Reset();
@@ -791,6 +899,30 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	return Open(Key);
 }
 
+namespace AirParts
+{
+	namespace Hitch
+	{
+		/** (the row flyCurtainFirst) A live battle's ships laid on its stage, as BeginLiveCall lays them, once the scene is made. */
+		static void LayShips(AAirStage* OnStage, const std::vector<AirFeed::ShipRow>& Rows)
+		{
+			TArray<FStageShip> Ships;
+			for (const AirFeed::ShipRow& Row : Rows)
+			{
+				FStageShip& Ship = Ships.AddDefaulted_GetRef();
+				Ship.Id = Row.Id;
+				Ship.Class = Wide(Row.Class);
+				Ship.Nation = Wide(Row.Nation);
+				Ship.Name = Wide(Row.Name);
+				Ship.At = FVector2D(Row.X, Row.Y);
+				Ship.Face = Row.Face;
+				Ship.bDock = Row.bDock;
+			}
+			OnStage->SetShips(Ships);
+		}
+	}
+}
+
 bool AAirBattle::BeginLive(FCampaignSession* InSession, const FString& Kind, int32 Target, const TArray<int32>& Ids)
 {
 	TArray<FString> Numbers;
@@ -808,8 +940,11 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	{
 		return false;
 	}
+	AirParts::Hitch::BeginBeforeOpen(TEXT("BeginLiveCall TC.") + Function); // (the hitch's naming lines: this work's ms, said as Open is reached)
 	FString Reply, Error;
-	if (!Session->CallBattle(Function, ArgumentsJson, Reply, Error))
+	const bool bCalled = Session->CallBattle(Function, ArgumentsJson, Reply, Error);
+	AirParts::Hitch::BeforeOpen().Step(*(TEXT("the bridge's TC.") + Function));
+	if (!bCalled)
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Air battle: TC.%s failed: %s"), *Function, *Error);
 		return false;
@@ -823,6 +958,9 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	SkyFinish(false); // (a turn of the clouds painted aside on a battle begun before: done before its state goes)
 	State = MakeShared<FAirBattleState>();
 	B17FineRead(); // (the Battle rules card's "Finer B-17", read once as the battle begins: every shape it makes follows it)
+	B17SkinRead(); // (and its "Worn B-17 paint", after it: her paint for every shape the battle makes)
+	B17SheenRead(); // (and its "B-17 paint sheen", after that: her paint's own finish)
+	MustangMetalRead(); // (the Battle rules card's "Silver Mustang": her bare metal file and its finish)
 	TimeEyeKey = TimeEyeGroup = -1; // (the timing eye, -TheaterAirTimeEye, begun afresh with each battle)
 	TimeEyeFrom = -1.0;
 	bTimeEyeQuit = false;
@@ -856,13 +994,21 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 		NoteShip(ShipNames, CapitalShips, Ship);
 	}
 	S.Desk.Take(First);
+	AirParts::Hitch::BeforeOpen().Step(TEXT("the answer read, the show and the desk"));
 	S.BattleT = S.FedT = First.Head.T;
 	// (the bridge's battle opens paused: it is run here a battle second at a time, ahead of what is shown)
 	FString Ignored;
 	Session->CallBattle(TEXT("battleSpeed"), TEXT("[1]"), Ignored, Error);
+	AirParts::Hitch::BeforeOpen().Step(TEXT("the bridge's TC.battleSpeed"));
 	if (!Open(TEXT("live")))
 	{
 		return false;
+	}
+	if (bCurtainWaiting)
+	{
+		// (the row flyCurtainFirst: the scene is made a frame or two on, under the black, and its ships are laid then)
+		CurtainThen = [this, Rows = First.ShipRows]() { if (Stage && !Rows.empty()) { AirParts::Hitch::LayShips(Stage.Get(), Rows); } };
+		return true;
 	}
 	if (Stage && !First.ShipRows.empty())
 	{
@@ -926,12 +1072,18 @@ static void AirTrailHeightAsked(FAirBattleState& S)
 
 bool AAirBattle::Open(const FString& Why)
 {
+	AirParts::Hitch::SayBeforeOpen();
 	UWorld* Here = GetWorld();
 	if (!Here || !State.IsValid())
 	{
 		return false;
 	}
 	FAirBattleState& S = *State;
+	if (CurtainFirstHold(Why))
+	{
+		return true; // (the row flyCurtainFirst: the black first; Tick runs this once it has been shown, CurtainFirstWaits)
+	}
+	AirParts::Hitch::FSteps PressSteps; // (the hitch's naming lines: each step's ms, said at the end while the speed log is written)
 	// (the sheet of cloud shapes begun on the pool now, for LaySky; once a run)
 	AirParts::BeginSheet();
 	// The mix (the sound director's mix.json, carried in Content/Data/Sound): the scene reads its numbers, never copies them.
@@ -1006,6 +1158,7 @@ bool AAirBattle::Open(const FString& Why)
 			}
 		}
 	}
+	PressSteps.Step(TEXT("the mix and the sound"));
 	// The paint: the campaign's own surface, coloured by each point's colour, as the stage's ships are.
 	{
 		UMaterialInterface* Surface = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_MapSurface.M_MapSurface"));
@@ -1050,6 +1203,85 @@ bool AAirBattle::Open(const FString& Why)
 		PaintRoughness = static_cast<float>(PaintRough);
 		PaintSpecular = static_cast<float>(PaintSpec);
 		PlainInk = Ink(0.85f, 0.2f);
+		// (the Battle rules card's "B-17 paint sheen", row "flyB17Sheen", read as the battle began (B17SheenRead): her paint
+		// on M_AirPaint, M_MapSurface's own nodes with her finish carried in the first texture coordinate; at nothing
+		// carried it gives PlaneInk's numbers exactly. Off, nothing here runs and nothing is said.)
+		SheenInk = nullptr;
+		if (State && State->B17SheenOn == 1 && SheenNow)
+		{
+			UMaterialInterface* SheenAsset = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_AirPaint.M_AirPaint"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+			if (!SheenAsset)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle: B-17 paint sheen: on, but /Game/Campaign/Materials/M_AirPaint is missing (run Tools/build_content.sh): she wears her matt paint."));
+				State->B17SheenOn = 0;
+				SheenNow = nullptr;
+			}
+			else
+			{
+				UMaterialInstanceDynamic* SheenMade = UMaterialInstanceDynamic::Create(SheenAsset, this);
+				// (the stale-asset sentinel, read before anything is set, so that it is the asset's own: "SheenEdge" is never
+				// set by the game; an M_AirPaint built before this build's nodes lacks it or holds another number)
+				const float SheenEdgeRead = SheenMade->K2_GetScalarParameterValue(TEXT("SheenEdge"));
+				if (FMath::Abs(SheenEdgeRead - static_cast<float>(AirSheen::Tune().Edge)) > 0.001f)
+				{
+					UE_LOG(LogTheater, Warning, TEXT("Air battle: B-17 paint sheen: on, but /Game/Campaign/Materials/M_AirPaint is older than this build (run TC_REBUILD=M_AirPaint Tools/build_content.sh): she wears her matt paint."));
+					State->B17SheenOn = 0;
+					SheenNow = nullptr;
+				}
+				else
+				{
+					const AirSheen::Tune& SheenLook = SheenNow->Look;
+					SheenMade->SetScalarParameterValue(TEXT("Roughness"), static_cast<float>(PaintRough));
+					SheenMade->SetScalarParameterValue(TEXT("Specular"), static_cast<float>(PaintSpec));
+					SheenMade->SetScalarParameterValue(TEXT("Grain"), 0.0f);
+					SheenMade->SetScalarParameterValue(TEXT("Tooth"), 0.0f);
+					SheenMade->SetScalarParameterValue(TEXT("SheenGain"), static_cast<float>(SheenLook.Gain));
+					SheenMade->SetScalarParameterValue(TEXT("SheenFloor"), static_cast<float>(SheenLook.Floor));
+					SheenMade->SetScalarParameterValue(TEXT("SheenSpec"), static_cast<float>(SheenLook.Spec));
+					SheenMade->SetScalarParameterValue(TEXT("SheenMetal"), static_cast<float>(SheenLook.Metal));
+					SheenMade->SetScalarParameterValue(TEXT("SheenMetalFrom"), static_cast<float>(SheenLook.MetalFrom));
+					SheenMade->SetScalarParameterValue(TEXT("SheenGlare"), static_cast<float>(SheenLook.Glare));
+					SheenMade->SetScalarParameterValue(TEXT("SheenGraze"), static_cast<float>(SheenLook.Graze));
+					SheenInk = SheenMade;
+					// (her glare guard's sun is set, and she is announced, once the stage is raised and the key light aimed:
+					// after HideTheTable below, since a stage battle's sun is the stage's)
+				}
+			}
+		}
+		// (the Battle rules card's "Silver Mustang", row "flyMustangMetal", read as the battle began (MustangMetalRead): her
+		// bare metal on the same M_AirPaint, with its own numbers (AirSheen::BareTune: a floor of 0.25, no glare guard).
+		// Off, nothing here runs and nothing is said.)
+		BareInk = nullptr;
+		if (State && State->MustangMetalOn == 1 && BareNow)
+		{
+			UMaterialInterface* BareAsset = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_AirPaint.M_AirPaint"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+			UMaterialInstanceDynamic* BareMade = BareAsset ? UMaterialInstanceDynamic::Create(BareAsset, this) : nullptr;
+			if (!BareMade || FMath::Abs(BareMade->K2_GetScalarParameterValue(TEXT("SheenEdge")) - static_cast<float>(AirSheen::Tune().Edge)) > 0.001f)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle: silver Mustang: on, but /Game/Campaign/Materials/M_AirPaint is %s (run TC_REBUILD=M_AirPaint Tools/build_content.sh): every Mustang flies as before."),
+					BareMade ? TEXT("older than this build") : TEXT("missing"));
+				State->MustangMetalOn = 0;
+				BareNow = nullptr;
+			}
+			else
+			{
+				const AirSheen::Tune& BareLook = BareNow->Look;
+				BareMade->SetScalarParameterValue(TEXT("Roughness"), static_cast<float>(PaintRough));
+				BareMade->SetScalarParameterValue(TEXT("Specular"), static_cast<float>(PaintSpec));
+				BareMade->SetScalarParameterValue(TEXT("Grain"), 0.0f);
+				BareMade->SetScalarParameterValue(TEXT("Tooth"), 0.0f);
+				BareMade->SetScalarParameterValue(TEXT("SheenGain"), static_cast<float>(BareLook.Gain));
+				BareMade->SetScalarParameterValue(TEXT("SheenFloor"), static_cast<float>(BareLook.Floor));
+				BareMade->SetScalarParameterValue(TEXT("SheenSpec"), static_cast<float>(BareLook.Spec));
+				BareMade->SetScalarParameterValue(TEXT("SheenMetal"), static_cast<float>(BareLook.Metal));
+				BareMade->SetScalarParameterValue(TEXT("SheenMetalFrom"), static_cast<float>(BareLook.MetalFrom));
+				BareMade->SetScalarParameterValue(TEXT("SheenGlare"), static_cast<float>(BareLook.Glare));
+				BareMade->SetScalarParameterValue(TEXT("SheenGraze"), static_cast<float>(BareLook.Graze));
+				BareInk = BareMade;
+				UE_LOG(LogTheater, Display, TEXT("Air battle: silver Mustang: on (the Battle rules card's Silver Mustang, or -TheaterAirMustangMetal): MustangBare.json on M_AirPaint, floor %.2f, glare guard %.2f, metal %.2f from %.2f (-TheaterAirMustangMetalInk=gain,floor,spec,metal,glare,graze,metalfrom); her marks satin, no metal."),
+					BareLook.Floor, BareLook.Glare, BareLook.Metal, BareLook.MetalFrom);
+			}
+		}
 		if (UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight")))
 		{
 			DiscInk = UMaterialInstanceDynamic::Create(Glow, this);
@@ -1059,6 +1291,7 @@ bool AAirBattle::Open(const FString& Why)
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterScrewTurns="), Turns);
 		ScrewTurns = FMath::Clamp(static_cast<double>(Turns), 0.0, 30.0);
 	}
+	PressSteps.Step(TEXT("the inks"));
 	// The effects: the kit's own, drawn out to the air distance, on the air clock (its mesh, the one it hangs on Root,
 	// drawn behind the clouds while the eye is under them: DrawSky).
 	const TArray<TObjectPtr<USceneComponent>> BeforeAir = Root->GetAttachChildren();
@@ -1137,7 +1370,9 @@ bool AAirBattle::Open(const FString& Why)
 			GroundFx.Reset();
 		}
 	}
+	PressSteps.Step(TEXT("the effects kits"));
 	Raise();
+	PressSteps.Step(TEXT("the ground (Raise)"));
 	// The flight core's ground: the stage's hills; with no stage the board's own land, as LayGround lays it (the
 	// pre-check on round 14: Bremen's bombs had burst as water columns); else the sea.
 	if (Stage && Stage->IsRaised())
@@ -1159,8 +1394,11 @@ bool AAirBattle::Open(const FString& Why)
 		}
 	}
 	LaySky();
+	PressSteps.Step(TEXT("the clouds (LaySky)"));
 	LayZenith();
+	PressSteps.Step(TEXT("LayZenith"));
 	LayHazeBand();
+	PressSteps.Step(TEXT("LayHazeBand"));
 	KeyWarmth = S.Board.StageKey.empty() && !S.Board.Land.empty() ? 6500.0f : 4900.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterKeyWarmth="), KeyWarmth);
 	KeyWarmth = FMath::Clamp(KeyWarmth, 1700.0f, 12000.0f);
@@ -1170,11 +1408,26 @@ bool AAirBattle::Open(const FString& Why)
 	Small->SetCastShadow(false);
 	Small->RegisterComponent();
 	OpenTroops(); // (release 2: the column under a raid on troops, where the sky has marks: AirBattleTroops.cpp)
+	PressSteps.Step(TEXT("OpenTroops"));
 	HideTheTable();
+	PressSteps.Step(TEXT("HideTheTable"));
+	if (SheenInk && SheenNow)
+	{
+		// (the B-17's sheen: her glare guard follows the sun the key light was just aimed from, a stage battle's too;
+		// nothing here with her row off, since SheenInk is then null)
+		SheenSunSet();
+		const AirSheen::Tune& SheenLook = SheenNow->Look;
+		const FVector SheenUp = TowardSun().GetSafeNormal();
+		UE_LOG(LogTheater, Display, TEXT("Air battle: B-17 paint sheen: on (the Battle rules card's B-17 paint sheen, or -TheaterAirB17Sheen): M_AirPaint, gain %.2f, floor %.2f, specular %.2f, metal %.2f from %.2f, glare guard %.2f, grazing guard %.2f (-TheaterAirB17SheenInk=gain,floor,spec,metal,glare,graze,metalfrom); her sun %.0f deg up; from %s."),
+			SheenLook.Gain, SheenLook.Floor, SheenLook.Spec, SheenLook.Metal, SheenLook.MetalFrom, SheenLook.Glare, SheenLook.Graze, FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(SheenUp.Z, -1.0, 1.0))),
+			UTF8_TO_TCHAR(SheenNow->SourceSha256.substr(0, 12).c_str()));
+	}
 	LayDeckShade();
 	LayDeckSheet();
+	PressSteps.Step(TEXT("the deck's shade and sheet"));
 	LayCirrus();
 	LayRainShafts();
+	PressSteps.Step(TEXT("cirrus and rain"));
 	Eye = Here->SpawnActor<ACameraActor>();
 	if (Eye)
 	{
@@ -1242,14 +1495,16 @@ bool AAirBattle::Open(const FString& Why)
 	}
 	// (the eye stood on its opening place before it is the view: spawned at the world's middle, the frame drawn before
 	// the battle's first tick was drawn from there, at the stage's sea level; the first tick then cuts to the flyover)
+	PressSteps.Step(TEXT("the eye and its grade"));
 	AimEye(0.0);
 	SkyLowerOnce();
+	PressSteps.Step(TEXT("the first aim and the sky's lower half (SkyLowerOnce)"));
 	if (APlayerController* Controller = Here->GetFirstPlayerController())
 	{
 		if (Eye)
 		{
 			Controller->SetViewTarget(Eye);
-			AirParts::TellCut(Here);
+			AirParts::TellCut(Here, TEXT("the battle's first view (Open)"));
 		}
 		AirParts::ShowFrame(Cast<ACampaignHUD>(Controller->GetHUD()), false);
 	}
@@ -1280,10 +1535,15 @@ bool AAirBattle::Open(const FString& Why)
 		WarmUp();
 	}
 	ShowScreen();
+	PressSteps.Step(TEXT("the warm sheets and the screen"));
 	bBegun = true;
 	SetActorTickEnabled(true);
 	UE_LOG(LogTheater, Display, TEXT("Air battle: %s, %s (%s), %d views%s."), *Why, *AirParts::Wide(S.Board.Title), *AirParts::Wide(S.Board.Date),
 		S.bReplay ? static_cast<int32>(S.Recording.Views.size()) : 1, ShotFolder.IsEmpty() ? TEXT("") : *(TEXT(", pictures into ") + ShotFolder));
+	if (TheaterSpeed::IsLogging())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air hitch: the press (Open), frame %lld, %.0f ms in all; each step in ms: %s."), static_cast<long long>(GFrameCounter), PressSteps.Ms(), *PressSteps.Line);
+	}
 	return true;
 }
 
@@ -1536,44 +1796,11 @@ void AAirBattle::PaintLand()
 	{
 		UE_LOG(LogTheater, Log, TEXT("Air battle ground: the recording gives no true north (place.ground.north); the town plan is laid with north up the board."));
 	}
-	LandMade = MakeShared<FAirLandMade, ESPMode::ThreadSafe>();
-	LandAsked = FPlatformTime::Seconds();
-	// The paint's loops at the background's priority, so that they never stand before the frame's own jobs. Spread over
-	// every core at the frame's priority, they did: the render thread waited behind them for its scene's own jobs, a
-	// second at a time, until the paint was done (the Mac's hitch dump on 3e098f1f, 24 Nov 2026 23:44Z, hitch 7:
-	// UpdatePrimitive's wait for its tasks 1005 ms, 8.9 s into the flyover, ending as the ground was painted). The same
-	// ground, perhaps a little later. -TheaterAirLoudPaint: spread at the frame's priority, as before.
-	const EParallelForFlags Loops = LoudPaint() ? EParallelForFlags::None : EParallelForFlags::BackgroundPriority;
-	LandPainting = Async(EAsyncExecution::ThreadPool, [Made = LandMade, P, Plans, Loops]()
+	const FAirLandAsk Ask{ P, Plans };
+	if (!PaintEarlyAdopt(Ask)) // (the row flyPaintEarly: the paint begun as the replay was queued, if it is this very ground)
 	{
-		const double Began = FPlatformTime::Seconds();
-		Made->Painter = std::make_unique<AirLand::Painter>(P, Plans);
-		Made->Frames = AirLand::Frames(P);
-		Made->Levels.SetNum(static_cast<int32>(Made->Frames.size()));
-		for (int32 K = 0; K < Made->Levels.Num(); ++K)
-		{
-			const AirLand::Frame& F = Made->Frames[static_cast<size_t>(K)];
-			std::vector<uint8_t> Rgba(static_cast<size_t>(F.W) * F.H * 4);
-			std::vector<float> Heights(static_cast<size_t>(F.W) * F.H);
-			// (in bands of 64 rows, every band on a thread of its own; the shadows when every row's heights are in)
-			const int32 Bands = (F.H + 63) / 64;
-			const AirLand::Painter& Painter = *Made->Painter;
-			ParallelFor(Bands, [&](int32 B) { Painter.PaintRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); }, Loops);
-			if (AirLand::Painter::Shades(F))
-			{
-				ParallelFor(Bands, [&](int32 B) { Painter.ShadeRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); }, Loops);
-			}
-			TArray<FColor> Pixels;
-			Pixels.SetNumUninitialized(F.W * F.H);
-			for (int32 I = 0; I < Pixels.Num(); ++I)
-			{
-				const uint8_t* C = &Rgba[static_cast<size_t>(I) * 4];
-				Pixels[I] = FColor(C[0], C[1], C[2], 255);
-			}
-			CampaignTextures::MakeLevels(F.W, F.H, Pixels, true, Made->Levels[K]);
-		}
-		Made->Seconds = FPlatformTime::Seconds() - Began;
-	});
+		StartPaint(Ask);
+	}
 	// (a picture run waits for the ground, so that every picture has it)
 	if (!ShotFolder.IsEmpty())
 	{
@@ -1583,16 +1810,259 @@ void AAirBattle::PaintLand()
 	}
 }
 
+/**
+ * (Release 2, the hitch: the Battle rules card's "The ground is kept once painted", row flyGroundKeep; on for a run
+ * -TheaterAirGroundKeep, off -TheaterAirNoGroundKeep.) On, the three painted pictures are kept in the project's
+ * Saved/AirGround, one file a ground named by a key of everything the painter reads (Battle/AirGroundKeep.h), and a
+ * later flight of the same ground reads them on the pool instead of painting; a file whose header, key, sizes, length
+ * or check does not match is refused and the ground painted. The folder keeps the six grounds last used (its order.txt).
+ */
+static bool GroundKeepOn()
+{
+	return FLandLive::RuleNow(TEXT("flyGroundKeep"));
+}
+
+/** (the row flyGroundKeep, on the pool) This ground's kept pictures, whole, into Out; false (and why, in Made's KeepSaid) if not. */
+static bool ReadKeptGround(const FString& Folder, uint64 KeyOf, const std::vector<AirLand::Frame>& Frames, std::vector<std::vector<uint8_t>>& Out, FAirLandMade& Made)
+{
+	Made.KeptName = AirParts::Wide(AirGroundKeep::FileName(KeyOf));
+	TArray<uint8> Bytes;
+	if (!FFileHelper::LoadFileToArray(Bytes, *(Folder / Made.KeptName), FILEREAD_Silent))
+	{
+		Made.KeepSaid = TEXT("none kept yet: painted, and kept");
+		return false;
+	}
+	std::string Why;
+	if (!AirGroundKeep::Unpack(Bytes.GetData(), static_cast<size_t>(Bytes.Num()), KeyOf, Frames, Out, Why))
+	{
+		Made.KeepSaid = TEXT("the kept file refused (") + AirParts::Wide(Why) + TEXT("): painted, and kept again");
+		return false;
+	}
+	Made.KeepSaid = TEXT("read from the kept file, not painted");
+	return true;
+}
+
+/** (the row flyGroundKeep, on the pool) The painted pictures kept: written beside their place, then moved into it, as the
+ * campaign's save is (ACampaignGameMode::WriteSave). */
+static void WriteKeptGround(const FString& Folder, uint64 KeyOf, const std::vector<AirLand::Frame>& Frames, const std::vector<std::vector<uint8_t>>& Pictures, FAirLandMade& Made)
+{
+	const std::vector<uint8_t> Packed = AirGroundKeep::Pack(KeyOf, Frames, Pictures);
+	const FString Path = Folder / Made.KeptName;
+	const FString Beside = Path + TEXT(".writing");
+	IFileManager::Get().MakeDirectory(*Folder, true);
+	if (Packed.empty() || !AirGroundKeep::WriteBytes(TCHAR_TO_UTF8(*Beside), Packed) || !IFileManager::Get().Move(*Path, *Beside, true, true))
+	{
+		Made.KeepSaid += TEXT(" (but it could not be written)");
+		Made.KeptName.Empty();
+	}
+}
+
+/** (the row flyGroundKeep, on the game thread once the ground is laid) The folder's order with this ground first; the
+ * grounds past the six last used, and any ground file the order does not name, deleted. */
+static void RememberKeptGround(const FString& Folder, const FString& Name)
+{
+	const FString OrderFile = Folder / TEXT("order.txt");
+	FString Order;
+	FFileHelper::LoadFileToString(Order, *OrderFile);
+	std::vector<std::string> Drop;
+	const std::string Now = AirGroundKeep::Remember(TCHAR_TO_UTF8(*Order), TCHAR_TO_UTF8(*Name), Drop);
+	FFileHelper::SaveStringToFile(AirParts::Wide(Now), *OrderFile, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	TArray<FString> Files;
+	IFileManager::Get().FindFiles(Files, *(Folder / TEXT("*.ground")), true, false);
+	for (const FString& File : Files)
+	{
+		const std::string Plain = TCHAR_TO_UTF8(*File);
+		if (AirGroundKeep::IsGroundName(Plain) && Now.find(Plain + "\n") == std::string::npos)
+		{
+			IFileManager::Get().Delete(*(Folder / File), false, false, true);
+		}
+	}
+}
+
+void AAirBattle::StartPaint(const FAirLandAsk& Ask)
+{
+	LandMade = MakeShared<FAirLandMade, ESPMode::ThreadSafe>();
+	LandAsked = FPlatformTime::Seconds();
+	// The paint's loops at the background's priority, so that they never stand before the frame's own jobs. Spread over
+	// every core at the frame's priority, they did: the render thread waited behind them for its scene's own jobs, a
+	// second at a time, until the paint was done (the Mac's hitch dump on 3e098f1f, 24 Nov 2026 23:44Z, hitch 7:
+	// UpdatePrimitive's wait for its tasks 1005 ms, 8.9 s into the flyover, ending as the ground was painted). The same
+	// ground, perhaps a little later. -TheaterAirLoudPaint: spread at the frame's priority, as before.
+	const EParallelForFlags Loops = LoudPaint() ? EParallelForFlags::None : EParallelForFlags::BackgroundPriority;
+	// (the hitch's naming lines: each picture's each phase, in seconds since the paint was asked for, while the speed log
+	// is written; the phase kept for the long frames' line either way, AirParts::Hitch)
+	const bool bSay = TheaterSpeed::IsLogging();
+	const double Asked = LandAsked;
+	// (the row flyGroundKeep: the folder the pictures are kept in; empty with the row off, and nothing is read or kept)
+	const FString KeepFolder = GroundKeepOn() ? FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("AirGround"))) : FString();
+	LandPainting = Async(EAsyncExecution::ThreadPool, [Made = LandMade, P = Ask.P, Plans = Ask.Plans, Loops, bSay, Asked, KeepFolder]()
+	{
+		const double Began = FPlatformTime::Seconds();
+		if (bSay)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Air hitch: ground paint begun on the pool %.2f s after it was asked for (%s)."), Began - Asked,
+				Loops == EParallelForFlags::None ? TEXT("its loops at the frame's priority") : TEXT("its loops at the background's priority"));
+		}
+		Made->Painter = std::make_unique<AirLand::Painter>(P, Plans);
+		Made->Frames = AirLand::Frames(P);
+		Made->Levels.SetNum(static_cast<int32>(Made->Frames.size()));
+		// (the row flyGroundKeep: this ground's kept pictures read whole, or none; with the row off, nothing is read)
+		const bool bKeep = !KeepFolder.IsEmpty();
+		const uint64 KeepKey = bKeep ? AirGroundKeep::Key(P, Plans, Made->Frames) : 0;
+		std::vector<std::vector<uint8_t>> Kept;
+		const bool bFromDisk = bKeep && ReadKeptGround(KeepFolder, KeepKey, Made->Frames, Kept, *Made);
+		std::vector<std::vector<uint8_t>> ToKeep;
+		for (int32 K = 0; K < Made->Levels.Num(); ++K)
+		{
+			const AirLand::Frame& F = Made->Frames[static_cast<size_t>(K)];
+			std::vector<uint8_t> Rgba(static_cast<size_t>(F.W) * F.H * 4);
+			if (bFromDisk)
+			{
+				Rgba.swap(Kept[static_cast<size_t>(K)]); // (the kept picture: the bytes the painter made of this very ground)
+			}
+			else
+			{
+				std::vector<float> Heights(static_cast<size_t>(F.W) * F.H);
+				// (in bands of 64 rows, every band on a thread of its own; the shadows when every row's heights are in)
+				const int32 Bands = (F.H + 63) / 64;
+				const AirLand::Painter& Painter = *Made->Painter;
+				Made->Phase.store(4 * K + 1);
+				ParallelFor(Bands, [&](int32 B) { Painter.PaintRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); }, Loops);
+				if (bSay)
+				{
+					UE_LOG(LogTheater, Display, TEXT("Air hitch: ground picture %d (%d x %d at %.0f m): rows painted %.2f s after it was asked for (%d bands)."),
+						K, F.W, F.H, F.Step, FPlatformTime::Seconds() - Asked, Bands);
+				}
+				if (AirLand::Painter::Shades(F))
+				{
+					Made->Phase.store(4 * K + 2);
+					ParallelFor(Bands, [&](int32 B) { Painter.ShadeRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); }, Loops);
+					if (bSay)
+					{
+						UE_LOG(LogTheater, Display, TEXT("Air hitch: ground picture %d: shaded %.2f s after it was asked for (%d bands)."), K, FPlatformTime::Seconds() - Asked, Bands);
+					}
+				}
+				if (bKeep)
+				{
+					ToKeep.push_back(Rgba); // (the row flyGroundKeep: kept as painted, before its smaller copies are made)
+				}
+			}
+			Made->Phase.store(4 * K + 3);
+			TArray<FColor> Pixels;
+			Pixels.SetNumUninitialized(F.W * F.H);
+			for (int32 I = 0; I < Pixels.Num(); ++I)
+			{
+				const uint8_t* C = &Rgba[static_cast<size_t>(I) * 4];
+				Pixels[I] = FColor(C[0], C[1], C[2], 255);
+			}
+			CampaignTextures::MakeLevels(F.W, F.H, Pixels, true, Made->Levels[K]);
+			if (bSay)
+			{
+				UE_LOG(LogTheater, Display, TEXT("Air hitch: ground picture %d: its smaller copies made %.2f s after it was asked for."), K, FPlatformTime::Seconds() - Asked);
+			}
+		}
+		if (bKeep && !bFromDisk)
+		{
+			WriteKeptGround(KeepFolder, KeepKey, Made->Frames, ToKeep, *Made);
+		}
+		Made->Seconds = FPlatformTime::Seconds() - Began;
+		Made->Phase.store(-1);
+	});
+}
+
+/** (the row flyPaintEarly) Toward the sun over a board with no stage, as TowardSun reckons it once the battle stands. */
+static FVector SunOfBoard(const AirFeed::Sky& Board)
+{
+	if (Board.StageKey.empty() && std::isfinite(Board.Latitude))
+	{
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		AirLand::SunAt(Board.Latitude, Board.Month + 1, 12.5, Board.NorthX, Board.NorthY, X, Y, Z);
+		const FVector Way = FVector(Y, X, FMath::Max(Z, 0.07)).GetSafeNormal();
+		if (!Way.IsNearlyZero())
+		{
+			return Way;
+		}
+	}
+	return FRotator(30.0, 150.0, 0.0).Vector();
+}
+
+void AAirBattle::PaintEarly(const FString& Key)
+{
+	if (!FLandLive::RuleNow(TEXT("flyPaintEarly")))
+	{
+		return;
+	}
+	// (the recording read as BeginReplay will read it, for its board: the ground is painted as LayGround would ask)
+	FString Text;
+	AirFeed::Recording Early;
+	std::string Error;
+	if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Data/AirBattles") / Key + TEXT(".json")))
+		|| !AirFeed::ReadRecording(AirParts::Narrow(Text), Early, Error))
+	{
+		return;
+	}
+	const AirFeed::Sky& B = Early.Board;
+	if (!(B.StageKey.empty() && !B.Land.empty() && B.Terrain != "desert" && B.DefNat != "JAP" && B.DefNat != "JPN"))
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air battle ground: nothing to paint early for %s (a stage, a desert, a Japanese-held target, or no land): row flyPaintEarly."), *Key);
+		return;
+	}
+	TSharedPtr<FAirLandAsk> Ask = MakeShared<FAirLandAsk>();
+	AirLand::Place& P = Ask->P;
+	P.AimX = B.TargetX;
+	P.AimY = B.TargetY;
+	P.NorthX = B.NorthX;
+	P.NorthY = B.NorthY;
+	P.Terrain = B.Terrain.empty() ? std::string("plains") : B.Terrain;
+	P.Name = B.PlaceName;
+	P.Month = B.Month + 1;
+	P.Seed = Early.Seed ? Early.Seed : 238;
+	const FVector Sun = SunOfBoard(B);
+	P.SunX = Sun.Y;
+	P.SunY = Sun.X;
+	P.SunZ = Sun.Z;
+	P.Land = B.Land;
+	P.Rivers = B.Rivers;
+	FString Book;
+	FFileHelper::LoadFileToString(Book, *(FPaths::ProjectContentDir() / TEXT("Data/AirGround/towns.json")));
+	Ask->Plans = TCHAR_TO_UTF8(*Book);
+	StartPaint(*Ask);
+	LandEarly = Ask;
+	UE_LOG(LogTheater, Display, TEXT("Air battle ground: %s's pictures begun as the replay was queued (the Battle rules card's row flyPaintEarly, or -TheaterAirPaintEarly)."), *Key);
+}
+
+bool AAirBattle::PaintEarlyAdopt(const FAirLandAsk& Ask)
+{
+	if (!LandEarly.IsValid())
+	{
+		return false;
+	}
+	const TSharedPtr<FAirLandAsk> Early = LandEarly;
+	LandEarly.Reset();
+	if (LandMade.IsValid() && LandPainting.IsValid() && AirGroundKeep::SamePlace(Early->P, Ask.P) && Early->Plans == Ask.Plans)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air battle ground: the pictures begun %.1f s before the battle asked for them are this ground's (row flyPaintEarly)."), FPlatformTime::Seconds() - LandAsked);
+		return true;
+	}
+	// (not this ground after all: painted again as before; the paint begun early is let run out, unread)
+	UE_LOG(LogTheater, Display, TEXT("Air battle ground: the pictures begun early are not this battle's ground; painted again (row flyPaintEarly)."));
+	PaintDropped = MoveTemp(LandPainting);
+	LandPainting = TFuture<void>();
+	return false;
+}
+
 void AAirBattle::LayLand()
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_LayLand);
-	if (!LandMade.IsValid() || !LandMade->Painter || LandMade->Levels.Num() != static_cast<int32>(LandMade->Frames.size()))
+	if (!LandMade.IsValid() || !LandMade->Painter || LandMade->Levels.Num() != static_cast<int32>(LandMade->Frames.size()) || !State.IsValid())
 	{
 		return;
 	}
 	FAirLandMade& Made = *LandMade;
 	const FAirBattleState& S = *State;
+	const double LoadBegan = FPlatformTime::Seconds();
 	UMaterialInterface* Cloth = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Flag.M_Flag"));
+	NoteLoad(TEXT("M_Flag (LayLand)"), LoadBegan);
 	if (!Cloth)
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Air battle ground: M_Flag is missing; the plain ground stays."));
@@ -1778,6 +2248,15 @@ void AAirBattle::LayLand()
 		*AirParts::Wide(S.Board.PlaceName), *AirParts::Wide(Count.Plan), Count.Villages, Count.Links, Count.Bridges, Count.Spires, Count.bCoast ? TEXT(", the coast") : TEXT(""),
 		Made.Seconds, LoudPaint() ? TEXT("its loops at the frame's priority: -TheaterAirLoudPaint") : TEXT("its loops at the background's priority"),
 		FPlatformTime::Seconds() - LandAsked);
+	if (!Made.KeepSaid.IsEmpty())
+	{
+		// (the row flyGroundKeep: what became of the kept file, and the folder's order with this ground first)
+		UE_LOG(LogTheater, Display, TEXT("Air battle ground: %s, Saved/AirGround/%s (the Battle rules card's row flyGroundKeep, or -TheaterAirGroundKeep)."), *Made.KeepSaid, *Made.KeptName);
+		if (!Made.KeptName.IsEmpty())
+		{
+			RememberKeptGround(FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("AirGround"))), Made.KeptName);
+		}
+	}
 	// (the pictures are on the drawing thread now: the copies here are let go, all but the near picture's own texels
 	// and the painter, for the craters)
 	if (Made.Levels.Num() > 0 && Made.Levels[0].Each.Num() > 0 && LandPictures.Num() > 0)
@@ -1824,6 +2303,7 @@ void AAirBattle::HideTheTable()
 		{
 			Table = Map;
 			AirParts::PutAway(Map, true);
+			MapHoldBegin(Map); // (the row flyMapHold: its per-frame update held while the battle is up)
 		}
 		if (It->IsA<ACampaignMapActor>() || It->IsA<AArmyPiece>())
 		{
@@ -2294,6 +2774,7 @@ void AAirBattle::ShowTheTable()
 			Map->SetPiecesShown(false);
 			Map->SetPiecesShown(true);
 		}
+		MapHoldEnd(Map); // (the row flyMapHold: its held update run once, with the pieces back, before the frame is drawn)
 	}
 	else
 	{
@@ -2880,6 +3361,7 @@ void AAirBattle::LayDeckShade()
 	DeckShadeInk = UMaterialInstanceDynamic::Create(ShadeMaterial, this);
 	DeckShadeInk->SetTextureParameterValue(TEXT("Shade"), DeckShadeSheet);
 	DeckShadeInk->SetVectorParameterValue(TEXT("SunWay"), FLinearColor(static_cast<float>(SunWay.X), static_cast<float>(SunWay.Y), static_cast<float>(SunWay.Z), 0.0f));
+	SheenSunSet(); // (the B-17's sheen's glare guard follows the sun as laid here too: nothing with its row off)
 	DeckShadeInk->SetVectorParameterValue(TEXT("Origin"), FLinearColor(static_cast<float>(Corner.X), static_cast<float>(Corner.Y), 0.0f, 0.0f));
 	DeckShadeInk->SetScalarParameterValue(TEXT("Period"), static_cast<float>(Shade.Period * U));
 	DeckShadeInk->SetScalarParameterValue(TEXT("DeckZ"), static_cast<float>(Middle.Z));
@@ -3436,6 +3918,11 @@ void AAirBattle::DrawSky()
 		{
 			RainShafts->SetTranslucentSortPriority(Want == 1 ? -21 : -12);
 		}
+		// (the airscrews' discs and haze, the row "flyPropSpin" or "flyPropBlur" on, with the air fight's)
+		if (State && (State->PropSpinOn == 1 || State->PropBlurOn == 1))
+		{
+			ResortScrews();
+		}
 	}
 	// Turned to the eye as far as it has moved: the near room as often as its puffs' turn shows, the far room (most of
 	// the points) and the shadows only when the eye has moved far enough for a far puff's turn to show (AirSky::Rooms).
@@ -3457,7 +3944,7 @@ void AAirBattle::DrawSky()
 	if (bCut)
 	{
 		// (every cut the sky sees is told to the renderer too: the flyover's shots, the pictures, the strategy camera's jumps)
-		AirParts::TellCut(GetWorld());
+		AirParts::TellCut(GetWorld(), TEXT("a jump the sky saw (DrawSky: the flyover's shots, the time eye, the strategy camera)"));
 	}
 	// (a turn painted aside stands on the picture while the eye goes on a few frames: the painters fade a puff by the
 	// lens along that way (AirSky's SetSweep), so that in a glide of hundreds of metres a frame none shows as a disc
@@ -3767,6 +4254,11 @@ void AAirBattle::Tick(float DeltaSeconds)
 		return;
 	}
 	KeepTheTableHidden();
+	HitchNote(DeltaSeconds); // (release 2, the hitch's naming lines: only while the speed log is written)
+	if (CurtainFirstWaits())
+	{
+		return; // (the row flyCurtainFirst: the black up, the scene not yet made or just made in this frame)
+	}
 	if (LandPainting.IsValid() && LandPainting.IsReady())
 	{
 		LandPainting.Wait();
@@ -4135,6 +4627,171 @@ void AAirBattle::B17FineRead()
 	}
 }
 
+void AAirBattle::B17SkinRead()
+{
+	// The Battle rules card's "Worn B-17 paint" (FLandLive's rule "flyB17Skin", release 2; off until the Mac's stills are
+	// judged with her markings): the model thread's paint for the finer B-17's shape, Content/Data/AirSkin/B17Fine.json
+	// (Tools/make_air_skin.py; Battle/AirSkin), read here once as the battle begins, after B17FineRead and before any
+	// shape is made, never in a frame. Every reader of her file (the miniature kit's, the earned colours', the nose-art
+	// panel's) asks AirSkin; with the row off it holds nothing, nothing is read and nothing is said: the battle's log, its
+	// shapes and their keys are as they were before. Read once a run and kept (its file does not change while the game runs).
+	static AirSkin::Overlay WornKept;
+	static bool bWornKeptRead = false;
+	AirSkin::Set(nullptr); // (an earlier battle's skin never lingers)
+	if (!State || !FLandLive::RuleNow(TEXT("flyB17Skin")))
+	{
+		return;
+	}
+	if (State->B17FineOn != 1)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air battle: worn B-17 paint: on, but the Battle rules card's Finer B-17 is off, so no B-17 wears it (it is her paint)."));
+		return;
+	}
+	if (!bWornKeptRead)
+	{
+		TArray<uint8> Bytes;
+		const FString Path = FPaths::ProjectContentDir() / TEXT("Data/AirSkin/B17Fine.json");
+		if (!FFileHelper::LoadFileToArray(Bytes, *Path))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: worn B-17 paint: Content/Data/AirSkin/B17Fine.json could not be read, so the finer B-17s wear her plain olive."));
+			return;
+		}
+		const std::string Text(reinterpret_cast<const char*>(Bytes.GetData()), static_cast<size_t>(Bytes.Num()));
+		std::string Why;
+		if (!AirSkin::Read(Text, 143899, 15534, 46, WornKept, Why))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: worn B-17 paint: Content/Data/AirSkin/B17Fine.json does not read (%s), so the finer B-17s wear her plain olive."), UTF8_TO_TCHAR(Why.c_str()));
+			return;
+		}
+		// (her contact shade's strength, for stills with and without it: -TheaterAirB17SkinShade=0..1, the whole of it
+		// unless asked; read once with the file, so the kept overlay is never written again once a reader may hold it)
+		float ShadeAsked = 1.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterAirB17SkinShade="), ShadeAsked);
+		WornKept.ShadeStrength = FMath::Clamp(static_cast<double>(ShadeAsked), 0.0, 1.0);
+		bWornKeptRead = true;
+	}
+	AirSkin::Set(&WornKept);
+	UE_LOG(LogTheater, Display, TEXT("Air battle: worn B-17 paint: on (the Battle rules card's Worn B-17 paint, or -TheaterAirB17Skin): the model thread's paint for her shape, from %s; contact shade %.2f (-TheaterAirB17SkinShade=0..1)."),
+		UTF8_TO_TCHAR(WornKept.SourceSha256.substr(0, 12).c_str()), WornKept.ShadeStrength);
+}
+
+void AAirBattle::B17SheenRead()
+{
+	// The Battle rules card's "B-17 paint sheen" (FLandLive's rule "flyB17Sheen", release 2; off until the Mac's stills are
+	// judged): her paint's own finish a point, Content/Data/AirSkin/B17Fine-sheen.json (Tools/make_air_skin.py
+	// --sheen-out, in the same run as her overlay; Battle/AirSheen), read here once as the battle begins, after
+	// B17SkinRead and before any shape is made. With the row off nothing is read, nothing is said, no shape's key changes
+	// and every aircraft keeps PlaneInk. Read once a run and kept, with the launch word's numbers.
+	static AirSheen::Sheen SheenKept;
+	static bool bSheenKeptRead = false;
+	SheenNow = nullptr; // (an earlier battle's sheen never lingers)
+	SheenInk = nullptr;
+	if (!State)
+	{
+		return;
+	}
+	State->B17SheenOn = 0;
+	if (!FLandLive::RuleNow(TEXT("flyB17Sheen")))
+	{
+		return;
+	}
+	const AirSkin::Overlay* Worn = AirSkin::Active() ? AirSkin::For("B17Fine") : nullptr;
+	if (!Worn)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air battle: B-17 paint sheen: on, but Worn B-17 paint is off, so no B-17 wears it (it is her paint's finish)."));
+		return;
+	}
+	if (!bSheenKeptRead)
+	{
+		TArray<uint8> Bytes;
+		const FString Path = FPaths::ProjectContentDir() / TEXT("Data/AirSkin/B17Fine-sheen.json");
+		if (!FFileHelper::LoadFileToArray(Bytes, *Path))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: B-17 paint sheen: Content/Data/AirSkin/B17Fine-sheen.json could not be read, so her paint stays matt."));
+			return;
+		}
+		const std::string Text(reinterpret_cast<const char*>(Bytes.GetData()), static_cast<size_t>(Bytes.Num()));
+		std::string Why;
+		if (!AirSheen::Read(Text, 143899, 15534, SheenKept, Why))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: B-17 paint sheen: Content/Data/AirSkin/B17Fine-sheen.json does not read (%s), so her paint stays matt."), UTF8_TO_TCHAR(Why.c_str()));
+			return;
+		}
+		if (SheenKept.SourceSha256 != Worn->SourceSha256 || SheenKept.BaseSha256 != Worn->BaseSha256)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: B-17 paint sheen: Content/Data/AirSkin/B17Fine-sheen.json is not her paint's (made from %s, her paint from %s): remake both with Tools/make_air_skin.py --out ... --sheen-out ...; her paint stays matt."),
+				UTF8_TO_TCHAR(SheenKept.SourceSha256.substr(0, 12).c_str()), UTF8_TO_TCHAR(Worn->SourceSha256.substr(0, 12).c_str()));
+			return;
+		}
+		// (the material's numbers, for stills without a rebuild: -TheaterAirB17SheenInk=gain,floor,spec,metal,glare,graze,
+		// metalfrom, each optional; read once with the file, so the kept sheen is never written again once a shape holds it)
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterAirB17SheenInk="), Asked, false))
+		{
+			if (!AirSheen::ParseTune(std::string(TCHAR_TO_UTF8(*Asked)), SheenKept.Look, Why))
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle: B-17 paint sheen: -TheaterAirB17SheenInk=%s: %s."), *Asked, UTF8_TO_TCHAR(Why.c_str()));
+			}
+		}
+		bSheenKeptRead = true;
+	}
+	SheenNow = &SheenKept;
+	State->B17SheenOn = 1;
+}
+
+void AAirBattle::MustangMetalRead()
+{
+	// The Battle rules card's "Silver Mustang" (FLandLive's rule "flyMustangMetal", release 2; off until the Mac's stills
+	// are judged). Brian, 27 November: "shouldnt the p-51 mustangs be silver with black paint?", then "it should be shiny
+	// silver", "metalic". Her file is the air rules thread's issue-13 (battle-models/air-bar-1126/issue-13/Mustang.json,
+	// sha256 4b7fe030..., the art director's pick: E0E3E5 at roughness 0.28), kept beside the old one as
+	// Content/Models/MustangBare.json so that the row off draws every Mustang as before. Read once a run and kept.
+	static AirSheen::OwnFinish BareKept;
+	static bool bBareKeptRead = false;
+	BareNow = nullptr; // (an earlier battle's never lingers)
+	BareInk = nullptr;
+	if (!State)
+	{
+		return;
+	}
+	State->MustangMetalOn = 0;
+	if (!FLandLive::RuleNow(TEXT("flyMustangMetal")))
+	{
+		return;
+	}
+	if (!bBareKeptRead)
+	{
+		TArray<uint8> Bytes;
+		const FString Path = FPaths::ProjectContentDir() / TEXT("Models/MustangBare.json");
+		if (!FFileHelper::LoadFileToArray(Bytes, *Path))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: silver Mustang: Content/Models/MustangBare.json could not be read, so every Mustang flies as before."));
+			return;
+		}
+		const std::string Text(reinterpret_cast<const char*>(Bytes.GetData()), static_cast<size_t>(Bytes.Num()));
+		std::string Why;
+		if (!AirSheen::ReadOwn(Text, BareKept, Why))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: silver Mustang: Content/Models/MustangBare.json does not read (%s), so every Mustang flies as before."), UTF8_TO_TCHAR(Why.c_str()));
+			return;
+		}
+		// (the material's numbers, for stills without a rebuild: -TheaterAirMustangMetalInk=gain,floor,spec,metal,glare,
+		// graze,metalfrom, each optional, over her own (a floor of 0.25, no glare guard); 0.32 is the art director's
+		// fall-back floor if the Mac shows sparkle)
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterAirMustangMetalInk="), Asked, false))
+		{
+			if (!AirSheen::ParseTune(std::string(TCHAR_TO_UTF8(*Asked)), BareKept.Look, Why))
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle: silver Mustang: -TheaterAirMustangMetalInk=%s: %s."), *Asked, UTF8_TO_TCHAR(Why.c_str()));
+			}
+		}
+		bBareKeptRead = true;
+	}
+	BareNow = &BareKept;
+	State->MustangMetalOn = 1;
+}
+
 int32 AAirBattle::B17FineNearMost()
 {
 	// (each finer B-17 that once comes near keeps her close-up shape for the battle, some 31 to 37 MB a copy by arithmetic:
@@ -4150,6 +4807,25 @@ int32 AAirBattle::B17FineNearMost()
 	return Most;
 }
 
+int32 AAirBattle::B17FinePerFrame()
+{
+	// (a close-up is paid for in the frame it is made: on the Mac, 27 Nov, 4 or 5 made in one frame gave a 49-64 ms
+	// frame, 8 gave 145 ms, 20 gave 201 ms. With N, at most N are made a frame, the nearest first, and the rest wait a
+	// frame or two on their far shape; 0, unless asked, keeps the old order: any in the battle's order while there is room)
+	static const int32 PerFrame = []()
+	{
+		int32 Asked = 0;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterAirB17FinePerFrame="), Asked);
+		Asked = FMath::Clamp(Asked, 0, 1000);
+		if (Asked > 0)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Air battle: finer B-17: her close-up shapes made at most %d a frame, the nearest first (-TheaterAirB17FinePerFrame=N)."), Asked);
+		}
+		return Asked;
+	}();
+	return PerFrame;
+}
+
 bool AAirBattle::B17FineNearRoom(const FPlaneMade& Made)
 {
 	if (!Made.bFine || Made.bNearMade)
@@ -4161,16 +4837,125 @@ bool AAirBattle::B17FineNearRoom(const FPlaneMade& Made)
 	{
 		Kept += Each.Value.bFine && Each.Value.bNearMade ? 1 : 0;
 	}
-	if (Kept < B17FineNearMost())
+	// (with -TheaterAirB17FinePerFrame=N, only those Draw chose this frame, the nearest first: AirNear::MayMake, which
+	// keeps the same most; without it, any while fewer than the most are made, as before)
+	if (B17FinePerFrame() > 0 ? Made.bMayMake : Kept < B17FineNearMost())
 	{
 		return true;
 	}
-	if (!bB17FineHeldSaid)
+	if (Kept >= B17FineNearMost() && !bB17FineHeldSaid)
 	{
 		bB17FineHeldSaid = true;
 		UE_LOG(LogTheater, Display, TEXT("Air battle: finer B-17: %d close-up shapes made, the most a battle keeps (-TheaterAirB17FineNear=N): any other B-17 that comes near stays on her far shape."), Kept);
 	}
 	return false;
+}
+
+bool AAirBattle::PropSpinOn()
+{
+	// The Battle rules card's "Turning airscrews" (FLandLive's rule "flyPropSpin", release 2; off until the Mac has
+	// timed it and the art director has passed it): read once a battle, as its first shape is asked for (ShapeFor), so
+	// that every shape it makes follows it. Without the airscrews' own ink (M_Highlight, DiscInk) no screw is found, and
+	// the row stays off. Said only when on: off, the battle's log is as it was before.
+	if (!State)
+	{
+		return false;
+	}
+	if (State->PropSpinOn < 0)
+	{
+		State->PropSpinOn = DiscInk && FLandLive::RuleNow(TEXT("flyPropSpin")) ? 1 : 0;
+		if (State->PropSpinOn == 1)
+		{
+			if (!ScrewHaze)
+			{
+				// (M_Highlight's look made usable on the copies, Tools/build_content.py's M_ScrewHaze: M_Highlight itself is
+				// not, and on a copy the engine would draw the default material in its place)
+				if (UMaterialInterface* Haze = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_ScrewHaze.M_ScrewHaze"), nullptr, LOAD_NoWarn | LOAD_Quiet))
+				{
+					ScrewHaze = UMaterialInstanceDynamic::Create(Haze, this);
+					ScrewHaze->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+				}
+			}
+			if (ScrewHaze)
+			{
+				UE_LOG(LogTheater, Display, TEXT("Air battle: turning airscrews: on (the Battle rules card's Turning airscrews, or -TheaterAirPropSpin): no still blades past 300 m, each airscrew an even haze there (M_ScrewHaze), a stronger smear close to."));
+			}
+			else
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle: turning airscrews: on, but /Game/Campaign/Materials/M_ScrewHaze is missing (run Tools/build_content.sh): past 300 m the blades stay standing as before (no haze to put in their place); close to, the stronger smear."));
+			}
+		}
+	}
+	return State->PropSpinOn == 1;
+}
+
+UMaterialInterface* AAirBattle::ScrewHazeInk() const
+{
+	return State && (State->PropSpinOn == 1 || State->PropBlurOn == 1) ? ScrewHaze.Get() : nullptr;
+}
+
+bool AAirBattle::PropBlurOn()
+{
+	// The Battle rules card's "Far airscrews a faint blur" (FLandLive's rule "flyPropBlur", release 2; Brian, 27 November
+	// 2026 01:23:16Z: "yeah the far propellers don't move and dont look good", his picture of the Overview each far B-17's
+	// airscrew a big solid disc with a yellow rim, the modeller's blur disc drawn on the far shape's solid ink): read
+	// once a battle with PropSpinOn (ShapeFor), so that every shape it makes follows it. Without the airscrews' own ink
+	// (DiscInk) no screw is found, and the row stays off. Said only when on: off, the battle's log is as it was before.
+	if (!State)
+	{
+		return false;
+	}
+	if (State->PropBlurOn < 0)
+	{
+		State->PropBlurOn = DiscInk && FLandLive::RuleNow(TEXT("flyPropBlur")) ? 1 : 0;
+		if (State->PropBlurOn == 1)
+		{
+			if (!ScrewHaze)
+			{
+				// (the same see-through ink as "flyPropSpin"'s haze, Tools/build_content.py's M_ScrewHaze)
+				if (UMaterialInterface* Haze = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_ScrewHaze.M_ScrewHaze"), nullptr, LOAD_NoWarn | LOAD_Quiet))
+				{
+					ScrewHaze = UMaterialInstanceDynamic::Create(Haze, this);
+					ScrewHaze->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+				}
+			}
+			if (ScrewHaze)
+			{
+				UE_LOG(LogTheater, Display, TEXT("Air battle: far airscrews a faint blur: on (the Battle rules card's Far airscrews a faint blur, or -TheaterAirPropBlur): past 300 m no solid disc and no still blades, each airscrew a faint grey disc (M_ScrewHaze); close to, the tips' paint is a faint arc."));
+			}
+			else
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle: far airscrews a faint blur: on, but /Game/Campaign/Materials/M_ScrewHaze is missing (run Tools/build_content.sh): past 300 m the airscrews stay as before (no faint disc to put in their place); close to, the marks go and the tips' arc is drawn."));
+			}
+		}
+	}
+	return State->PropBlurOn == 1;
+}
+
+UMaterialInterface* AAirBattle::InkFor(const FString& Shape) const
+{
+	// (a shape made with her sheen carries her finish in its first texture coordinate; every other is PlaneInk's, as before)
+	if (SheenInk && Shape.Contains(TEXT("|sheen")))
+	{
+		return SheenInk.Get();
+	}
+	// (the silver Mustang's: her bare metal carried the same way, on her own ink; null with her row off)
+	if (BareInk && Shape.StartsWith(TEXT("MustangBare:")))
+	{
+		return BareInk.Get();
+	}
+	return PlaneInk.Get();
+}
+
+void AAirBattle::SheenSunSet()
+{
+	if (!SheenInk)
+	{
+		return;
+	}
+	// (the way to the sun as the deck's shade takes it, without its floor: the guard's "low" reads its height)
+	const FVector Sun = TowardSun().GetSafeNormal();
+	SheenInk->SetVectorParameterValue(TEXT("SheenSun"), FLinearColor(static_cast<float>(Sun.X), static_cast<float>(Sun.Y), static_cast<float>(Sun.Z), 0.0f));
 }
 
 FString AAirBattle::ModelFor(const FString& Model, const FString& Nation, bool bFighter) const
@@ -4194,13 +4979,17 @@ FString AAirBattle::ModelFor(const FString& Model, const FString& Nation, bool b
 	// for the run (AirParts::Shapes, the miniature kit's, the earned colours', the nose-art panels') is the newer one's;
 	// with the row off, the name and every one of them is what it always was)
 	const bool bFine = State && State->B17FineOn == 1;
-	const FString Asked = Model + TEXT("|") + Nation + (bFighter ? TEXT("|f") : TEXT("|b")) + (bFine ? TEXT("|fine") : TEXT(""));
+	// (and its "Silver Mustang": every Mustang drawn from MustangBare.json, her bare metal file, the same way; with the row
+	// off, or her file not read, the name is what it always was)
+	const bool bBare = State && State->MustangMetalOn == 1 && BareNow;
+	const FString Asked = Model + TEXT("|") + Nation + (bFighter ? TEXT("|f") : TEXT("|b")) + (bFine ? TEXT("|fine") : TEXT("")) + (bBare ? TEXT("|bare") : TEXT(""));
 	if (const FString* Answered = Found.Find(Asked))
 	{
 		return *Answered;
 	}
 	const FString* Named = Known.Find(Model);
-	const FString Name = bFine ? AirParts::Wide(AirShow::FileOf(AirParts::Narrow(Named ? *Named : Model), true)) : Named ? *Named : Model;
+	const FString Plain = bFine ? AirParts::Wide(AirShow::FileOf(AirParts::Narrow(Named ? *Named : Model), true)) : Named ? *Named : Model;
+	const FString Name = bBare && Plain == TEXT("Mustang") ? FString(TEXT("MustangBare")) : Plain;
 	FMiniatureMesh Probe;
 	const FString Out = !Name.IsEmpty() && Probe.Vehicle(Name + TEXT(":") + Nation, FVector::ZeroVector, 1.0, 0.0, false)
 		? Name + TEXT(":") + Nation : (bFighter ? TEXT("Fighter:") : TEXT("Bomber:")) + Nation;
@@ -4218,14 +5007,23 @@ namespace AirParts
 		TArray<int32> Triangles;
 		TArray<FVector> Normals;
 		TArray<FColor> Colors;
+		/** Her paint's own finish a point, carried in the mesh's first texture coordinate (the row "flyB17Sheen":
+		 * Battle/AirSheen's Carry, U her roughness below 0.9, V her metal); empty for every other shape and with the row
+		 * off. Drawn only where it is one a point (UvOf). */
+		TArray<FVector2D> Sheen;
 		/** Its airscrews, their blades taken out of the shape to turn as discs of their own (in the shape's frame). */
 		struct FScrewAt
 		{
 			FVector Hub = FVector::ZeroVector;
 			double Radius = 0.0;
 			int32 Blades = 3;
+			/** Its tips' paint as the file gives it (the row "flyPropBlur", AirScrew::TipColour; alpha 0: none, no arc). */
+			FColor Tip = FColor(0, 0, 0, 0);
 		};
 		TArray<FScrewAt> Screws;
+		/** A far shape stripped with the row "flyPropBlur" on: its airscrews drawn as the faint grey disc
+		 * (AirScrew::MakeBlurDisc), not "flyPropSpin"'s haze. */
+		bool bBlurDisc = false;
 		/** Its bomb bay (the modeller's batch of 21 November: the file's near.part and parts): each door's triangles,
 		 * taken out of the near shape to turn about its hinge (Pivot, Axis, at most Most degrees), and the load racked
 		 * in the bay, hidden once her stick begins to fall. In the shape's frame. */
@@ -4234,11 +5032,15 @@ namespace AirParts
 			TArray<FVector> Points, Normals;
 			TArray<int32> Triangles;
 			TArray<FColor> Colors;
+			TArray<FVector2D> Sheen;
 			FVector Pivot = FVector::ZeroVector, Axis = FVector::ForwardVector;
 			double Most = 85.0;
 		};
 		TArray<FPiece> Doors;
 		FPiece Racked;
+		/** A far shape's airscrews' blades, one piece a screw as Screws (the row "flyPropSpin": taken out of the far shape
+		 * with its blur disc, TakeFarScrews), drawn standing still for an engine stopped and feathered. */
+		TArray<FPiece> StillBlades;
 		/** Its kill slots, for an ace's victories (the file's tally.kills; AirBattleTally.cpp): read when an ace first
 		 * needs them, from its file (Kind) as its points were brought in (Middle, Fit). */
 		FAirTallySide Kills;
@@ -4269,11 +5071,63 @@ namespace AirParts
 	}
 
 	/**
+	 * Her paint's own finish onto a shape just made from her file (the row "flyB17Sheen"): the shape's point K is her
+	 * file's point K (the miniature kit lays one point a file point, in order, her markings after them), so point K takes
+	 * her sheen file's gloss and metal at K under her contact shade, and each point past her file's (her star and bar)
+	 * her coat's. Nothing unless her overlay and her sheen file are of one size and the shape holds at least as many points.
+	 */
+	static void SheenOnto(FShape& Shape, const AirSkin::Level& Skin, const AirSheen::Level& Own, double ShadeStrength, const AirSheen::Carried& Coat)
+	{
+		const size_t Count = Own.Count();
+		if (Skin.Count() != Count || Own.Metal.size() != Count || Shape.Points.Num() < static_cast<int32>(Count))
+		{
+			return;
+		}
+		Shape.Sheen.SetNum(Shape.Points.Num());
+		for (int32 K = 0; K < Shape.Points.Num(); ++K)
+		{
+			const size_t At = static_cast<size_t>(K);
+			const AirSheen::Carried C = At < Count ? AirSheen::Carry(Own.Gloss[At], Own.Metal[At], AirSkin::ShadeFactor(Skin.Shade[At], ShadeStrength)) : Coat;
+			Shape.Sheen[K] = FVector2D(C.U, C.V);
+		}
+	}
+
+	/** The same for an aircraft whose own file carries her finish (the silver Mustang's): her gloss, metal and shade a
+	 * point, as her file lists them; a point past them (her marks) wears Marks. */
+	static void OwnOnto(FShape& Shape, const AirSheen::Level& Own, const std::vector<float>& Shade, const AirSheen::Carried& Marks)
+	{
+		const size_t Count = Own.Count();
+		if (Shade.size() != Count || Own.Metal.size() != Count || Shape.Points.Num() < static_cast<int32>(Count))
+		{
+			return;
+		}
+		Shape.Sheen.SetNum(Shape.Points.Num());
+		for (int32 K = 0; K < Shape.Points.Num(); ++K)
+		{
+			const size_t At = static_cast<size_t>(K);
+			const AirSheen::Carried C = At < Count ? AirSheen::Carry(Own.Gloss[At], Own.Metal[At], Shade[At]) : Marks;
+			Shape.Sheen[K] = FVector2D(C.U, C.V);
+		}
+	}
+
+	/** A shape's first texture coordinate as drawn: its sheen where it is one a point, else none (as every shape had). */
+	static const TArray<FVector2D>& UvOf(const TArray<FVector2D>& Carried, int32 Points)
+	{
+		static const TArray<FVector2D> None;
+		return Carried.Num() == Points && Points > 0 ? Carried : None;
+	}
+
+	/**
 	 * A sculpted aircraft's airscrews (Battle/AirScrew), found by the paints its file gives the points the model was made
 	 * from, in order: their blades are taken out of its near shape, which turns them as discs. Read wrong (its points
-	 * not in the file's order, a screw that is not one) and the blades stay where they are, standing still.
+	 * not in the file's order, a screw that is not one) and the blades stay where they are, standing still. The blades'
+	 * painted marks always go with them (AirScrew's BladeDecals: the finer B-17's and the Wellington's 84 a screw; a
+	 * named mend of a fault in his game, 27 November 2026: left behind, they stood still half the radius out in the
+	 * turning disc, and on the close B-17 read as a red disc in a white ring under the wing root and two red marks under
+	 * the chin, the art director's P48 find). With the row "flyPropBlur" on (bPropBlur) each screw is also given its
+	 * tips' paint (TipColour) for the disc's arc.
 	 */
-	static void TakeScrews(FShape& Shape, const FMiniatureMesh& Made, const FString& Kind, const FVector& Middle, double Fit, double U)
+	static void TakeScrews(FShape& Shape, const FMiniatureMesh& Made, const FString& Kind, const FVector& Middle, double Fit, double U, bool bPropBlur = false)
 	{
 		FString Text;
 		if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models") / (Kind + TEXT(".json")))))
@@ -4312,13 +5166,23 @@ namespace AirParts
 		}
 		TArray<int32> Kept;
 		Kept.Reserve(Shape.Triangles.Num());
+		// (the blades' painted marks in the discs go with the blades, row or no row: the blade marks mend; the row
+		// "flyPropBlur": the tips' paint, off none)
+		const std::vector<bool> Marks = AirScrew::BladeDecals(Points, Paints, Are, Triangles, Found.Screws);
+		unsigned char Tip[3] = { 0, 0, 0 };
+		bool bTip = false;
+		if (bPropBlur)
+		{
+			bTip = AirScrew::TipColour(FileText, Paints, Tip);
+		}
 		// (the blades go, and with them the model's own painted blur disc where it has one: the turning disc stands
 		// in for both, and the blur would draw solid here)
 		auto IsBlur = [&](int32 Point) { return Point >= 0 && static_cast<size_t>(Point) < Paints.size() && Are.IsBlur(Paints[static_cast<size_t>(Point)]); };
 		for (int32 T = 0; T + 2 < Shape.Triangles.Num(); T += 3)
 		{
 			const bool bBlur = IsBlur(Made.Triangles[T]) && IsBlur(Made.Triangles[T + 1]) && IsBlur(Made.Triangles[T + 2]);
-			if (!Found.BladeTriangle[static_cast<size_t>(T / 3)] && !bBlur)
+			const bool bMark = !Marks.empty() && Marks[static_cast<size_t>(T / 3)];
+			if (!Found.BladeTriangle[static_cast<size_t>(T / 3)] && !bBlur && !bMark)
 			{
 				Kept.Append({ Shape.Triangles[T], Shape.Triangles[T + 1], Shape.Triangles[T + 2] });
 			}
@@ -4330,8 +5194,112 @@ namespace AirParts
 			At.Hub = (FVector(S.Hub.X, S.Hub.Y, S.Hub.Z) - Middle) * Fit;
 			At.Radius = S.Radius * Fit;
 			At.Blades = S.Blades;
+			if (bTip)
+			{
+				At.Tip = FColor(Tip[0], Tip[1], Tip[2], 255);
+			}
 			Shape.Screws.Add(At);
 		}
+	}
+
+	/**
+	 * A sculpted aircraft's airscrews taken out of its far shape too (the row "flyPropSpin"; Battle/AirScrew's
+	 * StripScrews): the far mesh's blades, found as the near mesh's are, and its modeller's blur disc (drawn solid in a far
+	 * mesh: its "clear" is not read), leave the shape; each screw's blades are kept apart for an engine feathered, and the
+	 * near shape's screws given it, for the copies' haze. Its far screws not the near ones (as many, each hub within a
+	 * twentieth of its radius: on every aircraft in Content/Models they are) and the shape is left as it was: false.
+	 */
+	static bool TakeFarScrews(FShape& Away, const FMiniatureMesh& Far, const FShape& Near, const FString& Kind, const FVector& Middle, double Fit)
+	{
+		FString Text;
+		// (the file the far mesh itself was read from: with -TheaterOldVehicles, Models/Old's where one is kept, as
+		// FMiniatureMesh reads it; the near screws' file and this one not the same model, SameScrews leaves the shape be)
+		static const bool bOldVehicles = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldVehicles"));
+		FString Path = FPaths::ProjectContentDir() / TEXT("Models") / (Kind + TEXT(".json"));
+		if (bOldVehicles && FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Models") / TEXT("Old") / (Kind + TEXT(".json"))))
+		{
+			Path = FPaths::ProjectContentDir() / TEXT("Models") / TEXT("Old") / (Kind + TEXT(".json"));
+		}
+		if (Near.Screws.Num() == 0 || !FFileHelper::LoadFileToString(Text, *Path))
+		{
+			return false;
+		}
+		const std::string FileText(TCHAR_TO_UTF8(*Text));
+		const std::vector<int> Paints = AirScrew::FarPaints(FileText);
+		const AirScrew::PaintsAre Are = AirScrew::PaintKinds(FileText);
+		if (Paints.empty() || static_cast<int32>(Paints.size()) > Far.Vertices.Num() || Away.Triangles.Num() != Far.Triangles.Num() || Away.Points.Num() != Far.Vertices.Num())
+		{
+			return false;
+		}
+		std::vector<AirScrew::Vec3> Points;
+		Points.reserve(Paints.size());
+		for (size_t K = 0; K < Paints.size(); ++K)
+		{
+			const FVector& P = Far.Vertices[static_cast<int32>(K)];
+			Points.push_back({ P.X, P.Y, P.Z });
+		}
+		const std::vector<int> Triangles(Far.Triangles.GetData(), Far.Triangles.GetData() + Far.Triangles.Num());
+		const AirScrew::Stripped Cut = AirScrew::StripScrews(Points, Paints, Are, Triangles);
+		// (the far screws in the shape's frame, as the near ones were brought in)
+		std::vector<AirScrew::Screw> Wanted, Found;
+		for (const FShape::FScrewAt& At : Near.Screws)
+		{
+			AirScrew::Screw S;
+			S.Hub = { At.Hub.X, At.Hub.Y, At.Hub.Z };
+			S.Radius = At.Radius;
+			S.Blades = At.Blades;
+			Wanted.push_back(S);
+		}
+		for (const AirScrew::Screw& Each : Cut.Screws)
+		{
+			AirScrew::Screw S = Each;
+			const FVector Hub = (FVector(Each.Hub.X, Each.Hub.Y, Each.Hub.Z) - Middle) * Fit;
+			S.Hub = { Hub.X, Hub.Y, Hub.Z };
+			S.Radius = Each.Radius * Fit;
+			Found.push_back(S);
+		}
+		const std::vector<int> Which = AirScrew::SameScrews(Wanted, Found);
+		if (Which.empty() || Cut.Drop.size() * 3 != static_cast<size_t>(Away.Triangles.Num()))
+		{
+			return false;
+		}
+		TArray<FShape::FPiece> Still;
+		Still.SetNum(Near.Screws.Num());
+		for (size_t J = 0; J < Cut.Blades.size(); ++J)
+		{
+			FShape::FPiece& Piece = Still[Which[J]];
+			TMap<int32, int32> Into;
+			for (const int T : Cut.Blades[J])
+			{
+				for (int32 C = 0; C < 3; ++C)
+				{
+					const int32 Point = Away.Triangles[T * 3 + C];
+					if (const int32* Have = Into.Find(Point))
+					{
+						Piece.Triangles.Add(*Have);
+						continue;
+					}
+					const int32 Made = Piece.Points.Add(Away.Points[Point]);
+					Piece.Normals.Add(Away.Normals.IsValidIndex(Point) ? Away.Normals[Point] : FVector::UpVector);
+					Piece.Colors.Add(Away.Colors.IsValidIndex(Point) ? Away.Colors[Point] : FColor(22, 22, 22));
+					Into.Add(Point, Made);
+					Piece.Triangles.Add(Made);
+				}
+			}
+		}
+		TArray<int32> Kept;
+		Kept.Reserve(Away.Triangles.Num());
+		for (int32 T = 0; T + 2 < Away.Triangles.Num(); T += 3)
+		{
+			if (!Cut.Drop[static_cast<size_t>(T / 3)])
+			{
+				Kept.Append({ Away.Triangles[T], Away.Triangles[T + 1], Away.Triangles[T + 2] });
+			}
+		}
+		Away.Triangles = MoveTemp(Kept);
+		Away.Screws = Near.Screws;
+		Away.StillBlades = MoveTemp(Still);
+		return true;
 	}
 
 	/**
@@ -4764,6 +5732,10 @@ namespace AirParts
 					Into.Points.Add(Shape.Points[Corner]);
 					Into.Normals.Add(Shape.Normals.IsValidIndex(Corner) ? Shape.Normals[Corner] : FVector::UpVector);
 					Into.Colors.Add(Shape.Colors.IsValidIndex(Corner) ? Shape.Colors[Corner] : FColor::White);
+					if (Shape.Sheen.Num() == Shape.Points.Num())
+					{
+						Into.Sheen.Add(Shape.Sheen[Corner]);
+					}
 				}
 				Into.Triangles.Add(*Was);
 			}
@@ -4797,8 +5769,29 @@ namespace AirParts
 	 * An airscrew turning, as a film's camera sees it: a see-through dark disc in its own Y-Z plane (the shaft along X),
 	 * clear at the boss and soft at the tips, darker where each blade sweeps, so that it is seen to turn. Both faces.
 	 */
-	static void DiscOf(double Radius, int32 Blades, TArray<FVector>& Points, TArray<int32>& Triangles, TArray<FVector>& Normals, TArray<FColor>& Colours)
+	static void LayDisc(const AirScrew::DiscMade& Made, const FVector& At, TArray<FVector>& Points, TArray<int32>& Triangles, TArray<FVector>& Normals, TArray<FColor>& Colours)
 	{
+		const int32 First = Points.Num();
+		for (size_t K = 0; K < Made.Points.size(); ++K)
+		{
+			Points.Add(At + FVector(Made.Points[K].X, Made.Points[K].Y, Made.Points[K].Z));
+			Normals.Add(FVector(1.0, 0.0, 0.0));
+			Colours.Add(FColor(Made.Red[K], Made.Green[K], Made.Blue[K], Made.Alpha[K]));
+		}
+		for (const int T : Made.Triangles)
+		{
+			Triangles.Add(First + T);
+		}
+	}
+
+	/** (bSmear, the row "flyPropSpin": the stronger trailing smear of Battle/AirScrew's MakeDisc, as many triangles) */
+	static void DiscOf(double Radius, int32 Blades, TArray<FVector>& Points, TArray<int32>& Triangles, TArray<FVector>& Normals, TArray<FColor>& Colours, bool bSmear = false)
+	{
+		if (bSmear)
+		{
+			LayDisc(AirScrew::MakeDisc(Radius, Blades, false), FVector::ZeroVector, Points, Triangles, Normals, Colours);
+			return;
+		}
 		constexpr int32 Round = 48;
 		const double Rings[4] = { 0.12, 0.5, 0.9, 1.0 };
 		for (int32 Ring = 0; Ring < 4; ++Ring)
@@ -4986,7 +5979,7 @@ namespace AirParts
 	 * the procedural meshes carry them; the material makes them linear), all on Ink. Null for a shape with no triangles.
 	 * Built as the ground battle builds its crowds' (LandVat), fast, with no collision.
 	 */
-	static UStaticMesh* StillOf(UObject* Owner, const FShape& Shape, UMaterialInterface* Ink)
+	static UStaticMesh* StillOf(UObject* Owner, const FShape& Shape, UMaterialInterface* Ink, UMaterialInterface* Haze = nullptr)
 	{
 		const int32 Count = Shape.Points.Num();
 		if (!Owner || !Ink || Count == 0 || Shape.Triangles.Num() < 3 || Shape.Colors.Num() != Count)
@@ -5022,7 +6015,8 @@ namespace AirParts
 			Tangents[Corner] = FVector3f::CrossProduct(Across, Normal).GetSafeNormal(1e-6f, FVector3f::ForwardVector);
 			Signs[Corner] = 1.0f;
 			Colours[Corner] = FVector4f(FLinearColor(Shape.Colors[I]));
-			Uvs.Set(Corner, 0, FVector2f::ZeroVector);
+			// (her paint's own finish, the row "flyB17Sheen": zero for every other shape, as before)
+			Uvs.Set(Corner, 0, Shape.Sheen.Num() == Count ? FVector2f(static_cast<float>(Shape.Sheen[I].X), static_cast<float>(Shape.Sheen[I].Y)) : FVector2f::ZeroVector);
 			Corners[I] = Corner;
 		}
 		int32 Laid = 0;
@@ -5041,8 +6035,51 @@ namespace AirParts
 		{
 			return nullptr;
 		}
+		// (the row "flyPropSpin": each airscrew an even haze at its hub, a second section on its own see-through ink, Haze;
+		// the far shape's only, the light shape has no screws. Each face its own corners, facing its own way. A far shape
+		// the row "flyPropBlur" stripped draws the faint grey disc in its place, bBlurDisc.)
+		const bool bHaze = Haze && Shape.Screws.Num() > 0;
+		if (bHaze)
+		{
+			const FPolygonGroupID Hazed = D.CreatePolygonGroup();
+			Attributes.GetPolygonGroupMaterialSlotNames()[Hazed] = TEXT("Haze");
+			for (const FShape::FScrewAt& Screw : Shape.Screws)
+			{
+				const AirScrew::DiscMade Disc = Shape.bBlurDisc ? AirScrew::MakeBlurDisc(Screw.Radius, Screw.Blades) : AirScrew::MakeDisc(Screw.Radius, Screw.Blades, true);
+				const int32 Many = static_cast<int32>(Disc.Points.size());
+				TArray<FVertexInstanceID> Faces;
+				Faces.SetNum(Many * 2);
+				for (int32 I = 0; I < Many; ++I)
+				{
+					const FVertexID Vertex = D.CreateVertex();
+					const AirScrew::Vec3& P = Disc.Points[static_cast<size_t>(I)];
+					Positions[Vertex] = FVector3f(Screw.Hub + FVector(P.X, P.Y, P.Z));
+					const FLinearColor Tone(FColor(Disc.Red[static_cast<size_t>(I)], Disc.Green[static_cast<size_t>(I)], Disc.Blue[static_cast<size_t>(I)], Disc.Alpha[static_cast<size_t>(I)]));
+					for (int32 Side = 0; Side < 2; ++Side)
+					{
+						const FVertexInstanceID Corner = D.CreateVertexInstance(Vertex);
+						Normals[Corner] = Side == 0 ? FVector3f::ForwardVector : -FVector3f::ForwardVector;
+						Tangents[Corner] = FVector3f::RightVector;
+						Signs[Corner] = 1.0f;
+						Colours[Corner] = FVector4f(Tone);
+						Uvs.Set(Corner, 0, FVector2f::ZeroVector);
+						Faces[I * 2 + Side] = Corner;
+					}
+				}
+				for (size_t T = 0; T + 2 < Disc.Triangles.size(); T += 3)
+				{
+					const int32 Side = T < Disc.Front ? 0 : 1;
+					const FVertexInstanceID Three[3] = { Faces[Disc.Triangles[T] * 2 + Side], Faces[Disc.Triangles[T + 1] * 2 + Side], Faces[Disc.Triangles[T + 2] * 2 + Side] };
+					D.CreateTriangle(Hazed, TArrayView<const FVertexInstanceID>(Three, 3));
+				}
+			}
+		}
 		UStaticMesh* Made = NewObject<UStaticMesh>(Owner, MakeUniqueObjectName(Owner, UStaticMesh::StaticClass(), FName(TEXT("AirPlaneStill"))));
 		Made->GetStaticMaterials().Add(FStaticMaterial(Ink, TEXT("Ink")));
+		if (bHaze)
+		{
+			Made->GetStaticMaterials().Add(FStaticMaterial(Haze, TEXT("Haze")));
+		}
 		TArray<const FMeshDescription*> Levels;
 		Levels.Add(&D);
 		UStaticMesh::FBuildMeshDescriptionsParams Params;
@@ -5068,12 +6105,49 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 	const int32 Scheme = FMiniatureMesh::SchemeOf(Name);
 	// (and one of a torpedo group a shape of its own: a model with both loads in its file carries its torpedo there,
 	// its bombs anywhere else; FMiniatureMesh::bTorpedoLoad)
-	const FString ShapeKey = (bStandIn ? FString::Printf(TEXT("%s@%.1f|%s"), *Name, Span, *Model) : Name) + (Scheme > 0 ? FString::Printf(TEXT("|scheme%d"), Scheme) : FString())
-		+ (bTorpedo ? TEXT("|torpedo") : TEXT(""));
+	// (and with the Battle rules card's "Turning airscrews" on, a shape of its own too, its far shape without its blades:
+	// the shapes are kept for the whole run, and a battle with the row off must draw what it drew before; so too with
+	// "Far airscrews a faint blur", its far shape without its blades and blur disc, its near one without the marks)
+	const bool bScrews = PropSpinOn();
+	// (and with the Battle rules card's "Bomber markings" from its second bundle on, the finer B-17 a shape of her own without
+	// her "#" number, which stands where her squadron's codes go: the row off, her key and her shape as before)
+	const bool bLetters = Name.StartsWith(AirParts::Wide(AirShow::FileOf("B17", true)) + TEXT(":")) && LettersOnNow() && State->LettersSheet.Bundle >= 2;
+	// (and with the Battle rules card's "Worn B-17 paint" on, the finer B-17 a shape of her own in her worn paint:
+	// AirSkin, read as the battle began (B17SkinRead); off, nothing is asked and the key is what it was. With both rows
+	// on her key is ...|letters|screws|skin, in that one order: this is the one place a shape's key is made)
+	bool bSkin = false;
+	const AirSkin::Overlay* Worn = nullptr;
+	if (AirSkin::Active())
+	{
+		FString SkinKind = Name, SkinWhose;
+		Name.Split(TEXT(":"), &SkinKind, &SkinWhose);
+		Worn = AirSkin::For(TCHAR_TO_UTF8(*SkinKind));
+		bSkin = Worn != nullptr;
+	}
+	// (and with the Battle rules card's "B-17 paint sheen" on as well, a shape of her own again, her paint's own finish in
+	// its first texture coordinate (SheenOnto): read as the battle began (B17SheenRead); off, the key is what it was)
+	const bool bSheen = bSkin && State && State->B17SheenOn == 1 && SheenNow;
+	// (the Battle rules card's "Silver Mustang": a Mustang drawn from her bare metal file (ModelFor's name) carries that
+	// file's own finish the same way (OwnOnto); its name is already its own, so no key is added)
+	const bool bBare = State && State->MustangMetalOn == 1 && BareNow && Name.StartsWith(TEXT("MustangBare:"));
+	// (and with the Battle rules card's "Far airscrews a faint blur" on, a shape of its own: its far form without the
+	// solid disc, its marks with its blades)
+	const bool bBlur = PropBlurOn();
+	FString ShapeKey = (bStandIn ? FString::Printf(TEXT("%s@%.1f|%s"), *Name, Span, *Model) : Name) + (Scheme > 0 ? FString::Printf(TEXT("|scheme%d"), Scheme) : FString())
+		+ (bTorpedo ? TEXT("|torpedo") : TEXT("")) + (bLetters ? TEXT("|letters") : TEXT("")) + (bBlur ? TEXT("|blur") : TEXT("")) + (bScrews ? TEXT("|screws") : TEXT(""));
+	if (bSkin)
+	{
+		ShapeKey += TEXT("|skin");
+	}
+	if (bSheen)
+	{
+		ShapeKey += TEXT("|sheen");
+	}
 	TMap<FString, AirParts::FShape>& Shapes = AirParts::Shapes();
 	if (!Shapes.Contains(ShapeKey))
 	{
 		FMiniatureMesh::bTorpedoLoad = bTorpedo;
+		FMiniatureMesh::bNoPlaneNumber = bLetters;
 		FMiniatureMesh Made;
 		Made.Vehicle(Name, FVector::ZeroVector, UnitsPerMetre, 0.0, true);
 		AirParts::FShape Near;
@@ -5085,11 +6159,23 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 			const double Across = FMath::Max(1.0, Box.GetSize().Y);
 			const double Fit = bStandIn ? Span * UnitsPerMetre / Across : 1.0;
 			Near = AirParts::ShapeOf(Made, Middle, Fit);
+			// (her paint's own finish, before her bay is lifted out, so that its doors and load carry it too)
+			const AirSheen::Carried Coat = bSheen ? AirSheen::Carry(SheenNow->CoatGloss, SheenNow->CoatMetal, 1.0) : AirSheen::Carried();
+			if (bSheen)
+			{
+				AirParts::SheenOnto(Near, Worn->Near, SheenNow->Near, Worn->ShadeStrength, Coat);
+			}
+			// (the silver Mustang: her own file's finish, her marks satin with no metal)
+			const AirSheen::Carried BareMarks = bBare ? AirSheen::Carry(BareNow->MarkGloss, BareNow->MarkMetal, 1.0) : AirSheen::Carried();
+			if (bBare)
+			{
+				AirParts::OwnOnto(Near, BareNow->Near, BareNow->NearShade, BareMarks);
+			}
 			FString Kind, Whose;
 			Name.Split(TEXT(":"), &Kind, &Whose);
 			if (DiscInk)
 			{
-				AirParts::TakeScrews(Near, Made, Kind, Middle, Fit, UnitsPerMetre);
+				AirParts::TakeScrews(Near, Made, Kind, Middle, Fit, UnitsPerMetre, bBlur);
 			}
 			FColor Navy;
 			const bool bNavy = bStandIn && AirParts::NavyCoat(Nation, Model, Navy);
@@ -5110,14 +6196,41 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 				// (about the same middle and the same size as the near shape's, so that the change from one to the
 				// other does not jump)
 				AirParts::FShape Away = AirParts::ShapeOf(Far, Middle, Fit);
+				if (bSheen)
+				{
+					AirParts::SheenOnto(Away, Worn->Far, SheenNow->Far, Worn->ShadeStrength, Coat);
+				}
+				if (bBare)
+				{
+					AirParts::OwnOnto(Away, BareNow->Far, BareNow->FarShade, BareMarks);
+				}
 				if (bNavy)
 				{
 					AirParts::Recoat(Away.Colors, FMiniatureMesh::VehicleColour(Nation).ToFColor(true), Navy);
+				}
+				// (the row "flyPropSpin": its airscrews out of the far shape as well, to turn as its copies' haze; only with
+				// the haze's ink there to draw them, else the far shape keeps its blades: never no airscrew at all. The row
+				// "flyPropBlur" the same, its copies drawing the faint grey disc in their place, bBlurDisc.)
+				if ((bScrews || bBlur) && Near.Screws.Num() > 0 && ScrewHazeInk())
+				{
+					const int32 Before = Away.Triangles.Num() / 3;
+					const TCHAR* Row = bBlur ? TEXT("far airscrews a faint blur") : TEXT("turning airscrews");
+					if (AirParts::TakeFarScrews(Away, Far, Near, Kind, Middle, Fit))
+					{
+						Away.bBlurDisc = bBlur;
+						UE_LOG(LogTheater, Display, TEXT("Air battle: %s: %s's far shape %d triangles, %d after its %d airscrews' blades and blur disc are taken out."),
+							Row, *ShapeKey, Before, Away.Triangles.Num() / 3, Away.Screws.Num());
+					}
+					else
+					{
+						UE_LOG(LogTheater, Warning, TEXT("Air battle: %s: %s's far airscrews are not its near ones, so its far shape keeps its blades standing still."), Row, *ShapeKey);
+					}
 				}
 				Shapes.Add(ShapeKey + TEXT("|far"), MoveTemp(Away));
 			}
 		}
 		FMiniatureMesh::bTorpedoLoad = false;
+		FMiniatureMesh::bNoPlaneNumber = false;
 		Shapes.Add(ShapeKey, MoveTemp(Near));
 	}
 	return ShapeKey;
@@ -5194,8 +6307,8 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 	Mesh->RegisterComponent();
 	if (First && First->Points.Num() > 0)
 	{
-		Mesh->CreateMeshSection(0, First->Points, First->Triangles, First->Normals, TArray<FVector2D>(), First->Colors, TArray<FProcMeshTangent>(), false);
-		Mesh->SetMaterial(0, PlaneInk);
+		Mesh->CreateMeshSection(0, First->Points, First->Triangles, First->Normals, AirParts::UvOf(First->Sheen, First->Points.Num()), First->Colors, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(0, InkFor(ShapeKey));
 	}
 	Planes.Add(Key, Mesh);
 	FPlaneMade Made;
@@ -5225,20 +6338,20 @@ void AAirBattle::PlaneNear(int32 Key, UProceduralMeshComponent* Mesh, bool bNear
 		{
 			return;
 		}
-		Mesh->CreateMeshSection(1, Near->Points, Near->Triangles, Near->Normals, TArray<FVector2D>(), Near->Colors, TArray<FProcMeshTangent>(), false);
-		Mesh->SetMaterial(1, PlaneInk);
+		Mesh->CreateMeshSection(1, Near->Points, Near->Triangles, Near->Normals, AirParts::UvOf(Near->Sheen, Near->Points.Num()), Near->Colors, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(1, InkFor(Made->Shape));
 		Made->bNearMade = true;
 		// (its bay: the two doors, sections 2 and 3, turned by Draw as the flight core opens them; the racked load, 4)
 		for (int32 K = 0; K < Near->Doors.Num(); ++K)
 		{
 			const AirParts::FShape::FPiece& Door = Near->Doors[K];
-			Mesh->CreateMeshSection(2 + K, Door.Points, Door.Triangles, Door.Normals, TArray<FVector2D>(), Door.Colors, TArray<FProcMeshTangent>(), false);
-			Mesh->SetMaterial(2 + K, PlaneInk);
+			Mesh->CreateMeshSection(2 + K, Door.Points, Door.Triangles, Door.Normals, AirParts::UvOf(Door.Sheen, Door.Points.Num()), Door.Colors, TArray<FProcMeshTangent>(), false);
+			Mesh->SetMaterial(2 + K, InkFor(Made->Shape));
 		}
 		if (Near->Doors.Num() == 2 && Near->Racked.Triangles.Num() > 0)
 		{
-			Mesh->CreateMeshSection(4, Near->Racked.Points, Near->Racked.Triangles, Near->Racked.Normals, TArray<FVector2D>(), Near->Racked.Colors, TArray<FProcMeshTangent>(), false);
-			Mesh->SetMaterial(4, PlaneInk);
+			Mesh->CreateMeshSection(4, Near->Racked.Points, Near->Racked.Triangles, Near->Racked.Normals, AirParts::UvOf(Near->Racked.Sheen, Near->Racked.Points.Num()), Near->Racked.Colors, TArray<FProcMeshTangent>(), false);
+			Mesh->SetMaterial(4, InkFor(Made->Shape));
 		}
 		Made->bBay = Near->Doors.Num() == 2;
 		Made->BayShown = 0.0;
@@ -5256,9 +6369,23 @@ void AAirBattle::PlaneNear(int32 Key, UProceduralMeshComponent* Mesh, bool bNear
 			TArray<FVector> Points, Normals;
 			TArray<int32> Triangles;
 			TArray<FColor> Colours;
-			AirParts::DiscOf(Screw.Radius, Screw.Blades, Points, Triangles, Normals, Colours);
+			// (the row "flyPropSpin": its stronger smear, sorted against the clouds as the air fight's effects are)
+			const bool bSmear = State && State->PropSpinOn == 1;
+			AirParts::DiscOf(Screw.Radius, Screw.Blades, Points, Triangles, Normals, Colours, bSmear);
+			// (the row "flyPropBlur": its tips' paint a faint arc behind each blade, laid over the disc, turning with it;
+			// close to only, the far copies' disc is grey. Sorted as "flyPropSpin"'s, either row on.)
+			const bool bTips = State && State->PropBlurOn == 1 && Screw.Tip.A > 0;
+			if (bTips)
+			{
+				const unsigned char Tip[3] = { Screw.Tip.R, Screw.Tip.G, Screw.Tip.B };
+				AirParts::LayDisc(AirScrew::MakeTipArcs(Screw.Radius, Screw.Blades, Tip), FVector::ZeroVector, Points, Triangles, Normals, Colours);
+			}
 			Disc->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
 			Disc->SetMaterial(0, DiscInk);
+			if (bSmear || (State && State->PropBlurOn == 1))
+			{
+				Disc->SetTranslucentSortPriority(ScrewSort());
+			}
 			// (and its blades standing still, shown in place of the turning disc once its engine is dead and feathered)
 			Points.Reset();
 			Normals.Reset();
@@ -5315,6 +6442,148 @@ void AAirBattle::TakeDiscEngines(FPlaneMade& Made, const AirShow::Shape& Shape)
 	}
 }
 
+void AAirBattle::ResortScrews()
+{
+	const int32 Order = ScrewSort();
+	for (TPair<FString, FPlaneCopies>& Pair : PlaneCopies)
+	{
+		if (Pair.Value.bHaze && Pair.Value.Copies.IsValid())
+		{
+			Pair.Value.Copies->SetTranslucentSortPriority(Order);
+		}
+	}
+	for (TPair<int32, FPlaneMade>& Pair : PlaneMade)
+	{
+		for (const TWeakObjectPtr<UProceduralMeshComponent>& Disc : Pair.Value.Discs)
+		{
+			if (Disc.IsValid())
+			{
+				Disc->SetTranslucentSortPriority(Order);
+			}
+		}
+		if (Pair.Value.bFarScrews)
+		{
+			if (TObjectPtr<UProceduralMeshComponent>* Mesh = Planes.Find(Pair.Key); Mesh && *Mesh)
+			{
+				(*Mesh)->SetTranslucentSortPriority(Order);
+			}
+		}
+	}
+}
+
+void AAirBattle::FarScrews(FPlaneMade& Made, UProceduralMeshComponent* Mesh, const AirShow::PlaneOut& P, bool bFar)
+{
+	// (the copies draw a far aircraft's airscrews as their haze; one on its own mesh draws them here, its far shape in
+	// section 0 having none: each running screw's haze, section 5, and each feathered one's blades standing still, 6.
+	// Near and never far yet, as most on their own meshes are each frame: nothing to make, show or hide.)
+	if (!bFar && !Made.bFarScrews)
+	{
+		return;
+	}
+	const AirParts::FShape* Far = AirParts::Shapes().Find(Made.Shape + TEXT("|far"));
+	if (!Mesh || !Far || Far->Screws.Num() == 0 || Far->StillBlades.Num() != Far->Screws.Num())
+	{
+		return;
+	}
+	int32 Still = 0;
+	if (bFar && P.bFeathered && !P.DeadEngines.empty())
+	{
+		// (each screw's engine as TakeDiscEngines takes a disc's: the engine nearest it across the span)
+		if (Made.FarEngine.Num() != Far->Screws.Num())
+		{
+			const AirShow::Shape Flown = AirShow::ShapeOf(P.Model, P.bFighter);
+			const double SpanUnits = FMath::Max(1.0, Made.Span * UnitsPerMetre);
+			Made.FarEngine.Init(1, Far->Screws.Num());
+			for (int32 K = 0; K < Far->Screws.Num() && Flown.Engines.size() >= 2; ++K)
+			{
+				const double Across = -Far->Screws[K].Hub.Y / SpanUnits;
+				double Nearest = TNumericLimits<double>::Max();
+				for (size_t N = 0; N < Flown.Engines.size(); ++N)
+				{
+					const double Off = FMath::Abs(Flown.Engines[N].Y / FMath::Max(1.0, Flown.Span) - Across);
+					if (Off < Nearest)
+					{
+						Nearest = Off;
+						Made.FarEngine[K] = static_cast<int32>(N) + 1;
+					}
+				}
+			}
+		}
+		for (int32 K = 0; K < Far->Screws.Num() && K < 31; ++K)
+		{
+			if (std::find(P.DeadEngines.begin(), P.DeadEngines.end(), Made.FarEngine[K]) != P.DeadEngines.end())
+			{
+				Still |= 1 << K;
+			}
+		}
+	}
+	if (bFar && (!Made.bFarScrews || Still != Made.FarStill))
+	{
+		TArray<FVector> Points, Normals;
+		TArray<int32> Triangles;
+		TArray<FColor> Colours;
+		UMaterialInterface* Haze = ScrewHazeInk();
+		for (int32 K = 0; K < Far->Screws.Num() && Haze; ++K)
+		{
+			if ((Still & (1 << K)) == 0)
+			{
+				AirParts::LayDisc(Far->bBlurDisc ? AirScrew::MakeBlurDisc(Far->Screws[K].Radius, Far->Screws[K].Blades) : AirScrew::MakeDisc(Far->Screws[K].Radius, Far->Screws[K].Blades, true),
+					Far->Screws[K].Hub, Points, Triangles, Normals, Colours);
+			}
+		}
+		if (Triangles.Num() > 0)
+		{
+			Mesh->CreateMeshSection(5, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+			Mesh->SetMaterial(5, Haze);
+			Mesh->SetTranslucentSortPriority(ScrewSort());
+		}
+		else if (Mesh->GetNumSections() > 5)
+		{
+			Mesh->ClearMeshSection(5);
+		}
+		Points.Reset();
+		Normals.Reset();
+		Triangles.Reset();
+		Colours.Reset();
+		for (int32 K = 0; K < Far->Screws.Num(); ++K)
+		{
+			if ((Still & (1 << K)) != 0)
+			{
+				const AirParts::FShape::FPiece& Blades = Far->StillBlades[K];
+				const int32 First = Points.Num();
+				Points.Append(Blades.Points);
+				Normals.Append(Blades.Normals);
+				Colours.Append(Blades.Colors);
+				for (const int32 T : Blades.Triangles)
+				{
+					Triangles.Add(First + T);
+				}
+			}
+		}
+		if (Triangles.Num() > 0)
+		{
+			Mesh->CreateMeshSection(6, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+			Mesh->SetMaterial(6, PlaneInk);
+		}
+		else if (Mesh->GetNumSections() > 6)
+		{
+			Mesh->ClearMeshSection(6);
+		}
+		Made.bFarScrews = true;
+		Made.FarStill = Still;
+		Made.bFarShown = !bFar;
+	}
+	// (shown or hidden only as it changes: each change sends the mesh to the graphics chip again)
+	if (Made.bFarScrews && Made.bFarShown != bFar)
+	{
+		Made.bFarShown = bFar;
+		for (int32 Section = 5; Section <= 6 && Section < Mesh->GetNumSections(); ++Section)
+		{
+			Mesh->SetMeshSectionVisible(Section, bFar);
+		}
+	}
+}
+
 void AAirBattle::ShowDiscs(FPlaneMade& Made, bool bShow)
 {
 	for (const TWeakObjectPtr<UProceduralMeshComponent>& Disc : Made.Discs)
@@ -5362,9 +6631,63 @@ UStaticMesh* AAirBattle::PlaneStill(const FString& Shape, bool bLight)
 		return Have->Get();
 	}
 	const AirParts::FShape* From = bLight ? AirParts::LightOf(Shape) : AirParts::Shapes().Find(Key);
-	UStaticMesh* Made = From ? AirParts::StillOf(this, *From, PlaneInk) : nullptr;
+	// (the far one with its airscrews' haze, the row "flyPropSpin" on: ScrewHazeInk is null with it off)
+	// (and on her sheen's ink, the row "flyB17Sheen", for a far shape made with it; the light shape carries none)
+	UStaticMesh* Made = From ? AirParts::StillOf(this, *From, bLight ? PlaneInk.Get() : InkFor(Shape), bLight ? nullptr : ScrewHazeInk()) : nullptr;
 	// (null kept too: a shape with no mesh is drawn on its own mesh, and not tried again)
 	PlaneStills.Add(Key, Made);
+	return Made;
+}
+
+UStaticMesh* AAirBattle::MarkStill(const FString& Mesh, bool bNear, const FString& Shape)
+{
+	// Bomber markings (the row "flyBomberMarks", AirBattleLetters.cpp): a mark mesh's parts laid in her shape's frame, kept
+	// by her file and that frame (every shape of the finer B-17, earned colours or turning airscrews, shares it), so that one
+	// mesh serves them all. Here beside PlaneStill, whose AirParts::StillOf it builds with.
+	FString Kind;
+	FVector Middle = FVector::ZeroVector;
+	double Fit = 1.0;
+	if (!State.IsValid() || State->LettersOn != 1 || !ShapeFrameOf(Shape, Kind, Middle, Fit))
+	{
+		return nullptr;
+	}
+	const FString Key = FString::Printf(TEXT("%s|%s|%s|%.1f,%.1f,%.1f|%.4f"), *Mesh, bNear ? TEXT("near") : TEXT("far"), *Kind, Middle.X, Middle.Y, Middle.Z, Fit);
+	if (const TObjectPtr<UStaticMesh>* Have = MarkStills.Find(Key))
+	{
+		return Have->Get();
+	}
+	// (each point as her own points were brought in from her file, as her nose art's panel is, AirBattleNoseArt.cpp: x and y
+	// turned half round, in engine units about her middle; each in its ink, painted metal as her star is, alpha 128)
+	const AirLetters::Sheet& Sheet = State->LettersSheet;
+	const double U = UnitsPerMetre;
+	AirParts::FShape Laid;
+	for (const std::string& Name : AirLetters::PartsOf(std::string(TCHAR_TO_UTF8(*Mesh))))
+	{
+		const AirLetters::Level* Level = Sheet.LevelOf(Name, bNear);
+		if (!Level)
+		{
+			continue;
+		}
+		const uint32 Rgb = Sheet.InkOf(Level->Ink);
+		const FColor Ink(static_cast<uint8>((Rgb >> 16) & 0xFFu), static_cast<uint8>((Rgb >> 8) & 0xFFu), static_cast<uint8>(Rgb & 0xFFu), 128);
+		const int32 First = Laid.Points.Num();
+		const int32 Count = static_cast<int32>(Level->Points.size() / 3);
+		for (int32 I = 0; I < Count; ++I)
+		{
+			const double* At = &Level->Points[static_cast<size_t>(3 * I)];
+			const double* Out = &Level->Facings[static_cast<size_t>(3 * I)];
+			Laid.Points.Add((FVector(-At[0], -At[1], At[2]) * U - Middle) * Fit);
+			Laid.Normals.Add(FVector(-Out[0], -Out[1], Out[2]).GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector));
+			Laid.Colors.Add(Ink);
+		}
+		for (const int Corner : Level->Triangles)
+		{
+			Laid.Triangles.Add(First + Corner);
+		}
+	}
+	UStaticMesh* Made = AirParts::StillOf(this, Laid, PlaneInk);
+	// (null kept too: not tried again)
+	MarkStills.Add(Key, Made);
 	return Made;
 }
 
@@ -5383,6 +6706,14 @@ AAirBattle::FPlaneCopies* AAirBattle::CopiesFor(const FString& Key, bool bShadow
 	Copies->SetupAttachment(Root);
 	Copies->SetStaticMesh(Mesh);
 	Copies->SetMaterial(0, Ink);
+	// (a far shape's airscrews' haze, the row "flyPropSpin": its mesh's second section, on its own see-through ink,
+	// sorted against the clouds as the air fight's effects are)
+	if (Mesh->GetStaticMaterials().Num() > 1)
+	{
+		Copies->SetMaterial(1, Mesh->GetStaticMaterials()[1].MaterialInterface);
+		Copies->SetTranslucentSortPriority(ScrewSort());
+		Group.bHaze = true;
+	}
 	Copies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Copies->SetCanEverAffectNavigation(false);
 	// (a shadow within ShadowFarM, as the aircraft's own meshes; lit by the light thrown up from under the eye, too)
@@ -5562,6 +6893,16 @@ void AAirBattle::WarmUp()
 	{
 		Quad(TEXT("AirWarmPlane"), PlaneInk.Get(), false, true);
 	}
+	// (the B-17's sheen's ink, the row "flyB17Sheen": its first draw under the black, as PlaneInk's; null with the row off)
+	if (SheenInk)
+	{
+		Quad(TEXT("AirWarmSheen"), SheenInk.Get(), true, true);
+	}
+	// (and the silver Mustang's, the row "flyMustangMetal"; null with the row off)
+	if (BareInk)
+	{
+		Quad(TEXT("AirWarmBare"), BareInk.Get(), true, true);
+	}
 }
 
 void AAirBattle::WarmShapes()
@@ -5571,8 +6912,10 @@ void AAirBattle::WarmShapes()
 	const double Began = FPlatformTime::Seconds();
 	TSet<FString> Done;
 	const int32 Before = AirParts::Shapes().Num();
+	FString EachMs; // (the hitch's naming lines: each shape's ms, read and made, said while the speed log is written)
 	auto Ready = [&](const FString& Model, const FString& Nation, bool bFighter, double Span, bool bTorpedo)
 	{
+		const double ShapeBegan = FPlatformTime::Seconds();
 		const FString ShapeKey = ShapeFor(Model, Nation, bFighter, Span, bTorpedo);
 		if (Done.Contains(ShapeKey))
 		{
@@ -5585,6 +6928,7 @@ void AAirBattle::WarmShapes()
 			PlaneStill(ShapeKey, false);
 			PlaneStill(ShapeKey, true);
 		}
+		EachMs += FString::Printf(TEXT("%s%s %.0f"), EachMs.IsEmpty() ? TEXT("") : TEXT(", "), *ShapeKey, 1000.0 * (FPlatformTime::Seconds() - ShapeBegan));
 	};
 	for (const AirShow::PlaneOut& P : S.Show.Planes())
 	{
@@ -5611,8 +6955,14 @@ void AAirBattle::WarmShapes()
 		}
 		Ready(Model, Nat, bFighter, 12.0, false);
 	}
+	// (bomber markings, the row "flyBomberMarks": the mark meshes the raid's finer B-17s wear made here too, not in flight)
+	if (LettersOnNow() && State->LettersOn == 1) WarmMarks();
 	UE_LOG(LogTheater, Display, TEXT("Air battle: the raid's %d aircraft shapes made ready under the opening's black (%d near and far shapes new this run), with their copies' meshes, in %.0f ms."),
 		Done.Num(), AirParts::Shapes().Num() - Before, 1000.0 * (FPlatformTime::Seconds() - Began));
+	if (TheaterSpeed::IsLogging())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air hitch: the shapes made under the black, frame %lld, each in ms (read and made, with its copies' meshes): %s."), static_cast<long long>(GFrameCounter), *EachMs);
+	}
 }
 
 void AAirBattle::WarmTick(float DeltaSeconds)
@@ -5631,6 +6981,14 @@ void AAirBattle::WarmTick(float DeltaSeconds)
 	WarmSlowest = FMath::Max(WarmSlowest, FMath::Max3(FrameMs, GameMs, DrawMs));
 	const bool bQuick = FrameMs < AirParts::WarmQuickMs && GameMs < AirParts::WarmQuickMs && DrawMs < AirParts::WarmQuickMs;
 	WarmQuick = bQuick ? WarmQuick + 1 : 0;
+	if (TheaterSpeed::IsLogging())
+	{
+		// (release 2, the hitch's naming lines: each frame under the black, so that its slow frames can be laid against
+		// what was first drawn and what the pool was painting)
+		UE_LOG(LogTheater, Display, TEXT("Air hitch: under the black, frame %lld (%d under it), %.0f ms: game %.1f, draw %.1f, graphics chip %.1f ms; %d quick in a row (%d wanted); the shapes %s, %d warm sheets before the eye; ground paint %s."),
+			static_cast<long long>(GFrameCounter), WarmFrames, FrameMs, GameMs, DrawMs, FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles()), WarmQuick, AirParts::WarmQuickWanted,
+			bWarmShapes ? TEXT("made") : TEXT("not yet made"), WarmShelf.Num(), *LandPhaseName());
+	}
 	if (Eye)
 	{
 		// (60 m before the eye, side by side, turned to it)
@@ -5677,6 +7035,141 @@ void AAirBattle::WarmDone(const TCHAR* Why)
 		WarmBegan >= 0.0 ? FPlatformTime::Seconds() - WarmBegan : 0.0, WarmFrames, WarmSlowest, Why);
 }
 
+FString AAirBattle::LandPhaseName() const
+{
+	if (!LandMade.IsValid())
+	{
+		return TEXT("none");
+	}
+	if (!LandPainting.IsValid())
+	{
+		return LandPictures.Num() > 0 ? TEXT("laid") : TEXT("none");
+	}
+	const int32 Phase = LandMade->Phase.load();
+	if (Phase < 0)
+	{
+		return TEXT("painted, not yet laid");
+	}
+	if (Phase == 0)
+	{
+		return TEXT("asked, not yet begun");
+	}
+	static const TCHAR* const Parts[] = { TEXT("rows"), TEXT("rows"), TEXT("shading"), TEXT("smaller copies") };
+	return FString::Printf(TEXT("picture %d %s, %.1f s since asked"), Phase / 4, Parts[Phase % 4], FPlatformTime::Seconds() - LandAsked);
+}
+
+void AAirBattle::HitchNote(float DeltaSeconds)
+{
+	if (!TheaterSpeed::IsLogging() || !State.IsValid())
+	{
+		bHitchLastLong = false;
+		return;
+	}
+	// (a long frame as the speed log counts one, and the one frame after it)
+	const bool bLong = DeltaSeconds > 0.0334f;
+	const bool bAfter = !bLong && bHitchLastLong;
+	bHitchLastLong = bLong;
+	if (!bLong && !bAfter)
+	{
+		return;
+	}
+	const FAirBattleState& S = *State;
+	const TCHAR* Black = !bBegun ? TEXT("up, the scene not yet made") : S.bWarming ? TEXT("up") : S.Curtain > 0.0 ? TEXT("fading") : TEXT("down");
+	const FString SinceCut = AirParts::Hitch::CutFrame == 0 ? FString(TEXT("no cut of the eye yet"))
+		: FString::Printf(TEXT("%lld frames since the eye last cut (%s)"), static_cast<long long>(GFrameCounter - AirParts::Hitch::CutFrame), AirParts::Hitch::CutKind);
+	UE_LOG(LogTheater, Display, TEXT("Air hitch: %s, frame %lld, %.0f ms: ground paint %s; the black %s; %s."), bLong ? TEXT("a long frame") : TEXT("the frame after a long frame"),
+		static_cast<long long>(GFrameCounter), DeltaSeconds * 1000.0, *LandPhaseName(), Black, *SinceCut);
+}
+
+void AAirBattle::NoteLoad(const TCHAR* What, double Began)
+{
+	if (TheaterSpeed::IsLogging())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air hitch: loaded %s in %.1f ms (frame %lld)."), What, 1000.0 * (FPlatformTime::Seconds() - Began), static_cast<long long>(GFrameCounter));
+	}
+}
+
+bool AAirBattle::CurtainFirstHold(const FString& Why)
+{
+	// (Open's second call, from CurtainFirstWaits; the old opening with no black; or the row off: Open runs now, as before)
+	if (bCurtainOpening || NoCurtain() || !FLandLive::RuleNow(TEXT("flyCurtainFirst")))
+	{
+		return false;
+	}
+	FAirBattleState& S = *State;
+	S.bWarming = true; // (the clock held, as WarmUp holds it; WarmUp sets both again when Open runs)
+	S.Curtain = 1.0;
+	ShowScreen(); // (the black, with no words yet: the title and the clock's tag are written once the scene runs)
+	bCurtainWaiting = true;
+	CurtainShownFrame = GFrameCounter;
+	CurtainWhy = Why;
+	SetActorTickEnabled(true);
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the black first, then the scene (the Battle rules card's row flyCurtainFirst, or -TheaterAirCurtainFirst): frame %lld."),
+		static_cast<long long>(GFrameCounter));
+	return true;
+}
+
+void AAirBattle::MapHoldBegin(ACampaignMapActor* Map)
+{
+	if (!Map || bMapHeld || !FLandLive::RuleNow(TEXT("flyMapHold")))
+	{
+		return;
+	}
+	bMapHeld = true;
+	Map->HoldUpdates(true); // (as the land battle holds it, LandBattle.cpp's MapUpdate)
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the hidden map's per-frame update held while the battle is up (the Battle rules card's row flyMapHold, or -TheaterAirMapHold)."));
+}
+
+void AAirBattle::MapHoldEnd(ACampaignMapActor* Map)
+{
+	if (!bMapHeld)
+	{
+		return;
+	}
+	bMapHeld = false;
+	if (Map)
+	{
+		Map->HoldUpdates(false);
+	}
+}
+
+bool AAirBattle::CurtainFirstWaits()
+{
+	if (!bCurtainWaiting)
+	{
+		return false;
+	}
+	if (!State.IsValid())
+	{
+		bCurtainWaiting = false;
+		return false;
+	}
+	// (shown two frames: the frame it was put up in and the next have been painted, and the draw thread holds no frame
+	// from before it, so the press's long frame is spent with the black on screen)
+	if (GFrameCounter < CurtainShownFrame + 2)
+	{
+		return true;
+	}
+	bCurtainWaiting = false;
+	bCurtainOpening = true;
+	const bool bOpened = Open(CurtainWhy);
+	bCurtainOpening = false;
+	if (!bOpened)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: the scene could not be made under the black (row flyCurtainFirst)."));
+		HideScreen();
+		return true;
+	}
+	if (CurtainThen)
+	{
+		CurtainThen();
+		CurtainThen = nullptr;
+	}
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the scene made under the black, %lld frames after it was put up (row flyCurtainFirst)."),
+		static_cast<long long>(GFrameCounter - CurtainShownFrame));
+	return true;
+}
+
 void AAirBattle::Draw(double Real)
 {
 	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_Draw);
@@ -5705,6 +7198,10 @@ void AAirBattle::Draw(double Real)
 	}();
 	const double Lens = Eye && Eye->GetCameraComponent() ? FMath::Clamp(static_cast<double>(Eye->GetCameraComponent()->FieldOfView), 5.0, 120.0) : 55.0;
 	const double Enlarged = FMath::Tan(FMath::DegreesToRadians(55.0 * 0.5)) / FMath::Tan(FMath::DegreesToRadians(Lens * 0.5));
+	// (bomber markings, the row "flyBomberMarks", AirBattleLetters.cpp: read once a battle; the book takes this frame's aircraft
+	// before any is drawn, so none is bare for a frame; off, nothing more is read or drawn)
+	const double MarksPpm = LettersOnNow() ? MarksPixelsPerMetre(Lens) : 0.0;
+	if (S.LettersOn == 1) S.Letters.Take(S.Show.Planes(), &S.Show.Groups());
 	CopiesDrawn = 0;
 	TSet<int32> Seen;
 	// Contrails (the row flyVapour; the effects kit's VapourMove): this frame's trailing aircraft, from this frame alone.
@@ -5715,6 +7212,38 @@ void AAirBattle::Draw(double Real)
 	{
 		S.VapourWas.swap(S.VapourKeys);
 		S.VapourKeys.clear();
+	}
+	if (S.B17FineOn == 1 && B17FinePerFrame() > 0)
+	{
+		// (which finer B-17s may have their close-up made this frame, the nearest first and at most N: AirNear, read by
+		// B17FineNearRoom; one first seen this frame has no FPlaneMade yet, and waits for the next)
+		int32 FineMade = 0;
+		for (TPair<int32, FPlaneMade>& Each : PlaneMade)
+		{
+			Each.Value.bMayMake = false;
+			FineMade += Each.Value.bFine && Each.Value.bNearMade ? 1 : 0;
+		}
+		std::vector<AirNear::FSeen> Fine;
+		for (const AirShow::PlaneOut& P : S.Show.Planes())
+		{
+			const FPlaneMade* Each = PlaneMade.Find(P.Key);
+			if (!P.bShown || !Each || !Each->bFine || Each->bNearMade)
+			{
+				continue;
+			}
+			AirNear::FSeen One;
+			One.Key = P.Key;
+			One.Away = FVector::Dist(World(P.At.X, P.At.Y, P.At.Z), EyeAt) / U;
+			One.bRidden = (S.bClose && S.Subject.Plane == P.Key) || (TimeEyeKey >= 0 && TimeEyeKey == P.Key); // (as the loop's bRidden)
+			Fine.push_back(One);
+		}
+		for (const int Chosen : AirNear::MayMake(Fine, FineMade, B17FineNearMost(), B17FinePerFrame(), 300.0))
+		{
+			if (FPlaneMade* Each = PlaneMade.Find(Chosen))
+			{
+				Each->bMayMake = true;
+			}
+		}
 	}
 	for (const AirShow::PlaneOut& P : S.Show.Planes())
 	{
@@ -5801,7 +7330,10 @@ void AAirBattle::Draw(double Real)
 		// ridden one never: B17FineNearRoom, the rule "b17Fine")
 		const bool bNearShape = Lit && Lit->bTwoShapes && (bRidden || Away < (Lit->bNear ? 450.0 : 300.0) || (Lit->bNear && Lit->bBay && P.Bay > 0.0))
 			&& (bRidden || B17FineNearRoom(*Lit));
-		if (bCopiesOn && Lit && Lit->bTwoShapes && !bNearShape)
+		// (the row "flyPropSpin", or "flyPropBlur": one with an engine stopped and feathered stays on its own mesh, where its
+		// still blades are)
+		const bool bFeatheredFar = (S.PropSpinOn == 1 || S.PropBlurOn == 1) && P.bFeathered && !P.DeadEngines.empty() && ScrewHazeInk();
+		if (bCopiesOn && Lit && Lit->bTwoShapes && !bNearShape && !bFeatheredFar)
 		{
 			const bool bLightWanted = Away * Enlarged > LightFromM * (Lit->bCopy && Lit->bLight ? 0.9 : 1.0);
 			UStaticMesh* Still = bLightWanted ? PlaneStill(Lit->Shape, true) : nullptr;
@@ -5811,7 +7343,7 @@ void AAirBattle::Draw(double Real)
 				Still = PlaneStill(Lit->Shape, false);
 			}
 			const FString CopiesKey = Lit->Shape + (bLight ? TEXT("|light") : TEXT("|far")) + (Lit->bShadow ? TEXT("|shadow") : TEXT("|plain"));
-			if (FPlaneCopies* Group = Still ? CopiesFor(CopiesKey, Lit->bShadow, Still, PlaneInk) : nullptr)
+			if (FPlaneCopies* Group = Still ? CopiesFor(CopiesKey, Lit->bShadow, Still, bLight ? PlaneInk.Get() : InkFor(Lit->Shape)) : nullptr)
 			{
 				if (!Lit->bCopy)
 				{
@@ -5825,6 +7357,7 @@ void AAirBattle::Draw(double Real)
 				Group->Keys.Add(P.Key);
 				Group->At.Add(Now);
 				Group->Before.Add(Lit->bWas ? Lit->Was : Now);
+				if (S.LettersOn == 1 && Lit->bFine && !bLight) AddMarks(P, *Lit, Now, Lit->bWas ? Lit->Was : Now, Away, false, bRidden, MarksPpm);
 				Lit->Was = Now;
 				Lit->bWas = true;
 				++CopiesDrawn;
@@ -5837,6 +7370,8 @@ void AAirBattle::Draw(double Real)
 		Mesh->SetVisibility(true);
 		if (Lit)
 		{
+			// (bomber markings, the row "flyBomberMarks": hers placed with her, before her place a frame before is written over)
+			if (S.LettersOn == 1 && Lit->bFine) AddMarks(P, *Lit, Now, Lit->bWas ? Lit->Was : Now, Away, bNearShape, bRidden, MarksPpm);
 			Lit->bCopy = false;
 			Lit->bLight = false;
 			Lit->Was = Now;
@@ -5844,6 +7379,10 @@ void AAirBattle::Draw(double Real)
 			if (Lit->bTwoShapes)
 			{
 				PlaneNear(P.Key, Mesh, bNearShape);
+				if (S.PropSpinOn == 1 || S.PropBlurOn == 1)
+				{
+					FarScrews(*Lit, Mesh, P, !bNearShape);
+				}
 			}
 		}
 		// Its bay doors as the flight core has them, while it is near (turned only when they have moved), and its racked
@@ -7982,7 +9521,7 @@ void AAirBattle::Finish()
 	{
 		AirParts::ShowFrame(Cast<ACampaignHUD>(Controller->GetHUD()), true);
 		Controller->SetViewTarget(Controller->GetPawn());
-		AirParts::TellCut(GetWorld());
+		AirParts::TellCut(GetWorld(), TEXT("back to the map (Finish)"));
 	}
 	ShowTheTable();
 	if (Hand)
@@ -8160,7 +9699,12 @@ USoundBase* AAirBattle::SoundOf(const TCHAR* Name, bool bLoop)
 		return nullptr;
 	}
 	// The battle pack's recordings, brought in by Tools/build_sounds.sh from Sounds/Real to /Game/Campaign/Sounds/Real.
+	const double LoadBegan = FPlatformTime::Seconds();
 	USoundBase* Made = LoadObject<USoundBase>(nullptr, *FString::Printf(TEXT("/Game/Campaign/Sounds/Real/%s.%s"), Name, Name), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (TheaterSpeed::IsLogging())
+	{
+		NoteLoad(*FString::Printf(TEXT("the sound %s (SoundOf)"), Name), LoadBegan); // (release 2, the hitch's naming lines)
+	}
 	if (!Made)
 	{
 		SoundsMissing.Add(Key);

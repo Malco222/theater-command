@@ -24,13 +24,15 @@ class UProceduralMeshComponent;
 class UDecalComponent;
 class UInstancedStaticMeshComponent;
 class UStaticMesh;
-namespace AirShow { struct Fx; struct Shape; struct Group; }
+namespace AirShow { struct Fx; struct Shape; struct Group; struct PlaneOut; }
+namespace AirSheen { struct Sheen; }
 class USceneComponent;
 class USkyLightComponent;
 class USoundAttenuation;
 class USoundBase;
 struct FAirBattleState;
 struct FAirLandMade;
+struct FAirLandAsk;
 class UTexture2D;
 
 /**
@@ -142,6 +144,8 @@ public:
 
 	// What the battle screen reads and asks.
 	const FAirBattleState* GetState() const { return State.Get(); }
+	/** (the row flyCurtainFirst) The black is up and the scene not yet made: the screen takes no press until it is. */
+	bool AwaitsOpen() const { return bCurtainWaiting; }
 	/** Drag with the left button: the camera turns round what it looks at (pixels of the viewport). */
 	void Orbit(const FVector2D& DeltaPixels);
 	/** The wheel: nearer or farther. */
@@ -212,6 +216,8 @@ private:
 		/** It is the finer B-17 (Content/Models/B17Fine.json, the rule "b17Fine"): its close-up copy counts toward the
 		 * most a battle makes (B17FineNearMost). */
 		bool bFine = false;
+		/** With -TheaterAirB17FinePerFrame=N: Draw chose her this frame to have her close-up made (AirNear::MayMake). */
+		bool bMayMake = false;
 		bool bNear = false;
 		/** It casts its shadow (made casting; AirParts::ShadowFarM). */
 		bool bShadow = true;
@@ -265,6 +271,15 @@ private:
 		 * panels, port and starboard where it is worn on both; tried says it was looked at, painted or not. */
 		TWeakObjectPtr<UProceduralMeshComponent> NoseArt;
 		bool bNoseArtTried = false;
+		/** Its far airscrews on its own mesh (the row "flyPropSpin", FarScrews): made; shown; which are drawn still (a bit a
+		 * screw: its engine dead and feathered); and each screw's engine (from 1), taken when first needed. */
+		bool bFarScrews = false;
+		bool bFarShown = false;
+		int32 FarStill = 0;
+		TArray<int32> FarEngine;
+		/** Its bomber markings drawn the frame before, a bit a mark mesh in AirLetters::MeshesOf's order (the row
+		 * "flyBomberMarks", AddMarks: each held a little past the size it first shows at, so that it does not flicker). */
+		uint8 MarksShown = 0;
 	};
 	TMap<int32, FPlaneMade> PlaneMade;
 	/**
@@ -283,6 +298,8 @@ private:
 		TArray<int32> Keys;
 		TArray<FTransform> At;
 		TArray<FTransform> Before;
+		/** Its mesh carries its airscrews' haze (the row "flyPropSpin"): sorted as ScrewSort. */
+		bool bHaze = false;
 	};
 	TMap<FString, FPlaneCopies> PlaneCopies;
 	/** The copies' meshes, by shape and level ("<shape>|far", "<shape>|light"; null kept where none can be made); and
@@ -592,6 +609,84 @@ private:
 	void ShowDiscs(FPlaneMade& Made, bool bShow);
 	/** Which engine each of an aircraft's discs is (FPlaneMade::DiscEngine), from its model's engines across the span. */
 	void TakeDiscEngines(FPlaneMade& Made, const AirShow::Shape& Shape);
+	/**
+	 * The Battle rules card's "Turning airscrews" (rule "flyPropSpin", -TheaterAirPropSpin; Brian, 26 November 2026
+	 * 04:00Z, "the b-17 propellers didnt look like they were spinning"): read once a battle, the first time a shape is
+	 * asked for, into its state's PropSpinOn. On, every shape is kept under its own key ("|screws"): its far shape (the
+	 * copies' and the light shape's, past 300 m) has its blades and its modeller's blur disc taken out, and the copies
+	 * draw each airscrew as an even haze (M_ScrewHaze, ScrewHaze; without it the far shape keeps its blades as before);
+	 * the near discs trail a stronger smear. Off: nothing
+	 * is read, made or drawn otherwise.
+	 */
+	bool PropSpinOn();
+	/**
+	 * The Battle rules card's "Far airscrews a faint blur" (rule "flyPropBlur", -TheaterAirPropBlur; Brian, 27 November
+	 * 2026 01:23:16Z, "yeah the far propellers don't move and dont look good", his picture each far B-17's airscrew a
+	 * solid disc with a yellow rim): read once a battle, with PropSpinOn, into its state's PropBlurOn. On, every shape is
+	 * kept under its own key ("|blur"): its far shape loses its blades and its modeller's blur disc as PropSpinOn's does,
+	 * and the copies draw each airscrew as a faint grey disc in their place (AirScrew's MakeBlurDisc, on ScrewHaze;
+	 * without it the far shape stays as before); close to, the blades' painted marks go with the blades and the tips'
+	 * paint is a faint arc on the turning disc. Either row on, the far machinery of "flyPropSpin" runs (ScrewHazeInk,
+	 * FarScrews, a feathered bomber's own mesh, ResortScrews); the near smear stays "flyPropSpin"'s alone. Off: nothing
+	 * is read, made or drawn otherwise.
+	 */
+	bool PropBlurOn();
+	/** The far airscrews' haze (M_ScrewHaze: M_Highlight's look, usable on the copies), made when the row is first read on;
+	 * null where the content has none (the far shapes then keep their blades, as with the row off; the near smear stays). */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> ScrewHaze;
+	/** The haze's ink while the row (or "flyPropBlur") is on this battle, else null. */
+	UMaterialInterface* ScrewHazeInk() const;
+	/** The finer B-17's paint with its sheen (M_AirPaint, the Battle rules card's "B-17 paint sheen", rule "flyB17Sheen"),
+	 * made as the battle opens with the row on and the material found and current; else null, and nothing draws on it. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> SheenInk;
+	/** Her sheen file as read with the row on (B17SheenRead), else null. */
+	const AirSheen::Sheen* SheenNow = nullptr;
+	/** The silver Mustang's bare metal on M_AirPaint (the Battle rules card's "Silver Mustang", rule "flyMustangMetal"):
+	 * made as the battle opens with the row on and the material found and current, else null; and her finish as her own
+	 * file (MustangBare.json) lists it, read with the row on (MustangMetalRead), else null. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> BareInk;
+	const AirSheen::OwnFinish* BareNow = nullptr;
+	/** The ink a shape is drawn with: SheenInk for a shape made with her sheen ("|sheen" in its key), BareInk for the silver
+	 * Mustang's ("MustangBare:" its name), else PlaneInk. */
+	UMaterialInterface* InkFor(const FString& Shape) const;
+	/** SheenInk's way to the sun ("SheenSun", the glare guard's), from TowardSun. */
+	void SheenSunSet();
+	/** The airscrews' see-through sort against the clouds, as the air fight's effects (AirFxMesh): 0 seen from over the
+	 * clouds' base, -30 from under it, behind every cloud between. */
+	int32 ScrewSort() const { return SkyOrder == 2 ? -30 : 0; }
+	/**
+	 * The Battle rules card's "Bomber markings" (rule "flyBomberMarks", -TheaterAirBomberMarks; Brian, 25 November 2026,
+	 * of the approved studio pictures: "Build it into the game"; AirBattleLetters.cpp, Battle/AirLetters): every finer
+	 * B-17 wears her group's white triangle and its letter on her fin and her upper starboard wing, ridden, near and far.
+	 * Read once a battle, when its shapes are first made ready (WarmShapes), into its state's LettersOn: on only with the
+	 * finer B-17 flying and the markings' file read (Content/Data/AirMarks/b17-fine-marks.json). Off: nothing is read,
+	 * made, drawn or said.
+	 */
+	bool LettersOnNow();
+	/** A mark mesh ("unit.C") at a level, laid in a shape's frame (its Middle and Fit, as her nose art's panel is), on
+	 * PlaneInk: made the first time, null kept where none can be made. */
+	UStaticMesh* MarkStill(const FString& Mesh, bool bNear, const FString& Shape);
+	/** Her mark meshes placed this frame with her own place and her place the frame before, each while it is big enough
+	 * on the screen (AirLetters::Shown) or she is ridden: the near level on her near shape, the far one otherwise. */
+	void AddMarks(const AirShow::PlaneOut& P, FPlaneMade& Made, const FTransform& Now, const FTransform& Was, double AwayM, bool bNearLevel, bool bRidden, double PixelsPerMetreAt1);
+	/** The mark meshes of the raid's finer B-17s made before the flyover (WarmShapes), near and far, on her shape. */
+	void WarmMarks();
+	/** How many pixels a metre is high one metre away through a lens (degrees across), on the game's screen, as her nose
+	 * art reckons it (AirBattleNoseArt.cpp). */
+	double MarksPixelsPerMetre(double Lens) const;
+	/** The mark meshes, by "<mesh>|<level>|<file>|<middle>|<fit>" (null kept where none can be made). */
+	UPROPERTY()
+	TMap<FString, TObjectPtr<UStaticMesh>> MarkStills;
+	/** The fewest pixels a mark is drawn at: the triangle, and the letters and codes (-TheaterAirMarksMinPx=2.7,4.0). */
+	double MarksMinPx[2] = { 2.7, 4.0 };
+	/** Every disc and haze sorted again as SkyOrder turns (row on). */
+	void ResortScrews();
+	/** An aircraft past its near shape on its own mesh, the row on (copies off, or an engine stopped and feathered): each
+	 * running airscrew's haze (section 5) and each feathered one's still blades (section 6), shown while bFar. */
+	void FarScrews(FPlaneMade& Made, UProceduralMeshComponent* Mesh, const AirShow::PlaneOut& P, bool bFar);
 	/** Each formation's engines, by group, and the kind of loop each was chosen as (B-17, fourEngined, ...). */
 	UPROPERTY()
 	TMap<int32, TObjectPtr<UAudioComponent>> Engines;
@@ -957,6 +1052,53 @@ private:
 	TArray<TObjectPtr<UProceduralMeshComponent>> WarmShelf;
 	UPROPERTY()
 	TArray<TObjectPtr<UObject>> WarmKeep;
+	/**
+	 * (Release 2, the hitch: the Mac's timing legs of 26 November, build 172f19ae0.) The naming lines, written only while
+	 * the speed log is (-TheaterSpeedLog), each beginning "Air hitch:" (AirParts::Hitch in AirBattle.cpp). HitchNote, each
+	 * frame from Tick: after a long frame (over 33 ms, as the speed log counts them) and on the one frame after it (the
+	 * draw thread's time is sometimes booked a frame late), the ground paint's phase, the black, and the frames since the
+	 * eye last cut. LandPhaseName: the ground paint's phase in words. NoteLoad: a load by name, with its ms.
+	 */
+	void HitchNote(float DeltaSeconds);
+	FString LandPhaseName() const;
+	static void NoteLoad(const TCHAR* What, double Began);
+	bool bHitchLastLong = false;
+	/**
+	 * (Release 2, the hitch: the Battle rules card's "The black first, then the scene", row flyCurtainFirst; on for a run
+	 * -TheaterAirCurtainFirst, off -TheaterAirNoCurtainFirst.) On, Open's first call only puts up the black (the clock held,
+	 * the screen shown) and returns; Tick runs Open itself once the black has been shown two frames (CurtainFirstWaits),
+	 * so the press's frame of 174 to 368 ms is spent behind the black, not on the campaign's last picture. A live battle's
+	 * ships are laid then (CurtainThen). Off (the default), Open runs at once, as before.
+	 */
+	bool CurtainFirstHold(const FString& Why);
+	bool CurtainFirstWaits();
+	bool bCurtainWaiting = false;
+	bool bCurtainOpening = false;
+	uint64 CurtainShownFrame = 0;
+	FString CurtainWhy;
+	TFunction<void()> CurtainThen;
+	/**
+	 * (Release 2, the hitch: the Battle rules card's "The map rests under an air battle", row flyMapHold; on for a run
+	 * -TheaterAirMapHold, off -TheaterAirNoMapHold.) On, the hidden campaign map's per-frame update (its lettering,
+	 * standards and smoke, 0.5 to 4 ms a frame in the Mac's legs) is held while the air battle is up, as the land battle
+	 * holds it (ACampaignMapActor::HoldUpdates), and let go as the map comes back (ShowTheTable). Off, it runs, as before.
+	 */
+	void MapHoldBegin(ACampaignMapActor* Map);
+	void MapHoldEnd(ACampaignMapActor* Map);
+	bool bMapHeld = false;
+	/**
+	 * (Release 2, the hitch: the Battle rules card's "The ground is painted early", row flyPaintEarly; on for a run
+	 * -TheaterAirPaintEarly, off -TheaterAirNoPaintEarly.) On, a replay's ground paint is begun as the replay is queued
+	 * (PaintEarly, from ReplayWhenReady), about 2 s before the battle opens, from the recording's own board; PaintLand
+	 * then takes it (PaintEarlyAdopt) only if the battle asks for the very same place and town plans, else paints as
+	 * before, so the pictures are the same bytes. StartPaint: the paint begun on the pool (PaintLand's own, moved).
+	 * Off, the paint is begun in the press, as before.
+	 */
+	void PaintEarly(const FString& Key);
+	bool PaintEarlyAdopt(const FAirLandAsk& Ask);
+	void StartPaint(const FAirLandAsk& Ask);
+	TSharedPtr<FAirLandAsk> LandEarly;
+	TFuture<void> PaintDropped;
 	/** The sun a hard small disc while the battle stands (the art director, build 1750); the lamp kept, put back with the table. */
 	void TheSun(UDirectionalLightComponent& Key);
 	/** Toward the battle's sun, a unit vector in the world: the set piece's own sun where its stage stands; over a raid with
@@ -989,10 +1131,25 @@ private:
 	/** The Battle rules card's "Finer B-17" (rule "b17Fine"), read once as a battle begins into its state's B17FineOn and
 	 * the flight core's AirShow::SetFineB17; off when the file is not in the build. */
 	void B17FineRead();
+	/** The Battle rules card's "Worn B-17 paint" (rule "flyB17Skin"), read once as a battle begins, after B17FineRead:
+	 * with it and the finer B-17 on, her overlay (Content/Data/AirSkin/B17Fine.json) set in Battle/AirSkin for every
+	 * reader of her file; off, AirSkin holds nothing and nothing is read or said. */
+	void B17SkinRead();
+	/** The Battle rules card's "B-17 paint sheen" (rule "flyB17Sheen"), read once as a battle begins, after B17SkinRead:
+	 * with it and her worn paint on, her sheen file (Content/Data/AirSkin/B17Fine-sheen.json) read into SheenNow and the
+	 * state's B17SheenOn; off, nothing is read or said. */
+	void B17SheenRead();
+	/** The Battle rules card's "Silver Mustang" (rule "flyMustangMetal"), read once as a battle begins: with it on, every
+	 * Mustang is drawn from Content/Models/MustangBare.json (ModelFor) and her finish read from that file into BareNow and
+	 * the state's MustangMetalOn; off, nothing is read or said and every Mustang is drawn as before. */
+	void MustangMetalRead();
 	/** The most close-up shapes of the finer B-17 a battle makes (-TheaterAirB17FineNear=N, 8 unless asked), and whether
 	 * this aircraft may go to its close-up shape now: any aircraft but a finer B-17, one whose close-up shape is made,
 	 * or one while fewer than the most are made. */
 	static int32 B17FineNearMost();
+	/** At most how many finer B-17 close-ups are made in one frame, the nearest first (-TheaterAirB17FinePerFrame=N;
+	 * 0 unless asked: no limit, the battle's order, as before). With N, B17FineNearRoom lets only those Draw chose. */
+	static int32 B17FinePerFrame();
 	bool B17FineNearRoom(const FPlaneMade& Made);
 	/** Whether the log has said the most finer B-17 close-up shapes are made, this battle. */
 	bool bB17FineHeldSaid = false;
