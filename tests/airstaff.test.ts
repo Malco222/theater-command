@@ -91,7 +91,7 @@ describe('the numbers', () => {
 });
 
 describe('what a raid costs in the grand campaign', () => {
-  it('a quarter to well over half of the bombers that go by day without escort into a strong patrol in 1939, and far fewer with one', () => {
+  it('a quarter to well over half of the bombers that go by day without escort into a strong patrol in 1939, few by night, and never more than the rules allow', () => {
     const g = grand('GER');
     const { b, escorts, target, patrol } = daylight(g);
     const alone = assessAir(g, [b], 'bomb', target);
@@ -103,8 +103,10 @@ describe('what a raid costs in the grand campaign', () => {
     const escorted = assessAir(g, [b, ...escorts], 'bomb', target);
     expect(escorted.E).toBeGreaterThan(450);
     expect(escorted.E).toBeLessThan(550);
-    expect(escorted.bomberLoss).toBeGreaterThanOrEqual(0.03);
-    expect(escorted.bomberLoss).toBeLessThanOrEqual(0.08);
+    // The escorted raid's band of bomberLoss 0.03 to 0.08 (written by 7eb46e713, Version 50) is RETIRED by the design
+    // director's ruling of 27 Nov 2026 07:59Z, in her words: "no source, 227 bands escorts only for 1943-45, and the
+    // historian calls a 1939 escorted raid counterfactual. A band with no record is a knob." The read behind it:
+    // air-rules/price-once-ruhr-1127/READ-AIRSTAFF-106.md. The escort's strength above stays pinned; its saving is not.
     // By night few fighters find the bombers.
     const night = assessAir(g, [b], 'night', target);
     expect(night.bomberLoss).toBeGreaterThan(0);
