@@ -4959,7 +4959,8 @@ export function halfYearLast(g: Game, i: number, due: number): number {
 /**
  * A month a dated row waited for room, counted so that it never runs out the row's half year (`halfYearLast`): a
  * computer's row with no room this month (`expeditions`), and the player's standing offer whose FORM IT is shut for
- * room alone this month (`offerRead`), the same months for both seats. Kept on the far side alone.
+ * room alone this month (`offerRead`), read once the month's rows are all read (`offersWaited`), the same months for
+ * both seats. Kept on the far side alone.
  */
 function roomWaited(g: Game, i: number): void {
   if (farOn(g)) g.flags[`roomwait:${i}`] = (g.flags[`roomwait:${i}`] ?? 0) + 1;
@@ -6002,8 +6003,9 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // (The far side: a row the player has been offered stands open until he answers, and nothing is read of it but
     // whether the corps it needs are still there: ruling B8, `offerStands`.)
     // (And a month in which it stands with no room for it is counted as a computer's row's is, `roomWaited`: the same
-    // count for both seats, the design director, 17:53Z, 27 November 2026, 3.)
-    if (take !== i && offerOpen(g, nat, i)) { if (!offerStands(g, nat, row, i) && offerRead(g, nat, row, i).forRoom) roomWaited(g, i); return; }
+    // count for both seats, the design director, 17:53Z, 27 November 2026, 3. Counted once the month's rows are all
+    // read, from the board he acts on: `offersWaited`, below.)
+    if (take !== i && offerOpen(g, nat, i)) { offerStands(g, nat, row, i); return; }
     let reg = g.byName[row[5]];
     let due = row[0];
     let fell = false, shifted = false;
@@ -6377,6 +6379,24 @@ function expeditions(g: Game, nat: string, take?: number): void {
     g.supplyDirty = true;
     headline(g, 'event', `${g.nations[nat].adj} forces lay down their arms: ${names.join('; ')}.`, nat, at);
   }
+  // (A reading of the design director's 17:53Z (3), asked of her: his standing offers' month waited for room is read
+  // from the board he acts on, once every row of the month is read and the corps leaving have left.)
+  if (take === undefined) offersWaited(g, nat);
+}
+
+/**
+ * A month waited for room by the player's standing offers (`roomWaited`), each counted once, read from the board he
+ * acts on: once the month's dated rows are all read (`expeditions`), where FORM IT is shut for want of room alone
+ * (`offerRead`'s `forRoom`), an offer made this month among them. Never from the board at the row's own turn in that
+ * reading, where a row read after it may yet fill the place or a corps leave it. A reading of the design director's
+ * 17:53Z, 27 November 2026, (3) ("Months waited for room come off the player's offer (offerLast) exactly as off the
+ * computer's half year"), Japan and Pacific's of 20:15Z, asked of her: the sceptic's F1. A computer's row, and a
+ * player's row that is no standing offer, are counted where they always were, at the row's turn. The lapse is read at
+ * the row's turn, as before (`offerStands`). Nothing is kept with the far side off.
+ */
+function offersWaited(g: Game, nat: string): void {
+  // (The rows the month's reading reads as this country's, `expeditions`: its own, and a fallen country's it keeps.)
+  ((setup as any).expeditions as any[] ?? []).forEach((row, i) => { if (offerOpen(g, nat, i) && (row[1] === nat || keptLevy(g, nat, row)) && offerRead(g, nat, row, i).forRoom) roomWaited(g, i); });
 }
 
 /** A theatre that opens in its own month digs nothing before it, and in free play, where it never opens, nothing at all. */
