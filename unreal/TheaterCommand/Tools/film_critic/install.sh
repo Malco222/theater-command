@@ -3,7 +3,7 @@
 #   bash install.sh          switch it on: a LaunchAgent tries night.sh every half hour from 9 PM to 6 AM
 #   bash install.sh off      switch it off (the agent is removed; pictures already taken are kept)
 #   bash install.sh status   say whether it is on, and how the last night went
-# night.sh decides each time whether it may run (idle Mac, lid open, screen unlocked, mains power, Brian's game
+# night.sh decides each time whether it may run (idle Mac, lid open, mains power, Brian's game
 # closed, the Mac builder's lock free) and otherwise leaves at once, so the agent costs nothing when it may not run.
 set -euo pipefail
 KIT="$(cd "$(dirname "$0")" && pwd)"
@@ -46,7 +46,7 @@ case "${1:-on}" in
     plutil -lint "$PLIST" > /dev/null
     launchctl bootout "$DOMAIN/$LABEL" 2> /dev/null || true
     launchctl bootstrap "$DOMAIN" "$PLIST"
-    echo "The film critic is on. From 9 PM it looks every half hour for a quiet Mac (lid open, screen unlocked,"
+    echo "The film critic is on. From 9 PM it looks every half hour for a quiet Mac (lid open,"
     echo "plugged in, nobody using it for 20 minutes, the game closed) and films the game for about two hours."
     echo "To switch it off: bash \"$KIT/install.sh\" off"
     ;;
