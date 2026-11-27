@@ -320,6 +320,26 @@ describe('an offer sent on by sea: card and result agree, in every seat', () => 
     months(c, 27, 27);
     expect([c.flags[`sent:${index(NOV41[2])}`], at(c)]).toEqual([1, ['Kagoshima']]);
   }, 600000);
+
+  it('the fact the page is handed: from Okinawa to Kagoshima when Okinawa is full; none with room on Okinawa; none with no room anywhere, where FORM IT is grey with the old tip', () => {
+    const of = (x: Game) => rowOffers(x).find((o) => o.id === index(NOV41[2]))!;
+    const g = war();
+    months(g, 1, 30);
+    const okinawa = g.byName.Okinawa, kagoshima = g.byName.Kagoshima;
+    // Room on Okinawa: it forms there, and nothing moved.
+    expect(of(g)).toMatchObject({ region: okinawa.id, why: null, moved: null });
+    // Okinawa full: the rule sends it on to Kagoshima, and says so once, in its own placing (`rowPlace`).
+    okinawaFull(g);
+    expect(of(g)).toMatchObject({ region: kagoshima.id, why: null, moved: { from: okinawa.id, to: kagoshima.id } });
+    // No room anywhere: it is not sent on; it waits at Okinawa, FORM IT grey with the old tip.
+    const n = war();
+    months(n, 1, 30);
+    noRoomForSixteenth(n);
+    const why = 'There is no room for another corps at Okinawa, or near it.';
+    expect(of(n)).toMatchObject({ region: okinawa.id, why, moved: null });
+    const r = open(n).sections[0].rows.find((x: any) => x.title === NOV41[2]);
+    expect([r.lines[0], r.buttons[0]]).toEqual(['Infantry, 8,000 men, to form on Okinawa.', { label: 'FORM IT', act: `offers:take:${index(NOV41[2])}`, ok: false, tip: why }]);
+  }, 600000);
 });
 
 // (The skeptic's review of 25 November 2026: the cases the first build left out or said wrongly. Words the marks do
