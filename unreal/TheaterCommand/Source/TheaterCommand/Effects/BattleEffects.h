@@ -332,12 +332,14 @@ public:
 	 * its worker never touches, so it may be asked any time on the game thread. */
 	int32 OilLane(int32 ShipId, TArray<FOilLanePoint>& Out) const;
 	/** One lane point's paint by the kit's rule (sea_leak.floor_px, floor_alpha, calm_from_deg, calm_full_deg,
-	 * calm_alpha): from its Dark, its dark middle's width on the screen across the lane (pixels) and the eye's grazing
+	 * calm_alpha, calm_far_deg, calm_far_pow, calm_far_most, dark): from its Dark, its dark middle's width on the screen across the lane (pixels) and the eye's grazing
 	 * angle to the sea there (degrees). Reads the recipe only; may be asked any time on the game thread. */
 	FOilLaneLook OilLook(float Dark, double MidPixels, double GrazeDegrees) const;
-	/** The same with the rule read once (OilRule, once a frame): what a strip of 1,200 points should use. */
+	/** The same with the rule read once (OilRule, once a frame): what a strip of 1,200 points should use. CalmShare (0 to
+	 * 1, 1 by default: today's numbers bit for bit) is how much of the calm band the light there allows: 0 on a night
+	 * sea (no band: the lane a dark film), the scene's day share for its unlit inks at dusk; Calm, Mid and Shoulder follow. */
 	FOilLaneRule OilRule() const;
-	static FOilLaneLook OilLook(const FOilLaneRule& Rule, float Dark, double MidPixels, double GrazeDegrees);
+	static FOilLaneLook OilLook(const FOilLaneRule& Rule, float Dark, double MidPixels, double GrazeDegrees, double CalmShare = 1.0);
 	/** The ships with a lane on the sea now. */
 	void OilLanes(TArray<int32>& Ships) const;
 	/** Item 11 part 4, the deck's brass: Count (1 to 16) spent cases of Kind (deck_cases.<kind>: aa25, aa40, in4, in5,

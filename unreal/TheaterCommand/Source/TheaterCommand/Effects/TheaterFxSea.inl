@@ -939,7 +939,7 @@
 		return R;
 	}
 
-	Battle::LaneLook Battle::OilLook(const LaneRule& Rule, double Dark, double MidPx, double GrazeDeg)
+	Battle::LaneLook Battle::OilLook(const LaneRule& Rule, double Dark, double MidPx, double GrazeDeg, double CalmShare)
 	{
 		LaneLook L;
 		const double D = SafeNum(Dark, 0.0, 1.0, 0.0);
@@ -953,6 +953,8 @@
 		const double G = SafeNum(GrazeDeg, -90.0, 90.0, 90.0);
 		const double C = CalmFrom > CalmFull ? Clamp01((CalmFrom - G) / (CalmFrom - CalmFull)) : (G <= CalmFull ? 1.0 : 0.0);
 		L.Calm = C * C * (3.0 - 2.0 * C);
+		// (the band is the sky's light mirrored on flat water: never more than the light there is; 0 at night)
+		L.Calm *= SafeNum(CalmShare, 0.0, 1.0, 1.0);
 		// (lower still than calm_full_deg the sea itself lightens toward the sky (more of it mirrored), so the calm paint
 		// lifts it less: lower than calm_far_deg its alpha grows as (calm_far_deg / the angle) to the power calm_far_pow,
 		// at most calm_far_most times, so that 2 km off the band still lands about as far over the sea as it does 800 m

@@ -846,10 +846,10 @@ FOilLaneRule FBattleEffects::OilRule() const
 	return Out;
 }
 
-FOilLaneLook FBattleEffects::OilLook(const FOilLaneRule& Rule, float Dark, double MidPixels, double GrazeDegrees)
+FOilLaneLook FBattleEffects::OilLook(const FOilLaneRule& Rule, float Dark, double MidPixels, double GrazeDegrees, double CalmShare)
 {
 	FOilLaneLook Out;
-	const TheaterFx::Battle::LaneLook L = TheaterFx::Battle::OilLook(Rule.Rule, static_cast<double>(Dark), MidPixels, GrazeDegrees);
+	const TheaterFx::Battle::LaneLook L = TheaterFx::Battle::OilLook(Rule.Rule, static_cast<double>(Dark), MidPixels, GrazeDegrees, CalmShare);
 	Out.Widen = static_cast<float>(L.Widen);
 	Out.Mid = static_cast<float>(L.Mid);
 	Out.Shoulder = static_cast<float>(L.Shoulder);

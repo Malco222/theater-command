@@ -764,6 +764,18 @@ namespace
 			Check(std::fabs(At1.CalmAlpha - 0.085) < 1e-9 && std::fabs(At07.CalmAlpha - 0.085 * Gain07) < 1e-9 && std::fabs(At02.CalmAlpha - 0.34) < 1e-9, "  ...lower than 0.85 degrees the calm paint's alpha grows as (0.85 / the angle) cubed, at most 4 times", Say("alpha %.3f at 1 degree, %.3f at 0.7, %.3f at 0.2", At1.CalmAlpha, At07.CalmAlpha, At02.CalmAlpha));
 			const Battle::LaneLook Old = Y.OilLook(0.02, 0.15, 1.0);
 			Check(Old.CalmAlpha < Thin.CalmAlpha && Old.Mid <= Old.CalmAlpha + 1e-12, "  ...thinner as the oil thins, never more than the calm paint's own", Say("an old lane's calm alpha %.3f against a fresh one's %.3f", Old.CalmAlpha, Thin.CalmAlpha));
+			// (the band is the sky's light mirrored: never more than the light there is. The code review of 27 November
+			// found it glowing on a night sea; the scene now hands its light share: 0 at night, no band, the lane its
+			// dark film as from above; its day share at dusk; 1 by default, today's numbers bit for bit)
+			{
+				const Battle::LaneRule R0 = Y.OilRule();
+				const Battle::LaneLook Day1 = Battle::OilLook(R0, Dark, 0.15, 0.5), DayDef = Battle::OilLook(R0, Dark, 0.15, 0.5, 1.0);
+				const Battle::LaneLook Night = Battle::OilLook(R0, Dark, 0.15, 0.5, 0.0), Above = Battle::OilLook(R0, Dark, 0.15, 30.0);
+				const Battle::LaneLook Dusk = Battle::OilLook(R0, Dark, 0.15, 0.5, 0.3);
+				const bool bSameDay = Day1.Calm == DayDef.Calm && Day1.Mid == DayDef.Mid && Day1.Shoulder == DayDef.Shoulder && Day1.CalmAlpha == DayDef.CalmAlpha && Day1.Widen == DayDef.Widen;
+				Check(Night.Calm == 0.0 && Night.Mid == Above.Mid && Night.Shoulder == Above.Shoulder && Night.Widen == Above.Widen, "  ...at a light share of 0 (a night sea) no calm band: the lane its dark film", Say("calm %.3f, middle %.3f against %.3f from above", Night.Calm, Night.Mid, Above.Mid));
+				Check(bSameDay && Day1.Calm == 1.0 && std::fabs(Dusk.Calm - 0.3) < 1e-12, "  ...at a share of 1 the same bits as with none given; at dusk the band scaled by the share", Say("calm %.3f by day, %.3f at a share of 0.3", Day1.Calm, Dusk.Calm));
+			}
 			// (the scene reads the rule once a frame (OilRule) and paints its 1,200 points by it: the same numbers, and cheap)
 			const Battle::LaneRule Rule = Y.OilRule();
 			int Same = 0;

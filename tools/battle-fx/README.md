@@ -2188,7 +2188,15 @@ in `/mnt/project-files/effects-r2/seam/sea/` (README there: every call letter fo
     straight above as before (46 levels darker than the sea). The power and its angle are fitted to the previewer's
     sea; the Mac's sea may want `calm_alpha` or `calm_far_deg` moved, no code.
     A real slick seen low reads by its calm film, not by its darkness. From above and wide on the screen nothing
-    changes. The previewer's sea has no sun term, so a sun ahead or behind draws the same lane (nothing here was
+    changes.
+    Night and dusk: the band is the sky's light mirrored on flat water, so it is never brighter than the light there
+    is. `OilLook` takes a fifth input, `CalmShare` (0 to 1, 1 by default, which gives the same bits as before), that
+    scales Calm and with it Mid and Shoulder. The sea scene's patch 04 passes 0 on a seed-mode night (and paints the
+    film itself black at its alphas, since seed mode never dims the marks' ink: the daylight oil paint lifted a
+    near-black sea 5 to 6 levels in the previewer), field mode's `Day.UnlitShare` otherwise (its band painted toward
+    `SeaSkyNow()` as the calm paint stands to today's sky), and 1 in seed daylight. The previewer draws both:
+    `FX_NIGHT=1` (sea and sky 0.03 as light, no band, the film black) and `FX_DIM=k` on the lane (a dusk: ink, sky and
+    the band's share k); `lane_lift.sh` holds the night lane to no column lifted more than 2 levels. The previewer's sea has no sun term, so a sun ahead or behind draws the same lane (nothing here was
     judged by the sun's side). The look review of 27 November found the lane gone from another ship's bridge 800 m
     off and 20 m up.
   - At most `points` (200) a ship and `ships` (6); a 20-minute track is kept whole. No dice.

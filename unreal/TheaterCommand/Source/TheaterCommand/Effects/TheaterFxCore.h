@@ -758,7 +758,10 @@ namespace TheaterFx
 		 * there closes on the sky's colour fast), lighter than the
 		 * sea, never black. Mid and Shoulder (at 0.55 of
 		 * the way out) are the alphas with Calm already blended in; the edges are clear. From above (past calm_from_deg)
-		 * and wide on the screen: Widen 1, Mid = Dark, Shoulder 0.85 Dark, Calm 0, the lane as it was. */
+		 * and wide on the screen: Widen 1, Mid = Dark, Shoulder 0.85 Dark, Calm 0, the lane as it was. CalmShare (0 to 1,
+		 * 1 by default, which gives today's numbers bit for bit): how much of the calm band the light there is allows,
+		 * the scene's own share (0 on a night sea: no band, the lane a dark film; its day share for its unlit inks at
+		 * dusk); Calm is scaled by it, and Mid and Shoulder with it. */
 		struct LaneLook
 		{
 			double Widen = 1.0, Mid = 0.0, Shoulder = 0.0, Calm = 0.0, CalmAlpha = 0.0;
@@ -770,7 +773,7 @@ namespace TheaterFx
 			double FloorPx = 1.5, FloorAlpha = 0.3, CalmFrom = 5.0, CalmFull = 1.0, CalmAlpha = 0.085, CalmFarDeg = 0.85, CalmFarPow = 3.0, CalmFarMost = 4.0, Dark0 = 0.55;
 		};
 		LaneRule OilRule() const;
-		static LaneLook OilLook(const LaneRule& Rule, double Dark, double MidPx, double GrazeDeg);
+		static LaneLook OilLook(const LaneRule& Rule, double Dark, double MidPx, double GrazeDeg, double CalmShare = 1.0);
 		LaneLook OilLook(double Dark, double MidPx, double GrazeDeg) const { return OilLook(OilRule(), Dark, MidPx, GrazeDeg); }
 
 		/** Item 11 part 4: the deck's brass. Spent cases from her light and medium guns lying on her deck, piling by the

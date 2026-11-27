@@ -2213,7 +2213,8 @@ namespace
 	 * ahead as she steams in 7 s); "wash", runoff over her starboard edge as she rolls
 	 * and turns (ShipRide, DeckWash; FX_KIND=awash: the sea over her low edge, listed FX_LIST degrees, 12); "lane", a
 	 * holed ship's oil lane after FX_SINCE s (300) at 10 m/s, seen from FX_EYE_H m (120) up astern (OilLeak, OilLane: the
-	 * kit draws nothing, so the strip is laid here as the sea scene's patch lays it, in the slicks' paint); "brass", a twin
+	 * kit draws nothing, so the strip is laid here as the sea scene's patch lays it, in the slicks' paint; FX_NIGHT=1 a
+	 * seed-mode night sea, FX_DIM=k a field-mode dusk, as patch 04 paints them); "brass", a twin
 	 * 40 mm on her deck firing FX_RUN s (40), seen from FX_DIST m (9) (AirGunShip, AirGun, the deck's brass; listed
 	 * FX_LIST degrees, 3, with a FX_COAMING m coaming, 0.3); "haze", FX_FLEET ships (6, up to 24) 450 m apart firing every light and
 	 * heavy AA gun for FX_RUN s (40), seen from FX_DIST m (700) off: lay battle-fx-sea-haze.json over the recipe for the
@@ -2232,6 +2233,10 @@ namespace
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.5), EnvNum("FX_WIND_Y", 0.5), 0.0));
 		Fx.UseSea();
 		const std::string Kind = Shot.substr(0, Shot.find('-'));
+		if (Kind == "lane") // (the lane's night and dusk: FX_NIGHT=1, the sea and sky 0.03 as light unless FX_DIM=k says how light)
+		{
+			DimK = std::getenv("FX_DIM") ? std::clamp(EnvNum("FX_DIM", 1.0), 0.02, 1.0) : std::getenv("FX_NIGHT") ? 0.03 : 1.0;
+		}
 		const double List = EnvNum("FX_LIST", Kind == "brass" ? 3.0 : Kind == "wash" && std::getenv("FX_KIND") && std::string(std::getenv("FX_KIND")) == "awash" ? 12.0 : 0.0);
 		const double Roll = EnvNum("FX_ROLL", Kind == "wash" ? 5.0 : 0.0), Turn = EnvNum("FX_TURN", Kind == "wash" ? 0.02 : 0.0);
 		const double Mps = EnvNum("FX_MPS", Kind == "drench" ? 0.0 : Kind == "brass" ? 4.0 : 10.0);
@@ -2496,6 +2501,15 @@ namespace
 				static const unsigned char Paints[5][3] = { { 66, 62, 56 }, { 66, 62, 56 }, { 59, 56, 50 }, { 66, 62, 56 }, { 66, 62, 56 } };
 				static const unsigned char SheenPaint[3] = { 96, 92, 84 };
 				static const unsigned char CalmPaint[3] = { 200, 208, 214 }; // (the sky at the horizon, written: a lift over the sea there, far or near)
+				// (the band is the sky's light mirrored on flat water, never more than the light there is, as patch 04 codes
+				// it: FX_NIGHT=1, a night sea as the scene's seed mode has it (WeatherRoom.bNight): the sea and sky near-black
+				// (FX_DIM, 0.03 unless given), the marks' ink not dimmed (seed mode never dims it), no calm band (its share 0)
+				// and the film painted black at its alphas, dark on dark; FX_DIM=k alone, a dusk as field mode has it: the ink k
+				// as bright (Day.UnlitShare) and the band's share k, its paint toward the sky as lit (the sky k as light over
+				// today's, the ink's k undone once: today's calm paint); neither: as before, bit for bit)
+				const bool bNightSea = std::getenv("FX_NIGHT") != nullptr, bDuskSea = !bNightSea && std::getenv("FX_DIM") != nullptr;
+				const double CalmShare = bNightSea ? 0.0 : bDuskSea ? DimK : 1.0;
+				const unsigned char* CalmNow = CalmPaint;
 				std::vector<std::array<unsigned char, 4>> Cols;
 				std::vector<Vec> Pts;
 				for (int K = 0; K < Got; ++K)
@@ -2511,7 +2525,7 @@ namespace
 					const Vec Normal = Line.Cross(Vec(Way.X, Way.Y, 0.0));
 					const double Wide = (Normal.Length() > 1.0e-3 * std::max(Way.Length(), 1.0e-6) ? std::fabs(Span.Dot(Normal.Unit(Vec(0.0, 0.0, 1.0)))) : (Span - Line * Span.Dot(Line)).Length()) * Cam.Ppr / Off;
 					const double Graze = std::asin(std::clamp((Cam.Eye.Z - 0.08) / Off, -1.0, 1.0)) * 180.0 / 3.14159265358979;
-					const Battle::LaneLook Lk = Battle::OilLook(Rule, L.Dark, 0.55 * Wide, Graze);
+					const Battle::LaneLook Lk = bNightSea || bDuskSea ? Battle::OilLook(Rule, L.Dark, 0.55 * Wide, Graze, CalmShare) : Battle::OilLook(Rule, L.Dark, 0.55 * Wide, Graze);
 					const double Floor = Lk.Widen;
 					const Vec Left = L.At + L.Across * (L.Left * Floor), Right = L.At - L.Across * (L.Right * Floor);
 					const Vec Across[5] = { Left, L.At + (Left - L.At) * 0.55, L.At, L.At + (Right - L.At) * 0.55, Right };
@@ -2522,7 +2536,7 @@ namespace
 						for (int Ch = 0; Ch < 3; ++Ch)
 						{
 							const double Oil = Paints[A][Ch] + (SheenPaint[Ch] - Paints[A][Ch]) * L.Sheen;
-							Px[static_cast<size_t>(Ch)] = static_cast<unsigned char>(Oil + (CalmPaint[Ch] - Oil) * Lk.Calm + 0.5);
+							Px[static_cast<size_t>(Ch)] = bNightSea ? 0 : static_cast<unsigned char>(Oil + (CalmNow[Ch] - Oil) * Lk.Calm + 0.5);
 						}
 						Px[3] = static_cast<unsigned char>(std::clamp(Alphas[A], 0.0, 1.0) * 255.0 + 0.5);
 						Cols.push_back(Px);
@@ -2530,7 +2544,7 @@ namespace
 					}
 				}
 				GammaBytes = true; // (the scene's vertex paint, sRGB bytes)
-				PictureGain = 1.0;
+				PictureGain = bDuskSea ? DimK : 1.0; // (at dusk the scene's marks ink as bright as the day allows)
 				for (int K = 0; K + 1 < Got; ++K)
 				{
 					for (int A = 0; A < 4; ++A)
