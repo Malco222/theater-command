@@ -19,12 +19,17 @@
 //                     falls (portsDone).
 //   portSpent:<id>    the month the news of the port's stores spent was told to the player, so that it is told once for
 //                     each fill of the stores: in the month they run out, or, where his reading of that month could not
-//                     yet see it, in the next month's (the UI director's 05:03Z, item 4). Cleared with portTold.
+//                     yet see it, in the next month's (the UI director's 05:03Z, item 4), or at the reading where the
+//                     port's lines come back to him after a ring (portRing:, 13:23Z, item c). Cleared with portTold; kept
+//                     where portTold goes as the port is left to its holder's pocket, so that a ring's months never tell
+//                     it twice for one fill, and then cleared once the stores are filled again, or as portTold would be.
 //   portRing:<id>     the month of the last reading at which the port was left to its holder's pocket for the player, its
-//                     holder (leftToPocket): once the ring breaks with the sea still shut, the port's first-month news is
-//                     told once, in his next news (the UI director's 12:24Z, item 7). Cleared at that reading, where the
-//                     port's lines come back with the ring still standing, where it is left to a siege's lines or changes
-//                     hands, when the switch is turned off, and when its holder or the player falls.
+//                     holder (leftToPocket): once the port's lines come back to him, the ring broken or its clock no
+//                     longer the sooner, with the sea still shut, what is true of the port then is told once, in his next
+//                     news: the first-month news while it is on its stores, the news of the stores spent once they are
+//                     (the UI director's 12:24Z, item 7, and 13:23Z, item c). Cleared at that reading, where it is left
+//                     to a siege's lines or changes hands, when the switch is turned off, and when its holder or the
+//                     player falls.
 //   seaShut:<z>:<nat> the month sea z became shut to nation nat, read at every nation's month as it opens: the start of
 //                     the hold the shutting side sees on the port's card ("held ... since"). -1 (WATCHED_OPEN) while
 //                     the switch watches the sea open to it; the month it became shut only where the switch watched it
@@ -914,9 +919,10 @@ function holdsMonth(g: Game, sweep: boolean): void {
  * before his corps are charged, the first month no ship gets in and the month the stores run out (after the relief,
  * where it is told in the same reading: relieved and shut again in one month). Once each: the first by the clock (the
  * month after the last fill; in the "by" form where a ring is due to close that month, the UI director's 13:23Z, item
- * a), or once at the reading after a ring that held the port's lines from its holder breaks with the sea still shut
- * (the UI director's 12:24Z, item 7); the second by the clock too (the first month the stores
- * feed none), or, where the larder was never the holder's, the first month it is told. Only to a player who holds the
+ * a); the second by the clock too (the first month the stores feed none), or, where the larder was never the holder's,
+ * the first month it is told. And at the reading where the port's lines come back to its holder after a ring that held
+ * them from him, broken or no longer the sooner, with the sea still shut, whichever of the two is true then, once (the
+ * UI director's 12:24Z, item 7, and 13:23Z, item c): the second still once for each fill. Only to a player who holds the
  * port or has corps there, and to its holder not while it is left to his pocket (12:24Z, item 1). Nothing with the
  * switch off, or with nobody at the table.
  */
@@ -937,11 +943,16 @@ export function portsMonth(g: Game, nat: string): void {
   for (const r of g.regions) {
     const k = toldKey(r.id), ks = spentKey(r.id), kr = ringKey(r.id);
     // (A port left to its holder's pocket for the player, its holder: the pocket's own lines tell him of it, and the
-    // port's news, its relief among them, waits with its marks gone; the mark that it was, so that the port's first
-    // news is told once the ring breaks. The UI director's 12:24Z, items 1 and 7.)
-    if (leftToPocket(g, r, me, mine ? me : undefined)) { delete g.flags[k]; delete g.flags[ks]; g.flags[kr] = g.turn; continue; }
+    // port's news, its relief among them, waits with its mark gone; the mark that it was, so that what is true of the
+    // port is told once its lines come back to him. The UI director's 12:24Z, items 1 and 7, and 13:23Z, item c. The
+    // mark of the stores spent stays: that news is told once for each fill, the ring's months or not.)
+    if (leftToPocket(g, r, me, mine ? me : undefined)) { delete g.flags[k]; g.flags[kr] = g.turn; continue; }
     if (g.flags[kr] !== undefined && (r.ctrl !== me || !watched(g, r) || !involved(g, r))) delete g.flags[kr];
     let told: number | undefined = g.flags[k];
+    const spent = g.flags[ks];
+    // (The mark of the stores spent, kept through a ring with no mark of the first news: it goes as it would with that
+    // mark, and once the stores are filled again.)
+    if (told === undefined && spent !== undefined && (!watched(g, r) || r.since > spent || !involved(g, r) || (g.flags[`stores:${r.id}`] ?? -1) >= spent)) delete g.flags[ks];
     if (told !== undefined) {
       // (A port lost since, or one the player no longer has any part in, keeps no mark.)
       if (!watched(g, r) || r.since > told || !involved(g, r)) { delete g.flags[k]; delete g.flags[ks]; continue; }
@@ -956,10 +967,13 @@ export function portsMonth(g: Game, nat: string): void {
       }
     }
     if (!mine || !involved(g, r)) continue;
-    // (The port's lines back for him, its holder, at his own reading: where the ring has broken, the record gone, the
-    // port's first news is told once, as laid, after the ring's own line, which his month's opening has just told
-    // (siege.ts pocketMonth); where the ring stands still, nothing more. The UI director's 12:24Z, item 7.)
-    const broken = g.flags[kr] !== undefined && pocketNat(g, r) !== r.ctrl;
+    // (The port's lines back for him, its holder, at his own reading, after a ring that held them from him: where the
+    // ring has broken, the record gone, and where it stands still but its clock is no longer the sooner. What is true of
+    // the port then is told once, as laid, after any ring line of the month, which his month's opening has just told
+    // (siege.ts pocketMonth, game.ts cutOffNews): the first news while the port is on its stores, the news of the stores
+    // spent once they are, by that news's own rule, once for each fill. The UI director's 12:24Z, item 7, and 13:23Z,
+    // item c.)
+    const back = g.flags[kr] !== undefined;
     delete g.flags[kr];
     // (Read for him: in his holder's pocket, of his own corps there, items 1 and 2.)
     const f = portCutOff(g, r.id, me, me);
@@ -968,12 +982,12 @@ export function portsMonth(g: Game, nat: string): void {
     // ring is due to close, its "through" and "at" cannot be given: the news takes the "by" form, the latest at both
     // ends, as the card and the corps line do (the UI director's 12:24Z, item 3), and is told once, as the first-month
     // news is, in the month after the fill (13:23Z, item a).)
-    if (f.state === 'stores' && (f.lastFilled === g.turn - 1 || broken)) {
+    if (f.state === 'stores' && (f.lastFilled === g.turn - 1 || back)) {
       headline(g, 'info', f.due
         ? `No ship reaches ${portOf(r)}: ${heldSaid(g, f.shut, null, false)}. Unless the sea is opened, the garrison is hungry by ${monthSaid(g, f.hungry!)} and lost by the start of ${monthSaid(g, f.lost)}.`
         : `No ship reaches ${portOf(r)}: ${heldSaid(g, f.shut, null, false)}. The garrison lives on the port's stores through ${monthSaid(g, f.feedsTo!)}; unless the sea is opened, it then goes hungry and is lost ${startOf(f.lostBy)} ${monthSaid(g, f.lost)}.`, r.ctrl, r.id, { lost: r.ctrl });
       g.flags[k] ??= g.turn;
-    } else if (f.state === 'hungry' && spentDue(g, f, told, g.flags[ks])) {
+    } else if (f.state === 'hungry' && spentDue(g, f, told, g.flags[ks], back)) {
       headline(g, 'info', `${PortOf(r)}'s stores are spent and no ship has got through: the garrison goes hungry, and is lost ${startOf(f.lostBy)} ${monthSaid(g, f.lost)} unless the sea is opened.`, r.ctrl, r.id, { lost: r.ctrl });
       g.flags[k] ??= g.turn;
       g.flags[ks] = g.turn;
@@ -988,12 +1002,15 @@ export function portsMonth(g: Game, nat: string): void {
  * not yet see it, it comes in the next month's, worded as laid, since it is still true then (the UI director's 05:03Z,
  * item 4): a crew lost after his card, so that a later nation's corps starves that month (keepAt: its draw is made
  * without the crew), or a reading that had no line of the port's that month (a pocket's ring, broken since). Where the
- * larder was never the holder's, the first month any of the port's cut-off news is told.
+ * port's lines come back to him after a ring that held them from him (`back`, portRing:), at that reading, whatever the
+ * month, since he has been told nothing of them while it held (the UI director's 13:23Z, item c); once for each fill
+ * still, so not where it was told for this fill before the ring. Where the larder was never the holder's, the first
+ * month any of the port's cut-off news is told.
  */
-function spentDue(g: Game, f: PortCut, told: number | undefined, spent: number | undefined): boolean {
+function spentDue(g: Game, f: PortCut, told: number | undefined, spent: number | undefined, back: boolean): boolean {
   if (f.feedsTo === null) return told === undefined;
   const at = f.feedsTo + 1;
-  return (at === g.turn || at === g.turn - 1) && !(spent !== undefined && spent > f.lastFilled!);
+  return (back || at === g.turn || at === g.turn - 1) && !(spent !== undefined && spent > f.lastFilled!);
 }
 
 /**
