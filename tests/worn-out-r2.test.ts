@@ -55,6 +55,8 @@ describe('worn out in the line (release 2)', () => {
       wornMonth(g, c);
       expect(c.spent).toBeCloseTo(Math.min(WORN.most, WORN.step * m), 9);
       expect(c.runIn).toBe(m);
+      // (The card says "month" for one: the design director, 18:51Z.)
+      if (m === 1) expect(wornLine(c)).toBe(`Worn out: ${Math.round(WORN.step * 100)}% weaker after 1 month in the line. A month at rest brings it back.`);
     }
     expect(edge(c)).toBeCloseTo(1 - WORN.most, 12);
     expect(blunted(c)).toBe(true);
@@ -81,6 +83,26 @@ describe('worn out in the line (release 2)', () => {
     wornMonth(g, c);
     expect(c.spent).toBeCloseTo(WORN.step, 12);
     expect(c.runIn).toBeUndefined();
+  });
+
+  it('a whole month in supply with no march and no fight clears it, even in the line (the design director, 18:51Z: rest is one fact)', () => {
+    const g = war();
+    setWorn(g, true);
+    const { here } = front(g);
+    const c = corps(g, 'GER', here.id);
+    c.born = g.turn - 1;
+    fought(c); wornMonth(g, c); fought(c); wornMonth(g, c);
+    expect(c.spent).toBeCloseTo(2 * WORN.step, 12);
+    expect(here.nb.some((j) => g.regions[j].ctrl === 'POL')).toBe(true);
+    rested(c);
+    wornMonth(g, c);
+    expect(c.spent).toBeUndefined();
+    expect(c.runIn).toBeUndefined();
+    // Without supply the same quiet month in the line wears.
+    fought(c); wornMonth(g, c);
+    c.fought = false; c.ap = c.apMax; c.supplied = false;
+    wornMonth(g, c);
+    expect(c.spent).toBeCloseTo(2 * WORN.step, 12);
   });
 
   it('the battle reads it inside its own assessment, the card says it, and both sides alike', () => {

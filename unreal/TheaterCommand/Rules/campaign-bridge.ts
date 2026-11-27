@@ -8118,7 +8118,8 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     // (Release 2, wornout.ts) Worn out in the line, switched in any month.
     ok = setWorn(s, part[1] === 'on');
     note = wornOn(s)
-      ? `Worn out in the line is on: every month a corps spends in the line takes a little more of its edge, up to ${Math.round(WORN.most * 100)}%, and a month at rest brings it all back. The same for every army.`
+      // (The design director, 18:51Z: words true by the code. Rest is one fact, read by morale and wear alike.)
+      ? `Worn out in the line is on: every month a corps fights, or marches or goes without supply with the enemy next door, it loses a little of its edge, up to ${Math.round(WORN.most * 100)}% weaker. A whole month in supply with no march and no fight brings it all back, even in the line. The same for every army.`
       : 'Worn out in the line is off: every corps has its edge back.';
     return { ok, note, fly, flies, open, view: view() };
   }
