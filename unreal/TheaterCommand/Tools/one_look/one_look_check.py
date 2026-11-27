@@ -4,7 +4,10 @@
 Reads the art director's table (Content/Data/Campaign/unit-table.json), the sculpted models it names
 (Content/Models) and the map's own source, and checks that what the table's "one_look" says can be painted and is
 what the ruling asks: each dominion's last dated mark and fin are whole and its own; each coat is the coat of the
-machine the model follows, by that machine's own file; each mark that is drawn as another is one the painter draws;
+machine the model follows, by that machine's own file, or one of the model's own schemes laid in every month (the
+Mustang, whose coat Brian named himself: proved on whichever of her two files the tree has, and the drill says which);
+each mark that is drawn as another is one the painter draws (the German cross and the British roundel at their real
+proportions among them, checked to the number);
 and Germany's tanks take the nation's grey in every year as they are played. It writes the months of the dated marks
 for the C++ test, which runs the game's own reckoning (Campaign/OneLook.h) over them.
 
@@ -136,10 +139,55 @@ for name, coat in one["coats"].items():
     check(mine.get("nation_paint") is not True, "%s: not a plain machine painted for any nation" % name)
     numbers = {}
     for key, code in coat.get("colours", {}).items():
-        check(key.isdigit() and int(key) < len(own), "%s: paint %s is one of the file's paints" % (name, key))
+        # (a row that lays one of her own schemes may name paints past an older file's list: the game skips those)
+        check(key.isdigit() and (int(key) < len(own) or "scheme" in coat), "%s: paint %s is one of the file's paints" % (name, key))
         check(is_hex(code), "%s: paint %s is a colour" % (name, key))
         if key.isdigit() and is_hex(code):
             numbers[int(key)] = code.upper()
+    if "scheme" in coat:
+        # (One of her OWN schemes in every month: the owner named her coat himself. Brian, 27 November 2026: "also
+        # shouldnt the p-51 mustangs be silver with black paint? why are they green?" Two Mustang files are about. The
+        # aircraft modeller's has an olive base, 42 named paints and dated schemes, "natural metal, black bands" among
+        # them: with one look no dated scheme stands (the painter), so the row lays that scheme, and it is checked
+        # against the file colour for colour. The older file has 18 paints, bare metal already and a red nose: the game
+        # skips the paints past its list, and what the row lays must leave her own metal standing.)
+        GLARE = 16
+        check("follows" not in coat and "own" not in coat, "%s: a scheme of her own follows no other machine" % name)
+        dated = mine.get("schemes") if isinstance(mine.get("schemes"), list) else []
+        names = mine.get("paint_names") if isinstance(mine.get("paint_names"), list) else []
+        ink = coat.get("number_ink", "")
+        if dated:
+            found = [each for each in dated if isinstance(each, dict) and each.get("name") == coat["scheme"]]
+            check(len(found) == 1, "%s: her file carries the scheme named, once (%s)" % (name, coat["scheme"]))
+            theirs = {}
+            if found:
+                told = found[0].get("colours", {})
+                theirs = {names.index(key): str(code).upper() for key, code in told.items() if key in names}
+                check(len(theirs) == len(told) and len(told) > 0, "%s: every paint of that scheme is one of the file's named paints" % name)
+                check({k: v for k, v in numbers.items() if k != GLARE} == theirs,
+                      "%s: the row is that scheme colour for colour, and lays no other paint but the glare panel" % name)
+                check(is_hex(ink) and ink.upper() == str(found[0].get("number_ink", "")).upper(), "%s: her side number is in that scheme's ink" % name)
+            check(all(k < len(own) for k in numbers), "%s: every paint the row lays is one of this file's" % name)
+            proved = "the file WITH dated schemes (%d paints, base %s): the row is her scheme '%s', laid in every month" % (len(own), own[0].upper(), coat["scheme"])
+        else:
+            check(all(numbers[k] == own[k].upper() for k in numbers if k < len(own) and k not in (3, 4, 10, GLARE)),
+                  "%s: on the file with no schemes, every paint the row lays but nose, boss, line and glare panel is her file's own already" % name)
+            check(is_hex(ink) and ink.upper() == mine.get("number_ink", "").upper(), "%s: on the file with no schemes, the row's ink is her file's own" % name)
+            proved = "the file with NO schemes (%d paints, base %s): %d of the row's paints lie past its list and the game skips them" % (
+                len(own), own[0].upper(), sum(1 for k in numbers if k >= len(own)))
+        laid = [numbers.get(k, own[k].upper()) for k in range(len(own))]
+        black = [k for k in (3, 4, GLARE, 40, 41) if k < len(own)]
+        check(GLARE in numbers and all(k in numbers for k in (0, 1, 2, 3, 4, 6, 15)), "%s: the row gives the whole outer coat, and the glare panel" % name)
+        check(all(luma(laid[k]) >= 150.0 and max(rgb(laid[k])) - min(rgb(laid[k])) <= 12 for k in (0, 1, 2, 6)),
+              "%s: laid, her coat is bare metal, a pale grey with no colour in it, above, below and on her frame (%s)" % (name, ", ".join(laid[k] for k in (0, 1, 2, 6))))
+        check(all(luma(laid[k]) <= 40.0 and max(rgb(laid[k])) - min(rgb(laid[k])) <= 8 for k in black),
+              "%s: laid, her nose, boss, glare panel and bands are black, with no red and no olive (%s)" % (name, ", ".join("%d %s" % (k, laid[k]) for k in black)))
+        check(is_hex(ink) and abs(luma(ink) - luma(laid[0])) >= 60.0, "%s: her side number stands off her coat (60 levels or more)" % name)
+        check(all(abs(luma(laid[k]) - luma(laid[0])) >= 60.0 for k in black), "%s: her black stands off her coat (60 levels or more)" % name)
+        print("  %-8s her scheme   %s" % (name, "  ".join("%d %s [%s]" % (k, laid[k], own[k].upper()) for k in sorted(set(OUTER + black)))))
+        print("  %-8s side number %s [%s]" % ("", ink.upper(), mine.get("number_ink", "").upper()))
+        print("  %-8s PROVED ON %s" % ("", proved))
+        continue
     check(sorted(numbers) == OUTER, "%s: the whole outer coat is given (upper, upper2, under, nose, boss, frame, stain)" % name)
     followed = model(coat.get("follows", ""))
     check(followed is not None, "%s: the machine it follows (%s) is a sculpted model" % (name, coat.get("follows")))
@@ -172,18 +220,107 @@ for file_name in sorted(os.listdir(MODELS)):
         carried.setdefault(mark.get("tag"), set()).add(file_name[:-5])
 with open(os.path.join(SRC, "CampaignMiniatures.cpp"), encoding="utf-8") as told:
     painter = told.read()
+# (A mark of the painter's own: no file carries it. The table draws it wherever the mark the files carry is asked for,
+# so a nation's mark is mended in one place for its aircraft, its tanks and the map's pieces, and no file changes.)
+PAINTERS_OWN = {"GER-BALKEN", "UK-RAF-A", "UK-RAF-A1"}
 print("Marks: drawn as another with one look")
 for asked, drawn in one["marks"].items():
-    check(asked in carried, "%s: some sculpted aircraft carries that mark" % asked)
-    check(drawn in carried, "%s: the mark drawn in its place (%s) is one some sculpted aircraft carries already" % (asked, drawn))
+    # (a mark is asked for by a file that carries it, or it is a country's own tag: the plain machines' marks say
+    # "the owner's own" (*), and a vehicle and a piece of the map ask for their owner's, so the painter is asked for
+    # the tag itself. Canada is such a one: no file carries CAN, and the painter draws it by hand.)
+    owners_own = asked in table["countries"] and "*" in carried and 'Tag == TEXT("%s")' % asked in painter
+    check(asked in carried or owners_own, "%s: some sculpted aircraft carries that mark, or it is a country's own tag that the painter draws" % asked)
+    check((drawn in carried) != (drawn in PAINTERS_OWN),
+          "%s: the mark drawn in its place (%s) is one some sculpted aircraft carries already, or the painter's own and carried by no file" % (asked, drawn))
     check('Tag == TEXT("%s")' % drawn in painter, "%s: the painter draws %s" % (asked, drawn))
     check(drawn not in one["marks"], "%s: the mark drawn in its place is not itself drawn as another" % asked)
-    print("  %s (%s) is drawn as %s (as %s)" % (asked, ", ".join(sorted(carried.get(asked, []))), drawn, ", ".join(sorted(carried.get(drawn, [])))))
+    print("  %s (%s) is drawn as %s (%s)" % (asked, ", ".join(sorted(carried.get(asked, []))) or "the country's own tag", drawn,
+                                           "the painter's own" if drawn in PAINTERS_OWN else "as " + ", ".join(sorted(carried.get(drawn, [])))))
 american = sorted(tag for tag in carried if tag and tag.startswith("USA"))
-check(sorted(set(one["marks"].get(tag, tag) for tag in american)) == ["USA"],
-      "with one look every American machine carries the one mark (the marks carried are %s)" % ", ".join(american))
-check(re.search(r'Tag == TEXT\("USA"\)\)\s*\{\s*Disc\(1\.0, Paint\(TEXT\("1B2A5C"\)\)\);\s*Star\(0\.95, White\);\s*Disc\(0\.2, Red\);', painter) is not None,
-      "the American mark is the white star in its blue disc with the red centre, a fifth of the disc and no wider, and no bars")
+check(sorted(set(one["marks"].get(tag, tag) for tag in american)) == ["USA-BAR"],
+      "with one look every American machine carries the one mark, the star and bar (the marks carried are %s)" % ", ".join(american))
+barred = re.search(r'Tag == TEXT\("USA-BAR"\)\)\s*\{(.*?)\n\t\}', painter, re.S)
+check(barred is not None
+      and re.search(r'Bar\(-0\.3, -2\.05, 0\.3, 2\.05, Navy\);\s*\+\+Layer;\s*Bar\(-0\.24, -1\.98, 0\.24, 1\.98, White\);', barred.group(1)) is not None
+      and re.search(r'Disc\(1\.0, Navy\);\s*Star\(0\.95, White\);', barred.group(1)) is not None
+      and "Red" not in barred.group(1) and "Disc(0.2" not in barred.group(1),
+      "the American mark is the white star in its blue disc with a white bar each side, edged in blue, and no red anywhere")
+
+# (The German cross. Brian, 26 November 2026: "the german logo is wrong on the FW-190". The art director, 27 November:
+# one cross at its real proportions for aircraft, tanks and the map. Each number below is a share of the cross's length.)
+german_marks = sorted(tag for tag in carried if tag and tag.startswith("GER"))
+check(german_marks == ["GER"] and one["marks"].get("GER") == "GER-BALKEN",
+      "with one look every German machine carries the one cross, at its real proportions (the marks carried are %s)" % ", ".join(german_marks))
+
+
+def crosses(tag):
+    """The layers of a mark the painter draws as crosses, lowest first: (arm, half width, colour) in the mark's radius."""
+    branch = re.search(r'Tag == TEXT\("%s"\)\)\s*\{(.*?)\n\t\}' % re.escape(tag), painter, re.S)
+    if branch is None:
+        return None
+    body = "\n".join(line for line in branch.group(1).split("\n") if not line.strip().startswith("//"))
+    laid = re.findall(r'Cross\(([0-9.]+), ([0-9.]+), (\w+)\);', body)
+    rest = re.sub(r'Cross\([0-9.]+, [0-9.]+, \w+\);', "", body).strip()
+    return None if rest else [(float(arm), float(half), colour) for arm, half, colour in laid]
+
+
+mended = crosses("GER-BALKEN")
+check(mended is not None and [colour for _, _, colour in mended] == ["Black", "White", "Black"] and all(arm == 1.0 for arm, _, _ in mended),
+      "the mended German cross is three crosses and nothing else, black, white, black, each arm the full length: nothing lies across an arm's end")
+if mended is not None and len(mended) == 3:
+    edge, white, bar = (half for _, half, _ in mended)
+    check(abs(bar - 0.25) < 1e-9, "its black bars are a quarter of its length wide (%.4f)" % (bar,))
+    check(abs((white - bar) / 2.0 - 0.125) < 1e-9, "its white is an eighth of its length each side (%.4f)" % ((white - bar) / 2.0,))
+    check(abs((edge - white) / 2.0 - 0.03125) < 1e-9, "its thin black edge is a thirty-second of its length (%.5f)" % ((edge - white) / 2.0,))
+    print("  the German cross with one look: bars %.4f, white %.4f each side, edge %.5f of its length; an arm is %.4f across in all"
+          % (bar, (white - bar) / 2.0, (edge - white) / 2.0, edge))
+check(crosses("GER") == [(1.0, 0.36, "White"), (0.94, 0.19, "Black")], "without one look the German cross is drawn as it was, to the number")
+
+# (The British roundel. The warplanes thread's find, 27 November 2026: the map drew the plain roundel in thirds and the
+# yellow-ringed one with its red centre near twice too wide. The art director, the same day: the real ring sizes, in
+# one place, for aircraft, vehicles and the map's pieces. Each number below is a share of the roundel's radius.)
+
+
+def discs(tag):
+    """The layers of a mark the painter draws as discs, lowest (widest) first: (size, colour) in the mark's radius."""
+    branch = re.search(r'Tag == TEXT\("%s"\)\)\s*\{(.*?)\n\t\}' % re.escape(tag), painter, re.S)
+    if branch is None:
+        return None
+    body = "\n".join(line for line in branch.group(1).split("\n") if not line.strip().startswith("//"))
+    laid = re.findall(r'Disc\(([0-9.]+), (\w+)\);', body)
+    rest = re.sub(r'Disc\([0-9.]+, \w+\);', "", body).strip()
+    return None if rest else [(float(size), colour) for size, colour in laid]
+
+
+british = sorted(tag for tag in carried if tag and tag.startswith("UK"))
+check(british == ["UK", "UK-A1", "UK-B", "UK-FIN"], "the British marks the sculpted aircraft carry are the four the ruling names (%s)" % ", ".join(british))
+check(one["marks"].get("UK") == "UK-RAF-A" and one["marks"].get("CAN") == "UK-RAF-A" and one["marks"].get("UK-A1") == "UK-RAF-A1",
+      "with one look the plain British roundel (UK, and Canada's, which is the British one all war) and the yellow-ringed one are drawn at their real ring sizes")
+check("UK-B" not in one["marks"] and "UK-FIN" not in one["marks"], "the upper wing's red on blue and the fin flash are drawn as they were")
+check(not any(tag in one["marks"] for tag in last_marks), "no dominion with a dated mark is drawn as another: each wears its own last mark (%s)" % ", ".join(sorted(last_marks)))
+check(not any(tag in one["marks"] for tag in ("FRA", "VIC", "FFR")), "France's roundel, which is truly in thirds, is not touched")
+check(not any(name.endswith("-FIN") or name.startswith("FIN:") for name in PAINTERS_OWN), "none of the painter's own marks is taken for a rudder flash, which the painter turns about on the far side")
+plain = discs("UK-RAF-A")
+check(plain is not None and [colour for _, colour in plain] == ["Blue", "White", "Red"],
+      "the mended plain roundel is three discs and nothing else: blue, white on it, red on that")
+if plain is not None and len(plain) == 3:
+    check(all(abs(size * 5.0 - share) < 1e-9 for (size, _), share in zip(plain, (5, 3, 1))),
+          "its red, white and blue are across as one, three and five (%s)" % ", ".join("%.3f" % size for size, _ in plain))
+ringed = discs("UK-RAF-A1")
+check(ringed is not None and [colour for _, colour in ringed] == ["Yellow", "Blue", "White", "Red"],
+      "the mended fuselage roundel is four discs and nothing else: yellow, blue, white, red")
+if ringed is not None and len(ringed) == 4:
+    check(all(abs(size - share / 7.0) < 0.0005 for (size, _), share in zip(ringed, (7, 5, 3, 1))),
+          "its red, white, blue and yellow are across as one, three, five and seven, to the third place (%s)" % ", ".join("%.3f" % size for size, _ in ringed))
+for name, laid in (("UK-RAF-A", plain), ("UK-RAF-A1", ringed)):
+    if laid:
+        check(all(laid[k][0] > laid[k + 1][0] for k in range(len(laid) - 1)) and laid[0][0] == 1.0, "%s: each disc is smaller than the one under it, so every ring shows, and the widest is the mark's own size" % name)
+        print("  the British roundel %s with one look: %s of its radius" % (name, ", ".join("%s %.3f" % (colour.lower(), size) for size, colour in laid)))
+check(discs("UK-A1") == [(1.0, "Yellow"), (0.8, "Blue"), (0.52, "White"), (0.26, "Red")], "without one look the yellow-ringed roundel is drawn as it was, to the number")
+check(discs("UK-B") == [(1.0, "Blue"), (0.42, "Red")], "the upper wing's roundel is drawn as it was, to the number, with one look or without")
+check(re.search(r'else if \(Tag == TEXT\("UK"\) \|\| Tag == TEXT\("CAN"\) \|\| Tag == TEXT\("AUS"\) \|\| Tag == TEXT\("NZL"\) \|\| Tag == TEXT\("SAF"\) \|\| Tag == TEXT\("IND"\)\)\s*\{\s*Rings\(Blue, White, Red\);\s*\}', painter) is not None
+      and re.search(r'auto Rings = \[&\]\([^)]*\)\s*\{\s*Disc\(1\.0, Outer\);\s*Disc\(0\.66, Middle\);\s*Disc\(0\.33, Centre\);\s*\};', painter) is not None,
+      "without one look the plain roundel of Britain and the dominions is drawn as it was, in thirds, to the number")
 
 # ---------------------------------------------------------------- Germany's tanks: grey in every year
 print("German tanks on the map")
