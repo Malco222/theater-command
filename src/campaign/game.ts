@@ -56,7 +56,7 @@ import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, rai
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willBurn } from './prizes';
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
-import { formedLine, joinedLine, nationDone, notFormedLine, rowDone, tellPlace, tellWait, waitedOn } from './arrivalwaits';
+import { formedLine, joinedLine, nationDone, notFormedLine, rowDone, tellLoan, tellPlace, tellWait, waitedOn } from './arrivalwaits';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -5769,6 +5769,29 @@ function standInsOf(g: Game, nat: string, row: any[]): Corps[] {
 }
 
 /**
+ * A loan's end held by the one contact test (the design director's "3 RULED IN", 01:37Z, 27 November 2026), read where
+ * `expeditions` would end the loan of sent row `i` this month, in the contact rule's scope (the theatre draw's, her
+ * Q2): the lent corps living, the loan over (an `until` row's by `lentOver`, unless the player's offer of its end is
+ * made or he has kept it; a war row's by its war over, the corps not at sea), and `corpsInContact` true with the corps
+ * whose loans end in the same pass as the corps that leave with it (`leaving`). With how it would have ended: 'down' (a
+ * garrison whose record ends in a surrender), 'back' (every division it holds goes back to the corps it came out of, or
+ * a war row's), else 'gone'. Null where nothing holds it. Writes nothing.
+ */
+function loanHeld(g: Game, nat: string, row: any[], o: any, i: number, id: number, leaving: (x: Corps) => boolean): { c: Corps; way: 'gone' | 'back' | 'down' } | null {
+  if (!contactRuleActs(g, g.byName[row[5]])) return null;
+  const c = g.corps.find((x) => x.id === id && x.nat === nat && !x.dead);
+  if (!c) return null;
+  let way: 'gone' | 'back' | 'down';
+  if (o.until) {
+    if (g.flags[leaveKey(i)] !== undefined || g.flags[keptKey(i)] || !lentOver(g, nat, row, o)) return null;
+    const drawn = g.flags.open === 1 && !!c.drew?.length && divisionsOf(g, c).every((d) => c.drew!.some((r) => r.name[0] === d.name && r.from !== c.id && !r.conv));
+    way = o.ends === 'surrender' && farOn(g) ? 'down' : drawn ? 'back' : 'gone';
+  } else if (o.war && g.flags.open === 1 && !warOn(g, o.war) && !g.atSea?.some((v) => v.corps.id === id) && (c.drew || c.rowed)) way = 'back';
+  else return null;
+  return corpsInContact(g, nat, c, new Set(g.corps.filter((x) => !x.dead && leaving(x)))) ? { c, way } : null;
+}
+
+/**
  * `take` is the one row the player has just said yes to (ruling B8, `takeOffer`): that row alone is read, and it
  * forms as the rule always formed it. Every other reading gives none, and reads every row.
  */
@@ -5816,7 +5839,17 @@ function expeditions(g: Game, nat: string, take?: number): void {
       // (The far side: the end of a loan takes no regiment of the player's that its division awaits off the map: it
       // is an offer, and the regiment stays until he lets it go. Ruling B8, `loanStays`. A computer's loan ends as
       // it did, and so does everybody's with the far side off.)
-      if (o.until && id > 0 && !loanStays(g, nat, row, o, i, take === i) && (take === i || lentOver(g, nat, row, o))) {
+      // (Under the switch 'fromWait', where the contact rule acts: a loan's end, any of its three ways (it leaves for
+      // other fronts, its divisions go back, it lays down its arms), waits while the one test holds the lent corps where
+      // it stands. It stays, the loan is tried again each month, and in the first month the test lets it go it ends
+      // exactly as it would have. Its wait is written and told like every wait of the rule's own. The design
+      // director's "3 RULED IN: a loan's end waits while the test holds the corps (Murzuk, Burao). One test for every
+      // piece", 01:37Z, 27 November 2026. A loan the player has been offered the end of, has kept, or has just let go
+      // keeps his offer and his choice (`loanStays`): while the test holds the corps the offer is not made, and the
+      // hold is told instead. Switch off: nothing is read.)
+      const held = g.flags.fromWait === 1 && id > 0 && take !== i ? loanHeld(g, nat, row, o, i, id, leaving) : null;
+      if (held) { tellLoan(g, i, held.c, held.way); g.flags[`wait:${i}`] = g.turn; }
+      else if (o.until && id > 0 && !loanStays(g, nat, row, o, i, take === i) && (take === i || lentOver(g, nat, row, o))) {
         const c = g.corps.find((x) => x.id === id && x.nat === nat);
         // (The far side: a regiment its division awaits comes home to it: `comeHome`. A row whose record ends in a
         // surrender, `ends`, is told as one: `down`, below.)
@@ -5833,6 +5866,9 @@ function expeditions(g: Game, nat: string, take?: number): void {
         }
         else if (c) { (o.ends === 'surrender' && farOn(g) ? down : gone).push(c); comeHome(g, nat, i, row, c); }
         g.flags[`lent:${i}`] = -1;
+        // (A loan's end that waited and was told: its telling flags go with it, `rowDone`. A war that never had the
+        // switch on has none, and nothing changes.)
+        if (g.flags[`rowTold:${i}`] !== undefined) rowDone(g, i);
         if (take === i) delete g.flags[leaveKey(i)];
         // (A corps ends its loan once: another lent row that added to it, `joins`, has nothing left to end.)
         ((setup as any).expeditions as any[]).forEach((_, j) => { if (j !== i && g.flags[`lent:${j}`] === id) g.flags[`lent:${j}`] = -1; });
@@ -5847,6 +5883,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
         if (c && (c.drew || c.rowed) && !rowOver(g, c, leaving, true)) back.push(c);
         g.supplyDirty = true;
         g.flags[`lent:${i}`] = -1;
+        if (g.flags[`rowTold:${i}`] !== undefined) rowDone(g, i);
         ((setup as any).expeditions as any[]).forEach((_, j) => { if (j !== i && g.flags[`lent:${j}`] === id) g.flags[`lent:${j}`] = -1; });
       }
       // (The far side: a division that awaits lent regiments keeps their shares for them while they are lent: `makeUp`.)

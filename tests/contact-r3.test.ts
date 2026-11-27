@@ -115,3 +115,80 @@ describe('R3-1: a row waits while the stand-in it would stand down is held by th
     expect(stand.dead).toBe(true);
   });
 });
+
+// ---- R3-2: a loan's end waits while the test holds the corps --------------------------------------------------------
+
+describe("R3-2: a loan's end waits while the one test holds the lent corps, and is tried again each month", () => {
+  /** A corps of Germany's lent to a campaign until month 2 stands in the Neumark (alone, unless `relief`). */
+  const run = (o: { on?: boolean; relief?: boolean; battle?: boolean; at?: string; human?: boolean } = {}): { g: Game; j: number; lent: Corps } => {
+    const { g, nm } = board(o.on ?? true);
+    if (o.human) g.human = 'GER';
+    const lent = add(g, 'GER', 'Lent Test Corps', 'inf', o.at ? g.byName[o.at] : nm, 2);
+    const j = addRow([1, 'GER', 'Lent Test Corps', 'inf', 2, 'Neumark', { until: 2 }]);
+    g.flags[`sent:${j}`] = 1;
+    g.flags[`lent:${j}`] = lent.id;
+    if (o.relief) add(g, 'GER', 'Relief Test Corps', 'inf', nm, 2);
+    if (o.battle) g.lastBattle = { [nm.id]: [lent.id] };
+    month(g, 2);
+    return { g, j, lent };
+  };
+
+  it('alone beside the enemy: it stays where it is, the loan is not ended, and its wait is written', () => {
+    const { g, j, lent } = run();
+    expect([lent.dead, g.regions[lent.reg].name]).toEqual([false, 'Neumark']);
+    expect(g.flags[`lent:${j}`]).toBe(lent.id);
+    expect(g.flags[`wait:${j}`]).toBe(2);
+    expect(g.headlines.some((h: any) => h.turn === 2 && /leave for other fronts/.test(h.text))).toBe(false);
+  });
+
+  it('relieved: the loan ends exactly as it would have (it leaves for other fronts)', () => {
+    const { g, j, lent } = run({ relief: true });
+    expect(lent.dead).toBe(true);
+    expect(g.flags[`lent:${j}`]).toBe(-1);
+    expect(g.flags[`wait:${j}`]).toBeUndefined();
+  });
+
+  it('the fight half: relieved, but it took part in the battle last resolved on its ground: it stays', () => {
+    const { g, j, lent } = run({ relief: true, battle: true });
+    expect(lent.dead).toBe(false);
+    expect(g.flags[`lent:${j}`]).toBe(lent.id);
+  });
+
+  it('no enemy beside it (her answer 1): the loan ends', () => {
+    const { lent } = run({ at: 'Bavaria' });
+    expect(lent.dead).toBe(true);
+  });
+
+  it('tried again the next month: the first month the test lets it go, the loan ends as it would have', () => {
+    const { g, j, lent } = run();
+    month(g, 3);
+    expect(lent.dead).toBe(false);
+    add(g, 'GER', 'Relief Test Corps', 'inf', g.byName.Neumark, 2);
+    month(g, 4);
+    expect(lent.dead).toBe(true);
+    expect(g.flags[`lent:${j}`]).toBe(-1);
+    expect(g.headlines.filter((h: any) => h.turn === 4 && /leave for other fronts: Lent Test Corps\./.test(h.text))).toHaveLength(1);
+  });
+
+  it("told, for the player's own lent corps, once, in the month the hold begins; the telling's flags go when the loan ends", () => {
+    const { g, j, lent } = run({ human: true });
+    expect(g.flags[`rowTold:${j}`]).toBe(2);
+    const said = g.headlines.filter((h: any) => h.turn === 2 && /Lent Test Corps/.test(h.text)).map((h: any) => h.text);
+    expect(said).toEqual(['The Lent Test Corps, lent to the campaign, is due to leave for other fronts this month, but it is at the front in the Neumark. It stays, and goes the month after it leaves the front.']);
+    month(g, 3);
+    expect(g.headlines.filter((h: any) => /Lent Test Corps, lent to the campaign/.test(h.text))).toHaveLength(1);
+    add(g, 'GER', 'Relief Test Corps', 'inf', g.byName.Neumark, 2);
+    month(g, 4);
+    expect(lent.dead).toBe(true);
+    expect(g.flags[`rowTold:${j}`]).toBeUndefined();
+    const cpu = run();
+    expect(cpu.g.flags[`rowTold:${cpu.j}`]).toBeUndefined();
+  });
+
+  it('switch off: the loan ends as before, and nothing is written', () => {
+    const { g, j, lent } = run({ on: false });
+    expect(lent.dead).toBe(true);
+    expect(g.flags[`lent:${j}`]).toBe(-1);
+    expect(g.flags[`wait:${j}`]).toBeUndefined();
+  });
+});
