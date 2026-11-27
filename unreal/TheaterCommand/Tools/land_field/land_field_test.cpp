@@ -1179,6 +1179,193 @@ namespace
 				(static_cast<double>(Heap1) - static_cast<double>(Heap0)) / 1048576.0);
 		}
 	}
+
+	/**
+	 * On trial, "diggings" (alone, on the steppe): the rules' works dug in heaps as "ploughland" paints them, and nothing
+	 * else of ploughland. Two more grounds of the same field: the word off, and the word swapped for "ploughland". Every
+	 * near tile's point on the works the colour ploughland gives it; every point of a fallow, and of every other ground
+	 * more than 15 m from the works, the colour with the word off; no tile any furrow; the clutter of the man's box in a
+	 * fallow (120 m at 820, 340) the word off's, and of a box over the works ploughland's, piece for piece.
+	 */
+	void DiggingsTrial(const LandField::Field& Fd, const LandField::Ground& G)
+	{
+		using LandField::Placed;
+		std::printf("  diggings (on trial): the works dug in heaps as ploughland has them, the fallows as they were\n");
+		const auto DigSwapped = [&Fd](const char* DigTo) {
+			std::string DigKept;
+			for (size_t P = 0; P <= Fd.Trial.size();)
+			{
+				size_t E = Fd.Trial.find(',', P);
+				if (E == std::string::npos) E = Fd.Trial.size();
+				const std::string DigWord = Fd.Trial.substr(P, E - P);
+				const std::string DigWordNow = DigWord == "diggings" ? std::string(DigTo) : DigWord;
+				if (!DigWordNow.empty()) DigKept += (DigKept.empty() ? "" : ",") + DigWordNow;
+				P = E + 1;
+			}
+			LandField::Field DigOut = Fd;
+			DigOut.Trial = DigKept;
+			return DigOut;
+		};
+		const LandField::Field DigOffField = DigSwapped(""), DigPloughField = DigSwapped("ploughland");
+		const LandField::Ground DigOff(DigOffField), DigPlough(DigPloughField);
+		// (the works on the field's 2 m raster, and every square within 18 m of one: a point in none is over 15 m away)
+		constexpr double DigCell = 2.0;
+		const int DigCols = static_cast<int>(std::ceil(Fd.Width() / DigCell)), DigRows = static_cast<int>(std::ceil(Fd.Depth() / DigCell));
+		std::vector<uint8_t> DugCells(static_cast<size_t>(DigCols) * DigRows, 0), NearDug(static_cast<size_t>(DigCols) * DigRows, 0);
+		long DugCount = 0;
+		for (int J = 0; J < DigRows; ++J)
+			for (int I = 0; I < DigCols; ++I)
+			{
+				LandField::Drawn DugWhat = LandField::Drawn::Pasture;
+				G.HeightAt((I + 0.5) * DigCell, (J + 0.5) * DigCell, &DugWhat);
+				if (DugWhat != LandField::Drawn::Works) continue;
+				DugCells[static_cast<size_t>(J) * DigCols + I] = 1;
+				++DugCount;
+			}
+		constexpr int DigReach = 9;
+		for (int J = 0; J < DigRows; ++J)
+			for (int I = 0; I < DigCols; ++I)
+			{
+				if (!DugCells[static_cast<size_t>(J) * DigCols + I]) continue;
+				for (int B = std::max(0, J - DigReach); B <= std::min(DigRows - 1, J + DigReach); ++B)
+					for (int A = std::max(0, I - DigReach); A <= std::min(DigCols - 1, I + DigReach); ++A)
+						if ((A - I) * (A - I) + (B - J) * (B - J) <= DigReach * DigReach) NearDug[static_cast<size_t>(B) * DigCols + A] = 1;
+			}
+		const auto NearWorks = [&](double X, double Y) {
+			const int I = static_cast<int>(std::floor(X / DigCell)), J = static_cast<int>(std::floor(Y / DigCell));
+			if (I < 0 || J < 0 || I >= DigCols || J >= DigRows) return false;
+			return NearDug[static_cast<size_t>(J) * DigCols + I] != 0;
+		};
+		const auto InFallow = [&G](double X, double Y) {
+			const int DigParcel = G.ParcelAt(X, Y);
+			return DigParcel >= 0 && G.CropOfParcel(DigParcel) == "fallow";
+		};
+		const auto DigGap = [](const LandField::Rgb8& A, const LandField::Rgb8& B) {
+			return std::max({ std::abs(A.R - B.R), std::abs(A.G - B.G), std::abs(A.B - B.B) });
+		};
+		long OnWorks = 0, WorksOff = 0, InFallowPts = 0, FarFromDug = 0, FarFromDugOff = 0, NearDugPts = 0, NearDugOff = 0, NearDugPlough = 0, BadShape = 0, DugFurrowed = 0;
+		long FarAwayOff = 0, FarPts = 0;
+		int WorksWorst = 0, FarFromDugWorst = 0, NearDugWorst = 0;
+		const auto& TilesDig = G.Tiles();
+		const auto& TilesOff = DigOff.Tiles();
+		const auto& TilesPlough = DigPlough.Tiles();
+		if (TilesDig.size() != TilesOff.size() || TilesDig.size() != TilesPlough.size()) ++BadShape;
+		for (size_t T = 0; T < TilesDig.size() && T < TilesOff.size() && T < TilesPlough.size(); ++T)
+		{
+			const LandField::Mesh& M = TilesDig[T].Near;
+			const LandField::Mesh& MO = TilesOff[T].Near;
+			const LandField::Mesh& MPl = TilesPlough[T].Near;
+			DugFurrowed += static_cast<long>(M.Uvs.size() + TilesDig[T].Far.Uvs.size());
+			if (M.Positions != MO.Positions || M.Positions != MPl.Positions || M.Colours.size() != M.Points() || MO.Colours.size() != M.Points() || MPl.Colours.size() != M.Points())
+			{
+				++BadShape;
+				continue;
+			}
+			for (size_t K = 0; K < M.Points(); ++K)
+			{
+				const double X = M.Positions[3 * K], Y = M.Positions[3 * K + 1];
+				LandField::Drawn DugWhat = LandField::Drawn::Pasture;
+				G.HeightAt(X, Y, &DugWhat);
+				const int ToOff = DigGap(M.Colours[K], MO.Colours[K]), ToPlough = DigGap(M.Colours[K], MPl.Colours[K]);
+				if (DugWhat == LandField::Drawn::Works)
+				{
+					++OnWorks;
+					WorksOff += ToPlough != 0;
+					WorksWorst = std::max(WorksWorst, ToPlough);
+				}
+				else if (InFallow(X, Y) || !NearWorks(X, Y))
+				{
+					++FarFromDug;
+					InFallowPts += InFallow(X, Y);
+					FarFromDugOff += ToOff != 0;
+					FarFromDugWorst = std::max(FarFromDugWorst, ToOff);
+				}
+				else
+				{
+					++NearDugPts;
+					NearDugOff += ToOff != 0;
+					NearDugPlough += ToPlough != 0;
+					NearDugWorst = std::max(NearDugWorst, std::min(ToOff, ToPlough));
+				}
+			}
+			// (the far level, for the record: its points mix the near colour round them, so only those far from the works)
+			const LandField::Mesh& FarDig = TilesDig[T].Far;
+			const LandField::Mesh& FO = TilesOff[T].Far;
+			if (FarDig.Positions == FO.Positions && FarDig.Colours.size() == FO.Colours.size())
+				for (size_t K = 0; K < FarDig.Points(); ++K)
+				{
+					if (NearWorks(FarDig.Positions[3 * K], FarDig.Positions[3 * K + 1])) continue;
+					++FarPts;
+					FarAwayOff += DigGap(FarDig.Colours[K], FO.Colours[K]) != 0;
+				}
+		}
+		for (const LandField::Tile& DigRingTile : G.Ring()) DugFurrowed += static_cast<long>(DigRingTile.Near.Uvs.size() + DigRingTile.Far.Uvs.size());
+		std::printf("    %ld works squares of 2 m; near points: %ld on the works (%ld unlike ploughland, worst %d), %ld in a fallow or over 15 m off (%ld in a fallow; %ld unlike the word off, worst %d), "
+		            "%ld within 15 m of the works off them (%ld unlike the word off, %ld unlike ploughland, worst of the nearer %d); far points over 15 m off %ld (%ld unlike the word off)\n",
+		            DugCount, OnWorks, WorksOff, WorksWorst, FarFromDug, InFallowPts, FarFromDugOff, FarFromDugWorst, NearDugPts, NearDugOff, NearDugPlough, NearDugWorst, FarPts, FarAwayOff);
+		Check(BadShape == 0 && DugCount > 0 && OnWorks > 0 && WorksOff == 0, "diggings: every near point on the works painted as ploughland paints it",
+		      Fmt("%.0f of %.0f differ", static_cast<double>(WorksOff), static_cast<double>(OnWorks)) + Fmt(", %.0f tiles unlike in shape", static_cast<double>(BadShape)));
+		Check(BadShape == 0 && InFallowPts > 0 && FarFromDugOff == 0, "diggings: every near point of a fallow, and of all other ground over 15 m from the works, as with the word off",
+		      Fmt("%.0f of %.0f differ", static_cast<double>(FarFromDugOff), static_cast<double>(FarFromDug)));
+		Check(DugFurrowed == 0, "diggings: no tile carries the furrows' two numbers", Fmt("%.0f numbers", static_cast<double>(DugFurrowed)));
+		// The clutter, piece for piece: the man's box in a fallow against the word off, and a box over the works (the 40 m
+		// grid's box of 120 m with the most works and no fallow) against ploughland.
+		const auto DigSame = [](const Placed& A, const Placed& B) {
+			return A.Kind == B.Kind && A.X == B.X && A.Y == B.Y && A.Z == B.Z && A.Yaw == B.Yaw && A.Scale == B.Scale && A.ScaleZ == B.ScaleZ && A.Tint.R == B.Tint.R && A.Tint.G == B.Tint.G
+				&& A.Tint.B == B.Tint.B && A.Lodge == B.Lodge;
+		};
+		const auto DigDiffering = [&DigSame](const std::vector<Placed>& A, const std::vector<Placed>& B) {
+			long D = A.size() == B.size() ? 0 : 1;
+			for (size_t N = 0; N < A.size() && N < B.size(); ++N) D += DigSame(A[N], B[N]) ? 0 : 1;
+			return D;
+		};
+		{
+			std::vector<Placed> DigHere, DigThere;
+			G.Clutter(760.0, 280.0, 880.0, 400.0, DigHere);
+			DigOff.Clutter(760.0, 280.0, 880.0, 400.0, DigThere);
+			const long D = DigDiffering(DigHere, DigThere);
+			Check(D == 0 && !DigHere.empty() && InFallow(820.0, 340.0), "diggings: the clutter of the man's box in a fallow (120 m at 820, 340) as with the word off, piece for piece",
+			      Fmt("%.0f differ of %.0f", static_cast<double>(D), static_cast<double>(DigHere.size())));
+		}
+		{
+			double DugBoxX = -1.0, DugBoxY = -1.0;
+			long BestDug = 0;
+			for (double BoxMidY = 60.0; BoxMidY + 60.0 <= Fd.Depth(); BoxMidY += 40.0)
+				for (double BoxMidX = 60.0; BoxMidX + 60.0 <= Fd.Width(); BoxMidX += 40.0)
+				{
+					long DugSeen = 0;
+					bool bDugBoxFallow = false;
+					for (double Y = BoxMidY - 59.0; Y < BoxMidY + 60.0 && !bDugBoxFallow; Y += 2.0)
+						for (double X = BoxMidX - 59.0; X < BoxMidX + 60.0; X += 2.0)
+						{
+							const int I = static_cast<int>(X / DigCell), J = static_cast<int>(Y / DigCell);
+							if (I >= 0 && J >= 0 && I < DigCols && J < DigRows) DugSeen += DugCells[static_cast<size_t>(J) * DigCols + I];
+							if (static_cast<int>(X) % 8 == 1 && static_cast<int>(Y) % 8 == 1 && InFallow(X, Y))
+							{
+								bDugBoxFallow = true;
+								break;
+							}
+						}
+					if (!bDugBoxFallow && DugSeen > BestDug)
+					{
+						BestDug = DugSeen;
+						DugBoxX = BoxMidX;
+						DugBoxY = BoxMidY;
+					}
+				}
+			std::vector<Placed> DigHere, DigThere, DigPlain;
+			if (BestDug > 0)
+			{
+				G.Clutter(DugBoxX - 60.0, DugBoxY - 60.0, DugBoxX + 60.0, DugBoxY + 60.0, DigHere);
+				DigPlough.Clutter(DugBoxX - 60.0, DugBoxY - 60.0, DugBoxX + 60.0, DugBoxY + 60.0, DigThere);
+				DigOff.Clutter(DugBoxX - 60.0, DugBoxY - 60.0, DugBoxX + 60.0, DugBoxY + 60.0, DigPlain);
+			}
+			const long D = DigDiffering(DigHere, DigThere), DOff = DigDiffering(DigHere, DigPlain);
+			Check(BestDug > 0 && D == 0 && !DigHere.empty(), "diggings: the clutter of a box over the works as ploughland's, piece for piece",
+			      Fmt("box at %.0f, %.0f, ", DugBoxX, DugBoxY) + Fmt("%.0f m2 of works; %.0f differ of %.0f", DigCell * DigCell * static_cast<double>(BestDug), static_cast<double>(D), static_cast<double>(DigHere.size()))
+				      + Fmt(" (%.0f unlike the word off)", static_cast<double>(DOff)));
+		}
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -2769,6 +2956,8 @@ int main(int Argc, char** Argv)
 	}
 	// (on trial, "lodged": the growth laid over round shell holes, LodgedTrial)
 	if (F.Tried("lodged")) LodgedTrial(F, Key);
+	// (on trial, "diggings" alone on the steppe: the works dug in heaps, nothing else of ploughland, DiggingsTrial)
+	if (F.Tried("diggings") && !F.Tried("ploughland") && LookLaid == "steppe") DiggingsTrial(F, G);
 
 	// The footprint shade under a tank, a gun, a standing man and a prone one (LandShade, the art director's cut 4 fix
 	// 3): laid without a fold or an overlap (it multiplies, so an overlap would be a dark seam), deepest under the
