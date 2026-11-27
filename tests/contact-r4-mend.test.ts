@@ -11,7 +11,7 @@ import { arrivalWaitOf, setFromWait } from '../src/campaign/arrivalwaits';
 import { divisionsOf } from '../src/campaign/armies';
 import { signPeace } from '../src/campaign/diplomacy';
 import { contactRead, corpsInContact, recordBattle } from '../src/campaign/drawn';
-import { addCorps, atWar, createGame, declareWar, relocate, rowLeaving, ruleHolds, startPhase } from '../src/campaign/game';
+import { addCorps, atWar, createGame, declareWar, leavingWatch, relocate, rowLeaving, ruleHolds, startPhase } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import { farOn } from '../src/campaign/world';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -19,7 +19,7 @@ import type { Corps, Game, Region } from '../src/campaign/types';
 const ROWS = (setup as any).expeditions as any[];
 let added = 0;
 const addRow = (row: any[]): number => { ROWS.push(row); added++; return ROWS.length - 1; };
-afterEach(() => { while (added > 0) { ROWS.pop(); added--; } });
+afterEach(() => { while (added > 0) { ROWS.pop(); added--; } leavingWatch.tell = null; });
 const month = (g: Game, t: number, nat = 'GER'): void => { g.turn = t; startPhase(g, nat); };
 
 // ---- S4-1: a held corps whose general takes its hold off this month (ai.ts `answering`, `frontAnswering`) is free --
@@ -135,5 +135,28 @@ describe("T4-1: a war row's loan held a second time is told again, dated by its 
     expect(heads(4)).toEqual(['The Lent Test Corps, lent to the campaign, is due this month to go back into the Parent Test Corps, but it is at the front in the Grenzmark. It stays, and goes back the month after it leaves the front.']);
     expect(arrivalWaitOf(g, c)?.whole).toBe('This corps was due to go back into the Parent Test Corps in December 1939. It goes back the month after it leaves the front.');
     expect(ruleHolds(g).map((h) => [h.path, h.told, h.untold])).toEqual([['loanBack', true, false]]);
+  });
+});
+
+// ---- T4-2: outside the pass, a loan held this month is no leaver for the rows after it, as in the pass -------------
+
+describe("T4-2: the telling's leaving set read between passes is the rule's own in-pass set", () => {
+  it('two lent corps alone together, loans over in month 2; a late row read after both: the same set before and in the pass', () => {
+    const { g, gz } = grenz();
+    const a = lend(g, 'Lent Test Corps A', gz);
+    const b = lend(g, 'Lent Test Corps B', gz);
+    const late = addRow([3, 'GER', 'Late Test Row', 'inf', 1, 'Magdeburg', {}]);
+    const names = (s: ReadonlySet<Corps>): string[] => [...s].map((x) => x.name).filter((n) => n.startsWith('Lent Test')).sort();
+    const rule: Record<number, string[]> = {};
+    leavingWatch.tell = (g2, nat, i, leaving) => { if (nat === 'GER' && i === late) rule[g2.turn] = names(leaving); };
+    month(g, 2);
+    expect([a.c.dead, g.flags[`wait:${a.j}`], b.c.dead]).toEqual([false, 2, true]);
+    // (After month 2's pass, as the player reads his cards: A is held this month, B is gone.)
+    const between = names(rowLeaving(g, 'GER', late));
+    month(g, 3);
+    expect([a.c.dead, g.flags[`wait:${a.j}`]]).toEqual([false, 3]);
+    expect(rule[3]).toEqual([]);
+    expect(between).toEqual(rule[3]);
+    expect(names(rowLeaving(g, 'GER', late))).toEqual(rule[3]);
   });
 });

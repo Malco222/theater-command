@@ -5798,9 +5798,30 @@ let PASS: { g: Game; nat: string; leaving: (x: Corps) => boolean } | null = null
 
 /**
  * The lent corps leaving this month, as the rule reads it: inside `expeditions`' pass for `nat`, the pass's own
- * predicate; outside it, the board's (`loanLeaving` with nothing yet put on its way). Writes nothing.
+ * predicate; outside it, the board's (`loanLeaving` with nothing yet put on its way), read as the pass reads the design
+ * director's (2) for row `i`: a lent corps the one test held this month for a row before `i` (`heldBefore`) is not
+ * leaving. For no row of the list (`i` -1), every loan held this month. Writes nothing.
  */
-export const loanEnding = (g: Game, nat: string): ((x: Corps) => boolean) => (PASS && PASS.g === g && PASS.nat === nat ? PASS.leaving : loanLeaving(g, nat, [], [], [], []));
+export const loanEnding = (g: Game, nat: string, i = -1): ((x: Corps) => boolean) => (PASS && PASS.g === g && PASS.nat === nat ? PASS.leaving : loanLeaving(g, nat, [], [], [], [], heldBefore(g, nat, i)));
+
+/**
+ * Outside the pass, the lent corps the one test held in this month's pass for a row before row `i` (every row, for `i`
+ * -1), from the save's own facts: the row `nat`'s and sent, its lent corps living (`lent:<j>`), and its wait written
+ * this month (`wait:<j>`, which on a sent row only the rule's hold writes: `expeditions`). The pass's own list,
+ * `heldNow`, in row order (the telling sceptic's finding T4-2, round 4). None with the switch 'fromWait' off. Writes
+ * nothing.
+ */
+function heldBefore(g: Game, nat: string, i: number): Corps[] {
+  if (g.flags.fromWait !== 1) return [];
+  const out: Corps[] = [];
+  ((setup as any).expeditions as any[]).forEach((r2, j) => {
+    if ((i >= 0 && j >= i) || r2[1] !== nat || !g.flags[`sent:${j}`] || g.flags[`wait:${j}`] !== g.turn) return;
+    const id = g.flags[`lent:${j}`];
+    const c = id > 0 ? g.corps.find((x) => x.id === id && x.nat === nat && !x.dead) : undefined;
+    if (c) out.push(c);
+  });
+  return out;
+}
 
 /**
  * A lent regiment of the player's whose loan's end is his offer (`loanStays`, the part of it that writes nothing: his
@@ -5833,7 +5854,7 @@ function leavingOf(g: Game, nat: string, row: any[] | undefined, o: any, ending:
  * Row `i`'s leaving set as the rule takes it now (`leavingOf`, with the row's words as `expeditions` reads them), for
  * the telling; with the switch 'fromWait' off, nobody (nothing reads it then). Writes nothing.
  */
-export function rowLeaving(g: Game, nat: string, i: number, ending: (x: Corps) => boolean = loanEnding(g, nat)): ReadonlySet<Corps> {
+export function rowLeaving(g: Game, nat: string, i: number, ending: (x: Corps) => boolean = loanEnding(g, nat, i)): ReadonlySet<Corps> {
   if (g.flags.fromWait !== 1) return NO_LEAVING;
   const row = ((setup as any).expeditions as any[])[i];
   return row ? leavingOf(g, nat, row, rowWords(g, nat, row).o, ending) : NO_LEAVING;
