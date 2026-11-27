@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f5038ba84 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6ca0580b5 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -48042,10 +48042,10 @@
         for (const j of e.nb) if (f.ours.has(j)) best = Math.min(best, e.fort.vs.includes(g2.regions[j].owner) ? FORT_MUL[e.fort.lv] : 1);
         return best === 99 ? 1 : best;
       };
-      const edge4 = [...f.edge];
-      const soft = edge4.filter((id) => works2(g2.regions[id]) < 1.5);
+      const edge5 = [...f.edge];
+      const soft = edge5.filter((id) => works2(g2.regions[id]) < 1.5);
       const depth = new Int16Array(N).fill(-1);
-      const q = soft.length ? [...soft] : [...edge4];
+      const q = soft.length ? [...soft] : [...edge5];
       for (const id of q) depth[id] = 1;
       for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (depth[j] < 0 && label[j] === comp && side5[j] === 2) {
         depth[j] = depth[q[i]] + 1;
@@ -48070,7 +48070,7 @@
           if (!still && d <= 2) threat2 += atkP(g2, u) * (d === 1 ? 1 : 0.6) * (cold2 ? EASTERN.winter.attack : 1);
         }
       }
-      for (const id of edge4) if (depth[id] > 2) {
+      for (const id of edge5) if (depth[id] > 2) {
         for (const u of g2.regions[id].units) if (foe(u.nat) && !u.hold && u.kind !== "fort") threat2 += atkP(g2, u) * 0.6;
       }
       const ours2 = [...f.ours];
@@ -48081,12 +48081,12 @@
       }
       const fights3 = (id) => id === nat || [...enemies].some((e) => atWar(g2, id, e));
       let atk = 0, fixed2 = 0;
-      const tally = one2 && edge4.every((id) => shoreOf(id) === 2) ? [] : null;
-      const deep = edge4.filter((id) => EASTERN.deepOwners.includes(g2.regions[id].owner)).length * 2 >= edge4.length;
+      const tally = one2 && edge5.every((id) => shoreOf(id) === 2) ? [] : null;
+      const deep = edge5.filter((id) => EASTERN.deepOwners.includes(g2.regions[id].owner)).length * 2 >= edge5.length;
       let season = deep && !EASTERN.winter.hardy.includes(nat) ? wx.winter ? EASTERN.winter.attack : wx.mud ? 0.8 : 1 : 1;
       if (EASTERN.lineReckon && !long.includes(nat)) {
         const reach3 = g2.reach[nat];
-        const far = edge4.filter((id) => long.includes(g2.regions[id].owner) && !EASTERN.deepOwners.includes(g2.regions[id].owner));
+        const far = edge5.filter((id) => long.includes(g2.regions[id].owner) && !EASTERN.deepOwners.includes(g2.regions[id].owner));
         if (reach3 && far.length) {
           const cutOff2 = EASTERN.bands[EASTERN.bands.length - 1][1];
           let sum3 = 0;
@@ -48108,7 +48108,7 @@
         atk += atkP(g2, c) * season;
         if (tally && !(c.hold && c.stay && !(o.gather && c.garr !== void 0))) tally.push([c, atkP(g2, c) * season]);
       }
-      const key8 = Object.keys(share).sort((a, b) => share[b] - share[a])[0] ?? g2.regions[edge4[0]].ctrl;
+      const key8 = Object.keys(share).sort((a, b) => share[b] - share[a])[0] ?? g2.regions[edge5[0]].ctrl;
       const mine4 = g2.nations[nat].air, his = g2.nations[key8]?.air ?? 0;
       const airEdge = (mine4 - his) / (mine4 + his + 1);
       atk *= 1 + 0.3 * airEdge;
@@ -48119,7 +48119,7 @@
         def *= OPEN.headOn;
         defNear *= OPEN.headOn;
       }
-      out.push({ key: key8, enemies: [...enemies], ours: ours2, edge: edge4, depth, areas: f.areas, atk, def: Math.max(def, 0.01), threat: threat2, fixed: fixed2, ratio: 0, near: 0, defNear: Math.max(defNear, 0.01) });
+      out.push({ key: key8, enemies: [...enemies], ours: ours2, edge: edge5, depth, areas: f.areas, atk, def: Math.max(def, 0.01), threat: threat2, fixed: fixed2, ratio: 0, near: 0, defNear: Math.max(defNear, 0.01) });
       if (tally) brought.set(out[out.length - 1], tally);
     }
     const M2 = brought.size ? membership(g2, nat, out, (id) => side5[id] === 1) : null;
@@ -48669,10 +48669,10 @@
     if (ids2.length === G5.length) return f;
     const depth = new Int16Array(f.depth.length).fill(-1);
     for (const id of ids2) depth[id] = f.depth[id];
-    const edge4 = f.edge.filter((id) => depth[id] >= 1);
-    if (!edge4.length) return null;
+    const edge5 = f.edge.filter((id) => depth[id] >= 1);
+    if (!edge5.length) return null;
     const enemies = foesOn(g2, nat, ids2).filter((e) => f.enemies.includes(e));
-    return { ...f, key: enemies.includes(f.key) ? f.key : enemies[0] ?? f.key, enemies, edge: edge4, depth };
+    return { ...f, key: enemies.includes(f.key) ? f.key : enemies[0] ?? f.key, enemies, edge: edge5, depth };
   }
   function frontsKept(g2, nat, real) {
     if (!farOn(g2)) return;
@@ -65017,8 +65017,8 @@
     if (!def.length) return null;
     if (!esc2.length) return { types: `Defending fighters at ${height(band2)} m: ${namesOf(def)}.`, edge: null };
     const E = a.typeEdge ?? 0, x = Math.exp(Math.abs(E) / 2) - 1;
-    const edge4 = x < 0.02 ? "The aircraft are about even." : `The ${E > 0 ? "escort's" : "defenders'"} aircraft are about ${Math.round(x * 100)}% stronger.`;
-    return { types: `Fighters at ${height(band2)} m: ${namesOf(esc2)} against ${namesOf(def)}.`, edge: edge4, ...a.pilotsLine ? { pilots: a.pilotsLine } : {} };
+    const edge5 = x < 0.02 ? "The aircraft are about even." : `The ${E > 0 ? "escort's" : "defenders'"} aircraft are about ${Math.round(x * 100)}% stronger.`;
+    return { types: `Fighters at ${height(band2)} m: ${namesOf(esc2)} against ${namesOf(def)}.`, edge: edge5, ...a.pilotsLine ? { pilots: a.pilotsLine } : {} };
   }
 
   // ../../src/campaign/intel.ts
@@ -71189,8 +71189,8 @@
     const played = seaField.fought?.({ turn: g2.turn, zone: z, nat, mine: mine4.map((f) => f.id), met: met2.map((f) => f.id), A, D: D2, airA, airD });
     const R2 = played ? played.R : A / D2 * rng.range(0.8, 1.2);
     const won = R2 >= 1;
-    const edge4 = won ? R2 : 1 / R2;
-    const hard = clamp(0.14 + 0.08 * edge4, 0.18, 0.5), light = clamp(0.16 / edge4, 0.03, 0.14);
+    const edge5 = won ? R2 : 1 / R2;
+    const hard = clamp(0.14 + 0.08 * edge5, 0.18, 0.5), light = clamp(0.16 / edge5, 0.03, 0.14);
     const keptA = mine4.map(() => none2()), keptD = met2.map(() => none2());
     mine4.forEach((f, i) => {
       att[i].sunk = played ? sinkFought(f, played, won ? light : hard, rng, dcOf(g2, f.nat), keptA[i]) : sinkShips(f, won ? light : hard, rng, CLASSES2, dcOf(g2, f.nat), keptA[i]);
@@ -71226,7 +71226,7 @@
       for (const f of met2) for (const e of mine4) (f.seen ?? (f.seen = {}))[e.nat] = g2.turn;
     }
     for (const f of won ? met2 : mine4) sail(g2, f, f.home, "port");
-    const level = won ? edge4 >= 2 ? "Decisive victory" : "Close victory" : edge4 >= 2 ? "Decisive defeat" : "Close defeat";
+    const level = won ? edge5 >= 2 ? "Decisive victory" : "Close victory" : edge5 >= 2 ? "Decisive defeat" : "Close defeat";
     g2.flags.seaBattles = (g2.flags.seaBattles ?? 0) + 1;
     att.forEach((s, i) => nameSide(g2, s, `sea:${g2.flags.seaBattles}:a${i}`));
     def.forEach((s, i) => nameSide(g2, s, `sea:${g2.flags.seaBattles}:d${i}`));
@@ -75048,17 +75048,17 @@
   function dumpRoads(g2, nat, region) {
     const d = new Int16Array(g2.regions.length).fill(-1);
     d[region] = 0;
-    let edge4 = [region];
-    for (let k = 1; k <= LOGI.dumps.reach && edge4.length; k++) {
+    let edge5 = [region];
+    for (let k = 1; k <= LOGI.dumps.reach && edge5.length; k++) {
       const next = [];
-      for (const p of edge4) for (const j of g2.regions[p].nb) {
+      for (const p of edge5) for (const j of g2.regions[p].nb) {
         if (d[j] >= 0) continue;
         const who = g2.regions[j].ctrl;
         if (!who || !friendOf(g2, who, nat)) continue;
         d[j] = k;
         next.push(j);
       }
-      edge4 = next;
+      edge5 = next;
     }
     return d;
   }
@@ -76262,6 +76262,103 @@
   function heldRibbon(g2, c) {
     if (!heldOn(g2) || !c.held) return null;
     return { title: `Held the line: ${g2.regions[c.held.at]?.name ?? "the line"}`, ribbon: HELD.ribbon };
+  }
+
+  // ../../data/campaign/wornout.json
+  var wornout_default = {
+    _note: "Worn out in the line (release 2; Brian's yes of 27 November 2026 17:10Z; the design director's ruling of 17:15Z, ideas-batch3-ruling-1127.md Q2). src/campaign/wornout.ts. Each month a corps spends in the line (it fought, or an army at war with it holds the ground next door or stands in its province: stories.ts inLine, the same front the uniforms wear on) takes 'step' more off its fighting power, to 'most' at the worst. No count of months comes first. One whole month at rest (morale.ts restedMonth: in supply, no march, no fight) brings it all back. Every army alike; where the computer's staff rests its worn corps (ai.ts relieve, the staffs rivals.json names), a corps worn to 'most' counts as worn, read through the battle's own edge(). The figures are design figures for the design director to rule with the form; the historian is asked for the record.",
+    step: 0.02,
+    most: 0.1
+  };
+
+  // ../../src/campaign/wornout.ts
+  var WORN = wornout_default;
+  var wornOn = (g2) => g2.flags.wornout === 1;
+  function setWorn(g2, on2) {
+    if (on2) {
+      if (g2.flags.open !== 1) return false;
+      g2.flags.wornout = 1;
+      return true;
+    }
+    delete g2.flags.wornout;
+    for (const c of g2.corps) {
+      delete c.spent;
+      delete c.runIn;
+    }
+    for (const v of g2.atSea ?? []) {
+      delete v.corps.spent;
+      delete v.corps.runIn;
+    }
+    return true;
+  }
+  var edge4 = (c) => c.spent ? 1 - c.spent : 1;
+  var blunted = (c) => edge4(c) <= 1 - WORN.most + 1e-9;
+  function wornMonth(g2, c) {
+    if (!wornOn(g2) || c.kind === "fort") return;
+    if (restedMonth(g2, c)) {
+      delete c.spent;
+      delete c.runIn;
+      return;
+    }
+    if (!(c.fought || inLine(g2, c))) {
+      delete c.runIn;
+      return;
+    }
+    c.runIn = (c.runIn ?? 0) + 1;
+    c.spent = Math.round(Math.min(WORN.most, (c.spent ?? 0) + WORN.step) * 1e3) / 1e3;
+  }
+  function wornLine(c) {
+    if (!c.spent) return "";
+    const pct14 = Math.round(c.spent * 100), months4 = c.runIn ?? 0;
+    return `Worn out: ${pct14}% weaker${months4 ? ` after ${months4} months in the line` : ""}. A month at rest brings it back.`;
+  }
+
+  // ../../data/campaign/fieldhospitals.json
+  var fieldhospitals_default = {
+    _note: "Field hospitals (release 2; Brian's yes of 27 November 2026 17:10Z; the design director's notes of 17:15Z, ideas-batch3-ruling-1127.md). src/campaign/fieldhospitals.ts. Of what a corps loses in a battle (its strength the fight took, not the men taken prisoner after it), 'wounded' are wounded men who can come back. Each month a share 'back' of a corps' wounded rejoins it, free (no men from the reserve, nothing from the treasury), while the corps is in supply: the supply's own reach, as the month's supply picture has it (true reach where that row is on), stands for the chain of field hospitals and the trains that carry the wounded. A Medicine building in its province or next door (buildings.json 'hospital') raises that share by 'raise' a level. Cut off, its wounded wait, and 'lost' of them a month never come back. A corps destroyed loses its wounded. Every army alike. Under this switch the Medicine building no longer speeds a resting corps' drafts (that stood in for the wounded: price once); its extra rest stays. The figures are the builder's placeholders for the design director to rule with the form; the historian is asked for the record.",
+    wounded: 0.6,
+    back: 0.25,
+    lost: 0.15,
+    raise: 0.25
+  };
+
+  // ../../src/campaign/fieldhospitals.ts
+  var HOSP = fieldhospitals_default;
+  var hospOn = (g2) => g2.flags.fieldhosp === 1;
+  function setHosp(g2, on2) {
+    if (on2) {
+      if (g2.flags.open !== 1) return false;
+      g2.flags.fieldhosp = 1;
+      return true;
+    }
+    delete g2.flags.fieldhosp;
+    for (const c of g2.corps) delete c.wd;
+    for (const v of g2.atSea ?? []) delete v.corps.wd;
+    return true;
+  }
+  function woundedBook(g2, c, took) {
+    if (!hospOn(g2) || c.kind === "fort" || !(took > 0)) return;
+    c.wd = Math.round(((c.wd ?? 0) + took * c.divs * HOSP.wounded) * 1e6) / 1e6;
+  }
+  function woundedMonth(g2, c, fed2, room2, level) {
+    if (!hospOn(g2) || !c.wd) return 0;
+    if (!fed2) {
+      c.wd = Math.round(c.wd * (1 - HOSP.lost) * 1e6) / 1e6;
+      if (c.wd < 1e-4) delete c.wd;
+      return 0;
+    }
+    const share = Math.min(1, HOSP.back * (1 + HOSP.raise * level));
+    const give = Math.min(c.wd * share, Math.max(0, room2) * c.divs);
+    if (give > 0) c.str += give / c.divs;
+    c.wd = Math.round((c.wd - give) * 1e6) / 1e6;
+    if (c.wd < 1e-4) delete c.wd;
+    return give;
+  }
+  function woundedLine(g2, c, fed2, level) {
+    if (!hospOn(g2) || !c.wd) return "";
+    const menOf = (x) => (Math.round(x * MEN_PER_DIV / 100) * 100).toLocaleString("en-US");
+    if (!fed2) return `Wounded: ${menOf(c.wd)} men waiting. Cut off, some will not come back. They rejoin once supply reaches the corps.`;
+    return `Wounded: ${menOf(c.wd)} men in the hospitals; about ${menOf(c.wd * Math.min(1, HOSP.back * (1 + HOSP.raise * level)))} rejoin next month.`;
   }
 
   // ../../data/campaign/diary.json
@@ -77643,6 +77740,7 @@
     const land2 = opts.sea === void 0;
     const armsA = wide3 ? combinedArms(g2, land2 ? attackers2.filter((c) => !noCrossing(g2, c.kind, c.reg, target.id)) : attackers2, target, false) : null, armsD = wide3 && !town ? combinedArms(g2, defenders, target, true) : null;
     let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1, shortA = 1, shortD = 1, spied = "", streets = false;
+    let spentA = 0, spentD = 0;
     let watched2 = null;
     let roadA = 0, railA = 1, roadD = 0, railD = 1;
     const rivers = /* @__PURE__ */ new Set();
@@ -77751,6 +77849,10 @@
         }
       }
       p *= heart(c);
+      if (c.spent) {
+        p *= edge4(c);
+        spentA = Math.max(spentA, c.spent);
+      }
       if (g2.nations[c.nat].slowCommand) p *= 0.85;
       p *= techMul(g2, c.nat, "doctrine");
       if (opts.sea !== void 0) p *= opts.sea;
@@ -77878,6 +77980,10 @@
         }
       }
       p *= heart(d);
+      if (d.spent) {
+        p *= edge4(d);
+        spentD = Math.max(spentD, d.spent);
+      }
       const proud = storyDefence(g2, d, target, attackers2);
       if (proud !== 1) {
         p *= proud;
@@ -78210,6 +78316,14 @@
       const value = [say(heartA, "Attackers"), say(heartD, heartA === null ? "Defenders" : "defenders")].filter(Boolean).join(", ");
       const effect = [fx(heartA, "Attack"), fx(heartD, "defence")].filter(Boolean).join(", ");
       lines2.push({ label: "Morale", value, effect: effect ? effect[0].toUpperCase() + effect.slice(1) : void 0 });
+    }
+    if (spentA > 0 || spentD > 0) {
+      const pct14 = (x) => Math.round(x * 100);
+      lines2.push({
+        label: "Worn out",
+        value: [spentA > 0 ? `Attackers worn by months in the line` : "", spentD > 0 ? `${spentA > 0 ? "defenders" : "Defenders"} worn by months in the line` : ""].filter(Boolean).join(", "),
+        effect: [spentA > 0 ? `Attack cut by up to ${pct14(spentA)}%` : "", spentD > 0 ? `${spentA > 0 ? "defence" : "Defence"} cut by up to ${pct14(spentD)}%` : ""].filter(Boolean).join(", ")
+      });
     }
     if (spied) lines2.push({ label: "Intelligence", value: `Agent ${spied} has mapped the defences of ${target.name}`, effect: `Attack up ${Math.round(INTEL.battle.attack * 100)}%` });
     if (watched2) {
@@ -78744,8 +78858,9 @@
     const attOut = pulled("att");
     const attK = !opts.field ? 1 : opts.field.broke === "att" && R2 < 1.2 ? pursuitScale(attackers2, attackers2.map((c, i) => attPart(c, i)), attackers2.map((c) => attPlain(c)), 0.6, 1, opts.field.att) : attOut !== null && R2 < 1.2 ? pursuitScale(attackers2, attackers2.map((c, i) => attPart(c, i)), attackers2.map((c) => attPlain(c)), 0.6, 1, opts.field.att, attOut) : fieldScale(attackers2, attackers2.map((c, i) => Math.min(0.6, attFrac * attW[i] * tollFor(a.faced?.toll, c) * cmdLoss(g2, c))), opts.field.att, opts.field.whole);
     attackers2.forEach((c, i) => {
-      const before = men(c);
+      const before = men(c), had = c.str;
       c.str *= 1 - Math.min(0.6, attFrac * attW[i] * attK * tollFor(a.faced?.toll, c) * cmdLoss(g2, c));
+      woundedBook(g2, c, had - c.str);
       c.org = clamp(c.org - (0.1 + 0.08 / RL) * cmdSteady(g2, c) * nerve(c), 0, 1);
       c.xp = Math.min(1, c.xp + 0.05);
       c.fought = true;
@@ -78762,8 +78877,9 @@
     const defOut = pulled("def");
     const defK = !opts.field ? 1 : opts.field.broke === "def" && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c) => defPlain(c)), 0.8, a.weight, opts.field.def) : defOut !== null && win ? pursuitScale(defenders, defenders.map((c, i) => defPart(c, i)), defenders.map((c) => defPlain(c)), 0.8, a.weight, opts.field.def, defOut) : fieldScale(defenders, defenders.map((c, i) => Math.min(0.8, defPart(c, i)) * a.weight), opts.field.def, opts.field.whole);
     defenders.forEach((c, i) => {
-      const before = men(c);
+      const before = men(c), had = c.str;
       c.str *= 1 - Math.min(0.8, defK * defFrac * defW[i] * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g2, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready)) * a.weight;
+      woundedBook(g2, c, had - c.str);
       c.org = clamp(c.org - clamp(0.18 + 0.14 * RL, 0.2, 0.75) * stood * cmdSteady(g2, c) * nerve(c) * a.weight, 0, 1);
       c.xp = Math.min(1, c.xp + 0.04);
       c.fought = true;
@@ -80921,9 +81037,13 @@
     const tempo = freshOffensive(g2, nat);
     const army2 = g2.corps.filter((c) => c.nat === nat);
     const drafts = draftsMul(g2, nat) * traitDrafts(g2, nat) * supDrafts(g2, nat) * civicDrafts(g2, nat) * govMul(g2, nat, "drafts");
-    const ward = (c) => restedMonth(g2, c) ? hospitalWorth(hospitalNear(g2, c, (h) => h === nat || allied(g2, h, nat))) : { drafts: 1, org: 0 };
+    const friendlyTo2 = (h) => h === nat || allied(g2, h, nat);
+    const ward = (c) => restedMonth(g2, c) ? ((w) => hospOn(g2) ? { drafts: 1, org: w.org } : w)(hospitalWorth(hospitalNear(g2, c, friendlyTo2))) : { drafts: 1, org: 0 };
     const stored = new Set(army2.filter((c) => onPortStores(g2, c)));
     const wantOf = (c) => c.supplied && !stored.has(c) && !(c.lean && nat === g2.human) && !shutIn(g2, c) && !inPocket(g2, c) ? Math.min(Math.max(0, (c.full ?? 1) * ownShare(c) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g2, c) * ward(c).drafts * c.divs * lineStrength(g2, c).mul * columnShare(g2, c) * (g2.regions[c.reg].overseas ? DESERT.replace : 1)) : 0;
+    if (hospOn(g2)) {
+      for (const c of army2) if (c.wd) woundedMonth(g2, c, c.supplied && !stored.has(c) && !shutIn(g2, c) && !inPocket(g2, c), (c.full ?? 1) * ownShare(c) - c.str, hospitalNear(g2, c, friendlyTo2));
+    }
     const want = army2.map((c) => c.vol ? 0 : wantOf(c));
     const volWant = army2.map((c) => c.vol ? wantOf(c) : 0);
     const asked4 = want.reduce((s, x) => s + x, 0);
@@ -80981,6 +81101,7 @@
       }
       const schooled = schoolMonth(g2, c, knew);
       wearMonth(g2, c, had, schooled);
+      wornMonth(g2, c);
       c.fought = false;
       if (c.blows !== void 0) delete c.blows;
       if (c.gaveWay) delete c.gaveWay;
@@ -81431,8 +81552,8 @@
     return `Between ${worst} and ${best} to 1 as the day goes`;
   }
   function shares2(r) {
-    const won = r >= 1, edge4 = won ? r : 1 / r;
-    const hard = clamp(0.14 + 0.08 * edge4, 0.18, 0.5), light = clamp(0.16 / edge4, 0.03, 0.14);
+    const won = r >= 1, edge5 = won ? r : 1 / r;
+    const hard = clamp(0.14 + 0.08 * edge5, 0.18, 0.5), light = clamp(0.16 / edge5, 0.03, 0.14);
     return won ? { ours: light, theirs: hard } : { ours: hard, theirs: light };
   }
   function lossAt(g2, fleets, share, to = (x) => x) {
@@ -82478,8 +82599,9 @@
   var wornOut = (g2, c) => {
     const R2 = RIVALS.relief;
     const since = g2.flags[`rl:${c.id}`];
-    if (since === void 0 || g2.turn - since >= 2 * R2.months) return c.str < R2.worn;
-    return c.str < R2.fit && g2.turn - since < R2.months;
+    const blunt = blunted(c);
+    if (since === void 0 || g2.turn - since >= 2 * R2.months) return c.str < R2.worn || blunt;
+    return (c.str < R2.fit || blunt) && g2.turn - since < R2.months;
   };
   var spared2 = (g2, c) => relieves(g2, c.nat) && wornOut(g2, c);
   var aside = (g2, r, nat) => r.theatre >= 0 && !!THEATRES[r.theatre] && apart2(g2, r.theatre, nat);
@@ -83001,11 +83123,11 @@
         planSet(g2, nat, k, ids2[k], { attack: ph?.posture === "attack" && enemies.size > 0, only: ph?.targets ? new Set(ph.targets) : null });
         if (ph?.posture === "attack" && enemies.size) {
           const only = ph.targets ? new Set(ph.targets) : null;
-          const halt = /* @__PURE__ */ new Set([...ph.siege ?? [], ...ph.mask ?? []]), edge4 = new Set(halt);
+          const halt = /* @__PURE__ */ new Set([...ph.siege ?? [], ...ph.mask ?? []]), edge5 = new Set(halt);
           for (const r of g2.regions) {
             if (!ids2[k].has(r.id)) {
               halt.add(r.name);
-              edge4.add(r.name);
+              edge5.add(r.name);
             } else if (only && !only.has(r.name)) halt.add(r.name);
           }
           if (!ph.massing) {
@@ -83013,7 +83135,7 @@
             offensive(g2, nat, ph.objectives ?? [], enemies, ph.minOdds ?? 1.3, [], true, true, halt, only, ph.oddsFor);
           }
           if (n.alive) {
-            inEffort(g2, () => advance(g2, nat, enemies, 0, null, edge4));
+            inEffort(g2, () => advance(g2, nat, enemies, 0, null, edge5));
             mass(g2, nat, ph);
             inEffort(g2, () => defend(g2, nat, false));
           }
@@ -90263,8 +90385,8 @@
     const rng = new Rng(seed ^ 22506);
     const half = s.great ? STREAM.great : STREAM.lesser, jh = STREAM.lesser;
     const dcx = Math.min(z.def[2] - 300, Math.max(z.def[0] + 300, town.x));
-    const edge4 = (streetEdge ?? []).filter((y, c) => y >= 0 && Math.abs(c * cell + cell / 2 - dcx) <= 700).sort((a, b) => a - b);
-    const front = Math.max(z.def[1] + 40, edge4.length ? edge4[Math.floor(edge4.length * 0.75)] + LAND.city.inside : 0);
+    const edge5 = (streetEdge ?? []).filter((y, c) => y >= 0 && Math.abs(c * cell + cell / 2 - dcx) <= 700).sort((a, b) => a - b);
+    const front = Math.max(z.def[1] + 40, edge5.length ? edge5[Math.floor(edge5.length * 0.75)] + LAND.city.inside : 0);
     const L3 = rng.range(1500, 2300), p1 = rng.range(0, Math.PI * 2), p2 = rng.range(0, Math.PI * 2);
     const wave = (v) => 0.5 + 0.35 * Math.sin(2 * Math.PI * v / L3 + p1) + 0.15 * Math.sin(2 * Math.PI * v / (L3 * 0.37) + p2);
     const far = (hw) => h - hw - STREAM.far;
@@ -90640,7 +90762,7 @@
   function layCity(size, tx, ty, cols2, rows, ground, height2, seed, strip = 0) {
     const { w, h, cell } = FIELD3, n = cols2 * rows;
     const cr = new Rng(seed ^ 49534);
-    const edge4 = fractal(cr, cols2, rows, 6, 2), fill10 = fractal(cr, cols2, rows, 2, 2);
+    const edge5 = fractal(cr, cols2, rows, 6, 2), fill10 = fractal(cr, cols2, rows, 2, 2);
     const storeys = new Array(n).fill(0);
     const core = new Uint8Array(n);
     const capital3 = size === "capital", front = h * 0.6;
@@ -90651,7 +90773,7 @@
     const coreFront = wave(170, 1300), termFront = wave(130, 1e3), westSide = wave(110, 700), eastSide = wave(110, 700);
     const ringAt = new Uint8Array(n);
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols2; c++) {
-      const i = r * cols2 + c, x = c * cell + cell / 2, y = r * cell + cell / 2, e = (edge4[i] - 0.5) * 120;
+      const i = r * cols2 + c, x = c * cell + cell / 2, y = r * cell + cell / 2, e = (edge5[i] - 0.5) * 120;
       let ring = 0;
       if (capital3) {
         const west = w * 0.05 + westSide(y) + e * 0.6, east = w - w * 0.05 - eastSide(y) - e * 0.6;
@@ -92185,10 +92307,12 @@
       return {
         nat: f.nat,
         title: called(r) || "No name yet",
+        // (The UI director, 16:12Z 27 Nov: a second line that only says the crew's count again is cut. It is there for a
+        // bomber that has flown more than its crew, a veteran with a new crew, or for what its gunners have shot down.)
         lines: [
           `${r.grade} crew: ${num5(r.crew)} of their ${tour}${toGo > 0 && toGo <= 5 ? `, ${toGo === 1 ? "one" : num5(toGo)} to go` : ""}.`,
-          `${num5(r.missions)} ${r.missions === 1 ? word3 : words2} flown${r.kills ? `, ${shot(r.kills)}` : ""}.`
-        ],
+          r.missions !== r.crew ? `The bomber has flown ${num5(r.missions)} ${r.missions === 1 ? word3 : words2}${r.kills ? `, with ${shot(r.kills)}` : ""}.` : r.kills ? `${shot(r.kills).replace(/^a/, "A")}.` : ""
+        ].filter(Boolean),
         buttons: []
       };
     });
@@ -93550,10 +93674,10 @@
   }
   function defend2(b, side5, style, mine4, foes, skip = null) {
     const leash2 = style?.defLeash ?? 300, finish2 = style?.defFinish ?? 150;
-    const edge4 = b.field.streetEdge, cell = b.field.cell;
+    const edge5 = b.field.streetEdge, cell = b.field.cell;
     const outside = (f) => {
-      if (!edge4) return false;
-      const y = edge4[Math.min(edge4.length - 1, Math.max(0, Math.floor(f.x / cell)))];
+      if (!edge5) return false;
+      const y = edge5[Math.min(edge5.length - 1, Math.max(0, Math.floor(f.x / cell)))];
       return y < 0 || f.y < y;
     };
     const struck = struckOf(mine4, foes);
@@ -97539,9 +97663,9 @@
       if (MOVING.has(m.pose) && Math.hypot(m.x - m.spot[0], m.y - m.spot[1]) > 1 && t < m.until + 1) return;
       const dE = this.toBox(m, e), down = lv > BOOK2.suppress.down;
       const [a] = this.slot(sq, m, "line"), mx = m.x - u.x, my = m.y - u.y;
-      const da = a + sq.flank * BOOK2.flank.out - (mx * rx + my * ry), edge4 = (e.x - m.x) * fx + (e.y - m.y) * fy - e.d / 2;
+      const da = a + sq.flank * BOOK2.flank.out - (mx * rx + my * ry), edge5 = (e.x - m.x) * fx + (e.y - m.y) * fy - e.d / 2;
       if (wavering && !down) {
-        const sa = clamp7(da, -8, 8), p = [m.x + rx * sa + fx * (edge4 + 4), m.y + ry * sa + fy * (edge4 + 4)];
+        const sa = clamp7(da, -8, 8), p = [m.x + rx * sa + fx * (edge5 + 4), m.y + ry * sa + fy * (edge5 + 4)];
         if (final === "grenade" && dE < G5 && m.pose !== "throw_grenade" && (m.shot === void 0 || t - m.shot > 6) && roll(this.seed, u.id, m.n, Math.floor(t / 3), 98) < 0.5) {
           m.v = 0;
           m.spot = [m.x, m.y];
@@ -97583,7 +97707,7 @@
         rushing = p0 >= d0 && p0 < d0 + len;
         rush = len;
       }
-      const dl = edge4 - G5 * 0.7;
+      const dl = edge5 - G5 * 0.7;
       if (rushing && m.rushed !== n && !down && dl > 2) {
         const F2 = BOOK2.flank.rush, swing = F2[0] + (F2[1] - F2[0]) * roll(this.seed, u.id, m.n, n, 3), step2 = 10 + 10 * roll(this.seed, u.id, m.n, n, 4);
         const sa = clamp7(da, -swing, swing), sl = clamp7(dl, 0, Math.max(3, step2 - Math.abs(sa) * 0.5));
@@ -100852,34 +100976,34 @@
         const us = joining.filter((u) => u.corps === corps), u0 = us[0], side5 = u0.side;
         const f = this.ticket[side5].joiners.find((x2) => x2.corps === corps);
         const own = side5 === "att" && B3 ? u0.dry ? B3.dry : B3.dry === "west" ? "east" : "west" : void 0;
-        const edge4 = joinEdge(side5, f.toward, own);
-        const lanes2 = own && B3 && edge4 === "south" ? own === "west" ? [10, B3.x - BEND.clear] : [B3.x + BEND.clear, F2.w - 10] : null;
-        const [x, y] = this.edgeAt(side5, edge4, f.toward, u0.w, lanes2);
-        const along = edge4 === "south" || edge4 === "north", [lo, hi] = lanes2 ?? [10, F2.w - 10];
+        const edge5 = joinEdge(side5, f.toward, own);
+        const lanes2 = own && B3 && edge5 === "south" ? own === "west" ? [10, B3.x - BEND.clear] : [B3.x + BEND.clear, F2.w - 10] : null;
+        const [x, y] = this.edgeAt(side5, edge5, f.toward, u0.w, lanes2);
+        const along = edge5 === "south" || edge5 === "north", [lo, hi] = lanes2 ?? [10, F2.w - 10];
         const own0 = this.units.filter((v) => v.side === side5);
         const cx = own0.length ? own0.reduce((a, v) => a + v.x, 0) / own0.length : x, cy = own0.length ? own0.reduce((a, v) => a + v.y, 0) / own0.length : y;
         const walk2 = Math.hypot(x - cx, y - cy) / Math.max(1, LAND.speed[u0.kind]);
         const at4 = Math.round(Math.max(0, (1 - u0.joined) * this.ticket.limit - walk2) * 1e3) / 1e3;
         if (at4 > 0) {
-          this.riders.push({ corps, side: side5, f, from: [x, y], mid: [cx, cy], to: [x, y], there: 0, comes: at4, edge: edge4 });
+          this.riders.push({ corps, side: side5, f, from: [x, y], mid: [cx, cy], to: [x, y], there: 0, comes: at4, edge: edge5 });
           this.riderTo(this.riders[this.riders.length - 1]);
         }
         us.forEach((u, i) => {
           const off2 = (i - (us.length - 1) / 2) * (u.w + J.gap);
           const px = along ? clamp6(x + off2, lo + u.w / 2, Math.max(lo + u.w / 2, hi - u.w / 2)) : x, py = along ? y : clamp6(y + off2, 40, F2.h - 40);
-          this.coming.push({ u, f, edge: edge4, x: px, y: py, lanes: lanes2, at: at4 });
+          this.coming.push({ u, f, edge: edge5, x: px, y: py, lanes: lanes2, at: at4 });
         });
         this.joinCorps.add(corps);
       }
       this.coming.sort((a, c) => a.at - c.at || a.u.id - c.u.id);
     }
     /** Where on its edge a joining corps comes on: across a back edge by the way it comes, at a flank its side's own depth. */
-    edgeAt(side5, edge4, toward, w, lanes2) {
+    edgeAt(side5, edge5, toward, w, lanes2) {
       const F2 = this.field, z = F2.zones[side5], J = LAND.join;
-      if (edge4 === "west" || edge4 === "east") return [edge4 === "west" ? w / 2 + 10 : F2.w - w / 2 - 10, (z[1] + z[3]) / 2];
+      if (edge5 === "west" || edge5 === "east") return [edge5 === "west" ? w / 2 + 10 : F2.w - w / 2 - 10, (z[1] + z[3]) / 2];
       const [lo, hi] = lanes2 ?? [z[0], z[2]];
       const q = toward !== void 0 && Number.isFinite(toward) ? toward : 0;
-      return [clamp6(F2.w / 2 + F2.w / 2 * Math.sin(q), lo + w / 2, Math.max(lo + w / 2, hi - w / 2)), edge4 === "south" ? J.edge : F2.h - J.edge];
+      return [clamp6(F2.w / 2 + F2.w / 2 * Math.sin(q), lo + w / 2, Math.max(lo + w / 2, hi - w / 2)), edge5 === "south" ? J.edge : F2.h - J.edge];
     }
     /** The joiners whose time has come: each corps' blocks walk on together, and its coming is told. */
     arrive() {
@@ -102721,8 +102845,8 @@
           const x = Math.round(cx + dx), y = Math.round(front + dir * dy);
           if (!this.sniperGround(x, y)) continue;
           if (!inReach(x, y)) continue;
-          const edge4 = this.sniperCover(x, y) || this.onHedge(x, y) || !this.inWoodsAt(x, y + dir * 30) ? 1 : 0;
-          const score = edge4 * 1e6 + dir * y * 10 - Math.abs(dx) * 0.1;
+          const edge5 = this.sniperCover(x, y) || this.onHedge(x, y) || !this.inWoodsAt(x, y + dir * 30) ? 1 : 0;
+          const score = edge5 * 1e6 + dir * y * 10 - Math.abs(dx) * 0.1;
           if (best && score <= best.score) continue;
           if (this.standWhy(u, x, y, room2) !== null) continue;
           best = { x, y, score };
@@ -113447,7 +113571,7 @@
     }
     const from2 = Math.atan2(ay, ax) || -Math.PI / 2, turn2 = -Math.PI / 2 - from2;
     const rot = ([x, y]) => [x * Math.cos(turn2) - y * Math.sin(turn2), x * Math.sin(turn2) + y * Math.cos(turn2)];
-    const clampBoard = (x, y, edge4 = 2e3) => [clampTo(x, edge4, SKY.w - edge4), clampTo(y, edge4, SKY.h - edge4)];
+    const clampBoard = (x, y, edge5 = 2e3) => [clampTo(x, edge5, SKY.w - edge5), clampTo(y, edge5, SKY.h - edge5)];
     const when = { year: turnToDate(g2.turn).year, month: turnToDate(g2.turn).month };
     const ships = SHIP_KINDS.includes(kind) ? shipPlace(g2, a, m, target, nat, when, SKY.target, turn2) : null;
     const stage = ships?.stage ? STAGES[ships.stage.key] : null;
@@ -114079,8 +114203,8 @@
   // ../../src/battle/sea/result.ts
   var clamp8 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
   function lossShares(r) {
-    const won = r >= 1, edge4 = won ? r : 1 / r;
-    const hard = clamp8(0.14 + 0.08 * edge4, 0.18, 0.5), light = clamp8(0.16 / edge4, 0.03, 0.14);
+    const won = r >= 1, edge5 = won ? r : 1 / r;
+    const hard = clamp8(0.14 + 0.08 * edge5, 0.18, 0.5), light = clamp8(0.16 / edge5, 0.03, 0.14);
     return won ? { att: light, def: hard } : { att: hard, def: light };
   }
   var diceRange = (odds2) => [odds2 * DICE[0], odds2 * DICE[1]];
@@ -114095,8 +114219,8 @@
     return winner === "att" ? Math.max(1, r) : Math.min(0.999, r);
   }
   function seaLevel(R2) {
-    const won = R2 >= 1, edge4 = won ? R2 : 1 / R2;
-    return won ? edge4 >= 2 ? "Decisive victory" : "Close victory" : edge4 >= 2 ? "Decisive defeat" : "Close defeat";
+    const won = R2 >= 1, edge5 = won ? R2 : 1 / R2;
+    return won ? edge5 >= 2 ? "Decisive victory" : "Close victory" : edge5 >= 2 ? "Decisive defeat" : "Close defeat";
   }
   function sunkCaps(fleets, odds2, plain2 = false) {
     const [lo, hi] = diceRange(odds2);
@@ -115297,7 +115421,7 @@
       const C4 = SEA.classes[u.extra.cls], F2 = SEA.field;
       const o = this.orders.get(u.id) ?? FREE2;
       let want = u.face, speed = C4.speed * SEA.speeds[u.extra.speed], foeId = -1;
-      let comb = null, combTo = 0, bare = 0, edge4 = false;
+      let comb = null, combTo = 0, bare = 0, edge5 = false;
       this.away[u.id] = false;
       const run0 = this.runs.get(u.id);
       if (run0 && (u.state === "routing" || this.toldOff(o, run0))) this.endRun(u, run0, run0.phase !== "in");
@@ -115383,15 +115507,15 @@
         if (u.x < m || u.x > F2.size - m || u.y < m || u.y > F2.size - m) {
           want = bare = bearing(u.x, u.y, F2.size / 2, F2.size / 2);
           foeId = -1;
-          edge4 = true;
+          edge5 = true;
         }
       }
-      if (edge4) this.clearSteered.delete(u.id);
+      if (edge5) this.clearSteered.delete(u.id);
       if (this.ownWater) {
-        if (this.clearSteered.has(u.id) || edge4) this.clearBack.delete(u.id);
+        if (this.clearSteered.has(u.id) || edge5) this.clearBack.delete(u.id);
         else if (steered0) this.clearBack.add(u.id);
       }
-      if (comb && !edge4) this.combSteered.add(u.id);
+      if (comb && !edge5) this.combSteered.add(u.id);
       else this.combSteered.delete(u.id);
       this.combed(u, comb, comb ? want : 0, bare);
       const acc = SEA.speeds.accel * DT;
@@ -123217,6 +123341,12 @@
           // (Release 2, pressed.ts, behind its switch) The captured tanks it has pressed into service, as its card's line:
           // "14 captured Soviet tanks in its own colours." Absent where it has none.
           ...c.kit && pressedOn(s) && (c.nat === s.human || s.human && c.joint === s.human) ? { kit: kitLine(s, c) } : {},
+          // (Release 2, wornout.ts, behind its switch) What its months in the line have taken off its edge, as its card's line:
+          // "Worn out: 6% weaker after 5 months in the line. A month at rest brings it back." Absent where it has lost none.
+          ...c.spent && (c.nat === s.human || s.human && c.joint === s.human) ? { worn: wornLine(c) } : {},
+          // (Release 2, fieldhospitals.ts, behind its switch) Its wounded, as its card's line: "Wounded: 3,400 men in the
+          // hospitals; about 900 rejoin next month." Absent where it has none.
+          ...c.wd && (c.nat === s.human || s.human && c.joint === s.human) ? { wounded: woundedLine(s, c, c.supplied, hospitalNear(s, c, (h) => h === c.nat || allied(s, h, c.nat))) } : {},
           ...markOf2(c),
           ...fresh6.has(c.id) ? { ready: true } : {},
           // (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) Where breaking corps up is on: why this corps cannot have
@@ -123611,6 +123741,10 @@
       warDiary: diaryOn(s),
       heldLine: heldOn(s),
       dumpFires: dumpFiresOn(s),
+      // (Release 2, batch 3) Worn out in the line (wornout.ts).
+      wornOut: wornOn(s),
+      // (Release 2, batch 3) Field hospitals (fieldhospitals.ts).
+      fieldHospitals: hospOn(s),
       // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
       townQueue: townQueueOn(s),
       // (Release 2, citydefences.ts) Whether searchlights can be built, the guns fight by night by what they see and a
@@ -130388,6 +130522,16 @@ ${standing6}`,
       note4 = heldOn(s) ? "Held the line is on: a corps that holds its ground when the attack had three chances in four of carrying it, or better, earns the medal, and its morale settles a little higher for the rest of the war. The same for every army." : "Held the line is off: no medal is given, and those given are taken back.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
+    if (part[0] === "wornoutrule") {
+      ok2 = setWorn(s, part[1] === "on");
+      note4 = wornOn(s) ? `Worn out in the line is on: every month a corps spends in the line takes a little more of its edge, up to ${Math.round(WORN.most * 100)}%, and a month at rest brings it all back. The same for every army.` : "Worn out in the line is off: every corps has its edge back.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
+    }
+    if (part[0] === "hospitalsrule") {
+      ok2 = setHosp(s, part[1] === "on");
+      note4 = hospOn(s) ? `Field hospitals are on: of what a corps loses in battle, about ${Math.round(HOSP.wounded * 100)} in 100 are wounded who can come back. While the corps is in supply about ${Math.round(HOSP.back * 100)} in 100 of them rejoin it each month, free, and more with a Medicine building near; cut off, some are lost. The same for every army.` : "Field hospitals are off: battle losses are gone for good, and only new drafts refill a corps.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
+    }
     if (part[0] === "dumpfiresrule") {
       ok2 = setDumpFires(s, part[1] === "on");
       note4 = dumpFiresOn(s) ? `Supply dumps that burn are on: a forward dump badly bombed burns on the map, and the corps that draw their supply on it have ${FIRES.slow === 1 ? "one move" : `${FIRES.slow} moves`} less the month after. The same for every army.` : part[1] === "on" && !dumpsOn(s) ? "Supply dumps that burn need the forward dumps, which a war takes only as it opens. This war has none, so they stay off. They reach new wars." : "Supply dumps that burn are off: a bombed dump loses what burned, and no more.";
@@ -131801,6 +131945,16 @@ ${standing6}`,
     setDumpFires(s, !!on2);
     return { on: dumpFiresOn(s) };
   };
+  globalThis.TC.wornOut = (on2) => {
+    const s = game();
+    setWorn(s, !!on2);
+    return { on: wornOn(s) };
+  };
+  globalThis.TC.fieldHospitals = (on2) => {
+    const s = game();
+    setHosp(s, !!on2);
+    return { on: hospOn(s) };
+  };
   globalThis.TC.pressedTanks = (on2) => {
     const s = game();
     setPressed(s, !!on2);
@@ -131892,7 +132046,11 @@ ${standing6}`,
     // (Release 2, game.ts trueReach: true reach on the old chart, taken only as a September 1939 war opens
     // (trueReachSettable), so an older war and a later start are left as they are. The design director's 480-war fairness
     // gate passed 15:53Z 27 Nov 2026: it ships ON, with its Options row (act('truereachrule:on' / ':off'), turn 1 only).)
-    truereachrule: (s) => setTrueReach(s, true) && trueReach(s)
+    truereachrule: (s) => setTrueReach(s, true) && trueReach(s),
+    // (Release 2, batch 3: worn out in the line, switched in any month; OFF on the Play list until the DD's gate passes.)
+    wornoutrule: (s) => setWorn(s, true) && wornOn(s),
+    // (Release 2, batch 3: field hospitals, switched in any month; OFF on the Play list until the DD's gate passes.)
+    hospitalsrule: (s) => setHosp(s, true) && hospOn(s)
   };
   function r2Ship(ids2) {
     const s = game();
