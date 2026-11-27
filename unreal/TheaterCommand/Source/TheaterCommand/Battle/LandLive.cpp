@@ -246,6 +246,46 @@ namespace
 		// -TheaterAirDogfights turns it on for a run, -TheaterAirOldDogfights off. The air battle reads it once as it starts
 		// (AAirBattle::DogfightsRead); it is never sent to the land rules.)
 		{ TEXT("realDogfights"), TEXT("Real dogfights"), TEXT("Fighter pilots fight as the aces of the war did: each type flown to its own speed, turn and climb, bounces out of the sun and from above, fast fighters diving and zooming while nimble ones turn, short close bursts. Off: the older circling fights."), TEXT("TheaterAirOldDogfights"), false, TEXT("TheaterAirDogfights") },
+		// (Turning airscrews, release 2: Brian, 26 November 2026 04:00Z, "the b-17 propellers didnt look like they were
+		// spinning". Past 300 m from the eye, the whole of the Overview, every aircraft was drawn from its far shape, which
+		// kept its blades standing still and drew the newer models' own blur disc solid. On: no still blades at any distance,
+		// each airscrew an even haze on the copies (M_ScrewHaze, Tools/build_content.py) and a stronger smear close to; a dead
+		// engine feathered still shows its blades. Looks only: nothing the rules count reads it. Off until the Mac has
+		// timed it and the art director has passed it (AIR-SCENE.md item 61), then this row flips to on in one line;
+		// -TheaterAirPropSpin turns it on for a run, -TheaterAirNoPropSpin off. NOT a fly-it-yourself row: its key begins
+		// "fly" only so that FLandLive::Start passes it over with the air battles' other switches. The air battle reads it
+		// once a battle (AAirBattle::PropSpinOn); it is never sent to the land rules.)
+		{ TEXT("flyPropSpin"), TEXT("Turning airscrews"), TEXT("Every aircraft's airscrews are drawn turning at every distance: a soft haze far off, a blurred sweep close to; an engine stopped with its blades feathered shows them standing still. Off: past 300 m the blades stand still."), TEXT("TheaterAirNoPropSpin"), false, TEXT("TheaterAirPropSpin") },
+		// (Bomber markings, release 2: Brian, 25 November 2026, of the approved studio pictures of the newer B-17, "Build it
+		// into the game"; 26 November, "i want the new ones in the game". Every finer B-17 wears her group's white triangle and
+		// letter on her fin and upper right wing, her squadron's codes and her own letter on her side (and in yellow on her
+		// fin), her "#" number dropped, near and far, the same in every month of the war: Battle/AirLetters,
+		// AirBattleLetters.cpp, Content/Data/AirMarks. Looks only: nothing the rules count reads it. Off until the Mac has
+		// timed it and the art director has passed it (AIR-SCENE.md item 65); -TheaterAirBomberMarks turns it on for a run,
+		// -TheaterAirNoBomberMarks off. Its key begins "fly" only so that FLandLive::Start passes it over; the air battle
+		// reads it once a battle (AAirBattle::LettersOnNow), only while the finer B-17 flies.)
+		{ TEXT("flyBomberMarks"), TEXT("Bomber markings"), TEXT("Every finer B-17 wears her group's white triangle and letter on her fin and right wing, her squadron's two letters and her own letter on her side and fin, near and far off, the same in every month of the war. Off: olive with the star only."), TEXT("TheaterAirNoBomberMarks"), false, TEXT("TheaterAirBomberMarks") },
+		// (Worn B-17 paint, release 2: Brian, 26 November 2026, "i want the new ones in the game", the look he approved on
+		// 25 November. The finer B-17 keeps her shape (Content/Models/B17Fine.json) and wears the model thread's paint for
+		// it, Content/Data/AirSkin/B17Fine.json (Tools/make_air_skin.py; Battle/AirSkin): the one army olive 5B5A44 over
+		// 9A9EA1, panel tones and stains, dark glass. Never by the year or month. Looks only: nothing the rules count reads
+		// it. Needs Finer B-17. Off until the Mac's stills are judged with her markings (AIR-SCENE.md item 66), then this
+		// row flips to on in one line; -TheaterAirB17Skin turns it on for a run, -TheaterAirNoB17Skin off. NOT a
+		// fly-it-yourself row: its key begins "fly" only so that FLandLive::Start passes it over. The air battle reads it
+		// once as it starts (AAirBattle::B17SkinRead); it is never sent to the land rules.)
+		{ TEXT("flyB17Skin"), TEXT("Worn B-17 paint"), TEXT("The finer B-17s wear the approved worn olive: each panel its own shade, oil and exhaust stains behind the engines, dark glass and engine fronts. Needs Finer B-17. Off: her plain olive."), TEXT("TheaterAirNoB17Skin"), false, TEXT("TheaterAirB17Skin") },
+		// (B-17 paint sheen, release 2: Brian, 26 November 2026, "make the new ones work"; the look he approved on 25
+		// November has a cool satin sheen on her wing tops and back and glinting glass, which flat paint cannot draw. Her
+		// own finish a point (the model thread's gloss and metal, Content/Data/AirSkin/B17Fine-sheen.json, made by
+		// Tools/make_air_skin.py --sheen-out with her overlay; Battle/AirSheen) rides her meshes' first texture coordinate
+		// to M_AirPaint; where a low sun would glare off her she stays matt (the glare guard). Never by the year or month.
+		// Looks only: nothing the rules count reads it. Needs Worn B-17 paint. Off until the Mac's stills are judged
+		// (AIR-SCENE.md item 67); -TheaterAirB17Sheen turns it on for a run, -TheaterAirNoB17Sheen off,
+		// -TheaterAirB17SheenInk=gain,floor,spec,metal,glare,graze,metalfrom tunes it. NOT a fly-it-yourself row: its key
+		// begins "fly" only so that FLandLive::Start passes it over. The air battle reads it once as it starts
+		// (AAirBattle::B17SheenRead); it is never sent to the land rules.)
+		{ TEXT("flyMustangMetal"), TEXT("Silver Mustang"), TEXT("Every Mustang flies in bare polished metal with her black nose, spinner, glare panel and bands: a bright streak along her back and wings that moves with the eye, darker beneath, her markings satin. The same in every month of the war. Off: her painted coat, as before."), TEXT("TheaterAirNoMustangMetal"), false, TEXT("TheaterAirMustangMetal") },
+		{ TEXT("flyB17Sheen"), TEXT("B-17 paint sheen"), TEXT("The finer B-17s' worn paint takes a soft satin sheen, her metal fittings and glass catch the light, and where a low sun would glare off her she stays matt. Needs Worn B-17 paint. Off: her paint matt, as every aircraft's."), TEXT("TheaterAirNoB17Sheen"), false, TEXT("TheaterAirB17Sheen") },
 		// (Old wrecks, Brian 23 November 20:09Z: starts off as Scarred ground does, until the effects thread's wrecks pass the
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)

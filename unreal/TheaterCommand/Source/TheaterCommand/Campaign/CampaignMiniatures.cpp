@@ -1,4 +1,5 @@
 #include "Campaign/CampaignMiniatures.h"
+#include "Battle/AirSkin.h"
 #include "Misc/ScopeExit.h"
 #include "Battle/ShipPaintCore.h"
 #include "Campaign/CampaignMiniatureParts.h"
@@ -88,6 +89,10 @@ namespace
 		// (An aircraft, from Tools/build_plane.py: the file says what colour each of its paints is, how worn the paint
 		// is at each point, and where every marking goes, with the way the skin faces there and how round it is.)
 		bool bAircraft = false, bNationPaint = false;
+		// (The finer B-17 under the Battle rules card's "Worn B-17 paint", row flyB17Skin: her colours, blend and soot are
+		// the model thread's paint for this very shape (Battle/AirSkin), and her schemes, were there any, stand aside. Set
+		// only on the game thread's copy of her read (Sculpted), never by BuildRaw.)
+		bool bSkinned = false;
 		// (A warship or a merchant from tools/battle-models (kind "ship"): the file gives each paint's own colour, by its
 		// paint names (hull, upper, deck, steel, black, canvas, glass, ...), and at each point how worn and rust-streaked
 		// it is, how sooted, and how salt-stained low on her sides. A ship carries no table markings.)
@@ -1296,6 +1301,7 @@ bool FMiniatureMesh::bCodeBuilt = false;
 bool FMiniatureMesh::bOldPieces = false;
 bool FMiniatureMesh::bTorpedoLoad = false;
 ShipPaintCore::Options FMiniatureMesh::ShipPaint;
+bool FMiniatureMesh::bNoPlaneNumber = false;
 
 int32 FMiniatureMesh::SchemeOf(const FString& Name)
 {
@@ -1341,7 +1347,58 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			InstallRaw(Name, bTorpedoLoad, Job, !bFar, bFar);
 		}
 	}
-	const TSharedPtr<FRaw> Raw = Read[Which];
+	TSharedPtr<FRaw> Raw = Read[Which];
+	// (the finer B-17 under the Battle rules card's "Worn B-17 paint": her plain read, however it came (read ahead by the
+	// worker or here), is copied and the model thread's paint laid over the copy HERE, on the game thread, the only thread
+	// that asks AirSkin; the copy is kept beside the plain read and painted apart from it. With the row off nothing is
+	// asked, nothing copied, and every key is what it was.)
+	const AirSkin::Overlay* const WornSkin = Raw.IsValid() && Raw->bAircraft && AirSkin::Active() ? AirSkin::For(TCHAR_TO_UTF8(*Name)) : nullptr;
+	if (WornSkin)
+	{
+		const FString SkinWhich = Which + TEXT("|worn");
+		if (const TSharedPtr<FRaw>* Kept = Read.Find(SkinWhich))
+		{
+			Raw = *Kept;
+		}
+		else
+		{
+			const TSharedPtr<FRaw> Skinned = MakeShared<FRaw>(*Raw);
+			// (Worn B-17 paint, the row flyB17Skin, read as the battle began (AAirBattle::B17SkinRead): the model thread's
+			// paint for this very shape laid over the file's, its 46 colours, each point's blend and soot, and the points
+			// it paints otherwise (far: the airscrews' domes). The law below is the same law. Laid only where the counts
+			// are the overlay's own.)
+			const AirSkin::Level* const WornLevel = &WornSkin->LevelOf(bFar);
+			if (static_cast<int32>(WornLevel->Count()) == Skinned->Paints.Num() && static_cast<int32>(WornSkin->Colours.size()) == Skinned->PaintColours.Num())
+			{
+				for (int32 SkinP = 0; SkinP < Skinned->PaintColours.Num(); ++SkinP)
+				{
+					const uint32 Hex = WornSkin->Colours[static_cast<size_t>(SkinP)];
+					Skinned->PaintColours[SkinP] = FLinearColor(FColor(static_cast<uint8>((Hex >> 16) & 0xFF), static_cast<uint8>((Hex >> 8) & 0xFF), static_cast<uint8>(Hex & 0xFF)));
+				}
+				Skinned->Blend.SetNum(Skinned->Paints.Num());
+				Skinned->Soot.SetNum(Skinned->Paints.Num());
+				for (int32 SkinK = 0; SkinK < Skinned->Paints.Num(); ++SkinK)
+				{
+					Skinned->Blend[SkinK] = static_cast<int32>(WornLevel->Blend[static_cast<size_t>(SkinK)]);
+					Skinned->Soot[SkinK] = static_cast<int32>(WornLevel->Soot[static_cast<size_t>(SkinK)]);
+				}
+				for (const std::pair<uint32_t, uint8_t>& Repainted : WornLevel->Repaint)
+				{
+					Skinned->Paints[static_cast<int32>(Repainted.first)] = static_cast<int32>(Repainted.second);
+				}
+				// (and her contact shade, the model thread's, at the strength the battle asked: multiplied in below)
+				Skinned->Worn.SetNum(Skinned->Paints.Num());
+				for (int32 SkinK = 0; SkinK < Skinned->Paints.Num(); ++SkinK)
+				{
+					Skinned->Worn[SkinK] = static_cast<float>(AirSkin::ShadeFactor(WornLevel->Shade[static_cast<size_t>(SkinK)], WornSkin->ShadeStrength));
+				}
+				Skinned->bSkinned = true;
+				InstalledBytes += static_cast<int64>(Skinned->Points.Num()) * 72 + static_cast<int64>(Skinned->Triangles.Num()) * 4 + static_cast<int64>(Skinned->Paints.Num()) * 16;
+			}
+			Read.Add(SkinWhich, Skinned);
+			Raw = Skinned;
+		}
+	}
 	if (!Raw.IsValid() || Raw->Points.Num() == 0)
 	{
 		return false;
@@ -1352,12 +1409,14 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	const bool bWash = UnitTable::Wash() && !bFigure && !Raw->bAircraft && !Raw->bPiece && !Raw->bShip;
 	// (and, an aircraft with paint by date, by which of its schemes stands in the painter's month: 0 its own colours.
 	// With one look for the whole war no scheme stands by the month: Brian, 26 November 2026, paint never by the year)
-	const int32 Livery = Raw->bAircraft && !UnitTable::OneLook() ? SchemeStanding(Raw->SchemeFrom) : 0;
+	const int32 Livery = Raw->bAircraft && !Raw->bSkinned && !UnitTable::OneLook() ? SchemeStanding(Raw->SchemeFrom) : 0; // (never by date under the worn skin)
 	// (and by whether it is painted with one look for the whole war: see UnitTable::OneLook)
 	const FString Key = (Era > 0 ? FString::Printf(TEXT("%s|%s|%d"), *Which, *Tag, Era) : Which + TEXT("|") + Tag) + (bWash ? TEXT("|wash") : TEXT(""))
 		+ (UnitTable::CloseMarks() ? TEXT("|close") : TEXT("")) + (Livery > 0 ? FString::Printf(TEXT("|scheme%d"), Livery) : FString())
 		+ (UnitTable::OneLook() ? TEXT("|one") : TEXT(""))
-		+ (Raw->bShip ? FString(UTF8_TO_TCHAR(ShipPaintCore::KeyOf(ShipPaint).c_str())) : FString()); // (nothing for today's paint: Battle/ShipPaintCore)
+		+ (Raw->bShip ? FString(UTF8_TO_TCHAR(ShipPaintCore::KeyOf(ShipPaint).c_str())) : FString()) // (nothing for today's paint: Battle/ShipPaintCore)
+		+ (WornSkin ? TEXT("|skin") : TEXT("")) // (the finer B-17 under her worn skin: painted apart)
+		+ (bNoPlaneNumber ? TEXT("|nonumber") : TEXT("")); // (an aircraft without her "#" number: the air battle's bomber markings)
 	FMiniatureMesh* Model = Painted.Find(Key);
 	if (!Model)
 	{
@@ -1568,6 +1627,12 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				if (PlanePaints.Num() > 11 && Raw->Soot.IsValidIndex(K) && Raw->Soot[K] > 0)
 				{
 					Shade = FMath::Lerp(Shade, PlanePaints[11], 0.72f * FMath::Min(Raw->Soot[K], 100) / 100.0f);
+				}
+				// (the worn skin's contact shade, the row flyB17Skin: multiplied in as a figure's wear is, linear; only under
+				// the skin, whose copy alone fills Worn for an aircraft)
+				if (Raw->bSkinned && Raw->Worn.IsValidIndex(K) && Raw->Worn[K] < 1.0f)
+				{
+					Shade = FLinearColor(Shade.R * Raw->Worn[K], Shade.G * Raw->Worn[K], Shade.B * Raw->Worn[K], Shade.A);
 				}
 				Fresh.Add(Raw->Points[K], Raw->Facings[K], Shade.ToFColor(true));
 				continue;
@@ -1793,7 +1858,11 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					}
 					if (Mark.Tag == TEXT("#"))
 					{
-						Fresh.PaintedNumerals(At, Mark.Radius, Number, Facing, SideInk);
+						// (not where the air battle paints her squadron's codes there instead: bNoPlaneNumber)
+						if (!bNoPlaneNumber)
+						{
+							Fresh.PaintedNumerals(At, Mark.Radius, Number, Facing, SideInk);
+						}
 					}
 					else
 					{
