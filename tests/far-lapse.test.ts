@@ -23,6 +23,7 @@ import { offerLines } from '../unreal/TheaterCommand/Rules/offers-look';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { turnToDate } from '../src/core/ticket';
+import { setStop } from '../src/campaign/history';
 
 type Call = (...a: unknown[]) => any;
 const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
@@ -258,6 +259,26 @@ describe("the player's offer stays in the list for the same half year as the com
     }
     expect([p.flags[`sent:${fifthId}`], p.headlines.slice(news).map((h) => h.text).filter((x) => x.includes(FIFTH))]).toEqual([undefined, []]);
   });
+
+  it("at stops 1 and 2 of the history dial (the record's hand) the count is kept the same in both seats and the row waits unstruck with no room anywhere: months 1 to 12, nothing sent, nothing offered, each month from its due month counted (the design director's ruling of 20:19Z, 27 November 2026, 3)", () => {
+    // (Her ruling 3, on the sceptic's F5: "D1 ("No row is ever struck for room, on any ground") covers the book's
+    // stops. The room count is kept the same in both seats and the row waits unstruck. The record gives a row its
+    // date, never its room.")
+    const due = rows[fifthId][0], rw = `roomwait:${fifthId}`;
+    const walk = (stop: number, human: string | null): unknown[] => {
+      const g = war(human);
+      expect(setStop(g, stop, true)).toBe(true);
+      fill(g);
+      const out: unknown[] = [];
+      for (let t = 1; t <= 12; t++) {
+        month(g, t);
+        out.push([t, g.flags[`sent:${fifthId}`], row(g, FIFTH), offer(g, FIFTH), g.flags[rw] ?? 0, halfYearLast(g, fifthId, due)]);
+      }
+      return out;
+    };
+    const unstruck = Array.from({ length: 12 }, (_, k) => { const waited = Math.max(0, k + 1 - due + 1); return [k + 1, undefined, undefined, undefined, waited, due + 6 + waited]; });
+    for (const stop of [1, 2]) for (const human of [null, 'JAP']) expect([stop, human, walk(stop, human)]).toEqual([stop, human, unstruck]);
+  }, 600000);
 
   // (The design director's ruling of 20:19Z, 27 November 2026, 1, on the sceptic's F1: "a month counts as waited for
   // room when the seat, at its own moment of acting, finds no room. The computer acts at its row's turn in the month's
