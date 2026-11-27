@@ -248,7 +248,7 @@ export function swapRefusal(g: Game, r: Region, c: Corps, out: Corps): string | 
   // (Fewer than 1,000 more fit after the swap: section 3's "full" line with the swap's one change, so the line never
   // promises room that is not there; the words sceptic's lean of 26 November 2026, laid until the UI director rules.)
   if (room - stay < 1000) return `${r.name} is full: it has room for about ${roomMen(room)} men and ${roomMen(stay, 'up')}${yours} stay there after the swap.`;
-  return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(stay, 'up')}${yours} stay there after the swap: only ${roomMen(room - stay, 'down')} more can go, and ${c.name} has ${cardMen(c)}.`;
+  return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(stay, 'up')}${yours} stay there after the swap: only ${canGo(room - stay, stay).toLocaleString('en-US')} more can go, and ${c.name} has ${cardMen(c)}.`;
 }
 
 /**
@@ -282,6 +282,15 @@ export function roomMen(n: number, how: 'down' | 'up' | 'near' = 'near'): string
 }
 const roomFigure = (m: number, how: 'down' | 'up' | 'near'): number =>
   (m < 1000 ? m : (how === 'down' ? Math.floor(m / 1000) : how === 'up' ? Math.ceil(m / 1000) : Math.round(m / 1000)) * 1000);
+/**
+ * "More can go" beside the men there: rounded DOWN to the thousand, and whole, the room less what is there, where what
+ * is there is under 1,000 and so itself whole, so the line still adds up (the UI director, 00:19Z, 27 November 2026,
+ * U1: "Where 'there' is under 1,000 it is whole, and 'more can go' is then whole too (the room less what is there)").
+ */
+const canGo = (left: number, there: number): number => {
+  const m = Math.max(0, Math.round(left));
+  return there < 1000 ? m : roomFigure(m, 'down');
+};
 /** A corps' men as its card shows them: the exact figure (ui/main.ts `num(men(c))`). */
 const cardMen = (c: Corps): string => menOfCorps(c).toLocaleString('en-US');
 /** "Two", "One": a count opening a sentence. */
@@ -329,12 +338,12 @@ export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[
     const yours = onlyMine(g, r, nat, corps) ? ' of yours' : '';
     // (What he sends would read at or under what can go once rounded: say the shortfall instead, the UI director's
     // answer of 21:37Z 26 November 2026, as the rifles' fifth read.)
-    const short = roomFigure(Math.round(sending), 'near') <= roomFigure(Math.max(0, Math.round(left)), there === 0 ? 'near' : 'down');
+    const short = roomFigure(Math.round(sending), 'near') <= (there === 0 ? roomFigure(Math.max(0, Math.round(left)), 'near') : canGo(left, there));
     const sends = short ? `you are sending ${roomMen(sending - left)} men more than fit` : `you are sending ${roomMen(sending)}`;
     if (there === 0) return `${r.name} has ${roomWords(isle.room)}: ${sends}.`;
     if (left < 1000) return `${r.name} is full: it has room for about ${roomMen(room)} men and ${roomMen(there, 'up')}${yours} are there.`;
     if (short) return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(there, 'up')}${yours} are there: ${sends}.`;
-    return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(there, 'up')}${yours} are there: only ${roomMen(left, 'down')} more can go, and ${sends}.`;
+    return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(there, 'up')}${yours} are there: only ${canGo(left, there).toLocaleString('en-US')} more can go, and ${sends}.`;
   }
   const riding = corps.length - line.length;
   if (!riding) return null;

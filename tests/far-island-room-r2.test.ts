@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { addCorps, createGame, men, placed, removeCorps, retreatTarget, rowCorps, startPhase, whyNoRoom } from '../src/campaign/game';
 import { saveGame } from '../src/campaign/save';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
-import { fits, islandOf, roomForDivision, roomRefusal } from '../src/campaign/islands';
+import { fits, islandOf, roomForDivision, roomRefusal, swapRefusal } from '../src/campaign/islands';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -194,4 +194,20 @@ describe("a dated row's room is read on the corps it forms, not its stated size 
     const row13 = [24, 'UK', 'XIII Corps, Eighth Army', 'inf', 2, 'Alexandria', { openDivs: 1 }];
     expect(rowCorps(g, 'UK', row13, row13[6]).map(men)).toEqual([15000]);
   });
+});
+
+// The UI director's answers of 00:19Z, 27 November 2026, on the live sentences.
+describe('U1: under 1,000 there, both figures whole and the line adds up', () => {
+  it('Guam with 750 of his there: only 29,250 more can go; the same in the swap line', () => {
+    const g = war('USA');
+    const guam = g.byName['Guam'], manila = g.byName['Manila'];
+    clear(g, guam);
+    corps(g, 'USA', 'Guam Insular Force (a test row)', guam, 1, 750 / 15000);
+    const big = corps(g, 'USA', 'Big', manila, 2);
+    expect(roomRefusal(g, guam, [big])).toBe('Guam has room for 2 divisions, about 30,000 men, and 750 of yours are there: only 29,250 more can go, and you are sending 30,000.');
+    TC().load(saveGame(g));
+    expect(TC().bySeaWhy([big.id], guam.id).why).toBe('Guam has room for 2 divisions, about 30,000 men, and 750 of yours are there: only 29,250 more can go, and you are sending 30,000.');
+    const out = corps(g, 'USA', 'Goes Out (a test row)', guam, 1, 600 / 15000);
+    expect(swapRefusal(g, guam, big, out)).toBe('Guam has room for 2 divisions, about 30,000 men, and 750 of yours stay there after the swap: only 29,250 more can go, and Big has 30,000.');
+  }, 300000);
 });

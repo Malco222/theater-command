@@ -308,7 +308,7 @@ describe('Okinawa takes four divisions, and other ground five corps', () => {
     there.str = 45600 / 45000;
     removeCorps(g, there);
     const guard = corps(g, 'JAP', 'Guard', okinawa, 1, 0.05);
-    expect(roomRefusal(g, okinawa, [going, ...[1, 2, 3, 4].map((k) => corps(g, 'JAP', `More ${k}`, tokyo))])).toBe('Okinawa has room for 4 divisions, about 60,000 men, and 750 of yours are there: only 59,000 more can go, and you are sending 75,000.');
+    expect(roomRefusal(g, okinawa, [going, ...[1, 2, 3, 4].map((k) => corps(g, 'JAP', `More ${k}`, tokyo))])).toBe('Okinawa has room for 4 divisions, about 60,000 men, and 750 of yours are there: only 59,250 more can go, and you are sending 75,000.'); // (the UI director, 00:19Z, 27 November 2026, U1: both whole)
     expect(guard.dead).toBeFalsy();
   }, 300000);
 
