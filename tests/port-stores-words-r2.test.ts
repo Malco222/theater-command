@@ -521,6 +521,15 @@ describe('who is told', () => {
     expect(news(on.g)).toHaveLength(3);
     expect(PORTSTORES_ROW.id).toBe('portstores');
   });
+
+  it('turned off after the news of the stores spent was told: its mark goes with the rest, and the game saved holds none of it', () => {
+    const { g } = malta('UK');
+    for (let t = 17; t <= 19; t++) month(g, t);
+    expect([g.flags[`portTold:${MALTA}`], g.flags[`portSpent:${MALTA}`]]).toEqual([17, 19]);
+    expect(setPortStores(g, false)).toBe(true);
+    expect(Object.keys(g.flags).filter((k) => k === 'portStores' || OWN.test(k))).toEqual([]);
+    expect(saveGame(g)).not.toMatch(/portStores|portTold|portSpent|seaShut|portLost|portHad|portCrew|portDraw/);
+  });
 });
 
 // ---- On the build (the UI director, 26 Nov 2026, 23:50Z) -------------------------------------------------------------
@@ -1633,6 +1642,61 @@ describe('05:03Z, item 1: a port in a pocket is left to the pocket\'s own lines,
     const DEC = [16, false, line('March 1941', 'May 1941', 'December')];
     expect(read()).toEqual([DEC, [16, true, false], [17, true, []], [17, true, false], [18, true, []], [18, false, false], [19, true, []], [19, false, false], [20, true, []], [20, false, true]]);
     expect(read(17)).toEqual([DEC, [16, true, false], [17, true, []], [17, true, false], [18, true, []], [18, true, false], [19, false, line('March', 'May')], [19, false, false], [20, false, line('March', 'May')], [20, false, false], [21, false, line('March', 'May')], [21, false, true]]);
+  });
+
+  it('12:24Z, item 4: a Canadian corps starved in Canada\'s May 1941, before the ring, and kept for Britain\'s reckoning, is told in it, though the ring Spain closes stands as Britain\'s June opens: a loss on the port\'s clock that the pocket\'s lines never tell', () => {
+    // (The fortress rows off: Gibraltar held by the book's garrison and a British 9th Corps in the town, with a 1st
+    // Canadian Corps; the sea shut from December 1940. Spain comes into the war in her May, after Britain's month and
+    // before Canada's, and the ring closes as Britain's June opens.)
+    const play = (on: boolean): { g: Game; rows: unknown[]; can: number } => {
+      const g = grand('UK', on);
+      const r = g.byName.Gibraltar;
+      const ninth = addCorps(g, 'UK', '9th Corps', 'inf', 2, 'Gibraltar', {});
+      r.units.splice(r.units.indexOf(ninth), 1);
+      joinTown(g, r, ninth);
+      const canadian = addCorps(g, 'CAN', '1st Canadian Corps', 'inf', 2, 'Gibraltar', {});
+      g.turn = 16;
+      g.supplyDirty = true;
+      computeSupply(g);
+      for (const nat of ['UK', 'CAN']) { declareWar(g, 'ITA', nat); declareWar(g, 'GER', nat); }
+      for (const f of g.fleets) if (f.nat === 'FRA') f.stance = 'port';
+      sail(g, 'ITA', 'wmed', ['1st Fleet']);
+      sail(g, 'ITA', 'iberia', ['2nd Fleet']);
+      g.supplyDirty = true;
+      expect(g.flags[`stores:${r.id}`]).toBe(16);
+      const rows: unknown[] = [];
+      for (let t = 16; t <= 22; t++) {
+        const h0 = g.headlines.length;
+        g.turn = t;
+        let ring = false;
+        for (const nat of ['GER', 'ITA', 'UK', 'ESP', 'CAN']) {
+          if (nat === 'ESP' && t === 21) { g.nations.ESP.align = 'axis'; declareWar(g, 'ESP', 'UK'); declareWar(g, 'ESP', 'CAN'); }
+          phase(g, nat);
+          if (nat === 'UK') ring = g.flags[`pkt:${r.id}`] !== undefined;
+        }
+        // (The month: whether the ring stood at Britain's reckoning, the telling's own news, the rules' own lines of
+        // Gibraltar, the corps struck off, and the corps kept for his next reckoning.)
+        rows.push([t, ring, g.headlines.slice(h0).map((h) => h.text).filter((x) => OURS.test(x)), SHIPPED(g, h0), [ninth.dead, canadian.dead], Object.keys(g.flags).filter((k) => k.startsWith('portLost:'))]);
+      }
+      return { g, rows, can: canadian.id };
+    };
+    const { g, rows, can } = play(true);
+    expect(rows).toEqual([
+      [16, false, [], [], [false, false], []],
+      [17, false, ['No ship reaches Gibraltar: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast. The garrison lives on the port\'s stores through February; unless the sea is opened, it then goes hungry and is lost at the start of May.'], [], [false, false], []],
+      [18, false, [], [], [false, false], []],
+      [19, false, ['Gibraltar\'s stores are spent and no ship has got through: the garrison goes hungry, and is lost at the start of May unless the sea is opened.'], [], [false, false], []],
+      [20, false, [], [], [false, false], []],
+      // May: the British corps struck off in Britain's reckoning, before Spain's war, and told in it; the Canadian corps
+      // in Canada's, after it, kept for Britain's next.
+      [21, false, ['Cut off in Gibraltar, two corps have starved and are lost: the Gibraltar garrison and the 9th Corps.'], [], [true, true], [`portLost:${g.byName.Gibraltar.id}:${can}:CAN:1st Canadian Corps`]],
+      // June: the ring closes as Britain's month opens, and its record stands at his reckoning. The corps kept was lost on
+      // the port's clock before the ring, and the pocket's lines never tell it: it is told, true (the UI director's
+      // 12:24Z, item 4), and its mark goes.
+      [22, true, ['Cut off in Gibraltar, the 1st Canadian Corps has starved and is lost.'], ['Gibraltar is surrounded: no road and no ship reaches it from the rest of the United Kingdom. The town has stores for 4 months, and any troops who fall back on it will live on them.'], [true, true], []],
+    ]);
+    // (The same war with the switch off, its own words and marks aside.)
+    expect(wordsOnly(g)).toBe(wordsOnly(play(false).g));
   });
 });
 
