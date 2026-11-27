@@ -146,16 +146,19 @@ const SET: Battle[] = [
   ...[0, 1].flatMap((k) => [at('harbour', SHIPS.harbour, k), at('carriers', SHIPS.carriers, k)]),
 ];
 
-/** What the head 78fd87433 gave for each battle of the set, switch off: FNV-1a over every tick's view(), then history(), outcome() and over.lines (step 0, before any change). */
+/** What the head 78fd87433 gave for each battle of the set, switch off: FNV-1a over every tick's view(), then history(), outcome() and over.lines (step 0, before any change).
+ * On release 2's pass 2 (the assembler, 27 November 2026): the sixteen turn-30 raids (FRA-Rhineland, UK-Ruhr) take what the
+ * pass-2 head before this join (next-av 839dfaa5f) gave, because pass 2's own campaign at turn 30 hands those raids other
+ * tickets; all 80 battles hash the same there and with this join, switch off. The other 64 are 78fd87433's, unchanged. */
 const BASELINE: Record<string, number> = {
   'GER-Alsace:0': 2225686532, 'GER-Alsace:1': 225243303, 'GER-Alsace:2': 2335731105, 'GER-Alsace:3': 4219053814,
   'GER-Alsace:4': 2253648796, 'GER-Alsace:5': 1975599040, 'GER-Alsace:6': 4182902111, 'GER-Alsace:7': 377184919,
   'GER-Kent:0': 3148912142, 'GER-Kent:1': 891888083, 'GER-Kent:2': 657927157, 'GER-Kent:3': 4249233553,
   'GER-Kent:4': 4048561157, 'GER-Kent:5': 3501605111, 'GER-Kent:6': 447398267, 'GER-Kent:7': 1407443564,
-  'FRA-Rhineland:0': 2021256632, 'FRA-Rhineland:1': 3001855544, 'FRA-Rhineland:2': 43399771, 'FRA-Rhineland:3': 720335385,
-  'FRA-Rhineland:4': 3399896426, 'FRA-Rhineland:5': 1493310594, 'FRA-Rhineland:6': 3629038974, 'FRA-Rhineland:7': 2738995837,
-  'UK-Ruhr:0': 3464559669, 'UK-Ruhr:1': 4250325863, 'UK-Ruhr:2': 1626790790, 'UK-Ruhr:3': 3071090043,
-  'UK-Ruhr:4': 2349952649, 'UK-Ruhr:5': 1333933345, 'UK-Ruhr:6': 204351070, 'UK-Ruhr:7': 1860839074,
+  'FRA-Rhineland:0': 3815780284, 'FRA-Rhineland:1': 3477971932, 'FRA-Rhineland:2': 3755573771, 'FRA-Rhineland:3': 1832780923,
+  'FRA-Rhineland:4': 3903087796, 'FRA-Rhineland:5': 2302530418, 'FRA-Rhineland:6': 3876039490, 'FRA-Rhineland:7': 1530121251,
+  'UK-Ruhr:0': 1130731809, 'UK-Ruhr:1': 987516315, 'UK-Ruhr:2': 888497646, 'UK-Ruhr:3': 3694235281,
+  'UK-Ruhr:4': 2746919971, 'UK-Ruhr:5': 2688296919, 'UK-Ruhr:6': 1648467190, 'UK-Ruhr:7': 1077192620,
   'pilot-kent:0': 3148912142, 'pilot-alsace:0': 2225686532, 'pilot-twins:0': 2596175145, 'pilot-order:0': 3655155787,
   'pilot-sky:0': 1043205276, 'pilot-kent:1': 891888083, 'pilot-alsace:1': 225243303, 'pilot-twins:1': 480628126,
   'pilot-order:1': 979056622, 'pilot-sky:1': 3433876588, 'pilot-kent:2': 657927157, 'pilot-alsace:2': 2335731105,
