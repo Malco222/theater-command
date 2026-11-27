@@ -181,7 +181,7 @@ export function formationName(names: [string, string][]): string | null {
  * row's own `from` corps, the lent corps whose loan ends this pass, the stand-in this row stands down), which keep
  * nothing for a corps beside them, and neither does a corps this row's claims would empty (`emptied`).
  */
-export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number, reg: Region, home: boolean, skip: (c: Corps) => boolean, busy: (c: Corps) => boolean, leavingNow: ReadonlySet<Corps> = NO_LEAVING): Claim[] {
+export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number, reg: Region, home: boolean, skip: (c: Corps) => boolean, busy: (c: Corps) => boolean, leavingNow: ReadonlySet<Corps> = NO_LEAVING, heldBy?: (cs: Corps[]) => void): Claim[] {
   const names = divisionsNamed(row[2], nat, row[3] as Kind).slice(0, n);
   const count = countingFor(g, nat, row)?.from;
   if (!names.length && !count) return [];
@@ -278,6 +278,9 @@ export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number,
     gone = emptied;
   }
   for (const q of out) if (q.from) q.stays = stays(q.from);
+  // (The corps that keep their claimed divisions for contact alone, no other reason: game.ts `noteHold`'s `claim`. Told
+  // only where asked: the switch on.)
+  if (heldBy) heldBy([...new Set(out.filter((q) => q.from && q.stays && !anyway(q.from)).map((q) => q.from!))]);
   // (In the order the row's name gives them, as they were always read.)
   out.sort((a, b) => a.slot - b.slot);
   if (out.length) drawnWatch.tell?.({ turn: g.turn, nat, row: row[2], place: row[5], lands: reg.name, home, divs: n, claims: out.map((q) => ({ name: q.name[0], from: q.from?.name ?? null, id: q.from?.id ?? null, at: q.from ? g.regions[q.from.reg].name : null, stays: q.stays, conv: q.conv ?? null, share: !!q.share })) });

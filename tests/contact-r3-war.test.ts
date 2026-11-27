@@ -9,7 +9,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { setFromWait } from '../src/campaign/arrivalwaits';
-import { createGame, leavingWatch, rowHolds } from '../src/campaign/game';
+import { createGame, leavingWatch, rowHolds, ruleHolds } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Corps } from '../src/campaign/types';
@@ -19,7 +19,7 @@ const rows = (setup as any).expeditions as any[][];
 const ids = (s: ReadonlySet<Corps>): number[] => [...s].map((c) => c.id).sort((a, b) => a - b);
 afterEach(() => { leavingWatch.tell = null; });
 
-describe("R3-3: the telling's leaving set is the rule's, month by month on a war", () => {
+describe("R3-3 and R3-4 on a war: the telling's leaving set is the rule's, and every hold of the rule's own writes its wait", () => {
   it('seed 20, 26 months: at every row the rule reads, rowHolds reads the very set the rule took', () => {
     const g = startOpen(createGame(20, null));
     expect(setFromWait(g, true)).toBe(true);
@@ -36,8 +36,22 @@ describe("R3-3: the telling's leaving set is the rule's, month by month on a war
       if ([...set].some((x) => !takes.has(x.id))) beyondTakes++;
       if ([...set].some((x) => rows.some((_, j) => gg.flags[`lent:${j}`] === x.id))) withLoans++;
     };
-    for (let m = 0; m < 26; m++) runTurnAI(g);
+    // (And R3-4 on the same war: every hold of the rule's own, read each month through the one pure reader, has its wait
+    // written and is told where it is the player's; the gate's "untold holds of the rule's own", target 0.)
+    const untold: string[] = [];
+    const paths: Record<string, number> = {};
+    for (let m = 0; m < 26; m++) {
+      const month = g.turn;
+      runTurnAI(g);
+      for (const h of ruleHolds(g, month)) {
+        paths[h.path] = (paths[h.path] ?? 0) + 1;
+        if (h.untold) untold.push(`month ${month} ${h.nat} row ${h.i} ${h.row}: ${h.path} ${h.corps.join(', ')} written ${h.written} told ${h.told}`);
+      }
+    }
     expect(bad).toEqual([]);
+    expect(untold).toEqual([]);
+    console.log(`R3-4 war: holds of the rule's own by path ${JSON.stringify(paths)}`);
+    expect(Object.values(paths).reduce((s, n) => s + n, 0)).toBeGreaterThan(0);
     console.log(`R3-3 war: ${read} sets read in ${months.size} months, ${beyondTakes} beyond the row's own corps, ${withLoans} holding a lent corps`);
     expect(read).toBeGreaterThan(20);
     expect(months.size).toBeGreaterThan(10);
