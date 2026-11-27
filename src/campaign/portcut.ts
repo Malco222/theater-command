@@ -43,7 +43,7 @@ import { hospitalNear, hospitalWorth } from './buildings';
 import { columnShare } from './columns';
 import { cmdRally, cmdWinter } from './commanders';
 import { BUDGET, budgeted } from './economy';
-import { DESERT, EASTERN, UNFED, allied, atWar, enemyAshore, fortRow, frozen, headline, keptStoresHis, lineStrength, placeName, portKeep, theWords, trueReach, worksKept } from './game';
+import { DESERT, EASTERN, UNFED, allied, atWar, enemyAshore, fortRow, fortRows, frozen, headline, keptStoresHis, lineStrength, placeName, portKeep, theWords, trueReach, worksKept } from './game';
 import { SIGHT, sightOf } from './intel';
 import { MORALE, moraleRules } from './morale';
 import { NAVY, SeaPicture, canPass, closedTo, fleetReach, inPassage, openSeas, seaSide, seaStarts, shipCount } from './navy';
@@ -137,10 +137,10 @@ export interface PortCut {
   side: 'holder' | 'shutting';
   /**
    * The months the port's stores feed its garrison after the last fill (game.ts portKeep). For the shutting side, as
-   * its own sight gives them: the port's own two (DESERT.stores), or a fortress crew's stores only where it sees the
-   * port whole (sightKeep).
+   * its own sight gives them (sightKeep): the port's own two (DESERT.stores) with the fortress rows off; under them, the
+   * stores of the row the port holds only where it sees the port whole, and null where it does not.
    */
-  keep: number;
+  keep: number | null;
   /** The port's seas shut to the holder this month, and who holds each. Empty where none is. */
   shut: SeaHeld[];
   // ---- The holder's side (null for the shutting side, which never reads the holder's stores) ----
@@ -302,10 +302,12 @@ function garrisonOf(g: Game, r: Region): Corps[] {
 
 /**
  * The months the shutting side counts the port's stores for, from its own sight (ruling 1: never read from the holder's
- * stores): a fortress crew's stores (portKeep, under the fortress rows) only where it sees the port whole, and the
- * crew with it; otherwise the port's own two.
+ * stores): with the fortress rows off, the port's own two. Under them, a fortress crew's stores (portKeep) only where
+ * it sees the port whole, and the crew with it; where it does not, null: a crew it cannot see may keep the stores
+ * longer than the port's own two (Malta's three, Gibraltar's 16), so that neither the month the garrison goes hungry
+ * nor the latest month it is lost can be given, and the count waits (the review of the 23:50Z build, finding 2).
  */
-const sightKeep = (g: Game, r: Region, sight: number): number => (sight >= SIGHT.full ? portKeep(g, r) : DESERT.stores);
+const sightKeep = (g: Game, r: Region, sight: number): number | null => (sight >= SIGHT.full ? portKeep(g, r) : fortRows(g) ? null : DESERT.stores);
 
 /**
  * True where the viewer's own sight of the port shows no garrison there for the rule to starve: seen whole, none of
@@ -357,7 +359,7 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
     const last = starts.some((x) => x === undefined || x === OPEN) ? null : Math.max(...(starts as number[]));
     const since = last === 0 ? null : last;
     const keep = sightKeep(g, r, sightOf(g, viewer)[r.id]);
-    const heldHungry = since === null ? null : since + keep + 1;
+    const heldHungry = since === null || keep === null ? null : since + keep + 1;
     return {
       region: r.id, holder, keep, shut, side: 'shutting', state: null, cut: false, lastFilled: null, feedsTo: null, hungry: null, lost: null, lostBy: null, garrison: [], fleetInReach: null,
       heldSince: since, heldHungry, heldLost: heldHungry === null ? null : heldHungry + hungryRun() - 1,
@@ -463,7 +465,8 @@ export function portCardLines(g: Game, regionId: number, viewer: string | null, 
     return [{ text: theWords(`${heldSaid(g, f.shut, viewer, true)} since ${monthSaid(g, f.heldSince)}. Counting from then, the garrison of ${portOf(r)} goes hungry from ${monthSaid(g, f.heldHungry)} and is lost by the start of ${monthSaid(g, f.heldLost)}, unless ships get through.`), tone: 'note' }];
   }
   if (f.lost === null) return [];
-  if (f.state === 'filled') return [{ text: theWords(`Cut off by sea, its stores would feed the garrison for ${months(f.keep)}.`), tone: 'note' }];
+  const keep = f.keep!;
+  if (f.state === 'filled') return [{ text: theWords(`Cut off by sea, its stores would feed the garrison for ${months(keep)}.`), tone: 'note' }];
   if (!f.cut) return [];
   const out: PortLine[] = [];
   if (f.state === 'stores') out.push({ text: theWords(`Cut off by sea: ${heldSaid(g, f.shut, viewer, false)}, and no ship reaches the harbour. The garrison lives on the port's stores through ${monthSaid(g, f.feedsTo!)}; unless the sea is opened, it then goes hungry and is lost ${startOf(f.lostBy)} ${monthSaid(g, f.lost)}.`), tone: 'warn' });
@@ -475,7 +478,7 @@ export function portCardLines(g: Game, regionId: number, viewer: string | null, 
   // sea card shows each side's strength there and no threshold, so the line is followed by those two figures, a
   // sentence for each sea it names, and no figure of the strength needed: the UI director's 23:50Z, item 3.)
   const measured = opts.measure ? open.map((z) => measureSaid(g, z, viewer)).filter((x): x is string => x !== null) : [];
-  out.push({ text: theWords(`A fleet of yours at sea there, strong enough to open ${seasSaid(g, open, 'or')}, lets the ships in and fills the stores: one such month feeds the garrison through ${monthSaid(g, g.turn + f.keep)}.${measured.map((x) => ` ${x}`).join('')}`), tone: 'note' });
+  out.push({ text: theWords(`A fleet of yours at sea there, strong enough to open ${seasSaid(g, open, 'or')}, lets the ships in and fills the stores: one such month feeds the garrison through ${monthSaid(g, g.turn + keep)}.${measured.map((x) => ` ${x}`).join('')}`), tone: 'note' });
   return out;
 }
 

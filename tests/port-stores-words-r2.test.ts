@@ -340,10 +340,14 @@ describe('the shutting side: a count only where the rule\'s clock runs, from its
     expect(g.flags[`stores:${gib}`]).toBe(17);
   });
 
-  it('out of its sight, the line is the same whether a British corps or a fortress crew stands in Malta or none; seen whole, the crew\'s stores are counted and an empty port has no line', () => {
-    // Italy's aircraft alone shut the sea: no Italian fleet at sea, so nothing of Italy's sees Malta.
-    const g = grand('ITA', true, true);
+  /**
+   * Malta held by a British 9th Corps (and the crews given), its stores filled in December 1940, and Italy's aircraft
+   * alone shutting the sea: no Italian fleet at sea, so nothing of Italy's sees Malta. December's months played.
+   */
+  function skyOnly(forts: boolean, crews: string[] = []): { g: Game; ninth: Corps } {
+    const g = grand('ITA', true, forts);
     const [ninth] = garrison(g, 'Malta', ['9th Corps']);
+    for (const n of crews) addCorps(g, 'UK', n, 'fort', 1, 'Malta', {});
     g.turn = 16;
     g.supplyDirty = true;
     computeSupply(g);
@@ -351,25 +355,50 @@ describe('the shutting side: a count only where the rule\'s clock runs, from its
     g.nations.ITA.air = 200;
     g.supplyDirty = true;
     month(g, 16, ['ITA', 'UK']);
+    return { g, ninth };
+  }
+  const SKY = 'Your aircraft have held the sky over the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from March and is lost by the start of May, unless ships get through.';
+
+  it('out of its sight, the line is the same whether a British corps stands in Malta or none', () => {
+    const { g, ninth } = skyOnly(false);
     month(g, 17, ['ITA', 'UK']);
     const r = g.regions[MALTA];
     expect([fogOn(g, 'ITA'), sightOf(g, 'ITA')[MALTA]]).toEqual([true, SIGHT.none]);
-    const line = 'Your aircraft have held the sky over the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from March and is lost by the start of May, unless ships get through.';
-    expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual([line]);
+    expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual([SKY]);
     // The garrison taken off: Malta is still British, and Italy sees nothing of it, so its card says the same.
     removeCorps(g, ninth);
     expect([r.ctrl, sightOf(g, 'ITA')[MALTA]]).toEqual(['UK', SIGHT.none]);
-    expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual([line]);
-    // A British fortress crew put in (under the fortress rows its stores are the port's: three months, not two). The
-    // holder's own count reads them; the shutting side, which cannot see them, counts the port's own two.
-    addCorps(g, 'UK', '9th Corps', 'inf', 2, 'Malta', {});
-    addCorps(g, 'UK', 'Malta fortress', 'fort', 1, 'Malta', {});
-    expect(portKeep(g, r)).toBe(3);
-    expect(portCutOff(g, MALTA, 'ITA')!.keep).toBe(2);
-    expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual([line]);
+    expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual([SKY]);
+  });
+
+  it('under the fortress rows, out of its sight, a crew it cannot see may keep the stores longer: no count, and the line waits, month by month while the crew\'s three months feed the garrison', () => {
+    // (The review of the 23:50Z build, finding 2: counted from the port's own two, the line said "lost by the start of
+    // May" from January to May, and the corps stood through May and was struck off as June opened.)
+    const { g, ninth } = skyOnly(true, ['Malta fortress']);
+    expect(portKeep(g, g.regions[MALTA])).toBe(3);
+    const clock: [number, boolean, boolean][] = [];
+    for (let t = 17; t <= 22; t++) {
+      month(g, t, ['ITA', 'UK']);
+      const f = portCutOff(g, MALTA, 'ITA')!;
+      expect([t, sightOf(g, 'ITA')[MALTA], f.side, f.heldSince, f.keep, f.heldHungry, f.heldLost, portCardLines(g, MALTA, 'ITA')]).toEqual([t, SIGHT.none, 'shutting', 16, null, null, null, []]);
+      clock.push([t, ninth.supplied, ninth.dead]);
+    }
+    // The rule's own clock: fed through March, hungry from April, struck off as June opens.
+    expect(clock).toEqual([[17, true, false], [18, true, false], [19, true, false], [20, false, false], [21, false, false], [22, false, true]]);
+    // With no crew there, the same: its sight cannot tell.
+    const none = skyOnly(true);
+    month(none.g, 17, ['ITA', 'UK']);
+    expect([portKeep(none.g, none.g.regions[MALTA]), portCutOff(none.g, MALTA, 'ITA')!.keep, portCardLines(none.g, MALTA, 'ITA')]).toEqual([2, null, []]);
+  });
+
+  it('under the fortress rows, seen whole: the crew\'s stores are counted, and a port with no garrison for the rule to starve has no line', () => {
+    const { g } = skyOnly(true, ['Malta fortress']);
+    month(g, 17, ['ITA', 'UK']);
+    const r = g.regions[MALTA];
     // With the fog lifted, Italy sees Malta whole: the crew and its stores are counted.
     g.flags.nofog = 1;
     expect(sightOf(g, 'ITA')[MALTA]).toBe(SIGHT.full);
+    expect(portCutOff(g, MALTA, 'ITA')!.keep).toBe(3);
     expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual(['Your aircraft have held the sky over the Central Mediterranean since December 1940. Counting from then, the garrison of Malta goes hungry from April and is lost by the start of June, unless ships get through.']);
     // And seen whole with no garrison for the rule to starve (the crew keeps its own clock), there is no line.
     for (const c of [...r.units]) if (c.kind !== 'fort') removeCorps(g, c);
