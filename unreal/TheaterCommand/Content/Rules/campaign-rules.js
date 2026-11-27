@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 78c7849d4 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a339e4a6a 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -44479,12 +44479,13 @@
       const k = toldKey2(r.id), ks2 = spentKey(r.id), kr = ringKey(r.id);
       if (leftToPocket(g2, r, me, mine4 ? me : void 0)) {
         delete g2.flags[k];
-        delete g2.flags[ks2];
         g2.flags[kr] = g2.turn;
         continue;
       }
       if (g2.flags[kr] !== void 0 && (r.ctrl !== me || !watched(g2, r) || !involved(g2, r))) delete g2.flags[kr];
       let told2 = g2.flags[k];
+      const spent = g2.flags[ks2];
+      if (told2 === void 0 && spent !== void 0 && (!watched(g2, r) || r.since > spent || !involved(g2, r) || (g2.flags[`stores:${r.id}`] ?? -1) >= spent)) delete g2.flags[ks2];
       if (told2 !== void 0) {
         if (!watched(g2, r) || r.since > told2 || !involved(g2, r)) {
           delete g2.flags[k];
@@ -44500,24 +44501,24 @@
         }
       }
       if (!mine4 || !involved(g2, r)) continue;
-      const broken = g2.flags[kr] !== void 0 && pocketNat(g2, r) !== r.ctrl;
+      const back = g2.flags[kr] !== void 0;
       delete g2.flags[kr];
       const f = portCutOff(g2, r.id, me, me);
       if (!f || !f.cut || f.lost === null) continue;
-      if (f.state === "stores" && (f.lastFilled === g2.turn - 1 || broken) && !f.due) {
-        headline(g2, "info", `No ship reaches ${portOf2(r)}: ${heldSaid(g2, f.shut, null, false)}. The garrison lives on the port's stores through ${monthSaid(g2, f.feedsTo)}; unless the sea is opened, it then goes hungry and is lost ${startOf(f.lostBy)} ${monthSaid(g2, f.lost)}.`, r.ctrl, r.id, { lost: r.ctrl });
+      if (f.state === "stores" && (f.lastFilled === g2.turn - 1 || back)) {
+        headline(g2, "info", f.due ? `No ship reaches ${portOf2(r)}: ${heldSaid(g2, f.shut, null, false)}. Unless the sea is opened, the garrison is hungry by ${monthSaid(g2, f.hungry)} and lost by the start of ${monthSaid(g2, f.lost)}.` : `No ship reaches ${portOf2(r)}: ${heldSaid(g2, f.shut, null, false)}. The garrison lives on the port's stores through ${monthSaid(g2, f.feedsTo)}; unless the sea is opened, it then goes hungry and is lost ${startOf(f.lostBy)} ${monthSaid(g2, f.lost)}.`, r.ctrl, r.id, { lost: r.ctrl });
         (_a = g2.flags)[k] ?? (_a[k] = g2.turn);
-      } else if (f.state === "hungry" && spentDue(g2, f, told2, g2.flags[ks2])) {
+      } else if (f.state === "hungry" && spentDue(g2, f, told2, g2.flags[ks2], back)) {
         headline(g2, "info", `${PortOf(r)}'s stores are spent and no ship has got through: the garrison goes hungry, and is lost ${startOf(f.lostBy)} ${monthSaid(g2, f.lost)} unless the sea is opened.`, r.ctrl, r.id, { lost: r.ctrl });
         (_b = g2.flags)[k] ?? (_b[k] = g2.turn);
         g2.flags[ks2] = g2.turn;
       }
     }
   }
-  function spentDue(g2, f, told2, spent) {
+  function spentDue(g2, f, told2, spent, back) {
     if (f.feedsTo === null) return told2 === void 0;
     const at4 = f.feedsTo + 1;
-    return (at4 === g2.turn || at4 === g2.turn - 1) && !(spent !== void 0 && spent > f.lastFilled);
+    return (back || at4 === g2.turn || at4 === g2.turn - 1) && !(spent !== void 0 && spent > f.lastFilled);
   }
   function portCrewGone(g2, c) {
     if (!portStoresOn(g2) || c.dead || !fortRow(g2, c) || !g2.human || !g2.nations[g2.human]?.alive) return;
