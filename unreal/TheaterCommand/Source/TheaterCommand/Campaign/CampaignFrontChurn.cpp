@@ -29,14 +29,18 @@
  * cloud drawings, churn-prototype-read-1127.md, which rules where the two differ; the arithmetic, and its cloud checks
  * and drawings, are in Campaign/FrontChurn.h.) The table's side of it:
  *
- *  - Which fronts. Each view the controller shows (ShowFrontChurn) gives the fronts as pairs of provinces and the corps
- *    on them. A pair has churned ground between it where both sides stand dug in: for as many months as the fewer of
- *    them where both are known; where only one side's months are known (the enemy seen digging, his months hidden by
- *    the fog: the design director's ruling of 27 November, 19:36Z), for its months; where neither is, for the months
- *    this table has seen them so. Nothing the fog hides is read: a corps only glimpsed, or known from a report, says
- *    no more than its posture. When the front moves on or a side leaves, the ground heals where it lies, over a year.
- *    (A campaign taken up again shows no healing ground from before it was saved until the rules record it: the known
- *    limit, with the design director's rules row as its mend.)
+ *  - Which fronts. The rules keep the record (src/campaign/churned.ts, a record for this map and never a rule; the
+ *    design director's rulings of 27 November 2026, 19:36Z and 21:05Z): at each month's end, every pair of provinces
+ *    whose holders are at war, the months each side has stood dug in facing the other, and the months the stand has
+ *    stood in the player's own picture, from what he can know and nothing more; and the stands it has left, healing.
+ *    Each view (ShowFrontChurn) brings that picture under fronts' sight rule, with the art director's healing year,
+ *    and this table draws it as it comes: growing by the months, healing by the months since, keeping nothing of its
+ *    own, so a war taken up again heals as it was saved. The record follows this switch: the session lays it on or off
+ *    with tc.Map.FrontChurn as a war is set up or read in (CampaignSession.cpp, ShipChurnRecord).
+ *    Until a war's first month's end with the record (a war from before it), the view as it stands, read only as the
+ *    player's own cards allow: a corps known as it is today for its dig and months; a corps he cannot know for
+ *    nothing, not even its standing order. Beside his own lines dug in, an enemy he cannot know is taken at his side's
+ *    months (19:36Z); between two other countries, both sides must be known dug in.
  *  - The lines. Laid in a frame of their own after a view that changed them, never in the month's own frame: the
  *    border of every such pair, chained, thinned and rounded as the pen's front is (Campaign/FrontLine.h), each point
  *    given its pair's state and how far it lies from where that pair's armies face, the pairs joined at the stronger
@@ -68,7 +72,7 @@ namespace
 		TEXT("With tc.Map.FrontChurn, for pictures: 0 or more takes every front on the table as dug in on both sides for this many months (6 is whole); -1 reads the corps, as the game has it."));
 	TAutoConsoleVariable<float> CVarFrontChurnHeal(
 		TEXT("tc.Map.FrontChurnHeal"), -1.0f,
-		TEXT("With tc.Map.FrontChurn, for pictures: 0 or more takes every front on the table as left this many months ago, after standing tc.Map.FrontChurnMonths (or six), and healing; -1 as the game has it."));
+		TEXT("With tc.Map.FrontChurn, for pictures: 0 or more takes every front on the table as left this many months ago, after standing tc.Map.FrontChurnMonths (or six), and healing over the rules' year (sent with their record: set tc.Map.FrontChurn before the war is set up or read in); -1 as the game has it."));
 	TAutoConsoleVariable<int32> CVarFrontChurnCraters(
 		TEXT("tc.Map.FrontChurnCraters"), 600,
 		TEXT("With tc.Map.FrontChurn: the most craters modelled in view at once, nearest the eye first (0 to 3000)."));
@@ -333,132 +337,203 @@ void ACampaignMapActor::ShowFrontChurn(const FCampaignView& View)
 	FFrontChurnTable& Table = *FrontChurn;
 	Table.Turn = View.Turn;
 
-	// Each province with corps dug in on it: for how many months, where the view says (0 where it does not).
-	struct FDug
-	{
-		int32 Months = 0;
-		bool bUnknown = false;
-	};
-	TMap<int32, FDug> DugIn;
-	for (const FViewCorps& Corps : View.Corps)
-	{
-		if (!Data.Regions.IsValidIndex(Corps.Region))
-		{
-			continue;
-		}
-		const bool bKnown = !Corps.bDim && Corps.Stale == 0;
-		if (bKnown && Corps.bDug)
-		{
-			FDug& Here = DugIn.FindOrAdd(Corps.Region);
-			if (Corps.DugFor > 0)
-			{
-				Here.Months = FMath::Max(Here.Months, Corps.DugFor);
-			}
-			else
-			{
-				Here.bUnknown = true; // (dug in where months are not counted)
-			}
-		}
-		else if (!bKnown && Corps.Posture == TEXT("dig"))
-		{
-			DugIn.FindOrAdd(Corps.Region).bUnknown = true; // (glimpsed, or from a report: its posture and no more)
-		}
-	}
-
+	// The healing year: the rules' own figure (churned.ts CHURN.year, the art director's), sent with their record. This
+	// table keeps none of its own: with none sent (the switch's rules side off, or rules before it), nothing heals.
+	const double Year = static_cast<double>(FMath::Max(0, View.ChurnYear));
 	const float AskedMonths = CVarFrontChurnMonths.GetValueOnGameThread();
 	const float AskedHeal = CVarFrontChurnHeal.GetValueOnGameThread();
-	auto Stand = [](FFrontChurnTable::FPair& Pair, double Months, int32 Turn)
+	auto PairKeyAt = [this](int32 One, int32 Other, uint64& Key) -> bool
 	{
-		if (Months >= 0.0)
+		if (!Data.Regions.IsValidIndex(One) || !Data.Regions.IsValidIndex(Other) || One == Other)
 		{
-			TheaterChurn::FState Grown = TheaterChurn::Growing(Months);
-			if (Pair.LeftTurn != INDEX_NONE)
+			return false;
+		}
+		Key = ChurnPairKey(One, Other);
+		return true;
+	};
+
+	if (AskedMonths >= 0.0f || AskedHeal >= 0.0f)
+	{
+		// (for pictures: every front on the table as asked, nothing of the game's own kept)
+		Table.Pairs.Reset();
+		const TheaterChurn::FState Stood = TheaterChurn::Growing(AskedMonths >= 0.0f ? AskedMonths : 6.0);
+		for (int32 K = 0; K + 1 < View.Fronts.Num(); K += 2)
+		{
+			uint64 Key = 0;
+			if (PairKeyAt(View.Fronts[K], View.Fronts[K + 1], Key))
 			{
-				const TheaterChurn::FState Left = TheaterChurn::Healing(Pair.AtLeaving, static_cast<double>(Turn - Pair.LeftTurn));
-				if (TheaterChurn::IsNothing(Left) || Left.Size <= Grown.Size)
+				Table.Pairs.FindOrAdd(Key).Now = AskedHeal >= 0.0f ? TheaterChurn::Healing(Stood, AskedHeal, Year) : Stood;
+			}
+		}
+	}
+	else if (View.bChurnKept)
+	{
+		// The rules' record (churned.ts): every pair as the player knows it, standing (its months) or healing (the months
+		// it stood, and how long since it was left), sent under fronts' sight rule. This table keeps nothing of its own, so
+		// a war taken up again heals as it was saved. Where a pair has stood more than once, the larger of what shows.
+		TMap<uint64, TheaterChurn::FState> Shown;
+		for (int32 K = 0; K + 3 < View.Churned.Num(); K += 4)
+		{
+			uint64 Key = 0;
+			const int32 Months = View.Churned[K + 2], Since = View.Churned[K + 3];
+			if (!PairKeyAt(View.Churned[K], View.Churned[K + 1], Key) || Months <= 0)
+			{
+				continue;
+			}
+			const TheaterChurn::FState Stood = TheaterChurn::Growing(static_cast<double>(Months));
+			const TheaterChurn::FState State = Since < 0 ? Stood : TheaterChurn::Healing(Stood, static_cast<double>(Since), Year);
+			if (!TheaterChurn::IsNothing(State))
+			{
+				TheaterChurn::FState* At = Shown.Find(Key);
+				Shown.Add(Key, At ? ChurnLarger(*At, State) : State);
+			}
+		}
+		Table.Pairs.Reset();
+		for (const TPair<uint64, TheaterChurn::FState>& Each : Shown)
+		{
+			Table.Pairs.Add(Each.Key).Now = Each.Value;
+		}
+	}
+	else
+	{
+		// No record yet (a war from before it, until its first month's end; the design director's 21:05Z ruling: no strip
+		// until recorded): the view as it stands, read only as fronts' sight rule and the player's own cards allow. A corps
+		// is read for its dig only where he knows it as it is today (dug, and its months where they are counted). A corps
+		// he cannot know is read for nothing, not even its standing order: the view sends that for every corps in sight,
+		// and it is the order as it truly is, so it is never read here. Beside his own lines dug in, an enemy whose dig he
+		// cannot know is taken at his side's months (the 19:36Z ruling); between two other countries both sides must be
+		// known dug in. The table remembers what healed while it ran; a war read in starts from what stands.
+		struct FDug
+		{
+			int32 Months = 0; // the most months counted among its known corps dug in
+			bool bCountless = false; // a known corps dug in where months are not counted
+			bool bUnknown = false; // a corps whose dig he cannot know
+			bool bMine = false; // one of the known corps dug in is his own
+		};
+		TMap<int32, FDug> DugIn;
+		for (const FViewCorps& Corps : View.Corps)
+		{
+			if (!Data.Regions.IsValidIndex(Corps.Region))
+			{
+				continue;
+			}
+			const bool bKnown = !Corps.bDim && Corps.Stale == 0;
+			if (bKnown && Corps.bDug)
+			{
+				FDug& Here = DugIn.FindOrAdd(Corps.Region);
+				if (Corps.DugFor > 0)
 				{
-					Pair.LeftTurn = INDEX_NONE;
+					Here.Months = FMath::Max(Here.Months, Corps.DugFor);
 				}
 				else
 				{
-					Grown = ChurnLarger(Grown, Left);
+					Here.bCountless = true;
+				}
+				Here.bMine |= Corps.Nation == View.Human || !Corps.Ally.IsEmpty();
+			}
+			else if (!bKnown)
+			{
+				DugIn.FindOrAdd(Corps.Region).bUnknown = true;
+			}
+		}
+		auto KnownDug = [](const FDug* Side) { return Side && (Side->Months > 0 || Side->bCountless); };
+
+		auto Stand = [Year](FFrontChurnTable::FPair& Pair, double Months, int32 Turn)
+		{
+			if (Months >= 0.0)
+			{
+				TheaterChurn::FState Grown = TheaterChurn::Growing(Months);
+				if (Pair.LeftTurn != INDEX_NONE)
+				{
+					const TheaterChurn::FState Left = TheaterChurn::Healing(Pair.AtLeaving, static_cast<double>(Turn - Pair.LeftTurn), Year);
+					if (TheaterChurn::IsNothing(Left) || Left.Size <= Grown.Size)
+					{
+						Pair.LeftTurn = INDEX_NONE;
+					}
+					else
+					{
+						Grown = ChurnLarger(Grown, Left);
+					}
+				}
+				Pair.bActive = true;
+				Pair.Now = Grown;
+				return;
+			}
+			Pair.SeenFrom = INDEX_NONE;
+			if (Pair.bActive)
+			{
+				Pair.bActive = false;
+				if (!TheaterChurn::IsNothing(Pair.Now))
+				{
+					Pair.AtLeaving = Pair.Now;
+					Pair.LeftTurn = Turn;
 				}
 			}
-			Pair.bActive = true;
-			Pair.Now = Grown;
-			return;
-		}
-		Pair.SeenFrom = INDEX_NONE;
-		if (Pair.bActive)
+			Pair.Now = Pair.LeftTurn != INDEX_NONE ? TheaterChurn::Healing(Pair.AtLeaving, static_cast<double>(Turn - Pair.LeftTurn), Year) : TheaterChurn::FState();
+		};
+		TSet<uint64> OnFront;
+		for (int32 K = 0; K + 1 < View.Fronts.Num(); K += 2)
 		{
-			Pair.bActive = false;
-			if (!TheaterChurn::IsNothing(Pair.Now))
+			uint64 Key = 0;
+			const int32 One = View.Fronts[K], Other = View.Fronts[K + 1];
+			if (!PairKeyAt(One, Other, Key))
 			{
-				Pair.AtLeaving = Pair.Now;
-				Pair.LeftTurn = Turn;
+				continue;
 			}
-		}
-		Pair.Now = Pair.LeftTurn != INDEX_NONE ? TheaterChurn::Healing(Pair.AtLeaving, static_cast<double>(Turn - Pair.LeftTurn)) : TheaterChurn::FState();
-	};
-	TSet<uint64> OnFront;
-	for (int32 K = 0; K + 1 < View.Fronts.Num(); K += 2)
-	{
-		const int32 One = View.Fronts[K], Other = View.Fronts[K + 1];
-		if (!Data.Regions.IsValidIndex(One) || !Data.Regions.IsValidIndex(Other) || One == Other)
-		{
-			continue;
-		}
-		const uint64 Key = ChurnPairKey(One, Other);
-		OnFront.Add(Key);
-		FFrontChurnTable::FPair& Pair = Table.Pairs.FindOrAdd(Key);
-		if (AskedMonths >= 0.0f || AskedHeal >= 0.0f)
-		{
-			// (for pictures: every front as asked, nothing of the game's own kept)
-			const TheaterChurn::FState Stood = TheaterChurn::Growing(AskedMonths >= 0.0f ? AskedMonths : 6.0);
-			Pair = FFrontChurnTable::FPair();
-			Pair.Now = AskedHeal >= 0.0f ? TheaterChurn::Healing(Stood, AskedHeal) : Stood;
-			continue;
-		}
-		double Months = -1.0; // dug in and facing for so many months; below nought, not both dug in
-		const FDug* Here = DugIn.Find(One);
-		const FDug* There = DugIn.Find(Other);
-		if (Here && There)
-		{
-			if (Here->Months > 0 && There->Months > 0)
+			OnFront.Add(Key);
+			FFrontChurnTable::FPair& Pair = Table.Pairs.FindOrAdd(Key);
+			double Months = -1.0; // dug in and facing for so many months; below nought, not both dug in
+			const FDug* Here = DugIn.Find(One);
+			const FDug* There = DugIn.Find(Other);
+			const FDug* Counted = nullptr; // the side whose months are taken where only one side's are
+			if (KnownDug(Here) && KnownDug(There))
 			{
-				Months = FMath::Min(Here->Months, There->Months);
+				if (Here->Months > 0 && There->Months > 0)
+				{
+					Months = FMath::Min(Here->Months, There->Months);
+				}
+				else
+				{
+					Counted = Here->Months > 0 ? Here : There->Months > 0 ? There : nullptr;
+					Months = Counted ? Counted->Months : -2.0; // (-2: neither counted, below)
+				}
 			}
-			else if (Here->Months > 0 || There->Months > 0)
+			else if (KnownDug(Here) && Here->bMine && There && There->bUnknown)
 			{
-				Months = FMath::Max(Here->Months, There->Months); // (the other seen digging, its months unknown: the known side's)
+				Months = Here->Months > 0 ? Here->Months : -2.0;
 			}
-			else
+			else if (KnownDug(There) && There->bMine && Here && Here->bUnknown)
 			{
+				Months = There->Months > 0 ? There->Months : -2.0;
+			}
+			if (Months == -2.0)
+			{
+				// (dug in where months are not counted: the months this table has seen them so)
 				if (Pair.SeenFrom == INDEX_NONE)
 				{
 					Pair.SeenFrom = View.Turn;
 				}
 				Months = static_cast<double>(View.Turn - Pair.SeenFrom + 1);
 			}
+			Stand(Pair, Months, View.Turn);
 		}
-		Stand(Pair, Months, View.Turn);
-	}
-	// Fronts no longer on the table: their ground heals where it lies; gone a year on, it is forgotten.
-	TArray<uint64> Gone;
-	for (TPair<uint64, FFrontChurnTable::FPair>& Each : Table.Pairs)
-	{
-		if (!OnFront.Contains(Each.Key))
+		// Fronts no longer on the table: their ground heals where it lies, over the rules' year; then it is forgotten.
+		TArray<uint64> Gone;
+		for (TPair<uint64, FFrontChurnTable::FPair>& Each : Table.Pairs)
 		{
-			Stand(Each.Value, -1.0, View.Turn);
+			if (!OnFront.Contains(Each.Key))
+			{
+				Stand(Each.Value, -1.0, View.Turn);
+			}
+			if (!Each.Value.bActive && Each.Value.SeenFrom == INDEX_NONE && TheaterChurn::IsNothing(Each.Value.Now))
+			{
+				Gone.Add(Each.Key);
+			}
 		}
-		if (!Each.Value.bActive && Each.Value.SeenFrom == INDEX_NONE && TheaterChurn::IsNothing(Each.Value.Now))
+		for (const uint64 Key : Gone)
 		{
-			Gone.Add(Each.Key);
+			Table.Pairs.Remove(Key);
 		}
-	}
-	for (const uint64 Key : Gone)
-	{
-		Table.Pairs.Remove(Key);
 	}
 
 	// Laid again (a frame later) only where what shows has changed.

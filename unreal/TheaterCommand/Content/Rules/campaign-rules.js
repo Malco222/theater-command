@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ddef90d11 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 338bb8fe7 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -86920,6 +86920,9 @@
       mines: g2.flags.open === 1 && g2.flags.seaMines === 1 && g2.mines?.length ? g2.mines : void 0,
       // A queue for a town (release 2, townqueue.ts): kept only with that switch on and something queued.
       townQueue: g2.flags.open === 1 && g2.flags.townQueue === 1 && g2.townQueue ? g2.townQueue : void 0,
+      // Churned ground's record (release 2, churned.ts): kept only with that switch on, so a save without it is written as
+      // it always was. An empty record is kept too: it says the record has been kept, which an older war's has not.
+      churned: g2.flags.open === 1 && g2.flags.churned === 1 && g2.churned ? g2.churned : void 0,
       headlines: g2.headlines,
       reports: g2.reports.slice(-KEEP_REPORTS)
     });
@@ -87108,6 +87111,7 @@
     else for (const r of g2.reports ?? []) wreckBump(g2, r);
     if (Array.isArray(d.mines)) g2.mines = d.mines;
     if (d.townQueue && typeof d.townQueue === "object") g2.townQueue = d.townQueue;
+    if (Array.isArray(d.churned)) g2.churned = d.churned;
     if (Array.isArray(d.fleets)) {
       g2.fleets = d.fleets;
       g2.nextFleet = d.nextFleet;
@@ -88195,6 +88199,120 @@
     return `${cap14(g2.nations[m.nat]?.adj ?? m.nat)} mines ${seaWords(g2, m.z)}: it may lose a ship each month it sails there, until destroyers sweep them.`;
   }
 
+  // ../../src/campaign/churned.ts
+  var CHURN = {
+    /**
+     * The art director's healing year (her sheet art-director/fronts-alive/fronts-alive-look.md, 27 November 2026): the
+     * ground between two lines heals over twelve months once the front moves on. Hers, not the rules': here only as the
+     * record's storage bound (a scar is dropped once it is healed). The bridge sends it with the list and the table draws
+     * its healing over it, so a change to her sheet is this one line. Her other figure, the band whole at the sixth month,
+     * is the table's drawing alone: the record's months are facts and are never capped.
+     */
+    year: 12,
+    /** At most so many entries in the bridge's list (four numbers each). */
+    sent: 600
+  };
+  var churnedOn = (g2) => g2.flags.open === 1 && g2.flags.churned === 1;
+  function setChurned(g2, on2) {
+    if (on2 && g2.flags.open === 1) g2.flags.churned = 1;
+    else {
+      delete g2.flags.churned;
+      delete g2.churned;
+    }
+    return churnedOn(g2);
+  }
+  function churnMonth(g2) {
+    if (!churnedOn(g2)) return;
+    const N = g2.regions.length;
+    const first2 = g2.churned === void 0;
+    const rows = /* @__PURE__ */ new Map();
+    for (const r of g2.churned ?? []) rows.set(r.a * N + r.b, r);
+    const lord = g2.regions.map((r) => fieldCtrl(g2, r));
+    const me = g2.human;
+    const fog = me !== null && fogOn(g2, me);
+    const seen2 = fog ? sightOf(g2, me) : null;
+    const war = (a, b) => a !== b && !!g2.nations[a] && !!g2.nations[b] && atWar(g2, a, b);
+    const works2 = (x) => Math.max(1, Math.round(x));
+    const dug = (x, foe) => {
+      let most = -1;
+      for (const c of g2.regions[x].units) {
+        if (c.dead || c.kind === "fort" || !c.dug || !war(c.nat, foe)) continue;
+        most = Math.max(most, c.dugFor ?? 0);
+      }
+      return most;
+    };
+    const known = (x, foe) => {
+      if (!seen2 || seen2[x] < SIGHT.full) return { state: "unknown", works: 0 };
+      let most = -1, hidden = false;
+      for (const c of g2.regions[x].units) {
+        if (c.dead || c.kind === "fort" || !war(c.nat, foe)) continue;
+        if (corpsKnown(g2, c, me).level !== "exact") {
+          hidden = true;
+          continue;
+        }
+        if (c.dug) most = Math.max(most, c.dugFor ?? 0);
+      }
+      return most >= 0 ? { state: "dug", works: most } : { state: hidden ? "unknown" : "not", works: 0 };
+    };
+    const out = [];
+    const visit = (a, b, row2, apart3 = false) => {
+      const la = lord[a], lb = lord[b];
+      const front = !apart3 && war(la, lb);
+      const da = front ? dug(a, lb) : -1, db = front ? dug(b, la) : -1;
+      if (!row2 && da < 0 && db < 0) return;
+      const was = row2 ?? { a, b, la, lb, ma: 0, mb: 0, pm: 0 };
+      const moved = was.la !== la || was.lb !== lb;
+      const ma = da < 0 ? 0 : first2 ? works2(da) : moved ? 1 : was.ma + 1;
+      const mb = db < 0 ? 0 : first2 ? works2(db) : moved ? 1 : was.mb + 1;
+      const before = moved ? 0 : was.pm;
+      let pm = 0;
+      if (!front) pm = 0;
+      else if (!fog) pm = ma > 0 && mb > 0 ? Math.min(ma, mb) : 0;
+      else {
+        const ownA = allied(g2, la, me), ownB = !ownA && allied(g2, lb, me);
+        if (ownA || ownB) {
+          const mine4 = ownA ? ma : mb;
+          const other4 = ownA ? known(b, la) : known(a, lb);
+          pm = mine4 <= 0 || other4.state === "not" ? 0 : other4.state === "dug" ? Math.min(mine4, works2(other4.works)) : mine4;
+        } else {
+          const ka = known(a, lb), kb = known(b, la);
+          if (ka.state === "not" || kb.state === "not") pm = 0;
+          else if (ka.state === "dug" && kb.state === "dug") pm = first2 ? Math.min(works2(ka.works), works2(kb.works)) : before + 1;
+          else pm = before;
+        }
+      }
+      const scars = (was.scars ?? []).filter((s) => g2.turn + 1 - s.left < CHURN.year);
+      if (was.pm > 0 && (moved || pm === 0)) scars.push({ m: was.pm, left: g2.turn });
+      if (ma <= 0 && mb <= 0 && pm <= 0 && !scars.length) return;
+      const next = { a, b, la, lb, ma, mb, pm };
+      if (scars.length) next.scars = scars;
+      out.push(next);
+    };
+    const done = /* @__PURE__ */ new Set();
+    for (const r of g2.regions) {
+      for (const j of r.nb) {
+        if (j <= r.id || j >= N) continue;
+        const key8 = r.id * N + j;
+        done.add(key8);
+        visit(r.id, j, rows.get(key8));
+      }
+    }
+    for (const [key8, row2] of rows) if (!done.has(key8) && row2.a < N && row2.b < N) visit(row2.a, row2.b, row2, true);
+    out.sort((x, y) => x.a - y.a || x.b - y.b);
+    g2.churned = out;
+  }
+  function churnedView(g2, seen2) {
+    if (!churnedOn(g2)) return void 0;
+    const pairs2 = [];
+    for (const r of g2.churned ?? []) {
+      if (pairs2.length >= CHURN.sent * 4) break;
+      if (!(seen2[r.a] > 0) || !(seen2[r.b] > 0)) continue;
+      if (r.pm > 0) pairs2.push(r.a, r.b, r.pm, -1);
+      for (const s of r.scars ?? []) pairs2.push(r.a, r.b, s.m, g2.turn - s.left);
+    }
+    return { year: CHURN.year, kept: g2.churned !== void 0, pairs: pairs2 };
+  }
+
   // ../../src/campaign/harbourstrike.ts
   var carrierStrikeOn = (g2) => g2.flags.open === 1 && g2.flags.carrierStrike === 1;
   function setCarrierStrike(g2, on2) {
@@ -88395,6 +88513,7 @@
       worksMonth(g2);
       logVoyages(g2);
       minesMonth(g2);
+      churnMonth(g2);
       g2.phase = 0;
       g2.turn++;
       g2.week = 1;
@@ -129178,6 +129297,9 @@
         }
         return out.slice(0, 160);
       })(),
+      // (Release 2, churned ground's record: churned.ts, a record for the 3D map and never a rule.) Fronts' sight rule: only
+      // where both provinces are seen, with the months of the player's own picture. Absent with the switch off.
+      churned: churnedView(s, seen2),
       // Prizes to mark on the map (Version 56): for each province the region, the tag of the army that holds prizes
       // outside a town it has not taken ('' if none; an airfield alone does not count), and 1 if something there burns.
       prizes: (() => {
@@ -137681,6 +137803,13 @@ ${standing6}`,
     return took > 0 ? view2() : null;
   }
   globalThis.TC.r2Ship = r2Ship;
+  function churnSwitch(on2) {
+    const s = game();
+    const was = churnedOn(s) || s.churned !== void 0;
+    setChurned(s, on2 === true);
+    return (churnedOn(s) || s.churned !== void 0) !== was ? view2() : null;
+  }
+  globalThis.TC.churnSwitch = churnSwitch;
   {
     const table = globalThis.TC;
     for (const name of Object.keys(table)) {

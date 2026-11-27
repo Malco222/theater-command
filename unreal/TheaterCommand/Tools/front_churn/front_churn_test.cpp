@@ -13,6 +13,10 @@
 
 using namespace TheaterChurn;
 
+// The healing year as the rules send it with their record (src/campaign/churned.ts CHURN.year, the art director's figure):
+// the table keeps none of its own.
+static const double Year = 12.0;
+
 namespace
 {
 	int Checks = 0, Faults = 0;
@@ -91,13 +95,14 @@ namespace
 		}
 		Check(bTable, "grows by the art director's table: nothing in month 1, 0.3, 0.5, 0.7, 0.85, whole at 6");
 		Check(Grown(1.5) > 0.0 && Grown(1.5) < 0.3, "and evenly between the months");
-		Check(std::fabs(Left(0.0) - 1.0) < 1e-9 && std::fabs(Left(4.0) - 0.5) < 1e-9 && std::fabs(Left(8.0) - 0.25) < 1e-9 && Left(12.0) == 0.0 && Left(20.0) == 0.0,
+		Check(std::fabs(Left(0.0, Year) - 1.0) < 1e-9 && std::fabs(Left(4.0, Year) - 0.5) < 1e-9 && std::fabs(Left(8.0, Year) - 0.25) < 1e-9 && Left(12.0, Year) == 0.0 && Left(20.0, Year) == 0.0,
 			"heals: half at 4 months, three quarters at 8, gone at 12");
-		Check(CratersLeft(4.0) < Left(4.0) && CratersLeft(6.0) == 0.0, "the craters green over first (" + Num(CratersLeft(4.0)) + " left at 4 months)");
-		const FState Whole = Growing(6.0), Healed = Healing(Whole, 8.0);
+		Check(Left(0.0, 0.0) == 0.0 && IsNothing(Healing(Growing(6.0), 0.0, 0.0)), "with no year sent, nothing heals: it is gone when the front moves on");
+		Check(CratersLeft(4.0) < Left(4.0, Year) && CratersLeft(6.0) == 0.0, "the craters green over first (" + Num(CratersLeft(4.0)) + " left at 4 months)");
+		const FState Whole = Growing(6.0), Healed = Healing(Whole, 8.0, Year);
 		Check(Whole.Size == 1.0f && Whole.Pale == 0.0f, "whole at six months, not pale");
 		Check(Healed.Size < 0.3f && Healed.Pits == 0.0f && Healed.Pale > 0.7f, "healing: weaker, no craters, a paler strip");
-		Check(IsNothing(Growing(1.0)) && IsNothing(Healing(Whole, 12.0)), "nothing in the first month, nothing after a year");
+		Check(IsNothing(Growing(1.0)) && IsNothing(Healing(Whole, 12.0, Year)), "nothing in the first month, nothing after a year");
 		const FState Half = Mix(Growing(2.0), Growing(4.0), 0.5);
 		Check(std::fabs(Half.Size - 0.5f) < 1e-6f, "the month's cross-fade runs evenly between the two");
 	}
@@ -208,9 +213,9 @@ namespace
 		Check(Covered > 0.995, "whole where the armies stand it is unbroken (" + Num(Covered) + ")");
 		Patches(First, 3.0, Covered, Typical);
 		Check(Covered > 0.3 && Covered < 0.8 && Typical >= 1.5 && Typical <= 6.0, "at first show it is patches (" + Num(Covered) + " laid, patches about " + Num(Typical) + " long)");
-		Patches(Healing(Whole, 8.0), 3.0, Covered, Typical);
+		Patches(Healing(Whole, 8.0, Year), 3.0, Covered, Typical);
 		Check(Covered > 0.15 && Covered < 0.6, "eight months healed it is islands (" + Num(Covered) + " left)");
-		Patches(Healing(Whole, 3.0), 3.0, Covered, Typical);
+		Patches(Healing(Whole, 3.0, Year), 3.0, Covered, Typical);
 		Check(Covered > 0.85, "three months healed it is still whole (" + Num(Covered) + ")");
 		// Its middle strays off the frontier by up to half a unit.
 		double Stray0 = 0.0;
@@ -495,7 +500,7 @@ namespace
 				}
 				return Sum;
 			};
-			const double Was = Summed(Whole), At4 = Summed(Healing(Whole, 4.0)) / Was, At8 = Summed(Healing(Whole, 8.0)) / Was;
+			const double Was = Summed(Whole), At4 = Summed(Healing(Whole, 4.0, Year)) / Was, At8 = Summed(Healing(Whole, 8.0, Year)) / Was;
 			Check(At4 > 0.35 && At4 < 0.8 && At8 > 0.15 && At8 < 0.4, "healing: about half the darkness left at four months (" + Num(At4) + ") and a quarter at eight (" + Num(At8) + ")");
 		}
 		// Plots still show through as darker versions of themselves: two grounds a field apart stay apart.
@@ -667,7 +672,7 @@ namespace
 		Check(Empty * 5 >= Windows && Dense > 0, "in clusters with bare stretches between, never an even pepper (" + std::to_string(Empty) + " of " + std::to_string(Windows) + " units bare)");
 		// Healing and weak ground: the craters go first, and a weak band has fewer.
 		std::vector<FPit> Later, Weak;
-		Pits(Straight(-40.0, 40.0, Healing(Whole, 4.0), 0.0), Later);
+		Pits(Straight(-40.0, 40.0, Healing(Whole, 4.0, Year), 0.0), Later);
 		Pits(Straight(-40.0, 40.0, Growing(2.0), 0.0), Weak);
 		auto CratersIn = [](const std::vector<FPit>& Set) { return static_cast<size_t>(std::count_if(Set.begin(), Set.end(), [](const FPit& P) { return !P.bSpoil; })); };
 		Check(CratersIn(Later) * 4 < Holes.size(), "four months after the front moved on, few craters are left (" + std::to_string(CratersIn(Later)) + ")");
@@ -1008,7 +1013,7 @@ namespace
 		Measure(Lines, Board.X0, Board.Y0, Board.Cell, NX, NY, Coarse);
 		for (const FMoment& Moment : Moments)
 		{
-			const FState Now = Moment.Since > 0.0 ? Healing(Growing(Moment.Months), Moment.Since) : Growing(Moment.Months);
+			const FState Now = Moment.Since > 0.0 ? Healing(Growing(Moment.Months), Moment.Since, Year) : Growing(Moment.Months);
 			std::vector<FLine> Here = Lines;
 			for (FLine& Line : Here)
 			{

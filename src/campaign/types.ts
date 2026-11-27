@@ -1993,6 +1993,14 @@ export interface Game {
   width: number;
   height: number;
   land: [number, number][][][];
+  /**
+   * Churned ground's record (release 2, churned.ts; the design director's rulings of 27 November 2026 19:36Z and
+   * 21:05Z): a record for the 3D map, never a rule. One row for each pair of neighbouring provinces (a < b) that
+   * stands or heals: their holders at the last month's end, the months each side has stood dug in facing the other,
+   * the months the stand has stood in the player's own picture, and the stands it has left, each with its months and
+   * the month it was left. Only churned.ts and save.ts touch it. Kept only under the switch 'churned'.
+   */
+  churned?: { a: number; b: number; la: string; lb: string; ma: number; mb: number; pm: number; scars?: { m: number; left: number }[] }[];
 }
 
 /**

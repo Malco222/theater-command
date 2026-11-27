@@ -95,9 +95,13 @@ namespace TheaterChurn
 		return Table(Points, 6, Months);
 	}
 
-	double Left(double MonthsSince)
+	double Left(double MonthsSince, double Year)
 	{
-		static const double Points[][2] = { { 0.0, 1.0 }, { 4.0, 0.5 }, { 8.0, 0.25 }, { 12.0, 0.0 } };
+		if (!(Year > 0.0))
+		{
+			return 0.0;
+		}
+		const double Points[][2] = { { 0.0, 1.0 }, { Year / 3.0, 0.5 }, { Year * 2.0 / 3.0, 0.25 }, { Year, 0.0 } };
 		return Table(Points, 4, MonthsSince);
 	}
 
@@ -114,9 +118,9 @@ namespace TheaterChurn
 		return State;
 	}
 
-	FState Healing(const FState& AtLeaving, double MonthsSince)
+	FState Healing(const FState& AtLeaving, double MonthsSince, double Year)
 	{
-		const double Share = Left(MonthsSince);
+		const double Share = Left(MonthsSince, Year);
 		FState State;
 		State.Size = static_cast<float>(AtLeaving.Size * Share);
 		State.Dark = static_cast<float>(AtLeaving.Dark * Share * Share); // (its islands keep their width and fade in tone; fewer of them, each plain: see Band)

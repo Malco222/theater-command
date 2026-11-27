@@ -38,8 +38,11 @@ namespace TheaterChurn
 
 	/** How far the churned ground has grown after Months of both sides dug in and facing: nothing in the first month, then 0.3, 0.5, 0.7, 0.85, whole at six (the art director's table), evenly between. */
 	double Grown(double Months);
-	/** The share of it left MonthsSince the front moved on or a side left: half at four months, a quarter at eight, nothing at twelve. */
-	double Left(double MonthsSince);
+	/** The share of it left MonthsSince the front moved on or a side left, over Year months: half at a third of it, a
+	 * quarter at two thirds, nothing at its end (the art director's year of twelve: half at four months, a quarter at
+	 * eight). Year comes from the rules with their record (churned.ts CHURN.year, the one home of her figure); this table
+	 * keeps none of its own, and with none sent nothing heals: it is gone when the front moves on. */
+	double Left(double MonthsSince, double Year);
 	/** The share of its craters left by then: they green over first, nearly gone by six months. */
 	double CratersLeft(double MonthsSince);
 
@@ -54,8 +57,8 @@ namespace TheaterChurn
 	};
 	/** Growing, after Months dug in and facing. */
 	FState Growing(double Months);
-	/** Healing, MonthsSince it stood as AtLeaving. */
-	FState Healing(const FState& AtLeaving, double MonthsSince);
+	/** Healing, MonthsSince it stood as AtLeaving, over Year months (see Left). */
+	FState Healing(const FState& AtLeaving, double MonthsSince, double Year);
 	/** Between two states (T 0 to 1): the cross-fade of a month's step. */
 	FState Mix(const FState& From, const FState& To, double T);
 	/** True when nothing of it shows. */
