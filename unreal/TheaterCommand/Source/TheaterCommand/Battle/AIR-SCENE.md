@@ -1648,6 +1648,11 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    Remade on 27 November from the model thread's pushed wear (the same path, sha256 2717c78061a7353b...: the art
    director's "push the wear harder"; blend, soot and five colours moved, every geometry list, the 160 far repaints
    and shade as before).
+   Remade again on 27 November (18:57Z) from SKIN 9, the coat the art director passed at 18:56Z
+   (battle-models/air-bar-1126/issue-4/B17-skin9.json, sha256 bd468b6d3342cb1c..., her page
+   finish-lists/AD-1856-SKIN-9-PASSES.md): against skin 2 only blend and soot moved (the wing tongues widen aft to the
+   eye, soot cleaner on the tail); colours, shade, gloss, metal and every geometry list as before. The sheen file was
+   made in the same run, so both record bd468b6d3342. Overlay sha256 14298379c624..., sheen file 817d734a3abd....
    Cost: none on the graphics chip (the same points, triangles, material and draws: only the colour bytes differ).
    Her shapes are made once more under "|skin" the first battle it is on (a second read of her 10.3 MB file each
    level, as with any first battle).
