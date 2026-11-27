@@ -151,6 +151,68 @@ namespace TheaterChurn
 		double PatchField(double X, double Y) { return 0.82 * Noise(X / 2.2, Y / 2.2, 83) + 0.18 * Noise(X / 0.9, Y / 0.9, 84); }
 	}
 
+	namespace
+	{
+		/** The smaller of two distances, blended over Soft: two shapes joined with a curved fillet, no corner. */
+		double SoftLess(double A, double B, double Soft)
+		{
+			const double T = std::clamp(0.5 + 0.5 * (B - A) / Soft, 0.0, 1.0);
+			return Lerp(B, A, T) - Soft * T * (1.0 - T);
+		}
+
+		double Round(double PX, double PY, double CX, double CY, double R) { return std::hypot(PX - CX, PY - CY) - R; }
+	}
+
+	double LobeEdge(double Along, double Up, uint32_t SideSeed, double Scale)
+	{
+		// The tongues are lobes, each its own (the art director's read of the third drawings): at most one in each
+		// stretch of LobeEvery along the edge, wholly inside it, none at all over stretches of a few units. Each is a
+		// leaning, bending finger of ground that narrows from its foot to a round tip (three rounds blended one into the
+		// next: no flat on it, no straight side, its sides never parallel), joined to the band's edge with a wide fillet
+		// (no corner at its foot). Its length and its width each vary about three to one, its lean too, either way; the
+		// longest are the widest, so that none is a thorn.
+		const int64_t Cell = static_cast<int64_t>(std::floor(Along / LobeEvery));
+		const double Start = static_cast<double>(Cell) * LobeEvery;
+		const double Stretch = Smooth(0.28, 0.42, Noise((Start + 0.5 * LobeEvery) / 4.5, 0.83, SideSeed + 21u));
+		if (Unit(Hash(Cell, SideSeed, 1u)) >= 0.95 * std::max(Stretch, 0.22))
+		{
+			return Up;
+		}
+		const double Size = Unit(Hash(Cell, SideSeed, 3u));
+		double Long = 0.93 * TongueLongest * (1.0 / 3.0 + (2.0 / 3.0) * Size);
+		// (its foot from 0.3 to 0.9 across, mostly with its length; its tip about half that, its middle between)
+		double Foot = 0.15 * std::pow(3.0, std::clamp(0.75 * Size + 0.25 * Unit(Hash(Cell, SideSeed, 4u)), 0.0, 1.0));
+		double Tip = std::min(Foot * (0.34 + 0.16 * Unit(Hash(Cell, SideSeed, 5u))), 0.32 * Long);
+		const double Bend = 2.0 * Unit(Hash(Cell, SideSeed, 8u)) - 1.0;
+		double Lean = (Unit(Hash(Cell, SideSeed, 6u)) < 0.5 ? -1.0 : 1.0) * (0.1 + 0.2 * Unit(Hash(Cell, SideSeed, 7u))) * Long;
+		double Waist = (0.5 * Foot + 0.5 * Tip) * (0.9 + 0.12 * Unit(Hash(Cell, SideSeed, 9u)));
+		double Sway = 0.5 * Lean + 0.06 * Bend * Long;
+		// (never over its own foot: the tip and the middle stand within it, so that no side is undercut)
+		Lean = std::clamp(Lean, -(Foot - Tip), Foot - Tip);
+		Sway = std::clamp(Sway, -(Foot - Waist), Foot - Waist);
+		// (wholly in its own stretch, fillet and all; shrunk to fit if it would not be)
+		double Joined = 0.75 * Foot, Fillet = 0.6 * Foot;
+		double Lo = std::min({ -Foot, Lean - Tip, Sway - Waist }) - Fillet - 0.08;
+		double Hi = std::max({ Foot, Lean + Tip, Sway + Waist }) + Fillet + 0.08;
+		const double Fit = std::min(1.0, LobeEvery / (Hi - Lo)) * Scale;
+		Long *= Fit;
+		Foot *= Fit;
+		Tip *= Fit;
+		Lean *= Fit;
+		Waist *= Fit;
+		Sway *= Fit;
+		Joined *= Fit;
+		Fillet *= Fit;
+		Lo *= Fit;
+		Hi *= Fit;
+		const double Room = std::max(0.0, LobeEvery - (Hi - Lo));
+		const double Middle = Start - Lo + Room * Unit(Hash(Cell, SideSeed, 2u));
+		const double Lobe = SoftLess(SoftLess(Round(Along, Up, Middle, -0.25 * Foot, Foot),
+			Round(Along, Up, Middle + Sway, 0.5 * (Long - Tip), Waist), Joined),
+			Round(Along, Up, Middle + Lean, Long - Tip, Tip), Joined);
+		return SoftLess(Up, Lobe, Fillet);
+	}
+
 	FBand Band(const FBandIn& In)
 	{
 		FBand Out;
@@ -194,14 +256,12 @@ namespace TheaterChurn
 		// The ragged edge, for the fine veil: crisp, with uneven tongues reaching out 0.3 to 0.8 of a unit and a few
 		// bites in, a different run of them on each side.
 		const uint32_t SideSeed = Off >= 0.0 ? 73u : 77u;
-		// (each tongue's tip blunt and lobed, not a thorn: its reach comes to a flat top whose height differs from tongue
-		// to tongue)
-		const double Tongue = 0.85 * Noise(In.Along / 0.6, 0.37, SideSeed) + 0.15 * Noise(In.Along / 0.3, 0.71, SideSeed + 6u);
-		const double Long = TongueLongest * (0.4 + 0.6 * Noise(In.Along / 2.3, 0.19, SideSeed + 3u));
-		const double Reach2 = Long * Smooth(0.47, 0.64, Tongue) - 0.1 * (1.0 - Smooth(0.14, 0.42, Tongue));
-		const double Wobble = 0.09 * (2.0 * Noise(In.Along / 1.3, 0.53, SideSeed + 11u) - 1.0);
-		const double Rim = Half + 0.35 * Edge + Reach2 * (0.55 + 0.45 * Grow) + Wobble;
-		Out.Ragged = static_cast<float>(Patch * (1.0 - Smooth(Rim - 0.07, Rim + 0.07, D)));
+		const double Bite = -0.1 * (1.0 - Smooth(0.14, 0.42, Noise(In.Along / 0.6, 0.37, SideSeed)));
+		// (and between the tongues it is never ruled straight: a slow wobble and a finer one)
+		const double Wobble = 0.09 * (2.0 * Noise(In.Along / 1.3, 0.53, SideSeed + 11u) - 1.0) + 0.07 * (2.0 * Noise(In.Along / 0.5, 0.29, SideSeed + 13u) - 1.0);
+		const double Rim = Half + 0.35 * Edge + Bite * (0.55 + 0.45 * Grow) + Wobble;
+		const double Outside = LobeEdge(In.Along, D - Rim, SideSeed, 0.55 + 0.45 * Grow);
+		Out.Ragged = static_cast<float>(Patch * (1.0 - Smooth(-0.07, 0.07, Outside)));
 		return Out;
 	}
 

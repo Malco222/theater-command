@@ -259,17 +259,21 @@ namespace
 				{
 					Last = D;
 				}
-				if (R >= 0.9)
+				// (the first fall outward, where no tongue stands: a tongue's side crossed on the slant is no softer)
+				if (R < 0.9 && From < 0.0)
 				{
 					From = D;
 				}
-				if (R >= 0.1)
+				if (R < 0.1 && To < 0.0)
 				{
 					To = D;
 				}
 			}
 			EdgeAt.push_back(Last);
-			Softest = std::max(Softest, To - From);
+			if (LobeEdge(X, 0.2, 73u, 1.0) > 0.18 && LobeEdge(X, 0.6, 73u, 1.0) > 0.58)
+			{
+				Softest = std::max(Softest, To - From);
+			}
 		}
 		// a straight stretch: the edge within 0.06 units of the straight line between its two ends
 		double LongestStraight = 0.0;
@@ -306,11 +310,134 @@ namespace
 			{
 				++Tongues;
 			}
-			bIn = Out >= 0.2;
+			bIn = bIn ? Out >= 0.2 : Out >= 0.3; // (in a tongue from 0.3 out until back under 0.2)
 		}
 		const double Per10 = Tongues * 10.0 / (static_cast<double>(EdgeAt.size()) * Step);
 		Check(Longest >= 0.3 && Longest <= TongueLongest + 0.1, "the veil's tongues reach out up to about 0.8 of a unit (longest " + Num(Longest) + ")");
 		Check(Per10 >= 1.0 && Per10 <= 12.0, "uneven, a few in every ten units (" + Num(Per10) + ")");
+	}
+
+	// ---- the tongues are lobes, not tabs (the art director's read of the third drawings) ----
+	void CheckLobes()
+	{
+		// The edge's outline seen from outside the band: at each point along it, the furthest point out still within
+		// the edge or a tongue.
+		const double Step = 0.01;
+		const int N = 60000; // (600 units of edge)
+		std::vector<double> Reach(static_cast<size_t>(N));
+		for (int K = 0; K < N; ++K)
+		{
+			double Top = 0.0;
+			for (double Up = 1.0; Up > 0.0; Up -= 0.005)
+			{
+				if (LobeEdge(K * Step, Up, 73u, 1.0) <= 0.0)
+				{
+					Top = Up;
+					break;
+				}
+			}
+			Reach[static_cast<size_t>(K)] = Top > 0.01 ? Top : 0.0;
+		}
+		double ShortestLong = 1e9, LongestLong = 0.0, NarrowestFoot = 1e9, WidestFoot = 0.0, LeastLean = 1e9, MostLean = 0.0;
+		int Lobes = 0, LeftLeaning = 0, Flat = 0, Square = 0, Parallel = 0;
+		double Bare = 0.0, LongestBare = 0.0, Run = 0.0;
+		for (int K = 1; K < N; ++K)
+		{
+			const bool bNone = Reach[static_cast<size_t>(K)] <= 0.0;
+			Run = bNone ? Run + Step : 0.0;
+			Bare += bNone ? Step : 0.0;
+			LongestBare = std::max(LongestBare, Run);
+			if (bNone || Reach[static_cast<size_t>(K - 1)] > 0.0)
+			{
+				continue;
+			}
+			int End = K;
+			while (End < N && Reach[static_cast<size_t>(End)] > 0.0)
+			{
+				++End;
+			}
+			if (End >= N)
+			{
+				continue;
+			}
+			int Top = K;
+			for (int A = K; A < End; ++A)
+			{
+				Top = Reach[static_cast<size_t>(A)] > Reach[static_cast<size_t>(Top)] ? A : Top;
+			}
+			++Lobes;
+			const double Long = Reach[static_cast<size_t>(Top)];
+			// (how wide it is at a share of its length, and where the middle of that is)
+			auto WidthAt = [&](double Share, double* Mid)
+			{
+				int Count = 0;
+				double Sum = 0.0;
+				for (int A = K; A < End; ++A)
+				{
+					const bool bIn = Reach[static_cast<size_t>(A)] >= Share * Long;
+					Count += bIn ? 1 : 0;
+					Sum += bIn ? A * Step : 0.0;
+				}
+				if (Mid)
+				{
+					*Mid = Count > 0 ? Sum / Count : 0.0;
+				}
+				return Count * Step;
+			};
+			double FootMid = 0.0;
+			const double Foot = WidthAt(0.2, &FootMid);
+			const double Lean = (Top * Step - FootMid) / Long;
+			ShortestLong = std::min(ShortestLong, Long);
+			LongestLong = std::max(LongestLong, Long);
+			NarrowestFoot = std::min(NarrowestFoot, Foot);
+			WidestFoot = std::max(WidestFoot, Foot);
+			LeastLean = std::min(LeastLean, std::fabs(Lean));
+			MostLean = std::max(MostLean, std::fabs(Lean));
+			LeftLeaning += Lean < 0.0 ? 1 : 0;
+			// no flat on its tip: nine tenths of the way out it is under half as wide as at its foot (a tab is nearly
+			// as wide there as at its foot)
+			Flat += WidthAt(0.9, nullptr) > 0.5 * Foot ? 1 : 0;
+			// no corner at its foot: where it leaves the edge it rises gently, the outer tenth of each side under a
+			// fifth of its length
+			const int Tenth = std::max(1, (Top - K) / 10), TenthR = std::max(1, (End - Top) / 10);
+			Square += Reach[static_cast<size_t>(K + Tenth)] > Long / 5.0 || Reach[static_cast<size_t>(End - 1 - TenthR)] > Long / 5.0 ? 1 : 0;
+			// no parallel sides: three quarters of the way up it is narrower than half way, by a sixth or more
+			Parallel += WidthAt(0.75, nullptr) > (5.0 / 6.0) * WidthAt(0.5, nullptr) ? 1 : 0;
+		}
+		Check(Lobes > 120 && Flat == 0, "a tongue's tip is rounded, never flat (" + std::to_string(Flat) + " flat of " + std::to_string(Lobes) + ")");
+		Check(Square == 0, "its sides come in to the band's edge with no corner (" + std::to_string(Square) + " cornered)");
+		Check(Parallel == 0, "its sides are never parallel: it narrows all the way up (" + std::to_string(Parallel) + " not)");
+		Check(LongestLong / ShortestLong > 2.5 && LongestLong <= TongueLongest + 0.01,
+			"lengths vary about three to one (" + Num(ShortestLong) + " to " + Num(LongestLong) + ")");
+		Check(WidestFoot / NarrowestFoot > 2.2, "widths too (" + Num(NarrowestFoot) + " to " + Num(WidestFoot) + " a fifth of the way up)");
+		Check(MostLean / LeastLean > 2.5 && LeftLeaning * 3 > Lobes && LeftLeaning * 3 < 2 * Lobes,
+			"and their lean, either way (tip off the foot's middle by " + Num(LeastLean) + " to " + Num(MostLean) + " of the length; " + std::to_string(LeftLeaning) + " of " + std::to_string(Lobes) + " to the left)");
+		Check(LongestBare >= 3.0 && Bare / (N * Step) > 0.3 && Bare / (N * Step) < 0.8,
+			"with stretches of none at all (" + Num(Bare / (N * Step)) + " of the edge bare, longest bare stretch " + Num(LongestBare) + ")");
+		// crisp all round a tongue as well: the edge's measure changes as fast as the distance across it, nearly
+		double Slowest = 1e9;
+		for (int K = 0; K < 20000; ++K)
+		{
+			const double X = K * 0.03;
+			for (double Up = -0.1; Up < 1.0; Up += 0.01)
+			{
+				const double Here = LobeEdge(X, Up, 73u, 1.0);
+				if (std::fabs(Here) < 0.035) // (near the edge itself: inside a narrow tongue the measure runs flat along its middle)
+				{
+					const double GX = (LobeEdge(X + 0.002, Up, 73u, 1.0) - LobeEdge(X - 0.002, Up, 73u, 1.0)) / 0.004;
+					const double GY = (LobeEdge(X, Up + 0.002, 73u, 1.0) - LobeEdge(X, Up - 0.002, 73u, 1.0)) / 0.004;
+					Slowest = std::min(Slowest, std::hypot(GX, GY));
+				}
+			}
+		}
+		Check(Slowest > 0.5, "the veil's edge is as crisp round a tongue (the edge's measure changes at least " + Num(Slowest) + " a unit across it)");
+		// and the two sides of a band each their own
+		int Same = 0;
+		for (int K = 0; K < 2000; ++K)
+		{
+			Same += (LobeEdge(K * 0.5, 0.2, 73u, 1.0) <= 0.0) == (LobeEdge(K * 0.5, 0.2, 77u, 1.0) <= 0.0) ? 1 : 0;
+		}
+		Check(Same < 1700, "each side its own run of them (" + std::to_string(Same) + " of 2000 points alike)");
 	}
 
 	// ---- the ground picture ----
@@ -1063,6 +1190,7 @@ int main(int Argc, char** Argv)
 	CheckMonths();
 	CheckWidth();
 	CheckEdge();
+	CheckLobes();
 	CheckPaint();
 	CheckVeilAndPits();
 	CheckMeasure();

@@ -71,8 +71,16 @@ namespace TheaterChurn
 	inline constexpr double Narrowest = 1.4;
 	/** Its middle strays off the frontier by up to this, over stretches of four to eight units. */
 	inline constexpr double Stray = 0.5;
-	/** The fine veil's tongues reach out from its edge by up to this. */
+	/** The fine veil's tongues reach out from its edge by up to this... */
 	inline constexpr double TongueLongest = 0.8;
+	/** ...one at most in each stretch of this along the edge, wholly inside it. */
+	inline constexpr double LobeEvery = 1.6;
+	/**
+	 * How far a point is outside the veil's ragged edge with its tongues (map units, less than nought within): the point
+	 * Along its line and Up from the edge as it lies without them, on one side (SideSeed), the tongues at Scale. The
+	 * tongues are lobes: leaning, narrowing to a round tip, joined to the edge with no corner, none over some stretches.
+	 */
+	double LobeEdge(double Along, double Up, uint32_t SideSeed, double Scale);
 	/** Whole within about this of where the armies face each other (measured from the point of their shared border nearest the middle between them)... */
 	inline constexpr double Reach = 10.0;
 	/** ...thinning to half at this and beyond, along a dug-in pair's own border. */

@@ -94,6 +94,14 @@ namespace
 	constexpr double ChurnVeilLift = 0.1; // over the ground: under the frontier's own line (0.13) and the pen (0.15, 0.2)
 	constexpr double ChurnBandWide = 3.6; // the whole band, core and edges, for how many pixels wide it is on the screen
 	constexpr int32 ChurnWorkersAtOnce = 2; // veil squares worked out on other threads at once
+	constexpr int32 ChurnFadeSteps = 16; // how finely the band fades in and out, at each corner of the picture's squares and of the veil's
+	constexpr int32 ChurnFadeSquaresAFrame = 4; // squares sent again (or veil squares laid again) a frame for fades that moved: a corner's all at once
+	constexpr int32 ChurnVeilLevels = 2; // the veil's lattice is made coarser, halving, up to this many times as it shrinks on the screen
+	constexpr int32 ChurnVeilMargin = 2; // fine points worked out round a veil square, for its coarsest lattice's averages (half its step)
+
+	/** How much of the band shows (0 to ChurnFadeSteps, not rounded) where one unit of the map is PixelsAUnit wide on the screen. */
+	double ChurnFadeWant(double PixelsAUnit) { return ChurnFadeSteps * TheaterChurn::Shown(ChurnBandWide * PixelsAUnit); }
+	uint8 ChurnFadeStep(double Want) { return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Want), 0, ChurnFadeSteps)); }
 
 	/** The largest of two states: ground still healing from an earlier stand keeps what is left of it where that is more. */
 	TheaterChurn::FState ChurnLarger(const TheaterChurn::FState& One, const TheaterChurn::FState& Other)
@@ -184,7 +192,9 @@ struct FFrontChurnTile
 	TArray<TheaterChurn::FPit> Pits;
 	int32 CratersFor = INDEX_NONE; // the half-octave of the screen's pixels its craters were made for (none: none made)
 	int32 Craters = 0; // how many it has modelled
-	float Shown = -1.0f; // how far its veil is faded in
+	TSharedPtr<FFrontChurnVeilWork, ESPMode::ThreadSafe> Done; // its veil as worked out (the fine lattice and a margin round it), kept to be laid again
+	int32 Level = INDEX_NONE; // the coarseness its veil is laid at on its mesh (a step of ChurnVeilStep doubled this many times; none: no veil on it)
+	uint8 Faded[4] = { 0, 0, 0, 0 }; // the fade at its four corners (north-west, north-east, south-west, south-east) it is laid with
 	double Far = 0.0; // from the eye, in the world
 	double PixelsAUnit = 0.0;
 	double AwaySince = -1.0;
@@ -215,13 +225,22 @@ struct FFrontChurnTable
 	TMap<int32, int32> CellAt; // the picture's point -> its place in Cells
 	TArray<FColor> ShownGround, ShownMasks; // the pictures as sent, churned ground and all, while the switch is on
 	int32 SquaresAcross = 1;
-	TMap<int32, uint8> SquareShown; // each square holding churned ground: how much of it shows, in eighths
+	TSet<int32> Squares; // the squares holding churned ground
+	TSet<int32> SnowSquares; // and those where it breaks the snow
+	// How much of the band shows (in ChurnFadeSteps) at each corner of those squares, shared by the squares round it;
+	// each point between takes it smoothly from its own square's four corners, so that no square's edge shows as a step.
+	TMap<int32, uint8> CornerShown;
+	int32 CornerKey(int32 CX, int32 CY) const { return CY * (SquaresAcross + 1) + CX; }
+	// The eye as the last frame had it (PixelsAtOne 0: none yet).
+	FVector Eye = FVector::ZeroVector;
+	double PixelsAtOne = 0.0;
 	TSet<int32> GroundDue, MasksDue; // squares to be sent again
 	TSet<int32> MudSet; // the rules' mud ground, as the cells were last laid for
 	uint32 MudFor = 0;
 
 	// ---- the fine veil and the craters near the eye ----
 	TMap<FIntPoint, FFrontChurnTile> Tiles;
+	TMap<FIntPoint, uint8> VeilCorners; // the veil squares' corners, shared as the picture's are: how much of it shows there
 	TArray<int32> SpareMeshes;
 	int32 Working = 0; // squares being worked out on other threads
 	TSet<FIntPoint> TreeSquares; // the woods' squares (130 units a side) the churned ground lies in, to be planted again when it changes
@@ -719,12 +738,39 @@ void ACampaignMapActor::LayFrontChurn()
 	}
 	Table.Cells = MoveTemp(Fresh);
 	Table.CellAt = MoveTemp(FreshAt);
-	TMap<int32, uint8> WasShown = MoveTemp(Table.SquareShown);
-	Table.SquareShown.Reset();
+	// (the squares holding it, and their corners: kept as they were, new ones as the eye last saw them)
+	auto FadeFor = [this, &Table](double X, double Y) -> uint8
+	{
+		if (Table.PixelsAtOne <= 0.0)
+		{
+			return static_cast<uint8>(ChurnFadeSteps);
+		}
+		const double Far = FMath::Max(FVector::Distance(Table.Eye, MapToWorld(X, Y, 0.0)), 1.0);
+		return ChurnFadeStep(ChurnFadeWant(Table.PixelsAtOne * UnitScale / Far));
+	};
+	Table.Squares.Reset();
+	Table.SnowSquares.Reset();
 	for (const FFrontChurnCell& Cell : Table.Cells)
 	{
-		const uint8* Was = WasShown.Find(Cell.Square);
-		Table.SquareShown.Add(Cell.Square, Was ? *Was : static_cast<uint8>(8));
+		Table.Squares.Add(Cell.Square);
+	}
+	TMap<int32, uint8> WasCorners = MoveTemp(Table.CornerShown);
+	Table.CornerShown.Reset();
+	for (const int32 Square : Table.Squares)
+	{
+		const int32 SX = Square % Table.SquaresAcross, SY = Square / Table.SquaresAcross;
+		for (int32 CY = SY; CY <= SY + 1; ++CY)
+		{
+			for (int32 CX = SX; CX <= SX + 1; ++CX)
+			{
+				const int32 Key = Table.CornerKey(CX, CY);
+				if (!Table.CornerShown.Contains(Key))
+				{
+					const uint8* Was = WasCorners.Find(Key);
+					Table.CornerShown.Add(Key, Was ? *Was : FadeFor(Terrain.OriginX + CX * ChurnPictureSquare * Terrain.Cell, Terrain.OriginY + CY * ChurnPictureSquare * Terrain.Cell));
+				}
+			}
+		}
 	}
 	if (bKept)
 	{
@@ -775,14 +821,29 @@ void ACampaignMapActor::LayFrontChurn()
 		PutChurnTileAway(Table.Tiles.FindChecked(Key));
 		Table.Tiles.Remove(Key);
 	}
+	TMap<FIntPoint, uint8> WasVeilCorners = MoveTemp(Table.VeilCorners);
+	Table.VeilCorners.Reset();
 	for (const FIntPoint& Key : FreshTiles)
 	{
 		FFrontChurnTile& Tile = Table.Tiles.FindOrAdd(Key);
-		Tile.bVeil = false;
+		Tile.bVeil = false; // (its old veil stays on show until the new one is laid)
 		Table.Drop(Tile);
+		Tile.Done.Reset();
 		Tile.CratersFor = INDEX_NONE;
 		TArray<TheaterChurn::FPit>* Pits = PitsIn.Find(Key);
 		Tile.Pits = Pits ? MoveTemp(*Pits) : TArray<TheaterChurn::FPit>();
+		for (int32 CY = Key.Y; CY <= Key.Y + 1; ++CY)
+		{
+			for (int32 CX = Key.X; CX <= Key.X + 1; ++CX)
+			{
+				const FIntPoint Corner(CX, CY);
+				if (!Table.VeilCorners.Contains(Corner))
+				{
+					const uint8* Was = WasVeilCorners.Find(Corner);
+					Table.VeilCorners.Add(Corner, Was ? *Was : FadeFor(CX * ChurnVeilSquare, CY * ChurnVeilSquare));
+				}
+			}
+		}
 	}
 
 	// ---- the trees close up: the woods' squares the churned ground lay in, or lies in now, planted again ----
@@ -818,8 +879,16 @@ void ACampaignMapActor::LayFrontChurn()
 void ACampaignMapActor::LayChurnCell(FFrontChurnCell& Cell)
 {
 	FFrontChurnTable& Table = *FrontChurn;
-	const uint8* Eighths = Table.SquareShown.Find(Cell.Square);
-	const float Share = Eighths ? static_cast<float>(*Eighths) / 8.0f : 1.0f;
+	// How much of it shows here: from its square's four corners, smoothly (the same on both sides of a square's edge).
+	const int32 GI = Cell.Index % Terrain.NX, GJ = Cell.Index / Terrain.NX;
+	const int32 SX = GI / ChurnPictureSquare, SY = GJ / ChurnPictureSquare;
+	auto CornerFade = [&Table](int32 CX, int32 CY) -> float
+	{
+		const uint8* At = Table.CornerShown.Find(Table.CornerKey(CX, CY));
+		return At ? static_cast<float>(*At) / ChurnFadeSteps : 1.0f;
+	};
+	const float U = static_cast<float>(GI - SX * ChurnPictureSquare) / ChurnPictureSquare, V = static_cast<float>(GJ - SY * ChurnPictureSquare) / ChurnPictureSquare;
+	const float Share = FMath::Lerp(FMath::Lerp(CornerFade(SX, SY), CornerFade(SX + 1, SY), U), FMath::Lerp(CornerFade(SX, SY + 1), CornerFade(SX + 1, SY + 1), U), V);
 	// The season on it: the rules' mud, snow lying (as the masks have it there), or dry.
 	const TheaterChurn::ESeason Season = Table.MudSet.Contains(Cell.Region) ? TheaterChurn::ESeason::Mud
 		: Cell.SnowIn > 77 ? TheaterChurn::ESeason::Snow : TheaterChurn::ESeason::Dry;
@@ -836,6 +905,10 @@ void ACampaignMapActor::LayChurnCell(FFrontChurnCell& Cell)
 	{
 		Cell.SnowOut = TheaterChurn::Snow(Cell.SnowIn, Cell.Band, Cell.State);
 		Cell.SnowFor = Cell.SnowIn;
+	}
+	if (Cell.SnowOut != Cell.SnowIn)
+	{
+		Table.SnowSquares.Add(Cell.Square);
 	}
 	if (Table.ShownGround.IsValidIndex(Cell.Index))
 	{
@@ -985,19 +1058,52 @@ void ACampaignMapActor::PutChurnTileAway(FFrontChurnTile& Tile)
 	Tile.bVeil = false;
 	Tile.CratersFor = INDEX_NONE;
 	Tile.Craters = 0;
-	Tile.Shown = -1.0f;
+	Tile.Level = INDEX_NONE;
+	Tile.Done.Reset();
 	FrontChurn->Drop(Tile);
 }
 
-void ACampaignMapActor::BuildChurnVeil(FFrontChurnTile& Tile, const FFrontChurnVeilWork& Work)
+void ACampaignMapActor::BuildChurnVeil(FFrontChurnTile& Tile)
 {
 	THEATER_SPEED_SCOPE(ChurnVeil);
 	UProceduralMeshComponent* Mesh = ChurnMeshes.IsValidIndex(Tile.Mesh) ? ChurnMeshes[Tile.Mesh].Get() : nullptr;
-	if (!Mesh)
+	if (!Mesh || !Tile.Done.IsValid() || Tile.Level == INDEX_NONE)
 	{
 		return;
 	}
-	const int32 Across = Work.Across;
+	const FFrontChurnVeilWork& Work = *Tile.Done;
+	// Its lattice at the coarseness asked for: every Stride'th fine point, each the average of the fine points round it
+	// (half a coarse step either way, from the margin worked out round the square: the same at a square's edge as its
+	// neighbour has it there), faded smoothly from the square's four corners.
+	const int32 Stride = 1 << Tile.Level;
+	const int32 Fine = Work.Across - 2 * ChurnVeilMargin;
+	const int32 Across = (Fine - 1) / Stride + 1;
+	const double Step = ChurnVeilStep * Stride;
+	const double OriginX = Work.OriginX + ChurnVeilMargin * ChurnVeilStep, OriginY = Work.OriginY + ChurnVeilMargin * ChurnVeilStep;
+	const int32 Half = Stride / 2;
+	TArray<uint8> Alpha;
+	Alpha.SetNumZeroed(Across * Across);
+	for (int32 J = 0; J < Across; ++J)
+	{
+		for (int32 I = 0; I < Across; ++I)
+		{
+			const int32 FI = ChurnVeilMargin + I * Stride, FJ = ChurnVeilMargin + J * Stride;
+			double Sum = 0.0, Weights = 0.0;
+			for (int32 B = -Half; B <= Half; ++B)
+			{
+				for (int32 A = -Half; A <= Half; ++A)
+				{
+					const double Weight = (Half > 0 && FMath::Abs(A) == Half ? 0.5 : 1.0) * (Half > 0 && FMath::Abs(B) == Half ? 0.5 : 1.0);
+					Sum += Weight * Work.Alpha[(FJ + B) * Work.Across + (FI + A)];
+					Weights += Weight;
+				}
+			}
+			const double U = static_cast<double>(I) / (Across - 1), V = static_cast<double>(J) / (Across - 1);
+			const double Fade = FMath::Lerp(FMath::Lerp(static_cast<double>(Tile.Faded[0]), static_cast<double>(Tile.Faded[1]), U),
+				FMath::Lerp(static_cast<double>(Tile.Faded[2]), static_cast<double>(Tile.Faded[3]), U), V) / ChurnFadeSteps;
+			Alpha[J * Across + I] = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Sum / Weights * Fade), 0, 255));
+		}
+	}
 	// (the way round that faces up, as the table's own meshes wind it (FCampaignMeshBuffers::AddTriangleFacingUp), the
 	// same for every square on the flat: the map's x runs east, its y south)
 	const FVector Corner0 = MapToWorld(0.0, 0.0), Corner1 = MapToWorld(1.0, 0.0), Corner2 = MapToWorld(1.0, 1.0);
@@ -1007,15 +1113,15 @@ void ACampaignMapActor::BuildChurnVeil(FFrontChurnTile& Tile, const FFrontChurnV
 	TArray<FVector> Vertices, Normals;
 	TArray<int32> Triangles;
 	TArray<FColor> Colors;
-	Vertices.Reserve(Work.Lit * 2);
+	Vertices.Reserve(Work.Lit * 2 / (Stride * Stride) + 16);
 	auto VeilPoint = [&](int32 I, int32 J) -> int32
 	{
 		int32& Point = Made[J * Across + I];
 		if (Point == INDEX_NONE)
 		{
-			Point = Vertices.Add(SurfacePoint(Work.OriginX + I * ChurnVeilStep, Work.OriginY + J * ChurnVeilStep, ChurnVeilLift));
+			Point = Vertices.Add(SurfacePoint(OriginX + I * Step, OriginY + J * Step, ChurnVeilLift));
 			Normals.Add(FVector::UpVector);
-			Colors.Add(FColor(0, 0, 0, Work.Alpha[J * Across + I]));
+			Colors.Add(FColor(0, 0, 0, Alpha[J * Across + I]));
 		}
 		return Point;
 	};
@@ -1023,8 +1129,8 @@ void ACampaignMapActor::BuildChurnVeil(FFrontChurnTile& Tile, const FFrontChurnV
 	{
 		for (int32 I = 0; I + 1 < Across; ++I)
 		{
-			const uint8 A = Work.Alpha[J * Across + I], B = Work.Alpha[J * Across + I + 1];
-			const uint8 C = Work.Alpha[(J + 1) * Across + I + 1], D = Work.Alpha[(J + 1) * Across + I];
+			const uint8 A = Alpha[J * Across + I], B = Alpha[J * Across + I + 1];
+			const uint8 C = Alpha[(J + 1) * Across + I + 1], D = Alpha[(J + 1) * Across + I];
 			if ((A | B | C | D) == 0)
 			{
 				continue;
@@ -1198,13 +1304,7 @@ void ACampaignMapActor::UpdateFrontChurn(const FVector& CameraFocus, float Camer
 			Table.GroundDue.Add(Cell.Square);
 		}
 	}
-	if (Table.bLayDue)
-	{
-		Table.bLayDue = false;
-		LayFrontChurn();
-	}
-
-	// The eye: how many pixels of the window one unit of the map takes, at each place.
+	// The eye: how many pixels of the window one unit of the map takes, at each place (kept for the lay's new corners).
 	FVector Eye = CameraFocus + FVector(0.0, 0.0, CameraDistance);
 	double PixelsAtOne = 1500.0;
 	if (UWorld* World = GetWorld())
@@ -1224,61 +1324,115 @@ void ACampaignMapActor::UpdateFrontChurn(const FVector& CameraFocus, float Camer
 			}
 		}
 	}
+	Table.Eye = Eye;
+	Table.PixelsAtOne = PixelsAtOne;
 	auto PixelsAUnitAt = [&](double X, double Y, double& Far) -> double
 	{
 		Far = FMath::Max(FVector::Distance(Eye, MapToWorld(X, Y, 0.0)), 1.0);
 		return PixelsAtOne * UnitScale / Far;
 	};
-
-	// ---- the picture's squares: each shows the band as far as it is wide on the screen there (in eighths) ----
-	for (TPair<int32, uint8>& Square : Table.SquareShown)
+	if (Table.bLayDue)
 	{
-		const int32 SX = Square.Key % Table.SquaresAcross, SY = Square.Key / Table.SquaresAcross;
-		const double X = Terrain.OriginX + (SX + 0.5) * ChurnPictureSquare * Terrain.Cell;
-		const double Y = Terrain.OriginY + (SY + 0.5) * ChurnPictureSquare * Terrain.Cell;
-		double Far = 0.0;
-		const double Want = 8.0 * TheaterChurn::Shown(ChurnBandWide * PixelsAUnitAt(X, Y, Far));
-		if (FMath::Abs(Want - static_cast<double>(Square.Value)) > 0.6)
+		Table.bLayDue = false;
+		LayFrontChurn();
+	}
+
+	// ---- the picture's squares: the band shown as far as it is wide on the screen, faded on the squares' corners ----
+	// (a corner that moved sends every square round it in the same frame, so that a square's edge never shows as a step;
+	// the corners that moved most first, a few squares a frame)
+	auto SendSquare = [this, &Table](int32 Square, bool bGround)
+	{
+		const int32 SX = Square % Table.SquaresAcross, SY = Square / Table.SquaresAcross;
+		const int32 X0 = SX * ChurnPictureSquare, Y0 = SY * ChurnPictureSquare;
+		if (X0 >= Terrain.NX || Y0 >= Terrain.NY)
 		{
-			Square.Value = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Want), 0, 8));
+			return;
+		}
+		const int32 X1 = FMath::Min(X0 + ChurnPictureSquare, Terrain.NX) - 1, Y1 = FMath::Min(Y0 + ChurnPictureSquare, Terrain.NY) - 1;
+		CampaignTextures::UpdateBoxAll(bGround ? GroundPicture : MasksPicture, bGround ? Table.ShownGround : Table.ShownMasks, X0, Y0, X1, Y1, ChurnPictureLevels);
+	};
+	int32 Sends = 0;
+	{
+		THEATER_SPEED_SCOPE(ChurnFade);
+		struct FMoved
+		{
+			int32 Key = 0;
+			uint8 To = 0;
+			double By = 0.0;
+		};
+		TArray<FMoved> Moved;
+		for (const TPair<int32, uint8>& Corner : Table.CornerShown)
+		{
+			const int32 CX = Corner.Key % (Table.SquaresAcross + 1), CY = Corner.Key / (Table.SquaresAcross + 1);
+			double Far = 0.0;
+			const double Want = ChurnFadeWant(PixelsAUnitAt(Terrain.OriginX + CX * ChurnPictureSquare * Terrain.Cell, Terrain.OriginY + CY * ChurnPictureSquare * Terrain.Cell, Far));
+			const double By = FMath::Abs(Want - static_cast<double>(Corner.Value));
+			if (By > 0.6)
+			{
+				Moved.Add({ Corner.Key, ChurnFadeStep(Want), By });
+			}
+		}
+		Moved.Sort([](const FMoved& A, const FMoved& B) { return A.By > B.By; });
+		TSet<int32> Again;
+		for (const FMoved& Corner : Moved)
+		{
+			const int32 CX = Corner.Key % (Table.SquaresAcross + 1), CY = Corner.Key / (Table.SquaresAcross + 1);
+			TArray<int32, TInlineAllocator<4>> Round;
+			for (int32 SY = CY - 1; SY <= CY; ++SY)
+			{
+				for (int32 SX = CX - 1; SX <= CX; ++SX)
+				{
+					const int32 Square = SY * Table.SquaresAcross + SX;
+					if (SX >= 0 && SY >= 0 && SX < Table.SquaresAcross && Table.Squares.Contains(Square) && !Again.Contains(Square))
+					{
+						Round.Add(Square);
+					}
+				}
+			}
+			if (Again.Num() > 0 && Again.Num() + Round.Num() > ChurnFadeSquaresAFrame)
+			{
+				break; // (the rest next frame; at least one corner each frame)
+			}
+			Table.CornerShown[Corner.Key] = Corner.To;
+			Again.Append(Round);
+		}
+		if (Again.Num() > 0)
+		{
 			for (FFrontChurnCell& Cell : Table.Cells)
 			{
-				if (Cell.Square == Square.Key)
+				if (Again.Contains(Cell.Square))
 				{
 					LayChurnCell(Cell);
 				}
 			}
-			Table.GroundDue.Add(Square.Key);
-			Table.MasksDue.Add(Square.Key);
+			for (const int32 Square : Again)
+			{
+				SendSquare(Square, true);
+				Table.GroundDue.Remove(Square);
+				if (Table.SnowSquares.Contains(Square))
+				{
+					SendSquare(Square, false);
+					Table.MasksDue.Remove(Square);
+				}
+				++Sends;
+			}
 		}
 	}
-	int32 Sends = 0;
+	// (and the squares due from a lay, the season or the snow, two a frame when no fade is moving)
 	for (TSet<int32>* Due : { &Table.GroundDue, &Table.MasksDue })
 	{
 		while (Sends < ChurnSendsAFrame && Due->Num() > 0)
 		{
 			const int32 Square = *Due->CreateConstIterator();
 			Due->Remove(Square);
-			const int32 SX = Square % Table.SquaresAcross, SY = Square / Table.SquaresAcross;
-			const int32 X0 = SX * ChurnPictureSquare, Y0 = SY * ChurnPictureSquare;
-			const int32 X1 = FMath::Min(X0 + ChurnPictureSquare, Terrain.NX) - 1, Y1 = FMath::Min(Y0 + ChurnPictureSquare, Terrain.NY) - 1;
-			if (X0 >= Terrain.NX || Y0 >= Terrain.NY)
-			{
-				continue;
-			}
-			if (Due == &Table.GroundDue)
-			{
-				CampaignTextures::UpdateBoxAll(GroundPicture, Table.ShownGround, X0, Y0, X1, Y1, ChurnPictureLevels);
-			}
-			else
-			{
-				CampaignTextures::UpdateBoxAll(MasksPicture, Table.ShownMasks, X0, Y0, X1, Y1, ChurnPictureLevels);
-			}
+			SendSquare(Square, Due == &Table.GroundDue);
 			++Sends;
 		}
 	}
 
-	// ---- the veil's squares near the eye: worked out on other threads, laid one a frame; craters nearest first ----
+	// ---- the veil's squares near the eye: worked out on other threads, laid one a frame at the coarseness their size
+	// on the screen needs (a step of the lattice never under about a pixel and a half), faded on the corners they share
+	// as the picture's squares are, and not drawn at all where nothing of them shows; craters nearest first ----
 	if (Table.Tiles.Num() == 0)
 	{
 		return;
@@ -1286,21 +1440,53 @@ void ACampaignMapActor::UpdateFrontChurn(const FVector& CameraFocus, float Camer
 	const double Now = FPlatformTime::Seconds();
 	const FVector2D Focus = WorldToMap(CameraFocus);
 	const double Reach = FMath::Max(48.0, 2.2 * static_cast<double>(CameraDistance) / UnitScale) + ChurnVeilSquare;
+	auto CornersOf = [](const FIntPoint& Key, FIntPoint Out[4])
+	{
+		Out[0] = Key;
+		Out[1] = FIntPoint(Key.X + 1, Key.Y);
+		Out[2] = FIntPoint(Key.X, Key.Y + 1);
+		Out[3] = FIntPoint(Key.X + 1, Key.Y + 1);
+	};
 	TArray<FIntPoint> Near;
+	TMap<FIntPoint, double> CornerWant;
 	for (TPair<FIntPoint, FFrontChurnTile>& Each : Table.Tiles)
 	{
 		FFrontChurnTile& Tile = Each.Value;
 		const double X = (Each.Key.X + 0.5) * ChurnVeilSquare, Y = (Each.Key.Y + 0.5) * ChurnVeilSquare;
 		Tile.PixelsAUnit = PixelsAUnitAt(X, Y, Tile.Far);
-		const float Show = static_cast<float>(TheaterChurn::Shown(ChurnBandWide * Tile.PixelsAUnit));
-		if (Show > 0.0f && FVector2D::Distance(FVector2D(X, Y), Focus) < Reach)
+		bool bShows = false;
+		if (FVector2D::Distance(FVector2D(X, Y), Focus) < Reach)
+		{
+			FIntPoint Corners[4];
+			CornersOf(Each.Key, Corners);
+			for (const FIntPoint& Corner : Corners)
+			{
+				double* Want = CornerWant.Find(Corner);
+				if (!Want)
+				{
+					// (as wide as the band is on the screen there, and thinning out toward the edge of the reach, so
+					// that the veil never stops short where the eye can see it)
+					double Far = 0.0;
+					const double FromFocus = FVector2D::Distance(FVector2D(Corner.X * ChurnVeilSquare, Corner.Y * ChurnVeilSquare), Focus);
+					const double Within = 1.0 - FMath::SmoothStep(0.7 * (Reach - ChurnVeilSquare), Reach - ChurnVeilSquare, FromFocus);
+					Want = &CornerWant.Add(Corner, Within * ChurnFadeWant(PixelsAUnitAt(Corner.X * ChurnVeilSquare, Corner.Y * ChurnVeilSquare, Far)));
+				}
+				const uint8* Has = Table.VeilCorners.Find(Corner);
+				bShows |= *Want > 0.0 || (Has && *Has > 0);
+			}
+		}
+		if (bShows)
 		{
 			Near.Add(Each.Key);
 			Tile.AwaySince = -1.0;
 		}
 		else if (Tile.Mesh != INDEX_NONE || Tile.Work.IsValid())
 		{
-			// (put away once it has been out of sight a couple of seconds: a glance back costs nothing)
+			// (out of sight at once, put away once it has been so a couple of seconds: a glance back costs nothing)
+			if (Tile.Mesh != INDEX_NONE && ChurnMeshes.IsValidIndex(Tile.Mesh) && ChurnMeshes[Tile.Mesh] && ChurnMeshes[Tile.Mesh]->IsVisible())
+			{
+				ChurnMeshes[Tile.Mesh]->SetVisibility(false);
+			}
 			if (Tile.AwaySince < 0.0)
 			{
 				Tile.AwaySince = Now;
@@ -1309,11 +1495,63 @@ void ACampaignMapActor::UpdateFrontChurn(const FVector& CameraFocus, float Camer
 			{
 				PutChurnTileAway(Tile);
 			}
-			if (Tile.Mesh != INDEX_NONE && Tile.Shown != 0.0f && ChurnInks.IsValidIndex(Tile.Mesh) && ChurnInks[Tile.Mesh])
+		}
+	}
+	// The veil's corners that moved, the most first: every laid square round each laid again in the same frame.
+	{
+		struct FMoved
+		{
+			FIntPoint Corner;
+			uint8 To = 0;
+			double By = 0.0;
+		};
+		TArray<FMoved> Moved;
+		for (const TPair<FIntPoint, double>& Each : CornerWant)
+		{
+			uint8* Has = Table.VeilCorners.Find(Each.Key);
+			if (!Has)
 			{
-				Tile.Shown = 0.0f;
-				ChurnInks[Tile.Mesh]->SetScalarParameterValue(TEXT("Opacity"), 0.0f);
+				Table.VeilCorners.Add(Each.Key, ChurnFadeStep(Each.Value));
 			}
+			else if (FMath::Abs(Each.Value - static_cast<double>(*Has)) > 0.6)
+			{
+				Moved.Add({ Each.Key, ChurnFadeStep(Each.Value), FMath::Abs(Each.Value - static_cast<double>(*Has)) });
+			}
+		}
+		Moved.Sort([](const FMoved& A, const FMoved& B) { return A.By > B.By; });
+		TSet<FIntPoint> Again;
+		for (const FMoved& Each : Moved)
+		{
+			TArray<FIntPoint, TInlineAllocator<4>> Round;
+			for (int32 TY = Each.Corner.Y - 1; TY <= Each.Corner.Y; ++TY)
+			{
+				for (int32 TX = Each.Corner.X - 1; TX <= Each.Corner.X; ++TX)
+				{
+					const FIntPoint Key(TX, TY);
+					const FFrontChurnTile* Tile = Table.Tiles.Find(Key);
+					if (Tile && Tile->bVeil && Tile->Done.IsValid() && !Again.Contains(Key))
+					{
+						Round.Add(Key);
+					}
+				}
+			}
+			if (Again.Num() > 0 && Again.Num() + Round.Num() > ChurnFadeSquaresAFrame)
+			{
+				break;
+			}
+			Table.VeilCorners[Each.Corner] = Each.To;
+			Again.Append(Round);
+		}
+		for (const FIntPoint& Key : Again)
+		{
+			FFrontChurnTile& Tile = Table.Tiles.FindChecked(Key);
+			FIntPoint Corners[4];
+			CornersOf(Key, Corners);
+			for (int32 K = 0; K < 4; ++K)
+			{
+				Tile.Faded[K] = Table.VeilCorners.FindRef(Corners[K]);
+			}
+			BuildChurnVeil(Tile);
 		}
 	}
 	Near.Sort([&Table](const FIntPoint& A, const FIntPoint& B) { return Table.Tiles.FindChecked(A).Far < Table.Tiles.FindChecked(B).Far; });
@@ -1338,7 +1576,7 @@ void ACampaignMapActor::UpdateFrontChurn(const FVector& CameraFocus, float Camer
 				Made->RegisterComponent();
 				UMaterialInstanceDynamic* Ink = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
 				Ink->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
-				Ink->SetScalarParameterValue(TEXT("Opacity"), 0.0f);
+				Ink->SetScalarParameterValue(TEXT("Opacity"), 1.0f); // (its fade is in its points, from its corners)
 				Tile.Mesh = ChurnMeshes.Add(Made);
 				ChurnInks.Add(Ink);
 			}
@@ -1346,81 +1584,81 @@ void ACampaignMapActor::UpdateFrontChurn(const FVector& CameraFocus, float Camer
 			{
 				continue;
 			}
-			ChurnMeshes[Tile.Mesh]->SetVisibility(true);
-			Tile.Shown = -1.0f;
+			Tile.Level = INDEX_NONE;
 		}
-		// Its veil: asked of another thread, and laid when it is back (one a frame).
-		if (!Tile.bVeil)
+		// Its veil: asked of another thread; laid when it is back, or again when its size on the screen asks for
+		// another coarseness (one a frame).
+		if (!Tile.bVeil && Tile.Work.IsValid() && Tile.Work->bDone.load(std::memory_order_acquire))
 		{
-			if (Tile.Work.IsValid() && Tile.Work->bDone.load(std::memory_order_acquire))
+			const TSharedPtr<FFrontChurnVeilWork, ESPMode::ThreadSafe> Back = Tile.Work;
+			Tile.Work.Reset();
+			Table.Working = FMath::Max(0, Table.Working - 1);
+			if (Back->Gen == Table.Gen)
 			{
-				const TSharedPtr<FFrontChurnVeilWork, ESPMode::ThreadSafe> Done = Tile.Work;
-				if (Done->Gen != Table.Gen)
-				{
-					Tile.Work.Reset(); // (for lines since laid again: asked again below)
-					Table.Working = FMath::Max(0, Table.Working - 1);
-				}
-				else if (!bVeilLaid)
-				{
-					bVeilLaid = true;
-					Tile.Work.Reset();
-					Table.Working = FMath::Max(0, Table.Working - 1);
-					BuildChurnVeil(Tile, *Done);
-					Tile.bVeil = true;
-				}
-			}
-			if (!Tile.bVeil && !Tile.Work.IsValid() && Table.Working < ChurnWorkersAtOnce && Table.Lines.IsValid())
-			{
-				TSharedPtr<FFrontChurnVeilWork, ESPMode::ThreadSafe> Asked = MakeShared<FFrontChurnVeilWork, ESPMode::ThreadSafe>();
-				Asked->Lines = Table.Lines;
-				Asked->Gen = Table.Gen;
-				Asked->OriginX = Key.X * ChurnVeilSquare;
-				Asked->OriginY = Key.Y * ChurnVeilSquare;
-				Asked->Across = FMath::RoundToInt32(ChurnVeilSquare / ChurnVeilStep) + 1;
-				// (the land round it, from the terrain's own points, and the towns near it: copies, so that the thread
-				// touches nothing of the map's)
-				const int32 LI0 = FMath::Clamp(FMath::FloorToInt32((Asked->OriginX - Terrain.OriginX) / Terrain.Cell) - 1, 0, Terrain.NX - 1);
-				const int32 LJ0 = FMath::Clamp(FMath::FloorToInt32((Asked->OriginY - Terrain.OriginY) / Terrain.Cell) - 1, 0, Terrain.NY - 1);
-				const int32 LI1 = FMath::Clamp(FMath::CeilToInt32((Asked->OriginX + ChurnVeilSquare - Terrain.OriginX) / Terrain.Cell) + 1, 0, Terrain.NX - 1);
-				const int32 LJ1 = FMath::Clamp(FMath::CeilToInt32((Asked->OriginY + ChurnVeilSquare - Terrain.OriginY) / Terrain.Cell) + 1, 0, Terrain.NY - 1);
-				Asked->LandNX = LI1 - LI0 + 1;
-				Asked->LandNY = LJ1 - LJ0 + 1;
-				Asked->LandCell = Terrain.Cell;
-				Asked->LandOriginX = Terrain.OriginX + LI0 * Terrain.Cell;
-				Asked->LandOriginY = Terrain.OriginY + LJ0 * Terrain.Cell;
-				Asked->Land.SetNumUninitialized(Asked->LandNX * Asked->LandNY);
-				TSet<int32> Provinces;
-				for (int32 LJ = LJ0; LJ <= LJ1; ++LJ)
-				{
-					for (int32 LI = LI0; LI <= LI1; ++LI)
-					{
-						Asked->Land[(LJ - LJ0) * Asked->LandNX + (LI - LI0)] = Terrain.Coverage[Terrain.Index(LI, LJ)];
-						Provinces.Add(Terrain.Region[Terrain.Index(LI, LJ)]);
-					}
-				}
-				for (const int32 RegionId : Provinces)
-				{
-					if (Data.Regions.IsValidIndex(RegionId))
-					{
-						const FVector2D& Town = Data.Regions[RegionId].Center;
-						Asked->Towns.Add(FVector(Town.X, Town.Y, TownRadius(RegionId) + 0.6));
-					}
-				}
-				Tile.Work = Asked;
-				++Table.Working;
-				Tile.Building = Async(EAsyncExecution::ThreadPool, [Asked]()
-				{
-					Asked->Work();
-					Asked->bDone.store(true, std::memory_order_release);
-				});
+				Tile.Done = Back; // (for lines since laid again it is let go, and asked again below)
 			}
 		}
-		// Faded in as far as the band is wide on the screen.
-		const float Show = static_cast<float>(TheaterChurn::Shown(ChurnBandWide * Tile.PixelsAUnit));
-		if (Tile.bVeil && FMath::Abs(Show - Tile.Shown) > 0.02f && ChurnInks.IsValidIndex(Tile.Mesh) && ChurnInks[Tile.Mesh])
+		const double Coarse = std::log2(1.5 / FMath::Max(ChurnVeilStep * Tile.PixelsAUnit, 1.0e-6)); // (the halvings that keep a step of the lattice to about a pixel and a half)
+		const int32 Level = Tile.Level != INDEX_NONE && FMath::Abs(Coarse - (Tile.Level - 0.5)) < 0.8 ? Tile.Level : FMath::Clamp(FMath::CeilToInt32(Coarse), 0, ChurnVeilLevels);
+		if (Tile.Done.IsValid() && (Level != Tile.Level || !Tile.bVeil) && !bVeilLaid)
 		{
-			Tile.Shown = Show;
-			ChurnInks[Tile.Mesh]->SetScalarParameterValue(TEXT("Opacity"), Show);
+			bVeilLaid = true;
+			Tile.Level = Level;
+			FIntPoint Corners[4];
+			CornersOf(Key, Corners);
+			for (int32 K = 0; K < 4; ++K)
+			{
+				Tile.Faded[K] = Table.VeilCorners.FindRef(Corners[K]);
+			}
+			BuildChurnVeil(Tile);
+			Tile.bVeil = true;
+		}
+		if (!Tile.bVeil && !Tile.Done.IsValid() && !Tile.Work.IsValid() && Table.Working < ChurnWorkersAtOnce && Table.Lines.IsValid())
+		{
+			TSharedPtr<FFrontChurnVeilWork, ESPMode::ThreadSafe> Asked = MakeShared<FFrontChurnVeilWork, ESPMode::ThreadSafe>();
+			Asked->Lines = Table.Lines;
+			Asked->Gen = Table.Gen;
+			// (with a margin round it, for the coarser lattices' averages at its edges)
+			Asked->OriginX = Key.X * ChurnVeilSquare - ChurnVeilMargin * ChurnVeilStep;
+			Asked->OriginY = Key.Y * ChurnVeilSquare - ChurnVeilMargin * ChurnVeilStep;
+			Asked->Across = FMath::RoundToInt32(ChurnVeilSquare / ChurnVeilStep) + 1 + 2 * ChurnVeilMargin;
+			// (the land round it, from the terrain's own points, and the towns near it: copies, so that the thread
+			// touches nothing of the map's)
+			const double Wide = (Asked->Across - 1) * ChurnVeilStep;
+			const int32 LI0 = FMath::Clamp(FMath::FloorToInt32((Asked->OriginX - Terrain.OriginX) / Terrain.Cell) - 1, 0, Terrain.NX - 1);
+			const int32 LJ0 = FMath::Clamp(FMath::FloorToInt32((Asked->OriginY - Terrain.OriginY) / Terrain.Cell) - 1, 0, Terrain.NY - 1);
+			const int32 LI1 = FMath::Clamp(FMath::CeilToInt32((Asked->OriginX + Wide - Terrain.OriginX) / Terrain.Cell) + 1, 0, Terrain.NX - 1);
+			const int32 LJ1 = FMath::Clamp(FMath::CeilToInt32((Asked->OriginY + Wide - Terrain.OriginY) / Terrain.Cell) + 1, 0, Terrain.NY - 1);
+			Asked->LandNX = LI1 - LI0 + 1;
+			Asked->LandNY = LJ1 - LJ0 + 1;
+			Asked->LandCell = Terrain.Cell;
+			Asked->LandOriginX = Terrain.OriginX + LI0 * Terrain.Cell;
+			Asked->LandOriginY = Terrain.OriginY + LJ0 * Terrain.Cell;
+			Asked->Land.SetNumUninitialized(Asked->LandNX * Asked->LandNY);
+			TSet<int32> Provinces;
+			for (int32 LJ = LJ0; LJ <= LJ1; ++LJ)
+			{
+				for (int32 LI = LI0; LI <= LI1; ++LI)
+				{
+					Asked->Land[(LJ - LJ0) * Asked->LandNX + (LI - LI0)] = Terrain.Coverage[Terrain.Index(LI, LJ)];
+					Provinces.Add(Terrain.Region[Terrain.Index(LI, LJ)]);
+				}
+			}
+			for (const int32 RegionId : Provinces)
+			{
+				if (Data.Regions.IsValidIndex(RegionId))
+				{
+					const FVector2D& Town = Data.Regions[RegionId].Center;
+					Asked->Towns.Add(FVector(Town.X, Town.Y, TownRadius(RegionId) + 0.6));
+				}
+			}
+			Tile.Work = Asked;
+			++Table.Working;
+			Tile.Building = Async(EAsyncExecution::ThreadPool, [Asked]()
+			{
+				Asked->Work();
+				Asked->bDone.store(true, std::memory_order_release);
+			});
 		}
 		// Its craters, for the size its pixels are now (in half octaves), while the most in view allows.
 		const int32 Size = FMath::RoundToInt32(2.0 * std::log2(FMath::Max(Tile.PixelsAUnit, 1.0e-3)));
@@ -1449,5 +1687,11 @@ void ACampaignMapActor::UpdateFrontChurn(const FVector& CameraFocus, float Camer
 			}
 		}
 		CratersLeft = FMath::Max(0, CratersLeft - Tile.Craters);
+		// Drawn only while something of it shows (a veil laid for the lines before stays on show until the new one is laid).
+		const bool bDrawn = Tile.Craters > 0 || (Tile.Level != INDEX_NONE && (Tile.Faded[0] | Tile.Faded[1] | Tile.Faded[2] | Tile.Faded[3]) > 0);
+		if (ChurnMeshes.IsValidIndex(Tile.Mesh) && ChurnMeshes[Tile.Mesh] && ChurnMeshes[Tile.Mesh]->IsVisible() != bDrawn)
+		{
+			ChurnMeshes[Tile.Mesh]->SetVisibility(bDrawn);
+		}
 	}
 }
