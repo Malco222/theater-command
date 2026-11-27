@@ -137,5 +137,6 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   // THE SKY (weather, ruling 143(b)): after the rows of news and before AT HOME; plain, never a warning.
   const sk = card.sky;
   const sky = !sk ? '' : `<div class="mc-box mc-sky"><div class="mc-lab">The sky</div>${sk.lines.map((l) => it('', `<span>${esc(l.text)}${l.forecast.map((f) => `<br><small style="opacity:.75">${esc(f)}</small>`).join('')}</span>`)).join('')}${sk.report ? it('', `<span><small>${esc(sk.report)}</small></span>`) : ''}${sk.tip ? it('', `<span><small><b>Tip.</b> ${esc(sk.tip)}</small></span>`) : ''}</div>`;
-  return `<div class="mc${card.bands.length > 1 ? ' two' : ''}">${head}${bands}${tally}<div class="mc-main${L ? '' : ' solo'}">${lead}${fronts}</div>${sky}${low}${foot}</div>`;
+  // (City defences, the switch on: a long label goes on to a second line and is never cut. Off, as shipped.)
+  return `<div class="mc${card.bands.length > 1 ? ' two' : ''}${card.wrap ? ' wrap' : ''}">${head}${bands}${tally}<div class="mc-main${L ? '' : ' solo'}">${lead}${fronts}</div>${sky}${low}${foot}</div>`;
 }

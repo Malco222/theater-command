@@ -2,13 +2,15 @@
 // owners": the month card's "the harbour of the Cotentin" (in place of "Cotentin harbour", one form for a harbour
 // everywhere) and "The raid on the Ruhr fails". Under the city defences switch; off, as shipped. Handed over by the air
 // rules' part 8e (MONTHCARD-HANDOVER.md). A place with no article ("Bremen") as now; Pearl Harbor as it is.
-// The rows the ruling does not name (the sky, a town, a rail yard, a fleet, shipping) are pinned as shipped both ways.
+// The rows the ruling does not name (a fleet, shipping) are pinned as shipped both ways. The sky, a town and a rail
+// yard take the article since part 7j (the UI director, 27 Nov 2026 01:41Z, 7 and 8): their pins here moved with it,
+// and the plural verb ("The Midlands are bombed") is pinned in city-defences-month-card-7j-r2.test.ts.
 // A raid on an airfield is drawn as a factories row and is named as one.
 import { describe, expect, it } from 'vitest';
 import places from '../data/campaign/places.json';
 import { harbourOf } from '../src/campaign/air';
 import { START_LAID, cityDefences, setCityDefences } from '../src/campaign/citydefences';
-import { atWar, createGame, declareWar, placeName } from '../src/campaign/game';
+import { atWar, createGame, declareWar, isPluralPlace, placeName } from '../src/campaign/game';
 import { monthCard, monthMark, type CardRow, type MonthCard } from '../src/campaign/monthcard';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -145,8 +147,10 @@ describe('city defences, the month card: bombing and the raid on the troops', ()
         expect(off.map((r) => r.place)).toEqual([name, name, name, name]);
         expect(off.map((r) => r.head)).toEqual([`The raid on ${name} fails`, `${name} is bombed`, `${name} beats off the raid`, `${name} is bombed`]);
         if (the) {
+          // (7j: a plural place takes a plural verb, "The Midlands are bombed", by the game's one plural list.)
+          const [is, beats] = isPluralPlace(name) ? ['are', 'beat'] : ['is', 'beats'];
           expect(on.map((r) => r.place)).toEqual([`The ${name}`, `The ${name}`, `The ${name}`, `The ${name}`]);
-          expect(on.map((r) => r.head)).toEqual([`The raid on the ${name} fails`, `The ${name} is bombed`, `The ${name} beats off the raid`, `The ${name} is bombed`]);
+          expect(on.map((r) => r.head)).toEqual([`The raid on the ${name} fails`, `The ${name} ${is} bombed`, `The ${name} ${beats} off the raid`, `The ${name} ${is} bombed`]);
         } else {
           expect(on.map((r) => r.place)).toEqual(off.map((r) => r.place));
           expect(on.map((r) => r.head)).toEqual(off.map((r) => r.head));
@@ -211,12 +215,13 @@ describe('city defences, the month card: what the switch does not move', () => {
     }
   });
 
-  it('leaves the rows the ruling does not name as shipped: the sky, a town, a rail yard, a fleet, shipping', () => {
+  it('leaves the rows the ruling does not name as shipped: a fleet, shipping; the sky, a town, a rail yard move only their place and headline', () => {
     const ruhr = loadGame(START)!.regions.find((r) => r.name === 'Ruhr')!;
+    // (7j: the sky, a town and a rail yard take the article; nothing else of theirs moves.)
+    for (const [place, o] of [['Saar', { mission: 'superiority' }], ['Ruhr', { mission: 'town' }], ['Ruhr', { mission: 'line' }], ['Valdai', { mission: 'town' }], ['Azores', { mission: 'line' }]] as [string, Partial<AirReport>][]) {
+      FOUR.forEach((f) => expect(rest(row(true, place, { ...o, ...f }))).toBe(rest(row(false, place, { ...o, ...f }))));
+    }
     const others: [string, Partial<AirReport>][] = [
-      ['Saar', { mission: 'superiority' }],
-      ['Ruhr', { mission: 'town' }],
-      ['Ruhr', { mission: 'line' }],
       ['the North Sea', { mission: 'strike', region: -1, zone: 0 }],
       ['the North Sea', { mission: 'fleet', region: -1, zone: 0 }],
     ];
@@ -226,27 +231,37 @@ describe('city defences, the month card: what the switch does not move', () => {
         expect(JSON.stringify({ ...on, report: null })).toBe(JSON.stringify({ ...off, report: null }));
       });
     }
-    // As shipped, to the letter (the UI director has not ruled these; a ruling moves these pins):
-    expect(row(true, 'Saar', { mission: 'superiority' }).place).toBe('The sky over Saar');
-    expect(row(true, 'Saar', { mission: 'superiority' }).head).toBe('The sky over Saar is yours');
-    expect(row(true, 'Ruhr', { mission: 'town', won: false }).head).toBe(`The raid on ${townName(ruhr)} fails`);
-    expect(row(true, 'Ruhr', { mission: 'line', won: false }).head).toBe(`The raid on ${townName(ruhr)} rail yard fails`);
+    // To the letter. (Pins moved by 7j: with the switch on the sky over the Saar takes the article; the Ruhr's town,
+    // Essen, takes none, so its town and rail-yard rows read as shipped.)
+    expect(row(false, 'Saar', { mission: 'superiority' }).place).toBe('The sky over Saar');
+    expect(row(false, 'Saar', { mission: 'superiority' }).head).toBe('The sky over Saar is yours');
+    expect(row(true, 'Saar', { mission: 'superiority' }).place).toBe('The sky over the Saar');
+    expect(row(true, 'Saar', { mission: 'superiority' }).head).toBe('The sky over the Saar is yours');
+    expect(townName(ruhr)).toBe('Essen');
+    for (const on of [false, true]) {
+      expect(row(on, 'Ruhr', { mission: 'town', won: false }).head).toBe('The raid on Essen fails');
+      expect(row(on, 'Ruhr', { mission: 'line', won: false }).head).toBe('The raid on Essen rail yard fails');
+    }
   });
 });
 
 describe('city defences, the month card: a town the news gives an article', () => {
-  it('leaves the town and rail-yard rows of such a town as shipped, switch on or off: Valdai, the Azores', () => {
-    // (The pins above use the Ruhr, whose town is Essen and takes no article. These towns carry their province's name,
-    // which the news gives "the": if a town or a rail-yard row ever takes the article unruled, these lines fail.)
+  it('gives the town and rail-yard rows of such a town the article with the switch on, as shipped with it off: Valdai, the Azores', () => {
+    // (Pins moved by 7j, the UI director's 7: "The raid on the Azores fails", "The Canary Islands rail yard". These towns
+    // carry their province's name, which the news gives "the". The Azores are plural; a rail yard is one thing.)
     for (const name of ['Valdai', 'Azores']) {
       expect(THE).toContain(name);
       expect(townName(loadGame(START)!.regions.find((r) => r.name === name)!)).toBe(name);
-      for (const on of [false, true]) {
-        expect(row(on, name, { mission: 'town' }).place).toBe(name);
-        expect(heads(on, name, { mission: 'town' })).toEqual([`The raid on ${name} fails`, `${name} is bombed`, `${name} beats off the raid`, `${name} is bombed`]);
-        expect(row(on, name, { mission: 'line' }).place).toBe(`${name} rail yard`);
-        expect(heads(on, name, { mission: 'line' })).toEqual([`The raid on ${name} rail yard fails`, `${name} rail yard is bombed`, `${name} rail yard beats off the raid`, `${name} rail yard is bombed`]);
-      }
+      expect(row(false, name, { mission: 'town' }).place).toBe(name);
+      expect(heads(false, name, { mission: 'town' })).toEqual([`The raid on ${name} fails`, `${name} is bombed`, `${name} beats off the raid`, `${name} is bombed`]);
+      expect(row(false, name, { mission: 'line' }).place).toBe(`${name} rail yard`);
+      expect(heads(false, name, { mission: 'line' })).toEqual([`The raid on ${name} rail yard fails`, `${name} rail yard is bombed`, `${name} rail yard beats off the raid`, `${name} rail yard is bombed`]);
+      expect(row(true, name, { mission: 'line' }).place).toBe(`The ${name} rail yard`);
+      expect(heads(true, name, { mission: 'line' })).toEqual([`The raid on the ${name} rail yard fails`, `The ${name} rail yard is bombed`, `The ${name} rail yard beats off the raid`, `The ${name} rail yard is bombed`]);
     }
+    expect(row(true, 'Valdai', { mission: 'town' }).place).toBe('The Valdai');
+    expect(heads(true, 'Valdai', { mission: 'town' })).toEqual(['The raid on the Valdai fails', 'The Valdai is bombed', 'The Valdai beats off the raid', 'The Valdai is bombed']);
+    expect(row(true, 'Azores', { mission: 'town' }).place).toBe('The Azores');
+    expect(heads(true, 'Azores', { mission: 'town' })).toEqual(['The raid on the Azores fails', 'The Azores are bombed', 'The Azores beat off the raid', 'The Azores are bombed']);
   });
 });

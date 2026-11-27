@@ -37,7 +37,7 @@ import { CAPITAL_BESIEGED, fallWarning, withinReach } from './danger';
 import { NO_LAST_MONTH, ROME_HOLDS, majorsOf, stakeDue, stakeWarning } from './diplomacy';
 import { ARSENAL, workLevel, yardLevel } from './arsenal';
 import { BUDGET, PRODUCTION, ledger } from './economy';
-import { allied, atWar, men, placeName, theName } from './game';
+import { allied, atWar, isPluralPlace, men, placeName, theName } from './game';
 import { CLASSES, NAVY, shipCount, shipList } from './navy';
 import { cityOrders } from './orders';
 import { besieged, garrisonOf, guardMen } from './siege';
@@ -233,6 +233,12 @@ export interface MonthCard {
    * campaign with weather.
    */
   sky?: SkyView;
+  /**
+   * (City defences, the switch on.) A row's label is never cut: where the browser would shorten a long one with three
+   * dots, it goes on to a second line (the UI director, 27 Nov 2026 01:41Z, "Length"). Display only. Absent with the
+   * switch off, so the card is as shipped.
+   */
+  wrap?: true;
 }
 
 const num = (n: number): string => Math.round(n).toLocaleString('en-US');
@@ -500,7 +506,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const N = g.nations[me];
   const card: MonthCard = {
     turn: mark.turn, month: turnToDate(mark.turn).label, viewer: me, ...(opts.opening ? { opening: true } : {}), bands: [], boxes: [], lead: null, quiet: '', rows: [], show: 7, count: '', foot: '',
-    home: [], research: [], also: [], alsoFull: [], staff: [], elsewhere: [], letters: [], more: 0,
+    home: [], research: [], also: [], alsoFull: [], staff: [], elsewhere: [], letters: [], more: 0, ...(cityDefences(g) ? { wrap: true as const } : {}),
   };
   if (!N) { card.quiet = opts.opening ? NOT_YET_FOUGHT : 'A quiet month.'; return card; }
   const mine = (nat?: string | null): boolean => nat === me;
@@ -525,6 +531,20 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const shores = g.shoreReports.slice(mark.shore);
   const ranked: Ranked[] = [];
   const blank = (): CardRow => ({ cls: 3, arm: null, picture: null, sign: '', place: '', tag: '', tone: 'plain', ours: null, theirs: null, line: '', figures: [], week: 1, when: '', kind: '', head: '', follows: '', facts: [] });
+  // (City defences, the switch on: one card names a place one way, as the news does. A place's label and its headline
+  // take the news's article, "The Valdai is taken", "The sky over the Riviera is yours", and a plural place takes a
+  // plural verb by the game's one plural list, "The Midlands are bombed". The UI director, 27 Nov 2026 01:41Z, 5, 7
+  // and 8. A name with its own "The" stays as it is ("The Pas"), and a place with no article is bare ("Bremen"). The
+  // line under the label and the sentence under the picture are as shipped. Off, every word as shipped.)
+  const named = cityDefences(g);
+  /** A place at the head of a label or a headline, and inside one: "The Ruhr", "the Ruhr"; off, the bare name. */
+  const theAt = (name: string): string => (named ? placeName(name, true) : name);
+  const theIn = (name: string): string => (named ? placeName(name) : name);
+  /** The verb that goes with a place: "is" or "are", "holds" or "hold"; off, always the first. */
+  const be = (name: string, one = 'is', many = 'are'): string => (named && isPluralPlace(name) ? many : one);
+  /** The bare name a row's label was made from, where the label took the article: the staff's lines match by it. */
+  const bareOf = new Map<CardRow, string>();
+  const label = (row: CardRow, name: string, said: string): void => { row.place = said; if (said !== name) bareOf.set(row, name); };
 
   // ---- 3. Ground: the battles his own troops fought --------------------------------------------------------
   let battlesWon = 0, battlesLost = 0, menOurs = 0, menTheirs = 0;
@@ -577,7 +597,8 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const lead = [...us].filter((u) => !u.guard).sort((a, b) => b.men - a.men)[0];
     const row = blank();
     row.arm = 'land';
-    row.place = place;
+    const at = theAt(place), inside = theIn(place), is = be(place);
+    label(row, place, at);
     row.week = r.week;
     Object.assign(row, dated(r.turn));
     row.region = r.region;
@@ -602,12 +623,12 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     if (r.yielded) {
       row.tag = att ? 'WON' : 'LOST'; row.tone = att ? 'good' : 'bad';
       row.line = att ? 'Taken without a fight.' : 'Given up under orders.';
-      row.head = att ? `${place} is taken without a fight` : `${place} is given up`;
+      row.head = att ? `${at} ${is} taken without a fight` : `${at} ${is} given up`;
       row.follows = worth(!att) || (att ? 'The enemy fell back before the attack.' : 'Your troops fell back before the attack.');
     } else if (r.siege && fellSince) {
       row.tag = att ? 'WON' : 'LOST'; row.tone = att ? 'good' : 'bad';
       row.line = att ? 'The field was won, and the town fell after it.' : 'The field was lost, and the town fell after it.';
-      row.head = att ? `${place} is taken` : `${place} is lost`;
+      row.head = att ? `${at} ${is} taken` : `${at} ${is} lost`;
       // (Beneath the lead's picture the truth of it comes first, then what the town was worth: the art director's review of 82.1.)
       row.follows = `${row.line} ${worth(!att) || (att ? 'The front moves forward.' : 'The front falls back.')}`;
       if (!att && corps) row.facts[0] = { n: plural(corps, 'corps', 'corps'), label: 'fought outside' };
@@ -615,7 +636,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       // (His town besieged and holding: BESIEGED, amber, "Pittsburgh BESIEGED by Canada. Canadian troops close round the town.")
       row.tag = att ? 'WON' : 'BESIEGED'; row.tone = att ? 'good' : 'warn';
       row.line = att ? 'The field is won. The town is besieged.' : shut.men > 0 ? `${g.nations[r.attNat]?.adj ?? 'Enemy'} troops close round the town.` : 'The field is lost. The town holds out.';
-      row.head = att ? `${place} is under siege` : `${place} is besieged`;
+      row.head = att ? `${at} ${is} under siege` : `${at} ${is} besieged`;
       row.follows = att ? 'The province falls only when the town is taken.' : shut.men > 0 ? shutWords(place, oursLost, shut) : 'The province is yours for as long as the town holds.';
       // The words are true to what they count: the corps that lost the field outside did not hold the line, and the
       // men shut in are not lost. Three boxes: the men shut in, the men lost (shown even at none), and theirs.
@@ -626,21 +647,21 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     } else if (r.relief || r.sally) {
       row.tag = good ? 'WON' : 'LOST'; row.tone = good ? 'good' : 'bad';
       row.line = r.relief ? (r.taken ? (att ? 'The siege is raised.' : 'Their relief broke your siege.') : (att ? 'The relief was thrown back.' : 'Their relief was thrown back.')) : (r.taken ? (att ? 'The garrison broke the ring.' : 'The garrison broke your ring.') : (att ? 'The sally was thrown back.' : 'Their sally was thrown back.'));
-      row.head = r.taken ? `The siege of ${place} is raised` : `The siege of ${place} holds`;
+      row.head = r.taken ? `The siege of ${inside} is raised` : `The siege of ${inside} holds`;
       row.follows = r.taken ? (att ? 'The town is free of its besiegers.' : 'The ring round the town is broken.') : (att ? 'The town is still cut off.' : 'The ring round the town stands.');
     } else if (att) {
       row.tag = r.taken ? 'WON' : 'LOST'; row.tone = r.taken ? 'good' : 'bad';
       row.line = r.taken
         ? (r.gates ? 'The town opened its gates.' : forTown ? `${count(corps)} corps stormed the town.` : r.prisoners >= 1000 ? `${count(corps)} corps took it, with ${num(r.prisoners)} prisoners.` : `${count(corps)} corps took the province.`)
         : (forTown ? 'The assault on the town was thrown back.' : 'The attack was thrown back.');
-      row.head = r.taken ? `${place} is taken` : `The attack on ${place} is thrown back`;
+      row.head = r.taken ? `${at} ${is} taken` : `The attack on ${inside} is thrown back`;
       row.follows = r.taken ? worth(false) || (r.prisoners > 0 ? `${num(r.prisoners)} prisoners were taken.` : 'The front moves forward.') : `The attack gained no ground${r.works ? `, and their works still stand` : ''}.`;
     } else {
       row.tag = r.taken ? 'LOST' : 'HELD'; row.tone = r.taken ? 'bad' : 'good';
       row.line = r.taken
         ? (r.gates ? 'The town opened its gates to them.' : forTown ? 'The town fell to assault.' : r.prisoners >= 1000 ? `The line broke: ${num(r.prisoners)} men taken prisoner.` : 'The line broke and the province is lost.')
         : (forTown ? 'An assault on the town was thrown back.' : `${an(g.nations[r.attNat]?.adj ?? 'enemy')} attack was thrown back.`);
-      row.head = r.taken ? `${place} is lost` : `${place} holds`;
+      row.head = r.taken ? `${at} ${is} lost` : `${at} ${be(place, 'holds', 'hold')}`;
       row.follows = r.taken ? worth(true) || 'The front falls back.' : 'The line holds where it stood.';
     }
     // What it weighs: his side's men, and the place by its rank (a capital is a capital in the month it falls).
@@ -683,7 +704,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.arm = 'land';
       row.sign = 'inf';
       row.picture = 'troops';
-      row.place = ids.length === 1 ? g.regions[ids[0]].name : `The ${other?.adj ?? 'open'} front`;
+      if (ids.length === 1) label(row, g.regions[ids[0]].name, theAt(g.regions[ids[0]].name)); else row.place = `The ${other?.adj ?? 'open'} front`;
       row.tag = gain ? 'WON' : 'LOST'; row.tone = gain ? 'good' : 'bad';
       row.ours = me; row.theirs = other ? nat : null;
       // ("Lost without a battle." after LOST says lost twice: both ways the line is "No battle was fought.", and the count is the figure.)
@@ -761,36 +782,41 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const what = bombers ? `${num(bombers)} bombers` : `${num(flown)} aircraft`;
     if (sky) {
       row.sign = 'ftr'; row.picture = 'airfield';
-      row.place = `The sky over ${r.place}`;
+      row.place = `The sky over ${theIn(r.place)}`;
       row.tag = good ? 'WON' : 'LOST';
       row.line = good ? 'Your fighters hold the sky there.' : 'Their fighters hold the sky there.';
-      row.head = good ? `The sky over ${r.place} is yours` : `The sky over ${r.place} is lost`;
+      row.head = good ? `The sky over ${theIn(r.place)} is yours` : `The sky over ${theIn(r.place)} is lost`;
     } else {
       row.sign = 'bmr';
       row.tag = att ? (r.won ? 'HIT' : 'MISSED') : r.won ? 'HIT' : 'HELD';
       // (City defences, the switch on: a harbour, the factories and the troops' ground are named as the news names
       // them, one form for a harbour everywhere: "The harbour of the Cotentin", "The raid on the Ruhr fails"; off, as
-      // shipped. The UI director, 26 Nov 2026 21:26Z, 4. A town, a rail yard, a fleet and shipping are as they were.
+      // shipped. The UI director, 26 Nov 2026 21:26Z, 4. A town and a rail yard take the article too, "The raid on the
+      // Azores fails", "The Canary Islands rail yard" (27 Nov 01:41Z, 7). A fleet and shipping are as they were.
       // A raid on an airfield has no row of its own: it is drawn as a factories row, so its place is named the same way.)
-      const named = cityDefences(g);
       const [pic, place, hit, miss]: [CardPicture, string, string, string] =
-        r.mission === 'line' ? ['rail-yard', `${town} rail yard`, `${what} cut the railway there.`, 'The bombs fell wide. The line still runs.']
+        r.mission === 'line' ? ['rail-yard', `${theAt(town)} rail yard`, `${what} cut the railway there.`, 'The bombs fell wide. The line still runs.']
         : r.mission === 'harbour' ? ['harbour', named ? cap(harbourOf(placeName(r.place))) : /\bHarbou?r$/.test(r.place) ? r.place : `${r.place} harbour`, `${what} struck the ships in harbour.`, 'The raid on the harbour was beaten off.']
         : r.mission === 'fleet' ? ['fleet', cap(the(r.ships?.[0]?.fleet ?? r.place)), `${what} struck the fleet at sea.`, 'The strike on the fleet was beaten off.']
         : r.mission === 'strike' ? ['fleet', cap(r.place.replace(/^the /, 'The ')), `${what} struck the shipping there.`, 'The strike on the shipping was beaten off.']
         : r.mission === 'ground' ? ['troops', named ? placeName(r.place, true) : r.place, `${what} struck the troops there.`, 'The raid on the troops was beaten off.']
-        : r.mission === 'town' ? ['town', town, `${what} broke down its defences.`, 'The raid on its defences was beaten off.']
+        : r.mission === 'town' ? ['town', theAt(town), `${what} broke down its defences.`, 'The raid on its defences was beaten off.']
         : ['factories', named ? placeName(r.place, true) : r.place, `${what} hit its factories${r.mission === 'night' ? ' by night' : ''}.`, 'The bombers were beaten off.'];
       row.picture = pic; row.place = place;
       row.line = r.won ? (att ? hit : hit.replace(/^([\d,]+) (bombers|aircraft)/, 'Their $2')) : miss;
       const low = place.replace(/^The /, 'the ');
       // The same place inside a sentence. A name that carries its own "The" keeps it: "The raid on The Pas fails".
-      const said = !named ? place : pic === 'harbour' ? harbourOf(placeName(r.place)) : pic === 'troops' || pic === 'factories' ? placeName(r.place) : place;
+      const said = !named ? place : pic === 'harbour' ? harbourOf(placeName(r.place)) : pic === 'troops' || pic === 'factories' ? placeName(r.place)
+        : pic === 'rail-yard' ? `${placeName(town)} rail yard` : pic === 'town' ? placeName(town) : place;
+      // The verb goes with the place where the place is what was bombed: "The Midlands are bombed". A harbour or a rail
+      // yard is one thing, whatever its place: "The harbour of the Midlands is bombed".
+      const one = pic === 'town' ? !isPluralPlace(town) : pic === 'troops' || pic === 'factories' ? !isPluralPlace(r.place) : true;
+      const is = named && !one ? 'are' : 'is', beats = named && !one ? 'beat' : 'beats';
       // Shipping is where the sea is, by the sea words: "Shipping off the Azores", "the strike on shipping in the North Sea".
       const shipAt = g.seas[r.zone] ? seaWhere(g.seas[r.zone].name) : `in ${low}`;
       row.head = r.mission === 'fleet' || r.mission === 'strike'
         ? (r.won ? `${r.mission === 'fleet' ? place : `Shipping ${shipAt}`} is struck from the air` : att ? `The strike on ${r.mission === 'fleet' ? low : `shipping ${shipAt}`} fails` : `The strike on ${r.mission === 'fleet' ? low : `shipping ${shipAt}`} is beaten off`)
-        : r.won ? `${place} is bombed` : att ? `The raid on ${said} fails` : `${place} beats off the raid`;
+        : r.won ? `${place} ${is} bombed` : att ? `The raid on ${said} fails` : `${place} ${beats} off the raid`;
     }
     row.follows = r.result;
     const sunkHere = shipsHit ? shipCount(shipsHit) : 0;
@@ -810,7 +836,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const row = blank();
     row.cls = 4; row.arm = 'sea';
     row.sign = 'hull'; row.picture = 'harbour';
-    row.place = r.place;
+    label(row, r.place, theAt(r.place));
     row.region = r.region;
     row.report = { type: 'shore', id: r.id };
     row.ours = me; row.theirs = att ? r.defNat || null : r.nat;
@@ -822,7 +848,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       : r.what === 'city' ? [{ n: `${Math.round(r.output * 100)}%`, label: 'output stopped' }]
       : [{ n: `${Math.round(r.works ?? 0)}%`, label: 'of its works' }];
     row.kind = 'SHELLED FROM THE SEA';
-    row.head = `${r.place} is shelled from the sea`;
+    row.head = `${theAt(r.place)} ${be(r.place)} shelled from the sea`;
     row.follows = r.result;
     row.facts = [{ n: String(shipCount(r.ships)), label: 'ships stood in' }, ...row.figures];
     ranked.push({ row, sub: 0, weight: SHELLED_MEN + shipsWeight(r.sunk), great: greatShips(r.sunk) });
@@ -862,6 +888,10 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     const seaAt = h.region === undefined ? seaSaid(h.text, g.seas.map((z) => z.name)) : null;
     const where = h.region === undefined && !seaAt ? / in (the [A-Z][A-Za-z' -]*?)(?= and |[.,:]|$)/.exec(h.text) : null;
     row.place = h.region !== undefined ? g.regions[h.region].name : seaAt ? g.seas[seaAt.i].name : where ? cap(where[1].replace(/^the /, '')) : h.arm === 'sea' ? 'At sea' : 'In the air';
+    // (A province, or a place the news names "in the X": with the switch on it keeps the news's article, "The Ardennes".
+    // A sea, "At sea" and "In the air" are as they were.)
+    const bare = row.place, land = h.region !== undefined || (!seaAt && !!where);
+    if (land) label(row, bare, theAt(bare));
     // (A sea has a place on the chart: the row's pin goes there.)
     const zone = seaAt ? seaAt.i : where ? g.seas.findIndex((z) => z.name.replace(/^the /i, '') === where[1].replace(/^the /i, '')) : -1;
     if (zone >= 0) row.sea = zone;
@@ -893,14 +923,14 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
       row.line = `The ring closes: ${who} ${/^(1|one|a|an) /i.test(who) ? 'is' : 'are'} cut off.`;
       row.figures = [{ n: ring[2], label: 'men cut off' }];
       // (As the lead story it is told whole: where, who, and how many.)
-      row.head = `The ring closes at ${row.place}`;
+      row.head = `The ring closes at ${land ? theIn(bare) : row.place}`;
       row.follows = `${cap(ring[1])} ${/^(1|one|a|an) /i.test(ring[1]) ? 'is' : 'are'} cut off from all supply.`;
       row.facts = row.figures;
     }
     if (raised && !fought.has(h.region!)) {
       raisedAt.add(h.region!);
       const town = townName(g.regions[h.region!]), by = raisedBy.get(h.region!);
-      Object.assign(row, { tag: 'HELD', tone: 'good', picture: 'town', line: `The siege of ${town} is raised.`, head: `The siege of ${town} is raised`, theirs: by ?? null });
+      Object.assign(row, { tag: 'HELD', tone: 'good', picture: 'town', line: `The siege of ${town} is raised.`, head: `The siege of ${theIn(town)} is raised`, theirs: by ?? null });
       if (by) row.join = { word: 'against', name: theName(g.nations[by]) };
     }
     // A siege laid on a town of his side's with no battle in the field (the Playtester's 84.2.6 find): BESIEGED by
@@ -908,7 +938,7 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     // the town."), never a nameless LOST while the town holds.
     const laid = h.arm === 'land' && h.region !== undefined && / troops close round [^:]+: .+ is under siege\b/.test(h.text);
     if (laid && bad && h.won && g.nations[h.won]) {
-      Object.assign(row, { tag: 'BESIEGED', tone: 'warn', picture: 'town', line: `${g.nations[h.won].adj} troops close round the town.`, head: `${row.place} is besieged`, theirs: h.won });
+      Object.assign(row, { tag: 'BESIEGED', tone: 'warn', picture: 'town', line: `${g.nations[h.won].adj} troops close round the town.`, head: `${row.place} ${be(bare)} besieged`, theirs: h.won });
     }
     // (A row on land that names the other side says it by name, with the tag's own word.)
     if (h.arm === 'land' && !row.join && row.theirs && g.nations[row.theirs] && (row.tag === 'WON' || row.tag === 'LOST' || row.tag === 'BESIEGED')) {
@@ -1225,7 +1255,9 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const taken = card.home.reduce((n, x) => n + goodLines(x), 0) + card.research.reduce((n, t) => n + linesAt(`Research complete: ${t}.`, FOOT_ROOM.home), 0);
   // A march that halts wants his orders and comes first; armies that arrive at one place are one line; and where
   // the town held, the staff speaks of the battle there and not of its loss.
-  const held = new Set(ranked.filter((x) => x.row.tag === 'HELD' || x.row.tag === 'BESIEGED').map((x) => x.row.place));
+  // (By the bare name a label was made from: with the switch on a label may read "The Valdai", and the staff's line is
+  // matched as shipped.)
+  const held = new Set(ranked.filter((x) => x.row.tag === 'HELD' || x.row.tag === 'BESIEGED').map((x) => bareOf.get(x.row) ?? x.row.place));
   const said: { text: string; full: string; hs: Headline[] }[] = [];
   for (const h of news.filter((x) => / has halted at .+ on its march to /.test(x.text))) said.push({ text: first(h.text), full: h.text, hs: [h] });
   const arrivals = new Map<string, Headline[]>();
