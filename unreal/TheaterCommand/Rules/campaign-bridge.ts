@@ -2968,8 +2968,8 @@ function move(ids: number[], to: number, army = '', armyIds: number[] = []) {
   }
   // (An island counted in men often takes some corps of a group and not others. Those that stayed next door for the
   // island's room are told the island's line for themselves, what they send being their own men; refused whole, the
-  // group is told it once for all of them. The words sceptic's lean of 26 November 2026, laid until the UI director
-  // rules: islands.ts roomRefusal, the UI director's section 3 of 15:02Z. Other ground: as it always was.)
+  // group is told it once for all of them, the march's line: the UI director, 00:19Z, 27 November 2026, U3 and U6
+  // (islands.ts stayBehind and roomRefusal, her section 3 of 15:02Z). Other ground: as it always was.)
   const isleTo = s.regions[to];
   if (isleTo && islandOf(s, isleTo)) {
     try {

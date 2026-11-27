@@ -748,9 +748,8 @@ export function whyNotTakeField(g: Game, c: Corps): string | null {
   const here = r.units.filter((u) => allied(g, u.nat, c.nat) && u.kind !== 'eng' && !roomless(g, u)).length;
   // (On an island of the Pacific the corps inside the town are counted in the island's room already, this one among
   // them, so its coming out asks no new place: islands.ts `fits`, which counts its men once, as going.)
-  // (Refused there, an island says its own section 3 line, in men: the UI director's marks of 15:02Z 25 November 2026,
-  // laid as the words sceptic leans until she rules on this form, 26 November 2026. Other ground: the old line.)
-  // (On an island the corps coming out is named, as in the swap: the UI director, 00:19Z, 27 November 2026, U7.)
+  // (Refused there, an island says its own section 3 line, in men (the UI director's marks of 15:02Z 25 November 2026),
+  // the corps coming out named, as in the swap: the UI director, 00:19Z, 27 November 2026, U7. Other ground: the old line.)
   if (!fits(g, r, c.nat, [c], { rows: here })) return roomRefusal(g, r, [c], { named: true }) ?? `There is no room in the field at ${r.name} for another corps.`;
   return null;
 }

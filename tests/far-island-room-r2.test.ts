@@ -267,7 +267,7 @@ describe('U6: a group march let in only in part names the corps that stay behind
       const { g, pearl, hon } = board(14000);
       const small = corps(g, 'USA', 'Small', hon, 1, 4000 / 15000), d24 = corps(g, 'USA', '24th Division Group', hon), d25 = corps(g, 'USA', '25th Division Group', hon);
       TC().load(saveGame(g));
-      // (26,000 there: 12,000 more fit, the small one goes in; then 4,000 can go, and the full line is a reading below.)
+      // (14,000 inside: 16,000 more fit, the small one of 4,000 goes in; then 18,000 are there and 12,000 more can go.)
       const one = TC().move([small.id, d24.id], pearl.id) as { moved: { id: number }[]; note: string };
       expect(one.moved.map((x) => x.id)).toEqual([small.id]);
       expect(one.note).toBe('The 24th Division Group stays behind. Pearl Harbor has room for 2 divisions, about 30,000 men, and 18,000 of yours are there: only 12,000 more can go, and you are sending 15,000.');

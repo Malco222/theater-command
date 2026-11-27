@@ -210,7 +210,7 @@ describe("a swap onto an island with fewer than 1,000 men's room left after it",
 });
 
 describe("an offered formation whose island has no room for it (the offers page, FORMATIONS OFFERED)", () => {
-  it("is told the island's room in men, the section 3 line for the row's own men (the words sceptic's lean until the UI director rules)", () => {
+  it("is told the island's room in men, the section 3 line in the offer's words for the row's own men (the UI director, 00:19Z, 27 November 2026, U5)", () => {
     const g = war('JAP');
     declareWar(g, 'JAP', 'USA');
     // (By hand: the play start has no offers, and the row is opened as its month would open it.)
@@ -237,7 +237,7 @@ describe("an offered formation whose island has no room for it (the offers page,
 });
 
 describe("a group march onto an island that takes some of it", () => {
-  it("tells the corps that stayed for the island's room the island's line for their own men; refused whole, the group's (the words sceptic's lean until the UI director rules)", () => {
+  it("tells the corps that stayed for the island's room the island's line for their own men; refused whole, the group's (the UI director, 00:19Z, 27 November 2026, U3 and U6)", () => {
     const g = war('USA');
     const pearl = at(g, 'Pearl Harbor'), hon = at(g, 'Honolulu');
     expect(pearl.nb).toContain(hon.id);
@@ -273,6 +273,14 @@ describe("the comments and test titles of the island's room cite the rulings the
       src.split('\n').forEach((line: string, i: number) => { for (const re of stale) if (re.test(line)) bad.push(`${f}:${i + 1}: ${line.trim()}`); });
     }
     expect(bad).toEqual([]);
+    // (A lean the UI director has since answered, 00:19Z, 27 November 2026, U1 to U8, is cited as hers, never as
+    // laid until she rules: read in every file, this one too, but for the line that names them.)
+    const answered = [/lean until the UI director rules/, /laid until the UI director\s*$/, /laid until the UI director rules/, /leans until she rules/];
+    const open: string[] = [];
+    for (const [f, src] of Object.entries(files)) {
+      src.split('\n').forEach((line: string, i: number) => { if (!/const answered/.test(line)) for (const re of answered) if (re.test(line)) open.push(`${f}:${i + 1}: ${line.trim()}`); });
+    }
+    expect(open).toEqual([]);
     const isl = Object.entries(files).find(([f]) => f.endsWith('/campaign/islands.ts'))![1];
     // (Read across the comment's line breaks.)
     const flat = isl.replace(/\n\s*(\*|\/\/)\s*/g, ' ');
