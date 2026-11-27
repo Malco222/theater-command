@@ -917,7 +917,9 @@ namespace
 		// 26 November 2026, 17:56Z): it stays large, half as big again as the captor's mark at its real size at most,
 		// and with the word off she is laid as before (no place of her own kept, as ever). Her rulings of 18:22Z: her
 		// back plate's mark by her sides' rule ("one tank, one size on her upright plates"), her roof's an air mark of
-		// 0.6 m across at most; and each is painted onto her skin, not laid flat before it.
+		// 0.6 m across at most; and each is painted onto her skin, not laid flat before it. Her ruling of 27 November
+		// 2026: under a quarter of a metre across NO back mark (the T-34's 0.20 and the light tank's 0.17 were specks
+		// low in a corner; both tanks' turret marks show from behind).
 		{
 			struct Taken
 			{
@@ -925,12 +927,12 @@ namespace
 				const char* Captor;
 				const char* From;
 				double Wide; // (half as big again as the captor's mark at its real size, metres across)
-				bool bBack;  // (her back plate takes a captor's mark by her sides' rule)
+				bool bBack;  // (her back plate takes a captor's mark by her sides' rule, a quarter of a metre across or more; else none)
 				bool bRoof;  // (her roof takes an air mark)
 			};
-			for (const Taken& K : { Taken{ "T34", "GER", "SOV", 0.375, true, true }, Taken{ "Sherman", "GER", "USA", 0.375, true, true },
+			for (const Taken& K : { Taken{ "T34", "GER", "SOV", 0.375, false, true }, Taken{ "Sherman", "GER", "USA", 0.375, true, true },
 					 Taken{ "PanzerIV", "USA", "GER", 0.5715, true, true }, Taken{ "PanzerIV", "SOV", "GER", 0.45, true, true },
-					 Taken{ "Tiger", "USA", "GER", 0.5715, true, true }, Taken{ "LightTank", "GER", "UK", 0.375, true, true } })
+					 Taken{ "Tiger", "USA", "GER", 0.5715, true, true }, Taken{ "LightTank", "GER", "UK", 0.375, false, true } })
 			{
 				std::string Text, Error;
 				if (!ReadFile(Content + "/Models/Battle/" + K.Model + ".json", Text))
@@ -1023,9 +1025,13 @@ namespace
 					{
 						Why = "a captor's roof mark over 0.6 m across";
 					}
-					else if ((Back > 0.0 && Back <= 0.05) || (Roof > 0.0 && Roof <= 0.05))
+					else if (Roof > 0.0 && Roof <= 0.05)
 					{
-						Why = "a captor's back or roof mark that is a speck (10 cm across or less)";
+						Why = "a captor's roof mark that is a speck (10 cm across or less)";
+					}
+					else if (Back > 0.0 && 2.0 * Back < 0.25 - 1e-6)
+					{
+						Why = "a captor's back mark under a quarter of a metre across";
 					}
 					else if (Under > 0)
 					{
@@ -1034,6 +1040,10 @@ namespace
 					else if (K.bBack && Back <= 0.0)
 					{
 						Why = "her back plate carries no captor's mark";
+					}
+					else if (!K.bBack && Back > 0.0)
+					{
+						Why = "her back plate carries a captor's mark where it takes none of a quarter of a metre";
 					}
 					else if (K.bRoof && Roof <= 0.0)
 					{
