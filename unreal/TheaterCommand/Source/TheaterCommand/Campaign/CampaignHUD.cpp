@@ -20493,6 +20493,10 @@ namespace
 			FLandLive::FlipFromCommandLine();
 			for (int32 Index = 0; Index < FLandLive::RuleCount(); ++Index)
 			{
+				if (!FLandLive::RuleDrawn(Index))
+				{
+					continue; // (a row whose piece is not in this build is not drawn: FLandLive::RuleDrawn)
+				}
 				const FLandLive::FRule& Rule = FLandLive::RuleAt(Index);
 				Body->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 				[

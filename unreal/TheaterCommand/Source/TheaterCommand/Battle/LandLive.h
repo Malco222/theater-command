@@ -61,6 +61,10 @@ public:
 	/** Whether the rule named Key is on for the next battle: as he left it on the Battle rules card, or for one run on the command line. */
 	static bool RuleNow(const TCHAR* Key);
 	static int32 RuleCount();
+	/** Whether the row is drawn on the Battle rules card on this build. A row wired with nothing behind it, or an early
+	 * copy of its piece, is not drawn and reaches the land rules as off, until its piece lands (the design director,
+	 * 27 November 2026, 04:52Z and 05:04Z: an Options switch ships only with its piece's code). */
+	static bool RuleDrawn(int32 Index);
 	static const FRule& RuleAt(int32 Index);
 	/** Whether the player has it on (his settings; on when never set). The command line's off is not counted here. */
 	static bool RuleOn(int32 Index);

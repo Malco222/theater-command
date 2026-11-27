@@ -302,6 +302,23 @@ int32 FLandLive::RuleCount()
 	return UE_ARRAY_COUNT(LandRuleTable);
 }
 
+bool FLandLive::RuleDrawn(int32 Index)
+{
+	// (The Play top-up, 27 November 2026. On this tree these four rows are wired with nothing behind them, or an early
+	// copy: on, the field draws exactly what off draws (the tank and soldier AI thread's read of 04:56Z; tankmg's
+	// drill.json block is a heading only). Their pieces are on the pass-2 line, rows off, and come with their code.)
+	static const TCHAR* const NotDrawn[] = { TEXT("seasoned"), TEXT("leaders"), TEXT("tankmind"), TEXT("tankmg") };
+	const TCHAR* const RowKey = RuleAt(Index).Key;
+	for (const TCHAR* const Key : NotDrawn)
+	{
+		if (FCString::Strcmp(RowKey, Key) == 0)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
 const FLandLive::FRule& FLandLive::RuleAt(int32 Index)
 {
 	return LandRuleTable[FMath::Clamp(Index, 0, RuleCount() - 1)];
@@ -381,6 +398,11 @@ void FLandLive::FlipFromCommandLine()
 			UE_LOG(LogTheater, Warning, TEXT("Battle rules card: no switch called \"%s\" to click"), *Key);
 			continue;
 		}
+		if (!RuleDrawn(Found))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Battle rules card: \"%s\" is not on the card in this build (its piece is not in it): not clicked"), *Key);
+			continue;
+		}
 		FlipRule(Found);
 	}
 }
@@ -406,7 +428,7 @@ bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, b
 		{
 			continue; // (the air battles' own switches, on the same card: flyLive, flyTroops, flyDefend, flySteadyEye, flyBoxKeep, noseArt, unitColours, b17Fine and those to come; the campaign and the air battle read them, the land rules never do)
 		}
-		const bool bOn = RuleNow(LandRuleTable[R].Key);
+		const bool bOn = RuleDrawn(R) && RuleNow(LandRuleTable[R].Key); // (a row not drawn on the card is off: RuleDrawn)
 		Switches += FString::Printf(TEXT(",\"%s\":%s"), LandRuleTable[R].Key, bOn ? TEXT("true") : TEXT("false"));
 	}
 	Thread = FRunnableThread::Create(this, TEXT("TheaterLandRules"), 0, TPri_Normal);
