@@ -26,7 +26,14 @@ const ROWS = (setup as any).expeditions as any[];
 let added = 0;
 afterEach(() => { while (added > 0) { ROWS.pop(); added--; } });
 const addRow = (row: any[]): number => { ROWS.push(row); added++; return ROWS.length - 1; };
-const month = (g: Game, t: number): void => { g.turn = t; startPhase(g, 'GER'); };
+/**
+ * (The contact rule's second form, the design director's ruling of 06:10Z, 26 November 2026: a corps beside the enemy
+ * is held while it took part in the battle last resolved on its ground, or where nobody of its side keeps its province.
+ * This board's corps at the front stand with others of their side, so each is set, by hand, as having fought the battle
+ * last resolved where it stands, and is held as the board means. The relieved case: tests/contact-fact.test.ts.)
+ */
+const fought = (g: Game): void => { if (g.flags.fromWait !== 1) return; g.lastBattle = {}; for (const c of g.corps) if (!c.dead) (g.lastBattle[c.reg] ??= []).push(c.id); };
+const month = (g: Game, t: number): void => { fought(g); g.turn = t; startPhase(g, 'GER'); };
 const said = (g: Game, t: number): string[] => g.headlines.filter((h) => h.turn === t && h.nat === 'GER' && /Test/.test(h.text)).map((h) => h.text);
 const tel = (g: Game, i: number): string[] => Object.keys(g.flags).filter((k) => /^row[A-Za-z]+:/.test(k) && k.split(':')[1] === String(i));
 const wall = (g: Game): string[] => g.stories.fallen.map((f) => `${f.nat} ${f.name} ${f.turn} ${f.how}`);
@@ -204,6 +211,7 @@ describe('the wall read from the month the row was told', () => {
     const c = addCorps(g, 'GER', 'Test Corps', 'inf', 2, g.byName.Grenzmark.id, {});
     const s = addCorps(g, 'GER', 'Second Test Corps', 'inf', 2, g.byName.Saar.id, {});
     const k = addCorps(g, 'GER', 'Keep Test Corps', 'inf', 2, g.byName.Bavaria.id, {});
+    fought(g);
     expect(corpsInContact(g, 'GER', s)).toBe(true);
     const i = addRow([2, 'GER', 'Test Army', 'inf', 2, 'Magdeburg', { from: ['Test Corps', 'Second Test Corps'] }]);
     month(g, 2);

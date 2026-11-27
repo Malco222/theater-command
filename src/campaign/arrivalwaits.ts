@@ -17,13 +17,16 @@
  *                 formed headline names them.
  *   rowId:<i>:<k> the id of the corps at the front that bit k of rowFront names, so that a corps renamed while the row
  *                 waits is known under its new name and never called lost (the sceptic's T2-3).
+ *   rowPlace:<i>  the province the row was held at because it is not in friendly hands (game.ts `expeditions`, the place
+ *                 line; no `wait:<i>` is written for it), told once in a headline: the report card's line and the formed
+ *                 headline's "now in friendly hands" read it. The UI director's section 9, 12:48Z, 26 November 2026.
  * All of them are cleared wherever the row is sent or struck (`rowDone`), and where its nation leaves the war for good
  * (`nationDone`), and only there (the switch turned off keeps them until then). With the switch off none is ever
  * written and nothing prints.
  */
 import setup from '../../data/campaign/setup-1939.json';
 import { turnToDate } from '../core/ticket';
-import { atFrontNow, headline, rowHolds, theWords } from './game';
+import { allied, atFrontNow, headline, rowHolds, theWords } from './game';
 import { contactRuleActs, stopOf } from './history';
 import type { Corps, Game, Region } from './types';
 
@@ -32,6 +35,7 @@ const toldKey = (i: number): string => `rowTold:${i}`;
 const atKey = (i: number): string => `rowAt:${i}`;
 const frontKey = (i: number): string => `rowFront:${i}`;
 const idKey = (i: number, k: number): string => `rowId:${i}:${k}`;
+const placeKey = (i: number): string => `rowPlace:${i}`;
 
 /**
  * The article a name takes in the telling's own sentences: none where it opens with "the", is an "X Force" or is
@@ -56,8 +60,8 @@ const fromOf = (row: any[]): string[] => (Array.isArray(row?.[6]?.from) ? (row[6
 /** The named corps of the row standing on the board, in the order the row names them. */
 const present = (g: Game, nat: string, from: string[]): Corps[] => g.corps.filter((x) => x.nat === nat && !x.dead && from.includes(x.name));
 const inOrder = (from: string[], cs: Corps[]): Corps[] => [...cs].sort((a, b) => from.indexOf(a.name) - from.indexOf(b.name));
-const holdsNow = (g: Game, nat: string, from: string[], at: number | undefined): { front: Corps[]; unformed: string[] } => {
-  const h = rowHolds(g, nat, from, at);
+const holdsNow = (g: Game, nat: string, from: string[], at: number | undefined, i: number): { front: Corps[]; unformed: string[] } => {
+  const h = rowHolds(g, nat, from, at, i);
   return { front: inOrder(from, h.front), unformed: h.unformed };
 };
 
@@ -124,7 +128,7 @@ export function tellWait(g: Game, i: number, at: Region | undefined): void {
   const row = ROWS()[i];
   if (!row || g.flags.fromWait !== 1 || !g.human || row[1] !== g.human || !at) return;
   const nat = row[1] as string, from = fromOf(row);
-  const { front, unformed } = holdsNow(g, nat, from, at.id);
+  const { front, unformed } = holdsNow(g, nat, from, at.id, i);
   // (Kept across the waiting months, not replaced: a row that waited on the front and then only for another row still
   // gets section 4's headline. The UI director's section 7, case 6: "It closes the wait he was told of, and it is true:
   // the corps did leave the front.")
@@ -138,6 +142,38 @@ export function tellWait(g: Game, i: number, at: Region | undefined): void {
   if (line) headline(g, 'info', line, nat, at.id);
 }
 
+/**
+ * The headline the month a row's hold for its place begins (the UI director's section 9, 12:48Z, 26 November 2026, in
+ * the game's own words for a place, "is not in friendly hands"; the holder named, the place said once): "{The 12th
+ * Army (62nd Division)} is due in {Kaifeng} this month, but {China} holds it, so the arrival waits until it is in
+ * friendly hands." Null where nobody holds it to be named.
+ */
+export function placeHeldLine(g: Game, rowName: string, at: Region): string | null {
+  const holder = at.ctrl ? g.nations[at.ctrl] : undefined;
+  if (!holder) return null;
+  return `${named(rowName, true)} is due in ${at.name} this month, but ${holder.name} holds it, so the arrival waits until it is in friendly hands.`;
+}
+
+/**
+ * game.ts `expeditions`, the place line: a row that takes named corps whole has passed every other hold this month and
+ * is held because its place is not in friendly hands (the design director's 06:10Z, 26 November 2026: "Tell the
+ * maker's hold for its place like any wait"; the telling reads its own flags, so no `wait:<i>` is written). In the
+ * telling's scope as the caller reads it, for the player's own row alone: the headline once, in the month the hold for
+ * that place begins, and the flags the report card and the formed headline read. A row first told of another cause
+ * keeps that month as the month it has waited since. A lost place together with another cause in one month never
+ * reaches here: the other cause holds the row first and is told as today (her section 9: not worded).
+ */
+export function tellPlace(g: Game, i: number, at: Region): void {
+  const row = ROWS()[i];
+  if (!row || g.flags.fromWait !== 1 || !g.human || row[1] !== g.human) return;
+  g.flags[atKey(i)] = at.id;
+  if (g.flags[toldKey(i)] === undefined) g.flags[toldKey(i)] = g.turn;
+  if (g.flags[placeKey(i)] === at.id) return;
+  g.flags[placeKey(i)] = at.id;
+  const line = placeHeldLine(g, row[2], at);
+  if (line) headline(g, 'info', line, row[1], at.id);
+}
+
 // ---- 4 and 5. The month it forms -----------------------------------------------------------------------------------
 
 /**
@@ -147,7 +183,7 @@ export function tellWait(g: Game, i: number, at: Region | undefined): void {
  * has read them (`formedLine` calls it itself); a row that never waited has none, and nothing changes.
  */
 export function rowDone(g: Game, i: number): void {
-  delete g.flags[toldKey(i)]; delete g.flags[atKey(i)]; delete g.flags[frontKey(i)];
+  delete g.flags[toldKey(i)]; delete g.flags[atKey(i)]; delete g.flags[frontKey(i)]; delete g.flags[placeKey(i)];
   fromOf(ROWS()[i]).forEach((_, k) => { delete g.flags[idKey(i, k)]; });
 }
 
@@ -162,7 +198,7 @@ export function rowDone(g: Game, i: number): void {
 export function nationDone(g: Game, nat: string): void {
   ROWS().forEach((row, i) => {
     if (row?.[1] !== nat) return;
-    const told = [toldKey(i), atKey(i), frontKey(i), ...fromOf(row).map((_, k) => idKey(i, k))].some((k) => g.flags[k] !== undefined);
+    const told = [toldKey(i), atKey(i), frontKey(i), placeKey(i), ...fromOf(row).map((_, k) => idKey(i, k))].some((k) => g.flags[k] !== undefined);
     if (told) rowDone(g, i);
   });
 }
@@ -216,7 +252,7 @@ export function waitedOn(g: Game, i: number, at: number | undefined): WaitedOn |
     if (!x && !onWall(g, row[1], name, g.flags[toldKey(i)])) return null;
     // (The rule's own test for the front, the forming place not set apart: game.ts `atFrontNow`.)
     if (!x) out.lost.push(name);
-    else if (!atFrontNow(g, row[1], x)) out.left.push(name);
+    else if (!atFrontNow(g, row[1], x, from)) out.left.push(name);
     else if (x.reg === at) out.stands.push(name);
     else return null;
   }
@@ -228,16 +264,22 @@ export function waitedOn(g: Game, i: number, at: number | undefined): WaitedOn |
  * today's bare line ("{row} has landed at {place}."), `after` is said after a row's own news or its general's line.
  * Null where the telling has nothing to say and today's line stands. Clears the row's telling flags: it has formed.
  * `own` is true where the row came with men of its own while its corps were at the front, in the telling's scope.
+ * `acts` is true where the rule acts for the row this month (game.ts `inFight`): then a row held for its place
+ * (`rowPlace`) that forms there takes the place's clause after the place, the UI director's section 9, 12:48Z, 26
+ * November 2026: "{The 12th Army (62nd Division)} has arrived in {Kaifeng}, now in friendly hands." with the "formed
+ * from ..." clause following as now. A row that comes without its corps at the front (`own`) is a lost place together
+ * with another cause, not worded: its line is today's.
  */
-export function formedLine(g: Game, i: number, was: WaitedOn | null, own: boolean, c: Corps, reg: Region, bySea: boolean): { alone: string | null; after: string | null } | null {
+export function formedLine(g: Game, i: number, was: WaitedOn | null, own: boolean, c: Corps, reg: Region, bySea: boolean, acts = false): { alone: string | null; after: string | null } | null {
   const row = ROWS()[i];
+  const held = acts && g.flags[placeKey(i)] === reg.id;
   rowDone(g, i);
   if (!row || !g.human || row[1] !== g.human) return null;
   const verb = bySea ? 'landed at' : 'arrived in';
-  const head = `${named(c.name, true)} has ${verb} ${reg.name}`;
+  const head = `${named(c.name, true)} has ${verb} ${reg.name}${held && !own ? ', now in friendly hands' : ''}`;
   if (own) {
     const from = fromOf(row);
-    const { front } = holdsNow(g, row[1], from, reg.id);
+    const { front } = holdsNow(g, row[1], from, reg.id, i);
     const here = present(g, row[1], from);
     // (Every corps it leaves, and which of them is at the front: the words cover all of them at the front.)
     if (!front.length || front.length !== here.length) return null;
@@ -247,9 +289,9 @@ export function formedLine(g: Game, i: number, was: WaitedOn | null, own: boolea
       : `${head} without ${join(front.map((x) => `your ${x.name}`))}, which are at the front in ${join([...new Set(front.map((x) => placeOf(g, x)))])} and stay corps of their own.`;
     return { alone, after: null };
   }
-  if (!was) return null;
-  const tail = formedTail(was, c.name);
-  return tail ? { alone: `${head}, ${tail}`, after: `The arrival is ${tail}` } : null;
+  const tail = was ? formedTail(was, c.name) : null;
+  if (!tail) return held ? { alone: `${head}.`, after: null } : null;
+  return { alone: `${head}, ${tail}`, after: `The arrival is ${tail}` };
 }
 
 /**
@@ -344,7 +386,7 @@ export function arrivalWaitOf(g: Game, c: Corps): { short: string; whole: string
   if (c.dead || g.flags.fromWait !== 1 || c.nat !== g.human) return null;
   for (const w of waiting(g, c.nat)) {
     if (!w.from.includes(c.name)) continue;
-    const { front, unformed } = holdsNow(g, c.nat, w.from, w.at);
+    const { front, unformed } = holdsNow(g, c.nat, w.from, w.at, w.i);
     if (!front.includes(c)) continue;
     const others = front.filter((x) => x !== c).map((x) => named(x.name));
     const since = turnToDate(w.since).label;
@@ -361,14 +403,25 @@ export function arrivalWaitOf(g: Game, c: Corps): { short: string; whole: string
 
 /**
  * The month's report card (section 2): for each waiting row of the player's that waits only for another row to form,
- * and so has no corps to carry it, one muted line, every month it waits.
+ * or only for its place to be in friendly hands (section 9), and so has no corps to carry it, one muted line, every
+ * month it waits.
  */
 export function rowsWaitingOnRows(g: Game, nat: string | null): string[] {
   if (!nat) return [];
   const out: string[] = [];
   for (const w of waiting(g, nat)) {
-    const { front, unformed } = holdsNow(g, nat, w.from, w.at);
-    if (front.length || !unformed.length) continue;
+    const { front, unformed } = holdsNow(g, nat, w.from, w.at, w.i);
+    if (front.length) continue;
+    if (!unformed.length) {
+      // (A row held for its place has no corps to carry it either: the UI director's section 9, 12:48Z, 26 November
+      // 2026, "the month's report card carries it, muted, as a row that waits for another row does". Read from the
+      // board as it stands: the line goes once the place is in friendly hands. With a corps at the front or a row not
+      // formed as well, that cause is told as today and this line is not: a lost place with another cause is not worded.)
+      const p = g.flags[placeKey(w.i)];
+      const place = p === undefined ? undefined : g.regions[p];
+      if (place && !allied(g, nat, place.ctrl)) out.push(theWords(`${named(w.row[2], true)}, due in ${place.name} since ${turnToDate(w.since).label}, waits until ${place.name} is in friendly hands.`));
+      continue;
+    }
     // (Its month as the UI director's section 7, case 8, gives it: "has waited since {month}".)
     out.push(theWords(`${named(w.row[2], true)}, due in ${g.regions[w.at].name}, has waited since ${turnToDate(w.since).label} for ${join(unformed.map((x) => named(x)))}, which ${hasOrHave(unformed)} not formed yet.`));
   }
@@ -418,5 +471,7 @@ export function setFromWait(g: Game, on: boolean): boolean {
   if (g.flags.open !== 1) return false;
   if (on) { g.flags.fromWait = 1; return true; }
   delete g.flags.fromWait;
+  // (The battle record is the switch's own: a war switched off holds none, and on again starts from an empty one.)
+  delete g.lastBattle;
   return true;
 }

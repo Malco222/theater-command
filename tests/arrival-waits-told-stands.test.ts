@@ -20,7 +20,14 @@ import type { Corps, Game } from '../src/campaign/types';
 const ROWS = (setup as any).expeditions as any[];
 let added = 0;
 afterEach(() => { while (added > 0) { ROWS.pop(); added--; } });
-const month = (g: Game, t: number): void => { g.turn = t; startPhase(g, 'GER'); };
+/**
+ * (The contact rule's second form, the design director's ruling of 06:10Z, 26 November 2026: a corps beside the enemy
+ * is held while it took part in the battle last resolved on its ground, or where nobody of its side keeps its province.
+ * This board's corps at the front stand with others of their side, so each is set, by hand, as having fought the battle
+ * last resolved where it stands, and is held as the board means. The relieved case: tests/contact-fact.test.ts.)
+ */
+const fought = (g: Game): void => { if (g.flags.fromWait !== 1) return; g.lastBattle = {}; for (const c of g.corps) if (!c.dead) (g.lastBattle[c.reg] ??= []).push(c.id); };
+const month = (g: Game, t: number): void => { fought(g); g.turn = t; startPhase(g, 'GER'); };
 const said = (g: Game, t: number): string[] => g.headlines.filter((h) => h.turn === t && h.nat === 'GER' && /Test|Hans/.test(h.text)).map((h) => h.text);
 
 /** Germany's corps `names` at the front in the Saar, and a row of month 2 taking them whole in the Grenzmark. */
@@ -31,7 +38,7 @@ function board(rowName: string, names: string[], opts: Record<string, unknown> =
   ROWS.push([2, 'GER', rowName, 'inf', 2, 'Grenzmark', { from: names, ...opts }]); added++;
   return { g, cs, i: ROWS.length - 1 };
 }
-const into = (g: Game, c: Corps): void => { relocate(g, c, g.byName.Grenzmark); expect(corpsInContact(g, 'GER', c)).toBe(true); };
+const into = (g: Game, c: Corps): void => { relocate(g, c, g.byName.Grenzmark); fought(g); expect(corpsInContact(g, 'GER', c)).toBe(true); };
 
 describe('section 8 point 2: the corps stands at the front in the province the row forms in', () => {
   it('one corps (R3): "formed from your Test Corps, now that it stands there"', () => {

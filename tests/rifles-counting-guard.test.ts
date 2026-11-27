@@ -23,7 +23,8 @@ import { startOpen } from '../src/campaign/staff';
 const RULING = "the design director's 14:07Z of 26 November 2026 (Q2): a counting-only rifles row (binds: false) waits on the mend that carries its corps' armed level the same way as a binding row's; until then no data row may be counting-only (on the known list)";
 
 declare global {
-  interface ImportMeta { glob: (pattern: string, options: { eager: true; import: 'default' }) => Record<string, unknown> }
+  // (A method, not a property, so it stands beside the other test files' own declaration of Vite's glob as one more overload.)
+  interface ImportMeta { glob(pattern: string, options: { eager: true; import: 'default' }): Record<string, unknown> }
 }
 /** Every data file, by its path, read whole (vite's own glob, as the test runner gives it). */
 const DATA = import.meta.glob('../data/campaign/*.json', { eager: true, import: 'default' });

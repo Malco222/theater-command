@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e530bd802 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f142aa32e 2026-11-26. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -43550,6 +43550,7 @@
   var atKey = (i) => `rowAt:${i}`;
   var frontKey = (i) => `rowFront:${i}`;
   var idKey = (i, k) => `rowId:${i}:${k}`;
+  var placeKey = (i) => `rowPlace:${i}`;
   var theOf = (name) => /^(the |[A-Z] Force|Creforce)/i.test(name) || /Force$/.test(name.split("(")[0].trim()) ? "" : "the ";
   var named3 = (name, head = false) => {
     const a = theOf(name);
@@ -43562,8 +43563,8 @@
   var fromOf = (row2) => Array.isArray(row2?.[6]?.from) ? row2[6].from : [];
   var present = (g2, nat, from2) => g2.corps.filter((x) => x.nat === nat && !x.dead && from2.includes(x.name));
   var inOrder = (from2, cs) => [...cs].sort((a, b) => from2.indexOf(a.name) - from2.indexOf(b.name));
-  var holdsNow = (g2, nat, from2, at4) => {
-    const h = rowHolds(g2, nat, from2, at4);
+  var holdsNow = (g2, nat, from2, at4, i) => {
+    const h = rowHolds(g2, nat, from2, at4, i);
     return { front: inOrder(from2, h.front), unformed: h.unformed };
   };
   var hasOrHave = (xs) => xs.length === 1 ? "has" : "have";
@@ -43601,7 +43602,7 @@
     const row2 = ROWS()[i];
     if (!row2 || g2.flags.fromWait !== 1 || !g2.human || row2[1] !== g2.human || !at4) return;
     const nat = row2[1], from2 = fromOf(row2);
-    const { front, unformed } = holdsNow(g2, nat, from2, at4.id);
+    const { front, unformed } = holdsNow(g2, nat, from2, at4.id, i);
     let mask = g2.flags[frontKey(i)] ?? 0;
     for (const c of front) {
       const k = from2.indexOf(c.name);
@@ -43616,10 +43617,26 @@
     const line = waitBeginsLine(g2, nat, row2[2], at4.name, from2, front, unformed);
     if (line) headline(g2, "info", line, nat, at4.id);
   }
+  function placeHeldLine(g2, rowName, at4) {
+    const holder = at4.ctrl ? g2.nations[at4.ctrl] : void 0;
+    if (!holder) return null;
+    return `${named3(rowName, true)} is due in ${at4.name} this month, but ${holder.name} holds it, so the arrival waits until it is in friendly hands.`;
+  }
+  function tellPlace(g2, i, at4) {
+    const row2 = ROWS()[i];
+    if (!row2 || g2.flags.fromWait !== 1 || !g2.human || row2[1] !== g2.human) return;
+    g2.flags[atKey(i)] = at4.id;
+    if (g2.flags[toldKey(i)] === void 0) g2.flags[toldKey(i)] = g2.turn;
+    if (g2.flags[placeKey(i)] === at4.id) return;
+    g2.flags[placeKey(i)] = at4.id;
+    const line = placeHeldLine(g2, row2[2], at4);
+    if (line) headline(g2, "info", line, row2[1], at4.id);
+  }
   function rowDone(g2, i) {
     delete g2.flags[toldKey(i)];
     delete g2.flags[atKey(i)];
     delete g2.flags[frontKey(i)];
+    delete g2.flags[placeKey(i)];
     fromOf(ROWS()[i]).forEach((_, k) => {
       delete g2.flags[idKey(i, k)];
     });
@@ -43627,7 +43644,7 @@
   function nationDone(g2, nat) {
     ROWS().forEach((row2, i) => {
       if (row2?.[1] !== nat) return;
-      const told2 = [toldKey(i), atKey(i), frontKey(i), ...fromOf(row2).map((_, k) => idKey(i, k))].some((k) => g2.flags[k] !== void 0);
+      const told2 = [toldKey(i), atKey(i), frontKey(i), placeKey(i), ...fromOf(row2).map((_, k) => idKey(i, k))].some((k) => g2.flags[k] !== void 0);
       if (told2) rowDone(g2, i);
     });
   }
@@ -43647,29 +43664,30 @@
       if (x && id !== void 0 && x.id !== id) return null;
       if (!x && !onWall(g2, row2[1], name, g2.flags[toldKey(i)])) return null;
       if (!x) out.lost.push(name);
-      else if (!atFrontNow(g2, row2[1], x)) out.left.push(name);
+      else if (!atFrontNow(g2, row2[1], x, from2)) out.left.push(name);
       else if (x.reg === at4) out.stands.push(name);
       else return null;
     }
     return out;
   }
-  function formedLine(g2, i, was, own, c, reg, bySea) {
+  function formedLine(g2, i, was, own, c, reg, bySea, acts = false) {
     const row2 = ROWS()[i];
+    const held3 = acts && g2.flags[placeKey(i)] === reg.id;
     rowDone(g2, i);
     if (!row2 || !g2.human || row2[1] !== g2.human) return null;
     const verb = bySea ? "landed at" : "arrived in";
-    const head = `${named3(c.name, true)} has ${verb} ${reg.name}`;
+    const head = `${named3(c.name, true)} has ${verb} ${reg.name}${held3 && !own ? ", now in friendly hands" : ""}`;
     if (own) {
       const from2 = fromOf(row2);
-      const { front } = holdsNow(g2, row2[1], from2, reg.id);
+      const { front } = holdsNow(g2, row2[1], from2, reg.id, i);
       const here = present(g2, row2[1], from2);
       if (!front.length || front.length !== here.length) return null;
       const alone = front.length === 1 ? `${head} without your ${front[0].name}, which is at the front in ${placeOf3(g2, front[0])} and stays a corps of its own.` : `${head} without ${join(front.map((x) => `your ${x.name}`))}, which are at the front in ${join([...new Set(front.map((x) => placeOf3(g2, x)))])} and stay corps of their own.`;
       return { alone, after: null };
     }
-    if (!was) return null;
-    const tail = formedTail(was, c.name);
-    return tail ? { alone: `${head}, ${tail}`, after: `The arrival is ${tail}` } : null;
+    const tail = was ? formedTail(was, c.name) : null;
+    if (!tail) return held3 ? { alone: `${head}.`, after: null } : null;
+    return { alone: `${head}, ${tail}`, after: `The arrival is ${tail}` };
   }
   function joinedLine(g2, i, was, joined3, place3) {
     const row2 = ROWS()[i];
@@ -43714,7 +43732,7 @@
     if (c.dead || g2.flags.fromWait !== 1 || c.nat !== g2.human) return null;
     for (const w of waiting2(g2, c.nat)) {
       if (!w.from.includes(c.name)) continue;
-      const { front, unformed } = holdsNow(g2, c.nat, w.from, w.at);
+      const { front, unformed } = holdsNow(g2, c.nat, w.from, w.at, w.i);
       if (!front.includes(c)) continue;
       const others = front.filter((x) => x !== c).map((x) => named3(x.name));
       const since = turnToDate(w.since).label;
@@ -43730,8 +43748,14 @@
     if (!nat) return [];
     const out = [];
     for (const w of waiting2(g2, nat)) {
-      const { front, unformed } = holdsNow(g2, nat, w.from, w.at);
-      if (front.length || !unformed.length) continue;
+      const { front, unformed } = holdsNow(g2, nat, w.from, w.at, w.i);
+      if (front.length) continue;
+      if (!unformed.length) {
+        const p = g2.flags[placeKey(w.i)];
+        const place3 = p === void 0 ? void 0 : g2.regions[p];
+        if (place3 && !allied(g2, nat, place3.ctrl)) out.push(theWords(`${named3(w.row[2], true)}, due in ${place3.name} since ${turnToDate(w.since).label}, waits until ${place3.name} is in friendly hands.`));
+        continue;
+      }
       out.push(theWords(`${named3(w.row[2], true)}, due in ${g2.regions[w.at].name}, has waited since ${turnToDate(w.since).label} for ${join(unformed.map((x) => named3(x)))}, which ${hasOrHave(unformed)} not formed yet.`));
     }
     return out;
@@ -43755,6 +43779,7 @@
       return true;
     }
     delete g2.flags.fromWait;
+    delete g2.lastBattle;
     return true;
   }
 
@@ -71276,7 +71301,7 @@
     const list6 = arm2 ? read2.map((m) => m[1]) : items;
     return `${list6.slice(0, -1).join(", ")} and ${list6[list6.length - 1]}${arm2 ? ` ${arm2}` : ""} Divisions`;
   }
-  function heldAlready(g2, nat, row2, o, n, reg, home, skip, busy) {
+  function heldAlready(g2, nat, row2, o, n, reg, home, skip, busy, leavingNow = NO_LEAVING) {
     const names = divisionsNamed(row2[2], nat, row2[3]).slice(0, n);
     const count4 = countingFor(g2, nat, row2)?.from;
     if (!names.length && !count4) return [];
@@ -71297,13 +71322,15 @@
       return held3.get(name);
     };
     const k = g2.byName[row2[5]]?.theatre ?? -1;
-    const fighting3 = (c) => contactRuleActs(g2, g2.byName[row2[5]]) && corpsInContact(g2, nat, c);
-    const stays = (c) => home || nat === g2.human || afloat2.has(c) || c.reg === reg.id || k >= 0 && g2.regions[c.reg].theatre === k || busy(c) || fighting3(c);
+    let gone = NO_LEAVING;
+    const fighting3 = (c) => contactRuleActs(g2, g2.byName[row2[5]]) && corpsInContact(g2, nat, c, gone);
+    const anyway = (c) => home || nat === g2.human || afloat2.has(c) || c.reg === reg.id || k >= 0 && g2.regions[c.reg].theatre === k || busy(c);
+    const stays = (c) => anyway(c) || fighting3(c);
     const was = o.was;
     const out = [];
     names.forEach((name, slot) => {
       const h = holder(name[0]);
-      if (h) out.push({ slot, name, from: h.c, at: h.at, stays: stays(h.c) });
+      if (h) out.push({ slot, name, from: h.c, at: h.at, stays: false });
     });
     names.forEach((name, slot) => {
       const old = !holder(name[0]) ? was?.[name[0]] : void 0;
@@ -71319,7 +71346,7 @@
         out.push({ slot, name, from: null, at: -1, conv: old, stays: true });
         return;
       }
-      out.push({ slot, name, from: h.c, at: h.at, conv: old, stays: stays(h.c) });
+      out.push({ slot, name, from: h.c, at: h.at, conv: old, stays: false });
     });
     if (count4) {
       for (const v of g2.atSea ?? []) if (whole2(v.corps)) afloat2.add(v.corps);
@@ -71334,7 +71361,7 @@
         const places = Array.from({ length: f.divs }, (_, j) => first2 + j).filter((slot) => slot < n && !out.some((q) => q.slot === slot));
         const own = (slot) => names[slot];
         if (of2 !== void 0) {
-          for (const slot of places) out.push({ slot, name: own(slot) ?? ["", ""], from: h, at: -1, stays: stays(h), counted: true, ...own(slot) ? { named: true } : {}, share: { rec: f.record / f.divs, of: of2 } });
+          for (const slot of places) out.push({ slot, name: own(slot) ?? ["", ""], from: h, at: -1, stays: false, counted: true, ...own(slot) ? { named: true } : {}, share: { rec: f.record / f.divs, of: of2 } });
           continue;
         }
         const free2 = divisionsOf(g2, h).filter((d) => !out.some((q) => q.from === h && q.at === d.slot));
@@ -71342,10 +71369,16 @@
         const last = cards.slice(Math.max(0, cards.length - places.length));
         last.forEach((d, j) => {
           const slot = places[j];
-          out.push({ slot, name: own(slot) ?? [d.name, d.short], from: h, at: d.slot, stays: stays(h), counted: true, ...own(slot) ? { named: true } : {} });
+          out.push({ slot, name: own(slot) ?? [d.name, d.short], from: h, at: d.slot, stays: false, counted: true, ...own(slot) ? { named: true } : {} });
         });
       }
     }
+    if (g2.flags.fromWait === 1) {
+      const emptied = new Set(leavingNow);
+      for (const h of new Set(out.map((q) => q.from).filter((x) => !!x))) if (!anyway(h) && out.filter((q) => q.from === h && !q.share).length >= h.divs) emptied.add(h);
+      gone = emptied;
+    }
+    for (const q of out) if (q.from) q.stays = stays(q.from);
     out.sort((a, b) => a.slot - b.slot);
     if (out.length) drawnWatch.tell?.({ turn: g2.turn, nat, row: row2[2], place: row2[5], lands: reg.name, home, divs: n, claims: out.map((q) => ({ name: q.name[0], from: q.from?.name ?? null, id: q.from?.id ?? null, at: q.from ? g2.regions[q.from.reg].name : null, stays: q.stays, conv: q.conv ?? null, share: !!q.share })) });
     return out;
@@ -71354,10 +71387,57 @@
   function ownShare(c) {
     return c.out && c.outOf ? clamp5(1 - c.out / c.outOf) : 1;
   }
-  function corpsInContact(g2, nat, c) {
-    const enemy = (r4) => !!r4.ctrl && atWar(g2, nat, r4.ctrl) || r4.units.some((u) => !u.dead && atWar(g2, nat, u.nat));
+  function recordBattle(g2, at4, who) {
+    (g2.lastBattle ?? (g2.lastBattle = {}))[at4.id] = who.filter((c) => !c.dead).map((c) => c.id);
+  }
+  function carryBattle(g2, from2, to) {
+    if (g2.flags.fromWait !== 1 || !g2.lastBattle) return;
+    for (const k in g2.lastBattle) {
+      const l = g2.lastBattle[k];
+      if (l.includes(from2) && !l.includes(to)) l.push(to);
+    }
+  }
+  function dropBattle(g2, id) {
+    if (!g2.lastBattle) return;
+    for (const k in g2.lastBattle) {
+      const l = g2.lastBattle[k];
+      const j = l.indexOf(id);
+      if (j >= 0) l.splice(j, 1);
+    }
+  }
+  var NO_LEAVING = /* @__PURE__ */ new Set();
+  function enemiesBeside(g2, nat, c, first2 = false) {
+    const out = [];
+    const add = (x) => {
+      if (!out.includes(x)) out.push(x);
+    };
+    const look = (r4) => {
+      if (r4.ctrl && atWar(g2, nat, r4.ctrl)) {
+        add(r4.ctrl);
+        if (first2) return true;
+      }
+      for (const u of r4.units) if (!u.dead && atWar(g2, nat, u.nat)) {
+        add(u.nat);
+        if (first2) return true;
+      }
+      return false;
+    };
     const r = g2.regions[c.reg];
-    return enemy(r) || r.nb.some((j) => enemy(g2.regions[j]));
+    if (look(r) && first2) return out;
+    for (const j of r.nb) if (look(g2.regions[j]) && first2) return out;
+    return out;
+  }
+  function contactRead(g2, nat, c, leaving2 = NO_LEAVING) {
+    const foes = enemiesBeside(g2, nat, c);
+    const r = g2.regions[c.reg];
+    const battle = !c.dead && (g2.lastBattle?.[c.reg]?.includes(c.id) ?? false);
+    const kept4 = foes.length > 0 && foes.every((e) => hostileUnits(g2, r, e).some((u) => u !== c && !u.dead && !leaving2.has(u) && !givesWay(g2, u)));
+    return { beside: foes.length > 0, battle, kept: kept4 };
+  }
+  function corpsInContact(g2, nat, c, leaving2 = NO_LEAVING) {
+    if (g2.flags.fromWait !== 1) return enemiesBeside(g2, nat, c, true).length > 0;
+    const k = contactRead(g2, nat, c, leaving2);
+    return k.beside && (k.battle || !k.kept);
   }
   function keepCounted(claims) {
     for (const q of claims) if (q.counted && q.stays && q.from && q.at >= 0 && !q.share) q.from.kept = (q.from.kept ?? 0) + 1;
@@ -71507,6 +71587,7 @@
       f.apMax = c.apMax;
       f.supplied = c.supplied;
       f.fought = c.fought;
+      carryBattle(g2, c.id, f.id);
       if (c.mor !== void 0) f.mor = c.mor;
       else delete f.mor;
       assemble(g2, f, apart3);
@@ -72187,6 +72268,7 @@
     c.dyle = null;
     c.xp = Math.max((c.nat === g2.human ? raisedXp(g2, c.nat) : 0.05) + campXp(g2, at4.id), c.xp * MANPOWER.fold.xp);
     for (const k of ["dug", "dugFor", "digging", "pressed", "blows", "relief", "yields", "gaveWay", "digs", "joint", "leave", "town", "job", "rival"]) delete c[k];
+    dropBattle(g2, c.id);
     raiseMorale(g2, c);
     reformNames(g2, c);
     g2.corps.push(c);
@@ -77352,13 +77434,14 @@
   }
   var YIELD_ODDS = 1.2;
   var YIELD_ORG = 0.15;
+  var givesWay = (g2, c) => !!c.yields && !c.gaveWay && !isRearguard(g2, c);
   function giveWay(g2, a, attackers2, target) {
     const gone = [];
     if (a.odds < YIELD_ODDS) return gone;
     if (target.cap && a.defenders.some((c) => c.nat === target.owner)) return gone;
     const banned = new Set(attackers2.map((c) => c.reg));
     for (const c of [...a.defenders]) {
-      if (!c.yields || c.gaveWay || isRearguard(g2, c)) continue;
+      if (!givesWay(g2, c)) continue;
       const to = retreatTarget(g2, c, target, banned);
       if (!to) continue;
       const unit = reportUnit(c);
@@ -77757,6 +77840,7 @@
       g2.scars[target.id].mudN = (scar?.mudN ?? 0) + 1;
       g2.scars[target.id].mudLast = g2.turn;
     }
+    if (g2.flags.fromWait === 1) recordBattle(g2, target, [...attackers2, ...defenders]);
     wreckBump(g2, rep);
     capturedKit(g2, rep, target);
     if (aside2) g2.flags.asideBattles = (g2.flags.asideBattles ?? 0) + 1;
@@ -78664,10 +78748,10 @@
       headline(g2, "event", `${N.adj} troops at ${from2.name}, with no road back to their own lines, are taken out by sea to ${to.name}, without their heavy equipment.`, c.nat, from2.id, { arm: "land", lost: c.nat });
     }
   }
-  function draw7(g2, nat, theatre, divs, made2) {
+  function draw7(g2, nat, theatre, divs, made2, held3) {
     const k = THEATRE_LIST.findIndex((t) => t.name === theatre);
     for (let need = divs; k >= 0 && need > 0; ) {
-      const c = g2.corps.filter((x) => x !== made2 && x.nat === nat && !x.dead && !x.hold && x.kind !== "fort" && g2.regions[x.reg].theatre === k && !(made2 && g2.flags[`formed:${x.id}`])).sort((a, b) => b.divs - a.divs || a.id - b.id)[0];
+      const c = g2.corps.filter((x) => x !== made2 && x.nat === nat && !x.dead && !x.hold && x.kind !== "fort" && g2.regions[x.reg].theatre === k && !(made2 && g2.flags[`formed:${x.id}`]) && !held3?.(x)).sort((a, b) => b.divs - a.divs || a.id - b.id)[0];
       if (!c) break;
       const take3 = Math.min(need, c.divs);
       if (take3 >= c.divs) removeCorps(g2, c);
@@ -78789,15 +78873,43 @@
   var aidOf = (c) => AID.get(`${c.nat}|${c.name}`) ?? [];
   var UNLESS = new Set((setup_1939_default.expeditions ?? []).map((row2) => row2[6]?.unless).filter((x) => !!x));
   var rowLanded = (g2, name) => (setup_1939_default.expeditions ?? []).some((row2, i) => row2[2] === name && (g2.flags[`came:${i}`] !== void 0 || g2.flags[`sent:${i}`] === 1));
-  var fromWaits = (g2, nat, from2) => (setup_1939_default.expeditions ?? []).some((r24, j) => r24[1] === nat && from2.includes(r24[2]) && !g2.flags[`sent:${j}`] && g2.flags[`wait:${j}`] !== void 0 && !g2.corps.some((x) => x.nat === nat && !x.dead && x.name === r24[2]));
-  function rowHolds(g2, nat, from2, at4) {
+  var bookWaitsNow = (g2, owner) => g2.flags[`book:${owner}`] === void 0 && !leavingThreat(g2, owner);
+  function rowComes(g2, nat, j) {
+    const row2 = (setup_1939_default.expeditions ?? [])[j];
+    if (!row2 || row2[1] !== nat) return "notYet";
+    if (g2.flags[`sent:${j}`]) return "ended";
+    const { booked: booked2, o } = rowWords(g2, nat, row2);
+    const fromWar = g2.flags.open === 1 && !!o.war && o.after !== void 0;
+    if (!fromWar && g2.turn < row2[0]) return "notYet";
+    if (o.open && g2.flags.open !== 1) return "notYet";
+    if (o.stops && !o.stops.includes(stopOf(g2))) return "notYet";
+    if (shipsItsOwn(g2, nat)) return "notYet";
+    if (g2.flags.open === 1) {
+      const reg = g2.byName[row2[5]];
+      const k = reg ? THEATRE_OF.get(reg.name) ?? -1 : -1;
+      if (k >= 0 && THEATRE_LIST[k].scripted && row2[0] >= (THEATRE_LIST[k].opens ?? 0) && (!booked2 || bookWaitsNow(g2, reg.owner))) return "notYet";
+      if (o.war) {
+        if (!warOn(g2, o.war)) return farRow(g2, nat, row2) && warOver(g2, j, o.war) ? "ended" : "notYet";
+        if (!o.war.includes(nat) && !atWar(g2, nat, o.war[0]) && !atWar(g2, nat, o.war[1])) return "notYet";
+        if (fromWar && g2.flags[`due:${j}`] === void 0 && g2.nations[nat].fellOn) return "ended";
+        const due = g2.flags[`due:${j}`] ?? (fromWar ? Math.max(warBegan(g2, o.war), g2.turn - 1) + o.after : g2.turn);
+        if (g2.turn < due) return "notYet";
+      }
+      if (rowPlace(g2, nat, row2, o, reg).waits) return "notYet";
+    }
+    if (o.until && g2.turn >= o.until) return "ended";
+    return "due";
+  }
+  var fromWaits = (g2, nat, from2, i) => (setup_1939_default.expeditions ?? []).some((r24, j) => j !== i && r24[1] === nat && from2.includes(r24[2]) && rowComes(g2, nat, j) === "due" && !g2.corps.some((x) => x.nat === nat && !x.dead && x.name === r24[2]) && !(g2.atSea ?? []).some((v) => v.corps.nat === nat && !v.corps.dead && v.corps.name === r24[2]));
+  function rowHolds(g2, nat, from2, at4, i) {
     const far = farOn(g2);
+    const gone = g2.flags.fromWait === 1 ? new Set(rowTakes(g2, nat, { from: from2 })) : NO_LEAVING;
     return {
-      front: g2.corps.filter((x) => x.nat === nat && !x.dead && from2.includes(x.name) && (far && onLiveFront(g2, nat, x) || x.reg !== at4 && corpsInContact(g2, nat, x))),
-      unformed: far ? from2.filter((n) => fromWaits(g2, nat, [n])) : []
+      front: g2.corps.filter((x) => x.nat === nat && !x.dead && from2.includes(x.name) && (far && onLiveFront(g2, nat, x) || x.reg !== at4 && corpsInContact(g2, nat, x, gone))),
+      unformed: far ? from2.filter((n) => fromWaits(g2, nat, [n], i)) : []
     };
   }
-  var atFrontNow = (g2, nat, x) => farOn(g2) && onLiveFront(g2, nat, x) || corpsInContact(g2, nat, x);
+  var atFrontNow = (g2, nat, x, from2) => farOn(g2) && onLiveFront(g2, nat, x) || corpsInContact(g2, nat, x, g2.flags.fromWait === 1 ? new Set(rowTakes(g2, nat, { from: from2 })) : NO_LEAVING);
   var generalsThe = (name) => /^(the |[A-Z] Force|Creforce)/i.test(name) ? "" : "the ";
   function carriedRows(g2) {
     const rows = setup_1939_default.expeditions ?? [];
@@ -79208,6 +79320,13 @@
     g2.flags[unmadeKey(id)] = g2.turn;
     return true;
   }
+  function rowWords(g2, nat, row2) {
+    const booked2 = g2.flags.open === 1 && row2[1] === nat && bookRow(g2, nat, g2.byName[row2[5]]);
+    const o00 = booked2 && BOOK.from?.[row2[2]] ? { ...row2[6] ?? {}, from: [...row2[6]?.from ?? [], ...BOOK.from[row2[2]]] } : row2[6] ?? {};
+    const o0 = countedWords(g2, nat, row2, o00);
+    const o = bookOnly(g2, nat, row2[2]) ? { ...o0, hold: 1, stay: 1 } : o0;
+    return { booked: booked2, o };
+  }
   function expeditions(g2, nat, take3) {
     const gone = [], down = [];
     const stood = [];
@@ -79228,10 +79347,7 @@
     (setup_1939_default.expeditions ?? []).forEach((row2, i) => {
       var _a, _b;
       if (take3 !== void 0 && i !== take3) return;
-      const booked2 = g2.flags.open === 1 && row2[1] === nat && bookRow(g2, nat, g2.byName[row2[5]]);
-      const o00 = booked2 && BOOK.from?.[row2[2]] ? { ...row2[6] ?? {}, from: [...row2[6]?.from ?? [], ...BOOK.from[row2[2]]] } : row2[6] ?? {};
-      const o0 = countedWords(g2, nat, row2, o00);
-      const o = bookOnly(g2, nat, row2[2]) ? { ...o0, hold: 1, stay: 1 } : o0;
+      const { booked: booked2, o } = rowWords(g2, nat, row2);
       const fromWar = g2.flags.open === 1 && !!o.war && o.after !== void 0;
       const kept4 = row2[1] !== nat && keptLevy(g2, nat, row2);
       if (row2[1] !== nat && !kept4 || !fromWar && g2.turn < row2[0]) return;
@@ -79310,8 +79426,13 @@
         home = P.home;
       }
       const inFight = g2.flags.fromWait === 1 && contactRuleActs(g2, g2.byName[row2[5]]) && !hisOffers(g2, nat);
+      const leavingNow = g2.flags.fromWait === 1 ? /* @__PURE__ */ new Set([
+        ...rowTakes(g2, nat, o),
+        ...g2.corps.filter((x) => !x.dead && leaving2(x)),
+        ...g2.flags.open === 1 && UNLESS.has(row2[2]) ? setup_1939_default.expeditions.filter((r24) => r24[6]?.unless === row2[2] && r24[1] === nat).map((r24) => g2.corps.find((u) => u.nat === nat && !u.dead && u.name === r24[2])).filter((x) => !!x) : []
+      ]) : NO_LEAVING;
       let own = false;
-      if (Array.isArray(o.from) && !ashore && row2[1] === nat && farOn(g2) && (g2.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && (onLiveFront(g2, nat, x) || inFight && x.reg !== reg?.id && corpsInContact(g2, nat, x))) || inFight && fromWaits(g2, nat, o.from))) {
+      if (Array.isArray(o.from) && !ashore && row2[1] === nat && farOn(g2) && (g2.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && (onLiveFront(g2, nat, x) || inFight && x.reg !== reg?.id && corpsInContact(g2, nat, x, leavingNow))) || inFight && fromWaits(g2, nat, o.from, i))) {
         if (o.adds > 0) own = true;
         else {
           if (inFight) tellWait(g2, i, reg);
@@ -79320,7 +79441,7 @@
         }
       }
       const formsAt2 = reg?.id;
-      if (g2.flags.fromWait === 1 && g2.flags.open === 1 && !farOn(g2) && contactRuleActs(g2, g2.byName[row2[5]]) && Array.isArray(o.from) && !ashore && row2[1] === nat && formsAt2 !== void 0 && g2.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt2 && corpsInContact(g2, nat, x))) {
+      if (g2.flags.fromWait === 1 && g2.flags.open === 1 && !farOn(g2) && contactRuleActs(g2, g2.byName[row2[5]]) && Array.isArray(o.from) && !ashore && row2[1] === nat && formsAt2 !== void 0 && g2.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt2 && corpsInContact(g2, nat, x, leavingNow))) {
         if (inFight) tellWait(g2, i, reg);
         g2.flags[`wait:${i}`] = g2.turn;
         return;
@@ -79379,12 +79500,15 @@
         else if (joined3?.alone) headline(g2, "info", joined3.alone, nat, old.reg);
         return;
       }
-      if (!reg || !allied(g2, nat, reg.ctrl)) return;
+      if (!reg || !allied(g2, nat, reg.ctrl)) {
+        if (inFight && reg && Array.isArray(o.from) && o.from.length > 0 && row2[1] === nat) tellPlace(g2, i, reg);
+        return;
+      }
       const n = g2.flags.open === 1 && o.openDivs !== void 0 ? o.openDivs : row2[4];
       const once = g2.flags.open === 1 && row2[1] === nat && !kept4 && !ashore && !own && !o.of && !o.awaits && !o.joins && row2[3] !== "fort" && (estAt(o.est, g2.turn) ?? 1) >= 1;
       const spoken = once ? /* @__PURE__ */ new Set([...Array.isArray(o.from) ? o.from : [], ...UNLESS.has(row2[2]) ? setup_1939_default.expeditions.filter((r24) => r24[6]?.unless === row2[2] && r24[1] === nat).map((r24) => r24[2]) : []]) : null;
       const fixed2 = (x) => x.sail !== void 0 || x.joint !== void 0 || x.leave !== void 0 || !!x.school || x.town !== void 0 && g2.regions[x.reg].units.some((u) => atWar(g2, u.nat, nat)) || farOn(g2) && onLiveFront(g2, nat, x);
-      const claims = once ? heldAlready(g2, nat, row2, o, n, reg, home, (x) => spoken.has(x.name) || leaving2(x), fixed2) : [];
+      const claims = once ? heldAlready(g2, nat, row2, o, n, reg, home, (x) => spoken.has(x.name) || leaving2(x), fixed2, leavingNow) : [];
       const cutStays = (share) => {
         const stay = claims.filter((q) => q.from && q.stays);
         for (const h of new Set(stay.map((q) => q.from))) {
@@ -79479,13 +79603,14 @@
       if (o.from && !Array.isArray(o.from)) {
         const here = theatreName(reg) === o.from;
         if (here) g2.flags[`formed:${c.id}`] = 1;
-        draw7(g2, o.of ?? nat, o.from, claims.length ? Math.max(0, n - claims.length) : row2[4], here ? c : void 0);
+        const held3 = g2.flags.fromWait === 1 && contactRuleActs(g2, g2.byName[row2[5]]) ? (x) => corpsInContact(g2, x.nat, x, leavingNow) || claims.some((q) => q.from === x && q.stays) : void 0;
+        draw7(g2, o.of ?? nat, o.from, claims.length ? Math.max(0, n - claims.length) : row2[4], here ? c : void 0, held3);
       }
       if (o.until) g2.flags[`lent:${i}`] = c.id;
       else if (g2.flags.open === 1 && o.war && (c.drew?.length || c.rowed)) g2.flags[`lent:${i}`] = c.id;
       const the5 = generalsThe(c.name);
       const bySea = reg.port && (reg.overseas || g2.nations[nat].seaSupply && reg.owner !== nat);
-      const said = formedLine(g2, i, was, inFight && own, c, reg, !!bySea);
+      const said = formedLine(g2, i, was, inFight && own, c, reg, !!bySea, inFight);
       if (o.news) headline(g2, "event", said?.after ? `${o.news} ${said.after}` : o.news, nat, reg.id);
       else if (o.gen && (!claims.length || generalOf(g2, c)?.name === o.gen)) headline(g2, "event", `${o.gen} ${bySea ? "lands at" : "arrives in"} ${reg.name} with ${the5}${c.name}.${said?.after ? ` ${said.after}` : ""}`, nat, reg.id);
       else if (nat === g2.human) headline(g2, "info", said?.alone ?? `${c.name} has ${bySea ? "landed at" : "arrived in"} ${reg.name}.`, nat, reg.id);
@@ -80660,6 +80785,7 @@
     keep3.ap = v.ap;
     const gave = riflesFold(g2, keep3, gone, from2);
     if (gone.fought) keep3.fought = true;
+    carryBattle(g2, gone.id, keep3.id);
     if (gone.pressed) keep3.pressed = true;
     if ((gone.blows ?? 0) > (keep3.blows ?? 0)) keep3.blows = gone.blows;
     returnMen(g2, keep3.nat, gone.str * gone.divs - from2);
@@ -84985,6 +85111,9 @@
       // Scarred ground (release 2): the grand campaign's own; a historical save is written as it always was, and is given
       // its scars back from its reports when loaded.
       scars: g2.flags.open === 1 ? g2.scars : void 0,
+      // The battle last resolved on each province (the contact rule's fight half): kept whole, only under its switch
+      // 'fromWait', so a save with the switch off is written as it always was.
+      lastBattle: g2.flags.fromWait === 1 ? g2.lastBattle : void 0,
       captured: g2.flags.open === 1 ? g2.captured : void 0,
       // Old wrecks (release 2): kept as the scars are, and given back from the reports to a save without them.
       wrecks: g2.flags.open === 1 ? g2.wrecks : void 0,
@@ -85169,6 +85298,7 @@
     if (d.legions && typeof d.legions === "object") g2.legions = { abroad: {}, done: {}, ...d.legions };
     if (d.qs && typeof d.qs === "object") g2.qs = d.qs;
     if (d.captured && typeof d.captured === "object") g2.captured = d.captured;
+    if (d.lastBattle && typeof d.lastBattle === "object") g2.lastBattle = d.lastBattle;
     if (d.scars && typeof d.scars === "object") g2.scars = d.scars;
     else
       for (const r of g2.reports ?? []) {
@@ -114342,6 +114472,7 @@
       dead: false
     };
     g2.corps.push(p);
+    carryBattle(g2, c.id, p.id);
     const nos = go.map((d) => d.no);
     p.dn = nos[0];
     if (nos.some((n, i) => n !== nos[0] + i)) p.nos = nos;
@@ -114414,6 +114545,7 @@
     else delete into.nos;
     into.names = all.map((d) => [d.name, d.short]);
     if (part.fought) into.fought = true;
+    carryBattle(g2, part.id, into.id);
     if (part.pressed) into.pressed = true;
     if ((part.blows ?? 0) > (into.blows ?? 0)) into.blows = part.blows;
     if ((part.whole?.length ?? 0) > (into.whole?.length ?? 0)) into.whole = part.whole;

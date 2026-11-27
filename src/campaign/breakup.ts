@@ -12,6 +12,7 @@
 
 import data from '../../data/campaign/breakup.json';
 import { removeCorps } from './game';
+import { carryBattle } from './drawn';
 import { divisionsOf } from './armies';
 import { riflesJoin, riflesSplit } from './rifles';
 import { FAR_STAGE } from './stage';
@@ -85,6 +86,7 @@ export function breakUp(g: Game, c: Corps, slots: number[]): Corps | null {
     general: null, hold: c.hold, dyle: c.dyle, supplied: c.supplied, fought: c.fought, dead: false,
   };
   g.corps.push(p);
+  carryBattle(g, c.id, p.id);
   // Its numbers are the divisions' own: never fresh ones.
   const nos = go.map((d) => d.no);
   p.dn = nos[0];
@@ -165,6 +167,7 @@ export function rejoin(g: Game, part: Corps, into: Corps): boolean {
   if (nos.some((n, i) => n !== nos[0] + i)) into.nos = nos; else delete into.nos;
   into.names = all.map((d) => [d.name, d.short] as [string, string]);
   if (part.fought) into.fought = true;
+  carryBattle(g, part.id, into.id);
   if (part.pressed) into.pressed = true;
   if ((part.blows ?? 0) > (into.blows ?? 0)) into.blows = part.blows;
   if ((part.whole?.length ?? 0) > (into.whole?.length ?? 0)) into.whole = part.whole;

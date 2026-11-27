@@ -110,6 +110,9 @@ export function saveGame(g: Game): string {
     // Scarred ground (release 2): the grand campaign's own; a historical save is written as it always was, and is given
     // its scars back from its reports when loaded.
     scars: g.flags.open === 1 ? g.scars : undefined,
+    // The battle last resolved on each province (the contact rule's fight half): kept whole, only under its switch
+    // 'fromWait', so a save with the switch off is written as it always was.
+    lastBattle: g.flags.fromWait === 1 ? g.lastBattle : undefined,
     captured: g.flags.open === 1 ? g.captured : undefined,
     // Old wrecks (release 2): kept as the scars are, and given back from the reports to a save without them.
     wrecks: g.flags.open === 1 ? g.wrecks : undefined,
@@ -328,6 +331,8 @@ function readSave(text: string, promote: boolean): Game | null {
   if (d.qs && typeof d.qs === 'object') g.qs = d.qs;
   // Scarred ground: as saved, or for a save without it, from the battles its reports still hold.
   if (d.captured && typeof d.captured === 'object') g.captured = d.captured;
+  // The battle last resolved on each province: as saved, never rebuilt from the reports nor seeded from `fought`.
+  if (d.lastBattle && typeof d.lastBattle === 'object') g.lastBattle = d.lastBattle;
   if (d.scars && typeof d.scars === 'object') g.scars = d.scars;
   else
     for (const r of g.reports ?? []) {

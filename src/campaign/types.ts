@@ -1960,6 +1960,12 @@ export interface Game {
    */
   scars?: Record<number, { n: number; last: number; mudN?: number; mudLast?: number }>;
   /**
+   * The contact rule's fight half (the design director, 06:10Z, 26 November 2026): for each province a land battle was
+   * resolved on under the switch 'fromWait', the ids of the living corps that took part in the last of them, attackers
+   * and defenders, every side. No month, no count. Absent until the first such battle, and with the switch off.
+   */
+  lastBattle?: Record<number, number[]>;
+  /**
    * Old wrecks (release 2, looks only): for each region a land battle was fought in, the armoured vehicles its battles
    * left burnt out or knocked out on the field, by nation (game.ts wreckBump), and the month of the last that left any.
    * Absent until the first; nothing in any fight reads it.
