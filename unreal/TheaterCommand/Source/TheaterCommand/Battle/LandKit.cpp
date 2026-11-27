@@ -2296,23 +2296,32 @@ namespace LandKit
 		 * held to a size (a vehicle's two sides carry the same size), or only fitted and not painted. None given: as
 		 * before, point for point.
 		 *
-		 * Whole's floor (CrossLeast; the art director's ruling of 27 November 2026, 07:37Z: "A cross is painted whole at
-		 * the largest size that fits, down to 0.12 m; one that cannot be whole at 0.12 m is not painted"). The moves
-		 * above are asked as before, and then: where half its size takes it nowhere, the same places are asked at each
-		 * smaller size in turn (0.85 of the last, and at last the floor itself), the larger first, with Clear round it and
-		 * then on her skin alone at each; and a fit under the floor is asked once more at the floor itself, as it was
-		 * found (with Clear round it, or on her skin alone), and where the floor does not take it so the mark is not
-		 * painted ("The Kubelwagen's 9 cm: NONE": her door takes the cross clear of its edge only at 9 cm; the larger
-		 * cross it would take on her skin alone, hard against the edge, is not painted in its place). A mark asked, or
-		 * held, under the floor is not painted.
+		 * Whole's floor (MarkWhole::Least, CrossFloor; the art director's rulings of 27 November 2026, 07:37Z: "A cross
+		 * is painted whole at the largest size that fits, down to 0.12 m; one that cannot be whole at 0.12 m is not
+		 * painted", and 13:32Z: 0.12 m on an upright plate, 0.20 m on what faces the sky). The moves above are asked as
+		 * before. Where they take it nowhere, or only under the floor (a fit under the floor is no fit), every place is
+		 * asked as above at no size under the floor, with Clear round it and then on her skin alone; and where half its
+		 * size takes it nowhere, at each smaller size in turn (0.85 of the last, and at last the floor itself), the
+		 * larger first, with Clear round it and then on her skin alone at each. So the Kubelwagen's door, which takes
+		 * the cross clear of its edge only at 9 cm, takes it on her skin alone, hard against the edge, at 0.18 m (her
+		 * ruling of 13:32Z: "Hard against the edge is already the kit's last resort... one rule everywhere"). A mark
+		 * asked, or held, under the floor is not painted.
 		 */
-		constexpr double CrossLeast = 0.06; // metres, half its width: 0.12 m across
+		constexpr double CrossLeast = 0.06;     // metres, half its width: 0.12 m across, on an upright plate
+		constexpr double CrossLeastRoof = 0.10; // metres, half its width: 0.20 m across, on what faces the sky
+		/** The floor of a cross on a plate that faces Facing (the art director's ruling of 27 November 2026, 13:32Z: "one
+		 * floor does not serve both eyes"): an upright plate (her sides, her doors, her back) is seen from the ground,
+		 * 0.12 m; what faces the sky is seen from high, 0.20 m. Facing the sky as her marks' real sizes read it. */
+		inline double CrossFloor(const V3& Facing)
+		{
+			return Facing.Z > 0.7 ? CrossLeastRoof : CrossLeast;
+		}
 		struct MarkWhole
 		{
 			bool bTryOnly = false;     // settle its size only: nothing is painted
 			double SizeMost = 0.0;     // metres, half its width: no larger than this (0: as asked)
 			double Fitted = 0.0;       // given back: the size it takes whole, half its width (0: none)
-			double Least = CrossLeast; // metres, half its width: none under this
+			double Least = CrossLeast; // metres, half its width: none under this (CrossFloor of the plate's facing)
 		};
 
 		/** A vehicle's two sides carry the same size (the art director, 27 November 2026, 04:20Z: "the smaller fit wins
@@ -2612,11 +2621,12 @@ namespace LandKit
 			// sample of it on one face of her skin, which is not cut by an edge though it has less room round it. The
 			// Sherman's left turret side, taken by Germany, takes her true cross whole at 0.262 m 9 cm from her file's
 			// place, between the moves above.)
-			// (Whole's floor: a fit under it is asked again at the floor, and else the mark is not painted)
+			// (Whole's floor: a fit under it is no fit, and the places are asked afresh, at no size under the floor)
 			const double WholeLeast = Whole ? Whole->Least : 0.0;
-			bool bFoundBare = false;
 			if (Whole && (!bFound || Size < WholeLeast - 1e-12))
 			{
+				bFound = false;
+				Size = std::min(Radius, Held);
 				std::vector<std::pair<double, double>> Grid;
 				for (int Ia = -12; Ia <= 12; ++Ia)
 				{
@@ -2648,12 +2658,13 @@ namespace LandKit
 							Middle = Where;
 							Size = Try;
 							bFound = true;
-							bFoundBare = bBare;
 							return true;
 						}
 					}
 					return false;
 				};
+				// (a mark asked, or held, under the floor is not painted)
+				const bool bAsked = Size >= WholeLeast - 1e-12;
 				double Last = Size;
 				for (const bool bBare : { false, true })
 				{
@@ -2661,7 +2672,7 @@ namespace LandKit
 					for (const double Shrink : { 1.0, 0.85, 0.7, 0.6, 0.5 })
 					{
 						const double Try = std::min(Radius * Shrink, Held);
-						if (bFound || std::fabs(Try - Tried) < 1e-12)
+						if (!bAsked || bFound || std::fabs(Try - Tried) < 1e-12 || Try < WholeLeast - 1e-12)
 						{
 							continue;
 						}
@@ -2672,7 +2683,7 @@ namespace LandKit
 				}
 				// (the floor, where half its size took it nowhere: each smaller size in turn down to the floor itself, the
 				// larger first; at each, with Clear round it and then on her skin alone)
-				for (double Shrink = 0.5 * 0.85; !bFound; Shrink *= 0.85)
+				for (double Shrink = 0.5 * 0.85; bAsked && !bFound; Shrink *= 0.85)
 				{
 					const double Try = std::max(std::min(Radius * Shrink, Held), WholeLeast);
 					if (Try < Last - 1e-12)
@@ -2686,15 +2697,6 @@ namespace LandKit
 					if (Radius * Shrink <= WholeLeast)
 					{
 						break;
-					}
-				}
-				// (a fit under the floor: asked once more at the floor itself, as it was found; else none)
-				if (bFound && Size < WholeLeast - 1e-12)
-				{
-					bFound = false;
-					if (std::min(Radius, Held) >= WholeLeast - 1e-12)
-					{
-						Ask(WholeLeast, bFoundBare);
 					}
 				}
 			}
@@ -4040,9 +4042,11 @@ namespace LandKit
 				const double SkirtDust = SkirtTopK > SkirtFootK ? 1.0 - Smooth(0.27, 0.36, (At.Z - SkirtFootK) / (SkirtTopK - SkirtFootK)) : 1.0;
 				// (everything done to her paint from here: worn edges, dust, soot, her creases' shade; a scale and an addition
 				// to the paint, which the national marks read to take on her own dirt, Dress::bMarks)
-				auto Finish = [&](Lin Cv)
+				// (bOldCoat: her maker's coat showing through her captor's, which is paint and no dirt. With the German
+				// cross at its true proportions her captor's marks do not read it, bMarksOverOld below.)
+				auto Finish = [&](Lin Cv, bool bOldCoat)
 				{
-					if (bCaptured && bCoat)
+					if (bCaptured && bCoat && bOldCoat)
 					{
 						// (a hasty overpaint by brush: the big flat plates near all covered, some 12 in 100 of the old left in
 						// streaks along the strokes; up to some 40 in 100 where a brush cannot reach: the running gear, the
@@ -4057,14 +4061,14 @@ namespace LandKit
 					}
 					if (bFileDust)
 					{
-						if (bCoat && Raw.Wear[K] > 0)
+						if (bCoat && Raw.Wear[K] > 0 && (bOldCoat || !bCaptured))
 						{
 							// (captured: the file's wear is the maker's own scuffs, mostly painted over by the captor; a
 							// third of it shows the old coat through)
 							Cv = Mix(Cv, bCaptured ? Old : Paint[static_cast<size_t>(Steel)], (bCaptured ? 0.35 : 1.0) * Clamp(Raw.Wear[K] / 100.0, 0.0, 1.0));
 						}
 					}
-					else if (bCoat && Edge[K] > 0.0f)
+					else if (bCoat && Edge[K] > 0.0f && (bOldCoat || !bCaptured))
 					{
 						const double Chip = Smooth(0.5, 0.78, Noise(Here * 9.0, Seed + 31));
 						Cv = bCaptured ? Mix(Cv, Old, 0.25 * Chip) : Mix(Cv, Cv * 1.55 + Lin(0.012, 0.011, 0.009), 0.5 * Chip);
@@ -4095,7 +4099,16 @@ namespace LandKit
 				};
 				if (D.bMarks)
 				{
-					const Lin Added = Finish(Lin()), Whole = Finish(Lin(1.0, 1.0, 1.0));
+					// The German cross at its true proportions on a vehicle Germany has taken (the art director, 27 November
+					// 2026, 13:32Z: the captured armoured car's roof cross "is HOLLOW: white angles round a bar in the coat's
+					// own tone... a captor's roof cross is the same mark: black bar"). What her marks read as her dirt held
+					// her maker's coat too, where it shows through the captor's brush in streaks, at scuffs and at chipped
+					// edges: a cross laid over a streak went six tenths of the way to the old coat's colour, the black bar
+					// most of all. That is paint under the mark, not dirt over it ("never her paint's own colours... a black
+					// stays black", her mends of 24 November), so with the word on it is left out of what her marks read.
+					// Off, or any other captor's mark: as before.
+					const bool bMarksOverOld = !(D.bTrueCross && bCaptured && D.Nation == "GER");
+					const Lin Added = Finish(Lin(), bMarksOverOld), Whole = Finish(Lin(1.0, 1.0, 1.0), bMarksOverOld);
 					float* To = &Dirt[K * 6];
 					To[0] = static_cast<float>(Whole.R - Added.R);
 					To[1] = static_cast<float>(Whole.G - Added.G);
@@ -4104,7 +4117,7 @@ namespace LandKit
 					To[4] = static_cast<float>(Added.G);
 					To[5] = static_cast<float>(Added.B);
 				}
-				C = Finish(C);
+				C = Finish(C, true);
 				Colour[K * 4] = ToPicture(C.R);
 				Colour[K * 4 + 1] = ToPicture(C.G);
 				Colour[K * 4 + 2] = ToPicture(C.B);
@@ -4427,6 +4440,7 @@ namespace LandKit
 						MarkWhole Try;
 						Try.bTryOnly = true;
 						Try.SizeMost = Most;
+						Try.Least = CrossFloor(Marks[I].Facing);
 						PaintCaptor(Parts[static_cast<size_t>(Marks[I].Part)].Body, Place, Marks[I].Facing, Size, Marks[I].Dust, I, nullptr, 0.0, &Try);
 						return Try.Fitted;
 					});
@@ -4446,6 +4460,7 @@ namespace LandKit
 						double Sized = 1.0;
 						MarkWhole Whole;
 						Whole.SizeMost = std::max(CaptorMost[I], 0.0);
+						Whole.Least = CrossFloor(Mk.Facing);
 						if (Size > 0.0 && CaptorMost[I] >= 0.0 && PaintCaptor(BodyIx, Place, Mk.Facing, Size, Mk.Dust, I, &Sized, 0.0, bWholeCaptor ? &Whole : nullptr) > 0)
 						{
 							Size *= Sized;
@@ -5194,14 +5209,17 @@ namespace LandKit
 						// back mark is a speck low in a corner of her plate and reads as a blemish, and a roof mark is a speck from
 						// the air as surely; her sides' marks and her captor's coat carry her. The floor is for the mark as
 						// painted, so the painting keeps it too where her skin would take the mark only smaller.
-						// The German cross at its true proportions on her roof (the art director's ruling of 27 November 2026,
-						// 07:37Z: "Roof crosses: SMALLER rather than none, down to the floor"): a cross's own floor, 0.12 m
-						// across (CrossLeast). Her back plate's keeps the quarter of a metre: the ruling names her roof.
+						// The German cross at its true proportions (the art director's rulings of 27 November 2026, 07:37Z:
+						// "Roof crosses: SMALLER rather than none, down to the floor", and 13:32Z: the floors by face): a
+						// cross's own floors, 0.20 m across on her roof (CrossLeastRoof), which is seen from high, and
+						// 0.12 m on her back plate (CrossLeast), an upright plate as her sides are ("the back takes the
+						// upright floor... It is the face Brian sees most, commanding from behind his tanks").
 						const double MarkLeast = 0.125;
-						const double RoofLeast = D.bTrueCross && CaptorKind == "cross" ? CrossLeast : MarkLeast;
+						const bool bCrossFloors = D.bTrueCross && CaptorKind == "cross";
+						const double RoofLeast = bCrossFloors ? CrossLeastRoof : MarkLeast, BackLeast = bCrossFloors ? CrossLeast : MarkLeast;
 						for (CaptorPlate* Speck : { &CaptorRoof, &CaptorBack })
 						{
-							if (Speck->Size < (Speck == &CaptorRoof ? RoofLeast : MarkLeast))
+							if (Speck->Size < (Speck == &CaptorRoof ? RoofLeast : BackLeast))
 							{
 								*Speck = CaptorPlate();
 							}
@@ -5213,7 +5231,7 @@ namespace LandKit
 							double Sized = 1.0;
 							// (the German cross at its true proportions: whole, never cut by the plate's edge, as her sides')
 							MarkWhole Whole;
-							Whole.Least = Which == 0 ? RoofLeast : MarkLeast;
+							Whole.Least = Which == 0 ? RoofLeast : BackLeast;
 							if (Pl.Size > 0.0 && PaintCaptor(Parts[static_cast<size_t>(PartIx)].Body, Pl.At, Pl.Facing, Pl.Size, CaptorDust, 1000 + static_cast<uint64_t>(Which), &Sized, Whole.Least,
 									D.bTrueCross && CaptorKind == "cross" ? &Whole : nullptr) > 0)
 							{
@@ -5346,6 +5364,7 @@ namespace LandKit
 						MarkWhole Try;
 						Try.bTryOnly = true;
 						Try.SizeMost = Most;
+						Try.Least = CrossFloor(Mk.Facing);
 						PaintMark(Bo.Near, Bo.Pivot, Pieces, Mk.At, Mk.Facing, Asked, Mk.Dust > 0.0 ? Mk.Dust : 45.0, 0.03, 0.004, Mix(I + 1, 1, 0x4D41524Bull), Skin,
 							MarkByHand(MarkKind), PaintedMade[I] != 0, nullptr, nullptr, D.bAllMarks, D.bRealMarks ? 0.05 : 0.0, D.bRealMarks ? 0.085 : 0.12, 0.0, 0.0, &Try);
 						return Try.Fitted;
@@ -5378,6 +5397,7 @@ namespace LandKit
 					bool bSized = false;
 					MarkWhole Whole;
 					Whole.SizeMost = bWholeCross ? std::max(CrossMost[I], 0.0) : 0.0;
+					Whole.Least = CrossFloor(Mk.Facing);
 					if (D.bRealMarks && !bCaptured)
 					{
 						// Marks at their real size (Dress::bRealMarks; Brian, 26 November 2026: "the tank markings are way
