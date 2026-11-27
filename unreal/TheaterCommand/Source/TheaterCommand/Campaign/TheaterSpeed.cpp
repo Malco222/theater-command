@@ -90,6 +90,12 @@ namespace
 	TAutoConsoleVariable<int32> CVarFogAside(
 		TEXT("tc.Speed.FogAside"), 1,
 		TEXT("1 lays the haze beyond the map on another thread when it moves and puts it on the table a picture a frame after; 0 lays it all in the frame of the press, as before."));
+	TAutoConsoleVariable<int32> CVarModelWarm(
+		TEXT("tc.Speed.ModelWarm"), 1,
+		TEXT("1 reads the model files the table could ask for on a thread of its own, one at a time at the lowest priority, so that a month's frame finds them read; 0 reads each in the frame that first asks, as before. The same models and paints either way."));
+	TAutoConsoleVariable<int32> CVarModelWarmMB(
+		TEXT("tc.Speed.ModelWarmMB"), 400,
+		TEXT("The megabytes of read models after which the queue stops reading the files no nation is named for; 0 reads only those."));
 	TAutoConsoleVariable<int32> CVarFineAside(
 		TEXT("tc.Speed.FineAside"), 1,
 		TEXT("1 makes the smaller copies of a fine sheet's pictures on the thread that models it; 0 in the frame that dresses it, as before."));
@@ -464,6 +470,16 @@ namespace TheaterSpeed
 	bool FogAside()
 	{
 		return CVarFogAside.GetValueOnGameThread() != 0;
+	}
+
+	int32 ModelWarm()
+	{
+		return CVarModelWarm.GetValueOnGameThread();
+	}
+
+	int32 ModelWarmMB()
+	{
+		return CVarModelWarmMB.GetValueOnGameThread();
 	}
 
 	bool RegionGrid()

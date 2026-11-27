@@ -196,6 +196,19 @@ struct FMiniatureMesh
 	static FString MainFighterOf(const FString& Tag);
 	static FString MainBomberOf(const FString& Tag);
 
+	/**
+	 * (tc.Speed.ModelWarm.) Queues, by file, the models the tables could ask for: first those of the nations at the year and
+	 * at the year after (as Year and DesignYears would stand), then the other nations', then the rest. They are read on a
+	 * thread of their own and put in the table one a frame by PumpWarm. Game thread only; leaves Year and DesignYears as they were.
+	 */
+	static void WarmModels(const TArray<FString>& Nations, int32 CalendarYear, const TMap<FString, FIntVector>& Designs);
+	/** One file read is put in the table, and the next begun, once a frame. Game thread only. */
+	static void PumpWarm(float DeltaSeconds);
+	/** Drops the queue and waits for the file in flight (a table's end of play). */
+	static void StopWarm();
+	/** Every model name the tables give, the aircraft apart, with any ":Nation" left on. */
+	static void AllModelNames(TArray<FString>& Aircraft, TArray<FString>& Others);
+
 	/** Dust: anything added below DustTop is tinted toward Dust, most at DustFoot. Off while DustTop is not above DustFoot. */
 	double DustFoot = 0.0, DustTop = 0.0;
 	/** What the paint lies on (art fix 12), kept in each point's alpha for the pieces' material: 255 cloth, wood, earth and skin; 128 painted metal, which chips down to the bare metal. */

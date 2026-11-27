@@ -132,6 +132,8 @@ public:
 	 * their pieces are picked up and carried along the road they took.
 	 */
 	void ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom = nullptr);
+	/** (tc.Speed.ModelWarm) Queues the model files this view's nations could ask for, to be read on a thread of their own. */
+	void WarmModels(const FCampaignView& View);
 
 	/** The piece a line from Origin along Direction passes through, nearest first. */
 	AArmyPiece* PieceAtRay(const FVector& Origin, const FVector& Direction, double* OutDistance = nullptr, const AArmyPiece* PassOver = nullptr) const;

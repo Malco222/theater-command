@@ -9,7 +9,14 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
+#include "Campaign/TheaterSpeed.h"
+#include "Async/Async.h"
+#include "Async/Future.h"
+#include "HAL/FileManager.h"
+#include "HAL/PlatformTime.h"
+#include "Misc/Crc.h"
 #include "Serialization/JsonSerializer.h"
+#include <atomic>
 
 namespace
 {
@@ -61,6 +68,645 @@ namespace
 	{
 		static TMap<FString, TArray<int32>> Months;
 		return Months;
+	}
+
+	// The numbers as the script wrote them, read once: points, which way each faces, its paint, and the triangles.
+	struct FRaw
+	{
+		TArray<FVector> Points, Facings;
+		TArray<int32> Paints, Triangles;
+		// (A worn figure, the soldiers' maker, 19 November 2026: the file's optional "shade" beside its paints, one
+		// number for each point, 1 clean and less where the cloth is worn or stitched. Empty where the file has none.)
+		TArray<float> Worn;
+		// (where the model's maker says its markings go, on the right-hand side, and how high its roof is: a model
+		// that does not say is marked by its outline)
+		bool bMarks = false, bCross = false, bNumber = false; // (a lorry carries its nation's mark and no number; a gun carries neither)
+		FVector Cross = FVector::ZeroVector, Number = FVector::ZeroVector;
+		double CrossSize = 0.2, NumberHigh = 0.26, Roof = 0.0;
+		double CrossLean = 0.13, NumberLean = 0.16; // (how far the plate each lies on leans back)
+		// (An aircraft, from Tools/build_plane.py: the file says what colour each of its paints is, how worn the paint
+		// is at each point, and where every marking goes, with the way the skin faces there and how round it is.)
+		bool bAircraft = false, bNationPaint = false;
+		// (A warship or a merchant from tools/battle-models (kind "ship"): the file gives each paint's own colour, by its
+		// paint names (hull, upper, deck, steel, black, canvas, glass, ...), and at each point how worn and rust-streaked
+		// it is, how sooted, and how salt-stained low on her sides. A ship carries no table markings.)
+		bool bShip = false;
+		TArray<int32> Salt;
+		TArray<bool> ShipMetal, ShipPainted; // (by the file's paint_names: which paints are steel, and which painted steel that rusts and salts)
+		FLinearColor Rust = FLinearColor(FColor::FromHex(TEXT("8A4E28")));
+		// (A piece of the table that is nobody's vehicle and nobody's soldier, such as the agent: the file gives the
+		// colour of each of its paints, and it takes no dust of the road, no markings and no wear.)
+		bool bPiece = false;
+		TArray<FLinearColor> PaintColours;
+		TArray<int32> Wear, Blend, Soot; // (each 0 to 100 a point: chipped paint, how far into the second camouflage colour, exhaust soot)
+		// (An aircraft's paint by date, the aircraft modeller's "schemes" (the Mustang's, 22 November 2026): each stands
+		// from its first month until the next begins, laid over the file's own colours paint by paint, and may give the
+		// side number its own ink. Before the first, the file's own colours stand.)
+		struct FScheme
+		{
+			TMap<int32, FLinearColor> Colours;
+			bool bInk = false;
+			FLinearColor Ink = FLinearColor::Black;
+		};
+		TArray<FScheme> Schemes;
+		TArray<int32> SchemeFrom; // (each one's first month, as SchemeMonth counts it)
+		// (A vehicle with a camouflage in fields: each point of its paint says how far it is into a field of the second
+		// colour and of the third, and the thin lines that part the fields are a paint of their own.)
+		bool bFields = false;
+		TArray<int32> FieldA, FieldB;
+		FLinearColor FieldColourA = FLinearColor::Black, FieldColourB = FLinearColor::Black, FieldStripe = FLinearColor::White;
+		FLinearColor NumberInk = FLinearColor(FColor::FromHex(TEXT("F2F0E8"))); // what the side number is painted in: dark on a pale machine
+		struct FMark
+		{
+			FString Tag;
+			FVector At = FVector::ZeroVector, Facing = FVector::UpVector;
+			double Radius = 0.3, Curve = 0.0;
+			bool bBoth = false;
+			// (a mark that fills a four-cornered place on the fin: its corners along the machine and up it, the lower
+			// leading one first, then the lower trailing, the upper trailing and the upper leading)
+			TArray<FVector2D> Quad;
+			// (and its own stripes there, where its maker gave them: {"dir": "v" or "h", "bands": [colours]}, from the
+			// leading edge or from the top, as the table's fin stripes)
+			TArray<FLinearColor> Bands;
+			bool bBandsUpright = true;
+			FString Part; // (on a land vehicle: "turret" or "hull")
+		};
+		TArray<FMark> PlaneMarks;
+		// (A land vehicle made from the vehicle modeller's battle model by Tools/battle_vehicle.py: its far mesh, the
+		// file's own colour for each of its paints, the camouflage's blotches point by point in Blend, wear and soot
+		// as an aircraft has them, and the places of its owner's marks, each side listed.)
+		bool bBattle = false;
+		TArray<FMark> LandMarks;
+		// (the parse met a "schemes" section: SchemeFrom is to be published to SchemeMonths() by InstallRaw)
+		bool bSchemes = false;
+	};
+
+	// (tc.Speed.ModelWarm: a model's file may be read aside. BuildRaw and ReadModelFile touch nothing but their own
+	// arguments and run on the worker; everything else down to AdoptWarm is the game thread's alone.)
+	// A model that is not there is remembered as nothing, and not looked for again.
+	TMap<FString, TSharedPtr<FRaw>> Read;
+	int64 InstalledBytes = 0; // (what the read models hold, by the points, triangles and paints, for tc.Speed.ModelWarmMB)
+
+	/** ("-TheaterOldVehicles" stands the campaign's older miniature wherever one is kept beside the new one, in
+	 * Models/Old: to show the two against each other and to time them. The parade can also name one outright,
+	 * "Old/LightTank:BRA".) Read on the game thread before any worker is begun. */
+	bool OldVehiclesFlag()
+	{
+		static const bool bOldVehicles = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldVehicles"));
+		return bOldVehicles;
+	}
+
+	/** Where a model's file is. */
+	FString ModelPath(const FString& Name, bool bOld)
+	{
+		FString Path = FPaths::ProjectContentDir() / TEXT("Models") / (Name + TEXT(".json"));
+		if (bOld && FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Models") / TEXT("Old") / (Name + TEXT(".json"))))
+		{
+			Path = FPaths::ProjectContentDir() / TEXT("Models") / TEXT("Old") / (Name + TEXT(".json"));
+		}
+		return Path;
+	}
+
+	/** One form (near or far) of a model, made from its file's parsed JSON: null where the file does not give it. Touches
+	 * nothing but its arguments, so that it may be run on any thread. */
+	TSharedPtr<FRaw> BuildRaw(const TSharedPtr<FJsonObject>& File, bool bFar, bool bTorpedo)
+	{
+		TSharedPtr<FRaw> Raw;
+		const TSharedPtr<FJsonObject>* Part = nullptr;
+		const TArray<TSharedPtr<FJsonValue>> *PointList = nullptr, *FacingList = nullptr, *PaintList = nullptr, *TriangleList = nullptr;
+		if (File->TryGetObjectField(bFar ? TEXT("far") : TEXT("near"), Part) && (*Part)->TryGetArrayField(TEXT("points"), PointList) && (*Part)->TryGetArrayField(TEXT("facings"), FacingList)
+			&& (*Part)->TryGetArrayField(TEXT("paints"), PaintList) && (*Part)->TryGetArrayField(TEXT("triangles"), TriangleList)
+			&& PointList->Num() == PaintList->Num() * 3 && FacingList->Num() == PointList->Num() && TriangleList->Num() % 3 == 0)
+		{
+			Raw = MakeShared<FRaw>();
+			for (int32 K = 0; K + 2 < PointList->Num(); K += 3)
+			{
+				// (the file has x forward and y to the right; the game's vehicles are built nose toward -X with their right hand at -Y)
+				Raw->Points.Add(FVector(-(*PointList)[K]->AsNumber(), -(*PointList)[K + 1]->AsNumber(), (*PointList)[K + 2]->AsNumber()));
+				Raw->Facings.Add(FVector(-(*FacingList)[K]->AsNumber(), -(*FacingList)[K + 1]->AsNumber(), (*FacingList)[K + 2]->AsNumber()).GetSafeNormal());
+			}
+			for (const TSharedPtr<FJsonValue>& Value : *PaintList)
+			{
+				Raw->Paints.Add(static_cast<int32>(Value->AsNumber()));
+			}
+			const TArray<TSharedPtr<FJsonValue>>* ShadeList = nullptr;
+			if ((*Part)->TryGetArrayField(TEXT("shade"), ShadeList) && ShadeList->Num() == PaintList->Num())
+			{
+				Raw->Worn.Reserve(ShadeList->Num());
+				for (const TSharedPtr<FJsonValue>& Value : *ShadeList)
+				{
+					Raw->Worn.Add(FMath::Clamp(static_cast<float>(Value->AsNumber()), 0.0f, 1.0f));
+				}
+			}
+			// (A model that carries a torpedo or bombs, never both (its "loads"; the aircraft modeller, 20 November
+			// 2026): the load it does not fly with is left out, a triangle at a time, so that every point keeps its
+			// place for the bay, the airscrews and the marks the air battle finds by point. Bombs unless asked.)
+			TSet<int32> Unflown;
+			const TArray<TSharedPtr<FJsonValue>> *Loads = nullptr, *PartNames = nullptr, *PartOf = nullptr;
+			if (File->TryGetArrayField(TEXT("loads"), Loads) && Loads->Num() >= 2 && File->TryGetArrayField(TEXT("parts"), PartNames)
+				&& (*Part)->TryGetArrayField(TEXT("part"), PartOf) && PartOf->Num() == PaintList->Num())
+			{
+				for (int32 K = 0; K < PartNames->Num(); ++K)
+				{
+					const TSharedPtr<FJsonObject> Named = (*PartNames)[K]->AsObject();
+					FString PartName;
+					if (Named.IsValid() && Named->TryGetStringField(TEXT("name"), PartName) && PartName == (bTorpedo ? TEXT("bombs") : TEXT("torpedo")))
+					{
+						Unflown.Add(K);
+					}
+				}
+				// (and whatever her file's own load clip hides, load.torpedo or load.bombs, each track's part scaled to
+				// nothing: the rebuilt Betty's (the aircraft modeller, 23 November 08:53Z) hides her bay's doors with
+				// her bombs, her torpedo hanging half out of her belly where they were)
+				const TSharedPtr<FJsonObject>* Clips = nullptr;
+				const TSharedPtr<FJsonObject>* Load = nullptr;
+				const TArray<TSharedPtr<FJsonValue>>* Tracks = nullptr;
+				if (File->TryGetObjectField(TEXT("clips"), Clips) && (*Clips)->TryGetObjectField(bTorpedo ? TEXT("load.torpedo") : TEXT("load.bombs"), Load)
+					&& (*Load)->TryGetArrayField(TEXT("tracks"), Tracks))
+				{
+					for (const TSharedPtr<FJsonValue>& Track : *Tracks)
+					{
+						if (!Track.IsValid() || Track->Type != EJson::Object)
+						{
+							continue;
+						}
+						const TSharedPtr<FJsonObject> Each = Track->AsObject();
+						const TArray<TSharedPtr<FJsonValue>>* Keys = nullptr;
+						double PartAt = -1.0;
+						if (!Each.IsValid() || !Each->TryGetNumberField(TEXT("part"), PartAt) || !Each->TryGetArrayField(TEXT("scale"), Keys) || Keys->Num() == 0)
+						{
+							continue;
+						}
+						// (its last key's scale: the clip holds where it ends)
+						const TArray<TSharedPtr<FJsonValue>>* Last = nullptr;
+						if ((*Keys).Last()->TryGetArray(Last) && Last->Num() >= 2 && (*Last)[1]->AsNumber() <= 0.01
+							&& PartAt >= 0.0 && static_cast<int32>(PartAt) < PartNames->Num())
+						{
+							Unflown.Add(static_cast<int32>(PartAt));
+						}
+					}
+				}
+			}
+			for (int32 K = 0; K + 2 < TriangleList->Num(); K += 3)
+			{
+				const int32 A = static_cast<int32>((*TriangleList)[K]->AsNumber()), B = static_cast<int32>((*TriangleList)[K + 1]->AsNumber()), C = static_cast<int32>((*TriangleList)[K + 2]->AsNumber());
+				if (Unflown.Num() > 0 && PartOf->IsValidIndex(A) && PartOf->IsValidIndex(B) && PartOf->IsValidIndex(C)
+					&& Unflown.Contains(static_cast<int32>((*PartOf)[A]->AsNumber())) && Unflown.Contains(static_cast<int32>((*PartOf)[B]->AsNumber()))
+					&& Unflown.Contains(static_cast<int32>((*PartOf)[C]->AsNumber())))
+				{
+					continue;
+				}
+				Raw->Triangles.Append({ A, B, C });
+			}
+			const TSharedPtr<FJsonObject>* Marks = nullptr;
+			if (File->TryGetObjectField(TEXT("marks"), Marks))
+			{
+				// (the file has x forward and y to the right; here the nose is toward -X and the right hand at -Y)
+				Raw->bMarks = true;
+				const TArray<TSharedPtr<FJsonValue>> *CrossAt = nullptr, *NumberAt = nullptr;
+				if ((*Marks)->TryGetArrayField(TEXT("cross"), CrossAt) && CrossAt->Num() >= 4)
+				{
+					Raw->bCross = true;
+					Raw->Cross = FVector(-(*CrossAt)[0]->AsNumber(), (*CrossAt)[1]->AsNumber(), (*CrossAt)[2]->AsNumber());
+					Raw->CrossSize = (*CrossAt)[3]->AsNumber();
+					if (CrossAt->Num() >= 5) { Raw->CrossLean = (*CrossAt)[4]->AsNumber(); }
+				}
+				if ((*Marks)->TryGetArrayField(TEXT("number"), NumberAt) && NumberAt->Num() >= 4)
+				{
+					Raw->bNumber = true;
+					Raw->Number = FVector(-(*NumberAt)[0]->AsNumber(), (*NumberAt)[1]->AsNumber(), (*NumberAt)[2]->AsNumber());
+					Raw->NumberHigh = (*NumberAt)[3]->AsNumber();
+					if (NumberAt->Num() >= 5) { Raw->NumberLean = (*NumberAt)[4]->AsNumber(); }
+				}
+				(*Marks)->TryGetNumberField(TEXT("roof"), Raw->Roof);
+			}
+			const TSharedPtr<FJsonObject>* Fields = nullptr;
+			const TArray<TSharedPtr<FJsonValue>> *FieldListA = nullptr, *FieldListB = nullptr;
+			if (File->TryGetObjectField(TEXT("camo"), Fields) && (*Part)->TryGetArrayField(TEXT("camo_a"), FieldListA) && (*Part)->TryGetArrayField(TEXT("camo_b"), FieldListB))
+			{
+				Raw->bFields = true;
+				FString Hexed;
+				if ((*Fields)->TryGetStringField(TEXT("a"), Hexed)) { Raw->FieldColourA = FLinearColor(FColor::FromHex(Hexed)); }
+				if ((*Fields)->TryGetStringField(TEXT("b"), Hexed)) { Raw->FieldColourB = FLinearColor(FColor::FromHex(Hexed)); }
+				if ((*Fields)->TryGetStringField(TEXT("stripe"), Hexed)) { Raw->FieldStripe = FLinearColor(FColor::FromHex(Hexed)); }
+				for (const TSharedPtr<FJsonValue>& Value : *FieldListA) { Raw->FieldA.Add(static_cast<int32>(Value->AsNumber())); }
+				for (const TSharedPtr<FJsonValue>& Value : *FieldListB) { Raw->FieldB.Add(static_cast<int32>(Value->AsNumber())); }
+			}
+			FString KindOfModel;
+			if (File->TryGetStringField(TEXT("kind"), KindOfModel) && KindOfModel == TEXT("piece"))
+			{
+				Raw->bPiece = true;
+				const TArray<TSharedPtr<FJsonValue>>* ColourList = nullptr;
+				if (File->TryGetArrayField(TEXT("colours"), ColourList))
+				{
+					for (const TSharedPtr<FJsonValue>& Value : *ColourList)
+					{
+						Raw->PaintColours.Add(FLinearColor(FColor::FromHex(Value->AsString())));
+					}
+				}
+			}
+			if (KindOfModel == TEXT("battle-vehicle"))
+			{
+				Raw->bBattle = true;
+				auto Numbers = [&Part](const TCHAR* Field, TArray<int32>& Into)
+				{
+					const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+					if ((*Part)->TryGetArrayField(Field, List))
+					{
+						Into.Reserve(List->Num());
+						for (const TSharedPtr<FJsonValue>& Value : *List)
+						{
+							Into.Add(static_cast<int32>(Value->AsNumber()));
+						}
+					}
+				};
+				Numbers(TEXT("wear"), Raw->Wear);
+				Numbers(TEXT("blend"), Raw->Blend);
+				Numbers(TEXT("soot"), Raw->Soot);
+				const TArray<TSharedPtr<FJsonValue>> *ColourList = nullptr, *MarkList = nullptr;
+				if (File->TryGetArrayField(TEXT("colours"), ColourList))
+				{
+					for (const TSharedPtr<FJsonValue>& Value : *ColourList)
+					{
+						Raw->PaintColours.Add(FLinearColor(FColor::FromHex(Value->AsString())));
+					}
+				}
+				if (File->TryGetArrayField(TEXT("marks"), MarkList))
+				{
+					for (const TSharedPtr<FJsonValue>& Value : *MarkList)
+					{
+						const TSharedPtr<FJsonObject>* Entry = nullptr;
+						const TArray<TSharedPtr<FJsonValue>> *AtList = nullptr, *FacingList2 = nullptr;
+						if (Value->TryGetObject(Entry) && (*Entry)->TryGetArrayField(TEXT("at"), AtList) && AtList->Num() >= 3
+							&& (*Entry)->TryGetArrayField(TEXT("facing"), FacingList2) && FacingList2->Num() >= 3)
+						{
+							FRaw::FMark& Mark = Raw->LandMarks.AddDefaulted_GetRef();
+							(*Entry)->TryGetStringField(TEXT("tag"), Mark.Tag);
+							(*Entry)->TryGetStringField(TEXT("part"), Mark.Part);
+							(*Entry)->TryGetNumberField(TEXT("radius"), Mark.Radius);
+							// (the file has x forward and y to the right; here the nose is toward -X and the right hand at -Y)
+							Mark.At = FVector(-(*AtList)[0]->AsNumber(), -(*AtList)[1]->AsNumber(), (*AtList)[2]->AsNumber());
+							Mark.Facing = FVector(-(*FacingList2)[0]->AsNumber(), -(*FacingList2)[1]->AsNumber(), (*FacingList2)[2]->AsNumber());
+						}
+					}
+				}
+			}
+			if (KindOfModel == TEXT("ship"))
+			{
+				Raw->bShip = true;
+				const TArray<TSharedPtr<FJsonValue>>* ColourList = nullptr;
+				if (File->TryGetArrayField(TEXT("colours"), ColourList))
+				{
+					for (const TSharedPtr<FJsonValue>& Value : *ColourList)
+					{
+						Raw->PaintColours.Add(FLinearColor(FColor::FromHex(Value->AsString())));
+					}
+				}
+				FString Hexed;
+				if (File->TryGetStringField(TEXT("rust"), Hexed))
+				{
+					Raw->Rust = FLinearColor(FColor::FromHex(Hexed));
+				}
+				auto Numbers = [&Part](const TCHAR* Field, TArray<int32>& Into)
+				{
+					const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+					if ((*Part)->TryGetArrayField(Field, List))
+					{
+						Into.Reserve(List->Num());
+						for (const TSharedPtr<FJsonValue>& Value : *List)
+						{
+							Into.Add(static_cast<int32>(Value->AsNumber()));
+						}
+					}
+				};
+				Numbers(TEXT("wear"), Raw->Wear);
+				Numbers(TEXT("soot"), Raw->Soot);
+				Numbers(TEXT("salt"), Raw->Salt);
+				// (each file names its own paints: a sub's 24 and 25 are upper.on and hull.on, a merchant's tarp and crate;
+				// the pre-check's list, 23 November)
+				static const TSet<FString> Metal = { TEXT("hull"), TEXT("upper"), TEXT("deck"), TEXT("flight"), TEXT("boot"), TEXT("antifoul"), TEXT("steel"),
+					TEXT("black"), TEXT("boat"), TEXT("roof"), TEXT("torn"), TEXT("brass"), TEXT("line"), TEXT("red"), TEXT("white"), TEXT("door"), TEXT("seam"),
+					TEXT("upper.on"), TEXT("hull.on"), TEXT("helmet"), TEXT("plane") };
+				static const TSet<FString> Coat = { TEXT("hull"), TEXT("upper"), TEXT("deck"), TEXT("roof"), TEXT("door"), TEXT("seam"), TEXT("upper.on"), TEXT("hull.on") };
+				const TArray<TSharedPtr<FJsonValue>>* NameList = nullptr;
+				if (File->TryGetArrayField(TEXT("paint_names"), NameList))
+				{
+					for (const TSharedPtr<FJsonValue>& Value : *NameList)
+					{
+						const FString Paint = Value->AsString();
+						Raw->ShipMetal.Add(Metal.Contains(Paint));
+						Raw->ShipPainted.Add(Coat.Contains(Paint));
+					}
+				}
+			}
+			if (KindOfModel == TEXT("aircraft"))
+			{
+				Raw->bAircraft = true;
+				File->TryGetBoolField(TEXT("nation_paint"), Raw->bNationPaint);
+				const TArray<TSharedPtr<FJsonValue>> *ColourList = nullptr, *WearList = nullptr, *MarkList = nullptr;
+				if (File->TryGetArrayField(TEXT("colours"), ColourList))
+				{
+					for (const TSharedPtr<FJsonValue>& Value : *ColourList)
+					{
+						Raw->PaintColours.Add(FLinearColor(FColor::FromHex(Value->AsString())));
+					}
+				}
+				if ((*Part)->TryGetArrayField(TEXT("wear"), WearList))
+				{
+					for (const TSharedPtr<FJsonValue>& Value : *WearList)
+					{
+						Raw->Wear.Add(static_cast<int32>(Value->AsNumber()));
+					}
+				}
+				const TArray<TSharedPtr<FJsonValue>> *BlendList = nullptr, *SootList = nullptr;
+				if ((*Part)->TryGetArrayField(TEXT("blend"), BlendList))
+				{
+					for (const TSharedPtr<FJsonValue>& Value : *BlendList)
+					{
+						Raw->Blend.Add(static_cast<int32>(Value->AsNumber()));
+					}
+				}
+				if ((*Part)->TryGetArrayField(TEXT("soot"), SootList))
+				{
+					for (const TSharedPtr<FJsonValue>& Value : *SootList)
+					{
+						Raw->Soot.Add(static_cast<int32>(Value->AsNumber()));
+					}
+				}
+				FString Ink;
+				if (File->TryGetStringField(TEXT("number_ink"), Ink))
+				{
+					Raw->NumberInk = FLinearColor(FColor::FromHex(Ink));
+				}
+				// (Its paint by date: "schemes", each {"from": "1944-04", "colours": {"upper": "B0B6BA", ...}, "number_ink": ...},
+				// its paints named as the file's "paint_names" name them, or where it has none as the plain build's
+				// eighteen. A name this model does not paint, such as the battle model's rivets and bands, is passed over.)
+				const TArray<TSharedPtr<FJsonValue>>* SchemeList = nullptr;
+				if (File->TryGetArrayField(TEXT("schemes"), SchemeList))
+				{
+					static const TArray<FString> PlainPaints = { TEXT("upper"), TEXT("upper2"), TEXT("under"), TEXT("nose"), TEXT("boss"), TEXT("glass"),
+						TEXT("frame"), TEXT("steel"), TEXT("tyre"), TEXT("blade"), TEXT("line"), TEXT("soot"), TEXT("engine"), TEXT("leg"), TEXT("bomb"),
+						TEXT("stain"), TEXT("glare"), TEXT("glint") };
+					TArray<FString> PaintNames;
+					if (!File->TryGetStringArrayField(TEXT("paint_names"), PaintNames))
+					{
+						PaintNames = PlainPaints;
+					}
+					for (const TSharedPtr<FJsonValue>& Value : *SchemeList)
+					{
+						const TSharedPtr<FJsonObject>* Entry = nullptr;
+						FString From;
+						if (!Value.IsValid() || !Value->TryGetObject(Entry) || !(*Entry)->TryGetStringField(TEXT("from"), From) || SchemeMonth(From) == INDEX_NONE)
+						{
+							continue;
+						}
+						FRaw::FScheme& Scheme = Raw->Schemes.AddDefaulted_GetRef();
+						Raw->SchemeFrom.Add(SchemeMonth(From));
+						const TSharedPtr<FJsonObject>* Named = nullptr;
+						if ((*Entry)->TryGetObjectField(TEXT("colours"), Named))
+						{
+							for (const TPair<FString, TSharedPtr<FJsonValue>>& Each : (*Named)->Values)
+							{
+								const int32 Index = PaintNames.IndexOfByKey(Each.Key);
+								FString Hexed;
+								if (Index != INDEX_NONE && Each.Value.IsValid() && Each.Value->TryGetString(Hexed))
+								{
+									Scheme.Colours.Add(Index, FLinearColor(FColor::FromHex(Hexed)));
+								}
+							}
+						}
+						FString SchemeInk;
+						if ((*Entry)->TryGetStringField(TEXT("number_ink"), SchemeInk))
+						{
+							Scheme.bInk = true;
+							Scheme.Ink = FLinearColor(FColor::FromHex(SchemeInk));
+						}
+					}
+				}
+				Raw->bSchemes = true;
+				if (File->TryGetArrayField(TEXT("marks"), MarkList))
+				{
+					for (const TSharedPtr<FJsonValue>& Value : *MarkList)
+					{
+						const TSharedPtr<FJsonObject>* Entry = nullptr;
+						const TArray<TSharedPtr<FJsonValue>> *AtList = nullptr, *FacingList2 = nullptr;
+						if (Value->TryGetObject(Entry) && (*Entry)->TryGetArrayField(TEXT("at"), AtList) && AtList->Num() >= 3
+							&& (*Entry)->TryGetArrayField(TEXT("facing"), FacingList2) && FacingList2->Num() >= 3)
+						{
+							FRaw::FMark& Mark = Raw->PlaneMarks.AddDefaulted_GetRef();
+							(*Entry)->TryGetStringField(TEXT("tag"), Mark.Tag);
+							(*Entry)->TryGetNumberField(TEXT("radius"), Mark.Radius);
+							(*Entry)->TryGetNumberField(TEXT("curve"), Mark.Curve);
+							(*Entry)->TryGetBoolField(TEXT("both"), Mark.bBoth);
+							const TArray<TSharedPtr<FJsonValue>>* Corners = nullptr;
+							if ((*Entry)->TryGetArrayField(TEXT("quad"), Corners) && Corners->Num() == 4)
+							{
+								for (const TSharedPtr<FJsonValue>& Corner : *Corners)
+								{
+									const TArray<TSharedPtr<FJsonValue>>* Pair = nullptr;
+									if (Corner.IsValid() && Corner->TryGetArray(Pair) && Pair->Num() >= 2)
+									{
+										// (the file has x forward; here the nose is toward -X)
+										Mark.Quad.Add(FVector2D(-(*Pair)[0]->AsNumber(), (*Pair)[1]->AsNumber()));
+									}
+								}
+								if (Mark.Quad.Num() != 4)
+								{
+									Mark.Quad.Reset();
+								}
+							}
+							const TSharedPtr<FJsonObject>* Striped = nullptr;
+							const TArray<TSharedPtr<FJsonValue>>* BandList = nullptr;
+							if ((*Entry)->TryGetObjectField(TEXT("bands"), Striped) && (*Striped)->TryGetArrayField(TEXT("bands"), BandList))
+							{
+								FString Way;
+								(*Striped)->TryGetStringField(TEXT("dir"), Way);
+								Mark.bBandsUpright = Way != TEXT("h");
+								for (const TSharedPtr<FJsonValue>& Band : *BandList)
+								{
+									FString Hexed;
+									if (Band.IsValid() && Band->TryGetString(Hexed))
+									{
+										Mark.Bands.Add(FLinearColor(FColor::FromHex(Hexed)));
+									}
+								}
+							}
+							// (the file has x forward and y to the right; here the nose is toward -X and the right hand at -Y)
+							Mark.At = FVector(-(*AtList)[0]->AsNumber(), -(*AtList)[1]->AsNumber(), (*AtList)[2]->AsNumber());
+							Mark.Facing = FVector(-(*FacingList2)[0]->AsNumber(), -(*FacingList2)[1]->AsNumber(), (*FacingList2)[2]->AsNumber());
+						}
+					}
+				}
+			}
+		}
+		return Raw;
+	}
+
+	template <typename T>
+	void HashOne(uint32& Running, const T& Item)
+	{
+		Running = FCrc::MemCrc32(&Item, sizeof(T), Running);
+	}
+
+	template <typename T>
+	void HashList(uint32& Running, const TArray<T>& Items)
+	{
+		HashOne(Running, Items.Num());
+		if (Items.Num() > 0)
+		{
+			Running = FCrc::MemCrc32(Items.GetData(), Items.Num() * sizeof(T), Running);
+		}
+	}
+
+	void HashMarks(uint32& Running, const TArray<FRaw::FMark>& Marks)
+	{
+		HashOne(Running, Marks.Num());
+		for (const FRaw::FMark& Mark : Marks)
+		{
+			Running = FCrc::StrCrc32(*Mark.Tag, Running);
+			Running = FCrc::StrCrc32(*Mark.Part, Running);
+			HashOne(Running, Mark.At);
+			HashOne(Running, Mark.Facing);
+			HashOne(Running, Mark.Radius);
+			HashOne(Running, Mark.Curve);
+			HashOne(Running, Mark.bBoth);
+			HashList(Running, Mark.Quad);
+			HashList(Running, Mark.Bands);
+			HashOne(Running, Mark.bBandsUpright);
+		}
+	}
+
+	/** A number for everything a read model holds, to show that it was read the same on whichever thread (the log's "hash"). */
+	uint32 RawHash(const FRaw& R)
+	{
+		uint32 H = 0;
+		HashList(H, R.Points);
+		HashList(H, R.Facings);
+		HashList(H, R.Paints);
+		HashList(H, R.Triangles);
+		HashList(H, R.Worn);
+		HashList(H, R.Salt);
+		HashList(H, R.Wear);
+		HashList(H, R.Blend);
+		HashList(H, R.Soot);
+		HashList(H, R.SchemeFrom);
+		HashList(H, R.FieldA);
+		HashList(H, R.FieldB);
+		HashOne(H, R.bMarks); HashOne(H, R.bCross); HashOne(H, R.bNumber); HashOne(H, R.bAircraft); HashOne(H, R.bNationPaint);
+		HashOne(H, R.bShip); HashOne(H, R.bPiece); HashOne(H, R.bFields); HashOne(H, R.bBattle); HashOne(H, R.bSchemes);
+		HashOne(H, R.Cross); HashOne(H, R.Number);
+		HashOne(H, R.CrossSize); HashOne(H, R.NumberHigh); HashOne(H, R.Roof); HashOne(H, R.CrossLean); HashOne(H, R.NumberLean);
+		HashOne(H, R.Rust); HashOne(H, R.NumberInk);
+		HashOne(H, R.FieldColourA); HashOne(H, R.FieldColourB); HashOne(H, R.FieldStripe);
+		HashList(H, R.PaintColours);
+		for (const bool bMetal : R.ShipMetal) { HashOne(H, bMetal); }
+		for (const bool bCoat : R.ShipPainted) { HashOne(H, bCoat); }
+		HashOne(H, R.Schemes.Num());
+		for (const FRaw::FScheme& Scheme : R.Schemes)
+		{
+			HashOne(H, Scheme.bInk);
+			HashOne(H, Scheme.Ink);
+			TArray<int32> Keys;
+			Scheme.Colours.GetKeys(Keys);
+			Keys.Sort();
+			for (const int32 Key : Keys)
+			{
+				HashOne(H, Key);
+				HashOne(H, Scheme.Colours.FindChecked(Key));
+			}
+		}
+		HashMarks(H, R.PlaneMarks);
+		HashMarks(H, R.LandMarks);
+		return H;
+	}
+
+	/** A model file read aside: both forms from the one parse. */
+	struct FWarmJob
+	{
+		FString Name;
+		TSharedPtr<FRaw> Near, Far;
+		uint32 NearHash = 0, FarHash = 0; // (RawHash of each form, taken where the file was read, not on the game thread)
+		double Seconds = 0.0;
+		std::atomic<bool> bDone{ false };
+	};
+
+	/** Reads and parses a model's file, once, and builds the wanted forms (both, by default) from the one parse. Any thread. */
+	void ReadModelFile(const FString& Name, bool bOld, bool bTorpedo, FWarmJob& Out, bool bWantNear = true, bool bWantFar = true)
+	{
+		const double Began = FPlatformTime::Seconds();
+		FString Text;
+		TSharedPtr<FJsonObject> File;
+		if (FFileHelper::LoadFileToString(Text, *ModelPath(Name, bOld)) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), File) && File.IsValid())
+		{
+			if (bWantNear)
+			{
+				Out.Near = BuildRaw(File, false, bTorpedo);
+				Out.NearHash = Out.Near.IsValid() ? RawHash(*Out.Near) : 0;
+			}
+			if (bWantFar)
+			{
+				Out.Far = BuildRaw(File, true, bTorpedo);
+				Out.FarHash = Out.Far.IsValid() ? RawHash(*Out.Far) : 0;
+			}
+		}
+		Out.Seconds = FPlatformTime::Seconds() - Began;
+	}
+
+	/** Puts a file's wanted forms in the table of read models, as Sculpted would have, and logs each as it always has. Game thread. */
+	void InstallRaw(const FString& Name, bool bTorpedo, const FWarmJob& Job, bool bWantNear = true, bool bWantFar = true)
+	{
+		for (const bool bFar : { false, true })
+		{
+			if (bFar ? !bWantFar : !bWantNear)
+			{
+				continue; // (this form was not built: left for the worker, or for the frame that asks for it)
+			}
+			const TSharedPtr<FRaw>& Raw = bFar ? Job.Far : Job.Near;
+			const FString Which = Name + (bFar ? TEXT("|far") : TEXT("|near")) + (bTorpedo ? TEXT("|torpedo") : TEXT(""));
+			if (Read.Contains(Which))
+			{
+				continue;
+			}
+			Read.Add(Which, Raw);
+			if (Raw.IsValid())
+			{
+				if (Raw->bSchemes)
+				{
+					SchemeMonths().Add(Name, Raw->SchemeFrom);
+				}
+				InstalledBytes += static_cast<int64>(Raw->Points.Num()) * 72 + static_cast<int64>(Raw->Triangles.Num()) * 4 + static_cast<int64>(Raw->Paints.Num()) * 16;
+				UE_LOG(LogTheater, Log, TEXT("Sculpted model %s read: %d points, %d triangles"), *Which, Raw->Points.Num(), Raw->Triangles.Num() / 3);
+				UE_LOG(LogTheater, Log, TEXT("Sculpted model %s hash %08x"), *Which, bFar ? Job.FarHash : Job.NearHash);
+			}
+		}
+	}
+
+	// (tc.Speed.ModelWarm: the files still to read, by the name of the model, the one being read, and the thread's future.
+	// Game thread only; the worker is given a job of its own and writes nothing else.)
+	TArray<FString> WarmQueue; // (the files a nation's pieces could ask for in the year, and the year after: read first)
+	TArray<FString> WarmLate; // (every other file: read last, and only while the read models hold less than tc.Speed.ModelWarmMB)
+	TSet<FString> WarmAsked;
+	TSharedPtr<FWarmJob, ESPMode::ThreadSafe> WarmRunning;
+	TFuture<void> WarmFuture;
+	int32 WarmSkipped = 0;
+	bool bWarmAll = false;
+
+	/** Waits for the file in flight, if there is one, and puts what it read in the table. Game thread. */
+	void AdoptWarm()
+	{
+		if (!WarmRunning.IsValid())
+		{
+			return;
+		}
+		if (WarmFuture.IsValid())
+		{
+			WarmFuture.Wait(); // (at once where the job says it is done)
+		}
+		const TSharedPtr<FWarmJob, ESPMode::ThreadSafe> Done = WarmRunning;
+		WarmRunning.Reset();
+		WarmFuture = TFuture<void>();
+		InstallRaw(Done->Name, false, *Done);
+		UE_LOG(LogTheater, Display, TEXT("Speed: model %s read aside in %.0f ms"), *Done->Name, Done->Seconds * 1000.0);
 	}
 
 	using FPlacing = MiniatureParts::FPlacing;
@@ -667,463 +1313,28 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	// with a kit: the colours of what its nation's soldier wears, by the numbers the figure's maker painted it with.
 	// A figure carries no markings and none of a vehicle's wear.)
 	const bool bFigure = Kit != nullptr && Kit->Num() > 0;
-	// The numbers as the script wrote them, read once: points, which way each faces, its paint, and the triangles.
-	struct FRaw
-	{
-		TArray<FVector> Points, Facings;
-		TArray<int32> Paints, Triangles;
-		// (A worn figure, the soldiers' maker, 19 November 2026: the file's optional "shade" beside its paints, one
-		// number for each point, 1 clean and less where the cloth is worn or stitched. Empty where the file has none.)
-		TArray<float> Worn;
-		// (where the model's maker says its markings go, on the right-hand side, and how high its roof is: a model
-		// that does not say is marked by its outline)
-		bool bMarks = false, bCross = false, bNumber = false; // (a lorry carries its nation's mark and no number; a gun carries neither)
-		FVector Cross = FVector::ZeroVector, Number = FVector::ZeroVector;
-		double CrossSize = 0.2, NumberHigh = 0.26, Roof = 0.0;
-		double CrossLean = 0.13, NumberLean = 0.16; // (how far the plate each lies on leans back)
-		// (An aircraft, from Tools/build_plane.py: the file says what colour each of its paints is, how worn the paint
-		// is at each point, and where every marking goes, with the way the skin faces there and how round it is.)
-		bool bAircraft = false, bNationPaint = false;
-		// (A warship or a merchant from tools/battle-models (kind "ship"): the file gives each paint's own colour, by its
-		// paint names (hull, upper, deck, steel, black, canvas, glass, ...), and at each point how worn and rust-streaked
-		// it is, how sooted, and how salt-stained low on her sides. A ship carries no table markings.)
-		bool bShip = false;
-		TArray<int32> Salt;
-		TArray<bool> ShipMetal, ShipPainted; // (by the file's paint_names: which paints are steel, and which painted steel that rusts and salts)
-		FLinearColor Rust = FLinearColor(FColor::FromHex(TEXT("8A4E28")));
-		// (A piece of the table that is nobody's vehicle and nobody's soldier, such as the agent: the file gives the
-		// colour of each of its paints, and it takes no dust of the road, no markings and no wear.)
-		bool bPiece = false;
-		TArray<FLinearColor> PaintColours;
-		TArray<int32> Wear, Blend, Soot; // (each 0 to 100 a point: chipped paint, how far into the second camouflage colour, exhaust soot)
-		// (An aircraft's paint by date, the aircraft modeller's "schemes" (the Mustang's, 22 November 2026): each stands
-		// from its first month until the next begins, laid over the file's own colours paint by paint, and may give the
-		// side number its own ink. Before the first, the file's own colours stand.)
-		struct FScheme
-		{
-			TMap<int32, FLinearColor> Colours;
-			bool bInk = false;
-			FLinearColor Ink = FLinearColor::Black;
-		};
-		TArray<FScheme> Schemes;
-		TArray<int32> SchemeFrom; // (each one's first month, as SchemeMonth counts it)
-		// (A vehicle with a camouflage in fields: each point of its paint says how far it is into a field of the second
-		// colour and of the third, and the thin lines that part the fields are a paint of their own.)
-		bool bFields = false;
-		TArray<int32> FieldA, FieldB;
-		FLinearColor FieldColourA = FLinearColor::Black, FieldColourB = FLinearColor::Black, FieldStripe = FLinearColor::White;
-		FLinearColor NumberInk = FLinearColor(FColor::FromHex(TEXT("F2F0E8"))); // what the side number is painted in: dark on a pale machine
-		struct FMark
-		{
-			FString Tag;
-			FVector At = FVector::ZeroVector, Facing = FVector::UpVector;
-			double Radius = 0.3, Curve = 0.0;
-			bool bBoth = false;
-			// (a mark that fills a four-cornered place on the fin: its corners along the machine and up it, the lower
-			// leading one first, then the lower trailing, the upper trailing and the upper leading)
-			TArray<FVector2D> Quad;
-			// (and its own stripes there, where its maker gave them: {"dir": "v" or "h", "bands": [colours]}, from the
-			// leading edge or from the top, as the table's fin stripes)
-			TArray<FLinearColor> Bands;
-			bool bBandsUpright = true;
-			FString Part; // (on a land vehicle: "turret" or "hull")
-		};
-		TArray<FMark> PlaneMarks;
-		// (A land vehicle made from the vehicle modeller's battle model by Tools/battle_vehicle.py: its far mesh, the
-		// file's own colour for each of its paints, the camouflage's blotches point by point in Blend, wear and soot
-		// as an aircraft has them, and the places of its owner's marks, each side listed.)
-		bool bBattle = false;
-		TArray<FMark> LandMarks;
-	};
-	static TMap<FString, TSharedPtr<FRaw>> Read; // (a model that is not there is remembered as nothing, and not looked for again)
 	static TMap<FString, FMiniatureMesh> Painted;
 	const FString Which = Name + (bFar ? TEXT("|far") : TEXT("|near")) + (bTorpedoLoad ? TEXT("|torpedo") : TEXT(""));
 	if (!Read.Contains(Which))
 	{
-		TSharedPtr<FRaw> Raw;
-		FString Text;
-		TSharedPtr<FJsonObject> File;
-		// ("-TheaterOldVehicles" stands the campaign's older miniature wherever one is kept beside the new one, in
-		// Models/Old: to show the two against each other and to time them. The parade can also name one outright,
-		// "Old/LightTank:BRA".)
-		static const bool bOldVehicles = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldVehicles"));
-		FString Path = FPaths::ProjectContentDir() / TEXT("Models") / (Name + TEXT(".json"));
-		if (bOldVehicles && FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Models") / TEXT("Old") / (Name + TEXT(".json"))))
+		THEATER_SPEED_SCOPE(SculptedRead); // (a model that arrives cold in a frame is named in the long-frame jobs list)
+		if (WarmRunning.IsValid() && WarmRunning->Name == Name)
 		{
-			Path = FPaths::ProjectContentDir() / TEXT("Models") / TEXT("Old") / (Name + TEXT(".json"));
+			AdoptWarm(); // (the worker is on this very file: wait for it, never parse it twice)
 		}
-		if (FFileHelper::LoadFileToString(Text, *Path) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), File) && File.IsValid())
+		if (!Read.Contains(Which))
 		{
-			const TSharedPtr<FJsonObject>* Part = nullptr;
-			const TArray<TSharedPtr<FJsonValue>> *PointList = nullptr, *FacingList = nullptr, *PaintList = nullptr, *TriangleList = nullptr;
-			if (File->TryGetObjectField(bFar ? TEXT("far") : TEXT("near"), Part) && (*Part)->TryGetArrayField(TEXT("points"), PointList) && (*Part)->TryGetArrayField(TEXT("facings"), FacingList)
-				&& (*Part)->TryGetArrayField(TEXT("paints"), PaintList) && (*Part)->TryGetArrayField(TEXT("triangles"), TriangleList)
-				&& PointList->Num() == PaintList->Num() * 3 && FacingList->Num() == PointList->Num() && TriangleList->Num() % 3 == 0)
+			// (not read ahead, or a torpedo load: read here and now, one parse for both forms)
+			FWarmJob Job;
+			Job.Name = Name;
+			ReadModelFile(Name, OldVehiclesFlag(), bTorpedoLoad, Job, !bFar, bFar); // (only the form asked for, as before the mend)
+			if (Job.Near.IsValid() || Job.Far.IsValid())
 			{
-				Raw = MakeShared<FRaw>();
-				for (int32 K = 0; K + 2 < PointList->Num(); K += 3)
-				{
-					// (the file has x forward and y to the right; the game's vehicles are built nose toward -X with their right hand at -Y)
-					Raw->Points.Add(FVector(-(*PointList)[K]->AsNumber(), -(*PointList)[K + 1]->AsNumber(), (*PointList)[K + 2]->AsNumber()));
-					Raw->Facings.Add(FVector(-(*FacingList)[K]->AsNumber(), -(*FacingList)[K + 1]->AsNumber(), (*FacingList)[K + 2]->AsNumber()).GetSafeNormal());
-				}
-				for (const TSharedPtr<FJsonValue>& Value : *PaintList)
-				{
-					Raw->Paints.Add(static_cast<int32>(Value->AsNumber()));
-				}
-				const TArray<TSharedPtr<FJsonValue>>* ShadeList = nullptr;
-				if ((*Part)->TryGetArrayField(TEXT("shade"), ShadeList) && ShadeList->Num() == PaintList->Num())
-				{
-					Raw->Worn.Reserve(ShadeList->Num());
-					for (const TSharedPtr<FJsonValue>& Value : *ShadeList)
-					{
-						Raw->Worn.Add(FMath::Clamp(static_cast<float>(Value->AsNumber()), 0.0f, 1.0f));
-					}
-				}
-				// (A model that carries a torpedo or bombs, never both (its "loads"; the aircraft modeller, 20 November
-				// 2026): the load it does not fly with is left out, a triangle at a time, so that every point keeps its
-				// place for the bay, the airscrews and the marks the air battle finds by point. Bombs unless asked.)
-				TSet<int32> Unflown;
-				const TArray<TSharedPtr<FJsonValue>> *Loads = nullptr, *PartNames = nullptr, *PartOf = nullptr;
-				if (File->TryGetArrayField(TEXT("loads"), Loads) && Loads->Num() >= 2 && File->TryGetArrayField(TEXT("parts"), PartNames)
-					&& (*Part)->TryGetArrayField(TEXT("part"), PartOf) && PartOf->Num() == PaintList->Num())
-				{
-					for (int32 K = 0; K < PartNames->Num(); ++K)
-					{
-						const TSharedPtr<FJsonObject> Named = (*PartNames)[K]->AsObject();
-						FString PartName;
-						if (Named.IsValid() && Named->TryGetStringField(TEXT("name"), PartName) && PartName == (bTorpedoLoad ? TEXT("bombs") : TEXT("torpedo")))
-						{
-							Unflown.Add(K);
-						}
-					}
-					// (and whatever her file's own load clip hides, load.torpedo or load.bombs, each track's part scaled to
-					// nothing: the rebuilt Betty's (the aircraft modeller, 23 November 08:53Z) hides her bay's doors with
-					// her bombs, her torpedo hanging half out of her belly where they were)
-					const TSharedPtr<FJsonObject>* Clips = nullptr;
-					const TSharedPtr<FJsonObject>* Load = nullptr;
-					const TArray<TSharedPtr<FJsonValue>>* Tracks = nullptr;
-					if (File->TryGetObjectField(TEXT("clips"), Clips) && (*Clips)->TryGetObjectField(bTorpedoLoad ? TEXT("load.torpedo") : TEXT("load.bombs"), Load)
-						&& (*Load)->TryGetArrayField(TEXT("tracks"), Tracks))
-					{
-						for (const TSharedPtr<FJsonValue>& Track : *Tracks)
-						{
-							if (!Track.IsValid() || Track->Type != EJson::Object)
-							{
-								continue;
-							}
-							const TSharedPtr<FJsonObject> Each = Track->AsObject();
-							const TArray<TSharedPtr<FJsonValue>>* Keys = nullptr;
-							double PartAt = -1.0;
-							if (!Each.IsValid() || !Each->TryGetNumberField(TEXT("part"), PartAt) || !Each->TryGetArrayField(TEXT("scale"), Keys) || Keys->Num() == 0)
-							{
-								continue;
-							}
-							// (its last key's scale: the clip holds where it ends)
-							const TArray<TSharedPtr<FJsonValue>>* Last = nullptr;
-							if ((*Keys).Last()->TryGetArray(Last) && Last->Num() >= 2 && (*Last)[1]->AsNumber() <= 0.01
-								&& PartAt >= 0.0 && static_cast<int32>(PartAt) < PartNames->Num())
-							{
-								Unflown.Add(static_cast<int32>(PartAt));
-							}
-						}
-					}
-				}
-				for (int32 K = 0; K + 2 < TriangleList->Num(); K += 3)
-				{
-					const int32 A = static_cast<int32>((*TriangleList)[K]->AsNumber()), B = static_cast<int32>((*TriangleList)[K + 1]->AsNumber()), C = static_cast<int32>((*TriangleList)[K + 2]->AsNumber());
-					if (Unflown.Num() > 0 && PartOf->IsValidIndex(A) && PartOf->IsValidIndex(B) && PartOf->IsValidIndex(C)
-						&& Unflown.Contains(static_cast<int32>((*PartOf)[A]->AsNumber())) && Unflown.Contains(static_cast<int32>((*PartOf)[B]->AsNumber()))
-						&& Unflown.Contains(static_cast<int32>((*PartOf)[C]->AsNumber())))
-					{
-						continue;
-					}
-					Raw->Triangles.Append({ A, B, C });
-				}
-				const TSharedPtr<FJsonObject>* Marks = nullptr;
-				if (File->TryGetObjectField(TEXT("marks"), Marks))
-				{
-					// (the file has x forward and y to the right; here the nose is toward -X and the right hand at -Y)
-					Raw->bMarks = true;
-					const TArray<TSharedPtr<FJsonValue>> *CrossAt = nullptr, *NumberAt = nullptr;
-					if ((*Marks)->TryGetArrayField(TEXT("cross"), CrossAt) && CrossAt->Num() >= 4)
-					{
-						Raw->bCross = true;
-						Raw->Cross = FVector(-(*CrossAt)[0]->AsNumber(), (*CrossAt)[1]->AsNumber(), (*CrossAt)[2]->AsNumber());
-						Raw->CrossSize = (*CrossAt)[3]->AsNumber();
-						if (CrossAt->Num() >= 5) { Raw->CrossLean = (*CrossAt)[4]->AsNumber(); }
-					}
-					if ((*Marks)->TryGetArrayField(TEXT("number"), NumberAt) && NumberAt->Num() >= 4)
-					{
-						Raw->bNumber = true;
-						Raw->Number = FVector(-(*NumberAt)[0]->AsNumber(), (*NumberAt)[1]->AsNumber(), (*NumberAt)[2]->AsNumber());
-						Raw->NumberHigh = (*NumberAt)[3]->AsNumber();
-						if (NumberAt->Num() >= 5) { Raw->NumberLean = (*NumberAt)[4]->AsNumber(); }
-					}
-					(*Marks)->TryGetNumberField(TEXT("roof"), Raw->Roof);
-				}
-				const TSharedPtr<FJsonObject>* Fields = nullptr;
-				const TArray<TSharedPtr<FJsonValue>> *FieldListA = nullptr, *FieldListB = nullptr;
-				if (File->TryGetObjectField(TEXT("camo"), Fields) && (*Part)->TryGetArrayField(TEXT("camo_a"), FieldListA) && (*Part)->TryGetArrayField(TEXT("camo_b"), FieldListB))
-				{
-					Raw->bFields = true;
-					FString Hexed;
-					if ((*Fields)->TryGetStringField(TEXT("a"), Hexed)) { Raw->FieldColourA = FLinearColor(FColor::FromHex(Hexed)); }
-					if ((*Fields)->TryGetStringField(TEXT("b"), Hexed)) { Raw->FieldColourB = FLinearColor(FColor::FromHex(Hexed)); }
-					if ((*Fields)->TryGetStringField(TEXT("stripe"), Hexed)) { Raw->FieldStripe = FLinearColor(FColor::FromHex(Hexed)); }
-					for (const TSharedPtr<FJsonValue>& Value : *FieldListA) { Raw->FieldA.Add(static_cast<int32>(Value->AsNumber())); }
-					for (const TSharedPtr<FJsonValue>& Value : *FieldListB) { Raw->FieldB.Add(static_cast<int32>(Value->AsNumber())); }
-				}
-				FString KindOfModel;
-				if (File->TryGetStringField(TEXT("kind"), KindOfModel) && KindOfModel == TEXT("piece"))
-				{
-					Raw->bPiece = true;
-					const TArray<TSharedPtr<FJsonValue>>* ColourList = nullptr;
-					if (File->TryGetArrayField(TEXT("colours"), ColourList))
-					{
-						for (const TSharedPtr<FJsonValue>& Value : *ColourList)
-						{
-							Raw->PaintColours.Add(FLinearColor(FColor::FromHex(Value->AsString())));
-						}
-					}
-				}
-				if (KindOfModel == TEXT("battle-vehicle"))
-				{
-					Raw->bBattle = true;
-					auto Numbers = [&Part](const TCHAR* Field, TArray<int32>& Into)
-					{
-						const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
-						if ((*Part)->TryGetArrayField(Field, List))
-						{
-							Into.Reserve(List->Num());
-							for (const TSharedPtr<FJsonValue>& Value : *List)
-							{
-								Into.Add(static_cast<int32>(Value->AsNumber()));
-							}
-						}
-					};
-					Numbers(TEXT("wear"), Raw->Wear);
-					Numbers(TEXT("blend"), Raw->Blend);
-					Numbers(TEXT("soot"), Raw->Soot);
-					const TArray<TSharedPtr<FJsonValue>> *ColourList = nullptr, *MarkList = nullptr;
-					if (File->TryGetArrayField(TEXT("colours"), ColourList))
-					{
-						for (const TSharedPtr<FJsonValue>& Value : *ColourList)
-						{
-							Raw->PaintColours.Add(FLinearColor(FColor::FromHex(Value->AsString())));
-						}
-					}
-					if (File->TryGetArrayField(TEXT("marks"), MarkList))
-					{
-						for (const TSharedPtr<FJsonValue>& Value : *MarkList)
-						{
-							const TSharedPtr<FJsonObject>* Entry = nullptr;
-							const TArray<TSharedPtr<FJsonValue>> *AtList = nullptr, *FacingList2 = nullptr;
-							if (Value->TryGetObject(Entry) && (*Entry)->TryGetArrayField(TEXT("at"), AtList) && AtList->Num() >= 3
-								&& (*Entry)->TryGetArrayField(TEXT("facing"), FacingList2) && FacingList2->Num() >= 3)
-							{
-								FRaw::FMark& Mark = Raw->LandMarks.AddDefaulted_GetRef();
-								(*Entry)->TryGetStringField(TEXT("tag"), Mark.Tag);
-								(*Entry)->TryGetStringField(TEXT("part"), Mark.Part);
-								(*Entry)->TryGetNumberField(TEXT("radius"), Mark.Radius);
-								// (the file has x forward and y to the right; here the nose is toward -X and the right hand at -Y)
-								Mark.At = FVector(-(*AtList)[0]->AsNumber(), -(*AtList)[1]->AsNumber(), (*AtList)[2]->AsNumber());
-								Mark.Facing = FVector(-(*FacingList2)[0]->AsNumber(), -(*FacingList2)[1]->AsNumber(), (*FacingList2)[2]->AsNumber());
-							}
-						}
-					}
-				}
-				if (KindOfModel == TEXT("ship"))
-				{
-					Raw->bShip = true;
-					const TArray<TSharedPtr<FJsonValue>>* ColourList = nullptr;
-					if (File->TryGetArrayField(TEXT("colours"), ColourList))
-					{
-						for (const TSharedPtr<FJsonValue>& Value : *ColourList)
-						{
-							Raw->PaintColours.Add(FLinearColor(FColor::FromHex(Value->AsString())));
-						}
-					}
-					FString Hexed;
-					if (File->TryGetStringField(TEXT("rust"), Hexed))
-					{
-						Raw->Rust = FLinearColor(FColor::FromHex(Hexed));
-					}
-					auto Numbers = [&Part](const TCHAR* Field, TArray<int32>& Into)
-					{
-						const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
-						if ((*Part)->TryGetArrayField(Field, List))
-						{
-							Into.Reserve(List->Num());
-							for (const TSharedPtr<FJsonValue>& Value : *List)
-							{
-								Into.Add(static_cast<int32>(Value->AsNumber()));
-							}
-						}
-					};
-					Numbers(TEXT("wear"), Raw->Wear);
-					Numbers(TEXT("soot"), Raw->Soot);
-					Numbers(TEXT("salt"), Raw->Salt);
-					// (each file names its own paints: a sub's 24 and 25 are upper.on and hull.on, a merchant's tarp and crate;
-					// the pre-check's list, 23 November)
-					static const TSet<FString> Metal = { TEXT("hull"), TEXT("upper"), TEXT("deck"), TEXT("flight"), TEXT("boot"), TEXT("antifoul"), TEXT("steel"),
-						TEXT("black"), TEXT("boat"), TEXT("roof"), TEXT("torn"), TEXT("brass"), TEXT("line"), TEXT("red"), TEXT("white"), TEXT("door"), TEXT("seam"),
-						TEXT("upper.on"), TEXT("hull.on"), TEXT("helmet"), TEXT("plane") };
-					static const TSet<FString> Coat = { TEXT("hull"), TEXT("upper"), TEXT("deck"), TEXT("roof"), TEXT("door"), TEXT("seam"), TEXT("upper.on"), TEXT("hull.on") };
-					const TArray<TSharedPtr<FJsonValue>>* NameList = nullptr;
-					if (File->TryGetArrayField(TEXT("paint_names"), NameList))
-					{
-						for (const TSharedPtr<FJsonValue>& Value : *NameList)
-						{
-							const FString Paint = Value->AsString();
-							Raw->ShipMetal.Add(Metal.Contains(Paint));
-							Raw->ShipPainted.Add(Coat.Contains(Paint));
-						}
-					}
-				}
-				if (KindOfModel == TEXT("aircraft"))
-				{
-					Raw->bAircraft = true;
-					File->TryGetBoolField(TEXT("nation_paint"), Raw->bNationPaint);
-					const TArray<TSharedPtr<FJsonValue>> *ColourList = nullptr, *WearList = nullptr, *MarkList = nullptr;
-					if (File->TryGetArrayField(TEXT("colours"), ColourList))
-					{
-						for (const TSharedPtr<FJsonValue>& Value : *ColourList)
-						{
-							Raw->PaintColours.Add(FLinearColor(FColor::FromHex(Value->AsString())));
-						}
-					}
-					if ((*Part)->TryGetArrayField(TEXT("wear"), WearList))
-					{
-						for (const TSharedPtr<FJsonValue>& Value : *WearList)
-						{
-							Raw->Wear.Add(static_cast<int32>(Value->AsNumber()));
-						}
-					}
-					const TArray<TSharedPtr<FJsonValue>> *BlendList = nullptr, *SootList = nullptr;
-					if ((*Part)->TryGetArrayField(TEXT("blend"), BlendList))
-					{
-						for (const TSharedPtr<FJsonValue>& Value : *BlendList)
-						{
-							Raw->Blend.Add(static_cast<int32>(Value->AsNumber()));
-						}
-					}
-					if ((*Part)->TryGetArrayField(TEXT("soot"), SootList))
-					{
-						for (const TSharedPtr<FJsonValue>& Value : *SootList)
-						{
-							Raw->Soot.Add(static_cast<int32>(Value->AsNumber()));
-						}
-					}
-					FString Ink;
-					if (File->TryGetStringField(TEXT("number_ink"), Ink))
-					{
-						Raw->NumberInk = FLinearColor(FColor::FromHex(Ink));
-					}
-					// (Its paint by date: "schemes", each {"from": "1944-04", "colours": {"upper": "B0B6BA", ...}, "number_ink": ...},
-					// its paints named as the file's "paint_names" name them, or where it has none as the plain build's
-					// eighteen. A name this model does not paint, such as the battle model's rivets and bands, is passed over.)
-					const TArray<TSharedPtr<FJsonValue>>* SchemeList = nullptr;
-					if (File->TryGetArrayField(TEXT("schemes"), SchemeList))
-					{
-						static const TArray<FString> PlainPaints = { TEXT("upper"), TEXT("upper2"), TEXT("under"), TEXT("nose"), TEXT("boss"), TEXT("glass"),
-							TEXT("frame"), TEXT("steel"), TEXT("tyre"), TEXT("blade"), TEXT("line"), TEXT("soot"), TEXT("engine"), TEXT("leg"), TEXT("bomb"),
-							TEXT("stain"), TEXT("glare"), TEXT("glint") };
-						TArray<FString> PaintNames;
-						if (!File->TryGetStringArrayField(TEXT("paint_names"), PaintNames))
-						{
-							PaintNames = PlainPaints;
-						}
-						for (const TSharedPtr<FJsonValue>& Value : *SchemeList)
-						{
-							const TSharedPtr<FJsonObject>* Entry = nullptr;
-							FString From;
-							if (!Value.IsValid() || !Value->TryGetObject(Entry) || !(*Entry)->TryGetStringField(TEXT("from"), From) || SchemeMonth(From) == INDEX_NONE)
-							{
-								continue;
-							}
-							FRaw::FScheme& Scheme = Raw->Schemes.AddDefaulted_GetRef();
-							Raw->SchemeFrom.Add(SchemeMonth(From));
-							const TSharedPtr<FJsonObject>* Named = nullptr;
-							if ((*Entry)->TryGetObjectField(TEXT("colours"), Named))
-							{
-								for (const TPair<FString, TSharedPtr<FJsonValue>>& Each : (*Named)->Values)
-								{
-									const int32 Index = PaintNames.IndexOfByKey(Each.Key);
-									FString Hexed;
-									if (Index != INDEX_NONE && Each.Value.IsValid() && Each.Value->TryGetString(Hexed))
-									{
-										Scheme.Colours.Add(Index, FLinearColor(FColor::FromHex(Hexed)));
-									}
-								}
-							}
-							FString SchemeInk;
-							if ((*Entry)->TryGetStringField(TEXT("number_ink"), SchemeInk))
-							{
-								Scheme.bInk = true;
-								Scheme.Ink = FLinearColor(FColor::FromHex(SchemeInk));
-							}
-						}
-					}
-					SchemeMonths().Add(Name, Raw->SchemeFrom);
-					if (File->TryGetArrayField(TEXT("marks"), MarkList))
-					{
-						for (const TSharedPtr<FJsonValue>& Value : *MarkList)
-						{
-							const TSharedPtr<FJsonObject>* Entry = nullptr;
-							const TArray<TSharedPtr<FJsonValue>> *AtList = nullptr, *FacingList2 = nullptr;
-							if (Value->TryGetObject(Entry) && (*Entry)->TryGetArrayField(TEXT("at"), AtList) && AtList->Num() >= 3
-								&& (*Entry)->TryGetArrayField(TEXT("facing"), FacingList2) && FacingList2->Num() >= 3)
-							{
-								FRaw::FMark& Mark = Raw->PlaneMarks.AddDefaulted_GetRef();
-								(*Entry)->TryGetStringField(TEXT("tag"), Mark.Tag);
-								(*Entry)->TryGetNumberField(TEXT("radius"), Mark.Radius);
-								(*Entry)->TryGetNumberField(TEXT("curve"), Mark.Curve);
-								(*Entry)->TryGetBoolField(TEXT("both"), Mark.bBoth);
-								const TArray<TSharedPtr<FJsonValue>>* Corners = nullptr;
-								if ((*Entry)->TryGetArrayField(TEXT("quad"), Corners) && Corners->Num() == 4)
-								{
-									for (const TSharedPtr<FJsonValue>& Corner : *Corners)
-									{
-										const TArray<TSharedPtr<FJsonValue>>* Pair = nullptr;
-										if (Corner.IsValid() && Corner->TryGetArray(Pair) && Pair->Num() >= 2)
-										{
-											// (the file has x forward; here the nose is toward -X)
-											Mark.Quad.Add(FVector2D(-(*Pair)[0]->AsNumber(), (*Pair)[1]->AsNumber()));
-										}
-									}
-									if (Mark.Quad.Num() != 4)
-									{
-										Mark.Quad.Reset();
-									}
-								}
-								const TSharedPtr<FJsonObject>* Striped = nullptr;
-								const TArray<TSharedPtr<FJsonValue>>* BandList = nullptr;
-								if ((*Entry)->TryGetObjectField(TEXT("bands"), Striped) && (*Striped)->TryGetArrayField(TEXT("bands"), BandList))
-								{
-									FString Way;
-									(*Striped)->TryGetStringField(TEXT("dir"), Way);
-									Mark.bBandsUpright = Way != TEXT("h");
-									for (const TSharedPtr<FJsonValue>& Band : *BandList)
-									{
-										FString Hexed;
-										if (Band.IsValid() && Band->TryGetString(Hexed))
-										{
-											Mark.Bands.Add(FLinearColor(FColor::FromHex(Hexed)));
-										}
-									}
-								}
-								// (the file has x forward and y to the right; here the nose is toward -X and the right hand at -Y)
-								Mark.At = FVector(-(*AtList)[0]->AsNumber(), -(*AtList)[1]->AsNumber(), (*AtList)[2]->AsNumber());
-								Mark.Facing = FVector(-(*FacingList2)[0]->AsNumber(), -(*FacingList2)[1]->AsNumber(), (*FacingList2)[2]->AsNumber());
-							}
-						}
-					}
-				}
-				UE_LOG(LogTheater, Log, TEXT("Sculpted model %s read: %d points, %d triangles"), *Which, Raw->Points.Num(), Raw->Triangles.Num() / 3);
+				// (a model with no file of its own, such as a ship kind, is not a late read)
+				UE_LOG(LogTheater, Display, TEXT("Speed: model %s was read late, in the frame that asked, %.0f ms"), *Name, Job.Seconds * 1000.0);
 			}
+			InstallRaw(Name, bTorpedoLoad, Job, !bFar, bFar);
 		}
-		Read.Add(Which, Raw);
 	}
 	const TSharedPtr<FRaw> Raw = Read[Which];
 	if (!Raw.IsValid() || Raw->Points.Num() == 0)
@@ -1610,6 +1821,187 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	TGuardValue<uint8> AsPainted(Finish, 255); // (each point keeps what the model says it is made of)
 	Stamp(*Model, Where, Metre, Turn);
 	return true;
+}
+
+void FMiniatureMesh::WarmModels(const TArray<FString>& Nations, int32 CalendarYear, const TMap<FString, FIntVector>& Designs)
+{
+	if (TheaterSpeed::ModelWarm() == 0)
+	{
+		WarmQueue.Reset();
+		WarmLate.Reset();
+		WarmAsked.Reset();
+		return;
+	}
+	// (the name functions read Year and DesignYears, which ShowArmies sets for the month it shows: they are set here for
+	// the months asked about and put back as they stood, all within this one call on the game thread)
+	struct FYearGuard
+	{
+		int32 Was;
+		TMap<FString, FIntVector> Were;
+		FYearGuard() : Was(FMiniatureMesh::Year), Were(FMiniatureMesh::DesignYears) {}
+		~FYearGuard()
+		{
+			FMiniatureMesh::Year = Was;
+			FMiniatureMesh::DesignYears = Were;
+		}
+	} Guard;
+	// A file to be read, by the name of its model ("Truck:SOV" is the file Truck): once, and only where there is a file.
+	auto Add = [](TArray<FString>& Into, FString Name, bool bSoon)
+	{
+		int32 Colon = INDEX_NONE;
+		if (Name.FindChar(TEXT(':'), Colon))
+		{
+			Name.LeftInline(Colon);
+		}
+		if (Name.IsEmpty())
+		{
+			return;
+		}
+		if (WarmAsked.Contains(Name))
+		{
+			// (asked in an earlier month and still waiting: a file wanted soon now moves up)
+			if (bSoon && WarmQueue.Remove(Name) + WarmLate.Remove(Name) > 0)
+			{
+				Into.Add(Name);
+			}
+			return;
+		}
+		WarmAsked.Add(Name);
+		if (!(Read.Contains(Name + TEXT("|near")) && Read.Contains(Name + TEXT("|far"))) && FPaths::FileExists(ModelPath(Name, OldVehiclesFlag())))
+		{
+			Into.Add(Name);
+		}
+	};
+	// What a nation's air force, and then its army, would be drawn with in a year, the aircraft first (the biggest files).
+	auto Names = [&Add](TArray<FString>& Into, const TArray<FString>& Tags, int32 Y, const TMap<FString, FIntVector>& D, bool bSoon)
+	{
+		FMiniatureMesh::Year = Y;
+		FMiniatureMesh::DesignYears = D;
+		for (const FString& Tag : Tags)
+		{
+			Add(Into, MainFighterOf(Tag), bSoon);
+			Add(Into, MainBomberOf(Tag), bSoon);
+		}
+		for (const FString& Tag : Tags)
+		{
+			Add(Into, MainTankOf(Tag), bSoon);
+			Add(Into, HeavyTankOf(Tag), bSoon);
+			Add(Into, MainGunOf(Tag), bSoon);
+			Add(Into, MainCarrierOf(Tag), bSoon);
+		}
+	};
+	TMap<FString, FIntVector> NextDesigns = Designs;
+	for (TPair<FString, FIntVector>& Each : NextDesigns)
+	{
+		Each.Value += FIntVector(1, 1, 1);
+	}
+	// Tier A and B: this view's nations in this year, then in the next (a month's roll ahead). Tier C: the other nations the
+	// tables know, the same two years.
+	TArray<FString> Others;
+	for (const TCHAR* Tag : { TEXT("GER"), TEXT("UK"), TEXT("USA"), TEXT("SOV"), TEXT("FRA"), TEXT("ITA"), TEXT("JAP"), TEXT("POL"), TEXT("AUS"), TEXT("CAN"), TEXT("NZL"), TEXT("SAF"), TEXT("IND"), TEXT("VIC"), TEXT("FFR"), TEXT("JPN"), TEXT("ROM") })
+	{
+		Others.AddUnique(Tag);
+	}
+	Others.RemoveAll([&Nations](const FString& Tag) { return Nations.Contains(Tag); });
+	TArray<FString> Soon, Later;
+	Names(Soon, Nations, CalendarYear, Designs, true);
+	Names(Soon, Nations, CalendarYear + 1, NextDesigns, true);
+	Names(Later, Others, CalendarYear, Designs, false);
+	Names(Later, Others, CalendarYear + 1, NextDesigns, false);
+	// (what is new goes before what waits from an earlier month)
+	WarmQueue.Insert(Soon, 0);
+	WarmQueue.Append(Later);
+	// Tier D, once: every other file of the tables, the aircraft first, and the figures' files. Read last, and only while the
+	// models read hold less than tc.Speed.ModelWarmMB.
+	if (!bWarmAll && TheaterSpeed::ModelWarmMB() > 0)
+	{
+		bWarmAll = true;
+		TArray<FString> Aircraft, Rest;
+		AllModelNames(Aircraft, Rest);
+		for (const FString& Name : Aircraft) { Add(WarmLate, Name, false); }
+		for (const FString& Name : Rest) { Add(WarmLate, Name, false); }
+		TArray<FString> Files;
+		IFileManager::Get().FindFiles(Files, *(FPaths::ProjectContentDir() / TEXT("Models") / TEXT("*.json")), true, false);
+		for (FString& File : Files)
+		{
+			if (File.StartsWith(TEXT("Rifleman_")) || File.StartsWith(TEXT("Rider_")) || File.StartsWith(TEXT("Pioneer_")))
+			{
+				File.RemoveFromEnd(TEXT(".json"));
+				Add(WarmLate, File, false);
+			}
+		}
+	}
+}
+
+void FMiniatureMesh::PumpWarm(float DeltaSeconds)
+{
+	THEATER_SPEED_SCOPE(ModelsAside);
+	// (a file done is put in the table now: two map entries and a few log lines)
+	if (WarmRunning.IsValid() && WarmRunning->bDone.load(std::memory_order_acquire))
+	{
+		AdoptWarm();
+	}
+	if (TheaterSpeed::ModelWarm() == 0)
+	{
+		WarmQueue.Reset();
+		WarmLate.Reset();
+		WarmAsked.Reset();
+		return;
+	}
+	if (WarmRunning.IsValid() || (WarmQueue.IsEmpty() && WarmLate.IsEmpty()))
+	{
+		return; // (one file at a time)
+	}
+	// (a long frame before holds the next file back, for at most two frames, so that the queue always finishes)
+	if (DeltaSeconds > 0.1f && WarmSkipped < 2)
+	{
+		++WarmSkipped;
+		return;
+	}
+	WarmSkipped = 0;
+	FString Name;
+	bool bFound = false;
+	while (!bFound && (WarmQueue.Num() > 0 || WarmLate.Num() > 0))
+	{
+		if (WarmQueue.Num() == 0 && InstalledBytes > static_cast<int64>(TheaterSpeed::ModelWarmMB()) * 1048576)
+		{
+			WarmLate.Reset(); // (enough held: the files no nation is named for are left until asked)
+			break;
+		}
+		TArray<FString>& From = WarmQueue.Num() > 0 ? WarmQueue : WarmLate;
+		Name = From[0];
+		From.RemoveAt(0);
+		bFound = !(Read.Contains(Name + TEXT("|near")) && Read.Contains(Name + TEXT("|far")));
+	}
+	if (!bFound)
+	{
+		return;
+	}
+	const bool bOld = OldVehiclesFlag(); // (read here, on the game thread, for the worker)
+	const TSharedPtr<FWarmJob, ESPMode::ThreadSafe> Job = MakeShared<FWarmJob, ESPMode::ThreadSafe>();
+	Job->Name = Name;
+	WarmRunning = Job;
+	// (on a thread of its own at the lowest priority, as a fine sheet's modelling is)
+	WarmFuture = TheaterSpeed::ModelAside(FMath::Max(TheaterSpeed::QuietModel(), 3), [Job, bOld]()
+	{
+		ReadModelFile(Job->Name, bOld, false, *Job);
+		Job->bDone.store(true, std::memory_order_release);
+	});
+}
+
+void FMiniatureMesh::StopWarm()
+{
+	WarmQueue.Reset();
+	WarmLate.Reset();
+	WarmAsked.Reset();
+	WarmSkipped = 0;
+	bWarmAll = false; // (a table begun again queues the rest again; what is read is not read twice)
+	if (WarmFuture.IsValid())
+	{
+		WarmFuture.Wait(); // (the file in flight is read to its end; what it read is dropped, and read again if asked)
+	}
+	WarmFuture = TFuture<void>();
+	WarmRunning.Reset();
 }
 
 void FMiniatureMesh::Stamp(const FMiniatureMesh& Model, const FVector& Where, double Scale, double Turn)
