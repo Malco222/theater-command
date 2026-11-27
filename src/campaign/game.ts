@@ -5075,7 +5075,7 @@ export function ashoreFor(g: Game, nat: string, row: any[], reg: Region | undefi
     // (Where the book dates this country's rows, stops 1 and 2 of the dial, the record's hand stands over an island's
     // room: its port is counted against five, as it always was. The design director, 13:58Z 25 November 2026, island
     // room 1. Elsewhere the island's own room binds the row, as it binds everyone.)
-    if (!r.port || !mine(r) || hostileUnits(g, r, nat).length || (bookKept(g, nat) ? friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= STACK /* record's hand */ : !fits(g, r, nat, rowCorps(nat, row, o), { rows: friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length }))) continue;
+    if (!r.port || !mine(r) || hostileUnits(g, r, nat).length || (bookKept(g, nat) ? friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= STACK /* record's hand */ : !fits(g, r, nat, rowCorps(g, nat, row, o), { rows: friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length }))) continue;
     const d = chartDist2(g, r, posting);
     if (d < bd) { bd = d; best = r; }
   }
@@ -5172,7 +5172,7 @@ export function postedFor(g: Game, nat: string, row: any[], reg: Region | undefi
   if (takes && !(nat === g.human && rowTakes(g, nat, o).length > 0)) return null;
   if (!o.war && !atWar(g, nat, posting.ctrl)) return { at: null, adds: null, waits: true, takes };
   const ground = stretchOf(g, posting), cap = g.nations[nat].capital;
-  const home = cap >= 0 && g.regions[cap].ctrl === nat ? roomNear(g, nat, g.regions[cap], false, rowCorps(nat, row, o), [], true) ?? g.regions[cap] : null;
+  const home = cap >= 0 && g.regions[cap].ctrl === nat ? roomNear(g, nat, g.regions[cap], false, rowCorps(g, nat, row, o), [], true) ?? g.regions[cap] : null;
   return { at: nearHarbour(g, nat, posting, (r) => ground.has(r.id)) ?? home, adds: body ? o.adds : null, waits: false, takes };
 }
 
@@ -5183,8 +5183,19 @@ export function postedFor(g: Game, nat: string, row: any[], reg: Region | undefi
  * (`ashore`), and, on the far side, whether its war has not begun (`waits`) and whether it is the player's row that
  * takes his corps, formed away from its posting (`shifted`): `postedFor`.
  */
-/** A dated row as the corps it forms, for the room it will take: its divisions at its strength (`men`). */
-const rowCorps = (nat: string, row: any[], o: any): Corps[] => [{ nat, kind: row[3], divs: typeof row[4] === 'number' ? row[4] : 1, str: o?.str ?? 1 } as unknown as Corps];
+/**
+ * A dated row as the corps it forms, for the room it will take (`men`): the divisions it opens with where the dial's
+ * rules give them (`openDivs` in the grand campaign, as `expeditions` forms it), at its strength; and a row made from
+ * corps on the board (`made`, the formations list's `from`) at the strength it takes out of them, never more than they
+ * hold, as `formRow` makes it. Not the row's stated size: laid without asking, and all right by the design director,
+ * 00:20Z, 27 November 2026 (the rules sceptic's s1-7). (Exported for its test.)
+ */
+export const rowCorps = (g: Game, nat: string, row: any[], o: any, made: readonly Corps[] | null = null): Corps[] => {
+  const divs: number = g.flags.open === 1 && o?.openDivs !== undefined ? o.openDivs : typeof row[4] === 'number' ? row[4] : 1;
+  let str: number = o?.str ?? 1;
+  if (made) str = Math.min(divs * str, made.reduce((n, x) => n + x.divs * x.str, 0)) / divs;
+  return [{ nat, kind: row[3], divs, str } as unknown as Corps];
+};
 /** The corps on the board a row is made from (`from`), struck as it forms: they leave the room it takes. */
 const rowOut = (g: Game, nat: string, o: any): Corps[] => {
   const names: string[] = Array.isArray(o?.from) ? o.from : typeof o?.from === 'string' ? [o.from] : [];
@@ -5215,14 +5226,14 @@ function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: 
     if (posted.waits) return { reg, fell, ashore, waits: true, shifted, home };
     if (posted.at && posted.takes) { reg = posted.at; fell = true; shifted = true; }
     else if (posted.at) { ashore = { at: posted.at, adds: posted.adds }; reg = posted.at; fell = true; }
-    return { reg: reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl) ? roomNear(g, nat, reg, true, rowCorps(nat, row, o), rowOut(g, nat, o), true) ?? reg : reg, fell, ashore, waits: false, shifted, home };
+    return { reg: reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl) ? roomNear(g, nat, reg, true, rowCorps(g, nat, row, o), rowOut(g, nat, o), true) ?? reg : reg, fell, ashore, waits: false, shifted, home };
   }
   // The wider world: a player whose homeland lies across the ocean has such an army form at home, and shipping
   // it is his business. (A computer's staff ships the corps it raises itself, and is sent none of these: above.)
   // (The far side: never a row posted on ground he holds himself, whoever owns it: it forms there. Ruling B7: Japan's
   // rows for Canton and Hainan, which stood at Tokyo. An ally's ground is as it was: his army is his to ship.)
   if (worldOn(g) && nat === g.human && cap >= 0 && beyondEurope(cap) && g.regions[cap].ctrl === nat && reg && reg.owner !== nat && !(reg.ctrl === nat && farOn(g)) && !o.from && !o.joins && row[3] !== 'fort')
-    reg = roomNear(g, nat, g.regions[cap], false, rowCorps(nat, row, o), [], true) ?? g.regions[cap];
+    reg = roomNear(g, nat, g.regions[cap], false, rowCorps(g, nat, row, o), [], true) ?? g.regions[cap];
   // (The far side: a division raised at home and posted abroad is not struck for a lost posting. On its date it
   // comes ashore at its country's nearest held port to the posting and the staff posts it: rider b642 part 2 to
   // ruling 234, `ashoreFor`. Nobody is brought ashore with the far side off. Since ruling B7 it is the rule of the
@@ -5234,7 +5245,7 @@ function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: 
   // A full province sends it on to the nearest ground with room. (The record's own place is counted against five on
   // an island of the Pacific too at stops 1 and 2, `roomNear`'s `record`: form B3 (c). So is it above, for a row
   // `postedFor` places. At stops 3 to 5 the island's room in men binds it: Q2.)
-  if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = roomNear(g, nat, reg, true, rowCorps(nat, row, o), rowOut(g, nat, o), true) ?? reg;
+  if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = roomNear(g, nat, reg, true, rowCorps(g, nat, row, o), rowOut(g, nat, o), true) ?? reg;
   return { reg, fell, ashore, waits: false, shifted, home };
 }
 
@@ -5493,7 +5504,7 @@ export interface RowOffer {
  */
 function rowFits(g: Game, nat: string, reg: Region, row: any[], o: any): boolean {
   const rows = placed(g, reg, nat).filter((u) => u.kind !== 'eng').length;
-  return stopDef(g).book ? rows < STACK /* record's hand */ : fits(g, reg, nat, rowCorps(nat, row, o), { rows, out: rowOut(g, nat, o) });
+  return stopDef(g).book ? rows < STACK /* record's hand */ : fits(g, reg, nat, rowCorps(g, nat, row, o), { rows, out: rowOut(g, nat, o) });
 }
 
 /** One open offer of the player's, read with nothing changed. */
@@ -5518,7 +5529,7 @@ function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
       // words sceptic's lean of 26 November 2026, laid until the UI director rules on this form. The row is no corps on
       // the board yet, so it is never told to split. A row made from corps on the board, and other ground: the old line.)
       const isle = !stopDef(g).book && !rowOut(g, nat, o).length && islandOf(g, reg)
-        ? roomRefusal(g, reg, rowCorps(nat, row, o).map((c) => ({ ...c, name: row[2], dead: true }) as Corps)) : null;
+        ? roomRefusal(g, reg, rowCorps(g, nat, row, o).map((c) => ({ ...c, name: row[2], dead: true }) as Corps)) : null;
       return isle ?? `There is no room for another corps at ${reg.name}, or near it.`;
     }
     return null;
@@ -6308,7 +6319,7 @@ function formPlace(g: Game, nat: string, row: any[], made: Corps[] | null): Regi
     if (reg.ctrl !== nat && !sharesWar(g, nat, reg.ctrl) && n.capital >= 0 && g.regions[n.capital].ctrl === nat) reg = g.regions[n.capital];
     // (The record's own hand: a row by date is counted against five, an island's room or no, at stops 1 and 2: form
     // B3, (c). At stops 3 to 5 the island's room in men: Q2.)
-    reg = roomNear(g, nat, reg, true, rowCorps(nat, row, row[6] ?? {}), rowOut(g, nat, row[6] ?? {}), true) ?? reg;
+    reg = roomNear(g, nat, reg, true, rowCorps(g, nat, row, row[6] ?? {}, made), rowOut(g, nat, row[6] ?? {}), true) ?? reg;
   }
   return reg;
 }

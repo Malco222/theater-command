@@ -5,7 +5,7 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, createGame, placed, removeCorps, retreatTarget, startPhase, whyNoRoom } from '../src/campaign/game';
+import { addCorps, createGame, men, placed, removeCorps, retreatTarget, rowCorps, startPhase, whyNoRoom } from '../src/campaign/game';
 import { saveGame } from '../src/campaign/save';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 import { fits, islandOf, roomForDivision, roomRefusal } from '../src/campaign/islands';
@@ -177,5 +177,21 @@ describe("a staff's check asks with its corps where it names one, and is named '
       src.split('\n').forEach((line, i) => { if (/roomLeft\([^;]*\)\s*(<|>=)\s*1\b/.test(line)) bad.push(`${f}:${i + 1}: ${line.trim()}`); });
     }
     expect(bad).toEqual([]);
+  });
+});
+
+describe("a dated row's room is read on the corps it forms, not its stated size (laid without asking, all right by the design director, 00:20Z, 27 November 2026)", () => {
+  it('a row made from corps on the board at the strength it takes out of them, and a row with opening divisions at those', () => {
+    const g = startOpen(createGame(3, null));
+    expect(g.flags.open).toBe(1);
+    // America's 24th Infantry Division at Pearl Harbor (far-shores.json): stated one division at 0.65, 9,750 men; made
+    // from what is left of the Hawaiian Division, here 0.3 of a division, 4,500 men, it forms at 4,500.
+    const row24 = [26, 'USA', '24th Infantry Division', 'inf', 1, 'Pearl Harbor', { str: 0.65, from: ['Hawaiian Division'] }];
+    const left = { nat: 'USA', kind: 'inf', divs: 1, str: 0.3 } as unknown as Corps;
+    expect(rowCorps(g, 'USA', row24, row24[6], [left]).map(men)).toEqual([4500]);
+    expect(rowCorps(g, 'USA', row24, row24[6]).map(men)).toEqual([9750]);
+    // XIII Corps, stated two divisions, opens with one in the grand campaign (setup-1939.json openDivs).
+    const row13 = [24, 'UK', 'XIII Corps, Eighth Army', 'inf', 2, 'Alexandria', { openDivs: 1 }];
+    expect(rowCorps(g, 'UK', row13, row13[6]).map(men)).toEqual([15000]);
   });
 });
