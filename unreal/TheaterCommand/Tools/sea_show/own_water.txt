@@ -1,0 +1,16 @@
+# The recordings made with the naval rules' own-water switch on ("Friendly torpedoes", ownWater: Brian, 25 November
+# 12:52Z, "the friendly ships would pass though right in front of torpedoes"). sea_show_test reads this list (run.sh names
+# it in SEA_SHOW_OWN_WATER): a line each, the recording's file name without .json. On such a night the rules hold a salvo
+# while another own ship is in its water and keep own ships out of a running salvo's water until its heads have passed, so
+# the test holds it strictly: no track's head through an own ship anywhere, and every torpedo the battle fired drawn. The
+# rules' recorder (tools/sea-record) writes no mark of the switch in a recording, hence the list; a hand-made stand-in may
+# say it in its field instead (ownWater true). Add each recording the naval thread makes with the switch on.
+#
+# The naval thread's own-water recordings (naval-battles/own-water-r2/recordings, 25 November, made with the reviewed rules,
+# switch on; light-ships, two-lines and two-lines-sailors as re-delivered at 17:52Z, the same moves with the words' fields
+# mended; their md5s in recordings/own-water-r2/README.md), kept in Tools/sea_show/recordings/own-water-r2 under these names.
+own-water-light-ships
+own-water-samar
+own-water-samar-sailors
+own-water-two-lines
+own-water-two-lines-sailors

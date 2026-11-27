@@ -1,6 +1,7 @@
 #include "Battle/SeaBattleScreen.h"
 
 #include "Battle/SeaBattle.h"
+#include "Battle/SeaWordsCore.h"
 #include "Brushes/SlateColorBrush.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
@@ -25,11 +26,17 @@ namespace SeaScreenParts
 	const FLinearColor Slate = FLinearColor(FColor::FromHex(TEXT("6F7B88")));
 	const FLinearColor Pale = FLinearColor(FColor::FromHex(TEXT("EFE6CF")));
 	const FLinearColor Plate = FLinearColor(0.02f, 0.015f, 0.01f, 0.55f);
+	// The torpedo words' plain cream (the UI director, 25 November 13:27Z: "plain cream like the state words, no colour"):
+	// the air screen's own cream (AirBattleScreen.cpp's Cream: his own tags' names, his dispatches), on the bar's dark plate.
+	const FLinearColor Cream = FLinearColor(FColor::FromHex(TEXT("EDE6D6")));
 
 	/** The bar and its flags, in the screen's own units (the window's height makes them larger, as the air screen's). */
 	constexpr double BarWide = 400.0, BarHigh = 8.0, FlagWide = 27.0, FlagHigh = 18.0, FlagGap = 10.0, Top = 16.0;
 	/** The card's small gap where the two colours meet (the knot), and how near an end the knot is ever drawn. */
 	constexpr double KnotGap = 3.0, KnotRoom = 0.02;
+	/** The torpedo words: a tag's height and the stalk under it down to its ship, and the line's plate, its height and how
+	 * far over the screen's foot it stands (clear of the month scene's way back to the map, 34 over it). */
+	constexpr double TagHigh = 18.0, TagStalk = 8.0, LineHigh = 26.0, LineFoot = 64.0;
 
 	static void Cloth(FSlateBrush& Brush, TWeakObjectPtr<UTexture2D>& Held, UTexture2D* Texture)
 	{
@@ -104,6 +111,9 @@ int32 SSeaBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 	static const FSlateColorBrush Solid(FLinearColor::White);
 	// The month's scene: its caption low over the sea as it ends, on a dark plate, and the way back to the map.
 	int32 Over = LayerId;
+	// (the caption's plate and the way back's words, where drawn: no torpedo tag over them)
+	double CaptionL = 0.0, CaptionT = 0.0, CaptionR = -1.0, CaptionB = -1.0;
+	double BackL = 0.0, BackT = 0.0, BackR = -1.0, BackB = -1.0;
 	if (Battle->IsMonthScene())
 	{
 		const FSlateFontInfo Face = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 15);
@@ -159,6 +169,10 @@ int32 SSeaBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 			{
 				const double PlateX = (Size.X - Widest) * 0.5 - 18.0;
 				FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Widest + 36.0, Rows.Num() * RowHigh + 20.0), FSlateLayoutTransform(FVector2D(PlateX, Top0 - 10.0))), &Solid, ESlateDrawEffect::None, Under);
+				CaptionL = PlateX;
+				CaptionT = Top0 - 10.0;
+				CaptionR = PlateX + Widest + 36.0;
+				CaptionB = CaptionT + Rows.Num() * RowHigh + 20.0;
 				for (int32 K = 0; K < Rows.Num(); ++K)
 				{
 					Write(Rows[K], (Size.X - WideOf(Rows[K], Face)) * 0.5, Top0 + K * RowHigh, Face, Ink, 1);
@@ -167,7 +181,106 @@ int32 SSeaBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		}
 		const FString Back = TEXT("Any key or click returns to the map");
 		Write(Back, Size.X - WideOf(Back, Small) - 24.0, Size.Y - 34.0, Small, Pale * FLinearColor(1.0f, 1.0f, 1.0f, 0.55f), 1);
+		// (its words' room, a 10 point line, and 4 round it)
+		BackL = Size.X - WideOf(Back, Small) - 24.0 - 4.0;
+		BackT = Size.Y - 34.0 - 4.0;
+		BackR = Size.X - 24.0 + 4.0;
+		BackB = Size.Y - 34.0 + 18.0 + 4.0;
 		Over = LayerId + 2;
+	}
+	// The torpedo words (Battle/SeaWordsCore; the naval rules behind their "Friendly torpedoes" switch): the camera's
+	// subject's line, one line at the foot of the screen (none while the month scene's caption is up), and a small tag in
+	// plain cream over the leading ship of each of the player's own pieces holding its salvo or turning clear of one; none
+	// over the bar, the line, or the month scene's caption and way back, and never one on another (SeaWords::Lay: the
+	// subject's first, then the nearest, each on its ship or lifted just over the one in its way).
+	{
+		TArray<ASeaBattle::FTorpedoTag> Placed;
+		FString Said;
+		if (Battle->GetTorpedoWords(Placed, Said))
+		{
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			const float TextScale = FMath::Max(Geometry.GetAccumulatedLayoutTransform().GetScale(), 0.01f);
+			auto WideOf = [&Measure, TextScale](const FString& Words, const FSlateFontInfo& Font) { return static_cast<double>(Measure->Measure(Words, Font, TextScale).X) / TextScale; };
+			auto Plated = [&](double X, double Y, double Wd, double Ht, const FLinearColor& Ink, int32 Layer)
+			{
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(Wd, Ht), FSlateLayoutTransform(FVector2D(X, Y))), &Solid, ESlateDrawEffect::None, Ink);
+			};
+			auto Lettered = [&](const FString& Words, double X, double Y, const FSlateFontInfo& Font, int32 Layer)
+			{
+				FSlateDrawElement::MakeText(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(WideOf(Words, Font) + 8.0, 40.0), FSlateLayoutTransform(FVector2D(X, Y))), Words, Font, ESlateDrawEffect::None, Cream);
+			};
+			const FVector2D Room = Geometry.GetLocalSize();
+			// (the line's plate, where it is drawn: no tag over it)
+			double LineL = 0.0, LineT = 0.0, LineR = -1.0, LineB = -1.0;
+			TArray<FString> MonthLines;
+			float MonthShown = 0.0f;
+			const bool bMonthCaption = Battle->IsMonthScene() && Battle->GetCaption(MonthLines, MonthShown) && MonthShown > 0.0f;
+			if (!Said.IsEmpty() && !bMonthCaption)
+			{
+				// (one line always: a smaller face where the screen is narrow)
+				FSlateFontInfo LineFace = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 14);
+				for (int32 Points = 13; Points >= 10 && WideOf(Said, LineFace) > Room.X - 64.0; --Points)
+				{
+					LineFace = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), static_cast<float>(Points));
+				}
+				const double LineWide = WideOf(Said, LineFace);
+				LineL = (Room.X - LineWide) * 0.5 - 14.0;
+				LineR = LineL + LineWide + 28.0;
+				LineB = Room.Y - LineFoot;
+				LineT = LineB - LineHigh;
+				Plated(LineL, LineT, LineR - LineL, LineHigh, Plate, 3);
+				Lettered(Said, LineL + 14.0, LineT + 4.0, LineFace, 4);
+			}
+			// (the places no tag may cover: the bar's plate where the bar is up, as drawn below, and 4 round it; the line's plate
+			// where it is drawn; in the month scene the caption's plate while it is up, and the way back's words)
+			std::vector<SeaWords::Box> Kept;
+			double KnotNow = 0.5;
+			UTexture2D* FlagMine = nullptr;
+			UTexture2D* FlagTheirs = nullptr;
+			if (Battle->GetBar(KnotNow, FlagMine, FlagTheirs))
+			{
+				const double BarHalf = BarWide * 0.5 + FlagGap + FlagWide + 10.0 + 4.0;
+				Kept.push_back(SeaWords::Box{ Room.X * 0.5 - BarHalf, -1.0e9, Room.X * 0.5 + BarHalf, Top + FlagHigh + 8.0 + 4.0 });
+			}
+			if (LineR > LineL)
+			{
+				Kept.push_back(SeaWords::Box{ LineL, LineT, LineR, LineB });
+			}
+			if (bMonthCaption && CaptionR > CaptionL)
+			{
+				Kept.push_back(SeaWords::Box{ CaptionL, CaptionT, CaptionR, CaptionB });
+			}
+			if (Battle->IsMonthScene() && BackR > BackL)
+			{
+				Kept.push_back(SeaWords::Box{ BackL, BackT, BackR, BackB });
+			}
+			const FSlateFontInfo TagFace = FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 10);
+			std::vector<SeaWords::Spot> Spots;
+			Spots.reserve(static_cast<size_t>(Placed.Num()));
+			for (const ASeaBattle::FTorpedoTag& One : Placed)
+			{
+				SeaWords::Spot Foot;
+				Foot.X = One.At.X * Room.X;
+				Foot.Y = One.At.Y * Room.Y;
+				Foot.Wide = WideOf(One.Text, TagFace) + 12.0;
+				Foot.Deep = One.Deep;
+				Foot.Piece = One.Piece;
+				Foot.bSubject = One.bSubject;
+				Spots.push_back(Foot);
+			}
+			const FLinearColor StalkInk = Cream * FLinearColor(1.0f, 1.0f, 1.0f, 0.7f);
+			for (const SeaWords::Laid& Stood : SeaWords::Lay(Spots, Kept, TagHigh, TagStalk))
+			{
+				const ASeaBattle::FTorpedoTag& One = Placed[static_cast<int32>(Stood.Of)];
+				Plated(Stood.Plate.L, Stood.Plate.T, Stood.Plate.R - Stood.Plate.L, TagHigh, Plate, 3);
+				for (const std::pair<double, double>& Bit : Stood.Stalk)
+				{
+					Plated(Stood.FootX - 0.5, Bit.first, 1.0, Bit.second - Bit.first, StalkInk, 3);
+				}
+				Lettered(One.Text, Stood.Plate.L + 6.0, Stood.Plate.T + 2.0, TagFace, 4);
+			}
+			Over = FMath::Max(Over, LayerId + 5);
+		}
 	}
 	double Knot = 0.5;
 	UTexture2D* Mine = nullptr;

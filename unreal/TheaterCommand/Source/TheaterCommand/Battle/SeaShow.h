@@ -37,7 +37,24 @@
  *  - L2: a carrier's strike flies off her deck, forms up, flies out, dives on the ship the battle names, and those left
  *    fly home and land on.
  *  - L3: a torpedo salvo's tracks fan out from each ship of the piece toward the battle's aim point; one ends against the
- *    ship the battle says was hit, the rest run on and fade.
+ *    ship the battle says was hit, the rest run on and fade. No track runs through a ship of its own side (Brian, 25
+ *    November 12:52Z: "the friendly ships would pass though right in front of torpedoes"): each of a ship's tubes is
+ *    held until its way to the aim is clear of every ship of her side (her column's ships ahead of her among them, and
+ *    each as she steams on over the whole of the track's run to the aim, turning as she is or easing her helm, her way a
+ *    little faster or slower than now as it may be), each tube looked at every quarter second and fired from the first
+ *    place it is clear from: her own place while she is in her line, until a third of the run is gone; from then (or
+ *    once she is out of her line) instead the salvo's firing point, the place the battle told the salvo from, where the
+ *    rules' water starts, and before then too for a tube whose track from her own place would not come into that water
+ *    within LookAhead (a track from the firing point starts in that water; one from her own place, at her side, comes
+ *    into it within LookAhead). A boat fires from her bow only. It runs at the speed that brings it to the aim when the
+ *    battle has the tracks arrive, never stopped short of the aim. A tube still held at two thirds of the run (too late
+ *    for a track to run the third of it a hit's track has) is never drawn, and is judged over its hold: for the rules'
+ *    side where at any judging (once a second) other pieces' ships in the salvo's water ahead of its heads were all that
+ *    stood in its way (their own-water switch off lets them lie there); else as it is given up, for her own piece's ships
+ *    alone or the scene's own otherwise. A track stops at the aim where an own ship lies in its run on, or as one comes across it
+ *    there. A hit ends the track of the launching piece nearest her that has run a third of the run with its way on to
+ *    her clear of its own side (TrackForHit). Where and when a track is drawn from only: the room, the ship a hit
+ *    strikes and the dice are kept as the tracks fired at the battle's moment would have them (their shadows).
  *  - L4: a ship out of the fight burning leaves her line and limps away from the enemy, on fire.
  *  - L5: smoke screens: destroyers turning away from their run, light ships breaking off, the screen of a carrier under
  *    gunfire. Drawn only: guns still fire through it, as the battle has them.
@@ -107,6 +124,10 @@ namespace SeaShow
 		/** The men in the water: the most the show keeps at once (each one man while there is room: Brian's standing rule,
 		 * 22 November 04:14Z, the real numbers; past it each ship's men are thinned, and the share is told). */
 		int MenMost = 2400;
+		/** Whether the battle was fought with the naval rules' "Friendly torpedoes" switch on (field.ownWater, where the field
+		 * says it: TC.seaStart's, or a stand-in's; the rules' recorder writes no mark of it). The torpedo words' gate
+		 * (SeaFeed::FriendlyTorpedoes); the show itself never reads it. */
+		bool bOwnWater = false;
 	};
 
 	/** One piece as a view gives it (battle-bridge.ts unitOut for a sea piece). */
@@ -147,6 +168,20 @@ namespace SeaShow
 		double KeelNext = -1.0;
 		bool bScope = false;
 		int ConvoyColumn = -1;
+		/** The torpedo words' fields (the naval rules behind their "Friendly torpedoes" switch, 25 November; Battle/SeaWordsCore
+		 * words them): the own piece in its line of fire it holds its salvo for (heldFor, -1 none) and that piece as the rules
+		 * name it; the own piece whose running salvo it turns clear of (clearFrom, -1 none), the battle second its heads
+		 * pass her and the launcher as the rules name it; under an order of the player's own (ordered). As each view says (none
+		 * without the switch), but for the held ones once the piece's salvo is told after its view (the rules have let it
+		 * fire: SalvoToldAt); the show itself never reads them. */
+		int HeldFor = -1, ClearFrom = -1;
+		std::string HeldForName, ClearFromName;
+		double ClearUntil = -1.0;
+		bool bOrdered = false;
+		/** The view reached holds her (heldFor), but her salvo has been told since, so her held fields are taken off (above):
+		 * the torpedo words' alone (Battle/SeaWordsCore: until the view that ends it, the view's hold still wins over its own
+		 * turn clear while the scene holds some of her tubes); never read from a view, and the show itself never reads it. */
+		bool bHeldLetGo = false;
 		/** Whether the player's side has her (Show::SetMine), where the view says it. A boat: the escorts of the other side
 		 * running in on her now (heard, their pieces; bHeard once a view has said it, and then it stands as last told), and
 		 * the enemy piece her deck gun is on while she is up (gun, -1 none: as each view says). An escort: the piece its echo
@@ -308,6 +343,38 @@ namespace SeaShow
 		Vec From, At;
 		double Heading = 0.0; // radians
 		double Speed = 0.0;
+		/** The piece that fired it, the ship whose tubes it left (her key; -1: fired from its salvo's firing point, she
+		 * not lying at it), where its run ends as it was fired, whether its head is past the battle's aim and its moment
+		 * (running on, the scene's own water: the rules keep own ships out of a salvo's water only up to its aim), and
+		 * whether it was fired from its salvo's firing point (the place the battle told the salvo from, where the rules'
+		 * water starts: From lies in that water). */
+		int Piece = -1, Ship = -1;
+		Vec End;
+		bool bRunOn = false, bFromPoint = false;
+	};
+
+	/**
+	 * What the scene shows of a piece's torpedoes now, for the torpedo words (Battle/SeaWordsCore; Show::TubesNow): read
+	 * only, the show itself never reads it. Its latest salvo told (its number in the order told, 0 none) and the tracks
+	 * drawn of it so far (each in the water from its launch); its tubes the scene still holds, of any of its salvos (the
+	 * scene's own holds, after the rules let a salvo go: an own ship in the way from where she fires), and the tracks drawn
+	 * of the salvos it holds them of; and the own piece whose ship stands across its held tubes' way, as each of its ships
+	 * last looked (the first own ship found across each held tube's way, at the first place a ship holds it: the piece
+	 * standing across the most of them, another piece before its own, then the lowest; -1 none found).
+	 */
+	struct TubesOut
+	{
+		int Salvo = 0, Fired = 0;
+		int Held = 0, HeldFired = 0;
+		int Across = -1;
+	};
+
+	/** Words the battle has said of a piece (the torpedo words' phrases; the show itself never reads them): the battle
+	 * second they were said and the words. */
+	struct Phrase
+	{
+		double T = -1.0;
+		std::string Text;
 	};
 
 	/**
@@ -547,7 +614,8 @@ namespace SeaShow
 		ScreenStart, // a ship starts laying smoke: Key (ship), At (her funnels), Vel
 		ScreenMove,  // Key, At, Vel, every frame while she lays it
 		ScreenStop,  // Key
-		TrackStart,  // a torpedo's track: Key (torpedo), At, Vel
+		TrackStart,  // a torpedo's track: Key (torpedo), At, Vel; Aim (where its run ends, as fired), Until (the battle time it
+		             //   ends), Size (the ship whose tubes it left, her key; -1: fired from its salvo's firing point)
 		TrackMove,   // Key, At, Vel
 		TrackStop,   // Key
 		Flak,        // an anti-aircraft shell bursting: At, What ("heavy", "light")
@@ -660,6 +728,29 @@ namespace SeaShow
 		int HandedOver = 0;         // leaders fallen back level with their next astern dodging, who handed her the lead
 		int DodgesUnturned = 0;     // dodges ended before her helm bit (another ship too near): none, so not judged
 		int SunkUnmatched = 0, BurningUnmatched = 0, TorpedoHitUnmatched = 0;
+		// Torpedoes and the ships of their own side (Brian, 25 November 12:52Z): the tracks a ship held in her tubes for an own
+		// ship in their way and fired once it was clear, and those fired from the salvo's firing point (from a third of the run,
+		// or before it where her own place's would not come into the rules' water within LookAhead); the tracks stopped at the
+		// aim for an own ship in their run on as they were fired, and those stopped running on as one came across them; the
+		// longest a ship held her tubes (seconds), and the least any track's line cleared an own ship's hull by as it was fired
+		// (metres beyond her half beam; the show's own measure).
+		int TracksHeld = 0, TracksMoved = 0, TracksCut = 0, TracksStopped = 0;
+		// Those never drawn (no way clear by two thirds of the run, when a track fired would no longer be one a hit may end),
+		// each judged over its hold: those that at some judging (once a second) had only ships of other pieces lying in her
+		// salvo's water ahead of its heads in their way (the rules' side: their switch keeps own ships out of it); of the rest,
+		// as each was given up, those her own piece's ships alone kept foul at every place she might fire from (the scene's
+		// own), and the rest the scene's own too (a ship behind the heads or out of the water, the room).
+		int TracksDropped = 0, TracksDroppedOwn = 0, TracksDroppedWater = 0;
+		int TubesAtHit = 0;         // tubes fired at a hit with none of its piece's tracks running, to end there (a last resort: none)
+		double MostHold = 0.0, LeastTrackGap = 1e9;
+		// By salvo, in the order told (each sea:torpedo with ships to fire it): the tubes the battle fired and the tracks drawn of
+		// them. By torpedo hit drawn, in order: how far from her side the head of the track as fired at the battle's moment lay
+		// (the hit's shadow: the jump the track a hit ended made before any ship held hers; -1 none).
+		std::vector<int> SalvoTubes, SalvoTracks;
+		// (and by salvo, the same order: the piece that fired it, and its tubes never drawn (DropTube), so a salvo's tubes still
+		// held are its tubes less those drawn and those dropped: the torpedo words' test holds Show::TubesNow to them)
+		std::vector<int> SalvoPiece, SalvoDropped;
+		std::vector<double> HitShadowGap;
 		double GaveWay = 0.0;       // ship-seconds followers eased their way for a ship of their own line crossing ahead
 		double KeptClear = 0.0;     // ship-seconds any ship held an alteration of course or way to keep clear of another
 		// Where ships went down: her crew in the water (the real number, and those the show keeps), the most at once, those
@@ -698,6 +789,16 @@ namespace SeaShow
 
 		/** The most torpedo tracks running at once (each salvo shares what is left of it among its ships). */
 		static constexpr int TrackRoom = 60;
+		/** The least a torpedo's track clears a ship of its own side by as it is fired (metres beyond her half beam, all along
+		 * her length): its line from where it starts to where its run ends. */
+		static constexpr double TrackClear = 20.0;
+		/** No track fired from a ship's own place runs longer than this outside its salvo's water as the rules have it
+		 * (seconds; one from the salvo's firing point starts in it). */
+		static constexpr double LookAhead = 15.0;
+		/** How much faster or slower than now a ship of the side may steam over a track's run as its head is looked at
+		 * against her (a share of the time ahead; and a second either way at the least): a ship easing her way to keep clear
+		 * of another, or working up again, is still clear of the head. */
+		static constexpr double WayDoubt = 0.1;
 
 		void SetField(const Field& InField);
 		const Field& Board() const { return F; }
@@ -766,6 +867,13 @@ namespace SeaShow
 		double WindFrom() const { return WindFromR; }
 		/** A piece's column as shown now: its middle and its leader's heading; false where there is none afloat. */
 		bool PieceMiddle(int PieceId, Vec& OutAt, double& OutFace) const;
+		/** A piece's leading ship as shown now (the head of its column, where the torpedo words' tag stands): her key, -1 where
+		 * it has none in its line. */
+		int LeaderOf(int PieceId) const
+		{
+			const auto It = Lines.find(PieceId);
+			return It == Lines.end() || It->second.Line.empty() ? -1 : It->second.Line.front();
+		}
 		/** A ship as shown now, by her key. */
 		const ShipOut* Ship(int Key) const;
 		/** The pieces as the battle has them now (interpolated), for labels and the camera. */
@@ -780,6 +888,14 @@ namespace SeaShow
 		 * view draws every charge alike. Read only. */
 		struct ChargeDown { int Escort = -1, Boat = -1; Vec At, Off; double Bursts = 0.0, Dropped = 0.0; std::string Kind; bool bOnBoat = false; };
 		void ChargesDown(std::vector<ChargeDown>& Out) const;
+		/** The torpedo words' picture (Battle/SeaWordsCore), read only: what the scene shows of each piece's torpedoes now
+		 * (TubesOut), by piece, for each piece that has told a salvo or holds tubes (Out emptied first). */
+		void TubesNow(std::map<int, TubesOut>& Out) const;
+		/** The torpedo words' phrases, by piece, read only: its name as the rules last gave it in a view the picture has
+		 * reached (another piece's heldForName or clearFromName, which name the piece meant), and the log's line of its latest
+		 * salvo (its sea:torpedo's text), each as last told. */
+		const std::map<int, Phrase>& NamesGiven() const { return RulesNamed; }
+		const std::map<int, Phrase>& SalvoLines() const { return SalvoSaid; }
 
 	private:
 		struct View
@@ -937,6 +1053,71 @@ namespace SeaShow
 			double Speed = 20.0, Ends = 0.0, Launched = 0.0;
 			Vec Aim;
 			bool bRunning = true;
+			// (the ship whose tubes it left, -1 none: from its salvo's firing point, she not lying at it; whether from that
+			// point; where its run ends as fired; when its head is level with the aim, and the battle's moment for it: past both
+			// it runs on, and stops for an own ship across it; its salvo and that salvo's run, for the hit that ends it)
+			int Ship = -1, Salvo = 0;
+			bool bFromPoint = false;
+			Vec End;
+			double AimAt = 0.0, Arrive = 0.0, Running = 75.0;
+		};
+		/** A track as it would have been fired at the battle's moment from each ship's place, never drawn (a shadow): the
+		 * shadows keep the room's count and pick the ship a hit strikes as the tracks did before any ship held hers, so the
+		 * dice and every ship are the same with the holds or without. */
+		struct Shadow
+		{
+			int Piece = 0;
+			Vec P, Way;
+			double Speed = 20.0, Ends = 0.0;
+		};
+		/** A ship's tubes not yet fired (Brian, 25 November 12:52Z): each held while a ship of her side lies in its way to the
+		 * aim. Her salvo (its count), her piece and side; her class and navy; whether a boat's, its tracks wakeless;
+		 * the aim, when the battle told it, when its tracks arrive, the run's seconds; the fan; each tube's place in it, its own
+		 * scatter (the battle's dice, thrown as the salvo was told) and when its shadow ends; the salvo's firing point (the
+		 * piece's place as the battle told the salvo, its leader's there as the rules lay him: where the rules' water starts);
+		 * the rules' water (the naval rules' own-water switch: the fan from that point, the leader's half beam wide there, to
+		 * the run's radius either side of the aim), and whether she has fired any. */
+		struct Held
+		{
+			int Salvo = 0, Ship = -1, Piece = -1, Side = 0;
+			std::string Class, Nation;
+			bool bBoat = false, bWakeless = false;
+			Vec Aim;
+			double Told = 0.0, Arrive = 0.0, Running = 75.0, Fan = 3.5;
+			std::vector<double> Ks, Scatter, Ends;
+			std::vector<char> RulesOnly; // (per tube: at some judging of its hold the rules' ships alone were in its way, WhyHeld)
+			// (per tube still held, as she last looked (FireTubes): the piece of the first own ship found across its way, at the
+			// first place a ship holds it, -1 none; the torpedo words' alone, TubesNow: never read in deciding)
+			std::vector<int> Across;
+			Vec WaterP;
+			double WaterHalf = 5.0, Radius = 800.0;
+			bool bFiredAny = false;
+			double NextLook = 0.0; // (when she looks again: every quarter second, her salvo's ships a step apart)
+			double NextJudge = 0.0; // (when she next judges why a tube is held: once a second, from her first look)
+		};
+		/** Where a held ship's tubes may be fired from: a place, her heading there (the way to the aim at the salvo's firing
+		 * point), the ship left out of the tracks' way (hers, they starting at her side; -1 none), whether it is the salvo's
+		 * firing point, and whether only for a tube whose track from her own place would not come into the rules' water
+		 * within the look ahead (the point before a third of the run). */
+		struct FirePlace
+		{
+			Vec P;
+			double Hdg = 0.0;
+			int Except = -1;
+			bool bPoint = false, bIfOut = false;
+		};
+		/** One tube's track as it would be fired from a place now: where it starts, its way, where its run ends, its speed,
+		 * when it ends, when its head is level with the aim; whether its run on was cut for an own ship in it, and whether its
+		 * line is clear; the own ships across it (their keys), and whether it would start or run outside the rules' water
+		 * (from the firing point, at its start; from her own place, past the look ahead). */
+		struct TubeWay
+		{
+			Vec P, Dir, End;
+			double Speed = 0.0, Ends = 0.0, AimAt = 0.0;
+			bool bClear = false, bCut = false, bOutside = false;
+			std::vector<int> Foul;
+			// (not every ship asked: the first own ship found across it, -1 none; for the torpedo words, Held::Across)
+			int FirstFoul = -1;
 		};
 
 		enum class Leg { Deck, Form, Out, Attack, Home, Gone, Cover };
@@ -1013,6 +1194,19 @@ namespace SeaShow
 		std::map<int, Hull> Hulls;
 		std::vector<Shells> Flying;
 		std::vector<Torp> Torps;
+		std::vector<Shadow> Shadows;
+		std::vector<Held> Holding;
+		int TorpSalvos = 0;
+		/** By piece: the battle second its last salvo was told (sea:torpedo); and the second of the view the pieces are taken
+		 * from now (Interpolate). A piece whose salvo is told after that view holds it no longer (the rules have let it fire,
+		 * as the next view says): its held fields are taken off as the salvo is told, so the torpedo words' tag goes off as
+		 * its first track leaves, not at the next view. */
+		std::map<int, double> SalvoToldAt;
+		double NowFrom = -1.0;
+		/** The torpedo words' alone (TubesNow, NamesGiven, SalvoLines; never read in deciding): by piece, its latest salvo's
+		 * number; the rules' name of it as a view reached last gave it (Interpolate); and its latest salvo's line in the log. */
+		std::map<int, int> LastSalvo;
+		std::map<int, Phrase> RulesNamed, SalvoSaid;
 		std::map<int, Plane> Air;
 		std::vector<Strike> Strikes;
 		std::map<int, Owed> Debt;         // by piece: hits the battle has taken off its hull not yet drawn
@@ -1236,6 +1430,50 @@ namespace SeaShow
 		void Gunnery(double Dt);
 		void LandShells();
 		void RunTorpedoes(double Dt);
+		/** Brian, 25 November 12:52Z: each of a held ship's tubes fired where its way is clear now (from her own place; from a
+		 * third of the run, or once she is out of her line, the salvo's firing point too): whether any are still held. */
+		bool FireTubes(Held& R);
+		/** The places a held ship may fire from now. */
+		void PlacesOf(const Held& R, std::vector<FirePlace>& Out) const;
+		/** A held tube's track as it would be fired from a place now (OnlyPiece: only that piece's ships in its way, -1 every
+		 * ship of her side): whether its way is clear (bAll: every ship across it found, else it stops at the first). */
+		bool PlanTube(const Held& R, size_t Tube, const FirePlace& From, int OnlyPiece, TubeWay& W, bool bAll = false) const;
+		/** Each ship's ways as HeadsClear foresees them (her helm held or eased: one for a follower on her leader's track, or a
+		 * ship not turning), a quarter second apart, Upto seconds on at the least; kept for the step they were foreseen on
+		 * (every held tube looked at in a step asks of the same ships), longer as they are asked for. */
+		const std::vector<std::vector<std::pair<Vec, double>>>& Foreseen(const Hull& O, double Upto) const;
+		mutable std::map<int, std::vector<std::vector<std::pair<Vec, double>>>> ForeseenWays;
+		mutable double ForeseenAt = -1.0;
+		/** A held tube fired as planned (its entry taken out of hers). */
+		void LaunchTube(Held& R, size_t Tube, const FirePlace& From, const TubeWay& W);
+		/** Why a held tube's way is not clear now, at the places it may be fired from: 0 her own piece's ships alone, 1 other
+		 * pieces' ships in her salvo's water ahead of its heads all that stand in it at one of them (the rules' side), 2 the
+		 * scene's own otherwise. */
+		int WhyHeld(const Held& R, size_t Tube, const std::vector<FirePlace>& From) const;
+		/** A held tube never drawn (bRoom: for the room), judged over its hold (TracksDroppedOwn, TracksDroppedWater; its entry
+		 * taken out). */
+		void DropTube(Held& R, size_t Tube, bool bRoom = false);
+		/** Whether a point lies in a salvo's water as the rules have it (Pad: metres round it; S, where given, how far along
+		 * from the piece's place toward the aim). */
+		bool InWater(const Held& R, const Vec& Q, double Pad, double* S = nullptr) const;
+		/** Whether an own ship lies in a salvo's water ahead of its heads as the battle's moment has them now (bow, middle or
+		 * stern, her half beam round each): where the rules' switch keeps her out. */
+		bool InWaterAhead(const Held& R, const Hull& O) const;
+		/** Whether a track's head, from Start along Dir at Speed over its run's first Length metres, stays clear of every ship
+		 * of a side as each steams on, turning as she is or easing her helm, her way as much as WayDoubt faster or slower than
+		 * now (Her, the ship it leaves, by 3 m; the rest by 5 m; Skip left out; only OnlyPiece's, where 0 or more); Foul,
+		 * where given, every ship that would come across it (each once), else it stops at the first. */
+		bool HeadsClear(const Vec& Start, const Vec& Dir, double Speed, double Length, int Side, int Her, int Skip, int OnlyPiece, std::vector<int>* Foul = nullptr,
+		                int* First = nullptr) const;
+		/** Whether a track's line from A to B clears every ship of a side (but Except; only OnlyPiece's, where 0 or more) by
+		 * TrackClear beyond her half beam; Least, where given, the least it clears any by; Foul, where given, every ship it
+		 * does not clear. */
+		bool WayClear(const Vec& A, const Vec& B, int Side, int Except, double* Least, int OnlyPiece, std::vector<int>* Foul = nullptr, int* First = nullptr) const;
+		/** The track of a piece a torpedo hit on a ship ends: of those running, the nearest her that has run at least a third
+		 * of its salvo's run with its way to her clear of its own side, else the nearest that has run so long, else the
+		 * nearest; none running, a held tube of the piece fired at her now from a clear stretch short of her side, or one
+		 * from the battle's moment's (a last resort, TubesAtHit). */
+		Torp* TrackForHit(int Piece, const Hull& Struck);
 		void FlyStrikes(double Dt);
 		void LayScreens();
 		void CoverFleet(double Dt);

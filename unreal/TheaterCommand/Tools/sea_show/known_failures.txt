@@ -2,9 +2,10 @@
 # convoy battle's real nights (Tools/sea_show/recordings, D2), until its rules fix lands. sea_show_test reads this list
 # (run.sh names it in SEA_SHOW_KNOWN). Each line, tab apart: the recording's file name without .json, the check's name as
 # sea_show_test prints it, and the most that check may read on that night (its Measure: frames off for the line, seconds
-# late for the gun hits, hits over a fifth of the salvos for the salvos). Within its bound the failure prints KNOWN and fails
-# nothing; past it, or any check not listed failing, fails the run as ever; a listed check that passes says to take its line
-# off. Take each line off when its rules fix lands.
+# late for the gun hits, hits over a fifth of the salvos for the salvos, torpedoes never drawn, metres a torpedo hit's jump
+# passes the battle's own). Within its bound the failure prints KNOWN and fails nothing; past it, or any check not listed
+# failing, fails the run as ever; a listed check that passes says to take its line off. Take each line off when its rules
+# fix lands (a stand-in's lines, which keep a rules' side case on purpose, stay).
 #
 # The line: the battle gives up a boat's ship (Untold) while its views still count her afloat, 1 to 1 (first-pack piece 49 at
 # 2289 s, hunted 61 at 8430 s, hunters 62 at 11589 s).
@@ -18,3 +19,13 @@ convoy-hunted	every gun hit told drawn on the ship struck within 30 s	46.1
 convoy-hunters	every gun hit told drawn on the ship struck within 30 s	53.5
 # The salvos: two gun hits booked on hunters' piece 62 in 60 s against five salvos drawn (2 for 5: one hit over a fifth).
 convoy-hunters	most salvos miss (hits only as the battle books them)	1.0
+#
+# The blocked destroyer column (a stand-in, Tools/sea_show/stand-ins/destroyer_column.py, the review of 25 November): made
+# without the rules' own-water switch, the cruiser of another piece lies stopped 200 m short of the aim across the column's
+# ways, so the four tubes whose ways ran nearest the battleship are held behind her until two thirds of the run and never
+# drawn, each judged over its hold (the cruiser in the salvo's water ahead of its heads, at some look all that stood in its
+# way: the rules' side); and the tracks that remain, round the cruiser's ends, pass the battleship's ends, so her third
+# hit's track jumps 200 m to her side against the 46 m the battle's moment's own would have (153.8 m past it). Not to be
+# taken off: the stand-in keeps the case.
+destroyer-column-blocked	every torpedo the battle fired drawn (held tubes fired once clear)	4
+destroyer-column-blocked	every torpedo hit's jump no longer than the battle's own	154

@@ -57,7 +57,8 @@ enum class ESeaShot : uint8 { Fleets, Line, Broadside, Rangefinder, Hit, Tracks,
  * quiet stretches between them, and quits. The live battle (TC.seaStart and battleCalls) comes with the shared wiring.
  *
  * Over it the screen (SSeaBattleScreen): for now the tug-of-war bar alone at the top, each side's flag at its end and
- * the knot sliding toward the side that is losing (SeaFeed::KnotOf on the view the picture has reached, eased here).
+ * the knot sliding toward the side that is losing (SeaFeed::KnotOf on the view the picture has reached, eased here);
+ * and, behind the naval rules' "Friendly torpedoes" switch, the torpedo words (Battle/SeaWordsCore: GetTorpedoWords).
  *
  * The world: X up the board (the board's north), Y across it (the board's east), Z up from the sea, 100 units a metre;
  * the actor stands at the origin, unturned, as the stage does. A heading clockwise from north is Unreal's yaw.
@@ -106,6 +107,23 @@ public:
 	/** The tug-of-war bar for the screen (SSeaBattleScreen): the knot from the player's flag, 0 to 1, eased (0.5 level,
 	 * past the middle he is winning), and each side's flag; false while the recording gives no lost shares for it. */
 	bool GetBar(double& OutKnot, UTexture2D*& OutMine, UTexture2D*& OutTheirs) const;
+
+	/** One tag of the torpedo words (Battle/SeaWordsCore): where its foot stands, over the top of its piece's leading ship (a
+	 * share of the screen across and down, 0 to 1), and its words; how far in front of the eye that ship lies (world
+	 * units along the eye's look), its piece, and whether that piece is the camera's subject (the screen stands the
+	 * subject's tag first, then the nearest: SeaWords::Lay). */
+	struct FTorpedoTag
+	{
+		FVector2D At = FVector2D::ZeroVector;
+		FString Text;
+		double Deep = 0.0;
+		int32 Piece = INDEX_NONE;
+		bool bSubject = false;
+	};
+	/** The torpedo words for the screen (the naval rules behind their "Friendly torpedoes" switch): a tag over each of the
+	 * player's own pieces holding its salvo or turning clear of one, where it is on the screen in front of the eye, and the
+	 * line of the camera's subject piece (empty while that piece has none); false while there are neither. */
+	bool GetTorpedoWords(TArray<FTorpedoTag>& OutTags, FString& OutLine) const;
 
 private:
 	/** One of the camera's moments (the picture run's pictures; the shots it cuts between when watched). */
@@ -233,6 +251,11 @@ private:
 	/** The bar's knot as drawn (eased toward the view's: MoveKnot), and whether the recording gives one at all. */
 	double BarKnot = 0.5;
 	bool bBarGiven = false;
+	/** The torpedo words as placed this frame (PlaceTorpedoWords, once the eye is aimed), and the ship the eye is on (its
+	 * shot's subject while that shot's own eye is used, AimEye; -1 none). */
+	TArray<FTorpedoTag> TorpedoTags;
+	FString TorpedoLine;
+	int32 EyeSubject = -1;
 
 	FString PendingReplay;
 	FString RecordKey;
@@ -529,6 +552,8 @@ private:
 	/** The bar's knot toward the view's at the moment shown (SeaFeed::KnotOf), on the screen's clock: about a second and
 	 * a half to arrive, every move alike, the break's too (the UI director); at once across a picture run's skip. */
 	void MoveKnot(double RealDt, bool bAtOnce);
+	/** The torpedo words (Battle/SeaWordsCore) for the moment shown, each tag put on the screen through the eye just aimed. */
+	void PlaceTorpedoWords();
 
 	UAudioComponent* Sound(const FName& Name, const FVector& Where, const FName& Family, float Volume = 1.0f, bool bFlashFirst = true);
 	/** A ship's light gun firing this step (its stream's key, ShipGuns::KindSlot of its kind, its slot: 0 hmg, 1 aa25, 2 aa40), heard

@@ -103,6 +103,12 @@ namespace SeaFeed
 	};
 	bool ReadRecording(const std::string& Source, Recording& Out, std::string& OutError);
 
+	/** Whether the action was fought with the naval rules' "Friendly torpedoes" switch on, as far as what was read says it:
+	 * its field's ownWater (SeaShow::Field::bOwnWater), or a view carrying the torpedo words' fields (heldFor, clearFrom:
+	 * the rules write them only with the switch on). The torpedo words' gate (SeaWords::Write): off, nothing shows. A
+	 * recording made with the switch on whose views never carry a field and whose field says nothing of it reads as off. */
+	bool FriendlyTorpedoes(const Recording& Rec);
+
 	/** 0 the attacker, 1 the defender, -1 neither. */
 	int SideOf(const std::string& Side);
 }
