@@ -4743,8 +4743,8 @@ void AAirBattle::MustangMetalRead()
 {
 	// The Battle rules card's "Silver Mustang" (FLandLive's rule "flyMustangMetal", release 2; off until the Mac's stills
 	// are judged). Brian, 27 November: "shouldnt the p-51 mustangs be silver with black paint?", then "it should be shiny
-	// silver", "metalic". Her file is the air rules thread's issue-13 (battle-models/air-bar-1126/issue-13/Mustang.json,
-	// sha256 4b7fe030..., the art director's pick: E0E3E5 at roughness 0.28), kept beside the old one as
+	// silver", "metalic". Her file is the air rules thread's issue-13 (battle-models/air-bar-1126/issue-13/Mustang-b.json,
+	// sha256 b6adf723..., the art director's pick: E0E3E5 at roughness 0.28; her marks as ruled 18:49Z), kept beside the old one as
 	// Content/Models/MustangBare.json so that the row off draws every Mustang as before. Read once a run and kept.
 	static AirSheen::OwnFinish BareKept;
 	static bool bBareKeptRead = false;
@@ -5093,7 +5093,10 @@ namespace AirParts
 	}
 
 	/** The same for an aircraft whose own file carries her finish (the silver Mustang's): her gloss, metal and shade a
-	 * point, as her file lists them; a point past them (her marks) wears Marks. */
+	 * point, as her file lists them; a point past them (her marks) wears Marks. Her shade is also her colour's: each of
+	 * her file's points has its colour multiplied by its shade in linear light, as the B-17's worn skin has hers in the
+	 * kit (her file's meaning: "the contact shading the game multiplies the point's colour by"). So her rivets, seams and
+	 * lines on her black paint (shade 0.00 to 0.02) lie at the black, a shade darker, not pale. */
 	static void OwnOnto(FShape& Shape, const AirSheen::Level& Own, const std::vector<float>& Shade, const AirSheen::Carried& Marks)
 	{
 		const size_t Count = Own.Count();
@@ -5102,11 +5105,17 @@ namespace AirParts
 			return;
 		}
 		Shape.Sheen.SetNum(Shape.Points.Num());
+		const bool bOwnColours = Shape.Colors.Num() == Shape.Points.Num();
 		for (int32 K = 0; K < Shape.Points.Num(); ++K)
 		{
 			const size_t At = static_cast<size_t>(K);
 			const AirSheen::Carried C = At < Count ? AirSheen::Carry(Own.Gloss[At], Own.Metal[At], Shade[At]) : Marks;
 			Shape.Sheen[K] = FVector2D(C.U, C.V);
+			if (bOwnColours && At < Count && Shade[At] < 1.0f)
+			{
+				const FLinearColor Lit(Shape.Colors[K]);
+				Shape.Colors[K] = FLinearColor(Lit.R * Shade[At], Lit.G * Shade[At], Lit.B * Shade[At], Lit.A).ToFColor(true);
+			}
 		}
 	}
 

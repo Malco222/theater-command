@@ -6,9 +6,12 @@
 // Content/Models/MustangBare.json beside the old Mustang.json, which the row off still draws. Checked here: both files'
 // bytes; her finish read as the game reads it, paint by paint against the art director's rulings; M_AirPaint's law on
 // her numbers (her bare skin polished metal under its own floor, no glare guard; her paint and marks satin, no metal);
-// refusals; and the game's side as text (the row off unless asked, the name, the ink, the read).
+// refusals; her marks as the game lays them (her side number keeps off the star and bar's aft end, the art director's
+// words of 21:46Z); and the game's side as text (the row off unless asked, the name, the ink, the read, the marks' sizes).
 #include "Battle/AirSheen.h"
+#include "Battle/LandJson.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -59,6 +62,20 @@ namespace
 		return H;
 	}
 
+	/** A colour's channel to linear light and back, as the engine's FLinearColor(FColor) and ToFColor(true) do it. */
+	double ToLinear(int Byte)
+	{
+		const double V = Byte / 255.0;
+		return V <= 0.04045 ? V / 12.92 : std::pow((V + 0.055) / 1.055, 2.4);
+	}
+
+	int ToByte(double Linear)
+	{
+		const double V = std::min(std::max(Linear, 0.0), 1.0);
+		const double S = V <= 0.0031308 ? V * 12.92 : std::pow(V, 1.0 / 2.4) * 1.055 - 0.055;
+		return static_cast<int>(std::floor(S * 255.999));
+	}
+
 	/** Her near paints, as numbers, from the file's own "paints" list (the reader does not keep them). */
 	std::vector<int> NearPaints(const std::string& Text)
 	{
@@ -94,8 +111,9 @@ int main(int Argc, char** Argv)
 	const std::string Old = ReadAll(Argv[2]);
 	const std::string Src = Argv[3];
 
-	// The files' bytes: hers is issue-13's (sha256 4b7fe030...), the old one untouched (the row off draws it)
-	Check(Bare.size() == 3338874 && Fnv(Bare) == 0x7fe81244a95260aaull, "MustangBare.json is issue-13/Mustang.json byte for byte (3,338,874 bytes, FNV-1a 7fe81244a95260aa)");
+	// The files' bytes: hers is issue-13's second cut, Mustang-b.json (sha256 b6adf723...: the art director's 18:49Z marks,
+	// the side star back at 0.30 and moved forward, the wing marks 0.05 m forward), the old one untouched (the row off draws it)
+	Check(Bare.size() == 3338872 && Fnv(Bare) == 0x2f39f79b6bba5335ull, "MustangBare.json is issue-13/Mustang-b.json byte for byte (3,338,872 bytes, FNV-1a 2f39f79b6bba5335)");
 	Check(Old.size() == 2840697 && Fnv(Old) == 0x5eb305dffb669325ull, "Mustang.json is untouched (the row off draws every Mustang from it, as before)");
 	Check(Bare.find("\"schemes\"") == std::string::npos && Bare.find("mark_months") == std::string::npos,
 		"her file carries no paint by date (Brian's standing rule: markings and paint never by year)");
@@ -127,6 +145,78 @@ int main(int Argc, char** Argv)
 		"her black paint (nose, spinner, glare panel, bands): metal 0, gloss 50 or more (paint stays paint)");
 	Check(All(5, 7, 7, 0), "her glass: gloss 7, no metal");
 	Check(F.MarkGloss == 50 && F.MarkMetal == 0, "her marks (star and bar, number), laid after her file's points: satin, no metal");
+
+	// Her colour times her shade (AirParts::OwnOnto, in linear light, as the B-17's worn skin has hers in the kit): her
+	// rivets, seams and lines on her black paint (metal 0, shade 0.00 to 0.02) lie at the black, a shade darker. Drawn
+	// without her shade they were pale studs on black (issue-13's worst fault; the 3D sceptic's find, 27 Nov 22:0xZ).
+	{
+		LandJson::Json ColourRoot;
+		std::string ColourWhy;
+		const bool bColours = LandJson::Parse(Bare, ColourRoot, ColourWhy) && ColourRoot["colours"].IsArray() && ColourRoot["paint_names"].IsArray()
+			&& ColourRoot["colours"].Count() == ColourRoot["paint_names"].Count();
+		std::vector<bool> Plate(bColours ? ColourRoot["paint_names"].Count() : 0, false);
+		for (size_t K = 0; K < Plate.size(); ++K)
+		{
+			const std::string Named = ColourRoot["paint_names"].Items[K].Str("");
+			Plate[K] = Named == "line" || Named == "rivet" || Named == "rivet_under" || Named == "seam" || Named == "seam_under";
+		}
+		int OnPaint = 0, Lightest = 0, PlainLeast = 255;
+		for (size_t K = 0; bRead && K < Paints.size() && K < F.Near.Count(); ++K)
+		{
+			const size_t Which = static_cast<size_t>(Paints[K]);
+			if (Which >= Plate.size() || !Plate[Which] || F.Near.Metal[K] != 0)
+			{
+				continue;
+			}
+			++OnPaint;
+			const std::string Hex = ColourRoot["colours"].Items[Which].Str("");
+			for (int Channel = 0; Hex.size() == 6 && Channel < 3; ++Channel)
+			{
+				const int Byte = static_cast<int>(std::strtol(Hex.substr(static_cast<size_t>(2 * Channel), 2).c_str(), nullptr, 16));
+				PlainLeast = std::min(PlainLeast, Byte);
+				Lightest = std::max(Lightest, ToByte(ToLinear(Byte) * F.NearShade[K]));
+			}
+		}
+		char Line[220];
+		std::snprintf(Line, sizeof Line, "her %d plate points on black paint: colour x shade at most %d of 255 (her black 1C is 28); without the shade at least %d (pale)", OnPaint, Lightest, PlainLeast);
+		Check(bColours && OnPaint == 1819 && Lightest <= 0x1C + 2 && PlainLeast >= 0x91, Line);
+	}
+
+	// Her marks as the game lays them from her file (Campaign/CampaignMiniatures.cpp: Marking's USA-BAR, its bars 2.05 of
+	// her radius each way along the mark's width; PaintedNumerals, figures 0.6 wide with 0.2 between and a stroke 0.075 to
+	// either side, in her slot's radius, centred on the slot; an aircraft's number 1 to 14, so two figures at most). The art
+	// director, 21:46Z 27 Nov: "When a number is drawn, the number keeps off the bar end." (the file's x is forward)
+	{
+		LandJson::Json MarksRoot;
+		std::string MarksWhy;
+		const bool bMarks = LandJson::Parse(Bare, MarksRoot, MarksWhy) && MarksRoot["marks"].IsArray();
+		const LandJson::Json* SideMark = nullptr;
+		const LandJson::Json* Slot = nullptr;
+		int SideMarks = 0, Slots = 0;
+		for (size_t K = 0; bMarks && K < MarksRoot["marks"].Count(); ++K)
+		{
+			const LandJson::Json& M = MarksRoot["marks"].Items[K];
+			if (M["tag"].Str("") == "USA-BAR" && M["place"].Str("") == "side") { SideMark = &M; ++SideMarks; }
+			if (M["tag"].Str("") == "#") { Slot = &M; ++Slots; }
+		}
+		Check(SideMarks == 1 && Slots == 1, "her file: one side star and bar (both sides) and one number slot (both sides)");
+		if (SideMark && Slot)
+		{
+			const LandJson::Json& SA = (*SideMark)["at"];
+			const LandJson::Json& SF = (*SideMark)["facing"];
+			const double SR = (*SideMark)["radius"].Num(0.0);
+			// (the mark's width runs along Top ^ Out, Top the sky square to her side: its share along x is Out's y over Out's length)
+			const double OutLength = std::sqrt(SF.Items[0].Num(0.0) * SF.Items[0].Num(0.0) + SF.Items[1].Num(0.0) * SF.Items[1].Num(0.0));
+			const double BarAft = SA.Items[0].Num(0.0) - 2.05 * SR * (OutLength > 0.0 ? std::fabs(SF.Items[1].Num(0.0)) / OutLength : 1.0);
+			const double SlotX = (*Slot)["at"].Items[0].Num(0.0), SlotR = (*Slot)["radius"].Num(0.0);
+			const double TwoFigures = 2 * 0.6 + 0.2;
+			const double NumberFore = SlotX + (TwoFigures * 0.5 + 0.075) * SlotR;
+			const double Clear = BarAft - NumberFore;
+			char Line[200];
+			std::snprintf(Line, sizeof Line, "her side number (two figures, the widest) keeps off the bar end: number to x %.3f, aft bar end x %.3f, clear %.3f m", NumberFore, BarAft, Clear);
+			Check(std::fabs(SR - 0.30) < 1e-9 && std::fabs(BarAft + 3.418) < 0.002 && Clear > 0.1, Line);
+		}
+	}
 
 	// M_AirPaint's law on her numbers (her own tune: a floor of 0.25, no glare guard)
 	const AirSheen::Tune T = AirSheen::BareTune();
@@ -199,6 +289,17 @@ int main(int Argc, char** Argv)
 				&& Count(Battle, "TEXT(\"Models/MustangBare.json\")") == 1 && Count(Battle, "MustangMetalRead();") == 2,
 			"her ink on M_AirPaint, her file read once a run, at both battle starts");
 		Check(Count(Battle, "TEXT(\"TheaterAirMustangMetalInk=\")") == 1, "her numbers for stills: -TheaterAirMustangMetalInk=gain,floor,spec,metal,glare,graze,metalfrom");
+		Check(Count(Battle, "if (bOwnColours && At < Count && Shade[At] < 1.0f)") == 1
+				&& Count(Battle, "Shape.Colors[K] = FLinearColor(Lit.R * Shade[At], Lit.G * Shade[At], Lit.B * Shade[At], Lit.A).ToFColor(true);") == 1,
+			"her colour times her shade in linear light on her near and far shapes (OwnOnto), her marks untouched");
+		const std::string Kit = ReadAll(Src + "/Campaign/CampaignMiniatures.cpp");
+		Check(Count(Kit, "const int32 Number = 1 + static_cast<int32>(GetTypeHash(Tag + Name) % 14);") == 1
+				&& Count(Kit, "const double Wide = 0.6, Gap = 0.2, Thick = 0.075, All = Text.Len() * Wide + (Text.Len() - 1) * Gap;") == 1
+				&& Count(Kit, "Fresh.PaintedNumerals(At, Mark.Radius, Number, Facing, SideInk);") == 1
+				&& Count(Kit, "\t\tBar(-0.3, -2.05, 0.3, 2.05, Navy);\n") == 1,
+			"the marks' sizes the clearance above takes: a number 1 to 14 in the slot's radius, figures 0.6 and 0.2, the bars 2.05");
+		Check(Count(Kit, "if (Raw->bSkinned && Raw->Worn.IsValidIndex(K) && Raw->Worn[K] < 1.0f)") == 1 && Count(Kit, "Skinned->bSkinned = true;") == 1,
+			"the kit multiplies a colour by a shade only under the B-17's worn skin (AirSkin), so hers is shaded once, by OwnOnto");
 	}
 
 	if (Failed == 0)
