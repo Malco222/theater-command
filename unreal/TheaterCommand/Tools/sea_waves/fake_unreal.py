@@ -14,7 +14,8 @@ What it models of the engine, because the script depends on it:
 - The engine's own pictures the script loads (ENGINE_TEXTURES) carry the compression and sRGB the script tests. The first
   path stand_in() tries, T_Default_Material_Grid_M, holds plain numbers (masks, linear), so a picture of numbers stands
   on it; a picture of colours falls through to the next path, T_Default_MacroVariation (default, sRGB).
-- does_asset_exist answers from EXISTING (empty unless the caller fills it): with nothing there, everything is built.
+- does_asset_exist answers from EXISTING (empty unless the caller fills it) and from what this run made and has not
+  deleted since, as the editor would: with nothing there at the start, everything is built.
 - A wire into a node's input that already has one replaces it, as the material editor does; the replaced wire is kept
   in the trace.
 - Release 2's ground pictures (build_content's land_texture): unreal.Paths answers with this project's folder, and an
@@ -40,9 +41,10 @@ BY_PATH = {}         # their paths -> the asset
 LOGS = []            # unreal.log and its kin, in order: (level, text)
 LOADS = []           # unreal.load_asset: (path, found)
 DELETED = []         # EditorAssetLibrary.delete_asset paths
+GONE = set()         # (made in this run and deleted since: does_asset_exist says no)
 SAVED = []           # EditorAssetLibrary.save_asset paths
 IMPORTED = []        # AssetImportTask runs: (the asset's path, the file as a path in the project)
-EXISTING = set()     # the paths does_asset_exist says are there (none: everything is built)
+EXISTING = set()     # the paths there before the run (none: everything is built); what the run makes counts too (GONE)
 QUIET = True         # unreal.log prints nothing unless told
 
 
@@ -246,6 +248,7 @@ class _AssetTools:
         ASSETS.append(asset)
         BY_PATH[path] = asset
         BY_PATH[asset._path] = asset
+        GONE.discard(path)
         return asset
 
     def import_asset_tasks(self, tasks):
@@ -395,12 +398,15 @@ class MaterialExpressionMaterialFunctionCall(Thing):
 class EditorAssetLibrary(Thing):
     @staticmethod
     def does_asset_exist(asset_path):
-        return asset_path in EXISTING
+        # (and an asset this run made, or brought in, and did not delete since, as the editor answers: the blast press's
+        # twins are built only beside a plain material that is there, build_content's twin loop)
+        return asset_path in EXISTING or (asset_path in BY_PATH and asset_path not in GONE)
 
     @staticmethod
     def delete_asset(asset_path):
         DELETED.append(asset_path)
         EXISTING.discard(asset_path)
+        GONE.add(asset_path)
         return True
 
     @staticmethod

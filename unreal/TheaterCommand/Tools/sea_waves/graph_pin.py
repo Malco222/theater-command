@@ -1,7 +1,7 @@
 """The materials' graphs, pinned (the release 2 ocean plan, step 0: measure and guard rails).
 
 Runs Tools/build_content.py in the cloud through the stand-in Unreal module (fake_unreal.py), with nothing there yet
-(does_asset_exist False) and TC_REBUILD=all, so every material is built, and pins each material's graph by a SHA-256:
+(does_asset_exist False for every asset the run has not made itself) and TC_REBUILD=all, so every material is built, and pins each material's graph by a SHA-256:
 M_StageSea (Pearl Harbor's and Midway's sea, and the fleet actions' sea today), M_UnderSea, M_Wake, M_Highlight and the
 other eleven the build makes. A later step that refactors build_content.py, or adds the fleet's own materials after
 M_UnderSea, must leave every one of these hashes as pinned, byte for byte (Tools/sea_waves/graphs.sha).
@@ -233,9 +233,12 @@ def loop_entries():
                     raise SystemExit("graph_pin: the build loop holds an entry that is not (\"name\", builder)")
                 entries.append((elt.elts[0].value, builder_of(elt.elts[1])))
             loops.append(entries)
-    if len(loops) != 1:
-        raise SystemExit(f"graph_pin: build_content.py should have one build loop over (name, build); found {len(loops)}")
-    return loops[0]
+    # (the build loop is the one that holds M_MapSurface; any other loop over (name, build), the blast press's twins',
+    # may name none of the 15 pinned materials)
+    pinned_in = [entries for entries in loops if any(n in PINNED_NAMES for n, _ in entries)]
+    if len(pinned_in) != 1:
+        raise SystemExit(f"graph_pin: build_content.py should have one build loop over (name, build) holding the pinned materials; found {len(pinned_in)}")
+    return pinned_in[0]
 
 
 # ---- Checks ---------------------------------------------------------------------------------------------------------------
