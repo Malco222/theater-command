@@ -1291,6 +1291,9 @@ int main(int argc, char** argv)
 				{ "h_taken_other_side", "", true, false, 99, -62.0, 9.0, "her other side" },
 				{ "i_taken_back", "", true, false, 99, 200.0, 14.0, "her back plate" },
 				{ "j_taken_top", "", true, false, 99, 62.0, 58.0, "from above" },
+				// (her back plate from a raised eye, behind and above her as he commands: the art director's ruling of 27
+				// November 2026, 14:12Z, "a raised eye loses it")
+				{ "m_taken_back_raised", "", true, false, 99, 200.0, 40.0, "her back plate from a raised eye" },
 			};
 			// (LAND_KIT_CROSS_OWN=<model>: Germany's own vehicle of that name as well, her cross close and whole, as
 			// Kubelwagen for her doors' crosses)
