@@ -4974,9 +4974,13 @@ export function rowHolds(g: Game, nat: string, from: string[], at: number | unde
   const far = farOn(g);
   // (The corps the row would take leave together, and keep nothing for each other: the one contact test's `leaving`.)
   const gone = g.flags.fromWait === 1 ? new Set(rowTakes(g, nat, { from })) : NO_LEAVING;
+  // (A stand-in the row would stand down (`unless`) is held by the one test alone, as `expeditions` reads it, never by
+  // a live front, and is no row still to come: the design director's "2 YES", 01:37Z, 27 November 2026.)
+  const row = i >= 0 ? ((setup as any).expeditions as any[])[i] : undefined;
+  const ins = new Set<string>(row ? standInsOf(g, nat, row).map((x) => x.name) : []);
   return {
-    front: g.corps.filter((x) => x.nat === nat && !x.dead && from.includes(x.name) && ((far && onLiveFront(g, nat, x)) || (x.reg !== at && corpsInContact(g, nat, x, gone)))),
-    unformed: far ? from.filter((n) => fromWaits(g, nat, [n], i)) : [],
+    front: g.corps.filter((x) => x.nat === nat && !x.dead && from.includes(x.name) && ((far && !ins.has(x.name) && onLiveFront(g, nat, x)) || (x.reg !== at && corpsInContact(g, nat, x, gone)))),
+    unformed: far ? from.filter((n) => !ins.has(n) && fromWaits(g, nat, [n], i)) : [],
   };
 }
 
@@ -5757,6 +5761,14 @@ export function rowWords(g: Game, nat: string, row: any[]): { booked: boolean; o
 }
 
 /**
+ * The stand-ins of a row (`unless`): the living corps of `nat`'s rows that stand in for this one, which go when it
+ * lands (`expeditions`, `standDown`): the same men cannot stand in two places. The grand campaign only. Writes nothing.
+ */
+function standInsOf(g: Game, nat: string, row: any[]): Corps[] {
+  return g.flags.open === 1 && UNLESS.has(row[2]) ? ((setup as any).expeditions as any[]).filter((r2) => r2[6]?.unless === row[2] && r2[1] === nat).map((r2) => g.corps.find((u) => u.nat === nat && !u.dead && u.name === r2[2])).filter((x): x is Corps => !!x) : [];
+}
+
+/**
  * `take` is the one row the player has just said yes to (ruling B8, `takeOffer`): that row alone is read, and it
  * forms as the rule always formed it. Every other reading gives none, and reads every row.
  */
@@ -5923,7 +5935,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     const leavingNow: ReadonlySet<Corps> = g.flags.fromWait === 1 ? new Set<Corps>([
       ...rowTakes(g, nat, o),
       ...g.corps.filter((x) => !x.dead && leaving(x)),
-      ...(g.flags.open === 1 && UNLESS.has(row[2]) ? ((setup as any).expeditions as any[]).filter((r2) => r2[6]?.unless === row[2] && r2[1] === nat).map((r2) => g.corps.find((u) => u.nat === nat && !u.dead && u.name === r2[2])).filter((x): x is Corps => !!x) : []),
+      ...standInsOf(g, nat, row),
     ]) : NO_LEAVING;
     let own = false;
     if (Array.isArray(o.from) && !ashore && row[1] === nat && farOn(g) && (g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name)
@@ -6089,6 +6101,13 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // island of the Pacific too, as `roomNear` counts it: a row is not kept waiting, and so struck, by the islands' table.)
     if (!o.join && placed(g, reg, nat).filter((u) => u.kind !== 'eng').length >= STACK) return;
     if (asks) { offerMade(g, nat, i, o); return; }
+    // (Under the switch 'fromWait', where the contact rule acts: a row that would stand down a stand-in the one test
+    // holds where it stands, away from the province the row forms in, waits that month and tries again the next, its
+    // wait written and told like every wait of the rule's own: the design director's "2 YES: standDown goes under the
+    // one test, and the row waits, told", 01:37Z, 27 November 2026. The scope is the theatre draw's (her Q2, "one
+    // test, one scope"); a row the player has just said yes to forms as he ordered. Switch off: nothing is read.)
+    if (g.flags.fromWait === 1 && take !== i && contactRuleActs(g, g.byName[row[5]])
+      && standInsOf(g, nat, row).some((x) => x.reg !== reg.id && corpsInContact(g, nat, x, leavingNow))) { tellWait(g, i, reg); g.flags[`wait:${i}`] = g.turn; return; }
     g.flags[`sent:${i}`] = 1;
     // (The telling's three flags go once the formed headline below has read them: `formedLine` calls arrivalwaits.ts
     // `rowDone`, as every other place that sends or strikes a row does. The design director's answer 3 of 00:43Z, 26

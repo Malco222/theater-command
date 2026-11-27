@@ -56,7 +56,15 @@ const numberWord = (n: number): string => NUMBER[n] ?? String(n);
 /** Names joined whole: "A", "A and B", "A, B and C". */
 const join = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const placeOf = (g: Game, c: Corps): string => g.regions[c.reg].name;
-const fromOf = (row: any[]): string[] => (Array.isArray(row?.[6]?.from) ? (row[6].from as string[]) : []);
+/**
+ * The named corps a row takes whole (`from`), and after them the stand-ins it stands down as it lands (rows of its
+ * country whose `unless` names it): every corps the rule may hold it for, in that order. The design director's "2 YES:
+ * standDown goes under the one test, and the row waits, told", 01:37Z, 27 November 2026.
+ */
+const fromOf = (row: any[]): string[] => [
+  ...(Array.isArray(row?.[6]?.from) ? (row[6].from as string[]) : []),
+  ...(row ? ROWS().filter((r2) => r2?.[6]?.unless === row[2] && r2[1] === row[1]).map((r2) => r2[2] as string) : []),
+];
 /** The named corps of the row standing on the board, in the order the row names them. */
 const present = (g: Game, nat: string, from: string[]): Corps[] => g.corps.filter((x) => x.nat === nat && !x.dead && from.includes(x.name));
 const inOrder = (from: string[], cs: Corps[]): Corps[] => [...cs].sort((a, b) => from.indexOf(a.name) - from.indexOf(b.name));
