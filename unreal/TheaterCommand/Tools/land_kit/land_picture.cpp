@@ -1279,7 +1279,7 @@ int main(int argc, char** argv)
 				double Bearing, Up;
 				const char* Words;
 			};
-			const CrossLook Looks[] = {
+			std::vector<CrossLook> Looks = {
 				// (the Panzer IV: among her first two places, the skirts' crosses; the hull's own lie hidden behind the skirts)
 				{ "a_panzer_close", "PanzerIV", false, true, 2, 62.0, 12.0, "Panzer IV, her cross close" },
 				{ "b_tiger_close", "Tiger", false, true, 2, -128.0, 12.0, "Tiger, her hull's cross close" },
@@ -1291,7 +1291,19 @@ int main(int argc, char** argv)
 				{ "h_taken_other_side", "", true, false, 99, -62.0, 9.0, "her other side" },
 				{ "i_taken_back", "", true, false, 99, 200.0, 14.0, "her back plate" },
 				{ "j_taken_top", "", true, false, 99, 62.0, 58.0, "from above" },
+				// (her back plate from a raised eye, behind and above her as he commands: the art director's ruling of 27
+				// November 2026, 14:12Z, "a raised eye loses it")
+				{ "m_taken_back_raised", "", true, false, 99, 200.0, 40.0, "her back plate from a raised eye" },
 			};
+			// (LAND_KIT_CROSS_OWN=<model>: Germany's own vehicle of that name as well, her cross close and whole, as
+			// Kubelwagen for her doors' crosses)
+			const std::string OwnModel = std::getenv("LAND_KIT_CROSS_OWN") ? std::getenv("LAND_KIT_CROSS_OWN") : "";
+			const std::string OwnClose = OwnModel + ", Germany's own, her cross close", OwnWhole = OwnModel + ", Germany's own, whole";
+			if (!OwnModel.empty())
+			{
+				Looks.push_back({ "k_own_close", OwnModel.c_str(), false, true, 99, 62.0, 12.0, OwnClose.c_str() });
+				Looks.push_back({ "l_own_whole", OwnModel.c_str(), false, false, 99, 62.0, 9.0, OwnWhole.c_str() });
+			}
 			for (const CrossLook& K : Looks)
 			{
 				for (int After = 0; After < 2; ++After)
