@@ -2295,12 +2295,24 @@ namespace LandKit
 		 * its size and then smaller (to half of it); where none takes it whole, none at all. With Whole the mark may also be
 		 * held to a size (a vehicle's two sides carry the same size), or only fitted and not painted. None given: as
 		 * before, point for point.
+		 *
+		 * Whole's floor (CrossLeast; the art director's ruling of 27 November 2026, 07:37Z: "A cross is painted whole at
+		 * the largest size that fits, down to 0.12 m; one that cannot be whole at 0.12 m is not painted"). The moves
+		 * above are asked as before, and then: where half its size takes it nowhere, the same places are asked at each
+		 * smaller size in turn (0.85 of the last, and at last the floor itself), the larger first, with Clear round it and
+		 * then on her skin alone at each; and a fit under the floor is asked once more at the floor itself, as it was
+		 * found (with Clear round it, or on her skin alone), and where the floor does not take it so the mark is not
+		 * painted ("The Kubelwagen's 9 cm: NONE": her door takes the cross clear of its edge only at 9 cm; the larger
+		 * cross it would take on her skin alone, hard against the edge, is not painted in its place). A mark asked, or
+		 * held, under the floor is not painted.
 		 */
+		constexpr double CrossLeast = 0.06; // metres, half its width: 0.12 m across
 		struct MarkWhole
 		{
-			bool bTryOnly = false; // settle its size only: nothing is painted
-			double SizeMost = 0.0; // metres, half its width: no larger than this (0: as asked)
-			double Fitted = 0.0;   // given back: the size it takes whole, half its width (0: none)
+			bool bTryOnly = false;     // settle its size only: nothing is painted
+			double SizeMost = 0.0;     // metres, half its width: no larger than this (0: as asked)
+			double Fitted = 0.0;       // given back: the size it takes whole, half its width (0: none)
+			double Least = CrossLeast; // metres, half its width: none under this
 		};
 
 		/** A vehicle's two sides carry the same size (the art director, 27 November 2026, 04:20Z: "the smaller fit wins
@@ -2600,7 +2612,10 @@ namespace LandKit
 			// sample of it on one face of her skin, which is not cut by an edge though it has less room round it. The
 			// Sherman's left turret side, taken by Germany, takes her true cross whole at 0.262 m 9 cm from her file's
 			// place, between the moves above.)
-			if (!bFound && Whole)
+			// (Whole's floor: a fit under it is asked again at the floor, and else the mark is not painted)
+			const double WholeLeast = Whole ? Whole->Least : 0.0;
+			bool bFoundBare = false;
+			if (Whole && (!bFound || Size < WholeLeast - 1e-12))
 			{
 				std::vector<std::pair<double, double>> Grid;
 				for (int Ia = -12; Ia <= 12; ++Ia)
@@ -2622,6 +2637,24 @@ namespace LandKit
 					}
 					return std::atan2(L.first, L.second) < std::atan2(G.first, G.second);
 				});
+				// (one size asked of every place, the nearest first)
+				auto Ask = [&](double Try, bool bBare)
+				{
+					for (const auto& At2 : Grid)
+					{
+						const V3 Where = Place + Across * (At2.first * Shift) + Up * (At2.second * Shift);
+						if (Fits(Where, Try, bBare))
+						{
+							Middle = Where;
+							Size = Try;
+							bFound = true;
+							bFoundBare = bBare;
+							return true;
+						}
+					}
+					return false;
+				};
+				double Last = Size;
 				for (const bool bBare : { false, true })
 				{
 					double Tried = -1.0;
@@ -2633,17 +2666,35 @@ namespace LandKit
 							continue;
 						}
 						Tried = Try;
-						for (const auto& At2 : Grid)
+						Last = std::min(Last, Try);
+						Ask(Try, bBare);
+					}
+				}
+				// (the floor, where half its size took it nowhere: each smaller size in turn down to the floor itself, the
+				// larger first; at each, with Clear round it and then on her skin alone)
+				for (double Shrink = 0.5 * 0.85; !bFound; Shrink *= 0.85)
+				{
+					const double Try = std::max(std::min(Radius * Shrink, Held), WholeLeast);
+					if (Try < Last - 1e-12)
+					{
+						Last = Try;
+						if (!Ask(Try, false))
 						{
-							const V3 Where = Place + Across * (At2.first * Shift) + Up * (At2.second * Shift);
-							if (Fits(Where, Try, bBare))
-							{
-								Middle = Where;
-								Size = Try;
-								bFound = true;
-								break;
-							}
+							Ask(Try, true);
 						}
+					}
+					if (Radius * Shrink <= WholeLeast)
+					{
+						break;
+					}
+				}
+				// (a fit under the floor: asked once more at the floor itself, as it was found; else none)
+				if (bFound && Size < WholeLeast - 1e-12)
+				{
+					bFound = false;
+					if (std::min(Radius, Held) >= WholeLeast - 1e-12)
+					{
+						Ask(WholeLeast, bFoundBare);
 					}
 				}
 			}
@@ -5143,10 +5194,14 @@ namespace LandKit
 						// back mark is a speck low in a corner of her plate and reads as a blemish, and a roof mark is a speck from
 						// the air as surely; her sides' marks and her captor's coat carry her. The floor is for the mark as
 						// painted, so the painting keeps it too where her skin would take the mark only smaller.
+						// The German cross at its true proportions on her roof (the art director's ruling of 27 November 2026,
+						// 07:37Z: "Roof crosses: SMALLER rather than none, down to the floor"): a cross's own floor, 0.12 m
+						// across (CrossLeast). Her back plate's keeps the quarter of a metre: the ruling names her roof.
 						const double MarkLeast = 0.125;
+						const double RoofLeast = D.bTrueCross && CaptorKind == "cross" ? CrossLeast : MarkLeast;
 						for (CaptorPlate* Speck : { &CaptorRoof, &CaptorBack })
 						{
-							if (Speck->Size < MarkLeast)
+							if (Speck->Size < (Speck == &CaptorRoof ? RoofLeast : MarkLeast))
 							{
 								*Speck = CaptorPlate();
 							}
@@ -5158,7 +5213,8 @@ namespace LandKit
 							double Sized = 1.0;
 							// (the German cross at its true proportions: whole, never cut by the plate's edge, as her sides')
 							MarkWhole Whole;
-							if (Pl.Size > 0.0 && PaintCaptor(Parts[static_cast<size_t>(PartIx)].Body, Pl.At, Pl.Facing, Pl.Size, CaptorDust, 1000 + static_cast<uint64_t>(Which), &Sized, MarkLeast,
+							Whole.Least = Which == 0 ? RoofLeast : MarkLeast;
+							if (Pl.Size > 0.0 && PaintCaptor(Parts[static_cast<size_t>(PartIx)].Body, Pl.At, Pl.Facing, Pl.Size, CaptorDust, 1000 + static_cast<uint64_t>(Which), &Sized, Whole.Least,
 									D.bTrueCross && CaptorKind == "cross" ? &Whole : nullptr) > 0)
 							{
 								Pl.Size *= Sized;

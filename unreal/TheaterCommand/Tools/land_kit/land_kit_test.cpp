@@ -831,11 +831,13 @@ namespace
 		// (the German cross at its true proportions, Dress::bTrueCross, the trial word "truecross"; the art director's
 		// ruling of 27 November 2026, 01:23Z: the black a quarter of the cross's length wide, the white an eighth of its
 		// length along each side of an arm, so five twelfths of the cross is white by area where a fifth was. On every
-		// German vehicle of the real-size list above at the same sizes, and on three as shipped, without "realmarks".)
+		// German vehicle of the real-size list above at the same sizes, and on three as shipped, without "realmarks".
+		// But the Kubelwagen: with the word on she wears none, her ruling of 07:37Z ("The Kubelwagen's 9 cm: NONE"),
+		// which the true cross's own checks below hold her to.)
 		for (const Case& C : std::vector<Case>{ { "PanzerIV", "GER", 1943, 7, "truecross", false, false, false, "", true, 0.25, true },
 				 { "Tiger", "GER", 1944, 7, "truecross", false, false, false, "", true, 0.30, true }, { "Panther", "GER", 1944, 7, "truecross", false, false, false, "", true, 0.30, true },
 				 { "StuG3", "GER", 1943, 7, "truecross", false, false, false, "", true, 0.25, true }, { "Hanomag", "GER", 1944, 7, "truecross", false, false, false, "", true, 0.25, true },
-				 { "Hummel", "GER", 1944, 7, "truecross", false, false, false, "", true, 0.25, true }, { "Kubelwagen", "GER", 1944, 7, "truecross", false, false, false, "", true, 0.25, true },
+				 { "Hummel", "GER", 1944, 7, "truecross", false, false, false, "", true, 0.25, true },
 				 { "LightTank", "GER", 1941, 6, "truecross", true, false, false, "", true, 0.25, true }, { "Truck", "GER", 1944, 7, "truecross", false, false, false, "", true, 0.25, true },
 				 { "PanzerIV", "GER", 1944, 7, "truecross", false, false, false, "", false, 0.0, true }, { "Tiger", "GER", 1944, 7, "truecross", false, false, false, "", false, 0.0, true },
 				 { "Truck", "GER", 1944, 7, "truecross", false, false, false, "", false, 0.0, true },
@@ -1207,9 +1209,14 @@ namespace
 		// point of every body of hers 3 cm or more above the cross's flat stands off its outline, across that flat, at
 		// least 0.625 of its height above it), or else the roof cross is smaller or absent. As first built with the word
 		// on, the Sherman's left turret cross was cut at 0.375 m beside her right one's whole 0.262, and her roof cross of
-		// 0.435 lay under her machine gun on its post (seen from above at 58 degrees). The light tank's roof cross with
-		// the word on goes: her hatch ring stands 16 cm proud 21 cm behind its middle, and no flat of her turret's roof
-		// holds a quarter-metre cross clear of it, the floor.
+		// 0.435 lay under her machine gun on its post (seen from above at 58 degrees). The light tank's hatch ring stands
+		// 16 cm proud 21 cm behind her roof cross's middle, and no flat of her turret's roof holds a quarter-metre cross
+		// clear of it.
+		// Her ruling of 27 November 2026, 07:37Z, the cross's own floor: "A cross is painted whole at the largest size that
+		// fits, down to 0.12 m; one that cannot be whole at 0.12 m is not painted", and "Roof crosses: SMALLER rather than
+		// none, down to the floor". So with the word on a roof cross's floor is 0.12 m (the light tank's comes back at
+		// 0.21 m, clear of her hatch ring); her back plate's keeps the quarter of a metre, which the ruling does not name;
+		// and no cross in the kit is under 0.12 m across (every model, below).
 		{
 			struct Taken
 			{
@@ -1218,7 +1225,7 @@ namespace
 				const char* From;
 				double Wide; // (half as big again as the captor's mark at its real size, metres across)
 				bool bBack;  // (her back plate takes a captor's mark by her sides' rule, a quarter of a metre across or more; else none)
-				bool bRoof;  // (her roof takes an air mark, a quarter of a metre across or more; else none)
+				bool bRoof;  // (her roof takes an air mark, a quarter of a metre across or more, a true cross 0.12 m or more; else none)
 				bool bTrue = false; // (the German captor's cross at its true proportions, Dress::bTrueCross: the same sizes and floors)
 			};
 			for (const Taken& K : { Taken{ "T34", "GER", "SOV", 0.375, false, true }, Taken{ "Sherman", "GER", "USA", 0.375, true, true },
@@ -1226,7 +1233,7 @@ namespace
 					 Taken{ "Tiger", "USA", "GER", 0.5715, true, true }, Taken{ "LightTank", "GER", "UK", 0.375, false, true },
 					 Taken{ "M10", "GER", "USA", 0.375, false, false }, Taken{ "M3Halftrack", "GER", "USA", 0.375, true, false },
 					 Taken{ "T34", "GER", "SOV", 0.375, false, true, true }, Taken{ "Sherman", "GER", "USA", 0.375, true, true, true },
-					 Taken{ "LightTank", "GER", "UK", 0.375, false, false, true }, Taken{ "M10", "GER", "USA", 0.375, false, false, true },
+					 Taken{ "LightTank", "GER", "UK", 0.375, false, true, true }, Taken{ "M10", "GER", "USA", 0.375, false, false, true },
 					 Taken{ "M3Halftrack", "GER", "USA", 0.375, true, false, true } })
 			{
 				std::string Text, Error;
@@ -1367,9 +1374,9 @@ namespace
 					{
 						Why = "a captor's roof mark over 0.6 m across";
 					}
-					else if (Roof > 0.0 && 2.0 * Roof < 0.25 - 1e-6)
+					else if (Roof > 0.0 && 2.0 * Roof < (K.bTrue && std::string(K.Captor) == "GER" ? 0.12 : 0.25) - 1e-6)
 					{
-						Why = "a captor's roof mark under a quarter of a metre across";
+						Why = K.bTrue && std::string(K.Captor) == "GER" ? "a captor's roof cross under 0.12 m across" : "a captor's roof mark under a quarter of a metre across";
 					}
 					else if (Back > 0.0 && 2.0 * Back < 0.25 - 1e-6)
 					{
@@ -1393,7 +1400,7 @@ namespace
 					}
 					else if (!K.bRoof && Roof > 0.0)
 					{
-						Why = "her roof carries an air mark where it takes none of a quarter of a metre";
+						Why = "her roof carries an air mark where it takes none of its floor's size";
 					}
 					else if (std::string(K.Captor) == "GER" && (FlatWhite <= 0.0 || std::fabs(FlatBlack / FlatWhite - (K.bTrue ? 0.5 : 0.6825)) > 0.02))
 					{
@@ -1426,7 +1433,11 @@ namespace
 		// Every model in the kit, as Germany's own and as taken by Germany, with the cross at its true proportions and marks
 		// at their real size: the art director's rulings of 27 November 2026 are every model's, so each is read here by
 		// CrossFits (her two sides the same size, no cross cut by its plate's edge as the kit tells a cut, nothing of hers
-		// over her roof cross).
+		// over her roof cross), and none of her crosses is under 0.12 m across (her ruling of 07:37Z: a smaller one reads
+		// as dirt, so it is not painted: the Kubelwagen's 9 cm and the motorcycles' 9 and 10 cm go). The two she named
+		// are held to it by name, Germany's own Kubelwagen and motorcycle (WLA): each wears crosses with the word off and
+		// none with it on. As first built with the floor, a cross that fitted clear of its plate's edge only under the
+		// floor was painted larger on her skin alone, hard against the edge, and the Kubelwagen wore 0.18 m.
 		// As first built the fits were tested on five taken vehicles only, and an armoured car taken by Germany wore
 		// 0.225 m on one side and 0.188 m on the other: the side held to its partner's size took the cross only smaller
 		// still, and its partner was not asked again.
@@ -1440,7 +1451,8 @@ namespace
 				}
 			}
 			std::sort(Names.begin(), Names.end());
-			size_t Looks = 0, Crosses = 0, Bad = 0, Untolds = 0;
+			size_t Looks = 0, Crosses = 0, Bad = 0, Untolds = 0, RuledNone = 0;
+			double SmallestOfAll = 1e9;
 			for (const std::string& Nm : Names)
 			{
 				std::string Text;
@@ -1460,7 +1472,26 @@ namespace
 					D.bTrueCross = true;
 					Model Real;
 					std::string Error;
-					if (!Real.Load(Text, D, Error) || Real.Painted.empty())
+					if (!Real.Load(Text, D, Error))
+					{
+						continue;
+					}
+					if (!bTaken && (Nm == "Kubelwagen" || Nm == "WLA"))
+					{
+						Dress Off = D;
+						Off.bTrueCross = false;
+						Model Plain;
+						std::string PlainError;
+						const bool bWore = Plain.Load(Text, Off, PlainError) && !Plain.Painted.empty();
+						RuledNone += bWore && Real.Painted.empty() ? 1 : 0;
+						if (!bWore || !Real.Painted.empty())
+						{
+							++Bad;
+							std::printf("  %-11s Germany's own (true cross)  FAIL ruled none: %zu crosses with the word on, %s with it off\n", Nm.c_str(), Real.Painted.size(),
+								bWore ? "crosses" : "none");
+						}
+					}
+					if (Real.Painted.empty())
 					{
 						continue;
 					}
@@ -1470,9 +1501,16 @@ namespace
 					++Looks;
 					Untolds += bUntold ? 1 : 0;
 					Crosses += Real.Painted.size();
+					double Smallest = 1e9;
+					for (const Mark& Mk : Real.Painted)
+					{
+						Smallest = std::min(Smallest, 2.0 * Mk.Radius);
+					}
+					SmallestOfAll = std::min(SmallestOfAll, Smallest);
 					const std::string Why = !Unpaired.empty() ? "her two sides' crosses are not the same size (" + Unpaired + ")"
 						: !Cut.empty() ? "a cross cut by its plate's edge (" + Cut + ")"
-						: !OverRoof.empty() ? "something of hers stands over her roof cross seen from above (" + OverRoof + ")" : std::string();
+						: !OverRoof.empty() ? "something of hers stands over her roof cross seen from above (" + OverRoof + ")"
+						: Smallest < 0.12 - 1e-6 ? "a cross under 0.12 m across (" + std::to_string(Smallest) + " m)" : std::string();
 					if (!Why.empty())
 					{
 						++Bad;
@@ -1481,9 +1519,9 @@ namespace
 				}
 			}
 			++AllCases;
-			std::printf("  every model, Germany's own and taken by Germany (true cross): %zu looks, %zu crosses, %zu against the rulings (%zu looks not read for a cut)  %s\n",
-				Looks, Crosses, Bad, Untolds, Bad == 0 && Looks > 0 ? "ok" : "FAIL");
-			Failures += Bad == 0 && Looks > 0 ? 0 : 1;
+			std::printf("  every model, Germany's own and taken by Germany (true cross): %zu looks, %zu crosses, the smallest %.3f m across (floor 0.120), %zu of 2 ruled none wear none, %zu against the rulings (%zu looks not read for a cut)  %s\n",
+				Looks, Crosses, SmallestOfAll > 1e8 ? 0.0 : SmallestOfAll, RuledNone, Bad, Untolds, Bad == 0 && Looks > 0 && RuledNone == 2 ? "ok" : "FAIL");
+			Failures += Bad == 0 && Looks > 0 && RuledNone == 2 ? 0 : 1;
 		}
 		// With the word off the fits take no part: every look the fits change with the word on is, with the word off, the
 		// look it was before them. Told by her painted marks: how many, their radii summed (tenths of a millimetre) and
