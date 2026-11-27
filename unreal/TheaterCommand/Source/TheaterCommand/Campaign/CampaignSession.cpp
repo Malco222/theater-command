@@ -1921,6 +1921,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			C.Region = Unit->GetIntegerField(TEXT("reg"));
 			C.Moves = Unit->GetIntegerField(TEXT("ap"));
 			C.MovesMax = Unit->GetIntegerField(TEXT("apMax"));
+			Unit->TryGetNumberField(TEXT("apOut"), C.MovesOut); // (the 1.5.3 patch: sent only for his own corps inside a town)
 			{
 				int32 Marching = INDEX_NONE;
 				if (Unit->TryGetNumberField(TEXT("marchTo"), Marching) && Marching >= 0)
@@ -2073,12 +2074,20 @@ namespace
 	}
 }
 
-TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger, TMap<int32, int32>* OutFar, TArray<int32>* OutStanding, bool* OutSpent)
+TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger, TMap<int32, int32>* OutFar, TArray<int32>* OutStanding, bool* OutSpent, TArray<int32>* OutComesOut, FString* OutStays)
 {
 	TArray<FReachRegion> Out;
 	if (OutSpent)
 	{
 		*OutSpent = false;
+	}
+	if (OutComesOut)
+	{
+		OutComesOut->Reset();
+	}
+	if (OutStays)
+	{
+		OutStays->Reset();
 	}
 	if (OutDanger)
 	{
@@ -2142,6 +2151,20 @@ TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArr
 	if (OutSpent)
 	{
 		Object->TryGetBoolField(TEXT("spent"), *OutSpent);
+	}
+	// (The 1.5.3 patch.) The corps of a garrison in hand that come out of their town with an order, and have a move to
+	// make once out: the rules bring them all out or none (a bundle before 1.5.3 sends none).
+	const TArray<TSharedPtr<FJsonValue>>* Coming = nullptr;
+	if (OutComesOut && Object->TryGetArrayField(TEXT("out"), Coming))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Coming)
+		{
+			OutComesOut->Add(FMath::RoundToInt32(Value->AsNumber()));
+		}
+	}
+	if (OutStays)
+	{
+		Object->TryGetStringField(TEXT("stays"), *OutStays); // (the 1.5.3 review: beside the army in the field, why one of the garrison stays inside)
 	}
 	return Out;
 }
@@ -2557,11 +2580,12 @@ FAttackResult FCampaignSession::Attack(const TArray<int32>& CorpsIds, int32 Regi
 	return CorpsIds.Num() == 0 ? FAttackResult() : Fight(TEXT("attack"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId));
 }
 
-FString FCampaignSession::GarrisonWhy(int32 RegionId)
+FString FCampaignSession::GarrisonWhy(int32 RegionId, const TArray<int32>& CorpsIds)
 {
 	FString Why;
 	TSharedPtr<FJsonObject> Object;
-	if (CallRules(TEXT("garrisonWhy"), FString::Printf(TEXT("[%d]"), RegionId), Object))
+	const FString Args = CorpsIds.Num() > 0 ? FString::Printf(TEXT("[%d,[%s]]"), RegionId, *IdList(CorpsIds)) : FString::Printf(TEXT("[%d]"), RegionId);
+	if (CallRules(TEXT("garrisonWhy"), Args, Object))
 	{
 		Object->TryGetStringField(TEXT("why"), Why);
 	}

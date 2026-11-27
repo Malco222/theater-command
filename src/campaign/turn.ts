@@ -13,7 +13,7 @@ import {
   airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
-import { NAVY, adrift, baseTargets, canPass, cutOff, inPassage, laneNear, laneSteps, laneStepsFrom, passageWhy, scuttleFleet, turnBack, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, canShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
+import { NAVY, adrift, baseTargets, canPass, cutOff, fleetName, inPassage, laneNear, laneSteps, laneStepsFrom, passageWhy, scuttleFleet, turnBack, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, canShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
@@ -1829,7 +1829,11 @@ export function fleetOptions(g: Game, id: number): FleetOptions | null {
   if (seaMinesOn(g)) out.mines = war && !held && !cut ? mineSeas(g, f.id) : [];
   if (adrift(f)) { out.held = `${passageWhy(g, f)} ${out.ports.length ? 'A harbour is open to it now: it can make for one.' : 'It can be scuttled.'}`; out.scuttle = true; }
   else if (inPassage(f)) out.held = `${passageWhy(g, f)} It can be turned back to ${f.passage?.fromPort ?? 'the harbour it left'}.`;
-  else if (held) out.held = `The ${f.name} was sent at the enemy this month: it stays where the battle left it until next month.`;
+  else if (held) {
+    // (1.5.3) "The Home Fleet was sent", "Force H was sent": the fleet named as the attack card names it.
+    const named = fleetName(f);
+    out.held = `${named[0].toUpperCase()}${named.slice(1)} was sent at the enemy this month: it stays where the battle left it until next month.`;
+  }
   return out;
 }
 

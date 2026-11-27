@@ -77,7 +77,7 @@ import {
   governmentOf, whyNotAppointMinister, orderAppoint, whyNotOrderDecree, orderDecree, whyNotSetAsideDirective, orderSetAside,
   manpowerOf, cabinetIsOff, orderCabinet, cabinetBillOf, callUpOf, officeIsSecure, orderOffice, orderEarlyClass, orderCallUp,
   promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, orderPromise, whyNotTakeBackPromise, orderTakeBack, whyNotStandByGeneral, orderStandBy, orderSack,
-  townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, whyNotStormTown, stormOutlook, orderStorm, marchOutlook, orderTake, stormCandidates, stormChoice, verdictOf, whyNotGate, gateQuestion, orderGate, gateLeft, whyNotOrder, whyNotOrderGarrison, garrisonLine, whyNotSallyOut, sallyOutlook, orderSally,
+  townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, apForOrders, whyNotStormTown, stormOutlook, orderStorm, marchOutlook, orderTake, stormCandidates, stormChoice, verdictOf, whyNotGate, gateQuestion, orderGate, gateLeft, whyNotOrder, whyNotOrderGarrison, garrisonLine, whyNotSallyOut, sallyOutlook, orderSally,
   sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent, orderArrest, whyNotArrestAgent, orderTurn, whyNotTurnAgent,
   lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
   orderBureau, orderTeams, techTree, orderResearch, orderStopResearch, whyNotOrderResearch, orderAssign, orderPromote, orderRelieve, orderSkill,
@@ -106,7 +106,7 @@ import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, 
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
 import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
-import { adrift, baseTargets, cutOff, cutOffHomeTip, cutOffLine, struckLine, bookBaseOf, fleetReach, harbourFor, landingTargets, passageWhy, safeHarbour, seaAt as seaUnder, seaReading, seekOnceOn, setSeekOnce, beatReachOn, setBeatReach, voyageMonths, whyNotLand, whyNotShip } from '../../../src/campaign/navy';
+import { adrift, baseTargets, cutOff, cutOffHomeTip, cutOffLine, struckLine, bookBaseOf, fleetReach, harbourFor, landingTargets, passageWhy, safeHarbour, seaAt as seaUnder, seaReading, seekOnceOn, setSeekOnce, beatReachOn, setBeatReach, voyageMonths, whyNotLand, whyNotShip, whyNotShipAll } from '../../../src/campaign/navy';
 import { gateBar, gateSpot, gateViews } from '../../../src/campaign/gates';
 import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, roundWords, settleStands, standArmy } from '../../../src/campaign/round';
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, noneSeen, overOcean, seenAgo, skyOver, standingGuns, whyNotMission } from '../../../src/campaign/air';
@@ -137,6 +137,7 @@ import { orderCarrierStrikeFleet } from '../../../src/campaign/turn';
 import { galeLine, galeSeas, heavySeasOn, setHeavySeas } from '../../../src/campaign/heavyseas';
 import { setVoyageLog, voyageLines, voyageOn } from '../../../src/campaign/voyage';
 import { ownWaterOn, sailorsOn, setOwnWater, setSailors } from '../../../src/battle/sea/ticket';
+import { oddsWord } from '../../../src/campaign/seaplan';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { raidFogOn, skyKnown } from '../../../src/campaign/airfog';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
@@ -802,7 +803,12 @@ function drawView(step = false) {
       // (Version 61) how far its works have got, in months, where months are counted: attacks wear them down. -1 where they are not.
       works: c.dug && s.flags.open === 1 && DEFENCE.entrench.auto ? Math.round(worksOf(c) * 10) / 10 : -1, town: !!(c as { town?: unknown }).town, men: men(c),
       // (Rules 84.2.4; the UI director, 17 November.) A corps of his own inside a town: the rules' refusal, naming the town, for its card.
-      garrison: (c as { town?: unknown }).town && c.nat === s.human ? (() => { try { return garrisonLine(s, [c]); } catch { return ''; } })() : '',
+      // (The 1.5.3 patch, the playtest's find 18: one that went in this month is told when it can march, not to take the field.)
+      garrison: (c as { town?: unknown }).town && c.nat === s.human ? stayLine(s, [c]) : '',
+      // (The 1.5.3 patch, the playtest's finds 14 and 15.) And the moves it has once out, as an order brings it out (apForOrders:
+      // all but one of its month, none if it went in this month, and none while it may not come out). `ap` stays the
+      // rules' own, 0 inside the town.
+      ...((c as { town?: unknown }).town && c.nat === s.human ? { apOut: (() => { try { return apForOrders(s, c); } catch { return 0; } })() } : {}),
       // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
       xp: Math.round(c.xp * 100), grade: grade(c.xp), nick: c.nick ?? null,
       honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'] })),
@@ -1781,10 +1787,10 @@ function comeOut<R>(ids: unknown, call: () => R, looks: boolean): R {
     done.push(x);
   }
   const out = inside.map((x) => ({ reg: x.c.reg, ap: x.c.ap }));
-  const settle = (): number => {
+  const settle = (): Inside[] => {
     const back = looks ? inside : inside.filter((x, i) => !wentOut(s, x, out[i]));
     backInside(back);
-    return back.length;
+    return back;
   };
   let result: R;
   try { result = call(); } catch (e) { settle(); throw e; }
@@ -1792,13 +1798,127 @@ function comeOut<R>(ids: unknown, call: () => R, looks: boolean): R {
   // (The 1.5 pre-check, 24 Nov 19:11Z.) An order's answer carries the picture of the war drawn inside the call, with
   // the garrison still out; the 3D game takes it as the map's (TakeView). Where any corps was put back (a refusal, or
   // one the order left behind), the picture is drawn again, with it inside its town and its moves as they were.
-  if (!looks && put > 0 && result && typeof result === 'object' && 'view' in result) (result as { view: unknown }).view = view();
+  if (!looks && put.length > 0 && result && typeof result === 'object' && 'view' in result) (result as { view: unknown }).view = view();
+  // (The 1.5.3 review.) Where the order went and left corps of the town behind (one with a move fewer for coming out,
+  // that could not keep up), the answer's note names them as they stay in the town, so that they are not left without
+  // a word.
+  const answer = !looks && put.length > 0 && result && typeof result === 'object' ? (result as { note?: unknown; moved?: unknown; report?: unknown }) : null;
+  if (answer && typeof answer.note === 'string' && (put.length < inside.length || (Array.isArray(answer.moved) && answer.moved.length > 0) || !!answer.report)) {
+    const stay = leftInTown(put.map((x) => x.c), put.length === 1 ? 'It could not go with the rest.' : 'They could not go with the rest.');
+    answer.note = answer.note ? `${answer.note} ${stay}` : stay;
+  }
   return result;
 }
 /** A call that only looks, made with the garrison in hand as if out: put back after. */
 const lookOut = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R => comeOut(a[0], () => fn(...a), true);
 /** An order, made with the garrison in hand out of its town: it stays out if the order went. */
 const goOut = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R => comeOut(a[0], () => fn(...a), false);
+
+// ---- What a garrison in hand is told (the 1.5.3 patch; the playtest's finds 16 and 18) ----------------------------
+/** The player's corps among these ids, where every one of them stands inside a town: a hand that is all garrison. Empty otherwise. */
+const garrisonHand = (s: Game, ids: unknown): Corps[] => {
+  const inside = insideOf(s, ids);
+  try { return inside.length && inside.length === corpsById(s, ids as number[]).length ? inside : []; } catch { return []; }
+};
+/**
+ * (The 1.5.3 review.) The corps of a hand that a train or a ship takes. Beside the army in the field, the corps of the
+ * town's garrison take neither (whyNoTrain, whyNotShip): the train, the voyage and the landing are the field army's,
+ * judged on it alone, and the garrison stays in its town, as rail() and ship() leave it. A hand that is all garrison,
+ * or has none, is judged whole.
+ */
+const afield = (cs: Corps[]): Corps[] => {
+  const field = cs.filter((c) => c.town === undefined);
+  return field.length && field.length < cs.length ? field : cs;
+};
+/** (The 1.5.3 review.) The corps of a hand left in their town as the rest go by train or by sea, named, with the rules' reason ('' where none is left). */
+function leftInTown(stay: Corps[], why: string): string {
+  if (!stay.length) return '';
+  const names = stay.map((c) => shortName(c.name));
+  return `${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} stay` : `${names[0]} stays`} in the town.${why ? ` ${why}` : ''}`;
+}
+/**
+ * Why these corps of his inside a town march nowhere this month, in the sentence the 3D game's pointer gives a
+ * garrison in hand (garrisonWhy): the rules' garrisonLine, which tells one that went in this month when it can march
+ * (it has no move once out) and any other the way out (TAKE THE FIELD, or a sortie where an army stands round the
+ * town). '' where there are none.
+ */
+function stayLine(s: Game, cs: Corps[]): string {
+  if (!cs.length) return '';
+  try { return garrisonLine(s, cs); } catch { return ''; }
+}
+/**
+ * An order whose answer says nothing when nothing was done: for a hand that is all garrison, the answer's `key` then
+ * carries the reason the 3D game's pointer gives (`why`, asked once the call is over and the garrison back inside;
+ * where it gives '', the answer stays ''). Any other hand, and any answer that did something or said something, is
+ * left as it is.
+ */
+function sayWhyInside<A extends [unknown, ...unknown[]], R>(fn: (...a: A) => R, key: string, idle: (r: R) => boolean, why: (s: Game, cs: Corps[], a: A) => string = (s, cs) => stayLine(s, cs)) {
+  return (...a: A): R => {
+    const out = fn(...a);
+    try {
+      const s = game();
+      const cs = garrisonHand(s, a[0]);
+      const said = out && typeof out === 'object' ? (out as Record<string, unknown>)[key] : undefined;
+      if (cs.length && said === '' && idle(out)) (out as Record<string, unknown>)[key] = why(s, cs, a);
+    } catch { /* (the answer stands as the order gave it) */ }
+    return out;
+  };
+}
+/** True where the garrison in hand comes out with a move to make and the place is in its reach once out (ComesOutTo in the 3D game). */
+const comesOutTo = (hand: { out: number[]; regions: { id: number }[] }, to: unknown): boolean => hand.out.length > 0 && hand.regions.some((r) => r.id === to);
+/**
+ * (The 1.5.3 review.) For a march or a march up, the garrison's line is the reason only where the 3D pointer gives it
+ * (ComesOutTo): the hand cannot come out with a move to make, or the place is beyond its reach once out. Where it
+ * could come out and get there, nothing stands in its way but what stands in a field army's, and the place's own
+ * answer stands as a field army gets it: '' for a march onto the enemy next door, which is an attack, not a march.
+ */
+function garrisonOrPlace(s: Game, cs: Corps[], a: [unknown, ...unknown[]]): string {
+  return comesOutTo(reachHand(a[0] as number[]), a[1]) ? '' : stayLine(s, cs);
+}
+/**
+ * (The 1.5.3 review; the playtest's find 16.) The march up and the attack, planned with the garrison in hand as if out
+ * of its town (lookOut). A hand that is all garrison and would have no move once out (it went in this month) is
+ * planned nothing, as the 3D game asks for no plan then (GarrisonApproach): the answer says why in the pointer's
+ * words, not that the nearest ground is a month's march off, which it could not set off on. Any other refusal with
+ * nothing said is told why as a march is (garrisonOrPlace).
+ */
+function approachHand(ids: number[], to: number) {
+  const plan = lookOut(approach)(ids, to);
+  try {
+    const s = game();
+    const cs = plan.ok ? [] : garrisonHand(s, ids);
+    if (cs.length) {
+      const hand = reachHand(ids);
+      const why = !hand.out.length || (plan.none === '' && !comesOutTo(hand, to)) ? stayLine(s, cs) : '';
+      if (why) return { ...plan, rows: [], none: why };
+    }
+  } catch { /* (the plan stands as the rules made it) */ }
+  return plan;
+}
+/**
+ * (The 1.5.3 review; the playtest's find 14.) Why the last corps of the hand inside a town that no order would bring
+ * out with a move stays inside, in the rules' words, so that the 3D game can take it out of a hand beside the army in
+ * the field and say why. They are taken out in turn, as an order takes them (comeOut, all or none), and put back: the
+ * first the rules keep inside gives the reason ("There is no room in the field at Saar for another corps."), and where
+ * every one comes out, the last has no move once out (it went in this month: garrisonLine says when it can march).
+ * '' where every corps of the hand inside a town comes out with a move.
+ */
+function staysWhy(s: Game, ids: number[], out: number[]): string {
+  const inside = insideOf(s, ids);
+  const left = inside.filter((c) => !out.includes(c.id));
+  if (!left.length) return '';
+  const xs = inside.map((c) => insideNow(s, c));
+  const done: Inside[] = [];
+  let why = '';
+  try {
+    for (const x of xs) {
+      const no = whyNotLeaveTown(s, x.c);
+      if (no !== null || !orderTakeField(s, x.c)) { why = no ?? ''; break; }
+      done.push(x);
+    }
+  } catch { why = ''; } finally { backInside(done); }
+  return why || stayLine(s, [left[left.length - 1]]);
+}
 
 
 /** One formation seen to fly a raid: where from, where to, whose, what flies, and what it meets. */
@@ -2713,6 +2833,30 @@ function reachOf(ids: number[]) {
 }
 
 /**
+ * (The 1.5.3 patch; the playtest's finds 14 and 18.) The reach of the army in hand as the 3D game asks for it: its
+ * garrison looked at as if out (lookOut), and two things more. `out`: the corps of the hand inside a town that an
+ * order would bring out with a move to make (comeOut brings them all or none, and one that went in this month has
+ * none once out), so that a hand of a garrison and a field army can say which come out. `why`: for a hand that is all
+ * garrison and can march nowhere this month, the reason, in the sentence garrisonWhy gives. (The 1.5.3 review.) It
+ * is spent as any hand is (reachOf): not on the eve of war, where a corps brought out of its town has its whole month
+ * when the war opens, as every corps in the field has. `stays`: for a hand beside the army in the field, why the last
+ * of its corps inside a town that no order brings out with a move stays inside (staysWhy), so that the 3D game takes
+ * it out of the hand and says so.
+ */
+function reachHand(ids: number[]) {
+  const s = game();
+  const inside = insideOf(s, ids);
+  let out: number[] = [];
+  const seen = comeOut(ids, () => {
+    out = inside.filter((c) => c.town === undefined && !c.dead && c.ap > 0).map((c) => c.id);
+    return reachOf(ids);
+  }, true);
+  const stuck = humanUp(s) && !out.length ? garrisonHand(s, ids) : [];
+  const mixed = humanUp(s) && inside.length > 0 && !stuck.length && inside.length < corpsById(s, ids).length;
+  return { ...seen, out, why: stayLine(s, stuck), stays: mixed ? staysWhy(s, ids, out) : '' };
+}
+
+/**
  * (Rulings 88, 101 and 102(b).) The round of armies as the rules count it (round.ts), so that both builds show the
  * same numbers: `bright` on NEXT ARMY's disc (while it is above nothing END THE MONTH stays dark), `quiet` for the
  * rear, `front` for how many of the bright stand at the front, `all` for every army Tab still goes to, and `idle`
@@ -3451,9 +3595,19 @@ function sally(region: number) {
   return { report: namedReport(s, report), siege: false, fell: false, stands: '', marched: 0, note: report ? battleNote(s, report) : why ?? '', price: report ? priceLine(s, report) : '', paid, moved: [] as { id: number; path: number[] }[], view: view() };
 }
 
-/** (Rules 84.2.4.) Why the player's corps inside a province's town take no marching orders, in the rules' own sentence; '' where he has none there. */
-function garrisonWhy(region: number) {
-  try { return { why: whyNotOrderGarrison(game(), region) ?? '' }; } catch { return { why: '' }; }
+/**
+ * (Rules 84.2.4.) Why the player's corps inside a province's town take no marching orders, in the rules' own sentence;
+ * '' where he has none there. (The 1.5.3 patch, the playtest's find 18: where every one of them went in this month,
+ * and so has no move once out, the rules' sentence says when they can march, not to take the field: garrisonLine.)
+ * (The 1.5.3 review.) Given the corps in hand, the sentence is theirs, not the whole town's: one that went in this
+ * month beside an older garrison is told when it can march, as its own card tells it.
+ */
+function garrisonWhy(region: number, ids?: number[]) {
+  try {
+    const s = game();
+    const hand = insideOf(s, ids).filter((c) => c.reg === region && !c.dead);
+    return { why: hand.length ? stayLine(s, hand) : whyNotOrderGarrison(s, region) ?? '' };
+  } catch { return { why: '' }; }
 }
 
 function takeOutlook(ids: number[], to: number) {
@@ -4004,8 +4158,12 @@ function rail(ids: number[], to: number) {
   const went: string[] = [];
   for (const c of asked) if (orderRail(s, c, to)) { forgetMarch(s, [c.id]); moved.push({ id: c.id, path: [to] }); went.push(c.name); } // (an order carried out ends a standing march)
   // (the message line, as the browser says it)
-  const place = s.regions[to]?.name ?? '', left = asked.length - went.length;
-  const said = went.length ? `${went.length === 1 ? `${went[0]} goes` : `${went.length} corps go`} to ${place} by rail: there this month, the whole month spent.${left ? ` ${left === 1 ? 'One corps stays' : `${left} corps stay`} behind: ${place} has no room for more.` : ''}` : '';
+  // (The 1.5.3 review.) A corps of the town's garrison beside the army in the field takes no train: it is named as it
+  // stays in the town, with the rules' reason (whyNoTrain), and is not counted among those the place has no room for.
+  const inside = asked.filter((c) => c.town !== undefined && !moved.some((m) => m.id === c.id));
+  const place = s.regions[to]?.name ?? '', left = asked.length - inside.length - went.length;
+  const stay = inside.length ? ` ${leftInTown(inside, whyNoTrain(s, inside[0])?.line ?? '')}` : '';
+  const said = went.length ? `${went.length === 1 ? `${went[0]} goes` : `${went.length} corps go`} to ${place} by rail: there this month, the whole month spent.${left ? ` ${left === 1 ? 'One corps stays' : `${left} corps stay`} behind: ${place} has no room for more.` : ''}${stay}` : '';
   return { moved, said, view: view() };
 }
 
@@ -4044,7 +4202,10 @@ function railShow(ids: number[], march: number[], army = '', armyIds: number[] =
   const none = { can: false, strong: '', line: '', tracks: [] as number[][], reach: [] as number[], dots: [] as number[], tint: [] as number[], bars: [] as number[][], ringed: [] as number[] };
   try {
     if (!humanUp(s) || onEve(s)) return none;
-    const cs = corpsById(s, ids).filter((c) => !c.dead && canOrder(s, c));
+    // (The 1.5.3 review.) Beside the army in the field, the town's garrison in hand takes no train: the field army is
+    // judged alone, as rail() sends it, and where it rides the line names the garrison as it stays in its town.
+    const all = corpsById(s, ids).filter((c) => !c.dead && canOrder(s, c));
+    const cs = afield(all), stay = all.filter((c) => !cs.includes(c));
     if (!cs.length) return none;
     const walked = new Set<number>(march);
     const reach = [...railReachFor(s, cs)];
@@ -4076,6 +4237,7 @@ function railShow(ids: number[], march: number[], army = '', armyIds: number[] =
         line = `${who} ${named.many ? 'are' : 'is'} ${seat.town}'s garrison${stronger ? `: inside the town ${named.many ? 'they fight' : 'it fights'} ${stronger}% stronger` : ''}. TAKE THE FIELD brings ${named.many ? 'them' : 'it'} out.`;
       }
     } catch { /* the rules' own line stands */ }
+    if (said?.can && stay.length) line = `${line} ${leftInTown(stay, whyNoTrain(s, stay[0])?.line ?? '')}`;
     return {
       can: !!said?.can, strong: said?.strong ?? '', line, tracks, reach,
       dots: beyond.filter((id) => !cuts.has(id) && !(barred && steep.has(s.regions[id].name))),
@@ -4088,17 +4250,25 @@ function railShow(ids: number[], march: number[], army = '', armyIds: number[] =
  * The words under the pointer for a province beyond the march of the army in hand (the art director's railway brief,
  * section 8): the rules' one line where a train would take it there; or why none will, with the opening that takes
  * the emphasis where the reason is a break he can act on, and whether that reason is a cut at this very province (so
- * that the cut is said once).
+ * that the cut is said once). (The 1.5.3 review.) A hand that is all garrison asked of its own province, as the BY RAIL
+ * notice asks it (ToggleRail in the 3D game), is told why no train takes it from there, judged whole.
  */
 function railTip(ids: number[], to: number) {
   const s = game();
   const none = { ride: '', relay: '', no: '', strong: '', cutHere: false };
   try {
-    const cs = corpsById(s, ids).filter((c) => !c.dead && canOrder(s, c) && c.reg !== to);
+    const home = humanUp(s) ? garrisonHand(s, ids) : [];
+    if (home.length && home.every((c) => c.reg === to)) {
+      const no = whyNoTrainFor(s, home);
+      return no ? { ...none, no: no.line, strong: no.strong ?? '' } : none;
+    }
+    // (The 1.5.3 review.) The field army is judged alone, as railShow judges it; the ride names the garrison that stays.
+    const all = corpsById(s, ids).filter((c) => !c.dead && canOrder(s, c) && c.reg !== to);
+    const cs = afield(all), stay = all.filter((c) => !cs.includes(c));
     if (!cs.length || !s.regions[to] || !humanUp(s)) return none;
     if (railReachFor(s, cs).has(to)) {
       const said = rideLines(s, cs, to, 'Right-click');
-      return { ...none, ride: said.line, relay: said.relay };
+      return { ...none, ride: stay.length ? `${said.line} ${leftInTown(stay, '')}` : said.line, relay: said.relay };
     }
     const no = whyNoTrainFor(s, cs, to);
     return no ? { ...none, no: no.line, strong: no.strong ?? '', cutHere: no.code === 'cut' && no.at === to } : none;
@@ -4115,7 +4285,7 @@ function seaReach(ids: number[]) {
   const ports = new Set<number>();
   let beaches: number[] = [];
   if (humanUp(s) && !onEve(s)) seaReading(s, () => {
-    const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+    const cs = afield(corpsById(s, ids).filter((c) => canOrder(s, c))); // (the 1.5.3 review: the garrison beside the field army stays in its town)
     for (const c of cs) for (const r of s.regions) if (r.port && r.id !== c.reg && whyNotShip(s, c, r) === null) ports.add(r.id);
     beaches = landingTargets(s, cs).map((r) => r.id);
   });
@@ -4125,21 +4295,16 @@ function seaReach(ids: number[]) {
 /**
  * (The UI director, 18 November 2026; ruling 204.) Why the chosen corps cannot go by sea to a place the by-sea offer
  * leaves out: the first test the place fails, in the rules' own words (to friendly ground, the first corps that
- * cannot be shipped there; to any other, the landing). Empty where the rules have nothing against it.
+ * cannot be shipped there; to any other, the landing). Empty where the rules have nothing against it. (The 1.5.3
+ * review: a hand that is all garrison is judged whole, as the landing and the train judge it: whyNotShipAll.)
  */
 function bySeaWhy(ids: number[], to: number): { why: string } {
   const s = game();
   const r = s.regions[to];
-  const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+  const cs = afield(corpsById(s, ids).filter((c) => canOrder(s, c))); // (the 1.5.3 review, as seaReach)
   if (!r || !cs.length) return { why: '' };
   // (One sea reading, as `seaReach`: a refusal for lying beyond a month's sailing searches from every port on the way.)
-  return seaReading(s, () => {
-    if (allied(s, cs[0].nat, r.ctrl)) {
-      for (const c of cs) { const why = whyNotShip(s, c, r); if (why) return { why }; }
-      return { why: '' };
-    }
-    return { why: whyNotLand(s, cs, r) ?? '' };
-  });
+  return seaReading(s, () => ({ why: (allied(s, cs[0].nat, r.ctrl) ? whyNotShipAll(s, cs, r) : whyNotLand(s, cs, r)) ?? '' }));
 }
 
 /** Ships the chosen corps to a friendly port. */
@@ -4153,7 +4318,7 @@ function ship(ids: number[], to: number) {
 /** What a landing on an enemy coast would meet, before the order is given. */
 function landingPlan(ids: number[], to: number) {
   const s = game();
-  const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+  const cs = afield(corpsById(s, ids).filter((c) => canOrder(s, c))); // (the 1.5.3 review: the force is the field army's, as seaReach offers the coast)
   const p = previewLanding(s, cs, to);
   const lines: string[] = [];
   if (!p.why) {
@@ -4218,7 +4383,7 @@ function landingPlan(ids: number[], to: number) {
 /** Lands the chosen corps on an enemy coast. */
 function landOn(ids: number[], to: number) {
   const s = game();
-  const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+  const cs = afield(corpsById(s, ids).filter((c) => canOrder(s, c))); // (the 1.5.3 review, as landingPlan: the garrison stays in its town)
   const before = new Map(cs.map((c) => [c.id, c.reg] as const));
   const r = orderLand(s, cs, to);
   const moved = cs.filter((c) => !c.dead && c.reg !== before.get(c.id)).map((c) => ({ id: c.id, path: [c.reg] }));
@@ -5800,6 +5965,16 @@ function cutOffWhyNoSea(s: Game, id: number): string {
   const f = s.fleets.find((x) => x.id === id);
   return `Every sea in its reach lies beyond the shut strait. ${f && cutOffHomeTip(s, f) ? 'RETURN TO HARBOUR takes it to a harbour on its side.' : 'No friendly harbour on its side can take it, so it stays at sea.'}`;
 }
+/**
+ * (1.5.3, the 1.5.2 review) The page note's rule for a fleet's orders, with a space before it. A cut-off fleet reaches no
+ * sea, so it is not told it reaches three from its base: it keeps its one order a month where a harbour on its side can
+ * take it, and with none no order moves it, so nothing is said (the cut-off line at the head of the note says why).
+ */
+function fleetRuleNote(s: Game, id: number): string {
+  const f = s.fleets.find((x) => x.id === id);
+  if (!f || !cutOff(s, f)) return ' A fleet reaches three seas from its base, and can be given one order a month.';
+  return harbourFor(s, f) ? ' It can be given one order a month.' : '';
+}
 
 function fleetPage(s: Game, id: number): Page | null {
   const card = s.flags.open === 1 ? fleetView(s, id) : null;
@@ -5865,10 +6040,12 @@ function fleetPage(s: Game, id: number): Page | null {
   const targets: PageRow[] = (o?.attack ?? []).map((t) => {
     const p = previewFleetAttack(s, id, t);
     const them = p?.theirs.fleets.find((x) => x.id === t);
-    const where = p ? (p.where === 'harbour' ? `In harbour at ${p.port}.` : `At sea, ${seaWhere(p.zoneName)}.`) : '';
+    // (1.5.3, playtest #25) A fleet only reported is in harbour, and no more: the map gives it no port.
+    const where = p ? (p.where === 'harbour' ? `In harbour${them?.known === 'exact' ? ` at ${p.port}` : ''}.` : `At sea, ${seaWhere(p.zoneName)}.`) : '';
     return {
       nat: them?.nat ?? '', title: them?.name ?? 'An enemy fleet',
-      lines: [where, p?.odds ? `${p.verdict}: ${p.odds.mid >= 9.95 ? 'more than 10' : p.odds.mid.toFixed(1)} to 1.` : 'Its strength is not known.'].filter(Boolean),
+      // (1.5.3) Hopeless odds read "less than 0.1 to 1", not "0.0 to 1", as on the card.
+      lines: [where, p?.odds ? `${p.verdict}: ${oddsWord(p.odds.mid)} to 1.` : 'Its strength is not known.'].filter(Boolean),
       buttons: [{ label: 'ATTACK', act: `open:fleetattack:${id}:${t}`, ok: up, tip: 'Shows the odds first. Or drop the fleet on theirs on the map.' }],
     };
   });
@@ -5941,7 +6118,8 @@ function fleetPage(s: Game, id: number): Page | null {
   }] : [];
   const joins: PageRow[] = (o?.merge ?? []).map((other) => {
     const f = fleetView(s, other);
-    return { nat: card.nat, title: f?.name ?? 'A fleet', lines: [f ? `${f.ships} ships. ${f.doing}.` : ''], buttons: [{ label: 'JOIN IT', act: `fleetmerge:${id}:${other}`, ok: up, tip: 'The two become one fleet under the other\'s flag and orders.' }] };
+    // (1.5.3, playtest #26) "1 ship", not "1 ships", here and in the room's note.
+    return { nat: card.nat, title: f?.name ?? 'A fleet', lines: [f ? `${f.ships} ship${f.ships === 1 ? '' : 's'}. ${f.doing}.` : ''], buttons: [{ label: 'JOIN IT', act: `fleetmerge:${id}:${other}`, ok: up, tip: 'The two become one fleet under the other\'s flag and orders.' }] };
   });
   const gap = card.screen.gap > 0 ? ` ${cap1(card.screen.word)}: it has ${card.screen.have} destroyers where its heavy ships need ${card.screen.need}.` : '';
   const who = whoSails(s, id);
@@ -5956,7 +6134,7 @@ function fleetPage(s: Game, id: number): Page | null {
     id: `fleet:${id}`, title: card.name.toUpperCase(), headline: `${card.doing}`,
     // (Release 2, the far chart: struck at anchor this month or last, the card says so first, and where is out of reach.)
     // (1.5.2) Cut off beyond a shut strait: the cut-off line heads the note.
-    note: `${cutOffNote(s, id)}${fl && struckLine(s, fl) ? `${struckLine(s, fl)} ` : ''}${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.${why ? ` ${why}` : ''}${task ? ` ${task}` : ''}${who ? ` ${who}` : ''}`,
+    note: `${cutOffNote(s, id)}${fl && struckLine(s, fl) ? `${struckLine(s, fl)} ` : ''}${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ship${card.ships === 1 ? '' : 's'}, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''}${fleetRuleNote(s, id)}${why ? ` ${why}` : ''}${task ? ` ${task}` : ''}${who ? ` ${who}` : ''}`,
     top: [
       // (Release 2, the far chart: a fleet in passage to a new base is turned back by the same order.)
       // (1.5.2's #37 and 1.5.1's held fleet, both: the reason it is held comes first, else it says if it is the order now.)
@@ -6011,16 +6189,30 @@ function fleetAttackPage(s: Game, id: number, target: number): Page | null {
   const p = previewFleetAttack(s, id, target);
   if (!p) return null;
   const share = (x: number): string => `${Math.round(x * 100)}%`;
-  const odds = (x: number): string => (x >= 9.95 ? 'more than 10' : x.toFixed(1));
+  // (1.5.3, playtest #26) "1 cruiser and 3 destroyers": the last of a list after "and".
   const lost = (x: Record<string, number>): string => {
     const parts = ['bb', 'cv', 'ca', 'dd', 'ss'].filter((c) => (x[c] ?? 0) > 0).map((c) => `${x[c]} ${SHIP_WORD[c][x[c] === 1 ? 0 : 1]}`);
-    return parts.length ? parts.join(', ') : 'nothing';
+    return parts.length ? listOf(parts) : 'nothing';
+  };
+  // (1.5.3, playtest #26) A battleship or carrier the likely count rounds away, though it may well go down, is named after it.
+  const likely = (x: Record<string, number>, heavy: string[]): string => {
+    const list = lost(x);
+    if (!heavy.length) return list;
+    const warn = `${listOf(heavy.map((c) => `a ${SHIP_WORD[c][0]}`))} may well go down`;
+    return list === 'nothing' ? `Probably nothing, but ${warn}` : `${list}, and ${warn}`;
+  };
+  // (1.5.3, playtest #26) The fewest and the most each side loses as the dice fall, said plainly, and once where they are the same.
+  const range = (r: Record<string, number>[], own: boolean): string => {
+    const few = lost(r[0]), most = lost(r[1]);
+    if (few === most) return `${own ? 'You lose' : 'He loses'} ${few} however the day goes.`;
+    return own ? `At best you lose ${few}; at worst ${most}.` : `At the least he loses ${few}; at the most ${most}.`;
   };
   const them = p.theirs.fleets.find((x) => x.id === target);
   const name = them?.name ?? 'the enemy fleet';
-  const where = p.where === 'harbour' ? `in harbour at ${p.port}` : seaWhere(p.zoneName);
+  // (1.5.3, playtest #25) A fleet only reported is in harbour, and no more: the map gives it no port.
+  const where = p.where === 'harbour' ? `in harbour${them?.known === 'exact' ? ` at ${p.port}` : ''}` : seaWhere(p.zoneName);
   const side = (fs: typeof p.ours.fleets, own: boolean): PageRow[] => fs.map((x) => ({
-    nat: x.nat, title: `${x.name}${x.count >= 0 ? `  \u00B7  ${x.count} ships` : x.size ? `  \u00B7  ${x.size.toLowerCase()}` : ''}`,
+    nat: x.nat, title: `${x.name}${x.count >= 0 ? `  \u00B7  ${x.count} ${x.count === 1 ? 'ship' : 'ships'}` : x.size ? `  \u00B7  ${x.size.toLowerCase()}` : ''}`,
     lines: [
       x.ships ? ['bb', 'cv', 'ca', 'dd', 'ss'].filter((c) => (x.ships as unknown as Record<string, number>)[c] > 0).map((c) => `${(x.ships as unknown as Record<string, number>)[c]} ${SHIP_WORD[c][(x.ships as unknown as Record<string, number>)[c] === 1 ? 0 : 1]}`).join(', ') : 'Reported, not identified: its ships and strength are not known.',
       own ? `${x.admiral ? `${x.admiral} commands. ` : ''}Readiness ${share(x.ready ?? 1)}.` : '',
@@ -6028,14 +6220,32 @@ function fleetAttackPage(s: Game, id: number, target: number): Page | null {
     ].filter(Boolean),
     buttons: [],
   }));
+  // (1.5.3, the release review) A fleet the player's side has not found at all (an old page, a fleet since lost from
+  // sight) is refused, and the card says nothing of where it is: not its sea, not whether it is in harbour, and not the
+  // fleets of either side that would fight beside it there. Only the fleet that was to be sent is shown.
+  if (!them) {
+    const why = p.why ?? 'No such enemy fleet is known.';
+    return {
+      id: `fleetattack:${id}:${target}`, title: 'ATTACK THE ENEMY FLEET?', headline: why, note: `${card.name} against the enemy fleet.`,
+      top: [
+        { label: 'SEND THEM IN', act: `fleetattack:${id}:${target}`, ok: false, tip: why, danger: false },
+        { label: 'CALL IT OFF', act: `goto:fleet:${id}`, ok: true, tip: 'The fleet stays where it is, in your hand.' },
+      ],
+      sections: [
+        { heading: 'YOUR SHIPS', text: '', rows: side(p.ours.fleets.filter((x) => x.id === id), true) },
+        { heading: 'THE ODDS', text: 'Nothing of his strength is known: the odds cannot be given.', rows: [] },
+      ].filter((x) => x.rows.length || x.text),
+    };
+  }
   const ticket: PageRow[] = p.lines.map((l) => ({ nat: '', title: l.label, lines: [l.value, l.effect ?? ''].filter(Boolean), buttons: [] }));
   const losses: PageRow[] = p.odds ? [
-    { nat: card.nat, title: 'You are likely to lose', lines: [lost(p.likely.ours as unknown as Record<string, number>), `Between ${lost(p.range.ours[0] as unknown as Record<string, number>)} and ${lost(p.range.ours[1] as unknown as Record<string, number>)} as the day goes.`], buttons: [] },
-    { nat: them?.nat ?? '', title: 'He is likely to lose', lines: [lost(p.likely.theirs as unknown as Record<string, number>), `Between ${lost(p.range.theirs[0] as unknown as Record<string, number>)} and ${lost(p.range.theirs[1] as unknown as Record<string, number>)} as the day goes.`], buttons: [] },
+    { nat: card.nat, title: 'You are likely to lose', lines: [likely(p.likely.ours as unknown as Record<string, number>, p.risk.ours), range(p.range.ours as unknown as Record<string, number>[], true)], buttons: [] },
+    { nat: them?.nat ?? '', title: 'He is likely to lose', lines: [likely(p.likely.theirs as unknown as Record<string, number>, p.risk.theirs), range(p.range.theirs as unknown as Record<string, number>[], false)], buttons: [] },
   ] : [];
   return {
     id: `fleetattack:${id}:${target}`, title: `ATTACK ${name.toUpperCase()}?`,
-    headline: p.why ? p.why : p.odds ? `${p.verdict}: ${odds(p.odds.mid)} to 1, about ${share(p.win)} to win` : 'Its strength is not known',
+    // (1.5.3) The odds as the card's own lines say them: "more than 10", and "less than 0.1", not "0.0" (seaplan.ts).
+    headline: p.why ? p.why : p.odds ? `${p.verdict}: ${oddsWord(p.odds.mid)} to 1, about ${share(p.win)} to win` : 'Its strength is not known',
     note: `${card.name} against ${name}, ${where}. ${p.where === 'harbour' ? 'Ships at anchor cannot manoeuvre, and the harbour\'s guns fire on the attackers.' : 'Fought at once, on the ships, guns, air cover, training and readiness of both sides.'}`,
     top: [
       { label: 'SEND THEM IN', act: `fleetattack:${id}:${target}`, ok: !p.why, tip: p.why ?? 'The fleet sails at once and the battle is fought now. The side that loses makes for its home port.', danger: !p.why && p.win < 0.4 },
@@ -9121,11 +9331,15 @@ function find(name: string) {
   };
 }
 
+// (The 1.5.3 patch; the playtest's finds 14, 16 and 18.) The reach says which corps of a garrison in hand come out with an
+// order, and why a garrison goes nowhere (reachHand). The march up and the attack is planned with a garrison in hand as
+// if out, as the reach and the odds are. A hand that is all garrison, refused a march, a train or an approach with
+// nothing said, is told why in the answer, in the words the pointer gives it (sayWhyInside).
 const battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t, ids, f) => playerOrder(act)(`raid:${k}:${t}:${ids.join('.')}`, -1, f) });
 (globalThis as Record<string, unknown>).TC = {
   digest, find,
   raidsFlown, fleetInHand, warFleetAttack, briefing, sack: sackGeneral, drafts: draftsFor, school: schoolFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => { try { return { sea: seaUnder(x, y, game()) }; } catch { return { sea: seaUnder(x, y) }; } },
-  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(rail, 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, nationsBook, start, save, peek, peekChart, load, view, reach: lookOut(reachOf), marchPlan: lookOut(marchPlanOf), nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(goOut(move), 'march'), previewAttack: lookOut(preview), attack: playerOrder(goOut(attack)), takeOutlook: lookOut(takeOutlook), take: playerOrder(goOut(take), 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: lookOut(leadOf),
+  land, work: playerOrder(work), force, forceOrder: playerOrder(forceOrder), seaReach, bySeaWhy, ship, landingPlan, landOn: playerOrder(landOn, 'march'), record, roll, stance, railReach, rail: playerOrder(sayWhyInside(rail, 'said', (r) => !r.moved.length, (s, cs, [ids, to]) => railTip(ids, to).no || stayLine(s, cs)), 'rail'), railShow, railTip, province, raise: playerOrder(raise), fortify: playerOrder(fortify), cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act: playerOrder(act, '', (action) => !staffAct(action)), abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order: playerOrder(order), starts, grand, nationsBook, start, save, peek, peekChart, load, view, reach: reachHand, marchPlan: lookOut(marchPlanOf), nextArmy: nextArmyOf, stand: standOf, stands: standsOf, stageGuns, stageCut, stageRecon, stageAgent, stageCaught, agentWhy, move: playerOrder(sayWhyInside(goOut(move), 'note', (r) => !r.moved.length, garrisonOrPlace), 'march'), previewAttack: lookOut(preview), attack: playerOrder(goOut(attack)), takeOutlook: lookOut(takeOutlook), take: playerOrder(goOut(take), 'march'), stormLook, storm: playerOrder(storm), gateAsk, gateOrder, gateLeft: gateLeftOf, approach: approachHand, garrisonWhy, sallyLook, sally: playerOrder(sally), endMonth: endMonthWithLessons, lead: lookOut(leadOf),
   // (Rules 84.3.3) FIRST COMMAND's notes, the Guide's list, the notebook, and the card lesson 1 lies on.
   lessonNow, lessonDeed: lessonDeedOf, lessonAct, notebook: lessonNotebook, guide: lessonGuide, openingCard,
   // The played battles (battle-bridge.ts): the field's own sims on the shared clock, each settled through the player's

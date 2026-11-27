@@ -1120,7 +1120,7 @@ void ACampaignPlayerController::PressDesk(const FString& Id)
 	}
 }
 
-void ACampaignPlayerController::BeginGrandCampaign(bool bWatch)
+void ACampaignPlayerController::BeginGrandCampaign(bool bWatch, const FString& DepthWord)
 {
 	ACampaignGameMode* Mode = GetMode();
 	if (!Mode || Opening.bWorking || !Opening.Years.IsValidIndex(Opening.YearIndex) || (!bWatch && !Opening.Nations.IsValidIndex(Opening.NationIndex)))
@@ -1130,7 +1130,13 @@ void ACampaignPlayerController::BeginGrandCampaign(bool bWatch)
 	const FString Human = bWatch ? FString() : Opening.Nations[Opening.NationIndex].Tag;
 	const FString Level = Opening.Levels.IsValidIndex(Opening.LevelIndex) ? Opening.Levels[Opening.LevelIndex].Id : FString();
 	FString Depth = !bWatch && Opening.Depths.IsValidIndex(Opening.DepthIndex) ? Opening.Depths[Opening.DepthIndex].Id : FString();
-	if (FCString::Strifind(FCommandLine::Get(), TEXT("TheaterShots=")) != nullptr)
+	if (!bWatch && !DepthWord.IsEmpty())
+	{
+		// (1.5.3, dev only: a step file's start line that names a depth is played at it, in a run that takes pictures too.
+		// Before, "start UK 1939-09 seed 4 theatre" played the full game unless the launch said -TheaterDepth=theatre.)
+		Depth = DepthWord;
+	}
+	else if (FCString::Strifind(FCommandLine::Get(), TEXT("TheaterShots=")) != nullptr)
 	{
 		// (a run that takes pictures plays the full game, with every desk in the player's hands, as it always has:
 		// "-TheaterDepth=theatre" asks for another depth)
@@ -1770,6 +1776,15 @@ void ACampaignPlayerController::ToggleRail()
 	RefreshOrders();
 	if (bByRail)
 	{
+		// (The 1.5.3 review.) A hand that is all garrison is told the rules' reason by rail, judged for the hand as a whole
+		// (GarrisonByRail), as BY SEA tells it the reason by sea; the march's line only where the rules give none.
+		const FString Garrison = GarrisonSays();
+		if (!Garrison.IsEmpty())
+		{
+			const FString Train = GarrisonByRail(ArmyRegion);
+			Notify(Train.IsEmpty() ? Garrison + GarrisonWhere() : Train, 8.0);
+			return;
+		}
 		Notify(Reach.Num() > 0 ? TEXT("By rail: right-click any ground tinted blue. It takes the corps' whole month.")
 			: TEXT("None of these corps can go by rail this month: it takes a whole month's moves."), 5.0);
 	}
@@ -1786,8 +1801,14 @@ void ACampaignPlayerController::ToggleSea()
 	RefreshOrders();
 	if (bBySea)
 	{
-		Notify(Reach.Num() > 0 ? TEXT("By sea: ground tinted blue is a friendly port they can be shipped to, or an enemy coast they can land on. It takes the corps' whole month.")
-			: TEXT("None of these corps can go by sea this month: they must stand in a port, with their whole month before them, and there must be shipping."), 6.0);
+		// (The 1.5.3 review; the playtest's find 17.) A garrison in hand takes no ship. A hand that is all garrison is told
+		// the rules' reason (bySeaWhy), not that it must stand in a port with its whole month before it; one beside the
+		// army in the field is told which of its corps stay in the town.
+		const FString Aboard = GarrisonSays().IsEmpty() ? FString() : GarrisonAboard();
+		const FString Staying = Reach.Num() > 0 ? StaysAshore() : FString();
+		const FString Sea = Reach.Num() > 0 ? FString(TEXT("By sea: ground tinted blue is a friendly port they can be shipped to, or an enemy coast they can land on. It takes the corps' whole month."))
+			: FString(TEXT("None of these corps can go by sea this month: they must stand in a port, with their whole month before them, and there must be shipping."));
+		Notify(!Aboard.IsEmpty() ? Aboard : Staying.IsEmpty() ? Sea : Sea + TEXT(" ") + Staying, Staying.IsEmpty() ? 6.0 : 9.0);
 	}
 }
 
@@ -7752,15 +7773,31 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			// (release 2 and the 1.5.1 patch: a garrison that could come out and get here is told what a right-click would
 			// do as an army in the field is, the rules looking at it as if out; it comes out only as the order goes)
 			const bool bComesOut = !GarrisonTip.IsEmpty() && ComesOutTo(TipRegion);
-			if (!GarrisonTip.IsEmpty() && !bComesOut)
+			// (The 1.5.3 review; the playtest's find 16.) Or an enemy army beyond its reach that it could march up to and
+			// attack once out: the march up and the attack are offered as to its field brothers, planned with it as if out.
+			const FApproachPlan GarrisonRoad = (!GarrisonTip.IsEmpty() && !bComesOut) ? GarrisonApproach(TipRegion) : FApproachPlan();
+			if (!GarrisonTip.IsEmpty() && !bComesOut && !GarrisonRoad.bOk)
 			{
-				Line += TEXT("\n") + GarrisonTip + GarrisonWhere(); // (a garrison in hand is promised no march)
+				// (a garrison in hand is promised no march; BY SEA or BY RAIL it is told the rules' reason by sea or by rail,
+				// as a right-click answers it there: OrderTo, the 1.5.3 review)
+				const FString Instead = bBySea ? GarrisonAboard() : bByRail ? GarrisonByRail(TipRegion) : FString();
+				Line += TEXT("\n") + (Instead.IsEmpty() ? GarrisonTip + GarrisonWhere() : Instead);
 			}
 			else if (ArmyRegion != INDEX_NONE && TipRegion != ArmyRegion)
 			{
-				if (bComesOut)
+				if (bComesOut || GarrisonRoad.bOk)
 				{
 					Line += TEXT("\nThey are inside the town, and come out of it as the order goes.");
+				}
+				else if (FindReach(TipRegion) != nullptr)
+				{
+					// (The 1.5.3 patch, the playtest's find 14.) Corps of the town's garrison in hand beside the army in the field:
+					// they come out of the town as the order goes, and the rest march as they would.
+					const FString ComingOut = ComesOutAlong();
+					if (!ComingOut.IsEmpty())
+					{
+						Line += TEXT("\n") + ComingOut;
+					}
 				}
 				// (Rules 84.2.5; ruling 211(a); the code checker, 17 November.) Guns and engineers sent forward alone: the
 				// refusal is asked as OrderTo asks it, after the question of war and before anything else is promised.
@@ -7866,7 +7903,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					// (Rules 84.2.5; ruling 211(a).) Guns sent forward alone: the refusal on the pointer's paper slip, in ink.
 					Line += TEXT("\n") + Alone;
 				}
-				else if (const FApproachPlan Road = (!bByRail && !bBySea && !bHandSpent) ? Session->PlanApproach(PickedCorps, TipRegion) : FApproachPlan(); Road.bOk)
+				else if (const FApproachPlan Road = GarrisonRoad.bOk ? GarrisonRoad : (!bByRail && !bBySea && !bHandSpent) ? Session->PlanApproach(PickedCorps, TipRegion) : FApproachPlan(); Road.bOk)
 				{
 					// (The code checker, 17 November.) One test for the tip and the order: the march-up card is promised only
 					// where a right-click opens it (OrderTo asks the same plan, in the same place in its order). (Rules 84.5;
@@ -8108,10 +8145,14 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 						}
 					}
 				}
+				// (1.5.3, the 1.5.2 review) A fleet cut off beyond a shut strait is not told a sea is too far: over a sea no gate
+				// bars, its line says why, as a right-click there answers it. Over a barred sea the gate's red line says why, as the
+				// browser's tip does, and a right-click there gives its cut-off line, as the browser's click does.
 				HoverTip = FText::FromString(!FleetHand.Held.IsEmpty() ? FString::Printf(TEXT("%s%s\n%s"), *Name, *Known, *FleetHand.Held)
 					: Held->Reach.Contains(Sea)
 					? FString::Printf(TEXT("%s%s\nRight-click: %s sails here to %s.%s"), *Name, *Known, *Held->Name, FleetNext == TEXT("raid") ? TEXT("raid merchant shipping") : FleetNext == TEXT("hunt") ? TEXT("hunt submarines") : TEXT("patrol"), *Attack)
 					: Bar ? Name
+					: !FleetHand.Cut.IsEmpty() ? FString::Printf(TEXT("%s\n%s"), *Name, *FleetHand.Cut)
 					: FString::Printf(TEXT("%s\nToo far for %s this month."), *Name, *Held->Name));
 			}
 			else if (TipRegion == INDEX_NONE)
@@ -8646,8 +8687,11 @@ void ACampaignPlayerController::LayOutFleet()
 	Tray.Color = Nation ? FLinearColor(Nation->Color) : FLinearColor::Gray;
 	Tray.Tag = View.Human;
 	Tray.Title = FText::FromString(Fleet->Name);
-	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d ship%s%s  \u00B7  can reach %d sea%s"), *Doing, Fleet->Ships(), Fleet->Ships() == 1 ? TEXT("") : TEXT("s"),
-		FleetHand.Admiral.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("  \u00B7  %s"), *FleetHand.Admiral), Fleet->Reach.Num(), Fleet->Reach.Num() == 1 ? TEXT("") : TEXT("s")));
+	// (1.5.3, the 1.5.2 review) Cut off beyond a shut strait it reaches no sea: its heading says so, not "can reach 0 seas".
+	const FString ReachWords = !FleetHand.Cut.IsEmpty() ? FString(TEXT("cut off beyond a shut strait"))
+		: FString::Printf(TEXT("can reach %d sea%s"), Fleet->Reach.Num(), Fleet->Reach.Num() == 1 ? TEXT("") : TEXT("s"));
+	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d ship%s%s  \u00B7  %s"), *Doing, Fleet->Ships(), Fleet->Ships() == 1 ? TEXT("") : TEXT("s"),
+		FleetHand.Admiral.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("  \u00B7  %s"), *FleetHand.Admiral), *ReachWords));
 	// (Rules version 72: the sea lift is on the fleet's card, since it is the fleet that covers a crossing. It is in
 	// the card's plain heading and not on its warning line: it is a fact, not an alarm.)
 	if (!View.LiftLine.IsEmpty())
@@ -8799,6 +8843,14 @@ void ACampaignPlayerController::OrderFleetTo(int32 Zone)
 	if (!Fleet->Reach.Contains(Zone))
 	{
 		CampaignSounds::Play(this, TEXT("click"), 0.5f);
+		// (1.5.3, the 1.5.2 review) Held where this month's battle left it, or cut off beyond a shut strait (no sea is ringed
+		// for it), it is refused with that reason, held first, as the tray's buttons and the rules give it.
+		const FString HeldOrCut = !FleetHand.Held.IsEmpty() ? FleetHand.Held : FleetHand.Cut;
+		if (!HeldOrCut.IsEmpty())
+		{
+			Notify(HeldOrCut, 8.0);
+			return;
+		}
 		// (Ruling 86.) A route refused because a gate is shut says so.
 		const int32* BarredBy = Fleet->Barred.Find(Zone);
 		const FViewGate* Bar = BarredBy ? Session->GetView().Gates.FindByPredicate([BarredBy](const FViewGate& Each) { return Each.Id == *BarredBy; }) : nullptr;
@@ -9338,11 +9390,15 @@ void ACampaignPlayerController::TrayTownOrder(int32 Which)
 		CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
 		CampaignSounds::Play(this, TEXT("marching"), 0.5f);
 	}
+	HandStaysSaid.Reset();
 	RefreshOrders();
 	RefreshRegionPanel(Here);
-	if (!Said.IsEmpty())
+	// (The 1.5.3 review.) A corps the order leaves in the town that RefreshOrders took out of the hand: its reason follows
+	// the order's own note, which would otherwise hide it.
+	const FString Told = HandStaysSaid.IsEmpty() ? Said : Said.IsEmpty() ? HandStaysSaid : Said + TEXT(" ") + HandStaysSaid;
+	if (!Told.IsEmpty())
 	{
-		Notify(Said, 6.0);
+		Notify(Told, HandStaysSaid.IsEmpty() ? 6.0 : 9.0);
 	}
 }
 
@@ -9366,12 +9422,19 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 		if (!Garrison.IsEmpty())
 		{
 			// (The UI director, 18 November 2026: the card's line above already says whose garrison they are. Where the
-			// card carries TAKE THE FIELD, the foot says only what to do.)
+			// card carries TAKE THE FIELD, the foot says only what to do. The 1.5.3 patch, the playtest's find 18: where
+			// taking the field would leave them no move, as for a garrison that went in this month, the rules' sentence
+			// says when they can march.)
 			Tray.Hint = FText::FromString(ComesOut()
 				? FString(TEXT("Right-click where they should go, or drag the flag there: they come out of the town on the way. Esc puts them down."))
-				: !Tray.FieldButton.IsEmpty()
+				: !Tray.FieldButton.IsEmpty() && !GarrisonWaits()
 				? FString(TEXT("To march, TAKE THE FIELD first. Right-click the town for its orders. Esc puts them down."))
 				: Garrison + GarrisonWhere() + TEXT(" Esc puts them down."));
+		}
+		else if (const FString ComingOut = ComesOutAlong(); !ComingOut.IsEmpty() && Tray.StormButton.IsEmpty())
+		{
+			// (The 1.5.3 patch, the playtest's find 14.) Corps of the town's garrison in hand beside the army in the field.
+			Tray.Hint = FText::FromString(TEXT("Right-click where they should go, or drag the flag there. ") + ComingOut + TEXT(" Esc puts them down."));
 		}
 	}
 	if (FCampaignSession* Rules = GetSession())
@@ -9398,7 +9461,7 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 			// card carries TAKE THE FIELD, the foot says only what to do.)
 			Tray.Hint = FText::FromString(ComesOut()
 				? FString(TEXT("Right-click where they should go, or drag the flag there: they come out of the town on the way. Esc puts them down."))
-				: !Tray.FieldButton.IsEmpty()
+				: !Tray.FieldButton.IsEmpty() && !GarrisonWaits()
 				? FString(TEXT("To march, TAKE THE FIELD first. Right-click the town for its orders. Esc puts them down."))
 				: Garrison + GarrisonWhere() + TEXT(" Esc puts them down."));
 		}
@@ -9446,8 +9509,9 @@ void ACampaignPlayerController::DropArmy(int32 RegionId, bool bOnTable)
 	}
 	{
 		const FString Garrison = GarrisonSays();
-		// (a garrison's flag set down where it could go this month once out: the order goes on, as OrderTo has it)
-		if (!Garrison.IsEmpty() && !(bOnTable && ComesOutTo(RegionId)))
+		// (a garrison's flag set down where it could go this month once out, or on an enemy army it could march up to
+		// and attack once out (the 1.5.3 review, the playtest's find 16): the order goes on, as OrderTo has it)
+		if (!Garrison.IsEmpty() && !(bOnTable && (ComesOutTo(RegionId) || GarrisonApproach(RegionId).bOk)))
 		{
 			// (a garrison's flag set down somewhere: it goes back, and is told how it can be moved)
 			Piece->ReturnToRest();
@@ -9538,7 +9602,8 @@ bool ACampaignPlayerController::PickUpArmyIn(int32 RegionId)
 	}
 	// (The code checker, 17 November.) The army picked up is the army in the field. The town's garrison stays in its
 	// town: it was being handed marches it cannot make, and the order vanished without a word. Where nobody stands in
-	// the field the garrison is what is in hand, so that its cards and its orders can still be read.
+	// the field the garrison is what is in hand, so that its cards and its orders can still be read. (The 1.5.3 patch:
+	// a corps of the garrison that would come out with a move is clicked in among the field army by its card.)
 	if (Orderable.Num() == 0)
 	{
 		Orderable = MoveTemp(Within);
@@ -9556,19 +9621,23 @@ bool ACampaignPlayerController::PickUpArmyIn(int32 RegionId)
 	ArmyRegion = RegionId;
 	AdviserSaw(0);
 	PickedCorps = MoveTemp(Orderable);
+	HandStaysSaid.Reset();
 	RefreshOrders();
 	if (bNewInHand)
 	{
-		// (Rules 84.2.4; the playtester's case 2.) A garrison in hand says at once how it comes out of its town.
+		// (Rules 84.2.4; the playtester's case 2.) A garrison in hand says at once how it comes out of its town. (The 1.5.3
+		// review: a corps RefreshOrders took out of the hand, as one that went in this month beside an older garrison, is
+		// named after it, as TrayTownOrder says it, so that this notice does not hide it.)
 		const FString Garrison = GarrisonSays();
+		const FString Stays = HandStaysSaid.IsEmpty() ? FString() : TEXT(" ") + HandStaysSaid;
 		if (!Garrison.IsEmpty() && ComesOut())
 		{
 			// (release 2, Brian, 24 November 2026: no press first; an order to march or attack brings them out)
-			Notify(TEXT("They are inside the town. Send them anywhere they can go this month: they come out of it as the order goes."), 8.0);
+			Notify(TEXT("They are inside the town. Send them anywhere they can go this month: they come out of it as the order goes.") + Stays, Stays.IsEmpty() ? 8.0 : 10.0);
 		}
 		else if (!Garrison.IsEmpty())
 		{
-			Notify(Garrison + GarrisonWhere(), 10.0);
+			Notify(Garrison + GarrisonWhere() + Stays, 10.0);
 		}
 	}
 	if (bNewInHand)
@@ -9701,11 +9770,14 @@ void ACampaignPlayerController::SplitOffDivisions(int32 CorpsId)
 		ShowWar(Session->GetView(), TArray<FCorpsMove>());
 	}
 	// (a refused split keeps the picks, so they can be changed and tried again)
-	if (!Note.IsEmpty())
-	{
-		Notify(Note, 6.0);
-	}
+	HandStaysSaid.Reset();
 	RefreshOrders();
+	// (The 1.5.3 review.) A corps RefreshOrders took out of the hand: its reason follows the note, as TrayTownOrder says it.
+	const FString Told = HandStaysSaid.IsEmpty() ? Note : Note.IsEmpty() ? HandStaysSaid : Note + TEXT(" ") + HandStaysSaid;
+	if (!Told.IsEmpty())
+	{
+		Notify(Told, HandStaysSaid.IsEmpty() ? 6.0 : 9.0);
+	}
 }
 
 void ACampaignPlayerController::HoldAsRearguard(int32 CorpsId, bool bHold)
@@ -9744,11 +9816,14 @@ void ACampaignPlayerController::RejoinCorps(int32 CorpsId, int32 IntoId)
 		CampaignSounds::Play(this, TEXT("stamp"), 0.5f);
 		ShowWar(Session->GetView(), TArray<FCorpsMove>());
 	}
-	if (!Note.IsEmpty())
-	{
-		Notify(Note, 6.0);
-	}
+	HandStaysSaid.Reset();
 	RefreshOrders();
+	// (The 1.5.3 review.) A corps RefreshOrders took out of the hand: its reason follows the note, as TrayTownOrder says it.
+	const FString Told = HandStaysSaid.IsEmpty() ? Note : Note.IsEmpty() ? HandStaysSaid : Note + TEXT(" ") + HandStaysSaid;
+	if (!Told.IsEmpty())
+	{
+		Notify(Told, HandStaysSaid.IsEmpty() ? 6.0 : 9.0);
+	}
 }
 
 void ACampaignPlayerController::ToggleCorps(int32 CorpsId)
@@ -9765,7 +9840,8 @@ void ACampaignPlayerController::ToggleCorps(int32 CorpsId)
 			return;
 		}
 	}
-	if (PickedCorps.Contains(CorpsId))
+	const bool bJoins = !PickedCorps.Contains(CorpsId);
+	if (!bJoins)
 	{
 		PickedCorps.Remove(CorpsId);
 	}
@@ -9774,6 +9850,16 @@ void ACampaignPlayerController::ToggleCorps(int32 CorpsId)
 		PickedCorps.Add(CorpsId);
 	}
 	RefreshOrders();
+	if (bJoins && HandComesOut.Contains(CorpsId))
+	{
+		// (The 1.5.3 patch, the playtest's find 14.) A corps of the garrison clicked in among the army in the field says
+		// once, as it joins, that it comes out of the town as the order goes.
+		const FString ComingOut = ComesOutAlong();
+		if (!ComingOut.IsEmpty())
+		{
+			Notify(ComingOut, 6.0);
+		}
+	}
 }
 
 void ACampaignPlayerController::ToggleShip(int32 Index)
@@ -10066,7 +10152,9 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.Carry = Unit.Carry; // (Version 84)
 		Card.bDigging = Unit.bDigging;
 		Card.Experience = Unit.Experience;
-		Card.Moves = Unit.Moves;
+		// (The 1.5.3 patch, the playtest's find 15.) A corps of his inside a town has no moves of its own (the rules keep it
+		// at none), but an order brings it out with all but one of its month: its card says the moves it will march with.
+		Card.Moves = Unit.bInTown && Unit.MovesOut >= 0 ? Unit.MovesOut : Unit.Moves;
 		Card.MovesMax = Unit.MovesMax;
 		if (Unit.MarchTo != INDEX_NONE && Map.IsValid() && Map->GetData().Regions.IsValidIndex(Unit.MarchTo))
 		{
@@ -10110,9 +10198,12 @@ void ACampaignPlayerController::RefreshOrders()
 		Map->SetReach(Reach);
 		return;
 	}
-	// (The code checker, 17 November.) With the army in the field in hand, the town's garrison cannot be clicked in among
-	// them: it marches nowhere until it takes the field, and would be left behind without a word. Its card says why, in
-	// the rules' refusal of 84.2.4 that names the town (the UI director, 17 November: no sentence of the 3D game's own).
+	// (The 1.5.3 patch, the playtest's find 14.) With the army in the field in hand, a corps of the town's garrison is
+	// clicked in among them like any corps: the rules bring it out of the town as the order goes (since 1.5.1), and the
+	// corps in the field march as they would. Only one that would have no move once out (it went in this month, it is
+	// shut in, or the field outside is full) is kept apart, as any order would leave it behind: its card says why, in
+	// the rules' sentence that names the town (the UI director, 17 November: no sentence of the 3D game's own). Rules
+	// that do not say its moves once out keep every garrison apart, as the code checker's guard of 17 November did.
 	if (Tray.Cards.ContainsByPredicate([](const FTrayCard& C) { return C.bPicked && !C.bInTown; }))
 	{
 		for (FTrayCard& Card : Tray.Cards)
@@ -10120,7 +10211,10 @@ void ACampaignPlayerController::RefreshOrders()
 			if (Card.bInTown && !Card.bPicked && Card.bCanOrder)
 			{
 				const FViewCorps* Inside = View.Corps.FindByPredicate([&Card](const FViewCorps& Each) { return Each.Id == Card.CorpsId; });
-				Card.Apart = Inside && !Inside->Garrison.IsEmpty() ? Inside->Garrison : Session->GarrisonWhy(ArmyRegion);
+				if (!Inside || Inside->MovesOut <= 0)
+				{
+					Card.Apart = Inside && !Inside->Garrison.IsEmpty() ? Inside->Garrison : Session->GarrisonWhy(ArmyRegion);
+				}
 			}
 		}
 	}
@@ -10278,6 +10372,8 @@ void ACampaignPlayerController::RefreshOrders()
 	TArray<int32> Danger, Road;
 	TMap<int32, int32> Far;
 	bHandSpent = false;
+	HandComesOut.Reset();
+	HandStays.Reset();
 	bHandStands = ArmyRegion != INDEX_NONE && Session && Session->Stands(ArmyRegion) == TEXT("all");
 	KeptPlanRegion = -2; // (whatever was planned was planned for another hand)
 	if (bBySea)
@@ -10312,7 +10408,32 @@ void ACampaignPlayerController::RefreshOrders()
 	}
 	else
 	{
-		Reach = Session->Reach(PickedCorps, &Danger, &Far, &Road, &bHandSpent);
+		Reach = Session->Reach(PickedCorps, &Danger, &Far, &Road, &bHandSpent, &HandComesOut, &HandStays);
+	}
+	// (The 1.5.3 review; the playtest's find 14.) Beside the army in the field, a corps of the town's garrison that no
+	// order would bring out with a move would be left behind without a word: the rules bring the garrison in hand out
+	// all or none (two inside with room outside for one), and one that went in this month has no move once out. Beside
+	// older corps of the garrison that come out, such a one would be taken out of the town onto a march kept for next
+	// month (LeftInside). It is taken out of the hand, the last picked first, the hand is looked at again without it,
+	// and the rules' reason is said once, by the first look.
+	if (const int32 Stays = LeftInside(); Stays != INDEX_NONE)
+	{
+		FString StaysWhy = HandStays;
+		if (StaysWhy.IsEmpty())
+		{
+			const FViewCorps* Inside = View.Corps.FindByPredicate([Stays](const FViewCorps& Each) { return Each.Id == Stays; });
+			StaysWhy = Inside ? Inside->Garrison : FString();
+		}
+		PickedCorps.Remove(Stays);
+		++HandStaysDepth;
+		RefreshOrders();
+		--HandStaysDepth;
+		if (HandStaysDepth == 0 && !StaysWhy.IsEmpty())
+		{
+			HandStaysSaid = StaysWhy; // (for an order of the town's that says its own note after: TrayTownOrder)
+			Notify(StaysWhy, 8.0);
+		}
+		return;
 	}
 	EnemyReach = TSet<int32>(Danger);
 	FarMonths = MoveTemp(Far);
@@ -10673,6 +10794,190 @@ bool ACampaignPlayerController::ComesOutTo(int32 RegionId) const
 	return RegionId != INDEX_NONE && RegionId != ArmyRegion && FindReach(RegionId) != nullptr && ComesOut();
 }
 
+FString ACampaignPlayerController::ComesOutAlong() const
+{
+	// (The 1.5.3 patch, the playtest's find 14. The rules bring a garrison in hand out of its town inside the order's own
+	// call, beside a field army too: comeOut in campaign-bridge.ts. Their reach names those that come out with a move.)
+	FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE || bBySea || bByRail || HandComesOut.Num() == 0)
+	{
+		return FString();
+	}
+	const FCampaignView& View = Session->GetView();
+	bool bInField = false;
+	TArray<FString> Names;
+	for (const int32 Id : PickedCorps)
+	{
+		const FViewCorps* Unit = View.Corps.FindByPredicate([Id](const FViewCorps& Each) { return Each.Id == Id; });
+		if (!Unit)
+		{
+			continue;
+		}
+		if (!Unit->bInTown)
+		{
+			bInField = true;
+		}
+		else if (HandComesOut.Contains(Id))
+		{
+			Names.Add(Unit->Name);
+		}
+	}
+	if (!bInField || Names.Num() == 0)
+	{
+		return FString(); // (a hand that is all garrison has its own sentence: GarrisonSays and ComesOut)
+	}
+	const bool bOne = Names.Num() == 1;
+	FString Who = Names.Pop();
+	if (!bOne)
+	{
+		Who = FString::Join(Names, TEXT(", ")) + TEXT(" and ") + Who;
+	}
+	return FString::Printf(TEXT("%s %s inside the town, and %s out of it as the order goes."), *Who, bOne ? TEXT("is") : TEXT("are"), bOne ? TEXT("comes") : TEXT("come"));
+}
+
+bool ACampaignPlayerController::GarrisonWaits() const
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE || PickedCorps.Num() == 0 || Tray.FieldActions.Num() < PickedCorps.Num())
+	{
+		return false;
+	}
+	const FCampaignView& View = Session->GetView();
+	for (const int32 Id : PickedCorps)
+	{
+		const FViewCorps* Unit = View.Corps.FindByPredicate([Id](const FViewCorps& Each) { return Each.Id == Id; });
+		if (!Unit || !Unit->bInTown || Unit->MovesOut != 0)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+FApproachPlan ACampaignPlayerController::GarrisonApproach(int32 RegionId) const
+{
+	// (The 1.5.3 review; the playtest's find 16. The rules plan the march up with the garrison in hand as if out of its
+	// town: approach is a look in campaign-bridge.ts, and the march it gives brings the garrison out as it goes.)
+	FCampaignSession* Session = GetSession();
+	if (!Session || RegionId == INDEX_NONE || RegionId == ArmyRegion || bHandSpent || FindReach(RegionId) != nullptr || !ComesOut())
+	{
+		return FApproachPlan();
+	}
+	return Session->PlanApproach(PickedCorps, RegionId);
+}
+
+FString ACampaignPlayerController::GarrisonAboard() const
+{
+	// (The 1.5.3 review; the playtest's find 17. The rules answer a garrison before they ask about the place it is sent
+	// to, so its own province is asked: "A garrison does not take ship. Out of the town, it can embark next month.", or
+	// that its province has no port, that its harbour is wrecked and for how long, that no ship leaves a siege, or that
+	// there is no shipping.)
+	FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE)
+	{
+		return FString();
+	}
+	const FCampaignView& View = Session->GetView();
+	TArray<int32> InTown;
+	for (const int32 Id : PickedCorps)
+	{
+		const FViewCorps* Unit = View.Corps.FindByPredicate([Id](const FViewCorps& Each) { return Each.Id == Id; });
+		if (Unit && Unit->bInTown)
+		{
+			InTown.Add(Id);
+		}
+	}
+	return InTown.Num() > 0 ? Session->WhyNotBySea(InTown, ArmyRegion) : FString();
+}
+
+FString ACampaignPlayerController::GarrisonByRail(int32 RegionId) const
+{
+	// (The 1.5.3 review. The rules judge the hand as a whole: TAKE THE FIELD only where every corps of it would ride once
+	// out, or the reason of one that would not, or its province's own railway: railTip in campaign-bridge.ts.)
+	FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE || RegionId == INDEX_NONE || PickedCorps.Num() == 0)
+	{
+		return FString();
+	}
+	return Session->RailTip(PickedCorps, RegionId).No;
+}
+
+FString ACampaignPlayerController::StaysAshore() const
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE)
+	{
+		return FString();
+	}
+	const FCampaignView& View = Session->GetView();
+	bool bInField = false;
+	TArray<FString> Names;
+	for (const int32 Id : PickedCorps)
+	{
+		const FViewCorps* Unit = View.Corps.FindByPredicate([Id](const FViewCorps& Each) { return Each.Id == Id; });
+		if (!Unit)
+		{
+			continue;
+		}
+		if (!Unit->bInTown)
+		{
+			bInField = true;
+		}
+		else
+		{
+			Names.Add(Unit->Name);
+		}
+	}
+	if (!bInField || Names.Num() == 0)
+	{
+		return FString(); // (a hand that is all garrison is told by GarrisonAboard alone)
+	}
+	const bool bOne = Names.Num() == 1;
+	FString Who = Names.Pop();
+	if (!bOne)
+	{
+		Who = FString::Join(Names, TEXT(", ")) + TEXT(" and ") + Who;
+	}
+	const FString Why = GarrisonAboard();
+	return FString::Printf(TEXT("%s %s in the town."), *Who, bOne ? TEXT("stays") : TEXT("stay")) + (Why.IsEmpty() ? FString() : TEXT(" ") + Why);
+}
+
+int32 ACampaignPlayerController::LeftInside() const
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE || bBySea || bByRail || PickedCorps.Num() < 2)
+	{
+		return INDEX_NONE;
+	}
+	const FCampaignView& View = Session->GetView();
+	if (!View.bHumanUp)
+	{
+		return INDEX_NONE;
+	}
+	bool bInField = false;
+	int32 Last = INDEX_NONE;
+	for (const int32 Id : PickedCorps)
+	{
+		const FViewCorps* Unit = View.Corps.FindByPredicate([Id](const FViewCorps& Each) { return Each.Id == Id; });
+		if (!Unit)
+		{
+			continue;
+		}
+		if (!Unit->bInTown)
+		{
+			bInField = true;
+		}
+		else if (Unit->MovesOut != INDEX_NONE && !HandComesOut.Contains(Id))
+		{
+			Last = Id; // (rules that do not say a garrison's moves once out do not say who comes out either: the hand stays as it was)
+		}
+	}
+	// (The 1.5.3 review.) Or beside corps of the garrison that do come out with a move, in a hand that is all garrison (an
+	// older corps and one that went in this month, as GARRISON <TOWN> leaves a hand that held both): the order would take
+	// the one that went in this month out of the town onto a march kept for next month, and leave the town empty.
+	return (bInField || HandComesOut.Num() > 0) ? Last : INDEX_NONE;
+}
+
 FString ACampaignPlayerController::GarrisonWhere() const
 {
 	// (The design director, 17 November: no hint sends him to a press that does nothing. The sortie and the order to
@@ -10707,7 +11012,9 @@ FString ACampaignPlayerController::GarrisonSays() const
 		}
 	}
 	{
-		const FString Rules = Session->GarrisonWhy(ArmyRegion);
+		// (The 1.5.3 review: the sentence of the corps in hand, not of the whole town. One that went in this month beside an
+		// older garrison is told when it can march, as its own card tells it.)
+		const FString Rules = Session->GarrisonWhy(ArmyRegion, PickedCorps);
 		if (!Rules.IsEmpty())
 		{
 			return Rules;
@@ -10841,8 +11148,26 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		const FString Garrison = GarrisonSays();
 		// (Release 2 and the 1.5.1 patch, Brian, 24 November 2026: a garrison sent where it could go this month once out
 		// is ordered as an army in the field is. The rules bring it out of its town inside the order's own call, and
-		// only if the order goes: a card's No, the war question's No or a refusal leaves it inside, nothing spent.)
-		if (!Garrison.IsEmpty() && !ComesOutTo(RegionId))
+		// only if the order goes: a card's No, the war question's No or a refusal leaves it inside, nothing spent. The 1.5.3
+		// review, the playtest's find 16: and one sent at an enemy army beyond its reach that it could march up to and
+		// attack once out is given the march up and the attack below, as its field brothers are.)
+		if (!Garrison.IsEmpty() && bBySea)
+		{
+			// (The 1.5.3 review.) BY SEA, no order brings a garrison out (ComesOut), and no ship takes it: a right-click is
+			// answered with the rules' reason by sea (GarrisonAboard), the line the BY SEA notice gave, not the march's.
+			const FString Aboard = GarrisonAboard();
+			Notify(Aboard.IsEmpty() ? Garrison + GarrisonWhere() : Aboard, 10.0);
+			return;
+		}
+		if (!Garrison.IsEmpty() && bByRail)
+		{
+			// (The 1.5.3 review.) BY RAIL likewise: no train takes a garrison, and a right-click is answered with the rules'
+			// reason by rail (GarrisonByRail), the line the pointer gave, not the march's.
+			const FString Train = GarrisonByRail(RegionId);
+			Notify(Train.IsEmpty() ? Garrison + GarrisonWhere() : Train, 10.0);
+			return;
+		}
+		if (!Garrison.IsEmpty() && !ComesOutTo(RegionId) && !GarrisonApproach(RegionId).bOk)
 		{
 			Notify(Garrison + GarrisonWhere(), 10.0); // (a garrison in hand: it is told how it can be moved, and promised no march)
 			return;
@@ -10851,6 +11176,10 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	const FReachRegion* Target = FindReach(RegionId);
 	if (bBySea && Target)
 	{
+		// (The 1.5.3 review; the playtest's finds 14 and 17. Asked before the hand sails: corps of the town's garrison
+		// beside the army in the field take no ship, and are named as they stay. The voyage and the landing are the field
+		// army's alone, in the rules' reckoning: seaReach and landingPlan in campaign-bridge.ts.)
+		const FString Staying = StaysAshore();
 		if (Target->bAttack)
 		{
 			// A landing: say what it will meet, and ask.
@@ -10866,7 +11195,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 			WarPrompt.Region = RegionId;
 			WarPrompt.Tag = Session->GetView().Human;
 			WarPrompt.Title = FText::FromString(FString::Printf(TEXT("Land at %s?"), *Plan.Name));
-			WarPrompt.Body = FText::FromString(FString::Join(Plan.Lines, TEXT("\n")));
+			WarPrompt.Body = FText::FromString(FString::Join(Plan.Lines, TEXT("\n")) + (Staying.IsEmpty() ? FString() : TEXT("\n\n") + Staying));
 			if (!Plan.AshoreLine.IsEmpty())
 			{
 				// (set out as the card's other notes are: a heading, and its line marked)
@@ -10900,6 +11229,10 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		bBySea = false;
 		RefreshOrders();
 		SelectRegion(RegionId);
+		if (!Staying.IsEmpty())
+		{
+			Notify(Staying, 8.0);
+		}
 		return;
 	}
 	if ((!Target || Target->IsWar()) && OfferWar(RegionId))
@@ -11028,7 +11361,15 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	}
 	if (bByRail)
 	{
-		const TArray<FCorpsMove> Trains = Session->Rail(PickedCorps, RegionId);
+		// (The 1.5.3 review. A corps of the town's garrison beside the army in the field takes no train: the rules' line
+		// names it as it stays in the town, and is said where the hand held one. Any other hand is answered as before.)
+		const bool bTownInHand = PickedCorps.ContainsByPredicate([Session](int32 Id)
+		{
+			const FViewCorps* Unit = Session->GetView().Corps.FindByPredicate([Id](const FViewCorps& Each) { return Each.Id == Id; });
+			return Unit && Unit->bInTown;
+		});
+		FString TrainSaid;
+		const TArray<FCorpsMove> Trains = Session->Rail(PickedCorps, RegionId, &TrainSaid);
 		if (Trains.Num() == 0)
 		{
 			Notify(TEXT("No corps could go: there is no room there, or they have already used their month."));
@@ -11047,6 +11388,10 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		bByRail = false;
 		RefreshOrders();
 		SelectRegion(RegionId);
+		if (bTownInHand && !TrainSaid.IsEmpty())
+		{
+			Notify(TrainSaid, 8.0);
+		}
 		return;
 	}
 	if (Target->bAttack)
@@ -11310,7 +11655,15 @@ void ACampaignPlayerController::RightClickOn(int32 RegionId, int32 Sea, bool bOn
 		}
 		else
 		{
-			Notify(TEXT("A fleet keeps to the sea: right-click one of the ringed seas, a friendly port tinted blue to make it the fleet's new home, or its own harbour to bring it in."), 6.0);
+			// (1.5.3, the 1.5.2 review) Held where this month's battle left it, or cut off beyond a shut strait (no sea is ringed
+			// for it), it is not told to right-click a ringed sea: its line says why, held first, as the tray's hint and the
+			// browser say it, with the way home where a harbour on its side can take it, and the coasts its guns can still shell.
+			const TCHAR* ShellsStill = FleetHand.Coasts.Num() > 0 ? TEXT(" A coast in red can still be shelled.") : TEXT("");
+			const FString HeldOrCutLand = !FleetHand.Held.IsEmpty() ? FString::Printf(TEXT("%s%s"), *FleetHand.Held, ShellsStill)
+				: !FleetHand.Cut.IsEmpty() ? FString::Printf(TEXT("%s%s%s"), *FleetHand.Cut, FleetHand.HomeTip.IsEmpty() ? TEXT("") : TEXT(" RETURN TO HARBOUR takes it to a harbour on its side."), ShellsStill)
+				: FString();
+			Notify(!HeldOrCutLand.IsEmpty() ? HeldOrCutLand
+				: FString(TEXT("A fleet keeps to the sea: right-click one of the ringed seas, a friendly port tinted blue to make it the fleet's new home, or its own harbour to bring it in.")), 6.0);
 		}
 	}
 }
@@ -11381,8 +11734,17 @@ bool ACampaignPlayerController::RestoreCampaign(const FString& SaveText)
 	return true;
 }
 
-bool ACampaignPlayerController::BeginGrandFor(const FString& Tag, int32 FromTurn, int32 Seed, const FString& LevelWord)
+bool ACampaignPlayerController::BeginGrandFor(const FString& Tag, int32 FromTurn, int32 Seed, const FString& LevelWord, const FString& DepthWord)
 {
+	// (1.5.3) The depth asked for, as the rules name it; a depth they do not offer begins nothing, rather than a war at
+	// another depth than the step file says.
+	const int32 DepthAt = DepthWord.IsEmpty() ? INDEX_NONE
+		: Opening.Depths.IndexOfByPredicate([&DepthWord](const FGrandLevel& Each) { return Each.Id.Equals(DepthWord, ESearchCase::IgnoreCase); });
+	if (!DepthWord.IsEmpty() && DepthAt == INDEX_NONE)
+	{
+		return false;
+	}
+	const FString DepthId = DepthAt != INDEX_NONE ? Opening.Depths[DepthAt].Id : FString();
 	int32 Year = INDEX_NONE;
 	for (int32 Index = 0; Index < Opening.Years.Num(); ++Index)
 	{
@@ -11413,8 +11775,12 @@ bool ACampaignPlayerController::BeginGrandFor(const FString& Tag, int32 FromTurn
 			PickLevel(Index);
 		}
 	}
+	if (DepthAt != INDEX_NONE)
+	{
+		PickDepth(DepthAt);
+	}
 	Opening.AskKind = 0;
-	BeginGrandCampaign(false);
+	BeginGrandCampaign(false, DepthId);
 	return !Opening.bVisible || WarDue || bEnterWhenLaid; // (tc.Speed.WarSpread: a war being laid under the plate is begun; the step player waits for it)
 }
 
@@ -11505,11 +11871,22 @@ void ACampaignPlayerController::DescribeScreen(FString& OutOpen, FString& OutWor
 	{
 		TArray<FString> Ids;
 		for (const int32 Id : PickedCorps) { Ids.Add(FString::FromInt(Id)); }
-		// (1.5.1, the Mac's p7: a division's tile picked or let go on a card is a change in hand the step player can see)
+		// (1.5.1, the Mac's p7: a division's tile picked or let go on a card is a change in hand the step player can see.)
+		// (1.5.3: only the picks the tray shows lit are counted, as MakeCard in CampaignHUD.cpp lights a tile: on a card of
+		// the tray in view that can be broken up, among the tiles it lays out, twelve at most. A pick kept from a card that
+		// is no longer shown, such as another army's before this one was picked up, is not in hand.)
 		int32 Splitting = 0;
-		for (const TPair<int32, TSet<int32>>& Each : PickedDivisions)
+		if (Tray.bVisible)
 		{
-			Splitting += Each.Value.Num();
+			for (const FTrayCard& Card : Tray.Cards)
+			{
+				const TSet<int32>* Set = !Card.bLook && Card.bCanBreak ? PickedDivisions.Find(Card.CorpsId) : nullptr;
+				const int32 Tiles = Card.Parts.Num() > 0 ? FMath::Min(Card.Parts.Num(), 12) : FMath::Clamp(Card.Divisions, 1, 12);
+				for (int32 Slot = 0; Set && Slot < Tiles; ++Slot)
+				{
+					Splitting += Set->Contains(Slot) ? 1 : 0;
+				}
+			}
 		}
 		const FString Split = Splitting > 0 ? FString::Printf(TEXT(", %d division%s picked to split off"), Splitting, Splitting == 1 ? TEXT("") : TEXT("s")) : FString();
 		OutHand = FString::Printf(TEXT("army at %s: corps %s%s%s"), *Place(ArmyRegion), *FString::Join(Ids, TEXT(",")), bByRail ? TEXT(" (by rail)") : bBySea ? TEXT(" (by sea)") : TEXT(""), *Split);

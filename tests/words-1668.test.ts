@@ -38,7 +38,7 @@ describe('build 1668 words', () => {
     for (const u of [...lodz.units]) relocate(g, u, g.byName.Warsaw);
     const c = addCorps(g, 'POL', 'Inside Corps', 'inf', 1, 'Lodz', {});
     expect(garrison(g, c)).toBe(true);
-    expect(whyNoTrain(g, c)!.line).toBe('A garrison does not take the train: TAKE THE FIELD first.');
+    expect(whyNoTrain(g, c)!.line).toBe('A garrison does not take the train. Out of the town, it can go by rail next month.'); // (the 1.5.3 review: a train takes the whole month, and coming out costs a move)
   });
 
   it('says Motorised, in one English', () => {

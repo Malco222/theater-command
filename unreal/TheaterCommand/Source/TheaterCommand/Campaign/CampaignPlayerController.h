@@ -749,8 +749,12 @@ public:
 	void PickGrandNation(int32 Index);
 	void PickGrandNation(const FString& Tag);
 
-	/** Starts the grand campaign as the country chosen, or with nobody leading. */
-	void BeginGrandCampaign(bool bWatch);
+	/**
+	 * Starts the grand campaign as the country chosen, or with nobody leading. DepthWord (the step player's start line, 1.5.3)
+	 * is the depth it is played at, in a run that takes pictures too. Without one the screen's depth is played, and a run
+	 * that takes pictures plays the full game unless "-TheaterDepth=" asks for another.
+	 */
+	void BeginGrandCampaign(bool bWatch, const FString& DepthWord = FString());
 
 	/** Picks up the campaign saved on this computer. */
 	void ContinueCampaign();
@@ -1502,8 +1506,12 @@ public:
 	/** Answers what a month's end puts in the way, as a player in a hurry would: the question, the newsreel, the announcements, the replay. */
 	void StepThroughMonth();
 	bool RestoreCampaign(const FString& SaveText);
-	/** Begins a grand campaign as this country from this month, with these dice and this level, as the opening screen would. */
-	bool BeginGrandFor(const FString& Tag, int32 FromTurn, int32 Seed, const FString& LevelWord);
+	/**
+	 * Begins a grand campaign as this country from this month, with these dice, this level and this depth, as the opening
+	 * screen would. With no level the screen's stands; with no depth, as BeginGrandCampaign has it. A depth the rules do not
+	 * offer begins nothing.
+	 */
+	bool BeginGrandFor(const FString& Tag, int32 FromTurn, int32 Seed, const FString& LevelWord, const FString& DepthWord);
 	const TArray<int32>& StepPicked() const { return PickedCorps; }
 	int32 StepFleet() const { return FleetInHand; }
 	/** How many sentences the paper line has been given so far: a sentence said again is still an answer. */
@@ -1731,6 +1739,14 @@ private:
 	TSet<int32> RailBeyond; // (rulings 110, 112, 118) and the provinces beyond its march that a train would take it to this month
 	// (Ruling 87.) Every corps in hand has used its moves: a right-click on friendly ground is kept for next month.
 	bool bHandSpent = false;
+	// (The 1.5.3 patch.) The corps of the hand inside a town that an order would bring out with a move to make, as the
+	// rules' reach names them: all of the garrison in hand or none, and never one that went in this month.
+	TArray<int32> HandComesOut;
+	// (The 1.5.3 review.) And, for a hand beside the army in the field, the rules' reason why the last of its corps inside a
+	// town that no order brings out with a move stays inside: RefreshOrders takes that corps out of the hand and says so.
+	FString HandStays;
+	int32 HandStaysDepth = 0; // (RefreshOrders looking again at the hand without it: the reason is said once, by the first look)
+	FString HandStaysSaid; // (and the reason last said so, for an order of the town's whose own note comes after: TrayTownOrder)
 	bool bMarchSlipDone = false; // (kept with the options) GOT IT has been pressed, or one march kept for a spent army
 	// (One voice after a press; the UI director's brief, 17 November.) An order has been given to the army in hand since
 	// it was picked up: the slip stays put away, and the tray's foot no longer speaks of next month.
@@ -1757,6 +1773,45 @@ private:
 	bool ComesOutTo(int32 RegionId) const;
 	/** True where the garrison in hand may come out of its town and could go somewhere this month once out. */
 	bool ComesOut() const;
+	/**
+	 * (The 1.5.3 patch; the playtest's find 14.) A hand of corps in the field and corps of the town's garrison: the
+	 * sentence that names those of the garrison that come out of the town as the order goes, as the rules' reach names
+	 * them (HandComesOut). Empty for a hand with nobody in the field, by sea or by rail, or where none of it comes out.
+	 */
+	FString ComesOutAlong() const;
+	/**
+	 * (The 1.5.3 patch; the playtest's find 18.) True where every corps in hand is inside its town and may take the
+	 * field, but would have no move once out: it went in this month. TAKE THE FIELD is no way to march then, and the
+	 * rules' sentence (GarrisonSays) says when it can.
+	 */
+	bool GarrisonWaits() const;
+	/**
+	 * (The 1.5.3 review; the playtest's find 16.) A hand that is all garrison and could come out, sent at an enemy army
+	 * beyond its reach: the rules' plan for the march up and the attack, made with it as if out of its town, as for an
+	 * army in the field (bOk false otherwise). The march the card gives brings it out as it goes (CarryOutApproach).
+	 */
+	FApproachPlan GarrisonApproach(int32 RegionId) const;
+	/** (The 1.5.3 review; the playtest's find 17.) The rules' reason the corps of the hand inside a town take no ship (bySeaWhy); empty where none is in hand. */
+	FString GarrisonAboard() const;
+	/**
+	 * (The 1.5.3 review.) BY RAIL, the rules' reason a hand that is all garrison takes no train to a place, judged for the
+	 * hand as a whole (railTip); asked of the hand's own province, why no train takes it from there. Empty where the
+	 * rules give none.
+	 */
+	FString GarrisonByRail(int32 RegionId) const;
+	/**
+	 * (The 1.5.3 review.) By sea, a hand of corps in the field and of the town's garrison: the sentence that names those
+	 * of the garrison, which stay in the town, and the rules' reason (GarrisonAboard). Empty for a hand that is all
+	 * garrison or has none of it.
+	 */
+	FString StaysAshore() const;
+	/**
+	 * (The 1.5.3 review; the playtest's find 14.) Beside the army in the field, or beside corps of the garrison that come
+	 * out with a move, the last corps of the hand inside a town that no order would bring out with a move (not in
+	 * HandComesOut): it would be left behind without a word, or taken out of the town onto a march kept for next month.
+	 * INDEX_NONE where there is none, by sea or by rail, and while it is not the player's turn.
+	 */
+	int32 LeftInside() const;
 	/**
 	 * The march up to an enemy army that is not next door and the attack, planned as one order and shown before
 	 * anything is carried out. True where the card opened or the rules' sentence was said; false where the rules have

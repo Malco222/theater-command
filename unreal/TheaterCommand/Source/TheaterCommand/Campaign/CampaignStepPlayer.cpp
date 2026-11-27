@@ -172,6 +172,37 @@ namespace
 	}
 
 	/**
+	 * (1.5.3) True where a line of the button's own, one not on a button inside it, reads exactly these words (as Plain
+	 * gives both): a card's name on the card, though the card holds buttons of its own. A corps that has earned a nickname
+	 * shows it on the same line, in quotes after the name (MakeCard), and the name alone still names it.
+	 */
+	bool HasLine(const TSharedRef<SWidget>& Widget, const FString& Want, bool bTop = true)
+	{
+		static const FName ButtonType(TEXT("SButton"));
+		static const FName TextType(TEXT("STextBlock"));
+		if (!Widget->GetVisibility().IsVisible() || (!bTop && Widget->GetType() == ButtonType))
+		{
+			return false;
+		}
+		if (Widget->GetType() == TextType)
+		{
+			const FString Line = Plain(StaticCastSharedRef<STextBlock>(Widget)->GetText().ToString());
+			return Line == Want || Line.StartsWith(Want + TEXT(" \u201C"), ESearchCase::CaseSensitive);
+		}
+		if (FChildren* Children = Widget->GetChildren())
+		{
+			for (int32 Index = 0; Index < Children->Num(); ++Index)
+			{
+				if (HasLine(Children->GetChildAt(Index), Want, false))
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Every button on the screen that can be seen, with the words on it. (1.5.1, the Mac's p7, 25 November 2026: with
 	 * bDeep, a press's own search, the buttons inside a button are gathered too, after it: a division's tile on a corps'
 	 * card, a button on a page's card. Before, the search stopped at the outermost button, and a press meant for a tile
@@ -434,7 +465,8 @@ bool FStepPlayer::Press(ACampaignPlayerController& Player, const FString& Words)
 			Matched.Add(Index);
 		}
 	}
-	if (Matched.Num() == 0)
+	const bool bWhole = Matched.Num() > 0;
+	if (!bWhole)
 	{
 		for (int32 Index = 0; Index < All.Num(); ++Index)
 		{
@@ -444,21 +476,47 @@ bool FStepPlayer::Press(ACampaignPlayerController& Player, const FString& Words)
 			}
 		}
 	}
+	// (1.5.3) The buttons named by the words: where no button's words are these and no more, one with a line of its own
+	// (not on a button inside it) that reads exactly them, as Plain gives both, or them and a nickname in quotes after
+	// them. II Corps' card is named by "II Corps", and still is once the corps has earned a nickname.
+	TArray<int32> ByName;
+	if (!bWhole && !Want.IsEmpty())
+	{
+		for (const int32 Index : Matched)
+		{
+			if (HasLine(All[Index].Widget.ToSharedRef(), Want))
+			{
+				ByName.Add(Index);
+			}
+		}
+	}
 	// (1.5.1) A button whose words are found only because a button inside it carries them gives way to that inner one:
-	// "3rd Infantry" is the division's tile, not the corps' card that holds the tile. Where no inner button matches, the
-	// outer one is pressed, as before.
+	// "3rd Infantry" is the division's tile, not the corps' card that holds the tile and has no line of that name of its
+	// own. Where no inner button matches, the outer one is pressed, as before.
+	// (1.5.3) But a button named by the words keeps the press, and the buttons inside it give way to it instead: after a
+	// split, "press II Corps" is II Corps' card, not REJOIN II CORPS DETACHMENT on it. Only a named button and the ones
+	// inside it are weighed so. The rest keep their screen order as in 1.5.2, and "#2" counts among them as it did where a
+	// named card holds at most one such button, as a corps' card does (it shows one REJOIN): "press II Corps#2" is still
+	// REJOIN II CORPS on the detachment's card, which "II Corps" does not name.
 	TArray<const FFoundButton*> Alike;
 	for (const int32 Index : Matched)
 	{
-		bool bHolds = false;
-		for (const int32 Other : Matched)
+		bool bGivesWay = false;
+		for (int32 Up = All[Index].Parent; Up != INDEX_NONE && !bGivesWay; Up = All[Up].Parent)
 		{
-			for (int32 Up = All[Other].Parent; Up != INDEX_NONE && !bHolds; Up = All[Up].Parent)
+			bGivesWay = ByName.Contains(Up);
+		}
+		if (!ByName.Contains(Index))
+		{
+			for (const int32 Other : Matched)
 			{
-				bHolds = Up == Index;
+				for (int32 Up = All[Other].Parent; Up != INDEX_NONE && !bGivesWay; Up = All[Up].Parent)
+				{
+					bGivesWay = Up == Index;
+				}
 			}
 		}
-		if (!bHolds)
+		if (!bGivesWay)
 		{
 			Alike.Add(&All[Index]);
 		}
@@ -594,29 +652,61 @@ void FStepPlayer::Act(ACampaignPlayerController& Player, const FStep& Step)
 	const FString& Verb = Step.Verb;
 	if (Verb == TEXT("start"))
 	{
-		// "USA 1939-09 seed 25 colonel"
+		// "USA 1939-09 seed 25 colonel", "UK 1939-09 seed 4 theatre colonel": after the date, in any order, the dice, a level
+		// of difficulty and a depth, each as the opening screen offers them. (1.5.3: a depth was read as a level, matched
+		// none, and a run that takes pictures played the full game whatever the line said. A word that is neither is named
+		// in the step's note, and left out.)
 		TArray<FString> Words;
 		Step.Target.ParseIntoArray(Words, TEXT(" "), true);
 		FString Year, Month;
 		const bool bDated = Words.Num() > 1 && Words[1].Split(TEXT("-"), &Year, &Month);
 		const int32 From = bDated ? (FCString::Atoi(*Year) - 1939) * 12 + FCString::Atoi(*Month) - 9 + 1 : 1;
 		int32 Seed = 0;
-		FString Level;
-		for (int32 Index = 2; Index < Words.Num(); ++Index)
+		FString Level, Depth;
+		TArray<FString> Neither;
+		const FOpening& Offered = Player.GetOpening();
+		auto Offers = [](const TArray<FGrandLevel>& List, const FString& Word)
+		{
+			return List.ContainsByPredicate([&Word](const FGrandLevel& One) { return One.Id.Equals(Word, ESearchCase::IgnoreCase); });
+		};
+		// (a second word that is no date is read with the rest, so that it is named if it means nothing: before, it was let go)
+		for (int32 Index = bDated ? 2 : 1; Index < Words.Num(); ++Index)
 		{
 			if (Words[Index] == TEXT("seed") && Words.IsValidIndex(Index + 1))
 			{
 				Seed = FCString::Atoi(*Words[++Index]);
 			}
-			else
+			else if (Offers(Offered.Depths, Words[Index]))
+			{
+				Depth = Words[Index];
+			}
+			else if (Offers(Offered.Levels, Words[Index]))
 			{
 				Level = Words[Index];
 			}
+			else
+			{
+				Neither.Add(TEXT("\"") + Words[Index] + TEXT("\""));
+			}
 		}
-		if (Words.Num() == 0 || !Player.BeginGrandFor(Words[0], From, Seed, Level))
+		if (Words.Num() == 0 || !Player.BeginGrandFor(Words[0], From, Seed, Level, Depth))
 		{
 			bMissing = true;
 			Note = TEXT("no such campaign could be begun");
+		}
+		if (Neither.Num() > 0)
+		{
+			auto Ids = [](const TArray<FGrandLevel>& List)
+			{
+				TArray<FString> Out;
+				for (const FGrandLevel& One : List)
+				{
+					Out.Add(One.Id);
+				}
+				return FString::Join(Out, TEXT(", "));
+			};
+			Note += (Note.IsEmpty() ? FString() : FString(TEXT("; "))) + FString::Printf(TEXT("left out, as neither a level nor a depth: %s (the levels: %s; the depths: %s)"),
+				*FString::Join(Neither, TEXT(", ")), *Ids(Offered.Levels), *Ids(Offered.Depths));
 		}
 		Context.Reset();
 	}
