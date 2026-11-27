@@ -76,7 +76,7 @@ def world_uv(material, tiling_name, tiling_default, x, y):
     return scaled
 
 
-def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, worn=False, alpha_rough=False):
+def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, worn=False, alpha_rough=False, press_twin=False, press_upright=False):
     """Land, sea and inked lines: the colour comes from the mesh itself, painted point by point in C++.
     The material adds what paint on a model has and a computer colour does not: a little unevenness and a slight tooth.
     (TK1: with soot, M_LandSteel, the far tanks', guns' and lorries' instanced pieces: the same surface, each point's
@@ -99,7 +99,10 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, 
     (With alpha_rough, M_LandManWorn and M_LandCrowdWorn, the men's inks under tc.Look.Worn: the mesh's alpha is each
     paint's roughness, which the men's looks write with the switch on (cloth about 0.9, skin 0.55, leather 0.45), so
     neither painted metal nor a wake is read from it; a point left whole, 255, keeps "Roughness". Every other material is
-    built as before.)"""
+    built as before.)
+    (press_twin, press_upright: M_LandBladesPress,
+    the same with the blast press, and the lean times how upright it stands (without TC_LODGED; with TC_LODGED=1 the
+    lodged stillness instead, on the wind's lean and on the press's capped lean): wind_sway.)"""
     m = new_material(name)
     # (the air battle draws its aircraft past 300 m with this surface by instancing, AS1; the ground battle its hedges,
     # trees and grass)
@@ -252,13 +255,8 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, 
     tinted = lerp(m, weathered, vector(m, "ChipColour", (0.13, 0.125, 0.12, 1.0), 450, -1300), chipped, 750, -900)
     tinted = times(m, tinted, lerp(m, 1.0, vector(m, "WakeTone", (1.0, 1.0, 1.0, 1.0), 600, -1250), on_water, 800, -1200), 900, -950)
     if sway:
-        tinted = times(m, tinted, wind_sheen(m, -900, 3200), 1000, -950)
-        to_property(wind_sway(m, -900, 3600), "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
-        # (corn and grass laid over by a blast, on trial "lodged", lit as a mat facing the sky; told and left out if it
-        # fails; only in a build made with TC_LODGED=1, see LODGED: without it the material is node for node as before)
-        lying = windy(name + " (lying normal)", lambda: lying_normal(m, -900, 4400)) if LODGED else None
-        if lying is not None:
-            to_property(lying, "", unreal.MaterialProperty.MP_NORMAL)
+        tinted = times(m, tinted, wind_sheen(m, -900, 3200, press_floored=press_twin), 1000, -950)
+        to_property(wind_sway(m, -900, 3600, press_twin=press_twin, press_upright=press_upright), "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
     to_property(tinted, "", unreal.MaterialProperty.MP_BASE_COLOR)
     to_property(times(m, chipped, 0.85, 750, -700), "", unreal.MaterialProperty.MP_METALLIC)
     # (The art director, 19 November 2026: a rifleman seen with the sun behind him stood darker on his shaded side
@@ -299,7 +297,17 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, 
     connect(bump, "RGB", tooth, "B")
     connect(scalar(m, "Tooth", 0.35, -850, 1250), "", tooth, "Alpha")
     # (a posed man: his facing as posed, in the world; the men's ink has no tooth)
-    to_property(posed_facing if crowd else tooth, "", unreal.MaterialProperty.MP_NORMAL)
+    facing_out = posed_facing if crowd else tooth
+    if sway and LODGED:
+        # (corn and grass laid over by a blast, on trial "lodged", lit as a mat facing the sky: the tooth bent toward
+        # the sky as the thing lies, and exactly the tooth for all that stands. Made here, after the tooth, and fed to
+        # the Normal in its place: the Normal takes one feed, and the last one given wins, so a lying normal fed before
+        # the tooth was lost. Told and left out if it fails; only in a build made with TC_LODGED=1, see LODGED: without
+        # it the material is node for node as before)
+        lying = windy(name, lambda: lying_normal(m, -900, 4400, standing=tooth), "the lying normal")
+        if lying is not None:
+            facing_out = lying
+    to_property(facing_out, "", unreal.MaterialProperty.MP_NORMAL)
 
     # (bare metal is smoother than paint: the lamp glints on the chips)
     rough = lerp(m, scalar(m, "Roughness", 0.9, -450, 200), 0.34, chipped, -250, 200)
@@ -2513,16 +2521,29 @@ def land_texture(name, cut_out=False):
 
 
 _AIR = {}  # (the air's picture, brought in once a run)
+_TWIN_BUILD = set()  # (while a blast press twin is built: its name; build_pressed_or_tell)
 
 
-def wind_gust(m, x, y, vertex):
+def land_texture_kept(name, cut_out=False):
+    """A blast press twin's picture (build_pressed_or_tell): the one already brought in, as its plain material left it,
+    neither brought in again nor saved; land_texture only when there is none yet."""
+    kept_path = f"{LAND_TEXTURES}/{name}"
+    if eal.does_asset_exist(kept_path):
+        kept_texture = unreal.load_asset(kept_path)
+        if kept_texture is not None:
+            return kept_texture
+    return land_texture(name, cut_out=cut_out)
+
+
+def wind_gust(m, x, y, vertex, press_floored=False):
     """THE WIND'S GUSTS (release 2; Brian, 23 November: "can we make the grass, trees, and sky more visually realistic
     and epic?"). How hard the wind blows at a point now, 0 (a lull) to 1 (a gust): T_LandCloudWind's green
     (Tools/land_look/make_sky_textures.py), "GustSize" metres a repeat, carried downwind ("WindWay", the world's X and
     Y) at "WindTravel" metres a second on the game's clock, so the gusts run over the field as they do over corn.
     vertex: read for World Position Offset (its smallest picture never taken, as a vertex has no footprint; the point
-    where it stands before any offset)."""
-    air = _AIR.get("picture") or _AIR.setdefault("picture", land_texture("T_LandCloudWind"))
+    where it stands before any offset). press_floored (the blast press's twins only): "GustSize" held to at least
+    PRESS_FLOOR before it divides, so a 0 typed by hand gives no NaN there (the plain materials' nodes are as they were)."""
+    air = _AIR.get("picture") or _AIR.setdefault("picture", (land_texture_kept if _TWIN_BUILD else land_texture)("T_LandCloudWind"))
     where = node(m, unreal.MaterialExpressionWorldPosition, x, y)
     if vertex:
         where.set_editor_property("world_position_shader_offset", unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
@@ -2530,7 +2551,15 @@ def wind_gust(m, x, y, vertex):
     way = node_from(m, unreal.MaterialExpressionComponentMask, vector(m, "WindWay", (0.91, 0.41, 0.0, 0.0), x, y + 120), x + 150, y + 120,
                     r=True, g=True, b=False, a=False)
     run = times(m, times(m, way, scalar(m, "WindTravel", 5.0, x + 150, y + 220), x + 300, y + 150), node(m, unreal.MaterialExpressionTime, x + 300, y + 250), x + 450, y + 150)
-    uv = over(m, plus(m, metres, times(m, run, -1.0, x + 600, y + 150), x + 750, y + 50), scalar(m, "GustSize", 150.0, x + 750, y + 200), x + 900, y + 50)
+    # (made in the order they always were: the travel, the sum, GustSize, then the division)
+    gust_at = plus(m, metres, times(m, run, -1.0, x + 600, y + 150), x + 750, y + 50)
+    gust_size = scalar(m, "GustSize", 150.0, x + 750, y + 200)
+    if press_floored:
+        gust_size_held = node(m, unreal.MaterialExpressionMax, x + 850, y + 200)
+        _feed(m, gust_size_held, "A", gust_size)
+        _feed(m, gust_size_held, "B", PRESS_FLOOR)
+        gust_size = gust_size_held
+    uv = over(m, gust_at, gust_size, x + 900, y + 50)
     gust = node(m, unreal.MaterialExpressionTextureSample, x + 1050, y, texture=air, sampler_type=sampler_for(air))
     if vertex:
         gust.set_editor_property("mip_value_mode", unreal.TextureMipValueMode.TMVM_MIP_LEVEL)
@@ -2539,15 +2568,231 @@ def wind_gust(m, x, y, vertex):
     return (gust, "G"), metres, way
 
 
-def wind_sway(m, x, y, leaves=False):
+# THE BLAST PRESS (Brian's film details, "grass and dust flattened by blasts": the moment a shell bursts, the grass, corn
+# and leaves round it flinch outward from the blast and spring back). Its numbers, the same in every pressed twin:
+PRESS_SLOTS = 4             # blasts pressing at once; LandBattle.h's PressSlotStart[4] must be the same
+PRESS_FRONT_MPS = 340.0     # "PressFront": the blast front runs out at about the speed of sound (30 m off 0.09 s after)
+PRESS_RISE_S = 0.08         # "PressRise": the flinch out to its full over this, slowing as it gets there (peak ~0.07 s)
+PRESS_BACK_S = 0.75         # "PressBack": ... and back to standing from the moment the front arrived; nothing from then on
+PRESS_MOST = 0.45           # "PressMost"'s default: a tip goes at most this share of its height AS DRAWN aside, however many blasts press it
+PRESS_UPRIGHT_FROM = 1.1    # the upright share: a piece tilted under about 24.6 degrees counts as standing (acos(1 / 1.1) = 24.62)
+PRESS_FLOOR = 0.001         # each number a twin divides by is held to at least this first (a 0 typed by hand: no NaN)
+# (All the press's seconds are the scene's life seconds, the effects kit's clock (LandBattle's S.Lived): "PressNow" is
+# that clock, written by the game every frame a press is still showing and never otherwise, so the press keeps time
+# with its burst at 0.5x, 4x and held. The wind keeps its Time node. PressFront, PressRise and PressBack are parameters
+# whose numbers the game owns: LandBattle::LoadInks writes them from the same constants its slot choice uses
+# (-TheaterLandBlastPress=<strength>,<front>,<rise>,<back>,<most> tunes them on the Mac without a rebuild); these are only
+# the materials' defaults. "PressMost", the cap (0.45 of the height as drawn, about 27 degrees; the switch holds it to
+# 0.1 .. 0.9), is a parameter for the same reason, so the Mac can film 0.45 against 0.8 without a rebuild. LandBattle.cpp
+# carries PRESS_SLOTS, PRESS_RISE_S, PRESS_BACK_S and PRESS_MOST as literals: harness/cpp/run_cpp.py checks they agree. PRESS_PEAK below is from these defaults; with other timings the curve's own peak differs (by up
+# to half: rise 0.5 s, back 1 s), and LandBattle::PressBurst scales every strength it writes by PRESS_PEAK's over the
+# tuned curve's peak, so "PressBend" stays the lean at the peak whatever the Mac tunes.)
+
+
+def _press_curve(press_t):
+    """The press against the seconds since the front arrived, as the material works it out (blast_press): 0 before,
+    out to the peak as 1 - (1 - t / RISE)^2 (fast, slowing to a stop), held back by (1 - t / BACK)^2 (back to standing
+    without swinging through), exactly 0 from BACK on."""
+    press_rise = min(max(press_t / PRESS_RISE_S, 0.0), 1.0)
+    press_back = 1.0 - min(max(press_t / PRESS_BACK_S, 0.0), 1.0)
+    return (1.0 - (1.0 - press_rise) * (1.0 - press_rise)) * press_back * press_back
+
+
+PRESS_PEAK = max(_press_curve(press_i * PRESS_BACK_S / 15000.0) for press_i in range(15001))  # (so "PressBend" is the lean at the peak)
+
+
+def press_clock(m, x, y):
+    """The press's clock: "PressNow", the scene's life seconds as the game last wrote them, and in the pass that works
+    out where each point was the frame before (for the motion vectors, so the temporal upscaler sees the flinch move)
+    "PressBefore", the clock the frame before (MaterialExpressionPreviousFrameSwitch, UE 5.8, its pins tried by both
+    spellings as M_LandCrowd's). If that node cannot be made or wired here, PressNow alone, said once a run: the press
+    still works, only its motion vectors are nought."""
+    press_now = scalar(m, "PressNow", 0.0, x, y)
+    press_before = scalar(m, "PressBefore", 0.0, x, y + 100)
+    try:
+        press_switch = node(m, unreal.MaterialExpressionPreviousFrameSwitch, x + 150, y)
+        for press_current_pin, press_previous_pin in (("Current Frame", "Previous Frame"), ("CurrentFrame", "PreviousFrame")):
+            if mel.connect_material_expressions(press_now, "", press_switch, press_current_pin) and mel.connect_material_expressions(press_before, "", press_switch, press_previous_pin):
+                return press_switch
+        press_problem = "its pins were not found"
+    except Exception as press_error:
+        press_problem = str(press_error)
+    if not _PRESS_TOLD.get("before"):
+        _PRESS_TOLD["before"] = True
+        unreal.log_warning(f"Theater Command: the blast press without its last frame's clock ({press_problem}): the flinch gives the anti-aliasing no motion")
+    return press_now
+
+
+_PRESS_TOLD = {}
+
+
+def _press_per(m, press_one, press_name, press_default, x, y):
+    """One over one of the press's timing parameters, the parameter held to at least PRESS_FLOOR first."""
+    press_held = node(m, unreal.MaterialExpressionMax, x + 150, y)
+    _feed(m, press_held, "A", scalar(m, press_name, press_default, x, y))
+    _feed(m, press_held, "B", PRESS_FLOOR)
+    return over(m, press_one, press_held, x + 300, y)
+
+
+def blast_press(m, x, y, press_metres, press_now):
+    """What the bursting shells do to a point of a swaying thing now, summed over the PRESS_SLOTS slots: the way away
+    from each burst (the world's X and Y, at most 1 long) times the press there.
+    Each slot is two parameters the game writes when a shell bursts, and never between (LandBattle::PressBurst):
+    "PressAt<k>": the burst's place in the world in metres (red, green: the world's X and Y, as a point's own place times
+    0.01 here), ONE OVER how far its press reaches in metres (blue: so the shader multiplies), and the moment it burst on
+    the press's clock, the scene's life seconds (alpha); "PressStrength<k>": 0 (none, as every slot starts) to 1 (a 150
+    mm shell). press_now: press_clock. The press at a point is the strength, times the share left by its distance (full near
+    the burst, (1 - (d / reach)^2)^2, nothing at the reach with no edge), times _press_curve of the seconds since the
+    front got there (d / "PressFront" after the burst). An empty slot, or one long done, gives exactly nothing."""
+    # (the timing, shared by the slots: one over each of the three numbers, worked once a vertex)
+    press_one = node(m, unreal.MaterialExpressionConstant, x - 150, y - 500, r=1.0)
+    press_per_front = _press_per(m, press_one, "PressFront", PRESS_FRONT_MPS, x - 600, y - 400)
+    press_per_rise = _press_per(m, press_one, "PressRise", PRESS_RISE_S, x - 600, y - 300)
+    press_per_back = _press_per(m, press_one, "PressBack", PRESS_BACK_S, x - 600, y - 200)
+    press_pushed = None
+    for press_k in range(PRESS_SLOTS):
+        press_y0 = y + 400 * press_k
+        press_at = vector(m, f"PressAt{press_k}", (0.0, 0.0, 1.0, -100000.0), x, press_y0)
+        press_burst = node_from(m, unreal.MaterialExpressionComponentMask, press_at, x + 150, press_y0, r=True, g=True, b=False, a=False)
+        press_apart = node(m, unreal.MaterialExpressionDistance, x + 300, press_y0)
+        connect(press_metres, "", press_apart, "A")
+        connect(press_burst, "", press_apart, "B")
+        press_away = node(m, unreal.MaterialExpressionSubtract, x + 300, press_y0 + 100)
+        connect(press_metres, "", press_away, "A")
+        connect(press_burst, "", press_away, "B")
+        # (how near: full at the burst, nothing at its reach)
+        press_share = one_in(m, unreal.MaterialExpressionSaturate, times(m, press_apart, (press_at, "B"), x + 450, press_y0), x + 600, press_y0)
+        press_near = one_in(m, unreal.MaterialExpressionOneMinus, times(m, press_share, press_share, x + 750, press_y0), x + 900, press_y0)
+        press_near = times(m, press_near, press_near, x + 1050, press_y0)
+        # (when: the seconds since the front got here, on the press's clock)
+        press_since = node(m, unreal.MaterialExpressionSubtract, x + 450, press_y0 + 200)
+        connect(press_now, "", press_since, "A")
+        connect(press_at, "A", press_since, "B")
+        press_late = node(m, unreal.MaterialExpressionSubtract, x + 750, press_y0 + 200)
+        connect(press_since, "", press_late, "A")
+        connect(times(m, press_apart, press_per_front, x + 600, press_y0 + 260), "", press_late, "B")
+        press_rise = one_in(m, unreal.MaterialExpressionOneMinus,
+                            one_in(m, unreal.MaterialExpressionSaturate, times(m, press_late, press_per_rise, x + 900, press_y0 + 160), x + 1050, press_y0 + 160), x + 1200, press_y0 + 160)
+        press_rise = one_in(m, unreal.MaterialExpressionOneMinus, times(m, press_rise, press_rise, x + 1350, press_y0 + 160), x + 1500, press_y0 + 160)
+        press_back = one_in(m, unreal.MaterialExpressionOneMinus,
+                            one_in(m, unreal.MaterialExpressionSaturate, times(m, press_late, press_per_back, x + 900, press_y0 + 260), x + 1050, press_y0 + 260), x + 1200, press_y0 + 260)
+        press_back = times(m, press_back, press_back, x + 1350, press_y0 + 260)
+        press_here = times(m, times(m, times(m, press_rise, press_back, x + 1650, press_y0 + 200), press_near, x + 1800, press_y0 + 100), scalar(m, f"PressStrength{press_k}", 0.0, x + 1650, press_y0 + 300), x + 1950, press_y0 + 150)
+        # (the way away from the burst: a point within half a metre of it is pushed that much less)
+        press_least = node(m, unreal.MaterialExpressionMax, x + 450, press_y0 + 100)
+        _feed(m, press_least, "A", press_apart)
+        _feed(m, press_least, "B", 0.5)
+        press_push = times(m, press_away, over(m, press_here, press_least, x + 2100, press_y0 + 150), x + 2250, press_y0 + 100)
+        press_pushed = press_push if press_pushed is None else plus(m, press_pushed, press_push, x + 2400, press_y0)
+    return press_pushed
+
+
+def press_lean(m, x, y, press_pushed, press_high, press_reach, press_still=None):
+    """The blast press's lean in world centimetres (the world's X and Y): blast_press's sum times "PressBend" (radians at
+    the peak of a full press, by the same height as the wind's "Bend"; nothing unless C++ says, and held to 0 .. the cap,
+    so a negative one typed by hand never pulls a tip toward the burst), each blast never more than "PressMost" (default
+    PRESS_MOST) of the height aside, and all of them together never more than that either (the summed lean held to
+    that length, its way kept: two shells side by side bow the corn no further than one). press_high and press_reach: the
+    height and the bending reach AS DRAWN, metres (own_up's press_stretch taken in: a squashed tuft is pushed by its own height).
+    And how far that lean brings the point DOWN, world centimetres (0 or less): a lean of f of the point's height as drawn
+    moves it aside only, which would stretch the blade (by 10% at f 0.45, 28% at 0.8), so the point comes down by
+    height x (1 - sqrt(1 - f x f)) and stays as far from the foot as it stood. Exactly 0 when no press is written.
+    That keeps each POINT's distance from the foot, not the length along the blade: a blade that leans as a whole
+    (BendCurve 0, the grass) keeps its length exactly, but one whose lean grows with height (BendCurve 1, corn and
+    stalks) bows, and is drawn longer along its curve, at the full press about 4% at a cap of 0.45, 7% at 0.6, 15% at
+    0.8 and 24% at 0.9 (harness/check_guards.py measures it; without the drop it was 12%, 20%, 33% and 40%).
+    press_still (built with TC_LODGED=1 only, wind_sway's "still"): the capped lean times it, AFTER the cap and before
+    the drop is worked out from it, so the aside is still x the aside the same piece would get standing at any strength
+    and any number of bursts (two 150s at once at 40 degrees: 0.549 of the upright aside, not the full cap), 0 aside and
+    0 drop for a piece lying 60 degrees or more, and the same bits as without it for one standing (still exactly 1).
+    None: no such node, the graph as it always was.
+    (press_lean_cm, press_drop_cm)."""
+    # (PressMost held to 0 .. 1 first (Saturate), so a huge one typed by hand with a huge PressBend cannot overflow the
+    # aside to infinity and give 0 x inf = NaN in an empty slot; the game writes 0.1 .. 0.9, which it leaves as it is)
+    press_most_held = one_in(m, unreal.MaterialExpressionSaturate, scalar(m, "PressMost", PRESS_MOST, x - 150, y + 300), x - 75, y + 300)
+    press_most = times(m, press_high, press_most_held, x, y + 200)
+    press_bend = node(m, unreal.MaterialExpressionMin, x + 150, y)
+    connect(times(m, scalar(m, "PressBend", 0.0, x - 150, y), press_reach, x, y + 100), "", press_bend, "A")
+    connect(press_most, "", press_bend, "B")
+    press_bend_kept = node(m, unreal.MaterialExpressionMax, x + 225, y)
+    _feed(m, press_bend_kept, "A", press_bend)
+    _feed(m, press_bend_kept, "B", 0.0)
+    press_aside = times(m, press_pushed, times(m, press_bend_kept, 1.0 / PRESS_PEAK, x + 300, y), x + 450, y)
+    press_size = node(m, unreal.MaterialExpressionDistance, x + 600, y + 100)
+    connect(press_aside, "", press_size, "A")
+    connect(node(m, unreal.MaterialExpressionConstant2Vector, x + 450, y + 200, r=0.0, g=0.0), "", press_size, "B")
+    press_least = node(m, unreal.MaterialExpressionMax, x + 750, y + 100)
+    _feed(m, press_least, "A", press_size)
+    _feed(m, press_least, "B", 0.0001)
+    press_keep = one_in(m, unreal.MaterialExpressionSaturate, over(m, press_most, press_least, x + 900, y + 100), x + 1050, y + 100)
+    press_lean_m = times(m, press_aside, press_keep, x + 1200, y)
+    if press_still is not None:
+        # (on trial "lodged": the capped lean times the stillness, so a half-lying piece leans that share of what it
+        # would standing however hard it is pressed; the drop below is worked out from this stilled lean)
+        press_lean_m = times(m, press_lean_m, press_still, x + 1275, y + 50)
+    # (down: f x f is the lean's length squared over the height's, the height's held to at least 1e-8 so a point at the
+    # foot gives 0 over it; 1 - f x f held to at least 0 before its root, as a cap typed over 1 by hand could pass it)
+    press_lean_sq = node(m, unreal.MaterialExpressionDotProduct, x + 1350, y + 200)
+    connect(press_lean_m, "", press_lean_sq, "A")
+    connect(press_lean_m, "", press_lean_sq, "B")
+    press_high_sq = node(m, unreal.MaterialExpressionMax, x + 1350, y + 300)
+    _feed(m, press_high_sq, "A", times(m, press_high, press_high, x + 1200, y + 300))
+    _feed(m, press_high_sq, "B", 1e-8)
+    press_upright_left = node(m, unreal.MaterialExpressionMax, x + 1650, y + 250)
+    _feed(m, press_upright_left, "A", one_in(m, unreal.MaterialExpressionOneMinus, over(m, press_lean_sq, press_high_sq, x + 1500, y + 250), x + 1575, y + 250))
+    _feed(m, press_upright_left, "B", 0.0)
+    press_down = plus(m, one_in(m, unreal.MaterialExpressionSquareRoot, press_upright_left, x + 1800, y + 250), -1.0, x + 1950, y + 250)
+    press_drop = times(m, times(m, press_down, press_high, x + 2100, y + 250), 100.0, x + 2250, y + 250)
+    return times(m, press_lean_m, 100.0, x + 1350, y), press_drop
+
+
+def own_up(m, x, y):
+    """The instance's own up in the world: Local to World of (0, 0, 1), and its length, which is how much the instance
+    is stretched upward (its Z scale: a squashed tuft's 0.2 or so). (press_up, press_stretch)."""
+    press_up = node(m, unreal.MaterialExpressionTransform, x, y,
+              transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
+              transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+    connect(node(m, unreal.MaterialExpressionConstant3Vector, x - 150, y, constant=unreal.LinearColor(0.0, 0.0, 1.0, 0.0)), "", press_up, "")
+    press_stretch = node(m, unreal.MaterialExpressionDistance, x + 150, y + 100)
+    connect(press_up, "", press_stretch, "A")
+    connect(node(m, unreal.MaterialExpressionConstant3Vector, x, y + 150, constant=unreal.LinearColor(0.0, 0.0, 0.0, 0.0)), "", press_stretch, "B")
+    return press_up, press_stretch
+
+
+def upright_share(m, x, y, press_up, press_stretch):
+    """How upright the instance stands: the world's up of its own up (own_up, its press_stretch taken out), times
+    PRESS_UPRIGHT_FROM, held 0 to 1. Exactly 1 for a piece standing (or leaning under about 24.6 degrees, acos(1 / 1.1), as on a slope),
+    0.19 for one laid over 80 degrees, 0 lying flat or upside down."""
+    press_tall = node_from(m, unreal.MaterialExpressionComponentMask, press_up, x + 150, y, r=False, g=False, b=True, a=False)
+    press_least = node(m, unreal.MaterialExpressionMax, x + 300, y + 100)
+    _feed(m, press_least, "A", press_stretch)
+    _feed(m, press_least, "B", 0.0001)
+    return one_in(m, unreal.MaterialExpressionSaturate, times(m, over(m, press_tall, press_least, x + 450, y), PRESS_UPRIGHT_FROM, x + 600, y), x + 750, y)
+
+
+def wind_sway(m, x, y, leaves=False, press_twin=False, press_upright=False):
     """The World Position Offset of a thing the wind bends: grass, corn, a shrub or a tree, about its foot (the instance's
     own origin; its height read in its own space, so a man or a house never moves, as their materials have none).
     It leans downwind by "Bend" (radians at a full gust; nothing unless C++ says, so the battle without the wind is as
     before) times the day's calm share ("WindCalm") and the gust over it, and springs back and forth a little in the gust
     ("Spring" of it, "SpringHz" a second). A blade leans as a whole from its root; a tree bends more toward its top
     ("BendCurve" 1: the lean grows as its height over "BendHeight" metres). leaves: each card also flutters on its own
-    ("Flutter" metres at a gust, about "FlutterHz" a second)."""
-    gust, metres, way = wind_gust(m, x, y, True)
+    ("Flutter" metres at a gust, about "FlutterHz" a second).
+    press_twin (the pressed twins only, M_LandBladesPress and the rest): the bursting shells' press (blast_press, press_lean,
+    on the press's own clock, press_clock, and on the height as drawn, own_up) leans it too, away from each burst, one
+    way only (a leaf card's flutter is left as the wind makes it: a shake would
+    swing back and forth, and the press is a flinch, not a show; each point brought down as it leans, so it keeps its
+    distance from the foot: grass keeps its length, corn and stalks bow a little longer, press_lean). The twins' own wind divides by BendHeight and GustSize held to PRESS_FLOOR (the same numbers
+    for any the game writes). press_upright (with press_twin only; the twins always have it): without TC_LODGED, the
+    twin's offset, the wind's lean and the press's, times how upright the instance stands (upright_share), so a piece
+    laid over does not slide along the ground. Built with TC_LODGED=1 the upright share is not made at all: the lodged
+    trial's stillness ("still", saturate((up.z - 0.5) / 0.485)) is then the one ramp, on the wind's lean in every
+    swaying material and, in the twins, on the press's lean AFTER press_lean's cap (and before its drop), so a twin with
+    no press written is its plain material at every tilt and a pressed one leans still x its upright lean at any
+    strength. (The lasting
+    flattened ring round a shell hole is that trial, "lodged": its stillness covers the ring, and the plain materials
+    never take the upright share.) Neither press_twin nor TC_LODGED: the nodes are those it always made, in the same order."""
+    gust, metres, way = wind_gust(m, x, y, True, press_floored=press_twin)
     where = node(m, unreal.MaterialExpressionWorldPosition, x, y + 500)
     where.set_editor_property("world_position_shader_offset", unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
     own = node(m, unreal.MaterialExpressionTransformPosition, x + 150, y + 500,
@@ -2557,8 +2802,19 @@ def wind_sway(m, x, y, leaves=False):
     high = node(m, unreal.MaterialExpressionMax, x + 450, y + 500)
     _feed(m, high, "A", times(m, node_from(m, unreal.MaterialExpressionComponentMask, own, x + 300, y + 500, r=False, g=False, b=True, a=False), 0.01, x + 400, y + 560))
     _feed(m, high, "B", 0.0)
-    reach = times(m, high, lerp(m, 1.0, over(m, high, scalar(m, "BendHeight", 12.0, x + 450, y + 650), x + 600, y + 600),
-                                scalar(m, "BendCurve", 0.0, x + 600, y + 700), x + 750, y + 600), x + 900, y + 550)
+    # (made in the order they always were: the tall share, then the curve, then the lerp and the reach)
+    press_bend_height = scalar(m, "BendHeight", 12.0, x + 450, y + 650)
+    if press_twin:
+        # (the twins only: the wind's own division too takes BendHeight held to at least PRESS_FLOOR, so a 0 typed by
+        # hand gives no NaN in a twin; with any BendHeight the game writes (1 to 12) it is the same number, bit for bit)
+        press_bend_held = node(m, unreal.MaterialExpressionMax, x + 525, y + 650)
+        _feed(m, press_bend_held, "A", press_bend_height)
+        _feed(m, press_bend_held, "B", PRESS_FLOOR)
+        press_tall_share = over(m, high, press_bend_held, x + 600, y + 600)
+    else:
+        press_tall_share = over(m, high, press_bend_height, x + 600, y + 600)
+    press_bend_curve = scalar(m, "BendCurve", 0.0, x + 600, y + 700)
+    reach = times(m, high, lerp(m, 1.0, press_tall_share, press_bend_curve, x + 750, y + 600), x + 900, y + 550)
     time = node(m, unreal.MaterialExpressionTime, x + 1050, y + 300)
     along = node(m, unreal.MaterialExpressionDotProduct, x + 1050, y + 400)
     connect(metres, "", along, "A")
@@ -2585,7 +2841,37 @@ def wind_sway(m, x, y, leaves=False):
                        r=False, g=False, b=True, a=False)
         still = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, up, -0.5, x + 2250, y + 700), 1.0 / 0.485, x + 2400, y + 700), x + 2550, y + 700)
         lean = times(m, lean, still, x + 2700, y + 300)
-    offset = pair(m, times(m, way, lean, x + 2400, y + 250), node(m, unreal.MaterialExpressionConstant, x + 2400, y + 400, r=0.0), x + 2550, y + 300)
+    press_sideways = times(m, way, lean, x + 2400, y + 250)
+    if press_twin:
+        press_up, press_stretch = own_up(m, x + 4350, y + 600)
+    if press_twin:
+        # (the press on the height as drawn: the mesh's own height times the instance's stretch upward, and the bending
+        # reach worked out from that height as the wind's is from the mesh's, exactly for any BendCurve: the drawn height
+        # times lerp(1, drawn height / BendHeight, BendCurve), BendHeight held to at least PRESS_FLOOR (press_bend_held,
+        # which the wind's own division above takes too, in the twins only; the plain materials' wind is as it was).
+        # The wind's own lean stays on the mesh's height, as it always was)
+        press_high_drawn = times(m, high, press_stretch, x + 4350, y + 1300)
+        press_reach_drawn = times(m, press_high_drawn, lerp(m, 1.0, over(m, press_high_drawn, press_bend_held, x + 4350, y + 1450), press_bend_curve, x + 4350, y + 1500), x + 4500, y + 1400)
+        press_pushed = blast_press(m, x + 2400, y + 1600, metres, press_clock(m, x + 1800, y + 1600))
+        # (on trial "lodged" too: a thing a blast laid over lies still under the next burst as in the wind, its capped
+        # lean times the same stillness, after press_lean's cap and before its drop, so lying corn never slides along
+        # the ground and a half-lying piece leans that share of the upright lean however strong the press; exactly 1,
+        # the same bits, for all that stands within some 10 degrees of upright. The clock's PreviousFrameSwitch is
+        # upstream, so the motion vectors' pass (PressBefore) takes the same ramp)
+        press_lean_cm, press_drop_cm = press_lean(m, x + 4650, y + 1500, press_pushed, press_high_drawn, press_reach_drawn,
+                                                  press_still=still if LODGED else None)
+        press_sideways = plus(m, press_sideways, press_lean_cm, x + 5100, y + 1000)
+        # (the twin's offset: aside, and down by the press's drop (exactly 0 with no press); without TC_LODGED the whole
+        # times how upright the piece stands (upright_share), so a piece laid over neither slides nor sinks; with
+        # TC_LODGED=1 no upright share: the wind's lean and the press's capped lean take the lodged stillness instead)
+        offset = pair(m, press_sideways, press_drop_cm, x + 5250, y + 900)
+        if press_upright and not LODGED:
+            # (built with TC_LODGED=1 the twin takes the lodged trial's stillness alone, "still" above, on the wind's
+            # lean, as its plain material does, and the press's capped lean: one ramp, so a twin with no press written is its
+            # plain material bit for bit at every tilt, and the upright share is not made at all)
+            offset = times(m, offset, upright_share(m, x + 4500, y + 600, press_up, press_stretch), x + 5400, y + 700)
+    else:
+        offset = pair(m, press_sideways, node(m, unreal.MaterialExpressionConstant, x + 2400, y + 400, r=0.0), x + 2550, y + 300)
     if leaves:
         # (each card on its own: three slow beats out of step, by where its corners stand)
         whole = times(m, node_from(m, unreal.MaterialExpressionComponentMask, where, x + 150, y + 800, r=True, g=True, b=True, a=False), 0.01, x + 300, y + 800)
@@ -2603,12 +2889,17 @@ def wind_sway(m, x, y, leaves=False):
     return offset
 
 
-def lying_normal(m, x, y):
+def lying_normal(m, x, y, standing=None):
     """The normal of a thing laid over by a blast (on trial "lodged", LandField::Placed::Lodge), in the tangent space:
     a lying mat of corn or grass faces the sky whatever way its blades' own faces turned, so its normal is bent toward
     the world's up by 0.85 x (1 - saturate((up.z - 0.5) / 0.485)), up the instance's own +Z turned into the world. Within
     some 10 degrees of upright (all that stands today) the share is exactly 0 and the normal exactly the mesh's own
-    (0, 0, 1), as when nothing is connected. The painter does the same (land_field_picture.cpp)."""
+    (0, 0, 1), as when nothing is connected. The painter (land_field_picture.cpp) bends by the same share and ramp,
+    but from the mesh's plain normal, with no tooth.
+    standing: the material's own normal for a thing that stands, where it has one (M_LandBlades' tooth), in place of
+    the mesh's own (0, 0, 1): the lying mat is bent from that, and what stands keeps it exactly. So the blades' mat
+    keeps a little of the paper's grain (and, the tooth being a lerp a shade shorter than 1, leans a shade further to
+    the sky) where the painter's has none; the stalks, which have no tooth, match the painter exactly."""
     upward = node(m, unreal.MaterialExpressionTransform, x, y,
                   transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
                   transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
@@ -2621,27 +2912,30 @@ def lying_normal(m, x, y):
                transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_WORLD,
                transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_TANGENT)
     connect(node(m, unreal.MaterialExpressionConstant3Vector, x + 750, y + 150, constant=unreal.LinearColor(0.0, 0.0, 1.0, 0.0)), "", sky, "")
-    own = node(m, unreal.MaterialExpressionConstant3Vector, x + 900, y + 300, constant=unreal.LinearColor(0.0, 0.0, 1.0, 0.0))
+    own = standing if standing is not None else node(m, unreal.MaterialExpressionConstant3Vector, x + 900, y + 300, constant=unreal.LinearColor(0.0, 0.0, 1.0, 0.0))
     return lerp(m, own, sky, share, x + 1200, y + 150)
 
 
-def windy(name, make):
+def windy(name, make, left_out="the wind"):
     """The wind's part of a material that stood before it (M_LandSurface, M_LandLeaves, M_LandStalks): made, or, if
-    anything in it goes wrong, told and left out, so the material is built as it was without the wind."""
+    anything in it goes wrong, told and left out, so the material is built as it was without the wind. left_out: the part
+    named in that line ("the wind" unless said; "the lying normal" for lying_normal, whose failure leaves the Normal
+    as it was, the tooth or the mesh's own, and the material built)."""
     import traceback
     try:
         return make()
     except Exception:
-        unreal.log_error(f"Theater Command: {name} built without the wind:\n" + traceback.format_exc())
+        unreal.log_error(f"Theater Command: {name} built without {left_out}:\n" + traceback.format_exc())
         return None
 
 
-def wind_sheen(m, x, y, ripe=None):
+def wind_sheen(m, x, y, ripe=None, press_floored=False):
     """What a gust does to a field's look from afar: the grass and the corn bent over show their paler sides, so each
     gust runs over a field as a light patch and each lull as a darker one, moving with the lean (the same gusts). A
     share about 1, by "Sheen" (nothing unless C++ says). ripe: where the paint is ripe grain (0..1), by "SheenRipe"
-    there instead (the art director's round 1: ripe wheat, barley, gaoliang show it most)."""
-    gust, _, _ = wind_gust(m, x, y, False)
+    there instead (the art director's round 1: ripe wheat, barley, gaoliang show it most). press_floored (the blast
+    press's twins only): its GustSize held to PRESS_FLOOR too, as the twin's sway (wind_gust)."""
+    gust, _, _ = wind_gust(m, x, y, False, press_floored=press_floored)
     amount = scalar(m, "Sheen", 0.0, x + 1050, y + 100)
     if ripe is not None:
         amount = lerp(m, amount, scalar(m, "SheenRipe", 0.0, x + 1050, y + 200), ripe, x + 1200, y + 150)
@@ -2814,7 +3108,7 @@ def build_land_surface():
     finish(m)
 
 
-def build_land_leaves():
+def build_land_leaves(name="M_LandLeaves", press_twin=False, press_upright=False):
     """THE HEDGES' AND THE TREES' LEAVES (release 2; Brian, 22 November: "i want the grass and bushes and plants to
     look more realistic"). The ground battle's shrubs and trees carry their leaves on flat cards (LandField's LeafCard),
     each a spray of the leaves' picture (T_LandLeaves, Tools/land_look/make_leaf_textures.py): its twigs and leaves cut
@@ -2822,14 +3116,17 @@ def build_land_leaves():
     vertex colour is its paint (sRGB, made linear, as M_MapSurface's), the picture's colour a number about it (0.5 as
     painted: each leaf a little lighter or darker, a pale midrib, the twigs dark). Lit as foliage: what the sun shines
     through from behind glows a little, yellow-green ("Through", "ThroughStrength"). Instanced, as the shrubs and trees
-    are. Without it (build_content.py not run since it came) the game draws the old solid sprigs instead, said once."""
-    m = new_material("M_LandLeaves")
+    are. Without it (build_content.py not run since it came) the game draws the old solid sprigs instead, said once.
+    (press_twin, press_upright: M_LandLeavesPress, the same with the blast press, and the lean times how upright it stands
+    (without TC_LODGED; with TC_LODGED=1 the lodged stillness instead, on the wind's lean and on the press's capped lean):
+    wind_sway. In a twin the wind is never left out: it fails whole, and the game draws the plain one.)"""
+    m = new_material(name)
     m.set_editor_property("used_with_instanced_static_meshes", True)
     m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
     m.set_editor_property("two_sided", True)
     m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_TWO_SIDED_FOLIAGE)
     m.set_editor_property("opacity_mask_clip_value", 0.5)
-    leaves_picture = land_texture("T_LandLeaves", cut_out=True)
+    leaves_picture = (land_texture_kept if press_twin else land_texture)("T_LandLeaves", cut_out=True)
     colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
     to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
     connect(colour, "", to_linear, "Base")
@@ -2846,13 +3143,14 @@ def build_land_leaves():
     to_property(scalar(m, "Specular", 0.3, -200, 700), "", unreal.MaterialProperty.MP_SPECULAR)
     # (the wind: the tree or the shrub bends as its wood does, M_LandBlades with the same numbers, and each card
     # flutters besides; nothing unless C++ says. Brian, 23 November: grass, trees and sky "more visually realistic")
-    sway = windy("M_LandLeaves", lambda: wind_sway(m, -1800, 1000, leaves=True))
+    press_make = lambda: wind_sway(m, -1800, 1000, leaves=True, press_twin=press_twin, press_upright=press_upright)  # noqa: E731
+    sway = press_make() if press_twin else windy(name, press_make)
     if sway is not None:
         to_property(sway, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
     finish(m)
 
 
-def build_land_stalks():
+def build_land_stalks(name="M_LandStalks", press_twin=False, press_upright=False):
     """THE CORN NEAR THE LENS, STALK BY STALK (release 2; the art director on cut 4, fix 4: "the near wheat reads as
     paper"). Within 3.5 m of a low lens the corn's bundles are taken away and each clump drawn as its own stalks
     (LandField's Stalks: thin stems, drooping leaves, an ear of crossed strips, the poppies' cups), painted by vertex
@@ -2861,8 +3159,11 @@ def build_land_stalks():
     by dither (smoothed by the temporal anti-aliasing): in from "NearFrom" over "NearSpan" metres of depth, so no stalk
     stands across the lens itself, and out from "FarTo" less "FarSpan" to "FarTo" metres along the ground, where the
     bundles take over (the C++ sets all four, LandBattle::LoadInks). Its shadow ignores the fades. Instanced, as the
-    clutter is. Without it the corn keeps its bundles to the lens, said once."""
-    m = new_material("M_LandStalks")
+    clutter is. Without it the corn keeps its bundles to the lens, said once. (press_twin, press_upright: M_LandStalksPress, the
+    same with the blast press, and the lean times how upright it stands (without TC_LODGED; with TC_LODGED=1 the lodged
+    stillness instead, on the wind's lean and on the press's capped lean): wind_sway. In a twin the wind is never left
+    out: it fails whole, and the game draws the plain one.)"""
+    m = new_material(name)
     m.set_editor_property("used_with_instanced_static_meshes", True)
     m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
     m.set_editor_property("two_sided", False)
@@ -2873,15 +3174,18 @@ def build_land_stalks():
     connect(colour, "", to_linear, "Base")
     painted = times(m, to_linear, scalar(m, "Value", 1.0, -700, 150), -500, 50)
     # (the wind, as the corn's bundles beyond: M_LandBlades' numbers; nothing unless C++ says)
-    sheen = windy("M_LandStalks", lambda: wind_sheen(m, -2400, 1400))
-    sway = windy("M_LandStalks", lambda: wind_sway(m, -2400, 1800)) if sheen is not None else None
+    if press_twin:
+        sheen, sway = wind_sheen(m, -2400, 1400, press_floored=True), wind_sway(m, -2400, 1800, press_twin=True, press_upright=press_upright)
+    else:
+        sheen = windy(name, lambda: wind_sheen(m, -2400, 1400))
+        sway = windy(name, lambda: wind_sway(m, -2400, 1800, press_upright=press_upright)) if sheen is not None else None
     if sheen is not None and sway is not None:
         painted = times(m, painted, sheen, -450, 0)
         to_property(sway, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
     to_property(painted, "", unreal.MaterialProperty.MP_BASE_COLOR)
     # (the corn laid over by a blast, on trial "lodged", lit as a mat facing the sky; told and left out if it fails;
     # only in a build made with TC_LODGED=1, see LODGED)
-    lying = windy("M_LandStalks (lying normal)", lambda: lying_normal(m, -2400, 2600)) if LODGED else None
+    lying = windy(name, lambda: lying_normal(m, -2400, 2600), "the lying normal") if LODGED else None
     if lying is not None:
         to_property(lying, "", unreal.MaterialProperty.MP_NORMAL)
     through = times(m, times(m, painted, vector(m, "Through", (0.9, 1.0, 0.45, 1.0), -500, 250), -350, 200),
@@ -3347,6 +3651,51 @@ def build_night_sky():
         unreal.log_warning(f"Theater Command: M_NightSky was not built ({failed}): the sea's night sky stays empty")
 
 
+def build_pressed_or_tell(name, build):
+    """THE BLAST PRESS's twins (wind_sway's press; the game loads them in place of the plain ones only with
+    "-TheaterLandBlastPress", LandBattle::LoadInks): whatever goes wrong in one is told (once a run, as it is built once a
+    run), the half-built twin removed, and the game draws the plain material in its place (said once there); the rest of
+    the content is built as before. Its pictures are the ones already brought in (land_texture_kept): a twin never brings
+    in or saves again the pictures its plain material uses. True if the twin was built, False if its build failed (the
+    twin loop warns of a twin built without its plain material only on True). A half-built twin whose delete fails,
+    raising or returning False, is told in one red line: it could NOT be removed (the game would draw it)."""
+    import traceback
+    _TWIN_BUILD.add(name)
+    try:
+        build()
+    except Exception:
+        unreal.log_error(f"Theater Command: {name} was not built (the blast press draws the plain material, no press):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/{name}"):
+                if not eal.delete_asset(f"{MATERIALS}/{name}"):
+                    unreal.log_error(f"Theater Command: and the half-built {MATERIALS}/{name} could NOT be removed (delete_asset said no): "
+                                     f"the game loads a twin whenever its plain material loads, so with -TheaterLandBlastPress it would "
+                                     f"draw it: delete it by hand, or rebuild it (TC_REBUILD={name})")
+        except Exception:
+            unreal.log_error(f"Theater Command: and the half-built {name} could not be removed:\n" + traceback.format_exc())
+        return False
+    finally:
+        _TWIN_BUILD.discard(name)
+    # (what the twin's shader costs against its plain material's, for the Mac run's notes, as M_CloudTurned's; the plain
+    # one is only read, never changed. A shader that fails to compile raises nothing here and the twin is saved: so a
+    # twin that reports no vertex shader is told as a WARNING (the game would draw a twin that truly failed as the
+    # default material with the switch on). Only a warning, and the twin kept: nothing here waits for the editor's
+    # shader compile, so the count may simply not be ready yet; a 0 with no shader error in the log is not a failure)
+    for press_each in (name, name[:-len("Press")]):
+        try:
+            press_stats = mel.get_statistics(unreal.load_asset(f"{MATERIALS}/{press_each}.{press_each}"))
+            press_vertex = press_stats.get_editor_property('num_vertex_shader_instructions')
+            unreal.log(f"Theater Command: {press_each}: {press_vertex} vertex shader instructions, "
+                       f"{press_stats.get_editor_property('num_pixel_shader_instructions')} pixel")
+            if press_each == name and press_vertex <= 0:
+                unreal.log_warning(f"Theater Command: {name} reports no vertex shader yet: if a shader error for it is in the log above, the game "
+                                   f"may draw it as the default material with -TheaterLandBlastPress: rebuild it (TC_REBUILD={name}) or run without "
+                                   f"the switch; with no such error the count may only not be ready")
+        except Exception:
+            pass
+    return True
+
+
 # Each asset is left alone if it is already there, so adding one does not rewrite the others.
 # Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
 import os
@@ -3356,6 +3705,7 @@ REBUILD = os.environ.get("TC_REBUILD", "")
 # trial word, so without it M_LandBlades, M_LandLeaves and M_LandStalks are built node for node as before. To try the
 # word on the Mac: TC_LODGED=1 TC_REBUILD=M_LandBlades,M_LandLeaves,M_LandStalks; the same without TC_LODGED puts them back.)
 LODGED = os.environ.get("TC_LODGED", "") == "1"
+BUILT_THIS_RUN = set()  # (the materials the loop below built in this run: the blast press's twins follow their plain ones)
 # (M_LandSurface, the ground battle's ground, comes after M_MapSurface and can never stop the rest: see
 # build_land_surface_or_tell. After the pictures are painted again, TC_REBUILD=M_LandSurface brings them in again.
 # M_LandLeaves, its hedges' and trees' leaves, the same: TC_REBUILD=M_LandLeaves after make_leaf_textures.py.
@@ -3385,6 +3735,44 @@ for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_l
                 build()
             except Exception as why:
                 unreal.log_error(f"Theater Command: {MATERIALS}/{name} was not built: {why}")
+        if eal.does_asset_exist(f"{MATERIALS}/{name}"):
+            BUILT_THIS_RUN.add(name)
+    else:
+        unreal.log(f"Theater Command: {MATERIALS}/{name} already exists, left alone")
+# (The blast press's twins, the same: built when missing or named, and whenever their plain material was built in this
+# run (BUILT_THIS_RUN), so TC_REBUILD=M_LandBlades remakes M_LandBladesPress too and a change to the wind can never leave
+# the switched-on grass on the old sway. TC_REBUILD=M_LandBladesPress alone remakes only the twin. A twin whose plain
+# material is missing after the loop above (its build failed, or it was never built) is not built, and a twin of it
+# left from an earlier run is DELETED here, said in one line, so no old twin outlives its plain material. The game
+# too (LandBattle::LoadInks) takes a twin only if its plain material loads, so switched on or off it then draws the
+# same thing.)
+for name, build in (("M_LandBladesPress", lambda: build_pressed_or_tell("M_LandBladesPress", lambda: build_map_surface("M_LandBladesPress", sway=True, press_twin=True, press_upright=True))),
+                    ("M_LandLeavesPress", lambda: build_pressed_or_tell("M_LandLeavesPress", lambda: build_land_leaves("M_LandLeavesPress", press_twin=True, press_upright=True))),
+                    ("M_LandStalksPress", lambda: build_pressed_or_tell("M_LandStalksPress", lambda: build_land_stalks("M_LandStalksPress", press_twin=True, press_upright=True)))):
+    if not eal.does_asset_exist(f"{MATERIALS}/{name[:-len('Press')]}"):
+        if eal.does_asset_exist(f"{MATERIALS}/{name}"):
+            try:
+                press_gone = eal.delete_asset(f"{MATERIALS}/{name}")
+            except Exception as press_error:
+                press_gone, press_why = False, str(press_error)
+            else:
+                press_why = "delete_asset said no"
+            if press_gone:
+                unreal.log_warning(f"Theater Command: {MATERIALS}/{name} DELETED (an old one): its plain material {name[:-len('Press')]} is missing")
+            else:
+                unreal.log_error(f"Theater Command: {MATERIALS}/{name} could NOT be deleted ({press_why}): its plain material {name[:-len('Press')]} is missing; the game will not use it (it loads a twin only with its plain material), delete it by hand")
+        else:
+            unreal.log_warning(f"Theater Command: {MATERIALS}/{name} not built: its plain material {name[:-len('Press')]} is missing")
+    elif REBUILD == "all" or name in REBUILD.split(",") or name[:-len("Press")] in BUILT_THIS_RUN or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
+        press_built = build()
+        # (a twin built in a run that did not build its plain material, missing or named alone, takes this run's
+        # TC_LODGED, which nothing on the assets records: said once, so a plain material built otherwise is put right;
+        # only when the twin's build succeeded (build_pressed_or_tell says so), never of a half-built one left behind)
+        if name[:-len("Press")] not in BUILT_THIS_RUN and eal.does_asset_exist(f"{MATERIALS}/{name}") and press_built:
+            unreal.log_warning(f"Theater Command: {MATERIALS}/{name} built without its plain material {name[:-len('Press')]}, "
+                               f"with TC_LODGED={'1' if LODGED else 'unset'} (this run): if M_LandBlades, M_LandLeaves and "
+                               f"M_LandStalks were built with another TC_LODGED, build all six in one run with the same TC_LODGED "
+                               f"(TC_REBUILD=M_LandBlades,M_LandLeaves,M_LandStalks remakes the three twins with them)")
     else:
         unreal.log(f"Theater Command: {MATERIALS}/{name} already exists, left alone")
 def build_battle_puffs(name="M_BattlePuffs", soft=False):
