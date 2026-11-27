@@ -786,6 +786,171 @@ void FBattleEffects::SeaSplash(const FVector& WorldAt, float CalibreMm, const FS
 	});
 }
 
+// Release 2, the ten dramatic moments: the sea's items 9, 10 and 11 (the core's TheaterFxSea.inl)
+void FBattleEffects::DeckDrench(const FVector& ColumnAt, float CalibreMm, const FVector& Toward, float DeckZ, int32 ShipId, float BeamMetres)
+{
+	Do([=, this]()
+	{
+		// (Toward is a length as well as a way: world units to metres, as a place is; her beam is metres already)
+		Core.DeckDrench(Time(), ToFx(ColumnAt), CalibreMm, ToFx(Toward), DeckZ / UnitsPerMetre, ShipId, BeamMetres);
+	});
+}
+
+void FBattleEffects::ShipRide(int32 ShipId, const FTransform& Hull, float LongMetres, float HalfBeamMetres, float CoamingMetres, float DeckMetres)
+{
+	TheaterFx::Battle::ShipPose Pose;
+	Pose.At = ToFx(Hull.GetLocation());
+	Pose.Fore = ToFxWay(Hull.GetUnitAxis(EAxis::X));
+	Pose.Left = ToFxWay(-Hull.GetUnitAxis(EAxis::Y)); // (her port side: Unreal's Y with X her bow and Z up is to starboard)
+	Pose.Up = ToFxWay(Hull.GetUnitAxis(EAxis::Z));
+	Pose.Long = LongMetres;
+	Pose.HalfBeam = HalfBeamMetres;
+	Pose.Coaming = CoamingMetres;
+	Pose.Deck = DeckMetres; // (her deck over her waterline: the deck's brass lies on it)
+	Do([=, this]()
+	{
+		Core.ShipRide(Time(), ShipId, Pose);
+	});
+}
+
+void FBattleEffects::ShipRideStop(int32 ShipId)
+{
+	Do([=, this]()
+	{
+		Core.ShipRideStop(ShipId);
+	});
+}
+
+void FBattleEffects::DeckWash(int32 ShipId, const TArray<FVector>& EdgeMetres, float Strength, float Seconds, const FString& Kind)
+{
+	// (already metres in her frame: copied as they are)
+	std::vector<TheaterFx::Vec> Edge;
+	Edge.reserve(EdgeMetres.Num());
+	for (const FVector& P : EdgeMetres)
+	{
+		Edge.emplace_back(P.X, P.Y, P.Z);
+	}
+	const std::string Named_ = Named(Kind);
+	Do([=, this]()
+	{
+		Core.DeckWash(Time(), ShipId, Edge.data(), static_cast<int>(Edge.size()), Strength, Seconds, Named_.c_str());
+	});
+}
+
+void FBattleEffects::DeckWashStop(int32 ShipId)
+{
+	Do([=, this]()
+	{
+		Core.DeckWashStop(Time(), ShipId);
+	});
+}
+
+void FBattleEffects::OilLeak(int32 ShipId, const FVector& WorldAt, float Rate)
+{
+	Do([=, this]()
+	{
+		Core.OilLeak(Time(), ShipId, ToFx(WorldAt), Rate);
+	});
+}
+
+void FBattleEffects::OilLeakStop(int32 ShipId)
+{
+	Do([=, this]()
+	{
+		Core.OilLeakStop(Time(), ShipId);
+	});
+}
+
+int32 FBattleEffects::OilLane(int32 ShipId, TArray<FOilLanePoint>& Out) const
+{
+	Out.Reset();
+	if (!IsReady())
+	{
+		return 0;
+	}
+	// (the lanes alone: nothing the kit's draw on its worker reads or writes)
+	std::vector<TheaterFx::Battle::LanePoint> Strip;
+	Core.OilLane(Time(), ShipId, Strip);
+	Out.Reserve(static_cast<int32>(Strip.size()));
+	for (const TheaterFx::Battle::LanePoint& P : Strip)
+	{
+		FOilLanePoint& L = Out.AddDefaulted_GetRef();
+		const FVector Mid(P.At.X, P.At.Y, P.At.Z), Across(P.Across.X, P.Across.Y, P.Across.Z);
+		L.Mid = Mid * UnitsPerMetre;
+		L.LeftEdge = (Mid + Across * P.Left) * UnitsPerMetre;
+		L.RightEdge = (Mid - Across * P.Right) * UnitsPerMetre;
+		L.Dark = static_cast<float>(P.Dark);
+		L.Sheen = static_cast<float>(P.Sheen);
+		L.AgeSeconds = static_cast<float>(P.Age);
+	}
+	return Out.Num();
+}
+
+FOilLaneLook FBattleEffects::OilLook(float Dark, double MidPixels, double GrazeDegrees) const
+{
+	FOilLaneLook Out;
+	if (!IsReady())
+	{
+		return Out;
+	}
+	// (the recipe alone: nothing the kit's draw on its worker reads or writes)
+	return OilLook(OilRule(), Dark, MidPixels, GrazeDegrees);
+}
+
+FOilLaneRule FBattleEffects::OilRule() const
+{
+	FOilLaneRule Out;
+	if (IsReady())
+	{
+		Out.Rule = Core.OilRule();
+	}
+	return Out;
+}
+
+FOilLaneLook FBattleEffects::OilLook(const FOilLaneRule& Rule, float Dark, double MidPixels, double GrazeDegrees, double CalmShare)
+{
+	FOilLaneLook Out;
+	const TheaterFx::Battle::LaneLook L = TheaterFx::Battle::OilLook(Rule.Rule, static_cast<double>(Dark), MidPixels, GrazeDegrees, CalmShare);
+	Out.Widen = static_cast<float>(L.Widen);
+	Out.Mid = static_cast<float>(L.Mid);
+	Out.Shoulder = static_cast<float>(L.Shoulder);
+	Out.Calm = static_cast<float>(L.Calm);
+	Out.CalmAlpha = static_cast<float>(L.CalmAlpha);
+	return Out;
+}
+
+void FBattleEffects::OilLanes(TArray<int32>& Ships) const
+{
+	Ships.Reset();
+	if (!IsReady())
+	{
+		return;
+	}
+	std::vector<int> Have;
+	Core.OilLanes(Have);
+	for (const int Id : Have)
+	{
+		Ships.Add(Id);
+	}
+}
+
+void FBattleEffects::DeckBrass(int32 ShipId, const FVector& Breech, const FVector& Away, const FString& Kind, int32 Count)
+{
+	const std::string Named_ = Named(Kind);
+	Do([=, this]()
+	{
+		Core.DeckBrass(Time(), ShipId, ToFx(Breech), ToFxWay(Away), Named_.c_str(), Count);
+	});
+}
+
+void FBattleEffects::AirGunShip(int32 Gun, int32 ShipId)
+{
+	Do([=, this]()
+	{
+		Core.AirGunShip(Gun, ShipId);
+	});
+}
+
 void FBattleEffects::SetWind(const FVector& MetresPerSecond)
 {
 	Do([=, this]()
