@@ -84,6 +84,25 @@ struct FLandBattleState
 	LandBurn::Director Burns;
 	/** Effects (R2): the crews getting out of knocked-out tanks, -TheaterLandBailOut (LandBail). */
 	LandBail::Book Bails;
+	/** Effects (R2): the blood mist at a bullet's strike, -TheaterLandHitMist: on, the battle time the men's strikes were
+	 * last asked up to (under 0: not yet), and this frame's (LandMen::Crowd::StrikesIn, handed to the kit's Struck). */
+	bool bHitMist = false;
+	double StruckAsked = -1.0;
+	std::vector<LandMen::Crowd::Strike> StrikesNow;
+	/** Effects (R2), item 7 of Brian's film details (26 November): a gun's smoke after the shot (-TheaterLandBarrelSmoke),
+	 * a closed tank's hatch fumes and the odd case (-TheaterLandHatchFumes), cases over an open gun's side
+	 * (-TheaterLandCasesOut); read in Open. ShotsOf: each vehicle's shots so far, counted at her case_clang. */
+	bool bBarrelSmoke = false, bHatchFumes = false, bCasesOut = false;
+	TMap<int32, int32> ShotsOf;
+	/** Effects (R2), the mend of 27 November (-TheaterLandBarrelSmoke): where a vehicle's muzzle was (world) when she last
+	 * fired standing still, her heading (radians), turret and traverse (degrees) then, and the battle time: when she
+	 * moves off or turns, her wisp is laid there no more (FBattleEffects::WispStop). */
+	struct FWispFrom
+	{
+		FVector At = FVector::ZeroVector;
+		double Heading = 0.0, Turret = 0.0, Traverse = 0.0, T = 0.0;
+	};
+	TMap<int32, FWispFrom> WispFrom;
 	/** Effects (R2): the fighters on call over the field, -TheaterLandAirSupport (LandAir; the scene's FlyOver,
 	 * Battle/LandBattleAir.cpp): the plan, and what the effects kit has been told of it. */
 	struct FAirSupport

@@ -925,6 +925,37 @@ pass. Without it the battle is as before, and the log's line "small arms on armo
 - **Mac ticket**: /mnt/project-files/effects-r2/tickets/ricochet-ticket.md. **Pictures**:
   `/mnt/project-files/battle-fx/ricochet/` (the kit's preview, `fxpreview ... ricochet 30|150|600`), with notes.
 
+## Gun smoke after the shot and spent cases (release 2, off until passed)
+
+Brian, 26 November ("lets try to add more visual dramatic things like that", then "do 2-11"), item 7 of the film
+details. Three launch words, each read in `ALandBattle::Open` beside `-TheaterLandGunFlash`, each laying its own
+overlay over the effects recipe (`Effects->LayOver`, before `Begin`). Without them every piece is drawn as before (the
+kit's `Tools/fx_ten/run.sh` holds a scripted fight's every piece to the kit before, byte for byte).
+
+- `-TheaterLandBarrelSmoke` (`battle-fx-barrel.json`): after a tank gun, an anti-tank gun or a howitzer fires, a thin
+  faint wisp curls from the muzzle for 4 to 7 s once the shot's smoke has rolled off (from 3 to 4 s after it; the
+  howitzer from 5 to 6.5 s). The kit lays it inside `Muzzle` (`muzzle.<gun>.after_wisp`), only within 300 m of the eye,
+  one a gun at once, 16 on the field at most. And a towed gun's or an open self-propelled gun's breech puffs a small
+  grey-brown puff back toward her loader as her case comes out: her `case_clang` beat in `PlayArmourEvents`, before
+  the picture's filter, a `Steam` of row `breech` at her `breech` socket, its number her beat's `E.Key + 300000`,
+  only within 150 m of the eye.
+- `-TheaterLandHatchFumes` (`battle-fx-hatch.json`): a closed tank kept her spent cases inside. With her hatch open
+  (`V.HatchOpen > 0.5`) a faint wisp of fumes rises from her commander's hatch on her 2nd, 5th, 7th, 10th ... shot by
+  her own count (two in five), within 150 m, only when she is stopped (the `Steam` is laid at one place and does not
+  ride with her, so on the move it would hang where her hatch was: the kit's `AfterShotOf` holds it, and the scene
+  calls no `SteamMove` for it; should she start off or shut her hatch inside its 2 s, the last of it stays put); and
+  one shot in eight, only when she is stopped, a case is pitched out of
+  the hatch to one side (`ThrowCase`, row `ground_cases.tank`, within 40 m of the eye as every lying case).
+- `-TheaterLandCasesOut` (`battle-fx-cases-out.json`): an open self-propelled gun (kind `tank` with a `crew.loader`
+  socket: the M7, the Hummel, the Sexton, the SU-76 and the M10) heaves seven cases in ten over her side, from her
+  loader's place out over the side he stands nearer to; they lie three to five minutes (`ground_cases.spg`), within
+  the kit's `most_lying` 200 and 40 m of the eye.
+- Who does what is `TheaterFx::AfterShotOf` (plain, held in the cloud test); `S.ShotsOf` counts each vehicle's shots
+  at her `case_clang`. The shipped recordings have no open self-propelled gun: they come in campaign battles with the
+  Battle rules card's `spg` (and `td` for the M10) rows on.
+- Known: a tank firing on the move leaves her wisp where her muzzle was (the kit's muzzle smoke does the same); the
+  art director to see it from 40 m.
+
 ## Shell and tank hits take limbs off (release 2, off until passed)
 
 Brian, 22 November: "make more graphic animations if a guy gets shot or blown up", "with limbs coming off"; and the
@@ -1354,6 +1385,52 @@ feed's halves and the blasts' knock-down come in a later build.
   white; three wounded men and a dead one at 0.5, 2, 5 and 20 s, close and at about 50 m; and a dense moment of
   normandy-1944-air from a battle camera's slant while the last men still fall, today and every part on. In
   `battle-fx/hits/pictures/`.
+
+## The blood mist at a bullet's strike (effects, off until passed)
+
+Brian, 26 November: "i do want a better look when a guy gets hit", "like a puff or mist of blood". Behind
+`-TheaterLandHitMist` (read in `MakeMen` beside `-TheaterLandHits`) and the recipe row `men.struck`. Off: nothing is
+asked of the men and nothing drawn, as before.
+
+- **The round arrives (`Hits::bArrive`, on with `-TheaterLandHits`).** A man killed by a rifle's, an mg's, a
+  sub-machine gun's or a pistol's round used to fall at the round's firing time while its tracer arrived range / 760
+  s later. Now his jolt, fall and strike start when it arrives: d + range / 760 m/s of life (the range from where his
+  firer's track stood at the round's time), at most 0.5 s of life (0.25 battle s at Life 2) and never more than 0.5
+  battle s. No firer known: at d. Wounds (`wd`) keep their time (the rules give them no round). What moves: the fall's
+  start by the flight alone (0.25 battle s at most in all four recordings); its end with it, and where his stance or
+  his neighbours' falls read a moment later give another clip, by that clip's length (14, 11, 108 and 23 men took
+  another clip; the latest came to rest 0.53, 0.50, 4.07 and 4.60 s later). Where he lies moves by the ground his
+  track covers in that moment (0.25 to 0.65 m at most), never farther from the place the rules killed him (he lags the
+  recording by his own delay, so a later fall finds him nearer it). Safe for the rules' bodies: the body count, the
+  gore twin, his last shot and every scene query read `d` (`ManInfo::Dead`), not the fall; bearers carry the wounded
+  (`cy`), whose times do not move; and the fall's own picks keep their dice. With `-TheaterLandHits` off nothing
+  moves: 4060f0923's land_hits test prints the same over the four recordings, g++ and clang++.
+- **The strike (`Crowd::StrikesIn(After, To, Out)`, `Crowd::Strike`).** Each man a bullet struck with T in (After,
+  To]: T (his fall's start, or a wounded man's going down), `At` and `Part` (`StruckPlace`, as posed now: ask after
+  `Update`), `Dir` (the round's way, a unit: from his firer's place as it fired, a metre over the ground there, to
+  At; none known, or a wound, level from his front), `Gun` (rifle, mg, smg, pistol; "other" for a wound), `Range`,
+  `bKilled`. None for a mortar's, a gun's, a tank's, a grenade's, a fire's or a track's death, none for riders; one
+  for each fall (a wounded man killed where he lies has two). A pure function of the recording and the time, so a
+  replay or a seek lists the same.
+- **The scene (`Tick`, after `S.Men->Update(Shown)`).** Each frame the men are asked for the strikes since the last
+  frame and each handed to `FBattleEffects::Struck` (its place and way through `World`/`WorldWay`). A seek back asks
+  again from where it lands; a jump forward only its last half second, so no burst of old strikes.
+- **The look (the kit's `Battle::Struck`, `tools/battle-fx/README.md`).** Where it goes in a pale puff of cloth dust,
+  gone in a quarter second; where it passes through (rifle and mg 8 in 10, a limb 9 in 10, smg 3 in 10, pistol 1 in
+  4) a fine dull red-pink mist thrown on along the round's path a forearm to an arm long, widening, gone in 0.3 to 0.5
+  s, and 2 or 3 dark drops falling short; a head strike a shorter, denser puff. Nine pieces at the most, all gone
+  within the second, no lamp, nothing on the ground. Under the land grade the young mist lands about 111,69,48 and
+  thins darker and browner, about 91,64,54, never paler (a pale tail read as dust over dark woods); against the sky,
+  thin as it is, it is not black but a pale warm grey-rose darker than the sky (151,144,143 against 169,171,174 at +0.05 s, 180,177,180 against 203,206,210 at +0.15 s in the graded 20 m picture). Seen end-on its pieces start a little apart across the path as well as along it, so it is an uneven smear on his back, not a ball.
+- **The head.** A man whose fall is one of his file's `die_head_*` (with the hits' variety, about 1 in 10 rifle or mg
+  deaths are struck in the head by his own dice, which weighs the head falls four times) is struck on the head: `StruckPlace` gives the head bone's place, a hand over its joint, and the
+  part "head", so the kit draws the head's shorter, denser puff there. The other falls give their own part, else the
+  chest. Seen in `mist_head.png`, drawn from such a fall (no stand-in place).
+- **Without `-TheaterLandHits`.** The mist still comes, at each bullet fall's start (the round's firing time, no
+  jolt, the old falls): the strike drawn a moment before its tracer arrives. Nothing harmful; best with both words.
+- **Tests and pictures.** `Tools/land_mist/run.sh` (with `LAND_MIST_BASE=d226a786d` also the word-absent proof);
+  `land_mist_picture.cpp`, `land_mist_pictures.py`; pictures in `battle-fx/hits/pictures/mist_*.png`; the Mac ticket
+  `effects-r2/tickets/hit-mist-ticket.md`.
 
 ## The fighters on call over the field (release 2, off until passed)
 

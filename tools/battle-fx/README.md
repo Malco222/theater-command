@@ -2280,6 +2280,148 @@ because the lamps went to the strongest flashes alone.
 - Preview: `FX_GUN=naval_heavy` on the sea shot.
 - Notes for the sea scene: `/mnt/project-files/sea-storm-night/effects-lamps-for-sea.md`.
 
+## A bullet striking a man: the blood mist (men.struck, behind the scene's -TheaterLandHitMist)
+
+Brian, 26 November: "i do want a better look when a guy gets hit", "like a puff or mist of blood". The look is what a
+rifle's or a machine gun's round truly did, sober, never a game's: `Battle::Struck(Now, At, Dir, Weapon, Part,
+Through = -1)`, called by the land scene for each man a bullet strikes (LandMen's `Crowd::StrikesIn`: where on him,
+the way the round went, its weapon, the part struck).
+
+- **Where it goes in:** almost nothing. One pale puff of cloth dust off the tunic (`entry`: 7 to 11 cm, alpha 0.35,
+  kicked a little back toward the shot), gone in 0.2 to 0.28 s.
+- **Whether it passes through:** the strike's own dice, by weapon (`through`): rifle and mg 0.8 (full-power 7.92 mm,
+  .303, .30-06 and 7.62 mm rounds at 750 to 850 m/s mostly went through the body at battle ranges), sub-machine gun
+  0.3 and pistol 0.25 (the slower 9 mm or .45 mostly stayed in), a wound with no round known 0.4; times `limb_k` 1.15
+  through an arm or a leg (rifle 0.92), `head_k` 1 through the head. A lodged round: the cloth puff alone.
+- **Where it leaves:** a fine dull red-pink mist thrown on along the round's path from 10 cm past the strike (`mist`:
+  3 to 4 puffs strung along it by their speeds, each set off a little further along it (`exit_step_m` 0.1 m times
+  its share), set off a little across it too (`side_m` 0.06 m times each piece's own jitter with its part along the
+  path taken out: no new die), sized by its place along it (`r1_share_k` 0.6: the first smaller, the last larger),
+  the first thinner (`first_alpha_k` 0.8: alpha 0.4), and spread a fifth of a radian about it (`spread` 0.2), so
+  seen end-on, along the line of sight, it breaks into an uneven smear, not a ball (no `side_m`, `r1_share_k` or
+  `first_alpha_k` row: as before, to the byte); 3 to 8 m/s against drag 10, so 0.3 to 0.8 m: a forearm to an arm
+  long), each widening to 14 to 24 cm and thinning along the throw, alpha 0.5 down to a third less at its end, gone
+  in 0.3 to 0.5 s, the young colour turning darker and browner as it thins, never paler (`colour`, `colour_late`: a
+  pale tail over dark ground read as dust), its alpha carrying the thinning (`hold` 0.06: it starts to thin early). A head strike (`head`): 4 to
+  5 puffs, shorter (2 to 5 m/s, drag 12), smaller and denser (alpha 0.62), gone in 0.25 to 0.4 s. And 2 to 3 heavier
+  dark drops (`drops`: streaks 6 to 10 mm, falling under gravity, gone in 0.3 to 0.45 s, within a metre).
+- **Bounded:** nine pieces at the most (1 + 5 + 3), all gone within the second; no lamp, no mark, nothing on the
+  ground. Nothing past `within_m` (400 m) of the eye, or with the screen's room `room_share` (0.8) full of what can be
+  drawn. Far off a mist puff is held at `mist.least_px` (2 px) across and thinned to match, never under `least_keep`
+  (0.35) of itself: a few pixels of dark pink at 100 m that fade rather than pop, next to nothing at 300 m.
+- **Colour, written to land:** the land battle grades its own picture, so the row's colours under `land_grade.men.struck`
+  are written with `land_grade.py write` and land (`land_grade.py lands`): the mist young 162,97,47 lands 111,69,48 (aimed at 110,66,46: green
+  well over blue, so it holds red-brown and not mauve as it blends into a blue-grey sky; 112,64,56 was not enough), as
+  it thins 141,101,77 lands 91,64,54 (darker and browner than the young, aimed at 92,66,54), the drops 126,64,58 land 55,23,25, the cloth 166,154,126 lands 152,146,128. The
+  plain row (`men.struck`, for the game's own curve) lands about the same through `game_curve.py`. A dull dark
+  pink-brown against the grass; against the sky, thin as it is, a pale rose-grey darker than the sky (measured in the graded 20 m picture: 151,144,143 against 169,171,174 at +0.05 s, 180,177,180 against 203,206,210 at +0.15 s; green now at or a little above blue young, about level with it as it thins: a warm grey-rose, no longer mauve, but not red-brown either; thin over a bright sky a dark mist cannot land dark),
+  not black; not paint. **The red is the art director's to rule on.**
+- **Own dice** (the strike's place and its time in ms), so every other effect draws as before with strikes among
+  them; one draw a statement.
+- **Switch:** the call itself and the row. No call, or no `men.struck.on` in the recipe: nothing is laid or drawn, and
+  every frame of the kit is as before to the byte (fxpreview: 4060f0923's core and recipe against this core with
+  4060f0923's recipe and with this recipe, the men.struck row in and never called: 8 shots, 18 frames and their prints,
+  the same; the land grade, sRGB bytes and soft contact among them).
+- **Tests and pictures:** `unreal/TheaterCommand/Tools/land_mist/run.sh` (the kit alone, the men's strikes, the four
+  recordings, g++ and clang++); `land_mist_picture.cpp` and `land_mist_pictures.py` (the men from LandMen's own skinning
+  with the kit's previewer's painter, graded through the land battle's grade). Pictures in
+  `battle-fx/hits/pictures/mist_*.png`.
+
+## The film details, first batch: flak by its size, no false brass at sea, gun smoke after the shot, spent cases (release 2, each behind its launch word)
+
+Brian, 26 November: "i like the debris coming off the planes when hit", "lets try to add more visual dramatic things
+like that", then "do 2-11". This batch is the part the kit can make alone (the plan's item 3 part 1, item 7 parts 1
+to 4, item 11 part 1). Every new row is in an overlay recipe laid over `fx.json` only when its launch word is given,
+as `fx-film.json` is; the shipped `fx.json` is unchanged. Without the words every piece is laid as before.
+
+| Word | Overlay (`tools/battle-fx/`, and `Content/Effects/battle-` + the same name) | Read in |
+|---|---|---|
+| `-TheaterAirFlakKinds` | `fx-flak.json` | the wrapper's `FBattleEffects::Begin`, for every kit (the air scene's, the sea scene's) |
+| `-TheaterSeaNoFalseCases` | `fx-sea-cases.json` | `ASeaBattle::OpenOn`, before its kit's `Begin` |
+| `-TheaterLandBarrelSmoke` | `fx-barrel.json` | `ALandBattle::Open`, beside `-TheaterLandGunFlash` |
+| `-TheaterLandHatchFumes` | `fx-hatch.json` | the same |
+| `-TheaterLandCasesOut` | `fx-cases-out.json` | the same |
+
+- **Flak by its size** (`air_flak.medium`, `air_flak.light`, `linger.flak.by.<kind>`). Today only `heavy` has a row,
+  so light and medium burst as heavy. Medium: a 37 to 40 mm burst, 6 to 8 m, dark grey, gone in about 5 s and
+  lingering to 9 s. Light: a 20 mm self-destruct burst, a small grey puff 3 to 4 m (grey, not white), gone in about
+  3 s and lingering to 5.5 s. `AirFlak` asks `LingerOf("flak", kind)` only where `linger.flak.by.<kind>.gone_s` is in
+  the recipe: asked by a name with no row, `LingerOf` gives no linger at all, so heavy is still asked by no name.
+  Which puffs of a cloud stay is drawn on one count, `LingerNo`, shared by every lingering cloud. A light or medium
+  burst lays fewer lobes than the heavy one it was before, so it would move that count and every cloud lingered after
+  it (heavy bursts, a cannon hit's smoke). So `AirFlak` lays heavy dry first (its pieces and its lamp taken away, the
+  shared `Seeds` put back) to find where the count would have stood, lingers the new kind on a count of its own from
+  the place and the time, then sets `LingerNo` there: a heavy burst or a cannon hit laid after them is piece for
+  piece as without the word (fx_ten checks it). Where the room is short (`LingerSpare`), a heavy cloud may still keep
+  fewer or more puffs than before, as the room holds fewer pieces.
+  Colours written to land (`game_curve.py write`): medium 68,68,66 lands 40,40,38 and greys to 129,127,124 (lands
+  135,132,128); light 88,88,87 lands 70,70,68, greying to 139,138,136 (lands 150,148,145). The mend of 27 November:
+  from a deck 400 m off the first cut drew light and medium as thin dark dashes about 5 x 2 px, a light barrage an
+  empty sky. Light is now rounder (`lobe_r` 0.45 to 0.6, `wisps` 0 to 1, `stretch_mps` 0.5, alpha 0.6) and held to
+  `least_px` 7; medium `stretch_mps` 1.0, held to 9 px. Measured as heavy's 22 m is (the mean of eight bursts at 2 s)
+  light stands 3.4 m on both compilers and medium 6.8 m (g++) and 6.5 m (clang++); their `long_m` (4.7 and 9.3) are
+  written in that measure, which reads a rounder burst smaller.
+- **No false brass at sea** (`ground_cases.not_on: ["water"]`). The sea scene's big turrets fire by the howitzer's row
+  in its default seed mode, and that row threw a 0.4 m field-gun case on the water 2.5 m behind the muzzle (within
+  40 m of the eye), left where it fell as the ship steamed on. `CaseRowOf` now takes the ground the gun stands on
+  (every sea `Muzzle` passes "water"; a ground with no switch of its own is passed as it is) and gives no case on a
+  ground the list names. Without the key: as before.
+- **The barrel's wisp** (`muzzle.<gun>.after_wisp`, tank gun, anti-tank gun, howitzer). Laid last in `Muzzle`
+  (`AfterWisp`): a thin wisp from the bore, one ribbon of 28 to 36 small round puffs (`stretch` 1; the first cut's 10
+  to 15 puffs stretched upright read as a row of tally marks) 0.06 to 0.1 m at the mouth to 0.45 to 0.7 m, each
+  leaning a little further along one slow curl (a sine over the wisp, a little jitter on it), alpha 0.42 to 0.5 at
+  the bore and thinner as the barrel cools (`cool` 0.6), a warm grey (124,119,112 to 138,134,128, near the breech puff's), from 3 to 4 s after the shot for 5 to 7 s (the howitzer 5 to 6.5 s, for
+  6 to 8 s), rising 0.35 to 0.6 m/s and leaning on the wind. Only within `within_m` (300) of the eye, `per_gun` (1)
+  from one gun's place (`same_gun_m`, 3 m) and `most` (16) on the field at once, and only while the screen is under
+  two fifths full. Each puff is held to `least_px` (2) across and thinner to match. Its own dice from the place and
+  the moment. It has a room of its own: its pieces (`Bit::bWisp`, at most 16 x 36) are left out of `RoomAsked` and
+  `RoomSeen`, so no gate that reads how full the room is changes for them; in forty guns firing for five minutes
+  every piece laid without the word is laid with it. The mend of 27 November (its far end thickened, as the look
+  review asked; the first ribbon, 0.26 to 0.5 m at alpha 0.3 to 0.4, darkened the sky by a median 4 to 6 levels at
+  60 m): in the previewer (1200 px, 42 degrees, eye 2 m up, the game's curve) a tank gun's wisp at 60 m is a thread
+  at least 10 levels darker than the sky 6 to 11 px wide over 9 to 13 rows at 4.5 to 6 s (up to 26 levels), at 100 m
+  5 to 7 px wide over 5 to 7 rows, at 150 m 3 px over 5 rows; gone by 10.5 s. At its biggest (817 px, 69 x 32 px at
+  60 m) it is under a twentieth of the shot's own smoke at 1 to 2 s (17,000 to 27,000 px, 250 to 300 px across).
+  The round-4 mend (27 November): smoke stays in the air where it was made, never made where the muzzle has left. A
+  gun on the move lays none: the land scene finds the vehicle whose `muzzle` socket fired (the nearest within 3 m)
+  and passes `Muzzle(..., bMoving)` (only with the word). One that fired at the halt and then moves off, or turns her
+  hull, turret or traverse a degree, gets `Battle::WispStop(Now, At)`: the wisp's puffs not yet born are cut
+  (`Bit::CutAt`, never drawn), those in the air drift and fade where they are. No dice. A towed gun never moves.
+- **The breech's puff** (`steam.breech`): a `Steam` row, grey-brown (written 120,114,108, lands 120,112,102), 0.8 to
+  1.3 m from a 0.25 m breech, 1 to 1.8 s rags, alpha 0.45, held to 3 px. The land scene calls it at a towed gun's or an open
+  self-propelled gun's `case_clang`, at her `breech` socket, back toward her loader. `steam.<row>.least_px` is new
+  for every steam row (0, none, unless a row gives it).
+- **Hatch fumes** (`steam.hatch_fumes`): a faint pale grey wisp (127,126,124, lands 132,130,127; alpha 0.34) rising
+  0.6 to 1.1 m from a closed tank's open hatch on two shots in five by her count, only when she is stopped: the
+  scene's `Steam` is laid at one place and does not ride with her, so on the move it would hang where her hatch was.
+- **Cases thrown by a crew** (`Battle::ThrowCase(Now, At, Away, Kind, Key)`, rows `ground_cases.spg` and
+  `ground_cases.tank`): a case through `CaseRowOf` and `GroundCase`, so within `within_m` of the eye (a row's own
+  `within_m` where it gives one, else the shared 40: `spg` 150, so an open gun's pile is by her when the camera cuts
+  in from the general's place, and `tank` 100; drawn only within `draw_within_m` 150), under
+  `most_lying` and the screen's three fifths as the towed guns' are; its length within `case_long_m`, at the row's
+  `odds` against its own dice (from Key, the place and the moment). `spg`: 0.37 to 0.45 m, thrown 1.5 to 3 m/s, lying
+  180 to 300 s, odds 0.7. `tank`: one pitched out of a hatch, 0.35 to 0.5 m, lying 180 to 240 s. Both are dull
+  handled brass, not the towed guns' shine: a row may give its own `colour`, `shade` and `glint` (read in `CaseRowOf`,
+  the shared `ground_cases` values the fallback, so nothing else changes): colour 140,120,89 (lands 150,122,72 on the
+  game's curve, 105,91,71 under the land battle's grade), shade 106,91,67 (lands 96,74,40; 55,49,38), glint 1 (the
+  shared 196,156,82 lands 208,172,55 on the game's curve, 177,151,112 under the land grade, glint 4).
+- Who does what at a `case_clang` is `TheaterFx::AfterShotOf` (plain): a towed gun (kind `gun`) with a breech, a puff;
+  an open self-propelled gun (kind `tank` with a `crew.loader` socket) a puff if her model has a breech, and her case
+  over the side (an open gun fires by the howitzer's row, so the scene passes her `Muzzle` `bCaseOverSide`, only
+  with the word, and with `ground_cases.spg` in the recipe the row's case behind her muzzle is not thrown: one case a
+  shot, over her side; a towed howitzer still leaves hers); a closed tank (kind `tank`, no loader's place, a `commander` socket) with her hatch open over half,
+  fumes on her shots 2, 5, 7, 10, 12 ... and one shot in eight, stopped, a case.
+- Test: `unreal/TheaterCommand/Tools/fx_ten/run.sh` (g++ and clang++, the strict flags, `-ffp-contract=off`). The dump
+  of five scripted fights (land guns, a broadside close on the water, a flak barrage of every kind, turrets far off,
+  guns on sand) with the shipped recipe is held to `golden-default.sha256`, printed by the kit before this batch. The
+  test (80 checks) has each part on and off: it fires when it should and only then, its sizes and lives, its own
+  dice (the kit's shared `Seeds` as before), every piece without it laid the same with it, and its cap in the densest
+  case (a six-minute barrage of all three flak kinds, forty guns firing for five minutes, a battery of six open guns
+  for five minutes).
+- Preview: `./fxpreview recipe.txt out ten <flak|wisp|breech|spg|hatch|sea> <frames> [WxH]` (`FX_FLAK`, `FX_DIST`,
+  `FX_GUN`, `FX_TEN_OFF=1` for the land words not given). Lay an overlay by flattening it after `fx.json` into the same
+  recipe (`flatten.py fx.json; flatten.py fx-barrel.json`): a later line wins.
+
 ## The sea's dramatic moments: drench, wash, oil lane, deck brass, AA haze (release 2, items 9 to 11; all OFF)
 
 Five pieces for the sea battle, each behind a switch of the sea scene's. With no switch, every tool that compiles the

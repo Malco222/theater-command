@@ -645,7 +645,12 @@ namespace LandMen
 		struct Hits
 		{
 			bool bJolt = false, bVariety = false, bWounded = false, bFlinch = false;
-			bool Any() const { return bJolt || bVariety || bWounded || bFlinch; }
+			/** Effects (R2): a man struck by a rifle's, an mg's, a sub-machine gun's or a pistol's round falls (and is
+			 * jolted, and his Strike comes) when the round ARRIVES, not when it was fired: the round's time plus its
+			 * flight from where its firer stood then, range / 760 m/s of life, at most 0.5 s of life, on the battle's
+			 * clock (over SetLife), and never more than 0.5 battle seconds. A firer not known: as fired. Off: as before. */
+			bool bArrive = false;
+			bool Any() const { return bJolt || bVariety || bWounded || bFlinch || bArrive; }
 		};
 		void SetHits(const Hits& H);
 		const Hits& HitsOf() const;
@@ -660,6 +665,29 @@ namespace LandMen
 		 * False for no such man. Ask it after Update (the effects read it the frame his fall starts).
 		 */
 		bool StruckPlace(int Man, Vec3& OutAt, std::string& OutPart) const;
+		/**
+		 * Effects (R2), the blood mist (-TheaterLandHitMist; Brian, 26 November: "like a puff or mist of blood"): a man
+		 * struck by a bullet, for the scene to hand to the effects kit. T: when it struck (battle seconds): his fall's
+		 * start (with Hits::bArrive the round's arrival), or a wounded man's going down (bWounded). At and Part:
+		 * StruckPlace as he is posed now. Dir: the way the round was going (a unit), from his killer's place as it fired
+		 * (a metre over the ground there) to At; where that is not known, or for a wound, level from his front. Gun:
+		 * "rifle", "mg", "smg" or "pistol", the killing round's word; "other" for a wound (the rules give no round). Range:
+		 * metres from the firer, 0 not known. bKilled: false for a wound. None for a blast's, a shell's, a fire's or a
+		 * tank's death: only a bullet's round, one for each fall (a man wounded and then killed where he lies has two).
+		 */
+		struct Strike
+		{
+			int Man = -1;
+			double T = 0.0;
+			Vec3 At, Dir;
+			std::string Part, Gun;
+			float Range = 0.f;
+			bool bKilled = true;
+		};
+		/** Every strike whose T lies after After and up to To (battle seconds), men in their order: a pure function of the
+		 * recording and the time (each man's fall and wound start are), so a replay or a seek gives the same. Ask it after
+		 * Update(To), with After the time asked up to the last time (nothing when To is not past it). */
+		void StrikesIn(double After, double To, std::vector<Strike>& Out) const;
 		/** His pose as last posed (each bone's turn and move), for tests. */
 		bool PoseOf(int Man, Pose& Out) const;
 		/** Changes when his mesh becomes another (a gore fall, or back at a replay from the start): his triangles and

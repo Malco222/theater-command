@@ -3101,6 +3101,69 @@
   "far_least": 0.2,
   "halve_past": 0.6
  },
+ "men": {
+  "struck": {
+   "_how": "Effects (R2), the blood mist at a bullet's strike (Brian, 26 November: \"i do want a better look when a guy gets hit\", \"like a puff or mist of blood\"; the scene's -TheaterLandHitMist, Battle::Struck). The look is what a rifle's or a machine gun's round truly did, sober: on the side it enters almost nothing, a small pale puff of cloth dust off the tunic or webbing (entry), gone in a quarter second; on the side it leaves, where it passed through (through: the odds by the round, a limb's times limb_k, the head's head_k), a fine dull red-pink mist thrown on along its path a forearm to an arm long (mist: pieces strung along it by speed_mps against drag, so 0.3 to 0.8 m), widening (r1_m) and thinning, most of it gone by 0.3 to 0.5 s, and a few heavier dark drops falling short within a metre (drops); a head strike a shorter, denser puff (head). No fountain, no pool, no spurt, nothing that hangs, no lamp, no mark on the ground: ten pieces at the most, all gone within the second. Far off each mist piece is held at least_px across and thinned to match (never under least_keep of itself), so at 100 m it is a few pixels of dark pink and at 300 m next to nothing; nothing at all past within_m, or with the screen's room past room_share full. Colours written to land on the game's curve (game_curve.py write; the land battle's grade has its own under land_grade.men.struck): the mist lands 110,66,46 young (green well over blue, so it holds red-brown, not mauve, as it blends into a blue-grey sky) and darker and browner as it thins, 92,66,54 (never paler: pale reads as dust), its alpha carrying the thinning (hold 0.06: it starts to thin early); its pieces start a little apart along the path (exit_step_m) and across it (side_m, by each piece's own jitter), sized by their place along it (r1_share_k) and the first thinner (first_alpha_k), so seen end-on it is an uneven smear, not a ball (no row: as before), the drops 58,26,25, the cloth 152,144,128. The red is the art director's to rule on. Remove on (or the whole row) and nothing is drawn.",
+   "on": 1,
+   "within_m": 400,
+   "room_share": 0.8,
+   "least_keep": 0.35,
+   "exit_m": 0.1,
+   "through": {
+    "_how": "The chance the round passes through and leaves the far side. A rifle's and a machine gun's full-power rounds (7.92 mm, .303, .30-06, 7.62 mm at 750 to 850 m/s) at battle ranges mostly went through the body and almost always through a limb; a sub-machine gun's and a pistol's slower 9 mm or .45 mostly stayed in the body. Times limb_k through an arm or a leg (at most 1), head_k through the head.",
+    "rifle": 0.8,
+    "mg": 0.8,
+    "smg": 0.3,
+    "pistol": 0.25,
+    "other": 0.4,
+    "limb_k": 1.15,
+    "head_k": 1.0
+   },
+   "entry": {
+    "colour": [141, 135, 124],
+    "alpha": 0.35,
+    "r_m": [0.07, 0.11],
+    "life_s": [0.2, 0.28],
+    "skin_m": 0.1,
+    "least_px": 1.5
+   },
+   "mist": {
+    "pieces": [3, 4],
+    "colour": [117, 85, 71],
+    "colour_late": [104, 85, 77],
+    "alpha": 0.5,
+    "first_alpha_k": 0.8,
+    "hold": 0.06,
+    "r1_m": [0.14, 0.24],
+    "speed_mps": [3.0, 8.0],
+    "drag": 10,
+    "spread": 0.2,
+    "exit_step_m": 0.1,
+    "side_m": 0.06,
+    "r1_share_k": 0.6,
+    "life_s": [0.3, 0.5],
+    "least_px": 2.0
+   },
+   "head": {
+    "pieces": [4, 5],
+    "alpha": 0.62,
+    "r1_m": [0.12, 0.18],
+    "speed_mps": [2.0, 5.0],
+    "drag": 12,
+    "spread": 0.18,
+    "life_s": [0.25, 0.4]
+   },
+   "drops": {
+    "pieces": [2, 3],
+    "colour": [85, 56, 54],
+    "alpha": 0.85,
+    "r_m": [0.006, 0.01],
+    "speed_mps": [1.5, 3.0],
+    "life_s": [0.3, 0.45],
+    "least_px": 0.8
+   }
+  }
+ },
  "tracer": {
   "_how": "Brian 2026-11-18: 'i want tracer fire shown as well. 1 out of every 5 bullets with yellow'. As a belt was loaded: every fifth round of a gun is a tracer; the four between are not seen. Out of step between guns.",
   "one_in": 5,
@@ -7177,6 +7240,13 @@
   "_how": "The land battle grades its own picture (most of the colour out of the darks and the middles, contrast 1.42, half a stop down: tools/battle-fx/land_grade.py), not by the game's curve these colours are written for, so a scene under it says so (FBattleEffects::SetLandGrade) and this row stands in for what it names, each at the same path under land_grade. Art director on cut 5 (06, 22 November): the clods were flat black silhouettes, core L 9; lit as earth they are about 45 to 70 in the smoke's shade, brown about 70,58,45, lumps not cards. Written with land_grade.py write: earth 118,103,61 lands 72,62,42 (art director 14:09Z: earth, not rose-brown; first 118,99,72 for 70,58,45 leaned rosy on the lit faces); mud 110,97,59, snow 125,114,76 and woods 138,118,67 the same lift over what they were painted to show, and sand's stones 107,93,53 (its clods land 72,59,45 already). The grade is steep (a tenth darker is ten levels darker), so the clods' shade (lit face and dark face) is 0.5 and their tint 0.95 to 1.05, holding a clod within about 40 to 80, and the shower's backlit undersides 0.9 to 1.0 (45 to 60) where 0.55 went black. Art director 13:58Z: the yellow tracer written for the grade lands near 214,207,103 (with the fire's spread 220,207,118; plain, it landed pale khaki 202,197,162 and was lost in the wheat): colour 232,208,0, and by day its edge 255,178,0 (233,193,110 with the spread, aim 229,196,31). Its white-hot core stays as it is. The desert (the production lead's theatre ask, 17:46Z 22 November; the art director's 13:30Z rule, colours written warmer to land on her numbers): sand's soil, heavy jets, dust and smoke, and the vehicles' sand dust low and high, written with land_grade.py write to land as grounds.sand.paint and dust.vehicles say the picture shows them (dust 196,174,135 was landing grey 185,174,154, smoke 160,144,126, heavy jets near black 38,31,21; vehicle dust 200,195,187). Sand's clods (72,59,45) and stones stay as passed, its foot black.",
   "_targets": {
    "_how": "The colour each desert paint and dust must land at on screen, as the art director passed them (11-22). land_grade.py retarget <recipe> <grade> --apply writes every entry again for a ground's grade; _targets_grade names the grade the writes above were made for.",
+   "men": {
+    "struck": {
+     "entry": {"colour": [152, 144, 128]},
+     "mist": {"colour": [110, 66, 46], "colour_late": [92, 66, 54]},
+     "drops": {"colour": [58, 26, 25]}
+    }
+   },
    "grounds": {
     "sand": {
      "paint": {
@@ -7330,6 +7400,20 @@
     178,
     0
    ]
+  },
+  "men": {
+   "struck": {
+    "entry": {
+     "colour": [166, 154, 126]
+    },
+    "mist": {
+     "colour": [162, 97, 47],
+     "colour_late": [141, 101, 77]
+    },
+    "drops": {
+     "colour": [126, 64, 58]
+    }
+   }
   },
   "dust": {
    "vehicles": {
