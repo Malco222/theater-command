@@ -288,6 +288,13 @@ namespace
 		// pass it; -TheaterLandRuleFieldMap turns it on for a run. Name and line the UI director's of 03:51Z. The rules
 		// do not read the key: the screen does (Battle/LandFieldMap, LandBattleScreen.cpp).)
 		{ TEXT("fieldmap"), TEXT("A map of the field in the corner"), TEXT("A small map at the bottom right of the battle shows the field, your units, the enemy your men can see and where you are looking. Click it to look there; M folds it away. Looks only: no result changes."), TEXT("TheaterLandNoFieldMap"), false, TEXT("TheaterLandRuleFieldMap") },
+		// (Unit tags that never cover one another, release 2: the UI director's ruling of 27 November 2026 16:02Z on the
+		// Mac's stills of the free view at Prokhorovka, where the far tags fell into one row and printed over each other.
+		// A tag that would cover another steps up on a longer stalk, twice at most, then folds to its kind sign; nothing
+		// is hidden; a folded tag opens under the pointer (Battle/LandTagPlace.h). Looks only. Off until the Mac and
+		// the UI director pass it; -TheaterLandRuleTagRoom turns it on for a run. The rules do not read the key: the
+		// screen does (LandBattleScreen.cpp). Name and line are hers, 17:56Z.)
+		{ TEXT("tagroom"), TEXT("Unit tags make room for each other"), TEXT("Where unit tags would run together, some rise on longer stalks, and where there is no room they fold to the unit's sign, which opens in full under the pointer. Off: tags are drawn where they stand, and may cover one another."), TEXT("TheaterLandNoTagRoom"), false, TEXT("TheaterLandRuleTagRoom") },
 		// (A free camera in battle, release 2: Brian, 26 November 2026 03:45Z, "I want to be able to see the ground level
 		// view but zoomed out so I can see it from a higher angle"; 04:13Z, "i want the camera angle to be like god mode
 		// ... a free camera mode where i can move where every i want"; 04:14Z, "if i click a specific unit it locks in on

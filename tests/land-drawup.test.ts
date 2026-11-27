@@ -315,6 +315,8 @@ describe('the 3D clipboard keeps the rules\' figures', () => {
     expect(table).toMatch(/\{ TEXT\("groups"\), TEXT\("Groups on the number keys"\), .*TEXT\("TheaterLandNoGroups"\), false, TEXT\("TheaterLandRuleGroups"\) \}/);
     // (the map of the field in the corner: Brian, 26 November 2026)
     expect(table).toMatch(/\{ TEXT\("fieldmap"\), TEXT\("A map of the field in the corner"\), .*TEXT\("TheaterLandNoFieldMap"\), false, TEXT\("TheaterLandRuleFieldMap"\) \}/);
+    // (unit tags that make room for each other: the UI director's ruling and her words, 27 November 2026)
+    expect(table).toMatch(/\{ TEXT\("tagroom"\), TEXT\("Unit tags make room for each other"\), .*TEXT\("TheaterLandNoTagRoom"\), false, TEXT\("TheaterLandRuleTagRoom"\) \}/);
   });
 });
 

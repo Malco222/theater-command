@@ -417,6 +417,9 @@ void ALandBattle::ShowGeneral()
 			M.Y = Top.Y;
 			M.FootX = Foot.X;
 			M.FootY = Foot.Y;
+			// (how far its tag is from the eye: the tags take their places nearest first, the UI director's ruling of
+			// 27 November 2026; PixelOf has found the eye)
+			M.Far = FVector::Dist(Eye->GetCameraComponent()->GetComponentLocation(), World(T.X, T.Y, GroundZ(T.X, T.Y) + TagLift));
 			if (T.bChosen)
 			{
 				// (the ring round a block in hand: its ground's corners, across its facing and along it)

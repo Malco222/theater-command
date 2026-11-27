@@ -398,6 +398,7 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 		// and no map of the field to press)
 		HoverBlock = -1;
 		TagBoxes.Reset();
+		TagPlacer.Reset();
 		MapFrame = LandFieldMap::Frame();
 	}
 
@@ -1300,16 +1301,45 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		{
 			Lines(Points, Ink, Thick, 2);
 		}
-		// (an attack's head: two short strokes back from its end)
+		// (an attack's head: two short strokes back from its end. The way of its last stretch is read back to the last
+		// point that is not the end itself: a block that closes on its target has a route that ends twice on one point,
+		// its way's end and its target, and a head read from those two was three strokes' ends on one point, no head)
 		if (R.bAttack && Points.Num() >= 2)
 		{
-			const FVector2D End = Points.Last(), Way = (End - Points[Points.Num() - 2]).GetSafeNormal();
-			const FVector2D Side(-Way.Y, Way.X);
-			Lines({ End - Way * 12.0 + Side * 7.0, End, End - Way * 12.0 - Side * 7.0 }, Ink, Thick + 0.5f, 2);
+			const FVector2D End = Points.Last();
+			FVector2D Way = FVector2D::ZeroVector;
+			for (int32 K = Points.Num() - 2; K >= 0 && Way.IsNearlyZero(); --K)
+			{
+				Way = (End - Points[K]).GetSafeNormal();
+			}
+			if (!Way.IsNearlyZero())
+			{
+				const FVector2D Side(-Way.Y, Way.X);
+				Lines({ End - Way * 12.0 + Side * 7.0, End, End - Way * 12.0 - Side * 7.0 }, Ink, Thick + 0.5f, 2);
+			}
 		}
 	}
 
 	// ---- The ring round each block in hand, its stalk and its paper tag. ----
+	// Every tag is measured first, then given its place, then drawn. With the trial word tagroom no tag covers another
+	// (the UI director's ruling of 27 November 2026, Battle/LandTagPlace.h): the tags take their places in her order,
+	// one that would cover another steps up on a longer stalk, and past two steps folds to its short mark. Without the
+	// word each hangs at its own place and is drawn in the marks' own order, as before.
+	struct FTagHung
+	{
+		const LandCommand::Tag* Its = nullptr;
+		int32 Block = -1;
+		FVector2D Top = FVector2D::ZeroVector, Foot = FVector2D::ZeroVector;
+		bool bFoe = false, bWoods = false, bPinned = false;
+		FString Name, OwnerWords, StateWords;
+		FLinearColor OwnerPaper = FLinearColor::White, OwnerInk = FLinearColor::White, StatePaper = FLinearColor::White, StateInk = FLinearColor::White;
+		/** The ring round its ground, where it is in hand. */
+		TArray<FVector2D> Ring;
+		double Air = -1.0, NameW = 0.0, OwnerW = 0.0, StateW = 0.0, TiedW = 0.0, TreeW = 0.0, PaperW = 0.0, Left = 0.0, Upper = 0.0, Far = 0.0;
+	};
+	const double TagH = 21.0;
+	const FSlateFontInfo TagFace = Typed(11.0f, true, 0);
+	TArray<FTagHung> Hung;
 	for (const FLandGeneralShown::Mark& M : G.Marks)
 	{
 		const LandCommand::Tag* T = Clip.TagOf(M.Block);
@@ -1317,91 +1347,242 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		{
 			continue;
 		}
-		const FVector2D Top = Local(M.X, M.Y), Foot = Local(M.FootX, M.FootY);
+		FTagHung D;
+		D.Its = T;
+		D.Block = M.Block;
+		D.Far = M.Far;
+		D.Top = Local(M.X, M.Y);
+		D.Foot = Local(M.FootX, M.FootY);
 		if (M.bCorners)
 		{
-			TArray<FVector2D> Ring;
 			for (int32 K = 0; K <= 4; ++K)
 			{
-				Ring.Add(Local(M.Corners[(K % 4) * 2], M.Corners[(K % 4) * 2 + 1]));
+				D.Ring.Add(Local(M.Corners[(K % 4) * 2], M.Corners[(K % 4) * 2 + 1]));
 			}
-			Lines(Ring, BrightBrass, 2.0f, 3);
 		}
-		const bool bFoe = !T->bMine;
-		const FSlateFontInfo Face = Typed(11.0f, true, 0);
-		const FString Name = !T->bKnown ? FString(TEXT("?")) : Wide(T->Short.empty() ? T->Name : T->Short).ToUpper();
-		FString OwnerWords, StateWords;
-		FLinearColor OwnerPaper = Track, OwnerInk = Cream, StatePaper = Track, StateInk = Cream;
-		double Air = -1.0;
-		if (!bFoe)
+		D.bFoe = !T->bMine;
+		D.Name = !T->bKnown ? FString(TEXT("?")) : Wide(T->Short.empty() ? T->Name : T->Short).ToUpper();
+		D.OwnerPaper = Track;
+		D.OwnerInk = Cream;
+		D.StatePaper = Track;
+		D.StateInk = Cream;
+		if (!D.bFoe)
 		{
-			OwnerOf(*T, OwnerWords, OwnerPaper, OwnerInk, Air);
-			StateOf(*T, StateWords, StatePaper, StateInk);
+			OwnerOf(*T, D.OwnerWords, D.OwnerPaper, D.OwnerInk, D.Air);
+			StateOf(*T, D.StateWords, D.StatePaper, D.StateInk);
 		}
 		else if (T->bVague && T->bKnown)
 		{
 			// (found by its fire, its men not yet plain: the historian's check, 22 November)
-			StateWords = TEXT("FIRE SEEN");
-			StatePaper = Slate;
-			StateInk = Cream;
+			D.StateWords = TEXT("FIRE SEEN");
+			D.StatePaper = Slate;
+			D.StateInk = Cream;
 		}
 		// (his own, hidden in woods from the enemy: the forest mark after its name)
-		const bool bWoods = !bFoe && T->bHidden;
-		const double TreeW = bWoods ? 20.0 : 0.0;
-		const double TH = 21.0;
-		const double NameW = WideOf(Name, Face);
-		const double OwnerW = DrawChip(OwnerWords, OwnerPaper, OwnerInk, Air, 0.0, 0.0, TH, false, 0);
-		const double StateW = DrawChip(StateWords, StatePaper, StateInk, -1.0, 0.0, 0.0, TH, false, 0);
+		D.bWoods = !D.bFoe && T->bHidden;
+		D.TreeW = D.bWoods ? 20.0 : 0.0;
+		D.NameW = WideOf(D.Name, TagFace);
+		D.OwnerW = DrawChip(D.OwnerWords, D.OwnerPaper, D.OwnerInk, D.Air, 0.0, 0.0, TagH, false, 0);
+		D.StateW = DrawChip(D.StateWords, D.StatePaper, D.StateInk, -1.0, 0.0, 0.0, TagH, false, 0);
 		// (its group's number before its name, release 2: his own units only)
-		const double TiedW = !bFoe && bGroupKeys && T->Group > 0 ? 19.0 : 0.0;
-		const double TW = TiedW + NameW + 12.0 + TreeW + OwnerW + StateW;
+		D.TiedW = !D.bFoe && bGroupKeys && T->Group > 0 ? 19.0 : 0.0;
+		D.PaperW = D.TiedW + D.NameW + 12.0 + D.TreeW + D.OwnerW + D.StateW;
 		// (kept inside the field: above the foot, under the top bar, inside the edges; pinned at the edge with a small arrow
 		// toward its unit where the unit is off it: the UI director, 18:26Z)
-		const double WantX = Top.X - TW * 0.5, WantY = Top.Y - TH;
-		const double TX = FMath::Clamp(WantX, 8.0, FMath::Max(8.0, Size.X - TW - 8.0));
-		const double TY = FMath::Clamp(WantY, FieldTop, FMath::Max(FieldTop, FieldBottom - TH - 4.0));
-		const bool bPinned = FMath::Abs(TX - WantX) > 0.5 || FMath::Abs(TY - WantY) > 0.5;
-		if (!bPinned)
+		const double WantX = D.Top.X - D.PaperW * 0.5, WantY = D.Top.Y - TagH;
+		D.Left = FMath::Clamp(WantX, 8.0, FMath::Max(8.0, Size.X - D.PaperW - 8.0));
+		D.Upper = FMath::Clamp(WantY, FieldTop, FMath::Max(FieldTop, FieldBottom - TagH - 4.0));
+		D.bPinned = FMath::Abs(D.Left - WantX) > 0.5 || FMath::Abs(D.Upper - WantY) > 0.5;
+		Hung.Add(D);
+	}
+	// One tag in full, its paper's top left corner at (AtX, AtY): its frame where it is in hand, its paper, its name, its
+	// chips and its strength; Up lifts its layers (a folded tag opened under the pointer lies over the rest).
+	auto DrawTag = [&](const FTagHung& D, double AtX, double AtY, int32 Up)
+	{
+		if (D.Its->bChosen)
 		{
-			Lines({ Foot, Top }, (bFoe ? Slate : Brass) * FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), 1.5f, 3);
-			Fill(Foot.X - 2.0, Foot.Y - 2.0, 4.0, 4.0, bFoe ? Slate : Brass, 3);
+			Fill(AtX - 2.0, AtY - 2.0, D.PaperW + 4.0, TagH + 4.0 + 4.0, BrightBrass, 4 + Up);
+		}
+		Fill(AtX, AtY, D.PaperW, TagH, D.bFoe ? Slate : Paper, 5 + Up);
+		if (D.TiedW > 0.0)
+		{
+			TiedChip(D.Its->Group, AtX + 4.0, AtY + 2.5, 6 + Up);
+		}
+		Write(D.Name, AtX + 6.0 + D.TiedW, AtY + 2.0, TagFace, D.bFoe ? Cream : DeskInk, 6 + Up);
+		if (D.bWoods)
+		{
+			Forest(AtX + D.TiedW + D.NameW + 9.0, AtY + 1.5, 18.0, LeafInk, 6 + Up);
+		}
+		const double ChipX = AtX + D.TiedW + D.NameW + 12.0 + D.TreeW;
+		DrawChip(D.OwnerWords, D.OwnerPaper, D.OwnerInk, D.Air, ChipX, AtY, TagH, true, 6 + Up);
+		DrawChip(D.StateWords, D.StatePaper, D.StateInk, -1.0, ChipX + D.OwnerW, AtY, TagH, true, 6 + Up);
+		// (its strength, a thin bar under the tag: what is left of it)
+		if (D.Its->bKnown)
+		{
+			Fill(AtX, AtY + TagH, D.PaperW, 3.0, Leather, 5 + Up);
+			Fill(AtX, AtY + TagH, D.PaperW * FMath::Clamp(D.Its->Str, 0.0, 1.0), 3.0, D.bFoe ? Cream : D.Its->Mor < 0.4 ? Amber : Brass, 6 + Up);
+		}
+	};
+	// Where each hangs this frame: in the order drawn (the last lies on top and is the first the pointer finds).
+	struct FTagPut
+	{
+		int32 At = 0;
+		bool bShort = false;
+		/** (false: a short mark that found no room anywhere, drawn where it is covered least, beneath the rest) */
+		bool bRoom = true;
+		double Rise = 0.0;
+		double BoxX = 0.0, BoxY = 0.0;
+	};
+	// (the short mark: the kind sign on its side's paper, 21 by 19, and its strength under it)
+	const double ShortW = 21.0, ShortPaper = 19.0, ShortH = 22.0;
+	TArray<FTagPut> Puts;
+	if (FLandLive::RuleNow(TEXT("tagroom")))
+	{
+		// (the groups of the blocks in hand: theirs are placed with them, before the rest of his own)
+		TArray<int> HandGroups;
+		for (const LandCommand::Tag& Each : Clip.Tags())
+		{
+			if (Each.bChosen && Each.bMine && Each.Group > 0)
+			{
+				HandGroups.AddUnique(Each.Group);
+			}
+		}
+		std::vector<LandTagPlace::Want> Asked;
+		Asked.reserve(static_cast<std::size_t>(Hung.Num()));
+		for (const FTagHung& D : Hung)
+		{
+			LandTagPlace::Want Ask;
+			Ask.Block = D.Block;
+			Ask.Rank = D.Its->bChosen || (D.Its->bMine && D.Its->Group > 0 && HandGroups.Contains(D.Its->Group)) ? 0 : D.Its->bMine ? 1 : 2;
+			Ask.Far = D.Far;
+			// (everything it draws: its frame where it is in hand, else its paper and its strength under it)
+			Ask.Full = D.Its->bChosen ? LandTagPlace::Box{ D.Left - 2.0, D.Upper - 2.0, D.PaperW + 4.0, TagH + 8.0 } : LandTagPlace::Box{ D.Left, D.Upper, D.PaperW, TagH + 3.0 };
+			// (its short mark likewise: in hand its frame stands 2 px round its paper and 3 px under its strength)
+			Ask.ShortW = ShortW + (D.Its->bChosen ? 4.0 : 0.0);
+			Ask.ShortH = ShortH + (D.Its->bChosen ? 5.0 : 0.0);
+			Ask.StalkX = FMath::Clamp(D.Top.X, 8.0 + ShortW * 0.5, FMath::Max(8.0 + ShortW * 0.5, Size.X - 8.0 - ShortW * 0.5));
+			Asked.push_back(Ask);
+		}
+		const std::vector<LandTagPlace::Placed> Placing = TagPlacer.Place(Asked, S.Real, LandTagPlace::Box{ 0.0, FieldTop, Size.X, FMath::Max(0.0, FieldBottom - FieldTop) });
+		// (drawn from the last placed to the first: the tag nobody may cover is drawn last)
+		for (int32 K = static_cast<int32>(Placing.size()) - 1; K >= 0; --K)
+		{
+			const LandTagPlace::Placed& Got = Placing[static_cast<std::size_t>(K)];
+			FTagPut Put;
+			Put.At = static_cast<int32>(Got.Index);
+			Put.bShort = Got.bShort;
+			Put.bRoom = Got.bRoom;
+			Put.Rise = Got.bShort ? 0.0 : Got.Rise;
+			Put.BoxX = Got.Drawn.X;
+			Put.BoxY = Got.Drawn.Y;
+			Puts.Add(Put);
+		}
+	}
+	else
+	{
+		TagPlacer.Reset();
+		for (int32 K = 0; K < Hung.Num(); ++K)
+		{
+			FTagPut Put;
+			Put.At = K;
+			Puts.Add(Put);
+		}
+	}
+	const FTagHung* Opened = nullptr;
+	double OpenedX = 0.0, OpenedY = 0.0;
+	for (const FTagPut& Put : Puts)
+	{
+		const FTagHung& D = Hung[Put.At];
+		if (D.Ring.Num() > 0)
+		{
+			Lines(D.Ring, BrightBrass, 2.0f, 3);
+		}
+		const FLinearColor Side = D.bFoe ? Slate : Brass;
+		// (what is drawn of it: the full tag where it hangs, or its short mark's paper, inside its frame where in hand)
+		const double Rim = Put.bShort && D.Its->bChosen ? 2.0 : 0.0;
+		const double DrawnX = Put.bShort ? Put.BoxX + Rim : D.Left, DrawnY = Put.bShort ? Put.BoxY + Rim : D.Upper + Put.Rise;
+		const double DrawnW = Put.bShort ? ShortW : D.PaperW, DrawnH = Put.bShort ? ShortPaper : TagH;
+		if (!D.bPinned)
+		{
+			// Its stalk, so the eye can follow it home (the UI director, 27 November 2026 17:56Z: a short mark off its own
+			// foot keeps a stalk straight to its block, as a stepped tag does). At its own place: its own stalk, as ever.
+			// Higher: the longer stalk on from its top. Lower: the stalk from its block's foot to it, from under or above.
+			const FLinearColor StalkInk = Side * FLinearColor(1.0f, 1.0f, 1.0f, 0.8f);
+			const double Under = DrawnY + DrawnH + 3.0;
+			const double StalkX = FMath::Clamp(D.Top.X, DrawnX, DrawnX + DrawnW);
+			if (Under <= D.Top.Y + 4.0)
+			{
+				Lines({ D.Foot, D.Top }, StalkInk, 1.5f, 3);
+			}
+			else if (Under < D.Foot.Y - 0.5)
+			{
+				Lines({ D.Foot, FVector2D(StalkX, Under) }, StalkInk, 1.5f, 3);
+			}
+			else if (DrawnY > D.Foot.Y + 0.5)
+			{
+				Lines({ D.Foot, FVector2D(StalkX, DrawnY) }, StalkInk, 1.5f, 3);
+			}
+			Fill(D.Foot.X - 2.0, D.Foot.Y - 2.0, 4.0, 4.0, Side, 3);
+			if (Under < D.Top.Y - 0.5)
+			{
+				Lines({ D.Top, FVector2D(StalkX, Under) }, StalkInk, 1.5f, 3);
+			}
 		}
 		else
 		{
 			// (the arrow: from the tag's edge nearest the unit, the way to it)
-			const FVector2D Mid(TX + TW * 0.5, TY + TH * 0.5);
-			const FVector2D Way = (Top - Mid).GetSafeNormal();
+			const FVector2D Mid(DrawnX + DrawnW * 0.5, DrawnY + DrawnH * 0.5);
+			const FVector2D Way = (D.Top - Mid).GetSafeNormal();
 			if (!Way.IsNearlyZero())
 			{
-				const double Reach = FMath::Min(FMath::Abs(Way.X) > 1e-6 ? (TW * 0.5) / FMath::Abs(Way.X) : 1e9, FMath::Abs(Way.Y) > 1e-6 ? (TH * 0.5) / FMath::Abs(Way.Y) : 1e9);
+				const double Reach = FMath::Min(FMath::Abs(Way.X) > 1e-6 ? (DrawnW * 0.5) / FMath::Abs(Way.X) : 1e9, FMath::Abs(Way.Y) > 1e-6 ? (DrawnH * 0.5) / FMath::Abs(Way.Y) : 1e9);
 				const FVector2D Base = Mid + Way * (Reach + 2.0), Tip = Base + Way * 9.0, Across(-Way.Y, Way.X);
-				Lines({ Base + Across * 5.0, Tip, Base - Across * 5.0, Base + Across * 5.0 }, bFoe ? Slate : BrightBrass, 2.0f, 6);
+				Lines({ Base + Across * 5.0, Tip, Base - Across * 5.0, Base + Across * 5.0 }, D.bFoe ? Slate : BrightBrass, 2.0f, 6);
 			}
 		}
-		if (T->bChosen)
+		if (!Put.bShort)
 		{
-			Fill(TX - 2.0, TY - 2.0, TW + 4.0, TH + 4.0 + 4.0, BrightBrass, 4);
+			DrawTag(D, DrawnX, DrawnY, 0);
 		}
-		Fill(TX, TY, TW, TH, bFoe ? Slate : Paper, 5);
-		if (TiedW > 0.0)
+		else
 		{
-			TiedChip(T->Group, TX + 4.0, TY + 2.5, 6);
+			// The short mark: its kind sign alone on its side's paper (an enemy not yet made out says "?"), in hand its
+			// frame, and its strength under it. It opens in full under the pointer, below. One that found no room
+			// anywhere is drawn three layers down, beneath every tag and mark placed before it, so they stay whole (the
+			// UI director, 17:56Z): its frame with the ground prints, its paper with the routes, its sign with the stalks.
+			const int32 Low = Put.bRoom ? 0 : -3;
+			if (D.Its->bChosen)
+			{
+				Fill(DrawnX - 2.0, DrawnY - 2.0, DrawnW + 4.0, DrawnH + 4.0 + 4.0, BrightBrass, 4 + Low);
+			}
+			Fill(DrawnX, DrawnY, DrawnW, DrawnH, D.bFoe ? Slate : Paper, 5 + Low);
+			if (!D.Its->bKnown)
+			{
+				Write(D.Name, DrawnX + (DrawnW - D.NameW) * 0.5, DrawnY + 1.0, TagFace, Cream, 6 + Low);
+			}
+			else
+			{
+				KitSign(KindSign(*D.Its), DrawnX + 2.5, DrawnY + 1.5, 16.0, D.bFoe ? Cream : DeskInk, 6 + Low);
+				Fill(DrawnX, DrawnY + DrawnH, DrawnW, 3.0, Leather, 5 + Low);
+				Fill(DrawnX, DrawnY + DrawnH, DrawnW * FMath::Clamp(D.Its->Str, 0.0, 1.0), 3.0, D.bFoe ? Cream : D.Its->Mor < 0.4 ? Amber : Brass, 6 + Low);
+			}
+			if (D.Block == HoverBlock)
+			{
+				// (opened where the mark is, its paper's top on the mark's and centred on it, kept inside the field)
+				Opened = &D;
+				OpenedX = FMath::Clamp(DrawnX + DrawnW * 0.5 - D.PaperW * 0.5, 8.0, FMath::Max(8.0, Size.X - D.PaperW - 8.0));
+				OpenedY = FMath::Clamp(DrawnY, FieldTop, FMath::Max(FieldTop, FieldBottom - TagH - 4.0));
+			}
 		}
-		Write(Name, TX + 6.0 + TiedW, TY + 2.0, Face, bFoe ? Cream : DeskInk, 6);
-		if (bWoods)
-		{
-			Forest(TX + TiedW + NameW + 9.0, TY + 1.5, 18.0, LeafInk, 6);
-		}
-		const double ChipX = TX + TiedW + NameW + 12.0 + TreeW;
-		DrawChip(OwnerWords, OwnerPaper, OwnerInk, Air, ChipX, TY, TH, true, 6);
-		DrawChip(StateWords, StatePaper, StateInk, -1.0, ChipX + OwnerW, TY, TH, true, 6);
-		// (its strength, a thin bar under the tag: what is left of it)
-		if (T->bKnown)
-		{
-			Fill(TX, TY + TH, TW, 3.0, Leather, 5);
-			Fill(TX, TY + TH, TW * FMath::Clamp(T->Str, 0.0, 1.0), 3.0, bFoe ? Cream : T->Mor < 0.4 ? Amber : Brass, 6);
-		}
-		TagBoxes.Add({ FSlateRect(static_cast<float>(TX - 2.0), static_cast<float>(TY - 2.0), static_cast<float>(TX + TW + 2.0), static_cast<float>(TY + TH + 5.0)), M.Block });
+		TagBoxes.Add({ FSlateRect(static_cast<float>(DrawnX - 2.0), static_cast<float>(DrawnY - 2.0), static_cast<float>(DrawnX + DrawnW + 2.0), static_cast<float>(DrawnY + DrawnH + 5.0)), D.Block });
+	}
+	// A folded tag under the pointer opens in full where its mark is, over the rest (the UI director, 17:56Z: opened at
+	// its unstepped place it would leave the pointer, shut and open again). It stays open while the pointer is on the
+	// mark or on the opened tag: both are its boxes, and the opened one is found first. A click on it is a click on the tag.
+	if (Opened)
+	{
+		DrawTag(*Opened, OpenedX, OpenedY, 8);
+		TagBoxes.Add({ FSlateRect(static_cast<float>(OpenedX - 2.0), static_cast<float>(OpenedY - 2.0), static_cast<float>(OpenedX + Opened->PaperW + 2.0), static_cast<float>(OpenedY + TagH + 5.0)), Opened->Block });
 	}
 
 	// ---- The corps coming up from next door (neighbours join the fight, release 2): who, where and how soon. ----

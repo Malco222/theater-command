@@ -31,6 +31,8 @@ struct FLandGeneralShown
 		int Block = -1;
 		double X = 0.0, Y = 0.0;
 		double FootX = 0.0, FootY = 0.0;
+		/** How far its tag is from the eye (the scene's own units): the tags take their places nearest first (tagroom). */
+		double Far = 0.0;
 		/** The block's ground's four corners (chosen blocks only, for the ring round them). */
 		bool bCorners = false;
 		double Corners[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
