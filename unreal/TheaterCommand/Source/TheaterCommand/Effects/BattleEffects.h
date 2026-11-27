@@ -101,7 +101,12 @@ public:
 	/** A gun firing: its muzzle at WorldAt, pointing along Facing. Gun is "rifle", "mg", "tank_gun", "at_gun",
 	 * "howitzer" or "mortar". Ground is what its blast throws up: on "sand" a tank or field gun's shot (a towed gun's
 	 * `muzzle` socket too) raises a veil of dust that hides the gun and its line of sight for a second or two. */
-	void Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun, const FString& Ground = TEXT("earth"));
+	void Muzzle(const FVector& WorldAt, const FVector& Facing, const FString& Gun, const FString& Ground = TEXT("earth"), bool bMoving = false, bool bCaseOverSide = false);
+	/** Effects (R2): Muzzle's bMoving (-TheaterLandBarrelSmoke, given only with the word): the gun is on the move or
+	 * turning, so she lays no barrel wisp. bCaseOverSide (-TheaterLandCasesOut, given only with the word): an open
+	 * self-propelled gun, her case thrown over her side (ThrowCase "spg"), none behind the muzzle. WispStop: the gun
+	 * whose muzzle was at WorldAt when she fired has moved off or traversed away; her wisp is laid no more there. */
+	void WispStop(const FVector& WorldAt);
 	/** Dust behind a moving vehicle: every frame, for each of its dust sockets ("dust.left", "dust.right"), where the
 	 * socket is and the vehicle's velocity (world units a second). Id: any number that stays the same for that socket
 	 * (the vehicle's number times two, plus one for the right). Ground is the ground it drives on ("sand" throws the

@@ -514,6 +514,64 @@ namespace
 			const size_t After3 = K.Fx.BarrelWisps.size();
 			Check(After1 == 1 && After2 == 1 && After3 == 2, "on: one wisp a gun at once (per_gun 1); the gun beside her her own", Say("%.0f, %.0f, %.0f", static_cast<double>(After1), static_cast<double>(After2), static_cast<double>(After3)));
 		}
+		// (the mend of 27 November: smoke stays where it was made, never made where the muzzle has left. A gun firing on
+		// the move lays no wisp, the shot itself as ever; one firing at the halt and moving off 4 s later lays no puff
+		// after she moved, and every puff from where her muzzle was)
+		{
+			const Vec Bore(0.0, 0.0, 2.0);
+			Kit Still(On), Moving(On);
+			Still.Fx.Draw(0.0, FxTen::Looking(Eye, Bore));
+			Moving.Fx.Draw(0.0, FxTen::Looking(Eye, Bore));
+			Still.Fx.Muzzle(1.0, Bore, Vec(0.0, 1.0, 0.03), "tank_gun", "earth");
+			Moving.Fx.Muzzle(1.0, Bore, Vec(0.0, 1.0, 0.03), "tank_gun", "earth", true);
+			size_t WispStill = 0, WispMoving = 0, SameShot = 0, ShotStill = 0;
+			for (const Bit& B : Still.Fx.Bits)
+			{
+				WispStill += B.bWisp ? 1u : 0u;
+				ShotStill += B.bWisp ? 0u : 1u;
+			}
+			for (size_t I = 0; I < Moving.Fx.Bits.size(); ++I)
+			{
+				WispMoving += Moving.Fx.Bits[I].bWisp ? 1u : 0u;
+				SameShot += I < Still.Fx.Bits.size() && FxTen::PieceHash(Moving.Fx.Bits[I]) == FxTen::PieceHash(Still.Fx.Bits[I]) ? 1u : 0u;
+			}
+			Check(WispStill > 0 && WispMoving == 0 && SameShot == ShotStill && Moving.Fx.BarrelWisps.empty(), "on: a gun firing on the move lays no wisp; the shot itself piece for piece as at the halt",
+				Say("%.0f puffs at the halt, %.0f on the move; %.0f of %.0f shot pieces the same", static_cast<double>(WispStill), static_cast<double>(WispMoving), static_cast<double>(SameShot), static_cast<double>(ShotStill)));
+			// (at the halt, then off at 5 s, 4 s after the shot: drawn frame by frame to 20 s; the control stays)
+			auto Off4 = [&](bool bStop, size_t& After, double& Farthest, size_t& Drawn)
+			{
+				Kit K(On);
+				K.Fx.Draw(0.0, FxTen::Looking(Eye, Bore));
+				K.Fx.Muzzle(1.0, Bore, Vec(0.0, 1.0, 0.03), "tank_gun", "earth");
+				After = 0;
+				Farthest = 0.0;
+				Drawn = 0;
+				for (int F = 1; F <= 600; ++F)
+				{
+					const double Now = 1.0 + F / 30.0;
+					if (bStop && F == 120)
+					{
+						K.Fx.WispStop(Now, Bore);
+					}
+					K.Fx.Draw(Now, FxTen::Looking(Eye, Bore));
+					for (const Bit& B : K.Fx.Bits)
+					{
+						if (B.bWisp && Now >= B.Born && Now <= B.Born + B.Life && Now <= B.CutAt)
+						{
+							++Drawn;
+							After += B.Born > 5.0 ? 1u : 0u;
+							Farthest = std::max(Farthest, (B.From - Bore).Length());
+						}
+					}
+				}
+			};
+			size_t AfterStop = 0, AfterStay = 0, DrawnStop = 0, DrawnStay = 0;
+			double FarStop = 0.0, FarStay = 0.0;
+			Off4(true, AfterStop, FarStop, DrawnStop);
+			Off4(false, AfterStay, FarStay, DrawnStay);
+			Check(DrawnStop > 0 && AfterStop == 0 && FarStop <= 0.5 && AfterStay > 0, "on: fired at the halt, off 4 s later: no puff laid after she moved, each laid within 0.5 m of her muzzle then (those in the air fade where they are)",
+				Say("%.0f puff-frames drawn, %.0f born after; laid at most %.2f m off; staying: %.0f born after", static_cast<double>(DrawnStop), static_cast<double>(AfterStop), FarStop, static_cast<double>(AfterStay)));
+		}
 		// (its own dice: a shot's wisp from the place and the moment, the same whatever came before)
 		{
 			Kit A(On), B(On);
@@ -835,6 +893,39 @@ namespace
 		Check(BOn.Seeds == BOff.Seeds, "the kit's shared dice drawn as often as before", Say("%.0f draws", static_cast<double>(BOn.Seeds)));
 		std::printf("     the battery: %d shots, %zu cases over the side; most pieces %zu off, %zu on; lying most %zu off, %zu on\n", Shots, Thrown, BOff.MostBits, BOn.MostBits, BOff.MostLying, BOn.MostLying);
 		std::printf("     time: the densest frame's Draw, %.3f ms on (%zu pieces), %.3f ms off (%zu pieces); a frame's mean %.3f ms on, %.3f ms off\n", BOn.DensestMs, BOn.MostBits, BOff.DensestMs, BOff.MostBits, BOn.MeanMs, BOff.MeanMs);
+		// (the mend of 27 November: a battery's open self-propelled gun fires by the howitzer's row, whose towed-gun case
+		// went behind her muzzle as well as hers over the side. The scene's Muzzle says bCaseOverSide for her: one case a
+		// shot, over her side; a towed howitzer beside her still leaves hers behind her muzzle)
+		{
+			auto Shot = [](const FxTen::Book& Book, bool bOverSide, bool bTowed, int Key)
+			{
+				Kit K(Book);
+				const Vec Near(0.0, -12.0, 2.0), Spg(0.0, 18.0, 0.0), Towed(10.0, 18.0, 0.0);
+				K.Fx.Draw(0.0, FxTen::Looking(Near, Spg));
+				K.Fx.Muzzle(1.0, Spg + Vec(0.0, 3.0, 2.0), Vec(0.0, 1.0, 0.4), "howitzer", "earth", false, bOverSide);
+				K.Fx.ThrowCase(2.4, Spg + Vec(1.5, -0.5, 1.9), Vec(1.0, -0.2, 0.0), "spg", Key);
+				if (bTowed)
+				{
+					K.Fx.Muzzle(1.5, Towed + Vec(0.0, 2.0, 1.2), Vec(0.0, 1.0, 0.3), "howitzer", "earth");
+				}
+				size_t Cases = 0;
+				for (const Bit& B : K.Fx.Bits)
+				{
+					Cases += IsCase(B) ? 1u : 0u;
+				}
+				return Cases;
+			};
+			int Key = 9100; // (a shot whose loader heaves her case over (odds 0.7): the first key from 9100 that does)
+			while (Key < 9200 && Shot(On, true, false, Key) == 0)
+			{
+				++Key;
+			}
+			const size_t One = Shot(On, true, false, Key), Was = Shot(On, false, false, Key), Beside = Shot(On, true, true, Key);
+			const size_t OffFlag = Shot(Off, true, false, Key), OffNo = Shot(Off, false, false, Key);
+			Check(One == 1 && Was == 2 && Beside == 2, "on: an open gun's shot 30 m off by the howitzer's row: one lying case, over her side; a towed howitzer beside her still leaves hers",
+				Say("%.0f (before the mend %.0f); with the towed gun %.0f", static_cast<double>(One), static_cast<double>(Was), static_cast<double>(Beside)));
+			Check(OffFlag == OffNo && OffNo == 1, "off: the flag changes nothing without the overlay (her row's case behind the muzzle, as before)", Say("%.0f, %.0f", static_cast<double>(OffFlag), static_cast<double>(OffNo)));
+		}
 		// (thrown while the eye is within the row's within_m, 150 m: the general's place, not the shared 40)
 		auto Heave = [](const FxTen::Book& Book, const Vec& From)
 		{

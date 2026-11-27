@@ -8646,8 +8646,49 @@ void ALandBattle::PlayEffects()
 		switch (E.Kind)
 		{
 		case LandPlay::FxKind::Muzzle:
-			Effects->Muzzle(At, WorldWay(E.Way.X, E.Way.Y, E.Way.Z).GetSafeNormal(), Name, Ground);
+		{
+			// Effects (R2), the mends of 27 November, only with their words: the vehicle whose muzzle fired (the nearest
+			// within 3 m). On the move she lays no barrel wisp (-TheaterLandBarrelSmoke: smoke stays where it was made);
+			// an open self-propelled gun's case goes over her side alone (-TheaterLandCasesOut), none behind her muzzle
+			bool bMoving = false, bOverSide = false;
+			const bool bBigGun = E.Name.rfind("tank_gun", 0) == 0 || E.Name.rfind("at_gun", 0) == 0 || E.Name.rfind("howitzer", 0) == 0;
+			if ((S.bBarrelSmoke || S.bCasesOut) && bBigGun && S.Armour)
+			{
+				int32 Shooter = -1;
+				double Nearest = 3.0;
+				for (size_t I = 0; I < S.Armour->Vehicles().size(); ++I)
+				{
+					LandKit::V3 Bore, BoreWay;
+					if (!S.Armour->Vehicles()[I].bDead && S.Armour->Vehicles()[I].SocketNow("muzzle", Bore, BoreWay))
+					{
+						const double Off = FVector(Bore.X - E.At.X, Bore.Y - E.At.Y, Bore.Z - E.At.Z).Size();
+						if (Off < Nearest)
+						{
+							Nearest = Off;
+							Shooter = static_cast<int32>(I);
+						}
+					}
+				}
+				if (Shooter >= 0)
+				{
+					const LandKit::Vehicle& V = S.Armour->Vehicles()[static_cast<size_t>(Shooter)];
+					LandKit::V3 Loader, LoaderWay;
+					bMoving = S.bBarrelSmoke && V.bMoving;
+					bOverSide = S.bCasesOut && V.Look().Kind == "tank" && V.SocketNow("crew.loader", Loader, LoaderWay);
+					if (S.bBarrelSmoke && !bMoving)
+					{
+						FLandBattleState::FWispFrom& From = S.WispFrom.FindOrAdd(Shooter);
+						From.At = At;
+						From.Heading = V.Heading;
+						From.Turret = V.TurretDeg;
+						From.Traverse = V.TraverseDeg;
+						From.T = S.Battle;
+					}
+				}
+			}
+			Effects->Muzzle(At, WorldWay(E.Way.X, E.Way.Y, E.Way.Z).GetSafeNormal(), Name, Ground, bMoving, bOverSide);
 			break;
+		}
 		case LandPlay::FxKind::Shots:
 			Effects->Shots(E.Gun, At, World(E.To.X, E.To.Y, E.To.Z), Name, E.Rounds, static_cast<float>(E.PerSecond), Ground); // (rounds a life second, on the kit's life clock: the mix cuts the burst alike)
 			break;
@@ -8680,6 +8721,29 @@ void ALandBattle::PlayEffects()
 			Effects->SmokeScreen(At, Across, Seconds, Name.IsEmpty() ? FString(TEXT("canister")) : Name, -1);
 			break;
 		}
+		}
+	}
+	// Effects (R2), the mend of 27 November (-TheaterLandBarrelSmoke): a gun that fired standing still and has since moved
+	// off or turned (her hull, turret or traverse a degree from where they were): her wisp is laid no more where her
+	// muzzle was; what is already in the air drifts and fades where it is
+	if (S.bBarrelSmoke && S.Armour)
+	{
+		for (auto It = S.WispFrom.CreateIterator(); It; ++It)
+		{
+			const FLandBattleState::FWispFrom& W = It.Value();
+			const bool bKnown = It.Key() >= 0 && static_cast<size_t>(It.Key()) < S.Armour->Vehicles().size();
+			const LandKit::Vehicle* V = bKnown ? &S.Armour->Vehicles()[static_cast<size_t>(It.Key())] : nullptr;
+			const bool bTurned = V && (FMath::Abs(FMath::FindDeltaAngleRadians(V->Heading, W.Heading)) > FMath::DegreesToRadians(1.0)
+				|| FMath::Abs(FMath::FindDeltaAngleDegrees(V->TurretDeg, W.Turret)) > 1.0 || FMath::Abs(V->TraverseDeg - W.Traverse) > 1.0);
+			if (!V || V->bMoving || V->bDead || bTurned)
+			{
+				Effects->WispStop(W.At);
+				It.RemoveCurrent();
+			}
+			else if (S.Battle - W.T > 60.0) // (her wisp long gone)
+			{
+				It.RemoveCurrent();
+			}
 		}
 	}
 }

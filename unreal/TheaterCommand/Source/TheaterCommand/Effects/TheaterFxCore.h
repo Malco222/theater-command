@@ -487,7 +487,13 @@ namespace TheaterFx
 		/** A gun firing, its muzzle at At, pointing along Facing. Gun is a muzzle row ("tank_gun", "mg", "howitzer").
 		 * Ground (a grounds row) is what its blast throws up: on sand a tank or field gun's shot raises a veil of dust
 		 * in front of it that hides the gun and its line of sight for a second or two, then lingers. */
-		void Muzzle(double Now, const Vec& At, const Vec& Facing, const char* Gun, const char* Ground = "earth");
+		void Muzzle(double Now, const Vec& At, const Vec& Facing, const char* Gun, const char* Ground = "earth", bool bMoving = false, bool bCaseOverSide = false);
+		/** Effects (R2), -TheaterLandBarrelSmoke (Muzzle's bMoving, given only with the word: a gun on the move or turning
+		 * lays no wisp; smoke stays where it was made): the gun whose muzzle was at At when she fired has moved off or
+		 * traversed away. Her wisp's puffs not yet born are never laid; those already in the air drift and fade where
+		 * they are. -TheaterLandCasesOut (bCaseOverSide, given only with the word): an open self-propelled gun throws her
+		 * case over her side (the scene's ThrowCase "spg"), so her gun row's case behind the muzzle is not thrown. */
+		void WispStop(double Now, const Vec& At);
 		/** Dust thrown up behind a vehicle on dry ground: every frame, for each of its dust sockets (dust.left,
 		 * dust.right), where the socket is and the vehicle's velocity (metres a second). Id: any number that stays the
 		 * same for that socket. Ground is a grounds row; snow, mud and water throw none (dust.vehicles.by_ground).
@@ -1428,6 +1434,7 @@ namespace TheaterFx
 			double Until = 0.0;
 		};
 		std::vector<Wisping> BarrelWisps;
+		bool bCaseOverSide = false; // (Effects (R2), -TheaterLandCasesOut: the Muzzle laid now is an open gun's, her case over her side)
 		double CaseFar = 150.0; // (ground_cases.draw_within_m: past it a case is neither counted nor laid)
 		double CaseDetailPx = 3.0; // (ground_cases.detail_px: a case narrower on the screen is laid as its tube alone)
 		bool CaseDetailed(double Rad, double Deep, const View& Eye) const { return 2.0 * Rad * std::max(Eye.PixelsPerRadian, 1.0) >= CaseDetailPx * std::max(Deep, 1e-3); }

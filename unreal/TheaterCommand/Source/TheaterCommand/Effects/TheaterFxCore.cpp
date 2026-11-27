@@ -3787,7 +3787,7 @@ namespace TheaterFx
 	// ---------------------------------------------------------------------------------------------------------------
 	// Guns
 
-	void Battle::Muzzle(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn)
+	void Battle::Muzzle(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn, bool bMoving, bool bOverSide)
 	{
 		GroundIn = GroundOn(GroundIn); // (a ground whose own switch is off is drawn as earth)
 		// (Effects (R2): "mg:star", the row mg with its own look, muzzle.look.star; a name with no colon as ever)
@@ -3801,7 +3801,9 @@ namespace TheaterFx
 		}
 		// (a tank's or a field gun's smoke and the dust it kicks up go slowly into the air: linger.gun, by the gun's row)
 		const size_t First = Bits.size();
+		bCaseOverSide = bOverSide && Has("ground_cases.spg.case_m"); // (Effects (R2), -TheaterLandCasesOut: her case goes over her side)
 		MuzzleLaid(Now, At, Facing, GunIn, GroundIn, bLook ? &GL : nullptr);
+		bCaseOverSide = false;
 		if (Bits.size() > First)
 		{
 			const double Foot = Height(At.X, At.Y);
@@ -3811,7 +3813,32 @@ namespace TheaterFx
 		{
 			LookLaid(Now, At, Facing.Unit(Vec(1.0, 0.0, 0.0)), GL, GroundIn);
 		}
-		AfterWisp(Now, At, Facing, GunIn); // (Effects (R2), -TheaterLandBarrelSmoke: laid last, so the shot is laid as ever)
+		if (!bMoving) // (Effects (R2), -TheaterLandBarrelSmoke: a gun on the move or turning lays none, the mend of 27 November)
+		{
+			AfterWisp(Now, At, Facing, GunIn); // (laid last, so the shot is laid as ever)
+		}
+	}
+
+	void Battle::WispStop(double Now, const Vec& At)
+	{
+		// (Effects (R2), -TheaterLandBarrelSmoke, the mend of 27 November: smoke stays in the air where it was made and is
+		// never made at a place the muzzle has left. Her wisp's puffs not yet born are cut (Bit::CutAt, never drawn); those
+		// in the air drift and fade where they are. No dice)
+		for (Wisping& Was : BarrelWisps)
+		{
+			if ((Was.At - At).Length() > 0.25 || !(Was.Until > Now))
+			{
+				continue;
+			}
+			for (Bit& B : Bits)
+			{
+				if (B.bWisp && B.Born > Now && (B.From - Was.At).Length() < 0.5)
+				{
+					B.CutAt = std::min(B.CutAt, Now);
+				}
+			}
+			Was.Until = Now;
+		}
 	}
 
 	void Battle::AfterWisp(double Now, const Vec& At, const Vec& Facing, const char* GunIn)
@@ -4149,7 +4176,7 @@ namespace TheaterFx
 		// so the cases pile up behind the gun through a fight. Its own dice)
 		{
 			CaseRow Cases;
-			if (CaseRowOf(GunIn ? GunIn : "", At, Cases, GroundIn) && RoomForCases() < static_cast<size_t>(MaxPuffs) * 3 / 5)
+			if (!bCaseOverSide && CaseRowOf(GunIn ? GunIn : "", At, Cases, GroundIn) && RoomForCases() < static_cast<size_t>(MaxPuffs) * 3 / 5)
 			{
 				Dice DC(PlaceKey(At) * 0xD1B54A32D192ED03ull ^ static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)));
 				const Vec Flat_ = Vec(Fw.X, Fw.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
