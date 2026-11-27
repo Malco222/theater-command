@@ -607,6 +607,23 @@ export function pocketView(g: Game, region: number): PocketView | null {
   return { nat, since: g.flags[`pkt:${r.id}`], town: townName(town), stores, left, spent, text };
 }
 
+/**
+ * Read only (release 2, portcut.ts, the UI director's 12:24Z, item 1): the month whose opening records a standing
+ * pocket's stores spent (`pktx:`, pocketMonth), the first in which its nation's draws feed nobody there (computeSupply,
+ * pocketDry), at the rate they are eaten as the month stands: each opening adds the month's mouths to what is eaten
+ * (`pkte:`, in tenths), and the stores are spent once it reaches them. `next` is the month of its nation's next opening.
+ * The pocket, its town and its mouths as the pocket's own card reads them (pocketView). Null where the province lies
+ * in no pocket, or its stores are spent already.
+ */
+export function pocketSpentAt(g: Game, r: Region, next: number): number | null {
+  const nat = pocketNat(g, r);
+  if (!nat || g.flags[`pktx:${r.id}`] === 1) return null;
+  const pocket = joined(g, nat, r.id, SIEGE.pocket.least) ?? [r.id];
+  const town = larder(g, nat, pocket) ?? r;
+  const bite = Math.round(10 * mouths(g, nat, pocket, town));
+  return next + Math.max(0, Math.ceil((10 * storesOf(g, town) - (g.flags[`pkte:${r.id}`] ?? 0)) / bite) - 1);
+}
+
 // ---- Into the town and out of it ----------------------------------------------------------------
 
 /** Puts a corps on the town's list. The caller has already taken it off whatever list it was on. */
