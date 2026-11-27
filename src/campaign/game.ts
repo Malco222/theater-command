@@ -56,7 +56,7 @@ import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, rai
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willBurn } from './prizes';
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
-import { formedLine, joinedLine, nationDone, notFormedLine, rowDone, tellPlace, tellWait, waitedOn } from './arrivalwaits';
+import { formedLine, joinedLine, nationDone, notFormedLine, rowDone, struckForPlace, struckForPlaceLines, tellPlace, tellWait, waitedOn, type StruckForPlace } from './arrivalwaits';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -5779,6 +5779,9 @@ function expeditions(g: Game, nat: string, take?: number): void {
   const stood: { id: number; name: string; reg: number }[] = [];
   // (And those every division of which went back to the corps it came out of: nothing of them leaves, and no line says so.)
   const back: Corps[] = [];
+  // (The telling: told rows of the player's held for their place and struck this month at their half year, told once
+  // every row is read, grouped by place and month: arrivalwaits.ts `struckForPlaceLines`.)
+  const struckHeld: StruckForPlace[] = [];
   // (A lent row's corps whose time is up and which leaves this month, whichever of two rows is read first: it is on
   // its way to other fronts, holds nothing a row may draw, and nothing goes back to it. The far side's 4th Indian
   // Division, lent to the Sudan until April 1941, leaves in the month its own row lays it in Egypt again. A corps
@@ -5976,6 +5979,10 @@ function expeditions(g: Game, nat: string, take?: number): void {
     if (late || (o.war && !warOn(g, o.war)) || (o.until && g.turn >= o.until)) {
       if (late) {
         g.flags[`sent:${i}`] = g.flags.open === 1 ? 2 : 1;
+        // (The telling: a told row held for its place is told it will not form, where the rule still acts for it: the
+        // UI director's section 10, T2. Read before its flags go. The strike itself is as before.)
+        const held = inFight ? struckForPlace(g, i) : null;
+        if (held) struckHeld.push(held);
         rowDone(g, i);
         const at = g.byName[row[5]];
         struckWatch.tell?.({ turn: g.turn, due, nat, name: row[2], kind: row[3], divs: row[4], place: row[5], owner: at?.owner ?? null, holder: at?.ctrl ?? null, to: reg?.name ?? null, toHolder: reg?.ctrl ?? null, war: !!o.war && !warOn(g, o.war), until: !!o.until && g.turn >= o.until, ifLost: !!o.ifLost, joins: o.joins ?? null, hold: !!o.hold });
@@ -6180,6 +6187,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     else if (o.gen && (!claims.length || generalOf(g, c)?.name === o.gen)) headline(g, 'event', `${o.gen} ${bySea ? 'lands at' : 'arrives in'} ${reg.name} with ${the}${c.name}.${said?.after ? ` ${said.after}` : ''}`, nat, reg.id);
     else if (nat === g.human) headline(g, 'info', said?.alone ?? `${c.name} has ${bySea ? 'landed at' : 'arrived in'} ${reg.name}.`, nat, reg.id);
   });
+  for (const x of struckForPlaceLines(g, struckHeld)) headline(g, 'info', x.text, nat, x.at);
   if (gone.length) {
     const where = theatreName(g.regions[gone[0].reg]);
     const names = gone.map((c) => c.name);

@@ -17,12 +17,12 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { arrivalWaitOf, rowsWaitingOnRows, setFromWait } from '../src/campaign/arrivalwaits';
+import { arrivalWaitOf, nationDone, rowsWaitingOnRows, setFromWait } from '../src/campaign/arrivalwaits';
 import { corpsInContact } from '../src/campaign/drawn';
 import { createGame, declareWar, relocate, removeCorps, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { markFor, monthCard } from '../src/campaign/monthcard';
-import { saveGame } from '../src/campaign/save';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { storyFallen } from '../src/campaign/stories';
 import { monthCardHtml } from '../src/campaign/ui/monthview';
@@ -42,6 +42,8 @@ const M = index(MAKER), C = index(CHAINED);
 // Her three lines, to the letter, with this board's slots (month 60 is August 1944).
 const HEADLINE = 'The 12th Army (62nd Division) is due in Kaifeng this month, but China holds it, so the arrival waits until it is in friendly hands.';
 const CARD = 'The 12th Army (62nd Division), due in Kaifeng since August 1944, waits until Kaifeng is in friendly hands.';
+// (A row first told it waits for its corps at the front in month 60, held for its place from month 61, September 1944.)
+const CARD_LATER = 'The 12th Army (62nd Division), due in Kaifeng since September 1944, waits until Kaifeng is in friendly hands.';
 const FORMED = 'The 12th Army (62nd Division) has arrived in Kaifeng, now in friendly hands.';
 const FORMED_LOST = 'The 12th Army (62nd Division) has arrived in Kaifeng, now in friendly hands, formed without your 1st Army (independent brigades, Taiyuan), which has been lost.';
 // Today's lines, for the other cause in the same month (not worded) and for the switch off. His row, its corps at the
@@ -149,11 +151,183 @@ describe('the month it forms', () => {
     destroy(g);
     month(g, 61);
     expect(about(g, 61)).toEqual([HEADLINE]);
-    // (The wait's month is kept: section 7, case 8.)
-    expect(rowsWaitingOnRows(g, 'JAP')).toContain(CARD);
+    // (The card's month is the month the place hold began, the month that headline was said: the UI director's section
+    // 10, Q3, 00:39Z, 27 November 2026. The row's own month, the front wait's, stays for every other reader of it:
+    // `rowTold` is still 60, so the memorial wall's "since the row was told" below still finds the brigades.)
+    expect(rowsWaitingOnRows(g, 'JAP')).toContain(CARD_LATER);
+    expect(rowsWaitingOnRows(g, 'JAP')).not.toContain(CARD);
+    expect([g.flags[`rowTold:${M}`], g.flags[`rowPlaceSince:${M}`]]).toEqual([60, 61]);
     g.byName.Kaifeng.ctrl = 'JAP';
     month(g, 62);
     expect(about(g, 62)).toEqual([FORMED_LOST]);
+    expect(Object.keys(g.flags).filter((k) => /^row[A-Z]\w*:/.test(k) && k.split(':')[1] === String(M))).toEqual([]);
+  });
+});
+
+describe("the place hold's month (Q3): its own flag, `rowPlaceSince`", () => {
+  it('a row held only for its place: the hold\'s month is the month it was told, and every reader reads it', () => {
+    const g = board(true);
+    month(g, 60);
+    expect([g.flags[`rowTold:${M}`], g.flags[`rowPlaceSince:${M}`]]).toEqual([60, 60]);
+    month(g, 61);
+    expect(g.flags[`rowPlaceSince:${M}`]).toBe(60);
+    expect(rowsWaitingOnRows(g, 'JAP')).toContain(CARD);
+  });
+
+  it('a save made before the flag (acf6ac794), its place hold already told: the card reads the row\'s month, nothing is told twice, and the flags go', () => {
+    const g = board(true);
+    month(g, 60);
+    delete g.flags[`rowPlaceSince:${M}`];
+    const text = saveGame(g);
+    const h = loadGame(text)!;
+    expect(rowsWaitingOnRows(h, 'JAP')).toContain(CARD);
+    month(h, 61);
+    expect(h.headlines.filter((x) => x.text === HEADLINE)).toHaveLength(1);
+    expect(about(h, 61)).toEqual([]);
+    expect(h.flags[`rowPlaceSince:${M}`]).toBeUndefined();
+    expect(rowsWaitingOnRows(h, 'JAP')).toContain(CARD);
+    // (Kaifeng back the next month: today's formed headline with the place's clause, and every flag of the row goes.)
+    const k = loadGame(text)!;
+    k.byName.Kaifeng.ctrl = 'JAP';
+    month(k, 61);
+    expect(about(k, 61)).toEqual([FORMED]);
+    expect(Object.keys(k.flags).filter((x) => /^row[A-Z]\w*:/.test(x) && x.split(':')[1] === String(M))).toEqual([]);
+  });
+
+  it('his nation leaves the war: the flag goes with the others (`nationDone`)', () => {
+    const g = board(true);
+    month(g, 60);
+    nationDone(g, 'JAP');
+    expect(Object.keys(g.flags).filter((k) => /^row[A-Z]\w*:/.test(k) && k.split(':')[1] === String(M))).toEqual([]);
+  });
+});
+
+describe("the month a row held for its place is struck (T2): one headline, the UI director's section 10", () => {
+  // (Her words, to the letter, with this board's slots: due 55, held from 60, struck at its half year in 62.)
+  const STRUCK = 'The 12th Army (62nd Division), due in Kaifeng since August 1944, will not form: Kaifeng is still not in friendly hands, and the arrival has waited as long as it may.';
+  const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  it('month 62: her sentence once, in the month of the strike; the card\'s muted line stops that month; the flags go', () => {
+    const g = board(true);
+    month(g, 60); month(g, 61);
+    expect(rowsWaitingOnRows(g, 'JAP')).toContain(CARD);
+    const mark = markFor(g);
+    month(g, 62);
+    expect(about(g, 62)).toEqual([STRUCK]);
+    const h = g.headlines.find((x) => x.text === STRUCK)!;
+    expect([h.kind, h.nat, h.region]).toEqual(['info', 'JAP', g.byName.Kaifeng.id]);
+    expect(rowsWaitingOnRows(g, 'JAP')).not.toContain(CARD);
+    const card = monthCard(g, mark, 'JAP');
+    expect(card.waits ?? []).not.toContain(CARD);
+    expect(monthCardHtml(card, { esc, flag: () => '', name: (x: string) => x, all: false, orders: true } as any)).toContain(esc(STRUCK));
+    expect(flags(g)).toEqual({ told: undefined, at: undefined, place: undefined, wait: undefined, sent: 2 });
+    expect(Object.keys(g.flags).filter((k) => /^row[A-Z]\w*:/.test(k) && k.split(':')[1] === String(M))).toEqual([]);
+    month(g, 63);
+    expect(about(g, 63)).toEqual([]);
+    expect(g.headlines.filter((x) => x.text === STRUCK)).toHaveLength(1);
+  });
+
+  it('the bridge: the month it ends in is told the same sentence, from the same maker', () => {
+    const g = board(true);
+    month(g, 60); month(g, 61);
+    g.phase = g.order.indexOf('JAP');
+    TC().load(saveGame(g));
+    expect((TC().openingCard() as { ok: boolean }).ok).toBe(true);
+    const res = TC().endMonth() as { headlines: { text: string }[] };
+    expect(res.headlines.map((x) => x.text).filter((x) => x.startsWith('The 12th Army (62nd Division)'))).toEqual([STRUCK]);
+    const back = loadGame((TC().save() as { text: string }).text)!;
+    expect(back.turn).toBe(62);
+    expect(back.flags[`sent:${M}`]).toBe(2);
+  });
+
+  it('a row first held at the front and then for its place: the place hold\'s month, and struck from the front wait\'s half year', () => {
+    const g = board(true, 'JAP', true);
+    toFront(g);
+    month(g, 60);
+    destroy(g);
+    for (let t = 61; t <= 68; t++) month(g, t);
+    expect(g.flags[`sent:${M}`]).toBe(2);
+    expect(g.headlines.filter((x) => /still not in friendly hands/.test(x.text) && x.text.startsWith('The 12th Army (62nd Division)')).map((x) => [x.turn, x.text])).toEqual([
+      [68, 'The 12th Army (62nd Division), due in Kaifeng since September 1944, will not form: Kaifeng is still not in friendly hands, and the arrival has waited as long as it may.'],
+    ]);
+  });
+
+  it('a save made before `rowPlaceSince` (acf6ac794), its hold already told: struck with the row\'s month, once', () => {
+    const g = board(true);
+    month(g, 60); month(g, 61);
+    delete g.flags[`rowPlaceSince:${M}`];
+    const h = loadGame(saveGame(g))!;
+    month(h, 62);
+    expect(about(h, 62)).toEqual([STRUCK]);
+  });
+
+  it('told, then its place retaken: it forms, and the strike\'s line is never said', () => {
+    const g = board(true);
+    month(g, 60);
+    g.byName.Kaifeng.ctrl = 'JAP';
+    month(g, 61); month(g, 62);
+    expect(about(g, 61)).toEqual([FORMED]);
+    expect(g.headlines.some((x) => /still not in friendly hands/.test(x.text))).toBe(false);
+  });
+
+  it('retaken in the very month of its half year: struck, and her line is not said (the place is in friendly hands); not worded', () => {
+    const g = board(true);
+    month(g, 60); month(g, 61);
+    g.byName.Kaifeng.ctrl = 'JAP';
+    month(g, 62);
+    expect(g.flags[`sent:${M}`]).toBe(2);
+    expect(about(g, 62)).toEqual([]);
+    expect(g.headlines.some((x) => /still not in friendly hands/.test(x.text))).toBe(false);
+  });
+
+  it('outside the telling\'s scope it says nothing, as today: the switch off, a computer\'s row', () => {
+    for (const g of [board(false), board(true, 'CHN')]) {
+      for (let t = 60; t <= 63; t++) month(g, t);
+      expect(g.flags[`sent:${M}`]).toBe(2);
+      expect(g.headlines.some((x) => /friendly hands/.test(x.text))).toBe(false);
+    }
+  });
+});
+
+describe('several rows struck in one place in one month: one headline, the names joined as section 8.5 joins them', () => {
+  // (Seed 34, the 11th Army's 3rd, 6th and 40th Divisions' rows, due at Yochow in month 24 at the book's stops: stop 1,
+  // the Pacific's book closed, so the rule acts. Yochow China's and emptied, the corps they are formed from gone.)
+  const ROWS3 = ['11th Army (3rd Division)', '11th Army (6th Division)', '11th Army (40th Division)'].map(index);
+  const yochow = (): Game => {
+    const g = startOpen(createGame(34, 'JAP'));
+    setStop(g, 1, true);
+    g.flags['hist:off:pacific'] = 20;
+    setFromWait(g, true);
+    const y = g.byName.Yochow;
+    for (const u of [...y.units]) relocate(g, u, g.byName.Hankow ?? g.byName.Changsha);
+    y.ctrl = 'CHN';
+    for (const j of ROWS3) for (const nm of rows[j][6].from as string[]) { const c = g.corps.find((x) => x.nat === 'JAP' && !x.dead && x.name === nm); if (c) { storyFallen(g, c, 'destroyed', 'CHN', c.reg); removeCorps(g, c); } }
+    for (const j of ROWS3) g.flags[`due:${j}`] = 24;
+    return g;
+  };
+  const struck = (g: Game): string[] => g.headlines.filter((x) => /still not in friendly hands/.test(x.text)).map((x) => `${x.turn}: ${x.text}`);
+
+  it('told in one month, struck in one month: one line', () => {
+    const g = yochow();
+    expect(ROWS3.every((j) => j >= 0)).toBe(true);
+    for (let t = 25; t <= 31; t++) month(g, t);
+    expect(ROWS3.map((j) => g.flags[`sent:${j}`])).toEqual([2, 2, 2]);
+    expect(struck(g)).toEqual([
+      '31: The 11th Army (3rd Division), the 11th Army (6th Division) and the 11th Army (40th Division), due in Yochow since September 1941, will not form: Yochow is still not in friendly hands, and the arrival has waited as long as it may.',
+    ]);
+    expect(rowsWaitingOnRows(g, 'JAP').filter((x) => x.includes('Yochow'))).toEqual([]);
+  });
+
+  it('their place holds begun in different months: each month its own line', () => {
+    const g = yochow();
+    month(g, 25);
+    // (The 40th Division's hold as one begun a month earlier: the state a row told in August 1941 carries.)
+    g.flags[`rowPlaceSince:${ROWS3[2]}`] = 24;
+    for (let t = 26; t <= 31; t++) month(g, t);
+    expect(struck(g)).toEqual([
+      '31: The 11th Army (3rd Division) and the 11th Army (6th Division), due in Yochow since September 1941, will not form: Yochow is still not in friendly hands, and the arrival has waited as long as it may.',
+      '31: The 11th Army (40th Division), due in Yochow since August 1941, will not form: Yochow is still not in friendly hands, and the arrival has waited as long as it may.',
+    ]);
   });
 });
 
@@ -191,7 +365,7 @@ describe('nothing told outside the telling\'s scope', () => {
     expect(about(g)).toEqual([]);
     expect(flags(g)).toEqual({ told: undefined, at: undefined, place: undefined, wait: undefined, sent: undefined });
     expect(g.headlines.some((h) => /friendly hands/.test(h.text))).toBe(false);
-    expect(Object.keys(g.flags).filter((k) => /^row(Told|At|Front|Id|Place):/.test(k))).toEqual([]);
+    expect(Object.keys(g.flags).filter((k) => /^row(Told|At|Front|Id|Place|PlaceSince):/.test(k))).toEqual([]);
     expect(rowsWaitingOnRows(g, 'JAP')).toEqual([]);
     g.byName.Kaifeng.ctrl = 'JAP';
     month(g, 61);

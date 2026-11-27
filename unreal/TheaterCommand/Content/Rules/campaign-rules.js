@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f5c8fcec8 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of be8f3beed 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -43555,6 +43555,7 @@
   var frontKey = (i) => `rowFront:${i}`;
   var idKey = (i, k) => `rowId:${i}:${k}`;
   var placeKey = (i) => `rowPlace:${i}`;
+  var placeSinceKey = (i) => `rowPlaceSince:${i}`;
   var theOf = (name) => /^(the |[A-Z] Force|Creforce)/i.test(name) || /Force$/.test(name.split("(")[0].trim()) ? "" : "the ";
   var named3 = (name, head = false) => {
     const a = theOf(name);
@@ -43633,6 +43634,7 @@
     if (g2.flags[toldKey(i)] === void 0) g2.flags[toldKey(i)] = g2.turn;
     if (g2.flags[placeKey(i)] === at4.id) return;
     g2.flags[placeKey(i)] = at4.id;
+    g2.flags[placeSinceKey(i)] = g2.turn;
     const line = placeHeldLine(g2, row2[2], at4);
     if (line) headline(g2, "info", line, row2[1], at4.id);
   }
@@ -43641,6 +43643,7 @@
     delete g2.flags[atKey(i)];
     delete g2.flags[frontKey(i)];
     delete g2.flags[placeKey(i)];
+    delete g2.flags[placeSinceKey(i)];
     fromOf(ROWS()[i]).forEach((_, k) => {
       delete g2.flags[idKey(i, k)];
     });
@@ -43648,7 +43651,7 @@
   function nationDone(g2, nat) {
     ROWS().forEach((row2, i) => {
       if (row2?.[1] !== nat) return;
-      const told2 = [toldKey(i), atKey(i), frontKey(i), placeKey(i), ...fromOf(row2).map((_, k) => idKey(i, k))].some((k) => g2.flags[k] !== void 0);
+      const told2 = [toldKey(i), atKey(i), frontKey(i), placeKey(i), placeSinceKey(i), ...fromOf(row2).map((_, k) => idKey(i, k))].some((k) => g2.flags[k] !== void 0);
       if (told2) rowDone(g2, i);
     });
   }
@@ -43705,6 +43708,27 @@
     if (!row2 || !g2.human || row2[1] !== g2.human || g2.flags[toldKey(i)] === void 0) return null;
     return `${named3(row2[2], true)}, due in ${place3}, will not form: every division of it already stands with your forces.`;
   }
+  function struckForPlace(g2, i) {
+    const row2 = ROWS()[i];
+    if (!row2 || g2.flags.fromWait !== 1 || !g2.human || row2[1] !== g2.human) return null;
+    const p = g2.flags[placeKey(i)];
+    const place3 = p === void 0 ? void 0 : g2.regions[p];
+    const since = g2.flags[placeSinceKey(i)] ?? g2.flags[toldKey(i)];
+    if (!place3 || since === void 0 || allied(g2, row2[1], place3.ctrl)) return null;
+    return { i, name: row2[2], at: place3.id, since };
+  }
+  function struckForPlaceLines(g2, xs) {
+    const groups = [];
+    for (const x of xs) {
+      const one2 = groups.find((q) => q.at === x.at && q.since === x.since);
+      if (one2) one2.names.push(x.name);
+      else groups.push({ at: x.at, since: x.since, names: [x.name] });
+    }
+    return groups.map((q) => {
+      const place3 = g2.regions[q.at].name;
+      return { text: `${join(q.names.map((x, k) => named3(x, k === 0)))}, due in ${place3} since ${turnToDate(q.since).label}, will not form: ${place3} is still not in friendly hands, and the arrival has waited as long as it may.`, at: q.at };
+    });
+  }
   function formedTail(was, name) {
     const yours = (x) => x === name ? "corps of that name" : x;
     const fromYour = was.count === 1 && was.one ? `from your ${yours(was.one)}` : `from ${numberWord(was.count)} of your corps`;
@@ -43757,7 +43781,8 @@
       if (!unformed.length) {
         const p = g2.flags[placeKey(w.i)];
         const place3 = p === void 0 ? void 0 : g2.regions[p];
-        if (place3 && !allied(g2, nat, place3.ctrl)) out.push(theWords(`${named3(w.row[2], true)}, due in ${place3.name} since ${turnToDate(w.since).label}, waits until ${place3.name} is in friendly hands.`));
+        const since = g2.flags[placeSinceKey(w.i)] ?? w.since;
+        if (place3 && !allied(g2, nat, place3.ctrl)) out.push(theWords(`${named3(w.row[2], true)}, due in ${place3.name} since ${turnToDate(since).label}, waits until ${place3.name} is in friendly hands.`));
         continue;
       }
       out.push(theWords(`${named3(w.row[2], true)}, due in ${g2.regions[w.at].name}, has waited since ${turnToDate(w.since).label} for ${join(unformed.map((x) => named3(x)))}, which ${hasOrHave(unformed)} not formed yet.`));
@@ -79339,6 +79364,7 @@
     const gone = [], down = [];
     const stood = [];
     const back = [];
+    const struckHeld = [];
     let over = null;
     const leaving2 = (x) => {
       if (gone.includes(x) || down.includes(x) || back.includes(x)) return true;
@@ -79471,6 +79497,8 @@
       if (late || o.war && !warOn(g2, o.war) || o.until && g2.turn >= o.until) {
         if (late) {
           g2.flags[`sent:${i}`] = g2.flags.open === 1 ? 2 : 1;
+          const held3 = inFight ? struckForPlace(g2, i) : null;
+          if (held3) struckHeld.push(held3);
           rowDone(g2, i);
           const at4 = g2.byName[row2[5]];
           struckWatch.tell?.({ turn: g2.turn, due, nat, name: row2[2], kind: row2[3], divs: row2[4], place: row2[5], owner: at4?.owner ?? null, holder: at4?.ctrl ?? null, to: reg?.name ?? null, toHolder: reg?.ctrl ?? null, war: !!o.war && !warOn(g2, o.war), until: !!o.until && g2.turn >= o.until, ifLost: !!o.ifLost, joins: o.joins ?? null, hold: !!o.hold });
@@ -79623,6 +79651,7 @@
       else if (o.gen && (!claims.length || generalOf(g2, c)?.name === o.gen)) headline(g2, "event", `${o.gen} ${bySea ? "lands at" : "arrives in"} ${reg.name} with ${the5}${c.name}.${said?.after ? ` ${said.after}` : ""}`, nat, reg.id);
       else if (nat === g2.human) headline(g2, "info", said?.alone ?? `${c.name} has ${bySea ? "landed at" : "arrived in"} ${reg.name}.`, nat, reg.id);
     });
+    for (const x of struckForPlaceLines(g2, struckHeld)) headline(g2, "info", x.text, nat, x.at);
     if (gone.length) {
       const where = theatreName(g2.regions[gone[0].reg]);
       const names = gone.map((c) => c.name);
