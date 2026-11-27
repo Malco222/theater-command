@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0e07d0ca8 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 99841b8f4 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -91919,7 +91919,7 @@
   function crewsPage(g2, id) {
     const f = g2.airFleets.find((x) => x.id === id);
     if (!f || !crewsShown(g2, f)) return null;
-    const R2 = f.bombers, rows = bomberCard(g2, f), shown2 = rows.slice(0, 12);
+    const R2 = f.bombers, rows = bomberCard(g2, f).sort((x, y) => y.crew - x.crew || y.missions - x.missions || y.kills - x.kills || x.name.localeCompare(y.name)), shown2 = rows.slice(0, 12);
     const tour = tourOf(f.nat), word3 = flownWord(f.nat), words2 = `${word3}s`, named5 = carriesNames(f.nat);
     const shot = (k) => k === 1 ? "a fighter shot down" : `${num5(k)} fighters shot down`;
     const called = (m) => m.mark && m.mark !== m.name ? `${m.mark}, ${m.name}` : m.name;
@@ -91929,8 +91929,8 @@
         nat: f.nat,
         title: called(r) || "No name yet",
         lines: [
-          `${num5(r.missions)} ${r.missions === 1 ? word3 : words2} flown${r.kills ? `, ${shot(r.kills)}` : ""}.`,
-          `${r.grade} crew: ${num5(r.crew)} of their ${tour}${toGo > 0 && toGo <= 5 ? `, ${toGo === 1 ? "one" : num5(toGo)} to go` : ""}.`
+          `${r.grade} crew: ${num5(r.crew)} of their ${tour}${toGo > 0 && toGo <= 5 ? `, ${toGo === 1 ? "one" : num5(toGo)} to go` : ""}.`,
+          `${num5(r.missions)} ${r.missions === 1 ? word3 : words2} flown${r.kills ? `, ${shot(r.kills)}` : ""}.`
         ],
         buttons: []
       };
@@ -91963,16 +91963,17 @@
         opt("split", "BOTH IN TURN", "One crew to the schools, the next on a war bond tour, and so on.")
       ]
     };
-    const lost = R2.gone ? `${num5(R2.gone)} ${named5 ? "named bombers" : "bombers"} lost` : `no ${named5 ? "named bomber" : "bomber"} lost`;
+    const lost = R2.gone ? `${num5(R2.gone)} lost` : "none lost";
     return {
       id: `crews:${id}`,
       title: `THE CREWS  ·  ${f.name.toUpperCase()}`,
-      headline: `${num5(R2.on.length)} bomber${R2.on.length === 1 ? "" : "s"} on strength · ${R2.home ? `${num5(R2.home)} crew${R2.home === 1 ? "" : "s"} gone home` : "no crew gone home yet"} · ${lost}`,
+      headline: `${num5(R2.on.length)} bomber${R2.on.length === 1 ? "" : "s"} · ${R2.home ? `${num5(R2.home)} crew${R2.home === 1 ? "" : "s"} gone home` : "no crew home yet"} · ${lost}`,
       note: `Every bomber of the group is known by ${named5 ? "its name" : "its marking"}, with the ${words2} it has flown and the aircraft its gunners have shot down. A crew that finishes its tour of ${tour} ${words2} goes home, and the group's readiness rises.`,
       top: [{ label: "BACK TO THE GROUP", act: `open:group:${id}`, ok: true, tip: "" }],
       sections: [
-        { heading: "THE BOMBERS, OLD HANDS FIRST", text: rows.length > shown2.length ? `And ${num5(rows.length - shown2.length)} more.` : "", rows: bombers },
+        // (The Mac's stills, 27 Nov: the page's one order stands first, where it is seen without scrolling.)
         { heading: "WHEN A TOUR IS OVER", text: "", rows: [order2] },
+        { heading: "THE CREWS NEAREST HOME FIRST", text: rows.length > shown2.length ? `The ${num5(shown2.length)} nearest home, of ${num5(rows.length)}.` : "", rows: bombers },
         { heading: "HOME AND LOST", text: roll4.length ? roll4.join("\n") : "No crew has finished its tour yet, and no bomber with a name has been lost.", rows: [] }
       ]
     };
