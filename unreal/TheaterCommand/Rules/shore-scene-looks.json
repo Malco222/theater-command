@@ -1,0 +1,160 @@
+{
+  "_about": "LOOK ONLY. The shelling scene's rows (sea-scene/shore-guns/plan.md, R0 and R1): what the stager (Rules/shore-scene.ts) draws a coast shelled from the sea with. No rule reads any of it and nothing here is a die: every look value the stager takes from these rows is placed by a hash of the campaign's seed, the month, the report and a label. Every number is a starting point for the art director, the historian or the Mac to confirm [EST] unless its row says where it comes from.",
+  "beats": {
+    "_about": "The scene's windows of battle time and their screen seconds (plan R1.6). pace: the most battle seconds a screen second may show (as the submarine scene's, sub-scene-looks.json); least and most: the scene's screen seconds, which this stager holds itself (sub-scene never reads its own 'least', plan section 0 point 2); pad: the windows added, in order, while it runs short of least; trim: the windows dropped, in order, while it runs over most.",
+    "pace": 4.5,
+    "least": 30,
+    "most": 45,
+    "pad": ["falls2", "broadside2", "falls3"],
+    "trim": ["climb", "pattern", "quiet"],
+    "fire0": 5,
+    "fireEnd": 450,
+    "after": [480, 600],
+    "screens": { "line": 4, "broadside": 4, "climb": 2, "quiet": 2, "falls": 3, "pattern": 3, "fort": 3, "glass": 3, "hit": 3, "sinking": 5, "after": 6, "falls2": 3, "broadside2": 3, "falls3": 3 }
+  },
+  "bands": {
+    "_about": "How far off the waterfront each class lies to shell (metres) [EST]; and the least a ship's track keeps from any land (plan R1 tests: the line 1.5 km or more off).",
+    "bb": [14000, 18000],
+    "ca": [9000, 13000],
+    "dd": [2500, 5000],
+    "clear": 1500,
+    "speed": 4,
+    "spacing": { "bb": 700, "ca": 550, "dd": 900 },
+    "column": 350
+  },
+  "cadence": { "_about": "Seconds between a ship's salvos: Show::Cadence's (SeaShow.cpp), without its roll.", "bb": 30, "ca": 16, "dd": 7.5 },
+  "flight": {
+    "_about": "A shell's time of flight, seconds a kilometre, by bore (mm, up to and including) [EST: the historian's range tables].",
+    "rows": [[130, 2.3], [180, 2.1], [280, 1.9], [380, 1.7], [999, 1.6]]
+  },
+  "pattern": { "_about": "A salvo's fall about its aim: a share of the range long and across [survey].", "long": 0.01, "across": 0.003 },
+  "lay": { "_about": "Of the shells not on target, the shares short in the water, short on the beach and over [EST].", "sea": 0.4, "beach": 0.25, "over": 0.35 },
+  "share": {
+    "_about": "The share s a shelling did, 0 to 1, for the closing words' bands and, until the report carries look.outcome.share, for the falls on target: troops their cut over bombard.troops.max (fleets.json; a cut reaches 1.15 times it, clamped), a city its output over bombard.city.max, a town its works over the most one shelling breaks (siege.json breach.shell: the code's own, where the plan said breach.most).",
+    "troops": "cut / bombard.troops.max",
+    "city": "output / bombard.city.max",
+    "town": "works / breach.shell"
+  },
+  "hits": { "_about": "Hits a ship takes before she goes down; a ship kept afloat's, by class (the plan's 1-2, fixed by class so that another seed never moves a count); a battleship struck (the navy's ruling 3: hits and smoke, never a sinking): her hits, and how much of the look's outcome.struck (the readiness the batteries cost the fleet: bbWear 2 x the reply, 0.012 a fortress level) one battleship hit stands for [EST]. gap and next: seconds between a ship's hits, and before the next ship's.", "dd": 2, "ca": 3, "kept": { "ca": 2, "dd": 1 }, "struck": { "hits": 2, "per": 0.024 }, "gap": 18, "next": 30 },
+  "forts": {
+    "_about": "A coast's batteries by fortress level: each one's bore (mm) [EST: the historian]; a level past the last takes the last. inland and along: where they stand behind the waterfront (m). cadence: seconds between a battery's own rounds; opening: the seconds of the guns' span (beats.fire0 to fireEnd) left out before a battery's own rounds are counted, so their number is fixed by the span and the cadence before any look (they are then laid by hash in the span after the opening rounds) [EST].",
+    "1": [152],
+    "2": [152, 152],
+    "3": [152, 152, 234],
+    "4": [152, 234, 234, 305],
+    "5": [234, 234, 305, 381],
+    "inland": [200, 1200],
+    "along": 3000,
+    "cadence": 20,
+    "opening": 50
+  },
+  "troops": { "_about": "A strip of ground for each division drawn [EST].", "len": [600, 1200], "wide": [150, 300], "inland": [500, 3000], "along": 4500 },
+  "town": {
+    "_about": "A town's blocks by its size: the radius they cover (m) [EST]; the chief place is drawn for troops only within near metres of the waterfront, and a city's skyline only within skyline.",
+    "village": { "r": 300 }, "town": { "r": 700 }, "city": { "r": 1500 }, "capital": { "r": 2500 },
+    "near": 3000,
+    "skyline": 8000,
+    "behind": [1000, 3000],
+    "quay": [400, 800]
+  },
+  "most": { "_about": "The most drawn (as sub-scene.ts's 'most'); the rest out of frame, counted in staged.drawn [EST].", "bb": 6, "ca": 8, "dd": 6, "divs": 6, "fires": 3, "townFires": 6, "palls": 3 },
+  "ground": { "_about": "Fires on the ground [EST]: troops at most 3, none on concrete; a town or city's grow with the share, its pall columns 3 or more above a share of palls.", "palls": 0.3 },
+  "classes": {
+    "_about": "The ships' sizes, as the fleet recordings use them (sub-scene-looks.json heavy).",
+    "bb": { "len": 240, "beam": 33, "speed": 7.2, "turn": 0.05 },
+    "ca": { "len": 180, "beam": 20, "speed": 7.7, "turn": 0.08 },
+    "dd": { "len": 110, "beam": 11, "speed": 8.2, "turn": 0.12 }
+  },
+  "crew": { "_about": "A ship's company, for the men in the water [EST].", "ca": 700, "dd": 200 },
+  "hours": [7, 17],
+  "sun": [12, 70],
+  "seas": { "_about": "The swell by the report's sea word (m, s) [EST]: the navy writes only 'normal' (the sea scene's own swell: no row, so no field.sea) or 'gale' (no scene before R6). A row here is drawn as field.sea.swell." },
+  "skies": { "_about": "The sky by the report's word [EST]: the navy's look.conditions.sky says who has the air over the coast ('held', 'won', null) and only 'closed' (a closed sky, the weather switch on) says cloud; the rest is the sea scene's own sky.", "closed": { "cover": 0.9, "kind": "deck" } },
+  "relief": { "_about": "The rise of the land behind the shore by the province's terrain (m, over 3-5 km) [EST].", "flat": [15, 60], "rolling": [40, 120], "hills": [80, 250], "mountains": [300, 800] },
+  "kits": {
+    "_about": "Coast kits by the place's latitude and longitude (the waterfront's, latLonOf), first match wins, else by the fallbacks [EST: the art director's coast palettes per theatre]. land: the land scene's region (Battle/LandScape.h) the kit's ground is painted from; town: its blocks' look; shelf: the sea's depth 3 km off (m); form: its shore where the map has no ring.",
+    "rows": [
+      { "kit": "channel-chalk", "box": [50.5, 51.6, -1.5, 2.6], "land": "Farmland", "town": "brick", "shelf": 25, "rise": [60, 150], "form": "straight" },
+      { "kit": "normandy-dunes", "box": [46, 50.5, -6, 2.6], "land": "Bocage", "town": "stone", "shelf": 12, "form": "straight" },
+      { "kit": "arctic-fjord", "box": [62, 90, -180, 180], "land": "Farmland", "town": "timber", "shelf": 150, "rise": [300, 800], "form": "bay" },
+      { "kit": "china-coast", "box": [18, 41, 105, 128], "land": "Rice", "town": "tile", "shelf": 10, "form": "bay" },
+      { "kit": "volcanic-island", "box": [12, 40, -32, -12], "land": "Med", "town": "whitewash", "shelf": 80, "rise": [200, 900], "form": "headland" },
+      { "kit": "volcanic-island", "box": [24, 46, 128, 180], "land": "Rice", "town": "tile", "shelf": 80, "rise": [200, 900], "form": "headland" },
+      { "kit": "coral-island", "box": [-25, 25, 120, 180], "land": "Island", "town": "palm", "shelf": 6, "form": "bay" },
+      { "kit": "coral-island", "box": [-25, 25, -180, -120], "land": "Island", "town": "palm", "shelf": 6, "form": "bay" },
+      { "kit": "north-africa-port", "box": [20, 34, -18, 60], "land": "Desert", "town": "whitewash", "shelf": 15, "form": "harbour" },
+      { "kit": "med-harbour", "box": [34, 46, -10, 42], "land": "Med", "town": "whitewash", "shelf": 40, "form": "harbour" }
+    ],
+    "fallback": [
+      { "kit": "arctic-fjord", "lat": [55, 90], "land": "Farmland", "town": "timber", "shelf": 150, "rise": [300, 800], "form": "bay", "terrain": ["mountain"] },
+      { "kit": "coral-island", "lat": [-23.5, 23.5], "land": "Island", "town": "palm", "shelf": 6, "form": "bay" },
+      { "kit": "north-africa-port", "lat": [-35, 35], "land": "Desert", "town": "whitewash", "shelf": 15, "form": "harbour", "terrain": ["desert"] },
+      { "kit": "med-harbour", "lat": [-46, 46], "land": "Med", "town": "whitewash", "shelf": 40, "form": "harbour" },
+      { "kit": "normandy-dunes", "lat": [-90, 90], "land": "Bocage", "town": "stone", "shelf": 12, "form": "straight" }
+    ]
+  },
+  "guns": {
+    "_about": "Bores and main guns by navy, class and date (plan R1.4) [EST: the historian]. bb: a battleship not named takes the navy's row; byName stands in until the hull rows (data/campaign/hulls.json) carry mm and guns. ca: the navy's cruiser mix, each of its share of the cruisers by hash rank. dd: its destroyers. Dated like sub-scene.ts rowOf: the latest 'from' not after the month; a navy without rows takes _default. The rules read none of it.",
+    "navies": {
+      "UK": {
+        "bb": [{ "from": "1939-01", "mm": 381, "guns": 8 }],
+        "ca": [{ "from": "1939-01", "mix": [{ "cls": "heavy cruiser", "mm": 203, "guns": 8, "share": 0.35 }, { "cls": "light cruiser", "mm": 152, "guns": 12, "share": 0.4 }, { "cls": "light cruiser", "mm": 152, "guns": 8, "share": 0.25 }] },
+               { "from": "1941-01", "mix": [{ "cls": "heavy cruiser", "mm": 203, "guns": 8, "share": 0.3 }, { "cls": "light cruiser", "mm": 152, "guns": 12, "share": 0.4 }, { "cls": "anti-aircraft cruiser", "mm": 133, "guns": 10, "share": 0.3 }] }],
+        "dd": [{ "from": "1939-01", "cls": "destroyer", "mm": 120, "guns": 4 }, { "from": "1943-01", "cls": "destroyer", "mm": 114, "guns": 4 }]
+      },
+      "USA": {
+        "bb": [{ "from": "1939-01", "mm": 356, "guns": 12 }, { "from": "1942-06", "mm": 406, "guns": 9 }],
+        "ca": [{ "from": "1939-01", "mix": [{ "cls": "heavy cruiser", "mm": 203, "guns": 9, "share": 0.45 }, { "cls": "light cruiser", "mm": 152, "guns": 15, "share": 0.4 }, { "cls": "anti-aircraft cruiser", "mm": 127, "guns": 12, "share": 0.15 }] }],
+        "dd": [{ "from": "1939-01", "cls": "destroyer", "mm": 127, "guns": 5 }, { "from": "1944-06", "cls": "destroyer", "mm": 127, "guns": 6 }]
+      },
+      "GER": {
+        "bb": [{ "from": "1939-01", "mm": 283, "guns": 9 }, { "from": "1941-03", "mm": 380, "guns": 8 }],
+        "ca": [{ "from": "1939-01", "mix": [{ "cls": "heavy cruiser", "mm": 203, "guns": 8, "share": 0.5 }, { "cls": "light cruiser", "mm": 150, "guns": 9, "share": 0.5 }] }],
+        "dd": [{ "from": "1939-01", "cls": "destroyer", "mm": 127, "guns": 5 }, { "from": "1941-01", "cls": "destroyer", "mm": 150, "guns": 5 }]
+      },
+      "ITA": {
+        "bb": [{ "from": "1939-01", "mm": 320, "guns": 10 }, { "from": "1940-08", "mm": 381, "guns": 9 }],
+        "ca": [{ "from": "1939-01", "mix": [{ "cls": "heavy cruiser", "mm": 203, "guns": 8, "share": 0.5 }, { "cls": "light cruiser", "mm": 152, "guns": 8, "share": 0.5 }] }],
+        "dd": [{ "from": "1939-01", "cls": "destroyer", "mm": 120, "guns": 4 }]
+      },
+      "FRA": {
+        "bb": [{ "from": "1939-01", "mm": 340, "guns": 8 }],
+        "ca": [{ "from": "1939-01", "mix": [{ "cls": "heavy cruiser", "mm": 203, "guns": 8, "share": 0.5 }, { "cls": "light cruiser", "mm": 155, "guns": 9, "share": 0.5 }] }],
+        "dd": [{ "from": "1939-01", "cls": "destroyer", "mm": 138, "guns": 5 }]
+      },
+      "JAP": {
+        "bb": [{ "from": "1939-01", "mm": 356, "guns": 8 }],
+        "ca": [{ "from": "1939-01", "mix": [{ "cls": "heavy cruiser", "mm": 203, "guns": 10, "share": 0.7 }, { "cls": "light cruiser", "mm": 140, "guns": 7, "share": 0.3 }] }],
+        "dd": [{ "from": "1939-01", "cls": "destroyer", "mm": 127, "guns": 6 }]
+      },
+      "SOV": {
+        "bb": [{ "from": "1939-01", "mm": 305, "guns": 12 }],
+        "ca": [{ "from": "1939-01", "mix": [{ "cls": "cruiser", "mm": 180, "guns": 9, "share": 0.6 }, { "cls": "light cruiser", "mm": 130, "guns": 15, "share": 0.4 }] }],
+        "dd": [{ "from": "1939-01", "cls": "destroyer", "mm": 130, "guns": 4 }]
+      },
+      "_default": {
+        "bb": [{ "from": "1939-01", "mm": 305, "guns": 10 }],
+        "ca": [{ "from": "1939-01", "mix": [{ "cls": "cruiser", "mm": 152, "guns": 8, "share": 1 }] }],
+        "dd": [{ "from": "1939-01", "cls": "destroyer", "mm": 120, "guns": 4 }]
+      }
+    },
+    "byName": {
+      "Nelson": [406, 9], "Rodney": [406, 9], "Hood": [381, 8], "Repulse": [381, 6], "Royal Oak": [381, 8], "Royal Sovereign": [381, 8], "Ramillies": [381, 8], "Warspite": [381, 8], "Barham": [381, 8], "Malaya": [381, 8], "Valiant": [381, 8], "Resolution": [381, 8], "Renown": [381, 6], "Revenge": [381, 8], "King George V": [356, 10], "Queen Elizabeth": [381, 8], "Prince of Wales": [356, 10], "Duke of York": [356, 10], "Anson": [356, 10], "Howe": [356, 10],
+      "Scharnhorst": [283, 9], "Gneisenau": [283, 9], "Bismarck": [380, 8], "Tirpitz": [380, 8],
+      "Dunkerque": [330, 8], "Strasbourg": [330, 8], "Provence": [340, 10], "Bretagne": [340, 10], "Lorraine": [340, 8], "Courbet": [305, 12], "Paris": [305, 12], "Richelieu": [380, 8],
+      "Conte di Cavour": [320, 10], "Giulio Cesare": [320, 10], "Caio Duilio": [320, 10], "Andrea Doria": [320, 10], "Littorio": [381, 9], "Vittorio Veneto": [381, 9], "Roma": [381, 9],
+      "Marat": [305, 12], "Oktyabrskaya Revolyutsiya": [305, 12], "Parizhskaya Kommuna": [305, 12],
+      "Arizona": [356, 12], "Oklahoma": [356, 10], "Nevada": [356, 10], "Pennsylvania": [356, 12], "California": [356, 12], "Tennessee": [356, 12], "Colorado": [406, 8], "Maryland": [406, 8], "West Virginia": [406, 8], "Idaho": [356, 12], "Mississippi": [356, 12], "New Mexico": [356, 12], "Arkansas": [305, 12], "New York": [356, 10], "Texas": [356, 10], "Wyoming": [305, 12], "North Carolina": [406, 9], "Washington": [406, 9], "South Dakota": [406, 9], "Indiana": [406, 9], "Massachusetts": [406, 9], "Alabama": [406, 9], "Iowa": [406, 9], "New Jersey": [406, 9], "Wisconsin": [406, 9], "Missouri": [406, 9],
+      "Nagato": [410, 8], "Mutsu": [410, 8], "Fuso": [356, 12], "Yamashiro": [356, 12], "Ise": [356, 12], "Hyuga": [356, 12], "Kirishima": [356, 8], "Kongo": [356, 8], "Haruna": [356, 8], "Hiei": [356, 8], "Yamato": [460, 9], "Musashi": [460, 9],
+      "Minas Geraes": [305, 12], "São Paulo": [305, 12], "Rivadavia": [305, 12], "Moreno": [305, 12], "Almirante Latorre": [356, 10]
+    }
+  },
+  "caption": {
+    "_about": "The closing words (the UI director's marks of 26 November 13:42Z, sea-shore-scene-UI-MARKS.md): the second line's bands by thirds of the share s. struck: line 3 where the batteries hit battleships (the look's outcome.struck; never sunk, the navy's ruling 3), in the rules' own words ('its battleships were hit, and none was sunk', naval-battles/shore-guns-r2/ui-words-1126.md) without the readiness figure, for a fleet of one battleship and of several: her marks have no battleship line yet, so these wait on them.",
+    "troops": ["The guns found little to hit.", "The shelling did them little harm.", "The shelling shook them.", "The shelling left them badly shaken."],
+    "town": ["The shells broke down little of them.", "The shells broke down little of them.", "The shells broke down part of them.", "The shells broke down much of them.", "There was little left to break."],
+    "city": ["The guns found little to hit.", "The shelling stopped little of their output for a month.", "The shelling stopped part of their output for a month.", "The shelling stopped much of their output for a month."],
+    "fort": "The shore batteries answered, but hit no ship.",
+    "struck": ["The battleship was hit, but not sunk.", "The battleships were hit, and none was sunk."]
+  }
+}

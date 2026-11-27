@@ -259,9 +259,172 @@ namespace SeaFeed
 			Out.WreckShip = Wreck.IsObject() && Wreck["ship"].IsNumber() ? std::clamp(Wreck["ship"].Int(), 0, 64) : 0;
 			Out.bDone = X["done"].Truth(false);
 		}
+
+		// ---- The shelling scene's own (the shore guns plan R1.8): read under -TheaterSeaShore=1 only ----------------------
+		// (every name read here is one Rules/shore-scene.ts writes; tests/shore-scene.test.ts holds the two to each other)
+
+		/** A finite number, else the default; and one held within [Lo, Hi]. */
+		double Finite(const Json& J, double Default)
+		{
+			return J.IsNumber() && std::isfinite(J.Num()) ? J.Num() : Default;
+		}
+		double Within(const Json& J, double Default, double Lo, double Hi)
+		{
+			return std::clamp(Finite(J, Default), Lo, Hi);
+		}
+		/** Falls as [[x, y, kind], ...]: at most 64, each with a finite place. */
+		void ReadFalls(const Json& J, std::vector<ShoreFall>& Out)
+		{
+			for (size_t K = 0; K < J.Count() && Out.size() < 64; ++K)
+			{
+				const Json& F = J.At(K);
+				if (!F.IsArray() || F.Count() < 3 || !F.At(0).IsNumber() || !F.At(1).IsNumber() || !std::isfinite(F.At(0).Num()) || !std::isfinite(F.At(1).Num())) continue;
+				Out.push_back(ShoreFall{ F.At(0).Num(), F.At(1).Num(), F.At(2).Str("") });
+			}
+		}
+		/** sea:shore, sea:battery, sea:fire or sea:spot: its own fields from its extra; false for any other event. */
+		bool ReadShoreEvent(const Json& E, ShoreEvent& Out)
+		{
+			Out.What = E["what"].Str("");
+			if (Out.What != "sea:shore" && Out.What != "sea:battery" && Out.What != "sea:fire" && Out.What != "sea:spot") return false;
+			const Json& X = E["extra"];
+			Out.T = Finite(E["t"], 0.0);
+			Out.Unit = E["unit"].IsNumber() ? E["unit"].Int() : -1;
+			Out.Ship = X["ship"].IsNumber() ? std::clamp(X["ship"].Int(), 0, 64) : 0;
+			Out.Lands = Finite(X["lands"], -1.0);
+			Out.Mm = Within(X["mm"], 0.0, 0.0, 460.0);
+			Out.N = std::clamp(X["n"].Int(0), 0, 64);
+			Out.Train = Finite(X["train"], 0.0);
+			const Json& Lay = X["lay"];
+			Out.LayOn = std::clamp(Lay["on"].Int(0), 0, 64);
+			Out.LaySea = std::clamp(Lay["sea"].Int(0), 0, 64);
+			Out.LayBeach = std::clamp(Lay["beach"].Int(0), 0, 64);
+			Out.LayOver = std::clamp(Lay["over"].Int(0), 0, 64);
+			Out.Bat = X["bat"].IsNumber() ? std::clamp(X["bat"].Int(), 0, 64) : -1;
+			Out.X = Finite(X["x"], 0.0);
+			Out.Y = Finite(X["y"], 0.0);
+			Out.On = X["on"].IsNumber() ? X["on"].Int() : -1;
+			Out.Kind = X["kind"].Str("");
+			Out.bDud = X["dud"].Truth(false);
+			Out.R = Within(X["r"], 0.0, 0.0, 10000.0);
+			Out.Until = Finite(X["until"], -1.0);
+			Out.Nat = X["nat"].Str("");
+			Out.Alt = Within(X["alt"], 0.0, 0.0, 10000.0);
+			ReadFalls(X["falls"], Out.Falls);
+			return true;
+		}
+		/** A window's shots: [{at, kind, subject?, spot?: [x, y]}], at most 16, in the window's order. */
+		void ReadShots(const Json& J, std::vector<Shot>& Out)
+		{
+			for (size_t K = 0; K < J.Count() && Out.size() < 16; ++K)
+			{
+				const Json& S = J.At(K);
+				if (!S.IsObject() || !S["at"].IsNumber() || !std::isfinite(S["at"].Num()) || !S["kind"].IsString()) continue;
+				Shot One;
+				One.At = S["at"].Num();
+				One.Kind = S["kind"].Str("");
+				One.Subject = S["subject"].IsNumber() ? S["subject"].Int() : -1;
+				const Json& Spot = S["spot"];
+				One.bSpot = Spot.IsArray() && Spot.Count() >= 2 && Spot.At(0).IsNumber() && Spot.At(1).IsNumber() && std::isfinite(Spot.At(0).Num()) && std::isfinite(Spot.At(1).Num());
+				One.SpotX = One.bSpot ? Spot.At(0).Num() : 0.0;
+				One.SpotY = One.bSpot ? Spot.At(1).Num() : 0.0;
+				Out.push_back(One);
+			}
+		}
+		// ---- (the shelling scene's own, ends) ----------------------------------------------------------------------
 	}
 
-	bool ReadView(const Json& J, Memory& Kept, Frame& Out)
+	bool ReadCoast(const Json& J, Coast& Out)
+	{
+		const Json& C = J["coast"];
+		Out = Coast();
+		if (!C.IsObject() || !C["bearing"].IsNumber() || !std::isfinite(C["bearing"].Num())) return false;
+		Out.bHas = true;
+		Out.Bearing = std::fmod(std::fmod(C["bearing"].Num(), 360.0) + 360.0, 360.0);
+		Out.AtX = Finite(C["at"]["x"], 0.0);
+		Out.AtY = Finite(C["at"]["y"], 0.0);
+		// (the land: closed rings of [x, y]; a ring of fewer than three finite points is not read, nor any past the caps)
+		const Json& Shore = C["shore"];
+		size_t Points = 0;
+		for (size_t K = 0; K < Shore.Count() && Out.Shore.size() < ShoreRings; ++K)
+		{
+			const Json& Ring = Shore.At(K);
+			std::vector<std::pair<double, double>> Read;
+			for (size_t P = 0; P < Ring.Count() && Points + Read.size() < ShorePoints; ++P)
+			{
+				const Json& At = Ring.At(P);
+				if (At.IsArray() && At.Count() >= 2 && At.At(0).IsNumber() && At.At(1).IsNumber() && std::isfinite(At.At(0).Num()) && std::isfinite(At.At(1).Num()))
+				{
+					Read.emplace_back(At.At(0).Num(), At.At(1).Num());
+				}
+			}
+			if (Read.size() < 3) continue;
+			Points += Read.size();
+			Out.Shore.push_back(std::move(Read));
+		}
+		Out.Form = C["form"].Str("");
+		Out.Relief = C["relief"].Str("");
+		Out.Rise = Within(C["rise"], 0.0, 0.0, 3000.0);
+		Out.Kit = C["kit"].Str("");
+		Out.Land = C["land"].Str("");
+		Out.Ground = C["ground"].Str("");
+		Out.Shelf = Within(C["shelf"], 0.0, 0.0, 1000.0);
+		const Json& Town = C["town"];
+		Out.bTown = Town.IsObject();
+		if (Out.bTown)
+		{
+			Out.TownName = Town["name"].Str("");
+			Out.TownSize = Town["size"].Str("");
+			Out.TownLook = Town["look"].Str("");
+			Out.bPort = Town["port"].Truth(false);
+			Out.TownX = Finite(Town["x"], 0.0);
+			Out.TownY = Finite(Town["y"], 0.0);
+			Out.TownR = Within(Town["r"], 0.0, 0.0, 10000.0);
+			const Json& Quay = Town["quay"];
+			Out.bQuay = Quay.IsObject();
+			Out.QuayX = Finite(Quay["x"], 0.0);
+			Out.QuayY = Finite(Quay["y"], 0.0);
+			Out.QuayFace = Finite(Quay["face"], 0.0);
+			Out.QuayLen = Within(Quay["len"], 0.0, 0.0, 5000.0);
+			Out.Damage = Within(Town["damage"], 0.0, 0.0, 1.0);
+			Out.bSkyline = Town["skyline"].Truth(false);
+		}
+		const Json& Target = C["target"];
+		Out.TargetKind = Target["kind"].Str("");
+		Out.TargetX = Finite(Target["x"], 0.0);
+		Out.TargetY = Finite(Target["y"], 0.0);
+		Out.TargetR = Within(Target["r"], 0.0, 0.0, 20000.0);
+		const Json& Strips = Target["strips"];
+		for (size_t K = 0; K < Strips.Count() && Out.Strips.size() < 16; ++K)
+		{
+			const Json& S = Strips.At(K);
+			ShoreStrip One;
+			One.X = Finite(S["x"], 0.0);
+			One.Y = Finite(S["y"], 0.0);
+			One.Len = Within(S["len"], 0.0, 0.0, 10000.0);
+			One.Wide = Within(S["wide"], 0.0, 0.0, 10000.0);
+			One.Face = Finite(S["face"], 0.0);
+			One.Kind = S["kind"].Str("");
+			Out.Strips.push_back(One);
+		}
+		const Json& Fort = C["fort"];
+		Out.FortLevel = std::clamp(Fort["level"].Int(0), 0, 10);
+		Out.bFortFired = Out.FortLevel > 0 && Fort["fired"].Truth(false);
+		const Json& Batteries = Fort["batteries"];
+		for (size_t K = 0; K < Batteries.Count() && Out.Batteries.size() < 16; ++K)
+		{
+			const Json& B = Batteries.At(K);
+			Out.Batteries.push_back(ShoreBattery{ Finite(B["x"], 0.0), Finite(B["y"], 0.0), Finite(B["face"], 0.0), Within(B["mm"], 0.0, 0.0, 460.0) });
+		}
+		const Json& Air = C["air"];
+		Out.AirSpot = Air["spot"].Str("");
+		Out.AirNat = Air["nat"].Str("");
+		Out.AirFrom = Air["from"].Str("");
+		Out.Whose = C["whose"].Str("");
+		return true;
+	}
+
+	bool ReadView(const Json& J, Memory& Kept, Frame& Out, bool bShore)
 	{
 		if (!J.IsObject()) return false;
 		Top& H = Out.Head;
@@ -297,6 +460,13 @@ namespace SeaFeed
 			SeaShow::Piece P;
 			ReadPiece(Units.At(K), Kept, P);
 			Out.Pieces.push_back(P);
+			// (a shelling ship's main bore, 75 to 460 mm, and her guns, where her extra says them; the boats' gunMm and its
+			// 200 mm cap above stay as they are)
+			const Json& X = Units.At(K)["extra"];
+			if (bShore && X["mainMm"].IsNumber() && X["mainMm"].Num() >= 75.0 && X["mainMm"].Num() <= 460.0)
+			{
+				Out.Guns.push_back(ShoreGuns{ P.Id, X["mainMm"].Num(), std::clamp(X["guns"].Int(0), 0, 32) });
+			}
 		}
 		const Json& Events = J["events"];
 		for (size_t K = 0; K < Events.Count(); ++K)
@@ -304,6 +474,8 @@ namespace SeaFeed
 			SeaShow::Event E;
 			ReadEvent(Events.At(K), E);
 			Out.Events.push_back(E);
+			ShoreEvent Shore;
+			if (bShore && ReadShoreEvent(Events.At(K), Shore)) Out.Shore.push_back(std::move(Shore));
 		}
 		const Json& Zones = J["zones"];
 		Out.bZones = Zones.IsArray();
@@ -336,7 +508,7 @@ namespace SeaFeed
 		return true;
 	}
 
-	bool ReadRecording(const std::string& Source, Recording& Out, std::string& OutError)
+	bool ReadRecording(const std::string& Source, Recording& Out, std::string& OutError, bool bShore)
 	{
 		Json J;
 		if (!AirFeed::Parse(Source, J, OutError)) return false;
@@ -360,7 +532,7 @@ namespace SeaFeed
 		for (size_t K = 0; K < Views.Count(); ++K)
 		{
 			Frame F;
-			if (!ReadView(Views.At(K), Kept, F)) continue;
+			if (!ReadView(Views.At(K), Kept, F, bShore)) continue;
 			if (K == 0) Out.Board.Limit = F.Head.Limit;
 			Out.Views.push_back(std::move(F));
 		}
@@ -378,8 +550,11 @@ namespace SeaFeed
 			Read.Screen = B["screen"].Num(0.0);
 			if (!std::isfinite(Read.From) || !std::isfinite(Read.To) || !std::isfinite(Read.Screen) || Read.To - Read.From < 0.1 || Read.Screen < 0.1 || Read.From < Last) continue;
 			Last = Read.To;
+			if (bShore) ReadShots(B["shots"], Read.Shots);
 			Out.Beats.push_back(Read);
 		}
+		// (a shelling's coast, under -TheaterSeaShore=1 only)
+		if (bShore) ReadCoast(J["field"], Out.Shore);
 		return !Out.Views.empty();
 	}
 }

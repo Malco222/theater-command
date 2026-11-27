@@ -263,10 +263,10 @@ int main(int Argc, char** Argv)
 	std::printf("The sea's switches and the \"Sea look:\" line (Battle/SeaLookSwitches)\n");
 	{
 		using namespace SeaLookSwitches;
-		Check("the plan's section 3: 39 switches of the release 2 sea (step 6 adds -TheaterSeaIce=, step 11 -TheaterSeaStars= and -TheaterSeaNightFight=, the ship detail plan's round 1 the ships' three and the reel's two)", Count == 39, std::to_string(Count));
+		Check("the plan's section 3: 48 switches of the release 2 sea (step 6 adds -TheaterSeaIce=, step 11 -TheaterSeaStars= and -TheaterSeaNightFight=, the ship detail plan's round 1 the ships' three and the reel's two, the shore guns plan its nine)", Count == 48, std::to_string(Count));
 		std::set<std::string> Names;
 		bool bNamed = true, bFilled = true, bOnAt = true;
-		const std::set<std::string> OnAts = { "1", "2", "3", "tier", "own", "with Swell", "with Day", "review", "extra", "none" };
+		const std::set<std::string> OnAts = { "1", "2", "3", "tier", "own", "with Swell", "with Day", "with Shore", "review", "extra", "none" };
 		for (const Switch& One : All)
 		{
 			const std::string Name = One.Name;
@@ -298,14 +298,14 @@ int main(int Argc, char** Argv)
 		{
 			Built += One.bBuilt ? (Built.empty() ? "" : ", ") + std::string(One.Name) : "";
 		}
-		Check("built so far: step 1(a)'s -TheaterSeaMarksPool=, step 11's -TheaterSeaDay=, -TheaterSeaVisContrast= and -TheaterSeaStars=, step 6's -TheaterSeaSpray= and -TheaterSeaIce=, step 11's -TheaterSeaNightFight=, step 13's five weather switches, the ship detail plan's round 1 five (each lands with its step; step 1(b)'s -TheaterSeaFarEdge= not yet)",
+		Check("built so far: step 1(a)'s -TheaterSeaMarksPool=, step 11's -TheaterSeaDay=, -TheaterSeaVisContrast= and -TheaterSeaStars=, step 6's -TheaterSeaSpray= and -TheaterSeaIce=, step 11's -TheaterSeaNightFight=, step 13's five weather switches, the shore guns plan's R1 -TheaterSeaShore=, the ship detail plan's round 1 five (each lands with its step; step 1(b)'s -TheaterSeaFarEdge= not yet)",
 			Built == "TheaterSeaMarksPool=, TheaterSeaDay=, TheaterSeaVisContrast=, TheaterSeaStars=, TheaterSeaSpray=, TheaterSeaIce=, TheaterSeaNightFight=, TheaterSeaClouds=, TheaterSeaCloudShade=, TheaterSeaRain=, TheaterSeaSkyStandIn=, TheaterSeaWeather=, "
-					 "TheaterSeaShipLight=, TheaterSeaShipSkin=, TheaterSeaShipShade=, TheaterSeaReel=, TheaterSeaRideStrip=",
+					 "TheaterSeaShore=, TheaterSeaShipLight=, TheaterSeaShipSkin=, TheaterSeaShipShade=, TheaterSeaReel=, TheaterSeaRideStrip=",
 			Built.empty() ? "none" : Built);
 
 		const std::string Plain = Line(0, {});
 		Check("the line with nothing asked: tier 0, release 1.5's sea as made, every switch at today's value",
-			Plain == "Sea look: tier 0 (release 1.5's sea, as made); 17 of the release 2 sea's 39 switches built, in force: -TheaterSeaMarksPool=0, -TheaterSeaDay=seed, -TheaterSeaVisContrast=0.05, -TheaterSeaStars=0, -TheaterSeaSpray=0, -TheaterSeaIce=0, -TheaterSeaNightFight=0, -TheaterSeaClouds=0, -TheaterSeaCloudShade=0, -TheaterSeaRain=0, -TheaterSeaSkyStandIn=0, -TheaterSeaWeather=none, -TheaterSeaShipLight=0, -TheaterSeaShipSkin=0, -TheaterSeaShipShade=0, -TheaterSeaReel=off, -TheaterSeaRideStrip=off.", Plain);
+			Plain == "Sea look: tier 0 (release 1.5's sea, as made); 18 of the release 2 sea's 48 switches built, in force: -TheaterSeaMarksPool=0, -TheaterSeaDay=seed, -TheaterSeaVisContrast=0.05, -TheaterSeaStars=0, -TheaterSeaSpray=0, -TheaterSeaIce=0, -TheaterSeaNightFight=0, -TheaterSeaClouds=0, -TheaterSeaCloudShade=0, -TheaterSeaRain=0, -TheaterSeaSkyStandIn=0, -TheaterSeaWeather=none, -TheaterSeaShore=0, -TheaterSeaShipLight=0, -TheaterSeaShipSkin=0, -TheaterSeaShipShade=0, -TheaterSeaReel=off, -TheaterSeaRideStrip=off.", Plain);
 		Lines << "look\t0||\t" << Plain << '\n';
 		Said.push_back(Plain);
 
@@ -319,7 +319,7 @@ int main(int Argc, char** Argv)
 		Given[1].Value = "2";
 		const std::string AskedLine = Line(0, Given);
 		Check("switches asked for before their step lands: said, in the table's order, to change nothing",
-			AskedLine == "Sea look: tier 0 (release 1.5's sea, as made); 17 of the release 2 sea's 39 switches built, in force: -TheaterSeaMarksPool=0, -TheaterSeaDay=seed, -TheaterSeaVisContrast=0.05, -TheaterSeaStars=0, -TheaterSeaSpray=0, -TheaterSeaIce=0, -TheaterSeaNightFight=0, -TheaterSeaClouds=0, -TheaterSeaCloudShade=0, -TheaterSeaRain=0, -TheaterSeaSkyStandIn=0, -TheaterSeaWeather=none, -TheaterSeaShipLight=0, -TheaterSeaShipSkin=0, -TheaterSeaShipShade=0, -TheaterSeaReel=off, -TheaterSeaRideStrip=off; "
+			AskedLine == "Sea look: tier 0 (release 1.5's sea, as made); 18 of the release 2 sea's 48 switches built, in force: -TheaterSeaMarksPool=0, -TheaterSeaDay=seed, -TheaterSeaVisContrast=0.05, -TheaterSeaStars=0, -TheaterSeaSpray=0, -TheaterSeaIce=0, -TheaterSeaNightFight=0, -TheaterSeaClouds=0, -TheaterSeaCloudShade=0, -TheaterSeaRain=0, -TheaterSeaSkyStandIn=0, -TheaterSeaWeather=none, -TheaterSeaShore=0, -TheaterSeaShipLight=0, -TheaterSeaShipSkin=0, -TheaterSeaShipShade=0, -TheaterSeaReel=off, -TheaterSeaRideStrip=off; "
 						 "asked for but not built yet, so nothing changes: -TheaterSeaLook=2, -TheaterSeaProbe.", AskedLine);
 		Lines << "look\t0|-TheaterSeaLook=2, -TheaterSeaProbe|\t" << AskedLine << '\n';
 		Said.push_back(AskedLine);
@@ -352,8 +352,8 @@ int main(int Argc, char** Argv)
 		const std::string PoolLine = Line(On), JunkLine = Line(Junk);
 		Check("-TheaterSeaMarksPool=1 keeps the marks' meshes and says so; anything else asked is today's, said as 0; not asked, today's and said as today's",
 			bOn && !bJunk && !bNone
-				&& PoolLine == "Sea look: tier 0 (release 1.5's sea, as made); 17 of the release 2 sea's 39 switches built, in force: -TheaterSeaMarksPool=1 (asked), -TheaterSeaDay=seed, -TheaterSeaVisContrast=0.05, -TheaterSeaStars=0, -TheaterSeaSpray=0, -TheaterSeaIce=0, -TheaterSeaNightFight=0, -TheaterSeaClouds=0, -TheaterSeaCloudShade=0, -TheaterSeaRain=0, -TheaterSeaSkyStandIn=0, -TheaterSeaWeather=none, -TheaterSeaShipLight=0, -TheaterSeaShipSkin=0, -TheaterSeaShipShade=0, -TheaterSeaReel=off, -TheaterSeaRideStrip=off."
-				&& JunkLine == "Sea look: tier 0 (release 1.5's sea, as made); 17 of the release 2 sea's 39 switches built, in force: -TheaterSeaMarksPool=0 (asked), -TheaterSeaDay=seed, -TheaterSeaVisContrast=0.05, -TheaterSeaStars=0, -TheaterSeaSpray=0, -TheaterSeaIce=0, -TheaterSeaNightFight=0, -TheaterSeaClouds=0, -TheaterSeaCloudShade=0, -TheaterSeaRain=0, -TheaterSeaSkyStandIn=0, -TheaterSeaWeather=none, -TheaterSeaShipLight=0, -TheaterSeaShipSkin=0, -TheaterSeaShipShade=0, -TheaterSeaReel=off, -TheaterSeaRideStrip=off."
+				&& PoolLine == "Sea look: tier 0 (release 1.5's sea, as made); 18 of the release 2 sea's 48 switches built, in force: -TheaterSeaMarksPool=1 (asked), -TheaterSeaDay=seed, -TheaterSeaVisContrast=0.05, -TheaterSeaStars=0, -TheaterSeaSpray=0, -TheaterSeaIce=0, -TheaterSeaNightFight=0, -TheaterSeaClouds=0, -TheaterSeaCloudShade=0, -TheaterSeaRain=0, -TheaterSeaSkyStandIn=0, -TheaterSeaWeather=none, -TheaterSeaShore=0, -TheaterSeaShipLight=0, -TheaterSeaShipSkin=0, -TheaterSeaShipShade=0, -TheaterSeaReel=off, -TheaterSeaRideStrip=off."
+				&& JunkLine == "Sea look: tier 0 (release 1.5's sea, as made); 18 of the release 2 sea's 48 switches built, in force: -TheaterSeaMarksPool=0 (asked), -TheaterSeaDay=seed, -TheaterSeaVisContrast=0.05, -TheaterSeaStars=0, -TheaterSeaSpray=0, -TheaterSeaIce=0, -TheaterSeaNightFight=0, -TheaterSeaClouds=0, -TheaterSeaCloudShade=0, -TheaterSeaRain=0, -TheaterSeaSkyStandIn=0, -TheaterSeaWeather=none, -TheaterSeaShore=0, -TheaterSeaShipLight=0, -TheaterSeaShipSkin=0, -TheaterSeaShipShade=0, -TheaterSeaReel=off, -TheaterSeaRideStrip=off."
 				&& Line(None) == Plain,
 			PoolLine);
 		Lines << "look\t0||-TheaterSeaMarksPool=1 (asked)\t" << PoolLine << '\n';
@@ -428,7 +428,7 @@ int main(int Argc, char** Argv)
 			const std::string LightLine = Line(Twelve);
 			Check("-TheaterSeaShipLight= takes off or 0 (none), 1 or on (0.10), or a top light from 0.0 to 0.30 to four places; anything else refused and taken as off; never in the month's scene; said as in force",
 				LightAt >= 0 && Wrong == 0 && SweepWrong == 0 && Took.Value == 0.12f && NotAsked.Value == 0.0f && !NotAsked.bRefused && Line(Unasked) == Plain && ShipPaintCore::SeaTopLightMost == 0.30f &&
-					LightLine == "Sea look: tier 0 (release 1.5's sea, as made); 17 of the release 2 sea's 39 switches built, in force: -TheaterSeaMarksPool=0, -TheaterSeaDay=seed, -TheaterSeaVisContrast=0.05, -TheaterSeaStars=0, -TheaterSeaSpray=0, -TheaterSeaIce=0, -TheaterSeaNightFight=0, -TheaterSeaClouds=0, -TheaterSeaCloudShade=0, -TheaterSeaRain=0, -TheaterSeaSkyStandIn=0, -TheaterSeaWeather=none, -TheaterSeaShipLight=0.12 (asked), -TheaterSeaShipSkin=0, -TheaterSeaShipShade=0, -TheaterSeaReel=off, -TheaterSeaRideStrip=off.",
+					LightLine == "Sea look: tier 0 (release 1.5's sea, as made); 18 of the release 2 sea's 48 switches built, in force: -TheaterSeaMarksPool=0, -TheaterSeaDay=seed, -TheaterSeaVisContrast=0.05, -TheaterSeaStars=0, -TheaterSeaSpray=0, -TheaterSeaIce=0, -TheaterSeaNightFight=0, -TheaterSeaClouds=0, -TheaterSeaCloudShade=0, -TheaterSeaRain=0, -TheaterSeaSkyStandIn=0, -TheaterSeaWeather=none, -TheaterSeaShore=0, -TheaterSeaShipLight=0.12 (asked), -TheaterSeaShipSkin=0, -TheaterSeaShipShade=0, -TheaterSeaReel=off, -TheaterSeaRideStrip=off.",
 				std::to_string(std::size(Cases) - Wrong) + " of " + std::to_string(std::size(Cases)) + " values as ruled" + (FirstWrong.empty() ? "" : "; " + FirstWrong) + "; " +
 					std::to_string(3000 - SweepWrong) + " of 3000 from 0.0001 to 0.3000 said back exactly" + (FirstSweepWrong.empty() ? "" : "; " + FirstSweepWrong) + "; " + LightLine);
 		}
