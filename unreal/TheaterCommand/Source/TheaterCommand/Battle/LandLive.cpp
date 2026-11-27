@@ -139,12 +139,13 @@ namespace
 		// view but zoomed out so I can see it from a higher angle"; 04:13Z, "i want the camera angle to be like god mode
 		// ... a free camera mode where i can move where every i want"; 04:14Z, "if i click a specific unit it locks in on
 		// them and follows them as the formation moves forward". The camera thread's (LandGeneralEye): HILL VIEW (I), his
-		// tilt keys on down past the automatic tilt to almost level, LOCK ON (L, or one of his units clicked twice on the
+		// tilt keys on down past the automatic tilt to almost level, LOCK ON (J, or one of his units clicked twice on the
 		// field). Looks only. Read as the battle's view begins. Off until the Mac and the art director pass it;
-		// -TheaterLandRuleFreeView turns it on for a run. Key L the UI director's of 04:22Z; the name passed and the line
-		// mended by the UI director, 27 November 2026 06:23Z, who also set it here, with the rows that change no result.
+		// -TheaterLandRuleFreeView turns it on for a run. Key J the UI director's of 27 November 2026 06:31Z (L, her
+		// first, has been ALL FALL BACK since release 1.5, and a shipped key moves only with his word); the name passed
+		// and the line mended by her at 06:23Z, who also set it here, with the rows that change no result.
 		// The rules do not read the key: the screen does (LandBattleCommand.cpp, LandBattleScreen.cpp).)
-		{ TEXT("freeview"), TEXT("A free camera in battle"), TEXT("Your own view of the battle tilts all the way from straight down to almost level with the ground (Shift with W or S). I gives the hill view: a look along the ground from higher up and further back, as from a hill. L locks the view on the unit in hand, and so does a second click on it: the view follows it, and still turns, tilts and zooms as you wish, until you move it elsewhere or press L again. Off: the view as before. A change takes effect from the next battle. Only how you watch: no result changes."), TEXT("TheaterLandNoFreeView"), false, TEXT("TheaterLandRuleFreeView") },
+		{ TEXT("freeview"), TEXT("A free camera in battle"), TEXT("Your own view of the battle tilts all the way from straight down to almost level with the ground (Shift with W or S). I gives the hill view: a look along the ground from higher up and further back, as from a hill. J locks the view on the unit in hand, and so does a second click on it: the view follows it, and still turns, tilts and zooms as you wish, until you move it elsewhere or press J again. Off: the view as before. A change takes effect from the next battle. Only how you watch: no result changes."), TEXT("TheaterLandNoFreeView"), false, TEXT("TheaterLandRuleFreeView") },
 		// (Infantry with tanks, release 2: Brian, 23 November 05:05Z. NOT looks only: with it on the rules' tanks overrun
 		// foot in the open (sim.escort, sim.overruns, LAND.overrun) and results change (the design director, 27 November
 		// 2026, 01:54Z). So it sits here, with the rows whose lines say "This changes how battles turn out", and its line
