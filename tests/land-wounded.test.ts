@@ -409,7 +409,14 @@ const base = BASE ? ((await import(BASE + '/src/battle/land/live.ts')) as typeof
 
 const all: { name: string; seat: Seat; on: Seen; plain: Seen }[] = [];
 
-/** The stunned: false reference digests (refd3.ts on the tree with stunned men struck out), by battle, set and seat. */
+/**
+ * The stunned: false reference digests, by battle, set and seat: read on the tree with its one stunned line struck out.
+ * Recorded again on the pass-2 line (27 November 13:52Z: this tree, next-al 0dc2b5b75 + the row, with stun() in
+ * burstThin struck out; all 16 keys read, and stunned: false on the tree as it stands gave the same 16). Fifteen are
+ * what the row's old line recorded. One moved: Prokhorovka 13, bearers on, nobody seated. With the bearers rule on
+ * this row stands aside (woundsOn false), so that key is the base's own drawing, and the pass-2 line draws that battle
+ * otherwise than the old line did from 306.5 s on (the pass-2 line with the bearers alone gives the same d511d769).
+ */
 const REF_TABLE: Record<string, string> = {
   'normandy-1944-11-bearers-seated': 'd58c2279',
   'normandy-1944-11-bearers-unseated': '9f7f03ce',
@@ -420,7 +427,7 @@ const REF_TABLE: Record<string, string> = {
   'normandy-1944-3-shipped-seated': '546ac04f',
   'normandy-1944-3-shipped-unseated': 'f7a25506',
   'prokhorovka-1943-13-bearers-seated': '3017872a',
-  'prokhorovka-1943-13-bearers-unseated': '3ca49b52',
+  'prokhorovka-1943-13-bearers-unseated': 'd511d769',
   'prokhorovka-1943-13-shipped-seated': '810e8ae2',
   'prokhorovka-1943-13-shipped-unseated': '489cc4e',
   'prokhorovka-1943-5-bearers-seated': 'cc7c7404',
