@@ -174,7 +174,7 @@ import grandData from '../../../data/campaign/grand.json';
 import setupBook from '../../../data/campaign/setup-1939.json';
 import { turnToDate } from '../../../src/core/ticket';
 import { TRADE as TRADE_RULES, dealsOf as tradeDealsOf, housesOf as tradeHousesOf, tradePath as tradePathOf, tradeRules as tradeIsOn, whyNoTrade as whyNoTradeWith } from '../../../src/campaign/trade';
-import { civicAdvice, civicLine, civicReady, civicSum as civicSumOf, setSettledTowns, settledTownsOn } from '../../../src/campaign/buildings';
+import { civicAdvice, civicLine, civicReady, civicSum as civicSumOf, hospitalNear, setSettledTowns, settledTownsOn } from '../../../src/campaign/buildings';
 import { addQueue, dropQueue, nextQueued, queueHeads, queueOf, queuedAt, queuedName, setTownQueue, townQueueOn, whyNotQueue } from '../../../src/campaign/townqueue';
 import { cityDefences, cityDefencesOn, flakGroundOn, lightsAt, radarLays, setCityDefences, townWorksAt } from '../../../src/campaign/citydefences';
 // (Rules 84.3.3) FIRST COMMAND: the first hour's ten staff notes, one list for both games.
@@ -197,6 +197,7 @@ import { kitLine, pressedOn, setPressed } from '../../../src/campaign/pressed';
 import { diaryEntries, diaryOn, setDiary } from '../../../src/campaign/diary';
 import { chanceWords as heldChanceWords, heldOn, heldRibbon, setHeld } from '../../../src/campaign/heldline';
 import { setWorn, wornLine, wornOn, WORN } from '../../../src/campaign/wornout';
+import { HOSP, hospOn, setHosp, woundedLine } from '../../../src/campaign/fieldhospitals';
 import { FIRES, burningAt, dumpFiresOn, setDumpFires } from '../../../src/campaign/dumpfires';
 import { cancelDump, dumpPlaces, dumpPrice, dumpsOf, dumpsOn as dumpsAreOn, dumpsView, firstFront, frontsAt, logisticsSet, lorryPool, orderDump, poolOn as lorryPoolOn, setLogistics, setLorryFirst, shiftOn as lorryShiftOn, wagonsOn as wagonsAreOn, whyNoDump, LOGI, type LogisticsSwitch } from '../../../src/campaign/logistics';
 import { railheads } from '../../../src/campaign/rails';
@@ -834,6 +835,9 @@ function drawView(step = false) {
       // (Release 2, wornout.ts, behind its switch) What its months in the line have taken off its edge, as its card's line:
       // "Worn out: 6% weaker after 5 months in the line. A month at rest brings it back." Absent where it has lost none.
       ...(c.spent && (c.nat === s.human || (s.human && c.joint === s.human)) ? { worn: wornLine(c) } : {}),
+      // (Release 2, fieldhospitals.ts, behind its switch) Its wounded, as its card's line: "Wounded: 3,400 men in the
+      // hospitals; about 900 rejoin next month." Absent where it has none.
+      ...(c.wd && (c.nat === s.human || (s.human && c.joint === s.human)) ? { wounded: woundedLine(s, c, c.supplied, hospitalNear(s, c, (h) => h === c.nat || allied(s, h, c.nat))) } : {}),
       ...markOf(c),
       ...(fresh.has(c.id) ? { ready: true } : {}),
       // (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) Where breaking corps up is on: why this corps cannot have
@@ -1143,6 +1147,8 @@ function drawView(step = false) {
     warDiary: diaryOn(s), heldLine: heldOn(s), dumpFires: dumpFiresOn(s),
     // (Release 2, batch 3) Worn out in the line (wornout.ts).
     wornOut: wornOn(s),
+    // (Release 2, batch 3) Field hospitals (fieldhospitals.ts).
+    fieldHospitals: hospOn(s),
     // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
     townQueue: townQueueOn(s),
     // (Release 2, citydefences.ts) Whether searchlights can be built, the guns fight by night by what they see and a
@@ -8338,6 +8344,14 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       : 'Worn out in the line is off: every corps has its edge back.';
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'hospitalsrule') {
+    // (Release 2, fieldhospitals.ts) Field hospitals, switched in any month.
+    ok = setHosp(s, part[1] === 'on');
+    note = hospOn(s)
+      ? `Field hospitals are on: of what a corps loses in battle, about ${Math.round(HOSP.wounded * 100)} in 100 are wounded who can come back. While the corps is in supply about ${Math.round(HOSP.back * 100)} in 100 of them rejoin it each month, free, and more with a Medicine building near; cut off, some are lost. The same for every army.`
+      : 'Field hospitals are off: battle losses are gone for good, and only new drafts refill a corps.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'dumpfiresrule') {
     // (Release 2, dumpfires.ts) Supply dumps that burn, switched in any month. They need the forward dumps, which a war
     // takes only as it opens: the setter will not turn them on in a war without them.
@@ -9559,6 +9573,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, offerCalls(g
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).dumpFires = (on: boolean) => { const s = game(); setDumpFires(s, !!on); return { on: dumpFiresOn(s) }; };
 // (Release 2, batch 3) Worn out in the line: TC.wornOut(on) at any time; the options page uses act('wornoutrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).wornOut = (on: boolean) => { const s = game(); setWorn(s, !!on); return { on: wornOn(s) }; };
+// (Release 2, batch 3) Field hospitals: TC.fieldHospitals(on) at any time; the options page uses act('hospitalsrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fieldHospitals = (on: boolean) => { const s = game(); setHosp(s, !!on); return { on: hospOn(s) }; };
 // (Release 2, pressed.ts) Captured tanks pressed into service: TC.pressedTanks(on) at any time; the options page uses
 // act('pressedtanksrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).pressedTanks = (on: boolean) => { const s = game(); setPressed(s, !!on); return { on: pressedOn(s) }; };
@@ -9611,6 +9627,8 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   truereachrule: (s) => setTrueReach(s, true) && trueReach(s),
   // (Release 2, batch 3: worn out in the line, switched in any month; OFF on the Play list until the DD's gate passes.)
   wornoutrule: (s) => setWorn(s, true) && wornOn(s),
+  // (Release 2, batch 3: field hospitals, switched in any month; OFF on the Play list until the DD's gate passes.)
+  hospitalsrule: (s) => setHosp(s, true) && hospOn(s),
 };
 function r2Ship(ids: string[]) {
   const s = game();

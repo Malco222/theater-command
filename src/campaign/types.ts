@@ -509,6 +509,8 @@ export interface Corps extends Storied {
    */
   spent?: number;
   runIn?: number;
+  /** (Release 2, fieldhospitals.ts, behind its switch) Its wounded who can still come back, in divisions' worth of men. */
+  wd?: number;
   /** It took over fieldworks left on this ground this month (the grand campaign): it keeps them at the month's end though it marched. */
   relief?: boolean;
   /**
