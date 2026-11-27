@@ -12,10 +12,11 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; (globalThis as any).TC_OFFERS = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, createGame, placed, relocate, rowOffers, setWar, startPhase } from '../src/campaign/game';
+import { addCorps, createGame, men, placed, relocate, rowCorps, rowOffers, setWar, startPhase } from '../src/campaign/game';
+import { fits, roomLeft } from '../src/campaign/islands';
 import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
-import { STACK, type Game } from '../src/campaign/types';
+import { MEN_PER_DIV, STACK, type Corps, type Game, type Region } from '../src/campaign/types';
 import setup from '../data/campaign/setup-1939.json';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 import { askForm, cardRowOf, offersLook } from '../unreal/TheaterCommand/Rules/offers-look';
@@ -31,8 +32,40 @@ const months = (g: Game, from: number, to: number): void => { for (let t = from;
 const open = (g: Game, nat = 'JAP'): any => { g.phase = g.order.indexOf(nat); expect(TC().load(saveGame(g))).not.toBeNull(); return TC().page('offers'); };
 /** A row of the page as words: title, each line with its tone, and each button with whether it is lit and its tip. */
 const words = (r: any): unknown[] => [r.title, r.lines.map((l: string, i: number) => `${r.tones[i] || 'plain'}: ${l}`), r.buttons.map((b: any) => `${b.label} ${b.ok ? 'lit' : 'grey'}${b.tip ? ` (${b.tip})` : ''} -> ${b.act}`)];
-/** Okinawa full: five corps of Japan's on the island, so the 14th Army's 16th Division cannot form there. */
+/**
+ * Okinawa full: five corps of Japan's on the island, so the 14th Army's 16th Division cannot form there.
+ * (Top-up 1: the two tests that use it, "the head asks in place" and "answered through the page's own acts", FAIL at
+ * 1084839a0, named, until the design director rules. This fill does fill Okinawa in men and stands five corps there;
+ * the row is sent on by sea "to form at Kagoshima" (game.ts roomNear, commit b180e02e4), so it can be formed and the
+ * counts read six and four. With every harbour filled as `noRoomForSixteenth` fills them the two pass only because the
+ * 4th Tank Regiment is itself sent on by sea, to Chichi Jima: a moved place, which waits for her word.)
+ */
 const fillOkinawa = (g: Game): void => { for (let k = 0; placed(g, g.byName.Okinawa, 'JAP').filter((u) => u.kind !== 'eng').length < STACK; k++) addCorps(g, 'JAP', `Test garrison ${k}`, 'inf', 1, 'Okinawa', {}); };
+/** The 14th Army's 16th Division as the rule reads its room: the corps it forms (game.ts `rowCorps`) and the corps of his it takes (the offer's own `takes`), which leave as it forms. */
+const sixteenth = (g: Game): { going: Corps[]; out: Corps[] } => {
+  const row = rows[index(NOV41[2])], o = rowOffers(g).find((x) => x.id === index(NOV41[2]))!;
+  return { going: rowCorps(g, 'JAP', row, row[6] ?? {}), out: o.takes.map((t) => g.corps.find((c) => c.id === t.id)!) };
+};
+/** A ground's fighting corps of Japan's side, as the five are counted on any ground (engineers apart). */
+const standing = (g: Game, r: Region): number => placed(g, r, 'JAP').filter((u) => u.kind !== 'eng').length;
+/**
+ * No room for the 14th Army's 16th Division "at Okinawa, or near it", read the way the rule now reads room. Okinawa:
+ * full in men by the rule's own reader (`fits` refuses the row's own corps) with five fighting corps standing there, so
+ * that it stays full when a place among the five is asked as well (the design director, 14:13Z, 27 November 2026, (2)).
+ * Near it: since round 2 a dated row for a full island of the table goes by sea to the nearest held harbour with room
+ * (game.ts roomNear, commit b180e02e4, the design director's D1 of 00:20Z, 27 November 2026), where the base found no
+ * ground joined to Okinawa by land and refused. So every harbour of Japan's is filled too until `fits`, asked as roomNear
+ * asks it, refuses the row there. (Whether an OFFER of the player's is sent on by sea, "to form at Kagoshima", is asked
+ * of the design director, unbuilt: this board holds whatever she rules, since no harbour has room for it.)
+ */
+const noRoomForSixteenth = (g: Game): void => {
+  const { going, out } = sixteenth(g), okinawa = g.byName.Okinawa;
+  for (let k = 0; standing(g, okinawa) < STACK || fits(g, okinawa, 'JAP', going, { out }); k++) addCorps(g, 'JAP', `Test garrison ${k}`, 'inf', 1, 'Okinawa', {});
+  for (const r of g.regions) {
+    if (!r.port || r === okinawa || r.ctrl !== 'JAP') continue;
+    for (let k = 0; k < 12 && fits(g, r, 'JAP', going, { rows: standing(g, r), out }); k++) addCorps(g, 'JAP', `Test harbour ${r.name} ${k}`, 'inf', 1, r.id, {});
+  }
+};
 /** A player's Japan in December 1941 (month 28), at war with Britain and with Singapore his: two loans have ended. */
 const singapore = (): Game => {
   const g = war();
@@ -121,7 +154,11 @@ describe('the offers page', () => {
   it('FORM IT shut: greyed, its reason its tip and the row\'s last line; DECLINE stays open', () => {
     const g = war();
     months(g, 1, 30);
-    fillOkinawa(g);
+    noRoomForSixteenth(g);
+    // (The no-room case comes from the fill and is read by the rule's own readers: Okinawa refuses the row's own corps,
+    // has less room left than the row's men, and five fighting corps stand there.)
+    const { going, out } = sixteenth(g), okinawa = g.byName.Okinawa;
+    expect([fits(g, okinawa, 'JAP', going, { out }), roomLeft(g, okinawa, 'JAP') * MEN_PER_DIV < men(going[0]), standing(g, okinawa)]).toEqual([false, true, STACK]);
     const why = 'There is no room for another corps at Okinawa, or near it.';
     const r = open(g).sections[0].rows.find((x: any) => x.title === NOV41[2]);
     expect(words(r)).toEqual([NOV41[2], ['plain: Infantry, 8,000 men, to form on Okinawa.', 'plain: Takes your General reserve (16th Division, home from China) at Osaka, 15,000 men.',

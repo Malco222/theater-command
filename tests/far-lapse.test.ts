@@ -14,9 +14,10 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; (globalThis as any).TC_OFFERS = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, createGame, placed, removeCorps, rowOffers, setWar, startPhase } from '../src/campaign/game';
+import { addCorps, createGame, men, placed, removeCorps, rowCorps, rowOffers, setWar, startPhase } from '../src/campaign/game';
+import { fits, roomLeft } from '../src/campaign/islands';
 import { startOpen } from '../src/campaign/staff';
-import { STACK, type Corps, type Game } from '../src/campaign/types';
+import { MEN_PER_DIV, STACK, type Corps, type Game, type Region } from '../src/campaign/types';
 import setup from '../data/campaign/setup-1939.json';
 
 const rows = (setup as any).expeditions as any[][];
@@ -91,11 +92,39 @@ describe('a row whose war is over lapses at once, for the player and the compute
 });
 
 describe("the player's offer stays in the list for the same half year as the computer's row", () => {
-  /** Formosa full: five corps of Japan's at Taihoku and at Formosa, so that the 21st Army's 5th Division has nowhere to form on the island. */
+  /** The 21st Army's 5th Division as the rule reads its room: the corps it forms (game.ts `rowCorps`) and the corps of his it is made from (its row's `from`), which leave as it forms. */
+  const fifth = (g: Game): { going: Corps[]; out: Corps[] } => {
+    const o = rows[fifthId][6] ?? {};
+    return { going: rowCorps(g, 'JAP', rows[fifthId], o), out: g.corps.filter((c) => c.nat === 'JAP' && !c.dead && (o.from as string[]).includes(c.name)) };
+  };
+  /** A ground's fighting corps of Japan's side, as the five are counted on any ground (engineers apart). */
+  const standing = (g: Game, r: Region): number => placed(g, r, 'JAP').filter((u) => u.kind !== 'eng').length;
+  /**
+   * No room for the 21st Army's 5th Division on Formosa, nor near it, read the way the rule now reads room. Taihoku and
+   * Formosa (the island's two grounds, joined by land): full in men by the rule's own reader (`fits` refuses the row's
+   * own corps) with five fighting corps standing on each, so that they stay full when a place among the five is asked
+   * as well (the design director, 14:13Z, 27 November 2026, (2)). Near them: since round 2 a dated row for a full
+   * island of the table goes by sea to the nearest held harbour with room (game.ts roomNear, commit b180e02e4, the
+   * design director's D1 of 00:20Z, 27 November 2026), where the base found none by land and the row had no place: at
+   * 1084839a0 it is offered and formed at Amoy. So every other harbour of Japan's is filled too, held for its staff,
+   * until `fits`, asked as roomNear asks it, refuses the row there. (Whether the row is sent on by sea for the player's
+   * offer is asked of the design director, unbuilt: this board holds whatever she rules, since no harbour has room.)
+   */
   const fill = (g: Game): void => {
+    const { going, out } = fifth(g);
     for (const nm of ['Taihoku', 'Formosa']) {
       const r = g.byName[nm];
-      for (let k = 0; placed(g, r, 'JAP').filter((u) => u.kind !== 'eng').length < STACK; k++) addCorps(g, 'JAP', `Test filler ${nm} ${k}`, 'inf', 1, nm, {});
+      for (let k = 0; standing(g, r) < STACK || fits(g, r, 'JAP', going, { out }); k++) addCorps(g, 'JAP', `Test filler ${nm} ${k}`, 'inf', 1, nm, {});
+    }
+    for (const r of g.regions) {
+      if (!r.port || r.ctrl !== 'JAP' || r === g.byName.Taihoku || r === g.byName.Formosa) continue;
+      for (let k = 0; k < 12 && fits(g, r, 'JAP', going, { rows: standing(g, r), out }); k++) addCorps(g, 'JAP', `Test harbour ${r.name} ${k}`, 'inf', 1, r.id, { hold: true });
+    }
+    // (The no-room case comes from the fill and is read by the rule's own readers: each ground of the island refuses the
+    // row's own corps, has less room left than its men, and holds five fighting corps.)
+    for (const nm of ['Taihoku', 'Formosa']) {
+      const r = g.byName[nm];
+      expect([nm, fits(g, r, 'JAP', going, { out }), roomLeft(g, r, 'JAP') * MEN_PER_DIV < men(going[0]), standing(g, r)]).toEqual([nm, false, true, STACK]);
     }
   };
 
@@ -109,6 +138,10 @@ describe("the player's offer stays in the list for the same half year as the com
 
     // The player and the computer, with no room on Formosa: nothing is offered or formed, and the row is struck in
     // month 9, its half year out.
+    // (FAILS at 1084839a0, named, until the design director rules: since b180e02e4 a row waiting for room is never
+    // struck for it, its half year not running out against room (game.ts expeditions `late` and `roomwait`, her D1 of
+    // 00:20Z, 27 November 2026: "No row is ever struck for room ... Where no held ground anywhere has room, it waits
+    // until one does."), so here both seats wait unstruck in month 9. The assertion is left as it stood: top-up 1.)
     for (const human of ['JAP', null]) {
       const g = war(human);
       fill(g);
