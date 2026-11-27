@@ -25,9 +25,11 @@
 //
 // The stories' one rule holds (stories.ts): every nation keeps these records, but only the player's own gain anything
 // by them. For the player a finished tour lifts the group's readiness, a crew at the schools
-// gives every later replacement experience before its first mission (and fighters bring down fewer of a group so
-// trained, whoever runs it: trainedEdge reads the roster's hours on every side), and a crew on a bond tour pays the treasury each month. Nothing here draws on the dice of the war: every
-// draw is from a stream of the group's own.
+// gives every later replacement experience before its first mission, and a crew on a bond tour pays the treasury each
+// month. What a crew arrived with is read alike on every side: fighters bring down fewer of any group whose roster
+// carries school hours (trainedEdge, the mend of 27 Nov 2026, DD 05:13Z item 6). Only headStart puts hours on a roster:
+// today the player's own crews alone, and under Units decide nobody's until units.json air.head is laid. Nothing here
+// draws on the dice of the war: every draw is from a stream of the group's own.
 
 import data from '../../data/campaign/stories.json';
 import { Rng, hashString } from '../core/rng';

@@ -4,21 +4,20 @@
 //
 // bombers.ts trainedEdge reads the hours a group's crews arrived with (the roster's fifth field) the same way whoever
 // runs the group. Before the mend a group the player did not run read 0 whatever its crews had. The player's own
-// figures do not move by a digit: the pin below is the figure trainedEdge gave on the Play tree (61c805c10) for the
-// seated war of the real case (seed 17, Germany seated, month 13, 1. Fliegerdivision, 75 crews: 53 with no hours, 7
-// with 3, 15 with 8), read by the game's own function (scratch out/real-17-GER-raid.json).
-import { afterEach, describe, expect, it } from 'vitest';
+// figures do not move by a digit: the pin below is the figure trainedEdge gives on the untouched base 8410c3e2d (the
+// 1.5.3 Play top-up's rules) for the seated war of the real case (seed 17, Germany seated, the save at turn 14,
+// 1. Fliegerdivision, 75 crews: 53 with no hours, 7 with 3, 15 with 8), read by the game's own function. The builder
+// read it first on the older Play tree 61c805c10; the sceptic re-made it on 8410c3e2d to the digit (CHECK-CREWS-MEND.md
+// section A).
+import { describe, expect, it } from 'vitest';
 import { assessAir } from '../src/campaign/air';
 import { BOMBERS, muster, trainedEdge } from '../src/campaign/bombers';
 import { createGame } from '../src/campaign/game';
 import type { AirFleet, Game } from '../src/campaign/types';
 
-const KEEP = JSON.parse(JSON.stringify(BOMBERS)) as typeof BOMBERS;
-afterEach(() => { Object.assign(BOMBERS, JSON.parse(JSON.stringify(KEEP))); });
-
 /** The real case's roster, as the seated war had it: 53 crews with no hours, 7 with 3, 15 with 8. */
 const REAL = [...Array(53).fill(0), ...Array(7).fill(3), ...Array(15).fill(8)] as number[];
-/** trainedEdge on the Play tree for that roster, the player's own group (out/real-17-GER-raid.json, case.player). */
+/** trainedEdge on the base 8410c3e2d for that roster, the player's own group (CHECK-CREWS-MEND.md section A). */
 const REAL_EDGE = 0.023500000000000004;
 
 const bombers = (g: Game, nat: string): AirFleet => {
