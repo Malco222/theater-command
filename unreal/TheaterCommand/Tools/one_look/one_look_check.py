@@ -4,8 +4,9 @@
 Reads the art director's table (Content/Data/Campaign/unit-table.json), the sculpted models it names
 (Content/Models) and the map's own source, and checks that what the table's "one_look" says can be painted and is
 what the ruling asks: each dominion's last dated mark and fin are whole and its own; each coat is the coat of the
-machine the model follows, by that machine's own file, or the model's own with only its nose and boss changed (the
-Mustang, whose coat Brian named himself); each mark that is drawn as another is one the painter draws;
+machine the model follows, by that machine's own file, or one of the model's own schemes laid in every month (the
+Mustang, whose coat Brian named himself: proved on whichever of her two files the tree has, and the drill says which);
+each mark that is drawn as another is one the painter draws;
 and Germany's tanks take the nation's grey in every year as they are played. It writes the months of the dated marks
 for the C++ test, which runs the game's own reckoning (Campaign/OneLook.h) over them.
 
@@ -137,29 +138,54 @@ for name, coat in one["coats"].items():
     check(mine.get("nation_paint") is not True, "%s: not a plain machine painted for any nation" % name)
     numbers = {}
     for key, code in coat.get("colours", {}).items():
-        check(key.isdigit() and int(key) < len(own), "%s: paint %s is one of the file's paints" % (name, key))
+        # (a row that lays one of her own schemes may name paints past an older file's list: the game skips those)
+        check(key.isdigit() and (int(key) < len(own) or "scheme" in coat), "%s: paint %s is one of the file's paints" % (name, key))
         check(is_hex(code), "%s: paint %s is a colour" % (name, key))
         if key.isdigit() and is_hex(code):
             numbers[int(key)] = code.upper()
-    if coat.get("own") is True:
-        # (A coat of her OWN: the owner named it himself. Brian, 27 November 2026: "also shouldnt the p-51 mustangs be
-        # silver with black paint? why are they green?" She keeps her file's coat in every month; the row may change
-        # her nose and her boss, nothing else, and follows no other machine.)
-        check("follows" not in coat and "number_ink" not in coat, "%s: a coat of her own follows no other machine and keeps her own side number's ink" % name)
-        check(len(numbers) > 0 and set(numbers) <= {3, 4}, "%s: a coat of her own changes only her nose and her boss (paints 3 and 4)" % name)
+    if "scheme" in coat:
+        # (One of her OWN schemes in every month: the owner named her coat himself. Brian, 27 November 2026: "also
+        # shouldnt the p-51 mustangs be silver with black paint? why are they green?" Two Mustang files are about. The
+        # aircraft modeller's has an olive base, 42 named paints and dated schemes, "natural metal, black bands" among
+        # them: with one look no dated scheme stands (the painter), so the row lays that scheme, and it is checked
+        # against the file colour for colour. The older file has 18 paints, bare metal already and a red nose: the game
+        # skips the paints past its list, and what the row lays must leave her own metal standing.)
+        GLARE = 16
+        check("follows" not in coat and "own" not in coat, "%s: a scheme of her own follows no other machine" % name)
+        dated = mine.get("schemes") if isinstance(mine.get("schemes"), list) else []
+        names = mine.get("paint_names") if isinstance(mine.get("paint_names"), list) else []
+        ink = coat.get("number_ink", "")
+        if dated:
+            found = [each for each in dated if isinstance(each, dict) and each.get("name") == coat["scheme"]]
+            check(len(found) == 1, "%s: her file carries the scheme named, once (%s)" % (name, coat["scheme"]))
+            theirs = {}
+            if found:
+                told = found[0].get("colours", {})
+                theirs = {names.index(key): str(code).upper() for key, code in told.items() if key in names}
+                check(len(theirs) == len(told) and len(told) > 0, "%s: every paint of that scheme is one of the file's named paints" % name)
+                check({k: v for k, v in numbers.items() if k != GLARE} == theirs,
+                      "%s: the row is that scheme colour for colour, and lays no other paint but the glare panel" % name)
+                check(is_hex(ink) and ink.upper() == str(found[0].get("number_ink", "")).upper(), "%s: her side number is in that scheme's ink" % name)
+            check(all(k < len(own) for k in numbers), "%s: every paint the row lays is one of this file's" % name)
+            proved = "the file WITH dated schemes (%d paints, base %s): the row is her scheme '%s', laid in every month" % (len(own), own[0].upper(), coat["scheme"])
+        else:
+            check(all(numbers[k] == own[k].upper() for k in numbers if k < len(own) and k not in (3, 4, 10, GLARE)),
+                  "%s: on the file with no schemes, every paint the row lays but nose, boss, line and glare panel is her file's own already" % name)
+            check(is_hex(ink) and ink.upper() == mine.get("number_ink", "").upper(), "%s: on the file with no schemes, the row's ink is her file's own" % name)
+            proved = "the file with NO schemes (%d paints, base %s): %d of the row's paints lie past its list and the game skips them" % (
+                len(own), own[0].upper(), sum(1 for k in numbers if k >= len(own)))
         laid = [numbers.get(k, own[k].upper()) for k in range(len(own))]
-        check(all(laid[k] == own[k].upper() for k in range(len(own)) if k not in (3, 4)), "%s: laid, every paint but her nose and boss is her file's own" % name)
-        ink = mine.get("number_ink", "F2F0E8")
-        check(abs(luma(ink) - luma(laid[0])) >= 60.0, "%s: her side number stands off her coat (60 levels or more)" % name)
-        check(all(abs(luma(laid[k]) - luma(laid[0])) >= 60.0 for k in (3, 4) if k in numbers), "%s: her nose and boss stand off her coat (60 levels or more)" % name)
-        if name == "Mustang":
-            spread = [max(rgb(laid[k])) - min(rgb(laid[k])) for k in (0, 1, 2, 6)]
-            check(all(luma(laid[k]) >= 150.0 for k in (0, 1, 2, 6)) and max(spread) <= 12,
-                  "Mustang: her coat is bare metal, a pale grey with no colour in it, above, below and on her frame (%s)" % ", ".join(laid[k] for k in (0, 1, 2, 6)))
-            check(all(luma(laid[k]) <= 40.0 and max(rgb(laid[k])) - min(rgb(laid[k])) <= 8 for k in (3, 4)),
-                  "Mustang: her nose and boss are black, with no red (%s, %s)" % (laid[3], laid[4]))
-        print("  %-8s her own      %s" % (name, "  ".join("%d %s [%s]" % (k, laid[k], own[k].upper()) for k in OUTER)))
-        print("  %-8s side number %s (her own)" % ("", ink.upper()))
+        black = [k for k in (3, 4, GLARE, 40, 41) if k < len(own)]
+        check(GLARE in numbers and all(k in numbers for k in (0, 1, 2, 3, 4, 6, 15)), "%s: the row gives the whole outer coat, and the glare panel" % name)
+        check(all(luma(laid[k]) >= 150.0 and max(rgb(laid[k])) - min(rgb(laid[k])) <= 12 for k in (0, 1, 2, 6)),
+              "%s: laid, her coat is bare metal, a pale grey with no colour in it, above, below and on her frame (%s)" % (name, ", ".join(laid[k] for k in (0, 1, 2, 6))))
+        check(all(luma(laid[k]) <= 40.0 and max(rgb(laid[k])) - min(rgb(laid[k])) <= 8 for k in black),
+              "%s: laid, her nose, boss, glare panel and bands are black, with no red and no olive (%s)" % (name, ", ".join("%d %s" % (k, laid[k]) for k in black)))
+        check(is_hex(ink) and abs(luma(ink) - luma(laid[0])) >= 60.0, "%s: her side number stands off her coat (60 levels or more)" % name)
+        check(all(abs(luma(laid[k]) - luma(laid[0])) >= 60.0 for k in black), "%s: her black stands off her coat (60 levels or more)" % name)
+        print("  %-8s her scheme   %s" % (name, "  ".join("%d %s [%s]" % (k, laid[k], own[k].upper()) for k in sorted(set(OUTER + black)))))
+        print("  %-8s side number %s [%s]" % ("", ink.upper(), mine.get("number_ink", "").upper()))
+        print("  %-8s PROVED ON %s" % ("", proved))
         continue
     check(sorted(numbers) == OUTER, "%s: the whole outer coat is given (upper, upper2, under, nose, boss, frame, stain)" % name)
     followed = model(coat.get("follows", ""))

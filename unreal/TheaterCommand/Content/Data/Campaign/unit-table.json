@@ -1,15 +1,29 @@
 {
  "about": "Ruling 78(f): the one table the 3D game draws its models from. src is own (the country's own model), shared (another country's, by the record; 'of' says whose) or generic. A tag not listed here takes _default. insignia (18 November, Brian's ask for every country's own mark): layers lowest first in a square -1..1: ring [r0, r1], tri [r, turn degrees], star [r, inner, points], rect [u0, u1, v0, v1], each with c (hex); it goes wherever a model's marks say the owner's own; insignia_checked False until the historian confirms it. fin {dir h or v, bands}: the flag's stripes on the rudder. marking_months [{from YYYY-MM, insignia, fin}]: a dominion's wartime roundel and fin flash from that month (fin as above, dir v from the leading edge). On land vehicles an insignia is drawn only inside its disc, radius 1: side bars and anything else beyond it are for aircraft. paint2 is the coat's second colour (the models' upper2 blotches); ground says the home ground it follows; winter_wash: a worn white wash over the coat when the battle's ground is snow. src captured (18 November 2026, Brian's rule for small nations' battleships and carriers): nothing shows until the country holds a great power's plans, by capture or by a spy; then it shows that great power's model named in captured_models[plans].models, in its own hull grey, flying its own ensign (and jack on a battleship). with_plans (ruling 235, b542) on a small nation's bomber or fighter: once it builds four-engined bombers or jet fighters, it draws captured_models[heavybombers or jets].models[the great power capitalPlans names], in its own paint and marking. captured_models keys are the rules' capitalPlans keys; column says which column each serves. Colours are hex. Art director, 16 November 2026. with_tech {tech id: model} shows that model once the country has researched it. swaps {swap name: [[from month YYYY-MM or null for the start, the file's choice], ...]} picks a model's swap by date. carrier_fighter, torpedo_bomber, dive_bomber and carrier_paint are for after release 1, as is a model named under after_release_1.",
  "one_look": {
-  "about": "Brian, 26 November 2026: 'have the paint be on it regardless of the year'. The art director's ruling of the same day: one nation, one mark and one coat for the whole war. Read always; used only with tc.Map.OneLook (or -TheaterOneLook), which is off as it comes. With it on: (1) a country whose mark this table dates (marking_months: AUS, NZL, SAF, IND) wears the LAST of its dated marks, and that mark's fin, in every month; no row of marking_months is changed or read differently with it off. (2) coats: a sculpted model named here wears these colours over its own file's, by the file's paint numbers (0 upper, 1 upper2, 2 under, 3 nose, 4 boss, 6 frame, 15 stain), and number_ink for its side number: a machine that comes into service later wears the coat of the one it follows (follows names it; the seven colours are that model's own); or, where 'own' is true, a machine keeps its own file's coat and the row changes only its nose and boss (the Mustang: Brian named her coat himself, silver with black). (3) marks: a mark named here is drawn as the other. Checked by Tools/one_look/run.sh against the model files.",
+  "about": "Brian, 26 November 2026: 'have the paint be on it regardless of the year'. The art director's ruling of the same day: one nation, one mark and one coat for the whole war. Read always; used only with tc.Map.OneLook (or -TheaterOneLook), which is off as it comes. With it on: (1) a country whose mark this table dates (marking_months: AUS, NZL, SAF, IND) wears the LAST of its dated marks, and that mark's fin, in every month; no row of marking_months is changed or read differently with it off. (2) coats: a sculpted model named here wears these colours over its own file's, by the file's paint numbers (0 upper, 1 upper2, 2 under, 3 nose, 4 boss, 6 frame, 15 stain), and number_ink for its side number: a machine that comes into service later wears the coat of the one it follows (follows names it; the seven colours are that model's own); or, where 'scheme' names one of the model's own dated schemes, the machine wears that scheme in every month (the Mustang: Brian named her coat himself, silver with black; with one look no dated scheme stands, so the row lays it). (3) marks: a mark named here is drawn as the other. Checked by Tools/one_look/run.sh against the model files.",
   "coats": {
    "Mustang": {
-    "own": true,
+    "scheme": "natural metal, black bands",
     "colours": {
+     "0": "B0B6BA",
+     "1": "B0B6BA",
+     "2": "9CA2A6",
      "3": "1C1C1C",
-     "4": "1C1C1C"
+     "4": "1C1C1C",
+     "6": "B0B6BA",
+     "10": "4A4E4E",
+     "15": "6A6A6A",
+     "16": "1C1C1C",
+     "36": "999EA2",
+     "37": "8B9094",
+     "38": "717477",
+     "39": "6D7174",
+     "40": "1C1C1C",
+     "41": "1C1C1C"
     },
-    "words": "her own bare metal in every month, as her file has it (B0B6BA over 9CA2A6, dark side number), with her nose band and boss black in place of the file's red. Brian, 27 November 2026, 01:23Z: 'also shouldnt the p-51 mustangs be silver with black paint? why are they green?' They were green because this row laid the Warhawk's olive on her (the art director's choice of 26 November, withdrawn). When the aircraft workshop's re-issued Mustang file with its own black lands in Content/Models, this row goes."
+    "number_ink": "1A1A1A",
+    "words": "bare metal with black in every month. Brian, 27 November 2026, 01:23Z: 'also shouldnt the p-51 mustangs be silver with black paint? why are they green?' They were green because this row laid the Warhawk's olive on her (the art director's choice of 26 November, withdrawn). The row is her OWN scheme 'natural metal, black bands' from the aircraft modeller's file (the historian's, there dated from April 1944), laid in every month by the file's paint numbers: upper, upper2, under, nose, boss, frame, line, stain, rivet, rivet_under, seam, seam_under, band, band_under, and the scheme's dark ink; and the glare panel (16) black, as he said black paint. Two Mustang files are about: the modeller's (42 paints, olive base, dated schemes; Brian's Play and the assembled line) and an older one (18 paints, bare metal already, a red nose; the map's own line). On the older one the game skips the paints past its list, and what is laid leaves her silver with a black nose and boss. When the aircraft workshop's re-issued Mustang with its own black lands in Content/Models, this row goes."
    },
    "Fw190": {
     "follows": "Bf109",

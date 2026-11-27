@@ -942,7 +942,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		// (Brian, 26 November 2026: "have the paint be on it regardless of the year". One look for the whole war: a
 		// machine that comes into service later wears the coat of the one it follows, where the art director's table
 		// gives it one, laid over its own file's colours by their numbers; and its side number is in that coat's ink.
-		// The Fw 190 in the Bf 109's greens; the Mustang her own bare metal, nose and boss black. See UnitTable::OneLook.)
+		// The Fw 190 in the Bf 109's greens; the Mustang in her own bare metal with black bands. See UnitTable::OneLook.)
 		FLinearColor SideInk = Raw->NumberInk;
 		if (Raw->bAircraft)
 		{
