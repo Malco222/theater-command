@@ -21,7 +21,7 @@ for B in land_mist_test_gcc land_mist_test_clang hits_base_g++ hits_now_g++ hits
 STRICT="-std=c++20 -O2 -Wall -Wextra -Wshadow -Wconversion -Wno-sign-conversion -Werror -ffp-contract=off -I$SRC -I$ROOT/Tools/land_show"
 python3 "$FX/preview/flatten.py" "$FX/fx.json" > "$OUT/recipe.txt"
 cmp -s "$FX/fx.json" "$ROOT/Content/Effects/battle-fx.json" || { echo "FAIL: tools/battle-fx/fx.json and Content/Effects/battle-fx.json differ"; exit 1; }
-OLD_REV="${LAND_MIST_BASE:-4060f0923}"
+OLD_REV="${LAND_MIST_BASE:-d226a786d}"
 git -C "$ROOT" show "$OLD_REV:tools/battle-fx/fx.json" > "$OUT/fx_old.json"
 python3 "$FX/preview/flatten.py" "$OUT/fx_old.json" > "$OUT/recipe_old.txt"
 $NICE g++ $STRICT -pthread "$HERE/land_mist_test.cpp" "$SRC/Battle/LandMen.cpp" "$SRC/Effects/TheaterFxCore.cpp" -o "$OUT/land_mist_test_gcc" &

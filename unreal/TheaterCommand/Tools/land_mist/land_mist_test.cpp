@@ -9,7 +9,7 @@
 //            other, its time his fall's and d plus the round's flight, his place, the way from the firer; the falls'
 //            rest places with bArrive and without; the kit fed the battle's strikes at their times (life clock):
 //            strikes, mists drawn, the most pieces alive at once, the densest frame's Draw with them and without.
-//   kit      Battle::Struck: no row (this tree's recipe less men.struck.on, and 4060f0923's recipe): nothing laid or
+//   kit      Battle::Struck: no row (this tree's recipe less men.struck.on, and the base's recipe, run.sh's LAND_MIST_BASE, d226a786d by default): nothing laid or
 //            drawn; with it, ten pieces at the most for every weapon and part, the share passing through by the odds,
 //            no lamp, everything gone a second on; the same dice twice the same bytes; a shell's and a burst's frames
 //            the same to the byte whether strikes were laid among them or not, once the mist has gone; seen end-on, the
@@ -591,7 +591,7 @@ namespace
 		std::printf("== kit\n");
 		using TheaterFx::Vec;
 		const TheaterFx::Battle::View V = EyeAt(Vec(15.0, 0.0, 1.4), Vec(0.0, 0.0, 1.3), 1000.0);
-		// (no row: this tree's recipe less men.struck.on, and 4060f0923's)
+		// (no row: this tree's recipe less men.struck.on, and the base's, d226a786d unless LAND_MIST_BASE names another)
 		FlatRecipe Less = Book;
 		Less.Numbers.erase("men.struck.on");
 		for (int Which = 0; Which < 2; ++Which)
@@ -605,7 +605,7 @@ namespace
 				K.Struck(0.1 * I, Vec(0.0, 0.0, 1.3), Vec(1.0, 0.0, 0.0), "rifle", "chest");
 				Laid += K.StruckPieces();
 			}
-			Check(Laid == 0 && K.Draw(1.0, V) == 0 && K.PuffsAsked() == 0, std::string("kit: ") + (Which ? "4060f0923's recipe" : "the row's on left out") + Fmt(": nothing laid (%.0f) or drawn", Laid));
+			Check(Laid == 0 && K.Draw(1.0, V) == 0 && K.PuffsAsked() == 0, std::string("kit: ") + (Which ? "the base's recipe" : "the row's on left out") + Fmt(": nothing laid (%.0f) or drawn", Laid));
 		}
 		// (every weapon and part, a thousand strikes each: pieces, the share passing through, no lamp, all gone)
 		const char* Weapons[] = { "rifle", "mg", "smg", "pistol", "other" };
