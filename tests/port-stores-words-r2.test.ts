@@ -162,11 +162,9 @@ describe('the UI director\'s words, on a real Malta (the Italian fleet across th
       month(g, t);
       expect(cs.map((c) => c.dead)).toEqual([t === 20, t === 20]);
     }
-    // (The rule's own line for a loss of more than 30,000 men stays as it was, beside it: existing lines are unchanged.)
-    expect(news(g, h0)).toEqual([
-      'Cut off on Malta, two corps have starved and are lost: the 9th Corps and the 14th Corps.',
-      'Cut off and out of supply, the British army at Malta lays down its arms: 2 corps, 36,848 men.',
-    ]);
+    // (The rule's own line for a loss of more than 30,000 men stays as it was: existing lines are unchanged. Told the
+    // same month, the struck-off line gives way to it: the UI director's 23:50Z, item 4, below.)
+    expect(news(g, h0)).toEqual(['Cut off and out of supply, the British army at Malta lays down its arms: 2 corps, 36,848 men.']);
   });
 
   it('a corps below full order: the card counts the rest it still gets from the stores, and it is struck off in the month named', () => {
@@ -524,5 +522,64 @@ describe('item 3: the browser\'s card follows the remedy line with the sea card\
     // (With the sea open there is no remedy line, and so no measure.)
     const h = malta('UK').g;
     expect(texts(portCardLines(h, MALTA, 'UK', { measure: true }))).toEqual(['Cut off by sea, its stores would feed the garrison for two months.']);
+  });
+});
+
+describe('item 4: two lines for one event, the rule\'s own line of a surrender stands and the struck-off line gives way to it', () => {
+  const SHIPPED = 'Cut off and out of supply, the British army at Malta lays down its arms: 2 corps, 36,848 men.';
+
+  it('the holder told the rule\'s line the same month: his struck-off line gives way, and nothing is kept for it', () => {
+    const { g, cs } = malta('UK', ['9th Corps', '14th Corps']);
+    for (let t = 17; t <= 20; t++) month(g, t);
+    const h0 = g.headlines.length;
+    month(g, 21);
+    expect(cs.map((c) => c.dead)).toEqual([true, true]);
+    expect(news(g, h0)).toEqual([SHIPPED]);
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('portLost:'))).toEqual([]);
+    // (A party the rule's line does not tell keeps the struck-off line: one corps, under 30,000 men.)
+    const one = malta('UK');
+    for (let t = 17; t <= 21; t++) month(one.g, t);
+    expect(news(one.g).slice(-1)).toEqual(['Cut off on Malta, the 9th Corps has starved and is lost.']);
+    expect(one.g.headlines.some((h) => /lays down its arms/.test(h.text))).toBe(false);
+  });
+
+  it('corps of two nations in one month: the rule\'s line tells Britain\'s, and the struck-off line names only the French corps it does not tell', () => {
+    // (A British corps of four divisions, more than 30,000 men when it starves, and a French one of two: two corps, so
+    // no ring was told, and the rule's line tells the British corps alone.)
+    const { g, cs: [ninth] } = malta('UK', ['9th Corps'], 16, (h) => { declareWar(h, 'ITA', 'FRA'); sail(h, 'ITA', 'central'); });
+    ninth.divs = 4;
+    const french = addCorps(g, 'FRA', '3rd Corps', 'inf', 2, 'Malta', {});
+    for (let t = 17; t <= 20; t++) month(g, t, ['FRA', 'UK']);
+    const h0 = g.headlines.length;
+    month(g, 21, ['FRA', 'UK']);
+    expect([french.dead, ninth.dead, g.flags[`ring:${MALTA}`]]).toEqual([true, true, undefined]);
+    expect(news(g, h0)).toEqual(['Cut off and out of supply, 9th Corps lays down its arms at Malta.', 'Cut off on Malta, the 3rd Corps has starved and is lost.']);
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('portLost:'))).toEqual([]);
+  });
+
+  it('where the newsreel told the ring, the rule\'s line tells every corps, even one alone: the struck-off line gives way to both', () => {
+    const { g, cs } = malta('UK', ['9th Corps', '14th Corps'], 16, (h) => { declareWar(h, 'ITA', 'FRA'); sail(h, 'ITA', 'central'); });
+    const french = addCorps(g, 'FRA', '3rd Corps', 'inf', 2, 'Malta', {});
+    for (let t = 17; t <= 20; t++) month(g, t, ['FRA', 'UK']);
+    const h0 = g.headlines.length;
+    month(g, 21, ['FRA', 'UK']);
+    expect([french.dead, ...cs.map((c) => c.dead), g.flags[`ring:${MALTA}`] !== undefined]).toEqual([true, true, true, true]);
+    expect(news(g, h0)).toEqual(['Cut off and out of supply, 3rd Corps lays down its arms at Malta.', SHIPPED]);
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('portLost:'))).toEqual([]);
+  });
+
+  it('an ally with corps there reads the one news: told the rule\'s line of the British corps, it keeps the struck-off line of its own corps only', () => {
+    const { g, cs: [ninth] } = malta('FRA', ['9th Corps'], 16, (h) => { declareWar(h, 'ITA', 'FRA'); sail(h, 'ITA', 'central'); });
+    ninth.divs = 4;
+    const french = addCorps(g, 'FRA', '3rd Corps', 'inf', 2, 'Malta', {});
+    for (let t = 17; t <= 20; t++) month(g, t, ['FRA', 'UK']);
+    const h0 = g.headlines.length;
+    // (France's month opens before Britain's: its own corps is told in its month, the British corps' surrender in
+    // Britain's, and France's next month tells nothing more.)
+    month(g, 21, ['FRA', 'UK']);
+    month(g, 22, ['FRA', 'UK']);
+    expect([french.dead, ninth.dead]).toEqual([true, true]);
+    expect(news(g, h0)).toEqual(['Cut off on Malta, the 3rd Corps has starved and is lost.', 'Cut off and out of supply, 9th Corps lays down its arms at Malta.']);
+    expect(Object.keys(g.flags).filter((k) => /^(portLost|portHad):/.test(k))).toEqual([]);
   });
 });

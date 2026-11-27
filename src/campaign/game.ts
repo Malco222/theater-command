@@ -6482,7 +6482,6 @@ export function startPhase(g: Game, nat: string): void {
     // A withered island garrison only defends: it neither attacks, marches nor sails (ruling 173(e), rider (o)(3)).
     if (far && withered(g, c)) c.ap = 0;
   });
-  portsStarved(g, nat, inPorts);
   if (drafted_ > 0) drawMen(g, nat, drafted_);
   if (menRules(g) && nat === g.human) {
     const level = menWarning(g, nat), left = menWords(menLeft(g, nat) * MEN_PER_DIV), start = menWords(poolAtStart(g, nat) * MEN_PER_DIV);
@@ -6494,13 +6493,18 @@ export function startPhase(g: Game, nat: string): void {
   }
   // A town whose last defenders laid down their arms this month falls.
   siegeFalls(g, nat);
+  // (Release 2, portcut.ts) The provinces whose surrender is told here, to whoever reads the news: the line of a port cut
+  // off by sea that names its corps struck off gives way to it (the UI director's 23:50Z, item 4).
+  const surrendered = new Set<number>();
   for (const [reg, lost] of starved) {
     // Small parties are not news, unless they are the end of an army the newsreel has already said was surrounded.
     if (lost.men <= 30000 && g.flags[`ring:${reg}`] === undefined) continue;
+    surrendered.add(reg);
     const place = g.regions[reg].name;
     if (lost.names.length === 1) headline(g, 'battle', `Cut off and out of supply, ${lost.names[0]} lays down its arms at ${place}.`, nat, reg, { arm: 'land', lost: nat });
     else headline(g, 'battle', `Cut off and out of supply, the ${n.adj} army at ${place} lays down its arms: ${lost.names.length} corps, ${lost.men.toLocaleString('en-US')} men.`, nat, reg, { arm: 'land', lost: nat });
   }
+  portsStarved(g, nat, inPorts, surrendered);
   // Replacements can spend the treasury to the last point: a rounding error below nothing is not a debt.
   n.pp = budgeted(g) ? (n.pp > -1e-9 ? Math.max(0, n.pp) : Math.max(-credit, n.pp)) : Math.max(0, n.pp);
   if (budgeted(g)) {

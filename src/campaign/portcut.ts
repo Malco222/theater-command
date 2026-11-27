@@ -543,13 +543,21 @@ export function portsWatched(g: Game, army: Corps[]): Corps[] | null {
  * and his reckoning tells, after his own corps are charged, every corps his ports have lost since his last: those of
  * the nations before him this month with his own, in one line. Kept only where he hears of the port (ruling 2): he
  * holds it, has corps there, or had corps there as his month opened (`portHad:`).
+ *
+ * Two lines for one event (the UI director's 23:50Z, item 4): where the rule's own line tells this nation's corps laid
+ * down their arms in the port this month ("Cut off and out of supply, the British army at Malta lays down its arms:
+ * ...", game.ts startPhase; `surrendered`, the provinces it was told for), that line stands unchanged and these corps
+ * are not kept for this one. The rule's line is a headline of the one news the table reads, told to the player
+ * whatever his part in the port, in the same dispatch as this line would be; the corps it does not tell (another
+ * nation's, a smaller party's) keep this line.
  */
-export function portsStarved(g: Game, nat: string, before: Corps[] | null): void {
+export function portsStarved(g: Game, nat: string, before: Corps[] | null, surrendered?: ReadonlySet<number>): void {
   if (!before) return;
   const me = g.human!;
   const by = new Map<number, Corps[]>();
   for (const c of before) if (c.dead) { const l = by.get(c.reg); if (l) l.push(c); else by.set(c.reg, [c]); }
   for (const [reg, lost] of by) {
+    if (surrendered?.has(reg)) continue;
     const r = g.regions[reg];
     if (!involved(g, r, lost) && g.flags[hadKey(reg)] !== g.turn) continue;
     const f = portCutOff(g, reg, null);
