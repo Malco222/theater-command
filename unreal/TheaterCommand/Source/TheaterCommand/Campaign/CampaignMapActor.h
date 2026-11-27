@@ -1652,13 +1652,13 @@ private:
 	// ---- (end release 2, the season turns) ----
 	// ---- (release 2, fronts that feel alive, piece 1: churned ground between dug-in lines. Campaign/FrontChurn.h has the
 	// arithmetic, Campaign/CampaignFrontChurn.cpp the rest; tc.Map.FrontChurn, off as it comes) ----
-	/** A frame of it: the lines laid a frame after a view that changed them, the pictures' squares sent two a frame, the fine veil and the craters near the eye. Nothing at all while off. */
+	/** A frame of it: the lines laid a frame after a view that changed them, the pictures' squares sent a few a frame (a fade that moved, all the squares round its corner at once), the fine veil and the craters near the eye. Nothing at all while off. */
 	void UpdateFrontChurn(const FVector& CameraFocus, float CameraDistance);
 	void LayFrontChurn();
-	/** One point of the pictures, churned as far as its square shows it, into the pictures as this table keeps them. */
+	/** One point of the pictures, churned as far as the fade there shows it (smoothly from its square's four corners), into the pictures as this table keeps them. */
 	void LayChurnCell(FFrontChurnCell& Cell);
 	void PutChurnTileAway(FFrontChurnTile& Tile);
-	void BuildChurnVeil(FFrontChurnTile& Tile, const FFrontChurnVeilWork& Work);
+	void BuildChurnVeil(FFrontChurnTile& Tile);
 	int32 BuildChurnCraters(FFrontChurnTile& Tile, int32 Most);
 	/**
 	 * Every send of the ground picture and the masks goes through these, whoever sends them: with tc.Map.FrontChurn on,
