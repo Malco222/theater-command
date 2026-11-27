@@ -24,7 +24,7 @@ import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
 import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, estAt, takenInWarThisMonth, fights, headline, keptStoresRun, men, natIndex, onPortStores, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, trueReach, worksFor, worksKept, fortRow, fortRows, roomless, type Assessment } from './game';
 import { farGuard, farGuardRow, type FarGuardRow } from './economy';
-import { crewStores, storesLeft } from './fortrows';
+import { crewStores, portStores, storesLeft } from './fortrows';
 import { seat } from './commanders';
 import { bookFed } from './history';
 import { drawMen } from './manpower';
@@ -281,7 +281,30 @@ export const townHeld = (g: Game, r: Region): boolean => garrisonOf(r).length > 
 
 /** Months the town feeds its defenders once it is closely invested. */
 // (A place's works set aside for a fight still keep its stores: game.ts worksKept, rider b628 to ruling 234.)
-export const storesOf = (g: Game, r: Region): number => SIEGE.stores[townSize(g, r)] + (worksKept(r)?.lv ?? 0) * SIEGE.fortStores;
+export const storesOf = (g: Game, r: Region): number => rowStores(g, r) ?? SIEGE.stores[townSize(g, r)] + (worksKept(r)?.lv ?? 0) * SIEGE.fortStores;
+
+/**
+ * One figure for one larder (the design director's ruling of 22:08Z, 25 November 2026, on his 07:12Z of 22 November:
+ * "one stores"). Under true reach and the fortress rows, a fortified port overseas that holds a fortress row with a
+ * stores clock reads the row's months (fortrows.ts portStores) for the town's stores, the figure the supply picture's
+ * window already keeps (game.ts portKeep): the guard's cap and the siege's opening stores (invest), the months left and
+ * the starving (garrisonFed), the card (siegeView), a computer staff's patience (ai.ts) and a pocket living on the town
+ * all read it through storesOf. Null elsewhere, and with either switch off: the town keeps its own figure.
+ * At such a port each corps eats from one larder only. A fortress crew eats its own stores on its own clock
+ * (fortrows.ts crewMonth, `eaten:<corps id>`), the row's months once, whether it lives on the port's stores while the
+ * sea is shut (game.ts onPortStores) or is shut in by a siege (siegeSupply: a crew eats none of the town's stores). The
+ * rest of the garrison eats the place's one stores: the window's months while the sea is shut and no enemy stands round
+ * the town, and once the siege opens, the siege's clock (`sgm:`) against the same figure, with the kept months already
+ * run charged at the opening (keptAtOpening).
+ * A siege keeps the figure it opened with (`sgs:`, written by invest and cleared with the siege's other flags): the
+ * figure is read from the living rows, and a crew killed or starved out in mid siege would otherwise drop it to the
+ * town's own and starve the garrison at once. (The window, read only while no siege stands, still follows the living
+ * rows.)
+ */
+function rowStores(g: Game, r: Region): number | null {
+  if (!r.overseas || !r.port || !worksKept(r) || !fortRows(g) || !trueReach(g)) return null;
+  return g.flags[`sgs:${r.id}`] ?? portStores(g, r);
+}
 
 /** Months the town has been closely invested. */
 export const monthsShut = (g: Game, r: Region): number => g.flags[`sgm:${r.id}`] ?? 0;
@@ -760,6 +783,9 @@ function tell(g: Game, r: Region, text: string, nat: string, parties: string[], 
 
 const placeWords = (g: Game, r: Region): string => (r.cap && r.owner === r.ctrl ? `the capital of ${theName(g.nations[r.owner])}` : `the ${TOWNS.words[townSize(g, r)].toLowerCase()}`);
 const months = (n: number): string => (n <= 1 ? 'a month' : `${n} months`);
+/** Months in words up to ten and in digits above, for the card of a port under true reach (the UI director, 22:08Z). */
+const COUNTED = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+const monthsSaid = (n: number): string => (n <= 1 ? 'a month' : `${n <= 10 ? COUNTED[n] : n} months`);
 
 // ---- Investing a town, raising a siege, and the fall --------------------------------------------
 
@@ -783,6 +809,10 @@ export function invest(g: Game, r: Region, by: string, monthOpen = false): void 
   // Who closed round it: so that an army driven off again can be told to burn what it held outside the walls.
   g.flags[`sgby:${r.id}`] = Object.keys(g.nations).indexOf(by);
   delete g.flags[`sgm:${r.id}`];
+  // (Under true reach and the fortress rows, the row's figure for the town's stores, kept for the siege: rowStores.)
+  delete g.flags[`sgs:${r.id}`];
+  const row = rowStores(g, r);
+  if (row !== null) g.flags[`sgs:${r.id}`] = row;
   // A town that has been feeding an army cut off round it starts its siege with those stores already eaten.
   let eaten = 0;
   if (g.flags[`pkt:${r.id}`] !== undefined) {
@@ -819,6 +849,7 @@ export function lift(g: Game, r: Region, by: string | null = null): void {
   delete g.flags[key];
   delete g.flags[`sgby:${r.id}`];
   delete g.flags[`sgm:${r.id}`];
+  delete g.flags[`sgs:${r.id}`];
   // Raised by a relieving army: a staff that has just been driven off a town leaves it alone for a season (ai.ts).
   if (by) g.flags[`relieved:${r.id}`] = g.turn;
   g.supplyDirty = true;
@@ -854,6 +885,7 @@ export function fall(g: Game, r: Region, by: string, how: Fell): void {
   delete g.flags[`siege:${r.id}`];
   delete g.flags[`sgby:${r.id}`];
   delete g.flags[`sgm:${r.id}`];
+  delete g.flags[`sgs:${r.id}`];
   delete g.flags[`guard:${r.id}`];
   delete g.flags[`storm:${r.id}`];
   delete g.flags[`sally:${r.id}`];
@@ -1048,6 +1080,7 @@ export function dropSieges(g: Game, nat: string): void {
     delete g.flags[`siege:${r.id}`];
     delete g.flags[`sgby:${r.id}`];
     delete g.flags[`sgm:${r.id}`];
+    delete g.flags[`sgs:${r.id}`];
     delete g.flags[`guard:${r.id}`];
   }
 }
@@ -1346,12 +1379,19 @@ export function siegeView(g: Game, region: number, reach?: SeaReach): SiegeView 
       lines.push(sat >= SIEGE.capitalYear ? `Shut in for ${months(sat)}, the government has lost its hold on the country: the capital counts as lost when it reckons whether to fight on.`
         : `A government shut in its capital loses its hold on the country month by month. After ${months(SIEGE.capitalYear)} of siege the capital counts as lost, whether it has fallen or not.`);
     }
+  } else if (!trueReach(g)) {
+    lines.push(`Closely invested, its stores would feed the defenders for ${months(stores)}${r.port ? ', and for as long as ships can reach its harbour' : ''}.`);
   } else {
     // Under true reach a fortified port overseas living on its kept stores has already eaten some of them: the card
-    // promises what a siege opened now would leave (keptAtOpening), as the siege's own line then reads.
-    const would = stores - Math.min(stores, keptAtOpening(g, r));
-    lines.push(would > 0 ? `Closely invested, its stores would feed the defenders for ${months(would)}${r.port ? ', and for as long as ships can reach its harbour' : ''}.`
-      : `Closely invested, its defenders would go hungry at once: its stores have been eaten while no ship came in${r.port ? ', and only ships reaching its harbour could feed them' : ''}.`);
+    // promises what a siege opened now would leave (keptAtOpening), as the siege's own line then reads, and says why
+    // the promise shrank (the UI director's words of 22:08Z, 25 November 2026, the numbers in words).
+    const eaten = Math.min(stores, keptAtOpening(g, r)), would = stores - eaten;
+    if (would <= 0) lines.push(`Closely invested, its defenders would go hungry at once: its stores have been eaten with no ship coming in${r.port ? ', and only ships reaching its harbour could feed them' : ''}.`);
+    else {
+      const ate = monthsSaid(eaten);
+      lines.push(`Closely invested, its stores would feed the defenders for ${monthsSaid(would)}${r.port ? ', and for as long as ships can reach its harbour' : ''}.`
+        + (eaten > 0 ? ` ${ate[0].toUpperCase()}${ate.slice(1)} of its stores ${eaten === 1 ? 'has' : 'have'} been eaten with no ship coming in.` : ''));
+    }
   }
   return {
     region, town: townName(r), size, sizeWord: TOWNS.words[size], holder: r.ctrl, by, since: investedOn(g, r), months: shut,

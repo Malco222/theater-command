@@ -683,15 +683,47 @@ export const natIndex = (g: Game, nat: string): number => Object.keys(g.nations)
  * picture writes the holder's place (`stores:by:<id>`, natIndex) beside the month, whoever's ships carried them. Stores
  * whose record names another nation were never his, however the port came to him (a battle, a fall, a hand-back, a
  * treaty or the last act), and stores with no record (filled with true reach off, or in a save from before the record)
- * charge nothing until the holder's own next fill writes one: the conservative reading. A port captured in or after
- * the month of the fill (Region.since) charges nothing either: a port lost and retaken by battle since its holder last
- * filled it, and stores a new holder filled in the very month he took the port.
+ * charge nothing until the holder's own next fill writes one: the conservative reading. A port that has changed
+ * hands since the fill charges nothing either: a port lost and retaken by battle since its holder last filled it. By
+ * the order of events, not the month (keptStoresHis): stores a new holder filled after taking the port are his, in the
+ * very month he took it too.
  */
 export function keptStoresRun(g: Game, r: Region, drawn = false): number {
+  if (!r.overseas || !r.port || !worksKept(r) || !keptStoresHis(g, r)) return 0;
+  return Math.min(portKeep(g, r), Math.max(0, g.turn - (drawn ? 0 : 1) - g.flags[storesKey(r.id)]));
+}
+/**
+ * True where a port's kept stores are its present holder's: the record of the fill names him, and the fill came after
+ * the port's last capture (Region.since). The one reading of whose stores they are, under true reach (the design
+ * director's ruling of 22:08Z, 25 November 2026: "one town, one larder, one reading: the window feeds only the holder
+ * who filled it, as the guard charges only that holder"): the guard charges by it (keptStoresRun), and the supply
+ * picture's window opens the quay by it (computeSupply), as does a fortress crew's living on the port's stores
+ * (onPortStores). Whether the fill came after the capture goes by the order of events, never by the month (the design
+ * director's ruling of 26 November 2026, 03:36Z: "a fill made before the capture in that month is the old holder's; a
+ * fill made after it is the captor's"). The fill records the port's last change of hands as it stood when the stores
+ * were filled (`stores:at:<id>`, Region.since at the fill), and a taking by battle strikes that record (capture). So the
+ * stores are the holder's where the record still reads the port's present since: nothing has changed hands since the
+ * fill. A captor whose own ships fill the port in the very month he takes it has such a record, and the stores are his
+ * from that fill; stores filled earlier that month, before he took it, name the old holder and are not. A record from
+ * before the order was kept (no `stores:at`) reads by the month, as it did: his only where the fill's month is later
+ * than the capture's. A since moved by a hand-over to the nation that already held the port is no capture
+ * (keptStoresHolder), and a taking by battle strikes that hand-over's mark as it strikes the fill's record.
+ */
+export function keptStoresHis(g: Game, r: Region): boolean {
   const last = g.flags[storesKey(r.id)];
-  if (!r.overseas || !r.port || !worksKept(r) || last === undefined || last <= r.since) return 0;
-  if (Object.keys(g.nations)[g.flags[storesByKey(r.id)] ?? -1] !== r.ctrl) return 0;
-  return Math.min(portKeep(g, r), Math.max(0, g.turn - (drawn ? 0 : 1) - last));
+  if (last === undefined || Object.keys(g.nations)[g.flags[storesByKey(r.id)] ?? -1] !== r.ctrl) return false;
+  const at = g.flags[storesAtKey(r.id)];
+  return (at !== undefined ? at === r.since : last > r.since) || g.flags[storesHeldKey(r.id)] === r.since;
+}
+/**
+ * A treaty, a cession or an annexation that hands a port to the nation already holding it moves Region.since though
+ * nothing changes hands (claims.ts treaty, diplomacy.ts transfer). Under true reach, kept stores that were the holder's
+ * stay his: the month is marked (`stores:held:<id>`), and keptStoresHis reads a since of that month as no capture, so
+ * the window still feeds him and the guard still charges him. Called before the hand-over writes since. Nothing off
+ * true reach.
+ */
+export function keptStoresHolder(g: Game, r: Region, to: string): void {
+  if (trueReach(g) && r.ctrl === to && keptStoresHis(g, r)) g.flags[storesHeldKey(r.id)] = g.turn;
 }
 /**
  * A fortress crew in a fortified port overseas living on the port's stores this month (07:12Z): the sea behind it is
@@ -702,7 +734,8 @@ export function keptStoresRun(g: Game, r: Region, drawn = false): number {
 export function onPortStores(g: Game, c: Corps): boolean {
   if (!fortRow(g, c) || !c.supplied) return false;
   const r = g.regions[c.reg], last = g.flags[`stores:${r.id}`];
-  return r.overseas && !!r.port && !!r.fort && last !== undefined && last < g.turn && g.turn - last <= portKeep(g, r);
+  // (Under true reach only where the window feeds the port: its kept stores are the present holder's, keptStoresHis.)
+  return r.overseas && !!r.port && !!r.fort && last !== undefined && last < g.turn && g.turn - last <= portKeep(g, r) && (!trueReach(g) || keptStoresHis(g, r));
 }
 export function fortShare(g: Game, defenders: Corps[]): number {
   let all = 0, forts = 0;
@@ -1036,6 +1069,11 @@ const depotKey = (id: number): string => (depotKeys[id] ??= 'depot:' + id);
 const storesKey = (id: number): string => (storesKeys[id] ??= `stores:${id}`);
 // (Whose stores they are, under true reach: keptStoresRun. It begins with "stores:" so that a load keeps it with the month.)
 const storesByKey = (id: number): string => (storesByKeys[id] ??= `stores:by:${id}`);
+// (The month a hand-over to the nation already holding the port moved Region.since: keptStoresHolder. "stores:" too.)
+const storesHeldKey = (id: number): string => `stores:held:${id}`;
+// (The Region.since the port had when its stores were filled, under true reach: keptStoresHis. "stores:" too.)
+const storesAtKeys: string[] = [];
+const storesAtKey = (id: number): string => (storesAtKeys[id] ??= `stores:at:${id}`);
 
 /** One country's supply picture from its stores outward over the provinces its roads may pass, and its lines' lengths. */
 function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], heads: number[], wide: boolean, long: string[], deep: Uint8Array, sand: Uint8Array, rail: RailNow): { ok: Uint8Array; reach: Float32Array; east: boolean } {
@@ -1073,16 +1111,27 @@ function drawSupply(g: Game, id: string, pass: Uint8Array, seeds: number[], head
  * 2026): a sea the shutting power holds closed to the nation fed is closed to every ship carrying it stores, whatever
  * the flag. An ally's ships feed a port for another nation (the supply picture's holder's and mates' quays) only by a
  * way that stays open with the seas closed to the nation fed closed to them too; paper reach is not reach. One rule
- * for both charts: on wherever the far side is on, and on the old chart under Units decide with its own sub-flag
- * 'trueReach' (stage.json), off until its gate passes. Every history stop alike.
+ * for both charts: on wherever the far side is on, and on the old chart with its own flag 'trueReach', with Units
+ * decide or without it (stage.json; the bridge's ship list 'truereachrule'), off until its gate passes. Every history
+ * stop alike. (With Units decide on, the reading is the one the 96- and 48-war gates measured, unchanged.)
  */
-export const trueReach = (g: Game): boolean => farOn(g) || (unitsDecide(g) && g.flags.trueReach === 1);
+export const trueReach = (g: Game): boolean => farOn(g) || (g.flags.open === 1 && g.flags.trueReach === 1);
 /**
- * Sets the old chart's sub-flag of true reach, for tests and the bench: only in a grand campaign with Units decide
- * (returns whether it was set). The supply picture is drawn afresh at its next asking.
+ * Whether true reach can be switched on by hand or by the ship list: in a grand campaign that opened on the first day
+ * (September 1939, no `openFrom`), and only in that opening month. Kept stores filled with the rule off carry no
+ * record of whose they are (`stores:by:`), and under true reach such stores feed nobody (keptStoresHis), so a war
+ * switched on later would find its cut-off ports hungry at once. A later start is the same case: its history months
+ * were all filled with the rule off (flags.open is laid only at startOpen), so it is left as it is until the design
+ * director rules how a later start should take the rule.
+ */
+export const trueReachSettable = (g: Game): boolean => g.flags.open === 1 && g.turn === 1 && g.flags.openFrom === undefined;
+/**
+ * Sets the old chart's flag of true reach (returns whether it was set): on only where trueReachSettable, off in any
+ * month of a grand campaign; never outside one. With or without Units decide. The supply picture is drawn afresh at
+ * its next asking.
  */
 export function setTrueReach(g: Game, on: boolean): boolean {
-  if (!unitsDecide(g)) return false;
+  if (on ? !trueReachSettable(g) : g.flags.open !== 1) return false;
   if (on) g.flags.trueReach = 1;
   else delete g.flags.trueReach;
   g.supplyDirty = true;
@@ -1344,9 +1393,13 @@ export function computeSupply(g: Game): void {
             // Under true reach the fill records whose stores they are: the holder's, whoever's ships carried them.
             g.flags[storesKey(r.id)] = g.turn;
             g.flags[storesByKey(r.id)] = (places ??= new Map(Object.keys(g.nations).map((n, i) => [n, i]))).get(r.ctrl)!;
+            // (And the port's last change of hands as it stood at the fill, so that a fill made after a capture in the
+            // very month of the capture reads as the captor's: keptStoresHis.)
+            g.flags[storesAtKey(r.id)] = r.since;
           }
         }
-        else if (g.turn - (g.flags[storesKey(r.id)] ?? -99) <= portKeep(g, r)) quay = true;
+        // (Under true reach the kept stores feed only the holder who filled them, the guard's own reading: keptStoresHis.)
+        else if (g.turn - (g.flags[storesKey(r.id)] ?? -99) <= portKeep(g, r) && (!truly || keptStoresHis(g, r))) quay = true;
       }
       if (!depot && !quay) continue;
       // A pocket that has eaten its stores feeds nobody (the grand campaign): its depot is a name, and no ship comes in.
@@ -3497,6 +3550,15 @@ export function capture(g: Game, r: Region, nat: string): void {
   const owner = g.nations[r.owner];
   r.ctrl = owner.alive && allied(g, nat, r.owner) ? r.owner : nat;
   r.since = g.turn;
+  // (A taking strikes the record of when the port's stores were filled, which only true reach writes: a fill made before this
+  // taking is never read as made after it, even where the port is back with its filler inside the month. The taker's
+  // own next fill writes the record afresh. keptStoresHis.)
+  if (g.flags[storesAtKey(r.id)] !== undefined) delete g.flags[storesAtKey(r.id)];
+  // (And it strikes the mark of a hand-over to the port's own holder (keptStoresHolder), which is written by the month:
+  // left standing, a port handed to its holder, then lost by battle and retaken in that same month, would read the
+  // stores from before the loss as his, since the retaking's month is the marked month again. The independent check
+  // of 26 November 2026. Only true reach writes the mark.)
+  if (g.flags[storesHeldKey(r.id)] !== undefined) delete g.flags[storesHeldKey(r.id)];
   // And in whose turn of the month it fell, so that the alarm can tell a fall the player has seen from one since he
   // last ended his month (danger.ts homeAlarms; the design director's ruling of 17 November, by the order of play).
   // Read by nothing that moves a die.
