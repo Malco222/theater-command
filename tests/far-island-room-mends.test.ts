@@ -180,7 +180,7 @@ describe("the islands' table and its stand-ins flagged G (the design director, 1
 });
 
 describe("a garrison that would take the field on an island over its room", () => {
-  it("is told the island's room in men, not of another corps (the section 3 line, the sceptic's lean until the UI director rules)", () => {
+  it("is told the island's room in men, not of another corps, the corps coming out named (the UI director, 00:19Z, 27 November 2026, U7)", () => {
     const g = war('USA');
     const wake = at(g, 'Wake');
     clear(g, wake);
@@ -188,7 +188,7 @@ describe("a garrison that would take the field on an island over its room", () =
     expect(garrison(g, inside)).toBe(true);
     // (Drafts and a corps put down by hand put the field over the room: 7,500 men there beside the 15,000 inside.)
     corps(g, 'USA', 'Marines', wake, 1, 0.5);
-    expect(whyNotTakeField(g, inside)).toBe('Wake has room for one division, about 15,000 men, and 8,000 of yours are there: only 7,000 more can go, and you are sending 15,000.');
+    expect(whyNotTakeField(g, inside)).toBe('Wake has room for one division, about 15,000 men, and 8,000 of yours are there: only 7,000 more can go, and the Defense Battalion has 15,000.');
     // Ground that is no island says what it always said.
     expect(whyNotTakeField(g, { ...inside, town: undefined } as Corps)).toBe('It is not in a garrison.');
   }, 300000);

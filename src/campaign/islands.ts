@@ -323,9 +323,10 @@ export const engRoom = (g: Game, r: Region | undefined | null): number => Math.m
  * ally's corps stand there too. Engineers are told their own count in corps (section 4). Null for ground that is no
  * island of the table, with the far side off, and where room is not what stops the order.
  * `forms`: a formation offered to form there, which is not sent: "only {3,000} more fit, and this takes {5,000}" (the
- * UI director, 00:19Z, 27 November 2026, U5; the full form passes as it is).
+ * UI director, 00:19Z, 27 November 2026, U5; the full form passes as it is). `named`: one corps coming out of the
+ * island's town into its field, named as in the swap, "and {the South Seas Force} has {15,000}" (U7).
  */
-export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[], o: { forms?: boolean } = {}): string | null {
+export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[], o: { forms?: boolean; named?: boolean } = {}): string | null {
   const isle = islandOf(g, r);
   if (!isle || !r || !corps.length) return null;
   const nat = corps[0].nat, room = isle.room * MEN_PER_DIV, line = corps.filter((c) => c.kind !== 'eng');
@@ -343,7 +344,10 @@ export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[
     const short = roomFigure(Math.round(sending), 'near') <= (there === 0 ? roomFigure(Math.max(0, Math.round(left)), 'near') : canGo(left, there));
     // (A formation offered: "this takes", U5. Its shortfall and its line with none there read the same verb: a reading.)
     const verb = o.forms ? 'this takes' : 'you are sending', more = o.forms ? 'more fit' : 'more can go';
-    const sends = short ? `${verb} ${roomMen(sending - left)} men more than fit` : `${verb} ${roomMen(sending)}`;
+    // (One corps named, U7: its card's figure, as in the swap. Its shortfall in the same voice: a reading.)
+    const one = o.named && line.length === 1 ? named(line[0].name) : null;
+    const sends = one ? (short ? `${one} has ${roomMen(sending - left)} men more than fit` : `${one} has ${cardMen(line[0])}`)
+      : short ? `${verb} ${roomMen(sending - left)} men more than fit` : `${verb} ${roomMen(sending)}`;
     if (there === 0) return `${r.name} has ${roomWords(isle.room)}: ${sends}.`;
     if (left < 1000) return `${r.name} is full: it has room for about ${roomMen(room)} men and ${roomMen(there, 'up')}${yours} are there.`;
     if (short) return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(there, 'up')}${yours} are there: ${sends}.`;
