@@ -18,7 +18,17 @@ const BASE = (name: string): string => (/^(the |[A-Z] Force|Creforce)/i.test(nam
 const ROWS = (setup as any).expeditions as any[];
 let added = 0;
 afterEach(() => { while (added > 0) { ROWS.pop(); added--; } });
-const month = (g: Game, t: number): void => { g.turn = t; startPhase(g, 'GER'); };
+/**
+ * (The contact rule's second form, the design director's ruling of 06:10Z, 26 November 2026, drawn.ts `corpsInContact`:
+ * with the switch on, a corps beside the enemy is held while it took part in the battle last resolved on its ground, or
+ * where nobody of its side keeps its province. The Test Corps at Grenzmark stands with others of Germany's, who keep the
+ * province, so it is set, by hand, as having fought the battle last resolved where it stands, and is held as this board
+ * means, as tests/arrival-waits-told and its family set theirs. With the switch off nothing is set. Until this was
+ * added the board's corps was not held under the rule, the row formed at once, and the test failed from the rule's own
+ * commit on: the joiner's find, 27 November 2026. The relieved case itself: tests/contact-fact.test.ts.)
+ */
+const fought = (g: Game): void => { if (g.flags.fromWait !== 1) return; g.lastBattle = {}; for (const c of g.corps) if (!c.dead) (g.lastBattle[c.reg] ??= []).push(c.id); };
+const month = (g: Game, t: number): void => { fought(g); g.turn = t; startPhase(g, 'GER'); };
 const said = (g: Game, t: number): string[] => g.headlines.filter((h) => h.turn === t && h.nat === 'GER' && /Hans Test|Test Corps/.test(h.text)).map((h) => h.text);
 
 describe("the general's line's article is the base's, for every dated row of the old chart", () => {
