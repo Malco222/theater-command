@@ -343,6 +343,34 @@ namespace
 		}
 		Check(WorstShare <= MostDarker + 0.006, "the core, picture and veil together, is at most a quarter darker than its ground (worst " + Num(WorstShare) + ")");
 		Check(LeastBrown > 0.0, "and browner than it (red over blue, as a share of the whole, up by at least " + Num(LeastBrown) + ")");
+		// Healing: the summed darkness against the bare ground about half at four months and a quarter at eight (the art director's read of the second drawings: 8 months was a tenth).
+		{
+			const uint8_t G[3] = { 0xA8, 0xA7, 0x77 };
+			auto Summed = [&](const FState& State)
+			{
+				double Sum = 0.0;
+				for (int K = 0; K < 1600; ++K)
+				{
+					for (double D = -3.0; D <= 3.0; D += 0.1)
+					{
+						const double X = K * 0.25;
+						const FBand B = BandAt(X, D, 3.0, State);
+						uint8_t Out[3];
+						PaintCell(G, B, State, EGround::Common, ESeason::Dry, X, D, Out);
+						const double V = Veil(B, State, X, D);
+						uint8_t Seen[3];
+						for (int C = 0; C < 3; ++C)
+						{
+							Seen[C] = static_cast<uint8_t>(std::lround(ToEye(ToLight(Out[C]) * (1.0 - V))));
+						}
+						Sum += 1.0 - Lstar(Seen) / Lstar(G);
+					}
+				}
+				return Sum;
+			};
+			const double Was = Summed(Whole), At4 = Summed(Healing(Whole, 4.0)) / Was, At8 = Summed(Healing(Whole, 8.0)) / Was;
+			Check(At4 > 0.35 && At4 < 0.8 && At8 > 0.15 && At8 < 0.4, "healing: about half the darkness left at four months (" + Num(At4) + ") and a quarter at eight (" + Num(At8) + ")");
+		}
 		// Plots still show through as darker versions of themselves: two grounds a field apart stay apart.
 		{
 			const FBand B = BandAt(1.0, 0.0, 3.0, Whole);

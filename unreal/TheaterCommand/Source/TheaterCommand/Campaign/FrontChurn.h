@@ -43,13 +43,14 @@ namespace TheaterChurn
 	/** The share of its craters left by then: they green over first, nearly gone by six months. */
 	double CratersLeft(double MonthsSince);
 
-	/** One stretch of churned ground as it stands: how wide (Size), how dark (Dark), how pitted (Pits), and how far it has paled in healing (Pale), each 0 to 1. */
+	/** One stretch of churned ground as it stands: how strong (Size: how much of it is laid), how dark (Dark), how pitted (Pits), how far it has paled in healing (Pale), and how wide its patches are (Wide: as Size while it grows; healing, the width it had when the front moved on, for its islands are as wide as the band was), each 0 to 1. */
 	struct FState
 	{
 		float Size = 0.0f;
 		float Dark = 0.0f;
 		float Pits = 0.0f;
 		float Pale = 0.0f;
+		float Wide = 0.0f;
 	};
 	/** Growing, after Months dug in and facing. */
 	FState Growing(double Months);

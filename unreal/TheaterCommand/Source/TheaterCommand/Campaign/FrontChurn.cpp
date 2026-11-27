@@ -110,6 +110,7 @@ namespace TheaterChurn
 		State.Size = S;
 		State.Dark = S;
 		State.Pits = S;
+		State.Wide = S;
 		return State;
 	}
 
@@ -118,9 +119,10 @@ namespace TheaterChurn
 		const double Share = Left(MonthsSince);
 		FState State;
 		State.Size = static_cast<float>(AtLeaving.Size * Share);
-		State.Dark = static_cast<float>(AtLeaving.Dark * Share);
+		State.Dark = static_cast<float>(AtLeaving.Dark * Share * Share); // (its islands keep their width and fade in tone; fewer of them, each plain: see Band)
 		State.Pits = static_cast<float>(AtLeaving.Pits * CratersLeft(MonthsSince));
 		State.Pale = static_cast<float>(std::max<double>(AtLeaving.Pale, 1.0 - Share));
+		State.Wide = Share > 0.0 ? AtLeaving.Wide : 0.0f;
 		return State;
 	}
 
@@ -132,6 +134,7 @@ namespace TheaterChurn
 		State.Dark = static_cast<float>(Lerp(From.Dark, To.Dark, U));
 		State.Pits = static_cast<float>(Lerp(From.Pits, To.Pits, U));
 		State.Pale = static_cast<float>(Lerp(From.Pale, To.Pale, U));
+		State.Wide = static_cast<float>(Lerp(From.Wide, To.Wide, U));
 		return State;
 	}
 
@@ -142,8 +145,10 @@ namespace TheaterChurn
 		/** The taper away from where the armies face: whole within Reach, half at Gone and beyond (where a weaker band shows a few gaps, never a thread). */
 		double Taper(double Facing) { return 0.5 + 0.5 * (1.0 - Smooth(Reach, Gone, Facing)); }
 
-		/** Where the craters cluster (and where a weak band keeps its patches, and a healing strip its islands). */
+		/** Where the craters cluster... */
 		double ClusterField(double X, double Y) { return 0.6 * Noise(X / 2.2, Y / 2.2, 83) + 0.4 * Noise(X / 0.9, Y / 0.9, 84); }
+		/** ...and, on the same broad lie but plainer, where a weak band keeps its patches and a healing strip its islands: few and plain, never many slivers. */
+		double PatchField(double X, double Y) { return 0.82 * Noise(X / 2.2, Y / 2.2, 83) + 0.18 * Noise(X / 0.9, Y / 0.9, 84); }
 	}
 
 	FBand Band(const FBandIn& In)
@@ -157,7 +162,9 @@ namespace TheaterChurn
 		Out.Strength = static_cast<float>(Strength);
 		// The core: 1.0 wide at first show, 2.4 when whole; weaker than at first show it keeps its width and breaks up
 		// instead (below).
-		const double Grow = Clamp01((Strength - 0.3) / 0.7);
+		// (a healing strip's islands keep the width the band had when the front moved on)
+		const double Widen = In.State.Size > 0.001f ? std::max(1.0, static_cast<double>(In.State.Wide) / In.State.Size) : 1.0;
+		const double Grow = Clamp01((Strength * Widen - 0.3) / 0.7);
 		double Wide = Lerp(CoreFirst, CoreWhole, Grow);
 		const double Edge = Lerp(EdgeFirst, EdgeWhole, Grow);
 		// It wanders by about two fifths over stretches of four to eight units, and bulges a little where the armies stand.
@@ -176,19 +183,22 @@ namespace TheaterChurn
 		const double D = std::fabs(Off);
 		// Weak is broken, never thin: patches two to five units long with gaps between, more of them the stronger it is,
 		// where the craters cluster (so that a healing strip keeps islands where its craters were).
-		const double Field = ClusterField(In.X, In.Y);
-		const double Cover = Smooth(0.03, 0.62, Strength);
-		const double Bar = 0.80 - 0.62 * Cover;
-		const double Patch = std::max(Smooth(Bar - 0.05, Bar + 0.05, Field), Smooth(0.85, 1.0, Cover));
+		const double Field = PatchField(In.X, In.Y);
+		const double Cover = Smooth(0.0, 0.52, Strength);
+		const double Bar = 0.78 - 0.58 * Cover;
+		const double Patch = std::max(Smooth(Bar - 0.04, Bar + 0.04, Field), Smooth(0.85, 1.0, Cover));
 		Out.Whole = static_cast<float>(Patch);
-		Out.Cluster = static_cast<float>(Smooth(0.40, 0.56, Field));
+		Out.Cluster = static_cast<float>(Smooth(0.40, 0.56, ClusterField(In.X, In.Y)));
 		Out.Body = static_cast<float>(Patch * (1.0 - Smooth(Half - 0.1 * Edge, Half + Edge, D)));
 		Out.Core = static_cast<float>(Patch * (1.0 - Smooth(0.7 * Half, Half, D)));
 		// The ragged edge, for the fine veil: crisp, with uneven tongues reaching out 0.3 to 0.8 of a unit and a few
 		// bites in, a different run of them on each side.
 		const uint32_t SideSeed = Off >= 0.0 ? 73u : 77u;
+		// (each tongue's tip blunt and lobed, not a thorn: its reach comes to a flat top whose height differs from tongue
+		// to tongue)
 		const double Tongue = 0.85 * Noise(In.Along / 0.6, 0.37, SideSeed) + 0.15 * Noise(In.Along / 0.3, 0.71, SideSeed + 6u);
-		const double Reach2 = 0.9 * TongueLongest * Smooth(0.46, 0.84, Tongue) - 0.1 * (1.0 - Smooth(0.14, 0.42, Tongue));
+		const double Long = TongueLongest * (0.4 + 0.6 * Noise(In.Along / 2.3, 0.19, SideSeed + 3u));
+		const double Reach2 = Long * Smooth(0.47, 0.64, Tongue) - 0.1 * (1.0 - Smooth(0.14, 0.42, Tongue));
 		const double Wobble = 0.09 * (2.0 * Noise(In.Along / 1.3, 0.53, SideSeed + 11u) - 1.0);
 		const double Rim = Half + 0.35 * Edge + Reach2 * (0.55 + 0.45 * Grow) + Wobble;
 		Out.Ragged = static_cast<float>(Patch * (1.0 - Smooth(Rim - 0.07, Rim + 0.07, D)));
@@ -207,8 +217,11 @@ namespace TheaterChurn
 		{
 			// (the darkness tapers with the strength, State.Dark against State.Size where the armies are; but gently, so
 			// that a weak band's patches still read as broken earth, not as a faint pencil line)
+			// (and never under about half where it lies at all: weak ground shows as fewer patches, each plain, never as
+			// many faint ones; the art director's read of the second drawings)
 			const double Share = State.Size > 0.001f ? Clamp01(Band.Strength / State.Size) : 0.0;
-			return std::sqrt(Clamp01(static_cast<double>(State.Dark) * Share));
+			const double Own = std::sqrt(Clamp01(static_cast<double>(State.Dark) * Share));
+			return Own > 0.0 ? std::max(Own, 0.55) : 0.0;
 		}
 	}
 
@@ -231,7 +244,7 @@ namespace TheaterChurn
 		}
 		BodyColour(Ground, Season, Band.Core, Body);
 		// Healing: the last of it is a paler, rougher strip.
-		const double Pale = 0.55 * State.Pale;
+		const double Pale = 0.4 * State.Pale;
 		// A few flecks of dry spoil along its edges.
 		const double EdgeZone = Clamp01(4.0 * Band.Body * (1.0 - Band.Core));
 		const double Fleck = Season == ESeason::Snow ? 0.0 : Smooth(0.72, 0.82, Noise(X / 0.9, Y / 0.9, 67)) * EdgeZone;
@@ -258,9 +271,11 @@ namespace TheaterChurn
 		};
 		const double Mottle = 0.7 * Noise(X / 1.2, Y / 1.2, 61) + 0.3 * Noise(X / 3.0, Y / 3.0, 62);
 		const double Room = 0.045 * Band.Body * Dark;
-		double L = std::max(Lightness(Luminance(Mixed)), (1.0 - PictureDarker + Room) * LIn);
+		// (the cap itself follows the band's darkness, so that a healing or a first-month band is lighter, not only browner)
+		const double Most = PictureDarker * std::min(1.0, Dark);
+		double L = std::max(Lightness(Luminance(Mixed)), (1.0 - Most + Room) * LIn);
 		L *= 1.0 + Room * (2.0 * Mottle - 1.0) * 2.0;
-		SetLightness(std::max(L, (1.0 - PictureDarker) * LIn));
+		SetLightness(std::max(L, (1.0 - Most) * LIn));
 		for (int C = 0; C < 3; ++C)
 		{
 			Out[C] = Byte(ToEye(Mixed[C]));
@@ -426,7 +441,7 @@ namespace TheaterChurn
 		std::vector<FState> State(N);
 		for (size_t K = 0; K < N; ++K)
 		{
-			double Sum = 0.0, Size = 0.0, Dark = 0.0, Pits = 0.0, Pale = 0.0;
+			double Sum = 0.0, Size = 0.0, Dark = 0.0, Pits = 0.0, Pale = 0.0, Wide = 0.0;
 			int Count = 0;
 			Near(K, [&](size_t J)
 			{
@@ -435,6 +450,7 @@ namespace TheaterChurn
 				Dark += Line.State[J].Dark;
 				Pits += Line.State[J].Pits;
 				Pale += Line.State[J].Pale;
+				Wide += Line.State[J].Wide;
 				++Count;
 			});
 			Strength[K] = static_cast<float>(Sum / Count);
@@ -442,6 +458,7 @@ namespace TheaterChurn
 			State[K].Dark = static_cast<float>(std::max<double>(Dark / Count, Line.State[K].Dark));
 			State[K].Pits = static_cast<float>(Pits / Count);
 			State[K].Pale = static_cast<float>(Pale / Count);
+			State[K].Wide = static_cast<float>(std::max<double>(Wide / Count, Line.State[K].Wide));
 		}
 		Line.Strength = std::move(Strength);
 		Line.State = std::move(State);
