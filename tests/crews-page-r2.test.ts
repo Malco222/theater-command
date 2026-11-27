@@ -52,15 +52,18 @@ describe('the crews page (release 2)', () => {
     const p = airPage(g, `crews:${f.id}`) as P;
     expect(p.id).toBe(`crews:${f.id}`);
     expect(p.title).toContain(f.name.toUpperCase());
-    expect(p.headline).toMatch(new RegExp(`^${f.bombers!.on.length.toLocaleString('en-US')} bombers on strength`));
-    const rows = p.sections[0].rows;
+    expect(p.headline).toMatch(new RegExp(`^${f.bombers!.on.length.toLocaleString('en-US')} bombers · no crew home yet · none lost$`));
+    const rows = p.sections[1].rows;
     expect(rows.length).toBe(Math.min(12, f.bombers!.on.length));
     // The old hand a mission from home comes first, says so, and has a name (America names her bombers).
     expect(rows[0].title).not.toBe('No name yet');
-    expect(rows[0].lines[0]).toBe(`${tourOf('USA') - 1} missions flown.`);
-    expect(rows[0].lines[1]).toMatch(/: 24 of their 25, one to go\.$/);
+    expect(rows[0].lines[0]).toMatch(/: 24 of their 25, one to go\.$/);
+    expect(rows[0].lines[1]).toBe(`${tourOf('USA') - 1} missions flown.`);
+    // Nearest home first: no crew below has flown more of its tour than the one above it.
+    const crewOf = (r: (typeof rows)[number]): number => Number(/: (\d+) of their/.exec(r.lines[0])![1]);
+    expect(rows.every((r, i) => i === 0 || crewOf(rows[i - 1]) >= crewOf(r))).toBe(true);
     // The standing order: three buttons, the order it has now shut and saying so.
-    const order = p.sections[1].rows[0];
+    const order = p.sections[0].rows[0];
     expect(order.title).toBe('Crews go home after 25 missions');
     expect(order.buttons.map((b) => b.act)).toEqual([`crews:${f.id}:school`, `crews:${f.id}:bonds`, `crews:${f.id}:split`]);
     expect(order.buttons[2]).toMatchObject({ ok: false, tip: 'This is your standing order now.' });
@@ -78,7 +81,7 @@ describe('the crews page (release 2)', () => {
     expect(r.ok).toBe(true);
     expect(r.open).toBe(`crews:${f.id}`);
     expect(g.stories.crews!.USA.order).toBe('school');
-    const order = (airPage(g, `crews:${f.id}`) as P).sections[1].rows[0];
+    const order = (airPage(g, `crews:${f.id}`) as P).sections[0].rows[0];
     expect(order.buttons[0]).toMatchObject({ ok: false, tip: 'This is your standing order now.' });
     expect(order.lines[0]).toBe("The group's readiness rises each time. Then they train new crews.");
     expect(airAct(g, `crews:${f.id}:nowhere`)).toBeNull();
