@@ -465,6 +465,12 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, buildings.ts; Brian 24 November 2026 18:12Z and 18:13Z) Conquered towns settle, after a short wait.
 			Add(TEXT("settledtownsrule"), TEXT("Conquered towns settle"), TEXT("A town taken from another country can put up every kind of building once it has been held three months: markets, schools, drill grounds, hospitals, administration, factories, shipyards and forts. Until then it can put up only an administration and a hospital, and its panel says how many months are left. Every country's conquests settle the same way. It can be switched in any month."),
 				Now.bSettledTowns ? TEXT("ON") : TEXT("OFF"), Now.bSettledTowns);
+			// (Release 2, pressed.ts; Brian 27 November 2026 05:23Z) The beaten side's repairable tanks join the winner's armour.
+			Add(TEXT("pressedtanksrule"), TEXT("Captured tanks join the army"), TEXT("After a land battle, a quarter of the beaten side's tanks knocked out on the field can be got running again. They join the winner's own armoured and motorised corps that fought, up to the strength each is short of, each worth half one of its own: no spare parts, and a crew new to it. Each month a tenth of them break down, twice that out of supply. In battle a few of the corps' tanks are drawn as the captured make in its own colours. Every country's armies work the same way. It can be switched in any month."),
+				Now.bPressedTanks ? TEXT("ON") : TEXT("OFF"), Now.bPressedTanks);
+			// (Release 2, airpages.ts; Brian 27 November 2026 05:23Z) A bomber group kept by name has a page of its crews.
+			Add(TEXT("crewrollrule"), TEXT("Bomber crews by name"), TEXT("A bomber group whose bombers are kept by name has a THE CREWS button on its page: its bombers one by one, the missions each crew has flown and how near it is to the end of its tour, the crews gone home and the bombers lost. There you choose what finished crews do: train new crews, go on a war bond tour, or both in turn. It changes nothing else in the war. It can be switched in any month."),
+				Now.bCrewRoll ? TEXT("ON") : TEXT("OFF"), Now.bCrewRoll);
 			// (Release 2, townqueue.ts; Brian 25 November 2026 13:41Z: "easy to manage the cities") What each town builds next, in order.
 			Add(TEXT("townqueuerule"), TEXT("Building queues"), TEXT("Each of your towns can be given its next buildings in order. At the opening of your month, once a town's builders are free and the treasury can pay, the next on its list is ordered for you at that day's price, as if you had pressed BUILD yourself. One the treasury cannot pay for yet waits at the head of its town's list. Your staff never touches a queue. It can be switched in any month."),
 				Now.bTownQueue ? TEXT("ON") : TEXT("OFF"), Now.bTownQueue);
@@ -764,14 +770,14 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("teamsrule") || Id == TEXT("settledtownsrule") || Id == TEXT("townqueuerule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("ownwaterrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("beatreachrule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule") || Id == TEXT("airnames") || Id == TEXT("citydefencesrule"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("teamsrule") || Id == TEXT("settledtownsrule") || Id == TEXT("pressedtanksrule") || Id == TEXT("crewrollrule") || Id == TEXT("townqueuerule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("ownwaterrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("beatreachrule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule") || Id == TEXT("airnames") || Id == TEXT("citydefencesrule"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
 		{
 			FString Note;
 			const FCampaignView& Now = Session->GetView();
-			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("airnames") ? Now.bAirNames : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("teamsrule") ? Now.bSupportTeams : Id == TEXT("settledtownsrule") ? Now.bSettledTowns : Id == TEXT("townqueuerule") ? Now.bTownQueue
+			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("airnames") ? Now.bAirNames : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("teamsrule") ? Now.bSupportTeams : Id == TEXT("settledtownsrule") ? Now.bSettledTowns : Id == TEXT("pressedtanksrule") ? Now.bPressedTanks : Id == TEXT("crewrollrule") ? Now.bCrewRoll : Id == TEXT("townqueuerule") ? Now.bTownQueue
 				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog : Id == TEXT("sailorsrule") ? Now.bSailors : Id == TEXT("ownwaterrule") ? Now.bOwnWater
 				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Id == TEXT("seekoncerule") ? Now.bSeekOnce : Id == TEXT("beatreachrule") ? Now.bBeatReach : Id == TEXT("atomrule") ? Now.bAtomBomb : Id == TEXT("carrierstrikerule") ? Now.bCarrierStrike : Id == TEXT("wingbydaterule") ? Now.bWingByDate : Id == TEXT("citydefencesrule") ? Now.bCityDefences : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
@@ -10129,6 +10135,10 @@ void ACampaignPlayerController::RefreshOrders()
 			TArray<FString> Tip;
 			Tip.Add(Unit.MoodLine);
 			Tip.Add(Unit.RestLine);
+			if (!Unit.Kit.IsEmpty())
+			{
+				Tip.Add(Unit.Kit); // (release 2, pressed.ts: captured tanks in its own colours)
+			}
 			if (Unit.Why.Num() > 0)
 			{
 				Tip.Add(TEXT("What has moved its morale:"));

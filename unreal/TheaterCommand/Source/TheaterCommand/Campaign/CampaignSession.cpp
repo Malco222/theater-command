@@ -1349,6 +1349,8 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("carrierStrike"), Out.bCarrierStrike); // (release 2, harbourstrike.ts)
 	Object->TryGetBoolField(TEXT("wingByDate"), Out.bWingByDate); // (release 2, carriers.ts)
 	Object->TryGetBoolField(TEXT("settledTowns"), Out.bSettledTowns); // (release 2, buildings.ts)
+	Object->TryGetBoolField(TEXT("pressedTanks"), Out.bPressedTanks); // (release 2, pressed.ts)
+	Object->TryGetBoolField(TEXT("crewRoll"), Out.bCrewRoll); // (release 2, airpages.ts)
 	Object->TryGetBoolField(TEXT("townQueue"), Out.bTownQueue); // (release 2, townqueue.ts)
 	Object->TryGetBoolField(TEXT("cityDefences"), Out.bCityDefences); // (release 2, citydefences.ts)
 	Object->TryGetBoolField(TEXT("r2Switches"), Out.bR2Switches);
@@ -1970,6 +1972,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			}
 			Unit->TryGetStringField(TEXT("nick"), C.Nickname); // null until it has earned one
 			Unit->TryGetStringField(TEXT("mark"), C.Marked); // (release 2, the marked army) absent unless it took one of his towns
+			Unit->TryGetStringField(TEXT("kit"), C.Kit); // (release 2, pressed.ts) absent unless his corps has captured tanks in its colours
 			Unit->TryGetBoolField(TEXT("ready"), C.bReady); // (release 2, new units ready) absent unless handed over as his month opened
 			C.Honours = ReadRibbons(Unit, TEXT("honours"));
 			{

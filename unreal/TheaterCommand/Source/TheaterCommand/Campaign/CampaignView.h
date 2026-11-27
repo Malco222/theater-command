@@ -123,6 +123,7 @@ struct FViewCorps
 	FString Grade; // what that experience is called: Green, Trained, Seasoned, Veteran, Elite
 	FString Nickname; // the name the army gives it, once it has earned one
 	FString Marked; // (release 2, the marked army; marked.ts) an enemy corps that took one of his towns: that town ("Paris"); empty otherwise
+	FString Kit; // (release 2, pressed.ts) its captured tanks pressed into service, as its card says them ("14 captured Soviet tanks in its own colours."); empty otherwise
 	bool bReady = false; // (release 2, new units ready; Brian 24 Nov 18:30Z) his corps handed over as this month opened: NEW on its pole
 	TArray<FHonourRibbon> Honours;
 	// The player's own corps, where the rules keep them (the grand campaign): morale and rest with their words, and its divisions.
@@ -1370,6 +1371,8 @@ struct FCampaignView
 	bool bCarrierStrike = false; // (release 2, harbourstrike.ts) a carrier fleet's page offers a strike on an enemy harbour (the switch as set)
 	bool bWingByDate = false; // (release 2, carriers.ts) a navy's carrier wing changes by date (the switch as set)
 	bool bSettledTowns = false; // (release 2, buildings.ts) a conquered town held three months can put up every building
+	bool bPressedTanks = false; // (release 2, pressed.ts; Brian 27 November 2026 05:23Z) captured tanks join the winner's armour
+	bool bCrewRoll = false; // (release 2, airpages.ts; Brian 27 November 2026 05:23Z) a bomber group's crews page
 	bool bTownQueue = false; // (release 2, townqueue.ts) the player can queue the next buildings for his towns
 	bool bCityDefences = false; // (release 2, citydefences.ts) searchlights, the guns by night by what they see, a garrison's town works (the town's guns on tanks: sub-switch flakGround, off)
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
