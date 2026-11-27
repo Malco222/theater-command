@@ -173,7 +173,11 @@ export interface PortCut {
   // ---- The shutting side, from its own sight only (null for the holder's side) ----
   /** The month its side's hold on the port's seas began, as its own fleets and aircraft know it. */
   heldSince: number | null;
-  /** Counting from then: the month the garrison goes hungry, and the month it is lost. */
+  /**
+   * Counting from then: the latest month the garrison is hungry by, and the latest month it is lost by. Bounds at both
+   * ends (the UI director's 01:14Z, item 2): a hold first seen at a month's turn may have begun after the holder's last
+   * fill of the month before, so that the hunger, and the loss, come a month sooner than counted.
+   */
   heldHungry: number | null;
   heldLost: number | null;
 }
@@ -359,6 +363,13 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
     const last = starts.some((x) => x === undefined || x === WATCHED_OPEN) ? null : Math.max(...(starts as number[]));
     const since = last === 0 ? null : last;
     const keep = sightKeep(g, r, sightOf(g, viewer)[r.id]);
+    // (The latest month the garrison is hungry by, and lost by: the UI director's 01:14Z, item 2. The record dates the
+    // hold by the first reading that saw the sea shut, as a nation's month opens, and the holder's last fill was the
+    // last draw that saw it open. A hold begun mid-month is seen the month it began, after the fill: the count is the
+    // rule's own. One begun at a month's turn (a fleet put to sea in the last nation's month, the weather turning as the
+    // month opens) is first seen in the new month, after a fill of the old one, and the rule acts a month sooner than
+    // counted. Which of the two it was, the shutting side cannot tell from its own sight: only the holder's draws, and
+    // whether his lanes reached the sea at them, say when his ships last got in.)
     const heldHungry = since === null || keep === null ? null : since + keep + 1;
     return {
       region: r.id, holder, keep, shut, side: 'shutting', state: null, cut: false, lastFilled: null, feedsTo: null, hungry: null, lost: null, lostBy: null, garrison: [], fleetInReach: null,
@@ -462,7 +473,7 @@ export function portCardLines(g: Game, regionId: number, viewer: string | null, 
     // (From its own sight only: no line where it sees the port and no garrison in it; where it does not see the port,
     // the line stands whatever is there, so that it tells nothing of what is out of sight.)
     if (f.heldSince === null || f.heldLost === null || f.heldHungry === null || g.turn > f.heldLost || seenEmpty(g, r, sightOf(g, viewer)[r.id])) return [];
-    return [{ text: theWords(`${heldSaid(g, f.shut, viewer, true)} since ${monthSaid(g, f.heldSince)}. Counting from then, the garrison of ${portOf(r)} goes hungry from ${monthSaid(g, f.heldHungry)} and is lost by the start of ${monthSaid(g, f.heldLost)}, unless ships get through.`), tone: 'note' }];
+    return [{ text: theWords(`${heldSaid(g, f.shut, viewer, true)} since ${monthSaid(g, f.heldSince)}. Counting from then, the garrison of ${portOf(r)} is hungry by ${monthSaid(g, f.heldHungry)} and lost by the start of ${monthSaid(g, f.heldLost)}, unless ships get through.`), tone: 'note' }];
   }
   if (f.lost === null) return [];
   const keep = f.keep!;
