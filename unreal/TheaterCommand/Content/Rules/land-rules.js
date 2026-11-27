@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of ac185a037 2026-11-26. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of ab147d2f5 2026-11-27. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -3490,7 +3490,22 @@
       carry: [2.8, 4.6]
     },
     wounded: {
-      _about: "Wounded and knocked-down men (release 2; Brian, 25 November 2026, 16:14Z: 'im not seeing multiple soliders being taken out by an explosion if they are in the blast radius'). Looks only (ruling 217), the drill's own dice; the rules' losses stay as booked; on only where asked (Drill wounded: the 3D game's switch)."
+      _about: [
+        "Wounded and knocked-down men (release 2; Brian, 25 November 2026, 16:14Z: 'im not seeing multiple soliders being taken out by an explosion if they are in the blast radius'). Looks only (ruling 217), the drill's own dice; the rules' losses stay as booked; on only where asked (Drill wounded: the 3D game's switch).",
+        "share: with the bearers rule off, a man who falls is dead or wounded by his own roll: one taken by small arms is wounded a share 'arms' of the time (2 in 3: the armies' wounded ran about 2 to 4 to each dead, rules.ts LAND.bearers.killed; 2 in 3 is the low end, so the field is not covered in men lying hurt). One taken by a burst the rings below place (ring) is dead inside its lethal ring and wounded outside it; where they cannot (no burst rule, or the burst had to be shrunk to fit), one inside the close 'third' of the shell's REACH (shells.ts) is wounded a share 'close' (1 in 4: a burst at his feet) and beyond it 'far' (2 in 3). With the bearers rule on none of this is used: its own share (LAND.bearers.killed) decides, as before.",
+        "hold: battle seconds a block's losses to shells wait for one burst, by the shell's class: the burst rule's own hold with the switch off (blast.hold, 6) for every class (the rulings, section 5.5, 27 November). The brief's 12 to 20 s were tried and dropped: measured on eight battles, with no stunned men they gave 6% of killing bursts two men or more against the base's 5%, and doubled the time men the rules have taken stand drawn (to 12 s for a field gun or a mortar, 15 s for a howitzer); the stunned men (stunned) do the gathering.",
+        "ring: metres, effective as the burst rule scores a man (his distance times 2 less his cover's figure, rounds.cover, over how much of him a burst finds, blast.lying and blast.kneeling): [lethal, wounded, stun] by class. Lethal: every man inside goes down, about 0.35 to 0.4 of the wounded ring (a design figure: no source gives a ring where all fall). Wounded: the casualty radius, where half of the unshielded men become casualties from a ground burst (BRL Handbook of Ballistic and Engineering Data for Ammunition II and III, 1949: the 81 mm 35 to 36 ft, the 155 mm 72 ft; FM 23-90). Stun: men are knocked off their feet or duck; nobody is hurt. light and bomb are scaled, with no source; the howitzer's is between the field gun's and the heavy's.",
+        "search: the burst is laid at a point round its first man where every man it takes is inside the wounded ring and no other living man of any block (either side) inside the lethal ring: a grid 'step' metres apart at the least, or the wounded ring over 'cells' where that is wider, out to the wounded ring round him, the one where he stands as far from it as his own roll asks: the wounded ring times his roll to the power 'aim' (0.7: a design figure, further out than an even spread, so a burst takes its first man dead about a quarter of the time and the fallen come to about two wounded to a dead, the brief's aim, with small arms' 2 in 3). Every other man is taken a stride ('spare' metres) nearer than he stands, for the men of a block not yet moved in that step. No point fits: the losses hold on (hold); at its end the burst is laid where the nearest other man is furthest off (shrunk) and its dead and wounded go by its 'share'.",
+        "miss: a high-explosive round that misses lands clear of every living man's lethal ring (as a miss already lands clear of a vehicle): it goes on over along its line of fire 'step' times the lethal ring at a time (never less than 'least' metres), up to 'tries' times, then as far short, then round it at 'ways' bearings a ring at a time out as far; a man is taken anywhere he may be by the time it lands (on his way at his pace for all of its flight, whether he stops at his spot or is sent on), at his real distance and 'spare' metres more, and 'fly' metres more for each battle second it flies (by then he may be on his feet and in the open, and on another way: a man's orders change every half second). A direct miss lands at least the lethal ring from what it was fired at (it was 0.6 m).",
+        "kd: a living man on foot inside the stun ring as a high-explosive round lands (a man of any block: never a vehicle, a man aboard or riding, one already down or leaving the field, a support team's weapon or its crew) is knocked down or ducks, by his own roll: surely at the lethal ring's edge ('sure'), falling evenly to 'far' at the stun ring's edge, by the burst's own reach only and the same for every man (the brief's W4 and the rulings, section 6.3: no figure is set to reach a share of a block down) (a squad lying near a burst mostly ducks: a man lying or in cover is further off as a burst finds him, so less often thrown and for less long). His hold, battle seconds by his own roll: 'edge' [least, most] at the stun ring's edge, rising evenly to 'lethal' [least, most] of the shell's class at the lethal ring's edge, never under 'least' (the 3D game's clips: 0.7 s going down, 1.6 s getting up, a down loop between). A heavy shell's 6 to 9 s at the lethal edge is the brief's figure; the others are scaled by their rings. Inside his hold he does not move (but rolled clear of a vehicle: 'roll'), his aim does not change, and no round is fired from him; a fresh burst on him meanwhile holds him to the later end. A man inside his hold as a round lands is on the ground: he is found as a man lying (blast.lying). A man whose hold is over is on his feet and found as any man standing: nothing reads how long ago he got up (the rulings, section 6.2, 27 November). 'roll': metres a battle second a man inside his hold who lies in a moving vehicle's way (escort.clear's box) is rolled or dragged clear of it on the ground (the rulings, section 5.8: never drawn under a tank; not his own order, so he stays down and his hold runs on); a design figure, about a fast crawl; faster where that would not clear him before her nose ('nose' metres ahead of her middle, about half a lorry's length) is on him, up to 'drag' metres a second (he is hauled clear by a mate or thrown aside: a design figure)."
+      ],
+      share: { arms: 0.667, close: 0.25, far: 0.667, third: 0.333 },
+      hold: { light: 6, mortar: 6, field: 6, howitzer: 6, heavy: 6, bomb: 6 },
+      ring: { light: [1.5, 4, 8], mortar: [4, 11, 18], field: [4, 11, 18], howitzer: [6, 15, 25], heavy: [8, 22, 35], bomb: [15, 45, 70] },
+      search: { step: 0.5, cells: 24, spare: 1, aim: 0.7 },
+      miss: { step: 0.5, least: 1.5, tries: 16, spare: 1, fly: 0.6, ways: 12 },
+      stunned: { _about: "Stunned men (the design director, 26 November 12:57Z): when a burst the drill lays for a block's booked shell losses lands, up to 'cap' of the living men on foot it knocks down (of the blocks it was fired at: men thin could take for an ordinary loss), nearest it first, are stunned, each by his own roll at 'odds' of the shell's class, at most 'most' of that class: design figures, more and likelier for a bigger shell, never tuned to a count. A stunned man lies 'lie' [least, most] battle seconds by his own roll (the director's 8 to 14). A shell loss from the same striker on his block that the drill with the switch off would draw while he still lies from that burst is taken from him then, as that burst's (dead inside its lethal ring, wounded outside): not at the booking itself, since till the base draws it a key man's fall may make it up and the block owed most may change (the mender, 26 November: bars a and d of the director's section 1); the rest get up at the end of their own window.", lie: [8, 14], cap: 3, odds: { light: 0.25, mortar: 0.5, field: 0.5, howitzer: 0.6, heavy: 0.7, bomb: 0.8 }, most: { light: 1, mortar: 2, field: 2, howitzer: 3, heavy: 3, bomb: 3 } },
+      kd: { edge: [2.4, 4], lethal: { light: [3, 4.5], mortar: [4.5, 7], field: [4.5, 7], howitzer: [5, 8], heavy: [6, 9], bomb: [7, 10] }, least: 2.4, sure: 1, far: 0.15, roll: 2.5, drag: 6, nose: 3 }
     },
     paces: {
       _about: "Every man his own pace (release 2; Brian, 25 November 2026, 17:30Z: 'it looks like they are all jogging at the same speed'; 16:24Z: 'the soldiers of a squad keep zig zaging at the same time'). Looks only (ruling 217), the drill's own dice; the rules never read it; on only where asked (Drill paces: the 3D game's switch, off until a Mac off/on line and the art director pass it). The numbers are laid here by the build."
@@ -4024,6 +4039,14 @@
        */
       __publicField(this, "wounded");
       /**
+       * Stunned men (release 2, the design director, 26 November 12:57Z; with wounded, unless stunned: false): some of the
+       * men a laid burst knocks down lie longer, and a shell loss from that striker on their block that the drill with the
+       * switch off would draw while they lie is taken from them then, as that burst's, so one burst ends with more than one
+       * man. It moves no loss in time against the drawing off, adds none, and moves none between strikers. Never with the
+       * bearers rule (its own thin). DR.wounded.stunned.
+       */
+      __publicField(this, "stunned");
+      /**
        * Every man his own pace (release 2; Brian, 25 November 2026, 17:30Z: "it looks like they are all jogging at the
        * same speed"; 16:24Z: "the soldiers of a squad keep zig zaging at the same time"): each man on foot moves at a
        * pace a little his own and steps off at his own moment, sprints across the open under fire and dashes the short
@@ -4051,6 +4074,29 @@
       /** Each block's figures at the drill's last step while it fought, and the battle time each block left the fight. */
       __publicField(this, "leftFig", /* @__PURE__ */ new Map());
       __publicField(this, "leftAt", /* @__PURE__ */ new Map());
+      // ---- Wounded and knocked-down men (Drill.wounded): its helpers stand just above thin(), below this line ----
+      // Brian, 25 November 2026, 16:14Z: "im not seeing multiple soliders being taken out by an explosion if they are in the
+      // blast radius or the limbs being blown off for realism"; 26 November 04:24Z: he still does not see "the blast taking
+      // out multiple people or knocking others down and getting back up if they were close". Looks only: the drill never
+      // chooses how many fall nor when the rules take them; it chooses which of a block's men, where the burst that took
+      // them lands, which of them lie wounded, and who near it is thrown down a moment (DR.wounded). With the switch on a
+      // block's losses to shells wait for one burst (DR.wounded.hold), the burst is laid where it takes the men it is owed
+      // and nobody else's life (burstThin, keyAt), its misses land clear of men (round: clearOfMen), the living men round
+      // every high-explosive landing go down or duck a few seconds each and get up again (knocks), and with the bearers rule
+      // off a share of the fallen lie wounded for good (lies). The drill's own dice (salts 381 to 399), and none of this
+      // runs while the switch is off.
+      /** High-explosive rounds landing ([x, y], battle time l, the round's number n, the shell's class): the men round each are knocked down as it lands (knocks). */
+      __publicField(this, "landings", []);
+      /** Where a 'shell' event that took a key man burst ('block:model'), and whether it was laid clear of every other man (keyBurst). */
+      __publicField(this, "keyBursts", /* @__PURE__ */ new Map());
+      /**
+       * What the switch did, for the meter and the tests (never sent): each burst laid (its landing, its round, its class,
+       * the men it took, whether it had to be shrunk), the misses moved clear of men and those that found no clear place,
+       * the numbers of the high-explosive misses (he), and the seconds each man drawn by owedThin stood after the rules
+       * booked him, by the class of what took him ('arms' for small arms; trail); stunned men marked and taken, and the
+       * seconds each taken man fell after the rules booked his loss (late: the base's own hold, when it held it).
+       */
+      __publicField(this, "hurtLog", { bursts: [], moved: 0, stuck: 0, he: [], trail: {}, stun: { marked: 0, taken: 0, late: [] } });
       // ---- A tank's machine guns, seen firing (Drill.tankmg): its helpers stand just above mgKill(), below this line ----
       /**
        * The model each tank block is drawn with, where whoever starts the 3D battle has told the drill (drawnAs). In a
@@ -4071,6 +4117,7 @@
       this.exits = !!opts.exits;
       this.teamwork = !!opts.teamwork;
       this.wounded = !!opts.wounded;
+      this.stunned = this.wounded && opts.stunned !== false;
       this.paces = !!opts.paces;
       this.byBook = opts.book ?? (this.platoons || this.life);
       this.scale = opts.scale !== void 0 && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : null;
@@ -4635,6 +4682,7 @@
       let old = 0;
       while (old < this.shots.length && this.shots[old].t < t - DR.rounds.keep) old++;
       if (old) this.shots.splice(0, old);
+      if (this.woundsOn) this.knocks();
       for (const sq of this.squads.values()) {
         const u = sq.u;
         const lost = Math.max(0, sq.lastStr - u.str) / Math.max(1e-6, u.str0);
@@ -4661,11 +4709,13 @@
           this.outriders(sq);
         } else if (t >= sq.nextThink) {
           sq.nextThink = t + 0.5;
+          const kept = this.woundsOn ? this.stillKnocked(sq) : null;
           if (this.byBook) this.feel(sq);
           this.think(sq);
           this.pairs(sq, this.space(sq));
           if (b.escort) this.escort(sq);
           if (sq.screenQ) this.screenRound(sq);
+          if (kept) for (const [m, was] of kept) Object.assign(m, was);
         }
         if (this.hatches && u.kind === "arm" && !sq.esc) this.hatchNow(sq);
         this.walk(sq);
@@ -4812,7 +4862,8 @@
      */
     leaveOne(sq, m) {
       const u = sq.u, t = this.b.t, E = DR.exits, routed = u.state === "gone", veh = VEHICLE.has(m.role), rides = CARRIED.has(m.pose);
-      const moving = MOVING.has(m.pose) && m.v > 0, r = (salt) => roll(this.seed, u.id, m.n, salt);
+      const held = this.woundsOn && this.knocked(m) ? m.kd[0] + m.kd[2] : void 0;
+      const moving = held === void 0 && MOVING.has(m.pose) && m.v > 0, r = (salt) => roll(this.seed, u.id, m.n, salt);
       m.lv = t;
       m.aim = void 0;
       m.hidden = void 0;
@@ -4843,6 +4894,7 @@
           m.lvP = w.lvP;
         }
       }
+      if (held !== void 0) m.lvGo = Math.max(m.lvGo, held);
       const kneel = !!w && w.role !== "gun" && w.v === 0 && w.lvGo > t;
       const still = { fire_stand: "idle", fire_kneel: "wait", fire_prone: "hide", lmg_burst: "hide", throw_grenade: "idle", fire: m.role === "tank" ? "halt" : m.role === "gun" ? "deployed" : "wait" };
       if (m.lvGo > t && (!moving || kneel)) {
@@ -5004,8 +5056,10 @@
       if (on === void 0 || k === void 0) return;
       this.shellKills.add(on + ":" + k);
       const vq = this.squads.get(on), v = vq?.men.find((x2) => x2.k === k);
+      const n0 = this.fired;
       if (vq && v && !(this.exits && v.lv !== void 0)) this.killRound(by2 !== void 0 ? this.b.unit(by2) : void 0, vq, v, [x, y]);
       if (vq && this.b.blast) vq.anchor = { x, y, t: this.b.t };
+      if (this.woundsOn && vq && v && this.fired > n0) this.keyBurst(vq, v, x, y, by2);
     }
     /** A model the rules took with no striker on the field (the air's bombs and guns): no round of the field's for him. */
     fromAir(on, k) {
@@ -5048,6 +5102,7 @@
     manAt(id, k) {
       const sq = this.squads.get(id);
       const m = sq?.men.find((x) => x.k === k);
+      if (m && sq && this.woundsOn && this.b.blast) return this.keyAt(sq, m);
       return m ? [m.x, m.y] : null;
     }
     /** Where a wreck lies as drawn: where her tank fell, or the rules' own place for one that fell before the men were drawn. */
@@ -5331,9 +5386,11 @@
           const st = this.strikerOf(u);
           if (st) this.killRound(st, sq, m, st.kind === "arm" || st.kind === "art" && st.team !== "mg" && st.team !== "snp" ? [m.x, m.y] : void 0);
         }
+        const odds = this.wounded && !this.b.bearers && !sq.esc ? this.keyOdds(m, key, shell) : -1;
         m.pose = "down";
         m.spot = [m.x, m.y];
         if (this.b.bearers && !sq.esc) this.hurt(sq, m);
+        else if (odds >= 0) this.lies(sq, m, odds);
         this.aid(sq, m);
         if (this.leaders) this.leaderFell(sq, m);
         if (sq.tier >= 1) this.regroup(sq, m);
@@ -5345,7 +5402,7 @@
     aid(sq, m) {
       const u = sq.u, t = this.b.t;
       if (!fighting(u) || m.role === "tank" || m.role === "gun" || !sq.down || sq.boarding !== void 0) return;
-      const helper = sq.men.filter((h) => this.stands(sq, h) && h.role === "rifle" && !h.pr && h.aid === void 0 && Math.hypot(h.x - m.x, h.y - m.y) < 30).sort((a, c) => Math.hypot(a.x - m.x, a.y - m.y) - Math.hypot(c.x - m.x, c.y - m.y))[0];
+      const helper = sq.men.filter((h) => this.stands(sq, h) && h.role === "rifle" && !h.pr && h.aid === void 0 && Math.hypot(h.x - m.x, h.y - m.y) < 30 && !(this.woundsOn && this.knocked(h))).sort((a, c) => Math.hypot(a.x - m.x, a.y - m.y) - Math.hypot(c.x - m.x, c.y - m.y))[0];
       if (helper && roll(this.seed, u.id, m.n, t * 10) < 0.6) {
         helper.aid = m.k;
         helper.spot = [m.x + 1.2, m.y - 0.8];
@@ -5462,14 +5519,39 @@
           movers.push({ v, side: vq.u.side, fx, fy, rx, ry });
         }
       }
-      if (!movers.length) return;
+      const rollers = this.woundsOn ? [...movers] : movers;
+      if (this.woundsOn) for (const vq of this.squads.values()) {
+        if (!live(vq.u)) continue;
+        for (const v of vq.veh) {
+          if (v.role !== "tank" && v.role !== "lorry" || v.fell !== void 0 || (v.went ?? 0) <= DR.escort.moving) continue;
+          const f = v.pose === "reverse" ? v.face + Math.PI : v.face;
+          const [fx, fy] = fwd(f), [rx, ry] = right(f);
+          rollers.push({ v, side: vq.u.side, fx, fy, rx, ry });
+        }
+      }
+      if (!rollers.length) return;
       for (const sq of this.squads.values()) {
         const u = sq.u;
         if (!live(u) || u.kind === "arm" || u.kind === "art") continue;
         const near = movers.filter((o) => Math.hypot(o.v.x - u.x, o.v.y - u.y) < C.within + Math.max(u.w, u.d) / 2);
-        if (!near.length) continue;
+        if (!near.length && rollers === movers) continue;
         for (const m of sq.men) {
           if (!this.stands(sq, m) || VEHICLE.has(m.role) || CARRIED.has(m.pose) || m.pose === "wounded") continue;
+          if (this.woundsOn && this.knocked(m)) {
+            for (const o of rollers) {
+              const dx = m.x - o.v.x, dy = m.y - o.v.y;
+              if (Math.abs(dx) > C.ahead + C.half || Math.abs(dy) > C.ahead + C.half) continue;
+              const a = dx * o.fx + dy * o.fy, l = dx * o.rx + dy * o.ry;
+              if (a < -C.behind || a > C.ahead || Math.abs(l) >= C.half) continue;
+              const need2 = C.half - Math.abs(l) + 0.05, time = Math.max(DT, (a - DR.wounded.kd.nose) / Math.max(o.v.went ?? 0, 0.1));
+              const s = l >= 0 ? 1 : -1, go = Math.min(need2, clamp2(need2 / time, DR.wounded.kd.roll, DR.wounded.kd.drag) * DT);
+              m.x = clamp2(m.x + o.rx * s * go, 1, this.b.field.w - 1);
+              m.y = clamp2(m.y + o.ry * s * go, 1, this.b.field.h - 1);
+              m.rolled = t;
+              break;
+            }
+            continue;
+          }
           if (m.dodged !== void 0 && t - m.dodged < C.dodge) continue;
           for (const o of near) {
             const dx = m.x - o.v.x, dy = m.y - o.v.y;
@@ -5532,6 +5614,511 @@
       }
       return by2 ?? this.threat(u) ?? void 0;
     }
+    /** How far a burst finds a man as the burst rule scores him: his distance times this (his cover, and how much of him shows: exposed). */
+    far(m) {
+      return (2 - (DR.rounds.cover[m.cover] ?? 1)) / this.exposed(m);
+    }
+    /**
+     * The switch's looks at work: wounded on and the bearers rule off. With the bearers rule on wounded changes nothing
+     * (rulings, 26 November 05:55Z, section 2): no knock-downs, no misses moved, no key man's burst laid by the rings; the
+     * bearers' own thin, hurt, aid and rise as they are, and nothing of the switch on the wire (live.ts: no header key, no
+     * wd or kd in the deltas). Read each time: the bearers rule is set after the drill is made.
+     */
+    get woundsOn() {
+      return this.wounded && !this.b.bearers;
+    }
+    /** A man inside his hold, knocked down by a burst (Man.kd): he does not move, his aim does not change, and he fires nothing. */
+    knocked(m) {
+      return m.kd !== void 0 && m.fell === void 0 && m.lv === void 0 && this.b.t < m.kd[0] + m.kd[2] - 1e-6;
+    }
+    /** One of a support team's weapons or a man who keeps by one: never knocked down here (the teams' own drill). */
+    teamMan(sq, m) {
+      if (CREWED.has(m.role)) return true;
+      if (sq.u.team === "snp") return true;
+      if (!m.pr) return false;
+      const w = this.memo(sq).keyOf.get(m.sec ?? m.k);
+      return !!w && CREWED.has(w.role);
+    }
+    /**
+     * The living men on foot of every block (either side) within r metres of a point, but those in `but`: [the man, his
+     * squad, where he stands]. `fly`: where each will be that many battle seconds on, going on toward his spot at his pace
+     * (a round landing then). Not a vehicle, nor a man aboard one or riding; a man leaving the field counts.
+     */
+    footNear(x, y, r, but, fly = 0, fo = true) {
+      const out = [];
+      for (const sq of this.squads.values()) {
+        const u = sq.u;
+        if (Math.hypot(u.x - x, u.y - y) > r + Math.hypot(u.w, u.d) / 2 + 300) continue;
+        const on = live(u), nMen = sq.men.length, spot = fo && on && sq.fo ? sq.fo : [];
+        for (let i = 0; i < nMen + spot.length; i++) {
+          const m = i < nMen ? sq.men[i] : spot[i - nMen];
+          if (m.fell !== void 0 || VEHICLE.has(m.role) || CARRIED.has(m.pose) || but?.has(m)) continue;
+          if (i < nMen && !(this.stands(sq, m) && on || this.leavingNow(m))) continue;
+          let px = m.x, py = m.y;
+          if (fly > 0 && MOVING.has(m.pose) && (m.went ?? 0) > 0 && !this.knocked(m)) {
+            const dx = m.spot[0] - m.x, dy = m.spot[1] - m.y, d = Math.hypot(dx, dy), go = Math.min(d, (m.went ?? 0) * fly);
+            if (d > 1e-6) {
+              px += dx / d * go;
+              py += dy / d * go;
+            }
+          }
+          if (Math.hypot(px - x, py - y) <= r) out.push([m, sq, px, py]);
+        }
+      }
+      return out;
+    }
+    /**
+     * Where to lay a burst of class cal that takes `men` (the first its first man): the point of a grid round him (search)
+     * where each of them is inside the wounded ring and every man of `others` outside the lethal ring, as the burst rule
+     * scores them (far), the one whose distance from him (as the burst finds him) is nearest `aim` metres. None fits: the point, with each of them inside the wounded ring, where the nearest of
+     * the others is furthest off (ok false: the burst is shrunk); and where no point has them all in it, his own place.
+     */
+    layAt(men, cal, others, aim = 0) {
+      const [L2, W] = DR.wounded.ring[cal], S = DR.wounded.search, m0 = men[0], f = this.b.field;
+      const fs = men.map((m) => this.far(m)), R = W / fs[0], step = Math.max(S.step, W / S.cells), n = Math.ceil(R / step);
+      const oth = others.map(([m, , x, y]) => [x, y, this.far(m)]);
+      let best, bd = Infinity, shrink, sd = -1, sn = Infinity;
+      for (let i = -n; i <= n; i++) for (let j = -n; j <= n; j++) {
+        const d0 = Math.hypot(i, j) * step;
+        if (d0 > R + 1e-9) continue;
+        const x = clamp2(m0.x + i * step, 2, f.w - 2), y = clamp2(m0.y + j * step, 2, f.h - 2);
+        let all = true;
+        for (let q = 0; q < men.length && all; q++) if (Math.hypot(men[q].x - x, men[q].y - y) * fs[q] > W) all = false;
+        if (!all) continue;
+        let near = Infinity;
+        for (const [ox, oy, k] of oth) {
+          const e = Math.max(0, Math.hypot(ox - x, oy - y) - S.spare) * k;
+          if (e < near) near = e;
+        }
+        const off = Math.abs(d0 * fs[0] - aim);
+        if (near >= L2) {
+          if (off < bd) {
+            bd = off;
+            best = [x, y];
+          }
+        } else if (near > sd || near === sd && d0 < sn) {
+          sd = near;
+          sn = d0;
+          shrink = [x, y];
+        }
+      }
+      if (best) return { x: best[0], y: best[1], ok: true };
+      const p = shrink ?? [m0.x, m0.y];
+      return { x: p[0], y: p[1], ok: false };
+    }
+    /** Whether one burst of class cal can take all these men: some point has each of them inside its wounded ring. */
+    oneBurst(men, cal) {
+      const p = this.layAt(men, cal, []);
+      const W = DR.wounded.ring[cal][1];
+      return men.every((m) => Math.hypot(m.x - p.x, m.y - p.y) * this.far(m) <= W + 1e-9);
+    }
+    /**
+     * The bearers off: a man who has just fallen lies wounded, not dead, by his own roll at `odds` (1 surely, 0 never):
+     * view() sends wd, and he lies there for good (never up again, never fired at, never firing). Not a vehicle nor a
+     * support team's weapon, nor a man the bearers rule has already hurt.
+     */
+    lies(sq, m, odds) {
+      if (VEHICLE.has(m.role) || CREWED.has(m.role) || m.wd !== void 0) return;
+      if (roll(this.seed, sq.u.id, m.n, 381) >= odds) return;
+      m.wd = this.b.t;
+      m.pose = "wounded";
+    }
+    /** The odds a man a burst took lies wounded where the rings could not place it (no burst rule, or a burst shrunk): 'close' inside the close third of its REACH, else 'far'. */
+    burstOdds(m, p, cal) {
+      const H = DR.wounded.share;
+      return Math.hypot(m.x - p[0], m.y - p[1]) * this.far(m) <= REACH[cal] * H.third ? H.close : H.far;
+    }
+    /** The odds a burst laid by the rings lies him wounded: none inside its lethal ring, surely outside it; shrunk, burstOdds. */
+    ringOdds(m, p, cal, ok2) {
+      if (!ok2) return this.burstOdds(m, p, cal);
+      return Math.hypot(m.x - p[0], m.y - p[1]) * this.far(m) <= DR.wounded.ring[cal][0] ? 0 : 1;
+    }
+    /**
+     * With shell blasts on: where the 'shell' event that takes key man m lands (sim.ts shell, by manAt). A man on foot:
+     * laid as a burst that takes him alone (layAt), of the class of the block owed most for his block's harm (the rules
+     * name the striker after this; keyBurst checks it against the class that fired). A vehicle or a support team's
+     * weapon: where it stands, as before.
+     */
+    keyAt(sq, m) {
+      if (VEHICLE.has(m.role) || CREWED.has(m.role) || CARRIED.has(m.pose)) return [m.x, m.y];
+      const cal = this.strikerOf(sq.u)?.cal ?? "field";
+      const p = this.layAt([m], cal, this.footNear(m.x, m.y, DR.wounded.ring[cal][1] + DR.wounded.ring[cal][0] * 4.5, /* @__PURE__ */ new Set([m])), DR.wounded.ring[cal][1] * roll(this.seed, sq.u.id, m.n, 387) ** DR.wounded.search.aim);
+      return [p.x, p.y];
+    }
+    /**
+     * A 'shell' event took key man v of block vq at (x, y), his round just booked: whether it was laid clear of every
+     * other man, by the class that fired it (dead or wounded as he falls: keyOdds), and the men round it knocked down.
+     */
+    keyBurst(vq, v, x, y, by2) {
+      if (VEHICLE.has(v.role)) return;
+      const cal = (by2 !== void 0 ? this.b.unit(by2)?.cal : void 0) ?? "field", [L2, W] = DR.wounded.ring[cal];
+      const ok2 = this.b.blast && !CREWED.has(v.role) && Math.hypot(v.x - x, v.y - y) * this.far(v) <= W && this.footNear(x, y, L2 * 4.5, /* @__PURE__ */ new Set([v])).every(([m, , px, py]) => Math.hypot(px - x, py - y) * this.far(m) >= L2);
+      this.keyBursts.set(vq.u.id + ":" + v.k, { x, y, ok: ok2, cal });
+      if (vq.anchor && vq.anchor.x === x && vq.anchor.y === y) vq.anchor.ok = ok2;
+      this.landings.push({ x, y, l: Math.round(this.b.t * 10) / 10, n: this.fired, cal });
+      if (this.b.blast) this.hurtLog.bursts.push({ t: Math.round(this.b.t * 10) / 10, x, y, n: this.fired, cal, men: 1, shrunk: !ok2, key: true });
+    }
+    /**
+     * The odds a key man who has just fallen lies wounded (lies), by what took him: a shell event's burst (ringOdds, or
+     * burstOdds without shell blasts), a burst at his feet where none was laid (the air's), small arms 'arms'.
+     */
+    keyOdds(m, key, shell) {
+      const kb = this.keyBursts.get(key);
+      this.keyBursts.delete(key);
+      if (shell && kb) return this.b.blast ? this.ringOdds(m, [kb.x, kb.y], kb.cal, kb.ok) : this.burstOdds(m, [kb.x, kb.y], kb.cal);
+      if (shell) return this.burstOdds(m, [m.x, m.y], "bomb");
+      return DR.wounded.share.arms;
+    }
+    /**
+     * Thin, with shell blasts on: the n men a block is owed to a gun's or a tank's shells (of class cal, from by). A
+     * 'shell' event that took one of its key men a moment ago is a burst: the men nearest it inside its wounded ring
+     * fall to it, mates of its round. The rest wait for a burst of their own (DR.wounded.hold seconds by class, or till
+     * as many are due as one shell of the class takes, blast.most): then the men are taken burst by burst, the first of
+     * each the man the shell finds first (as the burst rule picks him), the rest the men nearest him that one burst can
+     * take with him; each burst is laid where it takes them and no other living man of any block (layAt). Where any
+     * cannot be, they wait on till the hold is over; then it is laid shrunk. A man inside the lethal ring of a burst laid
+     * so is dead, outside it wounded. due: battle seconds since the oldest of the block's losses not yet drawn was
+     * booked; anchor: whether a key man's burst of a moment ago may take them. The men it took (owedThin).
+     */
+    burstThin(sq, n, cand, by2, cal, from, due, anchor) {
+      const u = sq.u, b = this.b, t = b.t, Wd = DR.wounded, [L2, W] = Wd.ring[cal], most = DR.blast.most[cal];
+      const pool = cand.filter((m) => m.fell === void 0), groups = [];
+      const drop = (g) => {
+        for (const m of g) pool.splice(pool.indexOf(m), 1);
+      };
+      const a = anchor && sq.anchor && t - sq.anchor.t <= DR.blast.anchor ? sq.anchor : void 0;
+      if (a) {
+        const e = (m) => Math.hypot(m.x - a.x, m.y - a.y) * this.far(m);
+        const g = pool.filter((m) => e(m) <= W).sort((p, q) => e(p) + 2 * roll(this.seed, u.id, p.n, sq.lost, 382) - e(q) - 2 * roll(this.seed, u.id, q.n, sq.lost, 382) || p.n - q.n).slice(0, n);
+        if (g.length) {
+          drop(g);
+          n -= g.length;
+          groups.push({ men: g, x: a.x, y: a.y, ok: a.ok ?? false, anchor: true });
+        }
+      }
+      if (n > 0) {
+        const end = !fighting(u) || b.over || due >= Wd.hold[cal] - 1e-6;
+        if (end || n >= most) {
+          const mine = [];
+          let left = n, i = 0;
+          while (left > 0 && pool.length) {
+            let best = 0, score = Infinity;
+            pool.forEach((m, j) => {
+              const sc = Math.hypot(m.x - from[0], m.y - from[1]) * this.far(m) + 40 * roll(this.seed, u.id, m.n, sq.lost + i, 383);
+              if (sc < score) {
+                score = sc;
+                best = j;
+              }
+            });
+            const first = pool[best], g = [first];
+            const e = (m) => Math.hypot(m.x - first.x, m.y - first.y) * this.far(m) + 3 * roll(this.seed, u.id, m.n, sq.lost + i, 384);
+            const near = pool.filter((m) => m !== first && Math.hypot(m.x - first.x, m.y - first.y) <= 2 * W).sort((p, q) => e(p) - e(q) || p.n - q.n);
+            for (const m of near) {
+              if (g.length >= Math.min(left, most)) break;
+              if (this.oneBurst([...g, m], cal)) g.push(m);
+            }
+            drop(g);
+            left -= g.length;
+            i++;
+            mine.push({ men: g });
+          }
+          const booked = /* @__PURE__ */ new Set([...groups.flatMap((g) => g.men), ...mine.flatMap((g) => g.men)]);
+          const laid = mine.map((g) => ({ men: g.men, ...this.layAt(g.men, cal, this.footNear(g.men[0].x, g.men[0].y, W + L2 * 4.5 + 2, booked), W * roll(this.seed, u.id, g.men[0].n, sq.lost, 387) ** Wd.search.aim), anchor: false }));
+          if (end || laid.every((g) => g.ok)) {
+            groups.push(...laid);
+            n = 0;
+          }
+        }
+      }
+      const laidNow = [];
+      for (const g of groups) {
+        const p = [g.x, g.y];
+        if (!g.anchor) this.duck(g.x, g.y);
+        let lead = 0;
+        g.men.forEach((m, i) => {
+          sq.lost++;
+          m.fell = t;
+          m.v = 0;
+          m.aim = void 0;
+          m.hidden = void 0;
+          this.killRound(by2, sq, m, p, g.anchor || i > 0);
+          if (!g.anchor && i === 0) lead = this.fired;
+          const odds = this.ringOdds(m, p, cal, g.ok);
+          m.pose = "down";
+          m.spot = [m.x, m.y];
+          if (b.bearers) this.hurt(sq, m);
+          else this.lies(sq, m, odds);
+          this.aid(sq, m);
+          if (this.leaders) this.leaderFell(sq, m);
+        });
+        if (!g.anchor) {
+          this.hurtLog.bursts.push({ t: Math.round(t * 10) / 10, x: Math.round(g.x * 10) / 10, y: Math.round(g.y * 10) / 10, n: lead, cal, men: g.men.length, shrunk: !g.ok, key: false });
+          this.landings.push({ x: g.x, y: g.y, l: Math.round(t * 10) / 10, n: lead, cal });
+          laidNow.push({ x: g.x, y: g.y, l: Math.round(t * 10) / 10, n: lead, b: this.hurtLog.bursts.length - 1 });
+        } else {
+          const kb = this.hurtLog.bursts.find((x) => x.key && x.x === g.x && x.y === g.y && Math.abs(x.t - a.t) < 0.05);
+          if (kb) kb.men += g.men.length;
+        }
+      }
+      if (groups.length) this.knocks();
+      if (this.stunned) for (const g of laidNow) this.stun(by2, cal, g);
+      return groups.reduce((s, g) => s + g.men.length, 0);
+    }
+    /**
+     * Stunned men: a burst laid for a block's booked shell losses (g: its point, landing, round, place in hurtLog) has
+     * just knocked men down (knocks). Up to DR.wounded.stunned.cap of them, nearest it first, each by his own roll at its
+     * class's odds and no more than its class's most, lie longer: his hold is his own roll within 'lie' (a later end
+     * already his stays). Only men of the blocks its striker fights whom thin could take for an ordinary loss: a
+     * section's men, not on a carry, not leaving, not a support team's, not a block's armoured car or AA vehicle.
+     */
+    stun(by2, cal, g) {
+      const T = DR.wounded.stunned, most = Math.min(T.cap, T.most[cal]), near = [];
+      for (const sq of this.squads.values()) {
+        if (sq.u.side === by2.side || sq.esc || !live(sq.u)) continue;
+        for (const m of sq.men) {
+          if (!m.kd || m.kd[0] !== g.l || m.kd[1] !== g.n || m.fell !== void 0 || m.j === void 0 || m.job || m.lv !== void 0 || this.teamMan(sq, m)) continue;
+          near.push([m, sq, Math.hypot(m.x - g.x, m.y - g.y)]);
+        }
+      }
+      near.sort((a, c) => a[2] - c[2] || a[1].u.id - c[1].u.id || a[0].n - c[0].n);
+      let k = 0;
+      for (const [m, sq] of near) {
+        if (k >= most) break;
+        if (roll(this.seed, sq.u.id, m.n, g.n, 388) >= T.odds[cal]) continue;
+        k++;
+        const s = T.lie[0] + (T.lie[1] - T.lie[0]) * roll(this.seed, sq.u.id, m.n, g.n, 389);
+        const end = Math.max(m.kd[0] + m.kd[2], g.l + s);
+        m.kd = [g.l, g.n, Math.round((end - g.l) * 10) / 10];
+        m.stun = { s: by2.id, x: g.x, y: g.y, n: g.n, cal, b: g.b, e: Math.round((g.l + s) * 10) / 10 };
+        this.hurtLog.stun.marked++;
+      }
+    }
+    /**
+     * A shell loss of sq from by that the base draws now (owedThin; booked by the rules at battle time 'at'): taken from
+     * the man of sq still lying stunned by one of by's bursts, nearest its point, now: he falls there (d, and wd outside
+     * its lethal ring: lies) and never gets up, and his kill round is that burst's, a mate of its round at its point, from
+     * by, in the same think. Only a man who has lain since that burst without a break (the stunned lie it gave him not
+     * yet over: stun.e): one who has got up since and been knocked down again by another round is not its. None lying:
+     * null (the loss goes as ever).
+     */
+    takeStunned(sq, by2, at) {
+      var _a, _b;
+      const t = this.b.t;
+      let m, bd = Infinity;
+      for (const x of sq.men) {
+        if (x.stun?.s !== by2.id || t >= x.stun.e - 1e-6 || !this.knocked(x) || x.j === void 0 || x.job) continue;
+        const d = Math.hypot(x.x - x.stun.x, x.y - x.stun.y);
+        if (d < bd) {
+          bd = d;
+          m = x;
+        }
+      }
+      if (!m) return null;
+      const st = m.stun;
+      sq.lost++;
+      m.fell = t;
+      m.v = 0;
+      m.aim = void 0;
+      m.hidden = void 0;
+      this.killRound(by2, sq, m, [st.x, st.y], true, void 0, st.n);
+      const odds = Math.hypot(m.x - st.x, m.y - st.y) * this.far(m) <= DR.wounded.ring[st.cal][0] ? 0 : 1;
+      m.pose = "down";
+      m.spot = [m.x, m.y];
+      this.lies(sq, m, odds);
+      this.aid(sq, m);
+      if (this.leaders) this.leaderFell(sq, m);
+      const bu = this.hurtLog.bursts[st.b];
+      if (bu) bu.later = (bu.later ?? 0) + 1;
+      this.hurtLog.stun.taken++;
+      this.hurtLog.stun.late.push(Math.round((t - at) * 10) / 10);
+      ((_a = this.hurtLog.trail)[_b = st.cal] ?? (_a[_b] = [])).push(Math.round((t - at) * 10) / 10);
+      return m;
+    }
+    /**
+     * Each high-explosive round as it lands (and each burst that takes men, as it bursts): every living man on foot
+     * inside its stun ring is knocked off his feet, or ducks, by his own roll (DR.wounded.kd): surely at its lethal
+     * ring's edge, seldom at its stun ring's, as the burst rule finds him (far: a man lying or in cover is further off,
+     * so less often and for less long); his hold the longer the nearer and the bigger the shell, never under 'least'.
+     * The chance falls evenly with his distance as the burst finds him, by the burst's own reach only (the rulings,
+     * section 6.3). A man inside his hold as it lands is on the ground (or getting up): he is found as a man lying, and
+     * held to the later end, with this round's number. A man whose hold is over is on his feet and found as any man
+     * standing: nothing reads how long ago he got up (the rulings, section 6.2). Not a vehicle, a man aboard or riding, a
+     * man down, leaving the field, on a carry, nor a support team's weapon or its crew (their own drill, teams: not
+     * touched here).
+     */
+    knocks() {
+      const t = this.b.t, K = DR.wounded.kd;
+      let keep = 0;
+      for (const g of this.landings) {
+        if (g.l > t + 1e-6) {
+          this.landings[keep++] = g;
+          continue;
+        }
+        const [L2, , S] = DR.wounded.ring[g.cal], [lo1, hi1] = K.lethal[g.cal];
+        for (const [m, sq] of this.footNear(g.x, g.y, S, void 0, 0, false)) {
+          if (m.job || m.lv !== void 0 || this.teamMan(sq, m)) continue;
+          const held = this.knocked(m);
+          const e = Math.hypot(m.x - g.x, m.y - g.y) * (held ? (2 - (DR.rounds.cover[m.cover] ?? 1)) / Math.min(this.exposed(m), DR.blast.lying) : this.far(m));
+          if (e >= S) continue;
+          const k = clamp2((S - e) / (S - L2), 0, 1), p = K.far + (K.sure - K.far) * k;
+          if (roll(this.seed, sq.u.id, m.n, g.n, 385) >= p) continue;
+          const lo = K.edge[0] + (lo1 - K.edge[0]) * k, hi = K.edge[1] + (hi1 - K.edge[1]) * k;
+          const s = Math.max(K.least, lo + (hi - lo) * roll(this.seed, sq.u.id, m.n, g.n, 386));
+          const end = held ? Math.max(m.kd[0] + m.kd[2], g.l + s) : g.l + s;
+          if (m.kdAt !== t) m.kdWas = m.kd;
+          m.kdAt = t;
+          m.kd = [g.l, g.n, Math.round((end - g.l) * 10) / 10];
+          m.went = 0;
+        }
+      }
+      this.landings.length = keep;
+    }
+    /** The men of a block held by a burst now (knocked), with what they were at: put back as they were once its drill has run (unknock). */
+    stillKnocked(sq) {
+      let out = null;
+      for (const m of sq.men) if (this.knocked(m)) (out ?? (out = [])).push([m, { x: m.x, y: m.y, face: m.face, pose: m.pose, v: m.v, spot: m.spot, cover: m.cover, aim: m.aim, until: m.until, slotAt: m.slotAt, el: m.el, rapid: m.rapid, hidden: m.hidden, rushed: m.rushed, shot: m.shot, sentry: m.sentry, esc: m.esc }]);
+      return out;
+    }
+    /**
+     * A high-explosive miss of class cal landing at (x, y) along the line of fire (lx, ly), fly battle seconds on: clear of
+     * every living man's lethal ring where he will be then (as a miss already lands clear of a vehicle): on over, a step
+     * at a time, else as far short; where no place within DR.wounded.miss is clear, where it was.
+     */
+    clearOfMen(x, y, lx, ly, cal, fly) {
+      const L2 = DR.wounded.ring[cal][0], M = DR.wounded.miss, f = this.b.field, s = Math.max(M.least, M.step * L2);
+      const room = L2 + M.spare + M.fly * fly, ways = [];
+      for (const [m, sq] of this.footNear(x, y, room + s * M.tries + 1 + CATCH_UP * fly)) {
+        if (this.knocked(m)) {
+          ways.push([m.x, m.y, m.x, m.y]);
+          continue;
+        }
+        if (MOVING.has(m.pose) && (m.went ?? 0) > 0) {
+          const dx = m.spot[0] - m.x, dy = m.spot[1] - m.y, d = Math.hypot(dx, dy), [fx, fy] = d > 0.3 ? [dx / d, dy / d] : fwd(m.face), go = (m.went ?? 0) * fly;
+          ways.push([m.x, m.y, m.x + fx * go, m.y + fy * go]);
+        } else ways.push([m.x, m.y, m.x, m.y]);
+        if (sq.net > 0.5) ways.push([m.x, m.y, m.x + sq.wx * fly, m.y + sq.wy * fly]);
+      }
+      const gap = (px, py, [ax, ay, bx, by2]) => {
+        const vx = bx - ax, vy = by2 - ay, l2 = vx * vx + vy * vy, k = l2 > 0 ? clamp2(((px - ax) * vx + (py - ay) * vy) / l2, 0, 1) : 0;
+        return Math.hypot(ax + vx * k - px, ay + vy * k - py);
+      };
+      const clear = (px, py) => ways.every((w) => gap(px, py, w) >= room);
+      if (clear(x, y)) return [x, y];
+      for (const dir of [1, -1]) for (let i = 1; i <= M.tries; i++) {
+        const px = clamp2(x + dir * lx * s * i, 1, f.w - 1), py = clamp2(y + dir * ly * s * i, 1, f.h - 1);
+        if (clear(px, py) && !this.onVehicle(px, py, 2.5, fly)) {
+          this.hurtLog.moved++;
+          return [px, py];
+        }
+      }
+      for (let i = 1; i <= M.tries; i++) for (let k = 0; k < M.ways; k++) {
+        const a = Math.atan2(ly, lx) + 2 * Math.PI * (k + 0.5) / M.ways;
+        const px = clamp2(x + Math.cos(a) * s * i, 1, f.w - 1), py = clamp2(y + Math.sin(a) * s * i, 1, f.h - 1);
+        if (clear(px, py) && !this.onVehicle(px, py, 2.5, fly)) {
+          this.hurtLog.moved++;
+          return [px, py];
+        }
+      }
+      this.hurtLog.stuck++;
+      return [x, y];
+    }
+    /**
+     * Thin, with shell blasts on and the bearers off (n: the men it is owed now). Each loss goes to the block the drill
+     * would name for it with the switch off, at the moment it would draw him then (the base's own clock, kept here: owe),
+     * so the striker and struck pairs drawn are the same on as off (the design director's bar (d), 26 November 05:55Z);
+     * only when and where he falls is this switch's. Small arms take theirs at once, as ever; a block's losses to shells
+     * wait for one burst of their striker's class (burstThin), DR.wounded.hold seconds from the oldest booked (since).
+     * The run over by a tank go at once, as ever.
+     */
+    owedThin(sq, n) {
+      var _a, _b;
+      const u = sq.u, b = this.b, t = b.t, owe = sq.owe ?? (sq.owe = []), booked = sq.bookedAt ?? (sq.bookedAt = []);
+      const untold = Math.max(0, n - owe.length);
+      while (booked.length < untold) booked.push(t);
+      if (booked.length > untold) booked.splice(0, booked.length - untold);
+      if (n <= 0 && !owe.length) return;
+      const cand = sq.men.filter((m) => m.j !== void 0 && m.fell === void 0 && !m.job);
+      const armoured = (m) => sq.of !== void 0 && m.pose === "mounted" && DR.mech.armoured.includes(this.lorryOf(sq, m).ml ?? "");
+      let nB = Math.min(n - owe.length, cand.length - owe.length);
+      if (nB > 0) {
+        const by2 = this.strikerOf(u);
+        const shell = !!by2 && (by2.kind === "arm" && !this.mgKill(by2, u, sq.lost + owe.length) || by2.kind === "art" && by2.team !== "mg" && by2.team !== "snp");
+        if (sq.of !== void 0 && !shell) nB = Math.min(nB, cand.filter((m) => !armoured(m)).length - owe.length);
+        if (nB > 0 && b.escort) {
+          const crushed = this.crushOf(sq, cand);
+          if (crushed) {
+            const [v, m, tu] = crushed;
+            cand.splice(cand.indexOf(m), 1);
+            sq.lost++;
+            nB--;
+            booked.shift();
+            m.fell = t;
+            m.v = 0;
+            m.aim = void 0;
+            m.hidden = void 0;
+            this.killRound(tu, sq, m, void 0, false, v);
+            m.pose = "down";
+            m.spot = [m.x, m.y];
+            this.aid(sq, m);
+            if (this.leaders) this.leaderFell(sq, m);
+          }
+        }
+        if (nB > 0) {
+          let go = true;
+          if (shell) {
+            const a = sq.anchor && t - sq.anchor.t <= DR.blast.anchor;
+            if (!a && fighting(u) && !b.over && nB < DR.blast.most[by2.cal ?? "field"] && t - (sq.held ?? (sq.held = t)) < DR.blast.hold) go = false;
+            else sq.held = void 0;
+          }
+          if (go) for (let i = 0; i < nB; i++) {
+            const at = booked.shift() ?? t;
+            if (shell && this.stunned && this.takeStunned(sq, by2, at)) continue;
+            owe.push({ by: by2, shell, at });
+          }
+        }
+      }
+      for (let i = 0; i < owe.length; i++) {
+        const o = owe[i];
+        if (o.shell) continue;
+        const from = o.by ? [o.by.x, o.by.y] : [u.x, u.y];
+        const can = cand.filter((m2) => m2.fell === void 0 && !armoured(m2));
+        if (!can.length) continue;
+        let best = 0, score = Infinity;
+        can.forEach((m2, j) => {
+          const sc = Math.hypot(m2.x - from[0], m2.y - from[1]) * (2 - (DR.rounds.cover[m2.cover] ?? 1)) + 40 * roll(this.seed, u.id, m2.n, sq.lost, 81);
+          if (sc < score) {
+            score = sc;
+            best = j;
+          }
+        });
+        const m = can[best];
+        sq.lost++;
+        m.fell = t;
+        m.v = 0;
+        m.aim = void 0;
+        m.hidden = void 0;
+        if (o.by) this.killRound(o.by, sq, m);
+        m.pose = "down";
+        m.spot = [m.x, m.y];
+        this.lies(sq, m, DR.wounded.share.arms);
+        this.aid(sq, m);
+        if (this.leaders) this.leaderFell(sq, m);
+        ((_a = this.hurtLog.trail).arms ?? (_a.arms = [])).push(Math.round((t - o.at) * 10) / 10);
+        owe.splice(i--, 1);
+      }
+      let anchor = true;
+      for (const by2 of [...new Set(owe.filter((o) => o.shell).map((o) => o.by))]) {
+        const mine = owe.filter((o) => o.by === by2 && o.shell), cal = by2.cal ?? "field";
+        const took = this.burstThin(sq, mine.length, cand, by2, cal, [by2.x, by2.y], t - Math.min(...mine.map((o) => o.at)), anchor);
+        anchor = false;
+        for (let i = 0, d = took; i < owe.length && d > 0; i++) if (owe[i].shell && owe[i].by === by2) {
+          ((_b = this.hurtLog.trail)[cal] ?? (_b[cal] = [])).push(Math.round((t - owe[i].at) * 10) / 10);
+          owe.splice(i--, 1);
+          d--;
+        }
+      }
+      sq.memo = void 0;
+    }
     thin(sq) {
       const u = sq.u, b = this.b;
       if (u.state === "withdrawn" || u.state === "gone" && (u.figures > 0 || u.y < 0 || u.y > b.field.h)) return;
@@ -5539,6 +6126,10 @@
       let up = 0;
       for (const m of sq.men) if (this.stands(sq, m) || m.j !== void 0 && m.fell === void 0) up++;
       let n = up - want;
+      if (this.wounded && b.blast && !b.bearers) {
+        this.owedThin(sq, n);
+        return;
+      }
       if (n < 0 && this.b.bearers) {
         this.rise(sq, -n);
         return;
@@ -5594,19 +6185,26 @@
         });
         const m = cand.splice(best, 1)[0];
         sq.lost++;
-        let mate = false;
+        let mate = false, fresh = false;
         if (shell && (!burst || Math.hypot(m.x - burst[0], m.y - burst[1]) > reach)) {
           burst = [m.x, m.y];
           this.duck(m.x, m.y);
+          fresh = true;
         } else if (blast) mate = true;
         m.fell = b.t;
         m.v = 0;
         m.aim = void 0;
         m.hidden = void 0;
         if (by2) this.killRound(by2, sq, m, shell ? burst : void 0, mate);
+        if (this.woundsOn && fresh && by2) {
+          this.landings.push({ x: burst[0], y: burst[1], l: Math.round(b.t * 10) / 10, n: this.fired, cal });
+          this.knocks();
+        }
+        const odds = this.woundsOn ? shell && burst ? this.burstOdds(m, burst, cal) : DR.wounded.share.arms : -1;
         m.pose = "down";
         m.spot = [m.x, m.y];
         if (b.bearers) this.hurt(sq, m);
+        else if (odds >= 0) this.lies(sq, m, odds);
         this.aid(sq, m);
         if (this.leaders) this.leaderFell(sq, m);
       }
@@ -5682,7 +6280,7 @@
       }
       const carries = sq.carries ?? (sq.carries = []);
       if (sq.lying?.length && fighting(u) && sq.down && sq.boarding === void 0) {
-        const free = sq.brs.filter((m) => !m.job && this.stands(sq, m) && !CARRIED.has(m.pose));
+        const free = sq.brs.filter((m) => !m.job && this.stands(sq, m) && !CARRIED.has(m.pose) && !(this.woundsOn && this.knocked(m)));
         for (let i = 0; i + 1 < free.length && sq.lying.length; i += 2) {
           const man = sq.lying.shift(), [ax, ay] = b.aidOf(u);
           const to = [clamp2(ax, 3, f.w - 3), clamp2(ay, 3, f.h - 3)], way = bearing2(man.x, man.y, to[0], to[1]);
@@ -10447,6 +11045,10 @@
           continue;
         }
         if (m.job) continue;
+        if (this.woundsOn && this.knocked(m)) {
+          m.went = 0;
+          continue;
+        }
         if (m.pose === "mounted" && (u.kind === "mot" || m.role === "crew") && sq.veh.length) {
           const lorry = this.lorryOf(sq, m), x0 = m.x, y0 = m.y, p = m.off ? this.landing(sq, m) : this.seat(sq, m);
           m.x = p[0];
@@ -10553,6 +11155,7 @@
       if (!live(u)) return;
       for (const m of sq.veh.length ? [...sq.men, ...sq.veh] : sq.men) {
         if (m.k < 100 ? !this.stands(sq, m) : m.fell !== void 0) continue;
+        if (this.woundsOn && this.knocked(m)) continue;
         if (this.tankmg && m.mgAt) this.tankMgFire(sq, m);
         if (m.shot !== void 0 && m.shot !== m.fired) {
           m.fired = m.shot;
@@ -10667,6 +11270,7 @@
       if (w === "mg" && m.role === "tank") base.g = this.tankmg ? m.mgG : this.tankGun(u, m, aim, k0);
       const [lx, ly] = range > 0.01 ? [(v.x - m.x) / range, (v.y - m.y) / range] : fwd(m.face);
       const fly = l - t;
+      const cal = u.cal ?? (w === "mortar" ? "mortar" : "field");
       if (w === "gun" && !m.buttoned || w === "mortar") {
         const [i0, i1] = w === "mortar" ? R.indirect.mortar : R.indirect.sigma;
         const sg = i0 + i1 * Math.hypot(aim[0] - m.x, aim[1] - m.y);
@@ -10683,14 +11287,20 @@
           this.duck(hx, hy);
           const cm = this.commanderHit(hitV, BOOK.tankMg.splinter, u.id, m.n, k0);
           this.book({ ...base, ok: hitV.k, x: Math.round(hx * 10) / 10, y: Math.round(hy * 10) / 10, r: glance ? "glance" : "worn", fc: "top", u: a, h, ...cm ? { cm: 1 } : {} }, hitV, "scorch");
+          if (this.woundsOn) this.landings.push({ x: Math.round(hx * 10) / 10, y: Math.round(hy * 10) / 10, l, n: this.fired, cal });
           return;
         }
         for (let i = 0; i < 6 && this.onVehicle(x2, y2, R.indirect.onVehicle, fly); i++) {
           x2 = clamp2(x2 + lx * 3, 1, this.b.field.w - 1);
           y2 = clamp2(y2 + ly * 3, 1, this.b.field.h - 1);
         }
+        if (this.woundsOn) [x2, y2] = this.clearOfMen(x2, y2, lx, ly, cal, fly);
         this.duck(x2, y2);
         this.book({ ...base, x: Math.round(x2 * 10) / 10, y: Math.round(y2 * 10) / 10 });
+        if (this.woundsOn) {
+          this.landings.push({ x: Math.round(x2 * 10) / 10, y: Math.round(y2 * 10) / 10, l, n: this.fired, cal });
+          this.hurtLog.he.push(this.fired);
+        }
         return;
       }
       const isV = VEHICLE.has(v.role);
@@ -10720,7 +11330,8 @@
       const [s0, s1, c0, c1] = R.spread[w];
       let ea = gauss(roll(this.seed, u.id, m.n, k0, 68), roll(this.seed, u.id, m.n, k0, 69)) * (s0 + s1 * range);
       let ec = gauss(roll(this.seed, u.id, m.n, k0, 70), roll(this.seed, u.id, m.n, k0, 71)) * (c0 + c1 * range);
-      const least = isV ? 2.5 : 0.6, off = Math.hypot(ea, ec);
+      const he = this.woundsOn && (w === "tank" || w === "gun") && !isV;
+      const least = isV ? 2.5 : he ? Math.max(0.6, DR.wounded.ring[cal][0]) : 0.6, off = Math.hypot(ea, ec);
       if (off < least) {
         const g = off > 1e-6 ? least / off : 1;
         ea = off > 1e-6 ? ea * g : least;
@@ -10732,8 +11343,13 @@
         x = clamp2(x + lx * 3, 1, this.b.field.w - 1);
         y = clamp2(y + ly * 3, 1, this.b.field.h - 1);
       }
+      if (he) [x, y] = this.clearOfMen(x, y, lx, ly, cal, fly);
       if (heavy || u.team === "snp") this.duck(x, y);
       this.book({ ...base, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
+      if (he) {
+        this.landings.push({ x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, l, n: this.fired, cal });
+        this.hurtLog.he.push(this.fired);
+      }
     }
     /**
      * Tells the drill the model a tank block is drawn with (the header's `model`), before the battle's first step, so
@@ -10805,7 +11421,7 @@
       if (x.role === "tank") return !kill && !x.buttoned && x.cmdDown === void 0 && f >= T.low && d < R.rattle ? 4 : 0;
       if (VEHICLE.has(x.role)) return 0;
       if (kill) return d < (tenth ? T.lastReach : R.open * k) ? 2 : 0;
-      const firing = x.pose === "fire" || SMALL_ARMS.has(x.pose);
+      const firing = (x.pose === "fire" || SMALL_ARMS.has(x.pose)) && !(this.woundsOn && this.knocked(x));
       const threat = x.role === "at" && d < R.at * k || (x.role === "mg" || x.role === "hmg") && firing && d < R.mg * k;
       if (tenth) return threat && d < T.lastReach ? 1 : 0;
       if (threat) return 1;
@@ -11093,7 +11709,7 @@
      * at p) or, on foot, its man nearest who could have fired it (on a tank: its anti-tank man, else a grenade). It is
      * the hit, landing as it is fired; on a tank it leaves the hole it went in by.
      */
-    killRound(by2, vq, v, p, mate = false, crush) {
+    killRound(by2, vq, v, p, mate = false, crush, late) {
       const t = this.b.t, tq = by2 ? this.squads.get(by2.id) : void 0;
       const at = p ?? [v.x, v.y];
       let s, w = p ? by2?.kind === "arm" ? "tank" : by2?.team === "mor" ? "mortar" : "gun" : "rifle";
@@ -11104,7 +11720,8 @@
           const g = tq.tw?.guns.get(x);
           return !g || !!g.at && g.set <= t && !g.mis && x.v === 0 && !MOVING.has(x.pose);
         };
-        const can = this.standing(tq).filter((x) => x.role !== "lorry" && x.role !== "holder" && x.role !== "spotter" && (mg ? x.role === "tank" : p ? shells(x) : !shells(x)) && setUp(x) && !(this.exits && x.lv !== void 0));
+        let can = this.standing(tq).filter((x) => x.role !== "lorry" && x.role !== "holder" && x.role !== "spotter" && (mg ? x.role === "tank" : p ? shells(x) : !shells(x)) && setUp(x) && !(this.exits && x.lv !== void 0));
+        if (this.woundsOn && can.some((x) => this.knocked(x)) && can.some((x) => !this.knocked(x))) can = can.filter((x) => !this.knocked(x));
         const pref = v.role === "tank" && !p && by2?.team !== "mg" ? can.filter((x) => x.role === "at") : can.filter((x) => SMALL_ARMS.has(x.pose) || shells(x) || x.role === "hmg" && (!tq.tw || x.pose === "fire"));
         const from = pref.length ? pref : tq.tw && by2?.team === "mg" ? can.filter((x) => x.role === "hmg") : can;
         let dd = Infinity;
@@ -11126,6 +11743,7 @@
       if (v.j !== void 0) r.oj = v.j;
       if (by2) r.by = by2.id;
       if (mate) r.m = 1;
+      if (late !== void 0) r.lt = late;
       if (s) {
         r.k = s.k;
         if (s.j !== void 0) r.j = s.j;
@@ -11162,6 +11780,8 @@
         if (m.gone !== void 0) o.gone = r13(m.gone);
         if (m.back !== void 0) o.back = r13(m.back);
         if (m.br) o.br = 1;
+        const kd = m.fell !== void 0 && m.kdAt === m.fell ? m.kdWas : m.kd;
+        if (kd) o.kd = [r13(kd[0]), kd[1], r13(kd[2])];
         if (m.call !== void 0 && m.callAt) o.cs = [r13(m.callAt[0]), r13(m.callAt[1])];
         if (m.sw) o.sw = { ...m.sw };
         if (this.leavingNow(m)) o.lv = 1;
@@ -17391,7 +18011,13 @@
   var same2 = (a, b) => a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
   var keyOf = (b, m, fo) => `${b}:${fo ? "fo" : ""}${m.k}${m.j !== void 0 ? `.${m.j}` : ""}`;
   var LiveKeeper = class {
-    constructor() {
+    /**
+     * hurt: wounded and knocked-down men (release 2, Drill.wounded) are at work (Drill.woundsOn, asked each time: the
+     * bearers rule, which turns them off, is set after the keeper is made): each track carries its wd (the battle time he
+     * fell wounded) and its kd (each knock-down as the drill sends it, [t, round, hold]). Off, neither is sent.
+     */
+    constructor(hurtOn = () => false) {
+      __publicField(this, "hurtOn", hurtOn);
       __publicField(this, "men", /* @__PURE__ */ new Map());
       __publicField(this, "order", []);
     }
@@ -17441,6 +18067,16 @@
           k.mk = m.mk;
           k.mkKey = mk;
           k.sentMk = false;
+        }
+      }
+      if (this.hurtOn()) {
+        if (m.wd !== void 0 && k.wd !== m.wd) {
+          k.wd = m.wd;
+          k.sentWd = false;
+        }
+        if (m.kd && (!k.kd || k.kd.some((v, i) => v !== m.kd[i]))) {
+          k.kd = [...m.kd];
+          (k.newKd ?? (k.newKd = [])).push(k.kd);
         }
       }
       k.out = void 0;
@@ -17495,7 +18131,7 @@
           tails.push(k.n, tail[1], tail[2], tail[3]);
           k.sentTail = tail;
         }
-        const changed = !k.sentWho || k.newAt.length || k.newCh.length || k.newS.length || !k.sentD || !k.sentMk || k.out !== k.sentOut;
+        const changed = !k.sentWho || k.newAt.length || k.newCh.length || k.newS.length || !k.sentD || !k.sentMk || k.out !== k.sentOut || k.wd !== void 0 && !k.sentWd || !!k.newKd?.length;
         if (!changed) continue;
         const d = { n: k.n };
         if (!k.sentWho) {
@@ -17522,6 +18158,14 @@
           d.mk = k.mk;
         }
         k.sentMk = true;
+        if (k.wd !== void 0 && !k.sentWd) {
+          d.wd = k.wd;
+          k.sentWd = true;
+        }
+        if (k.newKd?.length) {
+          d.kd = k.newKd;
+          k.newKd = void 0;
+        }
         if (k.out !== k.sentOut) {
           d.out = k.out ?? -1;
           k.sentOut = k.out;
@@ -17545,6 +18189,8 @@
           if (d.s) tr.s.push(...d.s);
           if (d.d !== void 0) tr.d = d.d;
           if (d.mk) tr.mk = d.mk;
+          if (d.wd !== void 0) tr.wd = d.wd;
+          if (d.kd) (tr.kd ?? (tr.kd = [])).push(...d.kd);
           if (d.out === -1) delete tr.out;
           else if (d.out !== void 0) tr.out = d.out;
         }
@@ -17646,7 +18292,7 @@
       __publicField(this, "sim");
       __publicField(this, "drill");
       __publicField(this, "me");
-      __publicField(this, "keeper", new LiveKeeper());
+      __publicField(this, "keeper");
       /** A campaign battle's sky (no set piece): as given, or drawn from its ticket. */
       __publicField(this, "skyOf");
       __publicField(this, "steppe");
@@ -17695,7 +18341,8 @@
       if (opts.cars === true && !piece) sim.cars = true;
       if (opts.aa === true && !piece) sim.aa = true;
       if (opts.light === true && !piece) sim.light = true;
-      this.drill = sim.drillOn({ sections: true, ...opts.platoons === false ? {} : { platoons: true }, ...opts.book !== void 0 ? { book: opts.book } : {}, ...opts.life === true ? { life: true } : {}, ...opts.hatches === true ? { hatches: true } : {}, ...opts.seasoned === true ? { seasoned: true } : {}, ...opts.leaders === true ? { leaders: true } : {}, ...opts.tankmind === true ? { tankmind: true } : {}, ...opts.tankmg === true ? { tankmg: true } : {}, ...opts.exits === true ? { exits: true } : {}, ...opts.wounded === true ? { wounded: true } : {}, ...opts.paces === true ? { paces: true } : {}, ...opts.teamwork === true ? { teamwork: true } : {} });
+      this.keeper = new LiveKeeper(() => this.drill.woundsOn);
+      this.drill = sim.drillOn({ sections: true, ...opts.platoons === false ? {} : { platoons: true }, ...opts.book !== void 0 ? { book: opts.book } : {}, ...opts.life === true ? { life: true } : {}, ...opts.hatches === true ? { hatches: true } : {}, ...opts.seasoned === true ? { seasoned: true } : {}, ...opts.leaders === true ? { leaders: true } : {}, ...opts.tankmind === true ? { tankmind: true } : {}, ...opts.tankmg === true ? { tankmg: true } : {}, ...opts.exits === true ? { exits: true } : {}, ...opts.wounded === true ? { wounded: true } : {}, ...opts.paces === true ? { paces: true } : {}, ...opts.teamwork === true ? { teamwork: true } : {}, ...opts.wounded === true && opts.stunned === false ? { stunned: false } : {} });
       if (opts.setup && this.me) sim.setupOn(this.me, true);
       if (opts.hide !== false) sim.hideOn();
       if (opts.armour !== false) sim.measured = true;
@@ -17786,6 +18433,10 @@
         title: t.title,
         date: t.date,
         turn: t.turn,
+        // (wounded and knocked-down men, release 2: the drill's own wounded and knock-downs are in this battle, so the 3D
+        // game leaves its own stand-in for them off for the whole of it; absent while the switch is off, and with the
+        // bearers rule on, where the switch changes nothing: the rulings, sections 2 and 5.6)
+        ...this.drill.woundsOn ? { wounded: true } : {},
         // (the campaign's weather word, for the ground under it, and scarred ground: looks only, release 2; the 3D game
         // lays thaw mud from "mud", weathered old craters from the scars, old ruts from the battles fought in mud, and the
         // burnt-out armour of the battles here from oldWrecks)
@@ -18120,7 +18771,7 @@
     }
     /** The men stand somewhere new before the clock has run: every track starts again from where they stand now. */
     replace() {
-      this.keeper = new LiveKeeper();
+      this.keeper = new LiveKeeper(() => this.drill.woundsOn);
       this.phases.clear();
       this.phaseNew.clear();
       this.lastView = -1;
