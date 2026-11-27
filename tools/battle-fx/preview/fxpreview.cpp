@@ -2483,8 +2483,10 @@ namespace
 			{
 				// (the strip, as the sea scene's patch 04 lays it: five across, a brown-black film written to land about
 				// 28,25,20 in its middle (game_curve), browner toward its ragged edges, its sheen a dull lighter band (toward
-				// 96,92,84, landing about 78,78,68), never more black; no narrower on the screen than 1.5 pixels, a lane under
-				// that widened to it and as much fainter, so a far lane fades and never breaks into dashes; a hand's breadth up)
+				// 96,92,84, landing about 78,78,68), never more black; its dark middle (0.55 of its width) no narrower on the
+				// screen than 1.5 pixels, a lane under that widened to it and as much fainter, so a far lane fades and never
+				// breaks into dashes (a band under a pixel is caught by the pixels' centres only here and there); a hand's
+				// breadth up)
 				std::vector<Battle::LanePoint> Strip;
 				const int Got = Fx.OilLane(Now, 1, Strip);
 				static const unsigned char Paints[5][3] = { { 66, 62, 56 }, { 66, 62, 56 }, { 59, 56, 50 }, { 66, 62, 56 }, { 66, 62, 56 } };
@@ -2494,9 +2496,13 @@ namespace
 				for (int K = 0; K < Got; ++K)
 				{
 					const Battle::LanePoint& L = Strip[static_cast<size_t>(K)];
-					const double Off = std::max((L.At - Cam.Eye).Length(), 1.0);
-					const double Wide = (L.Left + L.Right) * Cam.Ppr / Off;
-					const double Floor = Wide < 1.5 ? 1.5 / std::max(Wide, 1e-3) : 1.0;
+					// (its width on the screen as the eye sees it: the part square to the eye's line, so a lane seen low and edge-on
+					// counts as thin as it looks)
+					const Vec ToIt = Vec(L.At.X, L.At.Y, 0.08) - Cam.Eye;
+					const double Off = std::max(ToIt.Length(), 1.0);
+					const Vec Line = ToIt * (1.0 / Off), Span = L.Across * (L.Left + L.Right);
+					const double Wide = (Span - Line * Span.Dot(Line)).Length() * Cam.Ppr / Off;
+					const double Floor = 0.55 * Wide < 1.5 ? 1.5 / std::max(0.55 * Wide, 1e-3) : 1.0;
 					const Vec Left = L.At + L.Across * (L.Left * Floor), Right = L.At - L.Across * (L.Right * Floor);
 					const Vec Across[5] = { Left, L.At + (Left - L.At) * 0.55, L.At, L.At + (Right - L.At) * 0.55, Right };
 					const double Dark = L.Dark / Floor;

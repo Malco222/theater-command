@@ -1055,7 +1055,7 @@ namespace
 					Third += B.DeckShip == 4 ? 1 : 0;
 				}
 			}
-			Check(Mine == 20 && Far == 0 && Third > 100 && X.DeckCases.size() <= 200, "a far ship's rounds never take the cases in view", Say("in view %.0f of 20 after 40 s; the ship 800 m off %.0f laid; the one 70 to 80 m off %.0f lying (all the ships' cap %.0f)", Mine, Far, Third, static_cast<double>(X.DeckCases.size())));
+			Check(Mine == 20 && Far == 0 && Third > 100 && X.DeckCases.size() <= 200, "a far ship's rounds never take the cases in view", Say("in view %.0f of 20 after 40 s; the ship 800 m off %.0f laid; the one 70 to 80 m off %.0f pieces of hers (the fading among them); %.0f counted lying in all (the cap 200)", Mine, Far, Third, static_cast<double>(X.DeckCases.size())));
 		}
 		{
 			// (a ship let go: her cases fade out over a second where they lie, a fade and never a pop)

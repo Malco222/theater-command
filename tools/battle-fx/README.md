@@ -2132,40 +2132,52 @@ in `/mnt/project-files/effects-r2/seam/sea/` (README there: every call letter fo
   the kit's water or brass. Her frame: X toward her bow, Z up, origin her waterline amidships. The kit's Y is her PORT
   side. Unreal's frame turns the other way (its Y is starboard), so the wrapper passes minus Y, and the kit keeps port
   on whichever side it is told. Pieces in her frame (`Bit::DeckMode` 1 water, 2 foam, 3 a case, 4 a case over the
-  side) get their world place at Draw (`DeckPlace`). A ship not told of for 5 s is let go with all she carries.
+  side, 5 a drench sheet falling in the world until it lands, then hers) get their world place at Draw (`DeckPlace`).
+  Her freeboard (`ShipPose.Deck`, the wrapper's `DeckMetres`) is where the brass lies. A ship not told of for 5 s, or
+  let go with `ShipRideStop`, has all she carries fade out over a second where it is (never a pop).
 - **DeckDrench** (item 9, row `sea_splash.drench`; switch `-TheaterSeaDrench=1`, with `-TheaterSeaColumns=1`). A
-  column close off a ship's side drops its head across her deck. Call it at the column's `SeaSplash`.
-  - Lumps fall from rise plus 35 to 95 per cent of the hang, landing from her near edge out to `reach_k` (0.35) of
-    the column's height: 21 m for a 16-inch.
-  - Each leaves a sheet that drains in `life` (3) s, at most `most` (2) drenches falling on a ship.
-  - A 16-inch: 65 pieces, the last gone 12.3 s after the shell. Nothing when her edge is out of reach.
-  - Known limit: lumps and sheets lie in the world, so on a ship at speed a sheet slips aft for its 2 to 3 s. The
-    runoff after it rides her.
+  column close off a ship's side drops its head across her deck. Call it at the column's `SeaSplash`, after that
+  frame's `ShipRide`, with her beam (`BeamMetres`; 0 takes it from her pose).
+  - Lumps are let go over `let_go` (55 to 90 per cent) of the hang, landing from her near edge out to `reach_k`
+    (0.35) of the column's height (21 m for a 16-inch), and never past her far edge.
+  - The wind's drift is aimed for: an offshore wind of 8 m/s still lands every lump on her deck.
+  - Each leaves a sheet (`sheet_r` 0.10) that drains in `life` (5) s, laid in her frame when she is ridden, so it
+    goes with her at speed. A lump over the sea where she has steamed past falls on to the sea and lays no sheet.
+  - At most `most` (2) drenches falling on a ship. A 16-inch: 70 lumps (`puffs`, `piece_r` 0.06, `alpha` 0.95), 175
+    pieces, the last gone 14.8 s after the shell. Nothing when her edge is out of reach.
 - **DeckWash** (items 9 and 10, row `sea_splash.runoff`; switches `-TheaterSeaDrench=1`, `-TheaterSeaAwash=1`).
   Water running over her edge, in her frame.
   - "runoff": white sheets over the edge and down her side, foam where they land.
   - "awash" (`runoff.awash`): the sea heaving in over the low edge of a ship heeled past 8 degrees, foam sliding
     inboard.
-  - Strength scales the pieces (`sheets_per_s` per 10 m of edge). At most 4 washes a ship.
+  - The sheets are laid as a band along her edge, one every `band_m` (1.5 m) with a little jitter, `wide_m` (3.5)
+    wide and drawn out `stretch` (3.5) down her side, each with its foam: a sheet of water, never confetti.
+  - Strength scales the pieces (`sheets_per_s`, 10 per 10 m of edge, at `alpha` 0.45). At most 4 washes a ship.
   - White water is shaded (`shade_k`), never paper white.
 - **The oil lane** (item 10, row `sea_leak`; switch `-TheaterSeaOilLane=1`). `OilLeak` each frame while she leaks;
   `OilLane` gives the strip, oldest first. The kit draws nothing: the scene lays the strip in its slicks' paint.
   - A point every `every_s` (2) s, none within `gap_m` of the last.
   - Width `w0_m` + `k_m` times the square root of its age (3 m + 0.7 m root s, at most 80 m), edges ragged by
     `ragged` (0.25).
-  - It drifts at `drift_k` (3 per cent) of the wind. Its darkness is `dark` (0.85) times (1 - age / `dark_s`)^`dark_pow`,
-    gone in an hour, with a faint sheen (`sheen`, 0.2) fading over its first `sheen_s` (900 s).
+  - It drifts at `drift_k` (3 per cent) of the wind. Its darkness is `dark` (0.55) times (1 - age / `dark_s`)^`dark_pow`
+    (1.0), gone in an hour, with a faint sheen (`sheen`, 0.2) fading over its first `sheen_s` (900 s).
+  - The scene paints it as a dull band: the sea's own colour darkened toward 66,62,56 (the middle 59,56,50), written
+    to land about 28,25,20; its sheen a dull grey, never a rainbow; and never under 1.5 px across, a narrower lane
+    lighter for it instead of a hairline.
   - At most `points` (200) a ship and `ships` (6); a 20-minute track is kept whole. No dice.
   - A lane never burns. The scene's patch lights its own oil fire (`OilFire`, ids 4100000 and up, at most 3) under a
     ship stopped and burning.
 - **The deck's brass** (item 11 part 4, row `deck_cases`; switch `-TheaterSeaBrass=1`). `AirGunShip(stream, ship)`
-  ties a light gun's stream to her: each round's case falls on her deck in place of the aircraft-style spent case.
-  `DeckBrass(ship, breech, away, kind, count)` serves the 4- and 5-inch.
+  ties a light gun's stream to her: each round's case falls on her deck in place of the aircraft-style spent case,
+  whatever the gun (the `hmg` row serves a .50). `DeckBrass(ship, breech, away, kind, count)` serves the 4- and
+  5-inch.
+  - Cases lie on her deck (`ShipPose.Deck`), and are laid only within `lay_m` (90 m) of the eye; past the cap the
+    case farthest from the eye goes first, so a far ship never takes the cases in view.
   - Cases lie in her frame and roll to her low side past `stick_deg` (2) of heel. A coaming at least a case wide
     stops them; with open rails they go over the side.
   - At most `most_mount` (40) a mount and `most_lying` (200) in all.
   - Drawn whole within `within_m` (40), gone by `gone_m` (60).
-  - Kinds `aa25`, `aa40`, `in4`, `in5`, `cm127` at their true sizes (a 40 mm case 0.311 by 0.059 m).
+  - Kinds `hmg`, `aa25`, `aa40`, `in4`, `in5`, `cm127` at their true sizes (a 40 mm case 0.311 by 0.059 m).
   - Dull brass `colour` 140,120,89 with shade 90,79,61: brown-gold, never gold.
 - **The AA haze** (item 11 part 3; overlay `battle-fx-sea-haze.json` from `fx-sea-haze.json`, laid with
   `FBattleEffects::LayOver` behind `-TheaterSeaAAHaze=1`). Every key in it is new, so without the overlay nothing
@@ -2174,14 +2186,18 @@ in `/mnt/project-files/effects-r2/seam/sea/` (README there: every call letter fo
     by 10 s). It counts its staying puffs on its own count, so every other gun's smoke stays as it was.
   - One light-AA smoke puff in `smoke_hang_one_in` (40 mm: 4, 25 mm: 8) hangs `smoke_hang_s` (6 to 10 s), spreading
     to `smoke_hang_wide` (1.6) its width.
-  - `sea_haze.most` (250) hang at once. Past `sea_haze.shed_from` (4/5) of the room (`game.max_puffs`, as RoomGate
-    counts it), none more hang and those hanging fade first.
+  - `sea_haze.most` (250) hang at once, counted at the gun's moment. The room is what the screen can draw
+    (`RoomSeen`: what the last frame had on the screen and what is made since), not every piece asked for off it.
+  - `sea_haze.keep` (120) of them are the haze's own share: Draw keeps them as it keeps a light. Past
+    `sea_haze.shed_from` (4/5) of `game.max_puffs`, those over keep fade out, the oldest first, and none more hang
+    over it, so a fleet's full barrage still shows its haze.
   - The colour is the guns' own grey smoke, with no brown (the historian to rule).
 - Tests: `unreal/TheaterCommand/Tools/fx_sea/run.sh` (g++ and clang++, the strict flags, `-ffp-contract=off`), every
   part with its controls, and no draw on the battle's shared seed. The cost lines are kept out of the compilers'
   comparison.
 - Preview: `./fxpreview recipe.txt out deck <drench|wash|lane|brass|haze> <frames> [WxH]` (see `Deck` in
-  `fxpreview.cpp`; `FX_EYE=x,y,z` and `FX_AT=x,y,z` place the eye in her frame, `FX_FLEET` the haze's ships). The
+  `fxpreview.cpp`; `FX_EYE=x,y,z` and `FX_AT=x,y,z` place the eye in her frame, `FX_MPS` her speed, `FX_FLEET` the haze's ships,
+  up to 24). The
   calibre ladder: `./fxpreview recipe.txt out ladder sea 0`. The stills of release 2 (b_drench, b_wash, b_oil_lane,
   b_brass, b_aa_haze) and the commands that made them: `/mnt/project-files/effects-r2/tickets/ten-b-ticket.md`. For the haze, append the flattened `fx-sea-haze.json` to the recipe:
   `cat <(python3 flatten.py ../fx.json) <(python3 flatten.py ../fx-sea-haze.json)`.
