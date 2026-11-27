@@ -5772,10 +5772,17 @@ export function rowWords(g: Game, nat: string, row: any[]): { booked: boolean; o
  * loan is over (`lentOver`), read once, when first asked; never one that holds divisions a row drew for it (`drew`,
  * `rowed`), nor one that stood on (`stood`). The pass's own predicate; given empty lists, the board's as it stands
  * (`loanEnding`). Writes nothing.
+ *
+ * `held`: the lent corps the one test has held already in this pass (`loanHeld`, in the rows' own order, the fixed
+ * order of the data): such a corps stays, and is not leaving for any row read after it. The design director's (2) of
+ * 16:07Z, 27 November 2026: "read in row order, since that is a fixed order of the data and never a throw. A loan
+ * already held this pass is not leaving for the rows after it." Nothing loops: each reads only those decided before it.
+ * Empty with the switch 'fromWait' off (nothing is held then).
  */
-function loanLeaving(g: Game, nat: string, gone: Corps[], down: Corps[], back: Corps[], stood: { id: number }[]): (x: Corps) => boolean {
+function loanLeaving(g: Game, nat: string, gone: Corps[], down: Corps[], back: Corps[], stood: { id: number }[], held: Corps[] = []): (x: Corps) => boolean {
   let over: Set<number> | null = null;
   return (x: Corps): boolean => {
+    if (held.includes(x)) return false;
     if (gone.includes(x) || down.includes(x) || back.includes(x)) return true;
     if (x.drew || x.rowed || x.nat !== nat || stood.some((q) => q.id === x.id)) return false;
     if (!over) {
@@ -5937,7 +5944,9 @@ function expeditions(g: Game, nat: string, take?: number): void {
   // Division, lent to the Sudan until April 1941, leaves in the month its own row lays it in Egypt again. A corps
   // that holds divisions a row drew for it, `drew` and `rowed`, holds them still: it is read when its own row ends,
   // and one that stands on then is a living corps like any other. The rows whose time is up are read once, when first asked.)
-  const leaving = loanLeaving(g, nat, gone, down, back, stood);
+  // (The lent corps the one test has held so far in this pass, in row order: no leaver for the rows read after it.)
+  const heldNow: Corps[] = [];
+  const leaving = loanLeaving(g, nat, gone, down, back, stood, heldNow);
   // (The pass's own leaving, read by the telling while the pass runs: `loanEnding`, one function for both.)
   const outer = PASS;
   PASS = { g, nat, leaving };
@@ -5975,6 +5984,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
       // hold is told instead. Switch off: nothing is read.)
       const held = g.flags.fromWait === 1 && id > 0 && take !== i ? loanHeld(g, nat, row, o, i, id, leaving) : null;
       if (held) {
+        heldNow.push(held.c);
         tellLoan(g, i, held.c, held.way);
         g.flags[`wait:${i}`] = g.turn;
         noteHold(g, nat, i, held.way === 'gone' || held.way === 'rejoin' ? 'loanGone' : held.way === 'back' ? 'loanBack' : held.way === 'down' ? 'loanDown' : 'loanHome', [held.c], true);

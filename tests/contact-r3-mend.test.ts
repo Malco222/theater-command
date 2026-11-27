@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
 import { setFromWait } from '../src/campaign/arrivalwaits';
 import { divisionsOf } from '../src/campaign/armies';
-import { addCorps, atWar, createGame, declareWar, relocate, ruleHolds, startPhase, theatreName } from '../src/campaign/game';
+import { addCorps, atWar, createGame, declareWar, leavingWatch, relocate, rowLeaving, ruleHolds, startPhase, theatreName } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
@@ -99,14 +99,53 @@ describe("T3-1: ruleHolds counts the player's own hold that was never told as un
 // ---- T3-2: two loans ending in one pass are no relief to each other -------------------------------------------------
 
 describe('T3-2: the lent corps whose loans end in the same pass keep nothing for each other', () => {
-  it('two lent corps alone together beside the enemy, both loans over this month: the Neumark is not left empty', () => {
+  // (Round 4, R4-2: the design director's (2) of 16:07Z, 27 November 2026, "read in row order, since that is a fixed
+  // order of the data and never a throw. A loan already held this pass is not leaving for the rows after it." Finding
+  // S1-2. So the first in row order stays, held, and every one read after it goes.)
+  it('two lent corps alone together beside the enemy, both loans over this month: EXACTLY the first in row order stays', () => {
     const { g, nm } = board();
     const a = lend(g, 'Lent Test Corps A', nm);
     const b = lend(g, 'Lent Test Corps B', nm);
+    expect(a.j).toBeLessThan(b.j);
     month(g, 2);
-    // (As built both are held; finding S1-2 asks the director whether a loan held first is relief for the next one read.
-    // Under either reading at least one stays, and with the leaving set emptied neither does.)
-    expect([a.c, b.c].filter((c) => !c.dead && c.reg === nm.id).length).toBeGreaterThan(0);
+    expect([a.c.dead, a.c.reg, g.flags[`lent:${a.j}`], g.flags[`wait:${a.j}`]]).toEqual([false, nm.id, a.c.id, 2]);
+    expect([b.c.dead, g.flags[`lent:${b.j}`]]).toEqual([true, -1]);
+    expect(ruleHolds(g).filter((h) => h.path.startsWith('loan')).map((h) => [h.i, h.corps])).toEqual([[a.j, [a.c.name]]]);
+  });
+
+  it('three lent corps alone together beside the enemy: the first stays, the other two go', () => {
+    const { g, nm } = board();
+    const ls = ['A', 'B', 'C'].map((k) => lend(g, `Lent Test Corps ${k}`, nm));
+    month(g, 2);
+    expect(ls.map((l) => [l.c.dead, g.flags[`lent:${l.j}`]])).toEqual([[false, ls[0].c.id], [true, -1], [true, -1]]);
+    expect(ruleHolds(g).filter((h) => h.path.startsWith('loan')).map((h) => h.i)).toEqual([ls[0].j]);
+  });
+
+  it('switch off: all three go, as the base', () => {
+    const { g, nm } = board(false);
+    const ls = ['A', 'B', 'C'].map((k) => lend(g, `Lent Test Corps ${k}`, nm));
+    month(g, 2);
+    expect(ls.map((l) => [l.c.dead, g.flags[`lent:${l.j}`]])).toEqual([[true, -1], [true, -1], [true, -1]]);
+  });
+
+  it('a row read after a held loan finds the held corps no leaver: the telling reads the same set as the rule', () => {
+    const { g, nm } = board();
+    const a = lend(g, 'Lent Test Corps A', nm);
+    const b = lend(g, 'Lent Test Corps B', nm);
+    const seen: [number, string[]][] = [];
+    leavingWatch.tell = (g2, nat, i, leaving) => {
+      if (nat !== 'GER') return;
+      const tell = rowLeaving(g2, nat, i);
+      expect([...tell].map((x) => x.name).sort()).toEqual([...leaving].map((x) => x.name).sort());
+      seen.push([i, [...leaving].map((x) => x.name).filter((n) => n.startsWith('Lent Test')).sort()]);
+    };
+    const r = addRow([2, 'GER', 'Late Test Row', 'inf', 1, 'Magdeburg', {}]);
+    try { month(g, 2); } finally { leavingWatch.tell = null; }
+    expect(a.c.dead).toBe(false);
+    expect(b.c.dead).toBe(true);
+    // (The row read after both: A was held, so it is not leaving; B went, so it is.)
+    const late = seen.find(([i]) => i === r);
+    expect(late?.[1]).toEqual(['Lent Test Corps B']);
   });
 });
 
