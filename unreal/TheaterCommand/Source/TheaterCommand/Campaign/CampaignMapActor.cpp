@@ -2525,6 +2525,7 @@ void ACampaignMapActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		FogAsideBuilding.Wait(); // (it reads the world's sheet, which goes with the map)
 	}
+	FMiniatureMesh::StopWarm(); // (speed: the model file in flight is read by a thread that must not outlive the table)
 	for (const auto& Pair : FineSheets)
 	{
 		if (Pair.Value->Building.IsValid())
@@ -11383,6 +11384,21 @@ static float WinterHardInMonth(int32 Month)
 	return Winter[((Month % 12) + 12) % 12];
 }
 
+void ACampaignMapActor::WarmModels(const FCampaignView& View)
+{
+	TArray<FString> Nations;
+	for (const FViewCorps& Unit : View.Corps)
+	{
+		Nations.AddUnique(Unit.Nation);
+	}
+	for (const FViewFleet& Fleet : View.Fleets)
+	{
+		Nations.AddUnique(Fleet.Nation);
+	}
+	// (the year as ShowArmies counts it)
+	FMiniatureMesh::WarmModels(Nations, 1939 + (FMath::Max(View.Turn, 1) + 7) / 12, View.DesignYears);
+}
+
 void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom)
 {
 	THEATER_SPEED_SCOPE(ShowArmies);
@@ -11402,6 +11418,7 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 	// The first month is September 1939.
 	FMiniatureMesh::Year = 1939 + (FMath::Max(View.Turn, 1) + 7) / 12;
 	FMiniatureMesh::DesignYears = View.DesignYears;
+	WarmModels(View); // (tc.Speed.ModelWarm: the model files for the months ahead are queued, to be read on another thread)
 	// (Release 2: camps you can see.) How many months finish an army's works, for the stage each piece's camp has
 	// reached; and who holds what and who is at war with whom, for the side each camp's trench faces.
 	AArmyPiece::FullWorks = FMath::Max(1, View.DugFull);
@@ -18165,6 +18182,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	UpdateSky(CameraDistance, CameraFocus);
 	UpdateFogFade(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f);
 	UpdateFogAside(); // (speed: the haze beyond the map, laid on another thread)
+	FMiniatureMesh::PumpWarm(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f); // (speed: model files read on another thread, put in one a frame)
 	SortieSeenFrom = CameraDistance;
 	UpdateSorties();
 	UpdateSearchlights(CameraDistance);

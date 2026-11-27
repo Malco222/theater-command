@@ -347,6 +347,11 @@ void ACampaignGameMode::LayOutWar()
 	});
 	LaySteps.Emplace([this]()
 	{
+		// (tc.Speed.ModelWarm) the model files the table could ask for are queued in the load, read on another thread, and not in some month's frame
+		Table->WarmModels(Session->GetView());
+	});
+	LaySteps.Emplace([this]()
+	{
 		// (release 2, map run 7: tc.Speed.SidesKept) the sides view laid out of sight now, in the load, not on the first press
 		Table->WarmSides(Session->GetView().RegionStanding);
 	});

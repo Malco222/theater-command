@@ -1834,6 +1834,22 @@ FString FMiniatureMesh::MainCarrierOf(const FString& Tag)
 	return TEXT("Truck:") + Tag;
 }
 
+void FMiniatureMesh::AllModelNames(TArray<FString>& Aircraft, TArray<FString>& Others)
+{
+	for (const MiniatureParts::FModel& Each : MiniatureParts::AircraftModels())
+	{
+		Aircraft.Add(Each.Name);
+	}
+	for (const VehicleParts::FModel& Each : VehicleParts::Models)
+	{
+		Others.Add(Each.Name);
+	}
+	for (const MiniatureParts::FModel& Each : MiniatureParts::ShipModels())
+	{
+		Others.Add(Each.Name);
+	}
+}
+
 bool FMiniatureMesh::MainTank(const FVector& Where, double Metre, const FString& Tag, double Turn, bool bFine)
 {
 	const FString Name = MainTankOf(Tag);
