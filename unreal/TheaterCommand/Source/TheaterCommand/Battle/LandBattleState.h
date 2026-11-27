@@ -199,6 +199,9 @@ struct FLandBattleState
 	LandGeneralEye::Input GeneralIn;
 	double GeneralTurnHeld = 0.0, GeneralTiltHeld = 0.0;
 	bool bGeneralEye = false, bEyeSwitched = false;
+	/** The free view's row (`freeview`, release 2) as it stood when his view began: the hill view, the low look by
+	 * his tilt keys and the lock-on are his for this battle. */
+	bool bFreeView = false;
 
 	/** The camera's pose this frame and the words on the screen. */
 	LandEye::Pose Pose;

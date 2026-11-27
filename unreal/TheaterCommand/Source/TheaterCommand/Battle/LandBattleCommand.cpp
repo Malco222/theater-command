@@ -279,45 +279,23 @@ void ALandBattle::ShowGeneral()
 	{
 		return;
 	}
-	// The map of the field (release 2): the ground under the screen's four corners, for the outline of what his view
-	// sees. Each corner's ray is met with level ground at the height under the eye; one that looks over the horizon, or
-	// further than twice the field's own length, is set that far off along its way, and the map cuts the outline to its
-	// box. (The camera thread's LandGeneralEye::Seen takes this over when it lands.)
+	// The map of the field (release 2): the ground under the picture's four corners, for the outline of what his view
+	// sees: the camera thread's LandGeneralEye::Seen, from his own view's pose this frame. Near left, near right, far
+	// right, far left, at the level of what the view looks at; a corner that looks over the horizon, or further than
+	// twice the field's own length, is set that far off along its way, and the map cuts the outline to its box.
 	G.MapView.clear();
-	if (Eye && FLandLive::RuleNow(TEXT("fieldmap")))
+	if (Eye && S.bGeneralEye && View.X > 0.0 && View.Y > 0.0 && FLandLive::RuleNow(TEXT("fieldmap")))
 	{
 		LandFell::Phase("general: the map's view");
-		const UCameraComponent* Lens = Eye->GetCameraComponent();
-		const double HalfTan = FMath::Tan(FMath::DegreesToRadians(static_cast<double>(Lens->FieldOfView) * 0.5));
-		const FTransform& LensFrame = Lens->GetComponentTransform();
-		const FVector LensWorld = LensFrame.GetLocation();
-		// (the field's own axes: x east is the world's Y, y north the world's X; metres)
-		const FVector LensAt(LensWorld.Y / UnitsPerMetre, LensWorld.X / UnitsPerMetre, LensWorld.Z / UnitsPerMetre);
-		const double Level = S.Rec.Ground.HeightAt(FMath::Clamp(LensAt.X, 0.0, S.Rec.Ground.W), FMath::Clamp(LensAt.Y, 0.0, S.Rec.Ground.H));
 		const double FarMost = 2.0 * FMath::Sqrt(S.Rec.Ground.W * S.Rec.Ground.W + S.Rec.Ground.H * S.Rec.Ground.H);
-		const double CornerAt[4][2] = { { 0.0, View.Y }, { View.X, View.Y }, { View.X, 0.0 }, { 0.0, 0.0 } };
-		for (int32 Nth = 0; Nth < 4; ++Nth)
+		LandPlay::Vec Corner[4];
+		if (LandGeneralEye::Seen(S.GeneralEye.Current(), View.X / View.Y, FarMost, Corner))
 		{
-			const double Across = (CornerAt[Nth][0] / View.X * 2.0 - 1.0) * HalfTan;
-			const double Up = (1.0 - CornerAt[Nth][1] / View.Y * 2.0) * HalfTan * (View.Y / View.X);
-			const FVector WayWorld = LensFrame.TransformVectorNoScale(FVector(1.0, Across, Up)).GetSafeNormal();
-			const FVector Way(WayWorld.Y, WayWorld.X, WayWorld.Z);
-			const double Flat = FMath::Sqrt(Way.X * Way.X + Way.Y * Way.Y);
-			if (Flat < 1e-9)
+			for (const LandPlay::Vec& At : Corner)
 			{
-				// (straight down: the ground under the eye)
-				G.MapView.push_back(LensAt.X);
-				G.MapView.push_back(LensAt.Y);
-				continue;
+				G.MapView.push_back(At.X);
+				G.MapView.push_back(At.Y);
 			}
-			// (how far along the ground the ray comes down: never past FarMost, and FarMost where it never does)
-			double Reach = FarMost;
-			if (Way.Z < -1e-6 && LensAt.Z > Level)
-			{
-				Reach = FMath::Min(FarMost, (LensAt.Z - Level) / -Way.Z * Flat);
-			}
-			G.MapView.push_back(LensAt.X + Way.X / Flat * Reach);
-			G.MapView.push_back(LensAt.Y + Way.Y / Flat * Reach);
 		}
 	}
 	LandFell::Phase("general: the tags and routes");
@@ -989,7 +967,19 @@ void ALandBattle::GeneralRelease(const FVector2D& Pixel, int32 Button, bool bShi
 	const int32 Mine = On ? (On->bOrderable ? OnTag : -1) : bGround ? Clip.MineAt(X, Y, Reach * 0.5) : -1;
 	if (Button == 0 && Mine >= 0)
 	{
+		// (the free view, release 2; Brian, 26 November 2026 04:14Z, "if i click a specific unit it locks in on them and
+		// follows them": the first click takes it in hand, as ever; a second on the same unit inside the double click's
+		// time locks his view on it, as its card clicked twice does. Not with Shift, which adds to the hand and takes
+		// away from it.)
+		if (S.bFreeView && !bShift && Mine == GeneralPickBlock && RealT - GeneralPickAt < TwiceSeconds)
+		{
+			GeneralDo(FString::Printf(TEXT("follow:%d"), Mine));
+			GeneralPickAt = -10.0;
+			return;
+		}
 		Clip.Pick(Mine, bShift);
+		GeneralPickBlock = bShift ? -1 : Mine;
+		GeneralPickAt = RealT;
 		return;
 	}
 	// (his despatch rider: a click reads out what his corps coming up brings, and when; Brian, 22 November 12:48Z)
@@ -1256,7 +1246,23 @@ void ALandBattle::GeneralView(double Real)
 		}
 		const double Heading = G.Clipboard.Side() == 1 ? UE_DOUBLE_PI : 0.0;
 		LandFell::Phase("general: his eye begun");
-		S.bGeneralEye = S.GeneralEye.Begin(S.Rec, S.EyeWorld, LandPlay::Vec(X / Mine, Y / Mine, 0.0), Heading, 250.0);
+		// (the free view's row, release 2, read as his view begins: the low look by his tilt keys and the zoom's short
+		// stop are LandGeneralEye's own switches, off in it unless set here, so with the row off the view is the one
+		// he had to the last bit. -TheaterLandHillTilt=<degrees> and -TheaterLandHillUp=<metres> try another hill view
+		// on the Mac: its tilt, 15, and the height of the eye one press brings it to, 35.)
+		S.bFreeView = FLandLive::RuleNow(TEXT("freeview"));
+		LandGeneralEye::Settings EyeSet;
+		EyeSet.bLowByHand = EyeSet.bStopShort = S.bFreeView;
+		double Trial = 0.0;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandHillTilt="), Trial))
+		{
+			EyeSet.HillTilt = FMath::Clamp(Trial, 5.0, 40.0);
+		}
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandHillUp="), Trial))
+		{
+			EyeSet.HillUp = FMath::Clamp(Trial, 10.0, 120.0);
+		}
+		S.bGeneralEye = S.GeneralEye.Begin(S.Rec, S.EyeWorld, LandPlay::Vec(X / Mine, Y / Mine, 0.0), Heading, 250.0, EyeSet);
 		if (!S.bGeneralEye)
 		{
 			return;
@@ -1319,6 +1325,60 @@ void ALandBattle::GeneralView(double Real)
 		}
 		ViewsLogged = ViewsCheckStep++;
 	}
+	// (the Mac's check of the free view, release 2, -TheaterLandFreeViewAt=<battle seconds>, with the row on. The hill
+	// view pressed there and a still 5 s on; from 10 s his tilt keys held toward level for 2 s, to the low look as far
+	// as it goes, and a still at 16 s; the view left so till 30 s, then the hill view pressed again and a still at
+	// 35 s (the view back at the zoom and the tilt it had before the first press); at 36 s a unit taken in hand and
+	// locked on, a still at 42 s and another at 52 s, the unit still in the middle. Each step's view in the log, and
+	// the frames drawn since the step before it: so one run reads the automatic view's pace before the press, the
+	// hill view's, the lowest look's, which sees to the horizon, and the locked view's, on the same Mac in the same
+	// minute.)
+	int32 FreeLogged = -1;
+	int32 FreeFrames = 0;
+	double FreeReal = 0.0;
+	if (FreeCheckAt < -1.0)
+	{
+		double At = -1.0;
+		FreeCheckAt = FParse::Value(FCommandLine::Get(), TEXT("TheaterLandFreeViewAt="), At) ? At : -1.0;
+	}
+	static const double FreeCheckSteps[] = { 0.0, 5.0, 10.0, 12.0, 16.0, 30.0, 35.0, 36.0, 42.0, 52.0 };
+	const bool bFreeCheck = FreeCheckAt >= 0.0 && FreeCheckStep < 10 && S.bFreeView && !G.bFilm && S.bGeneralEye && !G.Clipboard.Deploying() && (ScriptFolder.IsEmpty() || ScriptStep >= 60);
+	if (bFreeCheck)
+	{
+		++FreeCheckFrames;
+		FreeCheckReal += Real;
+	}
+	if (bFreeCheck && S.Battle >= FreeCheckAt + FreeCheckSteps[FreeCheckStep])
+	{
+		if (FreeCheckStep == 0)
+		{
+			// (the later steps count from when the first was let go)
+			FreeCheckAt = S.Battle;
+		}
+		switch (FreeCheckStep)
+		{
+		case 0: GeneralDo(TEXT("hillview")); break;
+		case 1: ScriptStill(TEXT("free-hill")); break;
+		case 2: break;
+		case 3: break;
+		case 4: ScriptStill(TEXT("free-low")); break;
+		case 5: GeneralDo(TEXT("hillview")); break;
+		case 6: ScriptStill(TEXT("free-hill-back")); break;
+		case 7: GeneralDo(TEXT("next")); GeneralDo(TEXT("lockon")); break;
+		case 8: ScriptStill(TEXT("free-lock")); break;
+		default: ScriptStill(TEXT("free-lock-10s")); break;
+		}
+		FreeLogged = FreeCheckStep++;
+		FreeFrames = FreeCheckFrames;
+		FreeReal = FreeCheckReal;
+		FreeCheckFrames = 0;
+		FreeCheckReal = 0.0;
+	}
+	// (his tilt keys held toward level between the check's third and fourth steps, as Shift with S held does it)
+	if (bFreeCheck && FreeCheckStep == 3)
+	{
+		In.Tilt -= 50.0 * Real;
+	}
 	In.Turn += S.GeneralTurnHeld * 75.0 * Real;
 	// (Shift with W or S held: his own tilt, 50 degrees a second)
 	In.Tilt += S.GeneralTiltHeld * 50.0 * Real;
@@ -1358,6 +1418,19 @@ void ALandBattle::GeneralView(double Real)
 			S.GeneralEye.TiltDegrees(), S.GeneralEye.TopView() ? TEXT("on") : TEXT("off"), Own.Look.X, Own.Look.Y, Own.Eye.Z - Own.Look.Z,
 			RingsLaid, bCornerShown ? TEXT("shown") : TEXT("not shown"));
 	}
+	if (FreeLogged >= 0)
+	{
+		const LandEye::Pose& Own = S.GeneralEye.Current();
+		double UnitX = 0.0, UnitY = 0.0;
+		const int32 Locked = S.GeneralEye.Following();
+		const bool bUnit = Locked >= 0 && S.GeneralEye.BlockAt(Locked, S.Battle, UnitX, UnitY);
+		UE_LOG(LogTheater, Display, TEXT("Land battle (free view check): step %d done at %.1f s of battle: tilt %.1f degrees, hill view %s (the low look %.1f, wanted %.1f; none is %.0f), top view %s, own tilt %s, zoom %.3f, the eye %.0f m over what it looks at and %.0f m back; locked on unit %d, %.1f m from the middle of the view; since the step before %d frames in %.2f real seconds, %.1f a second"),
+			FreeLogged, S.Battle, S.GeneralEye.TiltDegrees(), S.GeneralEye.HillView() ? TEXT("on") : TEXT("off"), S.GeneralEye.HillTiltNow(), S.GeneralEye.HillTiltWanted(), S.GeneralEye.HillNoneDegrees(),
+			S.GeneralEye.TopView() ? TEXT("on") : TEXT("off"), S.GeneralEye.OwnTilt() ? TEXT("on") : TEXT("off"), S.GeneralEye.Zoom(),
+			Own.Eye.Z - Own.Look.Z, FMath::Sqrt(FMath::Square(Own.Eye.X - Own.Look.X) + FMath::Square(Own.Eye.Y - Own.Look.Y)),
+			Locked, bUnit ? FMath::Sqrt(FMath::Square(UnitX - Own.Look.X) + FMath::Square(UnitY - Own.Look.Y)) : -1.0,
+			FreeFrames, FreeReal, FreeReal > 0.0 ? FreeFrames / FreeReal : 0.0);
+	}
 	if (S.bEyeSwitched)
 	{
 		S.Pose.bCut = true;
@@ -1367,6 +1440,11 @@ void ALandBattle::GeneralView(double Real)
 	In.SlideRight = In.SlideAhead = In.Zoom = In.Turn = In.Tilt = 0.0;
 	In.bGoTo = false;
 	In.bTopView = false;
+	In.bHillView = false;
+	// (a point followed is named afresh each frame it is to be followed: one tank or one man of the unit locked on,
+	// the ground thread's to feed before the view's step)
+	In.bFollowAt = false;
+	In.FollowAtId = -1;
 	In.GoBlock = -1;
 	In.KeepView = In.CallView = -1;
 }
@@ -1576,6 +1654,47 @@ void ALandBattle::GeneralDo(const FString& Word)
 		if (!S.GeneralEye.TopView())
 		{
 			Say("TOP VIEW: O AGAIN GOES BACK. SHIFT+W OR S, OR OPTION AND TWO FINGERS, TILTS THE VIEW");
+		}
+	}
+	else if (Word == TEXT("hillview"))
+	{
+		// (I or HILL VIEW, the free view, release 2; Brian, 26 November 2026 03:45Z, "the ground level view but zoomed
+		// out so I can see it from a higher angle": his view swings up and back to look across the field from about
+		// 35 m up, and from then on tilts no steeper than that as it zooms; again, back as it was)
+		if (S.bFreeView && S.bGeneralEye && !G.bFilm)
+		{
+			S.GeneralIn.bHillView = true;
+			if (!S.GeneralEye.HillView())
+			{
+				Say("HILL VIEW: I AGAIN GOES BACK. THE WHEEL RUNS ALONG THE LOW LINE; SHIFT+W OR S TILTS THE VIEW");
+			}
+		}
+	}
+	else if (Word == TEXT("lockon"))
+	{
+		// (L or LOCK ON, the free view, release 2; Brian, 26 November 2026 04:14Z: the view locks on the unit in hand,
+		// the first of several, and follows it till he moves the view; pressed while it follows, it lets go)
+		if (S.bFreeView && S.bGeneralEye && !G.bFilm)
+		{
+			// (locked on the unit in hand already, or on one with none in hand: L lets go. Another in hand: the lock
+			// goes over to it.)
+			const int32 Locked = S.GeneralIn.bFollow ? S.GeneralEye.Following() : -1;
+			const int32 Wanted = bHand ? Clip.Chosen().front() : -1;
+			if (Locked >= 0 && (Wanted < 0 || Wanted == Locked))
+			{
+				S.GeneralIn.bFollow = false;
+				Say("LOCK OFF: THE VIEW IS YOURS");
+			}
+			else if (Wanted >= 0)
+			{
+				S.GeneralIn.GoBlock = Wanted;
+				S.GeneralIn.bFollow = true;
+				Say("LOCKED ON: THE VIEW FOLLOWS THIS UNIT. MOVE THE VIEW, OR L AGAIN, LETS GO");
+			}
+			else
+			{
+				Say("TAKE A UNIT IN HAND FIRST: L THEN LOCKS THE VIEW ON IT");
+			}
 		}
 	}
 	else if (Word.StartsWith(TEXT("view:")) || Word.StartsWith(TEXT("keepview:")))
