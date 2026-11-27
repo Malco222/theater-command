@@ -24,7 +24,7 @@ import { atWar, placeName, theName } from './game';
 import { campaignWhy, type GroupRow, type RaidKind, type RaidPlan, type RaidTarget } from './airwar';
 import {
   airFerryRoutes, airGroupBases, airGroupDecks, airGroupJobs, airfieldAt, fleetView, humanUp, myAirGroups, orderAboard, orderAirBase, orderFerryOff, orderFerryTo, orderGroupJob, orderRaid,
-  orderScout, orderSearch, previewRaid, raidMenu, raidTargetsFor, searchOptionsFor, wingsOfFleet,
+  orderCrews, orderScout, orderSearch, previewRaid, raidMenu, raidTargetsFor, searchOptionsFor, wingsOfFleet,
 } from './turn';
 import { FERRY, ferryOn } from './ferry';
 import { FLIP, afterCard, type AfterCard, type FoughtAir } from './airfought';
@@ -32,6 +32,9 @@ import { band, raidFogOn } from './airfog';
 import { allied } from './game';
 import { shipList } from './navy';
 import { townName } from './towns';
+import { BOMBERS, bomberCard, bomberMark, carriesNames, countWord, flownWord, headStart, keptByName, tourOf } from './bombers';
+import { BUDGET } from './economy';
+import type { CrewOrder } from './types';
 
 export interface PageButton { label: string; act: string; ok: boolean; tip: string; danger?: boolean }
 /** (Release 2) An air group's row may carry its role word, its short form and its earned name as its arm sets it (airwar.ts airWords). */
@@ -110,6 +113,9 @@ function groupPage(g: Game, id: number): Page | null {
   ];
   if (carrierRules(g)) top.push({ label: 'SEARCH A SEA', act: `open:search:${id}`, ok: up && !x.scouted, tip: x.scouted ? 'It has flown its reconnaissance this month.' : 'A few aircraft quarter one sea for the month: enemy ships there may be reported, or identified. A fleet has to be found before it can be struck.' });
   if (!deck) top.push({ label: 'MOVE TO ANOTHER AIRFIELD', act: `open:rebase:${id}`, ok: up, tip: 'Settling in costs it some readiness for a month.' });
+  // (Release 2, the crews' page behind its switch) A bomber group kept by name: its bombers and their crews' tours.
+  const fleet = g.airFleets.find((f) => f.id === id);
+  if (fleet && crewsShown(g, fleet)) top.push({ label: 'THE CREWS', act: `open:crews:${id}`, ok: true, tip: `Its bombers by name, the ${flownWord(fleet.nat)}s each has flown, and how near each crew is to the end of its tour.` });
   // On its way to another field by stages (release 2, ferry.ts): it can be called off, and stays where it has got to.
   if (x.way) top.push({ label: 'CALL IT OFF', act: `ferryoff:${id}`, ok: up, tip: `It stays at ${x.baseName}, the field it has reached, and is back in the fight.` });
   // A carrier wing's own order (ruling 175(b)): ashore from its fleet, or back aboard. With one place to go the button gives the order; with several it opens the list.
@@ -622,6 +628,93 @@ function raidReportsPage(g: Game): Page | null {
   };
 }
 
+// ---- The crews (release 2) ------------------------------------------------------------------------------------
+//
+// Brian, 27 November 2026 05:23Z, yes to the playtester's idea "bomber crews with a tour: each crew is named and
+// counts missions; at 25 they go home and lift their group's morale". The rule has run since 20 November (bombers.ts:
+// every land-based bomber group keeps its bombers one by one, America's tour 25 missions, Britain's 30 operations;
+// a finished tour lifts the group's readiness; the player's standing order sends finished crews to the schools or on
+// a war bond tour). The browser's air card has shown it since then (ui/main.ts bombersBlock); the 3D game's pages
+// never did. This is that card as a page, 'crews:<group id>', opened from the group's page. It reads the records and
+// changes none of them: only its one button, the standing order, is an order (airAct 'crews:<group id>:<order>').
+
+/** The page's switch: the grand campaign's own, on by the release 2 ship list ('crewrollrule'). */
+export const crewRollOn = (g: Game): boolean => g.flags.crewroll === 1;
+export function setCrewRoll(g: Game, on: boolean): boolean {
+  if (on) g.flags.crewroll = 1;
+  else delete g.flags.crewroll;
+  return true;
+}
+
+/** Whether a group of the player's has a crews' page: one kept by name, with bombers on its roll. */
+function crewsShown(g: Game, f: AirFleet): boolean {
+  return crewRollOn(g) && f.nat === g.human && keptByName(f) && (f.bombers?.on.length ?? 0) > 0;
+}
+
+const ORDER_WORDS: Record<CrewOrder, string> = { school: 'they train new crews', bonds: 'they go on a war bond tour', split: 'one goes to train new crews, the next on a war bond tour, and so on' };
+
+function crewsPage(g: Game, id: number): Page | null {
+  const f = g.airFleets.find((x) => x.id === id);
+  if (!f || !crewsShown(g, f)) return null;
+  const R = f.bombers!, rows = bomberCard(g, f), shown = rows.slice(0, 12);
+  const tour = tourOf(f.nat), word = flownWord(f.nat), words = `${word}s`, named = carriesNames(f.nat);
+  const shot = (k: number): string => (k === 1 ? 'a fighter shot down' : `${num(k)} fighters shot down`);
+  // An American bomber goes by its name; any other by its marking, with the word its crew calls it by where it has one.
+  const called = (m: { name: string; mark: string }): string => (m.mark && m.mark !== m.name ? `${m.mark}, ${m.name}` : m.name);
+  const bombers: PageRow[] = shown.map((r) => {
+    const toGo = tour - r.crew;
+    return {
+      nat: f.nat, title: called(r) || 'No name yet',
+      lines: [
+        `${num(r.missions)} ${r.missions === 1 ? word : words} flown${r.kills ? `, ${shot(r.kills)}` : ''}.`,
+        `${r.grade} crew: ${num(r.crew)} of their ${tour}${toGo > 0 && toGo <= 5 ? `, ${toGo === 1 ? 'one' : num(toGo)} to go` : ''}.`,
+      ],
+      buttons: [],
+    };
+  });
+  // The crews gone home and the bombers lost, the latest first. In running text a bomber goes by its name alone.
+  const roll = R.roll.slice(-6).reverse().map((x) => {
+    const name = bomberMark(g, f, x.b, x.t).name;
+    const what = x.how === 'home'
+      ? `${name ? `${name}'s crew` : "A bomber's crew"} went home after ${tour} ${words}${x.b[3] ? `, with ${shot(x.b[3])}` : ''}`
+      : `${name || 'A bomber'} was lost with ${num(x.b[2])} ${x.b[2] === 1 ? word : words} flown${x.b[3] ? ` and ${shot(x.b[3])}` : ''}`;
+    return `${turnToDate(x.t).label}: ${what}.`;
+  });
+  // The player's standing order for crews who finish (read only: a page never makes the nation's book).
+  const C = g.stories.crews?.[f.nat], now: CrewOrder = C?.order ?? 'split', up = humanUp(g);
+  const head = headStart(g, f.nat), tours = C?.bonds.length ?? 0;
+  const crews = (k: number): string => `${countWord(k, true)} ${k === 1 ? 'crew is' : 'crews are'}`;
+  const state = [
+    C?.school ? `${crews(C.school)} at the schools${head ? `: new crews arrive with ${head === 1 ? `${/^[aeiou]/.test(word) ? 'an' : 'a'} ${word}'s` : `${head} ${words}'`} experience` : ''}.` : '',
+    tours ? `${crews(tours)} on a war bond tour: ${Math.round(BOMBERS.bonds.pp * tours * BUDGET.scale).toLocaleString('en-US')} a month into the treasury.` : '',
+  ].filter(Boolean).join(' ');
+  const opt = (how: CrewOrder, label: string, what: string): PageButton => ({
+    label, act: `crews:${id}:${how}`, ok: up && now !== how,
+    tip: now === how ? 'This is your standing order now.' : up ? what : 'It is not your month.',
+  });
+  const order: PageRow = {
+    nat: f.nat, title: `Crews go home after ${tour} ${words}`,
+    lines: [`The group's readiness rises each time. Then ${ORDER_WORDS[now]}.`, state].filter(Boolean),
+    buttons: [
+      opt('school', 'TRAIN NEW CREWS', `Every new crew arrives with experience before its first ${word}, and fighters bring down fewer of a group so trained. Their own bomber flies on with a new crew.`),
+      opt('bonds', 'WAR BOND TOUR', `They fly their bomber home, and bring money into the treasury every month for ${BOMBERS.bonds.months[0]} to ${BOMBERS.bonds.months[1]} months. A new aircraft takes its place.`),
+      opt('split', 'BOTH IN TURN', 'One crew to the schools, the next on a war bond tour, and so on.'),
+    ],
+  };
+  const lost = R.gone ? `${num(R.gone)} ${named ? 'named bombers' : 'bombers'} lost` : `no ${named ? 'named bomber' : 'bomber'} lost`;
+  return {
+    id: `crews:${id}`, title: `THE CREWS  ·  ${f.name.toUpperCase()}`,
+    headline: `${num(R.on.length)} bomber${R.on.length === 1 ? '' : 's'} on strength · ${R.home ? `${num(R.home)} crew${R.home === 1 ? '' : 's'} gone home` : 'no crew gone home yet'} · ${lost}`,
+    note: `Every bomber of the group is known by ${named ? 'its name' : 'its marking'}, with the ${words} it has flown and the aircraft its gunners have shot down. A crew that finishes its tour of ${tour} ${words} goes home, and the group's readiness rises.`,
+    top: [{ label: 'BACK TO THE GROUP', act: `open:group:${id}`, ok: true, tip: '' }],
+    sections: [
+      { heading: 'THE BOMBERS, OLD HANDS FIRST', text: rows.length > shown.length ? `And ${num(rows.length - shown.length)} more.` : '', rows: bombers },
+      { heading: 'WHEN A TOUR IS OVER', text: '', rows: [order] },
+      { heading: 'HOME AND LOST', text: roll.length ? roll.join('\n') : 'No crew has finished its tour yet, and no bomber with a name has been lost.', rows: [] },
+    ],
+  };
+}
+
 /** One of the air war's pages, or null if the id is not one of them (or the game is not a grand campaign). region is the province selected on the map. */
 export function airPage(g: Game, id: string, region = -1): Page | null {
   if (!airWar(g) || !g.human) return null;
@@ -638,6 +731,7 @@ export function airPage(g: Game, id: string, region = -1): Page | null {
   if (part[0] === 'search') return searchPage(g, Number(part[1]));
   if (id === 'airreports') return raidReportsPage(g);
   if (part[0] === 'airreport') return raidReportPage(g, Number(part[1]));
+  if (part[0] === 'crews') return crewsPage(g, Number(part[1]));
   return null;
 }
 
@@ -660,6 +754,12 @@ export function airAct(g: Game, action: string, fought?: FoughtAir): AirActResul
       fly: first && from ? { from: first.base, fromX: from.x, fromY: from.y, x: p.x, y: p.y, nat: first.nat, bombers: rep.att.some((s) => s.bmr > 0), region: rep.zone >= 0 ? -1 : target } : undefined,
       ...(fought ? { after: afterCard(g, rep, fought) } : {}),
     };
+  }
+  if (part[0] === 'crews' && part.length >= 3 && (part[2] === 'school' || part[2] === 'bonds' || part[2] === 'split')) {
+    // (Release 2, the crews' page) The standing order for crews who finish their tour (bombers.ts setCrewOrder).
+    const f = g.airFleets.find((x) => x.id === Number(part[1]));
+    const ok = !!f && crewsShown(g, f) && orderCrews(g, part[2]);
+    return { ok, note: ok ? `Crews who finish their tour: ${ORDER_WORDS[part[2]]}.` : 'That order cannot be given now.', open: `crews:${part[1]}` };
   }
   if (part[0] === 'search') {
     const r = orderSearch(g, Number(part[1]), Number(part[2]));

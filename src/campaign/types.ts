@@ -492,6 +492,11 @@ export interface Corps extends Storied {
   digging?: number;
   /** It was attacked since its own last month ended (the grand campaign): it does no digging this month. */
   pressed?: boolean;
+  /**
+   * (Release 2, pressed.ts, behind its switch) Captured tanks it has pressed into service: whose make, how many still
+   * run (a fraction while they wear out), and the month it last took any. Never set with the switch off.
+   */
+  kit?: { from: string; n: number; turn: number };
   /** It took over fieldworks left on this ground this month (the grand campaign): it keeps them at the month's end though it marched. */
   relief?: boolean;
   /**

@@ -522,6 +522,7 @@ import { seaLoop } from '../../../src/battle/sea/cues';
 import { foughtOf, playedHook, seaAhead, type SeaAhead, type SeaPlayed } from '../../../src/battle/sea/handoff';
 import { SEA } from '../../../src/battle/sea/numbers';
 import { SeaSim, type SeaLosses } from '../../../src/battle/sea/sim';
+import { kitLook, pressedOn } from '../../../src/campaign/pressed';
 
 export interface BattleHooks {
   game: () => Game;
@@ -810,8 +811,12 @@ export function battleCalls(h: BattleHooks) {
         if (look) ticket.look = look;
       }
       // Captured kit (release 2): each side's latest capture of the last six months, whose tanks and how many blocks.
+      // (With captured tanks pressed into service switched on, pressed.ts: the tanks the corps in this battle have
+      // pressed into service, in place of the nation's last six months.)
       const took = (nat: string) => (g.captured?.[nat] ?? []).filter((k) => g.turn - k.turn < 6).slice(-1)[0];
-      const ca = took(t.att.nat), cd = took(t.def.nat);
+      const inBattle = new Set(corps.map((c) => c.id));
+      const ca = pressedOn(g) ? kitLook(g, corps) : took(t.att.nat);
+      const cd = pressedOn(g) ? kitLook(g, g.corps.filter((c) => c.reg === to && !inBattle.has(c.id))) : took(t.def.nat);
       if (ca || cd) ticket.captured = { ...(ca ? { att: { from: ca.from, n: ca.n } } : {}), ...(cd ? { def: { from: cd.from, n: cd.n } } : {}) };
       // Uniforms that age (release 2): each side's months in the line without a rest (its corps' weeks, as the stories
       // keep them, weighed by divisions), where the campaign counts them.
