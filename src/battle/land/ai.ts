@@ -246,14 +246,15 @@ function snipersUp(b: LandBattle, side: Side, u: LandUnit, mine: LandUnit[], foe
   if (u.order?.kind === 'withdraw' || (u.waits && !u.waits.free)) return;
   const K = LAND.snipers.keep, dir = side === 'att' ? 1 : -1, near = foes.filter((f) => f.kind !== 'fort' && b.gap(u, f) < K);
   if (u.slipTo !== undefined) {
-    if (u.order) return;
+    // One spot a slip: once chosen it is kept till the slip ends, never a second (the design director's keep, 26 Nov).
+    if (u.order || u.slipAt) return;
     const spot = b.slipSpot(u);
-    if (spot) b.command({ do: 'move', units: [u.id], x: spot[0], y: spot[1] }, side);
+    if (spot) { u.slipAt = spot; b.command({ do: 'move', units: [u.id], x: spot[0], y: spot[1] }, side); }
     return;
   }
   if (near.length) {
     // Already going somewhere far enough from them: on its way.
-    if (u.order?.kind === 'move' && !near.some((f) => dist(f.x, f.y, u.order!.x, u.order!.y) < K)) return;
+    if (u.order?.kind === 'move' && !near.some((f) => b.gapAt(u, u.order!.x, u.order!.y, f) < K)) return;
     const spot = b.sniperSpot(u, [u.x, u.y - dir * 400], u.y);
     const gap = near.reduce((m, f) => Math.min(m, b.gap(u, f)), Infinity);
     const [x, y] = spot ?? [u.x, u.y - dir * (K - gap + 50)];
