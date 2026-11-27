@@ -271,6 +271,43 @@ namespace
 		const Barrage HOff = SixMinutes(Off, true, false, false);
 		const Barrage HOn = SixMinutes(On, true, false, false);
 		Check(HOn.Digests == HOff.Digests, "on: six minutes of heavy flak alone, every piece as before", Say("%.0f samples", static_cast<double>(HOn.Digests.size())));
+		// (the linger count: light and medium bursts first, then a heavy burst and a cannon's hit on an aircraft; the
+		// two after are laid piece for piece as with the word off, the shared count LingerNo where it was off)
+		auto After = [](const FxTen::Book& Book, std::vector<uint64_t>& Pieces, std::vector<uint64_t>& Counts)
+		{
+			Kit K(Book);
+			K.Fx.Draw(0.0, FxTen::Looking(Vec(0.0, 0.0, 1500.0), Vec(0.0, 600.0, 1500.0)));
+			const char* Mixed[6] = { "light", "medium", "medium", "light", "medium", "light" };
+			for (int I = 0; I < 6; ++I)
+			{
+				K.Fx.AirFlak(1.0 + 0.7 * I, Vec(40.0 * I - 100.0, 600.0 + 25.0 * I, 1500.0), Mixed[I]);
+				Counts.push_back(K.Fx.LingerNo);
+			}
+			size_t First = K.Fx.Bits.size();
+			K.Fx.AirFlak(6.0, Vec(30.0, 650.0, 1510.0), "heavy");
+			for (size_t I = First; I < K.Fx.Bits.size(); ++I)
+			{
+				Pieces.push_back(FxTen::PieceHash(K.Fx.Bits[I]));
+			}
+			Counts.push_back(K.Fx.LingerNo);
+			First = K.Fx.Bits.size();
+			K.Fx.AirHit(6.5, Vec(-20.0, 500.0, 1490.0), Vec(0.0, 0.0, 1.0), Vec(0.0, 90.0, 0.0), "cannon");
+			for (size_t I = First; I < K.Fx.Bits.size(); ++I)
+			{
+				Pieces.push_back(FxTen::PieceHash(K.Fx.Bits[I]));
+			}
+			Counts.push_back(K.Fx.LingerNo);
+		};
+		std::vector<uint64_t> PiecesOff, PiecesOn, CountsOff, CountsOn;
+		After(Off, PiecesOff, CountsOff);
+		After(On, PiecesOn, CountsOn);
+		size_t SameAt = 0;
+		for (size_t I = 0; I < std::min(PiecesOff.size(), PiecesOn.size()); ++I)
+		{
+			SameAt += PiecesOff[I] == PiecesOn[I] ? 1u : 0u;
+		}
+		Check(!PiecesOff.empty() && PiecesOn == PiecesOff, "on: a heavy burst and a cannon's hit after light and medium ones, piece for piece as off", Say("%.0f of %.0f the same", static_cast<double>(SameAt), static_cast<double>(PiecesOff.size())));
+		Check(CountsOn == CountsOff, "on: the shared linger count after each burst and after the hit where it was off", Say("LingerNo %.0f after the six, %.0f after the hit", static_cast<double>(CountsOn[5]), static_cast<double>(CountsOn.back())));
 	}
 
 	// ----------------------------------------------------------------------------------------------------------------

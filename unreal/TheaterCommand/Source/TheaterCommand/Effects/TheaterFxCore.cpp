@@ -7159,12 +7159,31 @@ namespace TheaterFx
 	{
 		// (a burst's smoke keeps its dark until its thick time, then greys, widens and thins into the air: linger.flak)
 		const size_t First = Bits.size();
+		// (Effects (R2), -TheaterAirFlakKinds: a kind with a row of its own, which before burst as heavy, lingers on a
+		// count of its own and leaves the shared count, LingerNo, where heavy would have: heavy laid and lingered dry,
+		// taken away, the shared dice put back; so every cloud lingered after it is as before, piece for piece)
+		const bool bOwnCount = Kind && *Kind && std::string(Kind) != "heavy" && Has(std::string("air_flak.") + Kind + ".long_m");
+		uint64_t LingerAfter = LingerNo;
+		if (bOwnCount)
+		{
+			const uint64_t SeedsWas = Seeds;
+			AirFlakLaid(Now, At, "heavy");
+			LingerFrom(First, LingerOf("flak"), Now, At, 1.0, 0.0);
+			Bits.erase(Bits.begin() + static_cast<std::ptrdiff_t>(First), Bits.end());
+			Seeds = SeedsWas;
+			LingerAfter = LingerNo;
+			LingerNo = Mix64(PlaceKey(At) ^ (static_cast<uint64_t>(static_cast<int64_t>(std::clamp(Now, 0.0, 1.0e9) * 1000.0)) + 0xF1A4C0ull));
+		}
 		AirFlakLaid(Now, At, Kind);
 		// (Effects (R2), flak by its size, -TheaterAirFlakKinds: a kind with its own linger.flak.by.<kind>.gone_s
 		// lingers by that row, as battle-fx-flak.json gives medium and light; any other, heavy too, by linger.flak as
 		// before. Asked by name only where the row is: by a name with none, LingerOf would take no linger at all)
 		const std::string LingerName = Kind && *Kind && Has(std::string("linger.flak.by.") + Kind + ".gone_s") ? std::string(Kind) : std::string();
 		LingerFrom(First, LingerOf("flak", LingerName), Now, At, 1.0, 0.0);
+		if (bOwnCount)
+		{
+			LingerNo = LingerAfter;
+		}
 	}
 
 	void Battle::AirFlakLaid(double Now, const Vec& At, const char* Kind)
