@@ -51,6 +51,86 @@ namespace SeaFeed
 	double KnotOf(const Top& H);
 	constexpr double SettleBy = 0.1;
 
+	/**
+	 * The shelling scene's own (the shore guns plan, sea-scene/shore-guns/plan.md R1.8; Rules/shore-scene.ts writes them):
+	 * what a staged shelling adds to a recording, read only under -TheaterSeaShore=1 (bShore below) and only where the
+	 * recording has it. Off, or in any other recording, all of it stays empty and every recording reads exactly as before;
+	 * on, the show's own pieces, events and zones are read as before too. Nothing is drawn from it yet (R2 on): the show
+	 * never sees it. Bearings here are degrees clockwise from north; places are board metres.
+	 */
+	/** Where a shell or a battery's round fell: x, y and its kind ('on', 'sea', 'beach', 'over'; a battery's 'short', 'over', 'straddle', 'hit'). */
+	struct ShoreFall
+	{
+		double X = 0.0, Y = 0.0;
+		std::string Kind;
+	};
+	/** A division's ground ashore: its middle, length along its face, width, and shelter ('open', 'dug', 'fort'). */
+	struct ShoreStrip
+	{
+		double X = 0.0, Y = 0.0, Len = 0.0, Wide = 0.0, Face = 0.0;
+		std::string Kind;
+	};
+	/** A battery of the coast's fort: where it stands, the way it faces and its bore (mm). */
+	struct ShoreBattery
+	{
+		double X = 0.0, Y = 0.0, Face = 0.0, Mm = 0.0;
+	};
+	/** `field.coast`: the coast the fleet stands off. */
+	struct Coast
+	{
+		bool bHas = false;
+		/** The way the sea lies from the waterfront, and the waterfront. */
+		double Bearing = 0.0, AtX = 0.0, AtY = 0.0;
+		/** The land, as closed rings of board metres (at most ShoreRings rings of ShorePoints points in all). */
+		std::vector<std::vector<std::pair<double, double>>> Shore;
+		std::string Form, Relief, Kit, Land, Ground, Whose;
+		double Rise = 0.0, Shelf = 0.0;
+		/** The chief place, where drawn: its name, size, look, whether a port, its middle and reach, its quay, damage (0 to 1). */
+		bool bTown = false, bPort = false, bQuay = false, bSkyline = false;
+		std::string TownName, TownSize, TownLook;
+		double TownX = 0.0, TownY = 0.0, TownR = 0.0, QuayX = 0.0, QuayY = 0.0, QuayFace = 0.0, QuayLen = 0.0, Damage = 0.0;
+		/** What was shelled ('troops', 'town', 'city'), its middle and reach, and the troops' strips. */
+		std::string TargetKind;
+		double TargetX = 0.0, TargetY = 0.0, TargetR = 0.0;
+		std::vector<ShoreStrip> Strips;
+		/** The fort: its level, whether it fired, its batteries. */
+		int FortLevel = 0;
+		bool bFortFired = false;
+		std::vector<ShoreBattery> Batteries;
+		/** The spotting aircraft ('none', 'floatplane', 'carrier'), their nation and where from. */
+		std::string AirSpot, AirNat, AirFrom;
+	};
+	inline constexpr size_t ShoreRings = 4096, ShorePoints = 200000;
+	/** A shelling ship's guns, as her piece's extra says them: her main bore (75 to 460 mm) and how many. */
+	struct ShoreGuns
+	{
+		int Unit = -1;
+		double MainMm = 0.0;
+		int Guns = 0;
+	};
+	/** One of a shelling's own events: sea:shore (a salvo at the coast), sea:battery (a battery's round), sea:fire (a fire
+	 * ashore or on a deck), sea:spot (the spotting aircraft over the target). */
+	struct ShoreEvent
+	{
+		double T = 0.0;
+		std::string What, Kind, Nat;
+		int Unit = -1, Ship = 0, N = 0, Bat = -1, On = -1;
+		double Lands = -1.0, Mm = 0.0, Train = 0.0, X = 0.0, Y = 0.0, R = 0.0, Until = -1.0, Alt = 0.0;
+		/** A salvo's shells by where they fell: on target, short in the water, short on the beach, over. */
+		int LayOn = 0, LaySea = 0, LayBeach = 0, LayOver = 0;
+		bool bDud = false;
+		std::vector<ShoreFall> Falls;
+	};
+	/** A shot a staged window cuts to (`beats[].shots`): when (battle seconds), which shot, on which piece, at which spot. */
+	struct Shot
+	{
+		double At = 0.0;
+		std::string Kind;
+		int Subject = -1;
+		bool bSpot = false;
+		double SpotX = 0.0, SpotY = 0.0;
+	};
+
 	struct Frame
 	{
 		Top Head;
@@ -58,6 +138,9 @@ namespace SeaFeed
 		std::vector<SeaShow::Event> Events;
 		std::vector<SeaShow::Zone> Zones;
 		bool bZones = false; // the view carried its zones (else they are as before)
+		/** The shelling scene's (under -TheaterSeaShore=1 only): the shelling ships' guns this view told, and its own events. */
+		std::vector<ShoreGuns> Guns;
+		std::vector<ShoreEvent> Shore;
 	};
 
 	/** What a reader keeps between views: each piece's still fields as last told. */
@@ -68,8 +151,10 @@ namespace SeaFeed
 
 	/** TC.seaStart's field (and a recording's): the board, the navies, the look's own inputs. */
 	bool ReadField(const Json& J, SeaShow::Field& Out);
-	/** One TC.battleView() (or one recorded view). */
-	bool ReadView(const Json& J, Memory& Kept, Frame& Out);
+	/** One TC.battleView() (or one recorded view); bShore (-TheaterSeaShore=1) reads the shelling scene's own too. */
+	bool ReadView(const Json& J, Memory& Kept, Frame& Out, bool bShore = false);
+	/** A shelling's `field.coast` (read under -TheaterSeaShore=1 only); false where the field has none. */
+	bool ReadCoast(const Json& J, Coast& Out);
 
 	/** The after card (TC.battleEnd(), or the recording's after). */
 	struct After
@@ -86,6 +171,8 @@ namespace SeaFeed
 	{
 		std::string What;
 		double From = 0.0, To = 0.0, Screen = 0.0;
+		/** The shots it cuts to, in time (a shelling's, under -TheaterSeaShore=1 only; else empty). */
+		std::vector<Shot> Shots;
 	};
 
 	/** A whole recorded action (tools/sea-record). */
@@ -100,8 +187,11 @@ namespace SeaFeed
 		/** A staged scene's windows, in order, each a window of at least a tenth of a second given a tenth of a second
 		 * of screen or more (empty for a fought action, which is played whole). Read only: the show never sees them. */
 		std::vector<Beat> Beats;
+		/** A shelling's coast (under -TheaterSeaShore=1 only; else bHas false). */
+		Coast Shore;
 	};
-	bool ReadRecording(const std::string& Source, Recording& Out, std::string& OutError);
+	/** bShore (-TheaterSeaShore=1): a shelling's own keys read too, where the recording has them; off, they are not read. */
+	bool ReadRecording(const std::string& Source, Recording& Out, std::string& OutError, bool bShore = false);
 
 	/** Whether the action was fought with the naval rules' "Friendly torpedoes" switch on, as far as what was read says it:
 	 * its field's ownWater (SeaShow::Field::bOwnWater), or a view carrying the torpedo words' fields (heldFor, clearFrom:

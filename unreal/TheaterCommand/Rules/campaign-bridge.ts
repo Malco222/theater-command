@@ -157,6 +157,7 @@ import { seaOpenAt } from '../../../src/campaign/navy';
 import { LANE_NO_STAFF, LANE_UNCOUNTED, laneCarries } from '../../../src/campaign/navy';
 import { NAVY, subScene } from '../../../src/campaign/navy';
 import { subSceneOf } from './sub-scene'; // D1 (ruling 241): the month's submarine scene, staged; look only
+import { monthSeaOf, shoreSceneOf, shoreRecord, type ShoreShow, type ShoreWindow } from './shore-scene'; // shore guns R1: the shelling scene, staged; look only
 import { chanceOn, headline, offersOn } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
@@ -3877,6 +3878,12 @@ interface MonthCard {
 let monthBook: MonthMark | null = null;
 /** The last month's card, kept so that the report can be opened again. */
 let lastCard: MonthCard | null = null;
+/**
+ * (Shore guns R1.7) Where the last month card's shellings start in g.shoreReports: its own mark's index, or, for a month
+ * whose opening was not seen, its first month (as markBackTo counts). Kept as the card is made, for the shelling scene
+ * (TC.monthSea) to pick among the shellings that card shows; outside the save, and only for the game it was made in.
+ */
+let shoreCard: { game: Game; window: ShoreWindow } | null = null;
 
 function openMonthBook(s: Game): void {
   // (the rules' own mark: in a campaign's first month it reaches back to the war's opening, so that the declaration
@@ -4151,6 +4158,7 @@ function endMonth() {
     month = fallen || !s.human ? null : shownCard(s, cardOfRules(s, monthBook ?? markBackTo(s, month0), s.human, { whole: true }));
   } catch { month = null; }
   lastCard = month;
+  shoreCard = { game: s, window: { from: monthBook ? monthBook.shore : null, month0 } };
   try { openMonthBook(s); } catch { monthBook = null; }
   // (Release 2; Brian, 24 November 2026 18:30Z) The units handed over to him this month, for the table to say plainly.
   const ready = fallen ? [] : readyOf(s, h0);
@@ -9399,6 +9407,28 @@ const battleTable = battleCalls({ game, attack: playerOrder(attack), raid: (k, t
 // is written and every save is as before, and the stager stands in from its data rows. The setting is the viewer's and
 // lives outside the save: the screen sets it at start and again after every load.
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).subSceneOn = (on: boolean) => { subScene.on = !!on; return { on: subScene.on }; };
+// (Shore guns R1.7, sea-scene/shore-guns/plan.md) The shelling scene's pass-throughs (Rules/shore-scene.ts), look only;
+// TC.subScene above is untouched. TC.monthSea(from?, view?, show?) gives { mark, pick, recording } as TC.subScene does:
+// the month's one sea scene, a shelling the month card shows (its own mark, kept above as the card is made) among the
+// submarine scene's cases, in the UI director's order (his heavy ship lost; his shelling with a ship lost; his boats'
+// kill; his shelling; his convoy month; his coast shelled; his largest hunt); with no shelling picked, TC.subScene's
+// answer byte for byte. `show` is what the 3D's built switches draw ({ kinds, coast }); without it, troops shelled by his
+// nation only. TC.shoreScene(id) gives { pick, recording } for one report (his SHELL order's, played at once) and keeps
+// it as played, so that monthSea does not pick it again. TC.shoreSceneOn(on) is the 3D's scene record setting, sent
+// beside subSceneOn: while on, the navy thread's bombard will write ShoreReport.look (not built yet: nothing reads it).
+// All three read the game and write nothing to it; the played reports and the setting live outside the save.
+const shorePlayed = new WeakMap<Game, Set<number>>();
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).monthSea = (from?: number, view?: 'all' | 'mine' | 'never', show?: ShoreShow) => {
+  const s = game();
+  return monthSeaOf(s, NAVY.convoys, from, view, { window: shoreCard && shoreCard.game === s ? shoreCard.window : undefined, played: shorePlayed.get(s), show });
+};
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).shoreScene = (id: number) => {
+  const s = game();
+  const out = shoreSceneOf(s, id);
+  if (out.recording) { const p = shorePlayed.get(s) ?? new Set<number>(); p.add(id); shorePlayed.set(s, p); }
+  return out;
+};
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).shoreSceneOn = (on: boolean) => { shoreRecord.on = !!on; return { on: shoreRecord.on }; };
 Object.assign((globalThis as Record<string, unknown>).TC as object, bargainCalls(game, view)); // (release 2: a neutral's bargains and volunteer legions on the map, Rules/bargains-look.ts)
 Object.assign((globalThis as Record<string, unknown>).TC as object, scrambleCalls(game, battleTable.airStartOn)); // (release 2: the scramble offer's stand-in, Rules/scramble-demo.ts)
 // (Release 2, the whole world; ruling B8 of 25 November 2026) TC.offers(), TC.offerTake(ids | 'all'), TC.offerDecline(ids | 'all'):

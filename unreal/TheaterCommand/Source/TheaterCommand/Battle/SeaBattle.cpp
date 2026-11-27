@@ -1779,9 +1779,14 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 			}
 		}
 	}
+	// (the shore guns plan, sea-scene/shore-guns/plan.md R1.8: the shelling scene's own switch, -TheaterSeaShore=1, off by
+	// default and its value in force written back for the "Sea look:" line. Under it the reader takes a staged shelling's
+	// coast, its own events and its windows' shots, where the recording has them, and keeps them beside the show; nothing
+	// is drawn from them yet (R2 on). Off, every recording is read exactly as before.)
+	const bool bSeaShore = SeaLookSwitches::TakeOnOff(SeaLook, "TheaterSeaShore=");
 	SeaFeed::Recording Rec;
 	std::string Error;
-	if (!SeaFeed::ReadRecording(Narrow(Text), Rec, Error) || Rec.Views.empty())
+	if (!SeaFeed::ReadRecording(Narrow(Text), Rec, Error, bSeaShore) || Rec.Views.empty())
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Sea battle: %s: %s"), *Where, Error.empty() ? TEXT("no views") : *Wide(Error));
 		return false;

@@ -62,6 +62,17 @@ TABLE = [
     ("TheaterSeaCoast", "off", "off", "extra", "14", False),
     ("TheaterSeaTurrets=", "0, 1 (1 after the Mac check)", "0", "own", "16", False),
     ("TheaterSeaStepDown=", "0; 1 whenever the tier is 1 or more", "0", "1", "15", False),
+    # (the shore guns plan, sea-scene/shore-guns/plan.md section 1: a coast shelled from the sea; the scene's own switch read
+    # from R1, where SeaFeed reads a recording's coast, shore events and beats' shots only under it; the rest by their round)
+    ("TheaterSeaShore=", "0, 1 (the shelling scene: the month's sea scene may pick a shelling; the coast, its events and shots read)", "0", "own", "shore R1-R3", True),
+    ("TheaterSeaOwnGuns=", "0, 1 (a shelling ship's own bore, mainMm, for her guns' size and flash row)", "0", "own", "shore R3", False),
+    ("TheaterSeaShoreFort=", "0, 1 (the batteries' flashes and straddles)", "0", "with Shore", "shore R3", False),
+    ("TheaterSeaShoreTown=", "0, 1 (blocks, landmarks, quay, tanks, casemates)", "0", "with Shore", "shore R4", False),
+    ("TheaterSeaShoreTrees=", "0, 1 (trees)", "0", "with Shore", "shore R4", False),
+    ("TheaterSeaShoreMarks=", "0, 1 (fires and palls, laid again after cuts)", "0", "with Shore", "shore R4", False),
+    ("TheaterSeaThunder=", "0, 1 (thunder at its true delay, past the 8 s cap)", "0", "own", "shore R5", False),
+    ("TheaterSeaSpotters=", "0, 1 (the spotter pair)", "0", "with Shore", "shore R5", False),
+    ("TheaterSeaBlastFan=", "0, 1 (the blast fan on the water)", "0", "own", "shore R5", False),
     # (the ship detail plan, round 1: the ships at sea, review pictures until the art director's Mac check, and the reel's two)
     ("TheaterSeaShipLight=", "0 or off; 1 or on (the file's shade on each point, the ships' top light 0.10); or a top light from 0.0 to 0.30 to at most four places (0.08, 0.12, the map's 0.26); anything else refused, off", "0", "review", "R1.3", True),
     ("TheaterSeaShipSkin=", "0, 1 (the rust ramp and the ruled salt, M_MapSurface's own wear on the sea's steel ink)", "0", "review", "R1.4", True),

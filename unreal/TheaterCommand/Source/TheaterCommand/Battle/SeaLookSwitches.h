@@ -22,7 +22,8 @@ namespace SeaLookSwitches
 		/** Its value at tier 0 (release 1.5's sea). */
 		const char* Today;
 		/** What turns it on: a tier ("1", "2", "3"), "tier" (it is the tier), "own" (independent of the tier), "with
-		 * Swell" or "with Day" (with that switch), "review" (review pictures only), "extra" (one at a time) or "none". */
+		 * Swell", "with Day" or "with Shore" (with that switch), "review" (review pictures only), "extra" (one at a time)
+		 * or "none". */
 		const char* OnAt;
 		/** The plan's step that builds it. */
 		const char* Step;
@@ -68,6 +69,18 @@ namespace SeaLookSwitches
 		{ "TheaterSeaCoast", "off", "extra", "14", false },
 		{ "TheaterSeaTurrets=", "0", "own", "16", false },
 		{ "TheaterSeaStepDown=", "0", "1", "15", false },
+		// (the shore guns plan, sea-scene/shore-guns/plan.md: a coast shelled from the sea, its own rounds R1 to R5. The scene's
+		// own switch is read from R1: SeaFeed reads a recording's coast, its shore events and its beats' shots only under it,
+		// and draws nothing yet; the rest are unbuilt until their round)
+		{ "TheaterSeaShore=", "0", "own", "shore R1-R3", true },
+		{ "TheaterSeaOwnGuns=", "0", "own", "shore R3", false },
+		{ "TheaterSeaShoreFort=", "0", "with Shore", "shore R3", false },
+		{ "TheaterSeaShoreTown=", "0", "with Shore", "shore R4", false },
+		{ "TheaterSeaShoreTrees=", "0", "with Shore", "shore R4", false },
+		{ "TheaterSeaShoreMarks=", "0", "with Shore", "shore R4", false },
+		{ "TheaterSeaThunder=", "0", "own", "shore R5", false },
+		{ "TheaterSeaSpotters=", "0", "with Shore", "shore R5", false },
+		{ "TheaterSeaBlastFan=", "0", "own", "shore R5", false },
 		// (the ship detail plan, round 1: the ships at sea, each for review pictures until the art director's Mac check; the
 		// light, the file's shade on each point and the top light, which takes a value (off or 0, none; 1 or on, 0.10; or a
 		// top light from 0.0 to 0.30: TakeReviewNumber); the skin, the rust ramp and the material's own wear; the shade,
