@@ -20,9 +20,12 @@ namespace
 	// Fw 190; and the American star gained its bars with the Mustang and the B-17. With this each keeps one look: see
 	// UnitTable::OneLook. Off as it comes, until the Mac has shown the one beside the other; "-TheaterOneLook" turns
 	// it on, switch or no switch. It is read when a piece is next painted, which is when the map next lays it.
+	// (27 November 2026, Brian: "also shouldnt the p-51 mustangs be silver with black paint? why are they green?" He
+	// named her coat himself: the Mustang wears her own scheme "natural metal, black bands" in every month. A newer
+	// machine in her own coat comes with research, not with the date, so his rule of the year is kept.)
 	TAutoConsoleVariable<int32> CVarOneLook(
 		TEXT("tc.Map.OneLook"), 0,
-		TEXT("1: no model's paint or national mark changes with the date (a dominion wears its own roundel all war, the American fighter keeps its olive coat and its star); 0: they change by the month, as before. Release 2; off as it comes."));
+		TEXT("1: no model's paint or national mark changes with the date (a dominion wears its own roundel all war, the Mustang is bare metal with black in every month, every American machine wears the star and bar); 0: they change by the month, as before. Release 2; off as it comes."));
 
 	struct FLook
 	{
