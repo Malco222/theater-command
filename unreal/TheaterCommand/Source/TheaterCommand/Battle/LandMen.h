@@ -635,7 +635,9 @@ namespace LandMen
 		 *   where it lies as he does, some dragging themselves a few metres on (wounded_crawl, else crawl), else his
 		 *   fall's last frame held with breathing and stirring (the head lifted, an arm reaching, a knee drawn up). A man
 		 *   who will get up at back lies face down unless his file has get_up_back; up at back from where he lies
-		 *   (get_up_face/_back by name, else go_prone backwards). Killed down there, he goes still where he lies.
+		 *   (get_up_face/_back by name, else go_prone backwards), eased onto his track however far it went while he
+		 *   lay. Killed down there, he goes still where he lies. Carried (cy) or his wd taken back in a later delta
+		 *   while he lies: the bearers' (or the rules') at once, eased onto his track, never the hits' again.
 		 *  bFlinch: kept for the graze flinch; nothing yet (misses are not booked per man here).
 		 * The jolt plays a flinch clip by name where his file has one (hit_flinch_f/_b/_l/_r, _kneel_*, _run_*,
 		 * hit_flinch_prone: its difference from its additive_base laid over his pose), else the code's.
@@ -647,7 +649,8 @@ namespace LandMen
 		};
 		void SetHits(const Hits& H);
 		const Hits& HitsOf() const;
-		/** Bullet hits: the scene's walls, hedges and vehicles for a fall's room (none: only the men are checked). */
+		/** Bullet hits: the scene's walls, hedges and vehicles for a fall's room (none: only the men are checked). The
+		 * scene (ALandBattle) does not call it yet, so in the game a fall or a crawl is checked against men and bodies only. */
 		void SetRoom(const RoomFn& Fn);
 		/**
 		 * Bullet hits: where on the field the round that killed or wounded him struck him, and the part (the bone's name,

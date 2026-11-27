@@ -1189,7 +1189,10 @@ feed's halves and the blasts' knock-down come in a later build.
   man aiming or firing (`ManInfo::bFallAimed`), those opening in `idle` three times as likely for one who was not;
   never a thrown fall (`die_thrown_*`, or `hit.blast`) for a bullet; and room for where a fall carries him (its end
   offset over half a metre, e.g. `die_side_b` 1.07 m to his left): no other man or body within 0.55 m of the way and a
-  third of a metre on, nor (`Crowd::SetRoom`, the scene's) a wall, hedge or vehicle. A man walking (a gait under 1.6
+  third of a metre on, nor (`Crowd::SetRoom`, the scene's) a wall, hedge or vehicle. (`Crowd::SetRoom` is there for
+  the scene to give the walls, hedges and vehicles a fall's room and a crawl are checked against; the scene does not call
+  it yet, so in the game only men and bodies are checked, and a fall or a crawl can carry a man into a wall, a hedge or
+  a vehicle.) A man walking (a gait under 1.6
   m/s of life) or halted from a gait within 1.5 s of life takes the standing falls (one halted in cover the cover
   ones), so the stand-only clips bullets never reached come into play; a man running the running ones. The walking
   line is measured: the men killed in a gait went (life m/s) under 1.6: 19 of 25 (normandy-1944), 10 of 19
@@ -1231,8 +1234,16 @@ feed's halves and the blasts' knock-down come in a later build.
   fall); any other man with `wd` is this build's from `wd` to `back` (his fall, what he does down there, his get-up), and
   the rules' stances wait meanwhile, `wounded` among them. Down there he lies where he went down whatever his track does
   after `wd` (his place and facing held, eased back to the track's over the get-up); `d` while he lies: still where he
-  lies, no second fall; `wd` after `d`: never down. Checked in `Tools/land_hits` (the rules' wounded men: no man falls
-  twice, none down wounded stands or slides). The blasts' knock-down (`kd`) is not on this line; when it joins, its
+  lies, no second fall; `wd` after `d`: never down. In a live battle the drill gives `wd` when he falls but `cy` only
+  when a stretcher pair starts carrying him, so `cy` comes in a later delta: then (and if a later delta takes `wd`
+  back) the hold on his place ends at once and he is the bearers' (`LetGo`: their stance from lying, the lying pose
+  blended out over a second, his pelvis laid where it lay and his place eased onto his track); the hits never take him
+  again. Up at `back` (or let go there because the rules have him lie) he eases onto his track whatever distance it went
+  while he lay: on his feet first, then at a slow walk's 0.8 m/s (1.6 s at least), never let go at once; he glides
+  that last of it in his stance's own clip (no walk is played for it). Checked in `Tools/land_hits` (the rules' wounded
+  men: no man falls twice, none down wounded stands or slides; live, `cy` a delta after his wound: he goes with his
+  track, pelvis under 13 cm a frame; up after his track walked 0, 2 and 10 m, standing or prone at back: pelvis under
+  13 cm a frame, on his track in the end). The blasts' knock-down (`kd`) is not on this line; when it joins, its
   stand-in steps aside for a man whose round carries `wd` (its own rule) and this build does not touch its clips or times.
 - **The graze flinch (`bFlinch`).** Kept for the switch; nothing yet (the men read misses only as shots; a near miss
   needs the rounds' `l` and each block's men at its time in `Book`).
