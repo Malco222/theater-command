@@ -351,6 +351,8 @@ export interface Man {
   hand?: true;
   dn?: [number, number];
   dk?: number;
+  /** Support teams at work (Drill.steady): the pose he is drawn in, since when, and his aim and facing as he took it up. */
+  ps?: [Pose, number, [number, number] | undefined, number | undefined];
 }
 
 /**
@@ -512,6 +514,7 @@ const DR = data as unknown as {
     supply: { mg: { start: [number, number]; call: number; low: number; bring: [number, number]; rapid: number }; mortar: { start: [number, number]; call: number; low: number; bring: [number, number] }; dump: [number, number]; lane: number; load: [number, number] };
     jam: { every: [number, number]; for: [number, number] }; misfire: { p: number; wait: [number, number]; clear: [number, number] };
     fpl: { within: number; closing: number; every: number; hold: number; short: number; fpf: [number, number]; bombs: [number, number]; reach: number; clear: number };
+    held: number;
   };
   sections: {
     rifle: Record<string, { men: number; loaders: number; scouts: number }>;
@@ -1579,10 +1582,11 @@ export class Drill {
       if (b.bearers && !sq.esc) this.litters(sq);
       // (a block's armoured cars and AA vehicles: their own drive, outriders)
       if (t >= sq.nextThink && sq.esc) { sq.nextThink = t + 0.5; this.outriders(sq); }
-      else if (t >= sq.nextThink) { sq.nextThink = t + 0.5; if (this.byBook) this.feel(sq); this.think(sq); this.pairs(sq, this.space(sq)); if (b.escort) this.escort(sq); if (sq.screenQ) this.screenRound(sq); }
+      else if (t >= sq.nextThink) { sq.nextThink = t + 0.5; if (this.byBook) this.feel(sq); this.think(sq); this.pairs(sq, this.space(sq)); if (this.teamwork && u.team) this.steady(sq, true); if (b.escort) this.escort(sq); if (sq.screenQ) this.screenRound(sq); }
       if (this.hatches && u.kind === 'arm' && !sq.esc) this.hatchNow(sq);
       this.walk(sq);
       this.fire(sq);
+      if (this.teamwork && u.team) this.steady(sq, false);
     }
     this.shellKills.clear(); this.byOf.clear();
     if (b.escort) this.clearOfVehicles();
@@ -6316,6 +6320,37 @@ export class Drill {
     }
     m.pose = pose; m.lay = lay;
     return true;
+  }
+
+  /**
+   * Support teams at work (Drill.teamwork; the art director, 27 November 2026, 17:57Z: "No drill state drawn for under
+   * 2 s"): each man of a team (its crews and its spotters; at work, carrying or falling back; not in a rout) is drawn in a pose DR.teamwork.held seconds at
+   * least before another, a shot excepted (a burst's or a bomb's fire, and the pose either side of it). At his crew's think (settle) a pose asked
+   * sooner waits its turn: a change of gait waits (the new pace kept), a move from a still pose waits where he is, a
+   * still pose waits as it was (a crewman's aim and facing with it), and one still on his way keeps going, slowly. A move
+   * begun is paced to take that long at least. After his step (not settle) a pose his step gave him (arriving) is only
+   * marked, its time from then. Looks only.
+   */
+  private steady(sq: Squad, settle: boolean): void {
+    const t = this.b.t, H = DR.teamwork.held;
+    const at = sq.phase !== 'flee';
+    for (const m of sq.fo ? [...sq.men, ...sq.fo] : sq.men) {
+      const key = CREWED.has(m.role), fo = m.role === 'fo'; // (a mortar team's spotters: their own pair, not of its figures)
+      if (!at || m.fell !== undefined || m.job || (!m.pr && !key && !fo) || !(fo || this.stands(sq, m))) { m.ps = undefined; continue; }
+      const p = m.ps;
+      if (!p) { m.ps = [m.pose, t, m.aim, m.lay]; continue; }
+      if (settle && m.pose !== p[0] && t - p[1] < H - 1e-6 && m.pose !== 'fire' && p[0] !== 'fire') {
+        const go = MOVING.has(m.pose), went = MOVING.has(p[0]);
+        if (go && went) m.pose = p[0];
+        else if (go) { m.pose = p[0]; m.v = 0; if (!key) { m.aim = p[2]; m.lay = p[3]; } }
+        else if (went) { m.pose = p[0]; m.v = 2.5; }
+        else { m.pose = p[0]; if (!key) { m.aim = p[2]; m.lay = p[3]; } }
+      }
+      if (m.pose !== p[0]) m.ps = [m.pose, t, m.aim, m.lay];
+      // (a move begun: paced to take the hold at least, till its hold is up)
+      const q = m.ps!, left = q[1] + H - t;
+      if (settle && MOVING.has(m.pose) && m.v > 0 && left > 0) m.v = Math.min(m.v, Math.max(Math.hypot(m.spot[0] - m.x, m.spot[1] - m.y) / (left + DT), 0.01));
+    }
   }
 
   /**
