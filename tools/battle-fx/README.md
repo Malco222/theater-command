@@ -2141,6 +2141,13 @@ as `fx-film.json` is; the shipped `fx.json` is unchanged. Without the words ever
   lingering to 9 s. Light: a 20 mm self-destruct burst, a small grey puff 3 to 4 m (grey, not white), gone in about
   3 s and lingering to 5.5 s. `AirFlak` asks `LingerOf("flak", kind)` only where `linger.flak.by.<kind>.gone_s` is in
   the recipe: asked by a name with no row, `LingerOf` gives no linger at all, so heavy is still asked by no name.
+  Which puffs of a cloud stay is drawn on one count, `LingerNo`, shared by every lingering cloud. A light or medium
+  burst lays fewer lobes than the heavy one it was before, so it would move that count and every cloud lingered after
+  it (heavy bursts, a cannon hit's smoke). So `AirFlak` lays heavy dry first (its pieces and its lamp taken away, the
+  shared `Seeds` put back) to find where the count would have stood, lingers the new kind on a count of its own from
+  the place and the time, then sets `LingerNo` there: a heavy burst or a cannon hit laid after them is piece for
+  piece as without the word (fx_ten checks it). Where the room is short (`LingerSpare`), a heavy cloud may still keep
+  fewer or more puffs than before, as the room holds fewer pieces.
   Colours written to land (`game_curve.py write`): medium 68,68,66 lands 40,40,38 and greys to 129,127,124 (lands
   135,132,128); light 88,88,87 lands 70,70,68, greying to 139,138,136 (lands 150,148,145). The mend of 27 November:
   from a deck 400 m off the first cut drew light and medium as thin dark dashes about 5 x 2 px, a light barrage an
@@ -2155,15 +2162,20 @@ as `fx-film.json` is; the shipped `fx.json` is unchanged. Without the words ever
   ground the list names. Without the key: as before.
 - **The barrel's wisp** (`muzzle.<gun>.after_wisp`, tank gun, anti-tank gun, howitzer). Laid last in `Muzzle`
   (`AfterWisp`): a thin wisp from the bore, one ribbon of 28 to 36 small round puffs (`stretch` 1; the first cut's 10
-  to 15 puffs stretched upright read as a row of tally marks) 0.06 to 0.1 m at the mouth to 0.26 to 0.5 m, each
-  leaning a little further along one slow curl (a sine over the wisp, a little jitter on it), alpha 0.3 to 0.4 and
-  thinner as the barrel cools (`cool`), a warm grey (124,119,112 to 138,134,128, near the breech puff's), from 3 to 4 s after the shot for 4 to 6 s (the howitzer 5 to 6.5 s, for
-  5 to 7 s), rising 0.35 to 0.6 m/s and leaning on the wind. Only within `within_m` (300) of the eye, `per_gun` (1)
+  to 15 puffs stretched upright read as a row of tally marks) 0.06 to 0.1 m at the mouth to 0.45 to 0.7 m, each
+  leaning a little further along one slow curl (a sine over the wisp, a little jitter on it), alpha 0.42 to 0.5 at
+  the bore and thinner as the barrel cools (`cool` 0.6), a warm grey (124,119,112 to 138,134,128, near the breech puff's), from 3 to 4 s after the shot for 5 to 7 s (the howitzer 5 to 6.5 s, for
+  6 to 8 s), rising 0.35 to 0.6 m/s and leaning on the wind. Only within `within_m` (300) of the eye, `per_gun` (1)
   from one gun's place (`same_gun_m`, 3 m) and `most` (16) on the field at once, and only while the screen is under
   two fifths full. Each puff is held to `least_px` (2) across and thinner to match. Its own dice from the place and
   the moment. It has a room of its own: its pieces (`Bit::bWisp`, at most 16 x 36) are left out of `RoomAsked` and
   `RoomSeen`, so no gate that reads how full the room is changes for them; in forty guns firing for five minutes
-  every piece laid without the word is laid with it.
+  every piece laid without the word is laid with it. The mend of 27 November (its far end thickened, as the look
+  review asked; the first ribbon, 0.26 to 0.5 m at alpha 0.3 to 0.4, darkened the sky by a median 4 to 6 levels at
+  60 m): in the previewer (1200 px, 42 degrees, eye 2 m up, the game's curve) a tank gun's wisp at 60 m is a thread
+  at least 10 levels darker than the sky 6 to 11 px wide over 9 to 13 rows at 4.5 to 6 s (up to 26 levels), at 100 m
+  5 to 7 px wide over 5 to 7 rows, at 150 m 3 px over 5 rows; gone by 10.5 s. At its biggest (817 px, 69 x 32 px at
+  60 m) it is under a twentieth of the shot's own smoke at 1 to 2 s (17,000 to 27,000 px, 250 to 300 px across).
 - **The breech's puff** (`steam.breech`): a `Steam` row, grey-brown (written 120,114,108, lands 120,112,102), 0.8 to
   1.3 m from a 0.25 m breech, 1 to 1.8 s rags, alpha 0.45, held to 3 px. The land scene calls it at a towed gun's or an open
   self-propelled gun's `case_clang`, at her `breech` socket, back toward her loader. `steam.<row>.least_px` is new
@@ -2172,7 +2184,9 @@ as `fx-film.json` is; the shipped `fx.json` is unchanged. Without the words ever
   0.6 to 1.1 m from a closed tank's open hatch on two shots in five by her count, only when she is stopped: the
   scene's `Steam` is laid at one place and does not ride with her, so on the move it would hang where her hatch was.
 - **Cases thrown by a crew** (`Battle::ThrowCase(Now, At, Away, Kind, Key)`, rows `ground_cases.spg` and
-  `ground_cases.tank`): a case through `CaseRowOf` and `GroundCase`, so within `within_m` of the eye, under
+  `ground_cases.tank`): a case through `CaseRowOf` and `GroundCase`, so within `within_m` of the eye (a row's own
+  `within_m` where it gives one, else the shared 40: `spg` 150, so an open gun's pile is by her when the camera cuts
+  in from the general's place, and `tank` 100; drawn only within `draw_within_m` 150), under
   `most_lying` and the screen's three fifths as the towed guns' are; its length within `case_long_m`, at the row's
   `odds` against its own dice (from Key, the place and the moment). `spg`: 0.37 to 0.45 m, thrown 1.5 to 3 m/s, lying
   180 to 300 s, odds 0.7. `tank`: one pitched out of a hatch, 0.35 to 0.5 m, lying 180 to 240 s. Both are dull
@@ -2187,7 +2201,7 @@ as `fx-film.json` is; the shipped `fx.json` is unchanged. Without the words ever
 - Test: `unreal/TheaterCommand/Tools/fx_ten/run.sh` (g++ and clang++, the strict flags, `-ffp-contract=off`). The dump
   of five scripted fights (land guns, a broadside close on the water, a flak barrage of every kind, turrets far off,
   guns on sand) with the shipped recipe is held to `golden-default.sha256`, printed by the kit before this batch. The
-  test (70 checks) has each part on and off: it fires when it should and only then, its sizes and lives, its own
+  test (76 checks) has each part on and off: it fires when it should and only then, its sizes and lives, its own
   dice (the kit's shared `Seeds` as before), every piece without it laid the same with it, and its cap in the densest
   case (a six-minute barrage of all three flak kinds, forty guns firing for five minutes, a battery of six open guns
   for five minutes).
