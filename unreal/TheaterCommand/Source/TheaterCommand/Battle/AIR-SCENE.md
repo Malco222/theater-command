@@ -1614,10 +1614,8 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    specular and metal from U and V by AirSheen::Law's sums). At U = V = 0 those sums give PlaneInk's numbers exactly,
    so anything that carries nothing (an earned-colours copy, for now) draws as today.
    The law (defaults): her paint no smoother than 0.45 (SheenFloor), her glass alone smoother (0.07: it glints),
-   specular 0.25 where she carries a finish (SheenSpec), metal only where her file gives 0.4 or more (SheenMetalFrom:
-   hubs, cylinders, gun metal; NOT her coat's 0.18 or most rivet heads' 0.35; but 6,568 of her 40,986 near rivet heads
-   and 176 coat points carry 0.43 to 0.90 in the file, so they do take metal: the Mac's stills must look for dotted rivet
-   rows), and THE GLARE GUARD (on): within some 25 degrees of a low sun's mirror (sun under 15 degrees fully, none over
+   specular 0.25 where she carries a finish (SheenSpec), metal only over 0.5 (SheenMetalFrom 0.5: a point at 0.45 carries
+   none, one at 0.55 all of its own; the art director, 27 November 00:16Z: metal on true fittings only), and THE GLARE GUARD (on): within some 25 degrees of a low sun's mirror (sun under 15 degrees fully, none over
    30; Bremen's December sun is some 13 degrees up all raid) her finish goes back to PlaneInk's. The grazing guard (a
    look along her skin) is OFF: it would remove the approved picture's own cool-grey sky sheen on her wing tops.
    Every number is a launch word, no rebuild: `-TheaterAirB17SheenInk=gain,floor,spec,metal,glare,graze,metalfrom`

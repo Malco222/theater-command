@@ -34,7 +34,7 @@ namespace AirSheen
 	 * stale-asset sentinel, read from the asset as it is built. */
 	struct Tune
 	{
-		double Gain = 1.0, Floor = 0.45, Spec = 0.25, Metal = 1.0, Glare = 1.0, Graze = 0.0, MetalFrom = 0.4;
+		double Gain = 1.0, Floor = 0.45, Spec = 0.25, Metal = 1.0, Glare = 1.0, Graze = 0.0, MetalFrom = 0.5;
 		double LowSun = 0.5, GlassBelow = 0.12, Edge = 20.0;
 	};
 
@@ -70,8 +70,8 @@ namespace AirSheen
 
 	/** The launch word's numbers, "gain,floor,spec,metal,glare,graze,metalfrom", each optional (empty keeps it): each
 	 * clamped (gain 0..1.5, floor 0..0.9, spec 0..0.5, metal 0..1.5, glare 0..1, graze 0..1, metalfrom 0..1). Why is
-	 * set (and T keeps the number) for a word that is not a number, and for a number clamped or one too many; true
-	 * when nothing needed saying. */
+	 * set for a word that is not a number (T keeps its number there), for a number out of range (T takes it clamped)
+	 * and for one too many; true when nothing needed saying. */
 	bool ParseTune(const std::string& Words, Tune& T, std::string& Why);
 
 	/** One mesh's (near or far) finish, one a point, each 0 to 100. */

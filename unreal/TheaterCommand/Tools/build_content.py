@@ -283,10 +283,11 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, 
         _feed(m, rough, "A", mixed)
         _feed(m, rough, "B", floor)
         spec = lerp(m, spec_ink, scalar(m, "SheenSpec", 0.25, -550, 2250), on, -250, 2250)
-        # (metal only from SheenMetalFrom up: her paint (0.06, 0.18) and most rivet heads (0.35) carry none; what her file
-        # gives 0.4 or more keeps its own, some rivet heads among it: air_b17_sheen_test counts them)
+        # (metal only from SheenMetalFrom up, 0.5 (the art director, 27 November 00:16Z: metal on true fittings only): a
+        # point at 0.45 carries none, one at 0.55 all of its own; the sheen file itself holds metal on her fittings alone,
+        # make_air_skin.py's FITTINGS, so no rivet, seam or paint point carries any: air_b17_sheen_test counts them)
         fitting = one_in(m, unreal.MaterialExpressionSaturate,
-                         times(m, plus(m, bare, times(m, scalar(m, "SheenMetalFrom", 0.4, -1150, 2550), -1.0, -1000, 2550), -850, 2500), 20.0, -700, 2500), -550, 2500)
+                         times(m, plus(m, bare, times(m, scalar(m, "SheenMetalFrom", 0.5, -1150, 2550), -1.0, -1000, 2550), -850, 2500), 20.0, -700, 2500), -550, 2500)
         metal = times(m, times(m, one_in(m, unreal.MaterialExpressionSaturate, times(m, bare, scalar(m, "SheenMetal", 1.0, -1000, 2400), -850, 2400), -700, 2400),
                                fitting, -550, 2450), on, -400, 2400)
         # THE GLARE GUARD: where a low sun mirrors in her skin, her finish goes back to PlaneInk's, the one the art director

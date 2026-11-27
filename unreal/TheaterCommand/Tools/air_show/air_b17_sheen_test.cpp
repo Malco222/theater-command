@@ -11,8 +11,8 @@
 //      the guard whole gives the ink's; the glare guard at a low sun's mirror, none with the sun high, the grazing
 //      guard off unless asked;
 //   S3 her own points under the default tune: her paint no smoother than the floor (her glass alone smoother), never
-//      rougher than today, no metal where her file's is under SheenMetalFrom (0.4: her paint's 0.06 and 0.18, most
-//      rivet heads' 0.35; the points her file gives more are counted and printed), the untouched points exactly today's;
+//      rougher than today, no metal where her file's is 0.5 or under (SheenMetalFrom 0.5, the art director's 27
+//      November 00:16Z ruling: metal on true fittings only; the points that carry it are counted and printed), the untouched points exactly today's;
 //   S4 no garbage between corners: along every edge of her near and far meshes, roughness, specular and metal stay
 //      between the corners' own;
 //   S5 the launch word's numbers;
@@ -267,12 +267,12 @@ int main(int Argc, char** Argv)
 				Smooth += !bGlass && F.Rough < T.Floor - 1e-12 ? 1 : 0;
 				Rough += F.Rough > 0.9 + 1e-12 ? 1 : 0;
 				Spec += F.Spec < 0.15 - 1e-12 || F.Spec > 0.25 + 1e-12 ? 1 : 0;
-				// (metal only from SheenMetalFrom up: her file's paint metal (0.06, 0.18) and most rivet heads' (0.35) carry none;
-				// what her file gives 0.4 or more is kept, and counted where it falls on her coat or her rivets)
-				Under += L.Metal[K] < 40 && F.Metal != 0.0 ? 1 : 0;
+				// (metal only from SheenMetalFrom 0.5 up: a point at 0.45 carries none, one at 0.55 all of its own; what carries it
+				// is counted where it falls on her coat or her rivets)
+				Under += L.Metal[K] <= 50 && F.Metal != 0.0 ? 1 : 0;
 				CoatMetal += (Paint == 0 || Paint == 1 || Paint == 2) && F.Metal != 0.0 ? 1 : 0;
 				RivetMetal += Paint == 42 && F.Metal != 0.0 ? 1 : 0;
-				if (L.Metal[K] >= 45 && C.U >= 0.05f)
+				if (L.Metal[K] >= 55 && C.U >= 0.05f)
 				{
 					++Fittings;
 					Metal += std::fabs(F.Metal - static_cast<double>(C.V)) > 1e-6 ? 1 : 0;
@@ -287,12 +287,15 @@ int main(int Argc, char** Argv)
 			Check(Smooth == 0, Name + ": no paint smoother than the floor 0.45 (glass alone)", std::to_string(Smooth));
 			Check(Rough == 0, Name + ": none rougher than today's 0.9");
 			Check(Spec == 0, Name + ": specular 0.15 to 0.25");
-			Check(Under == 0, Name + ": no metal where her file's is under 0.4 (her paint, most rivet heads)", std::to_string(Under));
+			Check(Under == 0, Name + ": no metal where her file's is 0.5 or under", std::to_string(Under));
 			Check(Fittings > 0 && Metal == 0, Name + ": her fittings' metal her file's own", std::to_string(Fittings) + " fitting points");
 			Check(Untouched > 0 && Kept == 0, Name + ": the untouched points (gloss 90) exactly today's", std::to_string(Untouched));
 			std::printf("    %s: %d points at the floor, %d glass, %d fittings with metal, %d untouched; metal on her coat (paints 0-2) at %d points, on rivet heads (42) at %d\n",
 				Name.c_str(), Floored, Glass, Fittings, Untouched, CoatMetal, RivetMetal);
 		}
+		// (the start, 0.5: a fitting at 0.45 in her file (her seam lips' line, engine, exhaust) draws no metal; at 0.55 all)
+		const AirSheen::Finish At45 = AirSheen::Law(0.3, 0.45, 0.9, 0.15, T, 0.0), At55 = AirSheen::Law(0.3, 0.55, 0.9, 0.15, T, 0.0);
+		Check(T.MetalFrom == 0.5 && At45.Metal == 0.0 && std::fabs(At55.Metal - 0.55) < 1e-9, "the start 0.5: Metal(V = 0.45) == 0, Metal(V = 0.55) == 0.55", Num(At55.Metal));
 		// (a point the file does not hold, her star and bar laid after it, wears her coat's finish)
 		const AirSheen::Carried Coat = AirSheen::Carry(Sh.CoatGloss, Sh.CoatMetal, 1.0);
 		const AirSheen::Finish F = AirSheen::Law(Coat.U, Coat.V, 0.9, 0.15, T, 0.0);
@@ -334,12 +337,12 @@ int main(int Argc, char** Argv)
 	{
 		AirSheen::Tune T;
 		std::string W;
-		Check(AirSheen::ParseTune("0.5,0.6,0.2,0.8", T, W) && T.Gain == 0.5 && T.Floor == 0.6 && T.Spec == 0.2 && T.Metal == 0.8 && T.Glare == 1.0 && T.Graze == 0.0 && T.MetalFrom == 0.4,
+		Check(AirSheen::ParseTune("0.5,0.6,0.2,0.8", T, W) && T.Gain == 0.5 && T.Floor == 0.6 && T.Spec == 0.2 && T.Metal == 0.8 && T.Glare == 1.0 && T.Graze == 0.0 && T.MetalFrom == 0.5,
 			"four given, the rest kept");
 		T = AirSheen::Tune();
 		Check(AirSheen::ParseTune(",0.5,,", T, W) && T.Gain == 1.0 && T.Floor == 0.5 && T.Spec == 0.25, "empty words keep their numbers");
 		T = AirSheen::Tune();
-		Check(AirSheen::ParseTune("", T, W) && T.Gain == 1.0 && T.Floor == 0.45 && T.MetalFrom == 0.4, "nothing given, nothing changed");
+		Check(AirSheen::ParseTune("", T, W) && T.Gain == 1.0 && T.Floor == 0.45 && T.MetalFrom == 0.5, "nothing given, nothing changed");
 		T = AirSheen::Tune();
 		Check(!AirSheen::ParseTune("x", T, W) && !W.empty() && T.Gain == 1.0, "a word not a number: said, kept", W);
 		T = AirSheen::Tune();
