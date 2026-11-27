@@ -5493,7 +5493,9 @@ namespace TheaterFx
 		}
 		else if (Ask.Kind == "tank" && Ask.bHatch && Ask.HatchOpen > 0.5 && Ask.bHatchFumes && Ask.Shot > 0)
 		{
-			Out.bHatchFumes = Ask.Shot % 5 == 2 || Ask.Shot % 5 == 0;
+			// (only when she is stopped, as the case: the scene's Steam is laid at one place and does not ride with her, so
+			// fumes from a tank on the move would hang where her hatch was. The mend, 26 November)
+			Out.bHatchFumes = Ask.bStopped && (Ask.Shot % 5 == 2 || Ask.Shot % 5 == 0);
 			Out.bHatchCase = Ask.bStopped && Ask.Shot % 8 == 0;
 		}
 		return Out;

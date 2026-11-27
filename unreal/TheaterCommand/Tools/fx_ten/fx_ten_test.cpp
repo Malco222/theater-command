@@ -658,7 +658,7 @@ namespace
 	{
 		std::printf("E. Hatch fumes and the odd case (-TheaterLandHatchFumes, battle-fx-hatch.json)\n");
 		using TheaterFx::AfterShotOf;
-		int Fumes = 0, CasesMoving = 0, CasesStopped = 0, Shut = 0, NoWord = 0, Spg = 0;
+		int Fumes = 0, FumesMoving = 0, CasesMoving = 0, CasesStopped = 0, Shut = 0, NoWord = 0, Spg = 0;
 		std::string Which;
 		for (int Shot = 1; Shot <= 40; ++Shot)
 		{
@@ -667,8 +667,9 @@ namespace
 			const TheaterFx::AfterShot C = AfterShotOf(Ask("tank", true, false, true, 0.3, true, Shot, true, true, true));
 			const TheaterFx::AfterShot N = AfterShotOf(Ask("tank", true, false, true, 1.0, true, Shot, true, false, true));
 			const TheaterFx::AfterShot O = AfterShotOf(Ask("tank", true, true, true, 1.0, true, Shot, false, true, false));
-			Fumes += M.bHatchFumes ? 1 : 0;
-			if (M.bHatchFumes && Shot <= 12)
+			Fumes += S.bHatchFumes ? 1 : 0;
+			FumesMoving += M.bHatchFumes ? 1 : 0;
+			if (S.bHatchFumes && Shot <= 12)
 			{
 				Which += (Which.empty() ? "" : ",") + std::to_string(Shot);
 			}
@@ -678,7 +679,8 @@ namespace
 			NoWord += N.bHatchFumes || N.bHatchCase ? 1 : 0;
 			Spg += O.bHatchFumes || O.bHatchCase ? 1 : 0;
 		}
-		Check(Fumes == 16, "hatch open: fumes every second or third shot (16 of 40)", Say("%.0f of 40", Fumes) + " (" + Which + ", ...)");
+		Check(Fumes == 16, "hatch open, stopped: fumes every second or third shot (16 of 40)", Say("%.0f of 40", Fumes) + " (" + Which + ", ...)");
+		Check(FumesMoving == 0, "hatch open, on the move: no fumes (laid at one place, they would hang behind her)", Say("%.0f of 40", FumesMoving));
 		Check(CasesStopped == 5 && CasesMoving == 0, "a case pitched out one shot in eight, only when stopped", Say("%.0f of 40 stopped, %.0f moving", CasesStopped, CasesMoving));
 		Check(Shut == 0 && NoWord == 0 && Spg == 0, "hatch shut, the word not given, or an open gun: none", Say("%.0f, %.0f, %.0f", Shut, NoWord, Spg));
 		const FxTen::Book Off = Recipe();

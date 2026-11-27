@@ -840,7 +840,10 @@ kit's `Tools/fx_ten/run.sh` holds a scripted fight's every piece to the kit befo
   only within 150 m of the eye.
 - `-TheaterLandHatchFumes` (`battle-fx-hatch.json`): a closed tank kept her spent cases inside. With her hatch open
   (`V.HatchOpen > 0.5`) a faint wisp of fumes rises from her commander's hatch on her 2nd, 5th, 7th, 10th ... shot by
-  her own count (two in five), within 150 m; and one shot in eight, only when she is stopped, a case is pitched out of
+  her own count (two in five), within 150 m, only when she is stopped (the `Steam` is laid at one place and does not
+  ride with her, so on the move it would hang where her hatch was: the kit's `AfterShotOf` holds it, and the scene
+  calls no `SteamMove` for it; should she start off or shut her hatch inside its 2 s, the last of it stays put); and
+  one shot in eight, only when she is stopped, a case is pitched out of
   the hatch to one side (`ThrowCase`, row `ground_cases.tank`, within 40 m of the eye as every lying case).
 - `-TheaterLandCasesOut` (`battle-fx-cases-out.json`): an open self-propelled gun (kind `tank` with a `crew.loader`
   socket: the M7, the Hummel, the Sexton, the SU-76 and the M10) heaves seven cases in ten over her side, from her

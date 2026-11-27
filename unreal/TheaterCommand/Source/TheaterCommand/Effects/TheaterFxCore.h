@@ -371,9 +371,9 @@ namespace TheaterFx
 	 * breech. An open-topped self-propelled gun (kind "tank" with a loader's place, crew.loader: the M7, the Hummel,
 	 * the Sexton, the SU-76, the M10): a puff at her breech where her model has one, and her case thrown over her
 	 * side. A closed tank (kind "tank", no loader's place) kept her cases inside: with her hatch open (HatchOpen over
-	 * 0.5) and a hatch to let it out (her commander's place), every second or third shot by her count a faint wisp of
-	 * fumes out of it (shots 2, 5, 7, 10, 12 ...), and one shot in eight, only when she is stopped, a case pitched out
-	 * of it. Each part only with its own word. Shot counts her shots from 1. */
+	 * 0.5) and a hatch to let it out (her commander's place), only when she is stopped (the fumes are laid at one
+	 * place and do not ride with her), every second or third shot by her count a faint wisp of fumes out of it (shots
+	 * 2, 5, 7, 10, 12 ...), and one shot in eight a case pitched out of it. Each part only with its own word. Shot counts her shots from 1. */
 	struct AfterShot
 	{
 		bool bBreechPuff = false; // -TheaterLandBarrelSmoke
