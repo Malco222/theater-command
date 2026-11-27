@@ -179,6 +179,33 @@ describe("a staff's check asks with its corps where it names one, and is named '
     }
     expect(bad).toEqual([]);
   });
+
+  it("each staff of the sceptic's list asks with its corps where the corps is in the loop, and room for a division where none is", () => {
+    // (The staffs sceptic's S3-3 sites in ai.ts, by function: how many checks ask `fits` with one named corps of the
+    // loop, `fits(g, <ground>, nat, [<corps>]`, and how many ask `roomForDivision`, where no corps is at hand. A check
+    // that asks with its corps put back to room for a division, or the other way, moves a count.)
+    const ai = SOURCES['../src/campaign/ai.ts'];
+    const count: Record<string, { fits: number; division: number }> = {};
+    let fn = '';
+    for (const line of ai.split('\n')) {
+      const head = /^(?:export )?(?:async )?function (\w+)\(/.exec(line);
+      if (head) fn = head[1];
+      const f = (line.match(/fits\(g, [\w.]+, nat, \[\w+\]/g) ?? []).length, d = (line.match(/roomForDivision\(/g) ?? []).length;
+      if (f || d) { count[fn] ??= { fits: 0, division: 0 }; count[fn].fits += f; count[fn].division += d; }
+    }
+    const sites = ['lineMarch', 'mass', 'fallBack', 'gather', 'ferry', 'reinforce', 'gunsUp', 'advance', 'redeploy'];
+    expect(Object.fromEntries(sites.map((s) => [s, count[s]]))).toEqual({
+      lineMarch: { fits: 2, division: 0 },
+      mass: { fits: 2, division: 1 },
+      fallBack: { fits: 1, division: 1 },
+      gather: { fits: 1, division: 1 },
+      ferry: { fits: 3, division: 0 },
+      reinforce: { fits: 2, division: 1 },
+      gunsUp: { fits: 0, division: 1 },
+      advance: { fits: 3, division: 1 },
+      redeploy: { fits: 1, division: 0 },
+    });
+  });
 });
 
 describe("a dated row's room is read on the corps it forms, not its stated size (laid without asking, all right by the design director, 00:20Z, 27 November 2026)", () => {
