@@ -322,6 +322,13 @@ namespace LandSound
 		Lists["armour.smallArms"] = Takes(Ar["smallArms"]);
 		ArmourDb = Ar["db"].Num(ArmourDb);
 		ArmourWhineChance = Ar["whineChance"].Num(ArmourWhineChance);
+		// (a burst off armour, World::bRicochet: the rattle, RattleOff)
+		ArmourBurstMost = static_cast<int>(Ar["burstMost"].Num(ArmourBurstMost));
+		ArmourBurstShare = Ar["burstShare"].Num(ArmourBurstShare);
+		ArmourBurstPitch = Ar["burstPitchPercent"].Num(ArmourBurstPitch);
+		ArmourBurstDbSpread = Ar["burstDbSpread"].Num(ArmourBurstDbSpread);
+		ArmourBurstRing = Ar["burstRingS"].Num(ArmourBurstRing);
+		ArmourBurstWhine = Ar["burstWhineChance"].Num(ArmourBurstWhine);
 		const Json& Mg = Land["mgClose"];
 		for (size_t K = 0; K < Mg.Keys.size(); ++K)
 		{
@@ -819,6 +826,44 @@ namespace LandSound
 		return true;
 	}
 
+	int Mixer::PingsOf(int Rounds) const
+	{
+		return std::clamp(static_cast<int>(std::lround(Rounds * ArmourBurstShare)), 1, std::max(1, ArmourBurstMost));
+	}
+
+	void Mixer::RattleOff(const Noise& N, const Take& Base, double Far, double Now, bool bOnScreen, std::vector<Take>& Out)
+	{
+		// Effects (R2), small arms off armour: a machine gun raking a tank is a rattle of steel, not one ring. A ping for
+		// about burstShare of its rounds, never more than burstMost, spread over the burst (rounds / rate) each in its own
+		// stretch of it, a take of the list each (Pick: never the same twice running), a little pitch and level of its own
+		// over Start's, every one but the last cut to burstRingS with a 0.05 s fade (a sharp clang; the steel rings out
+		// only at the end, so eight pings are a rattle, not one wash); and one whine off now and then (the ground's gap
+		// and burstWhineChance, somewhere in the burst). The mix's limits and same-take rule as ever (Start). One roll a
+		// statement.
+		const double Long = N.Rounds / N.PerSecond;
+		const int Pings = PingsOf(N.Rounds);
+		for (int K = 0; K < Pings; ++K)
+		{
+			Take P = Base;
+			P.Name = Pick("armour.smallArms");
+			P.Family = "small_arms";
+			const double When = Roll();
+			P.Delay = Base.Delay + Long * (static_cast<double>(K) + 0.1 + 0.8 * When) / static_cast<double>(Pings);
+			const double Tone = Roll();
+			P.Pitch *= 1.0 + (Tone * 2.0 - 1.0) * ArmourBurstPitch * 0.01;
+			const double Level = Roll();
+			P.Db = ArmourDb - Level * ArmourBurstDbSpread;
+			if (K + 1 < Pings && ArmourBurstRing > 0.0)
+			{
+				P.Cut = ArmourBurstRing;
+				P.CutFade = std::min(0.05, ArmourBurstRing);
+			}
+			if (Start(P, Now, Far, bOnScreen, Out)) ++ArmourRings;
+		}
+		const double WhineWhen = Roll();
+		WhineOff(N.At + Vec(0.0, 0.0, 0.3), Far, Now, Base.Delay + 0.02 + Long * WhineWhen, ArmourDb - 2.0, ArmourBurstWhine, Out);
+	}
+
 	void Mixer::CutBurst(Take& T, const Noise& N)
 	{
 		// Every round fired is heard and no more: a burst of 8 from an MG 42 lasts 0.4 s, not the 1.2 s of firing in
@@ -1226,6 +1271,11 @@ namespace LandSound
 			if (bSmallArms && !ListOf("armour.smallArms").empty())
 			{
 				// A rifle or machine-gun round off a tank: the ring of the steel it struck, and now and then a whine off it.
+				if (N.Rounds > 1 && N.PerSecond > 0.0)
+				{
+					RattleOff(N, T, Far, Now, bOnScreen, Out); // (a burst's, World::bRicochet: a rattle of pings)
+					break;
+				}
 				T.Name = Pick("armour.smallArms");
 				T.Family = "small_arms";
 				T.Db = ArmourDb;

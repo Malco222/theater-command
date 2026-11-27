@@ -404,6 +404,14 @@ void ALandBattle::PumpLive()
 			}
 		}
 	}
+	// Effects (R2), small arms off armour (-TheaterLandRicochet): the plates of the strikes these pieces brought, searched
+	// a few a frame (never as the pieces grow her): the earliest still to be drawn first, until about a millisecond has
+	// passed (one search at least, 0.5 to 3 ms). The pieces come a second or more ahead of the screen, so a burst's plate
+	// is kept before it is drawn; one not yet searched is drawn at her skin's point (PlateNow). Off: nothing waits.
+	if (S.Armour && S.Armour->bKeepPlates)
+	{
+		S.Armour->KeepPlates(S.Battle, 4, 0.001);
+	}
 }
 
 void ALandBattle::MapLive(int32 TracksFrom, int32 VehiclesFrom, bool bReset, bool bVehiclesKept)

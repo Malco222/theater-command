@@ -81,6 +81,10 @@ namespace LandFeed
 		/** officer, rifle, mg, at, sapper, holder, fo, hmg, mortar; tank, gun, lorry; and a section's followers' leader
 		 * (a rifle section's key man), loader (an MG's or a tube's number two, the ammunition bearers), crew (a gun's). */
 		std::string Role;
+		/** The vehicle's own model where the recording names one (its "ml": an armoured infantry's half-track or the
+		 * lorry, a battery's self-propelled gun, an armoured block's tank destroyer, a block's armoured car, AA vehicle,
+		 * jeep or motorcycle), empty where it is the block's (Block::Model) or for a man. */
+		std::string Model;
 		std::vector<Point> At;
 		std::vector<Change> Ch;
 		/** The battle time of each of his shots that the contract stamps (a tank's or a gun's round, an anti-tank

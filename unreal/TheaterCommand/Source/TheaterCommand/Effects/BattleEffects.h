@@ -111,6 +111,20 @@ public:
 	/** Rounds fired by one gun (any number that stays the same for that gun) toward To: every fifth a tracer. Ground
 	 * is what they strike, for the little dust spurts there ("earth" if left out). */
 	void Shots(int32 Gun, const FVector& From, const FVector& To, const FString& Weapon, int32 Rounds, float PerSecond, const FString& Ground = TEXT("earth"));
+	/** Effects (R2), small arms off armour: Shots whose rounds strike a tank's, an armoured car's or a half-track's plate
+	 * at To (Normal its outward way) and bounce off it: on each round's strike a two-frame flash and a spray of sparks,
+	 * its tracers going off again as ricochets, never a spurt of dust (the recipe's bullet_ricochet). RoomMid, RoomA and
+	 * RoomB: how far the plate runs flat about To (world units: its middle, and two half-widths along it, square to each
+	 * other; both of no length, every round at To); every round strikes inside it. Carry: her velocity (world units a
+	 * second of this kit's clock); Pivot and Spin: her middle and her turn about the upright through it (radians a
+	 * second of this kit's clock, + turning the world's x toward its y): every strike where her plate is when it
+	 * strikes, its sparks riding with her. FloorZ: her own height under the plate where a spark thrown down lands on
+	 * her (world units; under -1e29 none). PathAt, PathDt and PathTurn (as many of each, two or more, PathDt rising from
+	 * 0): her path through the burst, her middle (world) and her turn since now (radians, as Spin) at moments PathDt
+	 * seconds of this kit's clock from now, so each strike is where her plate is as she slows, stops or turns (Carry,
+	 * Pivot and Spin then stand only where it has none). */
+	void ShotsOnArmour(int32 Gun, const FVector& From, const FVector& To, const FVector& Normal, const FVector& RoomMid, const FVector& RoomA, const FVector& RoomB, const FVector& Carry, const FVector& Pivot, double Spin, double FloorZ,
+		const TArray<FVector>& PathAt, const TArray<double>& PathDt, const TArray<double>& PathTurn, const FString& Weapon, int32 Rounds, float PerSecond, const FString& Ground = TEXT("earth"));
 	/** A gun on an aircraft firing: call it every frame while the trigger is down, for each gun (Gun: any number that
 	 * stays the same for that gun). Now is this frame's time on the same clock Tick is given; an air scene with its
 	 * own air time (slowed when the player slows it) gives its own FBattleEffects that time in both. Muzzle is where

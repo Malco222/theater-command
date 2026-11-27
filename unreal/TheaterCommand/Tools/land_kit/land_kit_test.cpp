@@ -398,6 +398,306 @@ int main(int argc, char** argv)
 		}
 	}
 
+	// ---- Effects (R2), small arms off armour: the plates her skin hands the effects kit (Vehicle::PlateAbout, what
+	// PlateNow gives the battle for a round's strike), cast on the Tiger and the Panzer IV as rounds strike her, face by
+	// face, at rest on level ground and trained on a slope. Every place in a plate's room less edge_m (3 cm), all the kit
+	// may strike, is on her drawn surface within 5 cm (straight in from it, or at an edge her nearest point), with nothing
+	// of her in front of it along the round's way (3 m out); a strike cast behind her running gear (from inside her) is
+	// moved onto what stands in front of it; her side aimed 0.1 m under its top edge is struck on it, never above it;
+	// and what a plate costs.
+	std::printf("\nSMALL ARMS OFF ARMOUR (Effects R2): HER PLATES AS THE KIT IS HANDED THEM (Vehicle::PlateAbout)\n");
+	{
+		const double EdgeM = 0.03, Near = 0.05;
+		const char* PlateModels[2] = { "Tiger", "PanzerIV" };
+		for (const char* Name : PlateModels)
+		{
+			std::string Text, LoadError;
+			Model M;
+			Dress D;
+			D.Nation = "GER";
+			if (!ReadFile(Content + "/Models/Battle/" + Name + ".json", Text) || !M.Load(Text, D, LoadError))
+			{
+				std::printf("  FAIL cannot read %s.json %s\n", Name, LoadError.c_str());
+				++Failures;
+				continue;
+			}
+			Tally OnHer, InFront, UnderEdge, Gear;
+			long Plates = 0, Roomless = 0, WithFloor = 0, Moved = 0, EdgeAims = 0;
+			double SumMs = 0.0, MostMs = 0.0, SumA = 0.0, SumB = 0.0, MovedMost = 0.0;
+			for (int Posed = 0; Posed < 2; ++Posed)
+			{
+				const GroundFn Ground = Posed == 0 ? GroundFn([](double, double, double& OutZ, V3& OutNormal) { OutZ = 0.0; OutNormal = V3(0.0, 0.0, 1.0); })
+					: GroundFn([](double X, double Y, double& OutZ, V3& OutNormal) { OutZ = 0.06 * X - 0.04 * Y + 3.0; OutNormal = V3(-0.06, 0.04, 1.0).Unit(); });
+				Vehicle::Pin Pin;
+				if (Posed == 1)
+				{
+					Pin.X = 120.0;
+					Pin.Y = -45.0;
+					Pin.Heading = 2.2;
+					Pin.Turret = M.Turret >= 0 ? 57.0 : 0.0;
+				}
+				Vehicle V;
+				V.PinPose(M, Pin, Ground);
+				const std::vector<Place>& Pl = V.Bodies();
+				size_t RootB = 0;
+				for (size_t B = 0; B < M.Bodies.size(); ++B)
+				{
+					if (M.Bodies[B].Parent < 0)
+					{
+						RootB = B;
+						break;
+					}
+				}
+				// (her hull's ways, and how far she reaches along them: every drawn point of her)
+				const V3 Fwd = Pl[RootB].Way(V3(1.0, 0.0, 0.0)).Unit(V3(1.0, 0.0, 0.0)), Side = Pl[RootB].Way(V3(0.0, 1.0, 0.0)).Unit(V3(0.0, 1.0, 0.0));
+				const V3 Up = Pl[RootB].Way(V3(0.0, 0.0, 1.0)).Unit(V3(0.0, 0.0, 1.0)), Mid = Pl[RootB].At;
+				double Lo[3] = { 1e9, 1e9, 1e9 }, Hi[3] = { -1e9, -1e9, -1e9 };
+				for (size_t B = 0; B < M.Bodies.size() && B < Pl.size(); ++B)
+				{
+					const Body& Bo = M.Bodies[B];
+					if (Bo.Name == "aerial" || Bo.Part < 0 || !M.Parts[static_cast<size_t>(Bo.Part)].bShown)
+					{
+						continue;
+					}
+					for (size_t K = 0; K + 2 < Bo.Near.Points.size(); K += 3)
+					{
+						const V3 P = Pl[B].Point(V3(Bo.Near.Points[K], Bo.Near.Points[K + 1], Bo.Near.Points[K + 2])) - Mid;
+						const double Along[3] = { P.Dot(Fwd), P.Dot(Side), P.Dot(Up) };
+						for (int A = 0; A < 3; ++A)
+						{
+							Lo[A] = std::min(Lo[A], Along[A]);
+							Hi[A] = std::max(Hi[A], Along[A]);
+						}
+					}
+				}
+				auto At3 = [&](double F, double S, double U) { return Mid + Fwd * F + Side * S + Up * U; };
+				auto Frac = [](double L, double H, double K) { return L + (H - L) * K; };
+				// How far a place is from her drawn surface: the nearest point of any triangle of her shown bodies (the
+				// slow way, every triangle; only where the ray straight in does not find her within 5 cm, as at an edge).
+				auto Nearest = [&](const V3& Q)
+				{
+					double Best = 1e9;
+					for (size_t B = 0; B < M.Bodies.size() && B < Pl.size(); ++B)
+					{
+						const Body& Bo = M.Bodies[B];
+						if (Bo.Name == "aerial" || Bo.Part < 0 || !M.Parts[static_cast<size_t>(Bo.Part)].bShown)
+						{
+							continue;
+						}
+						const Mesh& Me = Bo.Near;
+						auto Corner = [&](uint32_t I) { return Pl[B].Point(V3(Me.Points[I * 3], Me.Points[I * 3 + 1], Me.Points[I * 3 + 2])); };
+						for (size_t K = 0; K + 2 < Me.Triangles.size(); K += 3)
+						{
+							// (the nearest point of a triangle: Ericson's regions, corners, edges, face)
+							const V3 A = Corner(Me.Triangles[K]), Bv = Corner(Me.Triangles[K + 1]), C = Corner(Me.Triangles[K + 2]);
+							const V3 Ab = Bv - A, Ac = C - A, Ap = Q - A;
+							const double D1 = Ab.Dot(Ap), D2 = Ac.Dot(Ap);
+							V3 Closest;
+							if (D1 <= 0.0 && D2 <= 0.0)
+							{
+								Closest = A;
+							}
+							else
+							{
+								const V3 Bp = Q - Bv;
+								const double D3 = Ab.Dot(Bp), D4 = Ac.Dot(Bp);
+								const V3 Cp = Q - C;
+								const double D5 = Ab.Dot(Cp), D6 = Ac.Dot(Cp);
+								const double Vc = D1 * D4 - D3 * D2, Vb = D5 * D2 - D1 * D6, Va = D3 * D6 - D5 * D4;
+								if (D3 >= 0.0 && D4 <= D3)
+								{
+									Closest = Bv;
+								}
+								else if (D6 >= 0.0 && D5 <= D6)
+								{
+									Closest = C;
+								}
+								else if (Vc <= 0.0 && D1 >= 0.0 && D3 <= 0.0)
+								{
+									Closest = A + Ab * (D1 / (D1 - D3));
+								}
+								else if (Vb <= 0.0 && D2 >= 0.0 && D6 <= 0.0)
+								{
+									Closest = A + Ac * (D2 / (D2 - D6));
+								}
+								else if (Va <= 0.0 && D4 - D3 >= 0.0 && D5 - D6 >= 0.0)
+								{
+									Closest = Bv + (C - Bv) * ((D4 - D3) / ((D4 - D3) + (D5 - D6)));
+								}
+								else
+								{
+									const double Sum = Va + Vb + Vc;
+									Closest = Sum != 0.0 ? A + Ab * (Vb / Sum) + Ac * (Vc / Sum) : A;
+								}
+							}
+							Best = std::min(Best, (Q - Closest).Length());
+						}
+					}
+					return Best;
+				};
+				// Every place the kit may strike in a plate's room: on her within 5 cm, nothing of her in front of it.
+				auto CheckRoom = [&](const Vehicle::PlateSpot& P, const V3& In, const std::string& Where, double Highest)
+				{
+					const double HA = P.A.Length(), HB = P.B.Length();
+					const V3 Ua = P.A.Unit(V3(1.0, 0.0, 0.0)), Ub = P.B.Unit(V3(0.0, 0.0, 1.0));
+					const double Ha = std::max(0.0, HA - EdgeM), Hb = std::max(0.0, HB - EdgeM);
+					const bool bRoom = HA > 0.0 || HB > 0.0;
+					// (a 9 by 9 lattice over it, at quarters: off the 3 cm lattice PlateAbout tries it on)
+					for (int I = -4; I <= 4; ++I)
+					{
+						for (int J = -4; J <= 4; ++J)
+						{
+							if (!bRoom && (I != 0 || J != 0))
+							{
+								continue;
+							}
+							const V3 Q = bRoom ? P.Mid + Ua * (Ha * I / 4.0) + Ub * (Hb * J / 4.0) : P.At;
+							double T1 = 0.0, T2 = 0.0;
+							V3 N1, N2;
+							// (her surface straight in from 6 cm out within 5 cm of the place, in front of it or behind; else the
+							// nearest point of her, as where the place is on her edge)
+							const bool bOn = V.RayNow(Q + P.Normal * 0.06, -P.Normal, 0.12, T1, N1);
+							const double Off = bOn && std::fabs(T1 - 0.06) <= Near ? std::fabs(T1 - 0.06) : Nearest(Q);
+							OnHer.Note(Off <= Near, Off, Where + ": a place in the room " + std::to_string(Off) + " m off her drawn surface");
+							const bool bFirst = V.RayNow(Q - In * 3.0, In, 3.5, T2, N2);
+							const double Hid = bFirst ? std::max(0.0, 3.0 - T2) : 1.0;
+							InFront.Note(Hid <= Near, Hid, Where + ": something of her " + std::to_string(Hid) + " m in front of a place in the room");
+							if (std::getenv("LAND_KIT_PLATE_SHOW") && (Off > Near || Hid > Near))
+							{
+								std::printf("    %s: at (%.2f %.2f %.2f) way out (%.2f %.2f %.2f), room %.2f by %.2f about (%.2f %.2f %.2f); place %d,%d (%.2f %.2f %.2f): %.3f m off her, %.3f m behind something (its way out %.2f %.2f %.2f)\n",
+									Where.c_str(), P.At.X, P.At.Y, P.At.Z, P.Normal.X, P.Normal.Y, P.Normal.Z, HA, HB, P.Mid.X, P.Mid.Y, P.Mid.Z, I, J, Q.X, Q.Y, Q.Z, Off, Hid, N2.X, N2.Y, N2.Z);
+							}
+							if (Highest > -1e8)
+							{
+								const double Over = (Q - Mid).Dot(Up) - Highest;
+								UnderEdge.Note(Over <= 0.02, std::max(0.0, Over), Where + ": a place in the room " + std::to_string(Over) + " m over her plate's top edge");
+							}
+						}
+					}
+				};
+				auto Plate = [&](const V3& At, const V3& Normal, const V3& In, Vehicle::PlateSpot& Out)
+				{
+					const auto T0 = Clock::now();
+					V.PlateAbout(At, Normal, In, Out);
+					const double Took = Ms(T0, Clock::now());
+					SumMs += Took;
+					MostMs = std::max(MostMs, Took);
+					++Plates;
+					const double HA = Out.A.Length(), HB = Out.B.Length();
+					Roomless += HA == 0.0 && HB == 0.0 ? 1 : 0;
+					SumA += HA;
+					SumB += HB;
+					WithFloor += Out.Floor > -1e29 ? 1 : 0;
+				};
+				// Each face, rounds coming in square to it over a 7 by 7 grid of her: front, rear, left, right and top.
+				struct Face
+				{
+					const char* Name;
+					V3 In;
+					int Across, Upward; // (her axes the grid runs along: 0 ahead, 1 side, 2 up)
+					V3 From;            // (a place outside her on that side)
+				};
+				const Face Faces[5] = {
+					{ "front", -Fwd, 1, 2, Fwd * (Hi[0] + 2.0) },
+					{ "rear", Fwd, 1, 2, Fwd * (Lo[0] - 2.0) },
+					{ "left", Side, 0, 2, Side * (Lo[1] - 2.0) },
+					{ "right", -Side, 0, 2, Side * (Hi[1] + 2.0) },
+					{ "top", -Up, 0, 1, Up * (Hi[2] + 2.0) },
+				};
+				const V3 Axis[3] = { Fwd, Side, Up };
+				const double Ks[7] = { 0.08, 0.2, 0.35, 0.5, 0.65, 0.8, 0.92 };
+				for (const Face& F : Faces)
+				{
+					for (double Ka : Ks)
+					{
+						for (double Kb : Ks)
+						{
+							const V3 S = Mid + F.From + Axis[F.Across] * Frac(Lo[F.Across], Hi[F.Across], Ka) + Axis[F.Upward] * Frac(F.Upward == 2 ? Lo[2] + 0.25 : Lo[F.Upward], Hi[F.Upward], Kb);
+							double T = 0.0;
+							V3 N;
+							if (!V.RayNow(S, F.In, 20.0, T, N))
+							{
+								continue;
+							}
+							Vehicle::PlateSpot P;
+							Plate(S + F.In * T, N, F.In, P);
+							CheckRoom(P, F.In, std::string(Name) + " " + F.Name, -1e9);
+						}
+					}
+				}
+				// A strike cast behind her running gear (found from inside her, as the scar's cast may pass through her
+				// wheels and tracks): moved onto what stands in front of it, nothing of her before it.
+				for (int Sd = 0; Sd < 2; ++Sd)
+				{
+					const V3 In = Sd == 0 ? Side : -Side;
+					for (double Ka : { 0.2, 0.4, 0.6, 0.8 })
+					{
+						for (double Kz : { 0.35, 0.55, 0.75 })
+						{
+							const V3 Inside = At3(Frac(Lo[0], Hi[0], Ka), 0.0, Frac(Lo[2], Hi[2], 0.25 * Kz));
+							double T = 0.0;
+							V3 N;
+							if (!V.RayNow(Inside, -In, 5.0, T, N))
+							{
+								continue;
+							}
+							const V3 Behind = Inside - In * T;
+							Vehicle::PlateSpot P;
+							Plate(Behind, -In, In, P);
+							const double By = (P.At - Behind).Length();
+							Moved += By > 0.01 ? 1 : 0;
+							MovedMost = std::max(MovedMost, By);
+							double T2 = 0.0;
+							V3 N2;
+							const bool bFirst = V.RayNow(P.At - In * 3.0, In, 3.5, T2, N2);
+							const double Hid = bFirst ? std::max(0.0, 3.0 - T2) : 1.0;
+							Gear.Note(Hid <= Near, Hid, std::string(Name) + ": a strike cast behind her running gear left " + std::to_string(Hid) + " m behind what stands in front");
+							CheckRoom(P, In, std::string(Name) + " behind her running gear", -1e9);
+						}
+					}
+				}
+				// Her side aimed 0.1 m under its top edge (found from the top down, square to her side, toward her ends where
+				// no turret stands over it): every place the kit may strike on it, none over the edge.
+				for (int Sd = 0; Sd < 2; ++Sd)
+				{
+					const V3 In = Sd == 0 ? Side : -Side;
+					const double Outside = Sd == 0 ? Lo[1] - 2.0 : Hi[1] + 2.0;
+					for (double Ka : { 0.12, 0.25, 0.88 })
+					{
+						const double Fa = Frac(Lo[0], Hi[0], Ka);
+						double Top = -1e9;
+						for (double Z = Hi[2]; Z > Lo[2] + 0.2 && Top < -1e8; Z -= 0.01)
+						{
+							double T = 0.0;
+							V3 N;
+							if (V.RayNow(At3(Fa, Outside, Z), In, 20.0, T, N) && N.Dot(-In) >= 0.9)
+							{
+								Top = Z;
+							}
+						}
+						double T = 0.0;
+						V3 N;
+						if (Top < -1e8 || !V.RayNow(At3(Fa, Outside, Top - 0.1), In, 20.0, T, N))
+						{
+							continue;
+						}
+						++EdgeAims;
+						Vehicle::PlateSpot P;
+						Plate(At3(Fa, Outside, Top - 0.1) + In * T, N, In, P);
+						CheckRoom(P, In, std::string(Name) + " side 0.1 m under its top edge", Top);
+					}
+				}
+			}
+			std::printf("  %-9s %ld plates cast (at rest, and trained on a slope): %ld with no room (every round at the strike), the room on average %.2f by %.2f m about its middle, %ld with her own floor under it; %ld cast behind her running gear moved onto it (as far as %.2f m); %ld aims 0.1 m under her side's top edge; %.3f ms a plate on average, %.2f ms the most\n",
+				Name, Plates, Roomless, Plates ? 2.0 * SumA / static_cast<double>(Plates) : 0.0, Plates ? 2.0 * SumB / static_cast<double>(Plates) : 0.0, WithFloor, Moved, MovedMost, EdgeAims,
+				Plates ? SumMs / static_cast<double>(Plates) : 0.0, MostMs);
+			Report("every place the kit may strike, on her drawn surface (5 cm)", OnHer, "m");
+			Report("nothing of her in front of it along the round's way", InFront, "m");
+			Report("a strike cast behind her running gear, moved in front", Gear, "m");
+			Report("her side aimed 0.1 m under its top edge: none over it", UnderEdge, "m");
+		}
+	}
+
 	// ---- The battle.
 	std::string Recording, FatesText, Error;
 	if (!ReadFile(RecordingPath, Recording))
@@ -465,6 +765,118 @@ int main(int argc, char** argv)
 			RecordingPath.substr(RecordingPath.find_last_of('/') + 1).c_str(), static_cast<double>(Recording.size()) / 1e6, B.End, B.Month, B.Year,
 			B.Vehicles().size(), B.Rounds().size(), Ms(L0, L1), Ms(P0, P1));
 	}
+	// ---- Effects (R2), small arms off armour (-TheaterLandRicochet, Battle::bKeepPlates): the same battle made with every
+	// rifle's and machine gun's strike's plate worked out as she is made, so the game's frame only turns it by her pose
+	// (PlateNow). Each kept plate, at her pose as she stood when it struck, is the plate PlateAbout searches out there (to a
+	// millimetre); PlateNow costs well under 0.3 ms the most (the game's rule step asks it once a burst on armour, three in
+	// a frame at worst); and what keeping them adds to the battle's making.
+	std::printf("\nSMALL ARMS OFF ARMOUR (Effects R2): PLATES KEPT AS THE BATTLE IS MADE (Battle::bKeepPlates, Vehicle::PlateNow)\n");
+	{
+		Battle KB;
+		KB.Life = B.Life;
+		KB.BrewWaitLeast = B.BrewWaitLeast;
+		KB.BrewWaitMost = B.BrewWaitMost;
+		KB.Fires = Fires;
+		KB.bCapturedTest = B.bCapturedTest;
+		KB.bKeepPlates = true;
+		// (armour as the game has it, LandPlay::ArmouredVehicle, which this test does not build: here every tank and gun
+		// is armour and every lorry soft, so a lorry's strikes are never searched)
+		KB.Armoured = [](const TrackWords& W, const std::string&) { return W.Role != "lorry"; };
+		std::string KeepError;
+		const auto K0 = Clock::now();
+		if (!KB.Load(Recording, Read, Flat, bTable ? &Table : nullptr, 79, KeepError))
+		{
+			std::printf("  FAIL the battle with its plates kept: %s\n", KeepError.c_str());
+			++Failures;
+		}
+		const auto K1 = Clock::now();
+		// (every small arm's round that struck a vehicle, by the moment it struck)
+		struct Struck { double L; size_t V; int N; std::string Face; };
+		std::vector<Struck> List;
+		for (const Round& R : KB.Rounds())
+		{
+			if ((R.W != "rifle" && R.W != "mg") || R.R.empty() || R.R == "miss")
+			{
+				continue;
+			}
+			for (size_t I = 0; I < KB.Vehicles().size(); ++I)
+			{
+				const TrackWords& W = KB.Vehicles()[I].Words();
+				if (R.On == W.Block && R.Ok == W.K && R.Oj == W.J)
+				{
+					List.push_back({ R.L, I, R.N, R.Face.empty() ? std::string("front") : R.Face });
+				}
+			}
+		}
+		std::stable_sort(List.begin(), List.end(), [](const Struck& A, const Struck& Bs) { return A.L < Bs.L; });
+		Tally Same, Cost;
+		long Kept = 0, Roomed = 0, Wanted = 0, SoftKept = 0;
+		for (const Struck& S : List)
+		{
+			const bool bSoft = KB.Vehicles()[S.V].Words().Role == "lorry";
+			Wanted += bSoft ? 0 : 1;
+			SoftKept += bSoft && KB.Vehicles()[S.V].PlateKept(S.N) ? 1 : 0;
+		}
+		const size_t Waiting = KB.PlatesWaiting(-1e300);
+		double SumUs = 0.0, MostUs = 0.0;
+		const size_t Every = std::max<size_t>(1, List.size() / 120); // (about 120 of them searched again: each a few ms)
+		for (size_t I = 0; I < List.size(); ++I)
+		{
+			const Struck& S = List[I];
+			KB.Update(S.L);
+			const Vehicle& V = KB.Vehicles()[S.V];
+			Vehicle::PlateSpot Got;
+			const auto C0 = Clock::now();
+			const bool bGot = V.PlateNow(S.N, Got);
+			const double Us = 1000.0 * Ms(C0, Clock::now());
+			SumUs += Us;
+			MostUs = std::max(MostUs, Us);
+			Cost.Note(Us < 300.0, Us, "round " + std::to_string(S.N) + ": PlateNow took " + std::to_string(Us) + " microseconds");
+			if (!bGot || !V.PlateKept(S.N))
+			{
+				continue; // (not kept: PlateNow gives her skin's point, no room)
+			}
+			++Kept;
+			Roomed += Got.A.Length() > 0.0 || Got.B.Length() > 0.0 ? 1 : 0;
+			if (I % Every != 0)
+			{
+				continue;
+			}
+			// (searched again at her pose now, as it struck)
+			V3 At, Normal;
+			if (!V.StruckNow(S.N, At, Normal))
+			{
+				continue;
+			}
+			const V3 In = V.Root.Way(S.Face == "rear" ? V3(1.0, 0.0, 0.0) : S.Face == "left" ? V3(0.0, 1.0, 0.0) : S.Face == "right" ? V3(0.0, -1.0, 0.0)
+				: S.Face == "top" ? V3(0.0, 0.0, -1.0) : V3(-1.0, 0.0, 0.0)).Unit(V3(-1.0, 0.0, 0.0));
+			Vehicle::PlateSpot Full;
+			V.PlateAbout(At, Normal, In, Full);
+			const double Off = std::max({ (Got.At - Full.At).Length(), (Got.Mid - Full.Mid).Length(), (Got.A - Full.A).Length(), (Got.B - Full.B).Length(),
+				(Got.Normal - Full.Normal).Length(), (Got.Floor > -1e29) != (Full.Floor > -1e29) ? 1.0 : Got.Floor > -1e29 ? std::fabs(Got.Floor - Full.Floor) : 0.0 });
+			Same.Note(Off <= 0.001, Off, Who(V) + " round " + std::to_string(S.N) + ": kept plate " + std::to_string(Off) + " m off the plate searched at her pose then");
+		}
+		std::printf("  %zu small-arms strikes on %zu vehicles, %ld of them on armour: %ld plates kept (%ld with a room about the strike, the rest a point on her plate alone; a strike whose search finds no plate is drawn at her skin's point), %zu left unsearched, %ld kept on a lorry; the battle made in %.0f ms with them kept (%.0f ms without); PlateNow %.1f microseconds on average, %.1f the most\n",
+			List.size(), KB.Vehicles().size(), Wanted, Kept, Roomed, Waiting, SoftKept, Ms(K0, K1), Ms(L0, L1), List.empty() ? 0.0 : SumUs / static_cast<double>(List.size()), MostUs);
+		Report("a kept plate, the plate searched at her pose then (1 mm)", Same, "m");
+		Report("PlateNow under 0.3 ms", Cost, "us");
+		if (Kept == 0 && Wanted > 0)
+		{
+			std::printf("  FAIL no plate kept\n");
+			++Failures;
+		}
+		if (Waiting > 0)
+		{
+			std::printf("  FAIL %zu strikes on armour left unsearched once the battle was loaded\n", Waiting);
+			++Failures;
+		}
+		if (SoftKept > 0)
+		{
+			std::printf("  FAIL %ld plates searched and kept on a lorry (never drawn off a plate)\n", SoftKept);
+			++Failures;
+		}
+	}
+
 	std::vector<Vehicle>& All = B.Vehicles();
 	for (const Vehicle& V : All)
 	{

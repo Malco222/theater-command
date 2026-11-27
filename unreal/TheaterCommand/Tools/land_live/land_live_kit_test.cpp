@@ -659,6 +659,117 @@ int main(int Argc, char** Argv)
 	Check(Provisional * 200 < Matched, "events moved by a provisional point are few");
 	Check(Twitches * 200 < Matched, "events of a turn on the spot only a provisional point showed are few");
 	Check(JumpPlace <= 0.02 && JumpHeading <= 1.0, "no jump on the screen as a piece works her out again");
+
+	// Effects (R2), small arms off armour (-TheaterLandRicochet, Battle::bKeepPlates): the same battle grown again with
+	// the plates of armour's small-arms strikes kept. Growing her (Extend, on the game thread) must cost what it costs
+	// with the switch off: the plates are searched after the pieces, a few a frame (Battle::KeepPlates, as PumpLive
+	// calls it: the earliest still to be drawn first, about 1 ms), never inside Extend. Each frame's searching is timed,
+	// and every plate is kept before the screen reaches its strike. (Armour here: every tank and gun; the game's
+	// LandPlay::ArmouredVehicle also makes armour of the half-tracks the rules carry men in.)
+	{
+		Battle Keep;
+		Keep.Life = Live.Life;
+		Keep.bKeepPlates = true;
+		Keep.Armoured = [](const TrackWords& W, const std::string&) { return W.Role != "lorry"; };
+		std::string KeepError;
+		if (!Keep.Load(HeaderText, Read, Hills, bTable ? &Table : nullptr, Seed, KeepError))
+		{
+			std::printf("FAIL the header, plates kept: %s\n", KeepError.c_str());
+			return 1;
+		}
+		std::ifstream KeepIn(Folder + "/deltas.jsonl");
+		std::string KeepLine;
+		int KeepPieces = 0;
+		long KeepFrames = 0, BusyFrames = 0;
+		size_t Searched = 0, DrawnUnsearched = 0, LateStrikes = 0, BehindWas = 0;
+		double KeepExtendMs = 0.0, KeepExtendMost = 0.0, SearchMs = 0.0, SearchMost = 0.0, KeepShown = 0.0, LastEnd = 0.0;
+		while (std::getline(KeepIn, KeepLine))
+		{
+			if (KeepLine.empty())
+			{
+				continue;
+			}
+			const auto A = Clock::now();
+			if (!Keep.Extend(KeepLine, KeepError))
+			{
+				std::printf("FAIL piece %d, plates kept: %s\n", KeepPieces, KeepError.c_str());
+				return 1;
+			}
+			const double Ms = std::chrono::duration<double, std::milli>(Clock::now() - A).count();
+			++KeepPieces;
+			if (KeepPieces > 1)
+			{
+				KeepExtendMs += Ms;
+				KeepExtendMost = std::max(KeepExtendMost, Ms);
+			}
+			// (the frames until the next piece, one search call a frame; the screen one battle second behind the latest, as
+			// close as the game lets it come before it waits on the rules (LandBattleLive.cpp, LiveMargin), not the two
+			// seconds of the comparison above)
+			const double ShowTo = Keep.bOver ? Keep.End + 8.0 : std::max(0.0, Keep.End - 1.0);
+			const long FramesNow = std::max(1L, static_cast<long>(std::ceil((Keep.End - LastEnd) / Frame)));
+			LastEnd = Keep.End;
+			const double From = KeepShown;
+			// (a piece's strikes already behind the screen as it comes: drawn at her skin's point, never searched)
+			const size_t BehindNow = Keep.PlatesWaiting(-1e300) - Keep.PlatesWaiting(KeepShown);
+			LateStrikes += BehindNow > BehindWas ? BehindNow - BehindWas : 0;
+			for (long F = 0; F < FramesNow; ++F)
+			{
+				const double ShownWas = KeepShown;
+				KeepShown = std::max(KeepShown, From + (ShowTo - From) * static_cast<double>(F + 1) / static_cast<double>(FramesNow));
+				// (the strikes the screen reaches on this frame: each must have been searched by now)
+				DrawnUnsearched += Keep.PlatesWaiting(ShownWas) - Keep.PlatesWaiting(KeepShown);
+				const auto S0 = Clock::now();
+				const size_t Did = Keep.KeepPlates(KeepShown, 4, 0.001);
+				const double SMs = std::chrono::duration<double, std::milli>(Clock::now() - S0).count();
+				++KeepFrames;
+				if (Did > 0)
+				{
+					++BusyFrames;
+					Searched += Did;
+					SearchMs += SMs;
+					SearchMost = std::max(SearchMost, SMs);
+				}
+			}
+			BehindWas = Keep.PlatesWaiting(-1e300) - Keep.PlatesWaiting(KeepShown);
+		}
+		// (a strike the screen passed unsearched was drawn at her skin's point: KeepPlates never searches behind the screen;
+		// one whose cast a later piece moved to another body after it was drawn waits behind it, harmless)
+		const size_t LeftBehind = Keep.PlatesWaiting(-1e300);
+		size_t KeptLive = 0, KeptWhole = 0, Struck = 0;
+		Battle WholeKeep;
+		WholeKeep.Life = Live.Life;
+		WholeKeep.bKeepPlates = true;
+		WholeKeep.Armoured = Keep.Armoured;
+		const bool bWholeKeep = WholeKeep.Load(WholeText, Read, Hills, bTable ? &Table : nullptr, Seed, KeepError);
+		Check(bWholeKeep, "the whole battle with its plates kept (" + KeepError + ")");
+		for (const Round& R : WholeKeep.Rounds())
+		{
+			if ((R.W != "rifle" && R.W != "mg") || R.R.empty() || R.R == "miss")
+			{
+				continue;
+			}
+			for (size_t I = 0; I < WholeKeep.Vehicles().size() && I < Keep.Vehicles().size(); ++I)
+			{
+				const TrackWords& W = WholeKeep.Vehicles()[I].Words();
+				if (R.On == W.Block && R.Ok == W.K && R.Oj == W.J && W.Role != "lorry")
+				{
+					++Struck;
+					KeptWhole += WholeKeep.Vehicles()[I].PlateKept(R.N) ? 1 : 0;
+					KeptLive += Keep.Vehicles()[I].PlateKept(R.N) ? 1 : 0;
+				}
+			}
+		}
+		const double OffMean = ExtendMs / std::max(1, Deltas - 1), KeepMean = KeepExtendMs / std::max(1, KeepPieces - 1);
+		std::printf("  small arms off armour, plates kept: %zu small-arms strikes on armour, %zu plates kept grown piece by piece (%zu read whole); %zu reached by the screen before searched; %zu behind the screen as their piece came "
+			"(new, or cast again on another body), %zu left waiting behind it at the end; "
+			"Extend %.3f ms a piece (worst %.2f ms) against %.3f ms (worst %.2f ms) with the switch off; searching on %ld of %ld frames, %zu plates, %.2f ms on such a frame, the most %.2f ms\n",
+			Struck, KeptLive, KeptWhole, DrawnUnsearched, LateStrikes, LeftBehind, KeepMean, KeepExtendMost, OffMean, MostMs, BusyFrames, KeepFrames, Searched,
+			BusyFrames ? SearchMs / static_cast<double>(BusyFrames) : 0.0, SearchMost);
+		Check(KeepMean <= 1.5 * OffMean + 2.0, "plates kept: Extend costs what it costs with the switch off (" + std::to_string(KeepMean) + " ms a piece against " + std::to_string(OffMean) + ")");
+		Check(DrawnUnsearched == 0, "plates kept: every plate searched before the screen reaches its strike");
+		Check(KeptLive <= KeptWhole && KeptLive + LeftBehind >= KeptWhole, "plates kept: grown piece by piece, as many plates kept as read whole (but those cast again after the screen passed them)");
+		Check(Struck == 0 || KeptLive > 0, "plates kept: some plate kept");
+	}
 	std::printf("%s\n", Failures ? "FAIL" : "PASS");
 	return Failures ? 1 : 0;
 }

@@ -14,6 +14,13 @@
 //   ./fxpreview /tmp/recipe.txt <out folder> raid <earth|town|water> <frames> [WxH]
 //   ./fxpreview /tmp/recipe.txt <out folder> wreck <side|battle|far|tall> <frames> [WxH]
 //   ./fxpreview /tmp/recipe.txt <out folder> seafx <screen...|splash...> <frames> [WxH]
+//   ./fxpreview /tmp/recipe.txt <out folder> ricochet <eye metres: 30, 150, 600> <frames> [WxH]
+//     (Effects (R2), small arms off armour: a machine gun 120 m off rakes a tank's side, 45 degrees off square, its
+//     rounds laid by ShotsOnArmour and bouncing off her; the eye that far off. FX_RICO_CASE: side (the default), edge
+//     (her front plate aimed 3 cm under its top edge, 0.8 of the way to its side), turret (her turret's side 0.42 m
+//     over her deck, the deck handed over as her floor), driving (her front plate as she drives at the gun at 5 m/s,
+//     drawn where she is each frame). FX_RICO_BEFORE=1: the same burst as Shots, into her middle, as before;
+//     FX_FPS=60: frames a 60th of a second apart. ricochet_test.cpp checks it)
 //
 // The sea shot (the sea battle's range): three ships in line ahead, FX_GAP m (500) apart and FX_SHIP_LONG m (200)
 // long, steaming along +X at FX_KNOTS (25), seen broadside on from FX_DIST m (15000) by an eye FX_EYE_H m (24) up with
@@ -1532,6 +1539,146 @@ namespace
 		}
 	}
 
+	/** The ricochet shot (see the top of the file): a machine gun raking a tank's side, its rounds bouncing off her. */
+	int Ricochet(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Shot, std::vector<int> Frames, int W, int H)
+	{
+		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+		Battle Fx;
+		const char* SeedIs = std::getenv("FX_SEED");
+		Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetSrgbBytes(GammaWanted());
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
+		SkyFromEnv(Fx);
+		Fx.SetGroundColour(&GroundPaint, nullptr);
+		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0));
+		// (the tank at the middle facing +X, her side one flat face over her tracks as a Tiger's; the burst strikes her
+		// left side at the aim, from a machine gun FX_MG_AWAY m (120) off, 45 degrees off square, its muzzle 0.6 m up.
+		// The plate handed over as the battle does: the face struck as her room, her floor under it, her way)
+		const double G = Swell(nullptr, 0.0, 0.0);
+		const char* CaseIs = std::getenv("FX_RICO_CASE");
+		const std::string Case = CaseIs ? CaseIs : "side";
+		const bool bFront = Case == "edge" || Case == "driving";
+		Battle::ArmourPlate Plate;
+		Plate.Pivot = Vec(0.0, 0.0, G);
+		if (bFront)
+		{
+			Plate.At = Case == "edge" ? Vec(2.2, 1.28, G + 1.2 + 0.95 * 0.63) : Vec(2.2, -0.9, G + 1.5);
+			Plate.Normal = Vec(1.0, 0.0, 0.0);
+			Plate.RoomMid = Vec(2.2, 0.0, G + 1.515);
+			Plate.RoomA = Vec(0.0, 1.6, 0.0);
+			Plate.RoomB = Vec(0.0, 0.0, 0.315);
+			Plate.Floor = G + 1.2; // (her track guards and lower hull under her front plate)
+			Plate.Carry = Case == "driving" ? Vec(5.0, 0.0, 0.0) : Vec();
+		}
+		else if (Case == "turret")
+		{
+			Plate.At = Vec(-0.2, -1.2, G + 2.25);
+			Plate.Normal = Vec(0.0, -1.0, 0.0);
+			Plate.RoomMid = Vec(-0.2, -1.2, G + 2.34);
+			Plate.RoomA = Vec(1.4, 0.0, 0.0);
+			Plate.RoomB = Vec(0.0, 0.0, 0.51);
+			Plate.Floor = G + 1.83; // (her deck under her turret)
+		}
+		else
+		{
+			Plate.At = Vec(-0.6, -1.6, G + 1.5);
+			Plate.Normal = Vec(0.0, -1.0, 0.0);
+			Plate.RoomMid = Vec(-0.5, -1.6, G + 1.515);
+			Plate.RoomA = Vec(2.7, 0.0, 0.0);
+			Plate.RoomB = Vec(0.0, 0.0, 0.315);
+		}
+		const Vec Aim = Plate.At;
+		Vec Gun = Aim + (Case == "driving" ? Vec(1.0, 0.0, 0.0) : bFront ? Vec(1.0, 0.3, 0.0).Unit() : Vec(-1.0, -1.0, 0.0).Unit()) * EnvNum("FX_MG_AWAY", 120.0);
+		Gun.Z = Swell(nullptr, Gun.X, Gun.Y) + 0.6;
+		// (the eye: Shot metres (30, 150 or 600) off the aim, from ahead of her side, as a man's eye close in and higher far
+		// off; FX_EYE_H to set its height, FX_LENS its angle across, 42 degrees)
+		const double Away = std::clamp(std::atof(Shot.c_str()), 2.0, 5000.0);
+		const double EyeH = EnvNum("FX_EYE_H", Away < 60.0 ? 1.7 : Away < 300.0 ? 6.0 : 20.0);
+		Camera Cam;
+		Cam.W = W;
+		Cam.H = H;
+		Cam.Ppr = W / (2.0 * std::tan(std::clamp(EnvNum("FX_LENS", 42.0), 5.0, 170.0) * 3.14159265358979 / 360.0));
+		Cam.Eye = Aim + (bFront ? Vec(1.0, -0.35, 0.0) : Vec(0.35, -1.0, 0.0)).Unit() * Away;
+		Cam.Eye.Z = Swell(nullptr, Cam.Eye.X, Cam.Eye.Y) + EyeH;
+		Cam.Forward = (Aim + Vec(0.0, 0.0, 0.2) - Cam.Eye).Unit();
+		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
+		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+		Battle::View View;
+		View.Eye = Cam.Eye;
+		View.Right = Cam.Right;
+		View.Up = Cam.Up;
+		View.Forward = Cam.Forward;
+		View.PixelsPerRadian = Cam.Ppr * std::clamp(EnvNum("FX_KIT_PX", 1.0), 0.1, 16.0);
+		View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+		View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+		const bool bDusk = std::getenv("FX_DUSK") != nullptr;
+		if (bDusk)
+		{
+			View.SmokeLight = Rgb(0.22f, 0.2f, 0.24f);
+			View.SunLight = Rgb(0.0f, 0.0f, 0.0f);
+		}
+		const double Paint3[3] = { ToLinear(112), ToLinear(102), ToLinear(80) };
+		const double Track3[3] = { ToLinear(58), ToLinear(54), ToLinear(50) };
+		std::vector<Vec> Men;
+		Fx.Draw(-0.1, View); // (the eye is known before the burst, as in the game)
+		// (FX_MG_ROUNDS rounds (25) at FX_MG_RATE a second (15); FX_RICO_BEFORE=1: the same burst as Shots laid it before,
+		// into her middle, to see the two side by side)
+		const int Rounds = static_cast<int>(EnvNum("FX_MG_ROUNDS", 25.0));
+		const double Rate = EnvNum("FX_MG_RATE", 15.0);
+		Fx.Muzzle(0.0, Gun, (Aim - Gun).Unit(), "mg", "earth");
+		if (std::getenv("FX_RICO_BEFORE"))
+		{
+			Fx.Shots(0.0, 13, Gun, Vec(0.0, 0.0, G + 1.3), "mg", Rounds, Rate, "earth");
+		}
+		else
+		{
+			Fx.ShotsOnArmour(0.0, 13, Gun, Plate, "mg", Rounds, Rate, "earth");
+		}
+		std::sort(Frames.begin(), Frames.end());
+		int Drawn = 0;
+		const int PerSecond = std::max(1, static_cast<int>(EnvNum("FX_FPS", 30.0))); // (FX_FPS=60: the frames a 60th of a second apart)
+		for (int Frame : Frames)
+		{
+			for (; Drawn < Frame; ++Drawn)
+			{
+				Fx.Draw(Drawn / static_cast<double>(PerSecond), View);
+			}
+			Drawn = Frame + 1;
+			const double Now = Frame / static_cast<double>(PerSecond);
+			const int N = Fx.Draw(Now, View);
+			Battle::Lamp Lamps[2];
+			const int NL = Fx.Lamps(Now, Lamps, 2, Fx.DayOf(View.SmokeLight));
+			Canvas C;
+			C.Init(W, H);
+			Paint(C, Cam, Lamps, NL, Men, false);
+			const Vec Sun = View.Sun.Unit();
+			const double SunShare = bDusk ? 0.0 : 0.6;
+			const Vec By = Plate.Carry * Now; // (where she has driven to by this frame)
+			LitBox(C, Cam, By + Vec(-3.2, -1.6, G), By + Vec(3.2, -1.15, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
+			LitBox(C, Cam, By + Vec(-3.2, 1.15, G), By + Vec(3.2, 1.6, G + 1.2), Track3, Lamps, NL, Sun, SunShare);
+			LitBox(C, Cam, By + Vec(-3.0, -1.15, G + 0.4), By + Vec(2.6, 1.15, G + 1.2), Paint3, Lamps, NL, Sun, SunShare);
+			LitBox(C, Cam, By + Vec(-3.2, -1.6, G + 1.2), By + Vec(2.2, 1.6, G + 1.83), Paint3, Lamps, NL, Sun, SunShare);
+			LitBox(C, Cam, By + Vec(-1.6, -1.2, G + 1.83), By + Vec(1.2, 1.2, G + 2.85), Paint3, Lamps, NL, Sun, SunShare);
+			LitBox(C, Cam, By + Vec(1.2, -0.12, G + 2.1), By + Vec(5.2, 0.12, G + 2.34), Paint3, Lamps, NL, Sun, SunShare, 0.4);
+			if (bDusk)
+			{
+				for (size_t I = 0; I < C.R.size(); ++I)
+				{
+					C.R[I] *= 0.22;
+					C.G[I] *= 0.2;
+					C.B[I] *= 0.26;
+				}
+			}
+			Puffs(C, Cam, Fx, N);
+			char Name[256];
+			std::snprintf(Name, sizeof(Name), "%s/ricochet-%s%s%s-f%03d.ppm", OutDir.c_str(), CaseIs ? Case.c_str() : "", CaseIs ? "-" : "", Shot.c_str(), Frame);
+			C.Save(Name);
+			std::printf("frame %d: %d puffs, %d lamps; the burst laid %d strikes on her plate, %d sparks, %d ricochets\n", Frame, N, NL, Fx.RicochetStrikes(), Fx.RicochetSparks(), Fx.RicochetTracers());
+		}
+		return 0;
+	}
+
 	/** The wreck shot (see the top of the file): a knocked-out heavy tank burning, as the ground scene calls the kit. */
 	int Wreck(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Shot, std::vector<int> Frames, int W, int H)
 	{
@@ -2902,6 +3049,10 @@ int main(int Argc, char** Argv)
 	if (Size == "wreck")
 	{
 		return Wreck(Book, OutDir, Ground, Frames, W, H);
+	}
+	if (Size == "ricochet")
+	{
+		return Ricochet(Book, OutDir, Ground, Frames, W, H);
 	}
 	if (Size == "fleet")
 	{
