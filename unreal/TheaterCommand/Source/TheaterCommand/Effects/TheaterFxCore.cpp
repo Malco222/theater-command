@@ -5422,10 +5422,12 @@ namespace TheaterFx
 		C.Up = Range(P + "up_mps", 1.0, 2.5);
 		C.Lie = Range(P + "lie_s", 2.0, 4.0);
 		C.Tumble = Range(P + "tumble", 15.0, 30.0);
-		C.Glint = Num("ground_cases.glint", 4.0);
 		C.LeastPx = Num("ground_cases.least_px", 0.8);
-		C.Col = Picture("ground_cases.colour", Rgb::FromPicture(196, 156, 82));
-		C.Dark = Picture("ground_cases.shade", Picture("ground_cases.dark", Rgb::FromPicture(112, 82, 37)));
+		// (Effects (R2): a row may give its own colour, shade and glint, as the thrown cases' rows ground_cases.spg and
+		// .tank do (dull, handled brass, not a shine); without them the shared values, as before)
+		C.Glint = Num(P + "glint", Num("ground_cases.glint", 4.0));
+		C.Col = Picture(P + "colour", Picture("ground_cases.colour", Rgb::FromPicture(196, 156, 82)));
+		C.Dark = Picture(P + "shade", Picture("ground_cases.shade", Picture("ground_cases.dark", Rgb::FromPicture(112, 82, 37))));
 		return true;
 	}
 
