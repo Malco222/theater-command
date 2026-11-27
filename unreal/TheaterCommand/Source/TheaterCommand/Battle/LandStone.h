@@ -78,10 +78,11 @@ namespace LandStone
 		 * How far from his place a man is drawn so that he stands clear of the stone. X, Y his place (the rules');
 		 * Fx, Fy the way he faces (a unit vector on the ground); Reach his body's and weapon's. bStood: he has his
 		 * answer already and stands at, or is stepping to, StoodX, StoodY (where the last answer put him): while that
-		 * place is clear he stays there, and when it no longer is (he has turned his muzzle to the wall, or lain down)
-		 * he steps on from there, on the side of each wall he stands on, so a man who turns where he is never changes
+		 * place is clear he stays there, whether or not the rules' place has become clear too (he does not slide back
+		 * as he holds his rest), and when it no longer is (he has turned his muzzle to the wall, or lain down) he
+		 * steps on from there, on the side of each wall he stands on, so a man who turns where he is never changes
 		 * sides. OutDx, OutDy the step from the rules' place. True where there is a step to take; false, and zeros,
-		 * where he is clear as the rules have him.
+		 * where he is clear as the rules have him and stands nowhere else.
 		 */
 		bool Clear(double X, double Y, double Fx, double Fy, const Body& Reach, bool bStood, double StoodX, double StoodY, double& OutDx, double& OutDy) const
 		{
@@ -97,17 +98,17 @@ namespace LandStone
 				return false;
 			}
 			double Px = X, Py = Y;
-			if (!Stepped(Found->second, X, Y, Fx, Fy, Reach, false, Px, Py))
-			{
-				return false;
-			}
 			if (bStood && std::isfinite(StoodX) && std::isfinite(StoodY) && std::hypot(StoodX - X, StoodY - Y) <= 2.0 * (MostBody + 1.0))
 			{
 				Stepped(Found->second, StoodX, StoodY, Fx, Fy, Reach, true, Px, Py);
 			}
+			else if (!Stepped(Found->second, X, Y, Fx, Fy, Reach, false, Px, Py))
+			{
+				return false;
+			}
 			OutDx = Px - X;
 			OutDy = Py - Y;
-			return true;
+			return OutDx != 0.0 || OutDy != 0.0;
 		}
 
 	private:

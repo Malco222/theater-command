@@ -538,10 +538,18 @@ namespace LandMen
 		/**
 		 * The stone no man is drawn inside (StoneFn; a mend of 27 November 2026: a man whose place the rules set in a
 		 * wall's thickness was drawn in the stone, all of him hidden but what stood out of its faces). Set once. A man
-		 * at rest on the field (not aboard, not carried) is drawn at the step it gives from the rules' place, taken at
-		 * a walk's speed (StoneSpeed) as he comes to rest and given back as he moves off; one who starts the battle in
-		 * a wall starts clear of it. A man who falls lies where he was drawn. PlaceOf, PlaceAsPosed and every frame of
-		 * his are at the drawn place; StoneStep gives the step itself. Unset (the default): where the rules have him.
+		 * at rest on the field (not aboard, not carried) is drawn at the step it gives from the rules' place. He takes
+		 * it as he comes in to his rest, where his track shows the rest ahead (StoneAhead, StoneStay): over the time a
+		 * walk takes to make it, and for the way he will face and the stance he will have as he settles there
+		 * (StoneSettle), so he arrives at the clear place and does not slide to it as he holds his rest pose (the art
+		 * director, 27 November 2026); where it does not (a stop the rules had not yet told of) he takes it as he
+		 * settles. Never faster than a walk (StoneSpeed). Where he stops he stays while that place is clear: a step
+		 * moves at rest only as he turns, goes down, or must still come out of the stone (a bound of a few tenths of
+		 * a second from one place by a wall to another leaves a walk too little time). A man told to go down is asked
+		 * for as a lying man from that moment, one who pivots where he stands as he will face (StoneTurn). The step
+		 * is given back at a walk as he moves off; one who starts the battle in a wall starts clear of it. A man who
+		 * falls lies where he was drawn. PlaceOf, PlaceAsPosed and every frame of his are at the drawn place;
+		 * StoneStep gives the step itself. Unset (the default): where the rules have him.
 		 */
 		void SetStone(StoneFn Fn);
 		/** How far a man is drawn from the rules' place now to stand clear of stone (SetStone): zeros where he is not. */
@@ -552,6 +560,23 @@ namespace LandMen
 		static constexpr double StoneDwell = 0.1;
 		/** How fast he takes the step (metres a battle second, as the field sees him go): a walk, never faster. */
 		static constexpr double StoneSpeed = 1.4;
+		/** How far ahead on his track a man on his way is looked for a rest (battle seconds), and how long he must
+		 * stay at a place for it to be one (a halt of a moment between two bounds is not). */
+		static constexpr double StoneAhead = 2.2;
+		static constexpr double StoneStay = 0.4;
+		/** How far into his stay his facing is read for the step he comes in to (battle seconds): he turns to his front
+		 * where he stands in his first moments there, and the step is the one for the way he then faces. */
+		static constexpr double StoneSettle = 0.6;
+		/** A man who bounds from one place by a wall to another keeps the side of it his step has him on, where that
+		 * is no more than this much further than the nearest clear place at his new rest (metres). */
+		static constexpr double StoneKeepFar = 1.0;
+		/** A man slower than StoneStill who has crept this far from where he took his step no longer stands at it: he
+		 * is asked afresh (metres). */
+		static constexpr double StoneCrept = 0.5;
+		/** A man at rest who turns this fast or faster where he stands (radians a battle second) pivots: the walls are
+		 * asked for him as he will face when the pivot ends, or StoneSettle on if it lasts longer, so that he is not
+		 * stepped off for every facing he sweeps on the way round. A slower turn is asked for as he faces. */
+		static constexpr double StoneTurn = 0.2;
 		/** Whether a man is aboard a vehicle now (the stance he shows), and the rules' word for it: his block, her k in it
 		 * and his seat in her bed (each -1 where the rules did not say). */
 		bool AboardOf(int Man, int& OutBlock, int& OutSeatOn, int& OutSeat) const;

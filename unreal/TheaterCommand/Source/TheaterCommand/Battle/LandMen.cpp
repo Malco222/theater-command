@@ -1453,6 +1453,73 @@ namespace LandMen
 				return It == T.begin() ? 0 : static_cast<size_t>(It - T.begin()) - 1;
 			}
 
+			/** The rest a man on his way is coming to, where his track shows one within Ahead seconds of Tm (Cursor: the
+			 * point at or before Tm): the next place he stays at for Stay seconds or more (points at one place; a
+			 * recording's last point, where he stays for good; a live battle's provisional last point says how long he
+			 * is known to have stood so far). Its place, when he comes to it, and his facing Settle seconds into his stay
+			 * (he turns to his front where he stands in his first moments there). */
+			bool RestAhead(double Tm, size_t Cursor, double Ahead, double Stay, double Settle, double& OX, double& OY, float& OF, double& OAt) const
+			{
+				const size_t N = T.size();
+				for (size_t I = Cursor + 1; I < N; ++I)
+				{
+					if (T[I] > Tm + Ahead) return false;
+					size_t Last = I;
+					while (Last + 1 < N && std::hypot(X[Last + 1] - X[I], Y[Last + 1] - Y[I]) < 1e-6) ++Last;
+					if ((Last + 1 >= N && !bTail) || T[Last] - T[I] >= Stay)
+					{
+						OX = X[I];
+						OY = Y[I];
+						OAt = T[I];
+						size_t Faced = I;
+						while (Faced < Last && T[Faced + 1] <= T[I] + Settle) ++Faced;
+						if (Faced < Last)
+						{
+							const double Between = T[Faced + 1] - T[Faced];
+							const double U = Between > 1e-9 ? std::min(1.0, std::max(0.0, (T[I] + Settle - T[Faced]) / Between)) : 0.0;
+							OF = static_cast<float>(F[Faced] + Turn(F[Faced], F[Faced + 1]) * U);
+						}
+						else
+						{
+							OF = F[Last];
+						}
+						return true;
+					}
+					I = Last;
+				}
+				return false;
+			}
+
+			/** The facing a man at rest is turning to. Where his track has him turning at Tm (Cursor: the point at or
+			 * before Tm) as fast as Rate (radians a second) or faster: his facing as that turn ends where he stands,
+			 * or Settle seconds on, whichever is first. A man who pivots where he stands is asked for as he will face,
+			 * not through every facing he sweeps on the way. Where it has him turning slower, or no more: Now, his
+			 * facing as it is. */
+			float FacingTo(double Tm, size_t Cursor, double Settle, double Rate, float Now) const
+			{
+				const size_t N = T.size();
+				const auto Turns = [this, Rate](size_t I)
+				{
+					return std::fabs(Turn(F[I], F[I + 1])) >= Rate * std::max(1e-9, T[I + 1] - T[I]);
+				};
+				if (Cursor + 1 >= N || Tm < T[Cursor] || !Turns(Cursor))
+				{
+					return Now;
+				}
+				size_t Last = Cursor + 1;
+				while (Last + 1 < N && T[Last] < Tm + Settle && std::hypot(X[Last + 1] - X[Last], Y[Last + 1] - Y[Last]) < 1e-6 && Turns(Last))
+				{
+					++Last;
+				}
+				if (T[Last] <= Tm + Settle)
+				{
+					return F[Last];
+				}
+				const double Between = T[Last] - T[Last - 1];
+				const double U = Between > 1e-9 ? std::min(1.0, std::max(0.0, (Tm + Settle - T[Last - 1]) / Between)) : 1.0;
+				return static_cast<float>(F[Last - 1] + Turn(F[Last - 1], F[Last]) * U);
+			}
+
 			/** The last kept point's time (the provisional one is not kept), or -1e18 with none. */
 			double KeptUntil() const
 			{
@@ -1667,6 +1734,12 @@ namespace LandMen
 			// been at rest (battle seconds).
 			double StoneX = 0.0, StoneY = 0.0;
 			double StoneWantX = 0.0, StoneWantY = 0.0;   // the step he is taking (the last answer), zeros when none
+			double StoneShare = 1.0;                     // how much of it he is to have taken by now (under 1 as he comes in)
+			// The coming in he is on: when his track has him at the rest ahead (-1e18: none), and the step he had as it
+			// began: he comes on from that one, on the side of a wall it had him.
+			double StoneComeAt = -1e18, StoneFromX = 0.0, StoneFromY = 0.0;
+			double StoneAtX = 0.0, StoneAtY = 0.0;       // where the rules had him when he took the step he stands at
+			bool bStoneWay = false;                      // on his way since the walls were last asked for where he stands
 			double StillFor = 0.0;
 			float Fade = 1.f;
 			bool bVisible = true;
@@ -3473,33 +3546,146 @@ namespace LandMen
 				// would twitch at every kept point; as it is, his feet slip a little sideways where it wanders.)
 				M.F = F;
 				M.V = V;
-				// Never drawn in a wall's stone (SetStone): at rest on the field he is stepped clear of it no faster
-				// than he walks, and steps back as he moves off; where he starts the battle (or the film is wound to) he stands clear
-				// at once. X and Y are the drawn place from here on: his frames, his fall and his body are there.
+				// Never drawn in a wall's stone (SetStone): at rest on the field he stands a step clear of it, a step he
+				// takes as he comes in to his rest (his track shows it ahead) and no faster than he walks, and gives
+				// back as he moves off; where he starts the battle (or the film is wound to) he stands clear at once.
+				// X and Y are the drawn place from here on: his frames, his fall and his body are there.
 				if (StoneAt)
 				{
 					const bool bFirst = M.Last < 0.0;
 					M.StillFor = V < Crowd::StoneStill ? M.StillFor + Dt : 0.0;
 					const bool bHeld = M.Shown >= 0 && static_cast<size_t>(M.Shown) < M.Stances.size()
 						&& (M.Stances[static_cast<size_t>(M.Shown)].Aboard || M.Stances[static_cast<size_t>(M.Shown)].Lift > 0.f);
-					double WantX = 0.0, WantY = 0.0;
-					if (V < Crowd::StoneStill && (bFirst || M.StillFor >= Crowd::StoneDwell) && !bHeld && !M.bLeaving)
+					// (through a stop too short to tell from a gap between two kept points, as he was)
+					double WantX = M.StoneWantX, WantY = M.StoneWantY, Share = M.StoneShare;
+					double FromX = M.StoneFromX, FromY = M.StoneFromY;
+					// (his reach by the stance the rules have him in: a man going down has a lying man's from the moment
+					// he is told to, so his step is spent as he goes down, and one getting up keeps his until he is up)
+					const auto LieBy = [&M](double TrackT)
 					{
-						// (the place he is stepping to, if he is: he keeps the side of a wall he chose)
-						const bool bStood = M.StoneWantX != 0.0 || M.StoneWantY != 0.0;
-						if (!StoneAt(M.X, M.Y, F, M.Lie, bStood, M.X + M.StoneWantX, M.Y + M.StoneWantY, WantX, WantY))
+						size_t Lo = 0, Hi = M.Stances.size();
+						while (Lo + 1 < Hi)
 						{
-							WantX = WantY = 0.0;
+							const size_t Mid = (Lo + Hi) / 2;
+							if (M.Stances[Mid].T <= TrackT)
+							{
+								Lo = Mid;
+							}
+							else
+							{
+								Hi = Mid;
+							}
+						}
+						return !M.Stances.empty() && M.Stances[Lo].Cl == Prone ? 1.f : 0.f;
+					};
+					if (bHeld || M.bLeaving)
+					{
+						WantX = WantY = 0.0;
+						Share = 1.0;
+						FromX = FromY = 0.0;
+						M.StoneComeAt = -1e18;
+						M.bStoneWay = true;
+					}
+					else if (V < Crowd::StoneStill)
+					{
+						if (bFirst || M.StillFor >= Crowd::StoneDwell)
+						{
+							// (the place he stands at: as he stops, where he is drawn, and after that where he is stepping
+							// to if he is. He stays there while it is clear, and keeps the side of a wall he has; one who
+							// has crept StoneCrept from where he took the step is asked afresh)
+							const bool bStops = M.bStoneWay;
+							const double HintX = bStops ? M.StoneX : M.StoneWantX, HintY = bStops ? M.StoneY : M.StoneWantY;
+							const bool bStood = (HintX != 0.0 || HintY != 0.0)
+								&& (bStops || std::hypot(M.X - M.StoneAtX, M.Y - M.StoneAtY) <= Crowd::StoneCrept);
+							if (bStops || !bStood)
+							{
+								M.StoneAtX = M.X;
+								M.StoneAtY = M.Y;
+							}
+							// (asked for as he will face, where he is turning: FacingTo)
+							const float FaceTo = Tr.FacingTo(Tl, M.AtCursor, Crowd::StoneSettle, Crowd::StoneTurn, F);
+							if (!StoneAt(M.X, M.Y, FaceTo, std::max(M.Lie, LieBy(Tl)), bStood, M.X + HintX, M.Y + HintY, WantX, WantY))
+							{
+								WantX = WantY = 0.0;
+							}
+							Share = 1.0;
+							FromX = FromY = 0.0;
+							M.StoneComeAt = -1e18;
+							M.bStoneWay = false;
+						}
+					}
+					else
+					{
+						// On his way. Where his track shows the rest he is coming to, the step he will stand at there,
+						// taken as he comes in over the time a walk takes to make it (the art director, 27 November
+						// 2026, 20:54Z: he arrives at the clear place; the step is spent inside his approach, never
+						// while he holds a rest pose, never faster than he walks). Else none: he is where the rules
+						// have him.
+						double RestX = 0.0, RestY = 0.0, RestAt = 0.0;
+						float RestF = 0.f;
+						WantX = WantY = 0.0;
+						Share = 1.0;
+						M.bStoneWay = true;
+						// (not one who has left the field and walks on as he fades: his track is behind him)
+						const bool bOff = bLeaves || (M.Info.Out >= 0.0 && Tl > M.Info.Out);
+						if (!bFirst && !bOff && Tr.RestAhead(Tl, M.AtCursor, Crowd::StoneAhead, Crowd::StoneStay, Crowd::StoneSettle, RestX, RestY, RestF, RestAt))
+						{
+							// (a new coming in: the step he has as it begins. A man who bounds from one place by a wall
+							// to another keeps the side of it he lay on, and where his step still clears him there,
+							// his step.)
+							if (M.StoneComeAt != RestAt)
+							{
+								M.StoneComeAt = RestAt;
+								M.StoneFromX = M.StoneX;
+								M.StoneFromY = M.StoneY;
+							}
+							FromX = M.StoneFromX;
+							FromY = M.StoneFromY;
+							// (his reach there is that of the stance he will have as he settles: a man who lies down at
+							// his rest arrives where a lying man is clear. A rest the rules have clear wants no step,
+							// and the one he has is given back at a walk from now; one that wants a step is taken on
+							// the side of the wall his present step has him, unless that is StoneKeepFar further than
+							// the nearest)
+							const float RestLie = LieBy(RestAt + Crowd::StoneSettle);
+							if (!StoneAt(RestX, RestY, RestF, RestLie, false, 0.0, 0.0, WantX, WantY))
+							{
+								WantX = WantY = 0.0;
+								FromX = FromY = 0.0;
+							}
+							else if (FromX != 0.0 || FromY != 0.0)
+							{
+								double KeptX = 0.0, KeptY = 0.0;
+								if (StoneAt(RestX, RestY, RestF, RestLie, true, RestX + FromX, RestY + FromY, KeptX, KeptY)
+									&& std::hypot(KeptX, KeptY) <= std::hypot(WantX, WantY) + Crowd::StoneKeepFar)
+								{
+									WantX = KeptX;
+									WantY = KeptY;
+								}
+							}
+							const double Span = std::min(Crowd::StoneAhead, std::max(0.5, 1.5 * std::hypot(WantX - FromX, WantY - FromY) / Crowd::StoneSpeed));
+							const double Come = 1.0 - (RestAt - Tl) / Span;
+							const double C = Come <= 0.0 ? 0.0 : Come < 1.0 ? Come : 1.0;
+							Share = C * C * (3.0 - 2.0 * C);
+						}
+						else
+						{
+							FromX = FromY = 0.0;
+							M.StoneComeAt = -1e18;
 						}
 					}
 					M.StoneWantX = WantX;
 					M.StoneWantY = WantY;
-					const double GapX = WantX - M.StoneX, GapY = WantY - M.StoneY, Gap = std::hypot(GapX, GapY);
+					M.StoneShare = Share;
+					M.StoneFromX = FromX;
+					M.StoneFromY = FromY;
+					// (where he is to be drawn now: on from the step his coming in began with to the one he will stand at)
+					const double AimX = FromX + (WantX - FromX) * Share, AimY = FromY + (WantY - FromY) * Share;
+					const double GapX = AimX - M.StoneX, GapY = AimY - M.StoneY, Gap = std::hypot(GapX, GapY);
 					const double Most = bFirst ? 1e9 : Crowd::StoneSpeed * Dt;
 					if (Gap <= Most)
 					{
-						M.StoneX = WantX;
-						M.StoneY = WantY;
+						M.StoneX = AimX;
+						M.StoneY = AimY;
 					}
 					else
 					{
@@ -3885,6 +4071,10 @@ namespace LandMen
 			M.LeaveHold = 0.f;
 			M.StoneX = M.StoneY = 0.0;
 			M.StoneWantX = M.StoneWantY = 0.0;
+			M.StoneShare = 1.0;
+			M.StoneComeAt = -1e18;
+			M.StoneFromX = M.StoneFromY = 0.0;
+			M.bStoneWay = false;
 			M.StillFor = 0.0;
 			M.Last = -1.0;
 			M.FallClip = -1;
