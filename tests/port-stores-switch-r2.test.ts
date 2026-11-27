@@ -5,7 +5,7 @@
 // `portStores`, the ship list's 'portstores', and the 3D game's own Options row (CampaignPlayerController.cpp).
 //
 // Words only, and off until its checks: a war with the switch off is the save of the tree without it, byte for byte, on
-// two seeds for 36 months (the hashes below were taken on the tree before portcut.ts, at 2a7564b7b); and a war with it
+// two seeds for 36 months (the hashes below: the tree before portcut.ts, re-taken on the line it joined); and a war with it
 // on is the same war, its own words and marks aside.
 import { describe, expect, it } from 'vitest';
 import CPP from '../unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignPlayerController.cpp?raw';
@@ -120,11 +120,14 @@ describe('the switch through the bridge', () => {
   }, 600000);
 });
 
-// The tree without the change (2a7564b7b): each war played 36 months by the computer for every side but the seat's
-// orders, `startOpen(createGame(seed, 'UK'))`, 36 runTurnAI, its whole save hashed.
+// The tree without the change: each war played 36 months by the computer for every side but the seat's orders,
+// `startOpen(createGame(seed, 'UK'))`, 36 runTurnAI, its whole save hashed. Taken at 2a7564b7b (seed 3: length 1510516,
+// sha256 1362e671...; seed 1: 1529908, 22b8026c...); re-taken on release 2 pass 2 at next-bd 85a655fa7, the tree this
+// joined onto (the assembler, 27 November 2026 16:32Z: the pass-2 line since 2a7564b7b moves these two wars; the same
+// probe reproduces the 2a7564b7b values on that tree, and gives the values below on next-bd and on the join alike).
 const BASE = [
-  { name: 'seed 3, Units decide and true reach', seed: 3, reach: true, turn: 37, length: 1510516, sha: '1362e6719b35c91f92883bfdd80a1c0a595728814fa464e7e269bd00466e1412' },
-  { name: 'seed 1, the flags as the campaign opens them', seed: 1, reach: false, turn: 37, length: 1529908, sha: '22b8026cdb7dfbeacc09f2941abe3290b77d2979d906fb00d7c513653c0b3352' },
+  { name: 'seed 3, Units decide and true reach', seed: 3, reach: true, turn: 37, length: 1510895, sha: '5966d449385dea682eecdcbd767218f3b7c74859c5a2e8c59512d421e9b31d18' },
+  { name: 'seed 1, the flags as the campaign opens them', seed: 1, reach: false, turn: 37, length: 1531329, sha: '166e61f7968145fb58d20fc24c7450a429ee196c3ea4e1090e23a260cc299b6b' },
 ];
 function war(seed: number, reach: boolean, on: boolean): Game {
   const g = grand(seed, 'UK');
