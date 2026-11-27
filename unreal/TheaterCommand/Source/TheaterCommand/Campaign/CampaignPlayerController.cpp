@@ -8905,6 +8905,7 @@ void ACampaignPlayerController::LayOutLook()
 			Card.Carry = Unit.Carry; // (Version 84: an identified corps' weapons are known with it)
 			Card.Nickname = FText::FromString(Unit.Nickname);
 			Card.Marked = Unit.Marked; // (release 2, the marked army)
+			Card.PortLine = Unit.PortLine; // (release 2, portcut.ts: sent for his own corps only)
 			Card.bNew = Unit.bReady && bReadyNotice; // (release 2, new units ready)
 			Card.Grade = FText::FromString(Unit.Grade.IsEmpty() ? FString() : FString::Printf(TEXT("%s, %d"), *Unit.Grade, Unit.Experience));
 			Card.Honours = Unit.Honours;
@@ -9733,6 +9734,7 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.Nickname = FText::FromString(Unit.Nickname);
 		Card.Grade = FText::FromString(Unit.Grade.IsEmpty() ? FString() : FString::Printf(TEXT("%s, %d"), *Unit.Grade, Unit.Experience));
 		Card.Honours = Unit.Honours;
+		Card.PortLine = Unit.PortLine; // (release 2, portcut.ts)
 		SchoolButtonOnCard(Card, Unit, View); // (release 2: the battle schools)
 		Tray.Cards.Add(Card);
 		Divisions += Unit.Divisions;
@@ -13876,6 +13878,7 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			RegionPanel.PocketTitle = FText::FromString(Province.PocketTitle);
 			RegionPanel.PocketText = FText::FromString(Province.PocketText);
 			RegionPanel.bPocketSpent = Province.bPocketSpent;
+			RegionPanel.PortCut = Province.PortCut; // (release 2, portcut.ts)
 			if (Province.SiegeLines.Num() > 0)
 			{
 				RegionPanel.SiegeTitle = FText::FromString(Province.SiegeBy.IsEmpty() ? FString(TEXT("THE TOWN AS A FORTRESS")) : FString::Printf(TEXT("BESIEGED BY %s"), *Province.SiegeBy.ToUpper()));

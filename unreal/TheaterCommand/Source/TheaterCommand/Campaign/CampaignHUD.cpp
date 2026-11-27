@@ -9791,6 +9791,24 @@ namespace
 							SNew(STextBlock).Text(Info.PocketText).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.12f)
 						];
 					}
+					if ((ProvinceTab == 0 || !bProvince) && Info.PortCut.Num() > 0)
+					{
+						// (Release 2, portcut.ts; the UI director's 23:50Z, item 8.) A port cut off by sea: its lines under the
+						// province's supply line, where the stores line of a pocket sits, one a line, wrapping and never cut,
+						// each in the tone the card already gives such words: bad news in the alarm's red (as a pocket whose
+						// stores are spent), a warning in the bright brass (as a pocket still living on its stores), a note in
+						// the body's muted ink. None with the switch off.
+						bool bFirstPortLine = true;
+						for (const FPortCutLine& Line : Info.PortCut)
+						{
+							const FLinearColor Tone = Line.Tone == TEXT("bad") ? Alarm : Line.Tone == TEXT("warn") ? BrightBrass : Muted;
+							ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, bFirstPortLine ? 10.0f : 4.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Text(FText::FromString(Line.Text)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Tone).AutoWrapText(true).LineHeightPercentage(1.12f)
+							];
+							bFirstPortLine = false;
+						}
+					}
 					if ((ProvinceTab == 0 || !bProvince) && !Info.SiegeText.IsEmpty())
 					{
 						// The town as a fortress, and how its siege stands.
@@ -20733,6 +20751,13 @@ namespace
 					[
 						SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bGoing ? BrightBrass : Faint)
 						.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s  \u00B7  %s"), *Card.Kind.ToString(), *Card.Grade.ToString(), *MovesLine)))
+					]
+					// (Release 2, portcut.ts; the UI director's 23:50Z, item 8.) A corps of his in a port cut off by sea: its
+					// stores or its hunger, under its order line, one line wrapping and never cut. None with the switch off.
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 4.0f, Card.PortLine.IsEmpty() ? 0.0f : 5.0f)
+					[
+						SNew(STextBlock).Visibility(Card.PortLine.IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible)
+						.Text(FText::FromString(Card.PortLine)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bGoing ? Muted : Faint).AutoWrapText(true)
 					]
 					+ SVerticalBox::Slot().AutoHeight()[BargainLayer::TrayLine(Card.CorpsId)] // R2 bargains hook: a legion's Courier line (collapsed for any other corps)
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 4.0f, Card.bMood ? 6.0f : 0.0f)[Mood]
