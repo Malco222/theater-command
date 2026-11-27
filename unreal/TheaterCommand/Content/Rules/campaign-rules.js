@@ -123625,8 +123625,6 @@
       // (only as a September 1939 war opens, in its first month).
       trueReachOn: trueReach(s),
       trueReachCan: trueReachSettable(s),
-      // A later start (not begun in September 1939) runs without it, and the options page says so in one line.
-      trueReachLate: s.flags.open === 1 && s.flags.openFrom !== void 0,
       // (Release 2, logistics.ts) The three supply orders' switches as thrown (each does something only with the columns on).
       lorryShiftSet: logisticsSet(s, "lorryShift"),
       wagonsSet: logisticsSet(s, "wagons"),
@@ -130360,7 +130358,7 @@ ${standing6}`,
     }
     if (part[0] === "truereachrule") {
       ok2 = setTrueReach(s, part[1] === "on");
-      note4 = !ok2 ? s.flags.open === 1 && s.flags.openFrom !== void 0 ? "Supply ships need a way through plays only in a campaign begun in September 1939, so this one runs without it." : "Supply ships need a way through can be switched in the campaign's first month only." : trueReach(s) ? "Supply ships need a way through is on: supplies by sea reach a port only where the ships carrying them can sail there, by seas open to them the whole way." : "Supply ships need a way through is off: a port is fed while any sea off its harbour is open to one who feeds it, however the ships would get there.";
+      note4 = !ok2 ? "Whether supply ships need a way through can be set only in the first month of a campaign begun in September 1939." : trueReach(s) ? "Supply ships now need a way through: a port is fed only by ships that can sail there by seas open to them, its allies' too, so a port the enemy cuts off by sea lives on its own stores." : "Supply ships no longer need a way through: ports are fed as before.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
     if (part[0] === "columns") {
