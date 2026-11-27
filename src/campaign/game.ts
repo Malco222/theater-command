@@ -5807,9 +5807,10 @@ export const loanEnding = (g: Game, nat: string, i = -1): ((x: Corps) => boolean
 /**
  * Outside the pass, the lent corps the one test held in this month's pass for a row before row `i` (every row, for `i`
  * -1), from the save's own facts: the row `nat`'s and sent, its lent corps living (`lent:<j>`), and its wait written
- * this month (`wait:<j>`, which on a sent row only the rule's hold writes: `expeditions`). The pass's own list,
- * `heldNow`, in row order (the telling sceptic's finding T4-2, round 4). None with the switch 'fromWait' off. Writes
- * nothing.
+ * this month (`wait:<j>`: on a sent row the rule's hold writes it each month it holds, `expeditions`; a base gate writes
+ * one only before the row is sent, so of an earlier month, or, where his yes sent the row this month, on a loan not yet
+ * over, which leaves nothing). The pass's own list, `heldNow`, in row order (the telling sceptic's finding T4-2, round
+ * 4). None with the switch 'fromWait' off. Writes nothing.
  */
 function heldBefore(g: Game, nat: string, i: number): Corps[] {
   if (g.flags.fromWait !== 1) return [];
