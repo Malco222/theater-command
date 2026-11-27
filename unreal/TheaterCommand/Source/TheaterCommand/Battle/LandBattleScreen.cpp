@@ -365,6 +365,13 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 	bControlsOnTop = Tops.Num() > 0 && Size.X - 22.0 - TopsW >= Size.X * 0.5 + 190.0 + 10.0 + 27.0 + 14.0;
 	if (bGeneral)
 	{
+		// (the keel: one real piece on his screen's lowest layer, made before anything else of it. The engine begins a
+		// window's drawing at the first batch made on its lowest layer whatever that batch holds, and leaves the empty
+		// ones out only after it (UE 5.8, FSlateBatchData::MergeRenderBatches: FirstRenderBatchIndex is set before the
+		// loop that skips them); where that first batch has no triangle the game stops on the render thread,
+		// "RenderBatch.NumIndices > 0". His screen's layers 1 to 3 are mostly lines, and a line can come out empty; a
+		// box cannot. One pixel under the top bar's corner, all but clear.)
+		FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(1.0, 1.0), FSlateLayoutTransform(FVector2D(0.0, 0.0))), &Solid, ESlateDrawEffect::None, FLinearColor(0.0f, 0.0f, 0.0f, 0.02f));
 		CardsH = PaintGeneral(Geometry, OutDrawElements, LayerId);
 		LayerId += 18;
 	}
