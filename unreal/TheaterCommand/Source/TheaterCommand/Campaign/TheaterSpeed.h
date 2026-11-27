@@ -57,6 +57,15 @@ class APlayerController;
  *   tc.Speed.FogAside     1 (default): when the haze moves, the staff's paper beyond the map (the world's picture of
  *                         it and each fine sheet's) is laid on another thread and put on the table one picture a frame
  *                         after, a frame or three later than before. 0: all laid in the frame of the press, as before.
+ *   tc.Speed.ModelWarm    1 (default): the models' files (the JSON of Content/Models) the table could ask for, those of the
+ *                         nations on the table this year and the next first, are read and parsed one at a time on a thread of
+ *                         its own at the lowest priority, and put in the table one a frame, so that a month's frame finds its
+ *                         new models read (a big aircraft file took 0.37 s to read in the frame that showed it first). A
+ *                         model asked for while its file is being read waits for that read; one not read ahead is read in
+ *                         the frame that asks, and named in the speed log ("was read late"). 0: each read in the frame that
+ *                         first asks, as before. The same models and paints either way.
+ *   tc.Speed.ModelWarmMB  400 (default): the megabytes of read models after which the queue stops reading the files that no
+ *                         nation on the table is named for; 0 reads only those.
  *   tc.Speed.RegionGrid   1 (default): the province at a place is looked for among those whose bounds reach into its
  *                         square of the map (FCampaignMapData::FindRegionAt), the same province as before. 0: every
  *                         province is looked at, as before.
@@ -246,6 +255,8 @@ namespace TheaterSpeed
 	bool KeptHeights();
 	bool DressSteps();
 	bool FogAside();
+	int32 ModelWarm(); // 1 reads the model files ahead on a thread of its own, 0 in the frame that first asks, as before
+	int32 ModelWarmMB(); // the megabytes of read models after which the queue leaves the files no nation is named for
 	bool RegionGrid();
 	bool RiverInks();
 	bool FrontWeights();
