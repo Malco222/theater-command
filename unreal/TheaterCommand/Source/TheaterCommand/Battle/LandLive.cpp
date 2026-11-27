@@ -114,6 +114,27 @@ namespace
 		// Off until the island look has its Mac still and the art director's pass; -TheaterLandRuleIsland turns it on
 		// for a run. The campaign side's keys, ticket.look and ticket.latLon, are the Japan and Pacific thread's.)
 		{ TEXT("island"), TEXT("Island ground"), TEXT("A battle on a Pacific island is drawn as that island: beach, reef and palms, or jungle on the big islands, under its own sun. Campaign battles only. Off: it is drawn on the same ground as any other battle."), TEXT("TheaterLandNoIsland"), false, TEXT("TheaterLandRuleIsland") },
+		// (Drawing up while he places his army, release 2: Brian, 26 November 2026 03:45Z, "i should be able to move my
+		// units in a formation before the battle begins during the deployed phase". A control of the setup step and no
+		// battle rule (the design director, 03:50Z): several units dragged as one, a line drawn on his ground, and LINE,
+		// TWO LINES, WEDGE, COLUMN, each place by the rules' own land:place, all of them or none. Off until the Mac and
+		// the art director pass it; -TheaterLandRuleDrawUp turns it on for a run. Name and line the UI director's of
+		// 03:51Z. The rules do not read the key: the screen does (LandBattleCommand.cpp, LandBattleScreen.cpp).)
+		{ TEXT("drawup"), TEXT("Draw up units together before battle"), TEXT("Before the battle begins you can take several units in hand, drag them as one, and draw them up in a line, two lines, a wedge or a column. Off: you place them one at a time, as before. Only how you place them: no result changes."), TEXT("TheaterLandNoDrawUp"), false, TEXT("TheaterLandRuleDrawUp") },
+		// (Groups on the number keys, release 2: Brian, 26 November 2026 03:51Z, "you should be able to group units so
+		// you can hit the #1 and the units tied to it are all selected". Cmd on a Mac, Ctrl elsewhere, with a number
+		// ties those in hand to it; the number takes them in hand again, with Shift adds them, twice glides the view to
+		// them. The clock's pace moves from the numbers to the minus and plus keys while the row is on. A control and
+		// no battle rule. Off until the Mac and the art director pass it; -TheaterLandRuleGroups turns it on for a run.
+		// Name and line the UI director's of 03:53Z. The rules do not read the key: the screen does.)
+		{ TEXT("groups"), TEXT("Groups on the number keys"), TEXT("Tie the units in hand to a number with Cmd and that number (Ctrl on Windows); press the number to take them in hand again, twice to look at them. The clock's pace moves to \u2212 and +. Off: the numbers set the pace, as before. Only how you give orders: no result changes."), TEXT("TheaterLandNoGroups"), false, TEXT("TheaterLandRuleGroups") },
+		// (A map of the field in the corner, release 2: Brian, 26 November 2026 03:45Z, "its would be helpful to see a
+		// small map of the battle on the bottom right to know where everyone is". It shows the field, his units, the
+		// enemy units the field itself shows him and where he is looking (the design director, 03:50Z: the player's
+		// sight only); a click glides the view there, M folds it. Looks only. Off until the Mac and the art director
+		// pass it; -TheaterLandRuleFieldMap turns it on for a run. Name and line the UI director's of 03:51Z. The rules
+		// do not read the key: the screen does (Battle/LandFieldMap, LandBattleScreen.cpp).)
+		{ TEXT("fieldmap"), TEXT("A map of the field in the corner"), TEXT("A small map at the bottom right of the battle shows the field, your units, the enemy your men can see and where you are looking. Click it to look there; M folds it away. Looks only: no result changes."), TEXT("TheaterLandNoFieldMap"), false, TEXT("TheaterLandRuleFieldMap") },
 		// (Infantry with tanks, release 2: Brian, 23 November 05:05Z. NOT looks only: with it on the rules' tanks overrun
 		// foot in the open (sim.escort, sim.overruns, LAND.overrun) and results change (the design director, 27 November
 		// 2026, 01:54Z). So it sits here, with the rows whose lines say "This changes how battles turn out", and its line
@@ -156,27 +177,6 @@ namespace
 		// battle, the custom battles too: a team's fire shakes by its own harm, and a defence's line stays in its
 		// places while its teams fire. So the line says "into battle", not "campaign battles".)
 		{ TEXT("teams"), TEXT("Support teams in battle"), TEXT("Every infantry corps takes its own machine gun and mortar teams into battle, drawn from its own men, not extra ones, and they fire in support from behind its line. This changes how battles turn out. A change takes effect from the next battle. It works only with \u201CAttackers stay where they stop to fight\u201D and \u201CUnits face the fire that hurts most\u201D on."), TEXT("TheaterLandNoTeams"), false, TEXT("TheaterLandRuleTeams") },
-		// (Drawing up while he places his army, release 2: Brian, 26 November 2026 03:45Z, "i should be able to move my
-		// units in a formation before the battle begins during the deployed phase". A control of the setup step and no
-		// battle rule (the design director, 03:50Z): several units dragged as one, a line drawn on his ground, and LINE,
-		// TWO LINES, WEDGE, COLUMN, each place by the rules' own land:place, all of them or none. Off until the Mac and
-		// the art director pass it; -TheaterLandRuleDrawUp turns it on for a run. Name and line the UI director's of
-		// 03:51Z. The rules do not read the key: the screen does (LandBattleCommand.cpp, LandBattleScreen.cpp).)
-		{ TEXT("drawup"), TEXT("Draw up units together before battle"), TEXT("Before the battle begins you can take several units in hand, drag them as one, and draw them up in a line, two lines, a wedge or a column. Off: you place them one at a time, as before. Only how you place them: no result changes."), TEXT("TheaterLandNoDrawUp"), false, TEXT("TheaterLandRuleDrawUp") },
-		// (Groups on the number keys, release 2: Brian, 26 November 2026 03:51Z, "you should be able to group units so
-		// you can hit the #1 and the units tied to it are all selected". Cmd on a Mac, Ctrl elsewhere, with a number
-		// ties those in hand to it; the number takes them in hand again, with Shift adds them, twice glides the view to
-		// them. The clock's pace moves from the numbers to the minus and plus keys while the row is on. A control and
-		// no battle rule. Off until the Mac and the art director pass it; -TheaterLandRuleGroups turns it on for a run.
-		// Name and line the UI director's of 03:53Z. The rules do not read the key: the screen does.)
-		{ TEXT("groups"), TEXT("Groups on the number keys"), TEXT("Tie the units in hand to a number with Cmd and that number (Ctrl on Windows); press the number to take them in hand again, twice to look at them. The clock's pace moves to \u2212 and +. Off: the numbers set the pace, as before. Only how you give orders: no result changes."), TEXT("TheaterLandNoGroups"), false, TEXT("TheaterLandRuleGroups") },
-		// (A map of the field in the corner, release 2: Brian, 26 November 2026 03:45Z, "its would be helpful to see a
-		// small map of the battle on the bottom right to know where everyone is". It shows the field, his units, the
-		// enemy units the field itself shows him and where he is looking (the design director, 03:50Z: the player's
-		// sight only); a click glides the view there, M folds it. Looks only. Off until the Mac and the art director
-		// pass it; -TheaterLandRuleFieldMap turns it on for a run. Name and line the UI director's of 03:51Z. The rules
-		// do not read the key: the screen does (Battle/LandFieldMap, LandBattleScreen.cpp).)
-		{ TEXT("fieldmap"), TEXT("A map of the field in the corner"), TEXT("A small map at the bottom right of the battle shows the field, your units, the enemy your men can see and where you are looking. Click it to look there; M folds it away. Looks only: no result changes."), TEXT("TheaterLandNoFieldMap"), false, TEXT("TheaterLandRuleFieldMap") },
 		// (Fighting on after the break, release 2: Brian, 26 November 2026 03:53Z, "i feel like the battles end abruptly"
 		// and "if the enemy retreats, i have the option to continue on with the battle or end it". When an army breaks
 		// the battle does not end at once: the clock stands, a player who won chooses PURSUE or END THE BATTLE, and a
