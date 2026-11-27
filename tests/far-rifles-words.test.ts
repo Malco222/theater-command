@@ -19,6 +19,7 @@ import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { MEN_PER_DIV, type Game } from '../src/campaign/types';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
+import foldText from '../src/campaign/fold.ts?raw';
 
 const PER = 21300;
 const undo: (() => void)[] = [];
@@ -1057,5 +1058,18 @@ describe("the seventh read, point 2: the card before the fold gives the spare ri
     const a = addCorps(j, 'JAP', 'Kept corps', 'inf', 2, at, {}), b = addCorps(j, 'JAP', 'Folded corps', 'inf', 2, at, {});
     a.str = 0.6; b.str = 0.6;
     expect(foldCardLines(j, 'JAP', foldView(j, a, b))).toEqual({ men: '30,000 men', one: 'in one corps', over: '6,000 men over go back to the reserve.' });
+  });
+
+  // (The sceptic's K4 of the seventh read: fold.ts' own words for foldWords must not say that nothing is said of rifles
+  // where no men go back, now that the news and both cards say the spare rifles there.)
+  it('fold.ts says what foldWords gives where no men go back: the spare rifles, on the news and on the cards', () => {
+    const src = foldText as unknown as string;
+    const overDoc = /\/\*\*((?:(?!\*\/)[\s\S])*)\*\/\s*over: string \| null;\n\s*\/\*\* The news' clause for the rifles/.exec(src)?.[1] ?? '';
+    const block = /\/\*\*((?:(?!\*\/)[\s\S])*)\*\/\s*export function foldWords\(/.exec(src)?.[1] ?? '';
+    const flat = (s: string): string => s.replace(/\s*\n\s*\*\s?/g, ' ');
+    expect(flat(overDoc)).toContain('"2,300 spare rifles go to the store."');
+    expect(flat(block)).not.toContain('nothing is said of men or rifles going back');
+    expect(flat(block)).toContain('"..., and 2,300 spare rifles to the store."');
+    expect(flat(block)).toContain('"2,300 spare rifles go to the store."');
   });
 });

@@ -102,8 +102,11 @@ export interface FoldWords {
   /** The news' clause for the men sent back, or null where none go back: "6,000 sent back to the reserve", and for a
    * nation with a store "about 27,000 sent back to the reserve, and their rifles to the store". */
   back: string | null;
-  /** The cards' line for the men sent back, or null: "6,000 men over go back to the reserve.", and for a nation with a
-   * store "About 27,000 men over go back to the reserve, and their rifles to the store." */
+  /** The cards' line for the men sent back: "6,000 men over go back to the reserve.", and for a nation with a store
+   * "About 27,000 men over go back to the reserve, and their rifles to the store." (or "..., and their rifles and 1,200
+   * more to the store."). Where no men are said sent back, the line for the spare rifles the fold gives the store, for a
+   * nation with a store: "2,300 spare rifles go to the store." (set only where what the fold gives is passed: the cards,
+   * foldCardLines, and the news, foldCorps). Null where neither is said. */
   over: string | null;
   /** The news' clause for the rifles the fold gave the store where no men are said sent back, or null: "and 2,300
    * spare rifles to the store" (set only where the news passes what the fold gave, foldCorps). */
@@ -115,8 +118,11 @@ export interface FoldWords {
  * "about", to the thousand, as the reserve line beside them counts them; for a nation with a store, the rifles as a
  * clause on the men sent back ("..., about 27,000 sent back to the reserve, and their rifles to the store."). Every
  * other nation as built, byte for byte. Where no men go back (or, at a nation's own scale, fewer than rounds to a
- * thousand), nothing is said of men or rifles going back, even where the moved men's rifles pass the kept corps' full
- * and go to the store: the clause belongs to the men sent back.
+ * thousand), nothing is said of men going back; where the nation keeps a store and what the fold gives it is passed
+ * (`gave`: the news, foldCorps, with what the fold gave; the cards, foldCardLines, with what it would give), the spare
+ * rifles are said instead, the leftover men's among them: the news's "..., and 2,300 spare rifles to the store."
+ * (`spare`) and the cards' "2,300 spare rifles go to the store." (`over`). With `gave` unset, or no store kept, nothing
+ * is said of rifles there either.
  */
 export function foldWords(g: Game, nat: string, v: FoldView, gave?: number): FoldWords {
   const per = menScale(nat), rifles = binds(g, nat) ? ', and their rifles to the store' : '';
