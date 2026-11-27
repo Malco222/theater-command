@@ -39,7 +39,8 @@ export function islandOf(g: Game, r: Region | undefined | null): Island | null {
  * here, as their corps cards count them, not at the 67,000 of China's reserve sentences.)
  *
  * What counts is as ruled at 13:58Z: the corps of the side on the island's ground and in its town, for their own side
- * only; engineers apart, still in corps, up to `engRoom`; fortress crews apart under the fortress rows; a retreat onto
+ * only; engineers apart, still in corps, up to `engRoom`; fortress crews apart by their own kind, whatever the fortress
+ * rows' switch says (the design director, 00:20Z, 27 November 2026, D4: `counted`); a retreat onto
  * an island at room plus two, now two divisions' worth (`fits` with `slack` 2). Men are read as they stand: a worn
  * corps takes less room than a full one, and drafts that raise the men on an island over its room move nobody (the
  * design director, 21:37Z, 26 November 2026, 4: "drafts are never refused for room, because a refilled corps is the
@@ -76,15 +77,25 @@ const menOfCorps = (c: Corps): number => men(c);
  */
 function menOn(g: Game, r: Region, nat: string, going: readonly Corps[]): number {
   let n = 0;
-  for (const u of placed(g, r, nat)) if (u.kind !== 'eng' && !going.includes(u)) n += menOfCorps(u);
-  for (const u of r.garr ?? []) if (allied(g, nat, u.nat) && !roomless(g, u) && u.kind !== 'eng' && !going.includes(u)) n += menOfCorps(u);
+  for (const u of placed(g, r, nat)) if (counted(u) && !going.includes(u)) n += menOfCorps(u);
+  for (const u of r.garr ?? []) if (allied(g, nat, u.nat) && !roomless(g, u) && counted(u) && !going.includes(u)) n += menOfCorps(u);
   return n;
 }
+
+/**
+ * Whether a corps takes an island's room: not an engineer corps (counted apart, in corps), and not a corps of the
+ * fortress kind, told by its own kind whatever the fortress rows' switch says (the design director, 00:20Z, 27
+ * November 2026, D4: "YES, crews apart whatever the fortress-rows switch says. Room in men asks whether a placing can
+ * go there, and a fortress crew is never placed and never moves, so it is told by its own kind and counted once there.
+ * One switch never reads another's state to decide its own count. This widens my 13:58Z."). Read on an island alone:
+ * nothing else that reads `roomless` or `fortRow` changes.
+ */
+const counted = (u: Corps): boolean => u.kind !== 'eng' && u.kind !== 'fort';
 
 /** Whether only nat's own corps (none of an ally's) stand on an island, field and town, `going` left out. */
 function onlyMine(g: Game, r: Region, nat: string, going: readonly Corps[]): boolean {
   const there = [...placed(g, r, nat), ...(r.garr ?? []).filter((u) => allied(g, nat, u.nat) && !roomless(g, u))];
-  return there.every((u) => going.includes(u) || u.kind === 'eng' || u.nat === nat);
+  return there.every((u) => going.includes(u) || !counted(u) || u.nat === nat);
 }
 
 /** Engineer corps of nat's side in the field of r, `going` left out. */

@@ -6,8 +6,9 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { addCorps, createGame, removeCorps, retreatTarget, startPhase } from '../src/campaign/game';
-import { fits } from '../src/campaign/islands';
+import { fits, roomRefusal } from '../src/campaign/islands';
 import { startOpen } from '../src/campaign/staff';
+import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
 import { chartDist } from '../src/campaign/wrap';
 import setup from '../data/campaign/setup-1939.json';
@@ -84,4 +85,28 @@ describe('a beaten engineer corps falls back onto an island at room plus two (th
     expect(fits(g, sg, 'UK', [beaten], { slack: 2 })).toBe(true);
     expect(retreatTarget(g, beaten, jo, banned)?.name).toBe('Singapore');
   });
+});
+
+/** A whole-world war with a player, at his first month (seed 3). */
+function war(human: string): Game {
+  const g = startOpen(createGame(3, human));
+  for (let k = 0; !humanUp(g) && k < 400; k++) stepAI(g);
+  beginHuman(g);
+  return g;
+}
+
+describe('a fortress crew takes no room on an island, whatever the fortress rows say (the design director, 00:20Z, 27 November 2026, D4)', () => {
+  it("Pearl Harbor reads its one field division's men there, not its coast artillery's, with the fortress rows off", () => {
+    const g = war('USA');
+    expect(g.flags.fortRows).toBeUndefined();
+    const pearl = g.byName['Pearl Harbor'], hon = g.byName['Honolulu'];
+    const all = [...pearl.units, ...(pearl.garr ?? [])].filter((u) => u.nat === 'USA');
+    expect(all.map((u) => [u.kind, Math.round(u.divs * u.str * 15000)]).sort()).toEqual([['fort', 15000], ['inf', 10570]]);
+    const two = addCorps(g, 'USA', 'Two divisions (a test row)', 'inf', 2, hon.id, {});
+    expect(roomRefusal(g, pearl, [two])).toBe('Pearl Harbor has room for 2 divisions, about 30,000 men, and 11,000 of yours are there: only 19,000 more can go, and you are sending 30,000.');
+    // A corps of 19,000 fits beside them, where the crew's 15,000 counted would have left 4,000.
+    const one = addCorps(g, 'USA', 'One more (a test row)', 'inf', 2, hon.id, {});
+    one.str = 19000 / 30000;
+    expect(fits(g, pearl, 'USA', [one])).toBe(true);
+  }, 300000);
 });

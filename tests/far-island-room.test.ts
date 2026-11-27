@@ -211,27 +211,30 @@ describe('the player and Wake', () => {
     const g = war('UK');
     const singapore = at(g, 'Singapore'), johore = at(g, 'Johore');
     expect(singapore.nb).toEqual([johore.id]);
-    // (Read off the board: the coast guns' 15,000 and Malaya Command's men, drafted to 7,050 by the player's month.)
-    const there = [...placed(g, singapore, 'UK'), ...(singapore.garr ?? [])].filter((u) => u.kind !== 'eng').reduce((n, u) => n + men(u), 0);
-    expect(there).toBe(22050);
+    // (Read off the board: Malaya Command's men, drafted to 7,050 by the player's month. The coast guns' 15,000 are a
+    // fortress crew and take no room, whatever the fortress rows say: the design director, 00:20Z, 27 November 2026, D4.)
+    const all = [...placed(g, singapore, 'UK'), ...(singapore.garr ?? [])].filter((u) => u.kind !== 'eng');
+    expect(all.filter((u) => u.kind === 'fort').reduce((n, u) => n + men(u), 0)).toBe(15000);
+    const there = all.filter((u) => u.kind !== 'fort').reduce((n, u) => n + men(u), 0);
+    expect(there).toBe(7050);
     // Singapore's room is 5 (the design director's stand-in G of 14:28Z): a third corps, which its room of 2 corps
     // refused, now goes.
     const third = corps(g, 'UK', 'Third', johore);
     expect(hasRoom(g, singapore, third)).toBe(true);
     expect(whyNoRoom(g, third, singapore)).toBeNull();
     removeCorps(g, third);
-    const c = corps(g, 'UK', 'Army', johore, 4);
+    const c = corps(g, 'UK', 'Army', johore, 5);
     expect(hasRoom(g, singapore, c)).toBe(false);
     expect(reach(g, c).has(singapore.id)).toBe(false);
-    // (52,950 more fit: "more can go" is rounded down and the 22,050 there up, so the two add up to the room the line shows.)
-    const said = 'Singapore has room for 5 divisions, about 75,000 men, and 23,000 of yours are there: only 52,000 more can go, and you are sending 60,000.';
+    // (67,950 more fit: "more can go" is rounded down and the 7,050 there up, so the two add up to the room the line shows.)
+    const said = 'Singapore has room for 5 divisions, about 75,000 men, and 8,000 of yours are there: only 67,000 more can go, and you are sending 75,000.';
     expect(whyNoRoom(g, c, singapore)).toBe(said);
     expect(orderMove(g, c, singapore.id)).toBe(0);
     expect(moveCorps(g, c, singapore)).toBe(false);
     // (Nor by rail, with the island's own sentence.)
     expect(whyNoTrainFor(g, [c], singapore.id)).toMatchObject({ code: 'room', line: said, at: singapore.id });
-    // A worn army of 52,500 has the room a fresh one has not.
-    c.str = 0.875;
+    // A worn army of 67,500 has the room a fresh one has not.
+    c.str = 0.9;
     expect(hasRoom(g, singapore, c)).toBe(true);
     c.str = 1;
     // Ground that is no island says nothing of room here.
@@ -478,8 +481,9 @@ describe("the record's rows and an island's room", () => {
       const g = startOpen(createGame(3, 'USA'));
       g.flags.hist = stop;
       const pearl = at(g, 'Pearl Harbor');
-      // (Filled by hand before the 298th's month: a division of the player's at full strength beside the first day's.)
-      corps(g, 'USA', 'Filler', pearl, 1, 1);
+      // (Filled by hand before the 298th's month: two divisions of the player's at full strength beside the first day's.
+      // The coast artillery takes no room, the design director, 00:20Z, 27 November 2026, D4, so one would leave 4,430.)
+      corps(g, 'USA', 'Filler', pearl, 2, 1);
       expect(roomLeft(g, pearl, 'USA')).toBe(0);
       g.turn = 14;
       startPhase(g, 'USA');
@@ -516,11 +520,13 @@ describe("the island's sentences on a live board", () => {
       const g = war('UK');
       const sg = at(g, 'Singapore'), jo = at(g, 'Johore');
       const ids = (cs: Corps[]) => cs.map((c) => c.id);
-      const a1 = corps(g, 'UK', '1st Army', jo, 2), a2 = corps(g, 'UK', '2nd Army', jo, 2);
+      const a1 = corps(g, 'UK', '1st Army', jo, 2), a2 = corps(g, 'UK', '2nd Army', jo, 2), a3 = corps(g, 'UK', '3rd Army', jo, 2);
       TC().load(saveGame(g));
       expect(TC().province(sg.id).island.line, "head Singapore").toBe("Singapore has room for 5 divisions, about 75,000 men.");
-      expect(TC().railTip(ids([a1, a2]), sg.id).no, "some there (Singapore 22,050 of his; two armies of 30,000 by rail from Johore)").toBe("Singapore has room for 5 divisions, about 75,000 men, and 23,000 of yours are there: only 52,000 more can go, and you are sending 60,000.");
-      const a3 = corps(g, 'UK', '3rd Army', jo, 2), a4 = corps(g, 'UK', '4th Army', jo, 2, 0.5);
+      // (7,050 of his there: the coast guns are a fortress crew and take no room, the design director, 00:20Z, 27
+      // November 2026, D4.)
+      expect(TC().railTip(ids([a1, a2, a3]), sg.id).no, "some there (Singapore 7,050 of his; three armies of 30,000 by rail from Johore)").toBe("Singapore has room for 5 divisions, about 75,000 men, and 8,000 of yours are there: only 67,000 more can go, and you are sending 90,000.");
+      const a4 = corps(g, 'UK', '4th Army', jo, 2, 0.5);
       clear(g, sg);
       TC().load(saveGame(g));
       expect(TC().railTip(ids([a1, a2, a3]), sg.id).no, "none there (Singapore emptied by hand; 90,000 by rail)").toBe("Singapore has room for 5 divisions, about 75,000 men: you are sending 90,000.");
