@@ -294,6 +294,34 @@ describe('the offers page', () => {
   }, 600000);
 });
 
+// (The design director's ruling of 17:53Z, 27 November 2026, (1): "D1 reaches a formation offered to the player: one
+// rule for every seat. Okinawa full means 'to form at Kagoshima' with FORM IT lit, as a computer's row would. ... Card
+// and result agree.")
+describe('an offer sent on by sea: card and result agree, in every seat', () => {
+  it('where the page says "to form at Kagoshima", FORM IT puts the corps at Kagoshima and nowhere else, and a computer\'s Japan forms the same row there in the same month', () => {
+    // The player: Okinawa full before the row's month, November 1941 (month 27), so the offer is made sent on.
+    const g = war();
+    months(g, 1, 26);
+    okinawaFull(g);
+    months(g, 27, 27);
+    const r = open(g).sections[0].rows.find((x: any) => x.title === NOV41[2]);
+    expect([r.lines[0], r.buttons[0].label, r.buttons[0].ok]).toEqual(['Infantry, 8,000 men, to form at Kagoshima.', 'FORM IT', true]);
+    expect(TC().act(`offers:take:${index(NOV41[2])}`)).toMatchObject({ ok: true, note: `${NOV41[2]} is formed.` });
+    const h = loadGame(TC().save().text)!;
+    const at = (x: Game): string[] => x.corps.filter((c) => c.nat === 'JAP' && !c.dead && c.name === NOV41[2]).map((c) => x.regions[c.reg].name);
+    expect([h.turn, at(h)]).toEqual([27, ['Kagoshima']]);
+    // The computer: the same row on the same board (Okinawa filled the same way, in the same month) forms at
+    // Kagoshima in month 27: one rule for every seat.
+    const c = startOpen(createGame(5, null));
+    months(c, 1, 26);
+    okinawaFull(c);
+    const k = c.byName.Kagoshima, ok = c.byName.Okinawa, gk = g.byName.Kagoshima;
+    expect([standing(c, ok), standing(c, k)]).toEqual([standing(g, g.byName.Okinawa), standing(g, gk) - 1]);
+    months(c, 27, 27);
+    expect([c.flags[`sent:${index(NOV41[2])}`], at(c)]).toEqual([1, ['Kagoshima']]);
+  }, 600000);
+});
+
 // (The skeptic's review of 25 November 2026: the cases the first build left out or said wrongly. Words the marks do
 // not give are marked in offers-look.ts for the UI director.)
 describe('the offers page, mended after the review', () => {
