@@ -1420,7 +1420,8 @@ void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FStr
 	// (One look for the whole war: a mark is drawn as the one mark its nation's machines wear, where the art
 	// director's table says so. The American star in its disc is drawn as the star and bar, with no red centre,
 	// on every machine and in every year: the mark of the B-17 Brian approved. The German cross is drawn at its real
-	// proportions, on aircraft, tanks and the map's pieces alike: see the GER-BALKEN branch. See UnitTable::OneLook.)
+	// proportions, on aircraft, tanks and the map's pieces alike: see the GER-BALKEN branch. The British roundel is
+	// drawn with its rings at their real sizes: see the UK-RAF-A and UK-RAF-A1 branches. See UnitTable::OneLook.)
 	const FString Tag = UnitTable::OneLookMark(TagAsked);
 	auto Paint = [](const TCHAR* Hex) { return FLinearColor(FColor::FromHex(Hex)); };
 	const FLinearColor White = Paint(TEXT("F2F0E8")), Red = Paint(TEXT("C8102E")), Blue = Paint(TEXT("1F3A93")), Black = Paint(TEXT("141414")),
@@ -1610,6 +1611,26 @@ void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FStr
 		// The roundel of the upper wings: red on blue, with no white to catch the eye from above.
 		Disc(1.0, Blue);
 		Disc(0.42, Red);
+	}
+	else if (Tag == TEXT("UK-RAF-A"))
+	{
+		// The plain British roundel with its rings at their real sizes: red, white and blue across as one, three and
+		// five, so the white is three fifths of the whole and the red centre one fifth (the art director, 27 November
+		// 2026; the UK branch above draws it in thirds, with a red centre two thirds too wide). No file carries this
+		// mark: with one look on, the table draws it wherever UK or CAN is asked for.
+		Disc(1.0, Blue);
+		Disc(0.6, White);
+		Disc(0.2, Red);
+	}
+	else if (Tag == TEXT("UK-RAF-A1"))
+	{
+		// The fuselage roundel with its yellow outer ring, at its real sizes: red, white, blue and yellow across as
+		// one, three, five and seven (UK-A1 above has the yellow ring too thin and the red centre near twice too
+		// wide). No file carries this mark: with one look on, the table draws it wherever UK-A1 is asked for.
+		Disc(1.0, Yellow);
+		Disc(0.714, Blue);
+		Disc(0.429, White);
+		Disc(0.143, Red);
 	}
 	else if (Tag == TEXT("UK-FIN"))
 	{
