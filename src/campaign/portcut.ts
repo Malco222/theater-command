@@ -61,7 +61,7 @@ import { MORALE, moraleRules } from './morale';
 import { NAVY, SeaPicture, canPass, closedTo, fleetReach, inPassage, openSeas, seaSide, seaStarts, shipCount } from './navy';
 import { skiesOver } from './pacific';
 import { seaWhat } from './sea-words';
-import { fieldCtrl, siegeRules } from './siege';
+import { fieldCtrl, pocketDry, siegeRules } from './siege';
 import { witherAt } from './wither';
 import { farOn } from './world';
 import type { Corps, Game, Region } from './types';
@@ -152,7 +152,8 @@ export interface SeaHeld {
  * One corps of the garrison and the month the rule strikes it off if no ship gets in; `by` where that month is only the
  * latest it can come, something the count leaves out as the month stands being able to bring it sooner (lostMonth).
  * `fed`: the last month the port's stores feed it (null where they feed none), by the keep the rule reads at its own
- * nation's draw each month (fedTo).
+ * nation's draw each month (fedTo); none for a corps of the holder's in a pocket whose stores are spent (siege.ts
+ * pocketDry: his draws feed nobody there).
  */
 export interface GarrisonCount { id: number; lost: number; by: boolean; fed: number | null }
 
@@ -182,8 +183,8 @@ export interface PortCut {
   /** The month the stores were last filled for the holder (null where they never were, or the larder is not his). */
   lastFilled: number | null;
   /**
-   * The last month they feed the garrison (null where they feed none): the soonest of its corps' (GarrisonCount.fed),
-   * or with no garrison the holder's own, by the rule's clock (fedTo).
+   * The last month they feed the garrison (null where they feed none): the soonest of its corps' (GarrisonCount.fed,
+   * null where one of them is fed by none), or with no garrison the holder's own, by the rule's clock (fedTo).
    */
   feedsTo: number | null;
   /** The month the garrison goes hungry: the first month the stores feed it no longer. */
@@ -225,6 +226,9 @@ export interface PortCut {
  * A port whose stores the rules keep, as the supply picture's window reads it (game.ts computeSupply): a fortified port
  * overseas, held by a nation alive and at war, with no army of the enemy's round the town (a siege runs on the siege's
  * own clock: siege.ts) and no friendly ground beside it by land (where the roads may feed the garrison whatever the stores).
+ * A port with enemy ground beside it is cut off by land as well, a pocket (siege.ts pocketMonth): watched still, the
+ * pocket's clock running beside the window, and the holder's count reads the pocket's stores spent where the rule does
+ * (portCutOff).
  */
 function watched(g: Game, r: Region): boolean {
   return portOfKind(g, r) && !!g.nations[r.ctrl].atWar.length;
@@ -563,21 +567,27 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
   const flag = g.flags[`stores:${r.id}`];
   const his = flag !== undefined && (!trueReach(g) || keptStoresHis(g, r));
   const last = his ? flag : null;
+  // (A pocket, siege.ts pocketMonth: the port cut off by land as well as by sea, its holder's army there living on the
+  // pocket's stores on the pocket's own clock. Where the rule records those stores spent, the holder's draws feed nobody
+  // there, whatever the window (game.ts computeSupply, pocketDry): the stores feed none of his corps, this month or
+  // after, unless the ring is broken. Its other nations' draws are not stopped by it.)
+  const dry = siegeRules(g) && pocketDry(g, r, holder);
   // (The months they feed each nation's corps, by the keep the rule reads at that nation's draw each month: the keep
   // they were filled with while the crew whose stores they are lives, and after it starves, the keep it leaves. The UI
   // director's 01:14Z, item 3. With the fortress rows off, or no crew, the port's own two: the fill's month and two.)
   const crews = last !== null ? crewsOf(g, r, last, uncharged) : [];
   const feeds = new Map<string, number | null>();
   const fedFor = (nat: string): number | null => {
-    if (!feeds.has(nat)) feeds.set(nat, last === null ? null : fedTo(g, crews, last, nat));
+    if (!feeds.has(nat)) feeds.set(nat, last === null || (dry && nat === holder) ? null : fedTo(g, crews, last, nat));
     return feeds.get(nat)!;
   };
   // (Each corps' month, and the soonest it can come: the first loss is "by" its month where any corps of the garrison
   // can be lost before it.)
   const corps = garrisonOf(g, r);
   const counts = corps.map((c) => { const fed = fedFor(c.nat); return { id: c.id, fed, lost: lostMonth(g, c, fed, uncharged), soonest: lostMonth(g, c, fed, uncharged, true) }; });
-  // (The garrison lives on the stores through the last month they feed all of it.)
-  const feedsTo = last === null ? null : counts.length ? Math.min(...counts.map((x) => x.fed!)) : fedFor(holder);
+  // (The garrison lives on the stores through the last month they feed all of it: no month, where one of its corps is
+  // fed by none.)
+  const feedsTo = !counts.length ? fedFor(holder) : counts.some((x) => x.fed === null) ? null : Math.min(...counts.map((x) => x.fed!));
   const state = last === g.turn ? 'filled' : feedsTo !== null && feedsTo >= g.turn ? 'stores' : 'hungry';
   const lost = counts.length ? Math.min(...counts.map((x) => x.lost)) : null;
   return {
@@ -731,7 +741,8 @@ export function portCorpsLine(g: Game, c: Corps): string | null {
   // the rule's clock as it stands when the card is read, and never the picture of supply as last drawn, which may be
   // another nation's draw of this month and change within it: in March of the Canadian play a corps whose nation's draw
   // comes after a crew starves is still drawn as fed by Britain's, with the crew living, and its own draw will not feed
-  // it. Hungry by the clock, it reads hungry.)
+  // it. Hungry by the clock, it reads hungry: so too in a pocket whose stores the rule records spent, where its nation's
+  // draws feed it none whatever the port's stores, siege.ts pocketDry.)
   const fed = mine.fed !== null && mine.fed >= g.turn;
   return fed
     ? theWords(`Living on ${port}'s stores through ${monthSaid(g, mine.fed!)}.`)
