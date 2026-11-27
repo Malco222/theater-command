@@ -12,13 +12,16 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; (globalThis as any).TC_OFFERS = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, createGame, placed, relocate, rowOffers, setWar, startPhase } from '../src/campaign/game';
-import { saveGame } from '../src/campaign/save';
+import { addCorps, createGame, men, placed, relocate, removeCorps, rowCorps, rowOffers, setWar, startPhase } from '../src/campaign/game';
+import { fits, islandOf, roomLeft } from '../src/campaign/islands';
+import { chartDist } from '../src/campaign/wrap';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
-import { STACK, type Game } from '../src/campaign/types';
+import { MEN_PER_DIV, STACK, type Corps, type Game, type Region } from '../src/campaign/types';
+import { menWords } from '../src/campaign/manpower';
 import setup from '../data/campaign/setup-1939.json';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
-import { askForm, cardRowOf, offersLook } from '../unreal/TheaterCommand/Rules/offers-look';
+import { askForm, cardRowOf, offerLines, offersLook } from '../unreal/TheaterCommand/Rules/offers-look';
 import { orderDeclineFormation, orderTakeFormation } from '../src/campaign/turn';
 
 type Call = (...a: unknown[]) => any;
@@ -31,8 +34,50 @@ const months = (g: Game, from: number, to: number): void => { for (let t = from;
 const open = (g: Game, nat = 'JAP'): any => { g.phase = g.order.indexOf(nat); expect(TC().load(saveGame(g))).not.toBeNull(); return TC().page('offers'); };
 /** A row of the page as words: title, each line with its tone, and each button with whether it is lit and its tip. */
 const words = (r: any): unknown[] => [r.title, r.lines.map((l: string, i: number) => `${r.tones[i] || 'plain'}: ${l}`), r.buttons.map((b: any) => `${b.label} ${b.ok ? 'lit' : 'grey'}${b.tip ? ` (${b.tip})` : ''} -> ${b.act}`)];
-/** Okinawa full: five corps of Japan's on the island, so the 14th Army's 16th Division cannot form there. */
-const fillOkinawa = (g: Game): void => { for (let k = 0; placed(g, g.byName.Okinawa, 'JAP').filter((u) => u.kind !== 'eng').length < STACK; k++) addCorps(g, 'JAP', `Test garrison ${k}`, 'inf', 1, 'Okinawa', {}); };
+/**
+ * The 14th Army's 16th Division as the rule reads its room: the corps it forms (game.ts `rowCorps`) and the corps of
+ * his it takes, which leave as it forms: the offer's own `takes` once it is offered, and before that the corps its row
+ * is made from (`from`), as the rule's `rowOut` reads them.
+ */
+const sixteenth = (g: Game): { going: Corps[]; out: Corps[] } => {
+  const row = rows[index(NOV41[2])], o = rowOffers(g).find((x) => x.id === index(NOV41[2]));
+  return { going: rowCorps(g, 'JAP', row, row[6] ?? {}), out: o ? o.takes.map((t) => g.corps.find((c) => c.id === t.id)!) : g.corps.filter((c) => c.nat === 'JAP' && !c.dead && (row[6].from as string[]).includes(c.name)) };
+};
+/** The 14th Army's 16th Division's offer as the rule gives it. */
+const of = (x: Game) => rowOffers(x).find((o) => o.id === index(NOV41[2]))!;
+/** A ground's fighting corps of Japan's side, as the five are counted on any ground (engineers apart). */
+const standing = (g: Game, r: Region): number => placed(g, r, 'JAP').filter((u) => u.kind !== 'eng').length;
+/**
+ * Okinawa full for the 14th Army's 16th Division, read the way the rule reads room: full in men by the rule's own
+ * reader (`fits` refuses the row's own corps) with five fighting corps standing there, so that it stays full when a
+ * place among the five is asked as well (the design director, 14:13Z, 27 November 2026, (2)). Every harbour of Japan's
+ * is left as it is: the row is sent on by sea to the nearest held harbour with room, Kagoshima (game.ts roomNear, the
+ * design director's D1 of 00:20Z, 27 November 2026), and an offer of the player's with it, "to form at Kagoshima" with
+ * FORM IT lit, as a computer's row would: her ruling of 17:53Z, 27 November 2026, (1).
+ */
+const okinawaFull = (g: Game): void => {
+  const { going, out } = sixteenth(g), okinawa = g.byName.Okinawa;
+  for (let k = 0; standing(g, okinawa) < STACK || fits(g, okinawa, 'JAP', going, { out }); k++) addCorps(g, 'JAP', `Test garrison ${k}`, 'inf', 1, 'Okinawa', {});
+};
+/**
+ * No room for the 14th Army's 16th Division "at Okinawa, or near it": Okinawa full (`okinawaFull`), and every other
+ * harbour of Japan's filled too until `fits`, asked as roomNear asks it, refuses the row there, so that no held ground
+ * anywhere has room and the row waits (D1: "Where no held ground anywhere has room, it waits until one does."). The
+ * board of top-up 1's harbour fill: the one offer that truly cannot form this month, and stays open.
+ */
+const noRoomForSixteenth = (g: Game): void => {
+  const { going, out } = sixteenth(g), okinawa = g.byName.Okinawa;
+  okinawaFull(g);
+  for (const r of g.regions) {
+    if (!r.port || r === okinawa || r.ctrl !== 'JAP') continue;
+    // (No `hold`: this is the player's Japan, whose corps no staff moves. far-lapse holds its harbour fillers because
+    // its board is walked in the computer's seat too: top-up 1's verifier, F3.)
+    for (let k = 0; k < 12 && fits(g, r, 'JAP', going, { rows: standing(g, r), out }); k++) addCorps(g, 'JAP', `Test harbour ${r.name} ${k}`, 'inf', 1, r.id, {});
+  }
+  // (Every harbour so filled is full for the row: `fits`, asked as roomNear's sea branch asks it, refuses the row's own
+  // corps at each. The loop stops at twelve corps; this says that was enough.)
+  expect(g.regions.filter((r) => r.port && r !== okinawa && r.ctrl === 'JAP' && fits(g, r, 'JAP', going, { rows: standing(g, r), out })).map((r) => r.name)).toEqual([]);
+};
 /** A player's Japan in December 1941 (month 28), at war with Britain and with Singapore his: two loans have ended. */
 const singapore = (): Game => {
   const g = war();
@@ -46,6 +91,8 @@ const singapore = (): Game => {
 };
 
 const FIFTH = '21st Army (5th Division)';
+/** The UI director's line for an offer sent on by sea, her paper of 18:04Z, 27 November 2026, on this board's places. */
+const MOVED_LINE = 'Okinawa has no room for it. Kagoshima is your nearest harbour with room.';
 const NOV41 = ['25th Army (18th Division)', '14th Army (48th Division)', '14th Army (16th Division)', '16th Army (2nd Division)', '4th Tank Regiment'];
 const GARRISON = 'Tientsin-Pukow railway garrison (21st Division, less its Bataan detachment)';
 const ONE_NOTE = 'It would be formed out of corps you have, as history formed it. It waits for your answer until its last month, or until a corps it needs is gone.';
@@ -121,8 +168,14 @@ describe('the offers page', () => {
   it('FORM IT shut: greyed, its reason its tip and the row\'s last line; DECLINE stays open', () => {
     const g = war();
     months(g, 1, 30);
-    fillOkinawa(g);
-    const why = 'There is no room for another corps at Okinawa, or near it.';
+    noRoomForSixteenth(g);
+    // (The no-room case comes from the fill and is read by the rule's own readers: Okinawa refuses the row's own corps,
+    // has less room left than the row's men, and five fighting corps stand there.)
+    const { going, out } = sixteenth(g), okinawa = g.byName.Okinawa;
+    expect([fits(g, okinawa, 'JAP', going, { out }), roomLeft(g, okinawa, 'JAP') * MEN_PER_DIV < men(going[0]), standing(g, okinawa)]).toEqual([false, true, STACK]);
+    // ("on Okinawa": the no-room line takes "on" or "at" from the page's own island test, game.ts `onOrAt`, as the first
+    // line does: the UI director's small mend of 18:04Z, 27 November 2026. "at" for a place on land: far-lapse, Taihoku.)
+    const why = 'There is no room for another corps on Okinawa, or near it.';
     const r = open(g).sections[0].rows.find((x: any) => x.title === NOV41[2]);
     expect(words(r)).toEqual([NOV41[2], ['plain: Infantry, 8,000 men, to form on Okinawa.', 'plain: Takes your General reserve (16th Division, home from China) at Osaka, 15,000 men.',
       'plain: The other 8,000 are lost with the old corps.', 'muted: Offered in November 1941, open until May 1942.', `muted: ${why}`],
@@ -160,12 +213,30 @@ describe('the offers page', () => {
   it('the head asks in place: both questions with their figures, GO BACK first and safe', () => {
     const g = war();
     months(g, 1, 30);
-    fillOkinawa(g);
-    open(g);
+    okinawaFull(g);
+    // (Moved by D1, the design director's ruling of 17:53Z, 27 November 2026, (1): "Okinawa full means 'to form at
+    // Kagoshima' with FORM IT lit, as a computer's row would." Okinawa refuses the row's own corps and five stand there;
+    // Kagoshima, a harbour of Japan's, has room for it. So all six can form, and none is passed over. Before her ruling
+    // this read "Form all 5? ... 1 cannot be formed this month and stays open.": that case is now tested on a board
+    // with no room anywhere, below, "answered through the page's own acts".)
+    const { going, out } = sixteenth(g), okinawa = g.byName.Okinawa, kagoshima = g.byName.Kagoshima;
+    expect([fits(g, okinawa, 'JAP', going, { out }), roomLeft(g, okinawa, 'JAP') * MEN_PER_DIV < men(going[0]), standing(g, okinawa), fits(g, kagoshima, 'JAP', going, { rows: standing(g, kagoshima), out })]).toEqual([false, true, STACK, true]);
+    const r = open(g).sections[0].rows.find((x: any) => x.title === NOV41[2]);
+    // (The second line is the UI director's, 18:04Z, 27 November 2026: why the place moved.)
+    expect(words(r)).toEqual([NOV41[2], ['plain: Infantry, 8,000 men, to form at Kagoshima.', `plain: ${MOVED_LINE}`, 'plain: Takes your General reserve (16th Division, home from China) at Osaka, 15,000 men.',
+      'plain: The other 8,000 are lost with the old corps.', 'muted: Offered in November 1941, open until May 1942.'],
+    [`FORM IT lit -> offers:take:${index(NOV41[2])}`, `DECLINE lit -> offers:decline:${index(NOV41[2])}`]]);
     expect(TC().act('offers:ask:take')).toMatchObject({ ok: true });
     let p = TC().page('offers');
-    // Five can form: five corps of his leave the map (15,000, 15,000, 15,000, 4,000 and 15,000 men), and one is passed over.
-    expect(p.note).toBe('Form all 5? 5 of your corps leave the map, 64,000 men, and 5 formations form. It cannot be undone. 1 cannot be formed this month and stays open.');
+    // The head's figures from the rule's own readers: the offers that can form this month (no `why`), each corps of his
+    // they take counted once, with its men by the rule's `men`, said in the page's round figures (`menWords`).
+    const all = rowOffers(g), go = all.filter((o) => !o.why);
+    const struck = [...new Set(go.flatMap((o) => o.takes.map((t) => t.id)))].map((id) => g.corps.find((c) => c.id === id && !c.dead)!);
+    const gone = struck.reduce((n, c) => n + men(c), 0);
+    expect([all.length, go.length, struck.length]).toEqual([6, 6, 6]);
+    expect(p.note).toBe(`Form all ${go.length}? ${struck.length} of your corps leave the map, ${menWords(gone)} men, and ${go.length} formations form. It cannot be undone.`);
+    // Six can form: six corps of his leave the map (15,000, 15,000, 15,000, 15,000, 4,000 and 15,000 men), and none is passed over.
+    expect(p.note).toBe('Form all 6? 6 of your corps leave the map, 79,000 men, and 6 formations form. It cannot be undone.');
     expect(p.top).toEqual([{ label: 'GO BACK', act: 'offers:back', ok: true, tip: '', safe: true }, { label: 'FORM ALL', act: 'offers:all:take', ok: true, tip: '', danger: true }]);
     expect(TC().act('offers:back')).toMatchObject({ ok: true });
     p = TC().page('offers');
@@ -183,16 +254,30 @@ describe('the offers page', () => {
   it("answered through the page's own acts: form one, decline one, then accept all with one that cannot form, which stays open", () => {
     const g = war();
     months(g, 1, 30);
-    fillOkinawa(g);
+    // (Moved by D1, the design director's ruling of 17:53Z, 27 November 2026, (1): with Okinawa alone full the 16th
+    // Division is sent on to Kagoshima and can form, so the one that cannot form is made on a board where no held
+    // ground anywhere has room for it, top-up 1's harbour fill: Okinawa full and every other harbour of Japan's too.
+    // Read by the rule's own readers: Okinawa refuses the row's own corps, and no harbour of Japan's takes it.)
+    noRoomForSixteenth(g);
+    const { going, out } = sixteenth(g), okinawa = g.byName.Okinawa;
+    expect([fits(g, okinawa, 'JAP', going, { out }), standing(g, okinawa), g.regions.filter((r) => r.port && r.ctrl === 'JAP' && fits(g, r, 'JAP', going, { rows: standing(g, r), out })).map((r) => r.name)]).toEqual([false, STACK, []]);
     open(g);
     expect(TC().act(`offers:take:${index(NOV41[0])}`)).toMatchObject({ ok: true, note: `${NOV41[0]} is formed.`, open: '' });
     expect(TC().act(`offers:decline:${index(NOV41[1])}`)).toMatchObject({ ok: true, note: `${NOV41[1]} is declined: your corps stay as they are.`, open: '' });
     expect(TC().page('offers').sections[0].rows.map((r: any) => r.title)).toEqual([NOV41[2], NOV41[3], NOV41[4], GARRISON]);
     TC().act('offers:ask:take');
+    // The head's figures from the rule's own readers: the offers that can form (no `why`), each corps of his they take
+    // counted once with its men by `men`; the one passed over is the 16th Division, for want of room. (Read on the war
+    // as the page's acts have left it: the bridge's own, through its save.)
+    const h = loadGame(TC().save().text)!;
+    const left = rowOffers(h), go = left.filter((o) => !o.why), passed = left.filter((o) => o.why);
+    const struck = [...new Set(go.flatMap((o) => o.takes.map((t) => t.id)))].map((id) => h.corps.find((c) => c.id === id && !c.dead)!);
+    expect([go.map((o) => o.name), passed.map((o) => [o.name, o.why])]).toEqual([[NOV41[3], NOV41[4], GARRISON], [[NOV41[2], 'There is no room for another corps on Okinawa, or near it.']]]);
+    expect(TC().page('offers').note).toBe(`Form all ${go.length}? ${struck.length} of your corps leave the map, ${menWords(struck.reduce((n, c) => n + men(c), 0))} men, and ${go.length} formations form. It cannot be undone. ${passed.length} cannot be formed this month and stays open.`);
     expect(TC().page('offers').note).toBe('Form all 3? 3 of your corps leave the map, 34,000 men, and 3 formations form. It cannot be undone. 1 cannot be formed this month and stays open.');
     const all = TC().act('offers:all:take');
     expect(all).toMatchObject({ ok: false, open: '' });
-    expect(all.note).toBe(`3 formations are formed: ${NOV41[3]}, ${NOV41[4]} and ${GARRISON}. ${NOV41[2]} is not formed. There is no room for another corps at Okinawa, or near it.`);
+    expect(all.note).toBe(`3 formations are formed: ${NOV41[3]}, ${NOV41[4]} and ${GARRISON}. ${NOV41[2]} is not formed. There is no room for another corps on Okinawa, or near it.`);
     const p = TC().page('offers');
     expect([p.headline, p.sections[0].rows.map((r: any) => r.title), p.top]).toEqual(['1 formation offered', [NOV41[2]], [{ ...HEAD_BUTTONS[0], ok: false }, HEAD_BUTTONS[1]]]);
     // Declining the last one closes the page.
@@ -219,6 +304,145 @@ describe('the offers page', () => {
     // Asked from out of his month, the head does not ask.
     TC().act('offers:ask:take');
     expect(TC().page('offers').top.map((b: any) => b.label)).toEqual(['ACCEPT ALL', 'DECLINE ALL']);
+  }, 600000);
+});
+
+// (The design director's ruling of 17:53Z, 27 November 2026, (1): "D1 reaches a formation offered to the player: one
+// rule for every seat. Okinawa full means 'to form at Kagoshima' with FORM IT lit, as a computer's row would. ... Card
+// and result agree.")
+describe('an offer sent on by sea: card and result agree, in every seat', () => {
+  it('where the page says "to form at Kagoshima", FORM IT puts the corps at Kagoshima and nowhere else, and a computer\'s Japan forms the same row there in the same month', () => {
+    // The player: Okinawa full before the row's month, November 1941 (month 27), so the offer is made sent on.
+    const g = war();
+    months(g, 1, 26);
+    okinawaFull(g);
+    months(g, 27, 27);
+    const r = open(g).sections[0].rows.find((x: any) => x.title === NOV41[2]);
+    expect([r?.lines[0], r?.buttons[0].label, r?.buttons[0].ok]).toEqual(['Infantry, 8,000 men, to form at Kagoshima.', 'FORM IT', true]);
+    expect(TC().act(`offers:take:${index(NOV41[2])}`)).toMatchObject({ ok: true, note: `${NOV41[2]} is formed.` });
+    const h = loadGame(TC().save().text)!;
+    const at = (x: Game): string[] => x.corps.filter((c) => c.nat === 'JAP' && !c.dead && c.name === NOV41[2]).map((c) => x.regions[c.reg].name);
+    expect([h.turn, at(h)]).toEqual([27, ['Kagoshima']]);
+    // The computer: the same row on the same board (Okinawa filled the same way, in the same month) forms at
+    // Kagoshima in month 27: one rule for every seat.
+    const c = startOpen(createGame(5, null));
+    months(c, 1, 26);
+    okinawaFull(c);
+    const k = c.byName.Kagoshima, ok = c.byName.Okinawa, gk = g.byName.Kagoshima;
+    expect([standing(c, ok), standing(c, k)]).toEqual([standing(g, g.byName.Okinawa), standing(g, gk) - 1]);
+    months(c, 27, 27);
+    expect([c.flags[`sent:${index(NOV41[2])}`], at(c)]).toEqual([1, ['Kagoshima']]);
+  }, 600000);
+
+  it('the fact the page is handed: from Okinawa to Kagoshima when Okinawa is full; none with room on Okinawa; none with no room anywhere, where FORM IT is grey with the old tip', () => {
+    const g = war();
+    months(g, 1, 30);
+    const okinawa = g.byName.Okinawa, kagoshima = g.byName.Kagoshima;
+    // Room on Okinawa: it forms there, and nothing moved.
+    expect(of(g)).toMatchObject({ region: okinawa.id, why: null, moved: null });
+    // Okinawa full: the rule sends it on to Kagoshima, and says so once, in its own placing (`rowPlace`).
+    okinawaFull(g);
+    expect(of(g)).toMatchObject({ region: kagoshima.id, why: null });
+    expect(of(g).moved).toEqual({ from: okinawa.id, to: kagoshima.id, by: 'sea' });
+    // No room anywhere: it is not sent on; it waits at Okinawa, FORM IT grey with the old tip.
+    const n = war();
+    months(n, 1, 30);
+    noRoomForSixteenth(n);
+    const why = 'There is no room for another corps on Okinawa, or near it.';
+    expect(of(n)).toMatchObject({ region: okinawa.id, why, moved: null });
+    const r = open(n).sections[0].rows.find((x: any) => x.title === NOV41[2]);
+    expect([r.lines[0], r.buttons[0]]).toEqual(['Infantry, 8,000 men, to form on Okinawa.', { label: 'FORM IT', act: `offers:take:${index(NOV41[2])}`, ok: false, tip: why }]);
+  }, 600000);
+
+  // (The sceptic's F3, 27 November 2026: the fact was set from whatever place the rule had reached, so a row whose own
+  // place is not held, which falls back to its capital (`rowPlace`'s `home`), was handed a move from Tokyo. The brief's
+  // T2-1: null where "the row's place [is] not held".)
+  it('the fact is none where the row\'s own place is not held: Okinawa lost, the row falls back to Tokyo and forms near it with room, and nothing is told as moved', () => {
+    const g = war();
+    months(g, 1, 30);
+    const okinawa = g.byName.Okinawa, tokyo = g.regions[g.nations.JAP.capital];
+    for (const c of g.corps.filter((x) => x.nat === 'JAP' && !x.dead && x.reg === okinawa.id)) removeCorps(g, c);
+    okinawa.ctrl = 'CHN';
+    expect([okinawa.owner, g.nations.JAP.atWar.includes('CHN'), tokyo.name]).toEqual(['JAP', true, 'Tokyo']);
+    // It forms at a place of Japan's own with room, by the rule (no "why"), and that place is not Okinawa.
+    const lines = (): string[] => offerLines(g, of(g)).map((l) => l.text);
+    const at = (): string => g.regions[of(g).region].name;
+    expect([of(g).why, of(g).region === okinawa.id, g.regions[of(g).region].ctrl]).toEqual([null, false, 'JAP']);
+    expect([of(g).moved, lines()[0], lines().some((l) => /has no room for it/.test(l))]).toEqual([null, `Infantry, 8,000 men, to form at ${at()}.`, false]);
+    // Its fallback place full too: the rule sends it on again, and still nothing is told as moved.
+    const first = g.byName[at()], { going } = sixteenth(g);
+    for (let k = 0; standing(g, first) < STACK || fits(g, first, 'JAP', going, {}); k++) addCorps(g, 'JAP', `Test fallback ${k}`, 'inf', 1, first.id, {});
+    expect([of(g).why, at() === first.name, of(g).moved, lines()[0], lines().some((l) => /has no room for it/.test(l))]).toEqual([null, false, null, `Infantry, 8,000 men, to form at ${at()}.`, false]);
+    // (The design director's check of 20:19Z, 27 November 2026, on F3: "No moved line is right if the card's "to form
+    // at X" names the fallback place, read from the same function that forms it. Pin one such card. If a card names its
+    // own unheld place, that is a fault.") The page's card names the place, no card names Okinawa, and FORM IT pressed
+    // forms the corps there and nowhere else.
+    const there = at(), r = open(g).sections[0].rows.find((x: any) => x.title === NOV41[2]);
+    expect([r.lines[0], r.buttons[0].label, r.buttons[0].ok]).toEqual([`Infantry, 8,000 men, to form at ${there}.`, 'FORM IT', true]);
+    expect(open(g).sections.flatMap((sec: any) => sec.rows).filter((x: any) => x.lines.some((l: string) => /Okinawa/.test(l))).map((x: any) => x.title)).toEqual([]);
+    expect(TC().act(`offers:take:${index(NOV41[2])}`)).toMatchObject({ ok: true, note: `${NOV41[2]} is formed.` });
+    const h = loadGame(TC().save().text)!;
+    expect(h.corps.filter((c) => c.nat === 'JAP' && !c.dead && c.name === NOV41[2]).map((c) => h.regions[c.reg].name)).toEqual([there]);
+  }, 600000);
+});
+
+// (The UI director's line for an offer sent on by sea, her paper of 18:04Z, 27 November 2026,
+// pacific-japan/wip/island-room-in-men-UI-MARKS.md, "The offer moved to a harbour": "the row's second line, plain:
+// Okinawa has no room for it. Kagoshima is your nearest harbour with room." ... "in every month the offer stands
+// moved. It is gone in the month Okinawa has room for it again, when the first line reads 'on Okinawa'.")
+describe("the UI director's line for an offer sent on by sea", () => {
+  it('the row\'s second line, plain, in every month the offer stands moved, and gone in the month Okinawa has room again', () => {
+    const g = war();
+    months(g, 1, 26);
+    okinawaFull(g);
+    const lines = (): unknown[] => { const r = open(g).sections[0].rows.find((x: any) => x.title === NOV41[2]); return words(r)[1] as unknown[]; };
+    for (const t of [27, 28]) {
+      months(g, t, t);
+      expect([t, ...lines().slice(0, 2)]).toEqual([t, 'plain: Infantry, 8,000 men, to form at Kagoshima.', `plain: ${MOVED_LINE}`]);
+    }
+    // Room on Okinawa again in month 29: the first line reads "on Okinawa", and the line is gone.
+    for (const c of g.corps.filter((x) => /^Test garrison/.test(x.name) && !x.dead)) removeCorps(g, c);
+    months(g, 29, 29);
+    expect(of(g).moved).toBeNull();
+    expect(lines()).toEqual(['plain: Infantry, 8,000 men, to form on Okinawa.', 'plain: Takes your General reserve (16th Division, home from China) at Osaka, 15,000 men.',
+      'plain: The other 8,000 are lost with the old corps.', 'muted: Offered in November 1941, open until May 1942.']);
+  }, 600000);
+
+  // (Her fact to confirm, by a run: "'with room' must mean room for the whole formation ... If the rule can choose a
+  // harbour with less room than the formation takes, tell me before the line ships." The sea branch asks `fits` with
+  // the row's own corps: a harbour with room for less than the whole formation is passed over, and the line names the
+  // next one, where the corps forms whole.)
+  it('"your nearest harbour with room" is room for the whole formation: a nearer harbour with less room is passed over, the line names the next, and the corps forms there whole', () => {
+    // Japan's harbours by the sea's own distance from Okinawa, at the board's month, as the sea branch orders them.
+    const board = (): Game => { const g = war(); months(g, 1, 30); okinawaFull(g); return g; };
+    const near = (g: Game): Region[] => g.regions.filter((r) => r.port && r.ctrl === 'JAP' && r !== g.byName.Okinawa).sort((a, b) => chartDist(g, a, g.byName.Okinawa) - chartDist(g, b, g.byName.Okinawa) || a.id - b.id);
+    const formed = (g: Game, name: string): unknown[] => {
+      const r = open(g).sections[0].rows.find((x: any) => x.title === name);
+      const said = (words(r)[1] as string[]).slice(0, 2), ok = r.buttons[0].ok;
+      TC().act(`offers:take:${index(name)}`);
+      const h = loadGame(TC().save().text)!;
+      const c = h.corps.filter((x) => x.nat === 'JAP' && !x.dead && x.name === name);
+      return [said, ok, c.map((x) => [h.regions[x.reg].name, men(x)])];
+    };
+    // (a) A mainland harbour with five corps standing: Kagoshima, the nearest, packed by count until the rule's own
+    // `fits` (five rows) refuses the row there. It is passed over for Taihoku, the next, which has room for it whole.
+    const a = board();
+    const [k1, t1] = near(a);
+    expect([k1.name, !!islandOf(a, k1), t1.name, !!islandOf(a, t1)]).toEqual(['Kagoshima', false, 'Taihoku', true]);
+    const { going, out } = sixteenth(a), whole = men(going[0]);
+    for (let k = 0; standing(a, k1) < STACK || fits(a, k1, 'JAP', going, { rows: standing(a, k1), out }); k++) addCorps(a, 'JAP', `Pack ${k}`, 'inf', 1, k1.id, {});
+    expect([standing(a, k1), fits(a, k1, 'JAP', going, { rows: standing(a, k1), out }), fits(a, t1, 'JAP', going, { rows: standing(a, t1), out }), roomLeft(a, t1, 'JAP') * MEN_PER_DIV >= whole]).toEqual([STACK, false, true, true]);
+    expect(formed(a, NOV41[2])).toEqual([['plain: Infantry, 8,000 men, to form at Taihoku.', 'plain: Okinawa has no room for it. Taihoku is your nearest harbour with room.'], true, [['Taihoku', whole]]]);
+    // (b) And an island harbour of the table with room for one man fewer than the formation takes: Taihoku, the next
+    // after Kagoshima, so filled by men that its room left is the row's men less one. It is passed over too, for the
+    // next harbour, Nagasaki, which has room for the whole formation; the corps forms there whole.
+    const b = board();
+    const [k2, t2, n2] = near(b);
+    for (let k = 0; standing(b, k2) < STACK || fits(b, k2, 'JAP', going, { rows: standing(b, k2), out }); k++) addCorps(b, 'JAP', `Pack ${k}`, 'inf', 1, k2.id, {});
+    const left = roomLeft(b, t2, 'JAP') * MEN_PER_DIV, fill = addCorps(b, 'JAP', 'Fill Taihoku', 'inf', 1, t2.id, {});
+    fill.str = (left - (whole - 1)) / MEN_PER_DIV;
+    expect([t2.name, Math.round(roomLeft(b, t2, 'JAP') * MEN_PER_DIV), fits(b, t2, 'JAP', going, { rows: standing(b, t2), out }), n2.name, fits(b, n2, 'JAP', going, { rows: standing(b, n2), out })]).toEqual(['Taihoku', whole - 1, false, 'Nagasaki', true]);
+    expect(formed(b, NOV41[2])).toEqual([['plain: Infantry, 8,000 men, to form at Nagasaki.', 'plain: Okinawa has no room for it. Nagasaki is your nearest harbour with room.'], true, [['Nagasaki', whole]]]);
   }, 600000);
 });
 

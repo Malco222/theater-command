@@ -14,10 +14,19 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; (globalThis as any).TC_OFFERS = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, createGame, placed, removeCorps, rowOffers, setWar, startPhase } from '../src/campaign/game';
+import { addCorps, createGame, halfYearLast, men, placed, removeCorps, rowCorps, rowOffers, setWar, startPhase } from '../src/campaign/game';
+import { fits, roomLeft } from '../src/campaign/islands';
 import { startOpen } from '../src/campaign/staff';
-import { STACK, type Corps, type Game } from '../src/campaign/types';
+import { MEN_PER_DIV, STACK, type Corps, type Game, type Region } from '../src/campaign/types';
 import setup from '../data/campaign/setup-1939.json';
+import { offerLines } from '../unreal/TheaterCommand/Rules/offers-look';
+import '../unreal/TheaterCommand/Rules/campaign-bridge';
+import { loadGame, saveGame } from '../src/campaign/save';
+import { turnToDate } from '../src/core/ticket';
+import { setStop } from '../src/campaign/history';
+
+type Call = (...a: unknown[]) => any;
+const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
 
 const rows = (setup as any).expeditions as any[][];
 const war = (human: string | null): Game => startOpen(createGame(5, human));
@@ -91,15 +100,51 @@ describe('a row whose war is over lapses at once, for the player and the compute
 });
 
 describe("the player's offer stays in the list for the same half year as the computer's row", () => {
-  /** Formosa full: five corps of Japan's at Taihoku and at Formosa, so that the 21st Army's 5th Division has nowhere to form on the island. */
+  /** The 21st Army's 5th Division as the rule reads its room: the corps it forms (game.ts `rowCorps`) and the corps of his it is made from (its row's `from`), which leave as it forms. */
+  const fifth = (g: Game): { going: Corps[]; out: Corps[] } => {
+    const o = rows[fifthId][6] ?? {};
+    return { going: rowCorps(g, 'JAP', rows[fifthId], o), out: g.corps.filter((c) => c.nat === 'JAP' && !c.dead && (o.from as string[]).includes(c.name)) };
+  };
+  /** A ground's fighting corps of Japan's side, as the five are counted on any ground (engineers apart). */
+  const standing = (g: Game, r: Region): number => placed(g, r, 'JAP').filter((u) => u.kind !== 'eng').length;
+  /**
+   * No room for the 21st Army's 5th Division on Formosa, nor near it, read the way the rule now reads room. Taihoku and
+   * Formosa (the island's two grounds, joined by land): full in men by the rule's own reader (`fits` refuses the row's
+   * own corps) with five fighting corps standing on each, so that they stay full when a place among the five is asked
+   * as well (the design director, 14:13Z, 27 November 2026, (2)). Near them: since round 2 a dated row for a full
+   * island of the table goes by sea to the nearest held harbour with room (game.ts roomNear, commit b180e02e4, the
+   * design director's D1 of 00:20Z, 27 November 2026), where the base found none by land and the row had no place: at
+   * 1084839a0 it is offered and formed at Amoy. So every other harbour of Japan's is filled too, held for its staff,
+   * until `fits`, asked as roomNear asks it, refuses the row there. (The player's offer is sent on by sea as a
+   * computer's row is: the design director, 17:53Z, 27 November 2026, 1. This board has no room anywhere, so neither
+   * seat's row is sent on.)
+   */
   const fill = (g: Game): void => {
+    const { going, out } = fifth(g);
     for (const nm of ['Taihoku', 'Formosa']) {
       const r = g.byName[nm];
-      for (let k = 0; placed(g, r, 'JAP').filter((u) => u.kind !== 'eng').length < STACK; k++) addCorps(g, 'JAP', `Test filler ${nm} ${k}`, 'inf', 1, nm, {});
+      for (let k = 0; standing(g, r) < STACK || fits(g, r, 'JAP', going, { out }); k++) addCorps(g, 'JAP', `Test filler ${nm} ${k}`, 'inf', 1, nm, {});
+    }
+    for (const r of g.regions) {
+      if (!r.port || r.ctrl !== 'JAP' || r === g.byName.Taihoku || r === g.byName.Formosa) continue;
+      // (Held for its staff, `hold: true`: this board is walked in the computer's seat too, and a computer's staff
+      // would march an unheld filler away and leave the harbour room. far-offers-page's and far-island-room-topup's
+      // boards are the player's Japan alone, whose corps no staff moves, so theirs need no hold: top-up 1's verifier,
+      // F3.)
+      for (let k = 0; k < 12 && fits(g, r, 'JAP', going, { rows: standing(g, r), out }); k++) addCorps(g, 'JAP', `Test harbour ${r.name} ${k}`, 'inf', 1, r.id, { hold: true });
+    }
+    // (Every harbour so filled is full for the row: `fits`, asked as roomNear's sea branch asks it, refuses the row's
+    // own corps at each. The loop stops at twelve corps; this says that was enough.)
+    expect(g.regions.filter((r) => r.port && r.ctrl === 'JAP' && r !== g.byName.Taihoku && r !== g.byName.Formosa && fits(g, r, 'JAP', going, { rows: standing(g, r), out })).map((r) => r.name)).toEqual([]);
+    // (The no-room case comes from the fill and is read by the rule's own readers: each ground of the island refuses the
+    // row's own corps, has less room left than its men, and holds five fighting corps.)
+    for (const nm of ['Taihoku', 'Formosa']) {
+      const r = g.byName[nm];
+      expect([nm, fits(g, r, 'JAP', going, { out }), roomLeft(g, r, 'JAP') * MEN_PER_DIV < men(going[0]), standing(g, r)]).toEqual([nm, false, true, STACK]);
     }
   };
 
-  it('the 21st Army\'s 5th Division, due in October 1939: its last month is April 1940 in every seat, and in May it is gone from the rule', () => {
+  it("the 21st Army's 5th Division, due in October 1939: with room the player's offer is open through April 1940 and in May it is gone from the rule; with no room anywhere neither seat strikes it, and when room comes the player is offered it and the computer forms it in that month", () => {
     // The player, with room: offered in month 2, open through month 8, lapsed in month 9.
     const p = war('JAP');
     months(p, 1, 8);
@@ -107,16 +152,33 @@ describe("the player's offer stays in the list for the same half year as the com
     month(p, 9);
     expect([offer(p, FIFTH), p.flags[`sent:${fifthId}`], row(p, FIFTH), row(p, FIFTH_OF) !== undefined]).toEqual([undefined, 2, undefined, true]);
 
-    // The player and the computer, with no room on Formosa: nothing is offered or formed, and the row is struck in
-    // month 9, its half year out.
-    for (const human of ['JAP', null]) {
+    // The player and the computer, with no room on Formosa nor at any harbour of Japan's: nothing is offered or formed,
+    // and neither seat strikes it, in month 9 or after: it waits until there is room.
+    // (Moved by D1, the design director's ruling of 17:53Z, 27 November 2026, 2: "D1 decides. Re-pin far-lapse to the
+    // law: with no room anywhere, both seats wait unstruck." Her D1 of 00:20Z, 27 November 2026: "No row is ever struck
+    // for room ... Where no held ground anywhere has room, it waits until one does." Before her ruling this asserted
+    // the row struck in month 9, `sent` 2, in both seats.)
+    // (Each seat on its own board and walked on its own, so that each is shown: the computer's is not left unread
+    // behind the player's. Month by month: nothing sent, nothing formed, nothing offered, no word of it to anyone.)
+    const waits = (human: string | null): unknown[] => {
       const g = war(human);
       fill(g);
-      months(g, 1, 8);
-      expect([human, g.flags[`sent:${fifthId}`], row(g, FIFTH), offer(g, FIFTH)]).toEqual([human, undefined, undefined, undefined]);
-      month(g, 9);
-      expect([human, g.flags[`sent:${fifthId}`], row(g, FIFTH)]).toEqual([human, 2, undefined]);
-    }
+      const news = g.headlines.length, seen: unknown[] = [];
+      for (let t = 1; t <= 14; t++) {
+        month(g, t);
+        seen.push([t, g.flags[`sent:${fifthId}`], row(g, FIFTH), offer(g, FIFTH), row(g, FIFTH_OF) !== undefined]);
+      }
+      const told = g.headlines.slice(news).map((h) => h.text).filter((t) => t.includes(FIFTH) || /will not form/.test(t));
+      // Room on Formosa in month 15: the player is offered it in that month, the computer forms it in that month.
+      for (const c of g.corps.filter((x) => /^Test filler Taihoku/.test(x.name) && !x.dead)) removeCorps(g, c);
+      month(g, 15);
+      const formed = row(g, FIFTH);
+      const then = human ? [offer(g, FIFTH)?.since, offer(g, FIFTH)?.why, formed] : [g.flags[`sent:${fifthId}`], formed && g.regions[formed.reg].name, offer(g, FIFTH)];
+      return [human, seen, told, then];
+    };
+    const unstruck = Array.from({ length: 14 }, (_, k) => [k + 1, undefined, undefined, undefined, true]);
+    expect(waits(null)).toEqual([null, unstruck, [], [1, 'Taihoku', undefined]]);
+    expect(waits('JAP')).toEqual(['JAP', unstruck, [], [15, null, undefined]]);
 
     // The computer, with room, forms it in its month, as it always did.
     const c = war(null);
@@ -124,14 +186,248 @@ describe("the player's offer stays in the list for the same half year as the com
     expect([c.flags[`sent:${fifthId}`], c.regions[row(c, FIFTH)!.reg].name]).toEqual([1, 'Taihoku']);
   });
 
-  it("an offer made late in the half year has only what is left of it: room on Formosa in month 6 gives an offer open through month 8", () => {
+  it("an offer made late in the half year keeps the months its row waited for room: room on Formosa in month 6, after months 2 to 5 without, gives an offer open through month 12, gone in month 13", () => {
+    // (Moved by D1, the design director's ruling of 17:53Z, 27 November 2026, 3: "Months waited for room come off the
+    // player's offer (offerLast) exactly as off the computer's half year." Before her ruling this read `last: 8`, the
+    // due month and six, with the four months waited for room lost to the offer.)
     const g = war('JAP');
     fill(g);
     months(g, 1, 5);
     for (const c of g.corps.filter((x) => /^Test filler Taihoku/.test(x.name) && !x.dead)) removeCorps(g, c);
     month(g, 6);
-    expect(offer(g, FIFTH)).toMatchObject({ since: 6, last: 8 });
+    // Its due month is its date, October 1939 (month 2); it waited for room in months 2 to 5, counted by the rule
+    // (`roomwait`); its last month is the rule's own function of the two: the due month, six, and the months waited.
+    const due = rows[fifthId][0], waited = g.flags[`roomwait:${fifthId}`];
+    expect([due, waited]).toEqual([2, 6 - due]);
+    const last = halfYearLast(g, fifthId, due);
+    expect([last, due + 6 + waited]).toEqual([12, 12]);
+    expect(offer(g, FIFTH)).toMatchObject({ since: 6, last, why: null });
+    // The page prints it: "Offered in February 1940, open until August 1940."
+    expect(offerLines(g, offer(g, FIFTH)!).map((l) => l.text).slice(-1)).toEqual(['Offered in February 1940, open until August 1940.']);
+    months(g, 7, last);
+    expect(offer(g, FIFTH)).toMatchObject({ since: 6, last });
+    expect(offerLines(g, offer(g, FIFTH)!).map((l) => [l.text, l.tone]).slice(-1)).toEqual([['Offered in February 1940. This is its last month.', 'amber']]);
+    // Gone in the month after, with the lapse sentence, which reads the same last month.
+    const news = g.headlines.length;
+    month(g, last + 1);
+    expect([offer(g, FIFTH), g.flags[`sent:${fifthId}`], row(g, FIFTH)]).toEqual([undefined, 2, undefined]);
+    expect(g.headlines.slice(news).map((h) => h.text).filter((t) => t.includes(FIFTH))).toEqual([`The offer to form ${FIFTH} has lapsed: its time has passed.`]);
   });
+
+  it("the same count for both seats, from one function: each month without room is counted alike before the offer and after it, and the offer's last month is the computer's", () => {
+    // (The design director, 17:53Z, 27 November 2026, 3: "The same count for both seats, called from one function."
+    // A computer's row that gets room forms in that month, so the two seats cannot be walked to one last month by
+    // forming. The same walk instead, each seat on its own board, filled alike: the one function, `halfYearLast`, asked
+    // for both in the same months, and the months each counts.)
+    const p = war('JAP'), c = war(null);
+    fill(p);
+    fill(c);
+    const due = rows[fifthId][0], rw = `roomwait:${fifthId}`;
+    for (let t = 1; t <= 5; t++) {
+      month(p, t);
+      month(c, t);
+      // (No room anywhere: from its due month on, each month is counted, in both seats alike.)
+      expect([t, p.flags[rw] ?? 0, halfYearLast(p, fifthId, due)]).toEqual([t, c.flags[rw] ?? 0, halfYearLast(c, fifthId, due)]);
+      expect([t, c.flags[rw] ?? 0]).toEqual([t, Math.max(0, t - due + 1)]);
+    }
+    // Room on Formosa in month 6: the computer forms the row in that month; the player is offered it, open through the
+    // last month the computer's own count gives it, the same four months waited.
+    const last = halfYearLast(c, fifthId, due), counted = c.flags[rw];
+    for (const g of [p, c]) for (const x of g.corps.filter((y) => /^Test filler Taihoku/.test(y.name) && !y.dead)) removeCorps(g, x);
+    month(p, 6);
+    month(c, 6);
+    expect([c.flags[`sent:${fifthId}`], c.regions[row(c, FIFTH)!.reg].name]).toEqual([1, 'Taihoku']);
+    expect(offer(p, FIFTH)).toMatchObject({ since: 6, last, why: null });
+    expect(offerLines(p, offer(p, FIFTH)!).map((l) => l.text).slice(-1)).toEqual(['Offered in February 1940, open until August 1940.']);
+    // (The months counted by month 6, read from the count itself: the computer's months 2 to 5, the same in both seats;
+    // the month it was offered, which had room, is not among them.)
+    const at6 = p.flags[rw];
+    expect(at6).toBe(counted);
+    // Taihoku full again from month 7 (and every harbour still full): FORM IT shut for room. Each such month is counted
+    // for the standing offer as for a computer's row with no room, through the same count, and its last month moves on
+    // with it; the month it was offered, which had room, is not. Walked past the month that was its last when it was
+    // offered (12) and on to month 14: the offer stands, made in month 6, and no word says it has lapsed (the
+    // sceptic's F4, 27 November 2026).
+    const { going, out } = fifth(p), tk = p.byName.Taihoku;
+    for (let k = 0; standing(p, tk) < STACK || fits(p, tk, 'JAP', going, { out }); k++) addCorps(p, 'JAP', `Test refill ${k}`, 'inf', 1, 'Taihoku', {});
+    const news = p.headlines.length;
+    for (let t = 7; t <= 14; t++) {
+      month(p, t);
+      expect([t, p.flags[rw], offer(p, FIFTH)?.since, offer(p, FIFTH)?.why]).toEqual([t, at6 + (t - 6), 6, 'There is no room for another corps at Taihoku, or near it.']);
+      expect(offer(p, FIFTH)!.last).toBe(halfYearLast(p, fifthId, due));
+      expect([t, offer(p, FIFTH)!.last! >= t]).toEqual([t, true]);
+    }
+    expect([p.flags[`sent:${fifthId}`], p.headlines.slice(news).map((h) => h.text).filter((x) => x.includes(FIFTH))]).toEqual([undefined, []]);
+  });
+
+  it("at stops 1 and 2 of the history dial (the record's hand) the count is kept the same in both seats and the row waits unstruck with no room anywhere: months 1 to 12, nothing sent, nothing offered, each month from its due month counted (the design director's ruling of 20:19Z, 27 November 2026, 3)", () => {
+    // (Her ruling 3, on the sceptic's F5: "D1 ("No row is ever struck for room, on any ground") covers the book's
+    // stops. The room count is kept the same in both seats and the row waits unstruck. The record gives a row its
+    // date, never its room.")
+    const due = rows[fifthId][0], rw = `roomwait:${fifthId}`;
+    const walk = (stop: number, human: string | null): unknown[] => {
+      const g = war(human);
+      expect(setStop(g, stop, true)).toBe(true);
+      fill(g);
+      const out: unknown[] = [];
+      for (let t = 1; t <= 12; t++) {
+        month(g, t);
+        out.push([t, g.flags[`sent:${fifthId}`], row(g, FIFTH), offer(g, FIFTH), g.flags[rw] ?? 0, halfYearLast(g, fifthId, due)]);
+      }
+      return out;
+    };
+    const unstruck = Array.from({ length: 12 }, (_, k) => { const waited = Math.max(0, k + 1 - due + 1); return [k + 1, undefined, undefined, undefined, waited, due + 6 + waited]; });
+    for (const stop of [1, 2]) for (const human of [null, 'JAP']) expect([stop, human, walk(stop, human)]).toEqual([stop, human, unstruck]);
+  }, 600000);
+
+  // (The design director's ruling of 20:19Z, 27 November 2026, 1, on the sceptic's F1: "a month counts as waited for
+  // room when the seat, at its own moment of acting, finds no room. The computer acts at its row's turn in the month's
+  // pass. The player acts on the board after the pass, the board his page shows." "One count a month, through the same
+  // function. It is taken once at the end of the pass, never by a page read." Her 17:53Z (3) read so: "Months waited
+  // for room come off the player's offer (offerLast) exactly as off the computer's half year." The board: far-lapse's
+  // fill; the 13th Army's Wenchow detachment, a dated row read after the 5th Division's in the same month, lands at
+  // Taihoku in month 19 and leaves for other fronts in month 22, after the 5th Division's turn both times.)
+  const WENCHOW = '13th Army (Wenchow detachment)';
+  const rw = `roomwait:${fifthId}`, due = rows[fifthId][0];
+  const noRoom = 'There is no room for another corps at Taihoku, or near it.';
+  const unfill = (g: Game, re: RegExp): void => { for (const c of g.corps.filter((x) => re.test(x.name) && !x.dead)) removeCorps(g, c); };
+  /** Taihoku full again for the row, by the rule's own reader, with five standing. */
+  const refill = (g: Game): void => {
+    const { going, out } = fifth(g), tk = g.byName.Taihoku;
+    for (let k = 0; standing(g, tk) < STACK || fits(g, tk, 'JAP', going, { out }); k++) addCorps(g, 'JAP', `Test refill ${k}`, 'inf', 1, 'Taihoku', {});
+  };
+  /** The player's Japan: no room in months 1 to 5, room in month 6 (offered), none in months 7 to `shut`, room from `shut` + 1 through month 18. */
+  const walked = (shut: number): Game => {
+    const g = war('JAP');
+    fill(g);
+    months(g, 1, 5);
+    unfill(g, /^Test filler Taihoku/);
+    month(g, 6);
+    refill(g);
+    months(g, 7, shut);
+    unfill(g, /^Test refill/);
+    months(g, shut + 1, 18);
+    return g;
+  };
+  const seen = (g: Game): unknown[] => { const o = offer(g, FIFTH); return [g.turn, g.flags[rw], o?.since, o?.last, o?.why]; };
+  const heard = (g: Game, from: number): string[] => g.headlines.slice(from).map((h) => h.text).filter((x) => x.includes(FIFTH) || x.includes(WENCHOW));
+
+  it("a month his standing offer cannot be formed for room on the board he acts on is counted, though there was room at its row's own turn: Taihoku filled in month 19 after the row is read, so month 19 is counted, the card does not say it is the last month, no lapse in month 20, and the computer's row on that board forms in month 19; the Wenchow detachment leaving in month 22 after the row is read leaves his page with room, the month is not counted, and the offer lapses as the card said (the design director's ruling of 20:19Z, 27 November 2026, 1)", () => {
+    // (The Wenchow detachment's row is read after the 5th Division's in the month's pass.)
+    expect(rows.findIndex((r) => r[1] === 'JAP' && r[2] === WENCHOW)).toBeGreaterThan(fifthId);
+    const p = walked(13);
+    // By month 18: months 2 to 5 and 7 to 13 counted, read from the count; its last month is 19.
+    const at18 = p.flags[rw];
+    expect(at18).toBe((6 - due) + (13 - 7 + 1));
+    expect(seen(p)).toEqual([18, at18, 6, due + 6 + at18, null]);
+    expect(offer(p, FIFTH)!.last).toBe(19);
+    // (The card's line of the offer's months; under it, in a month shut for room, the no-room line.)
+    const card = (): string | undefined => offerLines(p, offer(p, FIFTH)!).map((l) => l.text).find((x) => x.startsWith('Offered in'));
+    expect(card()).toBe(`Offered in February 1940, open until ${turnToDate(19).label}.`);
+    // Month 19, its last month: room at the row's turn; the Wenchow detachment lands at Taihoku after it, and his page
+    // shows FORM IT shut for room. That month is counted, once, and the offer's last month moves on to 20.
+    let news = p.headlines.length;
+    month(p, 19);
+    expect([seen(p), heard(p, news)]).toEqual([[19, at18 + 1, 6, halfYearLast(p, fifthId, due), noRoom], [`${WENCHOW} has landed at Taihoku.`]]);
+    expect(offer(p, FIFTH)!.last).toBe(20);
+    // The card reads offerLast after that count: not "This is its last month." (her ruling 1, 20:19Z).
+    expect(card()).toBe(`Offered in February 1940, open until ${turnToDate(20).label}.`);
+    // Month 20: no lapse; shut for room at the row's turn and after it: counted once. Month 21 the same.
+    news = p.headlines.length;
+    month(p, 20);
+    expect([seen(p), heard(p, news), p.flags[`sent:${fifthId}`]]).toEqual([[20, at18 + 2, 6, halfYearLast(p, fifthId, due), noRoom], [], undefined]);
+    month(p, 21);
+    expect(seen(p)).toEqual([21, at18 + 3, 6, halfYearLast(p, fifthId, due), noRoom]);
+    // Month 22, the reverse: the Wenchow detachment at Taihoku at the row's turn leaves for other fronts after it. His
+    // page shows room (FORM IT open): the month is not counted, and the card says this is its last month.
+    news = p.headlines.length;
+    month(p, 22);
+    expect(heard(p, news)).toEqual([`Japanese formations lent to the campaign leave for other fronts: ${WENCHOW}.`]);
+    expect(seen(p)).toEqual([22, at18 + 3, 6, 22, null]);
+    expect(offerLines(p, offer(p, FIFTH)!).map((l) => [l.text, l.tone]).filter(([x]) => x.startsWith('Offered in'))).toEqual([['Offered in February 1940. This is its last month.', 'amber']]);
+    // Month 23: it lapses, as the card said, with the lapse sentence.
+    news = p.headlines.length;
+    month(p, 23);
+    expect([offer(p, FIFTH), p.flags[`sent:${fifthId}`], row(p, FIFTH), heard(p, news)]).toEqual([undefined, 2, undefined, [`The offer to form ${FIFTH} has lapsed: its time has passed.`]]);
+    // The computer's row on the same board (room in month 19 at its turn): it forms at Taihoku in month 19, as before.
+    const c = war(null);
+    fill(c);
+    months(c, 1, 5);
+    unfill(c, /^Test filler Taihoku/);
+    refill(c);
+    months(c, 6, 18);
+    unfill(c, /^Test refill/);
+    expect([c.flags[`sent:${fifthId}`], row(c, FIFTH)]).toEqual([undefined, undefined]);
+    month(c, 19);
+    expect([c.flags[`sent:${fifthId}`], c.regions[row(c, FIFTH)!.reg].name]).toEqual([1, 'Taihoku']);
+  }, 600000);
+
+  it("the reverse: a month shut for room at the row's own turn but with room on the board he acts on is not counted, since he could form it: the Wenchow detachment leaves Taihoku in month 22 after the row is read; a month shut both at its turn and after is counted exactly once (the design director's ruling of 20:19Z, 27 November 2026, 1)", () => {
+    const p = walked(18);
+    const at18 = p.flags[rw];
+    expect(at18).toBe((6 - due) + (18 - 7 + 1));
+    // (Month 19, room at the row's turn and none after it, is the test above's. Months 20 and 21: the Wenchow
+    // detachment at Taihoku at the row's turn and after it: each counted exactly once.)
+    month(p, 19);
+    const at19 = p.flags[rw];
+    month(p, 20);
+    expect(seen(p)).toEqual([20, at19 + 1, 6, halfYearLast(p, fifthId, due), noRoom]);
+    month(p, 21);
+    expect(seen(p)).toEqual([21, at19 + 2, 6, halfYearLast(p, fifthId, due), noRoom]);
+    // Month 22: the Wenchow detachment is still at Taihoku at the row's turn and leaves after it. His page shows FORM IT
+    // open: the month is not counted.
+    const news = p.headlines.length;
+    month(p, 22);
+    expect(p.headlines.slice(news).map((h) => h.text).filter((x) => x.includes(WENCHOW))).toEqual([`Japanese formations lent to the campaign leave for other fronts: ${WENCHOW}.`]);
+    expect(seen(p)).toEqual([22, at19 + 2, 6, halfYearLast(p, fifthId, due), null]);
+  }, 600000);
+
+  it("an offer made in a month whose page then shows FORM IT shut for room: that month is counted too, on the board he acts on, while the computer's row on that board forms in it (the design director's ruling of 20:19Z, 27 November 2026, 1)", () => {
+    const p = war('JAP');
+    fill(p);
+    months(p, 1, 18);
+    const at18 = p.flags[rw];
+    expect([at18, offer(p, FIFTH)]).toEqual([18 - due + 1, undefined]);
+    unfill(p, /^Test filler Taihoku/);
+    month(p, 19);
+    expect(seen(p)).toEqual([19, at18 + 1, 19, halfYearLast(p, fifthId, due), noRoom]);
+    const c = war(null);
+    fill(c);
+    months(c, 1, 18);
+    expect(c.flags[rw]).toBe(at18);
+    unfill(c, /^Test filler Taihoku/);
+    month(c, 19);
+    expect([c.flags[`sent:${fifthId}`], c.regions[row(c, FIFTH)!.reg].name]).toEqual([1, 'Taihoku']);
+  }, 600000);
+
+  it("the count read after the month's rows survives a save and a load in the middle of the wait, plain and through the bridge, and reading the page counts nothing (the design director's ruling of 20:19Z, 27 November 2026, 1)", () => {
+    const to19 = (): Game => { const g = walked(13); month(g, 19); return g; };
+    const twin = to19();
+    const at19 = twin.flags[rw];
+    const plain = loadGame(saveGame(to19()))!;
+    const b = to19();
+    b.phase = b.order.indexOf('JAP');
+    expect(TC().load(saveGame(b))).not.toBeNull();
+    TC().page('offers');
+    TC().page('offers');
+    const bridged = loadGame(TC().save().text)!;
+    expect([seen(plain), seen(bridged)]).toEqual([seen(twin), seen(twin)]);
+    for (let t = 20; t <= 22; t++) {
+      for (const g of [twin, plain, bridged]) month(g, t);
+      expect([seen(plain), seen(bridged)]).toEqual([seen(twin), seen(twin)]);
+      if (t !== 20) continue;
+      // Month 20, shut for room: the page read three times in the month, in each way it is read (the rule's list, the
+      // page's lines, and the 3D game's page through the bridge on a copy), and the count has risen by one in the month,
+      // never by a read (her ruling 1, 20:19Z: "taken once at the end of the pass, never by a page read").
+      for (let k = 0; k < 3; k++) offerLines(twin, offer(twin, FIFTH)!);
+      const copy = loadGame(saveGame(twin))!;
+      copy.phase = copy.order.indexOf('JAP');
+      expect(TC().load(saveGame(copy))).not.toBeNull();
+      for (let k = 0; k < 3; k++) TC().page('offers');
+      expect([twin.flags[rw], loadGame(TC().save().text)!.flags[rw]]).toEqual([at19 + 1, at19 + 1]);
+    }
+    expect(seen(twin)).toEqual([22, at19 + 2, 6, halfYearLast(twin, fifthId, due), null]);
+  }, 600000);
 });
 
 // (The skeptic's review of 25 November 2026: the half year reached offers of rows on the old chart too, beyond ruling

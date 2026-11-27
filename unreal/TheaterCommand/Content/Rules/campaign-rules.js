@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c62e61c4a 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 1b5282fbd 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -75820,6 +75820,7 @@
   function placeName2(name, start2 = false) {
     return PLACES.the.includes(name) ? `${start2 ? "The" : "the"} ${name}` : name;
   }
+  var onOrAt = (r) => r.nb.length === 0 ? "on" : "at";
   function headline(g2, kind, text, nat, region, tag) {
     g2.headlines.push({ turn: g2.turn, week: newsWeek(g2), text: theWords(text), kind, nat, region, ...tag });
   }
@@ -79132,7 +79133,7 @@
     makeUp(g2, nat, rows[k], rows[k][6]);
   }
   var sharesWar = (g2, nat, friend2) => !!g2.nations[friend2]?.atWar.some((e) => atWar(g2, nat, e));
-  function roomNear2(g2, nat, at4, record2 = false, going = [], out = [], row2 = false) {
+  function roomNear2(g2, nat, at4, record2 = false, going = [], out = [], row2 = false, said) {
     const rows = (r) => placed(g2, r, nat).filter((u) => u.kind !== "eng").length;
     const noRoom = (r) => going.length ? !fits(g2, r, nat, going, { rows: rows(r), out }) : !roomForDivision(g2, r, nat, rows(r));
     if (record2 && stopDef(g2).book ? rows(at4) < STACK : !noRoom(at4)) return at4;
@@ -79150,7 +79151,9 @@
       }
     }
     if (row2 && going.length && islandOf(g2, at4)) {
-      return g2.regions.filter((r) => r.port && r.id !== at4.id && held3(r) && !hostileUnits(g2, r, nat).length && !noRoom(r)).sort((a, b) => chartDist(g2, a, at4) - chartDist(g2, b, at4) || a.id - b.id)[0] ?? null;
+      const by2 = g2.regions.filter((r) => r.port && r.id !== at4.id && held3(r) && !hostileUnits(g2, r, nat).length && !noRoom(r)).sort((a, b) => chartDist(g2, a, at4) - chartDist(g2, b, at4) || a.id - b.id)[0] ?? null;
+      if (by2 && said) said.sea = true;
+      return by2;
     }
     return null;
   }
@@ -79195,6 +79198,12 @@
     const due = g2.flags.open === 1 && o.war && g2.flags[`due:${i}`] !== void 0 ? g2.flags[`due:${i}`] : row2[0];
     const waited = g2.flags[`wait:${i}`];
     return waited !== void 0 ? Math.max(due, waited + 1) : due;
+  }
+  function halfYearLast(g2, i, due) {
+    return due + 6 + (g2.flags[`roomwait:${i}`] ?? 0);
+  }
+  function roomWaited(g2, i) {
+    if (farOn(g2)) g2.flags[`roomwait:${i}`] = (g2.flags[`roomwait:${i}`] ?? 0) + 1;
   }
   var AID = new Map((setup_1939_default.expeditions ?? []).filter((row2) => Array.isArray(row2[6]?.war)).map((row2) => [`${row2[1]}|${row2[2]}`, row2[6].war.filter((x) => x !== row2[1] && x !== "*")]));
   var aidOf = (c) => AID.get(`${c.nat}|${c.name}`) ?? [];
@@ -79359,6 +79368,13 @@
   };
   function rowPlace(g2, nat, row2, o, at4) {
     let reg = at4, fell = false, shifted = false;
+    let moved = null;
+    const onFor = (r, own) => {
+      const how = { sea: false };
+      const to = roomNear2(g2, nat, r, true, rowCorps(g2, nat, row2, o), rowOut(g2, nat, o), true, how);
+      if (own && to && to !== r && farOn(g2)) moved = { from: r.id, to: to.id, by: how.sea ? "sea" : "land" };
+      return to ?? r;
+    };
     let home = false;
     let ashore = null;
     const cap19 = g2.nations[nat].capital;
@@ -79379,7 +79395,7 @@
     }
     const posted2 = fell ? null : postedFor(g2, nat, row2, reg);
     if (posted2) {
-      if (posted2.waits) return { reg, fell, ashore, waits: true, shifted, home };
+      if (posted2.waits) return { reg, fell, ashore, waits: true, shifted, home, moved };
       if (posted2.at && posted2.takes) {
         reg = posted2.at;
         fell = true;
@@ -79389,7 +79405,7 @@
         reg = posted2.at;
         fell = true;
       }
-      return { reg: reg && !o.join && !o.joins && row2[3] !== "fort" && allied(g2, nat, reg.ctrl) ? roomNear2(g2, nat, reg, true, rowCorps(g2, nat, row2, o), rowOut(g2, nat, o), true) ?? reg : reg, fell, ashore, waits: false, shifted, home };
+      return { reg: reg && !o.join && !o.joins && row2[3] !== "fort" && allied(g2, nat, reg.ctrl) ? onFor(reg, false) : reg, fell, ashore, waits: false, shifted, home, moved };
     }
     if (worldOn(g2) && nat === g2.human && cap19 >= 0 && beyondEurope(cap19) && g2.regions[cap19].ctrl === nat && reg && reg.owner !== nat && !(reg.ctrl === nat && farOn(g2)) && !o.from && !o.joins && row2[3] !== "fort")
       reg = roomNear2(g2, nat, g2.regions[cap19], false, rowCorps(g2, nat, row2, o), [], true) ?? g2.regions[cap19];
@@ -79400,8 +79416,8 @@
         fell = true;
       }
     }
-    if (reg && !o.join && !o.joins && row2[3] !== "fort" && allied(g2, nat, reg.ctrl)) reg = roomNear2(g2, nat, reg, true, rowCorps(g2, nat, row2, o), rowOut(g2, nat, o), true) ?? reg;
-    return { reg, fell, ashore, waits: false, shifted, home };
+    if (reg && !o.join && !o.joins && row2[3] !== "fort" && allied(g2, nat, reg.ctrl)) reg = onFor(reg, reg === at4);
+    return { reg, fell, ashore, waits: false, shifted, home, moved };
   }
   var struckWatch = { tell: null };
   function takenShare(g2, i) {
@@ -79457,7 +79473,7 @@
   function offerLast(g2, nat, row2, i) {
     const o = countedWords(g2, nat, row2);
     if (!offerRow(i)?.form && !farRow(g2, nat, row2)) return o.until ? o.until - 1 : null;
-    const half = rowDue(g2, i, row2, o) + 6;
+    const half = halfYearLast(g2, i, rowDue(g2, i, row2, o));
     return o.until ? Math.min(o.until - 1, half) : half;
   }
   function offerGone(g2, nat, row2, i) {
@@ -79488,6 +79504,10 @@
     return stopDef(g2).book ? rows < STACK : fits(g2, reg, nat, rowCorps(g2, nat, row2, o), { rows, out: rowOut(g2, nat, o) });
   }
   function offerView(g2, nat, row2, i) {
+    return offerRead(g2, nat, row2, i).view;
+  }
+  function offerRead(g2, nat, row2, i) {
+    let forRoom = false;
     const o = row2[6] ?? {}, posting = g2.byName[row2[5]];
     const divs = g2.flags.open === 1 && o.openDivs !== void 0 ? o.openDivs : row2[4];
     const takes = rowTakes(g2, nat, o).map((c) => ({ id: c.id, name: c.name, kind: c.kind, region: c.reg, divs: c.divs, men: men(c) }));
@@ -79503,14 +79523,32 @@
       if (old) return null;
       if (!reg) return `There is nowhere for it to form: ${posting?.name ?? row2[5]} is not yours, and you hold no harbour on that ground, nor your capital.`;
       if (!o.join && !rowFits(g2, nat, reg, row2, o)) {
+        forRoom = true;
         const isle = !stopDef(g2).book && !rowOut(g2, nat, o).length && islandOf(g2, reg) ? roomRefusal(g2, reg, rowCorps(g2, nat, row2, o).map((c) => ({ ...c, name: row2[2], dead: true })), { forms: true }) : null;
-        return isle ?? `There is no room for another corps at ${reg.name}, or near it.`;
+        return isle ?? `There is no room for another corps ${onOrAt(reg)} ${reg.name}, or near it.`;
       }
       return null;
     })();
     const names = (x) => Array.isArray(x) ? x : typeof x === "string" ? [x] : [];
     const then = [...new Set((setup_1939_default.expeditions ?? []).filter((r, j) => r[1] === nat && j !== i && r[2] !== row2[2] && !g2.flags[`sent:${j}`] && (!r[6]?.stops || r[6].stops.includes(stopOf(g2))) && (names(r[6]?.cut).includes(row2[2]) || Array.isArray(r[6]?.from) && !(r[6].adds > 0) && r[6].from.includes(row2[2]) && rowTakes(g2, nat, { from: r[6].from.filter((nm) => nm !== row2[2]) }).length === 0)).map((r) => r[2]))];
-    return { id: i, name: row2[2], kind: row2[3], divs, men: Math.round(divs * (o.str ?? 1) * MEN_PER_DIV), since: g2.flags[offerKey(i)], last: offerLast(g2, nat, row2, i), region: reg ? reg.id : -1, joins: old ? old.name : null, takes, why, then, loan: null, rest: "lost", lent: null };
+    return { view: {
+      id: i,
+      name: row2[2],
+      kind: row2[3],
+      divs,
+      men: Math.round(divs * (o.str ?? 1) * MEN_PER_DIV),
+      since: g2.flags[offerKey(i)],
+      last: offerLast(g2, nat, row2, i),
+      region: reg ? reg.id : -1,
+      joins: old ? old.name : null,
+      takes,
+      why,
+      then,
+      loan: null,
+      rest: "lost",
+      lent: null,
+      moved: !old && reg && P.moved && P.moved.to === reg.id ? P.moved : null
+    }, forRoom };
   }
   var leaveKey = (i) => `leave:${i}`;
   var keptKey = (i) => `kept:${i}`;
@@ -79804,7 +79842,7 @@
       const was = inFight ? waitedOn(g2, i, reg?.id) : null;
       const waited = g2.flags[`wait:${i}`];
       if (waited !== void 0) due = Math.max(due, waited + 1);
-      const late = g2.turn - due - (g2.flags[`roomwait:${i}`] ?? 0) > 6 && take3 !== i;
+      const late = g2.turn > halfYearLast(g2, i, rowDue(g2, i, row2, o)) && take3 !== i;
       if (late || o.war && !warOn(g2, o.war) || o.until && g2.turn >= o.until) {
         if (late) {
           g2.flags[`sent:${i}`] = g2.flags.open === 1 ? 2 : 1;
@@ -79903,7 +79941,7 @@
         }
       }
       if (!o.join && !rowFits(g2, nat, reg, row2, o)) {
-        if (farOn(g2)) g2.flags[`roomwait:${i}`] = (g2.flags[`roomwait:${i}`] ?? 0) + 1;
+        roomWaited(g2, i);
         return;
       }
       if (asks) {
@@ -79990,6 +80028,12 @@
       g2.supplyDirty = true;
       headline(g2, "event", `${g2.nations[nat].adj} forces lay down their arms: ${names.join("; ")}.`, nat, at4);
     }
+    if (take3 === void 0) offersWaited(g2, nat);
+  }
+  function offersWaited(g2, nat) {
+    (setup_1939_default.expeditions ?? []).forEach((row2, i) => {
+      if (offerOpen(g2, nat, i) && (row2[1] === nat || keptLevy(g2, nat, row2)) && offerRead(g2, nat, row2, i).forRoom) roomWaited(g2, i);
+    });
   }
   var worksDue = (g2, t) => t.opens === void 0 || g2.flags.open !== 1 && g2.turn >= t.opens;
   function desertWorks(g2, nat, closing = false) {
@@ -114693,9 +114737,10 @@
       out.push({ text: o.lent.goes === "lost" ? `Sent home, it leaves the map: ${theDivision(o.lent.division)} is no longer on it. Kept, it stays yours for good.` : `Sent home, it goes back into ${theDivision(o.lent.division)}. Kept, it stays yours for good.`, tone: "" });
     } else {
       const r = o.region >= 0 ? s.regions[o.region] : null;
-      const at4 = r ? `${r.nb.length === 0 ? "on" : "at"} ${r.name}` : "";
+      const at4 = r ? `${onOrAt(r)} ${r.name}` : "";
       const where = o.joins ? `, to join your ${o.joins}${at4 ? ` ${at4}` : ""}` : at4 ? `, to form ${at4}` : "";
       out.push({ text: `${kindWord2(o.kind)}, ${menWords(o.men)} men${where}.`, tone: "" });
+      if (o.moved && o.moved.by === "sea") out.push({ text: `${placeName2(s.regions[o.moved.from].name, true)} has no room for it. ${s.regions[o.moved.to].name} is your nearest harbour with room.`, tone: "" });
       for (const t of o.takes) out.push({ text: `Takes your ${t.name} at ${place3(t.region)}, ${menWords(t.men)} men.`, tone: "" });
       const took = o.takes.reduce((n, t) => n + t.men, 0), over = menWords(took) === menWords(o.men) ? 0 : took - o.men;
       if (over > 0 && o.takes.length) out.push({ text: o.rest === "stay" ? `The other ${menWords(over)} stay in your ${o.takes[o.takes.length - 1].name}.` : `The other ${menWords(over)} are lost with the old corps.`, tone: "" });
