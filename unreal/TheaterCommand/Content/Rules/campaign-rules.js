@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6ca0580b5 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2b0d9281e 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -46175,6 +46175,353 @@
     }
   }
 
+  // ../../data/campaign/intel.json
+  var intel_default = {
+    _about: "Spies and the fog of war, the grand campaign only. A historical scenario has neither: the whole map is in sight and nobody has agents. In the grand campaign the player sees an enemy or neutral army in full only where his own side can see it, and less the deeper it stands (sight). Agents are recruited for money and sent abroad to see further, to read a government's books, and to wreck factories, railways and oilfields; each month abroad an agent may be caught. The computer's staffs see the whole map, as they always did, and keep no agents on it: their services work against the player as a monthly chance of sabotage (enemy), which the player's own agents on guard at home can stop. So a war with nobody at the table is fought exactly as before.",
+    sight: {
+      _about: "Counted in provinces from ground or troops of the viewer's own side. Up to 'full' steps away an army is in view: its flag, the number of its corps and the staff's estimate of its strength, and each corps that has been identified (see 'reports'). Up to 'glimpse' steps away only its flag and the number of corps are known. Beyond that nothing is known. An agent at work sees as if the viewer's troops stood where the agent stands. With 'fleets' true, a fleet at sea glimpses every coast of the sea it is in.",
+      full: 1,
+      glimpse: 2,
+      fleets: true
+    },
+    agents: {
+      _about: "cost is in production points (shown times the budget scale). most is how many agents a nation's service can run at once (Brian, 22 November, release 2: every smaller nation up to 5; the great powers keep their order, each three more than before). train is the months before a recruit is ready, travel the months an agent is on the road when sent somewhere. skillAt is the experience at which an agent becomes an operative and then a master; watch is how many quiet months abroad earn one point of it.",
+      cost: 6,
+      most: {
+        _default: 5,
+        GER: 7,
+        UK: 8,
+        SOV: 8,
+        USA: 7,
+        FRA: 6,
+        ITA: 6,
+        JAP: 7
+      },
+      train: 1,
+      travel: 1,
+      skillAt: [
+        3,
+        8
+      ],
+      watch: 4,
+      ranks: [
+        "Agent",
+        "Operative",
+        "Master spy"
+      ]
+    },
+    missions: {
+      _about: "caught is the chance each month that the agent is found out while on this work; for sabotage it is the chance on the night of the attempt. success is the chance an attempt comes off. gain is the experience a success earns. bbPlans and cvPlans steal a great power's plans of battleships or of carriers, and (rider b542) bomberPlans, jetPlans, rocketPlans and guidedPlans its plans of four-engined bombers, jet fighters, rocket artillery and guided weapons: each tried once like an act of sabotage (arsenal.json, plans). A smaller nation's Intelligence branch (tech.json) makes its agents harder to catch and its thefts surer.",
+      watch: {
+        caught: 0.03
+      },
+      books: {
+        caught: 0.07
+      },
+      factory: {
+        caught: 0.18,
+        success: 0.45,
+        gain: 2
+      },
+      rail: {
+        caught: 0.14,
+        success: 0.55,
+        gain: 1
+      },
+      oil: {
+        caught: 0.18,
+        success: 0.45,
+        gain: 2,
+        months: 3,
+        cut: 0.5
+      },
+      airfield: {
+        caught: 0.18,
+        success: 0.45,
+        gain: 2
+      },
+      orders: {
+        caught: 0.14,
+        success: 0.45,
+        gain: 1
+      },
+      bbPlans: {
+        caught: 0.2,
+        success: 0.3,
+        gain: 3
+      },
+      cvPlans: {
+        caught: 0.2,
+        success: 0.3,
+        gain: 3
+      },
+      bomberPlans: {
+        caught: 0.2,
+        success: 0.3,
+        gain: 3
+      },
+      fighterPlans: {
+        caught: 0.2,
+        success: 0.3,
+        gain: 3
+      },
+      jetPlans: {
+        caught: 0.2,
+        success: 0.3,
+        gain: 3
+      },
+      rocketPlans: {
+        caught: 0.2,
+        success: 0.3,
+        gain: 3
+      },
+      guidedPlans: {
+        caught: 0.2,
+        success: 0.3,
+        gain: 3
+      },
+      guard: {
+        caught: 0
+      },
+      hunt: {
+        caught: 0
+      }
+    },
+    skill: {
+      _about: "For each rank above the first: caught takes this share off the chance of being found out, success adds this to the chance an attempt comes off, guard adds this to the chance of stopping a plot.",
+      caught: 0.2,
+      success: 0.1,
+      guard: 0.08
+    },
+    risk: {
+      _about: "What multiplies the chance of being caught: in a capital (not when reading the books, whose risk already counts it), in a country at war with the agent's own, and in a province on alert after an act of sabotage (heat months). lieLow is how many months an agent must wait after an attempt before the next.",
+      capital: 1.5,
+      war: 1.25,
+      heat: 1.6,
+      heatMonths: 3,
+      lieLow: 2
+    },
+    caught: {
+      _about: "A neutral that catches a spy thinks worse of the side that sent it: its opinion moves this far away from that side. 'war' (Brian, 18 November): the chance that a great power at peace with the thief, catching a spy at its plans (any of the six thefts), declares war on the spy's country.",
+      opinion: 6,
+      war: 0.4
+    },
+    battle: {
+      _about: "An agent at work in a province has mapped its defences: the agent's own side attacks it this much harder.",
+      attack: 0.08
+    },
+    enemy: {
+      _about: "From 'quiet' months after the player's campaign begins, each month every great power on the 'services' list that is at war with the player has this chance of an act of sabotage on the player's home ground, times the number for the campaign's level (easiest first). kinds is how the acts divide. A guard in or next to the province stops it with chance 'near'; every other guard at home adds 'far', up to 'most' in all. With secret.everyone on (release 2), every other nation at war with the player plots too, at secret.everyone.smaller times this rate.",
+      chance: 0.05,
+      quiet: 3,
+      level: [
+        0,
+        0.5,
+        1,
+        1.4,
+        1.8
+      ],
+      services: [
+        "GER",
+        "UK",
+        "FRA",
+        "ITA",
+        "SOV",
+        "USA",
+        "JAP"
+      ],
+      kinds: {
+        factory: 0.6,
+        rail: 0.4
+      },
+      near: 0.7,
+      far: 0.15,
+      most: 0.9
+    },
+    estimate: {
+      _about: "Without an agent reading its books, a foreign army's size is known only to the nearest this many divisions.",
+      round: 10
+    },
+    reports: {
+      _about: "What the player knows of a foreign army's make-up. Seeing a flag is not knowing what stands under it. A corps is identified when the player's side fights it, when an agent at work has it in view, or when aircraft photograph its province. In the month it is identified (and for 'fresh' months more) the report is exact. For 'keep' months it is kept but goes stale: the corps' kind and its divisions are still known, its strength is an estimate inside a band 'drift' wider for every month of age (never wider than 'widest'), and its morale and rest are no longer known. After that the corps is unidentified again. Corps that stand beside the player's lines without a report are counted, and the staff estimates their strength in divisions inside a band 'contact' wide. On the card that plans an attack the odds are a band too: 'unknown' wide for a defender not identified, 'drift' wide for every month of age for one known from a stale report. Every band holds the truth.",
+      fresh: 0,
+      keep: 4,
+      drift: 0.15,
+      widest: 0.6,
+      contact: 0.5,
+      unknown: 0.5
+    },
+    names: [
+      "Nightjar",
+      "Cobalt",
+      "Lantern",
+      "Marigold",
+      "Sextant",
+      "Halberd",
+      "Tinsmith",
+      "Juniper",
+      "Plumbline",
+      "Saffron",
+      "Bellows",
+      "Thimble",
+      "Osprey",
+      "Quartz",
+      "Harrow",
+      "Gimlet",
+      "Tallow",
+      "Vesper",
+      "Mallard",
+      "Cinder",
+      "Hawthorn",
+      "Kestrel",
+      "Lodestar",
+      "Mosaic",
+      "Nettle",
+      "Pewter",
+      "Ratchet",
+      "Sorrel",
+      "Trellis",
+      "Anvil",
+      "Bramble",
+      "Chalice",
+      "Dovetail",
+      "Ember",
+      "Farrier",
+      "Garnet",
+      "Heron",
+      "Inkwell",
+      "Jackdaw",
+      "Keystone"
+    ],
+    secret: {
+      _about: "The secret war (rulings 151(c), 135 and 153; the grand campaign only), each half behind its own switch: 'on' for new grand campaigns, kept with each campaign in g.flags ('sw:hunt', 'sw:orders'). HUNTERS: with it on, the other side's services work through real agents. A plot that would have struck at once (enemy.chance, the same rate in sum) instead puts a hidden agent on the province it means to strike, and it strikes 'lead' months later, where a guard can still stop it. The player's agent at home can HUNT ENEMY AGENTS: each month it uncovers each hidden agent in its own province with chance 'here', and in a province beside it with 'near', each rank above the first adding 'skill'. An uncovered agent can be ARRESTED, which ends it; nothing more is shown. No agent is turned (overridden by DOUBLES, below, where its switch is on). ORDERS: STEAL THE ORDERS, for an agent abroad at war with the host, in a province where a bomber group of the host's side is based (its numbers in missions.orders, a higher rank better at both). On a success the strongest bomber group there that could fly has next month's order written now: the target its staff would pick today, by day or by night, with the fighters on the field by day. The staff flies it in its month if it still can, and it lapses if not. Fighters that meet a raid whose order was read meet it at 'ambush' of full strength, with no loss for want of radar or for distance inside their reach. Brian switched HUNTERS and ORDERS on for new grand campaigns in release 2 (22 November). EVERYONE (Brian, 22 November, release 2: every country the computer plays runs real spies against the player, sized to the country; flag 'sw:all'): with it on, every living nation at war with the player has a service that works against him, not only the great powers on enemy.services. Those keep their rate (enemy.chance, times the level) exactly; every other nation plots at 'smaller' times that rate, since a small country's service is a small one. With HUNTERS on as well, a nation never has more hidden agents on the player's ground at once than its own service could run (agents.most, with its Intelligence branch). With it off, only the great powers on enemy.services work against him, as before.",
+      hunters: { on: true, lead: 2, here: 0.5, near: 0.25, skill: 0.1 },
+      orders: { on: true, ambush: 1 },
+      everyone: { on: true, smaller: 0.5 },
+      watchers: {
+        _about: "WATCHERS (Brian, 22 November 2026, release 2: 'Busier, mostly watchers'; flag 'sw:watch', set for new grand campaigns with 'on'; it needs HUNTERS on too, since a watcher is one of the hidden agents they search for). Each month, beside the plots above (which go on at their own rate), every service at war with the player has 'chance' (times the campaign's level, as enemy.chance is; a smaller nation's at secret.everyone.smaller times it) of putting a WATCHER on his front: a province he holds beside ground its own side holds, or, with none, beside any enemy's ground, or, with no front at all, a province of his home coast on a sea the enemy's coast is on (any home coast if none is). The more of the enemy's divisions stand beside a province, the likelier it is picked; never one where a watcher already is. It never strikes. From the month after it lands ('ready'), while its country stands and is at war with him, every attack its country or an ally of it makes on that province goes in 'attack' harder: it has mapped the defences. The battle report says so, naming the army that attacks and, where that is an ally's, the agent's country. Hunters find watchers as they find saboteurs, and an uncovered one can be arrested, or turned. A watcher stays until it is arrested or turned, or its country makes peace or falls. When its province is no longer on its front (the front has moved, or the province is lost), it moves to a new place on the front the month after, needing 'ready' months again, and the hunters lose it unless a double agent in its service tells where it went; with no new place to go it is recalled. A service lands a watcher only while it keeps 'reserve' places free for its saboteurs (agents.most, with its Intelligence branch), and never fewer than hunters.lead (a saboteur stays that many months and a service plots at most once a month), so the plots strike as often as before. Once every place on a service's front holds a watcher (any service's), its draws land nothing until one is arrested, turned or moves on. The staff that runs the secret service for the player (desks.ts) keeps a guard and then a hunter with this switch on (an agent already on guard stays the guard): the hunter where a watcher is likeliest (watchOdds in intel.ts: each province's share of each service's draw above, times its chance), moving only when the provinces it can search are less than half as likely as the likeliest; called home from abroad if none is at home or coming, never one reading the books. It turns an uncovered agent where its service has no double agent of his yet (with double agents on), arresting the rest. With the switch off there are no watchers and the staff does none of this. 'chance' 0.28 with the plots' 0.05 is up to about one agent a season from each great power, most of them watchers, as the card said.",
+        on: true,
+        chance: 0.28,
+        attack: 0.08,
+        ready: 1,
+        reserve: 2
+      },
+      doubles: {
+        _about: "DOUBLES (Brian, 22 November 2026, release 2, yes (3): double agents, with a telltale sign so a false report is never unfair; it overrides HUNTERS' 'no agent is turned'; flag 'sw:double', set for new grand campaigns with 'on'). Both ways, and only ever against or for the player: the computer's services keep no agents of their own, so a war nobody plays is untouched. YOU TURN THEIRS: an enemy agent the player's hunters have uncovered can be TURNED instead of arrested, at most 'most' at once in any one nation's service. While a double runs in a nation's service, every new agent that service puts on his ground is uncovered the month it arrives, and he reads that nation's books. Each month a double is found out by its own service with chance 'blown', and is of no more use; it ends quietly when its nation makes peace with him or is gone. THEY TURN YOURS: when one of his agents abroad, in a country at war with him, would be caught, it is turned instead with chance 'share'. Nothing is said. A turned agent is never caught; from the month after it is turned, the month its first quiet report is filed (so the lie never shows without the tell), the books it reads show the army 'lie' smaller than it is, unless an agent of his still loyal reads them too; its sabotage is reported in the usual words and wrecks nothing, so the map shows no damage; it never finds an order; his other agents in its masters' country are caught 'betray' more often (the chance times 1 + betray); and each month it files a quiet report too good to be true, which a loyal agent never files. Brought home, it is found out with chance 'home' each month and arrested.",
+        on: true,
+        most: 1,
+        blown: 0.06,
+        share: 0.3,
+        lie: 0.3,
+        betray: 0.5,
+        home: 0.6
+      },
+      network: {
+        _about: "A SERVICE IN BEING (the spies thread, 24 November 2026, release 2: Brian played and saw no spies, because a grand campaign opened with none and they waited behind the SPIES door; flag 'sw:net', set for new grand campaigns with 'on'). The player's own service opens the war with agents already at work, standing on the map from the first month: 'great' for a great power (one named in agents.most), 'small' for any other country, never more than its service can run. They cost nothing and are at work at once. The first stands guard at home, in the capital. With the spy hunters and their watchers on and an enemy at war with him, the next HUNTS ENEMY AGENTS on the province of his front where the enemy's watchers are likeliest (intel.ts watchOdds). The rest WATCH abroad, one to a country, in the capitals of the countries likeliest to be his enemies: those at war with him first, then the other camp's, then the great powers, the nearest first (intel.ts likeliestFoes). Only ever for the player: the computer's services keep no agents of their own, so a war nobody plays is untouched. The options page can take the whole secret war back in the campaign's first month (secretwar.ts secretWarSettable), the network with it.",
+        on: true,
+        great: 4,
+        small: 2
+      }
+    }
+  };
+
+  // ../../src/campaign/secretwar.ts
+  var S = intel_default.secret;
+  var huntersOn = (g2) => g2.flags.open === 1 && g2.flags["sw:hunt"] === 1;
+  var ordersOn = (g2) => g2.flags.open === 1 && g2.flags["sw:orders"] === 1;
+  var everyoneOn = (g2) => g2.flags.open === 1 && g2.flags["sw:all"] === 1;
+  var doublesOn = (g2) => g2.flags.open === 1 && g2.flags["sw:double"] === 1;
+  var watchersOn = (g2) => huntersOn(g2) && g2.flags["sw:watch"] === 1;
+  var networkOn = (g2) => g2.flags.open === 1 && g2.flags["sw:net"] === 1;
+  var NETWORK = () => S.network;
+  var WATCHERS = () => S.watchers;
+  var DOUBLES = () => S.doubles;
+  var SMALLER = () => S.everyone.smaller;
+  function openSecretWar(g2) {
+    if (S.hunters.on) g2.flags["sw:hunt"] = 1;
+    if (S.orders.on) g2.flags["sw:orders"] = 1;
+    if (S.everyone.on) g2.flags["sw:all"] = 1;
+    if (S.doubles.on) g2.flags["sw:double"] = 1;
+    if (S.watchers.on) g2.flags["sw:watch"] = 1;
+    if (S.network.on) g2.flags["sw:net"] = 1;
+  }
+  var SECRET_PARTS = ["hunt", "orders", "all", "double", "watch", "net"];
+  var secretWarOn = (g2) => g2.flags.open === 1 && SECRET_PARTS.some((p) => g2.flags[`sw:${p}`] === 1);
+  var secretWarSettable = (g2) => g2.flags.open === 1 && g2.turn === (g2.flags.openFrom ?? 1);
+  function setSecretWar(g2, part, on2) {
+    if (on2) g2.flags[`sw:${part}`] = 1;
+    else delete g2.flags[`sw:${part}`];
+  }
+  var ordersDue = (g2, nat) => ordersOn(g2) ? (g2.intel.orders ?? []).filter((o) => o.nat === nat && o.turn === g2.turn && !o.done) : [];
+  var ordersKnown = (g2, viewer = g2.human) => viewer && ordersOn(g2) ? (g2.intel.orders ?? []).filter((o) => o.by === viewer && o.turn >= g2.turn) : [];
+  function orderLapsed(g2, o, why) {
+    o.done = "lapsed";
+    const t = g2.regions[o.target];
+    headline(g2, "info", `The order against ${t?.name ?? "the target"} was cancelled: ${why}.`, o.by, o.target);
+  }
+  var ambushAt = (g2, target) => g2.flags["ord:fly"] === target + 1;
+  var AMBUSH = () => S.orders.ambush;
+  function flyingOrder(g2, target) {
+    if (target === null) delete g2.flags["ord:fly"];
+    else g2.flags["ord:fly"] = target + 1;
+  }
+  function pruneOrders(g2) {
+    if (g2.intel.orders) g2.intel.orders = g2.intel.orders.filter((o) => o.turn >= g2.turn - 1);
+  }
+
+  // ../../src/campaign/intercepts.ts
+  var interceptsOn = (g2) => g2.flags.intercepts === 1;
+  function setIntercepts(g2, on2) {
+    if (on2) {
+      if (g2.flags.open !== 1) return false;
+      g2.flags.intercepts = 1;
+      return true;
+    }
+    delete g2.flags.intercepts;
+    return true;
+  }
+  var intelRows = (g2, nat) => (techOf(g2, nat)?.done ?? []).filter((id) => techById(id)?.branch === "intel").length;
+  var counterRows = (g2, nat) => (techOf(g2, nat)?.done ?? []).filter((id) => (techById(id)?.spy?.guard ?? 0) > 0).length;
+  function touches(g2, viewer, region) {
+    const r = g2.regions[region];
+    const mine4 = (j) => g2.regions[j].ctrl === viewer || g2.corps.some((c) => c.reg === j && c.nat === viewer && !c.dead);
+    return mine4(r.id) || r.nb.some(mine4);
+  }
+  function deceives(g2, of2, viewer) {
+    if (!doublesOn(g2)) return false;
+    return agentsOf(g2, viewer).some((a) => a.turned !== void 0 && a.turnedFor === of2 && a.turned < g2.turn) && doubleIn(g2, of2, viewer) === null;
+  }
+  function falsePlace(g2, of2, viewer, target) {
+    const line = g2.regions.filter((r) => (r.ctrl === viewer || allied(g2, viewer, r.ctrl)) && r.nb.some((j) => g2.regions[j].ctrl === of2)).map((r) => r.id);
+    if (!line.length) return null;
+    const far = new Int16Array(g2.regions.length).fill(-1);
+    far[target] = 0;
+    const q = [target];
+    for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (far[j] < 0) {
+      far[j] = far[q[i]] + 1;
+      q.push(j);
+    }
+    let best = -1, at4 = null;
+    for (const j of line) if (j !== target && far[j] > best) {
+      best = far[j];
+      at4 = j;
+    }
+    return at4;
+  }
+  function interceptEffort(g2, e) {
+    const me = g2.human;
+    if (!interceptsOn(g2) || me === null || !g2.nations[me]?.alive || e.nat === me || !atWar(g2, me, e.nat)) return;
+    if (!(e.enemy === me || allied(g2, me, e.enemy))) return;
+    if (!touches(g2, me, e.first)) return;
+    if (intelRows(g2, me) <= counterRows(g2, e.nat)) return;
+    const trick = deceives(g2, e.nat, me);
+    const place3 = trick ? falsePlace(g2, e.nat, me, e.first) : e.first;
+    if (place3 === null) return;
+    const until = turnToDate(e.to).label;
+    const who = g2.nations[e.nat].adj;
+    headline(g2, "event", `Intercepted: the ${who} staff's orders name ${g2.regions[place3].name}. Its army is to mass opposite it this month and attack there until ${until}.${trick ? " The signal came through unusually clear." : ""}`, e.nat, place3);
+  }
+
   // ../../src/campaign/engineers.ts
   var JOBS = ["bridge", "rail", "plant", "works", "airfield", "mines", "demolish"];
   var REPAIRS = { bridge: "rebuilding the bridges", rail: "relaying the railway", plant: "rebuilding a factory" };
@@ -47105,300 +47452,6 @@
       }
       if (best && sail(g2, f, at4, "patrol")) bombard(g2, f, best, aim(best));
     }
-  }
-
-  // ../../data/campaign/intel.json
-  var intel_default = {
-    _about: "Spies and the fog of war, the grand campaign only. A historical scenario has neither: the whole map is in sight and nobody has agents. In the grand campaign the player sees an enemy or neutral army in full only where his own side can see it, and less the deeper it stands (sight). Agents are recruited for money and sent abroad to see further, to read a government's books, and to wreck factories, railways and oilfields; each month abroad an agent may be caught. The computer's staffs see the whole map, as they always did, and keep no agents on it: their services work against the player as a monthly chance of sabotage (enemy), which the player's own agents on guard at home can stop. So a war with nobody at the table is fought exactly as before.",
-    sight: {
-      _about: "Counted in provinces from ground or troops of the viewer's own side. Up to 'full' steps away an army is in view: its flag, the number of its corps and the staff's estimate of its strength, and each corps that has been identified (see 'reports'). Up to 'glimpse' steps away only its flag and the number of corps are known. Beyond that nothing is known. An agent at work sees as if the viewer's troops stood where the agent stands. With 'fleets' true, a fleet at sea glimpses every coast of the sea it is in.",
-      full: 1,
-      glimpse: 2,
-      fleets: true
-    },
-    agents: {
-      _about: "cost is in production points (shown times the budget scale). most is how many agents a nation's service can run at once (Brian, 22 November, release 2: every smaller nation up to 5; the great powers keep their order, each three more than before). train is the months before a recruit is ready, travel the months an agent is on the road when sent somewhere. skillAt is the experience at which an agent becomes an operative and then a master; watch is how many quiet months abroad earn one point of it.",
-      cost: 6,
-      most: {
-        _default: 5,
-        GER: 7,
-        UK: 8,
-        SOV: 8,
-        USA: 7,
-        FRA: 6,
-        ITA: 6,
-        JAP: 7
-      },
-      train: 1,
-      travel: 1,
-      skillAt: [
-        3,
-        8
-      ],
-      watch: 4,
-      ranks: [
-        "Agent",
-        "Operative",
-        "Master spy"
-      ]
-    },
-    missions: {
-      _about: "caught is the chance each month that the agent is found out while on this work; for sabotage it is the chance on the night of the attempt. success is the chance an attempt comes off. gain is the experience a success earns. bbPlans and cvPlans steal a great power's plans of battleships or of carriers, and (rider b542) bomberPlans, jetPlans, rocketPlans and guidedPlans its plans of four-engined bombers, jet fighters, rocket artillery and guided weapons: each tried once like an act of sabotage (arsenal.json, plans). A smaller nation's Intelligence branch (tech.json) makes its agents harder to catch and its thefts surer.",
-      watch: {
-        caught: 0.03
-      },
-      books: {
-        caught: 0.07
-      },
-      factory: {
-        caught: 0.18,
-        success: 0.45,
-        gain: 2
-      },
-      rail: {
-        caught: 0.14,
-        success: 0.55,
-        gain: 1
-      },
-      oil: {
-        caught: 0.18,
-        success: 0.45,
-        gain: 2,
-        months: 3,
-        cut: 0.5
-      },
-      airfield: {
-        caught: 0.18,
-        success: 0.45,
-        gain: 2
-      },
-      orders: {
-        caught: 0.14,
-        success: 0.45,
-        gain: 1
-      },
-      bbPlans: {
-        caught: 0.2,
-        success: 0.3,
-        gain: 3
-      },
-      cvPlans: {
-        caught: 0.2,
-        success: 0.3,
-        gain: 3
-      },
-      bomberPlans: {
-        caught: 0.2,
-        success: 0.3,
-        gain: 3
-      },
-      fighterPlans: {
-        caught: 0.2,
-        success: 0.3,
-        gain: 3
-      },
-      jetPlans: {
-        caught: 0.2,
-        success: 0.3,
-        gain: 3
-      },
-      rocketPlans: {
-        caught: 0.2,
-        success: 0.3,
-        gain: 3
-      },
-      guidedPlans: {
-        caught: 0.2,
-        success: 0.3,
-        gain: 3
-      },
-      guard: {
-        caught: 0
-      },
-      hunt: {
-        caught: 0
-      }
-    },
-    skill: {
-      _about: "For each rank above the first: caught takes this share off the chance of being found out, success adds this to the chance an attempt comes off, guard adds this to the chance of stopping a plot.",
-      caught: 0.2,
-      success: 0.1,
-      guard: 0.08
-    },
-    risk: {
-      _about: "What multiplies the chance of being caught: in a capital (not when reading the books, whose risk already counts it), in a country at war with the agent's own, and in a province on alert after an act of sabotage (heat months). lieLow is how many months an agent must wait after an attempt before the next.",
-      capital: 1.5,
-      war: 1.25,
-      heat: 1.6,
-      heatMonths: 3,
-      lieLow: 2
-    },
-    caught: {
-      _about: "A neutral that catches a spy thinks worse of the side that sent it: its opinion moves this far away from that side. 'war' (Brian, 18 November): the chance that a great power at peace with the thief, catching a spy at its plans (any of the six thefts), declares war on the spy's country.",
-      opinion: 6,
-      war: 0.4
-    },
-    battle: {
-      _about: "An agent at work in a province has mapped its defences: the agent's own side attacks it this much harder.",
-      attack: 0.08
-    },
-    enemy: {
-      _about: "From 'quiet' months after the player's campaign begins, each month every great power on the 'services' list that is at war with the player has this chance of an act of sabotage on the player's home ground, times the number for the campaign's level (easiest first). kinds is how the acts divide. A guard in or next to the province stops it with chance 'near'; every other guard at home adds 'far', up to 'most' in all. With secret.everyone on (release 2), every other nation at war with the player plots too, at secret.everyone.smaller times this rate.",
-      chance: 0.05,
-      quiet: 3,
-      level: [
-        0,
-        0.5,
-        1,
-        1.4,
-        1.8
-      ],
-      services: [
-        "GER",
-        "UK",
-        "FRA",
-        "ITA",
-        "SOV",
-        "USA",
-        "JAP"
-      ],
-      kinds: {
-        factory: 0.6,
-        rail: 0.4
-      },
-      near: 0.7,
-      far: 0.15,
-      most: 0.9
-    },
-    estimate: {
-      _about: "Without an agent reading its books, a foreign army's size is known only to the nearest this many divisions.",
-      round: 10
-    },
-    reports: {
-      _about: "What the player knows of a foreign army's make-up. Seeing a flag is not knowing what stands under it. A corps is identified when the player's side fights it, when an agent at work has it in view, or when aircraft photograph its province. In the month it is identified (and for 'fresh' months more) the report is exact. For 'keep' months it is kept but goes stale: the corps' kind and its divisions are still known, its strength is an estimate inside a band 'drift' wider for every month of age (never wider than 'widest'), and its morale and rest are no longer known. After that the corps is unidentified again. Corps that stand beside the player's lines without a report are counted, and the staff estimates their strength in divisions inside a band 'contact' wide. On the card that plans an attack the odds are a band too: 'unknown' wide for a defender not identified, 'drift' wide for every month of age for one known from a stale report. Every band holds the truth.",
-      fresh: 0,
-      keep: 4,
-      drift: 0.15,
-      widest: 0.6,
-      contact: 0.5,
-      unknown: 0.5
-    },
-    names: [
-      "Nightjar",
-      "Cobalt",
-      "Lantern",
-      "Marigold",
-      "Sextant",
-      "Halberd",
-      "Tinsmith",
-      "Juniper",
-      "Plumbline",
-      "Saffron",
-      "Bellows",
-      "Thimble",
-      "Osprey",
-      "Quartz",
-      "Harrow",
-      "Gimlet",
-      "Tallow",
-      "Vesper",
-      "Mallard",
-      "Cinder",
-      "Hawthorn",
-      "Kestrel",
-      "Lodestar",
-      "Mosaic",
-      "Nettle",
-      "Pewter",
-      "Ratchet",
-      "Sorrel",
-      "Trellis",
-      "Anvil",
-      "Bramble",
-      "Chalice",
-      "Dovetail",
-      "Ember",
-      "Farrier",
-      "Garnet",
-      "Heron",
-      "Inkwell",
-      "Jackdaw",
-      "Keystone"
-    ],
-    secret: {
-      _about: "The secret war (rulings 151(c), 135 and 153; the grand campaign only), each half behind its own switch: 'on' for new grand campaigns, kept with each campaign in g.flags ('sw:hunt', 'sw:orders'). HUNTERS: with it on, the other side's services work through real agents. A plot that would have struck at once (enemy.chance, the same rate in sum) instead puts a hidden agent on the province it means to strike, and it strikes 'lead' months later, where a guard can still stop it. The player's agent at home can HUNT ENEMY AGENTS: each month it uncovers each hidden agent in its own province with chance 'here', and in a province beside it with 'near', each rank above the first adding 'skill'. An uncovered agent can be ARRESTED, which ends it; nothing more is shown. No agent is turned (overridden by DOUBLES, below, where its switch is on). ORDERS: STEAL THE ORDERS, for an agent abroad at war with the host, in a province where a bomber group of the host's side is based (its numbers in missions.orders, a higher rank better at both). On a success the strongest bomber group there that could fly has next month's order written now: the target its staff would pick today, by day or by night, with the fighters on the field by day. The staff flies it in its month if it still can, and it lapses if not. Fighters that meet a raid whose order was read meet it at 'ambush' of full strength, with no loss for want of radar or for distance inside their reach. Brian switched HUNTERS and ORDERS on for new grand campaigns in release 2 (22 November). EVERYONE (Brian, 22 November, release 2: every country the computer plays runs real spies against the player, sized to the country; flag 'sw:all'): with it on, every living nation at war with the player has a service that works against him, not only the great powers on enemy.services. Those keep their rate (enemy.chance, times the level) exactly; every other nation plots at 'smaller' times that rate, since a small country's service is a small one. With HUNTERS on as well, a nation never has more hidden agents on the player's ground at once than its own service could run (agents.most, with its Intelligence branch). With it off, only the great powers on enemy.services work against him, as before.",
-      hunters: { on: true, lead: 2, here: 0.5, near: 0.25, skill: 0.1 },
-      orders: { on: true, ambush: 1 },
-      everyone: { on: true, smaller: 0.5 },
-      watchers: {
-        _about: "WATCHERS (Brian, 22 November 2026, release 2: 'Busier, mostly watchers'; flag 'sw:watch', set for new grand campaigns with 'on'; it needs HUNTERS on too, since a watcher is one of the hidden agents they search for). Each month, beside the plots above (which go on at their own rate), every service at war with the player has 'chance' (times the campaign's level, as enemy.chance is; a smaller nation's at secret.everyone.smaller times it) of putting a WATCHER on his front: a province he holds beside ground its own side holds, or, with none, beside any enemy's ground, or, with no front at all, a province of his home coast on a sea the enemy's coast is on (any home coast if none is). The more of the enemy's divisions stand beside a province, the likelier it is picked; never one where a watcher already is. It never strikes. From the month after it lands ('ready'), while its country stands and is at war with him, every attack its country or an ally of it makes on that province goes in 'attack' harder: it has mapped the defences. The battle report says so, naming the army that attacks and, where that is an ally's, the agent's country. Hunters find watchers as they find saboteurs, and an uncovered one can be arrested, or turned. A watcher stays until it is arrested or turned, or its country makes peace or falls. When its province is no longer on its front (the front has moved, or the province is lost), it moves to a new place on the front the month after, needing 'ready' months again, and the hunters lose it unless a double agent in its service tells where it went; with no new place to go it is recalled. A service lands a watcher only while it keeps 'reserve' places free for its saboteurs (agents.most, with its Intelligence branch), and never fewer than hunters.lead (a saboteur stays that many months and a service plots at most once a month), so the plots strike as often as before. Once every place on a service's front holds a watcher (any service's), its draws land nothing until one is arrested, turned or moves on. The staff that runs the secret service for the player (desks.ts) keeps a guard and then a hunter with this switch on (an agent already on guard stays the guard): the hunter where a watcher is likeliest (watchOdds in intel.ts: each province's share of each service's draw above, times its chance), moving only when the provinces it can search are less than half as likely as the likeliest; called home from abroad if none is at home or coming, never one reading the books. It turns an uncovered agent where its service has no double agent of his yet (with double agents on), arresting the rest. With the switch off there are no watchers and the staff does none of this. 'chance' 0.28 with the plots' 0.05 is up to about one agent a season from each great power, most of them watchers, as the card said.",
-        on: true,
-        chance: 0.28,
-        attack: 0.08,
-        ready: 1,
-        reserve: 2
-      },
-      doubles: {
-        _about: "DOUBLES (Brian, 22 November 2026, release 2, yes (3): double agents, with a telltale sign so a false report is never unfair; it overrides HUNTERS' 'no agent is turned'; flag 'sw:double', set for new grand campaigns with 'on'). Both ways, and only ever against or for the player: the computer's services keep no agents of their own, so a war nobody plays is untouched. YOU TURN THEIRS: an enemy agent the player's hunters have uncovered can be TURNED instead of arrested, at most 'most' at once in any one nation's service. While a double runs in a nation's service, every new agent that service puts on his ground is uncovered the month it arrives, and he reads that nation's books. Each month a double is found out by its own service with chance 'blown', and is of no more use; it ends quietly when its nation makes peace with him or is gone. THEY TURN YOURS: when one of his agents abroad, in a country at war with him, would be caught, it is turned instead with chance 'share'. Nothing is said. A turned agent is never caught; from the month after it is turned, the month its first quiet report is filed (so the lie never shows without the tell), the books it reads show the army 'lie' smaller than it is, unless an agent of his still loyal reads them too; its sabotage is reported in the usual words and wrecks nothing, so the map shows no damage; it never finds an order; his other agents in its masters' country are caught 'betray' more often (the chance times 1 + betray); and each month it files a quiet report too good to be true, which a loyal agent never files. Brought home, it is found out with chance 'home' each month and arrested.",
-        on: true,
-        most: 1,
-        blown: 0.06,
-        share: 0.3,
-        lie: 0.3,
-        betray: 0.5,
-        home: 0.6
-      },
-      network: {
-        _about: "A SERVICE IN BEING (the spies thread, 24 November 2026, release 2: Brian played and saw no spies, because a grand campaign opened with none and they waited behind the SPIES door; flag 'sw:net', set for new grand campaigns with 'on'). The player's own service opens the war with agents already at work, standing on the map from the first month: 'great' for a great power (one named in agents.most), 'small' for any other country, never more than its service can run. They cost nothing and are at work at once. The first stands guard at home, in the capital. With the spy hunters and their watchers on and an enemy at war with him, the next HUNTS ENEMY AGENTS on the province of his front where the enemy's watchers are likeliest (intel.ts watchOdds). The rest WATCH abroad, one to a country, in the capitals of the countries likeliest to be his enemies: those at war with him first, then the other camp's, then the great powers, the nearest first (intel.ts likeliestFoes). Only ever for the player: the computer's services keep no agents of their own, so a war nobody plays is untouched. The options page can take the whole secret war back in the campaign's first month (secretwar.ts secretWarSettable), the network with it.",
-        on: true,
-        great: 4,
-        small: 2
-      }
-    }
-  };
-
-  // ../../src/campaign/secretwar.ts
-  var S = intel_default.secret;
-  var huntersOn = (g2) => g2.flags.open === 1 && g2.flags["sw:hunt"] === 1;
-  var ordersOn = (g2) => g2.flags.open === 1 && g2.flags["sw:orders"] === 1;
-  var everyoneOn = (g2) => g2.flags.open === 1 && g2.flags["sw:all"] === 1;
-  var doublesOn = (g2) => g2.flags.open === 1 && g2.flags["sw:double"] === 1;
-  var watchersOn = (g2) => huntersOn(g2) && g2.flags["sw:watch"] === 1;
-  var networkOn = (g2) => g2.flags.open === 1 && g2.flags["sw:net"] === 1;
-  var NETWORK = () => S.network;
-  var WATCHERS = () => S.watchers;
-  var DOUBLES = () => S.doubles;
-  var SMALLER = () => S.everyone.smaller;
-  function openSecretWar(g2) {
-    if (S.hunters.on) g2.flags["sw:hunt"] = 1;
-    if (S.orders.on) g2.flags["sw:orders"] = 1;
-    if (S.everyone.on) g2.flags["sw:all"] = 1;
-    if (S.doubles.on) g2.flags["sw:double"] = 1;
-    if (S.watchers.on) g2.flags["sw:watch"] = 1;
-    if (S.network.on) g2.flags["sw:net"] = 1;
-  }
-  var SECRET_PARTS = ["hunt", "orders", "all", "double", "watch", "net"];
-  var secretWarOn = (g2) => g2.flags.open === 1 && SECRET_PARTS.some((p) => g2.flags[`sw:${p}`] === 1);
-  var secretWarSettable = (g2) => g2.flags.open === 1 && g2.turn === (g2.flags.openFrom ?? 1);
-  function setSecretWar(g2, part, on2) {
-    if (on2) g2.flags[`sw:${part}`] = 1;
-    else delete g2.flags[`sw:${part}`];
-  }
-  var ordersDue = (g2, nat) => ordersOn(g2) ? (g2.intel.orders ?? []).filter((o) => o.nat === nat && o.turn === g2.turn && !o.done) : [];
-  var ordersKnown = (g2, viewer = g2.human) => viewer && ordersOn(g2) ? (g2.intel.orders ?? []).filter((o) => o.by === viewer && o.turn >= g2.turn) : [];
-  function orderLapsed(g2, o, why) {
-    o.done = "lapsed";
-    const t = g2.regions[o.target];
-    headline(g2, "info", `The order against ${t?.name ?? "the target"} was cancelled: ${why}.`, o.by, o.target);
-  }
-  var ambushAt = (g2, target) => g2.flags["ord:fly"] === target + 1;
-  var AMBUSH = () => S.orders.ambush;
-  function flyingOrder(g2, target) {
-    if (target === null) delete g2.flags["ord:fly"];
-    else g2.flags["ord:fly"] = target + 1;
-  }
-  function pruneOrders(g2) {
-    if (g2.intel.orders) g2.intel.orders = g2.intel.orders.filter((o) => o.turn >= g2.turn - 1);
   }
 
   // ../../src/campaign/winter.ts
@@ -48848,7 +48901,10 @@
     const me = g2.human;
     if (me === null || !g2.nations[me]?.alive || e.nat === me) return;
     const how = plansKnown(g2, e.nat, me);
-    if (!how) return;
+    if (!how) {
+      interceptEffort(g2, e);
+      return;
+    }
     const who = g2.nations[e.nat]?.name ?? e.nat;
     const until = turnToDate(e.to).label;
     const name = e.name.replace(/^the /, "");
@@ -76266,9 +76322,9 @@
 
   // ../../data/campaign/wornout.json
   var wornout_default = {
-    _note: "Worn out in the line (release 2; Brian's yes of 27 November 2026 17:10Z; the design director's ruling of 17:15Z, ideas-batch3-ruling-1127.md Q2). src/campaign/wornout.ts. Each month a corps spends in the line (it fought, or an army at war with it holds the ground next door or stands in its province: stories.ts inLine, the same front the uniforms wear on) takes 'step' more off its fighting power, to 'most' at the worst. No count of months comes first. One whole month at rest (morale.ts restedMonth: in supply, no march, no fight) brings it all back. Every army alike; where the computer's staff rests its worn corps (ai.ts relieve, the staffs rivals.json names), a corps worn to 'most' counts as worn, read through the battle's own edge(). The figures are design figures for the design director to rule with the form; the historian is asked for the record.",
-    step: 0.02,
-    most: 0.1
+    _note: "Worn out in the line (release 2; Brian's yes of 27 November 2026 17:10Z; the design director's ruling of 17:15Z, ideas-batch3-ruling-1127.md Q2). src/campaign/wornout.ts. Each month a corps spends in the line (it fought, or an army at war with it holds the ground next door or stands in its province: stories.ts inLine, the same front the uniforms wear on) takes 'step' more off its fighting power, to 'most' at the worst. No count of months comes first. One whole month at rest (morale.ts restedMonth: in supply, no march, no fight) brings it all back. Every army alike; where the computer's staff rests its worn corps (ai.ts relieve, the staffs rivals.json names), a corps worn to 'most' counts as worn, read through the battle's own edge(). The figures are the design director's of 17:41Z, 27 November 2026 (FORM-worn-hospitals-intercepts-1127.md, ask 1): the cap cut from 0.10 to 0.05 at 0.01 a month, set before any run, because 0.10 moved a close attack about 25 points from months in the line alone and only one staff rests its worn corps. Raised only if the historian's record supports more, and only before the gate's declaration; never after the run.",
+    step: 0.01,
+    most: 0.05
   };
 
   // ../../src/campaign/wornout.ts
@@ -119662,9 +119718,9 @@
       const great = enters.length > 0 || h.kind === "fall" && !!h.nat && majors.has(h.nat);
       const lib = warn ? void 0 : freedBand(h);
       const p = h.kind === "fall" ? fellOf(h) : lib;
-      const touches = !!lib || (h.kind === "war" || h.kind === "fall") && (mine4(h.nat) || side5(h.nat) || foe(h.nat) || !!p && (side5(p.by) || foe(p.by)));
+      const touches2 = !!lib || (h.kind === "war" || h.kind === "fall") && (mine4(h.nat) || side5(h.nat) || foe(h.nat) || !!p && (side5(p.by) || foe(p.by)));
       const news4 = !warn && !lib && !!h.head && h.kind !== "war" && h.kind !== "fall" && (mine4(h.nat) || side5(h.nat) || foe(h.nat) || nameAt(me, h.text) >= 0);
-      if (!warn && !great && !touches && !news4) return;
+      if (!warn && !great && !touches2 && !news4) return;
       const word3 = warn ? "WARNING" : news4 ? "NEWS" : h.kind === "war" ? "WAR" : lib ? "FREED" : "FALLEN";
       const said2 = h.kind === "war" && !warn ? (h.text.match(/[^.!?]+/g) ?? []).map((s) => s.trim()).find((s) => {
         const at4 = s.search(/\bwar on\b/);
@@ -123745,6 +123801,8 @@
       wornOut: wornOn(s),
       // (Release 2, batch 3) Field hospitals (fieldhospitals.ts).
       fieldHospitals: hospOn(s),
+      // (Release 2, batch 3) Radio intercepts (intercepts.ts): words only.
+      intercepts: interceptsOn(s),
       // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
       townQueue: townQueueOn(s),
       // (Release 2, citydefences.ts) Whether searchlights can be built, the guns fight by night by what they see and a
@@ -126471,11 +126529,11 @@
     const reel = [];
     for (const a of announce) reel.push({ nat: a.nat, title: a.title, text: short(a.text), region: a.region ?? capitalOf2(a.nat) });
     const myName = s.human ? s.nations[s.human]?.name ?? "" : "";
-    const touches = (h) => !!s.human && (h.nat === s.human || !!myName && h.text.includes(myName));
+    const touches2 = (h) => !!s.human && (h.nat === s.human || !!myName && h.text.includes(myName));
     const wars = headlines.filter((x) => x.kind === "war");
-    const always = reel.length > 0 || wars.some(touches);
-    for (const h of [...wars.filter(touches), ...wars.filter((x) => !touches(x))].slice(0, 2)) reel.push({ nat: h.nat ?? "", title: h.head ? h.head.toUpperCase() : "WAR IS DECLARED", text: short(h.text), region: capitalOf2(h.nat) });
-    for (const h of headlines.filter((x) => !!x.head && x.kind !== "war" && x.kind !== "fall" && touches(x)).slice(0, 1)) reel.push({ nat: h.nat ?? "", title: h.head.toUpperCase(), text: short(h.text), region: capitalOf2(h.nat) });
+    const always = reel.length > 0 || wars.some(touches2);
+    for (const h of [...wars.filter(touches2), ...wars.filter((x) => !touches2(x))].slice(0, 2)) reel.push({ nat: h.nat ?? "", title: h.head ? h.head.toUpperCase() : "WAR IS DECLARED", text: short(h.text), region: capitalOf2(h.nat) });
+    for (const h of headlines.filter((x) => !!x.head && x.kind !== "war" && x.kind !== "fall" && touches2(x)).slice(0, 1)) reel.push({ nat: h.nat ?? "", title: h.head.toUpperCase(), text: short(h.text), region: capitalOf2(h.nat) });
     const fights3 = steps.filter((x) => x.note && !x.moved && ((x.battles?.length ?? 0) > 0 || (x.taken?.length ?? 0) > 0)).sort((a, b) => (b.mine ? 100 : 0) + (b.battles?.length ?? 0) + (b.taken?.length ?? 0) - ((a.mine ? 100 : 0) + (a.battles?.length ?? 0) + (a.taken?.length ?? 0)));
     const heavy = fights3.some((x) => x.mine && (x.taken?.length ?? 0) > 0) || fights3.reduce((n, x) => n + (x.taken?.length ?? 0), 0) >= 4;
     const big = always || (heavy || wars.length > 0) && s.turn - lastReel >= 3;
@@ -130527,6 +130585,11 @@ ${standing6}`,
       note4 = wornOn(s) ? `Worn out in the line is on: every month a corps spends in the line takes a little more of its edge, up to ${Math.round(WORN.most * 100)}%, and a month at rest brings it all back. The same for every army.` : "Worn out in the line is off: every corps has its edge back.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
+    if (part[0] === "interceptsrule") {
+      ok2 = setIntercepts(s, part[1] === "on");
+      note4 = interceptsOn(s) ? "Radio intercepts are on: when an enemy staff orders a main effort against you, and your codebreakers have built more of the Intelligence branch than it has of counter-intelligence, you may overhear the order where your front touches it. An enemy that has turned one of your agents can feed you a false one, and a false one always comes through unusually clear." : "Radio intercepts are off: you learn an enemy's plans only from an agent on its books or from an ally.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
+    }
     if (part[0] === "hospitalsrule") {
       ok2 = setHosp(s, part[1] === "on");
       note4 = hospOn(s) ? `Field hospitals are on: of what a corps loses in battle, about ${Math.round(HOSP.wounded * 100)} in 100 are wounded who can come back. While the corps is in supply about ${Math.round(HOSP.back * 100)} in 100 of them rejoin it each month, free, and more with a Medicine building near; cut off, some are lost. The same for every army.` : "Field hospitals are off: battle losses are gone for good, and only new drafts refill a corps.";
@@ -131955,6 +132018,11 @@ ${standing6}`,
     setHosp(s, !!on2);
     return { on: hospOn(s) };
   };
+  globalThis.TC.intercepts = (on2) => {
+    const s = game();
+    setIntercepts(s, !!on2);
+    return { on: interceptsOn(s) };
+  };
   globalThis.TC.pressedTanks = (on2) => {
     const s = game();
     setPressed(s, !!on2);
@@ -132050,7 +132118,9 @@ ${standing6}`,
     // (Release 2, batch 3: worn out in the line, switched in any month; OFF on the Play list until the DD's gate passes.)
     wornoutrule: (s) => setWorn(s, true) && wornOn(s),
     // (Release 2, batch 3: field hospitals, switched in any month; OFF on the Play list until the DD's gate passes.)
-    hospitalsrule: (s) => setHosp(s, true) && hospOn(s)
+    hospitalsrule: (s) => setHosp(s, true) && hospOn(s),
+    // (Release 2, batch 3: radio intercepts, words only, switched in any month; ON after the Mac check.)
+    interceptsrule: (s) => setIntercepts(s, true) && interceptsOn(s)
   };
   function r2Ship(ids2) {
     const s = game();
