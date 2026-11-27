@@ -440,7 +440,10 @@ describe('who is told', () => {
     for (let t = 17; t <= 21; t++) month(us.g, t);
     expect(news(us.g)).toEqual([]);
     expect(portCardLines(us.g, MALTA, 'USA')).toEqual([]);
-    expect(Object.keys(us.g.flags).filter((k) => OWN.test(k))).toEqual([]);
+    // (Nothing is kept for him but the record of the holds, which watches the seas of every port of the kind whatever
+    // his wars, so that a hold begun before his war with its holder is seen to begin: the UI director's 23:50Z, item 5.)
+    expect(Object.keys(us.g.flags).filter((k) => OWN.test(k) && !k.startsWith('seaShut:'))).toEqual([]);
+    expect(us.g.flags['seaShut:20:UK']).toBe(16);
   });
 
   it('corps of two nations struck off in one port in one month: one line to the holder, in the "Several" form, in the order they fell', () => {
@@ -591,10 +594,10 @@ describe('item 5: the shutting side\'s "have held ... since" only for a hold the
     // (The war runs with the switch off: Italy's fleets have held the Central Mediterranean since December 1940.)
     const { g } = malta('ITA', ['9th Corps'], 16, (h) => sail(h, 'ITA', 'central'), false);
     month(g, 17, ['ITA', 'UK']);
-    expect(Object.keys(g.flags).filter((k) => /^(seaShut:|portWatch)/.test(k))).toEqual([]);
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('seaShut:'))).toEqual([]);
     // January 1941: the player turns it on. Its first look finds the sea already shut: no month is given.
     expect(setPortStores(g, true)).toBe(true);
-    expect([g.flags['seaShut:20:UK'], g.flags.portWatch]).toEqual([0, 17]);
+    expect(g.flags['seaShut:20:UK']).toBe(0);
     expect(portCutOff(g, MALTA, 'ITA')).toMatchObject({ side: 'shutting', heldSince: null, heldHungry: null, heldLost: null });
     expect(portCardLines(g, MALTA, 'ITA')).toEqual([]);
     month(g, 18, ['ITA', 'UK']);
@@ -603,7 +606,7 @@ describe('item 5: the shutting side\'s "have held ... since" only for a hold the
     for (const f of g.fleets) if (f.nat === 'ITA') f.stance = 'port';
     g.supplyDirty = true;
     month(g, 19, ['ITA', 'UK']);
-    expect([g.flags['seaShut:20:UK'], g.flags[`stores:${MALTA}`]]).toEqual([undefined, 19]);
+    expect([g.flags['seaShut:20:UK'], g.flags[`stores:${MALTA}`]]).toEqual([-1, 19]);
     sail(g, 'ITA', 'central');
     g.supplyDirty = true;
     month(g, 20, ['ITA', 'UK']);
@@ -620,7 +623,7 @@ describe('item 5: the shutting side\'s "have held ... since" only for a hold the
     phase(g, 'ITA');
     phase(g, 'UK');
     expect(setPortStores(g, true)).toBe(true);
-    expect([g.flags[`seaShut:${wmed}:UK`], g.flags[`seaShut:${iberia}:UK`]]).toEqual([0, undefined]);
+    expect([g.flags[`seaShut:${wmed}:UK`], g.flags[`seaShut:${iberia}:UK`]]).toEqual([0, -1]);
     g.turn = 17;
     phase(g, 'ITA');
     sail(g, 'ITA', 'iberia', ['2nd Fleet']);
@@ -630,12 +633,83 @@ describe('item 5: the shutting side\'s "have held ... since" only for a hold the
     expect(texts(portCardLines(g, gib, 'ITA'))).toEqual(['Your fleets have held the Western Mediterranean and the waters off the Iberian coast since January. Counting from then, the garrison of Gibraltar goes hungry from April and is lost by the start of June, unless ships get through.']);
   });
 
-  it('the player falls: the holds watched for him and the watch go with him', () => {
+  it('the player falls: the holds watched for him go with him', () => {
     const { g } = malta('ITA');
     month(g, 17, ['ITA', 'UK']);
-    expect([g.flags['seaShut:20:UK'], g.flags.portWatch]).toEqual([16, 1]);
+    expect(g.flags['seaShut:20:UK']).toBe(16);
     portsDone(g, 'ITA');
-    expect(Object.keys(g.flags).filter((k) => /^(seaShut:|portWatch)/.test(k))).toEqual([]);
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('seaShut:'))).toEqual([]);
+  });
+
+  // (The review of the 23:50Z build, finding 1: a hold begun before the player's war with the port's holder. The seas
+  // of every port of the kind are watched whatever the player's wars: a hold the switch saw begin gives its month, and
+  // one it did not see begin waits. The fleets put to sea in their own nation's month, after its opening, as a staff's
+  // orders do.)
+  /**
+   * Malta held by a British 9th Corps; Germany's fleets put to sea off it in October 1940 (turn 14), Italy at war with
+   * Britain from January 1941 (turn 17); Germany's, Italy's and Britain's months played from August 1940 to March 1941,
+   * the switch on from the start or turned on after the month given; Italy's card read after each month.
+   */
+  function lateWar(switchedOn: number | null): { g: Game; ninth: Corps; card: Record<number, string[]>; clock: [number, boolean, boolean][] } {
+    const g = grand('ITA', switchedOn === null);
+    const [ninth] = garrison(g, 'Malta', ['9th Corps']);
+    const card: Record<number, string[]> = {}, clock: [number, boolean, boolean][] = [];
+    for (let t = 12; t <= 19; t++) {
+      g.turn = t;
+      if (t === 17) declareWar(g, 'ITA', 'UK');
+      g.supplyDirty = true;
+      phase(g, 'GER');
+      if (t === 14) { sail(g, 'GER', 'central'); g.supplyDirty = true; }
+      phase(g, 'ITA');
+      phase(g, 'UK');
+      if (t === switchedOn) setPortStores(g, true);
+      card[t] = texts(portCardLines(g, MALTA, 'ITA'));
+      clock.push([t, ninth.supplied, ninth.dead]);
+    }
+    return { g, ninth, card, clock };
+  }
+
+  it('Italy comes into the war in January 1941, after Germany\'s fleets shut Malta\'s sea in October 1940 under the switch\'s watch: the month it saw the hold begin, and the rule\'s own clock from then', () => {
+    const { g, card, clock } = lateWar(null);
+    expect(g.flags['seaShut:20:UK']).toBe(14);
+    for (let t = 12; t <= 16; t++) expect([t, card[t]]).toEqual([t, []]);
+    const line = 'German fleets have held the Central Mediterranean since October 1940. Counting from then, the garrison of Malta goes hungry from January and is lost by the start of March, unless ships get through.';
+    expect([card[17], card[18]]).toEqual([[line], [line]]);
+    // Fed through December, hungry from January, struck off as March opens.
+    expect(clock).toEqual([[12, true, false], [13, true, false], [14, true, false], [15, true, false], [16, true, false], [17, false, false], [18, false, false], [19, false, true]]);
+  });
+
+  it('the same war with the switch turned on in November 1940, after the hold began: Italy\'s line waits', () => {
+    const { g, card, clock } = lateWar(15);
+    expect(g.flags['seaShut:20:UK']).toBe(0);
+    for (let t = 12; t <= 19; t++) expect([t, card[t]]).toEqual([t, []]);
+    expect(clock.slice(-1)).toEqual([[19, false, true]]);
+  });
+
+  it('Spain comes into the war at Gibraltar in January 1941, after Italy\'s and Germany\'s fleets shut both its seas in October 1940: the month the switch saw, and the clock from then', () => {
+    const g = grand('ESP');
+    const gib = g.byName.Gibraltar.id, [wmed, iberia] = g.regions[gib].seas;
+    const [ninth] = garrison(g, 'Gibraltar', ['9th Corps']);
+    const card: Record<number, string[]> = {}, clock: [number, boolean, boolean][] = [];
+    for (let t = 12; t <= 19; t++) {
+      g.turn = t;
+      if (t === 12) { declareWar(g, 'ITA', 'UK'); for (const f of g.fleets) if (f.nat === 'FRA') f.stance = 'port'; }
+      if (t === 17) { g.nations.ESP.align = 'axis'; declareWar(g, 'ESP', 'UK'); }
+      g.supplyDirty = true;
+      phase(g, 'GER');
+      if (t === 14) { sail(g, 'GER', 'iberia', ['Battle Fleet']); g.supplyDirty = true; }
+      phase(g, 'ITA');
+      if (t === 14) { sail(g, 'ITA', 'wmed', ['1st Fleet']); g.supplyDirty = true; }
+      phase(g, 'ESP');
+      phase(g, 'UK');
+      card[t] = texts(portCardLines(g, gib, 'ESP'));
+      clock.push([t, ninth.supplied, ninth.dead]);
+    }
+    expect([g.flags[`seaShut:${wmed}:UK`], g.flags[`seaShut:${iberia}:UK`]]).toEqual([14, 14]);
+    for (let t = 12; t <= 16; t++) expect([t, card[t]]).toEqual([t, []]);
+    const line = 'Italian fleets have held the Western Mediterranean, and German fleets have held the waters off the Iberian coast since October 1940. Counting from then, the garrison of Gibraltar goes hungry from January and is lost by the start of March, unless ships get through.';
+    expect([card[17], card[18]]).toEqual([[line], [line]]);
+    expect(clock.slice(4)).toEqual([[16, true, false], [17, false, false], [18, false, false], [19, false, true]]);
   });
 });
 
