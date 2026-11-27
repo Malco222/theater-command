@@ -20,6 +20,12 @@
  *   rowPlace:<i>  the province the row was held at because it is not in friendly hands (game.ts `expeditions`, the place
  *                 line; no `wait:<i>` is written for it), told once in a headline: the report card's line and the formed
  *                 headline's "now in friendly hands" read it. The UI director's section 9, 12:48Z, 26 November 2026.
+ *   rowPlaceSince:<i> the month that hold began, written with `rowPlace` in the month its headline is said: the report
+ *                 card's "due in {place} since {month}" reads it, so that it agrees with the month the headline said "is
+ *                 due in {place} this month" (the UI director's section 10, Q3, 00:39Z, 27 November 2026). `rowTold`
+ *                 keeps the month the row was first told, for every other reader (a front wait's "has waited since",
+ *                 the memorial wall's "since the row was told"). A save made before it has none: the card then reads
+ *                 `rowTold`, as it did.
  * All of them are cleared wherever the row is sent or struck (`rowDone`), and where its nation leaves the war for good
  * (`nationDone`), and only there (the switch turned off keeps them until then). With the switch off none is ever
  * written and nothing prints.
@@ -36,6 +42,7 @@ const atKey = (i: number): string => `rowAt:${i}`;
 const frontKey = (i: number): string => `rowFront:${i}`;
 const idKey = (i: number, k: number): string => `rowId:${i}:${k}`;
 const placeKey = (i: number): string => `rowPlace:${i}`;
+const placeSinceKey = (i: number): string => `rowPlaceSince:${i}`;
 
 /**
  * The article a name takes in the telling's own sentences: none where it opens with "the", is an "X Force" or is
@@ -161,7 +168,10 @@ export function placeHeldLine(g: Game, rowName: string, at: Region): string | nu
  * telling's scope as the caller reads it, for the player's own row alone: the headline once, in the month the hold for
  * that place begins, and the flags the report card and the formed headline read. A row first told of another cause
  * keeps that month as the month it has waited since. A lost place together with another cause in one month never
- * reaches here: the other cause holds the row first and is told as today (her section 9: not worded).
+ * reaches here: the other cause holds the row first and is told as today (her section 9: not worded). The hold's own
+ * month (`rowPlaceSince`) is written with the place, in the month its headline is said: the card reads it (her section
+ * 10, Q3). A save made before it, its hold already told, keeps none and writes none: the place is the same, nothing is
+ * said again, and the card reads `rowTold`, as it did.
  */
 export function tellPlace(g: Game, i: number, at: Region): void {
   const row = ROWS()[i];
@@ -170,6 +180,7 @@ export function tellPlace(g: Game, i: number, at: Region): void {
   if (g.flags[toldKey(i)] === undefined) g.flags[toldKey(i)] = g.turn;
   if (g.flags[placeKey(i)] === at.id) return;
   g.flags[placeKey(i)] = at.id;
+  g.flags[placeSinceKey(i)] = g.turn;
   const line = placeHeldLine(g, row[2], at);
   if (line) headline(g, 'info', line, row[1], at.id);
 }
@@ -183,7 +194,7 @@ export function tellPlace(g: Game, i: number, at: Region): void {
  * has read them (`formedLine` calls it itself); a row that never waited has none, and nothing changes.
  */
 export function rowDone(g: Game, i: number): void {
-  delete g.flags[toldKey(i)]; delete g.flags[atKey(i)]; delete g.flags[frontKey(i)]; delete g.flags[placeKey(i)];
+  delete g.flags[toldKey(i)]; delete g.flags[atKey(i)]; delete g.flags[frontKey(i)]; delete g.flags[placeKey(i)]; delete g.flags[placeSinceKey(i)];
   fromOf(ROWS()[i]).forEach((_, k) => { delete g.flags[idKey(i, k)]; });
 }
 
@@ -198,7 +209,7 @@ export function rowDone(g: Game, i: number): void {
 export function nationDone(g: Game, nat: string): void {
   ROWS().forEach((row, i) => {
     if (row?.[1] !== nat) return;
-    const told = [toldKey(i), atKey(i), frontKey(i), placeKey(i), ...fromOf(row).map((_, k) => idKey(i, k))].some((k) => g.flags[k] !== undefined);
+    const told = [toldKey(i), atKey(i), frontKey(i), placeKey(i), placeSinceKey(i), ...fromOf(row).map((_, k) => idKey(i, k))].some((k) => g.flags[k] !== undefined);
     if (told) rowDone(g, i);
   });
 }
@@ -417,9 +428,12 @@ export function rowsWaitingOnRows(g: Game, nat: string | null): string[] {
       // 2026, "the month's report card carries it, muted, as a row that waits for another row does". Read from the
       // board as it stands: the line goes once the place is in friendly hands. With a corps at the front or a row not
       // formed as well, that cause is told as today and this line is not: a lost place with another cause is not worded.)
+      // (Its month is the month the place hold began, the month its headline was said: her section 10, Q3. A save
+      // made before `rowPlaceSince` reads the row's month, as it did.)
       const p = g.flags[placeKey(w.i)];
       const place = p === undefined ? undefined : g.regions[p];
-      if (place && !allied(g, nat, place.ctrl)) out.push(theWords(`${named(w.row[2], true)}, due in ${place.name} since ${turnToDate(w.since).label}, waits until ${place.name} is in friendly hands.`));
+      const since = g.flags[placeSinceKey(w.i)] ?? w.since;
+      if (place && !allied(g, nat, place.ctrl)) out.push(theWords(`${named(w.row[2], true)}, due in ${place.name} since ${turnToDate(since).label}, waits until ${place.name} is in friendly hands.`));
       continue;
     }
     // (Its month as the UI director's section 7, case 8, gives it: "has waited since {month}".)
