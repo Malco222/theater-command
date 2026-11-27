@@ -32,7 +32,8 @@
  */
 import setup from '../../data/campaign/setup-1939.json';
 import { turnToDate } from '../core/ticket';
-import { allied, atFrontNow, headline, rowHolds, rowWords, theWords, warOn } from './game';
+import { allied, atFrontNow, headline, loanBackInto, loanHeldNow, rowHolds, rowWords, theWords, warOn } from './game';
+import type { LoanWay } from './game';
 import { contactRuleActs, stopOf } from './history';
 import type { Corps, Game, Region } from './types';
 
@@ -63,7 +64,15 @@ const numberWord = (n: number): string => NUMBER[n] ?? String(n);
 /** Names joined whole: "A", "A and B", "A, B and C". */
 const join = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const placeOf = (g: Game, c: Corps): string => g.regions[c.reg].name;
-const fromOf = (row: any[]): string[] => (Array.isArray(row?.[6]?.from) ? (row[6].from as string[]) : []);
+/**
+ * The named corps a row takes whole (`from`), and after them the stand-ins it stands down as it lands (rows of its
+ * country whose `unless` names it): every corps the rule may hold it for, in that order. The design director's "2 YES:
+ * standDown goes under the one test, and the row waits, told", 01:37Z, 27 November 2026.
+ */
+const fromOf = (row: any[]): string[] => [
+  ...(Array.isArray(row?.[6]?.from) ? (row[6].from as string[]) : []),
+  ...(row ? ROWS().filter((r2) => r2?.[6]?.unless === row[2] && r2[1] === row[1]).map((r2) => r2[2] as string) : []),
+];
 /** The named corps of the row standing on the board, in the order the row names them. */
 const present = (g: Game, nat: string, from: string[]): Corps[] => g.corps.filter((x) => x.nat === nat && !x.dead && from.includes(x.name));
 const inOrder = (from: string[], cs: Corps[]): Corps[] => [...cs].sort((a, b) => from.indexOf(a.name) - from.indexOf(b.name));
@@ -185,6 +194,55 @@ export function tellPlace(g: Game, i: number, at: Region): void {
   if (line) headline(g, 'info', line, row[1], at.id);
 }
 
+/**
+ * game.ts `expeditions`: a lent row's corps (row `i`, sent, its loan over) is held where it stands by the one contact
+ * test, so the loan's end waits (the design director's "3 RULED IN: a loan's end waits while the test holds the corps",
+ * 01:37Z, 27 November 2026). For the player's own row alone, the headline once, in the month the hold begins, in the
+ * form of section 1 (her marks of 16:07Z, 27 November 2026, B1: `loanHeldLine`). `way` is how the loan would
+ * have ended: 'gone' (it leaves for other fronts), 'back' (its divisions go back to the corps they came out of), 'down'
+ * (a garrison whose record ends in a surrender), 'home' (a regiment its division's row awaits, whose loan's end he is
+ * asked about: the question waits with it, and is put the month after it leaves the front), 'rejoin' (such a regiment
+ * whose loan's end is no offer: it goes home to its division, game.ts `comeHome`). Its flags go where the
+ * loan ends (`rowDone`), or, for 'home', where his answer ends it.
+ */
+export function tellLoan(g: Game, i: number, c: Corps, way: LoanWay): void {
+  const row = ROWS()[i];
+  if (!row || g.flags.fromWait !== 1 || !g.human || row[1] !== g.human || c.nat !== g.human) return;
+  g.flags[atKey(i)] = c.reg;
+  if (g.flags[toldKey(i)] !== undefined) return;
+  g.flags[toldKey(i)] = g.turn;
+  headline(g, 'info', loanHeldLine(g, c, way), row[1], c.reg);
+}
+
+/** Where a held loan's divisions go back: "into {the 7th Armoured Division}" where the rule knows the corps, else "to the corps it came out of". */
+const backInto = (g: Game, c: Corps): string => {
+  const into = loanBackInto(g, c);
+  return into ? `into ${named(into)}` : 'to the corps it came out of';
+};
+
+/**
+ * The headline of a loan's end held by the one test (`tellLoan`), in the form of section 1: the corps, how its loan
+ * would have ended this month, where it is at the front, and what it does instead. The UI director's B1 of 16:07Z, 27
+ * November 2026, marks all five: four pass as printed, and "goes back" is her sentence. The one maker of the sentence:
+ * a reader that shows it calls this. Writes nothing.
+ */
+export function loanHeldLine(g: Game, c: Corps, way: LoanWay): string {
+  const at = `it is at the front in ${placeOf(g, c)}`;
+  const line = way === 'home'
+    ? `${named(c.name, true)}, lent to the campaign, has come to the end of its loan this month, but ${at}. It stays, and you are asked whether to let it go home to its division the month after it leaves the front.`
+    : way === 'rejoin'
+    ? `${named(c.name, true)}, lent to the campaign, has come to the end of its loan this month, but ${at}. It stays, and goes home to its division the month after it leaves the front.`
+    : way === 'down'
+    ? `${named(c.name, true)} is due to lay down its arms this month, but ${at}. It fights on, and lays them down the month after it leaves the front.`
+    : way === 'back'
+      // (The UI director's B1, 16:07Z, 27 November 2026: ""this month" moves so it cannot read with "came out of", and the
+      // corps is named where the rule knows it" (game.ts `loanBackInto`); "Where the rule cannot name it: "... is due this
+      // month to go back to the corps it came out of, ..."".)
+      ? `${named(c.name, true)}, lent to the campaign, is due this month to go back ${backInto(g, c)}, but ${at}. It stays, and goes back the month after it leaves the front.`
+      : `${named(c.name, true)}, lent to the campaign, is due to leave for other fronts this month, but ${at}. It stays, and goes the month after it leaves the front.`;
+  return line;
+}
+
 // ---- 4 and 5. The month it forms -----------------------------------------------------------------------------------
 
 /**
@@ -266,7 +324,7 @@ export function waitedOn(g: Game, i: number, at: number | undefined): WaitedOn |
     if (!x && !onWall(g, row[1], name, g.flags[toldKey(i)])) return null;
     // (The rule's own test for the front, the forming place not set apart: game.ts `atFrontNow`.)
     if (!x) out.lost.push(name);
-    else if (!atFrontNow(g, row[1], x, from)) out.left.push(name);
+    else if (!atFrontNow(g, row[1], x, from, i)) out.left.push(name);
     else if (x.reg === at) out.stands.push(name);
     else return null;
   }
@@ -306,6 +364,27 @@ export function formedLine(g: Game, i: number, was: WaitedOn | null, own: boolea
   const tail = was ? formedTail(was, c.name) : null;
   if (!tail) return held ? { alone: `${head}.`, after: null } : null;
   return { alone: `${head}, ${tail}`, after: `The arrival is ${tail}` };
+}
+
+/**
+ * The words the month a row of the player's forms from a theatre draw (game.ts `expeditions`, `from` a theatre) that
+ * passed over corps of his the one test holds at the front (`skipped`): the UI director's B5 of 16:07Z, 27 November
+ * 2026, "Pass your lean, section 5's form: {Row} has {arrived in / landed at} {place} without your {corps}, which is at
+ * the front in {X} and stays a corps of its own. After a general's line or news: The arrival is formed without your
+ * {corps}, which is at the front in {X} and stays a corps of its own. (the tail kept, as section 5)." `alone` takes the
+ * place of today's bare line, `after` is said after the row's news or its general's line. Several corps: section 5's
+ * two form, the place once where they share it (section 7 case 7); she gives no form for several after a general's line
+ * or news, so `after` is null there. Null where a corps passed over is not his. Writes nothing.
+ */
+export function drawnLine(g: Game, i: number, skipped: Corps[], c: Corps, reg: Region, bySea: boolean): { alone: string | null; after: string | null } | null {
+  const row = ROWS()[i];
+  if (!row || g.flags.fromWait !== 1 || !g.human || row[1] !== g.human || !skipped.length || skipped.some((x) => x.nat !== g.human)) return null;
+  const head = `${named(c.name, true)} has ${bySea ? 'landed at' : 'arrived in'} ${reg.name}`;
+  if (skipped.length === 1) {
+    const tail = `without your ${skipped[0].name}, which is at the front in ${placeOf(g, skipped[0])} and stays a corps of its own.`;
+    return { alone: `${head} ${tail}`, after: `The arrival is formed ${tail}` };
+  }
+  return { alone: `${head} without ${join(skipped.map((x) => `your ${x.name}`))}, which are at the front in ${join([...new Set(skipped.map((x) => placeOf(g, x)))])} and stay corps of their own.`, after: null };
 }
 
 /**
@@ -468,7 +547,7 @@ function waiting(g: Game, nat: string): { i: number; row: any[]; at: number; sin
  * month as section 7 case 8 gives it: "has waited for it since {month}"; and section 7 case 2 for a row that also
  * waits for another row to form): `short` for the tray card ("An arrival waits for it"), `whole` for its hover, the
  * record card and the 3D corps card's muted note. Read from the board as it stands: the line goes the moment the corps
- * leaves the front. Null otherwise.
+ * leaves the front. Where no arrival waits for it, a held loan's line (her B2, `loanStandingOf`). Null otherwise.
  */
 export function arrivalWaitOf(g: Game, c: Corps): { short: string; whole: string } | null {
   if (c.dead || g.flags.fromWait !== 1 || c.nat !== g.human) return null;
@@ -485,6 +564,34 @@ export function arrivalWaitOf(g: Game, c: Corps): { short: string; whole: string
       ? `${due}, and has waited for it since ${since}. It forms the month after ${who} the front.`
       : `${due} and from ${rest}, which ${hasOrHave(unformed)} not formed yet, and has waited for it since ${since}. It forms once ${who} the front and ${rest} ${hasOrHave(unformed)} formed.`;
     return { short: 'An arrival waits for it', whole: theWords(whole) };
+  }
+  return loanStandingOf(g, c);
+}
+
+/**
+ * A held loan's standing line on the corps' own cards (the UI director's B2 of 16:07Z, 27 November 2026: "Yes, a
+ * standing line on the corps' own cards, as section 2"), read by `arrivalWaitOf` where no arrival waits for the corps,
+ * so the tray card, the record card and the 3D note read it where they read section 2's: `short` for the tray card,
+ * "Its loan is over", `whole` for its hover, the record card and the 3D corps card's muted note, by the way the loan
+ * ends, in the month it was due to end (the month the hold began: `rowTold:<i>`, as section 7 case 8 keeps the wait's
+ * month). Every month the test holds the loan (game.ts `loanHeldNow`: the wait written this month), and only then: the
+ * line stops the month the hold ends, and with the corps (her B3). Two ways she has not worded are not built, for her:
+ * the garrison's (tray "Due to lay down its arms"; no record-card sentence) and "go back" where the rule cannot name the
+ * corps. A pure read: it writes nothing.
+ */
+function loanStandingOf(g: Game, c: Corps): { short: string; whole: string } | null {
+  for (const i of ROWS().keys()) {
+    if (g.flags[`lent:${i}`] !== c.id) continue;
+    const h = loanHeldNow(g, i);
+    if (!h || h.c !== c) continue;
+    const since = turnToDate(h.since).label;
+    const into = h.way === 'back' ? loanBackInto(g, c) : null;
+    const whole = h.way === 'gone' ? `This corps was due to leave for other fronts in ${since}. It goes the month after it leaves the front.`
+      : h.way === 'back' ? (into ? `This corps was due to go back into ${named(into)} in ${since}. It goes back the month after it leaves the front.` : null)
+        : h.way === 'home' ? `This corps was due to go home to its division in ${since}. It goes the month after it leaves the front. You are asked then whether to let it go.`
+          : h.way === 'rejoin' ? `This corps was due to go home to its division in ${since}. It goes the month after it leaves the front.`
+            : null;
+    return whole ? { short: 'Its loan is over', whole: theWords(whole) } : null;
   }
   return null;
 }
@@ -517,6 +624,18 @@ export function rowsWaitingOnRows(g: Game, nat: string | null): string[] {
     out.push(theWords(`${named(w.row[2], true)}, due in ${g.regions[w.at].name}, has waited since ${turnToDate(w.since).label} for ${join(unformed.map((x) => named(x)))}, which ${hasOrHave(unformed)} not formed yet.`));
   }
   return out;
+}
+
+/**
+ * The offers page's loans line for a held loan (the UI director's B6 of 16:07Z, 27 November 2026: "The held loan's line
+ * names no month that has passed: for a held loan, the loan's month gives way to its loan is over, but it is at the
+ * front in {Murzuk}: it goes the month after it leaves the front."): her words for loan row `i` while the one test holds
+ * it this month (game.ts `loanHeldNow`), the place with its article; null otherwise. The page puts them where the
+ * loan's month stood (offers-look.ts `asideLines`). A pure read: it writes nothing.
+ */
+export function heldLoanAside(g: Game, i: number): string | null {
+  const h = loanHeldNow(g, i);
+  return h ? theWords(`its loan is over, but it is at the front in ${placeOf(g, h.c)}: it goes the month after it leaves the front.`) : null;
 }
 
 // ---- 6. The Options row: the switch, in any month ------------------------------------------------------------------

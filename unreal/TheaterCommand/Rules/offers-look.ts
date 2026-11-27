@@ -26,6 +26,7 @@
 
 import { formationOffers, orderDeclineFormation, orderTakeFormation, whyNotAnswerOffers, type RowOffer } from '../../../src/campaign/turn';
 import { loansEnding, onOrAt, placeName, rowsAwaitingWar, theName } from '../../../src/campaign/game';
+import { heldLoanAside } from '../../../src/campaign/arrivalwaits';
 import { menWords } from '../../../src/campaign/manpower';
 import { turnToDate } from '../../../src/core/ticket';
 import { KIND, type Game } from '../../../src/campaign/types';
@@ -223,8 +224,11 @@ export function cardRowOf(s: Game, open: RowOffer[]): { text: string; amber: boo
  */
 export function asideLines(s: Game): { loans: string[]; waiting: string[] } {
   const who = (nat: string): string => (s.nations[nat] ? theName(s.nations[nat]) : nat);
+  // (A loan the contact rule holds at the front past its month: the month gives way to the UI director's words, B6 of
+  // 16:07Z, 27 November 2026, arrivalwaits.ts `heldLoanAside`. Under the switch 'fromWait' only: off, none is held.)
+  const held = (i: number): string | null => heldLoanAside(s, i);
   const loans = loansEnding(s).map((l) => (l.until !== null
-    ? `${l.name} leaves your command by itself in ${monthOf(l.until)}, when its loan ends.`
+    ? held(l.id) ? `${l.name} leaves your command by itself: ${held(l.id)}` : `${l.name} leaves your command by itself in ${monthOf(l.until)}, when its loan ends.`
     : l.takes ? `${l.name} leaves your command by itself once ${l.takes} is yours, when its loan ends.`
       : `${l.name} leaves your command by itself once ${listed(l.holds ?? [])} ${(l.holds ?? []).length === 1 ? 'is' : 'are'} lost, when its loan ends.`));
   // (A row that will be an offer when its war begins says so; "forms" only where it forms by itself with no answer

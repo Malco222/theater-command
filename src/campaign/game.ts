@@ -32,7 +32,7 @@ import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, m
 import { civicDrafts, civicSum, handedOver, holdersNow, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
 import { divisionsOf, growCorps, numberCorps, numbersUnderFlag } from './armies';
-import { DRAWN, NO_LEAVING, corpsInContact, countingFor, recordBattle, formsAny, heldAlready, heldLine, joinNames, joinsAlone, keepCounted, layOnce, namesNow, ownShare, rowOver } from './drawn';
+import { DRAWN, NO_LEAVING, corpsInContact, countingFor, recordBattle, formsAny, heldAlready, heldLine, joinNames, joinsAlone, keepCounted, layOnce, namesNow, ownShare, rowOver, rowStandsOn } from './drawn';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
@@ -56,7 +56,7 @@ import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, rai
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willBurn } from './prizes';
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
-import { formedLine, joinedLine, nationDone, notFormedLine, rowDone, struckForPlace, struckForPlaceLines, tellPlace, tellWait, waitedOn, type StruckForPlace } from './arrivalwaits';
+import { drawnLine, formedLine, joinedLine, nationDone, notFormedLine, rowDone, struckForPlace, struckForPlaceLines, tellLoan, tellPlace, tellWait, waitedOn, type StruckForPlace } from './arrivalwaits';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -5060,22 +5060,32 @@ const fromWaits = (g: Game, nat: string, from: string[], i: number): boolean => 
  * and the names a waiting row has still to make (the far side's chain, `fromWaits`). Changes nothing. With the switch
  * 'fromWait' off nothing reaches it: the telling's readers return first.
  */
-export function rowHolds(g: Game, nat: string, from: string[], at: number | undefined, i: number): { front: Corps[]; unformed: string[] } {
+export function rowHolds(g: Game, nat: string, from: string[], at: number | undefined, i: number): { front: Corps[]; unformed: string[]; leaving: ReadonlySet<Corps> } {
   const far = farOn(g);
-  // (The corps the row would take leave together, and keep nothing for each other: the one contact test's `leaving`.)
-  const gone = g.flags.fromWait === 1 ? new Set(rowTakes(g, nat, { from })) : NO_LEAVING;
+  // (The corps that leave in the same act keep nothing for each other: the rule's own set, `rowLeaving`, its loan ends
+  // and stand-ins included. A reading for no row of the list (a test's) takes the names given.)
+  const gone = telling(g, nat, from, i);
+  // (A stand-in the row would stand down (`unless`) is held by the one test alone, as `expeditions` reads it, never by
+  // a live front, and is no row still to come: the design director's "2 YES", 01:37Z, 27 November 2026.)
+  const row = i >= 0 ? ((setup as any).expeditions as any[])[i] : undefined;
+  const ins = new Set<string>(row ? standInsOf(g, nat, row).map((x) => x.name) : []);
   return {
-    front: g.corps.filter((x) => x.nat === nat && !x.dead && from.includes(x.name) && ((far && onLiveFront(g, nat, x)) || (x.reg !== at && corpsInContact(g, nat, x, gone)))),
-    unformed: far ? from.filter((n) => fromWaits(g, nat, [n], i)) : [],
+    front: g.corps.filter((x) => x.nat === nat && !x.dead && from.includes(x.name) && ((far && !ins.has(x.name) && onLiveFront(g, nat, x)) || (x.reg !== at && corpsInContact(g, nat, x, gone)))),
+    unformed: far ? from.filter((n) => !ins.has(n) && fromWaits(g, nat, [n], i)) : [],
+    leaving: gone,
   };
 }
+
+/** The telling's leaving set: row `i`'s, as the rule takes it (`rowLeaving`); for no row of the list, the names given. */
+const telling = (g: Game, nat: string, from: string[], i: number): ReadonlySet<Corps> =>
+  g.flags.fromWait !== 1 ? NO_LEAVING : ((setup as any).expeditions as any[])[i] ? rowLeaving(g, nat, i) : leavingOf(g, nat, undefined, { from }, loanEnding(g, nat));
 
 /**
  * A corps at the front as the rule reads it, wherever it stands, the province a row forms in not set apart: on a live
  * front of its staff's plan, on the far side, or in contact (an enemy at war on its province or beside it). Read for
  * the telling's words the month a row forms (arrivalwaits.ts `waitedOn`), never by the rule itself. Changes nothing.
  */
-export const atFrontNow = (g: Game, nat: string, x: Corps, from: string[]): boolean => (farOn(g) && onLiveFront(g, nat, x)) || corpsInContact(g, nat, x, g.flags.fromWait === 1 ? new Set(rowTakes(g, nat, { from })) : NO_LEAVING);
+export const atFrontNow = (g: Game, nat: string, x: Corps, from: string[], i = -1): boolean => (farOn(g) && onLiveFront(g, nat, x)) || corpsInContact(g, nat, x, telling(g, nat, from, i));
 
 /**
  * The article the general's line gives the row's name ("{general} arrives in {place} with the {row}."): none where the
@@ -5926,6 +5936,281 @@ export function rowWords(g: Game, nat: string, row: any[]): { booked: boolean; o
 }
 
 /**
+ * The lent corps whose time is up and which leave in this pass (`expeditions`), whichever of two rows is read first:
+ * those its own loan ends have put on their way (`gone`, `down`, `back`), and every other lent corps of `nat`'s whose
+ * loan is over (`lentOver`), read once, when first asked; never one that holds divisions a row drew for it (`drew`,
+ * `rowed`), nor one that stood on (`stood`). The pass's own predicate; given empty lists, the board's as it stands
+ * (`loanEnding`). Writes nothing.
+ *
+ * `held`: the lent corps the one test has held already in this pass (`loanHeld`, in the rows' own order, the fixed
+ * order of the data): such a corps stays, and is not leaving for any row read after it. The design director's (2) of
+ * 16:07Z, 27 November 2026: "read in row order, since that is a fixed order of the data and never a throw. A loan
+ * already held this pass is not leaving for the rows after it." Nothing loops: each reads only those decided before it.
+ * Empty with the switch 'fromWait' off (nothing is held then).
+ */
+function loanLeaving(g: Game, nat: string, gone: Corps[], down: Corps[], back: Corps[], stood: { id: number }[], held: Corps[] = []): (x: Corps) => boolean {
+  let over: Set<number> | null = null;
+  return (x: Corps): boolean => {
+    if (held.includes(x)) return false;
+    if (gone.includes(x) || down.includes(x) || back.includes(x)) return true;
+    if (x.drew || x.rowed || x.nat !== nat || stood.some((q) => q.id === x.id)) return false;
+    if (!over) {
+      over = new Set();
+      ((setup as any).expeditions as any[] ?? []).forEach((r2, j) => { const id = g.flags[`lent:${j}`]; if (r2[1] === nat && r2[6]?.until && id > 0 && lentOver(g, nat, r2, r2[6])) over!.add(id); });
+    }
+    return over.has(x.id);
+  };
+}
+
+/** The pass `expeditions` is reading now, if any: its game, its nation and its own `leaving`. */
+let PASS: { g: Game; nat: string; leaving: (x: Corps) => boolean } | null = null;
+
+/**
+ * The lent corps leaving this month, as the rule reads it: inside `expeditions`' pass for `nat`, the pass's own
+ * predicate; outside it, the board's (`loanLeaving` with nothing yet put on its way), read as the pass reads the design
+ * director's (2) for row `i`: a lent corps the one test held this month for a row before `i` (`heldBefore`) is not
+ * leaving. For no row of the list (`i` -1), every loan held this month. Writes nothing.
+ */
+export const loanEnding = (g: Game, nat: string, i = -1): ((x: Corps) => boolean) => (PASS && PASS.g === g && PASS.nat === nat ? PASS.leaving : loanLeaving(g, nat, [], [], [], [], heldBefore(g, nat, i)));
+
+/**
+ * Outside the pass, the lent corps the one test held in this month's pass for a row before row `i` (every row, for `i`
+ * -1), from the save's own facts: the row `nat`'s and sent, its lent corps living (`lent:<j>`), and its wait written
+ * this month (`wait:<j>`: on a sent row the rule's hold writes it each month it holds, `expeditions`; a base gate writes
+ * one only before the row is sent, so of an earlier month, or, where his yes sent the row this month, on a loan not yet
+ * over, which leaves nothing). The pass's own list, `heldNow`, in row order (the telling sceptic's finding T4-2, round
+ * 4). None with the switch 'fromWait' off. Writes nothing.
+ */
+function heldBefore(g: Game, nat: string, i: number): Corps[] {
+  if (g.flags.fromWait !== 1) return [];
+  const out: Corps[] = [];
+  ((setup as any).expeditions as any[]).forEach((r2, j) => {
+    if ((i >= 0 && j >= i) || r2[1] !== nat || !g.flags[`sent:${j}`] || g.flags[`wait:${j}`] !== g.turn) return;
+    const id = g.flags[`lent:${j}`];
+    const c = id > 0 ? g.corps.find((x) => x.id === id && x.nat === nat && !x.dead) : undefined;
+    if (c) out.push(c);
+  });
+  return out;
+}
+
+/**
+ * A lent regiment of the player's whose loan's end is his offer (`loanStays`, the part of it that writes nothing: his
+ * offers on, and a division's row awaits it): it stays on the map until he says yes, and then leaves in the pass that
+ * reads his answer alone. So it is no leaver for a corps beside it (the rule sceptic's finding S4-2, round 4). Writes
+ * nothing.
+ */
+const offerKeeps = (g: Game, x: Corps): boolean => hisOffers(g, x.nat)
+  && ((setup as any).expeditions as any[]).some((r2, j) => r2[1] === x.nat && r2[6]?.until && g.flags[`lent:${j}`] === x.id && awaitedBy(x.nat, r2[2]) >= 0);
+
+/**
+ * The living corps `ending` says leave in this pass, as the contact rule and its telling read them (`loanHeld`,
+ * `leavingOf`): never a regiment whose loan's end is the player's offer (`offerKeeps`). The base's own readers of
+ * `ending` (drawn.ts `rowOver`, and `rowStandsOn` beside it) read it as it was.
+ */
+const endingNow = (g: Game, ending: (x: Corps) => boolean): Corps[] => g.corps.filter((x) => !x.dead && ending(x) && !offerKeeps(g, x));
+
+/**
+ * The ONE leaving set (the design director's "Q1 YES: the telling reads leavingNow", 01:37Z, 27 November 2026; section
+ * 13 A1 of the design): the corps that leave in the same act as a row of `nat`'s, which keep nothing for a corps beside
+ * them. Its own 'from' corps (`rowTakes`, by the row's words `o`), the lent corps whose loans end in the pass
+ * (`ending`), and the stand-ins it stands down as it lands (`standInsOf`). The rule (`expeditions`) and the telling
+ * (`rowLeaving`, `rowHolds`, `atFrontNow`) read it here and nowhere else. Writes nothing.
+ */
+function leavingOf(g: Game, nat: string, row: any[] | undefined, o: any, ending: (x: Corps) => boolean): ReadonlySet<Corps> {
+  return new Set<Corps>([...rowTakes(g, nat, o), ...endingNow(g, ending), ...(row ? standInsOf(g, nat, row) : [])]);
+}
+
+/**
+ * Row `i`'s leaving set as the rule takes it now (`leavingOf`, with the row's words as `expeditions` reads them), for
+ * the telling; with the switch 'fromWait' off, nobody (nothing reads it then). Writes nothing.
+ */
+export function rowLeaving(g: Game, nat: string, i: number, ending: (x: Corps) => boolean = loanEnding(g, nat, i)): ReadonlySet<Corps> {
+  if (g.flags.fromWait !== 1) return NO_LEAVING;
+  const row = ((setup as any).expeditions as any[])[i];
+  return row ? leavingOf(g, nat, row, rowWords(g, nat, row).o, ending) : NO_LEAVING;
+}
+
+/**
+ * (For a test, null in play.) Told each time `expeditions` builds a row's leaving set under the switch 'fromWait':
+ * tests/contact-r3-war.test.ts asks the telling's own reader at that moment and holds it to the very same set.
+ */
+export const leavingWatch: { tell: ((g: Game, nat: string, i: number, leaving: ReadonlySet<Corps>) => void) | null } = { tell: null };
+
+/**
+ * The paths on which the contact rule holds a piece of its own (under the switch 'fromWait', the one test, drawn.ts
+ * `corpsInContact`): a row that takes named corps whole (`from`, or `joins` where it joins a corps already landed), a
+ * row whose named corps' own row is still to come (`chain`), the stand-in a row would stand down (`standDown`), a loan's
+ * end by the way it would have ended (`loanGone`, `loanBack`, `loanDown`, `loanHome`), and three pieces a row forms
+ * without while it goes on: a claimed division kept where it stands (`claim`), a corps the theatre draw skips (`draw`)
+ * and the named corps of a row that comes with men of its own (`ownMen`). The older holds (a live front of the staff's
+ * plan, the place not in friendly hands, room, the cut, `ifLost`, an offer, the posting's war) are not the rule's own.
+ */
+export type RuleHoldPath = 'from' | 'joins' | 'chain' | 'standDown' | 'loanGone' | 'loanBack' | 'loanDown' | 'loanHome' | 'claim' | 'draw' | 'ownMen';
+/**
+ * One hold of the rule's own, as `expeditions` made it: the month, the nation whose pass it was, the row (its place in
+ * the dated rows and its name), the path, the corps held, whether the row or the loan WAITS for it (a wait written,
+ * `wait:<i>`) or goes on without the piece (`claim`, `draw`, `ownMen`: the row is sent, and there is no wait to write),
+ * and whether the player was told (null where the row is not his: the telling speaks to him alone).
+ */
+export interface RuleHold { turn: number; nat: string; i: number; row: string; path: RuleHoldPath; corps: string[]; waits: boolean; told: boolean | null }
+/**
+ * The rule's own note of this month's holds, kept beside the game and never in it: nothing saves it, nothing in play
+ * reads it, and it holds one month (the last month a hold was made). With the switch off nothing is noted.
+ */
+const HOLDS = new WeakMap<Game, RuleHold[]>();
+function noteHold(g: Game, nat: string, i: number, path: RuleHoldPath, corps: Corps[], waits: boolean, told?: boolean | null): void {
+  if (g.flags.fromWait !== 1 || !corps.length && path !== 'chain') return;
+  const row = ((setup as any).expeditions as any[])[i];
+  let l = HOLDS.get(g);
+  if (!l || (l.length && l[0].turn !== g.turn)) { l = []; HOLDS.set(g, l); }
+  if (l.some((h) => h.nat === nat && h.i === i && h.path === path)) return;
+  l.push({ turn: g.turn, nat, i, row: row?.[2] ?? '', path, corps: corps.map((x) => x.name), waits,
+    told: told !== undefined ? told : row?.[1] === g.human && g.human ? g.flags[`rowTold:${i}`] !== undefined : null });
+}
+
+/** The month's note of a row that came with men of its own (`ownMen`): whether the player was told, once it formed. */
+function heardOwn(g: Game, nat: string, i: number, told: boolean | null): void {
+  const h = (HOLDS.get(g) ?? []).find((x) => x.turn === g.turn && x.nat === nat && x.i === i && x.path === 'ownMen');
+  if (h) h.told = told;
+}
+
+/** The month's note of a theatre draw that passed over a corps at the front (`draw`): whether the player was told, once the row formed. */
+function heardDraw(g: Game, nat: string, i: number, told: boolean | null): void {
+  const h = (HOLDS.get(g) ?? []).find((x) => x.turn === g.turn && x.nat === nat && x.i === i && x.path === 'draw');
+  if (h) h.told = told;
+}
+
+/**
+ * ONE pure reader (it writes nothing: tests/contact-r3-holds) of the holds of the rule's own made in `month` (this
+ * month by default), on every path, each with whether its wait is WRITTEN (`wait:<i>` holds that month; null for a
+ * piece a row forms without, which has no wait) and TOLD (null where the row is not the player's), and `untold` true
+ * where a hold that waits has no wait written, or the player's own hold was not told. The design director's verdict of
+ * 01:37Z, 27 November 2026: "A hold of the rule's own writes its wait (target 0)"; the gate reads "untold holds of the
+ * rule's own" here. Each is a copy: changing what it returns changes nothing.
+ */
+export function ruleHolds(g: Game, month: number = g.turn): (RuleHold & { written: boolean | null; untold: boolean })[] {
+  return (HOLDS.get(g) ?? []).filter((h) => h.turn === month).map((h) => {
+    const written = h.waits ? g.flags[`wait:${h.i}`] === h.turn : null;
+    return { ...h, corps: [...h.corps], written, untold: written === false || h.told === false };
+  });
+}
+
+/**
+ * The stand-ins of a row (`unless`): the living corps of `nat`'s rows that stand in for this one, which go when it
+ * lands (`expeditions`, `standDown`): the same men cannot stand in two places. The grand campaign only. Writes nothing.
+ */
+function standInsOf(g: Game, nat: string, row: any[]): Corps[] {
+  return g.flags.open === 1 && UNLESS.has(row[2]) ? ((setup as any).expeditions as any[]).filter((r2) => r2[6]?.unless === row[2] && r2[1] === nat).map((r2) => g.corps.find((u) => u.nat === nat && !u.dead && u.name === r2[2])).filter((x): x is Corps => !!x) : [];
+}
+
+/** How a loan would have ended this month, had the one contact test not held its corps (`loanHeld`, arrivalwaits.ts `tellLoan`). */
+export type LoanWay = 'gone' | 'back' | 'down' | 'home' | 'rejoin';
+
+/**
+ * How an `until` row's loan would end for lent corps `c` (`loanHeld`): 'home', 'down', 'back', 'rejoin' or 'gone', as
+ * `loanHeld` says them. Writes nothing.
+ */
+function untilWay(g: Game, nat: string, row: any[], o: any, c: Corps): LoanWay {
+  const drawn = g.flags.open === 1 && !!c.drew?.length && divisionsOf(g, c).every((d) => c.drew!.some((r) => r.name[0] === d.name && r.from !== c.id && !r.conv));
+  // ('rejoin': a regiment a division's row awaits, on the far side, whose loan's end is no offer: the base sends it
+  // home to its division as it goes, `comeHome`, so the hold says so. Sceptic finding S1-9 (b).)
+  return hisOffers(g, nat) && awaitedBy(nat, row[2]) >= 0 ? 'home' : o.ends === 'surrender' && farOn(g) ? 'down' : drawn ? 'back'
+    : farOn(g) && awaitedBy(nat, row[2]) >= 0 && !(g.flags.open === 1 && (c.drew || c.rowed)) ? 'rejoin' : 'gone';
+}
+
+/**
+ * A loan's end held by the one contact test (the design director's "3 RULED IN", 01:37Z, 27 November 2026), read where
+ * `expeditions` would end the loan of sent row `i` this month, in the contact rule's scope (the theatre draw's, her
+ * Q2): the lent corps living, the loan over (an `until` row's by `lentOver`, unless the player's offer of its end is
+ * made or he has kept it; a war row's by its war over, the corps not at sea), and `corpsInContact` true with the corps
+ * whose loans end in the same pass as the corps that leave with it (`leaving`). With how it would have ended: 'home' (a
+ * regiment of the player's that a division's row awaits, whose loan's end is his to answer, `loanStays`: while the test
+ * holds it the offer is not made, and the hold is told instead), 'down' (a garrison whose record ends in a surrender),
+ * 'back' (every division it holds goes back to the corps it came out of, or a war row's), else 'gone'. Null where
+ * nothing holds it. Writes nothing.
+ */
+function loanHeld(g: Game, nat: string, row: any[], o: any, i: number, id: number, leaving: (x: Corps) => boolean): { c: Corps; way: LoanWay } | null {
+  if (!contactRuleActs(g, g.byName[row[5]])) return null;
+  const c = g.corps.find((x) => x.id === id && x.nat === nat && !x.dead);
+  if (!c) return null;
+  let way: LoanWay;
+  if (o.until) {
+    if (g.flags[leaveKey(i)] !== undefined || g.flags[keptKey(i)] || !lentOver(g, nat, row, o)) return null;
+    way = untilWay(g, nat, row, o, c);
+    // (A corps the loan's end leaves standing where it is, `rowOver`, takes nobody from the front: nothing to hold, and
+    // no way to tell. Read as the base reads it where the loan ends. Sceptic finding S1-9 (a).)
+    if (g.flags.open === 1 && (c.drew || c.rowed) && !(o.ends === 'surrender' && farOn(g)) && rowStandsOn(g, c, leaving)) return null;
+  } else if (o.war && g.flags.open === 1 && !warOn(g, o.war) && !g.atSea?.some((v) => v.corps.id === id) && (c.drew || c.rowed)) {
+    if (rowStandsOn(g, c, leaving, true)) return null;
+    way = 'back';
+  } else return null;
+  return corpsInContact(g, nat, c, new Set(endingNow(g, leaving))) ? { c, way } : null;
+}
+
+/**
+ * The player's own loan the one contact test holds this month (row `i`), as the save has it, for the telling's cards
+ * (arrivalwaits.ts `arrivalWaitOf`, the UI director's B2 of 16:07Z, 27 November 2026): under the switch 'fromWait', the
+ * row his and sent, its lent corps living, the hold told (`rowTold:<i>`, written by `tellLoan` the month it began: the
+ * month the loan was due to end) and its wait written this month (`wait:<i>` is this month: `expeditions` writes it each
+ * month the test holds the loan, and the hold's end clears the telling's flags, `rowDone`). With the way it would end, as
+ * `loanHeld` reads it. Null otherwise. A pure read: it writes nothing.
+ */
+export function loanHeldNow(g: Game, i: number): { c: Corps; way: LoanWay; since: number } | null {
+  const row = ((setup as any).expeditions as any[])[i];
+  if (g.flags.fromWait !== 1 || !g.human || !row || row[1] !== g.human || !g.flags[`sent:${i}`]) return null;
+  const id = g.flags[`lent:${i}`], since = g.flags[`rowTold:${i}`];
+  if (!(id > 0) || since === undefined || g.flags[`wait:${i}`] !== g.turn) return null;
+  const c = g.corps.find((x) => x.id === id && x.nat === row[1] && !x.dead);
+  if (!c) return null;
+  const { o } = rowWords(g, row[1], row);
+  return { c, way: o.until ? untilWay(g, row[1], row, o, c) : 'back', since };
+}
+
+/**
+ * The one corps a held loan's divisions go back into ('back'), where the rule knows it: every division the lent corps
+ * holds is one it drew (`drew`) from another corps, and all of them from the same corps, which stands; its name as it
+ * stands now. Null where they came out of more than one corps, or out of one no longer on the board (the UI director's
+ * B1 of 16:07Z, 27 November 2026: "the corps is named where the rule knows it"). For the telling's words only. Writes
+ * nothing.
+ */
+export function loanBackInto(g: Game, c: Corps): string | null {
+  const from = new Set(divisionsOf(g, c).map((d) => c.drew?.find((r) => r.name[0] === d.name && r.from !== c.id && !r.conv)?.from));
+  if (from.size !== 1 || from.has(undefined)) return null;
+  const id = [...from][0];
+  return g.corps.find((x) => x.id === id && x.nat === c.nat && !x.dead)?.name ?? null;
+}
+
+/**
+ * Whether, by its own words, a gate of the base's could have written `wait:<i>` on this lent row before it was sent:
+ * the base writes the marker only on a row not yet sent, and only on the far side, at three gates: ruling B7's wait for
+ * a posting beyond Europe that its country does not own (`rowPlace` sends a row its country owns the ground of home
+ * first) and none of the words `postedFor` leaves out exclude (`P.waits`); the far from-row's live front, a `from` with
+ * no body of its own (`onLiveFront`); and `sourceAsked`, the player's row whose `cut`, or `from` with no body, waits on
+ * an offer. It never deletes one. Where this is false, any `wait:<i>` a sent row carries is the contact rule's own.
+ * Writes nothing.
+ */
+export function baseMayMark(g: Game, nat: string, row: any[], o: any): boolean {
+  if (!farOn(g)) return false;
+  if ((Array.isArray(o.from) && !(o.adds > 0)) || o.cut) return true;
+  const at = g.byName[row[5]];
+  return !!at && beyondEurope(at) && at.owner !== nat && !o.war && !(o.levy || o.overland || o.shore || o.joins || o.join || o.ifLost || row[3] === 'fort');
+}
+
+/**
+ * A held loan has ended (its corps gone, back or down, lost or its place fallen, at the two points `expeditions` ends a
+ * loan), or the hold of the player's own loan has ended and its offer is made: under the switch 'fromWait', the wait
+ * marker the contact rule wrote for the hold goes with it. The design director's (4) of 16:07Z, 27 November 2026: "The
+ * rule clears the markers IT wrote when the loan ends, on the ON path only. Off writes none, so switch-off identity
+ * holds." Only where no gate of the base's could have written one before the row was sent (`baseMayMark`): there the save
+ * cannot tell the rule's marker from the base's, and it stays as it was (her "bring me why"). Switch off: nothing.
+ */
+function loanMarkGone(g: Game, nat: string, j: number): void {
+  const row = ((setup as any).expeditions as any[])[j];
+  if (g.flags.fromWait !== 1 || g.flags[`wait:${j}`] === undefined || !row || baseMayMark(g, nat, row, rowWords(g, nat, row).o)) return;
+  delete g.flags[`wait:${j}`];
+}
+
+/**
  * `take` is the one row the player has just said yes to (ruling B8, `takeOffer`): that row alone is read, and it
  * forms as the rule always formed it. Every other reading gives none, and reads every row.
  */
@@ -5943,16 +6228,13 @@ function expeditions(g: Game, nat: string, take?: number): void {
   // Division, lent to the Sudan until April 1941, leaves in the month its own row lays it in Egypt again. A corps
   // that holds divisions a row drew for it, `drew` and `rowed`, holds them still: it is read when its own row ends,
   // and one that stands on then is a living corps like any other. The rows whose time is up are read once, when first asked.)
-  let over: Set<number> | null = null;
-  const leaving = (x: Corps): boolean => {
-    if (gone.includes(x) || down.includes(x) || back.includes(x)) return true;
-    if (x.drew || x.rowed || x.nat !== nat || stood.some((q) => q.id === x.id)) return false;
-    if (!over) {
-      over = new Set();
-      ((setup as any).expeditions as any[] ?? []).forEach((r2, j) => { const id = g.flags[`lent:${j}`]; if (r2[1] === nat && r2[6]?.until && id > 0 && lentOver(g, nat, r2, r2[6])) over!.add(id); });
-    }
-    return over.has(x.id);
-  };
+  // (The lent corps the one test has held so far in this pass, in row order: no leaver for the rows read after it.)
+  const heldNow: Corps[] = [];
+  const leaving = loanLeaving(g, nat, gone, down, back, stood, heldNow);
+  // (The pass's own leaving, read by the telling while the pass runs: `loanEnding`, one function for both.)
+  const outer = PASS;
+  PASS = { g, nat, leaving };
+  try {
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
     if (take !== undefined && i !== take) return;
     // (The row's words as this month reads them: `rowWords`, which `rowComes` reads too.)
@@ -5976,7 +6258,22 @@ function expeditions(g: Game, nat: string, take?: number): void {
       // (The far side: the end of a loan takes no regiment of the player's that its division awaits off the map: it
       // is an offer, and the regiment stays until he lets it go. Ruling B8, `loanStays`. A computer's loan ends as
       // it did, and so does everybody's with the far side off.)
-      if (o.until && id > 0 && !loanStays(g, nat, row, o, i, take === i) && (take === i || lentOver(g, nat, row, o))) {
+      // (Under the switch 'fromWait', where the contact rule acts: a loan's end, any of its three ways (it leaves for
+      // other fronts, its divisions go back, it lays down its arms), waits while the one test holds the lent corps where
+      // it stands. It stays, the loan is tried again each month, and in the first month the test lets it go it ends
+      // exactly as it would have. Its wait is written and told like every wait of the rule's own. The design
+      // director's "3 RULED IN: a loan's end waits while the test holds the corps (Murzuk, Burao). One test for every
+      // piece", 01:37Z, 27 November 2026. A loan the player has been offered the end of, has kept, or has just let go
+      // keeps his offer and his choice (`loanStays`): while the test holds the corps the offer is not made, and the
+      // hold is told instead. Switch off: nothing is read.)
+      const held = g.flags.fromWait === 1 && id > 0 && take !== i ? loanHeld(g, nat, row, o, i, id, leaving) : null;
+      if (held) {
+        heldNow.push(held.c);
+        tellLoan(g, i, held.c, held.way);
+        g.flags[`wait:${i}`] = g.turn;
+        noteHold(g, nat, i, held.way === 'gone' || held.way === 'rejoin' ? 'loanGone' : held.way === 'back' ? 'loanBack' : held.way === 'down' ? 'loanDown' : 'loanHome', [held.c], true);
+      }
+      else if (o.until && id > 0 && !loanStays(g, nat, row, o, i, take === i) && (take === i || lentOver(g, nat, row, o))) {
         const c = g.corps.find((x) => x.id === id && x.nat === nat);
         // (The far side: a regiment its division awaits comes home to it: `comeHome`. A row whose record ends in a
         // surrender, `ends`, is told as one: `down`, below.)
@@ -5993,9 +6290,14 @@ function expeditions(g: Game, nat: string, take?: number): void {
         }
         else if (c) { (o.ends === 'surrender' && farOn(g) ? down : gone).push(c); comeHome(g, nat, i, row, c); }
         g.flags[`lent:${i}`] = -1;
+        // (A loan's end that waited and was told: its telling flags go with it, `rowDone`. A war that never had the
+        // switch on has none, and nothing changes.)
+        if (g.flags[`rowTold:${i}`] !== undefined) rowDone(g, i);
+        // (And the wait marker the rule wrote while it held the loan: `loanMarkGone`. Switch off: nothing.)
+        loanMarkGone(g, nat, i);
         if (take === i) delete g.flags[leaveKey(i)];
         // (A corps ends its loan once: another lent row that added to it, `joins`, has nothing left to end.)
-        ((setup as any).expeditions as any[]).forEach((_, j) => { if (j !== i && g.flags[`lent:${j}`] === id) g.flags[`lent:${j}`] = -1; });
+        ((setup as any).expeditions as any[]).forEach((_, j) => { if (j !== i && g.flags[`lent:${j}`] === id) { g.flags[`lent:${j}`] = -1; loanMarkGone(g, nat, j); } });
       }
       // (The stood war rows, drawn.ts: a row keyed to a war was lent for that war, every nation's. The war over, each
       // division it drew goes back to the corps it came out of, or stands on where it is; what it raised new stays
@@ -6007,8 +6309,18 @@ function expeditions(g: Game, nat: string, take?: number): void {
         if (c && (c.drew || c.rowed) && !rowOver(g, c, leaving, true)) back.push(c);
         g.supplyDirty = true;
         g.flags[`lent:${i}`] = -1;
-        ((setup as any).expeditions as any[]).forEach((_, j) => { if (j !== i && g.flags[`lent:${j}`] === id) g.flags[`lent:${j}`] = -1; });
+        if (g.flags[`rowTold:${i}`] !== undefined) rowDone(g, i);
+        loanMarkGone(g, nat, i);
+        ((setup as any).expeditions as any[]).forEach((_, j) => { if (j !== i && g.flags[`lent:${j}`] === id) { g.flags[`lent:${j}`] = -1; loanMarkGone(g, nat, j); } });
       }
+      // (A loan's end of the player's that waited, told, and is now offered to him (`loanStays`): the hold is over, and its
+      // telling flags go; his answer is the offer's. None exist with the switch never on.)
+      if (!held && g.flags[leaveKey(i)] !== undefined && g.flags[`rowTold:${i}`] !== undefined) { rowDone(g, i); loanMarkGone(g, nat, i); }
+      // (A held loan of the player's that the one test no longer holds, its loan going on (a war row whose war has begun
+      // again): the hold is over, and its telling flags go, so a later hold is told again and dated by its own month. The
+      // telling sceptic's finding T4-1, round 4. The rule's own `wait:<i>` is left as it was: whether it goes too is the
+      // design director's (the rule sceptic's S4-3). Switch off: nothing.)
+      else if (!held && g.flags.fromWait === 1 && g.flags[`lent:${i}`] > 0 && g.flags[`rowTold:${i}`] !== undefined) rowDone(g, i);
       // (The far side: a division that awaits lent regiments keeps their shares for them while they are lent: `makeUp`.)
       if (o.awaits && farOn(g)) makeUp(g, nat, row, o);
       return;
@@ -6095,17 +6407,25 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // the lent corps whose time is up in this pass (`leaving`, removed once every row is read), and the stand-in this
     // row stands down where it lands. The design director's ruling of 06:10Z, 26 November 2026; section 13 A1 of the
     // design. With the switch off it is never built, and nothing reads it.)
-    const leavingNow: ReadonlySet<Corps> = g.flags.fromWait === 1 ? new Set<Corps>([
-      ...rowTakes(g, nat, o),
-      ...g.corps.filter((x) => !x.dead && leaving(x)),
-      ...(g.flags.open === 1 && UNLESS.has(row[2]) ? ((setup as any).expeditions as any[]).filter((r2) => r2[6]?.unless === row[2] && r2[1] === nat).map((r2) => g.corps.find((u) => u.nat === nat && !u.dead && u.name === r2[2])).filter((x): x is Corps => !!x) : []),
-    ]) : NO_LEAVING;
+    // (Built by `leavingOf`, the one function the telling reads too (`rowLeaving`, `rowHolds`, `atFrontNow`): the design
+    // director's "Q1 YES: the telling reads leavingNow", 01:37Z, 27 November 2026.)
+    const leavingNow: ReadonlySet<Corps> = g.flags.fromWait === 1 ? leavingOf(g, nat, row, o, leaving) : NO_LEAVING;
+    if (g.flags.fromWait === 1) leavingWatch.tell?.(g, nat, i, leavingNow);
     let own = false;
     if (Array.isArray(o.from) && !ashore && row[1] === nat && farOn(g) && (g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name)
       && (onLiveFront(g, nat, x) || (inFight && x.reg !== reg?.id && corpsInContact(g, nat, x, leavingNow))))
       || (inFight && fromWaits(g, nat, o.from, i)))) {
-      if (o.adds > 0) own = true;
-      else { if (inFight) tellWait(g, i, reg); waitRow(g, i); return; }
+      // (Which of its corps the one test holds, and whether its chain holds it: the rule's own holds, `noteHold`; one held
+      // by a live front alone is the older hold. Read only where the rule acts: with the switch off nothing is read.)
+      const fought = inFight ? g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== reg?.id && corpsInContact(g, nat, x, leavingNow)) : [];
+      if (o.adds > 0) { own = true; noteHold(g, nat, i, 'ownMen', fought, false, null); }
+      else {
+        if (inFight) tellWait(g, i, reg);
+        waitRow(g, i);
+        if (fought.length) noteHold(g, nat, i, o.joins ? 'joins' : 'from', fought, true);
+        else if (inFight && fromWaits(g, nat, o.from, i)) noteHold(g, nat, i, 'chain', [], true);
+        return;
+      }
     }
     // (The old chart, the grand campaign: a row that takes a named corps whole waits while that corps is in contact, an
     // enemy at war on its province or beside it, as the far side's waits for a live front, and its half year is counted
@@ -6118,7 +6438,12 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // 22:05Z; history.ts `contactRuleActs`.)
     const formsAt = reg?.id;
     if (g.flags.fromWait === 1 && g.flags.open === 1 && !farOn(g) && contactRuleActs(g, g.byName[row[5]]) && Array.isArray(o.from) && !ashore && row[1] === nat && formsAt !== undefined
-      && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt && corpsInContact(g, nat, x, leavingNow))) { if (inFight) tellWait(g, i, reg); waitRow(g, i); return; }
+      && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt && corpsInContact(g, nat, x, leavingNow))) {
+      if (inFight) tellWait(g, i, reg);
+      waitRow(g, i);
+      noteHold(g, nat, i, o.joins ? 'joins' : 'from', g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt && corpsInContact(g, nat, x, leavingNow)), true);
+      return;
+    }
     // (The far side: a row that waits on a formation the player has been offered and has not answered, the one that
     // makes its cut or the one it is itself made from, waits on his answer and has its half year from the month he
     // gives it: he is never struck a row for the months he took, nor given its men twice. And a row made from a
@@ -6220,7 +6545,13 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // (The far side: no row takes a corps standing on a live front of its staff's plan, by its name any more than by a list: the rulings of 05:30Z and 05:35Z, above.)
     // (Nor one that cannot leave where it is: at sea, shut in a town the enemy stands round, marching with an ally's army, at home out of the line.)
     const fixed = (x: Corps): boolean => x.sail !== undefined || x.joint !== undefined || x.leave !== undefined || !!x.school || (x.town !== undefined && g.regions[x.reg].units.some((u) => atWar(g, u.nat, nat))) || (farOn(g) && onLiveFront(g, nat, x));
-    const claims = once ? heldAlready(g, nat, row, o, n, reg, home, (x) => spoken!.has(x.name) || leaving(x), fixed, leavingNow) : [];
+    // (Under the switch 'fromWait': a lent corps whose loan's end the one test holds this pass stays where it stands
+    // with its divisions, `loanHeld`, so it is no corps on its way out: it holds them, and a claim of one keeps it there
+    // for contact, as for any corps in a fight. A division is laid once. Read against the loans' own superset of who
+    // leaves, as `loanHeld` reads it where the loan is read, so no loop is made. Switch off: nothing is read.)
+    const heldLoan = (x: Corps): boolean => g.flags.fromWait === 1 && x.id > 0 && ((setup as any).expeditions as any[]).some((r2, j) =>
+      j !== take && !!g.flags[`sent:${j}`] && g.flags[`lent:${j}`] === x.id && !!loanHeld(g, nat, r2, rowWords(g, nat, r2).o, j, x.id, leaving));
+    const claims = once ? heldAlready(g, nat, row, o, n, reg, home, (x) => spoken!.has(x.name) || (leaving(x) && !heldLoan(x)), fixed, leavingNow, g.flags.fromWait === 1 ? (xs) => noteHold(g, nat, i, 'claim', xs, false, null) : undefined) : [];
     // (A row another row took a share of before it landed, o.takes: a division of it that stays with its corps is the
     // weaker by that share there, as one that comes or is raised new is where the row lands.)
     // (Once for each corps, by the number of its divisions the row names: two of one corps are not cut one after the other.)
@@ -6282,6 +6613,18 @@ function expeditions(g: Game, nat: string, take?: number): void {
       return;
     }
     if (asks) { offerMade(g, nat, i, o); return; }
+    // (Under the switch 'fromWait', where the contact rule acts: a row that would stand down a stand-in the one test
+    // holds where it stands, away from the province the row forms in, waits that month and tries again the next, its
+    // wait written and told like every wait of the rule's own: the design director's "2 YES: standDown goes under the
+    // one test, and the row waits, told", 01:37Z, 27 November 2026. The scope is the theatre draw's (her Q2, "one
+    // test, one scope"); a row the player has just said yes to forms as he ordered. Switch off: nothing is read.)
+    if (g.flags.fromWait === 1 && take !== i && contactRuleActs(g, g.byName[row[5]])
+      && standInsOf(g, nat, row).some((x) => x.reg !== reg.id && corpsInContact(g, nat, x, leavingNow))) {
+      tellWait(g, i, reg);
+      g.flags[`wait:${i}`] = g.turn;
+      noteHold(g, nat, i, 'standDown', standInsOf(g, nat, row).filter((x) => x.reg !== reg.id && corpsInContact(g, nat, x, leavingNow)), true);
+      return;
+    }
     g.flags[`sent:${i}`] = 1;
     // (The telling's three flags go once the formed headline below has read them: `formedLine` calls arrivalwaits.ts
     // `rowDone`, as every other place that sends or strikes a row does. The design director's answer 3 of 00:43Z, 26
@@ -6334,6 +6677,9 @@ function expeditions(g: Game, nat: string, take?: number): void {
       } else if (j >= 0 && !g.flags[`sent:${j}`]) g.flags[`takecut:${j}`] = o.takes.share;
     }
     standDown(reg);
+    // (The corps the theatre draw passed over for the one test, below: told in the arrival's headline where the row is
+    // the player's, arrivalwaits.ts `drawnLine`.)
+    const skipped: Corps[] = [];
     if (o.from && !Array.isArray(o.from)) {
       // A formation put together where it stands, out of the army around it, is not itself broken up for the next one.
       const here = theatreName(reg) === o.from;
@@ -6342,8 +6688,14 @@ function expeditions(g: Game, nat: string, take?: number): void {
       // (Under the switch 'fromWait', where the contact rule acts, the draw takes no corps the one test holds, nor one a
       // claim of this row keeps where it stands: the design director's answer 3 of 12:48Z, 26 November 2026. A theatre
       // short of free corps gives what it has, as a theatre short of corps always did.)
-      const held = g.flags.fromWait === 1 && contactRuleActs(g, g.byName[row[5]]) ? (x: Corps): boolean => corpsInContact(g, x.nat, x, leavingNow) || claims.some((q) => q.from === x && q.stays) : undefined;
+      // (Each corps the draw passes over for the one test, while it still needs divisions, is a hold of the rule's own:
+      // `noteHold`, after the draw. One a claim keeps is that claim's.)
+      const held = g.flags.fromWait === 1 && contactRuleActs(g, g.byName[row[5]]) ? (x: Corps): boolean => {
+        if (corpsInContact(g, x.nat, x, leavingNow)) { if (!skipped.includes(x)) skipped.push(x); return true; }
+        return claims.some((q) => q.from === x && q.stays);
+      } : undefined;
       draw(g, o.of ?? nat, o.from, claims.length ? Math.max(0, n - claims.length) : row[4], here ? c : undefined, held);
+      noteHold(g, nat, i, 'draw', skipped, false, row[1] === g.human && g.human ? false : null);
     }
     if (o.until) g.flags[`lent:${i}`] = c.id;
     // (A war row that drew divisions from living corps is remembered by its corps until its war is over: above.)
@@ -6353,13 +6705,24 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // An army that marched there, or is forming up at home, simply arrives.
     const bySea = reg.port && (reg.overseas || (g.nations[nat].seaSupply && reg.owner !== nat));
     // (The telling: a row of the player's that waited on the front, or came without its corps at the front: arrivalwaits.ts.)
-    const said = formedLine(g, i, was, inFight && own, c, reg, !!bySea, inFight);
+    const formed = formedLine(g, i, was, inFight && own, c, reg, !!bySea, inFight);
+    // (The player's own theatre draw that passed over a corps at the front: told in section 5's form, where the telling
+    // has nothing else to say of the row this month. The UI director's B5 of 16:07Z, 27 November 2026.)
+    const drew = !formed && !(own && inFight) && skipped.length ? drawnLine(g, i, skipped, c, reg, !!bySea) : null;
+    const said = formed ?? drew;
+    // (A row that came with men of its own while its corps are held: told where the formed headline says so.)
+    if (own && inFight) heardOwn(g, nat, i, row[1] === g.human && g.human ? !!(said?.alone || said?.after) : null);
+    // (Which of the three lines below is said: the row's news, its general's, or the bare arrival, the player's alone.)
+    const by = o.news ? 'after' : o.gen && (!claims.length || generalOf(g, c)?.name === o.gen) ? 'after' : nat === g.human ? 'alone' : null;
+    // (The draw's hold is told where its words are in the line said: the rule's reader, `ruleHolds`.)
+    if (skipped.length) heardDraw(g, nat, i, row[1] === g.human && g.human ? !!drew && !!by && !!drew[by] : null);
     // A row that tells its own news says more than the bare arrival would.
     if (o.news) headline(g, 'event', said?.after ? `${o.news} ${said.after}` : o.news, nat, reg.id);
     // (A living corps come itself under the row keeps the general it has: the line names the row's only where he commands it.)
     else if (o.gen && (!claims.length || generalOf(g, c)?.name === o.gen)) headline(g, 'event', `${o.gen} ${bySea ? 'lands at' : 'arrives in'} ${reg.name} with ${the}${c.name}.${said?.after ? ` ${said.after}` : ''}`, nat, reg.id);
     else if (nat === g.human) headline(g, 'info', said?.alone ?? `${c.name} has ${bySea ? 'landed at' : 'arrived in'} ${reg.name}.`, nat, reg.id);
   });
+  } finally { PASS = outer; }
   for (const x of struckForPlaceLines(g, struckHeld)) headline(g, 'info', x.text, nat, x.at);
   if (gone.length) {
     const where = theatreName(g.regions[gone[0].reg]);

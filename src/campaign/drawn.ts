@@ -59,6 +59,7 @@ import words from '../../data/campaign/drawn.json';
 import counting from '../../data/campaign/counting.json';
 import { addCorps, atWar, givesWay, hostileUnits, relocate, removeCorps } from './game';
 import { divisionWords, divisionsNamed, divisionsOf, keepNumbers, ordinal, setStandInCount, standInCount, standInNumbers } from './armies';
+import { answering, frontAnswering } from './ai';
 import { seat } from './commanders';
 import { contactRuleActs } from './history';
 import type { Corps, Game, Kind, Region } from './types';
@@ -181,7 +182,7 @@ export function formationName(names: [string, string][]): string | null {
  * row's own `from` corps, the lent corps whose loan ends this pass, the stand-in this row stands down), which keep
  * nothing for a corps beside them, and neither does a corps this row's claims would empty (`emptied`).
  */
-export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number, reg: Region, home: boolean, skip: (c: Corps) => boolean, busy: (c: Corps) => boolean, leavingNow: ReadonlySet<Corps> = NO_LEAVING): Claim[] {
+export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number, reg: Region, home: boolean, skip: (c: Corps) => boolean, busy: (c: Corps) => boolean, leavingNow: ReadonlySet<Corps> = NO_LEAVING, heldBy?: (cs: Corps[]) => void): Claim[] {
   const names = divisionsNamed(row[2], nat, row[3] as Kind).slice(0, n);
   const count = countingFor(g, nat, row)?.from;
   if (!names.length && !count) return [];
@@ -278,6 +279,9 @@ export function heldAlready(g: Game, nat: string, row: any[], o: any, n: number,
     gone = emptied;
   }
   for (const q of out) if (q.from) q.stays = stays(q.from);
+  // (The corps that keep their claimed divisions for contact alone, no other reason: game.ts `noteHold`'s `claim`. Told
+  // only where asked: the switch on.)
+  if (heldBy) heldBy([...new Set(out.filter((q) => q.from && q.stays && !anyway(q.from)).map((q) => q.from!))]);
   // (In the order the row's name gives them, as they were always read.)
   out.sort((a, b) => a.slot - b.slot);
   if (out.length) drawnWatch.tell?.({ turn: g.turn, nat, row: row[2], place: row[5], lands: reg.name, home, divs: n, claims: out.map((q) => ({ name: q.name[0], from: q.from?.name ?? null, id: q.from?.id ?? null, at: q.from ? g.regions[q.from.reg].name : null, stays: q.stays, conv: q.conv ?? null, share: !!q.share })) });
@@ -326,13 +330,37 @@ export function dropBattle(g: Game, id: number): void {
 /** No corps leaving: the contact test's reading where the same act takes nobody away. */
 export const NO_LEAVING: ReadonlySet<Corps> = new Set();
 
-/** The enemies at war with `nat` that hold or stand on c's province or one beside it; with `first`, the first only. */
-function enemiesBeside(g: Game, nat: string, c: Corps, first = false): string[] {
+/**
+ * A corps its own orders bind to its place this month, as the general reads it: its order to hold where it stands
+ * (`hold`: set from its row's words, kept for good by `stay`, and lifted only by the general's own orders, ai.ts
+ * `release` and the plan's `freed`), which every picker of the general's (ai.ts) reads before it moves a corps. Never a
+ * corps the player orders: the general moves none of his, and his own orders are his. Read as it stands when the test
+ * reads it. Writes nothing. A held corps that answers this month is not bound: the general's own answer rule takes its
+ * hold off for the month's fighting (ai.ts `withAnswer`, over the corps that `answering` and `frontAnswering` list), so
+ * it is free to come on (`enemiesBeside`, the rule sceptic's finding S4-1, round 4).
+ */
+const boundHere = (g: Game, u: Corps): boolean => !!u.hold && u.nat !== g.human && u.joint !== g.human;
+
+/**
+ * The enemies at war with `nat` that hold or stand on c's province or one beside it; with `first`, the first only.
+ * With `free` (the alone half's reading, R4-1): an enemy corps bound to its place (`boundHere`) is not one, nor the
+ * province such a corps of its holder's stands on; one free corps of an enemy's beside makes it one.
+ */
+function enemiesBeside(g: Game, nat: string, c: Corps, first = false, free = false): string[] {
   const out: string[] = [];
   const add = (x: string): void => { if (!out.includes(x)) out.push(x); };
+  // (The held corps of each enemy that answer this month, ai.ts `answering` and `frontAnswering`, the two lists the
+  // general's `withAnswer` takes the hold off: read once a call, for an enemy one of whose held corps is beside.)
+  const answer = new Map<string, Set<Corps>>();
+  const bound = (u: Corps): boolean => {
+    if (!boundHere(g, u)) return false;
+    let a = answer.get(u.nat);
+    if (!a) { a = new Set([...answering(g, u.nat), ...frontAnswering(g, u.nat)]); answer.set(u.nat, a); }
+    return !a.has(u);
+  };
   const look = (r: Region): boolean => {
-    if (r.ctrl && atWar(g, nat, r.ctrl)) { add(r.ctrl); if (first) return true; }
-    for (const u of r.units) if (!u.dead && atWar(g, nat, u.nat)) { add(u.nat); if (first) return true; }
+    if (r.ctrl && atWar(g, nat, r.ctrl) && !(free && r.units.some((u) => !u.dead && u.nat === r.ctrl && bound(u)))) { add(r.ctrl); if (first) return true; }
+    for (const u of r.units) if (!u.dead && atWar(g, nat, u.nat) && !(free && bound(u))) { add(u.nat); if (first) return true; }
     return false;
   };
   const r = g.regions[c.reg];
@@ -344,7 +372,8 @@ function enemiesBeside(g: Game, nat: string, c: Corps, first = false): string[] 
 /**
  * The contact test's reading, whole: `beside` (an enemy at war with `nat` holds or stands on c's province or one beside
  * it), `battle` (c took part in the battle last resolved on its ground: `g.lastBattle`, recordBattle above), `kept`
- * (for every enemy faced, some unit other than c stands on c's province's field at war with it: the game's own holding
+ * (for every enemy faced that its own orders do not bind to its place, `boundHere`, some unit other than c stands on
+ * c's province's field at war with it: the game's own holding
  * test, game.ts `hostileUnits`; a unit the same act takes away, `leaving`, or one under an order to give its province up,
  * game.ts `givesWay`, keeps nothing). Only `corpsInContact` combines them; a gate's observer may read them. Nothing else
  * in src may hold a copy of the test (tests/contact-fact.test.ts reads every file for one).
@@ -353,7 +382,12 @@ export function contactRead(g: Game, nat: string, c: Corps, leaving: ReadonlySet
   const foes = enemiesBeside(g, nat, c);
   const r = g.regions[c.reg];
   const battle = !c.dead && (g.lastBattle?.[c.reg]?.includes(c.id) ?? false);
-  const kept = foes.length > 0 && foes.every((e) => hostileUnits(g, r, e).some((u) => u !== c && !u.dead && !leaving.has(u) && !givesWay(g, u)));
+  // (The alone half faces only the enemies free to come on, R4-1: one its own orders bind to its place keeps nothing
+  // from c's province, so where every enemy beside is bound, the province is kept. The design director's (1) of
+  // 16:07Z, 27 November 2026: "An enemy its own orders bind to its place is not "the enemy beside" for the alone half."
+  // `beside`, which the fight half reads, is every enemy, bound or free.)
+  const free = enemiesBeside(g, nat, c, false, true);
+  const kept = foes.length > 0 && free.every((e) => hostileUnits(g, r, e).some((u) => u !== c && !u.dead && !leaving.has(u) && !givesWay(g, u)));
   return { beside: foes.length > 0, battle, kept };
 }
 
@@ -513,6 +547,22 @@ export function layOnce(g: Game, nat: string, row: any[], n: number, reg: Region
  * free (the design director's ruling of 19:03Z, 25 November 2026). It leaves the row's corps as a corps of its own,
  * or, where the row's corps holds nothing else, that corps takes its name and is free of the row's orders.
  */
+/**
+ * Whether `rowOver` would leave the corps standing (true) or see it go (false), read without doing it: the same reading
+ * of its divisions, and nothing written, no watch told. game.ts `loanHeld` reads it under the switch 'fromWait': a
+ * loan's end that leaves its corps standing where it is takes nobody from the front, so the one test has nothing to
+ * hold there, and the loan ends as it always did (the rule sceptic's finding S1-9 (a), round 3).
+ */
+export function rowStandsOn(g: Game, c: Corps, leaving: (x: Corps) => boolean = () => false, war = false): boolean {
+  return partsOf(g, c).some((p) => {
+    const rec = c.drew?.find((r) => r.name[0] === p.name[0]);
+    if (!rec) return war;
+    const own = rec.from === c.id || !!rec.conv;
+    const parent = own ? undefined : g.corps.find((x) => x.id === rec.from && x.nat === c.nat && !x.dead && !leaving(x));
+    return !(parent && parent.reg === c.reg);
+  });
+}
+
 export function rowOver(g: Game, c: Corps, leaving: (x: Corps) => boolean = () => false, war = false): boolean {
   const keep: Part[] = [];
   // (The war over: the drawn divisions that stand on apart from the corps they came out of.)

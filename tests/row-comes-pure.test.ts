@@ -60,7 +60,7 @@ describe('rowComes keeps no month a row is first due', () => {
 });
 
 describe('rowComes writes nothing, and reads ended only where a row has ended', () => {
-  for (const seed of [17, 34]) {
+  for (const seed of [17]) {
     it(`seed ${seed}, ${MONTHS} months`, () => {
       const g = startOpen(createGame(seed, null));
       expect(setFromWait(g, true)).toBe(true);
@@ -88,6 +88,42 @@ describe('rowComes writes nothing, and reads ended only where a row has ended', 
       expect(sentRead).toBeGreaterThan(0);
     });
   }
+  // (One war a file, R4-4: the two wars of this test, seeds 17 and 34, were one file and passed vitest's 30 s only on a
+  // quiet box; seed 34 is tests/row-comes-pure-34.test.ts. The war's 24 months are read in four steps of six, one test each, on the
+  // same game, so that no step runs alone against the whole war's time: the same reads and the same assertions.)
+  const seed = 17;
+  let g: Game;
+  const seen = { notYet: 0, due: 0, ended: 0 };
+  const step = (): void => {
+    for (let m = 0; m < 6; m++) {
+      const flags = JSON.stringify(g.flags), save = saveGame(g);
+      for (const nat of Object.keys(g.nations)) rows.forEach((_, j) => { seen[rowComes(g, nat, j)]++; });
+      expect(JSON.stringify(g.flags), `month ${g.turn}: flags`).toBe(flags);
+      expect(saveGame(g) === save, `month ${g.turn}: the whole save`).toBe(true);
+      runTurnAI(g);
+      rows.forEach((row, j) => {
+        const nat = row[1] as string;
+        if (!g.nations[nat]) return;
+        const v = rowComes(g, nat, j);
+        if (g.flags[`sent:${j}`]) expect(v, `month ${g.turn}, row ${j} ${row[2]}: sent`).toBe('ended');
+        if (v === 'ended') expect(endedBecause(g, nat, j), `month ${g.turn}, row ${j} ${row[2]}: ended`).toBe(true);
+      });
+    }
+  };
+  it(`seed ${seed}, 24 months: months 1 to 6`, () => {
+    g = startOpen(createGame(seed, null));
+    expect(setFromWait(g, true)).toBe(true);
+    step();
+  });
+  it(`seed ${seed}, 24 months: months 7 to 12`, () => { step(); });
+  it(`seed ${seed}, 24 months: months 13 to 18`, () => { step(); });
+  it(`seed ${seed}, 24 months: months 19 to 24`, () => {
+    step();
+    // (Not an empty reading: rows of every kind were read.)
+    expect(seen.notYet).toBeGreaterThan(0);
+    expect(seen.due).toBeGreaterThan(0);
+    expect(seen.ended).toBeGreaterThan(0);
+  });
 });
 
 /** A row's own war set on by hand, both ways, on a board nobody plays. */
