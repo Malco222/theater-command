@@ -340,14 +340,17 @@ export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[
     if (!fewEnough(g, r, nat, corps, [], line.length, 0) && menOn(g, r, nat, corps) + line.reduce((n, c) => n + menOfCorps(c), 0) <= room) return `${r.name} has no room for ${line.length === 1 ? 'another corps' : `${line.length} more corps`}.`;
     const there = menOn(g, r, nat, corps), sending = line.reduce((n, c) => n + menOfCorps(c), 0), left = room - there;
     const yours = onlyMine(g, r, nat, corps) ? ' of yours' : '';
+    // (One corps named, U7: its card's figure, as in the swap, and never a shortfall: a named corps shows its card's
+    // exact figure, which keeps the line honest, 9,400 against 9,000 (the UI director's answer of 21:37Z 26 November
+    // 2026, 2: "{XIV Corps} has {32,000}: the corps card's own figure ... Where that would read at or under the room,
+    // the exact figure"; words sceptic 2, W2-4).)
+    const one = o.named && line.length === 1 ? named(line[0].name) : null;
     // (What he sends would read at or under what can go once rounded: say the shortfall instead, the UI director's
-    // answer of 21:37Z 26 November 2026, as the rifles' fifth read.)
-    const short = roomFigure(Math.round(sending), 'near') <= (there === 0 ? roomFigure(Math.max(0, Math.round(left)), 'near') : canGo(left, there));
+    // answer of 21:37Z 26 November 2026, as the rifles' fifth read. For "you are sending" and "this takes" alone.)
+    const short = !one && roomFigure(Math.round(sending), 'near') <= (there === 0 ? roomFigure(Math.max(0, Math.round(left)), 'near') : canGo(left, there));
     // (A formation offered: "this takes", U5. Its shortfall and its line with none there read the same verb: a reading.)
     const verb = o.forms ? 'this takes' : 'you are sending', more = o.forms ? 'more fit' : 'more can go';
-    // (One corps named, U7: its card's figure, as in the swap. Its shortfall in the same voice: a reading.)
-    const one = o.named && line.length === 1 ? named(line[0].name) : null;
-    const sends = one ? (short ? `${one} has ${roomMen(sending - left)} men more than fit` : `${one} has ${cardMen(line[0])}`)
+    const sends = one ? `${one} has ${cardMen(line[0])}`
       : short ? `${verb} ${roomMen(sending - left)} men more than fit` : `${verb} ${roomMen(sending)}`;
     if (there === 0) return `${r.name} has ${roomWords(isle.room)}: ${sends}.`;
     if (left < 1000) return `${r.name} is full: it has room for about ${roomMen(room)} men and ${roomMen(there, 'up')}${yours} are there.`;

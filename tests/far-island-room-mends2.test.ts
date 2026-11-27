@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { addCorps, createGame, men, removeCorps, setWar, startPhase } from '../src/campaign/game';
 import { atWar } from '../src/campaign/game';
 import setup from '../data/campaign/setup-1939.json';
-import { fits, islandOf } from '../src/campaign/islands';
+import { fits, islandOf, roomRefusal } from '../src/campaign/islands';
 import { rearMonth, startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
@@ -82,5 +82,20 @@ describe("a row's months waited for room count against its half year only from i
     g.turn = 32; startPhase(g, 'JAP');
     expect(g.flags['sent:263']).toBeUndefined();
     expect(g.flags['roomwait:263']).toBe(1);
+  });
+});
+
+describe("a corps named in an island's line shows its card's own figure, never a shortfall (words sceptic 2, W2-4; the UI director, 21:37Z, 26 November 2026, 2, and 00:19Z, 27 November 2026, U7)", () => {
+  it('Wake, 6,000 Marines in the field: the Defense Battalion of 9,400 coming out of the town reads its 9,400 against the 9,000 that can go', () => {
+    const g = startOpen(createGame(3, null));
+    const wake = g.byName['Wake'], hon = g.byName['Honolulu'];
+    clear(g, wake);
+    wake.ctrl = 'USA';
+    corps(g, 'USA', 'Marines', wake, 1, 0.4);
+    const bn = corps(g, 'USA', 'Defense Battalion', hon, 1, 9400 / 15000);
+    expect(men(bn)).toBe(9400);
+    expect(roomRefusal(g, wake, [bn], { named: true })).toBe('Wake has room for one division, about 15,000 men, and 6,000 of yours are there: only 9,000 more can go, and the Defense Battalion has 9,400.');
+    // Unnamed, what he sends keeps the shortfall her answer gives "you are sending".
+    expect(roomRefusal(g, wake, [bn])).toBe('Wake has room for one division, about 15,000 men, and 6,000 of yours are there: you are sending 400 men more than fit.');
   });
 });
