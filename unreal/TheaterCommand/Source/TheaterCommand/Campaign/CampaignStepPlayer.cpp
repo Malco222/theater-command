@@ -1625,7 +1625,9 @@ void FStepPlayer::Log(ACampaignPlayerController& Player, const FStep& Step)
 		const FString Title = Plain(Expect.Mid(4));
 		Pass = !After.Open.IsEmpty() && (Title.IsEmpty() || Plain(After.Open).Contains(Title)) ? TEXT("true") : TEXT("false");
 	}
-	// ("frames-under SECONDS": no frame of the step lasted longer than that, by the same clock as fps_low: the month-end bar, 0.25 s)
+	// ("frames-under SECONDS": no frame of the step lasted longer than that, by the same clock as fps_low: the month-end bar, 0.25 s.
+	// On a step that ends the month the game must also have changed, as "does" asked where this word took its place: an
+	// end-month that played nothing has no long frame either.)
 	else if (Expect.StartsWith(TEXT("frames-under")))
 	{
 		float Worst = 0.0f;
@@ -1633,7 +1635,7 @@ void FStepPlayer::Log(ACampaignPlayerController& Player, const FStep& Step)
 		{
 			Worst = FMath::Max(Worst, Each);
 		}
-		Pass = Worst <= FCString::Atof(*Expect.Mid(12).TrimStartAndEnd()) ? TEXT("true") : TEXT("false");
+		Pass = (Worst <= FCString::Atof(*Expect.Mid(12).TrimStartAndEnd()) && (!bMonth || After.Bare != Before.Bare)) ? TEXT("true") : TEXT("false");
 	}
 	// (a land step's expect words are read on the field it was played on: nothing, asks, closed, falls-back, view, paused,
 	// running, order, card)

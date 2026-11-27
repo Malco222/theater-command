@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Checks the model-warm mend (tc.Speed.ModelWarm) from the logs of step-player runs. Reads logs only; no engine.
 
-    check.py LOG[:STEPS.JSONL] LOG[:STEPS.JSONL] ... [--bar 4.0] [--over 250] [--late-ms 5] [--allow-missing] [--no-ref-check]
+    check.py LOG[:STEPS.JSONL] LOG[:STEPS.JSONL] ... [--bar 4.0] [--over 250] [--late-ms 5] [--months 'June 1940,April 1941']
+             [--allow-missing] [--no-ref-check]
 
 One or more logs. With two or more, the first is the reference (the run as it was: tc.Speed.ModelWarm=0 or the old build)
 and the others are the runs to be judged; with one log there is no reference, section 1 is skipped and that log is judged.
@@ -15,8 +16,15 @@ Reports, each with PASS or FAIL:
                  have none). A key missing from a run FAILS unless --allow-missing; keys only a later run has are listed.
   2. LATE READS  every 'Speed: model K was read late' line of --late-ms (5) or more, and whether it fell in a month-end step's
                  window (FAILS if it did). Lines under --late-ms are listed as small and ignored.
-  3. LONG FRAMES every 'Speed: a long frame, N ms' over --over (250) not tagged "beside the step player's look" (FAILS if any).
-  4. THE BAR     every end-month line of steps.jsonl: fps_low >= --bar (4.0, a longest frame of 0.25 s) (FAILS if any is under).
+  3. LONG FRAMES every 'Speed: a long frame, N ms' over --over (250) not tagged "beside the step player's look", and whether it
+                 fell in a month-end step's window (FAILS if any did). The others (the load, a close, the engine's clear-out)
+                 are not month ends: they are listed as information only. The bar is "no frame of a month end".
+  4. THE BAR     every end-month line of steps.jsonl: the month turned (before.month and after.month present and different) and
+                 the verdict is DID, as the expect word "does" asked before "frames-under" took its place; fps_low >= --bar
+                 (4.0, a longest frame of 0.25 s). And the months the run's end-months reached are the reference's, month for
+                 month, where there is one, and hold every month of --months (June 1940 and April 1941, the month ends the bar
+                 was set on; --months '' asks for none). FAILS if any end-month is under or did not turn its month, or the
+                 months differ or lack one (a run that stalled, skipped or stopped early measured nothing there).
   5. REFERENCE   the reference itself breaks the bar (so the comparison means something).
 A log with no speed lines (run without -TheaterSpeedLog) is said to have none: 2 and 3 then pass on nothing, and say so.
 Exit status 0 if every check passed on every log, 1 if any failed, 2 on a usage error.
@@ -99,6 +107,17 @@ class Run:
         return os.path.basename(self.log)
 
 
+def month_of(s, side):
+    """The month a steps.jsonl line names before or after its step, or ''."""
+    return (s.get(side) or {}).get('month') or ''
+
+
+def month_turned(s):
+    """An end-month line that played a month: both months named and different, and the step did something (what the
+    expect word "does" asked before "frames-under" took its place; a DEAD end-month has no long frame to fail on)."""
+    return bool(month_of(s, 'before')) and bool(month_of(s, 'after')) and month_of(s, 'before') != month_of(s, 'after') and s.get('verdict') == 'DID'
+
+
 def find_steps(log):
     stem = os.path.splitext(log)[0]
     for candidate in (os.path.join(stem, 'steps.jsonl'), os.path.join(os.path.dirname(log) or '.', 'steps.jsonl')):
@@ -109,11 +128,14 @@ def find_steps(log):
 
 def main(argv):
     bar, over, late_ms, allow_missing, ref_check, paths = 4.0, 250, 5, False, True, []
+    must_months = ['June 1940', 'April 1941']
     i = 0
     while i < len(argv):
         a = argv[i]
         if a == '--bar':
             i += 1; bar = float(argv[i])
+        elif a == '--months':
+            i += 1; must_months = [m.strip() for m in argv[i].split(',') if m.strip()]
         elif a == '--over':
             i += 1; over = int(argv[i])
         elif a == '--late-ms':
@@ -199,30 +221,65 @@ def main(argv):
         print('  %s: %d late reads, %d in a month-end window, %d read aside: %s%s' % (
             r.name(), len(r.late), len(in_end), len(r.aside), 'reference, information only' if info else verdict(not in_end), '' if have else '  (no speed lines in this log: run with -TheaterSpeedLog; nothing was checked)'))
 
-    # 3. long frames
-    print('\n3. LONG FRAMES over %d ms not beside the step player\'s look' % over)
+    # 3. long frames: the bar is "no frame of a month end", so only a frame in an end-month step's window fails. The load's
+    # frame (its first ShowArmies reads its models inline, before any frame has pumped the queue) and a stall such as the
+    # engine's clear-out in a close are listed as information.
+    print('\n3. LONG FRAMES over %d ms not beside the step player\'s look, and whether in a month-end step' % over)
     for r in runs:
-        bad = [x for x in r.longs if x[2] > over and not x[3]]
-        for when, frame, ms, beside, text in bad:
+        over_bar = [x for x in r.longs if x[2] > over and not x[3]]
+        in_end = []
+        for when, frame, ms, beside, text in over_bar:
             win = r.window_of(when)
-            print('  %s [%s] %d ms%s' % (r.name(), frame, ms, ' (step %d %s)' % win if win else ''))
-        print('  %s: %d long frames logged, %d over %d ms and not beside the look: %s%s' % (
-            r.name(), len(r.longs), len(bad), over, 'reference, information only' if r is ref else verdict(not bad), '' if r.longs else '  (none logged: run with -TheaterSpeedLog; nothing was checked)'))
+            endish = win is not None and win[1] == 'end-month'
+            print('  %s [%s] %d ms%s%s' % (r.name(), frame, ms, ' (step %d %s)' % win if win else '',
+                                          '  IN a month-end window' if endish else '  (information: not a month end)'))
+            if endish:
+                in_end.append(frame)
+        if not r.longs:
+            note = '  (none logged: run with -TheaterSpeedLog; nothing was checked)'
+        elif not r.step_times:
+            note = '  (no step lines in this log: no frame could be placed in a month end; nothing was checked)'
+        else:
+            note = ''
+        print('  %s: %d long frames logged, %d over %d ms and not beside the look, %d in a month-end window: %s%s' % (
+            r.name(), len(r.longs), len(over_bar), over, len(in_end), 'reference, information only' if r is ref else verdict(not in_end), note))
 
-    # 4. the bar
-    print('\n4. THE BAR (every end-month step: fps_low >= %.1f, its longest frame at most %.2f s)' % (bar, 1.0 / bar))
+    # 4. the bar, on end-month lines that played a month, and the months the run reached
+    print('\n4. THE BAR (every end-month step: the month turned, fps_low >= %.1f, its longest frame at most %.2f s; the months reached)' % (bar, 1.0 / bar))
+    ref_months = [month_of(s, 'after') for s in ref.steps if s.get('verb') == 'end-month'] if ref else None
     for r in runs:
         ends = [s for s in r.steps if s.get('verb') == 'end-month']
         under = [s for s in ends if s.get('fps_low') is None or s['fps_low'] < bar]
+        dead = [s for s in ends if not month_turned(s)]
         for s in ends:
-            after = s.get('after') or {}
-            print('  %s step %3d %-16s fps_low %5.1f  longest %.2f s  %s%s' % (
-                r.name(), s.get('n', 0), after.get('month', ''), s.get('fps_low') or 0.0,
+            print('  %s step %3d %-16s fps_low %5.1f  longest %.2f s  %s%s%s' % (
+                r.name(), s.get('n', 0), month_of(s, 'after'), s.get('fps_low') or 0.0,
                 (1.0 / s['fps_low']) if s.get('fps_low') else 0.0, 'ok' if s not in under else 'UNDER',
+                '  MONTH DID NOT TURN (%s, from %s)' % (s.get('verdict'), month_of(s, 'before') or 'no month') if s in dead else '',
                 '  [expect %s: pass %s]' % (s.get('expect'), s.get('pass')) if str(s.get('expect', '')).startswith('frames-under') else ''))
+        months = [month_of(s, 'after') for s in ends]
+        lacking = [m for m in must_months if m not in months]
+        differ = ''
+        if ref_months is not None and r is not ref and months != ref_months:
+            k = next((j for j in range(min(len(months), len(ref_months))) if months[j] != ref_months[j]), min(len(months), len(ref_months)))
+            differ = 'end-month %d reached %s here and %s in the reference (%d end-months here, %d there)' % (
+                k + 1, months[k] if k < len(months) else 'nothing', ref_months[k] if k < len(ref_months) else 'nothing', len(months), len(ref_months))
+            print('    MONTHS DIFFER from the reference: ' + differ)
+        if lacking:
+            print('    LACKS ' + ', '.join(lacking) + ': no end-month of this run reached it, so the bar was not measured there')
+        if r is ref:
+            said = "the reference's own"
+        elif ref_months is None:
+            said = 'no reference to compare'
+        else:
+            said = 'differ from the reference' if differ else "the reference's"
+        if lacking:
+            said += ', lacking ' + ', '.join(lacking)
         lowest = min((s.get('fps_low') or 0.0 for s in ends), default=0.0)
-        print('  %s: %d end-month lines, lowest fps_low %.1f, %d under %.1f: %s%s' % (
-            r.name(), len(ends), lowest, len(under), bar, 'reference, expected to break the bar' if r is ref else verdict(bool(ends) and not under), '' if ends else '  (no end-month lines: no steps.jsonl)'))
+        print('  %s: %d end-month lines, lowest fps_low %.1f, %d under %.1f, %d that did not turn the month, months %s: %s%s' % (
+            r.name(), len(ends), lowest, len(under), bar, len(dead), said,
+            'reference, expected to break the bar' if r is ref else verdict(bool(ends) and not under and not dead and not differ and not lacking),
+            '' if ends else '  (no end-month lines: no steps.jsonl)'))
 
     # 5. the reference breaks the bar
     if ref and ref_check:
