@@ -1196,7 +1196,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		// (Brian, 26 November 2026: "have the paint be on it regardless of the year". One look for the whole war: a
 		// machine that comes into service later wears the coat of the one it follows, where the art director's table
 		// gives it one, laid over its own file's colours by their numbers; and its side number is in that coat's ink.
-		// The Mustang in the Warhawk's olive drab, the Fw 190 in the Bf 109's greens. See UnitTable::OneLook.)
+		// The Fw 190 in the Bf 109's greens; the Mustang in her own bare metal with black bands. See UnitTable::OneLook.)
 		FLinearColor SideInk = Raw->NumberInk;
 		if (Raw->bAircraft)
 		{
@@ -1766,9 +1766,10 @@ void FMiniatureMesh::Submarine(const FVector& Where, double Length, const FLinea
 
 void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FString& TagAsked, double Turn)
 {
-	// (One look for the whole war: a mark that came in with a date is drawn as the one it followed, where the art
-	// director's table says so. The American star and bar is the star in its disc, with its red centre and no bars,
-	// on every machine and in every year. See UnitTable::OneLook.)
+	// (One look for the whole war: a mark is drawn as the one mark its nation's machines wear, where the art
+	// director's table says so. The American star in its disc is drawn as the star and bar, with no red centre,
+	// on every machine and in every year: the mark of the B-17 Brian approved. The German cross is drawn at its real
+	// proportions, on aircraft, tanks and the map's pieces alike: see the GER-BALKEN branch. See UnitTable::OneLook.)
 	const FString Tag = UnitTable::OneLookMark(TagAsked);
 	auto Paint = [](const TCHAR* Hex) { return FLinearColor(FColor::FromHex(Hex)); };
 	const FLinearColor White = Paint(TEXT("F2F0E8")), Red = Paint(TEXT("C8102E")), Blue = Paint(TEXT("1F3A93")), Black = Paint(TEXT("141414")),
@@ -1994,6 +1995,16 @@ void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FStr
 		// The straight-armed cross: black, edged in white.
 		Cross(1.0, 0.36, White);
 		Cross(0.94, 0.19, Black);
+	}
+	else if (Tag == TEXT("GER-BALKEN"))
+	{
+		// The straight-armed cross at its real proportions (Brian, 26 November 2026: "the german logo is wrong on the
+		// FW-190"; the art director, 27 November): black bars a quarter of its length wide, white an eighth of its
+		// length each side, a thin black edge a thirty-second of its length outside the white, and nothing across an
+		// arm's end. No file carries this mark: with one look on, the table draws it wherever GER is asked for.
+		Cross(1.0, 0.5625, Black);
+		Cross(1.0, 0.5, White);
+		Cross(1.0, 0.25, Black);
 	}
 	else if (Tag == TEXT("ITA"))
 	{
