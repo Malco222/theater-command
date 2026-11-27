@@ -1555,7 +1555,7 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    the star and bar is hers in every month (the art director, 26 November 21:42Z), and nothing here reads the month.
    Looks only: nothing the rules count reads it, and no random draw of the battle is made or moved.
    How: each mark is a small vertex-painted mesh in her model file's frame (Content/Data/AirMarks/b17-fine-marks.json,
-   4.56 MB at bundle 2, made by `python3 -I Tools/air_marks/make_b17_marks.py --livery <B17Livery.json>` from the model thread's
+   6.27 MB at bundle 2, made by `python3 -I Tools/air_marks/make_b17_marks.py --livery <B17Livery.json>` from the model thread's
    livery file, sha256 2ae760cc..., whose marks were laid on her newer shape 12 to 16 mm off her skin, near and far;
    the wing's triangle and letter are the tool's own, 1.5 m across at x 0.9, y 11.6 (the fin's 1.74 m would hang over
    her trailing edge there), the far glyph laid flat and draped 12 and 16 mm over a smooth fit of her wing; it refuses a
@@ -1579,6 +1579,8 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    On with the file missing or bad: one warning, and she flies with the star alone.
    The cloud test: air_letters_test in run.sh (under g++ and clang++): the file read as the game reads it, whole, made on
    her file (its sha256), wound as her file's, every fifth point 3 to 40 mm off its level's skin, by the signed distance to her nearest face (5.0 to 25.8 measured),
+   her far side's letters and codes straight in from her side never under her, 2 to 125 mm off, over 40 mm one point in
+   a hundred at most (3.7 to 116.5 measured: a tall letter's tail or top reaching round her curve),
    the letter F reading the right way round on both faces of her fin and on her wing from above, near and far, the wing's
    triangle apex forward on her right wing, nothing over her star and bar; each recording played through the show with the
    book taking every step, every third, every seventh from the fifth, and all hidden: the same wears; every American B-17
@@ -1586,7 +1588,7 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    the date moved to 1943-03 and 1944-06; the show's own record the same with the book and without; thirty made-up groups
    numbered two ways; no month or year in the book; and the Unreal side's guards from its source (lines of text: the
    proof is the Mac's run with the row off against the base).
-   Bundle 2 (the file's "bundle": 2, 194 parts, 4.56 MB; the bundle-1 parts in it byte for byte as before): her
+   Bundle 2 (the file's "bundle": 2, 194 parts, 6.27 MB; the bundle-1 parts in it byte for byte as before): her
    squadron's two letters and her own letter on both sides of her fuselage as the livery lays them, her own letter forward of
    the star and bar and the squadron's two aft of it (the 303rd's first bomber reads "A, star, VK" from her port side,
    each letter the right way round from either side), in the livery's code grey B9BAB4 (light grey, the livery's value "code"); her own letter again in
@@ -1596,8 +1598,14 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    paint) is not painted on a finer B-17 shape made with the row on at bundle 2: FMiniatureMesh::bNoPlaneNumber, set
    only in ShapeFor beside bTorpedoLoad, and her shape key ends "|letters" (before "|screws"), her paint key "|nonumber";
    off, every key and every paint is as before. The side letters J and Q (whose tails reached her wing root) are raised
-   to the foot of A and laid again 12 mm off her skin, near and far. About 380 to 1,370 triangles a bomber at the far
-   level (750 on average), 2,800 to 7,100 at the near. Bundle 3 (the yellow serial, close up) is not built.
+   to the foot of A and laid again 12 mm off her skin, near and far. At the far level the side letters and codes are laid
+   again as decals seen straight from her side (the tool's decal_side): her far side is a loft of a few flat faces, and
+   the livery's far glyphs, whose long triangles crossed its ridges, let her skin stand through them between their
+   corners (olive bites in the letters, seen in the check pictures); each is clipped to a grid whose lines stand at her
+   own faces' corners, set 12 mm off the outermost of her faces straight in, a cell raised where her skin stands out
+   over it (her wing fairing's edge), and her wing's root in front of the A's and J's feet left to hide them. About
+   1,100 to 3,700 triangles a bomber at the far level (2,000 on average, her fin's and wing's triangles counted), 4,200
+   to 7,000 at the near. Bundle 3 (the yellow serial, close up) is not built.
    The Mac's run (no build_content.sh: no new content): the Bremen raid with the finer B-17.
    1. `-TheaterAirBattle=bremen-b17 -TheaterAirB17Fine -TheaterAirNoBomberMarks -TheaterAirTimeEye=both`
    2. `-TheaterAirBattle=bremen-b17 -TheaterAirB17Fine -TheaterAirBomberMarks -TheaterAirTimeEye=both`

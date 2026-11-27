@@ -374,8 +374,8 @@ int main(int Argc, char** Argv)
 	ModelText.clear();
 
 	// Wound as her file's, and clear of her skin.
-	int Tris = 0, Wrong = 0, Points = 0, Out = 0, Missed = 0;
-	double Least = 1e9, Most = -1e9;
+	int Tris = 0, Wrong = 0, Points = 0, Out = 0, Missed = 0, DecalPoints = 0, DecalOut = 0, DecalWide = 0;
+	double Least = 1e9, Most = -1e9, DecalLeast = 1e9, DecalMost = -1e9;
 	std::string Worst;
 	for (const auto& [Name, Part] : Sheet.Parts)
 	{
@@ -398,6 +398,9 @@ int main(int Argc, char** Argv)
 				if (Dot(F, N) > 1e-9) ++Wrong;
 			}
 			const bool bWing = Name.compare(0, 5, "wing.") == 0;
+			// (a side letter or code at her far level is laid as a decal seen straight from her side, the tool's decal_side:
+			// measured straight in from her side, as it was laid; her far skin's thin edges make the nearest face no measure)
+			const bool bSideDecal = Lv == 1 && (Name.compare(0, 12, "letter.side.") == 0 || Name.compare(0, 5, "code.") == 0);
 			V3 Lo{ 1e9, 1e9, 1e9 }, Hi{ -1e9, -1e9, -1e9 };
 			const int Count = static_cast<int>(L.Points.size() / 3);
 			for (int I = 0; I < Count; ++I)
@@ -414,13 +417,14 @@ int main(int Argc, char** Argv)
 				// (the wing's straight down, as the tool laid it; the rest its distance to her skin, her nearest face)
 				double Gap = 0.0;
 				bool bFound = false;
-				if (bWing)
+				if (bWing || bSideDecal)
 				{
+					const V3 Way = bWing ? V3{ 0.0, 0.0, 1.0 } : V3{ 0.0, P.Y > 0.0 ? 1.0 : -1.0, 0.0 };
 					double Best = 1e9;
 					for (const size_t K : Near)
 					{
 						double T = 0.0;
-						if (Meet(S, K, P, V3{ 0.0, 0.0, 1.0 }, T) && std::fabs(T) < std::fabs(Best) && std::fabs(T) < 0.2) Best = T;
+						if (Meet(S, K, P, Way, T) && std::fabs(T) < std::fabs(Best) && std::fabs(T) < 0.2) Best = T;
 					}
 					bFound = Best < 1e8;
 					Gap = -Best;
@@ -433,6 +437,17 @@ int main(int Argc, char** Argv)
 				if (!bFound)
 				{
 					++Missed;
+					continue;
+				}
+				if (bSideDecal)
+				{
+					// (her far side's decals: never under her; off her by at most 40 mm but where a tall letter's tail or
+					// top reaches round her curve, which a decal seen straight from her side stands off, at most 125 mm)
+					++DecalPoints;
+					DecalLeast = std::min(DecalLeast, Gap);
+					DecalMost = std::max(DecalMost, Gap);
+					if (Gap > 0.040) ++DecalWide;
+					if (Gap < 0.002 || Gap > 0.125) ++DecalOut;
 					continue;
 				}
 				Least = std::min(Least, Gap);
@@ -454,6 +469,9 @@ int main(int Argc, char** Argv)
 	Check(Wrong * 1000 <= Tris, "wound as her own file's (all but a thousandth)", Line);
 	std::snprintf(Line, sizeof Line, "%d points tried, %d off, %d found no skin within 20 cm; %.1f to %.1f mm %s", Points, Out, Missed, Least * 1000.0, Most * 1000.0, Worst.c_str());
 	Check(Out == 0 && Missed * 50 <= Points, "every fifth point 3 to 40 mm off its own level's skin (the nearest of her; the wing's straight down)", Line);
+	std::snprintf(Line, sizeof Line, "%d points tried, %d off, %d over 40 mm; %.1f to %.1f mm", DecalPoints, DecalOut, DecalWide, DecalLeast * 1000.0, DecalMost * 1000.0);
+	Check(Sheet.Bundle < 2 || (DecalPoints > 0 && DecalOut == 0 && DecalWide * 100 <= DecalPoints),
+		"her far side's letters and codes, every fifth point, straight in from her side: never under her, 2 to 125 mm off, over 40 mm one in a hundred at most", Line);
 
 	// Reading the right way round, and the wing's triangle apex forward.
 	for (int Lv = 0; Lv < 2; ++Lv)
