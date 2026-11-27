@@ -11,7 +11,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { arrivalWaitOf, rowsWaitingOnRows } from '../src/campaign/arrivalwaits';
-import { createGame, declareWar, relocate, startPhase } from '../src/campaign/game';
+import { atWar, createGame, declareWar, relocate, startPhase } from '../src/campaign/game';
 import { markFor, monthCard } from '../src/campaign/monthcard';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -102,6 +102,9 @@ describe('the corps it is formed from has not formed yet: the 18th Division at R
     lose(g, 'Singapore', 'JAP', 'Calcutta');
     // (It forms there alone, nobody of its side to keep Hainan: the contact rule's second form holds it where it forms.)
     for (const u of [...g.byName['Hainan'].units]) relocate(g, u, g.byName['Hiroshima']);
+    // (R4-1: an enemy its own orders bind to its place is not the enemy beside for the alone half; those beside Hainan
+    // are set free to come on here, as this board means.)
+    for (const j of g.byName['Hainan'].nb) for (const u of g.regions[j].units) if (atWar(g, 'JAP', u.nat)) u.hold = false;
     month(g, 34); month(g, 35);
     const a = corps(g, ARMY25);
     expect(g.regions[a.reg].name).toBe('Hainan');

@@ -329,13 +329,26 @@ export function dropBattle(g: Game, id: number): void {
 /** No corps leaving: the contact test's reading where the same act takes nobody away. */
 export const NO_LEAVING: ReadonlySet<Corps> = new Set();
 
-/** The enemies at war with `nat` that hold or stand on c's province or one beside it; with `first`, the first only. */
-function enemiesBeside(g: Game, nat: string, c: Corps, first = false): string[] {
+/**
+ * A corps its own orders bind to its place this month, as the general reads it: its order to hold where it stands
+ * (`hold`: set from its row's words, kept for good by `stay`, and lifted only by the general's own orders, ai.ts
+ * `release` and the plan's `freed`), which every picker of the general's (ai.ts) reads before it moves a corps. Never a
+ * corps the player orders: the general moves none of his, and his own orders are his. Read as it stands when the test
+ * reads it. Writes nothing.
+ */
+const boundHere = (g: Game, u: Corps): boolean => !!u.hold && u.nat !== g.human && u.joint !== g.human;
+
+/**
+ * The enemies at war with `nat` that hold or stand on c's province or one beside it; with `first`, the first only.
+ * With `free` (the alone half's reading, R4-1): an enemy corps bound to its place (`boundHere`) is not one, nor the
+ * province such a corps of its holder's stands on; one free corps of an enemy's beside makes it one.
+ */
+function enemiesBeside(g: Game, nat: string, c: Corps, first = false, free = false): string[] {
   const out: string[] = [];
   const add = (x: string): void => { if (!out.includes(x)) out.push(x); };
   const look = (r: Region): boolean => {
-    if (r.ctrl && atWar(g, nat, r.ctrl)) { add(r.ctrl); if (first) return true; }
-    for (const u of r.units) if (!u.dead && atWar(g, nat, u.nat)) { add(u.nat); if (first) return true; }
+    if (r.ctrl && atWar(g, nat, r.ctrl) && !(free && r.units.some((u) => !u.dead && u.nat === r.ctrl && boundHere(g, u)))) { add(r.ctrl); if (first) return true; }
+    for (const u of r.units) if (!u.dead && atWar(g, nat, u.nat) && !(free && boundHere(g, u))) { add(u.nat); if (first) return true; }
     return false;
   };
   const r = g.regions[c.reg];
@@ -347,7 +360,8 @@ function enemiesBeside(g: Game, nat: string, c: Corps, first = false): string[] 
 /**
  * The contact test's reading, whole: `beside` (an enemy at war with `nat` holds or stands on c's province or one beside
  * it), `battle` (c took part in the battle last resolved on its ground: `g.lastBattle`, recordBattle above), `kept`
- * (for every enemy faced, some unit other than c stands on c's province's field at war with it: the game's own holding
+ * (for every enemy faced that its own orders do not bind to its place, `boundHere`, some unit other than c stands on
+ * c's province's field at war with it: the game's own holding
  * test, game.ts `hostileUnits`; a unit the same act takes away, `leaving`, or one under an order to give its province up,
  * game.ts `givesWay`, keeps nothing). Only `corpsInContact` combines them; a gate's observer may read them. Nothing else
  * in src may hold a copy of the test (tests/contact-fact.test.ts reads every file for one).
@@ -356,7 +370,12 @@ export function contactRead(g: Game, nat: string, c: Corps, leaving: ReadonlySet
   const foes = enemiesBeside(g, nat, c);
   const r = g.regions[c.reg];
   const battle = !c.dead && (g.lastBattle?.[c.reg]?.includes(c.id) ?? false);
-  const kept = foes.length > 0 && foes.every((e) => hostileUnits(g, r, e).some((u) => u !== c && !u.dead && !leaving.has(u) && !givesWay(g, u)));
+  // (The alone half faces only the enemies free to come on, R4-1: one its own orders bind to its place keeps nothing
+  // from c's province, so where every enemy beside is bound, the province is kept. The design director's (1) of
+  // 16:07Z, 27 November 2026: "An enemy its own orders bind to its place is not "the enemy beside" for the alone half."
+  // `beside`, which the fight half reads, is every enemy, bound or free.)
+  const free = enemiesBeside(g, nat, c, false, true);
+  const kept = foes.length > 0 && free.every((e) => hostileUnits(g, r, e).some((u) => u !== c && !u.dead && !leaving.has(u) && !givesWay(g, u)));
   return { beside: foes.length > 0, battle, kept };
 }
 

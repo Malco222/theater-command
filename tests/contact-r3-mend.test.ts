@@ -87,6 +87,9 @@ describe("T3-1: ruleHolds counts the player's own hold that was never told as un
     const balkans = g.regions.filter((r) => theatreName(r) === 'the Balkans');
     const greek = (r: Region): boolean => r.ctrl === 'GRE' || r.units.some((u) => u.nat === 'GRE');
     const line = balkans.find((r) => !greek(r) && !atWar(g, 'GER', r.ctrl) && r.nb.some((j) => greek(g.regions[j])))!;
+    // (R4-1: the Greek armies beside it start under their orders to hold where they stand, and an enemy so bound is not the
+    // enemy beside for the alone half; their orders are lifted here, so that they are free to come on, as this board means.)
+    for (const j of line.nb) for (const u of g.regions[j].units) if (u.nat === 'GRE') u.hold = false;
     for (const u of [...line.units]) if (u.nat === 'GER') relocate(g, u, g.byName.Bavaria);
     const held = add(g, 'Held Test Corps', line, 3);
     const i = addRow([2, 'GER', 'Test Theatre Army', 'inf', 1, 'Magdeburg', { from: 'the Balkans' }]);

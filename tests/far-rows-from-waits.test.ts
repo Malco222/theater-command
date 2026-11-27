@@ -14,7 +14,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { corpsInContact } from '../src/campaign/drawn';
-import { createGame, declareWar, relocate, startPhase } from '../src/campaign/game';
+import { atWar, createGame, declareWar, relocate, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { startOpen } from '../src/campaign/staff';
 import type { Game, Region } from '../src/campaign/types';
@@ -37,6 +37,10 @@ const war = (on: boolean, stop = 3): Game => {
   if (stop !== 3) setStop(g, stop, true);
   if (on) g.flags.fromWait = 1;
   lose(g, 'Cam Ranh', 'JAP', 'Saigon');
+  // (R4-1: the garrisons of Hong Kong and Waichow beside Tungkun stand under their orders to hold where they are, and an
+  // enemy so bound is not the enemy beside for the alone half: the 21st Army is held in the line as the months below
+  // hold it, by the battle last resolved where it stands, `fought`.)
+  fought(g);
   g.turn = 27; startPhase(g, 'JAP');
   g.turn = 28; g.flags['st:done:JAP:south'] = 28;
   for (const e of ['USA', 'UK', 'NED']) declareWar(g, 'JAP', e);
@@ -83,6 +87,9 @@ describe("switch on: the Rangoon row waits with the row that makes its corps", (
     relocate(g, c, g.byName['Hiroshima']);
     // (It forms there alone, nobody of its side to keep Hainan: the contact rule's second form holds it where it forms.)
     for (const u of [...g.byName['Hainan'].units]) relocate(g, u, g.byName['Hiroshima']);
+    // (R4-1: an enemy its own orders bind to its place is not the enemy beside for the alone half; those beside Hainan
+    // are set free to come on here, as this board means.)
+    for (const j of g.byName['Hainan'].nb) for (const u of g.regions[j].units) if (atWar(g, 'JAP', u.nat)) u.hold = false;
     months(g, 42, 44);
     expect(g.flags[`sent:${index(ARMY25)}`]).toBe(1);
     const a = g.corps.find((x) => x.nat === 'JAP' && !x.dead && x.name === ARMY25)!;
@@ -128,6 +135,8 @@ describe("switch on at the book's stops with the Pacific's book closed: a closed
     g.flags['hist:off:pacific'] = 26;
     g.flags.fromWait = 1;
     lose(g, 'Cam Ranh', 'JAP', 'Saigon');
+    // (R4-1: held in the line by the battle last resolved where it stands, as in `war`.)
+    fought(g);
     g.turn = 27; startPhase(g, 'JAP');
     g.turn = 28; g.flags['st:done:JAP:south'] = 28;
     for (const e of ['USA', 'UK', 'NED']) declareWar(g, 'JAP', e);
