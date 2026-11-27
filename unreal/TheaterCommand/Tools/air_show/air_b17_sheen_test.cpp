@@ -464,8 +464,8 @@ int main(int Argc, char** Argv)
 				&& Count(Block, "rough = lerp(m, rough, rough_ink, guard,") == 1 && Count(Block, "spec = lerp(m, spec, spec_ink, guard,") == 1 && Count(Block, "metal = lerp(m, metal, 0.0, guard,") == 1,
 			"roughness, specular and metal each connected once, each back to the ink's under the guard");
 		Check(Count(Script, "    if not air:\n        to_property(times(m, chipped, 0.85, 750, -700), \"\", unreal.MaterialProperty.MP_METALLIC)\n") == 1
-				&& Count(Script, "    if not air:\n        rough = lerp(m, scalar(m, \"Roughness\", 0.9, -450, 200), 0.34, chipped, -250, 200)\n") == 1
-				&& Count(Script, "        to_property(rough, \"\", unreal.MaterialProperty.MP_ROUGHNESS)\n"
+				&& Count(Script, "    if not air:\n        # (M_AirPaint wires its own roughness and specular below; the ground's roughness above is left unwired there)\n"
+								 "        to_property(rough, \"\", unreal.MaterialProperty.MP_ROUGHNESS)\n"
 								 "        to_property(scalar(m, \"Specular\", 0.25, -450, 300), \"\", unreal.MaterialProperty.MP_SPECULAR)\n    if air:\n") == 1,
 			"M_MapSurface's own metal, roughness and specular kept, under if not air");
 		Check(Count(Script, "def build_map_surface(name=\"M_MapSurface\", soot=False, crowd=False, sway=False, worn=False, alpha_rough=False, press_twin=False, press_upright=False, air=False):") == 1

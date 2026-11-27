@@ -315,17 +315,18 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, 
     to_property(facing_out, "", unreal.MaterialProperty.MP_NORMAL)
 
     # (bare metal is smoother than paint: the lamp glints on the chips)
+    rough = lerp(m, scalar(m, "Roughness", 0.9, -450, 200), 0.34, chipped, -250, 200)
+    if alpha_rough:
+        # (each paint's own roughness from the mesh's alpha; a point left whole keeps "Roughness")
+        whole = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, (colour, "A"), -0.996, -450, 440), 1000.0, -300, 440), -150, 440)
+        rough = lerp(m, (colour, "A"), rough, whole, 0, 400)
+    if worn:
+        # (the mottle is 1 where the paint is as painted, under 1 where it is darker, over 1 where paler: the roughness
+        # moves with it, so a dark oily patch has a little sheen and a pale dusty one none, and stays within 0 to 1)
+        rough = one_in(m, unreal.MaterialExpressionSaturate,
+                       plus(m, rough, times(m, plus(m, mottle, -1.0, -250, 320), scalar(m, "WearRough", 1.3, -250, 380), -100, 340), 0, 260), 150, 260)
     if not air:
-        rough = lerp(m, scalar(m, "Roughness", 0.9, -450, 200), 0.34, chipped, -250, 200)
-        if alpha_rough:
-            # (each paint's own roughness from the mesh's alpha; a point left whole keeps "Roughness")
-            whole = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, (colour, "A"), -0.996, -450, 440), 1000.0, -300, 440), -150, 440)
-            rough = lerp(m, (colour, "A"), rough, whole, 0, 400)
-        if worn:
-            # (the mottle is 1 where the paint is as painted, under 1 where it is darker, over 1 where paler: the roughness
-            # moves with it, so a dark oily patch has a little sheen and a pale dusty one none, and stays within 0 to 1)
-            rough = one_in(m, unreal.MaterialExpressionSaturate,
-                           plus(m, rough, times(m, plus(m, mottle, -1.0, -250, 320), scalar(m, "WearRough", 1.3, -250, 380), -100, 340), 0, 260), 150, 260)
+        # (M_AirPaint wires its own roughness and specular below; the ground's roughness above is left unwired there)
         to_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
         to_property(scalar(m, "Specular", 0.25, -450, 300), "", unreal.MaterialProperty.MP_SPECULAR)
     if air:
