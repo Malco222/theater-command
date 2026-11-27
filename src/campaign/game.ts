@@ -6179,8 +6179,11 @@ function expeditions(g: Game, nat: string, take?: number): void {
       }
     }
     // Troops sent to take over a stretch of an ally's line ('join') go in whatever already stands there.
-    // (Room is counted as everywhere else: engineers take none. The record's own place is counted against five on an
-    // island of the Pacific too, as `roomNear` counts it: a row is not kept waiting, and so struck, by the islands' table.)
+    // (Room is counted as everywhere else: engineers take none. On an island of the Pacific the record's own place is
+    // counted against five at stops 1 and 2 of the dial, the record's hand, and against the island's room in men at
+    // stops 3 to 5, `rowFits`. A row with no room there, nor on any held ground `rowPlace` could send it on to, waits
+    // here, and the months it waits for room are not counted toward its half year, so it is never struck by the
+    // islands' table: the design director's D1, `roomwait`.)
     if (!o.join && !rowFits(g, nat, reg, row, o)) {
       // (The far side: a month waited for room, counted so that it never runs out the row's half year: D1, above.)
       if (farOn(g)) g.flags[`roomwait:${i}`] = (g.flags[`roomwait:${i}`] ?? 0) + 1;
