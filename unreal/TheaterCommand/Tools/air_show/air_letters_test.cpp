@@ -733,6 +733,45 @@ int main(int Argc, char** Argv)
 		Check(bPairsOnce, "no two of a group's 30 bombers with the same code and letter");
 	}
 
+	// A hundred and forty named American B-17 groups (the 303rd among them): each group's four squadrons four different
+	// codes, and no code in two groups, however many groups share the letters.
+	{
+		std::map<int, AirShow::Group> Groups;
+		for (int K = 0; K < 140; ++K)
+		{
+			AirShow::Group G;
+			G.Id = K + 1;
+			G.Name = K == 40 ? std::string("303rd Bomb Group") : std::to_string(K + 1) + " Bomb Group";
+			G.bFighter = false;
+			G.Nation = "USA";
+			G.Model = "B17";
+			Groups[G.Id] = G;
+		}
+		AirLetters::Book Book;
+		Book.Begin(Sheet, Groups);
+		int Repeated = 0, Short = 0;
+		std::set<std::string> All;
+		bool bApart = true;
+		std::string First;
+		for (const auto& [Id, G] : Groups)
+		{
+			const std::vector<std::string> Cs = Book.CodesOf(Id);
+			const std::set<std::string> Own(Cs.begin(), Cs.end());
+			if (Cs.size() != 4) ++Short;
+			if (Own.size() != Cs.size())
+			{
+				++Repeated;
+				if (First.empty()) First = G.Name;
+			}
+			for (const std::string& C : Own) bApart = All.insert(C).second && bApart;
+		}
+		std::snprintf(Line, sizeof Line, "%d of 140 groups with a code twice (first %s), %d without four", Repeated, First.empty() ? "-" : First.c_str(), Short);
+		Check(Repeated == 0 && Short == 0, "each of 140 groups' four squadrons four different codes", Line);
+		Check(bApart && All.size() == 560, "no squadron's code in two of 140 groups (560 codes)");
+		const std::vector<std::string> Hist = Book.CodesOf(41);
+		Check(Book.LetterOf(41) == 'C' && Hist.size() == 4 && Hist[0] == "VK", "the 303rd still C and VK among 140");
+	}
+
 	// No word of the date in the book.
 	for (const char* File : { "/Battle/AirLetters.h", "/Battle/AirLetters.cpp" })
 	{

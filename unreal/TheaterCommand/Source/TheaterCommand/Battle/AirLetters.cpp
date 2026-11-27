@@ -243,6 +243,7 @@ namespace AirLetters
 		if (Hist != Known.end() && Hist->second.Codes.size() == 4)
 		{
 			L.Codes = Hist->second.Codes;
+			for (const std::string& Code : L.Codes) ++CodesUsed[Code];
 		}
 		else
 		{
@@ -259,10 +260,11 @@ namespace AirLetters
 						break;
 					}
 				}
+				// (held at once, so that the group's next squadron cannot draw it too)
 				L.Codes.push_back(Code);
+				++CodesUsed[Code];
 			}
 		}
-		for (const std::string& Code : L.Codes) ++CodesUsed[Code];
 		Groups[Id] = L;
 	}
 
