@@ -16,9 +16,10 @@ import { crewStores, storesEaten } from '../src/campaign/fortrows';
 import { SIGHT, fogOn, sightOf } from '../src/campaign/intel';
 import { closedTo, seaSide, zoneOf } from '../src/campaign/navy';
 import { PORTSTORES_ROW, monthSaid, portCardLines, portCorpsLine, portCutOff, portStoresOn, portsDone, setPortStores, type PortLine } from '../src/campaign/portcut';
-import { saveGame } from '../src/campaign/save';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { fieldCtrl, joinTown } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
+import { runTurnAI } from '../src/campaign/turn';
 import type { Corps, Game } from '../src/campaign/types';
 import { skyAtSea } from '../src/campaign/weather';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
@@ -1173,10 +1174,11 @@ describe('03:13Z, item 2: a crew lost in battle, the count on the rule\'s own cl
    * of stores) and a British 9th Corps in the town; the stores filled by a real draw in December 1940 (turn 16); Italy
    * and Germany at war with Britain, France's fleet in harbour, and Italy's 1st Fleet in the Western Mediterranean. Her
    * 2nd Fleet off the Iberian coast from the first, or with `watch` only from Italy's January (so that the switch sees
-   * the hold begin, and her own January draw finds the Iberian waters still open and fills the stores).
+   * the hold begin, and her own January draw finds the Iberian waters still open and fills the stores). The switch on,
+   * or as asked.
    */
-  function gibCrewed(human: string, watch = false): { g: Game; gib: number; ninth: Corps; crew: Corps } {
-    const g = grand(human, true, true);
+  function gibCrewed(human: string, watch = false, on = true): { g: Game; gib: number; ninth: Corps; crew: Corps } {
+    const g = grand(human, on, true);
     const r = g.byName.Gibraltar;
     const crew = r.units.find((c) => c.kind === 'fort')!;
     expect([crew.name, crew.nat, crewStores(crew)]).toEqual(['Gibraltar garrison', 'UK', 16]);
@@ -1312,6 +1314,41 @@ describe('03:13Z, item 2: a crew lost in battle, the count on the rule\'s own cl
       [23, line('May', 'July')], [23, false, true],
     ]);
   });
+
+  // (Words only: the record of a crew lost is written as the corps is struck off, game.ts removeCorps, inside the war.)
+  it('Italy\'s landing in her April, with the switch on and off under the fortress rows: the record is written with it on and never with it off, and the war after it, saved and loaded and played four months by the computer, is the same war, its own words and marks aside', () => {
+    const after = (on: boolean): { g: Game; kept: string[] } => {
+      const { g, gib, crew } = gibCrewed('UK', false, on);
+      for (let t = 17; t <= 20; t++) {
+        g.turn = t;
+        phase(g, 'ITA');
+        if (t === 20) crewBeaten(g, gib, crew, 'ITA');
+        phase(g, 'UK');
+      }
+      const kept = Object.keys(g.flags).filter((k) => k.startsWith('portCrew:'));
+      // (Britain's month opened, the month is handed on to the next nation's, as a step of the turn does (turn.ts
+      // stepAI); then saved, loaded, and played on by the computer for every side.)
+      g.phase = g.order.indexOf('UK') + 1;
+      const back = loadGame(saveGame(g))!;
+      for (let m = 0; m < 4; m++) runTurnAI(back);
+      return { g: back, kept };
+    };
+    const on = after(true), off = after(false);
+    expect([on.kept.length, on.kept[0].endsWith(':UK:16:1:ITA'), off.kept]).toEqual([1, true, []]);
+    expect([on.g.turn, off.g.turn]).toEqual([24, 24]);
+    // (Its words are news, and the week's paper reads the news: the paper's own flag goes with them, as in the switch's
+    // own test of a whole war.)
+    const told = on.g.headlines.filter((h) => /^(No ship reaches |Ships reach |Cut off (on|in) .*(has|have) starved and (is|are) lost)|'s stores are spent and no ship has got through/.test(h.text));
+    expect(told.slice(0, 2).map((h) => [h.turn, h.text])).toEqual([[17, 'No ship reaches Gibraltar: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast. The garrison lives on the port\'s stores through April 1942; unless the sea is opened, it then goes hungry and is lost at the start of July 1942.'], [20, 'Gibraltar\'s stores are spent and no ship has got through: the garrison goes hungry, and is lost at the start of June unless the sea is opened.']]);
+    const strip = (g: Game): string => {
+      const h = structuredClone(g) as Game;
+      h.headlines = h.headlines.filter((x) => !told.some((t) => t.text === x.text && t.turn === x.turn));
+      for (const k of Object.keys(h.flags)) if (/^(portStores$|portTold:|seaShut:|portLost:|portHad:|portCrew:)/.test(k) || k === 'newsweek') delete h.flags[k];
+      return saveGame(h);
+    };
+    expect(strip(on.g)).toBe(strip(off.g));
+    expect(saveGame(off.g)).not.toMatch(/portStores|portTold|seaShut|portLost|portHad|portCrew/);
+  }, 600000);
 });
 
 describe('03:13Z, item 3: a corps in a cut-off port always has its line', () => {
