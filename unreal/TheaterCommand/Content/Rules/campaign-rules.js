@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2b0d9281e 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of baf9f3623 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -46517,9 +46517,9 @@
     const trick = deceives(g2, e.nat, me);
     const place3 = trick ? falsePlace(g2, e.nat, me, e.first) : e.first;
     if (place3 === null) return;
-    const until = turnToDate(e.to).label;
+    const m = effortMonths(e);
     const who = g2.nations[e.nat].adj;
-    headline(g2, "event", `Intercepted: the ${who} staff's orders name ${g2.regions[place3].name}. Its army is to mass opposite it this month and attack there until ${until}.${trick ? " The signal came through unusually clear." : ""}`, e.nat, place3);
+    headline(g2, "event", `Intercepted: a signal from the ${who} staff orders its army to mass opposite ${g2.regions[place3].name} in ${m.mass} and attack there from ${m.strike} through ${m.last}.${trick ? " The signal came through unusually clear." : ""}`, e.nat, place3);
   }
 
   // ../../src/campaign/engineers.ts
@@ -48897,6 +48897,9 @@
     if (viewer === null || !g2.nations[viewer]?.alive || allied(g2, nat, viewer)) return "ally";
     return knowsBooks(g2, nat, viewer) ? "agent" : null;
   }
+  function effortMonths(e) {
+    return { mass: turnToDate(e.from).label, strike: turnToDate(e.from + 1).label, last: turnToDate(e.to).label };
+  }
   function effortNamed(g2, e) {
     const me = g2.human;
     if (me === null || !g2.nations[me]?.alive || e.nat === me) return;
@@ -48906,7 +48909,7 @@
       return;
     }
     const who = g2.nations[e.nat]?.name ?? e.nat;
-    const until = turnToDate(e.to).label;
+    const until = effortMonths(e).last;
     const name = e.name.replace(/^the /, "");
     if (how === "ally") {
       if (atWar(g2, me, e.enemy) || allied(g2, me, e.enemy)) headline(g2, "info", `${who}'s staff has named its main effort: ${e.name}, against ${g2.nations[e.enemy]?.name ?? e.enemy}, until ${until}.`, e.nat, e.first);
