@@ -126,6 +126,51 @@ namespace
 	{
 		return Action == TEXT("general:allback:yes") || Action == TEXT("general:allback:no");
 	}
+
+	/** What may go to the engine's batcher. It stops the game on the render thread ("RenderBatch.NumIndices > 0") when a
+	 * batch comes out with no triangle in it, so nothing that can make none is handed over: a box with no area, words
+	 * with no ink in them, a line with no length; nor any place that is not a number. */
+	bool DrawnBox(double X, double Y, double Wd, double Ht)
+	{
+		return FMath::IsFinite(X) && FMath::IsFinite(Y) && FMath::IsFinite(Wd) && FMath::IsFinite(Ht) && Wd > 0.0 && Ht > 0.0;
+	}
+
+	bool DrawnWords(const FString& Words, double X, double Y)
+	{
+		if (!FMath::IsFinite(X) || !FMath::IsFinite(Y))
+		{
+			return false;
+		}
+		for (int32 K = 0; K < Words.Len(); ++K)
+		{
+			if (!FChar::IsWhitespace(Words[K]))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** A line's points, less those that are no number and those lying on the point before them (within a hundredth of a
+	 * pixel): with fewer than two left there is no line to draw. */
+	TArray<FVector2D> DrawnLine(const TArray<FVector2D>& Points)
+	{
+		TArray<FVector2D> Kept;
+		Kept.Reserve(Points.Num());
+		for (const FVector2D& P : Points)
+		{
+			if (!FMath::IsFinite(P.X) || !FMath::IsFinite(P.Y))
+			{
+				continue;
+			}
+			if (Kept.Num() > 0 && FVector2D::DistSquared(Kept.Last(), P) <= 1.0e-4)
+			{
+				continue;
+			}
+			Kept.Add(P);
+		}
+		return Kept;
+	}
 }
 
 void SLandBattleScreen::Construct(const FArguments& Args)
@@ -170,11 +215,17 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 	auto WideOf = [&Measure, TextScale](const FString& Words, const FSlateFontInfo& Face) { return static_cast<double>(Measure->Measure(Words, Face, TextScale).X) / TextScale; };
 	auto Fill = [&](double X, double Y, double Wd, double Ht, const FLinearColor& Ink, int32 Layer)
 	{
-		FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(Wd, Ht), FSlateLayoutTransform(FVector2D(X, Y))), &Solid, ESlateDrawEffect::None, Ink);
+		if (DrawnBox(X, Y, Wd, Ht))
+		{
+			FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(Wd, Ht), FSlateLayoutTransform(FVector2D(X, Y))), &Solid, ESlateDrawEffect::None, Ink);
+		}
 	};
 	auto Write = [&](const FString& Words, double X, double Y, const FSlateFontInfo& Face, const FLinearColor& Ink, int32 Layer)
 	{
-		FSlateDrawElement::MakeText(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(1400.0, 60.0), FSlateLayoutTransform(FVector2D(X, Y))), Words, Face, ESlateDrawEffect::None, Ink);
+		if (DrawnWords(Words, X, Y))
+		{
+			FSlateDrawElement::MakeText(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(1400.0, 60.0), FSlateLayoutTransform(FVector2D(X, Y))), Words, Face, ESlateDrawEffect::None, Ink);
+		}
 	};
 	auto Centred = [&](const FString& Words, double Middle, double Y, const FSlateFontInfo& Face, const FLinearColor& Ink, int32 Layer)
 	{
@@ -228,6 +279,10 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 			}
 		}
 		Fill(X - 1.0, Y - 1.0, Wd + 2.0, Ht + 2.0, Brass, Layer);
+		if (!DrawnBox(X, Y, Wd, Ht))
+		{
+			return;
+		}
 		if (bFlagMade[Side])
 		{
 			FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer + 1, Geometry.ToPaintGeometry(FVector2D(Wd, Ht), FSlateLayoutTransform(FVector2D(X, Y))), &FlagBrush[Side], ESlateDrawEffect::None, FLinearColor::White);
@@ -680,17 +735,24 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	auto WideOf = [&Measure, TextScale](const FString& Words, const FSlateFontInfo& Face) { return static_cast<double>(Measure->Measure(Words, Face, TextScale).X) / TextScale; };
 	auto Fill = [&](double X, double Y, double Wd, double Ht, const FLinearColor& Ink, int32 Layer)
 	{
-		FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(Wd, Ht), FSlateLayoutTransform(FVector2D(X, Y))), &Solid, ESlateDrawEffect::None, Ink);
+		if (DrawnBox(X, Y, Wd, Ht))
+		{
+			FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(Wd, Ht), FSlateLayoutTransform(FVector2D(X, Y))), &Solid, ESlateDrawEffect::None, Ink);
+		}
 	};
 	auto Write = [&](const FString& Words, double X, double Y, const FSlateFontInfo& Face, const FLinearColor& Ink, int32 Layer)
 	{
-		FSlateDrawElement::MakeText(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(1400.0, 60.0), FSlateLayoutTransform(FVector2D(X, Y))), Words, Face, ESlateDrawEffect::None, Ink);
+		if (DrawnWords(Words, X, Y))
+		{
+			FSlateDrawElement::MakeText(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(1400.0, 60.0), FSlateLayoutTransform(FVector2D(X, Y))), Words, Face, ESlateDrawEffect::None, Ink);
+		}
 	};
 	auto Lines = [&](const TArray<FVector2D>& Points, const FLinearColor& Ink, float Thick, int32 Layer)
 	{
-		if (Points.Num() >= 2)
+		const TArray<FVector2D> Trimmed = DrawnLine(Points);
+		if (Trimmed.Num() >= 2)
 		{
-			FSlateDrawElement::MakeLines(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, Ink, true, Thick);
+			FSlateDrawElement::MakeLines(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(), Trimmed, ESlateDrawEffect::None, Ink, true, Thick);
 		}
 	};
 	auto Local = [&](double Px, double Py) { return ToLocal(Geometry, FVector2D(Px, Py)); };
@@ -1500,7 +1562,10 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		const double Wd = FilmW, Ht = FilmH, X = FilmX, Y = FilmY;
 		Fill(X - 2.0, Y - 2.0, Wd + 4.0, Ht + 4.0, Brass, 10);
 		Fill(X - 1.0, Y - 1.0, Wd + 2.0, Ht + 2.0, DeskInk, 11);
-		FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 12, Geometry.ToPaintGeometry(FVector2D(Wd, Ht), FSlateLayoutTransform(FVector2D(X, Y))), &CornerBrush, ESlateDrawEffect::IgnoreTextureAlpha, FLinearColor::White);
+		if (DrawnBox(X, Y, Wd, Ht))
+		{
+			FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 12, Geometry.ToPaintGeometry(FVector2D(Wd, Ht), FSlateLayoutTransform(FVector2D(X, Y))), &CornerBrush, ESlateDrawEffect::IgnoreTextureAlpha, FLinearColor::White);
+		}
 		// (its name and its key on a small plate at its foot)
 		const FSlateFontInfo FilmFace = Typed(10.0f, true, 30);
 		const FString FilmWords = TEXT("THE FILM: C FILLS THE SCREEN");
