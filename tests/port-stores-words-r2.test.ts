@@ -571,10 +571,12 @@ describe('item 4: two lines for one event, the rule\'s own line of a surrender s
     expect(news(g, h0)).toEqual([SHIPPED]);
     expect(Object.keys(g.flags).filter((k) => k.startsWith('portLost:'))).toEqual([]);
     // (A party the rule's line does not tell keeps the struck-off line: one corps, under 30,000 men.)
+    // (The month's news whole: the struck-off line, and no line of the rule's beside it.)
     const one = malta('UK');
-    for (let t = 17; t <= 21; t++) month(one.g, t);
-    expect(news(one.g).slice(-1)).toEqual(['Cut off on Malta, the 9th Corps has starved and is lost.']);
-    expect(one.g.headlines.some((h) => /lays down its arms/.test(h.text))).toBe(false);
+    for (let t = 17; t <= 20; t++) month(one.g, t);
+    const o0 = one.g.headlines.length;
+    month(one.g, 21);
+    expect(news(one.g, o0)).toEqual(['Cut off on Malta, the 9th Corps has starved and is lost.']);
   });
 
   it('corps of two nations in one month: the rule\'s line tells Britain\'s, and the struck-off line names only the French corps it does not tell', () => {
