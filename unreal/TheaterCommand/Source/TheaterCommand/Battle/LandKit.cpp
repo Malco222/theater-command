@@ -2159,8 +2159,9 @@ namespace LandKit
 		}
 
 		/** A mark's pieces, bottom layer first. bReal (Dress::bRealMarks): the British flash in its real shape, 18 inches
-		 * by 10, in place of the shipped one's 1.2 to 1 and the campaign map's 1.6 to 1 (three equal bands either way). */
-		void MarkPieces(const std::string& Kind, std::vector<MarkPiece>& Out, bool bReal = false)
+		 * by 10, in place of the shipped one's 1.2 to 1 and the campaign map's 1.6 to 1 (three equal bands either way).
+		 * bTrue (Dress::bTrueCross): the German cross at its true proportions. */
+		void MarkPieces(const std::string& Kind, std::vector<MarkPiece>& Out, bool bReal = false, bool bTrue = false)
 		{
 			Out.clear();
 			if (bReal && (Kind == "flash" || Kind == "red flash"))
@@ -2179,7 +2180,12 @@ namespace LandKit
 				// is black right to its end (the art director's mend of 24 November). Laid as one coat of pieces side by
 				// side: a layer of black over white stood off a stepped plate (the Tiger's welded seams) let the white show
 				// through in cracks.
-				const double E = 1.0, W = 0.36, K = 0.27;
+				// At its true proportions (Dress::bTrueCross; the art director's ruling of 27 November 2026, 01:23Z, the
+				// campaign map's and the aircraft's cross): the black a quarter of the cross's length wide (K 0.25 of the
+				// half length each side of an arm's middle) and the white an eighth of its length along each side (out to
+				// W 0.5), so an arm is half the cross's length across. The same eleven pieces; the aircraft's thin black
+				// edge outside the white is left out (8 mm on a quarter-metre cross). Off: 0.27 and 0.36, as before.
+				const double E = 1.0, W = bTrue ? 0.5 : 0.36, K = bTrue ? 0.25 : 0.27;
 				MarkBox(Out, -K, -E, K, E, MarkBlack, 0);
 				MarkBox(Out, -E, -K, -K, K, MarkBlack, 0);
 				MarkBox(Out, K, -K, E, K, MarkBlack, 0);
@@ -4144,6 +4150,17 @@ namespace LandKit
 						}
 						for (int I = 0; I < 10; ++I) Out.Triangles.insert(Out.Triangles.end(), { Mid, Rim[static_cast<size_t>((I + 1) % 10)], Rim[static_cast<size_t>(I)] });
 					}
+					else if (D.bTrueCross)
+					{
+						// (the flat captor cross at its true proportions, Dress::bTrueCross: the white half the cross's
+						// length across, the black a quarter of it and black to each arm's open end, as MarkPieces lays
+						// the painted one)
+						const double Bar = Size * 0.5, Beam = Size * 0.25;
+						Quad(-Size, -Bar, Size, Bar, 0.012, 206, 204, 194);
+						Quad(-Bar, -Size, Bar, Size, 0.012, 206, 204, 194);
+						Quad(-Size, -Beam, Size, Beam, 0.016, 24, 24, 24);
+						Quad(-Beam, -Size, Beam, Size, 0.016, 24, 24, 24);
+					}
 					else
 					{
 						const double Bar = Size * 0.36, Rim = Size * 0.09;
@@ -4166,7 +4183,7 @@ namespace LandKit
 				std::vector<MarkPiece> CaptorPieces;
 				if (D.bRealMarks)
 				{
-					MarkPieces(CaptorKind, CaptorPieces, true);
+					MarkPieces(CaptorKind, CaptorPieces, true, D.bTrueCross);
 				}
 				double CaptorDust = 0.0;
 				for (const Mark& Mk : Marks)
@@ -4912,7 +4929,7 @@ namespace LandKit
 			{
 				const std::string MarkKind = MarkWorn(D.Nation, D.Year, D.Month, R["mark_months"], D.bAnyYear, D.bAllMarks, D.bNewMarks);
 				std::vector<MarkPiece> Pieces;
-				MarkPieces(MarkKind, Pieces, D.bRealMarks);
+				MarkPieces(MarkKind, Pieces, D.bRealMarks, D.bTrueCross);
 				if (Level == 0 && !Pieces.empty())
 				{
 					// Where her owner's army painted it (the art director's mends of 24 November): her file's places, but
@@ -8283,6 +8300,7 @@ namespace LandKit
 		D.bAllMarks = bAllMarks;
 		D.bNewMarks = bNewMarks;
 		D.bRealMarks = bRealMarks;
+		D.bTrueCross = bTrueCross;
 		std::string Why;
 		if (!Looks[OutKey].Load(Text, D, Why))
 		{

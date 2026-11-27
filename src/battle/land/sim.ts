@@ -571,7 +571,9 @@ export class LandBattle implements BattleSim<LandUnit> {
    * Infantry with tanks (release 2; Brian, 23 November 05:05Z): foot near a friendly tank advance behind her, no man is
    * run over by his own side's vehicles (they step out of the way), and an enemy tank can run a man over (Drill.escort,
    * clearOfVehicles, thin; DRILL.escort). Off unless turned on (the bridge's { escort: true }, the Battle rules card's
-   * Infantry with tanks row). With it, tanks overrun foot in the open (LAND.overrun, overruns): harm unchanged.
+   * Infantry with tanks row). With it, tanks overrun foot in the open (LAND.overrun, overruns). The overrun adds no
+   * harm of its own, but the tank block drives through the foot's ground and back, so places, cover, reaches and so
+   * results change: NOT a looks-only row (the design director, 27 November 2026, 01:54Z).
    */
   escort = false;
   /**

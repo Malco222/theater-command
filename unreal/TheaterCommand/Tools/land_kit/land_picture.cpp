@@ -253,6 +253,8 @@ namespace
 		// tall standing at her marked plate, the honest ruler for a mark's size (the art director, 26 November 2026);
 		// bSayMark: her caption ends with what the mark facing the camera measures.
 		bool bRealMarks = false, bMan = false, bSayMark = false;
+		// The German cross at its true proportions (release 2, LandKit's Dress::bTrueCross, the trial word "truecross").
+		bool bTrueCross = false;
 		// A captured vehicle (LandKit's Dress::Captured): the nation she was taken from; Nation is then her captor.
 		std::string Captured;
 		struct Other
@@ -844,7 +846,7 @@ int main(int argc, char** argv)
 		// panels a year apart were being painted from whichever was loaded first)
 		const std::string Key = Name + "|" + Nation + "|" + std::to_string(For.Year * 100 + For.Month) + (For.bMarks ? "|marks" : "") + (For.Coat.empty() ? "" : "|coat " + For.Coat)
 			+ (For.bBurntCoat ? "|burnt" : "") + (For.bAnyYear ? "|anyyear" : "") + (For.bAllMarks ? "|allmarks" : "") + (For.bNewMarks ? "|newmarks" : "")
-			+ (For.bRealMarks ? "|realmarks" : "") + (For.Captured.empty() ? "" : "|captured " + For.Captured);
+			+ (For.bRealMarks ? "|realmarks" : "") + (For.bTrueCross ? "|truecross" : "") + (For.Captured.empty() ? "" : "|captured " + For.Captured);
 		if (!Models.count(Key))
 		{
 			std::string Text, Error;
@@ -865,6 +867,7 @@ int main(int argc, char** argv)
 			D.bAllMarks = For.bAllMarks;
 			D.bNewMarks = For.bNewMarks;
 			D.bRealMarks = For.bRealMarks;
+			D.bTrueCross = For.bTrueCross;
 			D.Captured = For.Captured;
 			if (!M->Load(Text, D, Error))
 			{
@@ -1082,7 +1085,11 @@ int main(int argc, char** argv)
 	// tank markings are way to big". The art director's sheet of 17:24Z: six WHOLE tanks before and after, each with a
 	// man 1.8 m tall standing at the marked plate (a cell cut to the turret makes any mark look big); then each of the
 	// thirty-eight nations' marks on the whole light tank, at its real size. Every caption ends with what the mark
-	// facing the camera measures. LAND_KIT_REALMARKS=six paints the six pairs alone.)
+	// facing the camera measures. LAND_KIT_REALMARKS=six paints the six pairs alone. LAND_KIT_REALMARKS=cross paints
+	// the trial word "truecross"'s pairs alone, the art director's ask of 27 November 2026, 01:23Z: the German cross as
+	// it is beside the same one at its true proportions, marks at their real size in both, on the Panzer IV close and
+	// whole, the Tiger's and the Panther's hull close, the assault gun and the lorry's door close, and a vehicle taken
+	// by Germany from both her sides, from behind and from above (LAND_KIT_TAKEN names another; the Sherman by default).)
 	const bool bRealMarksSheet = std::getenv("LAND_KIT_REALMARKS") != nullptr;
 	if (bRealMarksSheet)
 	{
@@ -1135,12 +1142,14 @@ int main(int argc, char** argv)
 		// (LAND_KIT_TAKEN=<model>,<captor>,<taken from>, as Tiger,USA,GER: these panels of another captured tank
 		// than the T-34 in German hands, for looking at where each one's plates take her captor's mark)
 		std::string TakenModel = "T34", TakenBy = "GER", TakenFrom = "SOV", TakenSays = "captured T-34 in German hands", TakenShort = "captured T-34";
+		bool bTakenNamed = false; // (LAND_KIT_TAKEN was given and read whole)
 		if (const char* Taken = std::getenv("LAND_KIT_TAKEN"))
 		{
 			const std::string Words = Taken;
 			const size_t C1 = Words.find(','), C2 = C1 == std::string::npos ? C1 : Words.find(',', C1 + 1);
 			if (C2 != std::string::npos)
 			{
+				bTakenNamed = true;
 				TakenModel = Words.substr(0, C1);
 				TakenBy = Words.substr(C1 + 1, C2 - C1 - 1);
 				TakenFrom = Words.substr(C2 + 1);
@@ -1253,6 +1262,61 @@ int main(int argc, char** argv)
 			P.bDay = true;
 			P.Caption = W.Name;
 			Panels.push_back(P);
+		}
+		if (std::string(std::getenv("LAND_KIT_REALMARKS")) == "cross")
+		{
+			// (these pairs alone: the sheet's other panels are left out)
+			Panels.erase(std::remove_if(Panels.begin(), Panels.end(), [](const Panel& Each) { return Each.File.compare(0, 10, "truecross_") != 0; }), Panels.end());
+			// (a vehicle named by LAND_KIT_TAKEN only where Germany took her from another: this sheet is of the German cross)
+			const bool bNamed = bTakenNamed && TakenBy == "GER" && TakenFrom != "GER";
+			const std::string CrossTaken = bNamed ? TakenModel : "Sherman", CrossFrom = bNamed ? TakenFrom : "USA";
+			struct CrossLook
+			{
+				const char* File;
+				const char* Model;
+				bool bTaken, bNear;
+				int Among;
+				double Bearing, Up;
+				const char* Words;
+			};
+			const CrossLook Looks[] = {
+				// (the Panzer IV: among her first two places, the skirts' crosses; the hull's own lie hidden behind the skirts)
+				{ "a_panzer_close", "PanzerIV", false, true, 2, 62.0, 12.0, "Panzer IV, her cross close" },
+				{ "b_tiger_close", "Tiger", false, true, 2, -128.0, 12.0, "Tiger, her hull's cross close" },
+				{ "c_panther_close", "Panther", false, true, 99, 62.0, 12.0, "Panther, her hull's cross close" },
+				{ "d_stug_close", "StuG3", false, true, 99, 62.0, 12.0, "assault gun, her cross close" },
+				{ "e_lorry_close", "Truck", false, true, 99, 62.0, 12.0, "lorry, her door's cross close" },
+				{ "f_panzer_whole", "PanzerIV", false, false, 99, 62.0, 9.0, "Panzer IV, whole" },
+				{ "g_taken_side", "", true, false, 99, 62.0, 9.0, "her side" },
+				{ "h_taken_other_side", "", true, false, 99, -62.0, 9.0, "her other side" },
+				{ "i_taken_back", "", true, false, 99, 200.0, 14.0, "her back plate" },
+				{ "j_taken_top", "", true, false, 99, 62.0, 58.0, "from above" },
+			};
+			for (const CrossLook& K : Looks)
+			{
+				for (int After = 0; After < 2; ++After)
+				{
+					Panel P;
+					P.File = std::string("truecross_") + K.File + (After ? "_2_true" : "_1_was");
+					P.ModelName = K.bTaken ? CrossTaken : K.Model;
+					P.Nation = "GER";
+					P.Captured = K.bTaken ? CrossFrom : "";
+					P.Year = 1943;
+					P.Month = 7;
+					P.bMarks = true;
+					P.bRealMarks = true;
+					P.bTrueCross = After == 1;
+					P.bClose = K.bNear;
+					P.CloseAmong = K.Among;
+					P.bMan = !K.bNear;
+					P.bSayMark = true;
+					P.CameraBearing = K.Bearing;
+					P.CameraUp = K.Up;
+					P.bDay = true;
+					P.Caption = (K.bTaken ? "captured " + CrossTaken + " in German hands, " + K.Words : std::string(K.Words)) + (After ? ", TRUE PROPORTIONS" : ", as it is");
+					Panels.push_back(P);
+				}
+			}
 		}
 	}
 	// (LAND_KIT_HOUSE=1: the farmhouse pilot's own sheet instead, release 2's -TheaterLandTrial=houses; LAND_KIT_HOUSE=farm

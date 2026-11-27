@@ -244,6 +244,32 @@ private:
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> CloudShadeInk;
 	bool bWindOn = false;
+	/** The blast press ("-TheaterLandBlastPress", only with the wind; PressBurst, PressFrame). Its four slots (build_content.py's
+	 * PRESS_SLOTS: the pressed twins' PressAt<k> and PressStrength<k>): when each burst, on the scene's life clock (S.Lived,
+	 * the effects kit's), its strength (0, none, at first), its reach (metres) and its place (the world's X and Y in
+	 * metres). */
+	bool bBlastPress = false;
+	double PressSlotStart[4] = {};
+	double PressSlotStrength[4] = {};
+	double PressSlotReach[4] = {};
+	FVector2D PressSlotAt[4];
+	/** ...how far from the eye the grass sways at all (LayThings' SwayTo, metres; SwayTo 0 or less, everywhere): a burst
+	 * farther than that and its reach from the eye (Eye, along the ground) shows nothing and takes no slot. */
+	double PressSeenTo = 250.0;
+	/** ...its timing, which this class owns: the front's speed (m/s), the rise and the way back (life seconds), written on
+	 * the pressed twins (PressFront, PressRise, PressBack) at LoadInks and used by the slot choice; PressGain times every
+	 * burst's strength ("-TheaterLandBlastPress=<strength>,<front>,<rise>,<back>,<most>"); the curve's peak and when it
+	 * comes; and the default curve's peak over the tuned one's, by which every strength written is scaled (the materials
+	 * normalise by the default's peak, build_content.py's PRESS_PEAK, so PressBend stays the lean at the peak); and the
+	 * cap, the most a tip goes aside as a share of its height as drawn (the twins' PressMost; build_content.py's
+	 * PRESS_MOST, 0.45, about 27 degrees, by default; the switch's fifth number, held to 0.1 .. 0.9). */
+	double PressGain = 1.0, PressFrontMps = 340.0, PressRiseS = 0.08, PressBackS = 0.75, PressPeak = 0.809266571, PressPeakS = 0.0707, PressPeakFix = 1.0;
+	double PressMostOfHeight = 0.45;
+	/** ...the press's clock as last written on the twins (PressNow, PressBefore), the life clock a frame ago (the effects
+	 * kit's own clock while PlayEffects runs: a burst it is told of then is stamped with it, P2), and whether the frame
+	 * after the last press ends is still to be written (so every slot then reads exactly 0 in both passes). */
+	double PressWroteNow = -1.0, PressWroteBefore = -1.0, PressLivedWas = 0.0;
+	bool bPressTail = false;
 	/** The sun's shafts through the crowns, the hedges and the smoke when it stands low (under 25 degrees) before the
 	 * lens ("-TheaterLandSunShafts", or "=bloom", 0.2; or "-TheaterLandEpic"). */
 	bool bSunShafts = false;
@@ -994,6 +1020,22 @@ private:
 	void MakeFlags();
 
 	void PlayEffects();
+	/** The blast press (the effects' Shell and Size cases call it as a shell bursts, PressOfSize): the grass, the corn and
+	 * the leaves round field metres (X, Y) flinch outward within RadiusM metres by Strength (0.3 a light mortar, 0.7 a 105
+	 * mm, 1 a 150 mm and up) from AtSeconds on the scene's life clock (S.Lived, the effects kit's: P2 passes the kit's own
+	 * stamp, PressLivedWas), and spring back.
+	 * Nothing unless "-TheaterLandBlastPress" is on with the wind; nothing for a number that is not finite, a place off
+	 * the field, a reach over 200 m, or a burst the eye cannot see sway. */
+	void PressBurst(double PressBurstX, double PressBurstY, double PressRadiusM, double PressBurstStrength, double PressAtSeconds);
+	/** ...by the effects kit's size row (battle-fx.json's sizes: grenade, light, mortar, gun75, how105, how150, bomb250,
+	 * bomb500): the reach its dust skirt runs to, 0.5 x of_cloud x cloud_m, and a strength by size. Any other row: none. */
+	void PressOfSize(double PressBurstX, double PressBurstY, const FString& PressSizeRow, double PressAtSeconds);
+	/** ...the size row the kit draws for a Shell event's calibre, in the kit's own order (SizeOfCalibre): "bomb" and any
+	 * name it does not know, a 105; torpedo and churn, kit rows the press does not hold, none (nothing pressed). */
+	static FString PressRowOfCalibre(const FString& PressCalibre);
+	/** ...and its clock, once a frame after the effects are played: the pressed twins' PressNow (S.Lived) and PressBefore
+	 * (S.Lived a frame ago), written only while a press still shows at either, and the frame after. */
+	void PressFrame();
 	/** This frame's hedge cutters (the recording's cuts): from T0 the shrubs at the gap shaken as she pushes into the
 	 * bank, at T1 the bank torn through (LandCrater's breach, sent by MakeCraters with the holes) and its shrubs thrown
 	 * down the way she drove. */

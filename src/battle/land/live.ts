@@ -388,7 +388,12 @@ export interface LiveOpts {
   stand?: boolean;
   /** Shell blasts (release 2, looks only; sim.blast): one burst takes the men near it together. Off unless true. */
   blast?: boolean;
-  /** Infantry with tanks (release 2, looks only; sim.escort): foot advance behind their tanks, never under them. Off unless true. */
+  /**
+   * Infantry with tanks (release 2; sim.escort): foot advance behind their tanks, never under them, and tanks overrun
+   * foot in the open. NOT looks only: the overrun moves the tank block in the rules (sim.ts overruns, LAND.overrun), so
+   * it changes how battles turn out (the design director, 27 November 2026, 01:54Z, by the sniper thread's measure:
+   * alone it changes 28 of 48 battles' results). Off unless true.
+   */
   escort?: boolean;
   /** Armoured infantry (release 2, looks only; sim.mech): an armoured block's riflemen ride behind its tanks in their carriers. Off unless true. */
   mech?: boolean;
