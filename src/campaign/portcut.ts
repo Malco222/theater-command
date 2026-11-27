@@ -61,7 +61,7 @@ import { MORALE, moraleRules } from './morale';
 import { NAVY, SeaPicture, canPass, closedTo, fleetReach, inPassage, openSeas, seaSide, seaStarts, shipCount } from './navy';
 import { skiesOver } from './pacific';
 import { seaWhat } from './sea-words';
-import { fieldCtrl, pocketDry, siegeRules } from './siege';
+import { fieldCtrl, pocketDry, pocketNat, siegeRules } from './siege';
 import { witherAt } from './wither';
 import { farOn } from './world';
 import type { Corps, Game, Region } from './types';
@@ -201,9 +201,10 @@ export interface PortCut {
   lost: number | null;
   /**
    * True where `lost` is only the latest month the first loss can come: something the count leaves out as the month
-   * stands (a treasury in debt, a corps that cannot count its month as rested) can bring it sooner. Its lines then say
-   * "by the start of", and otherwise "at the start of" (the UI director's 23:50Z, item 6). Null for the shutting side,
-   * whose count is always only the latest (it cannot see the garrison's order): its line says "by".
+   * stands (a treasury in debt, a corps that cannot count its month as rested, a pocket's stores not yet spent) can
+   * bring it sooner. Its lines then say "by the start of", and otherwise "at the start of" (the UI director's 23:50Z,
+   * item 6). Null for the shutting side, whose count is always only the latest (it cannot see the garrison's order): its
+   * line says "by".
    */
   lostBy: boolean | null;
   /** Each corps of the garrison that the rule would strike off from hunger, with its month. */
@@ -570,8 +571,11 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
   // (A pocket, siege.ts pocketMonth: the port cut off by land as well as by sea, its holder's army there living on the
   // pocket's stores on the pocket's own clock. Where the rule records those stores spent, the holder's draws feed nobody
   // there, whatever the window (game.ts computeSupply, pocketDry): the stores feed none of his corps, this month or
-  // after, unless the ring is broken. Its other nations' draws are not stopped by it.)
-  const dry = siegeRules(g) && pocketDry(g, r, holder);
+  // after, unless the ring is broken. Where they are not yet spent, the pocket the count leaves out can only bring the
+  // loss sooner: the soonest month takes it at its worst, spent at his next draw, and the month named is "by" (the UI
+  // director's 23:50Z, item 6). Its other nations' draws are not stopped by it.)
+  const pocket = siegeRules(g) && pocketNat(g, r) === holder;
+  const dry = pocket && pocketDry(g, r, holder);
   // (The months they feed each nation's corps, by the keep the rule reads at that nation's draw each month: the keep
   // they were filled with while the crew whose stores they are lives, and after it starves, the keep it leaves. The UI
   // director's 01:14Z, item 3. With the fortress rows off, or no crew, the port's own two: the fill's month and two.)
@@ -584,7 +588,11 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
   // (Each corps' month, and the soonest it can come: the first loss is "by" its month where any corps of the garrison
   // can be lost before it.)
   const corps = garrisonOf(g, r);
-  const counts = corps.map((c) => { const fed = fedFor(c.nat); return { id: c.id, fed, lost: lostMonth(g, c, fed, uncharged), soonest: lostMonth(g, c, fed, uncharged, true) }; });
+  const counts = corps.map((c) => {
+    const fed = fedFor(c.nat);
+    const worst = lostMonth(g, c, fed, uncharged, true);
+    return { id: c.id, fed, lost: lostMonth(g, c, fed, uncharged), soonest: pocket && !dry && c.nat === holder ? Math.min(worst, lostMonth(g, c, null, uncharged, true)) : worst };
+  });
   // (The garrison lives on the stores through the last month they feed all of it: no month, where one of its corps is
   // fed by none.)
   const feedsTo = !counts.length ? fedFor(holder) : counts.some((x) => x.fed === null) ? null : Math.min(...counts.map((x) => x.fed!));

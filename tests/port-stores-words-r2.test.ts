@@ -1397,9 +1397,13 @@ describe('a port in a pocket (siege.ts pocketMonth): its holder\'s army on the p
 
   it('the fortress rows off: the pocket\'s stores spent in February 1941, a month before the port\'s; from then every line reads the rule\'s clock, and the corps are struck off as April opens, the month named', () => {
     const { rows, shipped } = play(false);
-    // December, the month of the fill, and January, the pocket's stores not yet spent.
+    // December, the month of the fill, and January, the pocket's stores not yet spent. The month the garrison is lost is
+    // "by": the pocket the count leaves out can only bring it sooner, and does (the UI director's 23:50Z, item 6). (What
+    // the stores feed before then, "through February", is the port's own count: the pocket's waits for his word.)
     expect(rows[0].slice(0, 3)).toEqual([16, false, [true, 1]]);
     expect(rows[1].slice(0, 3)).toEqual([17, false, [true, 1]]);
+    expect(rows[1][3]).toEqual(['No ship reaches Gibraltar: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast. The garrison lives on the port\'s stores through February; unless the sea is opened, it then goes hungry and is lost by the start of May.']);
+    expect((rows[1][4] as string[])[0]).toBe('Cut off by sea: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast, and no ship reaches the harbour. The garrison lives on the port\'s stores through February; unless the sea is opened, it then goes hungry and is lost by the start of May.');
     // February: the pocket's stores are spent at Britain's draw, which feeds none of his corps. The card and every corps
     // card read it so, with the month the rule strikes them off. (The 03:13Z build gave the card "lives on the port's
     // stores through February" here, and each corps "Living on Gibraltar's stores through February."; the build before
@@ -1418,9 +1422,13 @@ describe('a port in a pocket (siege.ts pocketMonth): its holder\'s army on the p
     expect(shipped).toEqual(['The stores of Gibraltar are spent: 5 British corps, 150,000 men, are out of supply and cannot hold out long.', 'Cut off and out of supply, the British army at Gibraltar lays down its arms: 6 corps, 101,332 men.']);
   });
 
-  it('under the fortress rows: the crew\'s 16 months for the port, the pocket\'s seven, spent in July 1941; from then the rule\'s own months, the corps struck off as September opens', () => {
+  it('under the fortress rows: the crew\'s 16 months for the port, the pocket\'s seven, spent in July 1941; "by the start of July 1942" before it, and from then the rule\'s own months, the corps struck off as September opens', () => {
     const { rows, shipped } = play(true);
-    for (let i = 1; i <= 6; i++) expect(rows[i].slice(0, 3)).toEqual([16 + i, false, [true, 1]]);
+    // (January to June: "by the start of July 1942", and the rule strikes them off sooner.)
+    for (let i = 1; i <= 6; i++) {
+      expect(rows[i].slice(0, 3)).toEqual([16 + i, false, [true, 1]]);
+      expect((rows[i][4] as string[])[0]).toMatch(/ lives on the port's stores through April 1942; unless the sea is opened, it then goes hungry and is lost by the start of July 1942\.$/);
+    }
     // July 1941: spent at Britain's draw. (The 03:13Z build: "Living on Gibraltar's stores through April 1942.")
     expect(rows[7].slice(0, 4)).toEqual([23, true, [false, 0.6], []]);
     expect((rows[7][4] as string[])[0]).toBe(SPENT_G('September'));
