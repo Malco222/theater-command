@@ -925,6 +925,37 @@ pass. Without it the battle is as before, and the log's line "small arms on armo
 - **Mac ticket**: /mnt/project-files/effects-r2/tickets/ricochet-ticket.md. **Pictures**:
   `/mnt/project-files/battle-fx/ricochet/` (the kit's preview, `fxpreview ... ricochet 30|150|600`), with notes.
 
+## Gun smoke after the shot and spent cases (release 2, off until passed)
+
+Brian, 26 November ("lets try to add more visual dramatic things like that", then "do 2-11"), item 7 of the film
+details. Three launch words, each read in `ALandBattle::Open` beside `-TheaterLandGunFlash`, each laying its own
+overlay over the effects recipe (`Effects->LayOver`, before `Begin`). Without them every piece is drawn as before (the
+kit's `Tools/fx_ten/run.sh` holds a scripted fight's every piece to the kit before, byte for byte).
+
+- `-TheaterLandBarrelSmoke` (`battle-fx-barrel.json`): after a tank gun, an anti-tank gun or a howitzer fires, a thin
+  faint wisp curls from the muzzle for 4 to 7 s once the shot's smoke has rolled off (from 3 to 4 s after it; the
+  howitzer from 5 to 6.5 s). The kit lays it inside `Muzzle` (`muzzle.<gun>.after_wisp`), only within 300 m of the eye,
+  one a gun at once, 16 on the field at most. And a towed gun's or an open self-propelled gun's breech puffs a small
+  grey-brown puff back toward her loader as her case comes out: her `case_clang` beat in `PlayArmourEvents`, before
+  the picture's filter, a `Steam` of row `breech` at her `breech` socket, its number her beat's `E.Key + 300000`,
+  only within 150 m of the eye.
+- `-TheaterLandHatchFumes` (`battle-fx-hatch.json`): a closed tank kept her spent cases inside. With her hatch open
+  (`V.HatchOpen > 0.5`) a faint wisp of fumes rises from her commander's hatch on her 2nd, 5th, 7th, 10th ... shot by
+  her own count (two in five), within 150 m, only when she is stopped (the `Steam` is laid at one place and does not
+  ride with her, so on the move it would hang where her hatch was: the kit's `AfterShotOf` holds it, and the scene
+  calls no `SteamMove` for it; should she start off or shut her hatch inside its 2 s, the last of it stays put); and
+  one shot in eight, only when she is stopped, a case is pitched out of
+  the hatch to one side (`ThrowCase`, row `ground_cases.tank`, within 40 m of the eye as every lying case).
+- `-TheaterLandCasesOut` (`battle-fx-cases-out.json`): an open self-propelled gun (kind `tank` with a `crew.loader`
+  socket: the M7, the Hummel, the Sexton, the SU-76 and the M10) heaves seven cases in ten over her side, from her
+  loader's place out over the side he stands nearer to; they lie three to five minutes (`ground_cases.spg`), within
+  the kit's `most_lying` 200 and 40 m of the eye.
+- Who does what is `TheaterFx::AfterShotOf` (plain, held in the cloud test); `S.ShotsOf` counts each vehicle's shots
+  at her `case_clang`. The shipped recordings have no open self-propelled gun: they come in campaign battles with the
+  Battle rules card's `spg` (and `td` for the M10) rows on.
+- Known: a tank firing on the move leaves her wisp where her muzzle was (the kit's muzzle smoke does the same); the
+  art director to see it from 40 m.
+
 ## Shell and tank hits take limbs off (release 2, off until passed)
 
 Brian, 22 November: "make more graphic animations if a guy gets shot or blown up", "with limbs coming off"; and the

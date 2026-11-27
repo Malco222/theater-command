@@ -2525,6 +2525,28 @@ bool ALandBattle::Open()
 		Effects->LayOver(TEXT("battle-fx-guns.json"));
 		UE_LOG(LogTheater, Log, TEXT("Land battle: each gun's own flash (-TheaterLandGunFlash, release 2)"));
 	}
+	// Effects (R2), item 7 of Brian's film details (26 November, "do 2-11"): a thin wisp from the barrel after the shot
+	// and a puff at an open breech (-TheaterLandBarrelSmoke), a closed tank's hatch fumes and the odd case pitched out
+	// (-TheaterLandHatchFumes), the case over an open gun's side (-TheaterLandCasesOut); each its own look laid over
+	// the recipe, played at her case_clang in PlayArmourEvents
+	S.bBarrelSmoke = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandBarrelSmoke"));
+	S.bHatchFumes = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandHatchFumes"));
+	S.bCasesOut = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCasesOut"));
+	if (S.bBarrelSmoke)
+	{
+		Effects->LayOver(TEXT("battle-fx-barrel.json"));
+		UE_LOG(LogTheater, Log, TEXT("Land battle: a gun's smoke after the shot (-TheaterLandBarrelSmoke, release 2)"));
+	}
+	if (S.bHatchFumes)
+	{
+		Effects->LayOver(TEXT("battle-fx-hatch.json"));
+		UE_LOG(LogTheater, Log, TEXT("Land battle: a closed tank's hatch fumes and the odd case (-TheaterLandHatchFumes, release 2)"));
+	}
+	if (S.bCasesOut)
+	{
+		Effects->LayOver(TEXT("battle-fx-cases-out.json"));
+		UE_LOG(LogTheater, Log, TEXT("Land battle: cases over an open gun's side (-TheaterLandCasesOut, release 2)"));
+	}
 	if (!Effects->Begin(Root, UnitsPerMetre, [this, FieldPtr](const FVector& Point)
 		{
 			return FVector(Point.X, Point.Y, FieldPtr->HeightAt(Point.Y / UnitsPerMetre, Point.X / UnitsPerMetre) * UnitsPerMetre);
@@ -9117,8 +9139,49 @@ void ALandBattle::PlayEffects()
 		switch (E.Kind)
 		{
 		case LandPlay::FxKind::Muzzle:
-			Effects->Muzzle(At, WorldWay(E.Way.X, E.Way.Y, E.Way.Z).GetSafeNormal(), Name, Ground);
+		{
+			// Effects (R2), the mends of 27 November, only with their words: the vehicle whose muzzle fired (the nearest
+			// within 3 m). On the move she lays no barrel wisp (-TheaterLandBarrelSmoke: smoke stays where it was made);
+			// an open self-propelled gun's case goes over her side alone (-TheaterLandCasesOut), none behind her muzzle
+			bool bMoving = false, bOverSide = false;
+			const bool bBigGun = E.Name.rfind("tank_gun", 0) == 0 || E.Name.rfind("at_gun", 0) == 0 || E.Name.rfind("howitzer", 0) == 0;
+			if ((S.bBarrelSmoke || S.bCasesOut) && bBigGun && S.Armour)
+			{
+				int32 Shooter = -1;
+				double Nearest = 3.0;
+				for (size_t I = 0; I < S.Armour->Vehicles().size(); ++I)
+				{
+					LandKit::V3 Bore, BoreWay;
+					if (!S.Armour->Vehicles()[I].bDead && S.Armour->Vehicles()[I].SocketNow("muzzle", Bore, BoreWay))
+					{
+						const double Off = FVector(Bore.X - E.At.X, Bore.Y - E.At.Y, Bore.Z - E.At.Z).Size();
+						if (Off < Nearest)
+						{
+							Nearest = Off;
+							Shooter = static_cast<int32>(I);
+						}
+					}
+				}
+				if (Shooter >= 0)
+				{
+					const LandKit::Vehicle& V = S.Armour->Vehicles()[static_cast<size_t>(Shooter)];
+					LandKit::V3 Loader, LoaderWay;
+					bMoving = S.bBarrelSmoke && V.bMoving;
+					bOverSide = S.bCasesOut && V.Look().Kind == "tank" && V.SocketNow("crew.loader", Loader, LoaderWay);
+					if (S.bBarrelSmoke && !bMoving)
+					{
+						FLandBattleState::FWispFrom& From = S.WispFrom.FindOrAdd(Shooter);
+						From.At = At;
+						From.Heading = V.Heading;
+						From.Turret = V.TurretDeg;
+						From.Traverse = V.TraverseDeg;
+						From.T = S.Battle;
+					}
+				}
+			}
+			Effects->Muzzle(At, WorldWay(E.Way.X, E.Way.Y, E.Way.Z).GetSafeNormal(), Name, Ground, bMoving, bOverSide);
 			break;
+		}
 		case LandPlay::FxKind::Shots:
 			if (E.bArmour)
 			{
@@ -9186,6 +9249,29 @@ void ALandBattle::PlayEffects()
 			Effects->SmokeScreen(At, Across, Seconds, Name.IsEmpty() ? FString(TEXT("canister")) : Name, -1);
 			break;
 		}
+		}
+	}
+	// Effects (R2), the mend of 27 November (-TheaterLandBarrelSmoke): a gun that fired standing still and has since moved
+	// off or turned (her hull, turret or traverse a degree from where they were): her wisp is laid no more where her
+	// muzzle was; what is already in the air drifts and fades where it is
+	if (S.bBarrelSmoke && S.Armour)
+	{
+		for (auto It = S.WispFrom.CreateIterator(); It; ++It)
+		{
+			const FLandBattleState::FWispFrom& W = It.Value();
+			const bool bKnown = It.Key() >= 0 && static_cast<size_t>(It.Key()) < S.Armour->Vehicles().size();
+			const LandKit::Vehicle* V = bKnown ? &S.Armour->Vehicles()[static_cast<size_t>(It.Key())] : nullptr;
+			const bool bTurned = V && (FMath::Abs(FMath::FindDeltaAngleRadians(V->Heading, W.Heading)) > FMath::DegreesToRadians(1.0)
+				|| FMath::Abs(FMath::FindDeltaAngleDegrees(V->TurretDeg, W.Turret)) > 1.0 || FMath::Abs(V->TraverseDeg - W.Traverse) > 1.0);
+			if (!V || V->bMoving || V->bDead || bTurned)
+			{
+				Effects->WispStop(W.At);
+				It.RemoveCurrent();
+			}
+			else if (S.Battle - W.T > 60.0) // (her wisp long gone)
+			{
+				It.RemoveCurrent();
+			}
 		}
 	}
 }
@@ -11052,6 +11138,66 @@ void ALandBattle::PlayArmourEvents()
 		FString Fx = LandParts::Wide(E.Fx);
 		const FVector At = World(E.At.X, E.At.Y, E.At.Z);
 		const FVector Up = WorldWay(E.Facing.X, E.Facing.Y, E.Facing.Z).GetSafeNormal(0.01, FVector::UpVector);
+		// Effects (R2), item 7 of Brian's film details (26 November): as her spent case comes out after a shot (case_clang,
+		// left to the mix below), what her crew lets out of her, by what she is (TheaterFx::AfterShotOf): a towed gun's or
+		// an open gun's breech puffs; an open gun's loader heaves the case over her side; a closed tank with her hatch
+		// open lets a faint wisp of fumes out every second or third shot, and now and then, stopped, a case is pitched
+		// out. Only near the eye: every vehicle's beats come here.
+		if (Effects && (S.bBarrelSmoke || S.bHatchFumes || S.bCasesOut) && E.Fx == "case_clang" && E.Vehicle >= 0
+			&& static_cast<size_t>(E.Vehicle) < S.Armour->Vehicles().size())
+		{
+			const LandKit::Vehicle& V = S.Armour->Vehicles()[static_cast<size_t>(E.Vehicle)];
+			const int32 Shot = ++S.ShotsOf.FindOrAdd(E.Vehicle);
+			const double FromEye = FVector(E.At.X - S.Pose.Eye.X, E.At.Y - S.Pose.Eye.Y, E.At.Z - S.Pose.Eye.Z).Size();
+			LandKit::V3 Breech, BreechWay, Loader, LoaderWay, Hatch, HatchWay;
+			TheaterFx::AfterShotAsk Ask;
+			Ask.Kind = V.Look().Kind;
+			Ask.bBreech = V.SocketNow("breech", Breech, BreechWay);
+			Ask.bLoader = V.SocketNow("crew.loader", Loader, LoaderWay);
+			Ask.bHatch = V.SocketNow("commander", Hatch, HatchWay);
+			Ask.HatchOpen = V.HatchOpen;
+			Ask.bStopped = !V.bMoving;
+			Ask.Shot = Shot;
+			Ask.bBarrelSmoke = S.bBarrelSmoke;
+			Ask.bHatchFumes = S.bHatchFumes;
+			Ask.bCasesOut = S.bCasesOut;
+			const TheaterFx::AfterShot Out = FromEye < 300.0 ? TheaterFx::AfterShotOf(Ask) : TheaterFx::AfterShot();
+			// (her own numbers in the kit: E.Key's, +100000 and +200000 and LandBurn's are taken; a vehicle is either a gun
+			// with a breech or a closed tank, so the breech puff and the hatch fumes share this one)
+			const int32 PuffId = static_cast<int32>((static_cast<uint32>(E.Key) + 300000u) & 0x7FFFFFFFu);
+			// (a breech socket faces out of the breech, back toward the loader: the puff goes that way and up; a small thing,
+			// so only within 150 m of the eye)
+			if (Out.bBreechPuff && FromEye < 150.0)
+			{
+				const FVector Back = WorldWay(BreechWay.X, BreechWay.Y, 0.0).GetSafeNormal(0.01, FVector::UpVector);
+				Effects->Steam(PuffId, World(Breech.X, Breech.Y, Breech.Z), (Back + FVector::UpVector).GetSafeNormal(), 0.25f, 0.6f, TEXT("breech"));
+			}
+			// (her commander's place is a quarter metre under the hatch's rim: the fumes rise from the rim)
+			if (Out.bHatchFumes && FromEye < 150.0)
+			{
+				Effects->Steam(PuffId, World(Hatch.X, Hatch.Y, Hatch.Z + 0.3), FVector::UpVector, 0.3f, 2.0f, TEXT("hatch_fumes"));
+			}
+			// (a case thrown out of her: from her loader's place out over her near side, or out of her hatch; the side
+			// from her two rear dust sockets, the one her loader stands toward)
+			const LandKit::V3 Across(V.DustRight.X - V.DustLeft.X, V.DustRight.Y - V.DustLeft.Y, 0.0);
+			const double AcrossLong = FMath::Max(1.0e-3, FMath::Sqrt(Across.X * Across.X + Across.Y * Across.Y));
+			const double SideX = Across.X / AcrossLong, SideY = Across.Y / AcrossLong;
+			if (Out.bOverSide)
+			{
+				const double MidX = 0.5 * (V.DustLeft.X + V.DustRight.X), MidY = 0.5 * (V.DustLeft.Y + V.DustRight.Y);
+				const double Off = (Loader.X - MidX) * SideX + (Loader.Y - MidY) * SideY;
+				const double Way = Off < 0.0 ? -1.0 : 1.0;
+				const double Out_ = FMath::Max(0.0, 0.5 * V.Look().Wide - FMath::Abs(Off));
+				// (her loader's place is on her floor, her side at his waist: the case goes over it from his chest)
+				Effects->ThrowCase(World(Loader.X + SideX * Way * Out_, Loader.Y + SideY * Way * Out_, Loader.Z + 1.2),
+					WorldWay(SideX * Way, SideY * Way, 0.0), TEXT("spg"), E.Key);
+			}
+			if (Out.bHatchCase)
+			{
+				const double Way = (Shot / 8) % 2 == 0 ? 1.0 : -1.0;
+				Effects->ThrowCase(World(Hatch.X, Hatch.Y, Hatch.Z + 0.5), WorldWay(SideX * Way, SideY * Way, 0.0), TEXT("tank"), E.Key);
+			}
+		}
 		// (the round's: her gun's flash and blast dust, the strike's sparks and burst, small arms' rattle; the mix's: the
 		// spent case; her moving dust is drawn from her each frame; the crew and the gun's fittings make no effect)
 		if (Fx.Contains(TEXT("muzzle")) || Fx.Contains(TEXT("spark")) || Fx.Contains(TEXT("rattle")) || Fx.Contains(TEXT("case")) || Fx == TEXT("hit")
