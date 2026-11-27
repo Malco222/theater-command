@@ -110,6 +110,62 @@ namespace LandPlay
 		return "earth";
 	}
 
+	bool ArmouredVehicle(const Track& Tr, const LandFeed::Block* B)
+	{
+		// Effects (R2), small arms off armour (Brian, 25 November: "cannon fire or bazookas should be the only thing
+		// taking them out ... bullets should be bouncing off it"). Armour: a tank, an assault gun or a tank destroyer (the
+		// StuG, the M10, the SU-85, the Semovente), an armoured car (the Sd.Kfz. 222, the M8, the others' ArmouredCar), a
+		// half-track (the Sd.Kfz. 251 and the M3, carrying riflemen or a flak gun, and the M16), a battery's self-propelled
+		// gun (the M7, the Hummel, the Sexton, the SU-76). Soft, bullets going in as ever: the lorry and the flak lorry,
+		// jeeps, field and staff cars, motorcycles, and a towed gun (its shield is no hull; its crew are the rules'). Her
+		// own model where the recording names one (Track::Model, the rules' "ml": the drawn escorts ride as tanks), else
+		// her block's; a tank of a model not named here (every tank the game draws, and any it stands in for) is armour.
+		const std::string& Model = !Tr.Model.empty() || !B ? Tr.Model : B->Model;
+		if (Tr.Role == "lorry") return IsOneOf(Tr.Model, { "Hanomag", "M3Halftrack", "FlakHalftrack", "M16" });
+		if (Tr.Role == "gun") return !Tr.Model.empty() || IsOneOf(Model, { "M7", "Hummel", "Sexton", "SU76", "Priest", "Wespe" });
+		if (Tr.Role != "tank") return false;
+		return !IsOneOf(Model, { "Truck", "FlakTruck", "Jeep", "Kubelwagen", "FieldCar", "GAZ67", "Fiat508", "Kurogane", "Motorcycle", "R75", "M72", "WLA", "M20", "Alce", "Rikuo" });
+	}
+
+	PlateSpot PlainPlate(const Track& Tr, const LandFeed::Block* B, const LandFeed::Spot& S, double Ground, const std::string& Face, double UIn, double HIn)
+	{
+		const std::string& Model = !Tr.Model.empty() || !B ? Tr.Model : B->Model;
+		const bool bBig = Tr.Role != "lorry" && !IsOneOf(Model, { "SdKfz222", "M8", "ArmouredCar", "FlakHalftrack", "M16", "Hanomag", "M3Halftrack" });
+		const double HalfLong = bBig ? 3.0 : 2.9, HalfWide = bBig ? 1.6 : 1.1, High = bBig ? 2.6 : 2.2;
+		const Vec Ahead(std::sin(S.F), std::cos(S.F), 0.0), Right(std::cos(S.F), -std::sin(S.F), 0.0), Up(0.0, 0.0, 1.0);
+		const double U = std::clamp(UIn, -1.0, 1.0);
+		const Vec Foot(S.X, S.Y, Ground);
+		const Vec Mid = Foot + Up * (std::clamp(HIn, 0.05, 0.95) * High);
+		PlateSpot P;
+		if (Face == "top")
+		{
+			P.Normal = Up;
+			P.At = Foot + Up * High + Ahead * (U * HalfLong * 0.6);
+			P.RoomMid = Foot + Up * High;
+			P.RoomA = Ahead * HalfLong;
+			P.RoomB = Right * HalfWide;
+		}
+		else if (Face == "left" || Face == "right")
+		{
+			const double Out = Face == "right" ? 1.0 : -1.0;
+			P.Normal = Right * Out;
+			P.At = Mid + Right * (Out * HalfWide) + Ahead * (U * HalfLong * Out);
+			P.RoomMid = Foot + Up * (0.5 * High) + Right * (Out * HalfWide);
+			P.RoomA = Ahead * HalfLong;
+			P.RoomB = Up * (0.5 * High);
+		}
+		else
+		{
+			const double Out = Face == "rear" ? -1.0 : 1.0;
+			P.Normal = Ahead * Out;
+			P.At = Mid + Ahead * (Out * HalfLong) + Right * (U * HalfWide * Out);
+			P.RoomMid = Foot + Up * (0.5 * High) + Ahead * (Out * HalfLong);
+			P.RoomA = Right * HalfWide;
+			P.RoomB = Up * (0.5 * High);
+		}
+		return P;
+	}
+
 	bool Replay::Begin(const Recording& InRecording, const World& InWorld)
 	{
 		Rec = &InRecording;
@@ -360,6 +416,134 @@ namespace LandPlay
 		return Vec(R.X, R.Y, HeightAt(R.X, R.Y));
 	}
 
+	bool Replay::Ricochets(const Round& R, int Target) const
+	{
+		if (!Here.bRicochet || (R.W != "rifle" && R.W != "mg") || R.R == Result::Miss || Target < 0 || !Rec) return false;
+		const Track& Tr = Rec->Tracks[static_cast<size_t>(Target)];
+		return Tr.IsVehicle() && ArmouredVehicle(Tr, Rec->BlockOf(Tr.Block));
+	}
+
+	Vec PathMoved(const Effect& E, const Vec& P, double Dt, double* OutTurn)
+	{
+		// (a field way turned by A radians clockwise seen from above, as LandFeed's heading grows)
+		auto Turned = [](const Vec& W, double A) { return Vec(W.X * std::cos(A) + W.Y * std::sin(A), -W.X * std::sin(A) + W.Y * std::cos(A), W.Z); };
+		if (E.Path.empty())
+		{
+			if (OutTurn) *OutTurn = E.Turn * Dt;
+			return E.Pivot + E.Carry * Dt + Turned(P - E.Pivot, E.Turn * Dt);
+		}
+		// (her middle and her turn at Dt: straight between the moments either side, held before the first and past the last)
+		const Effect::PathPoint& First = E.Path.front();
+		Vec Mid = First.At;
+		double Turn = First.Turn;
+		if (Dt >= E.Path.back().Dt)
+		{
+			Mid = E.Path.back().At;
+			Turn = E.Path.back().Turn;
+		}
+		else if (Dt > First.Dt)
+		{
+			size_t K = 1;
+			while (K + 1 < E.Path.size() && E.Path[K].Dt < Dt) ++K;
+			const Effect::PathPoint& A = E.Path[K - 1];
+			const Effect::PathPoint& B = E.Path[K];
+			const double S = B.Dt > A.Dt ? (Dt - A.Dt) / (B.Dt - A.Dt) : 1.0;
+			Mid = A.At + (B.At - A.At) * S;
+			Turn = A.Turn + (B.Turn - A.Turn) * S;
+		}
+		if (OutTurn) *OutTurn = Turn;
+		return Mid + Turned(P - First.At, Turn);
+	}
+
+	void Replay::PlateOf(const Round& R, int Target, Effect& Sh) const
+	{
+		const std::string Face = R.Fc.empty() ? std::string("front") : R.Fc;
+		const Track& Tr = Rec->Tracks[static_cast<size_t>(Target)];
+		// Her plate as the scene has her posed at the battle time played to (Now): the scene's cast (World::Plate), her
+		// skin's point (World::Skin), else her plain box at her place then. Handed over so, never moved on a guess.
+		const double Now = PlayedTo;
+		const LandFeed::Spot N0 = LandFeed::SpotAt(Tr, Now);
+		const Vec CN(N0.X, N0.Y, HeightAt(N0.X, N0.Y));
+		PlateSpot P;
+		Vec At, Normal;
+		const bool bCast = Here.Plate && Here.Plate(Target, R.N, P) && P.Normal.Length() > 0.5;
+		if (bCast)
+		{
+			// (as the scene gives it)
+		}
+		else if (Here.Skin && Here.Skin(Target, R.N, R.L, Face, R.U, R.H, At, Normal) && Normal.Length() > 0.5)
+		{
+			P = PlateSpot();
+			P.At = P.RoomMid = At; // (her skin's point alone, no room known: every round there)
+			P.Normal = Normal;
+		}
+		else
+		{
+			P = PlainPlate(Tr, Rec->BlockOf(Tr.Block), N0, CN.Z, Face, R.U, R.H);
+		}
+		Sh.To = P.At;
+		Sh.Normal = P.Normal;
+		Sh.RoomMid = P.RoomMid;
+		Sh.RoomA = P.RoomA;
+		Sh.RoomB = P.RoomB;
+		Sh.Floor = P.Floor;
+		Sh.Pivot = CN;
+		// Her path from Now to past the burst's last strike: the burst flies from Now (a frame or so after the rules fired
+		// it), its first round striking as it lands (Lands, or the flight of a slow round from her gun's distance if
+		// later), the rest at its rate after (a quarter of a second at least). Her middle on the ground and her heading
+		// from her track at every point her track keeps in that time (she goes straight between them, so a strike is
+		// where her plate is at its moment as she slows, stops, speeds up or turns) and every tenth of a second besides
+		// (her ground's rise and fall), at most 60 moments: never inside her, never left behind her.
+		// The kit's flight and rounds go by life's clock (World::Life a battle second): with life slower than the battle
+		// (Life under 1) they take more battle time, and her path runs that much further (Slow), so no late strike is
+		// left where her path stopped.
+		const double Lands = R.L + std::max(0.0, Now - R.T);
+		const double Slow = 1.0 / std::clamp(Here.Life, 0.25, 1.0);
+		const double Fly = (P.At - Sh.At).Length() / 600.0;
+		const double Span = std::clamp((Sh.Rounds - 1) / std::max(Sh.PerSecond, 0.1), 0.25, 3.0);
+		const double Until = std::clamp(std::max(Lands - Now, Fly * Slow) + Span * Slow + 0.1, 0.3, 6.0 * Slow);
+		std::vector<double> Moments;
+		const int Even = std::clamp(static_cast<int>(std::ceil(Until / 0.1)), 2, 30);
+		for (int K = 1; K <= Even; ++K) Moments.push_back(Until * K / Even);
+		for (const LandFeed::Point& Pt : Tr.At)
+		{
+			if (Pt.T > Now && Pt.T < Now + Until && Moments.size() < 59) Moments.push_back(Pt.T - Now);
+		}
+		std::sort(Moments.begin(), Moments.end());
+		Sh.Path.clear();
+		Sh.Path.reserve(Moments.size() + 1);
+		Effect::PathPoint Start;
+		Start.At = CN;
+		Sh.Path.push_back(Start);
+		double Heading = N0.F;
+		for (double M : Moments)
+		{
+			if (M <= Sh.Path.back().Dt + 1e-6) continue; // (one moment a millionth of a second)
+			Effect::PathPoint Pt;
+			Pt.Dt = M;
+			const LandFeed::Spot Sk = LandFeed::SpotAt(Tr, Now + M);
+			Pt.At = Vec(Sk.X, Sk.Y, HeightAt(Sk.X, Sk.Y));
+			Pt.Turn = Sh.Path.back().Turn + std::remainder(Sk.F - Heading, 2.0 * 3.14159265358979323846); // (the short way each step)
+			Heading = Sk.F;
+			Sh.Path.push_back(Pt);
+		}
+		// (and her steady way and turn through it, least squares, for a kit that takes no path)
+		double St = 0.0, Stt = 0.0, Sf = 0.0, Stf = 0.0;
+		Vec Sc, Stc;
+		for (const Effect::PathPoint& Pt : Sh.Path)
+		{
+			St += Pt.Dt;
+			Stt += Pt.Dt * Pt.Dt;
+			Sc = Sc + Pt.At;
+			Stc = Stc + Pt.At * Pt.Dt;
+			Sf += Pt.Turn;
+			Stf += Pt.Dt * Pt.Turn;
+		}
+		const double Many = static_cast<double>(Sh.Path.size()), Den = Many * Stt - St * St; // (above naught: three moments at least, 0.3 s)
+		Sh.Carry = (Stc * Many - Sc * St) * (1.0 / Den);
+		Sh.Turn = (Many * Stf - St * Sf) / Den;
+	}
+
 	void Replay::Step(double From, double To, std::vector<Effect>& OutFx, std::vector<Noise>& OutNoise, std::vector<Loss>& OutLoss)
 	{
 		if (!Rec || To < From) return;
@@ -500,6 +684,13 @@ namespace LandPlay
 			Sh.PerSecond = LookRate > 0.0 ? std::min(LookRate, 30.0) : B.PerSecond;
 			Sh.Ground = GroundAt(To.X, To.Y);
 			Sh.Round = R.N;
+			// Effects (R2), small arms off armour (World::bRicochet): a burst that strikes a tank, an armoured car or a
+			// half-track is drawn bouncing off her plate, its point and outward way: sparks and ricochets, never dirt
+			if (Ricochets(R, Target))
+			{
+				Sh.bArmour = true;
+				PlateOf(R, Target, Sh);
+			}
 			N.Rounds = B.Rounds;
 			N.PerSecond = B.PerSecond;
 			// (a support team's gun on its mount, release 2's "teamguns": the scene gives her own burst, heard as long as
@@ -564,6 +755,17 @@ namespace LandPlay
 		F.Way = Incoming;
 		F.CalibreMm = CalibreOf(R.W, Model, Army);
 
+		if (Ricochets(R, Target))
+		{
+			// Effects (R2), small arms off armour (World::bRicochet): its ricochets are its burst's (Fire's Shots); here the
+			// steel heard, the burst's rounds a rattle of pings (LandSound), whatever the rules made of it
+			const Burst B = BurstOf(R.W, Army, S >= 0 ? Rec->Tracks[static_cast<size_t>(S)].Role : std::string());
+			N.Kind = NoiseKind::Glance;
+			N.Rounds = B.Rounds;
+			N.PerSecond = B.PerSecond;
+			OutNoise.push_back(N);
+			return;
+		}
 		if (R.W == "rifle" || R.W == "mg")
 		{
 			// The kit's Shots lays the strikes in the dirt. On armour small arms only rattle: sparks and the ring.

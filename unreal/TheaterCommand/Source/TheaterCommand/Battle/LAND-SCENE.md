@@ -88,6 +88,9 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
      the burnt-out armour of battles fought here before (N laid, at most 20, burnt M months ago, the nations the
      battle's two sides'), standing in for a recording's root `"oldWrecks": {"count", "months", "nats", "per"}`. See
      "Old wrecks" below.
+   - `-TheaterLandRicochet` (release 2, on trial): small arms bounce off armour, with ricochets and a rattle of steel
+     (see "Small arms off armour" below). Without it, small arms on armour are as before (sparks, dust and one ring);
+     the log says which.
    - `-TheaterLandCraterOldEdge`: the shell holes' edge as before the art director's 23 November seam (no feather);
      `-TheaterLandMenFieldFrame`: the near men's meshes left at the field's corner (no motion vector), for the A/B.
    - `-TheaterLandHour=`: another hour (local sun time) for the sun.
@@ -116,8 +119,9 @@ camera comes back to its shot.
 ## What the scene draws
 
 - **Every shot is seen and heard.** Each round in the recording flashes at its muzzle and lands where it struck. Most
-  rounds miss (the land rules' odds), so most landings are dust in the grass or a chip off a wall. A shot on screen is
-  always heard; only far and off-screen shots give way when the mix is full.
+  rounds miss (the land rules' odds), so most landings are dust in the grass or a chip off a wall. A rifle's or a
+  machine gun's burst that strikes armour bounces off her (release 2: "Small arms off armour" below). A shot on screen
+  is always heard; only far and off-screen shots give way when the mix is full.
 - **A man hit falls and stays.** His fall is one of the soldier file's deaths for his stance (standing, running,
   kneeling, prone, in cover), picked so the same fall does not repeat nearby. He lies where he fell, on the slope of
   the ground, his rifle beside him, for the rest of the battle; the camera's last picture walks past the fallen.
@@ -823,6 +827,103 @@ for byte, with the switch off).
   burst re-kicks its dust every fourth round and lights its lamp each round. The lamps compete for the kit's two.
 - **Pictures**: `/mnt/project-files/battle-fx/muzzle/` (cloud preview: `FX_MG_VIEW=flash`, `FX_MG_GUN=mg:star`,
   `FX_DIM` for dusk, `FX_FLASH_AHEAD=2.2 FX_FLASH_OFF=2.2` for the star from ahead, `FX_GUN_ROW=at_gun:brake`).
+
+## Small arms off armour: ricochets (release 2, on trial: off unless `-TheaterLandRicochet`)
+
+Brian, 25 November 15:58Z: "are bullets taking out german tanks? cannon fire or bazookas should be the only thing
+taking them out ... bullets should be bouncing off it". The rules thread settles what a round does. This is the look
+and the sound: the war film's machine gun raking a tank. It is off unless the game is started with
+`-TheaterLandRicochet` (release 2, on trial); the ship list turns it on after the Mac test and the art director's
+pass. Without it the battle is as before, and the log's line "small arms on armour" says which.
+
+- **What is armour** (`LandPlay::ArmouredVehicle`, from what the replay sees: the track's role, her own model where the
+  recording names one (`LandFeed::Track::Model`, the rules' `"ml"`), else her block's): a tank of any model; an
+  assault gun or tank destroyer (the StuG, the M10, the SU-85, the Semovente); an armoured car (the Sd.Kfz. 222, the
+  M8, the ArmouredCar) and an AA half-track (the FlakHalftrack, the M16), which ride as tanks; an armoured infantry's
+  half-track (the Hanomag, the M3: a lorry with one of those models); a battery's self-propelled gun (a gun with a
+  model of her own: the M7, the Hummel, the Sexton, the SU-76). Soft, as ever: the lorry and the flak lorry, jeeps,
+  field cars, staff cars, motorcycles, and a towed gun (its shield still glances: FX4's flash and sparks). The rules
+  (land-rules.js, `mech`) give armoured infantry three carrier models, the Hanomag, the M3Halftrack and the Truck, and
+  name the first two armoured; the function agrees.
+- **The look.** A rifle's or a machine gun's burst at armour that the rules do not call a miss (glance, worn or kill:
+  no harm is shown for any) goes to the kit's `ShotsOnArmour` (`LandPlay::FxKind::Shots` with `bArmour`, its `To` on
+  her plate and `Normal` the plate's outward way). The plate comes from the first of these that answers:
+  1. Her drawn skin (`World::Plate`: LandKit's `Vehicle::PlateNow`). It gives the strike (her road wheels, sprockets,
+     idlers and tracks before her hull included), how far the plate runs flat about it (`RoomMid`, `RoomA`, `RoomB`:
+     the biggest rectangle of a 3 cm lattice where a round meets her first within 3 cm of the plane, on a face turned
+     within 25 degrees of it, nothing of her in front), and her floor under it (her deck under her turret's side, her
+     track guard under her hull's side). That search costs 0.5 ms on average and up to about 3 ms, too dear for the
+     game's frame (three bursts strike armour in one frame at worst). So with the switch on it is made once for every
+     rifle's and machine gun's strike on armour (`LandKit::Battle::bKeepPlates`; `Battle::Armoured`, which the game
+     sets to `LandPlay::ArmouredVehicle`, so a lorry's strikes are never searched), as she stood when it struck, and
+     kept in the struck body's own axes; on the frame `PlateNow` only turns it by her pose now. A strike not kept
+     gives her skin's point alone. A recording's plates are all searched as it loads. A live battle's are never
+     searched as its pieces grow her (`Battle::Extend`, on the game thread, costs what it costs with the switch off):
+     after the pieces of a frame, `PumpLive` calls `Battle::KeepPlates`, which searches the earliest strikes still to
+     be drawn until about a millisecond has passed (one search at least). The pieces come a second or more ahead of
+     the screen, so each plate is kept before its burst is drawn. A strike whose search finds no plate is not
+     searched again. A turret strike whose cast a later piece redoes (her turret trained again by a few centimetres)
+     keeps its plate, moved with the strike; it is searched again only if the new cast finds another body or moves
+     the strike more than a quarter of a metre.
+  2. Her skin's strike alone (`World::Skin`), with every round at its point.
+  3. A plain box on the face the rules name.
+
+  `LandPlay::Replay::PlateOf` hands the kit the plate as she is posed at the frame the burst is laid, and her path
+  through the burst (`Effect::Path`): her middle and her heading at every point her track keeps until past the
+  burst's last strike, and every tenth of a second besides, at most 60 moments. The kit lays the strikes on life's
+  clock (`World::Life`, the game's `-TheaterLandLife`), so with life slower than the battle (under 1) the path runs
+  that much further in battle time and the burst's last strikes still fall on it. Her track runs straight between its
+  points, so the kit, laying each strike where her plate is on that path, follows her exactly as she slows, stops,
+  speeds up or turns. Her steady way and turn through it (`Carry`, `Turn` about `Pivot`) go too, for a kit that takes
+  no path. The kit lays every round inside the room and lets its sparks ride with her.
+
+  Each round that strikes gives a tiny two-frame white-yellow flash on the plate, at least 3 px, so far off each strike
+  still twinkles. It throws 3 to 8 short sparks the way it glances, falling, cooling to orange and gone in under
+  0.3 s; far off they hold their full strength longer and cool only half way, so none fades to a dull brown fleck.
+  None falls through her deck or track guard. Now and then it leaves a faint grey puff of paint, and never a dust
+  spurt. Most tracers that strike go off again as ricochets, 10 to 50 degrees off the plate, slower, tumbling, dimmer
+  than the tracer coming in, each streak 4 to 6 m (shorter than a tank at 600 m). Far off there are fewer, bigger
+  sparks, never beads, and never none.
+
+  The recipe row is `bullet_ricochet` (tools/battle-fx/README.md, "A burst off armour: ricochets"). The old 8 mm
+  glance (FX4) is not sent for such a round. A miss is as before.
+- **The sound** (`LandSound`, `land.armourStrikes` in mix.json): the burst's glance (`NoiseKind::Glance` with its
+  `Rounds` and `PerSecond`) rattles. Up to `burstMost` (8) steel pings, about `burstShare` (0.8) of its rounds, are
+  spread over the burst. The game's bursts are 4 to 10 rounds (`LandPlay::BurstOf`), so a machine gun's burst of 6
+  to 10 rounds rattles 5 to 8 pings (10 rounds 8, 9 rounds 7, 8 or 7 rounds 6, 6 rounds 5) and one of 4 rounds 3. Each
+  is a take of
+  `steel_hit_01..03` (never the same twice running) with its own pitch and level (`burstPitchPercent` 8,
+  `burstDbSpread` 4). Every ping but the last is cut to `burstRingS` (0.25 s unless given) with a 0.05 s fade, so it
+  is a sharp clang and the steel rings out only at the end. A whine off it comes at `burstWhineChance` (0.6 unless
+  given). The mix's limits and same-take rule hold as ever. A single rifle round rings once, as before.
+- **The cloud test** (land_play, off unless `LAND_PLAY_RICOCHET` is set; `LAND_PLAY_RICOCHET=1 Tools/land_play/run.sh`
+  runs it on):
+  - "ricochet classes:" reads every model under Content/Models/Battle and checks the table of what is armour: 42
+    model files (3 of them no vehicle), 43 rows (23 armoured, 20 soft), none drawn the wrong way and none with no row.
+    "ricochet carriers:" reads the carriers the rules write (land-rules.js) and checks each: 0 wrong.
+  - "ricochets:" checks that every small-arms burst at armour, and no other, goes off her plate, with a unit outward
+    way, within 4 m of her middle and aimed inside the room it was given (Normandy 370 bursts, Prokhorovka 372, all
+    tanks: neither recording names a model of its own).
+  - "ricochets followed:" checks each strike against her plate where `SpotAt` has her at the strike's own moment,
+    the odd rounds through a stand-in for the scene's plate (`World::Plate`: her box's face, its room shrunk 0.1 m)
+    and the even ones through the replay's own plain box. Every strike in both recordings is within 3 cm (0.000 m the
+    most) and none is inside her; left standing at her landing, as before it followed her, the 99th was 1.22 and
+    1.75 m. It fails under 95 in 100 within 3 cm, a 99th over 5 cm, one over 0.25 m, one more than 5 cm inside her, a
+    burst with no path, or either way of handing the plate over not run. "ricochets on life's clock" fails a strike
+    that comes after the path she was handed ends; `LAND_PLAY_LIFE=0.5` runs it with life at half the battle's pace.
+  - "armour: the mix's rattle" checks the ping count of every burst the game fires with mix.json's own numbers (a
+    machine gun's 6 to 10 rounds at least 5, 4 rounds at least 3). "armour: a burst of 8 off a tank rattles" checks
+    that a probe mix with those numbers plays them over the burst, never one take twice running, every one but the
+    last cut short, that 30 rounds give no more than `burstMost`, and that a single round rings once.
+  - Off, every output is byte for byte 388ba015's but for its timings (g++ and clang++).
+  - The kit's own check is `tools/battle-fx/preview/ricochet_test.cpp`; her skin's plates are checked on the real
+    models by `Tools/land_kit` ("her plates as the kit is handed them", and "plates kept as the battle is made": each
+    kept plate is the plate searched out at her pose when it struck, every strike on armour searched once the
+    battle is loaded and none on a lorry, and `PlateNow` costs microseconds). `Tools/land_live` (kit.sh) grows a live
+    battle again with the plates kept: `Extend` must cost what it costs with the switch off, every plate must be
+    searched before the screen reaches its strike, and as many kept as when the battle is read whole.
+- **Mac ticket**: /mnt/project-files/effects-r2/tickets/ricochet-ticket.md. **Pictures**:
+  `/mnt/project-files/battle-fx/ricochet/` (the kit's preview, `fxpreview ... ricochet 30|150|600`), with notes.
 
 ## Shell and tank hits take limbs off (release 2, off until passed)
 

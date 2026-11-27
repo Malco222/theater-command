@@ -3017,6 +3017,90 @@
   "spurt_chance": 0.3,
   "spread_mil": 12
  },
+ "bullet_ricochet": {
+  "_how": "Effects (R2), small arms off armour (Brian, 25 November 15:58Z: 'are bullets taking out german tanks? cannon fire or bazookas should be the only thing taking them out ... bullets should be bouncing off it'; off unless -TheaterLandRicochet (release 2, on trial)). ShotsOnArmour: a rifle's or machine gun's burst striking a tank, an assault gun, a self-propelled gun, an armoured car or a half-track (LandPlay::ArmouredVehicle) bounces off her plate, as the war film's machine gun raking a tank. Each round that strikes, spread over the plate about the aim (bullet_strike.spread_mil of the range, held to spread_m across and up it) and inside the room the battle says the plate has there, edge_m short of its edges (none in the air past her edge, on a curve that leaves the plate, or inside her), where her plate is when it strikes (riding with her as she moves: its flash, sparks and paint carried with her): a two-frame (flash_s) near-white flash flash_m across, burning flash_over past white, in a faint warm halo (halo_m, halo_alpha), each held to flash_least_px on the screen (so by day at 150 to 600 m each strike still twinkles white); sparks a round thrown in a cone_deg cone about the mirror of its way in, opened square_open_deg more the squarer it struck and never nearer the plate than least_off_deg, at spark_mps skewed by the power spark_uneven (most slow and short, a few fast and long), spark_wide_m wide, burning spark_over past white, falling, white-yellow (spark) cooling to orange (spark_old) by the end of its life, gone in spark_life_s (under 0.3 s), going out before it falls back onto a roof or a glacis, onto her own floor under the plate (her deck under her turret, her track guard under her hull's side: the battle's) or into the ground; chip_chance of rounds a faint grey puff of paint (chip, chip_alpha). A tracer that strikes (the gun's own one in tracer.one_in) is drawn to the plate and never past it, and while it still burns (tracer.life_s) tracer_chance of them go off again as a ricochet: tracer.ricochet.deflect_deg off the plate the way it was going, up to tracer_yaw_deg aside, at tracer.ricochet.slower of the tracer's speed, falling (tracer_drop), for tracer_life_s, its way kinked kink_deg at kinks moments as it tumbles and kink_slow slower at each, tracer_alpha bright (dimmer than the tracer coming in, so a far tank is not hidden behind them) and dimming; its streak tracer_streak_s of its flight (0.014 s: 4 to 6 m, shorter than a tank at 600 m and about half a hull at 150 m); a way headed down turned up as shallowly (as a skip off the ground would), and drawn only to where it meets the ground. Never a dust spurt on the armour. Far off: where a metre on the plate is under full_px on the screen, that share of sparks (never under far_least of them, never under one a round), each the root of it bigger and drawn out to spark_long_px long (never a bead), holding its full strength spark_hold_far of its life and cooling only spark_cool_far of the way to spark_old (so none fades to a dull brown fleck over her paint); a busy screen (the room over halve_past full) half as many, a quarter past four fifths full. Every key is read with its default.",
+  "sparks": [
+   3,
+   8
+  ],
+  "cone_deg": [
+   40,
+   70
+  ],
+  "square_open_deg": 60,
+  "least_off_deg": 6,
+  "spark_mps": [
+   3,
+   26
+  ],
+  "spark_uneven": 2.5,
+  "spark_life_s": [
+   0.08,
+   0.24
+  ],
+  "spark_wide_m": 0.012,
+  "spark_least_px": 1.3,
+  "spark_long_px": 5,
+  "spark_hold_far": 0.7,
+  "spark_cool_far": 0.5,
+  "spark": [
+   255,
+   240,
+   190
+  ],
+  "spark_old": [
+   255,
+   180,
+   80
+  ],
+  "spark_over": 1.4,
+  "flash_m": 0.05,
+  "flash_s": 0.034,
+  "flash_over": 2.0,
+  "flash": [
+   255,
+   250,
+   226
+  ],
+  "halo_m": 0.2,
+  "halo_alpha": 0.35,
+  "halo": [
+   255,
+   214,
+   132
+  ],
+  "flash_least_px": 3,
+  "spread_m": [
+   0.45,
+   0.25
+  ],
+  "edge_m": 0.03,
+  "chip_chance": 0.06,
+  "chip_alpha": 0.22,
+  "chip": [
+   138,
+   136,
+   130
+  ],
+  "tracer_chance": 0.8,
+  "tracer_yaw_deg": 25,
+  "tracer_life_s": [
+   0.2,
+   0.45
+  ],
+  "tracer_drop": 9.8,
+  "kinks": 2,
+  "kink_deg": [
+   8,
+   25
+  ],
+  "kink_slow": 0.75,
+  "tracer_alpha": 0.7,
+  "tracer_streak_s": 0.014,
+  "full_px": 25,
+  "far_least": 0.2,
+  "halve_past": 0.6
+ },
  "tracer": {
   "_how": "Brian 2026-11-18: 'i want tracer fire shown as well. 1 out of every 5 bullets with yellow'. As a belt was loaded: every fifth round of a gun is a tracer; the four between are not seen. Out of step between guns.",
   "one_in": 5,
