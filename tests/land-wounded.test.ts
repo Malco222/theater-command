@@ -416,6 +416,10 @@ const all: { name: string; seat: Seat; on: Seen; plain: Seen }[] = [];
  * what the row's old line recorded. One moved: Prokhorovka 13, bearers on, nobody seated. With the bearers rule on
  * this row stands aside (woundsOn false), so that key is the base's own drawing, and the pass-2 line draws that battle
  * otherwise than the old line did from 306.5 s on (the pass-2 line with the bearers alone gives the same d511d769).
+ * Recorded once more where the row is carried onto ground's crush mend (27 November 15:52Z: next-bc d57656614 + the
+ * row, the same way: all 16 keys read with stun() struck out, and stunned: false gave the same 16). Fifteen stand. The
+ * same one moved, to 40a2cce8: a tank of a block that did not strike a man no longer crushes him (crushOf's third
+ * argument), which changes the base's own drawing of that battle; next-bc itself with the bearers alone gives 40a2cce8.
  */
 const REF_TABLE: Record<string, string> = {
   'normandy-1944-11-bearers-seated': 'd58c2279',
@@ -427,7 +431,7 @@ const REF_TABLE: Record<string, string> = {
   'normandy-1944-3-shipped-seated': '546ac04f',
   'normandy-1944-3-shipped-unseated': 'f7a25506',
   'prokhorovka-1943-13-bearers-seated': '3017872a',
-  'prokhorovka-1943-13-bearers-unseated': 'd511d769',
+  'prokhorovka-1943-13-bearers-unseated': '40a2cce8',
   'prokhorovka-1943-13-shipped-seated': '810e8ae2',
   'prokhorovka-1943-13-shipped-unseated': '489cc4e',
   'prokhorovka-1943-5-bearers-seated': 'cc7c7404',
