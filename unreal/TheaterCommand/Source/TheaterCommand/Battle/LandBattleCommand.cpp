@@ -1666,7 +1666,7 @@ void ALandBattle::GeneralDo(const FString& Word)
 			S.GeneralIn.bHillView = true;
 			if (!S.GeneralEye.HillView())
 			{
-				Say("HILL VIEW: I AGAIN GOES BACK. THE WHEEL RUNS ALONG THE LOW LINE; SHIFT+W OR S TILTS THE VIEW");
+				Say("HILL VIEW: I AGAIN TAKES YOU BACK. THE WHEEL GOES NEARER OR FURTHER, STAYING LOW; SHIFT+W OR S TILTS THE VIEW");
 			}
 		}
 	}
@@ -1683,13 +1683,13 @@ void ALandBattle::GeneralDo(const FString& Word)
 			if (Locked >= 0 && (Wanted < 0 || Wanted == Locked))
 			{
 				S.GeneralIn.bFollow = false;
-				Say("LOCK OFF: THE VIEW IS YOURS");
+				Say("LOCK OFF: THE VIEW IS YOURS AGAIN");
 			}
 			else if (Wanted >= 0)
 			{
 				S.GeneralIn.GoBlock = Wanted;
 				S.GeneralIn.bFollow = true;
-				Say("LOCKED ON: THE VIEW FOLLOWS THIS UNIT. MOVE THE VIEW, OR L AGAIN, LETS GO");
+				Say("LOCKED ON: THE VIEW FOLLOWS THIS UNIT. MOVE THE VIEW ELSEWHERE, OR PRESS L AGAIN, TO LET GO");
 			}
 			else
 			{
