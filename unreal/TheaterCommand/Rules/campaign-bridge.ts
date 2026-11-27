@@ -112,7 +112,7 @@ import { armyRound, armyStands, frontIdle, nextArmy, roundCount, roundQuestion, 
 import { AIR, MISSION, SHIP_AIR_TIP, airRange, airTargets, fightersOver, flakGuns, forecastAir, gunsAt as gunsRound, gunsStop, km as airKm, moveTargets, noneSeen, overOcean, seenAgo, skyOver, standingGuns, whyNotMission } from '../../../src/campaign/air';
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
-import { airAct, airPage } from '../../../src/campaign/airpages';
+import { airAct, airPage, crewRollOn, setCrewRoll } from '../../../src/campaign/airpages';
 import type { FoughtAir } from '../../../src/campaign/airfought';
 import { strafedLine } from '../../../src/campaign/strafers';
 import type { FieldBill } from '../../../src/campaign/game';
@@ -193,6 +193,7 @@ import { nicknamesOn, setNicknames } from '../../../src/campaign/nicknames';
 import { airNamesOn, setAirNames } from '../../../src/campaign/airnames';
 import { markedOn, setMarked } from '../../../src/campaign/marked';
 import { thePlace } from '../../../src/campaign/bombers';
+import { kitLine, pressedOn, setPressed } from '../../../src/campaign/pressed';
 import { cancelDump, dumpPlaces, dumpPrice, dumpsOf, dumpsOn as dumpsAreOn, dumpsView, firstFront, frontsAt, logisticsSet, lorryPool, orderDump, poolOn as lorryPoolOn, setLogistics, setLorryFirst, shiftOn as lorryShiftOn, wagonsOn as wagonsAreOn, whyNoDump, LOGI, type LogisticsSwitch } from '../../../src/campaign/logistics';
 import { railheads } from '../../../src/campaign/rails';
 import { fuelMet, laneNotCounted } from '../../../src/campaign/resources';
@@ -821,6 +822,9 @@ function drawView(step = false) {
       school: !!c.school, schoolTo: grade(drillTo(c.xp)), schoolWhy: c.nat === s.human && !c.school ? whyNoSchool(s, c) ?? '' : '',
       // How worn its uniforms and kit look (release 2, looks only): 0.1 fresh to 1 after six weeks in the line.
       wear: wearOf(c), fresh: c.fresh ?? 0,
+      // (Release 2, pressed.ts, behind its switch) The captured tanks it has pressed into service, as its card's line:
+      // "14 captured Soviet tanks in its own colours." Absent where it has none.
+      ...(c.kit && pressedOn(s) && (c.nat === s.human || (s.human && c.joint === s.human)) ? { kit: kitLine(s, c) } : {}),
       ...markOf(c),
       ...(fresh.has(c.id) ? { ready: true } : {}),
       // (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) Where breaking corps up is on: why this corps cannot have
@@ -1117,6 +1121,9 @@ function drawView(step = false) {
     beatReach: beatReachOn(s),
     // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
     settledTowns: settledTownsOn(s),
+    // (Release 2, pressed.ts) Whether captured tanks are pressed into service; (airpages.ts) whether a bomber group's page has THE CREWS.
+    pressedTanks: pressedOn(s),
+    crewRoll: crewRollOn(s),
     // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
     townQueue: townQueueOn(s),
     // (Release 2, citydefences.ts) Whether searchlights can be built, the guns fight by night by what they see and a
@@ -8244,6 +8251,22 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       : `${label} ${logisticsSet(s, which) ? `${which === 'dumps' ? 'are' : which === 'wagons' ? 'are' : 'is'} on${columnsAreOn(s) ? '' : ' (they work only with the supply columns on)'}.` : `${which === 'lorryShift' ? 'is' : 'are'} off.`}`;
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'crewrollrule') {
+    // (Release 2, airpages.ts) The bomber crews' page, switched in any month: it shows the records and moves none.
+    ok = setCrewRoll(s, part[1] === 'on');
+    note = crewRollOn(s)
+      ? "Bomber crews by name: a bomber group's page has THE CREWS, its bombers one by one with the missions each has flown and how near each crew is to the end of its tour."
+      : "Bomber crews by name are off: the group's page has no list of its crews. Their tours go on as before.";
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'pressedtanksrule') {
+    // (Release 2, pressed.ts) Captured tanks pressed into service, switched in any month.
+    ok = setPressed(s, part[1] === 'on');
+    note = pressedOn(s)
+      ? 'Captured tanks are pressed into service: after a battle won, the beaten side\'s tanks left on the field that can be got running again join the winner\'s armour that fought, in its colours, and wear out for want of spare parts. The same for every army.'
+      : 'Captured tanks are not pressed into service: a win shows a few of them in the winner\'s paint, and no more.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'atomrule') {
     // (Release 2, atom.ts) The atomic project, switched in any month.
     ok = setAtom(s, part[1] === 'on');
@@ -9432,6 +9455,11 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, offerCalls(g
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).logistics = (which: LogisticsSwitch, on: boolean) => { const s = game(); const set = setLogistics(s, which, !!on); return { set, on: logisticsSet(s, which) }; };
 // (Release 2, the home front board.) TC.homeFront() answers the board alone, or null where there is none; the room is page('home').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).homeFront = () => homeBoard(game());
+// (Release 2, airpages.ts) The bomber crews' page: TC.crewRoll(on) at any time; the options page uses act('crewrollrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).crewRoll = (on: boolean) => { const s = game(); setCrewRoll(s, !!on); return { on: crewRollOn(s) }; };
+// (Release 2, pressed.ts) Captured tanks pressed into service: TC.pressedTanks(on) at any time; the options page uses
+// act('pressedtanksrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).pressedTanks = (on: boolean) => { const s = game(); setPressed(s, !!on); return { on: pressedOn(s) }; };
 // ---- (Release 2 assembly) The ship list's campaign switches (Brian, 25 November 2026 01:10Z: "turn them on automatically") ----
 // The 3D's release 2 ship list (Source/TheaterCommand/Release2Ship.h) names the grand campaign's release 2 rule switches
 // that ship ON, by the ids OPTIONS presses them with (act('<id>:on')). A grand war takes each one once: as it opens, the
@@ -9468,6 +9496,10 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   'logistics:dumps': (s) => setLogistics(s, 'dumps', true),
   // (Release 2, atom.ts: the atomic project, switched in any month, so an older war takes it too.)
   atomrule: (s) => setAtom(s, true) && atomOn(s),
+  // (Release 2, pressed.ts: captured tanks pressed into service, switched in any month, so an older war takes it too.)
+  pressedtanksrule: (s) => setPressed(s, true) && pressedOn(s),
+  // (Release 2, airpages.ts: the bomber crews' page, switched in any month; it shows records and moves nothing.)
+  crewrollrule: (s) => setCrewRoll(s, true) && crewRollOn(s),
 };
 function r2Ship(ids: string[]) {
   const s = game();

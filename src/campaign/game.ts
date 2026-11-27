@@ -79,6 +79,7 @@ import { engRoom, islandOf, roomAt, roomRefusal, roomSays } from './islands';
 import { frontOfRow, onLiveFront } from './planfronts';
 import { bookKept } from './stations';
 import { floorWords, witherAt, witherDrop, witherFed, witherMonth, withered } from './wither';
+import { pressTanks, pressedMonth, pressedOn, pressedWords } from './pressed';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -3353,7 +3354,13 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   wreckBump(g, rep);
   // (captured kit, looks only: a heavy win over an army with tanks leaves some of them in the winner's hands, a few of
   // them to be fielded in its paint; a fixed throw of the battle's own numbers, so no die of the war's is spent)
-  capturedKit(g, rep, target);
+  // (Release 2, pressed.ts: with captured tanks pressed into service switched on, the tanks are real in place of that
+  // look: the beaten side's repairable tanks on the field join the winner's armour that fought, and the look follows them.)
+  if (pressedOn(g)) {
+    const took = pressTanks(g, rep, attackers, defenders);
+    const words = took ? pressedWords(g, took, target.name) : '';
+    if (took && words) headline(g, 'info', words, took.took.some((t) => g.corps.find((c) => c.id === t.id)?.nat === g.human) ? g.human! : took.from, target.id);
+  } else capturedKit(g, rep, target);
   // The generals' luck on the main fronts is counted off the main fronts' own battles, for the same reason.
   if (aside) g.flags.asideBattles = (g.flags.asideBattles ?? 0) + 1;
   if (late) { g.flags.lateBattles = (g.flags.lateBattles ?? 0) + 1; g.flags[`fought:${target.theatre}`] = (g.flags[`fought:${target.theatre}`] ?? 0) + 1; }
@@ -6324,6 +6331,9 @@ export function startPhase(g: Game, nat: string): void {
   // (And, with the nation's footing switched on, what holding rearmament or all-out war takes: ruling 172.)
   const pcBase = pcIncome(nat, g) + civicSum(g, nat).pc + govCapital(g, nat), pcNet = pcBase + footHold(g, nat, pcBase);
   n.pc = Math.max(0, Math.min(Math.max(n.pc, DIPLOMACY.pcCap), n.pc + (g.flags.open === 1 ? pcNet : Math.max(0, pcNet))));
+  // (Release 2, pressed.ts: captured tanks in service break down for want of parts before the month's drafts make the
+  // corps good. Nothing with its switch off.)
+  pressedMonth(g, nat);
   const perDiv = PRODUCTION.replacementCost;
   const tempo = freshOffensive(g, nat);
   const army = g.corps.filter((c) => c.nat === nat);

@@ -1,0 +1,9 @@
+{
+  "_note": "Captured tanks pressed into service (release 2; Brian's yes of 27 November 2026 05:23Z). src/campaign/pressed.ts. repair: the share of the beaten side's tanks knocked out on a field the winner holds that its workshops can get running again. worth: what one of them adds to a corps, against one of its own (no spare parts, a crew new to it). wear: the share of those still running that break down each month for want of parts, and 'cut' that share again for a corps out of supply. least: fewer than this many vehicles is not news and is not booked. blocks: at most this many tank blocks of a battle side are drawn as the captured make.",
+  "repair": 0.25,
+  "worth": 0.5,
+  "wear": 0.1,
+  "cut": 2,
+  "least": 3,
+  "blocks": 3
+}
