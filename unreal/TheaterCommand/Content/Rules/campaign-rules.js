@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f142aa32e 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of acf6ac794 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -115050,13 +115050,15 @@
       } else {
         row2.sign = "bmr";
         row2.tag = att ? r.won ? "HIT" : "MISSED" : r.won ? "HIT" : "HELD";
-        const [pic, place3, hit, miss] = r.mission === "line" ? ["rail-yard", `${town} rail yard`, `${what} cut the railway there.`, "The bombs fell wide. The line still runs."] : r.mission === "harbour" ? ["harbour", /\bHarbou?r$/.test(r.place) ? r.place : `${r.place} harbour`, `${what} struck the ships in harbour.`, "The raid on the harbour was beaten off."] : r.mission === "fleet" ? ["fleet", cap18(the4(r.ships?.[0]?.fleet ?? r.place)), `${what} struck the fleet at sea.`, "The strike on the fleet was beaten off."] : r.mission === "strike" ? ["fleet", cap18(r.place.replace(/^the /, "The ")), `${what} struck the shipping there.`, "The strike on the shipping was beaten off."] : r.mission === "ground" ? ["troops", r.place, `${what} struck the troops there.`, "The raid on the troops was beaten off."] : r.mission === "town" ? ["town", town, `${what} broke down its defences.`, "The raid on its defences was beaten off."] : ["factories", r.place, `${what} hit its factories${r.mission === "night" ? " by night" : ""}.`, "The bombers were beaten off."];
+        const named7 = cityDefences(g2);
+        const [pic, place3, hit, miss] = r.mission === "line" ? ["rail-yard", `${town} rail yard`, `${what} cut the railway there.`, "The bombs fell wide. The line still runs."] : r.mission === "harbour" ? ["harbour", named7 ? cap18(harbourOf(placeName2(r.place))) : /\bHarbou?r$/.test(r.place) ? r.place : `${r.place} harbour`, `${what} struck the ships in harbour.`, "The raid on the harbour was beaten off."] : r.mission === "fleet" ? ["fleet", cap18(the4(r.ships?.[0]?.fleet ?? r.place)), `${what} struck the fleet at sea.`, "The strike on the fleet was beaten off."] : r.mission === "strike" ? ["fleet", cap18(r.place.replace(/^the /, "The ")), `${what} struck the shipping there.`, "The strike on the shipping was beaten off."] : r.mission === "ground" ? ["troops", named7 ? placeName2(r.place, true) : r.place, `${what} struck the troops there.`, "The raid on the troops was beaten off."] : r.mission === "town" ? ["town", town, `${what} broke down its defences.`, "The raid on its defences was beaten off."] : ["factories", named7 ? placeName2(r.place, true) : r.place, `${what} hit its factories${r.mission === "night" ? " by night" : ""}.`, "The bombers were beaten off."];
         row2.picture = pic;
         row2.place = place3;
         row2.line = r.won ? att ? hit : hit.replace(/^([\d,]+) (bombers|aircraft)/, "Their $2") : miss;
         const low2 = place3.replace(/^The /, "the ");
+        const said2 = !named7 ? place3 : pic === "harbour" ? harbourOf(placeName2(r.place)) : pic === "troops" || pic === "factories" ? placeName2(r.place) : place3;
         const shipAt = g2.seas[r.zone] ? seaWhere(g2.seas[r.zone].name) : `in ${low2}`;
-        row2.head = r.mission === "fleet" || r.mission === "strike" ? r.won ? `${r.mission === "fleet" ? place3 : `Shipping ${shipAt}`} is struck from the air` : att ? `The strike on ${r.mission === "fleet" ? low2 : `shipping ${shipAt}`} fails` : `The strike on ${r.mission === "fleet" ? low2 : `shipping ${shipAt}`} is beaten off` : r.won ? `${place3} is bombed` : att ? `The raid on ${place3} fails` : `${place3} beats off the raid`;
+        row2.head = r.mission === "fleet" || r.mission === "strike" ? r.won ? `${r.mission === "fleet" ? place3 : `Shipping ${shipAt}`} is struck from the air` : att ? `The strike on ${r.mission === "fleet" ? low2 : `shipping ${shipAt}`} fails` : `The strike on ${r.mission === "fleet" ? low2 : `shipping ${shipAt}`} is beaten off` : r.won ? `${place3} is bombed` : att ? `The raid on ${said2} fails` : `${place3} beats off the raid`;
       }
       row2.follows = r.result;
       const sunkHere = shipsHit ? shipCount(shipsHit) : 0;
