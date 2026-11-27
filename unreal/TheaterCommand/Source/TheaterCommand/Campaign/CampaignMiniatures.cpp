@@ -1906,6 +1906,10 @@ void FMiniatureMesh::WarmModels(const TArray<FString>& Nations, int32 CalendarYe
 	TArray<FString> Soon, Later;
 	Names(Soon, Nations, CalendarYear, Designs, true);
 	Names(Soon, Nations, CalendarYear + 1, NextDesigns, true);
+	// (the agents' sculpts, which no name function names: CampaignMapActor.cpp ShowAgents. The caught mark first shows in a
+	// month end, the month an agent is first caught. Both files by their exact names: the release-1 Agent* files are not read.)
+	Add(Soon, TEXT("AgentReader"), true);
+	Add(Soon, TEXT("AgentReaderMark"), true);
 	Names(Later, Others, CalendarYear, Designs, false);
 	Names(Later, Others, CalendarYear + 1, NextDesigns, false);
 	// (what is new goes before what waits from an earlier month)
