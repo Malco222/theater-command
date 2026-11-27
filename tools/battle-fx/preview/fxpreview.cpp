@@ -2496,12 +2496,15 @@ namespace
 				for (int K = 0; K < Got; ++K)
 				{
 					const Battle::LanePoint& L = Strip[static_cast<size_t>(K)];
-					// (its width on the screen as the eye sees it: the part square to the eye's line, so a lane seen low and edge-on
-					// counts as thin as it looks)
+					// (its width on the screen as the eye sees it, across the lane as the screen shows it: the part of its width
+					// square both to the eye's line and to the lane's own way there, so a lane seen low and far, running across the
+					// picture, counts as thin as it looks; the lane running straight at the eye, square to the eye's line alone)
 					const Vec ToIt = Vec(L.At.X, L.At.Y, 0.08) - Cam.Eye;
 					const double Off = std::max(ToIt.Length(), 1.0);
 					const Vec Line = ToIt * (1.0 / Off), Span = L.Across * (L.Left + L.Right);
-					const double Wide = (Span - Line * Span.Dot(Line)).Length() * Cam.Ppr / Off;
+					const Vec Way = Strip[static_cast<size_t>(std::min(K + 1, Got - 1))].At - Strip[static_cast<size_t>(std::max(K - 1, 0))].At;
+					const Vec Normal = Line.Cross(Vec(Way.X, Way.Y, 0.0));
+					const double Wide = (Normal.Length() > 1.0e-3 * std::max(Way.Length(), 1.0e-6) ? std::fabs(Span.Dot(Normal.Unit(Vec(0.0, 0.0, 1.0)))) : (Span - Line * Span.Dot(Line)).Length()) * Cam.Ppr / Off;
 					const double Floor = 0.55 * Wide < 1.5 ? 1.5 / std::max(0.55 * Wide, 1e-3) : 1.0;
 					const Vec Left = L.At + L.Across * (L.Left * Floor), Right = L.At - L.Across * (L.Right * Floor);
 					const Vec Across[5] = { Left, L.At + (Left - L.At) * 0.55, L.At, L.At + (Right - L.At) * 0.55, Right };
