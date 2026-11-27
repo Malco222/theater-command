@@ -56,7 +56,7 @@ import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, rai
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willBurn } from './prizes';
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
-import { formedLine, joinedLine, nationDone, notFormedLine, rowDone, tellLoan, tellPlace, tellWait, waitedOn } from './arrivalwaits';
+import { drawnLine, formedLine, joinedLine, nationDone, notFormedLine, rowDone, tellLoan, tellPlace, tellWait, waitedOn } from './arrivalwaits';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -5870,6 +5870,12 @@ function heardOwn(g: Game, nat: string, i: number, told: boolean | null): void {
   if (h) h.told = told;
 }
 
+/** The month's note of a theatre draw that passed over a corps at the front (`draw`): whether the player was told, once the row formed. */
+function heardDraw(g: Game, nat: string, i: number, told: boolean | null): void {
+  const h = (HOLDS.get(g) ?? []).find((x) => x.turn === g.turn && x.nat === nat && x.i === i && x.path === 'draw');
+  if (h) h.told = told;
+}
+
 /**
  * ONE pure reader (it writes nothing: tests/contact-r3-holds) of the holds of the rule's own made in `month` (this
  * month by default), on every path, each with whether its wait is WRITTEN (`wait:<i>` holds that month; null for a
@@ -6438,6 +6444,9 @@ function expeditions(g: Game, nat: string, take?: number): void {
       } else if (j >= 0 && !g.flags[`sent:${j}`]) g.flags[`takecut:${j}`] = o.takes.share;
     }
     standDown(reg);
+    // (The corps the theatre draw passed over for the one test, below: told in the arrival's headline where the row is
+    // the player's, arrivalwaits.ts `drawnLine`.)
+    const skipped: Corps[] = [];
     if (o.from && !Array.isArray(o.from)) {
       // A formation put together where it stands, out of the army around it, is not itself broken up for the next one.
       const here = theatreName(reg) === o.from;
@@ -6448,7 +6457,6 @@ function expeditions(g: Game, nat: string, take?: number): void {
       // short of free corps gives what it has, as a theatre short of corps always did.)
       // (Each corps the draw passes over for the one test, while it still needs divisions, is a hold of the rule's own:
       // `noteHold`, after the draw. One a claim keeps is that claim's.)
-      const skipped: Corps[] = [];
       const held = g.flags.fromWait === 1 && contactRuleActs(g, g.byName[row[5]]) ? (x: Corps): boolean => {
         if (corpsInContact(g, x.nat, x, leavingNow)) { if (!skipped.includes(x)) skipped.push(x); return true; }
         return claims.some((q) => q.from === x && q.stays);
@@ -6464,9 +6472,17 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // An army that marched there, or is forming up at home, simply arrives.
     const bySea = reg.port && (reg.overseas || (g.nations[nat].seaSupply && reg.owner !== nat));
     // (The telling: a row of the player's that waited on the front, or came without its corps at the front: arrivalwaits.ts.)
-    const said = formedLine(g, i, was, inFight && own, c, reg, !!bySea, inFight);
+    const formed = formedLine(g, i, was, inFight && own, c, reg, !!bySea, inFight);
+    // (The player's own theatre draw that passed over a corps at the front: told in section 5's form, where the telling
+    // has nothing else to say of the row this month. The UI director's B5 of 16:07Z, 27 November 2026.)
+    const drew = !formed && !(own && inFight) && skipped.length ? drawnLine(g, i, skipped, c, reg, !!bySea) : null;
+    const said = formed ?? drew;
     // (A row that came with men of its own while its corps are held: told where the formed headline says so.)
     if (own && inFight) heardOwn(g, nat, i, row[1] === g.human && g.human ? !!(said?.alone || said?.after) : null);
+    // (Which of the three lines below is said: the row's news, its general's, or the bare arrival, the player's alone.)
+    const by = o.news ? 'after' : o.gen && (!claims.length || generalOf(g, c)?.name === o.gen) ? 'after' : nat === g.human ? 'alone' : null;
+    // (The draw's hold is told where its words are in the line said: the rule's reader, `ruleHolds`.)
+    if (skipped.length) heardDraw(g, nat, i, row[1] === g.human && g.human ? !!drew && !!by && !!drew[by] : null);
     // A row that tells its own news says more than the bare arrival would.
     if (o.news) headline(g, 'event', said?.after ? `${o.news} ${said.after}` : o.news, nat, reg.id);
     // (A living corps come itself under the row keeps the general it has: the line names the row's only where he commands it.)

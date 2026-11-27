@@ -78,7 +78,9 @@ describe("S1-1: a lent corps the one test holds is no corps 'on its way out' to 
 // ---- T3-1: the reader counts the player's own hold that was not told ------------------------------------------------
 
 describe("T3-1: ruleHolds counts the player's own hold that was never told as untold", () => {
-  it("his own theatre draw passes over a corps the test holds: no sentence exists, so it is told false, and untold", () => {
+  // (Round 4, W4-3: the UI director's B5 of 16:07Z, 27 November 2026, "Pass your lean, section 5's form", gives this hold
+  // its sentence, so it is told now, and the reader says so: told true, untold false. Was: told false, untold true.)
+  it("his own theatre draw passes over a corps the test holds: told in section 5's form (her B5), so told, and not untold", () => {
     clear();
     const g = startOpen(createGame(1, null));
     setFromWait(g, true);
@@ -95,7 +97,8 @@ describe("T3-1: ruleHolds counts the player's own hold that was never told as un
     const i = addRow([2, 'GER', 'Test Theatre Army', 'inf', 1, 'Magdeburg', { from: 'the Balkans' }]);
     month(g, 2);
     expect(held.divs).toBe(3);
-    expect(ruleHolds(g).filter((h) => h.path === 'draw').map(({ turn, ...h }) => h)).toEqual([{ nat: 'GER', i, row: 'Test Theatre Army', path: 'draw', corps: ['Held Test Corps'], waits: false, written: null, told: false, untold: true }]);
+    expect(ruleHolds(g).filter((h) => h.path === 'draw').map(({ turn, ...h }) => h)).toEqual([{ nat: 'GER', i, row: 'Test Theatre Army', path: 'draw', corps: ['Held Test Corps'], waits: false, written: null, told: true, untold: false }]);
+    expect(g.headlines.filter((h: any) => h.turn === 2 && /Test Theatre Army/.test(h.text)).map((h: any) => h.text)).toEqual([`The Test Theatre Army has arrived in Magdeburg without your Held Test Corps, which is at the front in ${line.name} and stays a corps of its own.`]);
   });
 });
 

@@ -353,6 +353,27 @@ export function formedLine(g: Game, i: number, was: WaitedOn | null, own: boolea
 }
 
 /**
+ * The words the month a row of the player's forms from a theatre draw (game.ts `expeditions`, `from` a theatre) that
+ * passed over corps of his the one test holds at the front (`skipped`): the UI director's B5 of 16:07Z, 27 November
+ * 2026, "Pass your lean, section 5's form: {Row} has {arrived in / landed at} {place} without your {corps}, which is at
+ * the front in {X} and stays a corps of its own. After a general's line or news: The arrival is formed without your
+ * {corps}, which is at the front in {X} and stays a corps of its own. (the tail kept, as section 5)." `alone` takes the
+ * place of today's bare line, `after` is said after the row's news or its general's line. Several corps: section 5's
+ * two form, the place once where they share it (section 7 case 7); she gives no form for several after a general's line
+ * or news, so `after` is null there. Null where a corps passed over is not his. Writes nothing.
+ */
+export function drawnLine(g: Game, i: number, skipped: Corps[], c: Corps, reg: Region, bySea: boolean): { alone: string | null; after: string | null } | null {
+  const row = ROWS()[i];
+  if (!row || g.flags.fromWait !== 1 || !g.human || row[1] !== g.human || !skipped.length || skipped.some((x) => x.nat !== g.human)) return null;
+  const head = `${named(c.name, true)} has ${bySea ? 'landed at' : 'arrived in'} ${reg.name}`;
+  if (skipped.length === 1) {
+    const tail = `without your ${skipped[0].name}, which is at the front in ${placeOf(g, skipped[0])} and stays a corps of its own.`;
+    return { alone: `${head} ${tail}`, after: `The arrival is formed ${tail}` };
+  }
+  return { alone: `${head} without ${join(skipped.map((x) => `your ${x.name}`))}, which are at the front in ${join([...new Set(skipped.map((x) => placeOf(g, x)))])} and stay corps of their own.`, after: null };
+}
+
+/**
  * The words the month a told row joins a corps already landed (`joins`, game.ts `expeditions`): `alone` where the row
  * has no news of its own (today nothing is said then), `after` said after its news (section 4). The UI director's
  * section 8 point 3, 02:10Z, 26 November 2026: "{Row} has joined {the Old Corps} in {place}, formed from your {Test
