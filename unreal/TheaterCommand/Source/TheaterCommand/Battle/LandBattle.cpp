@@ -12,6 +12,7 @@
 #include "Battle/LandCrowd.h" // TK1
 #include "Battle/LandScape.h"
 #include "Battle/LandShade.h"
+#include "Battle/LandStone.h"
 #include "Battle/LandTeamGun.h"
 #include "Battle/LandVat.h" // SO1
 #include "Camera/CameraActor.h"
@@ -4093,6 +4094,35 @@ void ALandBattle::MakeMen()
 			Out.bBench = B.bBench;
 			return true;
 		});
+	}
+	// No man is drawn in a wall's stone (a mend of a fault in the game, 27 November 2026; LandStone.h, LandMen's
+	// SetStone): the rules place the men knowing nothing of the field's stone walls, and a man whose place fell in one
+	// showed as a helmet, two arms and a rifle standing out of its face. The walls' lines as the field laid them
+	// (LandField's HedgeLine, kind 4), their stone 0.30 m either side (the field's walls are 0.55 and 0.60 m thick).
+	// The men's posing threads only read them. No switch: it mends what is drawn, and the rules' places are untouched.
+	if (S.Field)
+	{
+		const TSharedRef<LandStone::Walls> Stone = MakeShared<LandStone::Walls>();
+		for (const LandField::HedgeLine& Line : S.Field->Hedges())
+		{
+			if (Line.Kind != 4)
+			{
+				continue;
+			}
+			for (size_t K = 0; K + 1 < Line.Points.size(); ++K)
+			{
+				Stone->Add(Line.Points[K].first, Line.Points[K].second, Line.Points[K + 1].first, Line.Points[K + 1].second, 0.30);
+			}
+		}
+		UE_LOG(LogTheater, Log, TEXT("Land battle: the men are drawn clear of %d lengths of stone wall"), Stone->Count());
+		if (Stone->Count() > 0)
+		{
+			S.Men->SetStone([Stone](double X, double Y, float Facing, float Lie, bool bStood, double StoodX, double StoodY, double& OutDx, double& OutDy)
+			{
+				const double Heading = static_cast<double>(Facing);
+				return Stone->Clear(X, Y, FMath::Sin(Heading), FMath::Cos(Heading), LandStone::BodyOf(static_cast<double>(Lie)), bStood, StoodX, StoodY, OutDx, OutDy);
+			});
+		}
 	}
 	S.ManOf.assign(S.Rec.Tracks.size(), -1);
 	S.TrackOfMan.assign(static_cast<size_t>(S.Men->Count()), -1);

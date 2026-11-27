@@ -33,8 +33,15 @@ STATUS=0
 # The men's front by the place on the earth (the Pacific past the date line, Formosa off the China coast).
 $CXX $FLAGS -pthread "$HERE/land_front_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_front_test"
 "$OUT/land_front_test" || STATUS=1
+# No man drawn in a wall's stone (Battle/LandStone.h, the crowd's SetStone): the walls' own answers, and the crowd on
+# each recording with walls laid through resting men's places.
+$CXX $FLAGS -pthread "$HERE/land_stone_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_stone_test"
+if command -v clang++ >/dev/null 2>&1; then
+  clang++ ${LAND_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Wunreachable-code-aggressive -Werror -I"$SRC" -I"$HERE" -pthread "$HERE/land_stone_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_stone_test_clang"
+fi
 for F in "$@"; do
   "$OUT/land_show_test" "$F" "$ROOT/Content/Models/Soldiers" "$ROOT/Content/Data/LandBattles/armies.json" || STATUS=1
+  "$OUT/land_stone_test" "$F" "$ROOT/Content/Models/Soldiers" "$ROOT/Content/Data/LandBattles/armies.json" || STATUS=1
   "$OUT/land_bank_test" "$F" "$ROOT/Content/Models/Soldiers" "$ROOT/Content/Data/LandBattles/armies.json" "$ROOT/Content/Models/Soldiers/pose_bank.json" || STATUS=1
   "$OUT/land_vat_test" "$F" "$ROOT/Content/Models/Soldiers" "$ROOT/Content/Data/LandBattles/armies.json" "$ROOT/Content/Models/Soldiers/pose_bank.json" || STATUS=1
   "$OUT/land_vat_pack_test" "$F" "$ROOT/Content/Models/Soldiers" "$ROOT/Content/Data/LandBattles/armies.json" "$ROOT/Content/Models/Soldiers/pose_bank.json" || STATUS=1

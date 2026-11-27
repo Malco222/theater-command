@@ -292,6 +292,12 @@ namespace LandMen
 	 * that block) and seat in her bed (two abreast, the odd ones on her right, front to back), each -1 where the rules
 	 * did not say; false where no vehicle carries him. Asked from several threads at once, as GroundFn is. */
 	using SeatFn = std::function<bool(double X, double Y, int Block, int SeatOn, int Seat, SeatPlace& Out)>;
+	/** The stone a man is never drawn inside (the field's walls, Battle/LandStone.h): for a man at rest at the rules'
+	 * place X, Y, facing Facing (radians clockwise from north) and lying as far as Lie (0 on his feet or his knee, 1
+	 * prone), the step from that place to where he is drawn, his body and his weapon clear of the stone. bStood: he has
+	 * his answer already and stands, or is stepping to, StoodX, StoodY (the last answer's place): he keeps the side of a
+	 * wall he chose. False where he is clear as he stands. Asked from several threads at once, as GroundFn is. */
+	using StoneFn = std::function<bool(double X, double Y, float Facing, float Lie, bool bStood, double StoodX, double StoodY, double& OutDx, double& OutDy)>;
 
 	/**
 	 * Where a man stands: his root on the field (x, y), his heading, and how far his body lies along the ground's slope
@@ -529,6 +535,23 @@ namespace LandMen
 		 * file with a seated clip (car_ride_back, release 2's riders) sits him on the bench; one without kneels him on the
 		 * bed's floor beside it. */
 		void SetSeats(SeatFn Fn);
+		/**
+		 * The stone no man is drawn inside (StoneFn; a mend of 27 November 2026: a man whose place the rules set in a
+		 * wall's thickness was drawn in the stone, all of him hidden but what stood out of its faces). Set once. A man
+		 * at rest on the field (not aboard, not carried) is drawn at the step it gives from the rules' place, taken at
+		 * a walk's speed (StoneSpeed) as he comes to rest and given back as he moves off; one who starts the battle in
+		 * a wall starts clear of it. A man who falls lies where he was drawn. PlaceOf, PlaceAsPosed and every frame of
+		 * his are at the drawn place; StoneStep gives the step itself. Unset (the default): where the rules have him.
+		 */
+		void SetStone(StoneFn Fn);
+		/** How far a man is drawn from the rules' place now to stand clear of stone (SetStone): zeros where he is not. */
+		void StoneStep(int Man, double& OutDx, double& OutDy) const;
+		/** A man slower than this is at rest (metres a battle second), and is stepped clear of stone once he has been
+		 * for StoneDwell (battle seconds: a walking man between two kept points of a live battle is not at rest). */
+		static constexpr float StoneStill = 0.3f;
+		static constexpr double StoneDwell = 0.1;
+		/** How fast he takes the step (metres a battle second, as the field sees him go): a walk, never faster. */
+		static constexpr double StoneSpeed = 1.4;
 		/** Whether a man is aboard a vehicle now (the stance he shows), and the rules' word for it: his block, her k in it
 		 * and his seat in her bed (each -1 where the rules did not say). */
 		bool AboardOf(int Man, int& OutBlock, int& OutSeatOn, int& OutSeat) const;

@@ -1663,6 +1663,11 @@ namespace LandMen
 			std::deque<Segment> Queue;
 			double X = 0.0, Y = 0.0;
 			float F = 0.f, V = 0.f;
+			// Drawn clear of stone (SetStone): the step from the rules' place that X and Y hold, and how long he has
+			// been at rest (battle seconds).
+			double StoneX = 0.0, StoneY = 0.0;
+			double StoneWantX = 0.0, StoneWantY = 0.0;   // the step he is taking (the last answer), zeros when none
+			double StillFor = 0.0;
 			float Fade = 1.f;
 			bool bVisible = true;
 			// Leaving with his block (release 2, SetLeaveWalk): on his way off, and how long he takes to get to his feet first.
@@ -1769,6 +1774,7 @@ namespace LandMen
 		bool bSections = false;     // the recording has followers (the drill's sections)
 		GroundFn GroundAt;
 		SeatFn SeatAt;              // the men aboard vehicles: their benches (SetSeats)
+		StoneFn StoneAt;            // the stone no man is drawn inside: the field's walls (SetStone)
 		uint64_t Seed = 1;
 		int MonthNo = 0;
 		std::string SeasonName = "summer", Front = "west";
@@ -3467,6 +3473,42 @@ namespace LandMen
 				// would twitch at every kept point; as it is, his feet slip a little sideways where it wanders.)
 				M.F = F;
 				M.V = V;
+				// Never drawn in a wall's stone (SetStone): at rest on the field he is stepped clear of it no faster
+				// than he walks, and steps back as he moves off; where he starts the battle (or the film is wound to) he stands clear
+				// at once. X and Y are the drawn place from here on: his frames, his fall and his body are there.
+				if (StoneAt)
+				{
+					const bool bFirst = M.Last < 0.0;
+					M.StillFor = V < Crowd::StoneStill ? M.StillFor + Dt : 0.0;
+					const bool bHeld = M.Shown >= 0 && static_cast<size_t>(M.Shown) < M.Stances.size()
+						&& (M.Stances[static_cast<size_t>(M.Shown)].Aboard || M.Stances[static_cast<size_t>(M.Shown)].Lift > 0.f);
+					double WantX = 0.0, WantY = 0.0;
+					if (V < Crowd::StoneStill && (bFirst || M.StillFor >= Crowd::StoneDwell) && !bHeld && !M.bLeaving)
+					{
+						// (the place he is stepping to, if he is: he keeps the side of a wall he chose)
+						const bool bStood = M.StoneWantX != 0.0 || M.StoneWantY != 0.0;
+						if (!StoneAt(M.X, M.Y, F, M.Lie, bStood, M.X + M.StoneWantX, M.Y + M.StoneWantY, WantX, WantY))
+						{
+							WantX = WantY = 0.0;
+						}
+					}
+					M.StoneWantX = WantX;
+					M.StoneWantY = WantY;
+					const double GapX = WantX - M.StoneX, GapY = WantY - M.StoneY, Gap = std::hypot(GapX, GapY);
+					const double Most = bFirst ? 1e9 : Crowd::StoneSpeed * Dt;
+					if (Gap <= Most)
+					{
+						M.StoneX = WantX;
+						M.StoneY = WantY;
+					}
+					else
+					{
+						M.StoneX += GapX / Gap * Most;
+						M.StoneY += GapY / Gap * Most;
+					}
+					M.X += M.StoneX;
+					M.Y += M.StoneY;
+				}
 			}
 			if (M.State == Man::Alive && M.Info.Dead >= 0.0 && Now >= M.Info.Dead)
 			{
@@ -3841,6 +3883,9 @@ namespace LandMen
 			M.bVisible = true;
 			M.bLeaving = false;
 			M.LeaveHold = 0.f;
+			M.StoneX = M.StoneY = 0.0;
+			M.StoneWantX = M.StoneWantY = 0.0;
+			M.StillFor = 0.0;
 			M.Last = -1.0;
 			M.FallClip = -1;
 			M.Info.FallClip.clear();
@@ -4771,6 +4816,17 @@ namespace LandMen
 	void Crowd::SetSeats(SeatFn Fn)
 	{
 		Inner->SeatAt = std::move(Fn);
+	}
+
+	void Crowd::SetStone(StoneFn Fn) { Inner->StoneAt = std::move(Fn); }
+
+	void Crowd::StoneStep(int Man, double& OutDx, double& OutDy) const
+	{
+		OutDx = OutDy = 0.0;
+		if (Man < 0 || Man >= Count()) return;
+		const Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
+		OutDx = Mn.StoneX;
+		OutDy = Mn.StoneY;
 	}
 
 	bool Crowd::AboardOf(int Man, int& OutBlock, int& OutSeatOn, int& OutSeat) const
