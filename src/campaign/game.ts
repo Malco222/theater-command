@@ -4970,10 +4970,11 @@ const fromWaits = (g: Game, nat: string, from: string[], i: number): boolean => 
  * and the names a waiting row has still to make (the far side's chain, `fromWaits`). Changes nothing. With the switch
  * 'fromWait' off nothing reaches it: the telling's readers return first.
  */
-export function rowHolds(g: Game, nat: string, from: string[], at: number | undefined, i: number): { front: Corps[]; unformed: string[] } {
+export function rowHolds(g: Game, nat: string, from: string[], at: number | undefined, i: number): { front: Corps[]; unformed: string[]; leaving: ReadonlySet<Corps> } {
   const far = farOn(g);
-  // (The corps the row would take leave together, and keep nothing for each other: the one contact test's `leaving`.)
-  const gone = g.flags.fromWait === 1 ? new Set(rowTakes(g, nat, { from })) : NO_LEAVING;
+  // (The corps that leave in the same act keep nothing for each other: the rule's own set, `rowLeaving`, its loan ends
+  // and stand-ins included. A reading for no row of the list (a test's) takes the names given.)
+  const gone = telling(g, nat, from, i);
   // (A stand-in the row would stand down (`unless`) is held by the one test alone, as `expeditions` reads it, never by
   // a live front, and is no row still to come: the design director's "2 YES", 01:37Z, 27 November 2026.)
   const row = i >= 0 ? ((setup as any).expeditions as any[])[i] : undefined;
@@ -4981,15 +4982,20 @@ export function rowHolds(g: Game, nat: string, from: string[], at: number | unde
   return {
     front: g.corps.filter((x) => x.nat === nat && !x.dead && from.includes(x.name) && ((far && !ins.has(x.name) && onLiveFront(g, nat, x)) || (x.reg !== at && corpsInContact(g, nat, x, gone)))),
     unformed: far ? from.filter((n) => !ins.has(n) && fromWaits(g, nat, [n], i)) : [],
+    leaving: gone,
   };
 }
+
+/** The telling's leaving set: row `i`'s, as the rule takes it (`rowLeaving`); for no row of the list, the names given. */
+const telling = (g: Game, nat: string, from: string[], i: number): ReadonlySet<Corps> =>
+  g.flags.fromWait !== 1 ? NO_LEAVING : ((setup as any).expeditions as any[])[i] ? rowLeaving(g, nat, i) : leavingOf(g, nat, undefined, { from }, loanEnding(g, nat));
 
 /**
  * A corps at the front as the rule reads it, wherever it stands, the province a row forms in not set apart: on a live
  * front of its staff's plan, on the far side, or in contact (an enemy at war on its province or beside it). Read for
  * the telling's words the month a row forms (arrivalwaits.ts `waitedOn`), never by the rule itself. Changes nothing.
  */
-export const atFrontNow = (g: Game, nat: string, x: Corps, from: string[]): boolean => (farOn(g) && onLiveFront(g, nat, x)) || corpsInContact(g, nat, x, g.flags.fromWait === 1 ? new Set(rowTakes(g, nat, { from })) : NO_LEAVING);
+export const atFrontNow = (g: Game, nat: string, x: Corps, from: string[], i = -1): boolean => (farOn(g) && onLiveFront(g, nat, x)) || corpsInContact(g, nat, x, telling(g, nat, from, i));
 
 /**
  * The article the general's line gives the row's name ("{general} arrives in {place} with the {row}."): none where the
@@ -5761,6 +5767,65 @@ export function rowWords(g: Game, nat: string, row: any[]): { booked: boolean; o
 }
 
 /**
+ * The lent corps whose time is up and which leave in this pass (`expeditions`), whichever of two rows is read first:
+ * those its own loan ends have put on their way (`gone`, `down`, `back`), and every other lent corps of `nat`'s whose
+ * loan is over (`lentOver`), read once, when first asked; never one that holds divisions a row drew for it (`drew`,
+ * `rowed`), nor one that stood on (`stood`). The pass's own predicate; given empty lists, the board's as it stands
+ * (`loanEnding`). Writes nothing.
+ */
+function loanLeaving(g: Game, nat: string, gone: Corps[], down: Corps[], back: Corps[], stood: { id: number }[]): (x: Corps) => boolean {
+  let over: Set<number> | null = null;
+  return (x: Corps): boolean => {
+    if (gone.includes(x) || down.includes(x) || back.includes(x)) return true;
+    if (x.drew || x.rowed || x.nat !== nat || stood.some((q) => q.id === x.id)) return false;
+    if (!over) {
+      over = new Set();
+      ((setup as any).expeditions as any[] ?? []).forEach((r2, j) => { const id = g.flags[`lent:${j}`]; if (r2[1] === nat && r2[6]?.until && id > 0 && lentOver(g, nat, r2, r2[6])) over!.add(id); });
+    }
+    return over.has(x.id);
+  };
+}
+
+/** The pass `expeditions` is reading now, if any: its game, its nation and its own `leaving`. */
+let PASS: { g: Game; nat: string; leaving: (x: Corps) => boolean } | null = null;
+
+/**
+ * The lent corps leaving this month, as the rule reads it: inside `expeditions`' pass for `nat`, the pass's own
+ * predicate; outside it, the board's (`loanLeaving` with nothing yet put on its way). Writes nothing.
+ */
+export const loanEnding = (g: Game, nat: string): ((x: Corps) => boolean) => (PASS && PASS.g === g && PASS.nat === nat ? PASS.leaving : loanLeaving(g, nat, [], [], [], []));
+
+/** The living corps `ending` says leave in this pass. */
+const endingNow = (g: Game, ending: (x: Corps) => boolean): Corps[] => g.corps.filter((x) => !x.dead && ending(x));
+
+/**
+ * The ONE leaving set (the design director's "Q1 YES: the telling reads leavingNow", 01:37Z, 27 November 2026; section
+ * 13 A1 of the design): the corps that leave in the same act as a row of `nat`'s, which keep nothing for a corps beside
+ * them. Its own 'from' corps (`rowTakes`, by the row's words `o`), the lent corps whose loans end in the pass
+ * (`ending`), and the stand-ins it stands down as it lands (`standInsOf`). The rule (`expeditions`) and the telling
+ * (`rowLeaving`, `rowHolds`, `atFrontNow`) read it here and nowhere else. Writes nothing.
+ */
+function leavingOf(g: Game, nat: string, row: any[] | undefined, o: any, ending: (x: Corps) => boolean): ReadonlySet<Corps> {
+  return new Set<Corps>([...rowTakes(g, nat, o), ...endingNow(g, ending), ...(row ? standInsOf(g, nat, row) : [])]);
+}
+
+/**
+ * Row `i`'s leaving set as the rule takes it now (`leavingOf`, with the row's words as `expeditions` reads them), for
+ * the telling; with the switch 'fromWait' off, nobody (nothing reads it then). Writes nothing.
+ */
+export function rowLeaving(g: Game, nat: string, i: number, ending: (x: Corps) => boolean = loanEnding(g, nat)): ReadonlySet<Corps> {
+  if (g.flags.fromWait !== 1) return NO_LEAVING;
+  const row = ((setup as any).expeditions as any[])[i];
+  return row ? leavingOf(g, nat, row, rowWords(g, nat, row).o, ending) : NO_LEAVING;
+}
+
+/**
+ * (For a test, null in play.) Told each time `expeditions` builds a row's leaving set under the switch 'fromWait':
+ * tests/contact-r3-war.test.ts asks the telling's own reader at that moment and holds it to the very same set.
+ */
+export const leavingWatch: { tell: ((g: Game, nat: string, i: number, leaving: ReadonlySet<Corps>) => void) | null } = { tell: null };
+
+/**
  * The stand-ins of a row (`unless`): the living corps of `nat`'s rows that stand in for this one, which go when it
  * lands (`expeditions`, `standDown`): the same men cannot stand in two places. The grand campaign only. Writes nothing.
  */
@@ -5788,7 +5853,7 @@ function loanHeld(g: Game, nat: string, row: any[], o: any, i: number, id: numbe
     way = o.ends === 'surrender' && farOn(g) ? 'down' : drawn ? 'back' : 'gone';
   } else if (o.war && g.flags.open === 1 && !warOn(g, o.war) && !g.atSea?.some((v) => v.corps.id === id) && (c.drew || c.rowed)) way = 'back';
   else return null;
-  return corpsInContact(g, nat, c, new Set(g.corps.filter((x) => !x.dead && leaving(x)))) ? { c, way } : null;
+  return corpsInContact(g, nat, c, new Set(endingNow(g, leaving))) ? { c, way } : null;
 }
 
 /**
@@ -5806,16 +5871,11 @@ function expeditions(g: Game, nat: string, take?: number): void {
   // Division, lent to the Sudan until April 1941, leaves in the month its own row lays it in Egypt again. A corps
   // that holds divisions a row drew for it, `drew` and `rowed`, holds them still: it is read when its own row ends,
   // and one that stands on then is a living corps like any other. The rows whose time is up are read once, when first asked.)
-  let over: Set<number> | null = null;
-  const leaving = (x: Corps): boolean => {
-    if (gone.includes(x) || down.includes(x) || back.includes(x)) return true;
-    if (x.drew || x.rowed || x.nat !== nat || stood.some((q) => q.id === x.id)) return false;
-    if (!over) {
-      over = new Set();
-      ((setup as any).expeditions as any[] ?? []).forEach((r2, j) => { const id = g.flags[`lent:${j}`]; if (r2[1] === nat && r2[6]?.until && id > 0 && lentOver(g, nat, r2, r2[6])) over!.add(id); });
-    }
-    return over.has(x.id);
-  };
+  const leaving = loanLeaving(g, nat, gone, down, back, stood);
+  // (The pass's own leaving, read by the telling while the pass runs: `loanEnding`, one function for both.)
+  const outer = PASS;
+  PASS = { g, nat, leaving };
+  try {
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
     if (take !== undefined && i !== take) return;
     // (The row's words as this month reads them: `rowWords`, which `rowComes` reads too.)
@@ -5969,11 +6029,10 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // the lent corps whose time is up in this pass (`leaving`, removed once every row is read), and the stand-in this
     // row stands down where it lands. The design director's ruling of 06:10Z, 26 November 2026; section 13 A1 of the
     // design. With the switch off it is never built, and nothing reads it.)
-    const leavingNow: ReadonlySet<Corps> = g.flags.fromWait === 1 ? new Set<Corps>([
-      ...rowTakes(g, nat, o),
-      ...g.corps.filter((x) => !x.dead && leaving(x)),
-      ...standInsOf(g, nat, row),
-    ]) : NO_LEAVING;
+    // (Built by `leavingOf`, the one function the telling reads too (`rowLeaving`, `rowHolds`, `atFrontNow`): the design
+    // director's "Q1 YES: the telling reads leavingNow", 01:37Z, 27 November 2026.)
+    const leavingNow: ReadonlySet<Corps> = g.flags.fromWait === 1 ? leavingOf(g, nat, row, o, leaving) : NO_LEAVING;
+    if (g.flags.fromWait === 1) leavingWatch.tell?.(g, nat, i, leavingNow);
     let own = false;
     if (Array.isArray(o.from) && !ashore && row[1] === nat && farOn(g) && (g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name)
       && (onLiveFront(g, nat, x) || (inFight && x.reg !== reg?.id && corpsInContact(g, nat, x, leavingNow))))
@@ -6223,6 +6282,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     else if (o.gen && (!claims.length || generalOf(g, c)?.name === o.gen)) headline(g, 'event', `${o.gen} ${bySea ? 'lands at' : 'arrives in'} ${reg.name} with ${the}${c.name}.${said?.after ? ` ${said.after}` : ''}`, nat, reg.id);
     else if (nat === g.human) headline(g, 'info', said?.alone ?? `${c.name} has ${bySea ? 'landed at' : 'arrived in'} ${reg.name}.`, nat, reg.id);
   });
+  } finally { PASS = outer; }
   if (gone.length) {
     const where = theatreName(g.regions[gone[0].reg]);
     const names = gone.map((c) => c.name);

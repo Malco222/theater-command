@@ -9,7 +9,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
 import { setFromWait } from '../src/campaign/arrivalwaits';
-import { addCorps, atWar, createGame, relocate, startPhase } from '../src/campaign/game';
+import { addCorps, atFrontNow, atWar, createGame, relocate, rowHolds, rowLeaving, startPhase } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
@@ -190,5 +190,48 @@ describe("R3-2: a loan's end waits while the one test holds the lent corps, and 
     expect(lent.dead).toBe(true);
     expect(g.flags[`lent:${j}`]).toBe(-1);
     expect(g.flags[`wait:${j}`]).toBeUndefined();
+  });
+});
+
+// ---- R3-3: the telling reads the rule's own leaving set ------------------------------------------------------------
+
+describe("R3-3: the telling reads the rule's own leaving set (loan ends and stand-ins included), through one function", () => {
+  /** III Corps alone in the Neumark but for a lent corps whose loan is over this month; a row of month 3 takes III Corps. */
+  const lentBoard = (): { g: Game; c: Corps; lent: Corps; i: number } => {
+    const { g, nm } = board();
+    const c = add(g, 'GER', 'Row Test Corps', 'inf', nm, 2);
+    const lent = add(g, 'GER', 'Lent Test Corps', 'inf', nm, 2);
+    const j = addRow([1, 'GER', 'Lent Test Corps', 'inf', 2, 'Neumark', { until: 2 }]);
+    g.flags[`sent:${j}`] = 1;
+    g.flags[`lent:${j}`] = lent.id;
+    const i = addRow([3, 'GER', 'Test Army', 'inf', 2, 'Magdeburg', { from: ['Row Test Corps'] }]);
+    g.turn = 2;
+    return { g, c, lent, i };
+  };
+
+  it('a corps whose only relief is a lent corps whose loan ends this month is at the front for the telling, as for the rule', () => {
+    const { g, c, lent, i } = lentBoard();
+    const s = rowLeaving(g, 'GER', i);
+    expect(s.has(c) && s.has(lent)).toBe(true);
+    const h = rowHolds(g, 'GER', ['Row Test Corps'], g.byName.Magdeburg.id, i);
+    expect(h.front).toEqual([c]);
+    expect([...h.leaving]).toEqual([...s]);
+    expect(atFrontNow(g, 'GER', c, ['Row Test Corps'], i)).toBe(true);
+  });
+
+  it("the stand-in a row stands down is in the row's leaving set, and the telling names it at the front", () => {
+    const { g, nm } = board();
+    const stand = add(g, 'GER', 'Stand-in Test Corps', 'inf', nm, 2);
+    const j = addRow([1, 'GER', 'Stand-in Test Corps', 'inf', 2, 'Neumark', { unless: W }]);
+    g.flags[`sent:${j}`] = 1;
+    const i = addRow([2, 'GER', W, 'inf', 2, 'Magdeburg', {}]);
+    expect(rowLeaving(g, 'GER', i).has(stand)).toBe(true);
+    expect(rowHolds(g, 'GER', ['Stand-in Test Corps'], g.byName.Magdeburg.id, i).front).toEqual([stand]);
+  });
+
+  it('switch off: no set is built, for the rule or the telling', () => {
+    const { g, i } = (() => { const b = lentBoard(); setFromWait(b.g, false); return b; })();
+    expect(rowLeaving(g, 'GER', i).size).toBe(0);
+    expect(rowHolds(g, 'GER', ['Row Test Corps'], g.byName.Magdeburg.id, i).leaving.size).toBe(0);
   });
 });

@@ -283,7 +283,7 @@ export function waitedOn(g: Game, i: number, at: number | undefined): WaitedOn |
     if (!x && !onWall(g, row[1], name, g.flags[toldKey(i)])) return null;
     // (The rule's own test for the front, the forming place not set apart: game.ts `atFrontNow`.)
     if (!x) out.lost.push(name);
-    else if (!atFrontNow(g, row[1], x, from)) out.left.push(name);
+    else if (!atFrontNow(g, row[1], x, from, i)) out.left.push(name);
     else if (x.reg === at) out.stands.push(name);
     else return null;
   }
