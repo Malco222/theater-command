@@ -61,5 +61,5 @@ export function wornMonth(g: Game, c: Corps): void {
 export function wornLine(c: Corps): string {
   if (!c.spent) return '';
   const pct = Math.round(c.spent * 100), months = c.runIn ?? 0;
-  return `Worn out: ${pct}% weaker${months ? ` after ${months} months in the line` : ''}. A month at rest brings it back.`;
+  return `Worn out: ${pct}% weaker${months ? ` after ${months} ${months === 1 ? 'month' : 'months'} in the line` : ''}. A month at rest brings it back.`;
 }
