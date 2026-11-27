@@ -855,6 +855,10 @@ void ALandBattle::FlyOver(const FVector& EyeWorld)
 			Effects->FuelBall(At, 18.0f, Vel);
 		}
 		Effects->ShellOfSize(At, bWhole ? TEXT("gun75") : TEXT("mortar"), Under);
+		// (the blast press, optional: the crash's ground burst flinches the grass as a shell of that size would;
+		// field metres and the kit's own stamp, PressLivedWas, as in PlayEffects; bBlastPress first, so with the
+		// switch off no FString is made)
+		if (bBlastPress) { PressOfSize(E.At.X, E.At.Y, FString(bWhole ? TEXT("gun75") : TEXT("mortar")), PressLivedWas); }
 		// (burning on where it lies: the whole of a fighter for the rest of the battle, at most four minutes; an
 		// exploded one's pieces for a minute and a half)
 		const double Left = FMath::Max(20.0, (S.Rec.End + 8.0 - E.T) * S.Life);

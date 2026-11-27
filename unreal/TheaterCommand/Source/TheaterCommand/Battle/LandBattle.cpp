@@ -9032,9 +9032,23 @@ void ALandBattle::PlayEffects()
 			break;
 		case LandPlay::FxKind::Shell:
 			Effects->Shell(At, Name, Ground, E.bArmour);
+			// (the blast press: never for a round on armour, which the kit draws as sparks on the plate with no ground
+			// burst and no skirt; by the size row the kit draws for this calibre (PressRowOfCalibre: "bomb" and any name
+			// it does not know, a 105; torpedo and churn, nothing); on the kit's own stamp for the burst, last frame's life clock (PressLivedWas);
+			// bBlastPress first, so with the switch off not even the row's name is made)
+			if (bBlastPress && !E.bArmour)
+			{
+				PressOfSize(E.At.X, E.At.Y, PressRowOfCalibre(Name), PressLivedWas);
+			}
 			break;
 		case LandPlay::FxKind::Size:
 			Effects->ShellOfSize(At, Name, Ground, E.bArmour);
+			// (a tank's or an anti-tank gun's HE round, a grenade: the same, by its own size row; not on armour;
+			// bBlastPress first, as in the Shell case, so with the switch off nothing is called)
+			if (bBlastPress && !E.bArmour)
+			{
+				PressOfSize(E.At.X, E.At.Y, Name, PressLivedWas);
+			}
 			break;
 		case LandPlay::FxKind::Skip:
 			Effects->Skip(At, WorldWay(E.Way.X, E.Way.Y, E.Way.Z).GetSafeNormal(), Ground);
