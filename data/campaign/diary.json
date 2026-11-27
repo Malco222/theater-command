@@ -1,5 +1,5 @@
 {
-  "_note": "The war diary (release 2; Brian's yes of 27 November 2026 13:40Z to the playtester's idea). src/campaign/diary.ts. As the player's month opens, one entry is set down for the month gone: its biggest win and its worst loss among the land battles his own corps fought, in the voice of a diary kept at the time. Words only: no rule reads it. 'keep': the most entries the war keeps (the oldest go first). 'shown': the most the diary page shows. 'round': the numbers in an entry are rounded to this, and a line that names a number is used only where that number comes to at least one 'round'. The enemy is named as '{adj} army' (the Polish army, the French army), since a nation's adjective alone does not name its men.",
+  "_note": "The war diary (release 2; Brian's yes of 27 November 2026 13:40Z to the playtester's idea). src/campaign/diary.ts. As the player's month opens, one entry is set down for the month gone: its biggest win and its worst loss among the land battles his own corps fought, in the voice of a diary kept at the time. Words only: no rule reads it. 'keep': the most entries the war keeps (the oldest go first). 'shown': the most the diary page shows. 'round': the numbers in an entry are rounded to this, and a line that names a number is used only where that number comes to at least one 'round'. The enemy is named as '{adj} army' (the Polish army, the French army), since a nation's adjective alone does not name its men. The art director's notes on the P60 stills (27 November 2026 20:26Z): never the same sentence two months running (a line used in last month's entry is not picked again this month, where another fits), deeper benches, and 'every front' said only where it is true: 'quiet' lines claim only that his corps fought no battle on land; 'allQuiet' lines, which claim more, are used only in a month when no fight at sea or in the air, and no shore bombardment, touched his own forces.",
   "keep": 120,
   "shown": 24,
   "round": 100,
@@ -17,15 +17,29 @@
   ],
   "noWin": [
     "No victory to set against it.",
-    "Nothing to cheer about this month."
+    "Nothing to cheer about this month.",
+    "Of good news there was none worth the ink.",
+    "We won nothing this month that a man could point to on a map.",
+    "No laurels this month."
   ],
   "noLoss": [
     "Nothing went badly enough to write down.",
-    "Not a reverse worth the name all month."
+    "Not a reverse worth the name all month.",
+    "Not one of our fights went against us.",
+    "No bad news from the line, for once.",
+    "Every fight we were in this month went our way."
   ],
   "quiet": [
+    "No battle for our corps this month. The rumours did the fighting.",
+    "Our corps saw no fighting this month: drill, sentry-go and long letters home.",
+    "The corps stood where they stood all month, and no shot was fired in anger on their front.",
+    "A month of digging and waiting for the corps. The cooks were the busiest men in the line.",
+    "No battle on our ground this month. The men are bored, which is better than the alternative."
+  ],
+  "allQuiet": [
     "Quiet on every front. The men cleaned their rifles and wrote home.",
     "Nothing to set down but the weather and the waiting.",
-    "No battle for our corps this month. The rumours did the fighting."
+    "Not a shot on land, at sea or in the air that touched us. A month to catch our breath.",
+    "A month with no battle anywhere of ours. Nobody trusts it to last."
   ]
 }

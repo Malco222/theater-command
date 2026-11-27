@@ -5058,7 +5058,7 @@ function warPlan(on: string, target = -1) {
 // 'muted' or 'amber', where a row says it; the offers page, on the UI director's marks of 25 November 2026.)
 interface PageButton { label: string; act: string; ok: boolean; tip: string; danger?: boolean; safe?: boolean }
 interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[]; meter?: number; picture?: string; alarm?: string; tones?: string[] }
-interface Page { id: string; title: string; headline: string; note: string; top: PageButton[]; sections: { heading: string; text: string; rows: PageRow[] }[] }
+interface Page { id: string; title: string; headline: string; note: string; top: PageButton[]; sections: { heading: string; text: string; /** (The diary) the same text marked for a rich text block: <Gold>…</> in the heads' gold. */ rich?: string; rows: PageRow[] }[] }
 
 /** A question about World Domination waiting for its second and third yes. */
 let domAsked = 0;
@@ -5604,12 +5604,20 @@ function battleReportPage(s: Game, id: number): Page | null {
 function diaryPage(s: Game): Page | null {
   if (!s.human || !diaryOn(s)) return null;
   const all = diaryEntries(s);
-  const years: { heading: string; text: string; rows: PageRow[] }[] = [];
+  // (The UI director, 20:28Z: each entry's month name in the heads' gold, the same face and size, its full stop in the
+  // body colour. `rich` is the same text with the month marked <Gold>…</> for a rich text block; `text` stays plain for
+  // every reader that does not draw it.)
+  const esc = (t: string): string => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const richOf = (e: { t: number; text: string }): string => {
+    const label = turnToDate(e.t).label;
+    return e.text.startsWith(`${label}.`) ? `<Gold>${esc(label)}</>${esc(e.text.slice(label.length))}` : esc(e.text);
+  };
+  const years: { heading: string; text: string; rich: string; rows: PageRow[] }[] = [];
   for (const e of all) {
     const y = String(turnToDate(e.t).year);
     const last = years[years.length - 1];
-    if (last?.heading === y) last.text += `\n\n${e.text}`;
-    else years.push({ heading: y, text: e.text, rows: [] });
+    if (last?.heading === y) { last.text += `\n\n${e.text}`; last.rich += `\n\n${richOf(e)}`; }
+    else years.push({ heading: y, text: e.text, rich: richOf(e), rows: [] });
   }
   return {
     id: 'diary', title: `THE WAR DIARY  \u00B7  ${(s.nations[s.human]?.name ?? s.human).toUpperCase()}`,

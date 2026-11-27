@@ -18,7 +18,7 @@ import { hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import type { BattleReport, Game } from './types';
 
-export const DIARY = data as { keep: number; shown: number; round: number; win: string[]; loss: string[]; noWin: string[]; noLoss: string[]; quiet: string[] };
+export const DIARY = data as { keep: number; shown: number; round: number; win: string[]; loss: string[]; noWin: string[]; noLoss: string[]; quiet: string[]; allQuiet: string[] };
 
 /** The switch: a grand campaign's own, off unless the release 2 ship list or the player turns it on. */
 export const diaryOn = (g: Game): boolean => g.flags.diary === 1;
@@ -31,7 +31,18 @@ export function setDiary(g: Game, on: boolean): boolean {
   return true;
 }
 
-const pick = (g: Game, what: string, list: string[]): string => list[hashString(`diary:${g.seed}:${g.turn}:${what}`) % list.length];
+/** True where a line of the bench stands in an entry: its fixed words, with any name or number in it. */
+const standsIn = (t: string, text: string): boolean => new RegExp(t.split(/\{\w+\}/).map((x) => x.replace(/[.*+?^$()|[\]\\]/g, '\\$&')).join('.+?')).test(text);
+/**
+ * A line of the bench, by a hash of the war's seed and the month: no die of the war's is thrown. (The art director, 27
+ * November 2026 20:26Z: never the same sentence two months running.) A line that stands in last month's entry is left
+ * out where another fits.
+ */
+const pick = (g: Game, what: string, list: string[], last = ''): string => {
+  const fresh = last ? list.filter((t) => !standsIn(t, last)) : list;
+  const from = fresh.length ? fresh : list;
+  return from[hashString(`diary:${g.seed}:${g.turn}:${what}`) % from.length];
+};
 const round = (n: number): string => Math.max(DIARY.round, Math.round(n / DIARY.round) * DIARY.round).toLocaleString('en-US');
 const fill = (t: string, v: Record<string, string>): string => t.replace(/\{(\w+)\}/g, (_, k: string) => v[k] ?? '');
 
@@ -56,6 +67,16 @@ function fought(g: Game, r: BattleReport, me: string): Fought | null {
   };
 }
 
+/** True where, in that month, no fight at sea or in the air and no shore bombardment touched his own forces: by the war's own reports and its news of fighting. */
+function quietEverywhere(g: Game, me: string, month: number): boolean {
+  const his = (x: { attNat: string; defNat: string; att: { nat: string }[]; def: { nat: string }[] }): boolean =>
+    x.attNat === me || x.defNat === me || x.att.some((s) => s.nat === me) || x.def.some((s) => s.nat === me);
+  if (g.seaReports.some((r) => r.turn === month && his(r))) return false;
+  if (g.airReports.some((r) => r.turn === month && his(r))) return false;
+  if ((g.shoreReports ?? []).some((r) => r.turn === month && (r.nat === me || r.defNat === me))) return false;
+  return !g.headlines.some((h) => h.turn === month && (h.arm === 'sea' || h.arm === 'air') && (h.nat === me || h.won === me || h.lost === me));
+}
+
 /** The entry for the month before 'g.turn', from his battles in it. Null where nobody plays. */
 export function diaryEntry(g: Game): string | null {
   const me = g.human;
@@ -63,7 +84,11 @@ export function diaryEntry(g: Game): string | null {
   const month = g.turn - 1;
   const all = g.reports.filter((r) => r.turn === month).map((r) => fought(g, r, me)).filter((x): x is Fought => !!x);
   const head = `${turnToDate(month).label}.`;
-  if (!all.length) return `${head} ${pick(g, 'quiet', DIARY.quiet)}`;
+  const last = (g.stories.diary ?? []).find((e) => e.t === month - 1)?.text ?? '';
+  // (The art director, 20:26Z: "every front" only where it is true. A month with no land battle of his is quiet for
+  // his corps; it is quiet everywhere only where no fight at sea or in the air, and no shore bombardment, touched his
+  // own forces that month.)
+  if (!all.length) return `${head} ${pick(g, 'quiet', quietEverywhere(g, me, month) ? [...DIARY.quiet, ...DIARY.allQuiet] : DIARY.quiet, last)}`;
   const win = all.filter((x) => x.won).sort((a, b) => b.theirs - a.theirs || a.r.id - b.r.id)[0];
   const loss = all.filter((x) => !x.won).sort((a, b) => b.ours - a.ours || a.r.id - b.r.id)[0];
   const words = (x: Fought): Record<string, string> => ({ place: x.r.regionName, unit: x.unit, adj: x.foe, theirs: round(x.theirs), ours: round(x.ours), prisoners: round(x.prisoners) });
@@ -73,8 +98,8 @@ export function diaryEntry(g: Game): string | null {
     const left = list.filter((t) => (['theirs', 'ours', 'prisoners'] as const).every((k) => !t.includes(`{${k}}`) || x[k] >= DIARY.round / 2));
     return left.length ? left : list;
   };
-  const winText = win ? fill(pick(g, 'win', fit(win, DIARY.win)), words(win)) : pick(g, 'nowin', DIARY.noWin);
-  const lossText = loss ? fill(pick(g, 'loss', fit(loss, DIARY.loss)), words(loss)) : pick(g, 'noloss', DIARY.noLoss);
+  const winText = win ? fill(pick(g, 'win', fit(win, DIARY.win), last), words(win)) : pick(g, 'nowin', DIARY.noWin, last);
+  const lossText = loss ? fill(pick(g, 'loss', fit(loss, DIARY.loss), last), words(loss)) : pick(g, 'noloss', DIARY.noLoss, last);
   return `${head} ${winText} ${lossText}`;
 }
 

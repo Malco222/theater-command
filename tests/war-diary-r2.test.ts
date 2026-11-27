@@ -53,7 +53,7 @@ describe('the war diary (release 2)', () => {
   it('a month without a win, without a loss, or without a battle says so', () => {
     const g = war();
     g.turn = 6;
-    expect(DIARY.quiet.some((q) => diaryEntry(g) === `${turnToDate(5).label}. ${q}`)).toBe(true);
+    expect([...DIARY.quiet, ...DIARY.allQuiet].some((q) => diaryEntry(g) === `${turnToDate(5).label}. ${q}`)).toBe(true);
     g.reports.push(report(g, 'Lodz', 'Decisive victory', [unit('XIV Corps', 'GER', 40000, 2000)], [unit('Army Lodz', 'POL', 30000, 9000)]));
     expect(DIARY.noLoss.some((t) => diaryEntry(g)!.endsWith(t))).toBe(true);
     // (No prisoners taken: the words that count prisoners are not used.)
@@ -109,10 +109,16 @@ describe('the war diary (release 2)', () => {
     const back = loadGame(saveGame(g))!;
     expect(back.stories.diary).toEqual(book);
     TC().load(saveGame(g));
-    const p = TC().page('diary') as { title: string; headline: string; sections: { heading: string; text: string }[] };
+    const p = TC().page('diary') as { title: string; headline: string; sections: { heading: string; text: string; rich: string }[] };
     expect(p.title).toBe('THE WAR DIARY  ·  GERMANY');
     expect(p.headline).toBe(`${book.length} months set down`);
     expect(p.sections[0].text.startsWith(book[book.length - 1].text)).toBe(true);
+    // (The UI director, 20:28Z) The rich text is the plain text with each month's name in the heads' gold, its full stop
+    // outside the mark; taken out, the marks leave the plain text exactly.
+    for (const sec of p.sections) {
+      expect(sec.rich.replace(/<Gold>|<\/>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')).toBe(sec.text);
+      expect(sec.rich.split('\n\n').every((para) => /^<Gold>[A-Z][a-z]+ \d{4}<\/>\. /.test(para))).toBe(true);
+    }
     // The door is on the month's report, once a month has ended.
     TC().endMonth();
     const r = TC().page('reports') as { top?: { label: string; act: string }[] };
@@ -128,5 +134,33 @@ describe('the war diary (release 2)', () => {
     TC().act('diaryrule:off');
     expect(TC().r2Ship(['diaryrule'])).toBeNull();
     expect(diaryOn(read())).toBe(false);
+  });
+
+  it("never the same sentence two months running, and 'every front' only where no fight at sea or in the air touched him (the art director, 20:26Z)", () => {
+    const g = war();
+    setDiary(g, true);
+    // Quiet months one after another: no line of last month's entry is picked again.
+    const book = (g.stories.diary ??= []);
+    for (let m = 0; m < 24; m++) {
+      g.turn = 6 + m;
+      const text = diaryEntry(g)!;
+      const prev = book.find((e) => e.t === g.turn - 2)?.text;
+      if (prev) for (const q of [...DIARY.quiet, ...DIARY.allQuiet]) expect(prev.includes(q) && text.includes(q)).toBe(false);
+      book.push({ t: g.turn - 1, text });
+    }
+    // An air fight of his in a month with no land battle: only the lines that claim no more than his corps' ground.
+    g.turn = 40;
+    for (let k = 0; k < 12; k++) {
+      g.seed = 1000 + k;
+      g.airReports.push({ turn: 39, attNat: 'UK', defNat: 'GER', att: [{ nat: 'UK' }], def: [{ nat: 'GER' }] } as never);
+      const text = diaryEntry(g)!;
+      expect(DIARY.allQuiet.some((q) => text.includes(q))).toBe(false);
+      expect(DIARY.quiet.some((q) => text.endsWith(q))).toBe(true);
+      g.airReports.pop();
+    }
+    // With nothing at sea or in the air, the lines that say every front may be told.
+    const seen = new Set<string>();
+    for (let k = 0; k < 40; k++) { g.seed = 2000 + k; seen.add(diaryEntry(g)!); }
+    expect([...seen].some((t) => DIARY.allQuiet.some((q) => t.endsWith(q)))).toBe(true);
   });
 });
