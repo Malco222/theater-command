@@ -276,8 +276,21 @@ const PLACED = new RegExp(`(^|[^A-Za-z])(?<![Tt]he )(?<!\\b[Aa]n? )(?<!\\b(?:${N
   const before = longer.filter((l) => l.endsWith(n) && l !== n).map((l) => `(?<!${reEsc(l.slice(0, l.length - n.length))})`).join('');
   return `${before}${reEsc(n)}${after}`;
 }).join('|')})\\b(?! [A-Z])`, 'g');
-/** A plural name owns with the apostrophe alone: "the Midlands' output", never "Midlands's" (the third playtester, 84.3.1). */
-const PLURAL_OWN = new RegExp(`\\b(${[...PLACES.the.filter((n) => /s$/.test(n)), 'Netherlands', 'United States'].sort((a, b) => b.length - a.length).map(reEsc).join('|')})'s\\b`, 'g');
+/**
+ * The places whose names are plural: the places that take "the" and end in s, and two countries. One list for the
+ * whole game. A plural name owns with the apostrophe alone, "the Midlands' output", never "Midlands's" (the third
+ * playtester, 84.3.1), and takes a plural verb, "The Midlands are bombed" (isPluralPlace).
+ */
+const PLURAL_PLACES: readonly string[] = [...PLACES.the.filter((n) => /s$/.test(n)), 'Netherlands', 'United States'];
+const PLURAL_OWN = new RegExp(`\\b(${[...PLURAL_PLACES].sort((a, b) => b.length - a.length).map(reEsc).join('|')})'s\\b`, 'g');
+/**
+ * Whether a place's name is plural and takes a plural verb: "the Midlands", "the Azores", "the Canary Islands". The same
+ * list that makes "the Midlands' output" (PLURAL_OWN). The name may come with its article ("The Midlands"); a name that
+ * carries its own "The" is read whole ("The Pas" is not plural). Paris, Wales and the like are not on the list.
+ */
+export function isPluralPlace(name: string): boolean {
+  return PLURAL_PLACES.includes(name) || (/^the /i.test(name) && PLURAL_PLACES.includes(name.slice(4)));
+}
 /**
  * A line of running text with its articles. `before` is the text that runs before it in the same sentence or
  * paragraph, where the line is one piece of a longer one (a page's text, piece by piece): it decides "The" or "the"

@@ -2101,6 +2101,10 @@ svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display
 .mc-rtx .r1 { display: flex; align-items: center; gap: 10px; min-width: 0; height: 24px; }
 .mc-rtx .pl { font: 700 20px/24px var(--mc-serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .mc-rtx .pl.long { font-size: 17px; }
+/* City defences, the switch on (the card's "wrap"): a long label goes on to a second line and is never cut. */
+.mc.wrap .mc-row { height: auto; min-height: 71px; }
+.mc.wrap .mc-rtx .r1 { height: auto; min-height: 24px; }
+.mc.wrap .mc-rtx .pl { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: break-word; }
 .mc-rtx .vs { display: flex; align-items: center; gap: 6px; margin-left: 2px; flex: none; }
 .mc-chip { font-size: 12px; font-weight: 700; letter-spacing: .12em; color: #1b1610; background: var(--c); padding: 3px 8px; border-radius: 2px; flex: none; }
 .mc-rtx .r2 { font-size: 13.5px; line-height: 17px; color: var(--mc-soft); margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

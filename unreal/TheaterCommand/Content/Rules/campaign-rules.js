@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of acf6ac794 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 87866abc1 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -75490,7 +75490,11 @@
     const before = longer.filter((l) => l.endsWith(n) && l !== n).map((l) => `(?<!${reEsc2(l.slice(0, l.length - n.length))})`).join("");
     return `${before}${reEsc2(n)}${after}`;
   }).join("|")})\\b(?! [A-Z])`, "g");
-  var PLURAL_OWN = new RegExp(`\\b(${[...PLACES.the.filter((n) => /s$/.test(n)), "Netherlands", "United States"].sort((a, b) => b.length - a.length).map(reEsc2).join("|")})'s\\b`, "g");
+  var PLURAL_PLACES = [...PLACES.the.filter((n) => /s$/.test(n)), "Netherlands", "United States"];
+  var PLURAL_OWN = new RegExp(`\\b(${[...PLURAL_PLACES].sort((a, b) => b.length - a.length).map(reEsc2).join("|")})'s\\b`, "g");
+  function isPluralPlace(name) {
+    return PLURAL_PLACES.includes(name) || /^the /i.test(name) && PLURAL_PLACES.includes(name.slice(4));
+  }
   function theWords(text, before = "") {
     const cut2 = before.length;
     const put3 = (s, re) => s.replace(re, (m, pre, name, at4) => {
@@ -114778,7 +114782,8 @@
       staff: [],
       elsewhere: [],
       letters: [],
-      more: 0
+      more: 0,
+      ...cityDefences(g2) ? { wrap: true } : {}
     };
     if (!N) {
       card.quiet = opts.opening ? NOT_YET_FOUGHT : "A quiet month.";
@@ -114806,6 +114811,15 @@
     const shores = g2.shoreReports.slice(mark2.shore);
     const ranked = [];
     const blank2 = () => ({ cls: 3, arm: null, picture: null, sign: "", place: "", tag: "", tone: "plain", ours: null, theirs: null, line: "", figures: [], week: 1, when: "", kind: "", head: "", follows: "", facts: [] });
+    const named7 = cityDefences(g2);
+    const theAt = (name) => named7 ? placeName2(name, true) : name;
+    const theIn = (name) => named7 ? placeName2(name) : name;
+    const be = (name, one2 = "is", many = "are") => named7 && isPluralPlace(name) ? many : one2;
+    const bareOf2 = /* @__PURE__ */ new Map();
+    const label = (row2, name, said2) => {
+      row2.place = said2;
+      if (said2 !== name) bareOf2.set(row2, name);
+    };
     let battlesWon = 0, battlesLost = 0, menOurs = 0, menTheirs = 0;
     const shutIn2 = (reg) => {
       if (!reg || !side5(reg.ctrl) || !besieged(g2, reg)) return { men: 0, corps: 0 };
@@ -114846,7 +114860,8 @@
       const lead2 = [...us].filter((u) => !u.guard).sort((a, b) => b.men - a.men)[0];
       const row2 = blank2();
       row2.arm = "land";
-      row2.place = place3;
+      const at4 = theAt(place3), inside2 = theIn(place3), is = be(place3);
+      label(row2, place3, at4);
       row2.week = r.week;
       Object.assign(row2, dated2(r.turn));
       row2.region = r.region;
@@ -114871,20 +114886,20 @@
         row2.tag = att ? "WON" : "LOST";
         row2.tone = att ? "good" : "bad";
         row2.line = att ? "Taken without a fight." : "Given up under orders.";
-        row2.head = att ? `${place3} is taken without a fight` : `${place3} is given up`;
+        row2.head = att ? `${at4} ${is} taken without a fight` : `${at4} ${is} given up`;
         row2.follows = worth4(!att) || (att ? "The enemy fell back before the attack." : "Your troops fell back before the attack.");
       } else if (r.siege && fellSince) {
         row2.tag = att ? "WON" : "LOST";
         row2.tone = att ? "good" : "bad";
         row2.line = att ? "The field was won, and the town fell after it." : "The field was lost, and the town fell after it.";
-        row2.head = att ? `${place3} is taken` : `${place3} is lost`;
+        row2.head = att ? `${at4} ${is} taken` : `${at4} ${is} lost`;
         row2.follows = `${row2.line} ${worth4(!att) || (att ? "The front moves forward." : "The front falls back.")}`;
         if (!att && corps) row2.facts[0] = { n: plural8(corps, "corps", "corps"), label: "fought outside" };
       } else if (r.siege) {
         row2.tag = att ? "WON" : "BESIEGED";
         row2.tone = att ? "good" : "warn";
         row2.line = att ? "The field is won. The town is besieged." : shut.men > 0 ? `${g2.nations[r.attNat]?.adj ?? "Enemy"} troops close round the town.` : "The field is lost. The town holds out.";
-        row2.head = att ? `${place3} is under siege` : `${place3} is besieged`;
+        row2.head = att ? `${at4} ${is} under siege` : `${at4} ${is} besieged`;
         row2.follows = att ? "The province falls only when the town is taken." : shut.men > 0 ? shutWords(place3, oursLost, shut) : "The province is yours for as long as the town holds.";
         if (!att) {
           row2.facts = [shut.men > 0 ? { n: num10(shut.men), label: "men shut in" } : { n: plural8(corps, "corps", "corps"), label: "fought outside" }, { n: num10(oursLost), label: "men lost" }, { n: num10(theirsLost), label: "of theirs" }];
@@ -114894,19 +114909,19 @@
         row2.tag = good ? "WON" : "LOST";
         row2.tone = good ? "good" : "bad";
         row2.line = r.relief ? r.taken ? att ? "The siege is raised." : "Their relief broke your siege." : att ? "The relief was thrown back." : "Their relief was thrown back." : r.taken ? att ? "The garrison broke the ring." : "The garrison broke your ring." : att ? "The sally was thrown back." : "Their sally was thrown back.";
-        row2.head = r.taken ? `The siege of ${place3} is raised` : `The siege of ${place3} holds`;
+        row2.head = r.taken ? `The siege of ${inside2} is raised` : `The siege of ${inside2} holds`;
         row2.follows = r.taken ? att ? "The town is free of its besiegers." : "The ring round the town is broken." : att ? "The town is still cut off." : "The ring round the town stands.";
       } else if (att) {
         row2.tag = r.taken ? "WON" : "LOST";
         row2.tone = r.taken ? "good" : "bad";
         row2.line = r.taken ? r.gates ? "The town opened its gates." : forTown ? `${count3(corps)} corps stormed the town.` : r.prisoners >= 1e3 ? `${count3(corps)} corps took it, with ${num10(r.prisoners)} prisoners.` : `${count3(corps)} corps took the province.` : forTown ? "The assault on the town was thrown back." : "The attack was thrown back.";
-        row2.head = r.taken ? `${place3} is taken` : `The attack on ${place3} is thrown back`;
+        row2.head = r.taken ? `${at4} ${is} taken` : `The attack on ${inside2} is thrown back`;
         row2.follows = r.taken ? worth4(false) || (r.prisoners > 0 ? `${num10(r.prisoners)} prisoners were taken.` : "The front moves forward.") : `The attack gained no ground${r.works ? `, and their works still stand` : ""}.`;
       } else {
         row2.tag = r.taken ? "LOST" : "HELD";
         row2.tone = r.taken ? "bad" : "good";
         row2.line = r.taken ? r.gates ? "The town opened its gates to them." : forTown ? "The town fell to assault." : r.prisoners >= 1e3 ? `The line broke: ${num10(r.prisoners)} men taken prisoner.` : "The line broke and the province is lost." : forTown ? "An assault on the town was thrown back." : `${an3(g2.nations[r.attNat]?.adj ?? "enemy")} attack was thrown back.`;
-        row2.head = r.taken ? `${place3} is lost` : `${place3} holds`;
+        row2.head = r.taken ? `${at4} ${is} lost` : `${at4} ${be(place3, "holds", "hold")}`;
         row2.follows = r.taken ? worth4(true) || "The front falls back." : "The line holds where it stood.";
       }
       let ourMen = oursLost + shut.men;
@@ -114946,7 +114961,8 @@
         row2.arm = "land";
         row2.sign = "inf";
         row2.picture = "troops";
-        row2.place = ids2.length === 1 ? g2.regions[ids2[0]].name : `The ${other4?.adj ?? "open"} front`;
+        if (ids2.length === 1) label(row2, g2.regions[ids2[0]].name, theAt(g2.regions[ids2[0]].name));
+        else row2.place = `The ${other4?.adj ?? "open"} front`;
         row2.tag = gain ? "WON" : "LOST";
         row2.tone = gain ? "good" : "bad";
         row2.ours = me;
@@ -115043,22 +115059,23 @@
       if (sky2) {
         row2.sign = "ftr";
         row2.picture = "airfield";
-        row2.place = `The sky over ${r.place}`;
+        row2.place = `The sky over ${theIn(r.place)}`;
         row2.tag = good ? "WON" : "LOST";
         row2.line = good ? "Your fighters hold the sky there." : "Their fighters hold the sky there.";
-        row2.head = good ? `The sky over ${r.place} is yours` : `The sky over ${r.place} is lost`;
+        row2.head = good ? `The sky over ${theIn(r.place)} is yours` : `The sky over ${theIn(r.place)} is lost`;
       } else {
         row2.sign = "bmr";
         row2.tag = att ? r.won ? "HIT" : "MISSED" : r.won ? "HIT" : "HELD";
-        const named7 = cityDefences(g2);
-        const [pic, place3, hit, miss] = r.mission === "line" ? ["rail-yard", `${town} rail yard`, `${what} cut the railway there.`, "The bombs fell wide. The line still runs."] : r.mission === "harbour" ? ["harbour", named7 ? cap18(harbourOf(placeName2(r.place))) : /\bHarbou?r$/.test(r.place) ? r.place : `${r.place} harbour`, `${what} struck the ships in harbour.`, "The raid on the harbour was beaten off."] : r.mission === "fleet" ? ["fleet", cap18(the4(r.ships?.[0]?.fleet ?? r.place)), `${what} struck the fleet at sea.`, "The strike on the fleet was beaten off."] : r.mission === "strike" ? ["fleet", cap18(r.place.replace(/^the /, "The ")), `${what} struck the shipping there.`, "The strike on the shipping was beaten off."] : r.mission === "ground" ? ["troops", named7 ? placeName2(r.place, true) : r.place, `${what} struck the troops there.`, "The raid on the troops was beaten off."] : r.mission === "town" ? ["town", town, `${what} broke down its defences.`, "The raid on its defences was beaten off."] : ["factories", named7 ? placeName2(r.place, true) : r.place, `${what} hit its factories${r.mission === "night" ? " by night" : ""}.`, "The bombers were beaten off."];
+        const [pic, place3, hit, miss] = r.mission === "line" ? ["rail-yard", `${theAt(town)} rail yard`, `${what} cut the railway there.`, "The bombs fell wide. The line still runs."] : r.mission === "harbour" ? ["harbour", named7 ? cap18(harbourOf(placeName2(r.place))) : /\bHarbou?r$/.test(r.place) ? r.place : `${r.place} harbour`, `${what} struck the ships in harbour.`, "The raid on the harbour was beaten off."] : r.mission === "fleet" ? ["fleet", cap18(the4(r.ships?.[0]?.fleet ?? r.place)), `${what} struck the fleet at sea.`, "The strike on the fleet was beaten off."] : r.mission === "strike" ? ["fleet", cap18(r.place.replace(/^the /, "The ")), `${what} struck the shipping there.`, "The strike on the shipping was beaten off."] : r.mission === "ground" ? ["troops", named7 ? placeName2(r.place, true) : r.place, `${what} struck the troops there.`, "The raid on the troops was beaten off."] : r.mission === "town" ? ["town", theAt(town), `${what} broke down its defences.`, "The raid on its defences was beaten off."] : ["factories", named7 ? placeName2(r.place, true) : r.place, `${what} hit its factories${r.mission === "night" ? " by night" : ""}.`, "The bombers were beaten off."];
         row2.picture = pic;
         row2.place = place3;
         row2.line = r.won ? att ? hit : hit.replace(/^([\d,]+) (bombers|aircraft)/, "Their $2") : miss;
         const low2 = place3.replace(/^The /, "the ");
-        const said2 = !named7 ? place3 : pic === "harbour" ? harbourOf(placeName2(r.place)) : pic === "troops" || pic === "factories" ? placeName2(r.place) : place3;
+        const said2 = !named7 ? place3 : pic === "harbour" ? harbourOf(placeName2(r.place)) : pic === "troops" || pic === "factories" ? placeName2(r.place) : pic === "rail-yard" ? `${placeName2(town)} rail yard` : pic === "town" ? placeName2(town) : place3;
+        const one2 = pic === "town" ? !isPluralPlace(town) : pic === "troops" || pic === "factories" ? !isPluralPlace(r.place) : true;
+        const is = named7 && !one2 ? "are" : "is", beats = named7 && !one2 ? "beat" : "beats";
         const shipAt = g2.seas[r.zone] ? seaWhere(g2.seas[r.zone].name) : `in ${low2}`;
-        row2.head = r.mission === "fleet" || r.mission === "strike" ? r.won ? `${r.mission === "fleet" ? place3 : `Shipping ${shipAt}`} is struck from the air` : att ? `The strike on ${r.mission === "fleet" ? low2 : `shipping ${shipAt}`} fails` : `The strike on ${r.mission === "fleet" ? low2 : `shipping ${shipAt}`} is beaten off` : r.won ? `${place3} is bombed` : att ? `The raid on ${said2} fails` : `${place3} beats off the raid`;
+        row2.head = r.mission === "fleet" || r.mission === "strike" ? r.won ? `${r.mission === "fleet" ? place3 : `Shipping ${shipAt}`} is struck from the air` : att ? `The strike on ${r.mission === "fleet" ? low2 : `shipping ${shipAt}`} fails` : `The strike on ${r.mission === "fleet" ? low2 : `shipping ${shipAt}`} is beaten off` : r.won ? `${place3} ${is} bombed` : att ? `The raid on ${said2} fails` : `${place3} ${beats} off the raid`;
       }
       row2.follows = r.result;
       const sunkHere = shipsHit ? shipCount(shipsHit) : 0;
@@ -115079,7 +115096,7 @@
       row2.arm = "sea";
       row2.sign = "hull";
       row2.picture = "harbour";
-      row2.place = r.place;
+      label(row2, r.place, theAt(r.place));
       row2.region = r.region;
       row2.report = { type: "shore", id: r.id };
       row2.ours = me;
@@ -115090,7 +115107,7 @@
       row2.line = `${cap18(the4(r.fleet))} shelled ${target}.`;
       row2.figures = lost2 ? [{ n: String(lost2), label: `${classWord(r.sunk)} ${att ? "lost" : "sunk"}` }] : r.what === "troops" ? [{ n: String(r.divs), label: r.divs === 1 ? "division hit" : "divisions hit" }] : r.what === "city" ? [{ n: `${Math.round(r.output * 100)}%`, label: "output stopped" }] : [{ n: `${Math.round(r.works ?? 0)}%`, label: "of its works" }];
       row2.kind = "SHELLED FROM THE SEA";
-      row2.head = `${r.place} is shelled from the sea`;
+      row2.head = `${theAt(r.place)} ${be(r.place)} shelled from the sea`;
       row2.follows = r.result;
       row2.facts = [{ n: String(shipCount(r.ships)), label: "ships stood in" }, ...row2.figures];
       ranked.push({ row: row2, sub: 0, weight: SHELLED_MEN + shipsWeight(r.sunk), great: greatShips(r.sunk) });
@@ -115126,6 +115143,8 @@
       const seaAt3 = h.region === void 0 ? seaSaid(h.text, g2.seas.map((z) => z.name)) : null;
       const where = h.region === void 0 && !seaAt3 ? / in (the [A-Z][A-Za-z' -]*?)(?= and |[.,:]|$)/.exec(h.text) : null;
       row2.place = h.region !== void 0 ? g2.regions[h.region].name : seaAt3 ? g2.seas[seaAt3.i].name : where ? cap18(where[1].replace(/^the /, "")) : h.arm === "sea" ? "At sea" : "In the air";
+      const bare = row2.place, land2 = h.region !== void 0 || !seaAt3 && !!where;
+      if (land2) label(row2, bare, theAt(bare));
       const zone = seaAt3 ? seaAt3.i : where ? g2.seas.findIndex((z) => z.name.replace(/^the /i, "") === where[1].replace(/^the /i, "")) : -1;
       if (zone >= 0) row2.sea = zone;
       row2.sign = h.arm === "land" ? bridges ? "eng" : /airborne/.test(h.text) ? "para" : "inf" : h.arm === "sea" ? /submarine|torpedo|convoy|shipping/i.test(h.text) ? "ss" : "hull" : "bmr";
@@ -115156,19 +115175,19 @@
         const who = force3 ? `${force3[1]} ${force3[2]}` : ring[1];
         row2.line = `The ring closes: ${who} ${/^(1|one|a|an) /i.test(who) ? "is" : "are"} cut off.`;
         row2.figures = [{ n: ring[2], label: "men cut off" }];
-        row2.head = `The ring closes at ${row2.place}`;
+        row2.head = `The ring closes at ${land2 ? theIn(bare) : row2.place}`;
         row2.follows = `${cap18(ring[1])} ${/^(1|one|a|an) /i.test(ring[1]) ? "is" : "are"} cut off from all supply.`;
         row2.facts = row2.figures;
       }
       if (raised && !fought.has(h.region)) {
         raisedAt.add(h.region);
         const town = townName(g2.regions[h.region]), by2 = raisedBy.get(h.region);
-        Object.assign(row2, { tag: "HELD", tone: "good", picture: "town", line: `The siege of ${town} is raised.`, head: `The siege of ${town} is raised`, theirs: by2 ?? null });
+        Object.assign(row2, { tag: "HELD", tone: "good", picture: "town", line: `The siege of ${town} is raised.`, head: `The siege of ${theIn(town)} is raised`, theirs: by2 ?? null });
         if (by2) row2.join = { word: "against", name: theName(g2.nations[by2]) };
       }
       const laid = h.arm === "land" && h.region !== void 0 && / troops close round [^:]+: .+ is under siege\b/.test(h.text);
       if (laid && bad && h.won && g2.nations[h.won]) {
-        Object.assign(row2, { tag: "BESIEGED", tone: "warn", picture: "town", line: `${g2.nations[h.won].adj} troops close round the town.`, head: `${row2.place} is besieged`, theirs: h.won });
+        Object.assign(row2, { tag: "BESIEGED", tone: "warn", picture: "town", line: `${g2.nations[h.won].adj} troops close round the town.`, head: `${row2.place} ${be(bare)} besieged`, theirs: h.won });
       }
       if (h.arm === "land" && !row2.join && row2.theirs && g2.nations[row2.theirs] && (row2.tag === "WON" || row2.tag === "LOST" || row2.tag === "BESIEGED")) {
         row2.join = { word: row2.tag === "BESIEGED" ? "by" : "against", name: theName(g2.nations[row2.theirs]) };
@@ -115462,7 +115481,7 @@
     const goodLines = (x) => x.text.length + (x.place ? 0.86 * x.place.length + 1 : 0) > 28 ? 2 : 1;
     const signed = card.home.length + card.research.length;
     const taken2 = card.home.reduce((n, x) => n + goodLines(x), 0) + card.research.reduce((n, t) => n + linesAt(`Research complete: ${t}.`, FOOT_ROOM.home), 0);
-    const held3 = new Set(ranked.filter((x) => x.row.tag === "HELD" || x.row.tag === "BESIEGED").map((x) => x.row.place));
+    const held3 = new Set(ranked.filter((x) => x.row.tag === "HELD" || x.row.tag === "BESIEGED").map((x) => bareOf2.get(x.row) ?? x.row.place));
     const said = [];
     for (const h of news3.filter((x) => / has halted at .+ on its march to /.test(x.text))) said.push({ text: first(h.text), full: h.text, hs: [h] });
     const arrivals = /* @__PURE__ */ new Map();
