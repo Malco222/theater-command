@@ -48,7 +48,7 @@ import { armOrder, canArm, openRifles } from './rifles';
 import { WORLD_FIRST, WORLD_MAP, acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oceanShares, overseasOf, shoreOf } from './world';
 import { patronOfClient, stationed, tieWar } from './far';
 import { inTheWay, pacificGround, runQuays } from './pacific';
-import { roomLeft, roomForDivision } from './islands';
+import { fits, islandOf, roomLeft, roomForDivision } from './islands';
 import { EASTERN, addCorps, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
 import { ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, TOWNQUEUE_STAGE, TRUEREACH_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE, AIRNAMES_STAGE, FERRY_STAGE, CITYDEFENCES_STAGE, OFFERS_STAGE, FLAKGROUND_STAGE } from './stage';
@@ -921,8 +921,14 @@ export function rearMonth(g: Game, nat: string): void {
     if ((r.owner !== nat && allied(g, nat, r.owner) && g.nations[r.owner]?.alive) || !r.prev || !atWar(g, nat, r.prev)) continue;
     const since = r.since ?? 0;
     if (since <= 0 || g.turn <= since || g.flags[`rear:${r.id}`] === since) continue;
-    if (hostileUnits(g, r, nat).length || !roomForDivision(g, r, nat, friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length)) continue;
     const row = T.towns[r.name], worth = row?.[0] ?? T.each;
+    // (On an island of the table the corps to be raised is known, one division at `worth`: it asks whether that corps
+    // fits, the island's men and its five, as economy.ts deliver does (the design director, 00:20Z, 27 November 2026,
+    // D5 and D6: "Where a check names its corps, it asks with that corps"). Other ground: room for a division, as built.)
+    const room = islandOf(g, r) && worth > 0
+      ? fits(g, r, nat, [{ nat, kind: 'inf', divs: 1, str: worth } as Corps])
+      : roomForDivision(g, r, nat, friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length);
+    if (hostileUnits(g, r, nat).length || !room) continue;
     if (!(worth > 0)) { g.flags[`rear:${r.id}`] = since; continue; }
     if (menRules(g) && menLeft(g, nat) + 1e-9 < worth) continue;
     if (!canArm(g, nat, worth)) continue;
