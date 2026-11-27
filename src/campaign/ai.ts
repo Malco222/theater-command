@@ -46,6 +46,7 @@ import {
   hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, sailOn, shipMove, shoreRoom, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
 } from './game';
 import { roomAt } from './islands';
+import { blunted } from './wornout';
 
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
 
@@ -198,8 +199,11 @@ const relieves = (g: Game, nat: string): boolean => !!RIVALS.relief && !scope &&
 const wornOut = (g: Game, c: Corps): boolean => {
   const R = RIVALS.relief!;
   const since = g.flags[`rl:${c.id}`];
-  if (since === undefined || g.turn - since >= 2 * R.months) return c.str < R.worn;
-  return c.str < R.fit && g.turn - since < R.months;
+  // (Release 2, wornout.ts, behind its switch; the design director, 17:15Z) A corps its months in the line have worn to
+  // the worst counts as worn, as one under strength does: read through the battle's own edge(). Never with the switch off.
+  const blunt = blunted(c);
+  if (since === undefined || g.turn - since >= 2 * R.months) return c.str < R.worn || blunt;
+  return (c.str < R.fit || blunt) && g.turn - since < R.months;
 };
 /** A worn corps its staff will rest is stormed into no town and thrown at nobody, in the hours before the relief as after it. */
 const spared = (g: Game, c: Corps): boolean => relieves(g, c.nat) && wornOut(g, c);

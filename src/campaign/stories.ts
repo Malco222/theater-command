@@ -689,7 +689,7 @@ export function schoolMonth(g: Game, c: Corps, before: number): boolean {
 export const wearOf = (c: Corps): number => c.wear ?? STORIES.wear.fresh;
 
 /** True where an army at war with the corps' nation holds the ground next door, or stands in its own province: the front. */
-const inLine = (g: Game, c: Corps): boolean => {
+export const inLine = (g: Game, c: Corps): boolean => {
   const r = g.regions[c.reg];
   if (!r) return false;
   if (r.units.some((u) => !u.dead && u.nat !== c.nat && atWar(g, u.nat, c.nat))) return true;

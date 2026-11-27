@@ -503,6 +503,12 @@ export interface Corps extends Storied {
    * when, and the chance it had of holding (0 to 1). Its morale settles higher for the rest of the war (morale.ts levelOf).
    */
   held?: { at: number; turn: number; chance: number };
+  /**
+   * (Release 2, wornout.ts, behind its switch) Worn out in the line: the share of its fighting power its months in the
+   * line have taken (0.02 to 0.1), and the months in the line in a row it has served. Never set with the switch off.
+   */
+  spent?: number;
+  runIn?: number;
   /** It took over fieldworks left on this ground this month (the grand campaign): it keeps them at the month's end though it marched. */
   relief?: boolean;
   /**

@@ -196,6 +196,7 @@ import { thePlace } from '../../../src/campaign/bombers';
 import { kitLine, pressedOn, setPressed } from '../../../src/campaign/pressed';
 import { diaryEntries, diaryOn, setDiary } from '../../../src/campaign/diary';
 import { chanceWords as heldChanceWords, heldOn, heldRibbon, setHeld } from '../../../src/campaign/heldline';
+import { setWorn, wornLine, wornOn, WORN } from '../../../src/campaign/wornout';
 import { FIRES, burningAt, dumpFiresOn, setDumpFires } from '../../../src/campaign/dumpfires';
 import { cancelDump, dumpPlaces, dumpPrice, dumpsOf, dumpsOn as dumpsAreOn, dumpsView, firstFront, frontsAt, logisticsSet, lorryPool, orderDump, poolOn as lorryPoolOn, setLogistics, setLorryFirst, shiftOn as lorryShiftOn, wagonsOn as wagonsAreOn, whyNoDump, LOGI, type LogisticsSwitch } from '../../../src/campaign/logistics';
 import { railheads } from '../../../src/campaign/rails';
@@ -830,6 +831,9 @@ function drawView(step = false) {
       // (Release 2, pressed.ts, behind its switch) The captured tanks it has pressed into service, as its card's line:
       // "14 captured Soviet tanks in its own colours." Absent where it has none.
       ...(c.kit && pressedOn(s) && (c.nat === s.human || (s.human && c.joint === s.human)) ? { kit: kitLine(s, c) } : {}),
+      // (Release 2, wornout.ts, behind its switch) What its months in the line have taken off its edge, as its card's line:
+      // "Worn out: 6% weaker after 5 months in the line. A month at rest brings it back." Absent where it has lost none.
+      ...(c.spent && (c.nat === s.human || (s.human && c.joint === s.human)) ? { worn: wornLine(c) } : {}),
       ...markOf(c),
       ...(fresh.has(c.id) ? { ready: true } : {}),
       // (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) Where breaking corps up is on: why this corps cannot have
@@ -1137,6 +1141,8 @@ function drawView(step = false) {
     crewRoll: crewRollOn(s),
     // (Release 2) The war diary (diary.ts), the 'held the line' medal (heldline.ts) and supply dumps that burn (dumpfires.ts).
     warDiary: diaryOn(s), heldLine: heldOn(s), dumpFires: dumpFiresOn(s),
+    // (Release 2, batch 3) Worn out in the line (wornout.ts).
+    wornOut: wornOn(s),
     // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
     townQueue: townQueueOn(s),
     // (Release 2, citydefences.ts) Whether searchlights can be built, the guns fight by night by what they see and a
@@ -8324,6 +8330,14 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       : 'Held the line is off: no medal is given, and those given are taken back.';
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'wornoutrule') {
+    // (Release 2, wornout.ts) Worn out in the line, switched in any month.
+    ok = setWorn(s, part[1] === 'on');
+    note = wornOn(s)
+      ? `Worn out in the line is on: every month a corps spends in the line takes a little more of its edge, up to ${Math.round(WORN.most * 100)}%, and a month at rest brings it all back. The same for every army.`
+      : 'Worn out in the line is off: every corps has its edge back.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'dumpfiresrule') {
     // (Release 2, dumpfires.ts) Supply dumps that burn, switched in any month. They need the forward dumps, which a war
     // takes only as it opens: the setter will not turn them on in a war without them.
@@ -9543,6 +9557,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, offerCalls(g
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).warDiary = (on: boolean) => { const s = game(); setDiary(s, !!on); return { on: diaryOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).heldLine = (on: boolean) => { const s = game(); setHeld(s, !!on); return { on: heldOn(s) }; };
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).dumpFires = (on: boolean) => { const s = game(); setDumpFires(s, !!on); return { on: dumpFiresOn(s) }; };
+// (Release 2, batch 3) Worn out in the line: TC.wornOut(on) at any time; the options page uses act('wornoutrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).wornOut = (on: boolean) => { const s = game(); setWorn(s, !!on); return { on: wornOn(s) }; };
 // (Release 2, pressed.ts) Captured tanks pressed into service: TC.pressedTanks(on) at any time; the options page uses
 // act('pressedtanksrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).pressedTanks = (on: boolean) => { const s = game(); setPressed(s, !!on); return { on: pressedOn(s) }; };
@@ -9593,6 +9609,8 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   // (trueReachSettable), so an older war and a later start are left as they are. The design director's 480-war fairness
   // gate passed 15:53Z 27 Nov 2026: it ships ON, with its Options row (act('truereachrule:on' / ':off'), turn 1 only).)
   truereachrule: (s) => setTrueReach(s, true) && trueReach(s),
+  // (Release 2, batch 3: worn out in the line, switched in any month; OFF on the Play list until the DD's gate passes.)
+  wornoutrule: (s) => setWorn(s, true) && wornOn(s),
 };
 function r2Ship(ids: string[]) {
   const s = game();
