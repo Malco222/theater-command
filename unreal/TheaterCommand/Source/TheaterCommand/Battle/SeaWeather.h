@@ -98,6 +98,9 @@ public:
 	/** The overview shot's eye height, metres (SeaSky::OverviewHeight): 1,300 unless the dome draws a deck, then under
 	 * its base. Fixed for the battle. */
 	double OverviewHeight() const;
+	/** Whether the dome draws a deck, and its base, metres (the sea free eye's ceiling stays under it: SeaFreeEye::Ceiling).
+	 * Fixed for the battle. */
+	bool DeckDrawn(double& OutBase) const;
 
 	/** The heaviest rain's footprint on the sea, for MPC_FleetSea's Squall (step 7). None without rain. */
 	const SeaSky::Squall& Squall() const { return Wet; }

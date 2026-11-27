@@ -55,13 +55,14 @@ namespace SeaScreenParts
 void SSeaBattleScreen::Construct(const FArguments& Args)
 {
 	Battle = Args._Battle;
-	// (inside the campaign, the month's scene: the screen takes the keys and the pointer, to skip it; else it takes none)
-	SetVisibility(Battle.IsValid() && Battle->IsMonthScene() ? EVisibility::Visible : EVisibility::HitTestInvisible);
+	// (inside the campaign, the month's scene: the screen takes the keys and the pointer, to skip it; the sea free eye:
+	// the camera's keys and the pointer; else it takes none)
+	SetVisibility(Battle.IsValid() && (Battle->IsMonthScene() || Battle->HasFreeEye()) ? EVisibility::Visible : EVisibility::HitTestInvisible);
 }
 
 bool SSeaBattleScreen::SupportsKeyboardFocus() const
 {
-	return Battle.IsValid() && Battle->IsMonthScene();
+	return Battle.IsValid() && (Battle->IsMonthScene() || Battle->HasFreeEye());
 }
 
 FReply SSeaBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& Event)
@@ -87,7 +88,35 @@ FReply SSeaBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& E
 		Battle->SkipMonthScene();
 		return FReply::Handled();
 	}
-	return FReply::Unhandled();
+	// The sea free eye: the camera's keys to the scene (Handled), every other key on to the campaign (Unhandled).
+	return FreeKeyOf(Event, true) ? FReply::Handled() : FReply::Unhandled();
+}
+
+FReply SSeaBattleScreen::OnKeyUp(const FGeometry& Geometry, const FKeyEvent& Event)
+{
+	return FreeKeyOf(Event, false) ? FReply::Handled() : FReply::Unhandled();
+}
+
+bool SSeaBattleScreen::FreeKeyOf(const FKeyEvent& Event, bool bDown)
+{
+	if (!Battle.IsValid() || Battle->IsMonthScene() || !Battle->HasFreeEye())
+	{
+		return false;
+	}
+	using SeaFreeEye::KeyName;
+	const FKey Key = Event.GetKey();
+	const KeyName Name = Key == EKeys::W ? KeyName::W : Key == EKeys::A ? KeyName::A : Key == EKeys::S ? KeyName::S : Key == EKeys::D ? KeyName::D
+		: Key == EKeys::Up ? KeyName::Up : Key == EKeys::Down ? KeyName::Down : Key == EKeys::Left ? KeyName::Left : Key == EKeys::Right ? KeyName::Right
+		: Key == EKeys::Q ? KeyName::Q : Key == EKeys::E ? KeyName::E : Key == EKeys::J ? KeyName::J : Key == EKeys::C ? KeyName::C
+		: Key == EKeys::Tab ? KeyName::Tab : Key == EKeys::U ? KeyName::U : KeyName::Other;
+	if (Name == KeyName::Other)
+	{
+		return false;
+	}
+	// (the glue's rule, SeaFreeEye::ScreenKey: with Control, Command or Option held a press is never the camera's, so
+	// Command+Q still quits and the campaign's chords reach it; a release is always told, so nothing stays held, and is
+	// Handled only for a key whose press the screen took, so the campaign sees every key it saw go down come up)
+	return Battle->FreeKey(Name, bDown, Event.IsShiftDown(), Event.IsRepeat(), Event.IsControlDown() || Event.IsCommandDown() || Event.IsAltDown());
 }
 
 FReply SSeaBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event)
@@ -97,7 +126,86 @@ FReply SSeaBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPoi
 		Battle->SkipMonthScene();
 		return FReply::Handled();
 	}
-	return FReply::Unhandled();
+	return FreeClickAt(Geometry, Event, false);
+}
+
+FReply SSeaBattleScreen::OnMouseButtonDoubleClick(const FGeometry& Geometry, const FPointerEvent& Event)
+{
+	if (!Battle.IsValid() || Battle->IsMonthScene() || !Battle->HasFreeEye())
+	{
+		return SLeafWidget::OnMouseButtonDoubleClick(Geometry, Event); // (the month's scene and the switch off: as today)
+	}
+	return FreeClickAt(Geometry, Event, true);
+}
+
+FReply SSeaBattleScreen::FreeClickAt(const FGeometry& Geometry, const FPointerEvent& Event, bool bDouble)
+{
+	if (!Battle.IsValid() || Battle->IsMonthScene() || !Battle->HasFreeEye())
+	{
+		return FReply::Unhandled();
+	}
+	// (the left button picks: the screen covers the picture, so its point as a share of its size is the picture's)
+	if (Event.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		const FVector2D Size = Geometry.GetLocalSize();
+		const FVector2D Local = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
+		if (Size.X > 0.0 && Size.Y > 0.0)
+		{
+			Battle->FreeClick(FVector2D(Local.X / Size.X, Local.Y / Size.Y), bDouble);
+		}
+	}
+	// (every press Handled, and the keys kept on the screen: under GameAndUI a press left unhandled would hand the
+	// keyboard to the game's viewport, and the camera's keys to the campaign until the next click)
+	return FReply::Handled().SetUserFocus(SharedThis(this), EFocusCause::Mouse);
+}
+
+FReply SSeaBattleScreen::OnMouseWheel(const FGeometry& Geometry, const FPointerEvent& Event)
+{
+	if (!Battle.IsValid() || Battle->IsMonthScene() || !Battle->HasFreeEye())
+	{
+		return FReply::Unhandled();
+	}
+	// (a notch nearer on the wheel turned away from him, as the land's)
+	Battle->FreeWheel(Event.GetWheelDelta());
+	return FReply::Handled();
+}
+
+FReply SSeaBattleScreen::OnTouchGesture(const FGeometry& Geometry, const FPointerEvent& Event)
+{
+	if (!Battle.IsValid() || Battle->IsMonthScene() || !Battle->HasFreeEye())
+	{
+		return FReply::Unhandled();
+	}
+	// A trackpad, as the land battle's: two fingers sliding drag the sea under them (the view goes the other way); a
+	// pinch zooms (about a notch a tenth of the fingers' spread); a twist turns the view.
+	const FVector2D Size = Geometry.GetLocalSize();
+	const FVector2D Delta = Event.GetGestureDelta();
+	switch (Event.GetGestureType())
+	{
+	case EGestureEvent::Scroll:
+		if (Size.X > 0.0 && Size.Y > 0.0)
+		{
+			Battle->FreeGesture(-Delta.X / Size.X, Delta.Y / Size.Y, 0.0, 0.0);
+		}
+		return FReply::Handled();
+	case EGestureEvent::Magnify:
+		Battle->FreeGesture(0.0, 0.0, Delta.X * 10.0, 0.0);
+		return FReply::Handled();
+	case EGestureEvent::Rotate:
+		Battle->FreeGesture(0.0, 0.0, 0.0, Delta.X);
+		return FReply::Handled();
+	default:
+		return FReply::Unhandled();
+	}
+}
+
+void SSeaBattleScreen::OnFocusLost(const FFocusEvent& Event)
+{
+	SLeafWidget::OnFocusLost(Event);
+	if (Battle.IsValid() && Battle->HasFreeEye())
+	{
+		Battle->FreeLetGoKeys(); // (the keys went elsewhere: nothing stays held, and none of them the screen's)
+	}
 }
 
 int32 SSeaBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements,
