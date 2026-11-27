@@ -2486,11 +2486,14 @@ namespace
 				// 96,92,84, landing about 78,78,68), never more black; its dark middle (0.55 of its width) no narrower on the
 				// screen than 1.5 pixels, a lane under that widened to it and as much fainter, so a far lane fades and never
 				// breaks into dashes (a band under a pixel is caught by the pixels' centres only here and there); a hand's
-				// breadth up)
+				// breadth up. Its look by the kit's OilLook: under the floor fainter by the root of the widening only, at
+				// least 0.3 in the middle; seen low (under 5 degrees, full by 1) going over to the calm band, a pale reflected
+				// sky (124,140,152 written) at about 0.2, a smooth streak a little lighter than the sea, never black)
 				std::vector<Battle::LanePoint> Strip;
 				const int Got = Fx.OilLane(Now, 1, Strip);
 				static const unsigned char Paints[5][3] = { { 66, 62, 56 }, { 66, 62, 56 }, { 59, 56, 50 }, { 66, 62, 56 }, { 66, 62, 56 } };
 				static const unsigned char SheenPaint[3] = { 96, 92, 84 };
+				static const unsigned char CalmPaint[3] = { 124, 140, 152 };
 				std::vector<std::array<unsigned char, 4>> Cols;
 				std::vector<Vec> Pts;
 				for (int K = 0; K < Got; ++K)
@@ -2505,17 +2508,19 @@ namespace
 					const Vec Way = Strip[static_cast<size_t>(std::min(K + 1, Got - 1))].At - Strip[static_cast<size_t>(std::max(K - 1, 0))].At;
 					const Vec Normal = Line.Cross(Vec(Way.X, Way.Y, 0.0));
 					const double Wide = (Normal.Length() > 1.0e-3 * std::max(Way.Length(), 1.0e-6) ? std::fabs(Span.Dot(Normal.Unit(Vec(0.0, 0.0, 1.0)))) : (Span - Line * Span.Dot(Line)).Length()) * Cam.Ppr / Off;
-					const double Floor = 0.55 * Wide < 1.5 ? 1.5 / std::max(0.55 * Wide, 1e-3) : 1.0;
+					const double Graze = std::asin(std::clamp((Cam.Eye.Z - 0.08) / Off, -1.0, 1.0)) * 180.0 / 3.14159265358979;
+					const Battle::LaneLook Lk = Fx.OilLook(L.Dark, 0.55 * Wide, Graze);
+					const double Floor = Lk.Widen;
 					const Vec Left = L.At + L.Across * (L.Left * Floor), Right = L.At - L.Across * (L.Right * Floor);
 					const Vec Across[5] = { Left, L.At + (Left - L.At) * 0.55, L.At, L.At + (Right - L.At) * 0.55, Right };
-					const double Dark = L.Dark / Floor;
-					const double Alphas[5] = { 0.0, Dark * 0.85, Dark, Dark * 0.85, 0.0 };
+					const double Alphas[5] = { 0.0, Lk.Shoulder, Lk.Mid, Lk.Shoulder, 0.0 };
 					for (int A = 0; A < 5; ++A)
 					{
 						std::array<unsigned char, 4> Px;
 						for (int Ch = 0; Ch < 3; ++Ch)
 						{
-							Px[static_cast<size_t>(Ch)] = static_cast<unsigned char>(Paints[A][Ch] + (SheenPaint[Ch] - Paints[A][Ch]) * L.Sheen + 0.5);
+							const double Oil = Paints[A][Ch] + (SheenPaint[Ch] - Paints[A][Ch]) * L.Sheen;
+							Px[static_cast<size_t>(Ch)] = static_cast<unsigned char>(Oil + (CalmPaint[Ch] - Oil) * Lk.Calm + 0.5);
 						}
 						Px[3] = static_cast<unsigned char>(std::clamp(Alphas[A], 0.0, 1.0) * 255.0 + 0.5);
 						Cols.push_back(Px);

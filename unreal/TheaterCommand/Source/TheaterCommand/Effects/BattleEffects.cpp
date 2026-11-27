@@ -825,6 +825,23 @@ int32 FBattleEffects::OilLane(int32 ShipId, TArray<FOilLanePoint>& Out) const
 	return Out.Num();
 }
 
+FOilLaneLook FBattleEffects::OilLook(float Dark, double MidPixels, double GrazeDegrees) const
+{
+	FOilLaneLook Out;
+	if (!IsReady())
+	{
+		return Out;
+	}
+	// (the recipe alone: nothing the kit's draw on its worker reads or writes)
+	const TheaterFx::Battle::LaneLook L = Core.OilLook(static_cast<double>(Dark), MidPixels, GrazeDegrees);
+	Out.Widen = static_cast<float>(L.Widen);
+	Out.Mid = static_cast<float>(L.Mid);
+	Out.Shoulder = static_cast<float>(L.Shoulder);
+	Out.Calm = static_cast<float>(L.Calm);
+	Out.CalmAlpha = static_cast<float>(L.CalmAlpha);
+	return Out;
+}
+
 void FBattleEffects::OilLanes(TArray<int32>& Ships) const
 {
 	Ships.Reset();

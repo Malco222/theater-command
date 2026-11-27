@@ -746,6 +746,21 @@ namespace TheaterFx
 		int OilLane(double Now, int ShipId, std::vector<LanePoint>& Strip) const;
 		/** The ships with a lane on the sea now, into Ships (emptied first): how many. */
 		int OilLanes(std::vector<int>& Ships) const;
+		/** How the scene paints one point of a lane, from its Dark (LanePoint), how wide its dark middle (0.55 of its
+		 * width) is on the screen across the lane (MidPx, pixels) and the eye's grazing angle to the sea there (GrazeDeg,
+		 * degrees, 90 straight down). Widen: under sea_leak.floor_px (1.5) the middle is widened to it, that many times,
+		 * and made fainter by the root of it only (Mid, at least sea_leak.floor_alpha (0.3) while the oil is that dark,
+		 * never more than Dark), so a far lane stays a soft streak a few pixels across and never dashes. Calm: seen low, a
+		 * slick reads by the calm of its film, the sky smooth in it, not by its darkness: from sea_leak.calm_from_deg (5)
+		 * down to calm_full_deg (1) the paint goes over (eased, 0 to 1) to the scene's calm paint at CalmAlpha
+		 * (sea_leak.calm_alpha, less as the oil thins), lighter than the sea, never black. Mid and Shoulder (at 0.55 of
+		 * the way out) are the alphas with Calm already blended in; the edges are clear. From above (past calm_from_deg)
+		 * and wide on the screen: Widen 1, Mid = Dark, Shoulder 0.85 Dark, Calm 0, the lane as it was. */
+		struct LaneLook
+		{
+			double Widen = 1.0, Mid = 0.0, Shoulder = 0.0, Calm = 0.0, CalmAlpha = 0.0;
+		};
+		LaneLook OilLook(double Dark, double MidPx, double GrazeDeg) const;
 
 		/** Item 11 part 4: the deck's brass. Spent cases from her light and medium guns lying on her deck, piling by the
 		 * mount and rolling in her own frame (ShipRide / CasesRide once a frame): thrown from Breech (metres, world) along

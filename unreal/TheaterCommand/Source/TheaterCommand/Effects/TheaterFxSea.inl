@@ -923,6 +923,31 @@
 		for (const std::pair<int, int>& G : GunShips)
 		{
 			if (G.first == Gun)
+	Battle::LaneLook Battle::OilLook(double Dark, double MidPx, double GrazeDeg) const
+	{
+		LaneLook L;
+		const std::string P = "sea_leak.";
+		const double D = SafeNum(Dark, 0.0, 1.0, 0.0);
+		const double FloorPx = SafeNum(Num(P + "floor_px", 1.5), 0.1, 20.0, 1.5);
+		const double FloorA = SafeNum(Num(P + "floor_alpha", 0.3), 0.0, 1.0, 0.3);
+		const double CalmFrom = SafeNum(Num(P + "calm_from_deg", 5.0), 0.0, 90.0, 5.0);
+		const double CalmFull = SafeNum(Num(P + "calm_full_deg", 1.0), 0.0, 90.0, 1.0);
+		const double CalmA = SafeNum(Num(P + "calm_alpha", 0.2), 0.0, 1.0, 0.2);
+		const double Dark0 = SafeNum(Num(P + "dark", 0.55), 0.01, 1.0, 0.55);
+		const double Px = SafeNum(MidPx, 0.0, 1.0e7, 0.0);
+		// (under the floor: widened to it, fainter by the root of that only, and never under floor_alpha while so dark)
+		L.Widen = Px < FloorPx ? FloorPx / std::max(Px, 1.0e-3) : 1.0;
+		const double DarkMid = L.Widen > 1.0 ? std::max(D / std::sqrt(L.Widen), std::min(D, FloorA)) : D;
+		// (seen low: over to the calm band, eased, full by calm_full_deg)
+		const double G = SafeNum(GrazeDeg, -90.0, 90.0, 90.0);
+		const double C = CalmFrom > CalmFull ? Clamp01((CalmFrom - G) / (CalmFrom - CalmFull)) : (G <= CalmFull ? 1.0 : 0.0);
+		L.Calm = C * C * (3.0 - 2.0 * C);
+		L.CalmAlpha = CalmA * std::sqrt(Clamp01(D / Dark0));
+		L.Mid = DarkMid + (L.CalmAlpha - DarkMid) * L.Calm;
+		L.Shoulder = 0.85 * DarkMid + (0.5 * L.CalmAlpha - 0.85 * DarkMid) * L.Calm;
+		return L;
+	}
+
 			{
 				Ship = G.second;
 				break;

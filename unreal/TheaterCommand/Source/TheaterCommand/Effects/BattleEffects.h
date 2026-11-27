@@ -27,6 +27,15 @@ struct FOilLanePoint
 	float Dark = 0.0f, Sheen = 0.0f, AgeSeconds = 0.0f;
 };
 
+/** How the scene paints one point of an oil lane (FBattleEffects::OilLook): Widen, how many times wider than its strip
+ * to lay it (1 when its dark middle is 1.5 px or more on the screen); Mid and Shoulder, its alpha at the middle and at
+ * 0.55 of the way out (its edges clear); Calm, 0 to 1, how far its paint goes over to the scene's calm paint (a pale
+ * reflected sky) when seen low; CalmAlpha, that paint's own alpha. */
+struct FOilLaneLook
+{
+	float Widen = 1.0f, Mid = 0.0f, Shoulder = 0.0f, Calm = 0.0f, CalmAlpha = 0.0f;
+};
+
 /** The camera's jolt from hits close by, for the caller to add to its own camera if it wants it: it is never moved
  * here. Offset is in world units. A setting turns it off (FBattleEffects::bShake). */
 struct FBattleJolt
@@ -316,6 +325,10 @@ public:
 	/** Her lane now, oldest first, into Out (world units): how many points. Reads only the lanes, which the kit's draw on
 	 * its worker never touches, so it may be asked any time on the game thread. */
 	int32 OilLane(int32 ShipId, TArray<FOilLanePoint>& Out) const;
+	/** One lane point's paint by the kit's rule (sea_leak.floor_px, floor_alpha, calm_from_deg, calm_full_deg,
+	 * calm_alpha): from its Dark, its dark middle's width on the screen across the lane (pixels) and the eye's grazing
+	 * angle to the sea there (degrees). Reads the recipe only; may be asked any time on the game thread. */
+	FOilLaneLook OilLook(float Dark, double MidPixels, double GrazeDegrees) const;
 	/** The ships with a lane on the sea now. */
 	void OilLanes(TArray<int32>& Ships) const;
 	/** Item 11 part 4, the deck's brass: Count (1 to 16) spent cases of Kind (deck_cases.<kind>: aa25, aa40, in4, in5,
