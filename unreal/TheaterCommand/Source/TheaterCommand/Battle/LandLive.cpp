@@ -87,10 +87,6 @@ namespace
 		{ TEXT("captured"), TEXT("Captured tanks"), TEXT("An army that lately beat one with tanks fields a few of them in its own paint. Off: every tank is its own side's."), TEXT("TheaterLandNoCaptured"), false, TEXT("TheaterLandRuleCaptured") },
 		{ TEXT("worn"), TEXT("Worn uniforms"), TEXT("Men long in the line without a rest wear faded, patched kit. Off: every army is turned out fresh."), TEXT("TheaterLandNoWorn"), true, nullptr },
 		{ TEXT("mud"), TEXT("Old ruts"), TEXT("A field fought over in the mud keeps its ruts for the next battle there. Off: the ground dries out between battles."), TEXT("TheaterLandNoOldRuts"), false, TEXT("TheaterLandRuleOldRuts") },
-		// (Shell blasts, release 2: Brian, 23 November 05:04Z, "explosions on the ground should be able to take out multiple
-		// people if they are close to it". The drill's, looks only: the rules' counts are untouched. Off until a Mac
-		// off/on line and the art director pass; -TheaterLandRuleBlast turns it on for a run.)
-		{ TEXT("escort"), TEXT("Infantry with tanks"), TEXT("Riflemen near a friendly tank walk behind it for cover as it advances, and step out of the way of their own tanks and lorries. An enemy tank can run a man over. Off: men and vehicles move on their own."), TEXT("TheaterLandNoEscort"), false, TEXT("TheaterLandRuleEscort") },
 		// (release 2: Brian, 23 November 07:01Z, yes to half-tracks carrying armoured infantry; looks only, starting off
 		// until the Mac holds 45 fps with it and the art director has passed it; -TheaterLandRuleMech turns it on for a run)
 		{ TEXT("mech"), TEXT("Armoured infantry"), TEXT("An armoured unit's riflemen ride behind its tanks in their army's half-tracks or lorries, and get down to fight near the enemy. Off: the tanks go alone."), TEXT("TheaterLandNoMech"), false, TEXT("TheaterLandRuleMech") },
@@ -104,6 +100,9 @@ namespace
 		{ TEXT("cars"), TEXT("Armoured cars"), TEXT("Some units bring their army's armoured cars (the German Sd.Kfz. 222, the American M8, the rest a generic car), out ahead on the flanks until the enemy is near, then back behind the unit. Campaign battles only. Off: none drawn."), TEXT("TheaterLandNoCars"), false, TEXT("TheaterLandRuleCars") },
 		{ TEXT("aa"), TEXT("AA vehicles"), TEXT("Some units and batteries bring their army's anti-aircraft vehicles (the American M16, the German flak half-track, the rest a flak lorry), kept behind them. Campaign battles only. Off: none drawn."), TEXT("TheaterLandNoAa"), false, TEXT("TheaterLandRuleAa") },
 		{ TEXT("light"), TEXT("Jeeps and motorcycles"), TEXT("Units bring their army's jeeps, field cars and motorcycles (the Willys jeep, the Kubelwagen, the BMW with its sidecar and more), riding out ahead with the screen or parked behind, despatch riders coming and going. Campaign battles only. Off: none drawn."), TEXT("TheaterLandNoLight"), false, TEXT("TheaterLandRuleLight") },
+		// (Shell blasts, release 2: Brian, 23 November 05:04Z, "explosions on the ground should be able to take out multiple
+		// people if they are close to it". The drill's, looks only: the rules' counts are untouched. Off until a Mac
+		// off/on line and the art director pass; -TheaterLandRuleBlast turns it on for a run.)
 		{ TEXT("blast"), TEXT("Shell blasts"), TEXT("One shell can take out several men standing close to where it bursts; men lying down or in cover are hit less often. Off: each man falls to a shell of his own."), TEXT("TheaterLandNoBlast"), false, TEXT("TheaterLandRuleBlast") },
 		{ TEXT("scars"), TEXT("Scarred ground"), TEXT("A field fought over before keeps the craters of those battles, weathered by the months since. Off: every field is fresh."), TEXT("TheaterLandNoScars"), false, TEXT("TheaterLandRuleScars") },
 		// (Japan's own tank and gun, release 2: the Japan and Pacific thread's finding of 25 November, that Japan fought
@@ -115,6 +114,13 @@ namespace
 		// Off until the island look has its Mac still and the art director's pass; -TheaterLandRuleIsland turns it on
 		// for a run. The campaign side's keys, ticket.look and ticket.latLon, are the Japan and Pacific thread's.)
 		{ TEXT("island"), TEXT("Island ground"), TEXT("A battle on a Pacific island is drawn as that island: beach, reef and palms, or jungle on the big islands, under its own sun. Campaign battles only. Off: it is drawn on the same ground as any other battle."), TEXT("TheaterLandNoIsland"), false, TEXT("TheaterLandRuleIsland") },
+		// (Infantry with tanks, release 2: Brian, 23 November 05:05Z. NOT looks only: with it on the rules' tanks overrun
+		// foot in the open (sim.escort, sim.overruns, LAND.overrun) and results change (the design director, 27 November
+		// 2026, 01:54Z). So it sits here, with the rows whose lines say "This changes how battles turn out", and its line
+		// says so: the UI director's words of 27 November 2026, 03:49Z, each condition checked against sim.overruns. It is
+		// read when the field opens, as the rows below are. Off until its own gate; -TheaterLandRuleEscort turns it on for
+		// a run.)
+		{ TEXT("escort"), TEXT("Infantry with tanks"), TEXT("Riflemen near a friendly tank walk behind it for cover as it advances, and step out of the way of their own tanks and lorries. An enemy tank can run a man over. Tanks attacking a unit on foot across open ground drive through it and back out, when their own infantry is beside them, the unit is not dug in and has no anti-tank weapon of its own, and no enemy weapon that can hurt a tank reaches their way. Off: men and vehicles move on their own, and no tank drives through a unit. This changes how battles turn out. A change takes effect from the next battle."), TEXT("TheaterLandNoEscort"), false, TEXT("TheaterLandRuleEscort") },
 		// (Attackers stay where they stop to fight, release 2: the art director's number of 26 November 2026 00:50Z and
 		// the design director's rulings of 01:02Z and 01:28Z. Off, a block on an attack order asks afresh every tick
 		// whether it is well in reach, with no memory: its target hovering at that edge, it stands a tick and wheels to
