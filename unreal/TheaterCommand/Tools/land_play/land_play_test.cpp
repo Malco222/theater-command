@@ -392,18 +392,27 @@ namespace
 		LandEye::World W;
 		LandGeneralEye::Eye Gen;
 		double T = 0.0;
-		EyeBench()
+		explicit EyeBench(bool bLowByHand = false, bool bStopShort = false, std::function<int(const Vec&, int)> Things = nullptr, std::function<void(LandGeneralEye::Settings&)> Tune = nullptr, std::function<bool(const Vec&)> Free = nullptr)
 		{
 			Rec.Ground.W = 3000.0;
 			Rec.Ground.H = 2000.0;
 			W.Height = [](double, double) { return 0.0; };
+			// (bare, unless a bench plants things on it)
+			if (Things) W.Solid = std::move(Things);
+			if (Free) W.Free = std::move(Free);
 			LandFeed::Track Tr;
 			Tr.Block = 3;
 			Tr.Role = "rifle";
 			Tr.At.push_back({ 0.0, 400.0, 400.0, 0.0 });
 			Tr.At.push_back({ 900.0, 400.0, 400.0, 0.0 });
 			Rec.Tracks.push_back(Tr);
-			Gen.Begin(Rec, W, Vec(1500.0, 1000.0, 0.0), 0.0, 250.0);
+			// (the tilt bench's rules are his own tilt's alone: the tilt keys stop at the automatic tilt, as before the
+			// low look by hand; the low look's bench sets the free view's two switches as its cases need them)
+			LandGeneralEye::Settings Row;
+			Row.bLowByHand = bLowByHand;
+			Row.bStopShort = bStopShort;
+			if (Tune) Tune(Row);
+			Gen.Begin(Rec, W, Vec(1500.0, 1000.0, 0.0), 0.0, 250.0, Row);
 		}
 		void Frame(const LandGeneralEye::Input& In) { Gen.Update(In, 1.0 / 60.0, 0.0); T += 1.0 / 60.0; }
 		void Still(int Frames) { for (int K = 0; K < Frames; ++K) Frame(LandGeneralEye::Input()); }
@@ -744,10 +753,1430 @@ namespace
 				Fault("a flight taken by his hand on the last of the way down to a man's shoulder handed back a tilt of his own that the picture had and still has where he is left, or left him more of it than the picture had");
 		}
 	}
+
+	/** The eye on the bare field under his hand, a key at a time: what the low look's bench drives. */
+	struct LowRig
+	{
+		EyeBench B;
+		/** A block followed (the scene holds bFollow until his pan), and a point of the scene's fed every frame (-1
+		 * none). */
+		bool bFollowBlock = false;
+		int Point = -1;
+		Vec PointAt;
+		/** The hardest the picture's tilt was pushed on a frame with none of his keys down, nor one the frame before,
+		 * degrees a second squared; and, on the same frames, the hardest kick of the look and the hardest rise or
+		 * fall of the eye as the picture sees it (over its distance from what it looks at), as the hill run's gates
+		 * measure them. */
+		double Jolt = 0.0, Kick = 0.0, Rise = 0.0;
+		/** And the hardest the eye was pushed over the field, the same way (a shake of the whole view, which turns no
+		 * look and so kicks none). */
+		double Shake = 0.0;
+		double TiltWas = 0.0, SpeedWas = 0.0;
+		double YawWas = 0.0, PitchWas = 0.0, YawSpeedWas = 0.0, PitchSpeedWas = 0.0, EyeUpWas = 0.0, EyeUpWas2 = 0.0;
+		Vec EyeWas, EyeWas2;
+		int Quiet = 0, Steady = 0;
+		LowRig(bool bLowByHand, bool bStopShort, std::function<int(const Vec&, int)> Things = nullptr, std::function<void(LandGeneralEye::Settings&)> Tune = nullptr, std::function<bool(const Vec&)> Free = nullptr) : B(bLowByHand, bStopShort, std::move(Things), std::move(Tune), std::move(Free)) { TiltWas = B.Gen.TiltDegrees(); }
+		void Go(LandGeneralEye::Input In)
+		{
+			const bool bPan = In.PanRight != 0.0 || In.PanAhead != 0.0;
+			const bool bKey = bPan || In.Tilt != 0.0 || In.Zoom != 0.0 || In.Turn != 0.0 || In.bTopView || In.bHillView || In.KeepView >= 0 || In.CallView >= 0 || In.GoBlock >= 0;
+			if (bPan) bFollowBlock = false;
+			In.bFollow = bFollowBlock;
+			if (Point >= 0) { In.bFollowAt = true; In.FollowAt = PointAt; In.FollowAtId = Point; }
+			B.Frame(In);
+			const double Tilt = B.Gen.TiltDegrees(), Speed = (Tilt - TiltWas) * 60.0;
+			Quiet = bKey ? 0 : Quiet + 1;
+			if (Quiet > 1) Jolt = std::max(Jolt, std::abs(Speed - SpeedWas) * 60.0);
+			TiltWas = Tilt;
+			SpeedWas = Speed;
+			const LandEye::Pose& P = B.Gen.Current();
+			const Vec To = P.Look - P.Eye;
+			const double Far = std::max(1.0, To.Length()), Deg = 57.29577951308232;
+			const double Yaw = std::atan2(To.X, To.Y) * Deg, Pitch = std::asin(std::clamp(To.Z / Far, -1.0, 1.0)) * Deg;
+			double Turned = Yaw - YawWas;
+			while (Turned > 180.0) Turned -= 360.0;
+			while (Turned < -180.0) Turned += 360.0;
+			const double YawSpeed = Turned * 60.0, PitchSpeed = (Pitch - PitchWas) * 60.0;
+			Steady = P.bCut ? 0 : Steady + 1;
+			if (Steady > 2 && Quiet > 1)
+			{
+				Kick = std::max(Kick, std::hypot(YawSpeed - YawSpeedWas, PitchSpeed - PitchSpeedWas) * 60.0);
+				Rise = std::max(Rise, std::abs((P.Eye.Z - EyeUpWas) - (EyeUpWas - EyeUpWas2)) * 3600.0 / Far * Deg);
+				Shake = std::max(Shake, std::hypot((P.Eye.X - EyeWas.X) - (EyeWas.X - EyeWas2.X), (P.Eye.Y - EyeWas.Y) - (EyeWas.Y - EyeWas2.Y)) * 3600.0 / Far * Deg);
+			}
+			EyeWas2 = EyeWas;
+			EyeWas = P.Eye;
+			YawWas = Yaw;
+			PitchWas = Pitch;
+			YawSpeedWas = YawSpeed;
+			PitchSpeedWas = PitchSpeed;
+			EyeUpWas2 = EyeUpWas;
+			EyeUpWas = P.Eye.Z;
+		}
+		void Calm() { Jolt = Kick = Rise = Shake = 0.0; }
+		void Wait(double Seconds) { for (int K = 0; K < static_cast<int>(Seconds * 60.0 + 0.5); ++K) Go(LandGeneralEye::Input()); }
+		void Hill() { LandGeneralEye::Input In; In.bHillView = true; Go(In); }
+		void Top() { LandGeneralEye::Input In; In.bTopView = true; Go(In); }
+		void Keep(int Number) { LandGeneralEye::Input In; In.KeepView = Number; Go(In); }
+		void Call(int Number) { LandGeneralEye::Input In; In.CallView = Number; Go(In); }
+		/** Notches of his wheel, one a tenth of a second (+ in). */
+		void Notches(int Count) { for (int K = 0; K < std::abs(Count); ++K) { LandGeneralEye::Input In; In.Zoom = Count > 0 ? 1.0 : -1.0; Go(In); Wait(0.1); } }
+		/** A tilt key held: degrees a second (+ steeper), for so long. */
+		void Tilt(double Rate, double Seconds) { for (int K = 0; K < static_cast<int>(Seconds * 60.0 + 0.5); ++K) { LandGeneralEye::Input In; In.Tilt = Rate / 60.0; Go(In); } }
+		void Pan(double Right, double Ahead, double Seconds) { for (int K = 0; K < static_cast<int>(Seconds * 60.0 + 0.5); ++K) { LandGeneralEye::Input In; In.PanRight = Right; In.PanAhead = Ahead; Go(In); } }
+		void Turn(double Rate, double Seconds) { for (int K = 0; K < static_cast<int>(Seconds * 60.0 + 0.5); ++K) { LandGeneralEye::Input In; In.Turn = Rate / 60.0; Go(In); } }
+		/** The unit's card: the view goes to the block and follows it. */
+		void Card() { LandGeneralEye::Input In; In.GoBlock = B.Rec.Tracks[0].Block; bFollowBlock = true; Go(In); }
+		double Zoom() const { return B.Gen.Zoom(); }
+		double TiltNow() const { return B.Gen.TiltDegrees(); }
+		/** The eye's height over the look-at, metres. */
+		double Up() const { return B.Gen.Current().Eye.Z - B.Gen.Current().Look.Z; }
+		/** Tilting with the zoom and nothing else: no tilt of his own, no low look, no top view. */
+		bool Plain() const { return !B.Gen.OwnTilt() && !B.Gen.HillView() && !B.Gen.TopView() && std::abs(B.Shown()) < 0.05 && LowAtRest(); }
+		/** The low look is where it is wanted (none, or its tilt), not left on its way under a tilt of his own. */
+		bool LowAtRest() const { return std::abs(B.Gen.HillTiltNow() - B.Gen.HillTiltWanted()) < 1e-9; }
+		/** A low look that is lit tells on the picture where the view stands (a quarter of a degree or more of the
+		 * automatic tilt held down), and so does the one a view is kept with at that view's zoom. */
+		bool Tells() const
+		{
+			const LandGeneralEye::Eye& G = B.Gen;
+			return !G.HillView() || AutoTiltDeg(G.ZoomWanted()) - G.TiltByItself(G.ZoomWanted(), G.HillTiltWanted()) > 0.25;
+		}
+		bool ViewTells(int Number) const
+		{
+			const LandGeneralEye::Eye& G = B.Gen;
+			Vec Look;
+			double Heading = 0.0, ViewZoom = 0.0, ViewTilt = 0.0;
+			if (!G.ViewIs(Number, Look, Heading, ViewZoom, ViewTilt) || G.ViewHill(Number) >= G.HillNoneDegrees()) return true;
+			return AutoTiltDeg(ViewZoom) - G.TiltByItself(ViewZoom, G.ViewHill(Number)) > 0.25;
+		}
+	};
+
+	/** The low look's own rules on a bare field (the review of 26 November). The hill run's script presses HILL from
+	 * the automatic view, holds its tilt keys from rest and keeps its views at rest; what it does not walk into is
+	 * set up here, a case each, with the figures a build without the rule gave beside it:
+	 * HILL pressed under the top view puts the low look out and leaves the top view and its zoom alone; a tilt of
+	 * his own set under a low look is not handed back as his own once the low look is gone and the automatic tilt
+	 * hides it (the top view's second press, HILL's second press, HILL off a low look a kept view brought on): he is
+	 * never left with a tilt he cannot see, to come out of nowhere when he zooms in (5.4 and 8.2 degrees), and the
+	 * picture is not kicked on the way (1,468 degrees a second squared); HILL's first press hands his own tilt
+	 * back, its second goes back to no tilt of his own where it came from none, and to the zoom it came from though
+	 * pressed again before the first had settled; a tilt of his own on its way back to the automatic one as HILL is
+	 * pressed is not his own again at the second press; his wheel takes the zoom from a press on its way; a press
+	 * back toward a zoom nearer than a followed unit's nearest rests at that nearest when the follow ends.
+	 * His tilt keys are one line: held down from the automatic view the picture falls at once; held up from the low
+	 * look it climbs through the automatic tilt into his own, and back, at the key's speed with no flat spot where
+	 * the low look hands over to his tilt (it stood still for a fifth of a second and more); pressed against a low
+	 * look that is still swinging the picture turns within the swing's own stopping way (it ran on 8.6 and 20.6
+	 * degrees the wrong way).
+	 * A view kept in a flight, and a flight let go by his hand, keep a low look only where it tells on the picture
+	 * (HILL VIEW was left lit for good over a low look a ten-thousandth of a degree under the automatic tilt); a
+	 * view kept the frame after HILL is kept with the low look the press is bringing; a flight between two low
+	 * looks flatter than the hill's crosses the field at the hill's tilt, not skimming it at three degrees; HILL
+	 * pressed at a kept low look called since his first press has no zoom to go back to; a call takes the zoom
+	 * from a press on its way.
+	 * A point of the scene's let go by his pan is taken up again once the scene has stopped and begun again; a leap
+	 * of the point (another man named under the same number) is not learnt as speed; a jitter of the feed is not
+	 * led; a new point does not start with the old one's speed. */
+	void LowLookBench()
+	{
+		const LandGeneralEye::Settings Set;
+		const bool bSay = std::getenv("LAND_PLAY_LOW") != nullptr;
+		typedef LandGeneralEye::Input Keys;
+		// HILL under the top view
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			R.Hill(); R.Wait(4.0);
+			R.Top(); R.Wait(4.0);
+			const double ZoomTop = R.Zoom();
+			const bool bSetUp = R.B.Gen.TopView() && R.B.Gen.HillView();
+			R.Hill(); R.Wait(4.0);
+			const bool bOut = R.B.Gen.TopView() && !R.B.Gen.HillView() && R.LowAtRest() && std::abs(R.Zoom() - ZoomTop) < 0.01;
+			R.Top(); R.Wait(6.0);
+			if (bSay) std::printf("  the low look's bench (hill under top): top zoom %.3f, after the hill press out %d, after the top press zoom %.3f plain %d\n", ZoomTop, bOut ? 1 : 0, R.Zoom(), R.Plain() ? 1 : 0);
+			if (!bSetUp) Fault("the low look's bench did not have the top view on over a hill view");
+			else if (!bOut) Fault("the hill view pressed under the top view did not just put the low look out (the top view and its zoom as they stood)");
+			else if (!R.Plain() || std::abs(R.Zoom() - ZoomTop) > 0.01) Fault("the top view's second press, the low look put out under it, did not leave the view tilting with the zoom where it stood");
+		}
+		// the top view pressed as the hill view's low look is still coming on: his tilt goes first and the low look
+		// waits (swung together they cross, each at its own speed: 1,032 degrees a second squared here, 1,750 in a
+		// random hand's sequence, where his tilt first gives 541)
+		{
+			double Worst = 0.0;
+			bool bTopOn = true;
+			for (int Gap = 8; Gap <= 12; Gap += 4)
+			{
+				LowRig R(true, true);
+				R.Wait(1.0);
+				R.Hill();
+				for (int K = 0; K < Gap; ++K) R.Go(Keys());
+				R.Calm();
+				R.Top(); R.Wait(6.0);
+				Worst = std::max(Worst, std::max(R.Jolt, R.Kick));
+				bTopOn = bTopOn && R.B.Gen.TopView() && R.B.Gen.HillView() && R.LowAtRest() && std::abs(R.TiltNow() - Set.TopTilt) < 0.3;
+			}
+			if (bSay) std::printf("  the low look's bench (the top view pressed as the hill view's low look comes on): the picture's tilt pushed %.0f degrees a second squared at the most, top view on over the low look at rest %d\n", Worst, bTopOn ? 1 : 0);
+			if (Worst > 800.0) Fault("the top view pressed as the hill view's low look came on met it on the way (the picture's tilt pushed over 800 degrees a second squared)");
+			if (!bTopOn) Fault("the top view pressed as the hill view's low look came on did not come to rest as the top view over the low look");
+		}
+		// a tilt of his own set under a low look, the low look then put out under the top view
+		for (int Low = 0; Low < 2; ++Low)
+		{
+			LowRig R(Low == 1, true);
+			R.Wait(1.0);
+			R.Hill(); R.Wait(6.0);
+			if (Low == 0) { R.Tilt(20.0, 0.5); R.Wait(3.0); }
+			else { R.Top(); R.Wait(4.0); R.Tilt(-30.0, 2.0); R.Wait(3.0); }
+			const double ShownSet = R.TiltNow() - R.B.Gen.TiltByItself(R.Zoom(), R.B.Gen.HillTiltNow());
+			const bool bSetUp = R.B.Gen.OwnTilt() && R.B.Gen.HillView() && !R.B.Gen.TopView() && ShownSet > 2.0;
+			R.Top(); R.Wait(4.0);
+			R.Hill(); R.Wait(3.0);
+			R.Top(); R.Wait(6.0);
+			const bool bOwnLeft = R.B.Gen.OwnTilt();
+			const double ShownLeft = R.B.Shown();
+			R.Notches(11); R.Wait(4.0);
+			if (bSay) std::printf("  the low look's bench (his tilt under a low look, the low look put out under the top view, tilt keys %s): set showing %.2f over the low look, left own %d showing %.2f, zoomed in to %.3f own %d showing %.2f\n",
+				Low ? "on down" : "to the automatic", ShownSet, bOwnLeft ? 1 : 0, ShownLeft, R.Zoom(), R.B.Gen.OwnTilt() ? 1 : 0, R.B.Shown());
+			if (!bSetUp) Fault("the low look's bench did not set a tilt of his own under a low look");
+			else if (bOwnLeft || R.B.Gen.OwnTilt() || std::abs(R.B.Shown()) > 0.05)
+				Fault("a tilt of his own set under a low look was handed back as his own with the low look gone and the automatic tilt hiding it (it came out of nowhere when he zoomed in)");
+		}
+		// ... and HILL's two presses a frame apart on the way: no kick
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			R.Hill(); R.Wait(6.0);
+			R.Top(); R.Wait(4.0);
+			R.Tilt(-30.0, 2.0); R.Wait(3.0);
+			R.Top(); R.Wait(4.0);
+			R.Hill(); R.Wait(1.0 / 60.0); R.Hill(); R.Wait(6.0);
+			R.Top(); R.Wait(4.0);
+			R.Tilt(-20.0, 1.5); R.Wait(2.0);
+			const bool bSetUp = R.B.Gen.OwnTilt() && R.B.Gen.HillView();
+			R.Calm();
+			R.Hill(); R.Wait(8.0);
+			if (bSay) std::printf("  the low look's bench (hill back over a tilt of his own saved under another low look): the picture's tilt pushed %.0f degrees a second squared at the most (look kick %.0f, rise %.0f), plain %d\n", R.Jolt, R.Kick, R.Rise, R.Plain() ? 1 : 0);
+			if (!bSetUp) Fault("the low look's bench did not set a tilt of his own over a hill view for its second press");
+			else if (R.Jolt > 1200.0) Fault("the hill view's second press kicked the picture's tilt (over 1200 degrees a second squared with no key down)");
+			else if (!R.Plain()) Fault("the hill view's second press left a tilt of his own on that the automatic tilt hides");
+		}
+		// HILL off a low look that a kept view brought on, a tilt of his own set under it
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			R.Hill(); R.Wait(6.0);
+			R.Keep(0);
+			R.Pan(1.0, 0.0, 1.0); R.Wait(3.0);
+			R.Call(0); R.Wait(8.0);
+			const bool bThere = R.B.Gen.ViewAt() == 0 && R.B.Gen.HillView();
+			R.Top(); R.Wait(4.0);
+			R.Tilt(-30.0, 1.7); R.Wait(3.0);
+			const bool bSetUp = bThere && R.B.Gen.OwnTilt() && R.B.Gen.HillView() && !R.B.Gen.TopView();
+			R.Hill(); R.Wait(8.0);
+			const bool bPlain = R.Plain();
+			R.Notches(9); R.Wait(4.0);
+			if (bSay) std::printf("  the low look's bench (hill off a kept view's low look): plain %d, zoomed in to %.3f own %d showing %.2f\n", bPlain ? 1 : 0, R.Zoom(), R.B.Gen.OwnTilt() ? 1 : 0, R.B.Shown());
+			if (!bSetUp) Fault("the low look's bench did not set a tilt of his own under a kept view's low look");
+			else if (!bPlain || !R.Plain()) Fault("the hill view pressed off a kept view's low look left a tilt of his own on that the automatic tilt hides");
+		}
+		// HILL's second press from a tilt of his own taken in the hill view: back to none, and to the zoom
+		{
+			LowRig R(false, true);
+			R.Wait(1.0);
+			const double Zoom0 = R.Zoom();
+			R.Hill(); R.Wait(4.0);
+			R.Tilt(50.0, 1.0); R.Wait(2.0);
+			const bool bSetUp = R.B.Gen.OwnTilt() && R.B.Gen.HillView() && R.B.Shown() > 1.0;
+			R.Calm();
+			R.Hill(); R.Wait(6.0);
+			if (bSay) std::printf("  the low look's bench (hill back from a tilt of his own taken in the hill view): zoom %.3f from %.3f, own %d showing %.2f; the picture's tilt pushed %.0f degrees a second squared at the most (look kick %.0f, rise %.0f)\n", R.Zoom(), Zoom0, R.B.Gen.OwnTilt() ? 1 : 0, R.B.Shown(), R.Jolt, R.Kick, R.Rise);
+			if (!bSetUp) Fault("the low look's bench did not set a tilt of his own in the hill view");
+			else if (R.Jolt > 1200.0 || R.Kick > 1200.0) Fault("the hill view's second press, his tilt handed back from high over the low look, kicked the picture (over 1200 degrees a second squared with no key down)");
+			else if (!R.Plain() || std::abs(R.Zoom() - Zoom0) > 0.01) Fault("the hill view's second press did not go back to the zoom and to no tilt of his own, as the view had it before the first");
+		}
+		// HILL's first press from a tilt of his own
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			R.Tilt(50.0, 2.0); R.Wait(2.0);
+			const bool bSetUp = R.B.Gen.OwnTilt() && R.B.Shown() > 10.0;
+			R.Hill(); R.Wait(5.0);
+			if (bSay) std::printf("  the low look's bench (hill from a tilt of his own): tilt %.2f, eye %.1f m up, own %d\n", R.TiltNow(), R.Up(), R.B.Gen.OwnTilt() ? 1 : 0);
+			if (!bSetUp) Fault("the low look's bench did not set a tilt of his own before the hill view");
+			else if (R.B.Gen.OwnTilt() || !R.B.Gen.HillView() || std::abs(R.TiltNow() - Set.HillTilt) > 0.3 || std::abs(R.Up() - Set.HillUp) > 1.0)
+				Fault("the hill view pressed from a tilt of his own did not hand it back and bring the view to the hill");
+		}
+		// HILL pressed again before the first press has settled
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			const double Zoom0 = R.Zoom();
+			R.Hill(); R.Wait(0.3);
+			const double ZoomMid = R.Zoom();
+			R.Hill(); R.Wait(5.0);
+			if (bSay) std::printf("  the low look's bench (hill pressed twice in a third of a second): zoom %.3f from %.3f by %.3f, plain %d\n", R.Zoom(), Zoom0, ZoomMid, R.Plain() ? 1 : 0);
+			if (std::abs(ZoomMid - Zoom0) < 0.005) Fault("the low look's bench: the hill view's press had not begun to move the zoom");
+			else if (!R.Plain() || std::abs(R.Zoom() - Zoom0) > 0.01) Fault("the hill view pressed again before it had settled did not go back to the zoom it came from");
+		}
+		// HILL as a tilt of his own is on its way back to the automatic one
+		{
+			LowRig R(false, true);
+			R.Wait(1.0);
+			R.Tilt(50.0, 1.0); R.Wait(1.0);
+			R.Tilt(-50.0, 1.0);
+			const bool bSetUp = R.B.Gen.OwnTilt() && R.B.Shown() > 1.0;
+			const double ShownAt = R.B.Shown();
+			R.Hill(); R.Wait(4.0);
+			R.Hill(); R.Wait(4.0);
+			if (bSay) std::printf("  the low look's bench (hill as his tilt goes back): showing %.2f at the press, after both presses own %d showing %.2f\n", ShownAt, R.B.Gen.OwnTilt() ? 1 : 0, R.B.Shown());
+			if (!bSetUp) Fault("the low look's bench did not press the hill view with a tilt of his own on its way back");
+			else if (!R.Plain()) Fault("a tilt of his own already going back to the automatic one as the hill view was pressed was his own again after the second press");
+		}
+		// the tilt keys' one line
+		{
+			// (at once: as soon as his own tilt answers the key held up, a third of a second for the first degree, the
+			// spring's start and the soft meeting's; the low look's wish begun from none, far over the automatic tilt
+			// of a near zoom, it was most of a second)
+			LowRig N(true, true);
+			N.Wait(1.0);
+			N.Notches(9); N.Wait(3.0);
+			const double TiltNear = N.TiltNow();
+			int FellAt = -1;
+			for (int K = 0; K < 120 && FellAt < 0; ++K) { N.Tilt(-50.0, 1.0 / 60.0); if (TiltNear - N.TiltNow() > 1.0) FellAt = K + 1; }
+			const double Fell = FellAt < 0 ? 9.0 : FellAt / 60.0;
+			LowRig R(true, true);
+			R.Wait(1.0);
+			R.Tilt(-50.0, 2.15); R.Wait(2.0);
+			const bool bLowOn = R.B.Gen.HillView() && !R.B.Gen.OwnTilt() && std::abs(R.B.Gen.HillTiltWanted() - Set.LowTilt) < 1e-6 && std::abs(R.TiltNow() - Set.LowTilt) < 0.05;
+			// (a window of a tenth of a second, from half a second into the hold, the spring's own start, until the
+			// key's line has reached its end and only the spring's tail is left: the lag is two speeds over the rate)
+			const double Rate = 50.0, Lag = 2.0 * Rate / Set.TiltEase + 3.0;
+			std::vector<double> Tilts;
+			for (int K = 0; K < 132; ++K) { R.Tilt(Rate, 1.0 / 60.0); Tilts.push_back(R.TiltNow()); }
+			double SlowUp = 1e9, BackUp = 0.0;
+			for (size_t K = 30; K + 6 < Tilts.size() && Tilts[K + 6] < Set.TiltMost - Lag; ++K) SlowUp = std::min(SlowUp, (Tilts[K + 6] - Tilts[K]) * 10.0);
+			for (size_t K = 1; K < Tilts.size(); ++K) BackUp = std::max(BackUp, Tilts[K - 1] - Tilts[K]);
+			R.Wait(2.0);
+			const bool bOwnUp = R.B.Gen.OwnTilt() && !R.B.Gen.HillView() && R.TiltNow() > Set.TiltMost - 1.0;
+			Tilts.clear();
+			for (int K = 0; K < 150; ++K) { R.Tilt(-Rate, 1.0 / 60.0); Tilts.push_back(R.TiltNow()); }
+			double SlowDown = 1e9, BackDown = 0.0;
+			for (size_t K = 30; K + 6 < Tilts.size() && Tilts[K + 6] > Set.LowTilt + Lag; ++K) SlowDown = std::min(SlowDown, (Tilts[K] - Tilts[K + 6]) * 10.0);
+			for (size_t K = 1; K < Tilts.size(); ++K) BackDown = std::max(BackDown, Tilts[K] - Tilts[K - 1]);
+			R.Wait(2.0);
+			const bool bLowAgain = R.B.Gen.HillView() && !R.B.Gen.OwnTilt() && std::abs(R.TiltNow() - Set.LowTilt) < 0.05;
+			if (bSay) std::printf("  the low look's bench (the tilt keys' one line): the first degree down at zoom %.2f took %.2f s, low %d; up at %.0f a second: slowest tenth of a second %.1f, back %.3f, his own %d; down: slowest %.1f, back %.3f, low again %d\n",
+				N.Zoom(), Fell, bLowOn ? 1 : 0, Rate, SlowUp, BackUp, bOwnUp ? 1 : 0, SlowDown, BackDown, bLowAgain ? 1 : 0);
+			if (Fell > 0.45) Fault("his tilt key held down from the automatic view did not tilt the picture at once (its first degree took over 0.45 s)");
+			if (!bLowOn || !bLowAgain) Fault("his tilt key held down did not bring the low look on as flat as it goes, with no tilt of his own left");
+			if (!bOwnUp) Fault("his tilt key held up from the low look did not end at his own tilt, as steep as it goes, the low look out");
+			if (SlowUp < 0.6 * Rate || BackUp > 0.01) Fault("his tilt key held up from the low look into his own tilt did not tilt the picture evenly (a tenth of a second at under six tenths of the key's speed, or a step back)");
+			if (SlowDown < 0.6 * Rate || BackDown > 0.01) Fault("his tilt key held down from his own tilt into the low look did not tilt the picture evenly (a tenth of a second at under six tenths of the key's speed, or a step back)");
+		}
+		// a tilt key against a low look still swinging
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			R.Tilt(-20.0, 1.0); R.Wait(5.0);
+			const bool bSetUp = R.B.Gen.HillView();
+			R.Hill(); R.Wait(0.2);
+			const double From = R.TiltNow();
+			double Wrong = 0.0;
+			for (int K = 0; K < 48; ++K) { R.Tilt(-20.0, 1.0 / 60.0); Wrong = std::max(Wrong, R.TiltNow() - From); }
+			LowRig R2(true, true);
+			R2.Wait(1.0);
+			R2.Hill(); R2.Wait(0.2);
+			const double From2 = R2.TiltNow();
+			double Wrong2 = 0.0;
+			for (int K = 0; K < 60; ++K) { R2.Tilt(20.0, 1.0 / 60.0); Wrong2 = std::max(Wrong2, From2 - R2.TiltNow()); }
+			if (bSay) std::printf("  the low look's bench (a tilt key against a low look still swinging): held down as it goes off the picture ran on %.2f degrees steeper; held up as it comes on, %.2f flatter\n", Wrong, Wrong2);
+			if (!bSetUp) Fault("the low look's bench did not bring a low look on by hand");
+			else if (Wrong > 5.0 || Wrong2 > 5.0) Fault("under a tilt key held against a low look still swinging the picture ran on the other way (over 5 degrees)");
+		}
+		// a view kept in a flight, and a flight let go, with the low look on its way
+		{
+			int BadKeep = 0, BadView = 0, BadGo = 0, Flights = 0, Takes = 0;
+			for (int Delay = 1; Delay <= 90; ++Delay)
+			{
+				LowRig R(true, true);
+				R.Wait(1.0);
+				R.Hill(); R.Wait(6.0);
+				R.Keep(2); R.Wait(0.5);
+				R.Hill(); R.Wait(6.0);
+				R.Call(2);
+				for (int K = 1; K < Delay; ++K) R.Go(Keys());
+				if (R.B.Gen.FlyingTo() == 2) ++Flights;
+				R.Keep(2); R.Wait(10.0);
+				if (!R.Tells()) ++BadKeep;
+				if (!R.ViewTells(2)) ++BadView;
+				LowRig L(true, true);
+				L.Wait(1.0);
+				L.Keep(1); L.Wait(0.5);
+				L.Hill(); L.Wait(6.0);
+				L.Call(1);
+				for (int K = 1; K < Delay; ++K) L.Go(Keys());
+				if (L.B.Gen.FlyingTo() == 1) ++Takes;
+				L.Turn(60.0, 0.05); L.Wait(10.0);
+				if (!L.Tells()) ++BadGo;
+			}
+			if (bSay) std::printf("  the low look's bench (a view kept in a flight, a flight let go, 90 of each a frame apart): %d and %d still flying; left lit with nothing to tell %d and %d, a view kept so %d\n", Flights, Takes, BadKeep, BadGo, BadView);
+			if (Flights < 20 || Takes < 20) Fault("the low look's bench did not keep a view, or take a flight, while the flight was on");
+			if (BadKeep > 0 || BadView > 0) Fault("a view kept in a flight kept a low look that tells on nothing (HILL VIEW lit for good with the automatic tilt on the picture)");
+			if (BadGo > 0) Fault("a flight let go by his hand left a low look on that tells on nothing where the view came to rest");
+		}
+		// a view kept the frame after HILL
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			R.Hill();
+			R.Keep(2);
+			if (bSay) std::printf("  the low look's bench (a view kept the frame after the hill press): kept with a low look of %.2f\n", R.B.Gen.ViewHill(2));
+			if (std::abs(R.B.Gen.ViewHill(2) - Set.HillTilt) > 1e-6) Fault("a view kept the frame after the hill view's press was not kept with the low look the press is bringing");
+		}
+		// a flight between two low looks flatter than the hill's, from far out and from a man's height
+		for (int Near = 0; Near < 2; ++Near)
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			R.Tilt(-50.0, 2.0); R.Wait(3.0);
+			R.Keep(1);
+			const Vec Kept = R.B.Gen.LookAt();
+			R.Pan(1.0, 0.0, 3.0); R.Wait(3.0);
+			if (Near) { R.Notches(14); R.Wait(3.0); }
+			const Vec Far = R.B.Gen.LookAt();
+			const double Way = std::hypot(Far.X - Kept.X, Far.Y - Kept.Y), ZoomFrom = R.Zoom(), UpFrom = R.Up();
+			const bool bSetUp = R.B.Gen.HillView() && std::abs(R.B.Gen.HillTiltNow() - Set.LowTilt) < 0.05 && Way > 150.0 && UpFrom < Set.FlyUp - 10.0;
+			R.Calm();
+			R.Call(1);
+			double MidMost = 0.0, UpLeast = 1e9, ZoomMost = 0.0;
+			for (int K = 0; K < 1500 && R.B.Gen.FlyingTo() == 1; ++K)
+			{
+				R.Go(Keys());
+				const Vec At = R.B.Gen.LookAt();
+				ZoomMost = std::max(ZoomMost, R.Zoom());
+				// (the eye's height from the first two metres of the way to the last two; the tilt across the middle)
+				if (std::hypot(At.X - Kept.X, At.Y - Kept.Y) > 2.0 && std::hypot(At.X - Far.X, At.Y - Far.Y) > 2.0) UpLeast = std::min(UpLeast, R.Up());
+				if (std::hypot(At.X - Kept.X, At.Y - Kept.Y) > 0.2 * Way && std::hypot(At.X - Far.X, At.Y - Far.Y) > 0.2 * Way) MidMost = std::max(MidMost, R.B.Gen.HillTiltNow());
+			}
+			R.Wait(3.0);
+			if (bSay) std::printf("  the low look's bench (a flight between two low looks of %.0f degrees, %.0f m apart, from zoom %.3f with the eye %.1f m up): crossed at %.2f degrees, the eye never under %.1f m up, the zoom out to %.4f; look kick %.0f, rise %.0f at the most; there %d with a low look of %.2f\n",
+				Set.LowTilt, Way, ZoomFrom, UpFrom, MidMost, UpLeast, ZoomMost, R.Kick, R.Rise, R.B.Gen.ViewAt() == 1 ? 1 : 0, R.B.Gen.HillTiltNow());
+			if (!bSetUp) Fault("the low look's bench did not set two low looks a flight apart");
+			else if (MidMost < Set.HillTilt - 0.5) Fault("a flight between two low looks flatter than the hill's did not cross the field at the hill's tilt");
+			// (47 m from far out and 41.5 m from a man's height, the flight setting out three hundredths of the zoom short
+			// of its height; 18 m where it set out for the hill's tilt with a flatter low look still on)
+			else if (UpLeast < Set.FlyUp - 5.0) Fault("a flight from a low look flatter than the hill's crossed the field with the eye well under a flight's height");
+			else if (R.Kick > 1200.0 || R.Rise > 1200.0) Fault("a flight between two low looks jolted the picture (over 1200 degrees a second squared): the zoom run into its end, or the low look met on the way");
+			else if (R.B.Gen.ViewAt() != 1 || std::abs(R.B.Gen.HillTiltNow() - Set.LowTilt) > 0.3) Fault("a flight to a kept low look flatter than the hill's did not come down to it at the end");
+		}
+		// the zoom on its way back out to a hair under its end, his notch in as it gets there
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			{ Keys In; In.Zoom = -1.77; R.Go(In); }
+			R.Wait(3.0);
+			const double ZoomOut = R.Zoom();
+			R.Hill(); R.Wait(5.0);
+			R.Hill();
+			for (int K = 0; K < 600 && R.Zoom() < ZoomOut - 0.02; ++K) R.Go(Keys());
+			const double ZoomAt = R.Zoom();
+			R.Calm();
+			R.Notches(1);
+			double ZoomMost = 0.0;
+			for (int K = 0; K < 240; ++K) { R.Go(Keys()); ZoomMost = std::max(ZoomMost, R.Zoom()); }
+			if (bSay) std::printf("  the low look's bench (the hill view's press back out to zoom %.4f, a notch in at %.4f): the zoom ran on to %.4f, rise %.0f degrees a second squared at the most, at rest %.4f\n", ZoomOut, ZoomAt, ZoomMost, R.Rise, R.Zoom());
+			if (ZoomOut < 0.99 || ZoomOut > 0.9995 || ZoomAt < ZoomOut - 0.03) Fault("the low look's bench did not bring the zoom back out to a hair under its end");
+			else if (ZoomMost > 0.99999 || R.Rise > 1200.0) Fault("the zoom, pulled back by his notch as it ran out to a hair under its end, ran into the end and was cut off there");
+		}
+		// HILL at a kept low look called since his first press; a call in a press's swing
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			const double Zoom0 = R.Zoom();
+			R.Hill(); R.Wait(6.0);
+			R.Notches(4); R.Wait(3.0);
+			R.Keep(0);
+			const double ZoomView = R.Zoom();
+			R.Hill(); R.Wait(6.0);
+			R.Pan(1.0, 0.0, 1.0); R.Wait(3.0);
+			R.Hill(); R.Wait(4.0);
+			R.Call(0); R.Wait(8.0);
+			const bool bSetUp = R.B.Gen.ViewAt() == 0 && R.B.Gen.HillView() && std::abs(ZoomView - Zoom0) > 0.05 && std::abs(ZoomView - R.B.Gen.HillZoom()) > 0.05;
+			R.Hill(); R.Wait(6.0);
+			if (bSay) std::printf("  the low look's bench (hill at a kept low look called since the first press): zoom %.3f, the view's %.3f, the first press's %.3f, plain %d\n", R.Zoom(), ZoomView, Zoom0, R.Plain() ? 1 : 0);
+			if (!bSetUp) Fault("the low look's bench did not call a kept low look after a hill press");
+			else if (!R.Plain() || std::abs(R.Zoom() - ZoomView) > 0.01) Fault("the hill view pressed at a kept low look called since his first press went back to that press's zoom");
+			// (a view kept farther out than he stands: the press's zoom, kept, took the view all the way in to the hill's
+			// zoom first and let go only there)
+			LowRig C(true, true);
+			C.Wait(1.0);
+			C.Notches(-1); C.Wait(3.0);
+			C.Keep(1);
+			const double ZoomKept = C.Zoom();
+			C.Notches(2); C.Wait(3.0);
+			C.Hill(); C.Wait(0.2);
+			const double ZoomCalled = C.Zoom();
+			C.Call(1);
+			double ZoomLeast = 9.0;
+			for (int K = 0; K < 480; ++K) { C.Go(Keys()); ZoomLeast = std::min(ZoomLeast, C.Zoom()); }
+			if (bSay) std::printf("  the low look's bench (a call in a hill press's swing): called at zoom %.4f, never under %.4f on the way, at the view %d, zoom %.4f, the view's %.4f, lit %d\n", ZoomCalled, ZoomLeast, C.B.Gen.ViewAt() == 1 ? 1 : 0, C.Zoom(), ZoomKept, C.B.Gen.HillView() ? 1 : 0);
+			if (C.B.Gen.ViewAt() != 1 || std::abs(C.Zoom() - ZoomKept) > 0.005 || C.B.Gen.HillView() || ZoomLeast < ZoomCalled - 0.04)
+				Fault("a kept view called in a hill press's swing was not reached as it was kept, or the zoom went on in toward the press's first (the press's zoom was not let go)");
+		}
+		// his wheel in a press's swing; a press back toward a zoom nearer than a followed unit's nearest
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			R.Hill(); R.Wait(0.3);
+			R.Notches(1); R.Wait(5.0);
+			const double Wheel = R.B.Gen.HillZoom() - Set.ZoomStep;
+			if (bSay) std::printf("  the low look's bench (a notch in a hill press's swing): zoom %.3f, the hill's less a notch %.3f\n", R.Zoom(), Wheel);
+			if (std::abs(R.Zoom() - Wheel) > 0.01) Fault("his wheel in a hill press's swing did not take the zoom from the press");
+			LowRig F(true, true);
+			F.Wait(1.0);
+			F.Notches(22); F.Wait(3.0);
+			const double ZoomNear = F.Zoom();
+			F.Hill(); F.Wait(5.0);
+			F.Card(); F.Wait(6.0);
+			const bool bSetUp = ZoomNear < Set.FollowNearest - 0.1 && F.B.Gen.Following() >= 0 && F.B.Gen.HillView();
+			F.Hill(); F.Wait(4.0);
+			const double ZoomHeld = F.Zoom();
+			F.Pan(1.0, 0.0, 1.0); F.Wait(3.0);
+			if (bSay) std::printf("  the low look's bench (hill back toward zoom %.3f while following): held at %.3f, after a pan %.3f\n", ZoomNear, ZoomHeld, F.Zoom());
+			if (!bSetUp) Fault("the low look's bench did not follow a unit in a hill view pressed from a man's shoulder");
+			else if (std::abs(ZoomHeld - Set.FollowNearest) > 0.01 || std::abs(F.Zoom() - Set.FollowNearest) > 0.01)
+				Fault("the hill view's second press while following a unit did not rest at a followed unit's nearest zoom, or dived in once the follow ended");
+		}
+		// his own tilt called back over a low look going off: no kick
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			R.Tilt(50.0, 2.0); R.Wait(2.0);
+			R.Keep(2);
+			R.Hill(); R.Wait(4.0);
+			const bool bSetUp = R.B.Gen.HillView() && !R.B.Gen.OwnTilt();
+			R.Calm();
+			R.Call(2); R.Wait(8.0);
+			LowRig T(true, true);
+			T.Wait(1.0);
+			T.Notches(6); T.Wait(2.0);
+			T.Tilt(50.0, 0.5); T.Wait(2.0);
+			const double ShownOwn = T.B.Shown(), ZoomOwn = T.Zoom();
+			T.Top(); T.Wait(4.0);
+			T.Hill(); T.Wait(5.0);
+			const bool bSetUpTop = T.B.Gen.HillView() && !T.B.Gen.TopView() && ShownOwn > 5.0;
+			T.Calm();
+			T.Hill(); T.Wait(8.0);
+			if (bSay) std::printf("  the low look's bench (his own tilt called back over a low look going off): the picture's tilt pushed %.0f degrees a second squared at the most (look kick %.0f, rise %.0f); there %d, own %d, lit %d; the hill view pressed from a top view over his own tilt, and again: %.0f (%.0f, %.0f), his own %d showing %.2f (%.2f before the top view), zoom %.3f (%.3f)\n",
+				R.Jolt, R.Kick, R.Rise, R.B.Gen.ViewAt() == 2 ? 1 : 0, R.B.Gen.OwnTilt() ? 1 : 0, R.B.Gen.HillView() ? 1 : 0, T.Jolt, T.Kick, T.Rise, T.B.Gen.OwnTilt() ? 1 : 0, T.B.Shown(), ShownOwn, T.Zoom(), ZoomOwn);
+			if (!bSetUpTop) Fault("the low look's bench did not press the hill view from a top view");
+			else if (T.Jolt > 1200.0 || T.Kick > 1200.0 || T.Rise > 1200.0) Fault("the hill view's second press, pressed first from a top view over his own tilt, kicked the picture (over 1200 degrees a second squared with no key down)");
+			else if (T.B.Gen.TopView() || T.B.Gen.HillView() || !T.B.Gen.OwnTilt() || std::abs(T.B.Shown() - ShownOwn) > 0.3 || std::abs(T.Zoom() - ZoomOwn) > 0.01)
+				Fault("the hill view's second press, pressed first from a top view over his own tilt, did not go back to the zoom and the tilt of his own the top view was pressed from");
+			if (!bSetUp) Fault("the low look's bench did not have a hill view on over a view kept with his own tilt");
+			else if (R.Jolt > 1200.0 || R.Kick > 1200.0 || R.Rise > 1200.0) Fault("his own tilt called back over a low look going off kicked the picture's tilt (over 1200 degrees a second squared with no key down)");
+			else if (R.B.Gen.ViewAt() != 2 || !R.B.Gen.OwnTilt() || R.B.Gen.HillView()) Fault("a view kept with his own tilt and no low look was not reached as it was kept from a hill view");
+		}
+		// the scene's point: let go and fed again, a leap, a jitter, a new point
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			const Vec At0 = R.B.Gen.LookAt();
+			R.Point = 5;
+			R.PointAt = Vec(At0.X + 30.0, At0.Y + 10.0, 0.0);
+			R.Wait(3.0);
+			const bool bOn = R.B.Gen.FollowingAt() == 5;
+			R.Pan(1.0, 0.0, 0.5); R.Wait(1.0);
+			const bool bLeft = R.B.Gen.FollowingAt() != 5;
+			R.Point = -1;
+			R.Wait(1.0);
+			R.Point = 5;
+			R.Wait(0.5);
+			if (bSay) std::printf("  the low look's bench (a point let go, stopped and fed again): on it %d, let go %d, on it again %d\n", bOn ? 1 : 0, bLeft ? 1 : 0, R.B.Gen.FollowingAt() == 5 ? 1 : 0);
+			if (!bOn || !bLeft) Fault("the low look's bench: the scene's point was not taken up, or his pan did not let go of it");
+			else if (R.B.Gen.FollowingAt() != 5) Fault("a point his pan had let go of was not taken up again once the scene had stopped feeding it and begun again");
+		}
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			const Vec At0 = R.B.Gen.LookAt();
+			double X = At0.X + 20.0;
+			const double Y = At0.Y;
+			R.Point = 7;
+			double Past = -1e9;
+			for (int K = 0; K < 240; ++K) { X += 0.1; R.PointAt = Vec(X, Y, 0.0); R.Go(Keys()); }
+			const double Rode = std::hypot(R.B.Gen.LookAt().X - X, R.B.Gen.LookAt().Y - Y);
+			X += 200.0;
+			for (int K = 0; K < 240; ++K) { X += 0.1; R.PointAt = Vec(X, Y, 0.0); R.Go(Keys()); Past = std::max(Past, R.B.Gen.LookAt().X - X); }
+			const double Off = std::hypot(R.B.Gen.LookAt().X - X, R.B.Gen.LookAt().Y - Y);
+			if (bSay) std::printf("  the low look's bench (a point that leaps 200 m): rode %.2f m off it before, %.2f m past it at the most after, %.2f m off it four seconds on\n", Rode, Past, Off);
+			if (Rode > 0.5) Fault("the low look's bench: the scene's point was not ridden before its leap");
+			else if (Past > 5.0 || Off > 1.0) Fault("a leap of the scene's point threw the look-at past it (the leap learnt as its speed), or the point was not ridden again four seconds on");
+		}
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			const Vec At0 = R.B.Gen.LookAt();
+			double X = At0.X + 20.0;
+			const double Y = At0.Y;
+			R.Point = 8;
+			R.PointAt = Vec(X, Y, 0.0);
+			R.Notches(22); R.Wait(3.0);
+			double OffMost = 0.0;
+			for (int K = 0; K < 480; ++K)
+			{
+				X += 0.1;
+				// (five centimetres either way, a frame at a time, as a walking man's or a tank's own bob feeds it)
+				const double Jx = 0.05 * (((K * 7919) % 13) / 6.0 - 1.0), Jy = 0.05 * (((K * 104729) % 11) / 5.0 - 1.0);
+				R.PointAt = Vec(X + Jx, Y + Jy, 0.0);
+				R.Go(Keys());
+				if (K == 240) R.Calm();
+				if (K >= 240) OffMost = std::max(OffMost, std::hypot(R.B.Gen.LookAt().X - X, R.B.Gen.LookAt().Y - Y));
+			}
+			if (bSay) std::printf("  the low look's bench (a point fed with five centimetres of jitter, from zoom %.3f): the look-at %.2f m off its true path at the most, the eye shaken %.0f degrees a second squared as the picture sees it\n", R.Zoom(), OffMost, R.Shake);
+			// (61 with the point's speed learnt over a quarter of a second; 450 with each frame's taken raw)
+			if (OffMost > 1.0 || R.Shake > 200.0) Fault("a jitter in the scene's point was led as if it were the point's speed (the view shaken over 200 degrees a second squared, or over a metre off its true path)");
+		}
+		{
+			LowRig R(true, true);
+			R.Wait(1.0);
+			const Vec At0 = R.B.Gen.LookAt();
+			double X = At0.X + 20.0;
+			const double Y = At0.Y;
+			R.Point = 5;
+			for (int K = 0; K < 240; ++K) { X += 0.1; R.PointAt = Vec(X, Y, 0.0); R.Go(Keys()); }
+			R.Point = 6;
+			const Vec Still(X + 0.5, Y, 0.0);
+			R.PointAt = Still;
+			double Past = -1e9;
+			for (int K = 0; K < 240; ++K) { R.Go(Keys()); Past = std::max(Past, R.B.Gen.LookAt().X - Still.X); }
+			const double Off = std::hypot(R.B.Gen.LookAt().X - Still.X, R.B.Gen.LookAt().Y - Still.Y);
+			if (bSay) std::printf("  the low look's bench (a new point standing still half a metre on from one that moved): %.2f m past it at the most, %.2f m off it four seconds on, on it %d\n", Past, Off, R.B.Gen.FollowingAt() == 6 ? 1 : 0);
+			if (R.B.Gen.FollowingAt() != 6 || Off > 0.5) Fault("another point of the scene's was not taken up and reached");
+			// (a third of a metre is the look-at's own way to a stop from the first point's pace; 1.2 m with the first
+			// point's speed kept for the second)
+			else if (Past > 0.6) Fault("a new point of the scene's began with the old point's speed (the look-at led a point that stands still)");
+		}
+	}
+
+	/** The far low turn (the review of 26 November). A low look far out puts a long arm's eye down among the trees,
+	 * and his turn key then sweeps it over the field at 100 to 400 m/s: it met a tree the look ahead had not seen
+	 * and stopped dead in a frame (2,000 to 4,000 degrees a second squared on Normandy). The rule, flown as a crane
+	 * is: where a thing stands on the eye's way round, the view rises while the turn is held, no further than the
+	 * height at which the way round is clear, then swings as fast as the key asks, and comes back down when the turn
+	 * is done; a key let go stops the turn where it would have stopped over open ground; a turn begun under a crown
+	 * rises no further than the way up is open, rests clear under the leaves, and goes on up once it is out from under
+	 * them (it coasted up into them and the picture cut). Over open ground it neither rises nor is held, a crown
+	 * overhead alone being nothing on its way; a turn that sweeps the eye slower than Settings::LowSweep is as it
+	 * was; and with no low look on nothing of it runs at all, however low the automatic tilt leaves the eye (the last
+	 * two are held to the picture, frame for frame, of a run with the rule switched off). No recording can be relied
+	 * on to put a wood exactly on the arc, so it is planted here: a tree every 25 m, 3 m about, none within a glade
+	 * about where the bench looks. The bench is its own witness too: with the rule switched off its wood must still
+	 * stop the far turn dead, or it proves nothing. */
+	void SweepBench()
+	{
+		const bool bSay = std::getenv("LAND_PLAY_LOW") != nullptr;
+		// (Tall: the trees' height, 0 none; Glade: no tree within this of where the bench looks; Roof: a crown's
+		// underside this high, a slab 4 m thick and 25 m about over where the far eye first stands, 0 none; From: the
+		// wood begins this many degrees round from where the eye first stands, either way, open ground before it;
+		// Yard: a farm's yard lies under the eye's way this many degrees round, eight degrees wide, ground the scene
+		// calls not free at any height: the view keeps Settings::FreeUnder, 12 m, over it; 0 none; Side: the wood
+		// stands only to that side of where the eye first stands, -1 the side a turn to the left sweeps it to, 0 both)
+		struct Plant
+		{
+			double Tall = 0.0, Glade = 60.0, Roof = 0.0, From = 0.0, Yard = 0.0, Side = 0.0;
+		};
+		// (the crown is there only once *bRoof is set: it grows over an eye already standing under it; an eye that came
+		// down on it from above would sit on top of it)
+		auto Wood = [](const Plant& P, const bool* bRoof)
+		{
+			return std::function<int(const Vec&, int)>([P, bRoof](const Vec& At, int) -> int
+			{
+				if (P.Roof > 0.0 && *bRoof && At.Z >= P.Roof && At.Z <= P.Roof + 4.0 && std::hypot(At.X - 1500.0, At.Y - 665.0) < 25.0) return 2;
+				if (P.Tall <= 0.0 || At.Z > P.Tall || At.Z < 0.0 || std::hypot(At.X - 1500.0, At.Y - 1000.0) < P.Glade) return 0;
+				if (P.From > 0.0 && std::abs(std::atan2(1500.0 - At.X, 1000.0 - At.Y)) * 57.29577951308232 < P.From) return 0;
+				if (P.Side != 0.0 && std::atan2(1500.0 - At.X, 1000.0 - At.Y) * P.Side < 0.0) return 0;
+				const double Gx = std::round(At.X / 25.0) * 25.0, Gy = std::round(At.Y / 25.0) * 25.0;
+				return std::hypot(At.X - Gx, At.Y - Gy) < 3.0 ? 2 : 0;
+			});
+		};
+		auto Farm = [](const Plant& P)
+		{
+			return std::function<bool(const Vec&)>([P](const Vec& At) -> bool
+			{
+				if (std::hypot(At.X - 1500.0, At.Y - 1000.0) < P.Glade) return true;
+				return std::abs(std::atan2(1500.0 - At.X, 1000.0 - At.Y) * 57.29577951308232 - P.Yard) > 4.0;
+			});
+		};
+		struct Got
+		{
+			int Waited = 0, Cuts = 0, InThing = 0;
+			double Kick = 0.0, Rise = 0.0, LiftMost = 0.0, LiftBefore = 0.0, LiftEnd = 0.0, LiftUnder = 0.0, FullAfter = -1.0, RateMost = 0.0, RateAtHalf = 0.0, Back = 0.0, Up = 0.0, Ran = 0.0, RateLeast = 1e9, UpLeast = 1e9, LiftAtKey = 0.0;
+			/** Every pose of the run folded into one number: two runs that show the same pictures have the same. */
+			std::uint64_t Sum = 1469598103934665603ULL;
+		};
+		// (zoomed in so many notches from the start, tilted down to the low look by hand, a turn key held three seconds,
+		// or Hold frames, and let go for six; bOff: the rule switched off, Settings::LowSweep 0; During: what his other
+		// hand does a second into the turn, 0 nothing, 1 the tilt key taken down for 1.6 s, 2 a press of HILL VIEW, 3 a slow
+		// pinch in for the rest of the turn, a fifth of a notch a second)
+		auto Run = [&](const Plant& P, double Rate, int NotchesIn, bool bLow, bool bOff = false, int Hold = 180, int During = 0)
+		{
+			bool bRoof = false;
+			const std::function<int(const Vec&, int)> Things = P.Tall > 0.0 || P.Roof > 0.0 ? Wood(P, &bRoof) : nullptr;
+			const std::function<void(LandGeneralEye::Settings&)> Off = [](LandGeneralEye::Settings& Row) { Row.LowSweep = 0.0; };
+			const std::function<bool(const Vec&)> Free = P.Yard != 0.0 ? Farm(P) : nullptr;
+			LowRig R(true, true, Things, bOff ? Off : nullptr, Free);
+			Got G;
+			R.Wait(1.0);
+			R.Notches(NotchesIn);
+			R.Wait(2.0);
+			if (bLow) R.Tilt(-40.0, 1.6);
+			R.Wait(4.0);
+			bRoof = true;
+			R.Wait(1.0);
+			const LandEye::Pose& P0 = R.B.Gen.Current();
+			G.Back = std::hypot(P0.Eye.X - P0.Look.X, P0.Eye.Y - P0.Look.Y);
+			G.Up = P0.Eye.Z;
+			G.LiftBefore = R.B.Gen.LiftNow();
+			const int Waited0 = R.B.Gen.WaitedFrames();
+			double RateWas = 0.0, UpWas = P0.Eye.Z, UpWas2 = P0.Eye.Z;
+			const int Frames = Hold + 360;
+			for (int K = 0; K < Frames; ++K)
+			{
+				LandGeneralEye::Input In;
+				if (K < Hold) In.Turn = Rate / 60.0;
+				if (During == 1 && K >= 60 && K < 156) In.Tilt = -40.0 / 60.0;
+				if (During == 2 && K == 60) In.bHillView = true;
+				if (During == 3 && K >= 60 && K < Hold) In.Zoom = 0.2 / 60.0;
+				R.Go(In);
+				const LandEye::Pose& Pose = R.B.Gen.Current();
+				const double Now = R.YawSpeedWas;
+				G.Kick = std::max(G.Kick, std::abs(Now - RateWas) * 60.0);
+				G.Rise = std::max(G.Rise, std::abs((Pose.Eye.Z - UpWas) - (UpWas - UpWas2)) * 3600.0 / std::max(1.0, (Pose.Look - Pose.Eye).Length()) * 57.29577951308232);
+				RateWas = Now;
+				UpWas2 = UpWas;
+				UpWas = Pose.Eye.Z;
+				G.RateMost = std::max(G.RateMost, std::abs(Now));
+				if (K == 30) G.RateAtHalf = std::abs(Now);
+				if (K >= 60 && K < Hold) G.RateLeast = std::min(G.RateLeast, std::abs(Now));
+				G.UpLeast = std::min(G.UpLeast, Pose.Eye.Z);
+				if (K == Hold - 1) G.LiftAtKey = R.B.Gen.LiftNow();
+				if (G.FullAfter < 0.0 && std::abs(Now) >= 0.9 * std::abs(Rate)) G.FullAfter = (K + 1) / 60.0;
+				if (K >= Hold) G.Ran += std::abs(Now) / 60.0;
+				G.LiftMost = std::max(G.LiftMost, R.B.Gen.LiftNow());
+				if (P.Roof > 0.0 && std::hypot(Pose.Eye.X - 1500.0, Pose.Eye.Y - 665.0) < 24.0) G.LiftUnder = std::max(G.LiftUnder, R.B.Gen.LiftNow());
+				if (Pose.bCut) ++G.Cuts;
+				if ((Things && Things(Pose.Eye, -1) != 0) || (Free && Pose.Eye.Z < 12.0 && !Free(Pose.Eye))) ++G.InThing;
+				for (const double V : { Pose.Eye.X, Pose.Eye.Y, Pose.Eye.Z, Pose.Look.X, Pose.Look.Y, Pose.Look.Z })
+				{
+					std::uint64_t Bits = 0;
+					std::memcpy(&Bits, &V, sizeof Bits);
+					G.Sum = (G.Sum ^ Bits) * 1099511628211ULL;
+				}
+			}
+			G.LiftEnd = R.B.Gen.LiftNow();
+			G.Waited = R.B.Gen.WaitedFrames() - Waited0;
+			return G;
+		};
+		auto Say = [&](const char* Name, const Got& G)
+		{
+			if (bSay) std::printf("  sweep bench, %s: eye %.0f m back, %.1f m up; lift %.2f before, %.2f at the most (%.2f under the crown), %.2f at the end; the turn %.1f deg/s at the most, %.1f after half a second, nine tenths of the key's after %.2f s, %.1f degrees on after the key; kick %.0f, rise or fall %.0f deg/s/s; waited %d, cuts %d, in a thing %d frames; the turn %.1f deg/s at the least from a second in to the key's end, the eye %.1f m up at the lowest, lift %.2f as the key is let go\n",
+				Name, G.Back, G.Up, G.LiftBefore, G.LiftMost, G.LiftUnder, G.LiftEnd, G.RateMost, G.RateAtHalf, G.FullAfter, G.Ran, G.Kick, G.Rise, G.Waited, G.Cuts, G.InThing, G.RateLeast > 1e8 ? -1.0 : G.RateLeast, G.UpLeast, G.LiftAtKey);
+		};
+		const Plant Bare, Trees{ 18.0, 60.0, 0.0, 0.0 }, Tall{ 26.0, 60.0, 0.0, 0.0 }, Thick{ 26.0, 20.0, 0.0, 0.0 }, Crown{ 0.0, 60.0, 20.0, 0.0 }, CrownWood{ 18.0, 60.0, 20.0, 0.0 };
+		const Plant Edge{ 18.0, 60.0, 0.0, 100.0 }, Brink{ 18.0, 60.0, 0.0, 6.0 }, CrownTall{ 26.0, 60.0, 20.0, 0.0 };
+		const Got Far = Run(Trees, 75.0, 0, true), Mid = Run(Trees, 75.0, 3, true), Mid5 = Run(Trees, -75.0, 5, true), Slow = Run(Trees, 20.0, 3, true);
+		const Got Open = Run(Bare, 75.0, 0, true), Near = Run(Trees, 75.0, 9, true), Roofed = Run(Crown, 75.0, 0, true);
+		const Got FarOff = Run(Trees, 75.0, 0, true, true);
+		const Got High = Run(Tall, 75.0, 0, false), HighOff = Run(Tall, 75.0, 0, false, true);
+		const Got Auto = Run(Thick, 90.0, 9, false), AutoOff = Run(Thick, 90.0, 9, false, true);
+		const Got Creep = Run(Trees, 6.0, 3, true), CreepOff = Run(Trees, 6.0, 3, true, true);
+		const Got RoofWood = Run(CrownWood, 75.0, 0, true), RoofWoodOff = Run(CrownWood, 75.0, 0, true, true);
+		const Got Into = Run(Edge, 75.0, 0, true), IntoBack = Run(Edge, -75.0, 0, true), IntoOff = Run(Edge, 75.0, 0, true, true);
+		const Got Shy = Run(Brink, 5.0, 0, true, false, 60), ShyOff = Run(Brink, 5.0, 0, true, true, 60);
+		const Got RoofTall = Run(CrownTall, 75.0, 0, true);
+		const Plant Yarded{ 0.0, 60.0, 0.0, 0.0, 60.0 };
+		const Got Yard = Run(Yarded, 75.0, 3, true), YardOff = Run(Yarded, 75.0, 3, true, true);
+		const Got Engage = Run(Tall, 75.0, 0, false, false, 300, 1), EngageOff = Run(Tall, 75.0, 0, false, true, 300, 1);
+		const Got Press = Run(Tall, 75.0, 0, false, false, 300, 2), PressOff = Run(Tall, 75.0, 0, false, true, 300, 2);
+		const Got Engage3 = Run(Tall, 75.0, 3, false, false, 300, 1), Engage3Off = Run(Tall, 75.0, 3, false, true, 300, 1);
+		const Got Engage6 = Run(Tall, 75.0, 6, false, false, 300, 1);
+		const Got EngageStill3 = Run(Tall, 0.0, 3, false, false, 300, 1);
+		const Got EngageCreep = Run(Tall, 6.0, 0, false, false, 300, 1), EngageCreep3 = Run(Tall, 6.0, 3, false, false, 300, 1), EngageSlow = Run(Tall, 20.0, 0, false, false, 300, 1);
+		// (a tall wood that begins 332 m from where the bench looks: the eye is 223 m back while it is high and 335 m
+		// back once it is down, so it comes down just inside a wood that does not stand under its way round as it is.
+		// Looked along where the eye is and not where it is coming to, the wood is not seen until the eye is nearly
+		// down: the turn was held from 75 degrees a second to 7.5 and the look kicked 896.)
+		const Plant Ring{ 26.0, 332.0, 0.0, 0.0 };
+		const Got EngageRing = Run(Ring, 75.0, 0, false, false, 300, 1), EngageRingOff = Run(Ring, 75.0, 0, false, true, 300, 1);
+		const Plant Wall{ 30.0, 60.0, 0.0, 100.0 };
+		const Got Walled = Run(Wall, 75.0, 6, true), WalledOff = Run(Wall, 75.0, 6, true, true);
+		const Plant Left{ 18.0, 60.0, 0.0, 6.0, 0.0, -1.0 };
+		const Got ToWood = Run(Left, -75.0, 0, true, false, 60), FromWood = Run(Left, 75.0, 0, true, false, 60), ToWoodOff = Run(Left, -75.0, 0, true, true, 60);
+		const Got RoofShort = Run(CrownWood, 75.0, 0, true, false, 6);
+		const Got Sink = Run(Trees, 75.0, 0, true, false, 300, 3);
+		Say("a wood, far out", Far);
+		Say("a wood, far out, the rule off", FarOff);
+		Say("a wood, three notches in", Mid);
+		Say("a wood, five notches in, the other way", Mid5);
+		Say("a wood, three notches in, a slow turn", Slow);
+		Say("open ground, far out", Open);
+		Say("a glade, nine notches in", Near);
+		Say("open ground, under a crown", Roofed);
+		Say("a wood, under a crown", RoofWood);
+		Say("a wood, under a crown, the rule off", RoofWoodOff);
+		Say("a tall wood, under a crown", RoofTall);
+		Say("open ground, then a wood", Into);
+		Say("open ground, then a wood, the other way", IntoBack);
+		Say("open ground, then a wood, the rule off", IntoOff);
+		Say("a wood 35 m on, a creeping turn toward it for a second", Shy);
+		Say("a farm's yard 60 degrees round, three notches in", Yard);
+		Say("a farm's yard 60 degrees round, three notches in, the rule off", YardOff);
+		Say("a wood, far out, the tilt key taken down to the low look a second into the turn", Engage);
+		Say("a wood, far out, the tilt key taken down a second into the turn, the rule off", EngageOff);
+		Say("a wood, far out, HILL VIEW pressed a second into the turn", Press);
+		Say("a wood, far out, HILL VIEW pressed a second into the turn, the rule off", PressOff);
+		Say("a wood, three notches in, the tilt key taken down a second into the turn", Engage3);
+		Say("a wood, three notches in, the tilt key taken down a second into the turn, the rule off", Engage3Off);
+		Say("a wood, six notches in, the tilt key taken down a second into the turn", Engage6);
+		Say("a wood, far out, the tilt key taken down a second into a creeping turn", EngageCreep);
+		Say("a wood, three notches in, the tilt key taken down a second into a creeping turn", EngageCreep3);
+		Say("a wood, far out, the tilt key taken down a second into a slow turn", EngageSlow);
+		Say("a wood, three notches in, the tilt key taken down with no turn held", EngageStill3);
+		Say("a wood beyond 332 m, far out, the tilt key taken down a second into the turn", EngageRing);
+		Say("a wood beyond 332 m, far out, the tilt key taken down a second into the turn, the rule off", EngageRingOff);
+		Say("open ground, then a wood too tall to rise over, six notches in", Walled);
+		Say("open ground, then a wood too tall to rise over, six notches in, the rule off", WalledOff);
+		Say("a wood to the left only, a turn to the left for a second", ToWood);
+		Say("a wood to the left only, a turn to the right for a second", FromWood);
+		Say("a wood to the left only, a turn to the left for a second, the rule off", ToWoodOff);
+		Say("a wood, under a crown, a turn of a tenth of a second", RoofShort);
+		Say("a wood, far out, a slow pinch in from a second into the turn", Sink);
+		Say("a tall wood, no low look", High);
+		Say("a thick tall wood, no low look, nine notches in", Auto);
+		Say("a wood, three notches in, a creeping turn", Creep);
+		Say("a wood, three notches in, a creeping turn, the rule off", CreepOff);
+		// (the figures of this build beside each bar)
+		// (it rises: 3.2 m far out, 4.6 m three notches in, 2.7 m five in, 5.1 m on the slow turn, 7.7 m once out from
+		// under the crown, whose own leaves it clears too)
+		if (Far.LiftMost < 2.5 || Mid.LiftMost < Mid.LiftBefore + 3.5 || Mid5.LiftMost < Mid5.LiftBefore + 2.0 || Slow.LiftMost < Slow.LiftBefore + 3.5 || RoofWood.LiftMost < 4.0 || Into.LiftMost < 2.5 || IntoBack.LiftMost < 2.5)
+			Fault("a low look's fast turn through a wood did not rise over the trees on its way round");
+		// (no further than where the way round is clear: 3.2 m over 18 m trees from 17.6 m up, where over everything is
+		// 14.4 and a rise left its swing ran on to 8.8; 4.1 m over the yard, which 3.2 clears)
+		if (Far.LiftMost > 4.5 || Into.LiftMost > 4.5 || Yard.LiftMost > 5.5) Fault("a low look's fast turn rose on past the height at which its way round was clear");
+		// (and back down within six seconds: to nothing where the eye comes to rest in the open, to the half metre the
+		// settling view keeps where it comes to rest beside a tree)
+		if (Far.LiftEnd > 1.0 || Mid.LiftEnd > 1.0 || Slow.LiftEnd > 1.0 || RoofWood.LiftEnd > 1.0 || Into.LiftEnd > 1.0 || Yard.LiftEnd > 1.0) Fault("the rise of a low look's fast turn did not come back down when the turn was done");
+		// (held while it rises: 24.2 and 21.9 degrees a second half a second on nearer in, where the key asks 75)
+		if (Mid.RateAtHalf > 60.0 || Mid5.RateAtHalf > 60.0) Fault("a low look's fast turn was not held while the view rose over the trees");
+		// (then as fast as the key asks: nine tenths of it after 0.62, 0.78 and 0.85 s, 0.80 s from under the crown, 1.12 s
+		// with tall trees beyond it, 0.47 s over the yard; and the slow turn and the turn that meets its wood later,
+		// never held, after 0.33 s)
+		auto Late = [](const Got& G, double By) { return G.FullAfter < 0.0 || G.FullAfter > By; };
+		if (Late(Far, 1.0) || Late(Mid, 1.2) || Late(Mid5, 1.2) || Late(RoofWood, 1.3) || Late(RoofTall, 1.5) || Late(Slow, 0.5) || Late(Into, 0.5) || Late(IntoBack, 0.5) || Late(Yard, 0.7)) Fault("a low look's fast turn through a wood was not let go at the key's rate once the view had risen");
+		// (cleanly: no stop at a tree, no cut, never in one; the look kicked 329 degrees a second squared at the most, the
+		// key's own start, and the eye's rise or fall 276 as the picture sees it, coming out from under the crown)
+		bool bDirty = false, bJolted = false;
+		// (and a turn already at the key's rate over open ground as a wood comes round to it, 440 m/s, the same: 329 and 26)
+		// (and over a farm's yard, ground the eye must stand 12 m over where it stood 8.8: up in time, no stop)
+		for (const Got* G : { &Far, &Mid, &Mid5, &Slow, &RoofWood, &RoofTall, &Into, &IntoBack, &Yard })
+		{
+			bDirty = bDirty || G->Waited > 0 || G->Cuts > 0 || G->InThing > 0;
+			bJolted = bJolted || G->Kick > 500.0 || G->Rise > 400.0;
+		}
+		if (bDirty) Fault("a low look's fast turn through a wood stopped at a tree, cut, or stood in one");
+		if (bJolted) Fault("a low look's fast turn through a wood jolted (a kick of the look over 500, or a rise or fall over 400 degrees a second squared)");
+		// (The low look brought on in the middle of a turn: from far over a tall wood, 250 m up, his turn key swings
+		// the eye at 290 m a second and his tilt key then brings it down among 26 m trees. The rise is asked from the
+		// start for where the eye is coming to, so it comes down no lower than over everything on its way round: the
+		// turn is never slowed (75 degrees a second at the least), the look kicked 329 at the most, its key's own
+		// start, and the eye's fall 138 to 195 as the picture sees it. Before 27 November the trees were seen a third
+		// of a second off: the whole view braked in mid air 85 m up, the lift was thrown up 28 m, and a second later
+		// the turn was held from 75 degrees a second to 8 with no key touched.)
+		// (and into a wood that stands only where the eye is coming to, further back than where it is: the same)
+		for (const Got* G : { &Engage, &Engage3, &Engage6, &EngageRing })
+		{
+			if (G->Waited > 0 || G->Cuts > 0 || G->InThing > 0 || G->Kick > 500.0 || G->Rise > 400.0 || G->RateLeast < 60.0)
+			{
+				Fault("a turn held while the tilt key brought the low look down over a wood was slowed, stopped, cut or jolted");
+				break;
+			}
+		}
+		// (and the bench's own set-up: with the rule off that wood stops the turn, nine frames far out and seven
+		// three notches in)
+		if (EngageOff.Waited == 0 || Engage3Off.Waited == 0 || EngageRingOff.Waited == 0) Fault("the sweep bench's tall wood no longer stops a turn that comes down into it with the rule switched off: it proves nothing");
+		// (HILL VIEW pressed in the middle of the same turn leaves the eye 35 m up, over the trees' height: nothing of
+		// the rule runs, the picture of a run with the rule switched off)
+		if (Press.Sum != PressOff.Sum) Fault("the far low turn's rule changed a turn whose eye stands over the trees' height");
+		// (A wood too tall to rise over, 30 m trees before an eye 4.6 m up that may rise 25, met at the key's full rate:
+		// the view rises as far as it may and the turn is slowed to what the way round lets it be, no harder than the
+		// turn's own push: 27.5 degrees a second at the least, the look kicked 329 at the most. Cut to it in a frame,
+		// it would be kicked 2,800.)
+		if (Walled.Kick > 500.0 || Walled.Cuts > 0 || Walled.InThing > 0 || Walled.Waited > 0) Fault("a low look's fast turn into a wood too tall to rise over jolted, stopped, cut or stood in a tree");
+		if (Walled.RateLeast > 45.0 || Walled.LiftMost < 24.0) Fault("the sweep bench's wood too tall to rise over no longer holds the turn: it proves nothing");
+		// (all of the rise, no more: 14.4 m far out, to 32 m over the ground; led besides by a tenth of a second of the
+		// arm's fall, as a lift over a thing under the eye is, it was thrown up 28 m)
+		if (Engage.LiftMost > 16.0 || Engage3.LiftMost > 24.5) Fault("a turn held while the tilt key brought the low look down over a wood was lifted past over everything on its way");
+		// (The same with a creeping turn, 6 degrees a second, too slow for the far low turn's rule to take up: the look
+		// ahead sees the wood on the eye's way while nothing yet stands where the eye is, and the lift is led by no
+		// more of the arm's fall than the things here ask, none: 9.3 m at the most. Led by all of that fall, as a
+		// lift over a thing under the eye is, it was thrown up 29 m and came down for a second and a half.)
+		if (EngageCreep.LiftMost > 12.0) Fault("a creeping turn held while the tilt key brought the low look down over a wood: the lift was thrown up by the arm's fall with nothing where the eye stood to ask it");
+		// (and with no turn, three notches in, the eye comes down onto a tree and is lifted 15 m over it; with a slow
+		// turn, 20 degrees a second, the rule's own rise: none of them cut, stands in a tree or jolts)
+		for (const Got* G : { &EngageStill3, &EngageCreep, &EngageCreep3, &EngageSlow })
+		{
+			if (G->Cuts > 0 || G->InThing > 0 || G->Kick > 1200.0 || G->Rise > 1200.0)
+			{
+				Fault("the tilt key taken down to the low look over a wood, with no turn or a slow one, cut, stood in a tree or jolted");
+				break;
+			}
+		}
+		// (A wood to one side only: the way round is looked along the way the turn goes. Turned into the wood for a
+		// second the view rises 3.2 m and meets nothing; turned away from it, it neither rises nor is held.)
+		if (ToWood.LiftMost < 2.5 || ToWood.Waited > 0 || ToWood.Cuts > 0 || ToWood.InThing > 0 || ToWood.Kick > 500.0) Fault("a low look's fast turn into a wood to one side did not rise over it, or stopped at a tree");
+		if (FromWood.LiftMost > 0.05 || Late(FromWood, 0.4)) Fault("a low look's fast turn away from a wood to one side rose, or was held");
+		if (ToWoodOff.Waited == 0 && ToWoodOff.Kick <= 1200.0) Fault("the sweep bench's wood to one side no longer stops a far low turn with the rule switched off: it proves nothing");
+		// (A turn of a tenth of a second under the crown, let go while the rise is still asked: it rests 1.55 m up, clear
+		// under the leaves, and settles; it is not asked on up into them once the key is let go.)
+		if (RoofShort.LiftMost > 1.75 || RoofShort.Cuts > 0 || RoofShort.LiftEnd > 1.0 || RoofShort.LiftMost < 1.0) Fault("the rise of a turn let go under a crown went on up into the leaves, cut, or did not settle");
+		// (A slow pinch in while the turn goes on, the arm's eye sinking 3 m in four seconds: the height at which the way
+		// round was found clear is kept, so the rise asked grows by what the arm sinks, 6.4 m at the most where 3.7
+		// was found. Kept as a rise, the eye sinks into the tree tops, the way round is no longer clear, and the view
+		// is sent up toward over everything.)
+		if (Sink.LiftMost > 8.0 || Sink.LiftAtKey < 5.0 || Sink.Waited > 0 || Sink.InThing > 0 || Sink.RateLeast < 60.0) Fault("the height a low look's fast turn found clear was not kept as the arm's eye sank under it");
+		// (a key let go: the turn runs on 11.9 degrees over open ground, and as far through the wood)
+		if (std::abs(Far.Ran - Open.Ran) > 2.0 || std::abs(Mid.Ran - Open.Ran) > 2.0 || std::abs(Mid5.Ran - Open.Ran) > 2.0 || std::abs(RoofWood.Ran - Open.Ran) > 2.0)
+			Fault("a low look's fast turn through a wood did not stop, its key let go, where a turn over open ground does");
+		// (nothing on its way round: no rise, and nine tenths of the key's rate after a third of a second as ever)
+		if (Open.LiftMost > 0.05 || Near.LiftMost > 0.05 || Roofed.LiftMost > 0.05 || Late(Open, 0.4) || Late(Near, 0.4) || Late(Roofed, 0.4))
+			Fault("a low look's fast turn with nothing on its way round rose, or was held");
+		// (under the crown the rise rests 1.55 m up, clear of the leaves by the wanted clearance: the crown's underside is
+		// 2.44 m over the eye, and 1.72 m up is as far as that clearance lets it)
+		// (and the same with 26 m trees on its way beyond the crown, asked for ahead of their time: 1.57 m)
+		if (RoofWood.LiftUnder > 1.75 || RoofTall.LiftUnder > 1.75) Fault("the rise of a low look's fast turn went on up into a crown's clearance over the eye");
+		// (with no low look on, nothing of the rule runs: the picture of a run with the rule switched off, frame for frame)
+		if (High.Sum != HighOff.Sum || Auto.Sum != AutoOff.Sum) Fault("the far low turn's rule changed a view with no low look on");
+		// (and a turn that sweeps the eye slower than LowSweep is as it was)
+		// (through the wood at 18 m/s; and toward a wood 35 m on at 29 m/s, which a rule that took up slower sweeps would
+		// have seen and risen for)
+		if (Creep.Sum != CreepOff.Sum || Shy.Sum != ShyOff.Sum) Fault("the far low turn's rule changed a turn that sweeps the eye slower than LowSweep");
+		// (the bench's own set-ups still stand: with the rule off its wood stops the far turn dead (a kick of 1,926 and
+		// three frames stopped at a tree from rest, 4,500 and one frame at the key's rate); and the view with no low
+		// look is one the rule would take up but for that,
+		// low among the trees (20.8 m up under 26 m trees, lifted 6 m by them) and swept at 58 m/s)
+		if ((FarOff.Waited == 0 && FarOff.Kick <= 1200.0) || (IntoOff.Waited == 0 && IntoOff.Kick <= 1200.0)) Fault("the sweep bench's wood no longer stops a far low turn with the rule switched off: it proves nothing");
+		// (and its yard is crossed too low with the rule off: six frames)
+		if (YardOff.InThing == 0 && YardOff.Waited == 0) Fault("the sweep bench's yard is crossed cleanly with the rule switched off: it proves nothing");
+		if (Auto.Up > 30.0 || Auto.Back * 90.0 / 57.29577951308232 < 45.0 || Auto.LiftMost < 1.0) Fault("the sweep bench's view with no low look is no longer low among the trees and swept fast: it proves nothing");
+		// (With a low look on, a turn gathers no harder than Settings::TurnGather: a key held through a wait at a thing
+		// was let go at 1,180 to 1,350 degrees a second squared. No wait can be relied on here, so the key is made
+		// four times as fast instead, 300 degrees a second, over open ground: held, the look is kicked 900 at the most;
+		// with nothing holding it, far more. With no low look on, nothing is held: the same picture either way.)
+		auto Gather = [](bool bLow, double Most)
+		{
+			const std::function<void(LandGeneralEye::Settings&)> Tune = [Most](LandGeneralEye::Settings& Row) { Row.TurnGather = Most; };
+			LowRig R(true, true, nullptr, Tune);
+			R.Wait(1.0);
+			if (bLow) R.Tilt(-40.0, 1.6);
+			R.Wait(4.0);
+			double Kick = 0.0, Was = R.YawSpeedWas;
+			for (int K = 0; K < 60; ++K)
+			{
+				LandGeneralEye::Input In;
+				In.Turn = 300.0 / 60.0;
+				R.Go(In);
+				Kick = std::max(Kick, std::abs(R.YawSpeedWas - Was) * 60.0);
+				Was = R.YawSpeedWas;
+			}
+			return Kick;
+		};
+		const double Hard = Gather(true, 900.0), HardFree = Gather(true, 0.0), HardHigh = Gather(false, 900.0), HardHighFree = Gather(false, 0.0);
+		if (bSay) std::printf("  sweep bench, a turn key of 300 deg/s: kick %.0f deg/s/s with a low look, %.0f with nothing holding it; %.0f and %.0f with no low look\n", Hard, HardFree, HardHigh, HardHighFree);
+		if (Hard > 950.0) Fault("with a low look on a turn gathered harder than TurnGather");
+		if (HardFree < 1200.0) Fault("the bench's hard turn key no longer gathers hard with nothing holding it: it proves nothing");
+		if (HardHigh != HardHighFree) Fault("TurnGather held a turn with no low look on");
+		// (The free view's own gates, each beside a view that sets nothing and so is as it was.)
+		// (The top view pressed in a thick wood, 21 m back and 10 m up among 26 m trees: the way up brakes at a tree,
+		// and a brake lets a wish go. With the free view the press's zoom is wanted afresh until the view is there;
+		// with nothing set it is lost at the tree, as it always was, and the top view is left 9 m up.)
+		auto TopPress = [&](bool bFree)
+		{
+			bool bRoof = false;
+			LowRig R(bFree, bFree, Wood(Thick, &bRoof));
+			R.Wait(1.0);
+			R.Notches(16);
+			R.Wait(3.0);
+			const int Braked0 = R.B.Gen.BrakedFrames();
+			R.Top();
+			R.Wait(10.0);
+			return std::make_pair(R.Zoom(), R.B.Gen.BrakedFrames() - Braked0);
+		};
+		const auto TopFree = TopPress(true), TopPlain = TopPress(false);
+		if (bSay) std::printf("  sweep bench, the top view pressed in a thick wood: zoom %.3f with the free view (braked %d frames on the way), %.3f with nothing set (braked %d)\n", TopFree.first, TopFree.second, TopPlain.first, TopPlain.second);
+		if (TopFree.second == 0 || TopPlain.second == 0) Fault("the sweep bench's thick wood no longer brakes the top view's way up: it proves nothing");
+		else if (TopFree.first < 0.68) Fault("the top view's press, braked at a tree on its way up, lost its zoom with the free view");
+		else if (TopPlain.first > TopFree.first - 0.1) Fault("the top view's press, braked at a tree on its way up, kept its zoom with nothing set (not as it was)");
+		// (And its second press, back down among the trees: the lift made too slow to be there in time, a twentieth of
+		// what it is, so the way down brakes, for four seconds in all; the zoom it had is reached all the same.)
+		{
+			bool bRoof = false;
+			const std::function<void(LandGeneralEye::Settings&)> Crawl = [](LandGeneralEye::Settings& Row) { Row.LiftSpeed = 0.05; };
+			LowRig R(true, true, Wood(Thick, &bRoof), Crawl);
+			R.Wait(1.0);
+			R.Notches(16);
+			R.Wait(3.0);
+			const double Zoom0 = R.Zoom();
+			R.Top();
+			R.Wait(10.0);
+			const double ZoomTop = R.Zoom();
+			const int Braked0 = R.B.Gen.BrakedFrames();
+			R.Top();
+			R.Wait(15.0);
+			if (bSay) std::printf("  sweep bench, the top view's second press over a thick wood, the lift slow: zoom %.3f, %.3f in the top view, %.3f back (braked %d frames on the way)\n", Zoom0, ZoomTop, R.Zoom(), R.B.Gen.BrakedFrames() - Braked0);
+			if (ZoomTop < 0.68 || R.B.Gen.BrakedFrames() == Braked0) Fault("the sweep bench's slow lift no longer brakes the top view's way back down: it proves nothing");
+			else if (std::abs(R.Zoom() - Zoom0) > 0.01) Fault("the top view's second press, braked on its way back down, lost the zoom it had with the free view");
+		}
+		// (A view coming down from the top view onto a line of 26 m trees under where it comes to rest, 160 m a second
+		// at the fastest: with the free view, or a low look on, where it will be is looked at while it is still far up
+		// and the lift is waiting, 18 m of it: no brake, the eye's fall eased at 934 degrees a second squared as the
+		// picture sees it at the most (683 from the hill view, five notches in). With nothing set it comes down as it
+		// always did: braked 44 frames, 2,358, and the zoom it was going back to lost at the trees.)
+		struct Fell
+		{
+			double Zoom0 = 0.0, Up0 = 0.0, Lift0 = 0.0, Zoom = 0.0, Lift = 0.0, Rise = 0.0, LiftMost = 0.0;
+			int Braked = 0, Waited = 0, Cuts = 0, InThing = 0;
+		};
+		auto Descent = [&](bool bFree, bool bHill)
+		{
+			// (the line is grown about the eye once it has come to rest, 24 m through: too far to step out of, so
+			// the view is lifted over it)
+			Fell F;
+			bool bGrown = false;
+			double Line = 0.0;
+			const std::function<int(const Vec&, int)> Planted = [&bGrown, &Line](const Vec& At, int) -> int { return bGrown && std::abs(At.Y - Line) < 12.0 && At.Z >= 0.0 && At.Z <= 26.0 ? 2 : 0; };
+			LowRig R(bFree, bFree, Planted);
+			R.Wait(1.0);
+			if (bHill) { R.Hill(); R.Wait(4.0); }
+			R.Notches(bHill ? 5 : 12);
+			R.Wait(5.0);
+			Line = R.B.Gen.Current().Eye.Y;
+			bGrown = true;
+			R.Wait(5.0);
+			F.Zoom0 = R.Zoom();
+			F.Up0 = R.B.Gen.Current().Eye.Z;
+			F.Lift0 = R.B.Gen.LiftNow();
+			R.Top();
+			R.Wait(8.0);
+			const int Waited0 = R.B.Gen.WaitedFrames(), Braked0 = R.B.Gen.BrakedFrames();
+			R.Top();
+			R.Calm();
+			for (int K = 0; K < 600; ++K)
+			{
+				R.Go(LandGeneralEye::Input());
+				if (R.B.Gen.Current().bCut) ++F.Cuts;
+				if (Planted(R.B.Gen.Current().Eye, -1) != 0) ++F.InThing;
+				F.LiftMost = std::max(F.LiftMost, R.B.Gen.LiftNow());
+			}
+			F.Zoom = R.Zoom();
+			F.Lift = R.B.Gen.LiftNow();
+			F.Rise = R.Rise;
+			F.Braked = R.B.Gen.BrakedFrames() - Braked0;
+			F.Waited = R.B.Gen.WaitedFrames() - Waited0;
+			return F;
+		};
+		const Fell DownFree = Descent(true, false), DownPlain = Descent(false, false), DownHill = Descent(false, true);
+		auto SayFell = [&](const char* Name, const Fell& F)
+		{
+			if (bSay) std::printf("  sweep bench, down from the top view onto a tree line, %s: zoom %.3f, eye %.1f m up, lift %.2f; back at zoom %.3f, lift %.2f, %.2f at the most on the way; rise or fall %.0f deg/s/s; braked %d, waited %d, cuts %d, in a thing %d frames\n",
+				Name, F.Zoom0, F.Up0, F.Lift0, F.Zoom, F.Lift, F.LiftMost, F.Rise, F.Braked, F.Waited, F.Cuts, F.InThing);
+		};
+		SayFell("the free view", DownFree);
+		SayFell("nothing set", DownPlain);
+		SayFell("nothing set, the hill view pressed and five notches in", DownHill);
+		for (const Fell* F : { &DownFree, &DownHill })
+		{
+			if (F->Lift0 < 3.0) Fault("the sweep bench's tree line no longer stands under where the view comes down: it proves nothing");
+			else if (F->Braked > 0 || F->Waited > 0 || F->Cuts > 0 || F->InThing > 0 || F->Rise > 1200.0 || std::abs(F->Zoom - F->Zoom0) > 0.01)
+				Fault("a view coming down from the top view onto a tree line, the free view taken or a low look on, braked, jolted or lost its zoom");
+		}
+		if (DownPlain.Braked == 0 || DownPlain.Rise < 1500.0) Fault("a view coming down from the top view onto a tree line with nothing set no longer brakes as it did (not as it was)");
+		// (A lift hurried and then let go, nearest in, 3 m from what the view looks at: tall things grown close about
+		// the eye, a slot 1.4 m wide left for it, so that the lift is asked 10 m up; and a bar half a metre high grown
+		// a hand's breadth beside it, inside the near clearance, so that the lift is hurried until it is over the bar:
+		// eight frames, to 6.8 m a second, where the lift's fastest that near is 2.4. With the free view, or a low
+		// look on, that swing is slowed to the fastest no harder than the lift's push: 1,031 degrees a second squared
+		// as the picture sees it, the hurry's own. With nothing set it is cut to the fastest in a frame, as it was: 2,750.)
+		// (Low: 0 no low look, 1 his tilt key taken down to one, 2 HILL VIEW pressed, which a build that sets nothing has too)
+		auto Hurry = [&](bool bFree, int Low)
+		{
+			bool bGrown = false;
+			Vec At0;
+			const std::function<int(const Vec&, int)> Slot = [&bGrown, &At0](const Vec& At, int) -> int
+			{
+				if (!bGrown) return 0;
+				const double Dx = At.X - At0.X, Dy = At.Y - At0.Y;
+				if (std::abs(Dx) > 0.7 && std::abs(Dx) < 12.0 && std::abs(Dy) < 12.0 && At.Z >= 0.0 && At.Z < 12.0) return 2;
+				return Dx > 0.2 && Dx < 0.5 && std::abs(Dy) < 1.0 && At.Z > At0.Z - 0.1 && At.Z < At0.Z + 0.5 ? 2 : 0;
+			};
+			LowRig R(bFree, bFree, Slot);
+			R.Wait(1.0);
+			if (Low == 2) { R.Hill(); R.Wait(4.0); }
+			R.Notches(40);
+			R.Wait(3.0);
+			if (Low == 1) R.Tilt(-40.0, 1.6);
+			R.Wait(4.0);
+			At0 = R.B.Gen.Current().Eye;
+			R.Calm();
+			bGrown = true;
+			int Bad = 0;
+			double Fastest = 0.0, Was = R.B.Gen.LiftNow();
+			for (int K = 0; K < 600; ++K)
+			{
+				R.Go(LandGeneralEye::Input());
+				if (R.B.Gen.Current().bCut || R.B.Gen.WaitedFrames() > 0) ++Bad;
+				Fastest = std::max(Fastest, (R.B.Gen.LiftNow() - Was) * 60.0);
+				Was = R.B.Gen.LiftNow();
+			}
+			return std::make_tuple(R.Rise, Fastest, R.B.Gen.LiftNow(), Bad);
+		};
+		const auto HurryLow = Hurry(true, 1), HurryFree = Hurry(true, 0), HurryHill = Hurry(false, 2), HurryPlain = Hurry(false, 0);
+		if (bSay) std::printf("  sweep bench, a lift hurried nearest in and let go: rise or fall %.0f deg/s/s with the free view and a low look (%.2f m/s at the fastest, lift %.2f at the end), %.0f with the free view alone, %.0f with nothing set but HILL VIEW pressed (%.2f m/s), %.0f with nothing set (%.2f m/s, lift %.2f)\n",
+			std::get<0>(HurryLow), std::get<1>(HurryLow), std::get<2>(HurryLow), std::get<0>(HurryFree), std::get<0>(HurryHill), std::get<1>(HurryHill), std::get<0>(HurryPlain), std::get<1>(HurryPlain), std::get<2>(HurryPlain));
+		if (std::get<1>(HurryLow) < 5.0 || std::get<1>(HurryHill) < 5.0 || std::get<1>(HurryPlain) < 5.0 || std::get<3>(HurryLow) > 0 || std::get<3>(HurryHill) > 0 || std::get<3>(HurryPlain) > 0)
+			Fault("the sweep bench's bar no longer hurries the lift past its fastest, or the view cut or waited: it proves nothing");
+		else if (std::get<0>(HurryLow) > 1200.0 || std::get<0>(HurryFree) > 1200.0 || std::get<0>(HurryHill) > 1200.0) Fault("a hurried lift's swing, the free view taken or a low look on, was cut to the fastest in a frame (over 1200 degrees a second squared as the picture sees it)");
+		else if (std::get<0>(HurryPlain) < 2000.0) Fault("a hurried lift's swing with nothing set was not cut to the fastest as it was");
+		// (The step aside's own way shut. A crown grown over an eye at rest nearest in, 2 m about: it has no open sky,
+		// so it steps out from under, 3 m to the north, the first place round it with sky. And a post a hand thick
+		// grown on that way, 1.5 m on: the step's own travel carries the eye up to the post's near clearance, and
+		// its next step inside it. Taken as a move that went too far, the whole view waited that frame and braked,
+		// the frame after it moved nothing, the step tried again, and so on for good: no wheel, pan or turn was
+		// answered again (Normandy, 27 November: 375 seconds, to the end of the run). With the free view taken
+		// or a low look on, the step waits where it is and the view goes on answering. With nothing set it is as
+		// it was.)
+		// (And how the step comes to the post: its way is marched along and it slows into the last clear place, its
+		// speed changing 0.7 m/s in a frame at the most; sent on to where it was wanted it ran into the post's near
+		// clearance at 8.8 m/s and stopped dead in a frame, as it does with nothing set.)
+		// (And a pin lying across the step's way, a hand thick, the height of the eye: its near clearance is thinner
+		// than the march's stride, so the step comes to rest before it, the march steps over it, and the frame's
+		// own step ends inside it. That step is taken back and the view goes on answering.)
+		// (Low: 0 no low look, 1 his tilt key taken down to one, 2 HILL VIEW pressed)
+		struct Shut
+		{
+			int Waited = 0, Cuts = 0, InThing = 0;
+			double Panned = 0.0, Turned = 0.0, Zoomed = 0.0, Step = 0.0, Kick = 0.0, Rise = 0.0, Shake = 0.0, LiftMost = 0.0, StepJolt = 0.0, StepStop = 0.0;
+			int Braked = 0;
+		};
+		auto Pocket = [&](bool bFree, int Low, bool bPin = false)
+		{
+			Shut G;
+			bool bGrown = false;
+			Vec At0;
+			const std::function<int(const Vec&, int)> Post = [&bGrown, &At0, bPin](const Vec& At, int) -> int
+			{
+				if (!bGrown) return 0;
+				const double Dx = At.X - At0.X, Dy = At.Y - At0.Y;
+				if (std::hypot(Dx, Dy) < 2.0 && At.Z > At0.Z + 4.5 && At.Z < At0.Z + 9.0) return 2;
+				if (bPin) return std::abs(Dy - 1.5) < 0.1 && std::abs(Dx) < 2.0 && std::abs(At.Z - At0.Z) < 0.3 ? 2 : 0;
+				return std::hypot(Dx, Dy - 1.5) < 0.15 && At.Z < At0.Z + 3.5 ? 2 : 0;
+			};
+			LowRig R(bFree, bFree, Post);
+			R.Wait(1.0);
+			if (Low == 2) { R.Hill(); R.Wait(4.0); }
+			R.Notches(40);
+			R.Wait(3.0);
+			if (Low == 1) R.Tilt(-40.0, 1.6);
+			R.Wait(4.0);
+			At0 = R.B.Gen.Current().Eye;
+			bGrown = true;
+			// (the most the step aside's own speed changed in a frame, m/s, his keys down or not: StepStop as it comes
+			// to the post, StepJolt once it stands there)
+			double StepWas = 0.0, StepSpeedWas = 0.0;
+			auto Count = [&]()
+			{
+				const LandEye::Pose& P = R.B.Gen.Current();
+				const double StepSpeed = (R.B.Gen.PushNow() - StepWas) * 60.0;
+				G.StepJolt = std::max(G.StepJolt, std::abs(StepSpeed - StepSpeedWas));
+				StepWas = R.B.Gen.PushNow();
+				StepSpeedWas = StepSpeed;
+				if (P.bCut) ++G.Cuts;
+				if (Post(P.Eye, -1) != 0) ++G.InThing;
+				G.LiftMost = std::max(G.LiftMost, R.B.Gen.LiftNow());
+			};
+			for (int K = 0; K < 180; ++K) { R.Go(LandGeneralEye::Input()); Count(); }
+			G.Step = std::hypot(R.B.Gen.Current().Eye.X - At0.X, R.B.Gen.Current().Eye.Y - At0.Y);
+			R.Calm();
+			G.StepStop = G.StepJolt;
+			G.StepJolt = 0.0;
+			const int Waited0 = R.B.Gen.WaitedFrames(), Braked0 = R.B.Gen.BrakedFrames();
+			const Vec Look0 = R.B.Gen.Current().Look;
+			const double Zoom0 = R.Zoom(), Yaw0 = R.YawWas;
+			for (int K = 0; K < 60; ++K) { LandGeneralEye::Input In; In.PanRight = 1.0; R.Go(In); Count(); }
+			for (int K = 0; K < 60; ++K) { R.Go(LandGeneralEye::Input()); Count(); }
+			G.Panned = std::hypot(R.B.Gen.Current().Look.X - Look0.X, R.B.Gen.Current().Look.Y - Look0.Y);
+			for (int K = 0; K < 60; ++K) { LandGeneralEye::Input In; In.Turn = 30.0 / 60.0; R.Go(In); Count(); }
+			for (int K = 0; K < 60; ++K) { R.Go(LandGeneralEye::Input()); Count(); }
+			G.Turned = std::abs(R.YawWas - Yaw0);
+			for (int K = 0; K < 3; ++K) { LandGeneralEye::Input In; In.Zoom = -1.0; R.Go(In); Count(); for (int J = 0; J < 6; ++J) { R.Go(LandGeneralEye::Input()); Count(); } }
+			for (int K = 0; K < 120; ++K) { R.Go(LandGeneralEye::Input()); Count(); }
+			G.Zoomed = std::abs(R.Zoom() - Zoom0);
+			G.Waited = R.B.Gen.WaitedFrames() - Waited0;
+			G.Braked = R.B.Gen.BrakedFrames() - Braked0;
+			G.Kick = R.Kick;
+			G.Rise = R.Rise;
+			G.Shake = R.Shake;
+			return G;
+		};
+		const Shut PocketFree = Pocket(true, 0), PocketLow = Pocket(true, 1), PocketHill = Pocket(false, 2), PocketPlain = Pocket(false, 0);
+		const Shut PinFree = Pocket(true, 0, true), PinHill = Pocket(false, 2, true), PinPlain = Pocket(false, 0, true);
+		auto SayShut = [&](const char* Name, const Shut& G)
+		{
+			if (bSay) std::printf("  sweep bench, a step aside whose own way is shut by a post or a pin, %s: stepped %.2f m; then a pan moved the look-at %.1f m, a turn %.1f degrees, three notches out %.3f of the zoom; waited %d frames, braked %d, cuts %d, in a thing %d; lift %.2f at the most; kick %.0f, rise or fall %.0f, the eye shaken %.0f deg/s/s; the step's speed changed %.2f m/s in a frame at the most as it came to the post, %.2f after\n",
+				Name, G.Step, G.Panned, G.Turned, G.Zoomed, G.Waited, G.Braked, G.Cuts, G.InThing, G.LiftMost, G.Kick, G.Rise, G.Shake, G.StepStop, G.StepJolt);
+		};
+		SayShut("the free view", PocketFree);
+		SayShut("the free view and a low look", PocketLow);
+		SayShut("nothing set, the hill view pressed", PocketHill);
+		SayShut("nothing set", PocketPlain);
+		SayShut("a pin, the free view", PinFree);
+		SayShut("a pin, nothing set, the hill view pressed", PinHill);
+		SayShut("a pin, nothing set", PinPlain);
+		for (const Shut* G : { &PocketFree, &PocketLow, &PocketHill, &PocketPlain, &PinFree, &PinHill, &PinPlain })
+		{
+			if (G->Step < 0.5 || G->Step > 1.2)
+			{
+				Fault("the sweep bench's post no longer stops the step aside on its way: it proves nothing");
+				break;
+			}
+		}
+		for (const Shut* G : { &PocketFree, &PocketLow, &PocketHill, &PinFree, &PinHill })
+		{
+			if (G->Waited > 30 || G->Panned < 2.0 || G->Turned < 20.0 || G->Zoomed < 0.1 || G->Cuts > 0 || G->InThing > 0 || G->Kick > 1200.0 || G->Rise > 1200.0)
+			{
+				Fault("a step aside whose own way was shut, the free view taken or a low look on, held the whole view: his pan, turn or wheel was not answered, or the view cut, stood in a thing or jolted");
+				break;
+			}
+		}
+		if (PocketPlain.Waited < 300 || PocketPlain.Panned > 0.5 || PinPlain.Waited < 300 || PinPlain.Panned > 0.5) Fault("a step aside whose own way was shut, with nothing set, no longer holds the view as it did (not as it was)");
+		for (const Shut* G : { &PocketFree, &PocketLow, &PocketHill })
+		{
+			if (G->StepStop > 2.0 || G->StepJolt > 3.0)
+			{
+				Fault("a step aside whose own way was shut by a post, the free view taken or a low look on, ran into the post's near clearance and stopped dead, or stood stopping and starting before it");
+				break;
+			}
+		}
+		// (The step taken back from the pin stands still: its swing is put out with it. Kept, the step pressed on at the
+		// pin every frame, the looks ahead took the eye to be going into it, and his first pan was braked 91 frames
+		// while the lift rose a metre for nothing.)
+		for (const Shut* G : { &PinFree, &PinHill })
+		{
+			if (G->Braked > 30 || G->LiftMost > 0.5 || G->Panned < 5.0)
+			{
+				Fault("a step aside taken back from a pin did not stand still there: his pan was braked or the lift rose for nothing");
+				break;
+			}
+		}
+		if (PocketPlain.StepStop < 5.0) Fault("a step aside whose own way was shut by a post, with nothing set, no longer runs on to the post as it did (not as it was)");
+		// (A zoom brought in over a flat roof, 10 m high, that begins 3 m short of what the view looks at and runs
+		// Deep m back: his wheel taken in 24 notches from far out, no low look. With the free view the lift is led
+		// by what the things under the eye ask and, over that, by no more of the arm's fall than they ask: over a
+		// roof 20 m deep the eye rises and falls 634 degrees a second squared at the most as the picture sees it,
+		// braked 12 frames. Led by nothing over what the look ahead asks, it was a metre short, braked 47 frames
+		// and was thrown up at 1,038 (1,355 on Normandy); led by all of the arm's fall, 1,364. With nothing set it
+		// is led by all of it as it was, and is thrown up at 1,364: a jolt the view has always had over a roof,
+		// 1,364 to 1,459 on this bench, and not this change's to mend. Onto a roof's brink, 5 m deep, the lift over
+		// the thing under the eye is led by all of the arm's fall: it waits 10 frames; led by no more than the
+		// need itself, 63.)
+		struct Roofed2
+		{
+			double Rise = 0.0, Kick = 0.0, LiftMost = 0.0;
+			int Waited = 0, Braked = 0, Cuts = 0, InThing = 0;
+		};
+		auto ZoomIn = [&](bool bFree, double Deep)
+		{
+			Roofed2 G;
+			const std::function<int(const Vec&, int)> Slab = [Deep](const Vec& At, int) -> int { return At.Z >= 0.0 && At.Z <= 10.0 && At.Y < 997.0 && At.Y > 997.0 - Deep ? 2 : 0; };
+			LowRig R(bFree, bFree, Slab);
+			R.Wait(3.0);
+			R.Calm();
+			const int Waited0 = R.B.Gen.WaitedFrames(), Braked0 = R.B.Gen.BrakedFrames();
+			auto Step = [&](const LandGeneralEye::Input& In)
+			{
+				R.Go(In);
+				if (R.B.Gen.Current().bCut) ++G.Cuts;
+				if (Slab(R.B.Gen.Current().Eye, -1) != 0) ++G.InThing;
+				G.LiftMost = std::max(G.LiftMost, R.B.Gen.LiftNow());
+			};
+			for (int K = 0; K < 24; ++K)
+			{
+				LandGeneralEye::Input In;
+				In.Zoom = 1.0;
+				Step(In);
+				for (int J = 0; J < 6; ++J) Step(LandGeneralEye::Input());
+			}
+			for (int K = 0; K < 360; ++K) Step(LandGeneralEye::Input());
+			G.Rise = R.Rise;
+			G.Kick = R.Kick;
+			G.Waited = R.B.Gen.WaitedFrames() - Waited0;
+			G.Braked = R.B.Gen.BrakedFrames() - Braked0;
+			return G;
+		};
+		const Roofed2 ZoomRoof = ZoomIn(true, 20.0), ZoomRoofPlain = ZoomIn(false, 20.0), ZoomBrink = ZoomIn(true, 5.0);
+		auto SayRoof = [&](const char* Name, const Roofed2& G)
+		{
+			if (bSay) std::printf("  sweep bench, a zoom brought in over a roof, %s: rise or fall %.0f deg/s/s, kick %.0f; lift %.2f at the most; waited %d, braked %d, cuts %d, in a thing %d frames\n",
+				Name, G.Rise, G.Kick, G.LiftMost, G.Waited, G.Braked, G.Cuts, G.InThing);
+		};
+		SayRoof("20 m deep, the free view", ZoomRoof);
+		SayRoof("20 m deep, nothing set", ZoomRoofPlain);
+		SayRoof("5 m deep, the free view", ZoomBrink);
+		if (ZoomRoof.LiftMost < 5.0 || ZoomRoofPlain.LiftMost < 5.0 || ZoomBrink.LiftMost < 5.0) Fault("the sweep bench's roof no longer stands under the zoom's way in: it proves nothing");
+		else
+		{
+			if (ZoomRoof.Rise > 800.0 || ZoomRoof.Waited > 0 || ZoomRoof.Cuts > 0 || ZoomRoof.InThing > 0) Fault("a zoom brought in over a roof with the free view braked hard or jolted: the lift was not led by what the things under the eye ask and no more");
+			if (ZoomRoofPlain.Rise < 1300.0) Fault("a zoom brought in over a roof with nothing set was not led by all of the arm's fall as it was");
+			if (ZoomBrink.Waited > 30 || ZoomBrink.Cuts > 0 || ZoomBrink.InThing > 0 || ZoomBrink.Rise > 1200.0 || ZoomBrink.Kick > 1200.0) Fault("a zoom brought in onto a roof's brink with the free view waited, cut or jolted: the lift over the thing under the eye was not led by all of the arm's fall");
+		}
+		// (His wheel brought in from far out at a steep tilt of his own, 85 degrees, straight down by the edge of a tall
+		// thing that begins a metre short of what the view looks at: the arm brings the eye down at 40 m/s and more,
+		// and the lift comes on over the thing's edge on top of it. With the free view the lift's push gives way to
+		// the arm's own, the two together under Settings::RisePush: 1,089 degrees a second squared as the picture
+		// sees it with the wheel run in fast, where the lift pushing all it has made 1,461; and where the view
+		// brakes at the thing, the wheel run in slower, 1,114 and 1,122 (the lift's push gives way to the stop the
+		// brake is about to give the arm as well: 1,239 and 1,743 without, 1,196 with the stop not counted). With
+		// nothing set the lift pushes all it has, as it did. Every frame is measured here, his wheel's too, as the
+		// hill run's gate measures them.)
+		struct Wheeled
+		{
+			double Tilt0 = 0.0, Rise = 0.0, LiftMost = 0.0;
+			int Waited = 0, Braked = 0, Cuts = 0, InThing = 0;
+		};
+		auto WheelIn = [&](bool bFree, double ThingTop, int Gap)
+		{
+			Wheeled G;
+			const std::function<int(const Vec&, int)> Slab = [ThingTop](const Vec& At, int) -> int { return At.Z >= 0.0 && At.Z <= ThingTop && At.Y < 999.0 ? 2 : 0; };
+			LowRig R(bFree, bFree, Slab);
+			R.Wait(1.0);
+			R.Tilt(40.0, 3.0);
+			R.Wait(3.0);
+			G.Tilt0 = R.TiltNow();
+			const int Waited0 = R.B.Gen.WaitedFrames(), Braked0 = R.B.Gen.BrakedFrames();
+			double Z1 = R.B.Gen.Current().Eye.Z, Z2 = Z1;
+			auto Step = [&](const LandGeneralEye::Input& In)
+			{
+				R.Go(In);
+				const LandEye::Pose& Pose = R.B.Gen.Current();
+				if (Pose.bCut) ++G.Cuts;
+				else G.Rise = std::max(G.Rise, std::abs((Pose.Eye.Z - Z1) - (Z1 - Z2)) * 3600.0 / std::max(1.0, (Pose.Look - Pose.Eye).Length()) * 57.29577951308232);
+				if (Slab(Pose.Eye, -1) != 0) ++G.InThing;
+				G.LiftMost = std::max(G.LiftMost, R.B.Gen.LiftNow());
+				Z2 = Z1;
+				Z1 = Pose.Eye.Z;
+			};
+			for (int K = 0; K < 30; ++K)
+			{
+				LandGeneralEye::Input In;
+				In.Zoom = 1.0;
+				Step(In);
+				for (int J = 0; J < Gap; ++J) Step(LandGeneralEye::Input());
+			}
+			for (int K = 0; K < 360; ++K) Step(LandGeneralEye::Input());
+			G.Waited = R.B.Gen.WaitedFrames() - Waited0;
+			G.Braked = R.B.Gen.BrakedFrames() - Braked0;
+			return G;
+		};
+		const Wheeled WheelFast = WheelIn(true, 12.0, 2), WheelBrake = WheelIn(true, 12.0, 6), WheelTall = WheelIn(true, 24.0, 6), WheelPlain = WheelIn(false, 12.0, 2);
+		auto SayWheel = [&](const char* Name, const Wheeled& G)
+		{
+			if (bSay) std::printf("  sweep bench, his wheel brought in at a steep tilt of his own by a tall thing's edge, %s: tilt %.1f; rise or fall %.0f deg/s/s; lift %.2f at the most; waited %d, braked %d, cuts %d, in a thing %d frames\n",
+				Name, G.Tilt0, G.Rise, G.LiftMost, G.Waited, G.Braked, G.Cuts, G.InThing);
+		};
+		SayWheel("12 m, run in fast, the free view", WheelFast);
+		SayWheel("12 m, the free view", WheelBrake);
+		SayWheel("24 m, the free view", WheelTall);
+		SayWheel("12 m, run in fast, nothing set", WheelPlain);
+		if (WheelFast.Tilt0 < 80.0 || WheelPlain.Tilt0 < 80.0 || WheelFast.LiftMost < 2.0 || WheelBrake.LiftMost < 2.0 || WheelTall.LiftMost < 2.0 || WheelPlain.LiftMost < 2.0 || WheelBrake.Braked == 0 || WheelTall.Braked == 0)
+			Fault("the sweep bench's tall thing no longer stands by the wheel's way in, or the view no longer brakes at it: it proves nothing");
+		else
+		{
+			for (const Wheeled* G : { &WheelFast, &WheelBrake, &WheelTall })
+			{
+				if (G->Cuts > 0 || G->InThing > 0 || G->Waited > 30)
+				{
+					Fault("his wheel brought in at a steep tilt of his own by a tall thing's edge, the free view taken: the view cut, waited or stood in the thing");
+					break;
+				}
+			}
+			if (WheelFast.Rise > 1100.0) Fault("his wheel brought in at a steep tilt of his own by a tall thing's edge, the free view taken: the lift's push did not give way to the arm's own");
+			if (WheelBrake.Rise > 1150.0 || WheelTall.Rise > 1150.0) Fault("his wheel brought in at a steep tilt of his own by a tall thing's edge, the free view braking there: the lift's push did not give way to the arm's own and to the stop the brake gives it");
+			if (WheelPlain.Rise < 1300.0) Fault("his wheel brought in at a steep tilt of his own by a tall thing's edge with nothing set: the lift no longer pushes all it has as it did (not as it was)");
+		}
+		// (And with nothing set but HILL VIEW pressed: the top view called from the low look, near in, under a crown
+		// that hangs over the eye's way up, 12 to 20 m high from 2 m behind the eye to 6 m before it. The arm swings
+		// the eye up, gathering at some 450 degrees a second squared as the picture sees it, and the crown comes within
+		// the look ahead's reach as it does: the lift's rise on top of the arm's, 1,089 together where the lift
+		// pushing all it has made 1,496. The lift's push gives way with a low look on as with the free view taken.)
+		auto TopCrown = [&]()
+		{
+			Wheeled G;
+			bool bGrown = false;
+			Vec From;
+			const std::function<int(const Vec&, int)> Hung = [&bGrown, &From](const Vec& At, int) -> int
+			{
+				return bGrown && std::abs(At.X - From.X) < 6.0 && At.Y > From.Y - 2.0 && At.Y < From.Y + 6.0 && At.Z >= 12.0 && At.Z <= 20.0 ? 2 : 0;
+			};
+			LowRig R(false, false, Hung);
+			R.Wait(1.0);
+			R.Hill();
+			R.Wait(4.0);
+			R.Notches(5);
+			R.Wait(5.0);
+			From = R.B.Gen.Current().Eye;
+			bGrown = true;
+			R.Wait(5.0);
+			G.Tilt0 = R.TiltNow();
+			const int Waited0 = R.B.Gen.WaitedFrames(), Braked0 = R.B.Gen.BrakedFrames();
+			double Z1 = R.B.Gen.Current().Eye.Z, Z2 = Z1;
+			for (int K = 0; K < 480; ++K)
+			{
+				LandGeneralEye::Input In;
+				In.bTopView = K == 0;
+				R.Go(In);
+				const LandEye::Pose& Pose = R.B.Gen.Current();
+				if (Pose.bCut) ++G.Cuts;
+				else G.Rise = std::max(G.Rise, std::abs((Pose.Eye.Z - Z1) - (Z1 - Z2)) * 3600.0 / std::max(1.0, (Pose.Look - Pose.Eye).Length()) * 57.29577951308232);
+				if (Hung(Pose.Eye, -1) != 0) ++G.InThing;
+				G.LiftMost = std::max(G.LiftMost, R.B.Gen.LiftNow());
+				Z2 = Z1;
+				Z1 = Pose.Eye.Z;
+			}
+			G.Waited = R.B.Gen.WaitedFrames() - Waited0;
+			G.Braked = R.B.Gen.BrakedFrames() - Braked0;
+			return G;
+		};
+		const Wheeled TopHung = TopCrown();
+		if (bSay) std::printf("  sweep bench, the top view called from the hill view under a hanging crown, nothing set: low look %.1f; rise or fall %.0f deg/s/s; lift %.2f at the most; waited %d, braked %d, cuts %d, in a thing %d frames\n",
+			TopHung.Tilt0, TopHung.Rise, TopHung.LiftMost, TopHung.Waited, TopHung.Braked, TopHung.Cuts, TopHung.InThing);
+		if (TopHung.LiftMost < 1.0 || TopHung.Tilt0 > 16.0) Fault("the sweep bench's hanging crown no longer stands over the eye's way up to the top view, or HILL VIEW gave no low look: it proves nothing");
+		else if (TopHung.Rise > 1100.0 || TopHung.Waited > 0 || TopHung.Cuts > 0 || TopHung.InThing > 0)
+			Fault("the top view called from the hill view under a hanging crown, nothing set: the lift's push did not give way to the arm's own with a low look on, or the view waited, cut or stood in the crown");
+	}
 }
 
 int main(int argc, char** argv)
 {
+	// (LAND_PLAY_ONLY_BENCH: the bare-field benches alone, which read no recording)
+	if (std::getenv("LAND_PLAY_ONLY_BENCH"))
+	{
+		TiltTakeBench();
+		LowLookBench();
+		SweepBench();
+		std::printf("the bare-field benches alone: %d faults\n", Faults);
+		return Faults ? 1 : 0;
+	}
 	if (argc < 3)
 	{
 		std::printf("usage: land_play_test <recording.json> <mix.json> [out folder]\n");
@@ -1223,7 +2652,8 @@ int main(int argc, char** argv)
 	Film.Set = ES;
 	Film.bNearReport = true;
 
-	const double Fps = 60.0, Dt = 1.0 / Fps;
+	// (LAND_PLAY_FPS: the general's view judged at another frame rate than 60)
+	const double Fps = std::getenv("LAND_PLAY_FPS") ? std::atof(std::getenv("LAND_PLAY_FPS")) : 60.0, Dt = 1.0 / Fps;
 	// The clock: twice life before the armies meet, then as life (the scene's own default), to the end and 6 s more.
 	double Battle = 0.0, Real = 0.0;
 	std::vector<LandPlay::Effect> Fx;
@@ -3177,17 +4607,31 @@ int main(int argc, char** argv)
 	// kept, and a chip must not stay lit with the view away from its view.
 	// (and the one rule of the kept views no scripted battle can be relied on to walk into, on a bare field of its own)
 	if (!std::getenv("LAND_PLAY_NO_VIEWS")) TiltTakeBench();
-	for (int GenRun = 0; GenRun < 3; ++GenRun)
+	// (and the low look's own rules, the same way)
+	if (!std::getenv("LAND_PLAY_NO_HILL")) { LowLookBench(); SweepBench(); }
+	for (int GenRun = 0; GenRun < 4; ++GenRun)
 	{
-		const bool bTiltRun = GenRun == 1, bViewRun = GenRun == 2;
+		const bool bTiltRun = GenRun == 1, bViewRun = GenRun == 2, bHillRun = GenRun == 3;
 		if (bTiltRun && std::getenv("LAND_PLAY_NO_TILT")) continue;
+		if (bHillRun && std::getenv("LAND_PLAY_NO_HILL")) continue;
 		if (bViewRun && std::getenv("LAND_PLAY_NO_VIEWS")) continue;
+		if (GenRun == 0 && std::getenv("LAND_PLAY_NO_PLAIN")) continue;
 		LandGeneralEye::Eye Gen;
 		const double* Za = Rec.Ground.ZoneAtt;
 		const double* Zd = Rec.Ground.ZoneDef;
 		const double Ox = 0.5 * (Za[0] + Za[2]), Oy = 0.5 * (Za[1] + Za[3]);
 		const double Ex = 0.5 * (Zd[0] + Zd[2]), Ey = 0.5 * (Zd[1] + Zd[3]);
-		Gen.Begin(Rec, EW, Vec(Ox, Oy, 0.0), LandFeed::FacingTo(Ox, Oy, Ex, Ey), 250.0);
+		// (the tilted run and the kept views' run hold his tilt key down past the automatic tilt and judge the view that
+		// went back to it: they keep the rule they were written to, the tilt keys stopping there (bLowByHand off), and
+		// so show that switch leaves the view as it was. The hill run has the keys as the free view's row sets them,
+		// on down to the low look. The zoom's short stop is on in all four, as that row has it; with
+		// LAND_PLAY_GEN_AS_BEFORE the three older runs set nothing, as a scene without the row, and their lines are
+		// then those of the build before the hill view to the last figure.)
+		const bool bAsBefore = std::getenv("LAND_PLAY_GEN_AS_BEFORE") != nullptr;
+		LandGeneralEye::Settings GenSet;
+		GenSet.bLowByHand = bHillRun || (!bAsBefore && !(bTiltRun || bViewRun));
+		GenSet.bStopShort = bHillRun || !bAsBefore;
+		Gen.Begin(Rec, EW, Vec(Ox, Oy, 0.0), LandFeed::FacingTo(Ox, Oy, Ex, Ey), 250.0, GenSet);
 		// (the block his card presses and his follows rest on: one of his own still on the field at the end of the
 		// scripted steps, so a block lost on the way cannot fault a build that is right. A tank's block where one
 		// lives that long, else any of his; -1 where none does, and the steps that need one are left out)
@@ -3208,18 +4652,26 @@ int main(int argc, char** argv)
 			}
 		}
 		if (TankBlock < 0) TankBlock = StandingBlock;
-		uint64_t Dice = Rec.Seed * 0x9E3779B97F4A7C15ull + 99;
+		// (LAND_PLAY_SEED: another wander than the recording's own, for a sweep of them)
+		uint64_t Dice = Rec.Seed * 0x9E3779B97F4A7C15ull + 99 + (std::getenv("LAND_PLAY_SEED") ? std::strtoull(std::getenv("LAND_PLAY_SEED"), nullptr, 10) * 0x2545F4914F6CDD1Dull : 0ull);
+		if (std::getenv("LAND_PLAY_SEED")) for (int K = 0; K < 4; ++K) { Dice ^= Dice << 13; Dice ^= Dice >> 7; Dice ^= Dice << 17; }
+		if (Dice == 0) Dice = 1;
 		auto Roll = [&Dice]() { Dice ^= Dice << 13; Dice ^= Dice >> 7; Dice ^= Dice << 17; return static_cast<double>(Dice % 1000000) / 1000000.0; };
 		LandGeneralEye::Input Wander;
 		double B = 0.0, R = 0.0, NextWander = 0.0, NextNotch = 0.0;
 		int GFrames = 0, Under = 0, InThing = 0, InCorn = 0, OffField = 0, Lifted = 0, Followed = 0, Kicks = 0;
+		// (held at a thing: the frames on end on which the whole view waited, the longest, and when)
+		int HeldOnEnd = 0, HeldLongest = 0, HeldWaitedWas = 0;
+		double HeldLongestAt = 0.0;
+		int FloorLow = 0;
+		double FloorLowest = 1e9;
 		double Lowest = 1e9, Highest = -1e9, LowestNear = 1e9, WorstKick = 0.0, WorstKickAt = 0.0, GSlowest = 0.0, Spent = 0.0;
 		double Yaw = 0.0, Pitch = 0.0, SwingYaw = 0.0, SwingPitch = 0.0;
 		int Steady = 0;
 		double ZWas = 0.0, ZWas2 = 0.0, WorstRise = 0.0, WorstRiseAt = 0.0;
 		int GCuts = 0;
 		bool CutWas = false;
-		const double End = bViewRun ? 404.0 : 260.0;
+		const double End = bViewRun ? 404.0 : bHillRun ? (std::getenv("LAND_PLAY_HILL_END") ? std::atof(std::getenv("LAND_PLAY_HILL_END")) : 350.0) : 260.0;
 		// (the kept views' own checks: each view as it stood when kept, the call being timed, and the worst a called view
 		// was missed by once it should have been reached)
 		struct KeptAs { bool bKept = false, bOwn = false; double X = 0.0, Y = 0.0, H = 0.0, S = 0.0, Tilt = 0.0; };
@@ -3281,6 +4733,49 @@ int main(int argc, char** argv)
 		// tilting with the zoom, and how often the top view and his tilt were on)
 		double TopTiltBest = 0.0, TopUpBest = 0.0, KeptTilt = -1.0, NearTilt = 0.0;
 		int BackToAuto = -1, TopFrames = 0, OwnFrames = 0, TopPresses = 0;
+		// (the hill run's own checks, Brian's hill view and his free camera of 26 November. The hill view: the view one
+		// press brings; its tilt at a man's shoulder and at the farthest zoom; the top view from it and back; the second
+		// press back to the zoom and the tilt it had. His tilt keys, one line from his own tilt down through the
+		// automatic one to the low look and back up: where each hold leaves the view, HILL VIEW lit or not, and the
+		// most the picture's tilt ever went the other way under a held key. A low look kept, called from the automatic
+		// view and left for it again; a flight to it taken by his hand; the hill view while following a block. A point
+		// of the scene's followed: taken up, ridden, let go by his pan and left alone, another taken, a stop and a new
+		// start, a kept view called from it. And through all of it: the view never steeper by itself than its low
+		// look, the automatic view to the last bit with none on, the low look never under its flattest, and every
+		// press's zoom reached, whatever hedge the view waited at on the way.)
+		const LandGeneralEye::Settings HillSet;
+		const double HillNoneDeg = Gen.HillNoneDegrees();
+		double HillZoomWas = -1.0, HillOnTilt = -1.0, HillOnUp = -1.0, HillOnCap = -1.0, HillNearTilt = -1.0, HillFarTilt = -1.0, HillFarUp = -1.0;
+		double HillTopZoomWas = -1.0, HillTopTilt = -1.0, HillTopBackTilt = -1.0, HillTopBackZoom = -1.0;
+		double HillBackZoom = -1.0, HillBackTilt = -1.0, HillBackCap = -1.0;
+		double HandUpTilt = -1.0, HandUpZoom = -1.0, HandLowTilt = -1.0, HandLowZoom = -1.0, HandLowCap = -1.0, HandUp2Tilt = -1.0, HandUp2Zoom = -1.0, HandUp2Cap = -1.0;
+		double HandOffZoomWas = -1.0, HandOffZoom = -1.0, HandOffTilt = -1.0, HandOffCap = -1.0, HandLow2Cap = -1.0;
+		bool bHandUpOwn = false, bHandUpLit = true, bHandLowLit = false, bHandLowOwn = true, bHandUp2Own = false, bHandUp2Lit = true, bHandOffLit = true, bHandLow2Lit = false;
+		double WorstUpUnderDown = 0.0, WorstDownUnderUp = 0.0, WorstUpAt = 0.0, WorstDownAt = 0.0;
+		double HillKept0 = -1.0, HillKept1 = -1.0, HillCall0 = -1.0, HillCall1 = -1.0, HillTakeAt = -1.0, HillTakeRate = 0.0, HillTakeRest = -1.0, HillTakeZoom = -1.0;
+		double HillSteepOver = 0.0, HillFollowTilt = -1.0, HillFollowCap = -1.0, HillLowest = 1e9;
+		bool bHillOnLit = false, bHillTopBackLit = false, bHillBackOff = false, bHillFollowLit = false, bHillCall0Lit = false, bHillCall1Lit = true;
+		int HillPresses = 0, HillFrames = 0, HillNotAuto = 0, HillCall0At = -2, HillCall1At = -2, HillFollowed = -2;
+		// (the scene's points: each goes round the middle of the field at a tank's pace, by its number)
+		const double FieldW = Rec.Ground.W > 0.0 ? Rec.Ground.W : 2000.0, FieldH = Rec.Ground.H > 0.0 ? Rec.Ground.H : 2000.0;
+		const double PointPace = 6.0;
+		auto PointAt = [&](int Id, double T)
+		{
+			const double Phase = 1.7 * Id + PointPace * T / (0.25 * std::max(FieldW, FieldH));
+			return Vec(0.5 * FieldW + 0.25 * FieldW * std::cos(Phase), 0.5 * FieldH + 0.25 * FieldH * std::sin(Phase), 0.0);
+		};
+		int PtOn5 = -2, PtLetGo = -2, PtStill = -2, PtOn6 = -2, PtNone = -2, PtAgain = -2, PtCalled = -2, PtCalledFly = -2, PtCalledAt = -2, PtCalledOn = -2, PtTurned = -2;
+		double PtOff5 = -1.0, PtAway = -1.0, PtAwayWas = -1.0, PtOff6 = -1.0, PtRodeFor = 0.0, PtWorstOff = 0.0, PtWorstOffAt = 0.0, PtNear = 1e9;
+		Vec PtLeftAt;
+		int PtFrames = 0, PtTaken = 0;
+		// (the wander's own point, fed for a spell now and then)
+		bool bWanderPoint = false;
+		int WanderPointId = 10;
+		// (a press of the top view or the hill view watched: the zoom it asked for, and for how long the zoom has
+		// stood still with no wait at a thing; it must stand at the zoom the press asked for)
+		double PressZoom = -1.0, PressStill = 0.0, PressAt = 0.0, WorstPressOff = 0.0;
+		bool bPressFollowed = false;
+		int PressesJudged = 0, PressesLost = 0, HeldUpWas = 0;
 		while (R < End)
 		{
 			LandGeneralEye::Input In;
@@ -3568,6 +5063,140 @@ int main(int argc, char** argv)
 					Wander.CallView = Wander.KeepView = -1;
 				}
 			}
+			else if (bHillRun)
+			{
+				if (R < 2.0) {}
+				// (the hill view: one press; turned, zoomed in to a man's shoulder and out to the farthest, panned; the top
+				// view from it and back; its second press)
+				else if (R < 6.0) In.bHillView = Once(2.0);
+				else if (R < 10.0) In.Turn = 45.0 * Dt;
+				else if (R < 17.0) Notch(1.0, 0.25);
+				else if (R < 19.0) {}
+				else if (R < 28.0) Notch(-1.0, 0.25);
+				else if (R < 30.0) {}
+				else if (R < 36.0) In.PanAhead = 1.0;
+				else if (R < 38.5) Notch(1.0, 0.3);
+				else if (R < 40.0) {}
+				else if (R < 44.0) In.bTopView = Once(40.0);
+				else if (R < 48.0) In.bTopView = Once(44.0);
+				else if (R < 53.0) In.bHillView = Once(48.0);
+				// (his tilt keys, one line: up from the automatic tilt to his own; down through it to the low look, as
+				// flat as it goes, and that kept; up out of it through the automatic tilt to his own again; down again,
+				// and the hill view's press with his hand's low look on)
+				else if (R < 55.0) In.Tilt = 20.0 * Dt;
+				else if (R < 56.0) {}
+				else if (R < 60.0) In.Tilt = -40.0 * Dt;
+				else if (R < 62.0) { if (Once(61.0)) In.KeepView = 0; }
+				else if (R < 66.0) In.Tilt = 20.0 * Dt;
+				else if (R < 67.0) {}
+				else if (R < 70.0) In.Tilt = -40.0 * Dt;
+				else if (R < 71.0) {}
+				else if (R < 75.0) In.bHillView = Once(71.0);
+				else if (R < 77.0) In.PanRight = 1.0;
+				else if (R < 78.0) { if (Once(77.5)) In.KeepView = 1; }
+				// (the low look called from the automatic view, left for it again, and a flight to it taken by a pan)
+				else if (R < 86.0) { if (Once(78.0)) In.CallView = 0; }
+				else if (R < 94.0) { if (Once(86.0)) In.CallView = 1; }
+				else if (R < 100.0) { if (Once(94.0)) In.CallView = 0; if (R >= 94.4 && R < 95.4) In.PanRight = 1.0; }
+				else if (R < 104.0) { if (Once(100.0) && Gen.HillView()) In.bHillView = true; }
+				else if (R < 140.0)
+				{
+					if (Once(104.0)) In.GoBlock = TankBlock;
+					In.bFollow = true;
+					In.bHillView = Once(106.0) && !Gen.HillView();
+					if (R >= 114.0 && R < 118.0) Notch(1.0, 0.25);
+					if (R >= 122.0 && R < 124.0) In.Turn = 60.0 * Dt;
+					if (R >= 128.0 && R < 132.0) Notch(-1.0, 0.25);
+				}
+				else if (R < 142.0) {}
+				else if (R < 176.0)
+				{
+					// (a point of the scene's, one tank of the unit locked on: fed, turned about and zoomed on, let go by a
+					// pan and fed on all the same; another; a stop; the same again; and a kept view called from it)
+					const int Fed = R < 156.0 ? 5 : R < 162.0 ? 6 : R < 163.0 ? -1 : R < 172.0 ? 6 : -1;
+					if (Fed >= 0)
+					{
+						In.bFollowAt = true;
+						In.FollowAtId = Fed;
+						In.FollowAt = PointAt(Fed, R);
+					}
+					if (R >= 146.0 && R < 148.0) In.Turn = 30.0 * Dt;
+					if (R >= 148.0 && R < 150.0) Notch(1.0, 0.25);
+					if (R >= 152.0 && R < 153.0) In.PanRight = 1.0;
+					if (Once(168.0)) In.CallView = 1;
+				}
+				else if (std::getenv("LAND_PLAY_FARLOW"))
+				{
+					// (the far low look, a sweep of its own: zoomed out, tilted down to the low look by hand, zoomed in a
+					// few notches or none, then turned and panned fast; a cycle of 12 s, each with its own rates.
+					// FARLOW_TURN: the fastest turn, degrees a second; FARLOW_IN: the notches in; FARLOW_NOLOW: no low look)
+					const double Cyc = std::fmod(R - 176.0, 12.0);
+					if (Cyc < Dt)
+					{
+						Wander = LandGeneralEye::Input();
+						Wander.Turn = (Roll() * 2.0 - 1.0) * (std::getenv("FARLOW_TURN") ? std::atof(std::getenv("FARLOW_TURN")) : 90.0) * Dt;
+						Wander.PanRight = Roll() * 2.0 - 1.0;
+						Wander.PanAhead = Roll() * 2.0 - 1.0;
+						NextWander = Roll();
+					}
+					const int InNotches = std::getenv("FARLOW_IN") ? std::atoi(std::getenv("FARLOW_IN")) : static_cast<int>(NextWander * 4.0 * 7.0) % 7;
+					if (Cyc < 2.0) Notch(-1.0, 0.25);
+					else if (Cyc < 3.5) { if (NextWander < 0.75 && !std::getenv("FARLOW_NOLOW")) In.Tilt = -40.0 * Dt; }
+					else if (Cyc < 5.25 + (std::getenv("FARLOW_IN") ? 1.75 : 0.0)) { if (std::floor((Cyc - 3.5) / 0.25) < InNotches) Notch(1.0, 0.25); }
+					else if (Cyc < 8.0) In.Turn = Wander.Turn;
+					else if (Cyc < 11.5) { In.PanRight = Wander.PanRight; In.PanAhead = Wander.PanAhead; }
+					if (std::getenv("LAND_PLAY_FARLOW_HILL") && Cyc >= 3.0 && Cyc < 3.0 + Dt && NextWander >= 0.75) In.bHillView = true;
+				}
+				else
+				{
+					if (R >= NextWander)
+					{
+						NextWander = R + (std::getenv("LAND_PLAY_HARD") ? 0.6 + 2.0 * Roll() : 1.5 + 3.0 * Roll());
+						Wander = LandGeneralEye::Input();
+						const double Pick = Roll();
+						if (std::getenv("LAND_PLAY_HARD"))
+						{
+							// (the hard mix, a sweep of its own: fast pans, many hill and top presses, tilt to the low look,
+							// zoom notches, calls)
+							const double Q = Roll();
+							if (Pick < 0.18) { Wander.PanRight = Q < 0.5 ? -1.0 : 1.0; Wander.PanAhead = Roll() * 2.0 - 1.0; }
+							else if (Pick < 0.38) Wander.bHillView = true;
+							else if (Pick < 0.46) Wander.bTopView = true;
+							else if (Pick < 0.58) Wander.Zoom = Q < 0.5 ? 1.0 : -1.0;
+							else if (Pick < 0.72) { Wander.Tilt = (Q < 0.6 ? -50.0 : 50.0) * Dt; if (Roll() < 0.4) Wander.PanAhead = Roll() * 2.0 - 1.0; }
+							else if (Pick < 0.84) Wander.CallView = static_cast<int>(Q * 4.0) % 4;
+							else if (Pick < 0.92) Wander.KeepView = static_cast<int>(Q * 4.0) % 4;
+							else if (Pick < 0.96) Wander.Turn = (Q * 2.0 - 1.0) * 90.0 * Dt;
+							else { bWanderPoint = !bWanderPoint; if (bWanderPoint) ++WanderPointId; }
+						}
+						else if (Pick < 0.22) { Wander.PanRight = Roll() * 2.0 - 1.0; Wander.PanAhead = Roll() * 2.0 - 1.0; }
+						else if (Pick < 0.3) Wander.Turn = (Roll() * 2.0 - 1.0) * 60.0 * Dt;
+						else if (Pick < 0.48) Wander.Zoom = Roll() < 0.5 ? 1.0 : -1.0;
+						else if (Pick < 0.6) Wander.Tilt = (Roll() * 2.0 - 1.0) * 50.0 * Dt;
+						else if (Pick < 0.66) Wander.bTopView = true;
+						else if (Pick < 0.77) Wander.bHillView = true;
+						else if (Pick < 0.86) Wander.CallView = static_cast<int>(Roll() * 4.0) % 4;
+						else if (Pick < 0.9) Wander.KeepView = static_cast<int>(Roll() * 4.0) % 4;
+						else
+						{
+							// (the scene begins to feed a point, another than the last, or stops)
+							bWanderPoint = !bWanderPoint;
+							if (bWanderPoint) ++WanderPointId;
+						}
+					}
+					In = Wander;
+					if (In.Zoom != 0.0) { if (R < NextNotch) In.Zoom = 0.0; else NextNotch = R + 0.3; }
+					if (bWanderPoint)
+					{
+						In.bFollowAt = true;
+						In.FollowAtId = WanderPointId;
+						In.FollowAt = PointAt(WanderPointId, R);
+					}
+					// (a press is one frame's)
+					Wander.bTopView = Wander.bHillView = false;
+					Wander.CallView = Wander.KeepView = -1;
+				}
+			}
 			else if (R < 2.0) {}
 			else if (R < 8.0) Notch(1.0, 0.25);
 			else if (R < 28.0) In.PanAhead = 1.0;
@@ -3613,7 +5242,8 @@ int main(int argc, char** argv)
 			auto Wrapped = [](double Degrees) { while (Degrees > 180.0) Degrees -= 360.0; while (Degrees < -180.0) Degrees += 360.0; return Degrees; };
 			// (the view before this frame's move: where it looked, how fast, and what it was doing)
 			const Vec LaBefore = Gen.LookAt();
-			const double SBefore = Gen.Zoom(), HBefore = Gen.Heading(), TiltBefore = Gen.TiltDegrees();
+			const double SBefore = Gen.Zoom(), HBefore = Gen.Heading(), TiltBefore = Gen.TiltDegrees(), HlBefore = Gen.HillTiltNow();
+			const int HeldUpBefore = Gen.BrakedFrames() + Gen.WaitedFrames(), PointBefore = Gen.FollowingAt();
 			const double SpeedBefore = std::hypot(LaBefore.X - LaWas.X, LaBefore.Y - LaWas.Y) / Dt;
 			const bool bRestBefore = SpeedBefore < 0.05 && std::abs(SBefore - SWas) / Dt < 0.002 && std::abs(Wrapped((HBefore - HWas) * 180.0 / Pi)) / Dt < 0.05 && std::abs(TiltBefore - TiltWas) / Dt < 0.05;
 			const int FlyBefore = Gen.FlyingTo(), FollowBefore = Gen.Following();
@@ -4017,6 +5647,104 @@ int main(int argc, char** argv)
 					}
 				}
 			}
+			if (bHillRun)
+			{
+				const double TiltNow = Gen.TiltDegrees(), UpNow = P.Eye.Z - P.Look.Z, CapNow = Gen.HillTiltNow();
+				const bool bNone = CapNow >= HillNoneDeg;
+				HillPresses += In.bHillView ? 1 : 0;
+				HillFrames += Gen.HillView() ? 1 : 0;
+				if (Once(2.0)) HillZoomWas = Gen.ZoomWanted();
+				if (Once(5.9)) { HillOnTilt = TiltNow; HillOnUp = UpNow; HillOnCap = CapNow; bHillOnLit = Gen.HillView(); }
+				if (Once(18.5)) HillNearTilt = TiltNow;
+				if (Once(29.5)) { HillFarTilt = TiltNow; HillFarUp = UpNow; }
+				if (Once(39.9)) HillTopZoomWas = Gen.ZoomWanted();
+				if (Once(43.9)) HillTopTilt = TiltNow;
+				if (Once(47.9)) { HillTopBackTilt = TiltNow; HillTopBackZoom = Gen.Zoom(); bHillTopBackLit = Gen.HillView() && !Gen.TopView(); }
+				if (Once(52.9)) { HillBackZoom = Gen.Zoom(); HillBackTilt = TiltNow; HillBackCap = CapNow; bHillBackOff = !Gen.HillView() && bNone; }
+				if (Once(55.9)) { HandUpTilt = TiltNow; HandUpZoom = Gen.Zoom(); bHandUpOwn = Gen.OwnTilt(); bHandUpLit = Gen.HillView(); }
+				if (Once(60.9)) { HandLowTilt = TiltNow; HandLowZoom = Gen.Zoom(); HandLowCap = CapNow; bHandLowLit = Gen.HillView(); bHandLowOwn = Gen.OwnTilt(); }
+				if (Once(61.5)) HillKept0 = Gen.ViewHill(0);
+				if (Once(66.9)) { HandUp2Tilt = TiltNow; HandUp2Zoom = Gen.Zoom(); HandUp2Cap = CapNow; bHandUp2Own = Gen.OwnTilt(); bHandUp2Lit = Gen.HillView(); }
+				if (Once(70.9)) { HandOffZoomWas = Gen.ZoomWanted(); HandLow2Cap = CapNow; bHandLow2Lit = Gen.HillView(); }
+				if (Once(74.9)) { HandOffZoom = Gen.Zoom(); HandOffTilt = TiltNow; HandOffCap = CapNow; bHandOffLit = Gen.HillView(); }
+				if (Once(77.9)) HillKept1 = Gen.ViewHill(1);
+				if (Once(85.9)) { HillCall0 = CapNow; HillCall0At = Gen.ViewAt(); bHillCall0Lit = Gen.HillView(); }
+				if (Once(93.9)) { HillCall1 = CapNow; HillCall1At = Gen.ViewAt(); bHillCall1Lit = Gen.HillView(); }
+				// (the flight to the low look taken by a pan while the low look was still coming on: its tilt as his hand
+				// finds it and how fast it was going; it must come to rest where its own push stops it)
+				if (Once(94.4)) { HillTakeAt = CapNow; HillTakeRate = (CapNow - HlBefore) / Dt; }
+				if (Once(99.9)) { HillTakeRest = CapNow; HillTakeZoom = Gen.Zoom(); }
+				if (Once(139.9)) { HillFollowTilt = TiltNow; HillFollowCap = CapNow; bHillFollowLit = Gen.HillView(); HillFollowed = Gen.Following(); }
+				// (his tilt keys held: the picture's tilt goes one way only)
+				if (In.Tilt < 0.0 && R < 176.0 && TiltNow - TiltBefore > WorstUpUnderDown) { WorstUpUnderDown = TiltNow - TiltBefore; WorstUpAt = R; }
+				if (In.Tilt > 0.0 && R < 176.0 && TiltBefore - TiltNow > WorstDownUnderUp) { WorstDownUnderUp = TiltBefore - TiltNow; WorstDownAt = R; }
+				// (the scene's point: on it, off it, and how far the look-at rides from it once it has had four seconds
+				// to come up with it)
+				const double PtOff = In.bFollowAt ? std::hypot(Gen.LookAt().X - In.FollowAt.X, Gen.LookAt().Y - In.FollowAt.Y) : -1.0;
+				if (Once(147.9)) PtTurned = Gen.FollowingAt();
+				if (Once(151.9)) { PtOn5 = Gen.FollowingAt(); PtOff5 = PtOff; }
+				if (Once(153.9)) { PtLetGo = Gen.FollowingAt(); PtAwayWas = PtOff; PtLeftAt = Gen.LookAt(); }
+				if (Once(155.9)) { PtStill = Gen.FollowingAt(); PtAway = std::hypot(Gen.LookAt().X - PtLeftAt.X, Gen.LookAt().Y - PtLeftAt.Y); }
+				if (Once(161.9)) { PtOn6 = Gen.FollowingAt(); PtOff6 = PtOff; }
+				if (Once(162.9)) PtNone = Gen.FollowingAt();
+				if (Once(167.9)) PtAgain = Gen.FollowingAt();
+				if (Once(168.5)) { PtCalled = Gen.FollowingAt(); PtCalledFly = Gen.FlyingTo(); }
+				if (Once(175.9)) { PtCalledAt = Gen.ViewAt(); PtCalledOn = Gen.FollowingAt(); }
+				PtFrames += Gen.FollowingAt() >= 0 ? 1 : 0;
+				PtTaken += Gen.FollowingAt() >= 0 && Gen.FollowingAt() != PointBefore ? 1 : 0;
+				// (four seconds on the same point with no wait at a thing in them: a wait leaves the view behind, and it
+				// then has the way to make up)
+				PtRodeFor = Gen.FollowingAt() >= 0 && Gen.FollowingAt() == PointBefore && HeldUpBefore == Gen.BrakedFrames() + Gen.WaitedFrames() ? PtRodeFor + Dt : 0.0;
+				// (three seconds on it: called from nearer, the view first draws back)
+				if (PtRodeFor > 3.0) PtNear = std::min(PtNear, Gen.Zoom());
+				if (PtRodeFor > 4.0 && PtOff > PtWorstOff) { PtWorstOff = PtOff; PtWorstOffAt = R; }
+				// (a low look on and no tilt of his own: the view never tilts steeper than it, nor than the automatic tilt)
+				if (!Gen.OwnTilt()) HillSteepOver = std::max(HillSteepOver, TiltNow - std::min(CapNow, AutoTilt(Gen.Zoom())));
+				// (none on and no tilt of his own: the automatic tilt to the last bit)
+				if (bNone && !Gen.OwnTilt() && std::abs(TiltNow - AutoTilt(Gen.Zoom())) > 1e-9) ++HillNotAuto;
+				HillLowest = std::min(HillLowest, CapNow);
+				// (a press of the top view or the hill view: the zoom it asks for is the zoom the view comes to rest at,
+				// unless his own wheel, a kept view called or a card pressed has asked another since; a followed unit or
+				// point holds it no nearer than FollowNearest)
+				const int HeldUpNow = Gen.BrakedFrames() + Gen.WaitedFrames();
+				if (In.bHillView || In.bTopView)
+				{
+					PressZoom = Gen.ZoomWanted();
+					PressStill = 0.0;
+					PressAt = R;
+					bPressFollowed = false;
+				}
+				else if (PressZoom >= 0.0)
+				{
+					if (In.Zoom != 0.0 || In.CallView >= 0 || In.GoBlock >= 0) PressZoom = -1.0;
+					else
+					{
+						bPressFollowed = bPressFollowed || Gen.Following() >= 0 || Gen.FollowingAt() >= 0;
+						PressStill = std::abs(Gen.Zoom() - SBefore) / Dt < 0.002 && HeldUpNow == HeldUpWas ? PressStill + Dt : 0.0;
+						if (PressStill >= 0.5)
+						{
+							const double Off = std::min(std::abs(Gen.Zoom() - PressZoom), bPressFollowed ? std::abs(Gen.Zoom() - std::max(PressZoom, HillSet.FollowNearest)) : 1e9);
+							++PressesJudged;
+							WorstPressOff = std::max(WorstPressOff, Off);
+							if (Off > 0.01)
+							{
+								++PressesLost;
+								if (PressesLost <= 6) std::printf("  the press at real %.2f asked for zoom %.3f; the view came to rest at %.3f by %.2f (braked %d, waited %d)\n", PressAt, PressZoom, Gen.Zoom(), R, Gen.BrakedFrames(), Gen.WaitedFrames());
+							}
+							PressZoom = -1.0;
+						}
+					}
+				}
+				HeldUpWas = HeldUpNow;
+				// (LAND_PLAY_HILL: four lines a second; LAND_PLAY_HILL_AT=from,to: every frame between those real seconds)
+				double HillFrom = 0.0, HillTo = -1.0;
+				if (const char* At = std::getenv("LAND_PLAY_HILL_AT")) std::sscanf(At, "%lf,%lf", &HillFrom, &HillTo);
+				if ((std::getenv("LAND_PLAY_HILL") && static_cast<int>((R + Dt) * 4.0) != static_cast<int>(R * 4.0)) || (R >= HillFrom && R <= HillTo))
+				{
+					std::printf("  hill at %.3f: zoom %.5f (to %.3f) tilt %.3f low look %.3f (to %.2f) lit %d own %d top %d at view %d flying to %d point %d (%.1f m off), eye %.1f over the look-at, %.1f over the ground, %.0f m back, lift %.2f, waited %d braked %d\n", R, Gen.Zoom(), Gen.ZoomWanted(), TiltNow, CapNow, Gen.HillTiltWanted(),
+						Gen.HillView() ? 1 : 0, Gen.OwnTilt() ? 1 : 0, Gen.TopView() ? 1 : 0, Gen.ViewAt(), Gen.FlyingTo(), Gen.FollowingAt(), PtOff, UpNow, P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y), std::hypot(P.Eye.X - P.Look.X, P.Eye.Y - P.Look.Y), Gen.LiftNow(), Gen.WaitedFrames(), Gen.BrakedFrames());
+				}
+			}
 			if (bTiltRun)
 			{
 				TopPresses += In.bTopView ? 1 : 0;
@@ -4044,6 +5772,13 @@ int main(int argc, char** argv)
 			GSlowest = std::max(GSlowest, Ms);
 			if (Ms > 3.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("  slow general's eye %.2f ms at real %.2f: zoom %.3f, lift %.2f need %.2f hurried %d aside %.2f waited %d braked %d, asked %d\n", Ms, R + Dt, Gen.Zoom(), Gen.LiftNow(), Gen.NeedNow(), Gen.HurriedNow(), Gen.PushNow(), Gen.WaitedFrames(), Gen.BrakedFrames(), Gen.AskedNow());
 			++GFrames;
+			HeldOnEnd = Gen.WaitedFrames() > HeldWaitedWas ? HeldOnEnd + 1 : 0;
+			HeldWaitedWas = Gen.WaitedFrames();
+			if (HeldOnEnd > HeldLongest)
+			{
+				HeldLongest = HeldOnEnd;
+				HeldLongestAt = R;
+			}
 			const double G = GroundAt(P.Eye.X, P.Eye.Y);
 			const double Over = P.Eye.Z - G;
 			Lowest = std::min(Lowest, Over);
@@ -4053,7 +5788,20 @@ int main(int argc, char** argv)
 			// (Free is the scene's ground-level word, a house's floor or a wall's line at any height: asked, as the view
 			// asks it, within FreeUnder of the ground; the eye 400 m over a farm's roof is not in it)
 			const bool bFreeAsked = Over < LandGeneralEye::Settings().FreeUnder;
-			if ((bFreeAsked && !EW.Free(P.Eye)) || EW.Solid(P.Eye, -1) != 0) { ++InThing; if (std::getenv("LAND_PLAY_GEN")) std::printf("  general's eye in a thing at real %.2f: free %d solid %d, zoom %.3f, eye %.2f over the ground, following %d\n", R, EW.Free(P.Eye) ? 1 : 0, EW.Solid(P.Eye, -1), Gen.Zoom(), Over, Gen.Following()); }
+			// (The hill run: FreeUnder, 12 m, is the height the view WANTS over a floor, and its eased lift trails a
+			// rising need: a floor met at speed, a far low pan's, is crossed up to half a metre under it for a few
+			// frames (a look every tenth of a second at Climb, 2.5 m/s, and the spring's own trail of as much again),
+			// the roof five metres below the eye. Held there to what a player could see: never more than FloorSlack
+			// under the wanted height; the frames within the slack are counted and said, not a fault. The three older
+			// runs are judged as they always were. Measured, 27 November: 11.53 m at the lowest on 46 runs, and the
+			// camera before the hill view the same on two of them.)
+			const double FloorSlack = 1.0;
+			if (bHillRun && bFreeAsked && !EW.Free(P.Eye) && EW.Solid(P.Eye, -1) == 0 && Over >= LandGeneralEye::Settings().FreeUnder - FloorSlack)
+			{
+				++FloorLow;
+				FloorLowest = std::min(FloorLowest, Over);
+			}
+			else if ((bFreeAsked && !EW.Free(P.Eye)) || EW.Solid(P.Eye, -1) != 0) { ++InThing; if (std::getenv("LAND_PLAY_GEN")) std::printf("  general's eye in a thing at real %.2f: free %d solid %d, zoom %.3f, eye %.2f over the ground, following %d\n", R, EW.Free(P.Eye) ? 1 : 0, EW.Solid(P.Eye, -1), Gen.Zoom(), Over, Gen.Following()); }
 			if (P.Eye.Z < G + CornAt(P.Eye.X, P.Eye.Y) + 0.1) ++InCorn;
 			if (const char* Win = std::getenv("LAND_PLAY_GEN_AT"))
 			{
@@ -4103,7 +5851,8 @@ int main(int argc, char** argv)
 			Pitch = Pt;
 		}
 		std::printf("\ngeneral's view%s: %d frames over %.0f s; eye under the ground %d, in a thing %d, among the stalks %d, look-at off the field %d; eye %.2f m over the ground at the lowest (%.2f at the nearest zoom), %.0f m over the look-at at the highest; followed a block %.0f s; worst look kick %.0f deg/s/s (real %.1f s), %d frames over 1200; the view's worst rise or fall %.0f deg/s/s as the picture sees it (real %.1f s), %d frames over 1200; waited at a thing %d frames, braked %d, cut %d times; %.3f ms a frame on average, %.2f ms the slowest",
-			bTiltRun ? ", tilted by hand" : bViewRun ? ", kept views" : "", GFrames, End, Under, InThing, InCorn, OffField, Lowest, LowestNear < 1e8 ? LowestNear : 0.0, Highest, Followed * Dt, WorstKick, WorstKickAt, Kicks, WorstRise, WorstRiseAt, Lifted, Gen.WaitedFrames(), Gen.BrakedFrames(), GCuts, Spent / std::max(1, GFrames), GSlowest);
+			bTiltRun ? ", tilted by hand" : bViewRun ? ", kept views" : bHillRun ? ", the hill view" : "", GFrames, End, Under, InThing, InCorn, OffField, Lowest, LowestNear < 1e8 ? LowestNear : 0.0, Highest, Followed * Dt, WorstKick, WorstKickAt, Kicks, WorstRise, WorstRiseAt, Lifted, Gen.WaitedFrames(), Gen.BrakedFrames(), GCuts, Spent / std::max(1, GFrames), GSlowest);
+		if (FloorLow > 0) std::printf("; within a metre under the height wanted over a floor %d frames, %.2f m over it at the lowest", FloorLow, FloorLowest);
 		if (Under > 0) Fault("the general's view went under the ground");
 		if (InThing > 0) Fault("the general's view stood in a thing or a man");
 		if (InCorn > 0) Fault("the general's view stood among the stalks");
@@ -4111,7 +5860,7 @@ int main(int argc, char** argv)
 		if (Kicks > 0) Fault("the general's view jolted (a look kick over 1200 deg/s/s)");
 		if (Lifted > 0) Fault("the general's view jolted up or down (over 1200 deg/s/s as the picture sees it)");
 		if (LowestNear > 2.5 && !bTiltRun && !bViewRun) Fault("the general's view never came down to a man's shoulder");
-		if (Highest < 300.0) Fault("the general's view never rose to look down on the battle");
+		if (Highest < 300.0 && !bHillRun) Fault("the general's view never rose to look down on the battle");
 		if (GSlowest > 8.0) Fault("a frame of the general's view took over 8 ms");
 		if (bViewRun)
 		{
@@ -4160,6 +5909,55 @@ int main(int argc, char** argv)
 			if (HandBacks < 1 || KeepBacks < 1) Fault("a flight taken, or a view kept, once his own tilt had sunk to the automatic one was not tested");
 			if (HandBacksWrong > 0 || KeepBacksWrong > 0) Fault("a flight taken, or a view kept, once his own tilt had sunk to the automatic one left it his own, unseen");
 			if (TankBlock < 0) std::printf("\n  (no block of his own lived through the scripted steps on this recording: the card press and the follows were left out)");
+		}
+		if (bHillRun)
+		{
+			const double Low = HillSet.LowTilt, Soft = HillSet.TiltSoft;
+			// (a flight let go: the low look's tilt comes to rest where its own push stops it, no flatter than the
+			// flattest, and is none where that would tell on nothing at the zoom it rests at)
+			const double TakeStop = std::max(HillTakeAt + HillTakeRate * std::abs(HillTakeRate) / (2.0 * HillSet.TiltPush * HillSet.FlySlower), Low);
+			const double HillTakeWant = TakeStop < AutoTiltDeg(HillTakeZoom) + Soft ? TakeStop : HillNoneDeg;
+			std::printf("\ngeneral's view, the hill view: one press brought the view to tilt %.1f degrees, %.1f m over the look-at (lit %s, its low look %.2f); at a man's shoulder tilted %.1f, at the farthest zoom %.1f from %.0f m up; the top view from it looked down %.1f and went back to %.1f at zoom %.3f (%.3f before; hill view lit %s); the second press went back to zoom %.3f (%.3f before the first) and tilt %.2f (off and none left: %s)",
+				HillOnTilt, HillOnUp, bHillOnLit ? "yes" : "NO", HillOnCap, HillNearTilt, HillFarTilt, HillFarUp, HillTopTilt, HillTopBackTilt, HillTopBackZoom, HillTopZoomWas, bHillTopBackLit ? "yes" : "NO", HillBackZoom, HillZoomWas, HillBackTilt, bHillBackOff ? "yes" : "NO");
+			std::printf("\ngeneral's view, his tilt keys: up from the automatic tilt to %.1f degrees (his own %s, hill view lit %s); held down, through it to the low look at %.2f, the view tilted %.2f (hill view lit %s, his own still %s); up again out of it to %.1f (his own %s, lit %s); down again to %.2f (lit %s) and the hill view pressed: tilt %.2f at zoom %.3f (%.3f before; lit %s); under a key held down the picture's tilt rose %.4f degrees a frame at the most (at %.2f), under one held up it fell %.4f (at %.2f)",
+				HandUpTilt, bHandUpOwn ? "yes" : "NO", bHandUpLit ? "YES" : "no", HandLowCap, HandLowTilt, bHandLowLit ? "yes" : "NO", bHandLowOwn ? "YES" : "no", HandUp2Tilt, bHandUp2Own ? "yes" : "NO", bHandUp2Lit ? "YES" : "no", HandLow2Cap, bHandLow2Lit ? "yes" : "NO", HandOffTilt, HandOffZoom,
+				HandOffZoomWas, bHandOffLit ? "YES" : "no", WorstUpUnderDown, WorstUpAt, WorstDownUnderUp, WorstDownAt);
+			std::printf("\ngeneral's view, the low look kept: with %.2f degrees and with none (%.1f); called, it came on to %.2f at view %d (lit %s), and went again to %.1f at view %d (lit %s); a flight to it taken at %.2f degrees going %.1f a second came to rest at %.2f (%.2f by its own push, at zoom %.3f); following a block, lit %s, its low look %.2f, tilt %.1f, following %d",
+				HillKept0, HillKept1, HillCall0, HillCall0At + 1, bHillCall0Lit ? "yes" : "NO", HillCall1, HillCall1At + 1, bHillCall1Lit ? "YES" : "no", HillTakeAt, HillTakeRate, HillTakeRest, HillTakeWant, HillTakeZoom, bHillFollowLit ? "yes" : "NO", HillFollowCap, HillFollowTilt, HillFollowed);
+			std::printf("\ngeneral's view, a point followed: on point %d after its turn and %d at the end, the look-at %.1f m from it; his pan let go (on %d, %.0f m from it), and fed on it was left alone (on %d; the look-at moved %.2f m in two seconds); the next taken (on %d, %.1f m off); a stop (on %d) and the same again (on %d); a kept view called from it flew (on %d, flying to %d) and was reached (at view %d, on %d); taken up %d times, followed %.0f s, three seconds on never nearer than zoom %.3f; four seconds on a point with no wait at a thing, the look-at rode %.2f m off it at the most (at %.1f)",
+				PtTurned, PtOn5, PtOff5, PtLetGo, PtAwayWas, PtStill, PtAway, PtOn6, PtOff6, PtNone, PtAgain, PtCalled, PtCalledFly + 1, PtCalledAt + 1, PtCalledOn, PtTaken, PtFrames * Dt, PtNear < 1e8 ? PtNear : -1.0, PtWorstOff, PtWorstOffAt);
+			std::printf("\ngeneral's view, the hill run through: by itself the view tilted %.6f degrees over its low look at the most; with none on, %d frames were not the automatic view to the last bit; the low look's flattest %.3f degrees (%.1f allowed); %d presses of the top and hill views came to rest, %d not at the zoom asked (%.4f off at the most); hill view lit %.0f s (%d presses); held at a thing %d frames on end at the most (real %.1f s)",
+				HillSteepOver, HillNotAuto, HillLowest, Low, PressesJudged, PressesLost, WorstPressOff, HillFrames * Dt, HillPresses, HeldLongest, HeldLongestAt);
+			// (The whole view waits at a thing a frame or a few, as a man stops at a hedge while the lift climbs. Held
+			// there for seconds, his wheel, pan and turn are not answered: a step aside whose own way was shut held
+			// it 375 seconds on Normandy, to the end of the run, with no gate to say so; 27 November.)
+			if (HeldLongest > 120) Fault("the general's view was held at a thing for over two seconds on end: his hand was not answered");
+			if (!bHillOnLit || std::abs(HillOnTilt - HillSet.HillTilt) > 0.3 || std::abs(HillOnUp - HillSet.HillUp) > 1.0 || std::abs(HillOnCap - HillSet.HillTilt) > 1e-6) Fault("one press of the hill view did not bring the general's view to the hill (its low tilt, its height over the look-at, lit)");
+			if (std::abs(HillNearTilt - HillSet.TiltNear) > 0.5) Fault("in the hill view the general's view at a man's shoulder was not the automatic one");
+			if (std::abs(HillFarTilt - HillSet.HillTilt) > 0.3 || HillFarUp < 120.0) Fault("in the hill view the general's view did not keep its low tilt to the farthest zoom");
+			if (HillTopTilt < 79.0 || std::abs(HillTopBackTilt - HillSet.HillTilt) > 0.5 || std::abs(HillTopBackZoom - HillTopZoomWas) > 0.01 || !bHillTopBackLit) Fault("the top view from the hill view did not look down and go back to the hill view as it was");
+			if (!bHillBackOff || HillBackCap < HillNoneDeg || std::abs(HillBackZoom - HillZoomWas) > 0.01 || std::abs(HillBackTilt - AutoTiltDeg(HillBackZoom)) > 0.05) Fault("the hill view's second press did not go back to the zoom and the tilt the view had");
+			if (!bHandUpOwn || bHandUpLit || HandUpTilt < AutoTiltDeg(HandUpZoom) + 20.0) Fault("his tilt key held up from the automatic tilt did not tilt the view down as his own tilt");
+			if (!bHandLowLit || bHandLowOwn || std::abs(HandLowCap - Low) > 0.05 || std::abs(HandLowTilt - Gen.TiltByItself(HandLowZoom, Low)) > 0.3) Fault("his tilt key held down did not bring the view through the automatic tilt to the low look, as flat as it goes (hill view lit, no tilt of his own left)");
+			if (!bHandUp2Own || bHandUp2Lit || HandUp2Cap < HillNoneDeg || HandUp2Tilt < AutoTiltDeg(HandUp2Zoom) + 5.0) Fault("his tilt key held up from the low look did not bring the view up through the automatic tilt to his own (hill view out)");
+			if (!bHandLow2Lit || std::abs(HandLow2Cap - Low) > 0.05) Fault("his tilt key held down a second time did not bring the low look back");
+			if (bHandOffLit || HandOffCap < HillNoneDeg || std::abs(HandOffZoom - HandOffZoomWas) > 0.01 || std::abs(HandOffTilt - AutoTiltDeg(HandOffZoom)) > 0.05) Fault("the hill view pressed with his hand's low look on did not put the view back to tilting with the zoom where it stood");
+			if (WorstUpUnderDown > 0.01 || WorstDownUnderUp > 0.01) Fault("under a tilt key held the picture's tilt went the other way");
+			if (std::abs(HillKept0 - Low) > 0.05 || HillKept1 < HillNoneDeg) Fault("a view was not kept with the low look as it stood (his hand's, and none)");
+			if (std::abs(HillCall0 - Low) > 0.05 || HillCall0At != 0 || !bHillCall0Lit || HillCall1 < HillNoneDeg || HillCall1At != 1 || bHillCall1Lit) Fault("a kept view called back did not bring the low look on, or take it off, as the view was kept");
+			if (HillTakeAt < Low + 2.0 || HillTakeAt > HillNoneDeg - 2.0 || HillTakeRate > -5.0 || std::abs(HillTakeRest - HillTakeWant) > 1.0) Fault("a flight to a kept low look taken by his hand swung on to it (or the take was not made while it was coming on)");
+			if (TankBlock >= 0 && (!bHillFollowLit || HillFollowed != TankBlock || std::abs(HillFollowCap - HillSet.HillTilt) > 1e-6)) Fault("the hill view did not stay on while the view followed a block");
+			if (PtTurned != 5 || PtOn5 != 5 || PtOff5 < 0.0 || PtOff5 > 1.0) Fault("the scene's point was not taken up and ridden (through a turn and a zoom)");
+			if (PtLetGo != -1 || PtStill != -1 || PtAwayWas < 5.0 || PtAway < 0.0 || PtAway > 0.5) Fault("his pan did not let go of the scene's point, or the point fed on was taken up again");
+			if (PtOn6 != 6 || PtOff6 < 0.0 || PtOff6 > 1.0) Fault("another point of the scene's was not taken up after his pan had let go of the first");
+			if (PtNone != -1 || PtAgain != 6) Fault("a point no longer fed was still followed, or the same point fed anew was not taken up");
+			if (PtCalled != -1 || PtCalledFly != 1 || PtCalledAt != 1 || PtCalledOn != -1) Fault("a kept view called while a point was followed did not fly to its view and stay there");
+			if (PtNear < HillSet.FollowNearest - 0.011) Fault("following a point the view came nearer than it comes to a followed unit");
+			if (PtWorstOff > 1.0) Fault("the look-at rode far from the point it followed");
+			if (HillSteepOver > 1e-6) Fault("with a low look on the general's view tilted steeper by itself than the low look");
+			if (HillNotAuto > 0) Fault("with no low look on the general's view was not the automatic one to the last bit");
+			if (HillLowest < Low - 1e-9) Fault("the low look went flatter than its flattest");
+			if (PressesJudged < 6 || PressesLost > 0) Fault("a press of the top view or the hill view did not come to rest at the zoom it asked for (or too few were judged)");
 		}
 		if (bTiltRun)
 		{

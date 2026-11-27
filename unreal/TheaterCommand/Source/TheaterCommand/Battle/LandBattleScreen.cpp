@@ -273,6 +273,13 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 		{
 			Tops.Add({ TEXT("ALL FALL BACK"), TEXT("L"), TEXT("general:allback"), S.General.bAllBackAsk });
 		}
+		// (the free view, release 2: the hill view, lit while a low look is on, and the lock-on, lit while his view
+		// follows a unit; with the row off neither button is there)
+		if (S.bFreeView)
+		{
+			Tops.Add({ TEXT("HILL VIEW"), TEXT("I"), TEXT("general:hillview"), S.GeneralEye.HillView() });
+			Tops.Add({ TEXT("LOCK ON"), TEXT("L"), TEXT("general:lockon"), S.GeneralIn.bFollow && S.GeneralEye.Following() >= 0 });
+		}
 	}
 	auto TopWidth = [&](const FTop& P)
 	{
@@ -1650,6 +1657,11 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			{
 				Ends.Add({ TEXT("ALL FALL BACK"), TEXT("L"), TEXT("general:allback"), G.bAllBackAsk });
 			}
+			if (S.bFreeView)
+			{
+				Ends.Add({ TEXT("HILL VIEW"), TEXT("I"), TEXT("general:hillview"), S.GeneralEye.HillView() });
+				Ends.Add({ TEXT("LOCK ON"), TEXT("L"), TEXT("general:lockon"), S.GeneralIn.bFollow && S.GeneralEye.Following() >= 0 });
+			}
 		}
 		// (the map of the field folded away leaves its button at the row's right end, wherever the clock's buttons stand)
 		if (bFieldMap && bMapFolded)
@@ -2759,6 +2771,16 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		else if (Key == EKeys::Escape) { Scene->GeneralDo(TEXT("clear")); return FReply::Handled(); }
 		else if (Key == EKeys::C) { Scene->GeneralDo(TEXT("film")); return FReply::Handled(); }
 		else if (Key == EKeys::O) { Scene->GeneralDo(TEXT("topview")); return FReply::Handled(); }
+		// (the free view, release 2: I the hill view, L the lock-on on the unit in hand, or off; one press each, a key
+		// held does not press again; with the row off the keys are nobody's)
+		else if ((Key == EKeys::I || Key == EKeys::L) && S->bFreeView)
+		{
+			if (!Event.IsRepeat())
+			{
+				Scene->GeneralDo(Key == EKeys::I ? TEXT("hillview") : TEXT("lockon"));
+			}
+			return FReply::Handled();
+		}
 		// (M folds the map of the field away and brings it back, release 2; with its row off the key is nobody's)
 		else if (Key == EKeys::M && FLandLive::RuleNow(TEXT("fieldmap")))
 		{
