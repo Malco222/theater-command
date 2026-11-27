@@ -45,8 +45,8 @@ import { stationBars, whyStationBars } from './far';
 import { FAR_SEAS_FIRST, farOn } from './world';
 import { PACIFIC, coversBeaches, hopAims, pacificGround, ringDrawn, shoreLift, skiesOver, useShoreLift, type ShoreLift } from './pacific';
 import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf, theatreOf, unitsFree } from './history';
-import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, hasRoom, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, roomForAll, routineNews, warning, placed, type Assessment } from './game';
-import { islandOf, roomAt, roomRefusal, roomSays } from './islands';
+import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, roomForAll, routineNews, warning, placed, type Assessment } from './game';
+import { fits, islandOf, roomRefusal, roomSays } from './islands';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, fieldCtrl, garrisonOf, roomIn, siegeRules, housed } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
@@ -1365,11 +1365,11 @@ function whyNotQuay(g: Game, c: Corps, to: Region, rides = false): string | null
   }
   const steep = whyBarred(g, c, to);
   if (steep) return steep;
-  // (A harbour holds five corps of a side, and an island of the Pacific its own room, said in its own words: islands.ts.
-  // On an island the quay counts as a march and a landing count, engineers apart (`hasRoom`, islands.ts engRoom): at a room of
-  // one corps the count decides what the island holds, and a ship must not be refused where a march or a landing
-  // would be let in. Every other harbour counts all the corps of a side on its quay, as it always did.)
-  if (islandOf(g, to) ? !hasRoom(g, to, c) : placed(g, to, c.nat).length >= roomAt(g, to, c.nat)) return roomRefusal(g, to, [c]) ?? roomSays(g, to) ?? `${to.name} has no room for another corps.`;
+  // (A harbour holds five corps of a side, and an island of the Pacific its own room in men, said in its own words:
+  // islands.ts `fits`. On an island the quay counts as a march and a landing count, engineers apart: a ship must not be
+  // refused where a march or a landing would be let in. Every other harbour counts all the corps of a side on its quay,
+  // as it always did.)
+  if (!fits(g, to, c.nat, [c], { rows: placed(g, to, c.nat).length })) return roomRefusal(g, to, [c]) ?? roomSays(g, to) ?? `${to.name} has no room for another corps.`;
   // (A row that goes with a corps already shipped there this month sails in that corps' lift: `rides`, rider b604 to ruling 234.)
   if (!rides && ownShips !== c.nat && liftLeft(g, c.nat) < 1) return 'All the shipping is in use this month.';
   return null;
@@ -1487,8 +1487,9 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
  * An island of the Pacific takes no more corps ashore than it has room for, those of the force's side already on it
  * counted and engineers apart, as a march counts them (rulings 173(b) and 179(s): "the limit of an open beach is the
  * island's room of one corps and what the corps carries"). The island's own sentence where the force is too many
- * ("Wake has room for one corps."), or null: always null for ground that is no island of the table, and with the far
- * side off.
+ * ("Wake is full: it has room for about 15,000 men and 15,000 of yours are there.", in men by the UI director's marks
+ * of 15:02Z 25 November 2026), or null: always null for ground that is no island of the table, and with the far side
+ * off.
  */
 const islandFull = (g: Game, cs: Corps[], to: Region): string | null => (islandOf(g, to) && !roomForAll(g, to, cs) ? roomRefusal(g, to, cs) ?? roomSays(g, to) : null);
 

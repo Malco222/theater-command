@@ -20,7 +20,8 @@
 //   TC.reach([corpsId, ...])            -> { regions: [{ id, cost, attack, prev }], danger: [regionId, ...] }
 //   TC.move([corpsId, ...], regionId)   -> { moved: [{ id, path }], note, view }: 'note' is the staff's word on the order ('' where the piece moving is the answer):
 //                                          a march that carries on, two corps that would change places, or an island of the Pacific that has no room
-//                                          for one more corps ("Hong Kong has room for one corps.": rulings 173(b) and 179(s))
+//                                          for the corps sent ("Hong Kong has room for one division, about 15,000 men: you are sending 30,000.":
+//                                          rulings 173(b) and 179(s), in men by the UI director's marks of 15:02Z 25 November 2026)
 //   TC.previewAttack([corpsId, ...], regionId) -> the odds and the Battle Ticket, or null
 //   TC.attack([corpsId, ...], regionId) -> { report, note, view }
 //   TC.endMonth()                       -> { steps, headlines, events, fallen, ready, view }
@@ -159,7 +160,7 @@ import { chanceOn, headline, offersOn } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
 import { CHART_NOW, answersOf, attachWorld, closedCountry, motherLine, patronOf } from '../../../src/campaign/world';
-import { islandOf, roomSays } from '../../../src/campaign/islands';
+import { islandOf, refusedWhole, roomSays, stayBehind, swapOffer } from '../../../src/campaign/islands';
 import { FAR_PATHS } from '../../../src/campaign/far-rows';
 // (Release 2, Japan and the Pacific: ruling 201's two lines, read where the war between the alliances goes on after a great power's fall.)
 import { warGoesOn } from '../../../src/campaign/domination';
@@ -2908,8 +2909,11 @@ function move(ids: number[], to: number, army = '', armyIds: number[] = []) {
     let others: Corps[] = [];
     try { others = s.regions[c.reg]?.nb.includes(to) ? swapChoices(s, c, to) : []; } catch { others = []; }
     // (Release 2, the Pacific's islands.) An island that has no room for one more corps says so in its own words,
-    // where nobody there can change places with the corps: "Hong Kong has room for one corps." (rulings 173(b), 179(s)).
+    // where nobody there can change places with the corps, in the UI director's words (rulings 173(b), 179(s); counted
+    // in men since the design director's 14:28Z of 25 November 2026: islands.ts roomRefusal).
     if (!others.length && !moved.length && !note) { try { note = whyNoRoom(s, c, s.regions[to]) ?? ''; } catch { note = ''; } }
+    // (A march order reads the march's sentence, as the page does; the swap's sentence is said only where a swap is
+    // asked, game.ts whyNoSwap for the corps he picked: the UI director, 00:19Z, 27 November 2026, U3 and U4.)
     if (!others.length || moved.length) return;
     const other = others[0], from = c.reg, key = `${c.id}:${to}:${s.turn}`;
     if (swapAsked === key) {
@@ -2920,8 +2924,9 @@ function move(ids: number[], to: number, army = '', armyIds: number[] = []) {
       }
     } else {
       swapAsked = key;
-      // (An island of the Pacific is full at its own room, and says that: "Hong Kong has room for one corps.")
-      note = `${roomSays(s, s.regions[to]) ?? `${s.regions[to].name} is full.`} Order the march again and ${c.name} changes places with ${other.name}, which comes back to ${s.regions[from].name}.`;
+      // (An island of the Pacific is full at its own room, and says that: "Hong Kong has room for one division, about
+      // 15,000 men.", its corps named as the news names them, U8: islands.ts swapOffer. Other ground: as it was.)
+      note = swapOffer(s, s.regions[to], c, other, s.regions[from]) ?? `${s.regions[to].name} is full. Order the march again and ${c.name} changes places with ${other.name}, which comes back to ${s.regions[from].name}.`;
     }
   };
   // (Rules 84.2.5) the fighting corps first: guns and engineers follow them onto enemy-held ground. (The code checker, 17
@@ -2960,6 +2965,21 @@ function move(ids: number[], to: number, army = '', armyIds: number[] = []) {
     const n = orderMove(s, c, to);
     if (n > 0) moved.push({ id: c.id, path: path.slice(0, n) });
     else trySwap(c);
+  }
+  // (An island counted in men often takes some corps of a group and not others. Those that stayed next door for the
+  // island's room are told the island's line for themselves, what they send being their own men; refused whole, the
+  // group is told it once for all of them, the march's line: the UI director, 00:19Z, 27 November 2026, U3 and U6
+  // (islands.ts stayBehind and roomRefusal, her section 3 of 15:02Z). Other ground: as it always was.)
+  const isleTo = s.regions[to];
+  if (isleTo && islandOf(s, isleTo)) {
+    try {
+      const stayed = sent.filter((c) => c.reg !== to && !moved.some((x) => x.id === c.id) && !kept.includes(c) && s.regions[c.reg].nb.includes(to) && whyNoRoom(s, c, isleTo) !== null);
+      if (stayed.length && moved.length) {
+        // (Named, the UI director, 00:19Z, 27 November 2026, U6: islands.ts stayBehind, the page's sentence too.)
+        const line = stayBehind(s, isleTo, stayed);
+        if (line) note = note ? `${note} ${line}` : line;
+      } else if (stayed.length > 1 && !moved.length && note === whyNoRoom(s, stayed[0], isleTo)) note = refusedWhole(s, isleTo, stayed) ?? note;
+    } catch { /* the march's own sentence stands */ }
   }
   if (kept.length) {
     // One sentence answers the press, of everyone whose march is kept. (a) It set off this month and goes on; (b) it

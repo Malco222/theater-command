@@ -34,7 +34,7 @@ import { storyFallen } from './stories';
 import { TOWNS, townName, townSize, type TownSize } from './towns';
 import { PRIZES, harbourOpen, prizesOnLoss, willBurn } from './prizes';
 import { cityHit } from './repairs';
-import { islandOf, roomAt } from './islands';
+import { fits, roomLeft, roomRefusal, roomForDivision } from './islands';
 import { KIND, MEN_PER_DIV, type BattleReport, type Corps, type Game, type Region } from './types';
 import { seaWhatList } from './sea-words';
 import { flagName } from './flagnames';
@@ -698,7 +698,7 @@ export function musterNear(g: Game, nat: string, r: Region): Region | null {
   for (let i = 0; i < q.length; i++) {
     const x = g.regions[q[i]];
     if (x !== r && allied(g, nat, x.ctrl) && allied(g, nat, fieldCtrl(g, x))) {
-      if (x.units.filter((u) => u.kind !== 'eng' && allied(g, u.nat, nat) && !roomless(g, u)).length < roomAt(g, x, nat)) return x;
+      if (roomForDivision(g, x, nat, x.units.filter((u) => u.kind !== 'eng' && allied(g, u.nat, nat) && !roomless(g, u)).length)) return x;
       crowded ??= x;
     }
     for (const j of x.nb) if (!seen[j]) { seen[j] = 1; q.push(j); }
@@ -747,8 +747,10 @@ export function whyNotTakeField(g: Game, c: Corps): string | null {
   if (besieged(g, r)) return `The enemy holds the country round ${townName(r)}: the garrison can come out only if the siege is raised.`;
   const here = r.units.filter((u) => allied(g, u.nat, c.nat) && u.kind !== 'eng' && !roomless(g, u)).length;
   // (On an island of the Pacific the corps inside the town are counted in the island's room already, this one among
-  // them, so its coming out asks no new place: islands.ts.)
-  if (here >= roomAt(g, r, c.nat) + (islandOf(g, r) && !roomless(g, c) ? 1 : 0)) return `There is no room in the field at ${r.name} for another corps.`;
+  // them, so its coming out asks no new place: islands.ts `fits`, which counts its men once, as going.)
+  // (Refused there, an island says its own section 3 line, in men (the UI director's marks of 15:02Z 25 November 2026),
+  // the corps coming out named, as in the swap: the UI director, 00:19Z, 27 November 2026, U7. Other ground: the old line.)
+  if (!fits(g, r, c.nat, [c], { rows: here })) return roomRefusal(g, r, [c], { named: true }) ?? `There is no room in the field at ${r.name} for another corps.`;
   return null;
 }
 
