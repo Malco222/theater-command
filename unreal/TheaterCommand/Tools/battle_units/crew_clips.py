@@ -15,7 +15,9 @@ names are the contract with the ground thread, which makes the props (each natio
     hmg_carry_tripod  (walk loop) the folded tripod on his shoulders, both fists up on its front legs
     hmg_carry_boxes   (walk loop) an ammunition box hanging from each fist by its handle, swinging with the step
     mortar_load       (loop) kneeling on the tube's right: a round off its case by his left knee, up in both hands to
-                      the muzzle, dropped, he ducks and turns his face away, mortar_fire 0.4 s after the drop
+                      the muzzle, dropped, he ducks and turns his face away (one way, over 0.5 s), mortar_fire
+                      0.58 s after the drop (the round's fall) with the top of his head under the muzzle and his fists
+                      down by his chest and knee, half a metre under it
     mortar_sight      (loop) kneeling behind the tube's left, his eye to the sight, his fists on the elevation and
                       traverse cranks turning them a little
 
@@ -49,7 +51,8 @@ toes in the ground, its thumb at the cheek), no further. A clip that breaks a li
 a step at a time (FITS: the gun set further out, a free arm swung wider, a box carried further out, the carried gun
 turned out, the tripod higher or further back, his eye further back from the sight ...; mortar_load fits its own: the
 muzzle, the case, the round's way, his rests, and keeps its picks in `fits` as LOAD_FIT so --check and --pictures
-remake it without picking again) until it passes; the values a file needed go into DIR/crew_checks.json's `fits`
+remake it without picking again; then its duck, reach and lift paced slower, singly or all at once (LOAD_PACE), where a
+step between keys is over 15 cm) until it passes; the values a file needed go into DIR/crew_checks.json's `fits`
 with its checks and skeleton print. Several --stage runs may write
 one DIR at once (crew_checks.json is updated under a lock). A radio man's long whip antenna is held still in the world
 over the crew clips (steady_whip); the walks keep the file's own sway.
@@ -834,11 +837,34 @@ def tri_closest(p, A, B, C):
     return W[:, :1] * A + W[:, 1:2] * B + W[:, 2:] * C, W
 
 
+def winding(Pp, V, T, chunk=8):
+    """The generalised winding number of each point of Pp about the triangles T between the points V (its size: about
+    1 inside a closed surface, 0 outside, whichever way the triangles turn)."""
+    out = np.zeros(len(Pp))
+    A0, B0, C0 = V[T[:, 0]], V[T[:, 1]], V[T[:, 2]]
+    for c0 in range(0, len(Pp), chunk):
+        p = Pp[c0:c0 + chunk][:, None, :]
+        A, B, C = A0[None] - p, B0[None] - p, C0[None] - p
+        la, lb, lc = np.linalg.norm(A, axis=2), np.linalg.norm(B, axis=2), np.linalg.norm(C, axis=2)
+        det = np.einsum("pti,pti->pt", A, np.cross(B, C))
+        den = (la * lb * lc + np.einsum("pti,pti->pt", A, B) * lc + np.einsum("pti,pti->pt", A, C) * lb +
+               np.einsum("pti,pti->pt", B, C) * la)
+        out[c0:c0 + chunk] = np.abs(np.arctan2(det, den).sum(1) / (2.0 * np.pi))
+    return out
+
+
+WIND_OUT = 0.3                      # (a point the surface's winding number puts under this is outside it, whatever
+                                    #  the facings near it say)
+
+
 def surface_depth(Pc, V, N, T, dep, near, reach=0.12):
     """Each point of Pc (knn found inside, `dep` deep, its nearest sample `near`) measured on the surface of
     triangles T between the points V (facings N): its distance to the nearest point of that surface where that
     point's facing (its triangle's corners' facings, weighted) has it behind, else 0; and the corner of that triangle
-    nearest it. A point with no triangle within `reach` (and its knn depth) keeps knn's reading."""
+    nearest it. A point with no triangle within `reach` (and its knn depth) keeps knn's reading. A point found so
+    inside is kept only where the surface's winding number about it is WIND_OUT or more: an Italian's thumb 9 cm
+    from his calf (by the folded leg's inner faces, their facings turned from it) read 8.7 cm inside it by knn and by
+    the facings, and winds 0.04."""
     A, B, C = V[T[:, 0]], V[T[:, 1]], V[T[:, 2]]
     cen = (A + B + C) / 3.0
     rad = np.sqrt(np.maximum(np.maximum(((A - cen) ** 2).sum(1), ((B - cen) ** 2).sum(1)), ((C - cen) ** 2).sum(1)))
@@ -855,6 +881,9 @@ def surface_depth(Pc, V, N, T, dep, near, reach=0.12):
         n = W[j] @ N[tj]
         out[i] = float(d[j]) if (p - q[j]) @ n < 0.0 else 0.0
         nr[i] = tj[int(W[j].argmax())]
+    ins = np.nonzero(out > 0.0)[0]
+    if len(ins):
+        out[ins[winding(Pc[ins], V, T) < WIND_OUT]] = 0.0
     return out, nr
 
 
@@ -1358,7 +1387,7 @@ def make_sit_down(man):
     the ground; his arms by Man.arm on the rifle while he holds it, then fist_to on arched ways to the gun's grips."""
     memo = man.__dict__.setdefault("_sit_memo", {})
     key = ("sit_down", SIT_EYE, SIT_LEAN, SIT_FEET, SIT_KNEE, SIT_ELBOW, SIT_RIFLE, SIT_BACK, SIT_SEAT, SIT_ARC,
-           repr(SIT_MID))
+           repr(SIT_MID), SIT_PORT_AT, SIT_LIFT, SIT_PORT)
     if key in memo:
         return memo[key]
     sit = make_fire_sit(man)
@@ -2018,6 +2047,10 @@ LOAD_FLOW = False                   # (his back's keys run through (flowed), not
                                     #  to a stop at each: for a file whose slung weapon's far end then swings too fast)
 LOAD_LEVEL = 0.4                    # (his head keeps 60 percent of his chest's sideways tip)
 HEAD_MAX = 76.0                     # (his head kept within this of his chest's way)
+REACH_EASE = 0.25                   # (his fists' and right elbow's way down to the round: speeding up and slowing over
+                                    #  this share of it each end, even between (ease_flat); less for a man whose elbow
+                                    #  would step more than 15 cm a key at the middle (a thick coat's elbow swung wide))
+FISTS_UNDER = 0.30                  # (at the shot his fists at least this far under the muzzle's top)
 LOAD_FIT = None                     # (make_mortar_load's choices when already made: from crew_checks.json's fits)
 I3 = np.eye(3)
 
@@ -2402,7 +2435,7 @@ def _mortar_load(man, ahead=MUZZLE_AHEAD, rest_r=REST_R, fire_off=FIRE_OFF, arc=
         lq = breathe(man, lq, t, LOAD_LONG)
         G, X = man.fk(lq, mv)
         hs, Rr = holds_at(t)
-        on = ease_flat((t - 0.0) / (T_GRAB - 0.02))   # (hands off his legs and down to the round: an even pace, its
+        on = ease_flat((t - 0.0) / (T_GRAB - 0.02), REACH_EASE)   # (hands off his legs and down to the round: an even pace, its
                                                        #  top speed a third over its mean, not half again)
         x = min(1.0, max(0.0, (t - DROP_T - 0.02) / (T_BACK - DROP_T - 0.02)))
         off = 0.5 * x + 0.5 * sm(x)                    # (let go, hands down to his knee and thigh: on their way at once)
@@ -2448,7 +2481,7 @@ def _mortar_load(man, ahead=MUZZLE_AHEAD, rest_r=REST_R, fire_off=FIRE_OFF, arc=
             if s == "r" and t < PR[1][0]:
                 # (his right elbow's pole turned evenly from its rest to its grab, at his fist's pace: the two eased
                 # straight between swung it fastest past the middle, where that blend is shortest)
-                bk, ou, dn = vslerp(unit(PR[0][1]), unit(PR[1][1]), ease_flat(t / PR[1][0]))
+                bk, ou, dn = vslerp(unit(PR[0][1]), unit(PR[1][1]), ease_flat(t / PR[1][0], REACH_EASE))
                 pole = arm_pole(man, G, s, down=dn, out=ou, back=bk)
             else:
                 pole = blend_poles(PL if s == "l" else PR, t, LOAD_LONG, man, G, s)
@@ -2536,15 +2569,20 @@ def _mortar_load(man, ahead=MUZZLE_AHEAD, rest_r=REST_R, fire_off=FIRE_OFF, arc=
         under = mz - float(Qh[:, 2].max())
         dist = float(np.linalg.norm(Qh - S["muzzle"], axis=1).min())
         fists = max(float(np.linalg.norm(man.grip(G1, X1, s) - rest_of(G1, X1, s))) for s in "lr")
+        low = min(mz - float(man.grip(G1, X1, s)[2]) for s in "lr")            # (his fists under the muzzle's top
+        off = min(float(np.linalg.norm(man.grip(G1, X1, s) - S["muzzle"])) for s in "lr")   # and off it, at the shot)
         G2, X2 = gore.pose(man.rig, c, T_BACK)
         back = max(float(np.linalg.norm(man.grip(G2, X2, s) - rest_of(G2, X2, s))) for s in "lr")
         fl = {"head not under the muzzle at the shot": under < DUCK_UNDER - 0.01,
               "head near the muzzle at the shot": dist < DUCK_CLEAR,
-              "fists not on their rests after": back > 0.02}
+              "fists not on their rests after": back > 0.02,
+              "fists near the muzzle at the shot": low < FISTS_UNDER}
         return {"fire_t": round(FIRE_T, 4), "head_under_muzzle_cm": round(under * 100, 2),
                 "head_to_muzzle_cm": round(dist * 100, 2), "fists_off_rest_at_fire_cm": round(fists * 100, 2),
-                "fists_off_rest_after_cm": round(back * 100, 2), "duck_flags": fl,
+                "fists_off_rest_after_cm": round(back * 100, 2), "fists_under_muzzle_at_fire_cm": round(low * 100, 2),
+                "fists_to_muzzle_at_fire_cm": round(off * 100, 2), "duck_flags": fl,
                 "duck_severity": 100.0 * (max(DUCK_UNDER - 0.01 - under, 0.0) + max(back - 0.02, 0.0) +
+                                          max(FISTS_UNDER - low, 0.0) +
                                           max(DUCK_CLEAR - dist, 0.0))}
 
     holds = [{"hand": "l", "socket": "round.hold.l", "from": T_GRAB, "to": DROP_T},
@@ -2566,8 +2604,9 @@ def _mortar_load(man, ahead=MUZZLE_AHEAD, rest_r=REST_R, fire_off=FIRE_OFF, arc=
                       f"low and turning his face away to his left and down in one move over {DUCK_T:.2f} s, so the top "
                       f"of his head is under the muzzle when it fires: mortar_fire at the prop's `muzzle` at "
                       f"{FIRE_T:.2f} s (event socket \"prop.muzzle\": the mortar prop's socket, not the man's "
-                      f"socket_muzzle; cue mortar_fire), his fists then just coming down onto his knee and thigh (on "
-                      f"them from {T_BACK:.2f} s); he stays down a moment and rises back for the next round by "
+                      f"socket_muzzle; cue mortar_fire), his fists by then down by his chest and knee, at least "
+                      f"{FISTS_UNDER * 100:.0f} cm under the muzzle's top, still on their way to his knee and thigh "
+                      f"(on them from {T_BACK:.2f} s); he stays down a moment and rises back for the next round by "
                       f"{LOAD_LONG} s. `round` gives the round's tail and turn every key (shown 1 while it is on the "
                       "case and in his hands; 0 once dropped down the tube: draw a fresh round on the case for the "
                       f"loop's start); his fists are on its hold.l / hold.r from {T_GRAB} s to the drop. " +
@@ -2716,6 +2755,12 @@ def steady_whip(man, fn):
 FITS = {"hmg_fire_prone": [("PRONE_TIP", ((8.0, 12.0, 0.0), (14.0, 20.0, 10.0))),
                            ("PRONE_GUN_OUT", (0.08, 0.11, 0.14, 0.17, 0.20)), ("PRONE_EYE", (0.03, 0.04, 0.025))],
         "hmg_fire_sit": [],
+        # (a long weapon's butt (a BAR's, a Thompson's drum) down by the gun's mount as he holds it at port: held
+        # higher; a bazooka's tube, its back end in the ground held up at port: held across him, nearer level)
+        "sit_down": [("SIT_PORT_AT", ((0.15, 0.10, -0.22), (0.15, 0.10, -0.12), (0.15, 0.18, -0.12))),
+                     ("SIT_PORT", ((0.25, 0.20, 1.0), (0.6, 0.8, 0.5)))],
+        "sit_up": [("SIT_PORT_AT", ((0.15, 0.10, -0.22), (0.15, 0.10, -0.12), (0.15, 0.18, -0.12))),
+                   ("SIT_PORT", ((0.25, 0.20, 1.0), (0.6, 0.8, 0.5)))],
         "hmg_feed": [("PRONE_TIP", ((8.0, 12.0, 0.0), (14.0, 20.0, 10.0))), ("FEED_RIGHT", (0.12, 0.16, 0.20, 0.24)),
                      ("FEED_TURN", (-20.0, -26.0, -32.0)), ("FEED_AHEAD", (0.32, 0.27, 0.22, 0.37)),
                      ("FEED_LIFT", (0.10, 0.06, 0.03)), ("FEED_ELBOW", (-0.6, -0.3, 0.0, -1.0))],
@@ -2724,7 +2769,22 @@ FITS = {"hmg_fire_prone": [("PRONE_TIP", ((8.0, 12.0, 0.0), (14.0, 20.0, 10.0)))
         "hmg_carry_tripod": [("GRIP_ALONG", (0.68, 0.84, 0.76)), ("TRIPOD_GAP", (0.012, 0.025, 0.04)),
                              ("TRIPOD_BACK", (0.06, 0.09, 0.12, 0.16)), ("TRIPOD_SLING", (None, (1.0, 0.10), (1.6, 0.16)))],
         "hmg_carry_boxes": [("BOX_OUT", (0.33, 0.36, 0.39, 0.42))],
-        "mortar_load": [("LOAD_FLOW", (False, True))],     # (fitted inside make_mortar_load too: its picks kept)
+        "mortar_load": [("LOAD_FLOW", (False, True)),      # (fitted inside make_mortar_load too: its picks kept)
+                        ("DUCK_WAIT", (0.07, 0.03, 0.0)), ("DUCK_T", (0.55, 0.58)),  # (the duck slower: a long
+                                                           #  slung weapon's end (a bazooka's tube) swung less a key)
+                        ("REACH_EASE", (0.25, 0.18, 0.12)),    # (the reach to the round evener: its elbow's top step)
+                        # (all at once (one tunable alone does not lower the top step when two moves step as far: a
+                        # long slung tube's end swung by the lift and by the duck): the duck over 0.62 s from the drop
+                        # (the head still under the muzzle at the shot), the grab sooner so the lift is slower, and
+                        # the reach to the round evener for its shorter time)
+                        ("LOAD_PACE", (None, {"DUCK_WAIT": 0.0, "DUCK_T": 0.62, "T_GRAB": 0.74, "REACH_EASE": 0.18},
+                                       {"DUCK_WAIT": 0.0, "DUCK_T": 0.62, "T_GRAB": 0.74, "REACH_EASE": 0.12})),
+                        # (his right elbow higher and further back as he reaches down past his raised left thigh to the
+                        # round (a greatcoat's thigh: the forearm over it, not into it), the reach evener so that
+                        # elbow's wider swing keeps under 15 cm a key: lower-case keys go into LOAD_FIT)
+                        ("LOAD_REACH", (None, {"grab_pole": [-0.4, 0.8, -0.8], "REACH_EASE": 0.18},
+                                        {"grab_pole": [-0.4, 0.8, -0.8], "REACH_EASE": 0.12},
+                                        {"way": [[0.08, 0.13], [0.04, 0.16]], "REACH_EASE": 0.18}))],
         "mortar_sight": [("SIGHT_STANDOFF", (0.012, 0.025, 0.04))]}
 
 
@@ -2849,7 +2909,7 @@ def clips_for(D, names=NAMES):
                 for v in values:
                     if v == best[1].get(key, values[0]):
                         continue
-                    tr = trial_of(dict(best[1], **{key: v}))
+                    tr = trial_of(moved(best[1], key, v))
                     if tr[0] < best[0]:
                         best = tr
                         if best[0] == 0.0:
@@ -2863,6 +2923,18 @@ def clips_for(D, names=NAMES):
         out[name] = c
         specs[name] = (sp, poses)
     return out, specs, man
+
+
+def moved(over, key, v):
+    """The tunables `over` with FITS's `key` set to v; a v that is a dict moves several at once (LOAD_PACE): its
+    upper-case keys are module tunables, its lower-case keys go into mortar_load's LOAD_FIT picks."""
+    if not isinstance(v, dict):
+        return dict(over, **{key: v})
+    out = dict(over, **{k: x for k, x in v.items() if not k.islower()})
+    picks = {k: x for k, x in v.items() if k.islower()}
+    if picks:
+        out["LOAD_FIT"] = dict(out.get("LOAD_FIT") or {}, **picks)
+    return out
 
 
 def clip_of(D, man, name):
@@ -3152,7 +3224,7 @@ def check_file(D, clips, specs, man):
             Hp = Q[B.zone["hands"]]
             if len(Wq):
                 rifle_hand = min(rifle_hand, float(np.min(np.linalg.norm(Hp[::3, None, :] - Wq[None, ::4, :], axis=2))))
-                if c["weapon"] == "laid":
+                if c["weapon"] == "laid" or name == "sit_down":    # (sit_down lays it down: its way there too)
                     wlow = min(wlow, float(Wq[:, 2].min()))
                 if c["weapon"] == "slung":
                     sling = max(sling, min_gap(Wq, Q[B.zone["trunk"]]))
@@ -3178,7 +3250,7 @@ def check_file(D, clips, specs, man):
              "hand_past_cm": round(hand_ex[0] * 100, 2), "hand_past_at": hand_ex[1],
              "limits_cm": {"arm_in_trunk": round(float(lim_arm.max()) * 100, 2), "arm_elsewhere": ARM_MIN * 100,
                            "hand_in_trunk": round(float(lim_hand.max()) * 100, 2), "hand_elsewhere": HAND_MIN * 100}}
-        if c["weapon"] == "laid" and wlow < 9.0:
+        if (c["weapon"] == "laid" or name == "sit_down") and wlow < 9.0:
             r["weapon_low_cm"] = round(wlow * 100, 2)
         if c["weapon"] == "slung" and len(B.Pw):
             r["sling_gap_cm"] = round(sling * 100, 2)

@@ -6,7 +6,7 @@ game can pick the clip nearest a man's speed, and a "pace" on every gait loop: t
 
     sprint, sprint_b, sprint_c   flat out (three runners; "style_of": "sprint" on _b and _c)      about 5.8, 5.3, 6.3 m/s
     dash, dash_b                 the hunched bound between cover ("style_of": "dash" on _b)        about 4.2, 4.9
-    jog_loaded                   a man under a load: short heavy steps, leaning into it            about 2.3
+    jog_loaded                   a man under a load: short heavy steps, leaning into it            about 2.2
     run_tired                    labouring, the head hung, the arms low                            about 2.5
     run_stumble                  NOT a loop: out of his run at 0.0 s, a caught foot, two quick steps, back into
                                  his run at "rejoin": ["run", t]
@@ -20,30 +20,39 @@ speed asked (his legs are not the reference man's), the cut is played that much 
 most). What he does with his arms is the CARRY:
 
     own     his own clip's arms and hold on his weapon, played in step (the weapon rides the bone it rides there):
-            his run's for the loaded jog, the tired run, the stumble, and for the sprint of a man whose weapon or load
-            needs both hands (the machine-gunners, the BAR, the bazooka, its loader, the radio; the medic's free
-            arms are the capture's); his ADVANCE's for the dash. Where the new body leans further forward than his
-            own clip's, both arms are turned up about his shoulders by that much, so the weapon keeps the pitch his
-            own clip gives it at the same moment of his step (and up to 10 degrees more or less, the pitch within 5
-            of his own, where the weapon would be deeper in him than in his own clip at that moment, or a forearm
-            nearer his head than 5.5 cm; where that is not enough his trunk is stood up a little, his head kept
-            looking where it looked, and last his head turned); the dash carries the
-            weapon low (his hold turned muzzle-down about his right fist to about 12 degrees over level, both arms set
-            to it by IK), the tired man's arms hang low (the hold turned and lowered 7 cm);
+            his run's for the loaded jog, the stumble, the tired run of a man whose weapon or load needs both hands,
+            and for the sprint of such a man (the machine-gunners, the BAR, the bazooka, its loader, the radio; the
+            medic's free arms are the capture's); his ADVANCE's for the dash. Where the new body leans further
+            forward than his own clip's, both arms are turned up about his shoulders by that much, so the weapon
+            keeps the pitch his own clip gives it at the same moment of his step (and up to 10 degrees more or less,
+            the pitch within 5 of his own, where the weapon would be deeper in him than in his own clip at that
+            moment, or a forearm nearer his head than 5.5 cm; where that is not enough his trunk is stood up a
+            little, his head kept looking where it looked, and last his head turned). Then the hold is carried LOW
+            ("low", rehold: turned muzzle-down about his right fist and lowered, both arms set to it by IK, as far
+            as clears him and as the arms reach, the drop given up first, per key and eased): the dash's rifle low
+            across his body at the hip (4 degrees over level, 7 cm down, turned across him to 38 degrees left of
+            ahead: "heading"), dash_b's a little higher (14 degrees, 3 cm); the loaded jog's low across his belt (8
+            degrees, 10 cm; a two-handed man's 24 and 5) and kept at his run's heading across him ("steady": not
+            swung out by the trunk's roll and twist); a two-handed man's tired run 20 degrees and 8 cm;
+    hang    the tired run of a rifle file: the rifle hanging in the right hand at the trail, low and almost still
+            (TRAIL["tired"]), the left arm hanging and swinging low: a spent man, not a runner;
     trail   the rifle in the RIGHT hand at the trail: the right arm hangs by IK and swings a little with the capture's,
             the fist closed on the rifle at its balance, the weapon bone keyed to ride that fist, muzzle forward
             and a little down, held out from his thigh just as far as clears it; the LEFT arm is the capture's own
-            (it pumps free); where it would pass into his kit or chest its elbow is bent more (40 degrees at most),
-            the forearm carried out past his chest (the upper arm turned about its length, 30 degrees at most) and
-            then, if that is not enough, the upper arm opened out from his side (30 degrees at most), the least of
-            these, eased between keys; it may lie a centimetre into the soft kit's profile. The rifle files'
-            sprints;
+            (it pumps free); where it would pass into his kit or chest its elbow is bent more first (to 120 degrees
+            of bend at most: a sprinter's elbow is about square), the forearm carried in across his chest or out
+            past it (the upper arm turned about its length), its swing drawn toward its middle (a man in webbing
+            pumps shorter), and only then the upper arm opened out from his side (OPEN_MOST, 15 degrees at most),
+            the least of these, eased between keys, the hand kept within 25 cm of his midline where any way that
+            clears does; only where none of these clears his kit (a chest rig, a greatcoat's pouches) is it opened
+            to 30 degrees and the forearm carried out to 30 (OPEN_LAST); it may lie a centimetre into the soft
+            kit's profile. The rifle files' sprints;
     limp    the rifle at the trail in the right hand, lower and almost still; limp_l: the left hand laid flat on the
             outside of the left thigh (as far down it as the arm reaches; the elbow's side chosen per key and eased
             between keys; where his kit at the hip would put the forearm into it, the hand set out from the thigh
-            up to 5 cm, and where even that does not let the forearm by, the arm hangs instead), limp_r: the left
-            arm hanging, swinging low. limp_r is limp_l's capture mirrored, the arms and hold made again.
-            Two-handed files keep their own hold.
+            up to 8 cm (a winter coat's skirt), and where even that does not let the forearm by, the arm hangs
+            instead), limp_r: the left arm hanging, swinging low. limp_r is limp_l's capture mirrored, the arms and
+            hold made again. Two-handed files keep their own hold.
 
 A child bone of the weapon that his run moves far from it (the loader's rocket in the bag on his back, the radio
 man's handset on his strap) is not part of the weapon: it is kept where his own clip has it on his chest, wherever
@@ -61,7 +70,9 @@ Mended 26 November 2026 after two reviews: the bazooka man's arms are lifted onl
 same moment of his step (lift_needed), 10 degrees past it at most and the tube within 5 degrees of his own pitch (they
 went up 45 degrees and the tube see-sawed); where his left forearm, across his face to the tube on his shoulder,
 would come nearer his head than 5.5 cm, his trunk is stood up a little (a man with a tube on his shoulder runs more
-upright) and last his head turned; footstep events at the boots' contacts (they missed by a sixth of a step on the
+upright) and last his head turned; where no lift within those 5 degrees keeps a weapon held across a man out of his
+hips and legs (the BAR's butt over a limping man's thigh, an MG 42's at his hip), it is held up to 12 degrees more
+upright (PITCH_LEGS), and each eased key is made sure of; footstep events at the boots' contacts (they missed by a sixth of a step on the
 fast gaits); every clip at 15 keys a second (the sprints, dashes and stumble were 30): the sprints and dashes
 planted on keys at 30 a second and every other key kept ("dense"), the loop begun where the kept keys cut the boots
 least through the ground and pop least (key_phase: the joints turning straight from key to key cut a boot through
@@ -71,7 +82,19 @@ bending its elbow and carrying the forearm out first and opened 30 degrees at mo
 degrees); the family's outer pace widened toward the game's speeds (widen_paces; a jog as far as 0.80 to 1.30 of its
 time, the tired run at 2.5 m/s so its pace holds 2.0 to 3.2); a planted boot of the stumble that floated set down by
 leg IK (set_caught_down); a walk's boots kept out of the ground at its keys by leg IK (boots_up: the limp's good leg
-went into it and slid); the limps played at 1.057 m/s so their pace holds 0.6 to 1.4.
+went into it and slid) and a planted boot held still through its stance (boots_still); the limps
+played at 1.057 m/s so their pace holds 0.6 to 1.4.
+
+Mended again 26 November 2026 after the pictures' review (gaits_mocap.py made the bodies; here the arms): the tired
+run hangs its rifle at the trail ("hang") and the loaded jog carries its rifle low across the belt at his run's
+heading ("steady"), so neither reads as his run; the dash's rifle low across the body at the hip, dash_b's higher;
+the sprint's free arm opened 15 degrees at most (30 only where nothing less clears his kit), its elbow bent to a
+square first and its swing calmed, the hand kept near his midline;
+the limp's hand laid on a winter coat too (set out up to 8 cm). Floating is judged on the lower of the sole and
+the boot's outline (a boot on its toe cap is on the ground), and key_phase also counts a boot left over the ground;
+the limps quickened to the exact speed asked (their pace holds 0.6 to 1.4 to the centimetre a second); the loaded
+jog played at 2.2 m/s (2.4 steps a second, slower than his run's 2.5) and its pace widened to 0.77 to 1.40 of its
+time, the tired run's to 0.78 to 1.30.
 
     python3 gaits.py --stage [DIR] [names...]          key and check; DIR/soldier_<N>.gaits.json = {"clips",
                                                        "about_gaits", "pace_add", "checks"} (DIR: STAGE below)
@@ -119,6 +142,9 @@ TWO_HANDS = {"USA_bar": "the BAR", "USA_bazooka": "the bazooka", "USA_loader": "
              "USA_medic": "no weapon (the capture's free arms)", "USA_radio": "the radio and carbine",
              "GER_lmg": "the machine gun", "GER_lmg34": "the machine gun"}
 SPRINT_LEAST = 4.6           # (m/s: the sprints of the men in TWO_HANDS are never played slower; their pace starts here)
+LOW_TWO = ("USA_bar", "GER_lmg", "GER_lmg34")   # (two-handed men whose weapon is carried across them: held low too
+#                                                  where a gait has low_two; the bazooka on the shoulder, the loader's
+#                                                  and the radio man's loads are left as their run has them)
 
 # name, the cut in gaits_clips.json, keys a second, the speeds the game will send (the contract), the speed asked,
 # the clip whose arms and hold an "own" carry takes, the family's carry on a rifle file
@@ -130,24 +156,31 @@ GAITS = [
     dict(name="sprint_c", cut="sprint_c", rate=15, band=(5.0, 6.5), asked=6.3, hold="run", rifle="trail", kind="sprint",
          quicken=True, style_of="sprint", dense=2),
     dict(name="dash", cut="dash_a", rate=15, band=(3.8, 5.5), asked=4.2, hold="advance", rifle="own", kind="dash",
-         quicken=True, low=(12.0, 0.03), dense=2),
+         quicken=True, low=(4.0, 0.07), heading=-38.0, dense=2),
     dict(name="dash_b", cut="dash_b", rate=15, band=(3.8, 5.5), asked=4.9, hold="advance", rifle="own", kind="dash",
-         quicken=True, low=(12.0, 0.03), style_of="dash", dense=2),
-    dict(name="jog_loaded", cut="jog_loaded", rate=15, band=(1.8, 3.0), asked=2.3, hold="run", rifle="own", kind="jog",
-         quicken=True),
-    dict(name="run_tired", cut="run_tired", rate=15, band=(2.0, 3.2), asked=2.5, hold="run", rifle="own", kind="jog",
-         quicken=True, low=(22.0, 0.07)),
+         quicken=True, low=(14.0, 0.03), style_of="dash", dense=2),
+    dict(name="jog_loaded", cut="jog_loaded", rate=15, band=(1.8, 3.0), asked=2.2, hold="run", rifle="own", kind="jog",
+         quicken=True, low=(8.0, 0.10), low_two=(24.0, 0.05), steady=True, widen=(0.77, 1.40)),
+    dict(name="run_tired", cut="run_tired", rate=15, band=(2.0, 3.2), asked=2.5, hold="run", rifle="hang", kind="jog",
+         quicken=True, low=(10.0, 0.14), low_two=(20.0, 0.08), trail="tired", left_hangs=True, widen=(0.78, 1.30)),
     dict(name="run_stumble", cut="stumble", rate=15, band=None, asked=None, hold="run", rifle="own", kind="stumble"),
     dict(name="limp_l", cut="limp_l", rate=15, band=(0.6, 1.4), asked=1.057, hold="run", rifle="limp", kind="walk",
-         quicken=True),
+         quicken=True, exact=True),
     dict(name="limp_r", cut="limp_l", rate=15, band=(0.6, 1.4), asked=1.057, hold="run", rifle="limp", kind="walk",
-         quicken=True, mirror=True),
+         quicken=True, mirror=True, exact=True),
 ]
 # (the limps' 1.057 m/s, "about 1.0": the one speed at which a walk's time limits, 0.565 to 1.33 of its own time,
 #  hold the whole of the 0.6 to 1.4 m/s the game will send them)
 # (quicken: played a few per cent faster or slower than the cut so the clip comes to the speed asked on this man;
 #  low: (degrees, metres): his own two-handed hold turned until the muzzle is no more than that far above level and
-#  lowered that much (rehold), as far as clearing him allows: the dash's weapon low, the tired man's arms low)
+#  lowered that much (rehold), as far as clearing him allows: the dash's weapon low at the hip, the loaded man's low
+#  across his belt; low_two: (degrees, metres) as low, for the men in LOW_TWO (a weapon carried across him in both
+#  hands: less, the gun is long and heavy); the drop is given up 2 cm at a time where the arms do not reach it;
+#  heading: the dash's hold turned (yaw) to this many degrees from ahead (left -), across his body;
+#  steady: the hold kept at his run's heading across him (yaw), not swung by the trunk's roll and twist;
+#  widen: how far the clip may be played from its own time to reach the family's band (widen_paces);
+#  hang (the tired run's carry on a rifle file): the rifle hanging in the right hand at the trail (TRAIL[trail]), the
+#  left arm hanging and swinging low)
 NEW = [g["name"] for g in GAITS]
 # the gait loops already in every file, and how each is stepped (pace_of's kinds)
 OLD = {"walk": "walk", "creep": "walk", "run": "jog", "run_b": "jog", "run_c": "jog", "run_d": "jog",
@@ -172,12 +205,15 @@ QUICK_MOST = 0.08            # (a cut played at most this much faster or slower 
 TRAIL = {
     "sprint": dict(back=-6.0, swing=11.0, reach=0.94, pitch=8.0, rock=3.0, yaw=4.0, out0=0.05, clear=0.025),
     "limp": dict(back=-2.0, swing=3.5, reach=0.975, pitch=11.0, rock=1.0, yaw=3.0, out0=0.04, clear=0.02),
+    "tired": dict(back=-3.0, swing=9.0, reach=0.975, pitch=14.0, rock=3.0, yaw=3.0, out0=0.04, clear=0.02,
+                  left=dict(back=4.0, swing=14.0, reach=0.97)),
 }
 GRIP_ALONG = 0.072           # (the fist's middle down the hand from the wrist)
 GRIP_CURL, GRIP_THUMB = 80.0, 34.0
-FREE_CURL, FREE_THUMB = 48.0, 18.0
-FREE_ARM_CLEAR = -0.008      # (the free arm no deeper than this into his kit's profile: the profile is good to about
-#                              a centimetre and its widest is soft kit, a tunic's skirt, a bread bag)
+FREE_CURL, FREE_THUMB = 68.0, 28.0     # (the free hand a loose fist)
+FREE_ARM_CLEAR = -0.012      # (the free arm no deeper than this into his kit's profile: the profile is good to about
+#                              a centimetre and its widest is soft kit, a tunic's skirt, a bread bag; the second
+#                              review asked to take a centimetre of soft kit rather than fling the arm out)
 THIGH_DOWN = 0.15            # (the hand on the hurt thigh: this far down it from the hip, if the arm reaches)
 LAID_HAND = 0.02             # (the hand laid on the thigh may lie this far inside the thigh's profile: the profile
 #                              is good to about a centimetre and takes a tunic's hem at its widest)
@@ -439,11 +475,20 @@ class Body:
 
 TRUNK_SHAPES = ("pelvis", "spine_01", "spine_02", "chest", "pouch_l", "pouch_r")
 LEG_SHAPES = ("thigh_l", "calf_l", "foot_l", "thigh_r", "calf_r", "foot_r")
+HIPS_LEGS = ("pelvis", "pouch_l", "pouch_r") + LEG_SHAPES      # (lift_needed's PITCH_LEGS: his hips, hip kit, legs)
 
 
 # ================================================================================================ one file
+def held_across(fit, g):
+    """Whether gait g's low hold, its heading and its steadiness (low, heading, steady) are for this man: a rifleman's
+    own two-handed hold, or one of LOW_TWO's where the gait has low_two (the heading is the riflemen's only)."""
+    if fit.name not in TWO_HANDS:
+        return True
+    return fit.name in LOW_TWO and bool(g.get("low_two")) and g.get("heading") is None
+
+
 def carry_of(name, D, g):
-    """own, trail or limp: what this file does with his arms in gait g."""
+    """own, trail, limp or hang: what this file does with his arms in gait g."""
     if g["rifle"] == "own":
         return "own"
     C = D["clips"]["run"]
@@ -673,6 +718,11 @@ def pole_path(cl, tol, loop=True):
     return best[1]
 
 
+SET_OUT_MOST = 0.08          # (hand_on_thigh: the laid hand set out from the thigh at most this far, to pass his kit
+#                              at the hip: a winter coat's skirt and the pouches over it take 7 or 8 cm; the second
+#                              review wanted the hand on the hurt thigh there too, not hanging)
+
+
 def hand_on_thigh(fit, q, mv, s, down, pole=None):
     """Hand `s` laid flat on the outside of its own thigh, a little to the front, `down` metres from the hip (less
     where the arm does not reach); then, wherever a part of the hand or forearm would still lie inside his thigh,
@@ -730,33 +780,44 @@ def hand_on_thigh(fit, q, mv, s, down, pole=None):
         hands.fingers(q, s, -40.0, -18.0)                 # (the rest hand is curled: laid flat on the thigh)
         c = clear_of(fit._hand_pts[s], q)
         fore_short = -(LAID_HAND - 0.004) - best[0]       # (the forearm still in his hip's kit: the hand set out
-        if (c >= -0.012 and fore_short <= 0.0) or extra >= 0.05:   # from the thigh till it passes, 5 cm at most)
+        #                                                    from the thigh till it passes; and the whole forearm and
+        #                                                    hand as check_clip measures them)
+        all_short = (-(LAID_HAND - 0.004) - free_arm_clear(fit, q, mv, s)[0]) if hasattr(fit, "_free_pts") else 0.0
+        if (c >= -0.012 and fore_short <= 0.0 and all_short <= 0.0) or extra >= SET_OUT_MOST:
             break
-        extra = min(0.05, extra + max(-c - 0.008, fore_short + 0.004, 0.004))
+        extra = min(SET_OUT_MOST, extra + max(-c - 0.008, fore_short + 0.004, all_short + 0.004, 0.004))
     G, X = sk.fk(q, mv)
     palm = X[sk.ix["hand_" + s]] + G[sk.ix["hand_" + s]] @ (A["d0"] * 0.07 + A["n0"] * 0.012)
     arm_in = free_arm_clear(fit, q, mv, s)[0] if hasattr(fit, "_free_pts") else c   # (as check_clip measures it)
     return dn, float(np.linalg.norm(palm - p)), round(extra, 3), float(best[0]), float(arm_in)
 
 
-OPEN_MOST = 30.0             # (the free arm opened out from his side at most this far, degrees)
-FLEX_MOST = 40.0             # (and its elbow bent at most this much more, to 140 degrees at most)
-ELBOW_MOST = 140.0
-FLEX_COST = 0.4              # (a degree of elbow bend counts as this much of a degree opened out: bend first)
+OPEN_MOST = 15.0             # (the free arm opened out from his side at most this far, degrees: the second review
+#                              saw 25 to 36 degrees as a wing flung out, not a pumping arm)
+FLEX_MOST = 60.0             # (and its elbow bent at most this much more, to 120 degrees of bend at most: a sprinter's
+ELBOW_MOST = 120.0           #  elbow is about square)
+FLEX_COST = 0.25             # (a degree of elbow bend counts as this much of a degree opened out: bend first)
 TWIST_MOST = 30.0            # (and the upper arm turned about its own length at most this far, the forearm and hand
-TWIST_COST = 0.6             #  carried out past his chest with the elbow where it was; a degree of it counts as this
-#                              much of a degree opened out)
+TWIST_COST = 0.6             #  carried in across his chest (or out past it, 10 at most) with the elbow where it was;
+TWIST_RANGE = (-30.0, 10.0)  #  a degree of it counts as this much of a degree opened out)
+HAND_MID_MOST = 0.25         # (the free hand kept within this of his midline, sideways, where any way that clears does)
+OPEN_LAST = 30.0             # (only where nothing within OPEN_MOST and TWIST_RANGE clears his kit (a chest rig, a
+TWIST_LAST = 30.0            #  greatcoat's pouches): opened out to this at most and the forearm carried out to this,
+LAST_COST = 200.0            #  each such way counted this much dearer than any within them; check_clip reports it)
+CALM_STEPS = (0.0, 0.2, 0.4, 0.6)   # (and the upper arm's swing drawn toward its middle by these shares, fore and
+CALM_COST = 25.0             #  back, where his kit at the hip or on his chest stops it: a man in webbing pumps
+#                              shorter; a share of it counts as this many degrees opened out: before opening wide)
 
 
 def open_out(fit, q, mv, s, deg):
-    """The upper arm `s` opened out from the body by `deg` (OPEN_MOST at most) about his forward line."""
+    """The upper arm `s` opened out from the body by `deg` (OPEN_LAST at most) about his forward line."""
     if not deg:
         return
     sk = fit.sk
     sgn = 1.0 if s == "r" else -1.0
     G, X = sk.fk(q, mv)
     ua = sk.ix["upperarm_" + s]
-    Gu = r_axis((1.0, 0.0, 0.0), sgn * min(deg, OPEN_MOST)) @ G[ua]
+    Gu = r_axis((1.0, 0.0, 0.0), sgn * min(deg, OPEN_LAST)) @ G[ua]
     q["upperarm_" + s] = G[sk.parent[ua]].T @ Gu
 
 
@@ -782,9 +843,9 @@ def flex_elbow(fit, q, mv, s, deg):
 
 
 def twist_out(fit, q, mv, s, deg):
-    """The upper arm `s` turned about its own length by `deg` (TWIST_MOST at most) so that the forearm and the hand go
-    out from his chest (the shoulder's outward turn): the elbow stays where it is, the forearm swings past his chest
-    instead of the whole arm being thrown out from his side."""
+    """The upper arm `s` turned about its own length by `deg` (TWIST_MOST at most either way) so that the forearm and
+    the hand go out from his chest (+: the shoulder's outward turn) or in across it (-): the elbow stays where it is,
+    the forearm swings past or across his chest instead of the whole arm being thrown out from his side."""
     if not deg:
         return
     sk = fit.sk
@@ -792,7 +853,7 @@ def twist_out(fit, q, mv, s, deg):
     ua, la = sk.ix["upperarm_" + s], sk.ix["lowerarm_" + s]
     ax = X[la] - X[ua]
     sgn = 1.0 if s == "l" else -1.0          # (about shoulder-to-elbow: + takes a left forearm to his left, -y)
-    Gu = r_axis(ax, sgn * min(deg, TWIST_MOST)) @ G[ua]
+    Gu = r_axis(ax, sgn * max(min(deg, TWIST_MOST), -TWIST_MOST)) @ G[ua]
     q["upperarm_" + s] = G[sk.parent[ua]].T @ Gu
 
 
@@ -815,6 +876,9 @@ def pitch_of(G):
 
 LIFT_EXTRA_MOST = 10.0       # (degrees the arms may be lifted past what keeps his own clip's weapon line, or lowered)
 PITCH_KEEP = 5.0             # (the weapon's pitch kept within this of his own clip's at the same moment, degrees)
+PITCH_LEGS = 12.0            # (but where no lift within PITCH_KEEP keeps it out of his hips and legs, as far as
+#                              this: a weapon held across him at the port, the BAR's butt over a limping man's thigh,
+#                              an MG 42's at his hip, held a little more upright rather than through him)
 HEAD_GAP = 0.055             # (a hand or forearm kept this far from his head, or as far as his own clip keeps it)
 NOD_MOST = 21.0              # (where the arms cannot, his head turned up or down at most this far to keep it so)
 UP_STEPS = (0.0, 4.0, 8.0, 12.0, 16.0, 20.0, 24.0, 28.0, 32.0)   # (and before that his trunk stood up so far,
@@ -878,18 +942,21 @@ def lift_needed(fit, pose_at, nk, hold, loop=True, drop=0.0):
     deeper in his trunk, kit or legs than in his own clip AT THAT MOMENT (or nearer the ground than 5 cm), or a hand
     or forearm nearer his head than HEAD_GAP (or than his own clip at that moment), the least change that clears
     them: the arms lifted further or let down, a degree at a time, LIFT_EXTRA_MOST at most either way and never past
-    PITCH_KEEP of his own clip's pitch. (Measured against his whole clip's worst, a man whose own hold already rests
+    PITCH_KEEP of his own clip's pitch (where none within it keeps the weapon out of his hips and legs, up to
+    PITCH_LEGS: the weapon held a little more upright). (Measured against his whole clip's worst, a man whose own hold already rests
     the weapon on him, the bazooka on his shoulder, had his arms thrown up 45 degrees and the tube see-sawing;
     against his own clip at the same moment, what he does anyway is not counted.) Where that is not enough, his trunk
     stood up a little (UP_STEPS: so much less lean, so much less lift, his head kept looking where it looked: a man
     with a tube on his shoulder runs more upright), the least that does, eased between keys, and the lift found again
-    on it; then, last, his head turned (NOD_MOST at most). Eased between keys. `drop`: the arms carried that much
+    on it; then, last, his head turned (NOD_MOST at most). Eased between keys, each key made sure of (where easing
+    would put the weapon deeper than the key's own lift did, the key's own lift kept). `drop`: the arms carried that much
     lower than that first. `pose_at(j, lift, nod=0, up=0)` -> (q, mv, (Go, Xo)): the pose (his head turned by
     nod_head, his trunk stood up by upright), and his own clip's world turns and heads at that moment.
     lift_needed.nod and lift_needed.up per key."""
     sk = fit.sk
     ch = sk.ix["chest"]
     info = {"extra_deg": 0.0, "let_down_deg": 0.0, "pitch_off_deg": 0.0, "head_gap_cm": 9.0}
+    legs_up = {}                     # ((key, up) -> how far past PITCH_KEEP's the weapon was held up off his legs)
     steps = sorted(np.arange(-LIFT_EXTRA_MOST, LIFT_EXTRA_MOST + 0.01, 1.0), key=lambda e: (abs(e), -e))
     own = []
     for j in range(nk):
@@ -903,9 +970,11 @@ def lift_needed(fit, pose_at, nk, hold, loop=True, drop=0.0):
         Go, own_p, want, zwant, hwant = own[j]
         q, mv, _ = pose_at(j, 0.0, 0.0, up)
         G, X = sk.fk(q, mv)
-        th0 = max(0.0, pitch_of(G[ch]) - pitch_of(Go[ch]))
+        th0 = pitch_of(G[ch]) - pitch_of(Go[ch])
+        lo = th0 - 12.0 if up else max(0.0, th0 - 12.0)       # (stood up, his chest can lean less than his own
+        th0 = th0 if up else max(0.0, th0)                    #  clip's: then the arms come down to keep his pitch)
         best = None                    # (the lift that keeps his own pitch: about the chest's lean, a degree at a time)
-        for th in np.arange(max(0.0, th0 - 12.0), th0 + 12.01, 1.0):
+        for th in np.arange(lo, max(lo, th0) + 12.01, 1.0):
             q, mv, _ = pose_at(j, float(th), 0.0, up)
             p = weapon_pitch(fit, sk.fk(q, mv)[0])
             if best is None or abs(p - own_p) < best[1] - 1e-9:
@@ -923,9 +992,35 @@ def lift_needed(fit, pose_at, nk, hold, loop=True, drop=0.0):
             score = min(c - want, zmin - zwant, hg - hwant)
             if got is None or score > got[1] + 1e-4 or score >= 0.0:
                 got = (th, score, hg)
+                legs = score < 0.0 and abs(score - (c - want)) < 1e-9 and which in HIPS_LEGS
             if score >= 0.0:
                 break
+        legs_up.pop((j, up), None)
+        if got[1] < 0.0 and legs:         # (none within PITCH_KEEP keeps it out of his legs: up to PITCH_LEGS)
+            for extra in steps:
+                th = th_keep + extra
+                q, mv, _ = pose_at(j, float(th), 0.0, up)
+                G, X = sk.fk(q, mv)
+                dp = abs(weapon_pitch(fit, G) - own_p)
+                if dp <= PITCH_KEEP + 1e-6 or dp > PITCH_LEGS + 1e-6:
+                    continue
+                c, which, zmin = fit.weapon_clear(G, X)
+                hg = head_gap(fit, G, X)
+                score = min(c - want, zmin - zwant, hg - hwant)
+                if score > got[1] + 1e-4:
+                    got = (th, score, hg)
+                    legs_up[(j, up)] = round(dp, 1)
+                if score >= 0.0:
+                    break
         return got + (th_keep,)
+
+    def weapon_score(j, th, up):
+        """the weapon's own terms of the score at key j (the clearance from him and the ground)"""
+        Go, own_p, want, zwant, hwant = own[j]
+        q, mv, _ = pose_at(j, float(th), 0.0, up)
+        G, X = sk.fk(q, mv)
+        c, which, zmin = fit.weapon_clear(G, X)
+        return min(c - want, zmin - zwant)
 
     def ease(v):
         if loop:
@@ -981,13 +1076,25 @@ def lift_needed(fit, pose_at, nk, hold, loop=True, drop=0.0):
         info["extra_deg"] = max(info["extra_deg"], round(float(th - th_keep), 1))
         info["let_down_deg"] = max(info["let_down_deg"], round(float(th_keep - th), 1))
         info["head_gap_cm"] = min(info["head_gap_cm"], round(100 * hg, 1))
+        if (j, up) in legs_up:
+            info["pitch_off_deg"] = max(info["pitch_off_deg"], legs_up[(j, up)])
     nod = held(nod)
     info["nod_deg"] = [round(float(nod.min()), 1), round(float(nod.max()), 1)]
     info["up_deg"] = [round(float(ups.min()), 1), round(float(ups.max()), 1)]
+    out = ease(need)
+    kept = 0
+    for j in range(nk):                   # (each key made sure of: eased is not always as clear)
+        if abs(out[j] - need[j]) < 0.05:
+            continue
+        s_need = weapon_score(j, need[j], float(ups[j]))
+        if weapon_score(j, out[j], float(ups[j])) < min(0.0, s_need) - 1e-4:
+            out[j] = need[j]
+            kept += 1
+    info["keys_kept_uneased"] = kept
     lift_needed.info = info
     lift_needed.nod = nod
     lift_needed.up = ups
-    return ease(need)
+    return out
 
 
 def weapon_pitch(fit, G):
@@ -996,55 +1103,91 @@ def weapon_pitch(fit, G):
     return math.degrees(math.asin(max(-1.0, min(1.0, ax[2]))))
 
 
-def rehold(fit, q, mv, tilt, lower):
+def heading_off(fit, Go, Gn):
+    """Degrees the weapon's heading over the ground (its line seen from above) must turn about the upright to be his
+    own clip's (Go) from what it is now (Gn): + turns it from +x toward +y."""
+    w = fit.sk.ix["weapon"]
+    a, b = Go[w][:, 0], Gn[w][:, 0]
+    if math.hypot(a[0], a[1]) < 0.2 or math.hypot(b[0], b[1]) < 0.2:
+        return 0.0
+    d = math.degrees(math.atan2(a[1], a[0]) - math.atan2(b[1], b[0]))
+    return (d + 180.0) % 360.0 - 180.0
+
+
+def rehold(fit, q, mv, tilt, lower, yaw=0.0):
     """His own two-handed hold turned and lowered as one: the weapon and both hands turned muzzle-down by `tilt`
-    degrees about his right fist (in the upright plane along the weapon: it keeps its heading across him) and
-    lowered `lower` metres; each arm set by IK
-    to its turned hand (its elbow kept on its side), so each fist keeps its place on the weapon where the arm
-    reaches."""
-    if not tilt and not lower:
+    degrees about his right fist (in the upright plane along the weapon: it keeps its heading across him), turned
+    `yaw` degrees about the upright through that fist (steady: back to his own clip's heading), and lowered `lower`
+    metres; each arm set by IK to its turned hand (its elbow kept on its side), so each fist keeps its place on the
+    weapon where the arm reaches."""
+    if not tilt and not lower and not yaw:
         return
     sk, hands = fit.sk, fit.hands
     G, X = sk.fk(q, mv)
     w, r = sk.ix["weapon"], sk.ix["root"]
     p = hands.grip(G, X, "r", 0.022, 0.075)
     Rt = r_axis(np.cross((0.0, 0.0, 1.0), G[w][:, 0]), tilt)
+    if yaw:
+        Rt = r_axis((0.0, 0.0, 1.0), yaw) @ Rt
     d = np.array((0.0, 0.0, -lower))
+    miss = 0.0
     for s in "lr":
         h = sk.ix["hand_" + s]
         pole = X[sk.ix["lowerarm_" + s]] - X[sk.ix["upperarm_" + s]]
-        hands.arm(q, mv, s, p + Rt @ (X[h] - p) + d, pole, Rt @ G[h])
+        T = p + Rt @ (X[h] - p) + d
+        Tc = hands.arm(q, mv, s, T, pole, Rt @ G[h])
+        miss = max(miss, float(np.linalg.norm(np.asarray(Tc) - T)))
+    fit._reach_miss = miss                    # (tilt_needed: a hold the arms cannot reach is not taken)
     Gw = Rt @ G[w]
     Xw = p + Rt @ (X[w] - p) + d
     q["weapon"] = Gw
     mv["weapon"] = Xw - sk.H0[r] - (sk.H0[w] - sk.H0[r])
 
 
-def tilt_needed(fit, pose_at, nk, hold, target, loop=True):
-    """rehold's turn per key: the weapon brought down to `target` degrees above level (none where it is already
-    lower), less wherever that would put it into him (as clear of his trunk, kit and legs as in his own clip, 5 cm
-    over the ground), eased between keys. `pose_at(j, tilt)` -> (q, mv)."""
+REACH_MISS = 0.006           # (rehold: a turned hold whose wrist the arm misses by more than this is not taken)
+
+
+def tilt_needed(fit, pose_at, nk, hold, target, lower=0.0, loop=True):
+    """rehold's turn and drop per key: the weapon brought down to `target` degrees above level (none where it is
+    already lower) and lowered `lower` metres, less of either wherever that would put it into him (as clear of his
+    trunk, kit and legs as in his own clip, 5 cm over the ground) or out of his arms' reach (the drop given up 2 cm
+    at a time first, then the turn), eased between keys. `pose_at(j, tilt, lower)` -> (q, mv). Returns (tilts,
+    lowers)."""
     sk = fit.sk
     base = fit.base_clear(hold)
     want = min(0.0, base) + 0.004
     allowed = np.zeros(nk)
+    dropped = np.zeros(nk)
+    drops = [lower] if lower <= 0.0 else list(np.arange(lower, -0.001, -0.02))
     for j in range(nk):
-        q, mv = pose_at(j, 0.0)
+        q, mv = pose_at(j, 0.0, 0.0)
         G, X = sk.fk(q, mv)
         t0 = max(0.0, weapon_pitch(fit, G) - target)
-        for tl in np.arange(t0, -0.01, -3.0):
-            q, mv = pose_at(j, tl)
-            G, X = sk.fk(q, mv)
-            c, which, zmin = fit.weapon_clear(G, X)
-            if c >= want and zmin >= 0.05:
+        got = None
+        for lw in drops:
+            for tl in np.arange(t0, -0.01, -3.0):
+                fit._reach_miss = 0.0
+                q, mv = pose_at(j, tl, lw)
+                G, X = sk.fk(q, mv)
+                c, which, zmin = fit.weapon_clear(G, X)
+                if c >= want and zmin >= 0.05 and fit._reach_miss <= REACH_MISS:
+                    got = (tl, lw)
+                    break
+            if got is not None:
                 break
-        allowed[j] = max(tl, 0.0)
-    if loop:
-        a = np.minimum(allowed, np.minimum(np.roll(allowed, 1), np.roll(allowed, -1)))
-        return np.minimum(smooth_loop(a, 2), allowed)
-    a = allowed.copy()
-    a[1:-1] = np.minimum(allowed[1:-1], np.minimum(allowed[:-2], allowed[2:]))
-    return np.minimum(smooth_loop(a, 2, loop=False), allowed)
+        if got is None:
+            got = (0.0, 0.0)
+        allowed[j] = max(got[0], 0.0)
+        dropped[j] = max(got[1], 0.0)
+
+    def ease(v):
+        if loop:
+            a = np.minimum(v, np.minimum(np.roll(v, 1), np.roll(v, -1)))
+            return np.minimum(smooth_loop(a, 2), v)
+        a = v.copy()
+        a[1:-1] = np.minimum(v[1:-1], np.minimum(v[:-2], v[2:]))
+        return np.minimum(smooth_loop(a, 2, loop=False), v)
+    return ease(allowed), ease(dropped)
 
 
 def keep_riders(fit, q, mv, tq, tm, on="chest"):
@@ -1063,6 +1206,13 @@ def keep_riders(fit, q, mv, tq, tm, on="chest"):
         Xw = Xn[c] + Gn[c] @ Go[c].T @ (Xo[i] - Xo[c])
         q[b] = Gn[p].T @ Gw
         mv[b] = Gn[p].T @ (Xw - Xn[p]) - (sk.H0[i] - sk.H0[p])
+
+
+def hand_mid(fit, q, mv, s):
+    """How far the hand `s` is out from his midline, sideways (the clip is in place, facing +x), metres."""
+    sk = fit.sk
+    G, X = sk.fk(q, mv)
+    return abs(float(X[sk.ix["hand_" + s]][1] - X[sk.ix["pelvis"]][1]))
 
 
 def free_arm_clear(fit, q, mv, s):
@@ -1097,7 +1247,7 @@ def key_gait(fit, g, log=print, quick=1.0, legs_only=False, phase=0.0):
     arm_tracks = [n for n in ARMS if n in sk.ix]
     hand_tracks = [f"{b}_{s}" for s in "lr" for b in ("fingers", "thumb") if f"{b}_{s}" in sk.ix]
     extra = list(TRUNK + LEGS)
-    if carry in ("trail", "limp"):
+    if carry in ("trail", "limp", "hang"):
         extra += arm_tracks + hand_tracks
     elif not free:
         extra += ["clavicle_l", "clavicle_r"]
@@ -1126,23 +1276,32 @@ def key_gait(fit, g, log=print, quick=1.0, legs_only=False, phase=0.0):
         return ((t / long + shift) % 1.0) * P["long"]
 
     sig = {}
-    if carry in ("trail", "limp"):
+    if carry in ("trail", "limp", "hang"):
         sig["r"] = swing_signal(fit, cut, [(t + phase) * fr / FPS for t in ts], "r")
         sig["l"] = swing_signal(fit, cut, [(t + phase) * fr / FPS for t in ts], "l")
-        par = TRAIL["sprint" if carry == "trail" else "limp"]
+        par = TRAIL[g.get("trail") or ("sprint" if carry == "trail" else "limp")]
         palm = fit.w_half + 0.008
         if not hasattr(fit, "_free_pts"):
             fit._free_pts = {s: fit.body.points_of([f"{b}_{s}" for b in ("lowerarm", "hand", "fingers", "thumb")], 120)
                              for s in "lr"}
 
-    left_hangs = [bool(g.get("mirror"))]              # (limp: the left arm hangs, or its hand is on the thigh)
+    mid_ua = None
+    if carry == "trail":                      # (the free upper arm's middle over the cut: calm_swing draws to it)
+        pn = sk.pname[sk.ix["upperarm_l"]]
+        qs = [R.m2q(cut.local("upperarm_l", pn, f)) for f in range(cut.F - 1)]
+        q0_ = qs[0]
+        qs = [x if x @ q0_ >= 0 else -x for x in qs]
+        mid_ua = R.q2m(np.mean(qs, axis=0))
+
+    left_hangs = [bool(g.get("mirror") or g.get("left_hangs"))]   # (limp: the left arm hangs, or its hand is on
+    #                                                                 the thigh; hang: it hangs)
     thigh_at = {}
     thigh_pole = {}
     yaw_add = [0.0]
 
-    def pose(j, out=None, opened=0.0, lift=0.0, tilt=0.0, lower=0.0, flex=0.0, twist=0.0, nod=0.0, up=0.0):
+    def pose(j, out=None, opened=0.0, lift=0.0, tilt=0.0, lower=0.0, flex=0.0, twist=0.0, nod=0.0, up=0.0, calm=0.0):
         """Key j whole. `out`: the trail hand's distance out from the shoulder; `opened`, `flex`: the free arm opened
-        out and its elbow bent more;
+        out and its elbow bent more; `calm`: its upper arm's swing drawn that share toward its middle;
         `lift`: his own carry's arms turned up (lift_needed); `tilt`, `lower`: his own hold turned muzzle-down and
         lowered (rehold)."""
         t = ts[j] + phase
@@ -1168,7 +1327,17 @@ def key_gait(fit, g, log=print, quick=1.0, legs_only=False, phase=0.0):
                 r = sk.ix["root"]
                 q[n] = Gw
                 mv[n] = Xw - sk.H0[r] - (sk.H0[i] - sk.H0[r])
-            rehold(fit, q, mv, tilt, lower)
+            yaw_c = 0.0
+            if (g.get("steady") or g.get("heading") is not None) and "weapon" in q \
+                    and fit.run.get("weapon") not in (None, "none") and held_across(fit, g):
+                Gs, _ = sk.fk(q, mv)
+                if g.get("heading") is not None:          # (a heading of its own: across him)
+                    a_ = Gs[sk.ix["weapon"]][:, 0]
+                    yaw_c = (g["heading"] - math.degrees(math.atan2(a_[1], a_[0])) + 180.0) % 360.0 - 180.0
+                else:                                     # (his own clip's heading at this moment)
+                    yaw_c = heading_off(fit, Go, Gs)
+                note["yaw_c"] = yaw_c
+            rehold(fit, q, mv, tilt, lower, yaw_c)
             keep_riders(fit, q, mv, tq, tm)
             return q, mv, note
         # his kit (the pouches) from his own clip in step; the arms made here
@@ -1190,12 +1359,14 @@ def key_gait(fit, g, log=print, quick=1.0, legs_only=False, phase=0.0):
         if carry == "trail":
             for n in ("upperarm_l", "lowerarm_l", "hand_l"):
                 q[n] = cut.local(n, sk.pname[sk.ix[n]], t * fr)
+            if calm and mid_ua is not None:
+                q["upperarm_l"] = R.q2m(R.nlerp(R.m2q(q["upperarm_l"]), R.m2q(mid_ua), calm))
             flex_elbow(fit, q, mv, "l", flex)
             twist_out(fit, q, mv, "l", twist)
             open_out(fit, q, mv, "l", opened)
             hands.fingers(q, "l", FREE_CURL, FREE_THUMB)
         elif left_hangs[0]:
-            hang_arm(fit, q, mv, "l", sig["l"][j], dict(back=3.0, swing=9.0, reach=0.965), opened)
+            hang_arm(fit, q, mv, "l", sig["l"][j], par.get("left", dict(back=3.0, swing=9.0, reach=0.965)), opened)
             hands.fingers(q, "l", 30.0, 12.0)
         else:                                             # (the same at a key whatever the right arm does)
             if j not in thigh_at:
@@ -1231,18 +1402,23 @@ def key_gait(fit, g, log=print, quick=1.0, legs_only=False, phase=0.0):
         info["arms_lifted_past_his_line_deg"] = lift_needed.info["extra_deg"]
         info["arms_let_down_from_his_line_deg"] = lift_needed.info["let_down_deg"]
         info["hands_head_at_keys_cm"] = lift_needed.info["head_gap_cm"]
+        if lift_needed.info["pitch_off_deg"]:
+            info["weapon_up_off_his_legs_deg"] = lift_needed.info["pitch_off_deg"]
     tilt = np.zeros(K + 1)
-    lower = 0.0
+    lower = np.zeros(K + 1)
     if "low" in g and carry == "own" and not free and fit.w_pts is not None \
-            and fit.run.get("weapon") not in (None, "none") and fit.name not in TWO_HANDS and not legs_only:
-        target, lower = g["low"]
-        tv = tilt_needed(fit, lambda j, tl: pose(j, lift=float(lift[j]), tilt=tl, lower=lower,
-                                                 nod=float(nodded[j]), up=float(stood[j]))[:2], K,
-                         g["hold"], target, loop=True)
+            and fit.run.get("weapon") not in (None, "none") and not legs_only and held_across(fit, g):
+        target, drop = g["low"] if fit.name not in TWO_HANDS else g["low_two"]
+        tv, lv_ = tilt_needed(fit, lambda j, tl, lw: pose(j, lift=float(lift[j]), tilt=tl, lower=lw,
+                                                          nod=float(nodded[j]), up=float(stood[j]))[:2], K,
+                              g["hold"], target, lower=drop, loop=True)
         tilt[:K] = tv
         tilt[K] = tv[0]
+        lower[:K] = lv_
+        lower[K] = lv_[0]
         info["held_low"] = {"tilt_deg": [round(float(tv.min()), 1), round(float(tv.max()), 1)],
-                            "lowered_m": lower, "muzzle_up_to_deg": target}
+                            "lowered_m": [round(float(lv_.min()), 3), round(float(lv_.max()), 3)],
+                            "asked": [target, drop], "muzzle_up_to_deg": target}
 
     # ---- the limp's hand on the thigh: the elbow's side at each key where the forearm passes his hip kit, eased
     #      between keys (pole_path)
@@ -1265,9 +1441,10 @@ def key_gait(fit, g, log=print, quick=1.0, legs_only=False, phase=0.0):
     opened = np.zeros(K + 1)
     flexed = np.zeros(K + 1)
     twisted = np.zeros(K + 1)
-    if carry in ("trail", "limp") and legs_only:
+    calmed = np.zeros(K + 1)
+    if carry in ("trail", "limp", "hang") and legs_only:
         out = par["out0"]
-    elif carry in ("trail", "limp"):
+    elif carry in ("trail", "limp", "hang"):
         # (out from his thigh as little as clears it; where his kit at the hip still takes the butt, the muzzle
         #  turned a little in, so the butt swings out past it)
         best = None
@@ -1306,45 +1483,61 @@ def key_gait(fit, g, log=print, quick=1.0, legs_only=False, phase=0.0):
             # (the free arm where the capture's would pass into his kit or trunk: its elbow bent more first, the
             #  forearm carried out past his chest, then the upper arm opened out from his side, the least of these
             #  that clears him, eased between keys)
-            combos = sorted(((float(o_), float(f_), float(w_)) for o_ in np.arange(0.0, OPEN_MOST + 0.01, 5.0)
+            def cost(c_):
+                last = c_[0] > OPEN_MOST + 1e-6 or c_[2] > TWIST_RANGE[1] + 1e-6
+                return (LAST_COST if last else 0.0) + c_[0] + FLEX_COST * c_[1] + TWIST_COST * abs(c_[2]) \
+                    + CALM_COST * c_[3]
+            combos = sorted(((float(o_), float(f_), float(w_), float(k_))
+                             for o_ in np.arange(0.0, OPEN_LAST + 0.01, 5.0)
                              for f_ in np.arange(0.0, FLEX_MOST + 0.01, 10.0)
-                             for w_ in np.arange(0.0, TWIST_MOST + 0.01, 10.0)),
-                            key=lambda c_: (c_[0] + FLEX_COST * c_[1] + TWIST_COST * c_[2], c_[0], c_[2]))
+                             for w_ in np.arange(TWIST_RANGE[0], TWIST_LAST + 0.01, 10.0)
+                             for k_ in CALM_STEPS),
+                            key=lambda c_: (cost(c_), c_[0], c_[3], abs(c_[2])))
 
-            def clear_at(j, o_, f_, w_):
-                q, mv, _ = pose(j, out, o_, flex=f_, twist=w_)
-                return free_arm_clear(fit, q, mv, "l")[0]
+            def clear_at(j, o_, f_, w_, k_, mid=False):
+                q, mv, _ = pose(j, out, o_, flex=f_, twist=w_, calm=k_)
+                c_ = free_arm_clear(fit, q, mv, "l")[0]
+                return (c_, hand_mid(fit, q, mv, "l")) if mid else c_
 
             def first_clear(j):
-                best_ = None
-                for o_, f_, w_ in combos:
-                    c_ = clear_at(j, o_, f_, w_)
+                best_, wide_ = None, None
+                for o_, f_, w_, k_ in combos:
+                    if wide_ is not None and cost((o_, f_, w_, k_)) >= LAST_COST:
+                        return wide_                 # (a way within OPEN_MOST that clears, the hand wide, before
+                    c_, hm = clear_at(j, o_, f_, w_, k_, mid=True)   # any opened past it)
                     if c_ >= FREE_ARM_CLEAR:
-                        return o_, f_, w_, c_
-                    if best_ is None or c_ > best_[3] + 1e-4:
-                        best_ = (o_, f_, w_, c_)
-                return best_
+                        if hm <= HAND_MID_MOST:
+                            return o_, f_, w_, k_, c_
+                        if wide_ is None:
+                            wide_ = (o_, f_, w_, k_, c_)
+                    if best_ is None or c_ > best_[4] + 1e-4:
+                        best_ = (o_, f_, w_, k_, c_)
+                return wide_ or best_
             chosen = [first_clear(j) for j in range(K)]
             o_k = np.array([c_[0] for c_ in chosen])
             f_k = np.array([c_[1] for c_ in chosen])
             w_k = np.array([c_[2] for c_ in chosen])
+            k_k = np.array([c_[3] for c_ in chosen])
 
             def ease(v):
                 n_ = np.maximum(v, np.maximum(np.roll(v, 1), np.roll(v, -1)))
                 return np.maximum(smooth_loop(n_, 2), v)
-            o_s, f_s, w_s = ease(o_k), ease(f_k), ease(w_k)
+            o_s, f_s, w_s, k_s = ease(o_k), ease(f_k), ease(w_k), ease(k_k)
             worst = 9.0
             for j in range(K):                       # (each key made sure of: eased is not always clearer)
-                c_ = clear_at(j, float(o_s[j]), float(f_s[j]), float(w_s[j]))
-                if c_ < min(FREE_ARM_CLEAR, chosen[j][3]) - 1e-9:
-                    o_s[j], f_s[j], w_s[j], c_ = chosen[j]
+                c_ = clear_at(j, float(o_s[j]), float(f_s[j]), float(w_s[j]), float(k_s[j]))
+                if c_ < min(FREE_ARM_CLEAR, chosen[j][4]) - 1e-9:
+                    o_s[j], f_s[j], w_s[j], k_s[j], c_ = chosen[j]
                 worst = min(worst, c_)
             opened[:K], opened[K] = o_s, o_s[0]
             flexed[:K], flexed[K] = f_s, f_s[0]
             twisted[:K], twisted[K] = w_s, w_s[0]
+            calmed[:K], calmed[K] = k_s, k_s[0]
+            info["free_arm_swing_calmed"] = round(float(k_s.max()), 2)
             info["free_arm_opened_deg"] = round(float(o_s.max()), 1)
             info["free_arm_elbow_bent_deg"] = round(float(f_s.max()), 1)
             info["free_arm_forearm_out_deg"] = round(float(w_s.max()), 1)
+            info["free_arm_forearm_in_deg"] = round(float(-w_s.min()), 1)
             info["free_arm_clear_cm"] = round(100 * worst, 1)
         elif left_hangs[0]:
             tries = np.arange(0.03, 0.2801, 0.01)
@@ -1373,8 +1566,8 @@ def key_gait(fit, g, log=print, quick=1.0, legs_only=False, phase=0.0):
     thigh = []
     for j in range(K + 1):
         jj = j if j < K or not loop else 0
-        q, mv, note = pose(jj, out, float(opened[jj]), float(lift[jj]), float(tilt[jj]), lower, float(flexed[jj]),
-                           float(twisted[jj]), float(nodded[jj]), float(stood[jj]))
+        q, mv, note = pose(jj, out, float(opened[jj]), float(lift[jj]), float(tilt[jj]), float(lower[jj]), float(flexed[jj]),
+                           float(twisted[jj]), float(nodded[jj]), float(stood[jj]), float(calmed[jj]))
         if "thigh" in note:
             thigh.append(note["thigh"])
         t = ts[j]
@@ -1386,7 +1579,12 @@ def key_gait(fit, g, log=print, quick=1.0, legs_only=False, phase=0.0):
             keys[n]["rot"].append([round(t, 4)] + [round(float(x), 5) for x in v])
             if has_move[n]:
                 keys[n]["move"].append([round(t, 4)] + [round(float(x), 4) for x in mv.get(n, np.zeros(3))])
-    info["left_hangs"] = left_hangs[0] if carry == "limp" else None
+    info["left_hangs"] = left_hangs[0] if carry in ("limp", "hang") else None
+    if (g.get("steady") or g.get("heading") is not None) and carry == "own" and fit.w_pts is not None \
+            and fit.run.get("weapon") not in (None, "none") and not legs_only:
+        yc = [pose(j, out, float(opened[j]), float(lift[j]), float(tilt[j]), float(lower[j]), float(flexed[j]), float(twisted[j]),
+                   float(nodded[j]), float(stood[j]))[2].get("yaw_c", 0.0) for j in range(K)]
+        info["held_steady_yaw_deg"] = [round(float(min(yc)), 1), round(float(max(yc)), 1)]
     if thigh and not left_hangs[0]:
         info["hand_on_thigh"] = {"down_m": [round(float(min(x[0] for x in thigh)), 3),
                                             round(float(max(x[0] for x in thigh)), 3)],
@@ -1432,6 +1630,11 @@ def key_gait(fit, g, log=print, quick=1.0, legs_only=False, phase=0.0):
         info["ground_mm"] = round(info["ground_mm"] + set_down(fit, clip), 1)     # (on the keys kept)
     if g["kind"] == "walk":
         info["boots_raised_mm"] = boots_up(fit, clip)
+        info["boots_lowered_mm"], info["swing_raised_mm"] = boots_settle(fit, clip)
+        info["boots_held_mm"] = boots_still(fit, clip)
+        if carry == "limp" and not left_hangs[0] and not legs_only:
+            # (the legs were bent again at their keys: the hand laid on the thigh where the thigh is now)
+            info["hand_relaid_into_cm"] = relay_hand(fit, clip, thigh_pole)
     after = R.ball_slide(sk, clip)
     if not legs_only:
         clip["events"], cs = footstep_events(fit, clip, loop=True,
@@ -1450,7 +1653,7 @@ def key_gait(fit, g, log=print, quick=1.0, legs_only=False, phase=0.0):
         f"most, a planted ball {before['slide'] / before['speed']:.4f} -> {after['slide'] / after['speed']:.4f} per m/s"
         + (f"; rifle {out * 100:.0f} cm out from the shoulder" if out is not None else "")
         + (f", free arm opened {info['free_arm_opened_deg']} deg, elbow bent {info['free_arm_elbow_bent_deg']} deg more,"
-           f" forearm out {info['free_arm_forearm_out_deg']} deg"
+           f" forearm out {info['free_arm_forearm_out_deg']} deg, swing calmed {info['free_arm_swing_calmed']}"
            f" ({info['free_arm_clear_cm']} cm clear)" if "free_arm_opened_deg" in info else "")
         + (f", hand on the thigh {info['hand_on_thigh']}" if "hand_on_thigh" in info else "")
         + (f"; arms lifted {info['arms_lifted_deg']} deg" if "arms_lifted_deg" in info else ""))
@@ -1495,15 +1698,17 @@ def leg_pops(clip, most=30.0):
     return out
 
 
-def boots_lowest(fit, clip, per_s=120):
-    """The lowest point of either boot's bottom outline over the loop (boot_points: the near mesh's own skin)."""
+def boots_lowest(fit, clip, per_s=120, each=False):
+    """The lowest point of either boot's bottom outline over the loop (boot_points: the near mesh's own skin); with
+    `each`, {side: its boot's lowest}."""
     L = float(clip["long"])
     n = int(round(L * per_s))
-    low = 9.0
+    low = {"l": 9.0, "r": 9.0}
     for j in range(n):
         G, X = fit.sk.fk(*R.clip_pose(clip, L * j / n))
-        low = min(low, min(float(boot_points(fit, G, X, s_)[:, 2].min()) for s_ in "lr"))
-    return low
+        for s_ in "lr":
+            low[s_] = min(low[s_], float(boot_points(fit, G, X, s_)[:, 2].min()))
+    return low if each else min(low.values())
 
 
 def key_phase(fit, g, quick):
@@ -1519,9 +1724,12 @@ def key_phase(fit, g, quick):
     for i in range(PHASES):
         ph = i * step
         c, _ = key_gait(fit, g, log=lambda *_: None, quick=quick, legs_only=True, phase=ph)
-        low = boots_lowest(fit, c)
+        lows = boots_lowest(fit, c, each=True)
+        low = min(lows.values())
         pp = leg_pops(c)
-        cost = max(0.0, -0.010 - low) * 1000 + sum(0.5 * (a_ - 20.0) for _, a_ in pp)
+        # (and a boot that never comes down to the ground between its kept keys: a short stance the keys straddle)
+        cost = max(0.0, -0.010 - low) * 1000 + sum(0.5 * (a_ - 20.0) for _, a_ in pp) \
+            + sum(max(0.0, v - 0.012) * 2000 for v in lows.values())
         if best is None or cost < best[1] - 1e-6:
             best = (ph, cost, low, pp)
     return best
@@ -1787,6 +1995,31 @@ def leg_ik(fit, q, mv, s_, T):
     return float(np.linalg.norm(ank_n - np.asarray(T, float)))
 
 
+def relay_hand(fit, clip, poles, s="l"):
+    """The hand on the hurt thigh laid again at each key of a clip whose legs were moved after it was laid (a walk's
+    boots set on the ground by leg IK turn the thigh under the hand): hand_on_thigh on the keyed pose, the elbow's
+    side as chosen for that key. The loop's last key is its first. Returns how far the arm then lies into his body at
+    worst, cm (free_arm_clear's measure)."""
+    trk = {tr["part_name"]: tr for tr in clip["tracks"]}
+    ts = [k_[0] for k_ in trk["pelvis"]["rot"]]
+    K = len(ts) - 1
+    names = [n + s for n in ("upperarm_", "lowerarm_", "hand_", "fingers_", "thumb_") if n + s in trk]
+    worst = 9.0
+    for j in range(K):
+        q, mv = R.clip_pose(clip, ts[j])
+        q, mv = dict(q), dict(mv)
+        res = hand_on_thigh(fit, q, mv, s, THIGH_DOWN, pole=poles.get(j, poles.get("all")))
+        worst = min(worst, res[4])
+        for n in names:
+            for jj in ((j, K) if j == 0 else (j,)):
+                k_ = trk[n]["rot"][jj]
+                v4 = R.m2q(q[n])
+                if np.dot(v4, k_[1:]) < 0:
+                    v4 = -v4
+                trk[n]["rot"][jj] = [k_[0]] + [round(float(x), 5) for x in v4]
+    return round(100 * worst, 1)
+
+
 def set_caught_down(fit, clip, cut, log=print, target=0.004, most=0.06):
     """A planted boot of the stumble set down on the ground (the caught toe, which on some men's legs the plant left
     floating 2 to 3.6 cm over it): at each key but the two at each end (his run's), where a boot stands still on the
@@ -1850,6 +2083,144 @@ def boots_up(fit, clip, under=-0.002, target=0.0, most=0.02):
             changed = True
         if not changed:
             continue
+        for s_ in "lr":
+            for n in ("thigh_", "calf_", "foot_"):
+                for jj in ((j, K) if j == 0 else (j,)):
+                    k_ = trk[n + s_]["rot"][jj]
+                    v4 = R.m2q(q[n + s_])
+                    if np.dot(v4, k_[1:]) < 0:
+                        v4 = -v4
+                    trk[n + s_]["rot"][jj] = [k_[0]] + [round(float(x), 5) for x in v4]
+    return out
+
+
+def boots_settle(fit, clip, over=0.003, slow=0.25, swing=0.03, fast=0.5, most=0.03):
+    """A walk's boots on the ground where they stand and off it where they swing, at its keys, by leg IK (the foot
+    keeping its turn): a boot that stands (its outline going over the ground at under `slow` of the clip's speed at
+    this key) with its lowest point more than `over` up is let down onto the ground; a boot that swings (faster than
+    `fast` of it) with its lowest point under `swing` is lifted to `swing` (`most` either way). The limp's good foot
+    came to rest 1 to 3 cm up after a heel-first landing and settled through half its stance; its toe, rolled off the
+    ground, swung back through it at 1.3 m/s (a scuff). The loop's last key is its first. Returns the most let down
+    and the most lifted, mm, per side."""
+    sk = fit.sk
+    trk = {tr["part_name"]: tr for tr in clip["tracks"]}
+    ts = [k_[0] for k_ in trk["pelvis"]["rot"]]
+    K = len(ts) - 1
+    L = float(clip["long"])
+    own = float(clip["stride"]) / L
+    dt = L / K
+    poses = [R.clip_pose(clip, ts[j]) for j in range(K)]
+    W = {s_: [] for s_ in "lr"}
+    for j in range(K):
+        G, X = sk.fk(*poses[j])
+        for s_ in "lr":
+            W[s_].append(boot_points(fit, G, X, s_))
+    down = {"l": 0.0, "r": 0.0}
+    up = {"l": 0.0, "r": 0.0}
+    for j in range(K):
+        q, mv = dict(poses[j][0]), dict(poses[j][1])
+        changed = False
+        for s_ in "lr":
+            a_, b_ = W[s_][(j - 1) % K], W[s_][(j + 1) % K]
+            d = (b_[:, :2] - a_[:, :2]).mean(0)
+            d[0] += own * 2 * dt
+            speed = float(np.hypot(d[0], d[1])) / (2 * dt)
+            low = float(W[s_][j][:, 2].min())
+            dz = 0.0
+            if speed < slow * own and low > over:
+                # (not so far that the sole, as check_clip measures it, goes more than 6 mm under: on some boots
+                #  it lies lower than the outline's lowest point)
+                Gp, Xp = sk.fk(*poses[j])
+                room = max(0.0, float(R.sole_z(sk, Gp, Xp, s_)) + 0.006)
+                dz = -min(low, most, room)
+            elif speed > fast * own and low < swing:
+                dz = min(swing - low, most)
+            if abs(dz) < 0.001:
+                continue
+            G, X = sk.fk(q, mv)
+            leg_ik(fit, q, mv, s_, X[sk.ix["foot_" + s_]] + np.array((0.0, 0.0, dz)))
+            if dz < 0:
+                down[s_] = max(down[s_], round(-1000 * dz, 1))
+            else:
+                up[s_] = max(up[s_], round(1000 * dz, 1))
+            changed = True
+        if not changed:
+            continue
+        for s_ in "lr":
+            for n in ("thigh_", "calf_", "foot_"):
+                for jj in ((j, K) if j == 0 else (j,)):
+                    k_ = trk[n + s_]["rot"][jj]
+                    v4 = R.m2q(q[n + s_])
+                    if np.dot(v4, k_[1:]) < 0:
+                        v4 = -v4
+                    trk[n + s_]["rot"][jj] = [k_[0]] + [round(float(x), 5) for x in v4]
+    return down, up
+
+
+def boots_still(fit, clip, down=0.008, most=0.05):
+    """A walk's standing boots held still on the ground at its keys: through each stance (keys where a boot has
+    points within `down` of the ground at this key and the next), the points that are down at both keys should not
+    move over the ground (the clip in place, the ground going back at its speed); what they move, on the mean, is
+    added up back from the stance's end (where the ball is down and the plant has it going back at the ground's
+    speed) and each key's ankle set by leg IK where its points will be at the next (`most` at most; the foot keeps
+    its turn, so it still rolls heel to toe), eased in over the key before the stance. The limp's good leg, a long
+    bent-kneed stance, came down heel first with its heel going back 6 to 7 mm a sixtieth of a second, 4 to 7 cm a
+    step on some men's legs: the plant (the body slid so the balls keep the ground's speed) holds the ball, which is
+    still 5 to 15 cm up then. Returns the most moved, mm, per side."""
+    sk = fit.sk
+    trk = {tr["part_name"]: tr for tr in clip["tracks"]}
+    ts = [k_[0] for k_ in trk["pelvis"]["rot"]]
+    K = len(ts) - 1
+    L = float(clip["long"])
+    own = float(clip["stride"]) / L
+    poses = [R.clip_pose(clip, ts[j]) for j in range(K)]
+    out = {}
+    corr = {s_: np.zeros((K, 2)) for s_ in "lr"}
+    for s_ in "lr":
+        W = [boot_points(fit, *sk.fk(*poses[j]), s_) for j in range(K)]
+        on = [w[:, 2] <= down for w in W]
+        # (the slide between each key and the next of the points down at both)
+        step = np.zeros((K, 2))
+        held = np.zeros(K, bool)
+        for j in range(K):
+            j2 = (j + 1) % K
+            m = on[j] & on[j2]
+            if m.sum() < 3:
+                continue
+            d = W[j2][m, :2] - W[j][m, :2]
+            d[:, 0] += own * (L / K)
+            step[j] = d.mean(0)
+            held[j] = True
+        if held.all() or not held.any():
+            out[s_] = 0.0
+            continue
+        # (each stance held where it ends, on the ball, as the plant left it: from its last held step back to its
+        #  first, each key set where the points will be at the next; eased in over the key before the stance)
+        ends = [j for j in range(K) if held[j] and not held[(j + 1) % K]]
+        for j1 in ends:
+            cum = np.zeros(2)
+            j = j1
+            while held[j]:
+                cum = cum + step[j]
+                c_ = cum.copy()
+                n_ = float(np.linalg.norm(c_))
+                if n_ > most:
+                    c_ = c_ * (most / n_)
+                corr[s_][j] = c_
+                j = (j - 1) % K
+            corr[s_][j] = 0.5 * corr[s_][(j + 1) % K]
+        out[s_] = round(1000 * float(np.linalg.norm(corr[s_], axis=1).max()), 1)
+    for j in range(K):
+        if not (np.any(corr["l"][j]) or np.any(corr["r"][j])):
+            continue
+        q, mv = poses[j]
+        q, mv = dict(q), dict(mv)
+        for s_ in "lr":
+            c_ = corr[s_][j]
+            if not np.any(c_):
+                continue
+            G, X = sk.fk(q, mv)
+            leg_ik(fit, q, mv, s_, X[sk.ix["foot_" + s_]] + np.array((c_[0], c_[1], 0.0)))
         for s_ in "lr":
             for n in ("thigh_", "calf_", "foot_"):
                 for jj in ((j, K) if j == 0 else (j,)):
@@ -1942,10 +2313,10 @@ def key_stumble(fit, g, log=print):
         lift_info = {"arms_lifted_past_his_line_deg": lift_needed.info["extra_deg"],
                      "arms_let_down_from_his_line_deg": lift_needed.info["let_down_deg"],
                      "hands_head_at_keys_cm": lift_needed.info["head_gap_cm"]}
-        for j in range(K + 1):
-            lift[j] *= min(sm(j / ease), sm((K - j) / ease))
-            nodded[j] *= min(sm(j / ease), sm((K - j) / ease))
-            stood[j] *= min(sm(j / ease), sm((K - j) / ease))
+        if lift_needed.info["pitch_off_deg"]:
+            lift_info["weapon_up_off_his_legs_deg"] = lift_needed.info["pitch_off_deg"]
+        for v_ in (lift, nodded, stood):     # (the end keys his run's own; the keys beside them, eased onto his
+            v_[0] = v_[K] = 0.0              #  run's body by pose, were measured as they are)
         if np.any(nodded):
             lift_info["head_turned_deg"] = [round(float(nodded.min()), 1), round(float(nodded.max()), 1)]
         if np.any(stood):
@@ -2122,7 +2493,8 @@ def widen_paces(fit, clips, infos):
             return float(clips[n]["stride"]) / float(clips[n]["long"])
 
         def sh(n):
-            return WIDEN.get(kind[n], WIDEN_FLIGHT)
+            gw = next((g_ for g_ in GAITS if g_["name"] == n), {}).get("widen")
+            return tuple(gw) if gw else WIDEN.get(kind[n], WIDEN_FLIGHT)
         if max(clips[n]["pace"][1] for n in have) < hi_b - 1e-9:
             n = max(have, key=lambda n_: v(n_) * sh(n_)[1])
             hi = min(hi_b, math.floor(v(n) * sh(n)[1] * 100 + 1e-6) / 100)
@@ -2280,11 +2652,15 @@ def check_clip(fit, g, clip, log=print, made=None):
     z, _ = soles_of(fit, clip, loop=loop)
     lows = {s_: float(z[s_].min()) for s_ in "lr"}
     m["sole_lowest_mm"] = {s_: round(1000 * v, 1) for s_, v in lows.items()}
+    # (a foot up on its toes, the dash's, has its sole's heel and ball points over the ground while the boot stands
+    #  on its toe cap: floating is judged on the lower of the sole and the boot's own outline)
+    boots = boots_lowest(fit, clip, each=True)
+    m["boot_lowest_mm"] = {s_: round(1000 * v, 1) for s_, v in boots.items()}
     for s_, v in lows.items():
         if v < -GROUND_UNDER - 5e-4:
             bad.append(f"foot_{s_} {-1000 * v:.1f} mm under the ground")
-        if v > GROUND_OVER + 5e-4:
-            bad.append(f"foot_{s_} floats {1000 * v:.1f} mm at its lowest")
+        if min(v, boots[s_]) > GROUND_OVER + 5e-4:
+            bad.append(f"foot_{s_} floats {1000 * min(v, boots[s_]):.1f} mm at its lowest")
     feet_on = [e["bone"] for e in clip["events"] if e["fx"] == "footstep"]
     m["footfalls"] = {b: [e["t"] for e in clip["events"] if e["fx"] == "footstep" and e["bone"] == b] for b in ("foot_l", "foot_r")}
     if set(feet_on) != {"foot_l", "foot_r"}:
@@ -2345,6 +2721,8 @@ def check_clip(fit, g, clip, log=print, made=None):
                 bad.append(f"a hand or forearm {100 * hh:.1f} cm from his head (his own {g['hold']}: {100 * hh_own:.1f})")
             m["weapon_pitch_deg"] = weapon_pitch_range(fit, clip, ts)
             m["weapon_pitch_his_own_deg"] = weapon_pitch_range(fit, hold, np.linspace(0.0, hold["long"], 17)[:-1])
+            m["weapon_heading_deg"] = weapon_heading_range(fit, clip, ts)
+            m["weapon_heading_his_own_deg"] = weapon_heading_range(fit, hold, np.linspace(0.0, hold["long"], 17)[:-1])
         m["weapon_clear_cm"] = round(100 * cl, 1)
         m["weapon_nearest"] = which
         m["weapon_clear_in_his_own_cm"] = round(100 * base, 1)
@@ -2353,7 +2731,7 @@ def check_clip(fit, g, clip, log=print, made=None):
             bad.append(f"the weapon {-100 * cl:.1f} cm into his {which} (his own {g['hold']}: {100 * base:.1f} cm clear)")
         if zmin < 0.03:
             bad.append(f"the weapon {100 * zmin:.1f} cm from the ground")
-    if carry in ("trail", "limp") and hasattr(fit, "_free_pts"):
+    if carry in ("trail", "limp", "hang") and hasattr(fit, "_free_pts"):
         cl, which = 9.0, None
         for t in ts:
             q, mv = R.clip_pose(clip, t)
@@ -2369,6 +2747,9 @@ def check_clip(fit, g, clip, log=print, made=None):
         m["upperarm_l_out_deg"] = [round(max(arm_out(fit, *R.clip_pose(clip, t)) for t in ts), 1),
                                    round(max(arm_out(fit, *R.clip_pose(D["clips"]["run"], t))
                                              for t in np.linspace(0.0, D["clips"]["run"]["long"], 13)[:-1]), 1)]
+        m["hand_l_from_mid_cm"] = [round(100 * max(hand_mid(fit, *R.clip_pose(clip, t), "l") for t in ts), 1),
+                                   round(100 * max(hand_mid(fit, *R.clip_pose(D["clips"]["run"], t), "l")
+                                                   for t in np.linspace(0.0, D["clips"]["run"]["long"], 13)[:-1]), 1)]
     # speed, pace, pops
     if g["band"]:
         if not (g["band"][0] <= own_speed <= g["band"][1]):
@@ -2393,6 +2774,16 @@ def check_clip(fit, g, clip, log=print, made=None):
     rate, which = turn_rate(clip)
     m["fastest_turn_deg_s"] = [rate, which]
     return m, bad
+
+
+def weapon_heading_range(fit, clip, ts):
+    """The weapon's heading over the ground (its line seen from above, from +x toward +y), degrees, least and most."""
+    w = fit.sk.ix["weapon"]
+    v = []
+    for t in ts:
+        a = fit.sk.fk(*R.clip_pose(clip, t))[0][w][:, 0]
+        v.append(math.degrees(math.atan2(a[1], a[0])))
+    return [round(float(min(v)), 1), round(float(max(v)), 1)]
 
 
 def weapon_pitch_range(fit, clip, ts):
@@ -2431,7 +2822,8 @@ def from_of(fit, g, info):
             + hold_changes(info),
             "trail": "the rifle keyed into his right hand at the trail, the left arm the capture's",
             "limp": "the rifle keyed into his right hand at the trail, the left " +
-                    ("arm hung low" if info.get("left_hangs") else "hand laid on his left thigh")}[carry]
+                    ("arm hung low" if info.get("left_hangs") else "hand laid on his left thigh"),
+            "hang": "the rifle keyed into his right hand, hanging low at the trail, the left arm hanging limp"}[carry]
     quick = info.get("quick", 1.0)
     return (f"motion capture: {src} (gaits_mocap.py's {g['cut']}: {c.get('note', '').rstrip('.')})"
             + (", mirrored left for right" if g.get("mirror") else "") + f"; keyed on this file by gaits.py with "
@@ -2460,8 +2852,9 @@ def hold_changes(info):
     hl = info.get("held_low")
     if hl:
         out.append(f"the weapon held low: turned {hl['tilt_deg'][0]:.0f} to {hl['tilt_deg'][1]:.0f} degrees "
-                   f"muzzle-down about his right fist" + (f" and lowered {hl['lowered_m'] * 100:.0f} cm" if hl["lowered_m"]
-                                                          else "") + ", both arms set to it by IK")
+                   f"muzzle-down about his right fist"
+                   + (f" and lowered {hl['lowered_m'][0] * 100:.0f} to {hl['lowered_m'][1] * 100:.0f} cm"
+                      if hl["lowered_m"][1] else "") + ", both arms set to it by IK")
     return (", " + "; ".join(out)) if out else ""
 
 
@@ -2489,6 +2882,11 @@ def about_of(fit, g, clip, info):
                f"{clip['_m']['muzzle'][0]:.0f} to {clip['_m']['muzzle'][1]:.0f} degrees down, held "
                f"{info['trail_out'] * 100:.0f} cm out from the shoulder's line to clear his thigh; the left arm pumps "
                f"free" + open_words(info) + ")")
+    elif carry == "hang":
+        how = ("carry: hang (a tired man's: the rifle hanging in the right hand at the trail, muzzle forward and "
+               f"{clip['_m']['muzzle'][0]:.0f} to {clip['_m']['muzzle'][1]:.0f} degrees down, held "
+               f"{info['trail_out'] * 100:.0f} cm out from the shoulder's line to clear his thigh; the left arm hanging "
+               "limp and swinging low)")
     else:
         if info.get("left_hangs"):
             how = ("carry: limp (the rifle in the right hand at the trail, the left arm hanging, swinging low"
@@ -2522,13 +2920,16 @@ def about_of(fit, g, clip, info):
 def open_words(info):
     o, f = info.get("free_arm_opened_deg", 0.0), info.get("free_arm_elbow_bent_deg", 0.0)
     t = info.get("free_arm_forearm_out_deg", 0.0)
-    if not o and not f and not t:
+    if not o and not f and not t and not info.get("free_arm_swing_calmed"):
         return ""
     w = []
     if f:
         w.append(f"its elbow bent up to {f:.0f} degrees more")
     if t:
         w.append(f"the forearm carried up to {t:.0f} degrees out (the upper arm turned about its length)")
+    k = info.get("free_arm_swing_calmed", 0.0)
+    if k:
+        w.append(f"its swing drawn up to {k * 100:.0f} per cent toward its middle")
     if o:
         w.append(f"the upper arm opened out up to {o:.0f} degrees")
     return ", " + " and ".join(w) + " where the capture's arm would pass into his kit or chest"
@@ -2541,7 +2942,7 @@ def about_gaits(fit, clips, pace_add):
     old = ", ".join(f"{n} {v[0]} to {v[1]}" for n, v in pace_add.items())
     carries = sorted({(n, clips[n]["_m"]["carry"]) for n in clips})
     trail = [n for n, c in carries if c == "trail"]
-    limp = [n for n, c in carries if c == "limp"]
+    limp = [n for n, c in carries if c in ("limp", "hang")]
     st = clips["run_stumble"]
     return (
         "gaits.py (25 November 2026): a ladder of gaits by speed, each another runner's motion capture (CMU, cut by "
@@ -2560,7 +2961,8 @@ def about_gaits(fit, clips, pace_add):
         "own pace). Play run_stumble once, now and then, in a tired man's run, then the run from rejoin. The carry: "
         + ("the rifle in the right hand at the trail in " + ", ".join(trail) + (" and " + ", ".join(limp) if limp else "") + "; "
            if trail else "")
-        + "his own hold on his weapon in the rest (the dashes take his advance's hold, the weapon low in both hands). "
+        + "his own hold on his weapon in the rest (the dashes take his advance's hold, the weapon low in both hands; "
+        "the loaded jog his run's, held low across his belt). "
         "The gait loops that were here have a pace now too: " + old + ". Every clip is keyed 15 a second; footstep "
         "events are at the boots' contacts. If run_styles.py is delivered again it removes every clip that has a "
         "style_of: deliver the gaits again after it.")
@@ -2588,7 +2990,7 @@ def bundle_for(name, D, cuts, runs, log=print):
             c0, _ = key_gait(fit, g, log=lambda *_: None, legs_only=True)
             v = c0["stride"] / c0["long"]
             quick = min(max(g["asked"] / v, 1.0 - QUICK_MOST), 1.0 + QUICK_MOST)
-            quick = round(quick, 4) if abs(quick - 1.0) > 0.008 else 1.0
+            quick = round(quick, 4) if abs(quick - 1.0) > (0.002 if g.get("exact") else 0.008) else 1.0
         if g["kind"] == "stumble":
             clip, info = key_stumble(fit, g, log=log)
         else:

@@ -30,6 +30,15 @@ laid over the cut loop in this order, the feet then locked on the ground as in e
              the shoulders heaving
     favour   (the limp) the hurt (left) leg's stance hurried: the loop's time runs 1 + favour as fast in the middle of
              that stance and 1 - favour as fast half a loop away (warp_favour; before the feet are locked)
+    hunch    degrees: the shoulders rounded over (the spine and chest bent forward, the neck back as much, so the
+             head still looks ahead): a man under a load
+    droop    degrees: the neck and head bent forward on the shoulders (the head hung forward of them)
+    sway     metres: the body carried this far over the standing foot, sideways, the feet kept where they were
+    sag      metres: the pelvis giving this much after each landing (the knees taking it), the feet kept
+    lurch    (deg, nod, shift): the limp's trunk rolled `deg` over the hurt leg while it bears him, the pelvis
+             `shift` metres over it, the head dipping `nod`
+    stiff    (knee, hike, out): the limp's hurt leg swung through stiff: its knee bent no more than `knee` degrees in
+             its swing, the pelvis hitched `hike` degrees on that side and the leg swung out `out` degrees round
 and after the feet are locked:
     heel_clear  metres: a foot still travelling over the ground keeps its heel this high, turned toe-down about the
              ball (heel_clear: a forefoot landing, no heel tap before the ball lands)
@@ -39,9 +48,17 @@ and after the feet are locked:
              otherwise)
 
 Mended 26 November 2026 after two reviews: the limp's hurt-leg stance was only 12 per cent shorter than the good
-leg's (now favour 0.18: 14 frames on the ground against 19); the sprints' and dashes' landing heel tapped the ground
+leg's (now favour 0.24: 13 frames on the ground against 19); the sprints' and dashes' landing heel tapped the ground
 before the ball landed (now heel_clear 4.5 cm); the limp's toe snapped 36 degrees between two keys (now eased); the
 stumble's knees bent 22 degrees off their hinge (now knee_side 10: 4 at most).
+
+Mended again 26 November 2026 after the pictures' review (from the game's camera the tired run and the loaded jog
+read as the run, the dash as the advance, the limp as a slow walk): the loaded jog slower (2.4 steps a second),
+lower on bent knees (about 14 cm under rest), the shoulders rounded and the body swaying over the standing foot; the
+tired run at 2.3 steps a second, its head hung forward of the shoulders and its pelvis sagging after each landing;
+the dashes deeper (dash_a's pelvis about 26 cm under rest, dash_b's 21 and more bent over, so the two differ); the
+limp's hurt leg down a shorter time (favour 0.40), the trunk lurching over it and the leg swung through stiff with
+the hip hitched. Each note says what was laid over its take.
 """
 import json
 import math
@@ -83,46 +100,64 @@ STYLES = [
               "for the capture's 19, reach 6.5 per cent longer, the pelvis 5 cm higher and the trunk 8 degrees less "
               "forward (mocap.crouch, the other way). The landing foot came in heel first, tapped the ground and "
               "landed again on its ball: its heel is now kept 4.5 cm up until the ball lands (heel_clear)."),
-    dict(name="dash_a", take="127_06", loop=True, head=0, ground=10, frames=18, reach=0.88, crouch=(0.10, 4),
+    dict(name="dash_a", take="127_06", loop=True, head=0, ground=10, frames=18, reach=0.88, crouch=(0.18, 6),
          tiptoe=30.0, kind="dash", heel_clear=0.045,
          note="Subject 127, 'Run' (another take, 4.24 m/s): the library's one runner who runs hunched (38 degrees "
               "forward, the knees bent). Made the bound between cover: the pelvis 10 cm lower again and the trunk 4 "
               "degrees further forward (mocap.crouch: deeper than the advance's 14 cm and 28 degrees over an upright "
-              "jog), the head held up, the steps shortened to 88 per cent and quickened (18 frames for 20). So deep "
+              "jog), the head held up; mended 26 November after the picture review (from the game's camera it read "
+              "as the advance): 18 cm lower and 6 degrees further forward, the pelvis about 26 cm under rest, the steps shortened to 88 per cent and quickened (18 frames for 20). So deep "
               "a crouch bends the standing ankle further than an ankle goes: he is put up on the ball of the foot "
               "where it passes 30 degrees (the heel lifted about the ball, the knee taking it up); the landing "
               "foot's heel kept 4.5 cm up."),
-    dict(name="dash_b", take="127_07", loop=True, head=0, ground=10, frames=17, reach=0.96, crouch=(0.08, 5),
+    dict(name="dash_b", take="127_07", loop=True, head=0, ground=10, frames=17, reach=0.96, crouch=(0.13, 10),
          tiptoe=30.0, v_tol=1.0, h_tol=0.05, kind="dash", heel_clear=0.045,
          note="Subject 127, 'Run' (a third take, 4.63 m/s, 36 degrees forward): the faster dash. The pelvis 8 cm "
               "lower and the trunk 5 degrees further forward (mocap.crouch), the head held up, the steps 96 per cent "
               "and quicker (17 frames for 20), up on the ball of the foot where the ankle would bend past 30 "
-              "degrees; the landing heel, which tapped the ground before the ball landed, kept 4.5 cm up."),
-    dict(name="jog_loaded", take="02_03", loop=True, head=8, ground=10, reach=0.85, scuff=0.7, bounce=0.4,
-         crouch=(0.07, 15), tiptoe=30.0, roll=6.0, arms=(0.45, 0.0, 0.25), kind="jog",
+              "degrees; the landing heel, which tapped the ground before the ball landed, kept 4.5 cm up. Mended 26 "
+              "November after the picture review: 13 cm lower and 10 degrees further forward (about 21 cm under rest, "
+              "43 degrees: more bent over and a little higher than dash_a, so the pair do not share one silhouette)."),
+    dict(name="jog_loaded", take="02_03", loop=True, head=8, ground=10, frames=25, reach=0.92, scuff=0.7, bounce=0.3,
+         crouch=(0.12, 20), tiptoe=30.0, roll=4.0, hunch=10.0, sway=0.03, arms=(0.45, 0.0, 0.25), h_tol=0.05,
+         v_tol=0.8, kind="jog",
          note="Subject 2, 'run/jog' (2.73 m/s, the slowest jog in the library). No take of a man running under a "
-              "load, so the load is laid over it: the steps 85 per cent as long at the capture's own beat, the feet "
-              "kept low (70 per cent as high), the pelvis's bounce cut to 40 per cent and 7 cm lower on bent knees, "
-              "the trunk 15 degrees into it (mocap.crouch), the shoulders rolling 6 degrees over the standing foot, "
-              "the arms held lower and swung 45 per cent, the heel lifted where the bent knee would bend the ankle "
-              "past 30 degrees."),
-    dict(name="run_tired", take="35_17", loop=True, head=36, ground=10, frames=24, reach=0.88, uneven=0.12,
-         scuff=0.45, bounce=0.85, crouch=(0.04, 8), roll=3.0, arms=(0.5, 0.7, 0.6), weary=(12.0, 9.0, 6.0),
-         kind="jog",
+              "load, so the load is laid over it. Mended 26 November after the picture review (from the game's "
+              "camera it read as the run, and quicker and lighter than it): a slower, heavier beat, 2.4 steps a "
+              "second (25 frames for the capture's 23), the steps 92 per cent as long, the feet kept low (70 per "
+              "cent as high), the pelvis's bounce cut to 30 per cent and carried 12 cm lower on bent knees (about "
+              "14 cm under rest), the trunk 20 degrees into it (mocap.crouch) and the shoulders rounded 10 more "
+              "(the head kept looking ahead), the body swaying 3 cm over the standing foot, the shoulders rolling 4 "
+              "degrees, the arms held lower and swung 45 per cent, the heel lifted where the bent knee would bend "
+              "the ankle past 30 degrees; the feet locked on the ground longer (h_tol 5 cm, v_tol 0.8 m/s: the "
+              "time in the air from 43 to about 32 per cent)."),
+    dict(name="run_tired", take="35_17", loop=True, head=36, ground=10, frames=26, reach=0.97, uneven=0.2,
+         scuff=0.45, bounce=0.85, crouch=(0.04, 8), roll=9.0, arms=(0.5, 0.7, 0.6), weary=(16.0, 12.0, 9.0),
+         droop=20.0, sag=0.03, h_tol=0.05, v_tol=0.8, kind="jog",
          note="Subject 35, 'run/jog' (the file's own runner, another take: 3.21 m/s). No take of a tired runner, so the "
-              "tiredness is keyed over it: the steps 88 per cent and slower (24 frames for 22), one step an eighth "
-              "longer than the other, the swinging feet under half as high (scuffing), the trunk 8 degrees forward and "
-              "sagging 4 cm, the head hung 36 degrees and dropping 12 more after each footfall, lolling 9 over the "
-              "standing foot, the shoulders heaving 6, the arms low (the elbows 70 per cent of the way to hanging "
-              "open, the upper arms 60 per cent of the way to straight down, the swing half)."),
-    dict(name="limp_l", take="142_12", loop=True, head=4, span=(3844, 4460), kind="walk", favour=0.18, ease_toes=330.0, knee_side=10.0,
+              "tiredness is keyed over it. Mended 26 November after the picture review (from the game's camera it "
+              "could not be told from the run): a slow, labouring beat, 2.3 steps a second (26 frames for the "
+              "capture's 22), the steps 97 per cent as long and uneven (one a fifth longer than the other), the "
+              "swinging feet under half as high (scuffing), the trunk 8 degrees forward and sagging 4 cm, the knees "
+              "giving 3 cm more after each landing, the trunk rolling 9 degrees over the standing foot, the head "
+              "hung (36 degrees, the neck bent 20 more so it drops forward of the shoulders) and dropping 16 more "
+              "after each footfall, lolling 12 over the standing foot, the shoulders heaving 9, the arms low (the "
+              "elbows 70 per cent of the way to hanging open, the upper arms 60 per cent of the way to straight "
+              "down, the swing half); the feet locked on the ground longer (h_tol 5 cm, v_tol 0.8 m/s)."),
+    dict(name="limp_l", take="142_12", loop=True, head=4, span=(3844, 4460), kind="walk", favour=0.40,
+         lurch=(10.0, 8.0, 0.03), stiff=(20.0, 6.0, 8.0), ease_toes=330.0, knee_side=10.0,
          note="Subject 142 (stylized walks), 'Painfulleftknee': a real limp, the LEFT leg the hurt one as captured "
               "(no mirror): the left knee held stiff (bent 21 degrees in its stance, the right 42), the left foot a "
               "shorter time on the ground, the trunk forward and dipping onto it. His faster pass (1.05 m/s). He "
-              "gets off the hurt leg sooner than he did: the loop's time runs 18 per cent faster in the middle of "
-              "its stance and slower on the good leg (favour), so the left foot is down 14 frames against the "
+              "gets off the hurt leg sooner than he did: the loop's time runs 24 per cent faster in the middle of "
+              "its stance and slower on the good leg (favour), so the left foot is down 13 frames against the "
               "right's 19 (15 against 17 as captured); the right toe's snap at its toe-off eased (330 deg/s), "
-              "the knees kept within 10 degrees of their hinge."),
+              "the knees kept within 10 degrees of their hinge. Mended again 26 November after the picture review "
+              "(from the game's camera it read as a slow walk): favour 0.40, so the left foot is down 12 frames "
+              "against the right's 20; the trunk lurching 10 degrees over the hurt leg while it bears him (the "
+              "pelvis 3 cm over it, the head dipping 8 degrees); the hurt leg swung through stiff (the knee kept "
+              "under 20 degrees of bend), the pelvis hitched 6 degrees on that side and the leg swung out 8 "
+              "degrees round, not through."),
     dict(name="stumble", make="stumble", loop=False, on="run_a", frames=30, rejoin=16, kind="once", knee_side=10.0,
          note="No trip inside a run in the library (104_13 'StumbleWalk' is a walk; 16_08 and 16_57 are stops), so it "
               "is keyed on run_a (CMU 35_18, the file's own run): the first frame is run_a's first, the last run_a's "
@@ -391,6 +426,116 @@ def weary(m, nod, loll, heave, th, mid):
     mocap.bend(m, "chest", -up * 0.35)
 
 
+def _lat(m):
+    yaw = mocap.yaw_of(m)
+    return np.stack([-np.sin(yaw), np.cos(yaw), np.zeros_like(yaw)], 1)     # (his left)
+
+
+def _keep_ankles(m, ank):
+    for s in ("l", "r"):
+        mocap.two_bone_ik(m, s, ank[s], np.ones(len(m)), m.heads())
+
+
+def _ankles(m):
+    r = m.rest
+    hd = m.heads()
+    return {s: hd[:, r.i("foot_" + s)].copy() for s in ("l", "r")}
+
+
+def _bump(th, c, half):
+    """1 at angle c round the loop, easing to 0 at `half` radians either side (cos squared), 0 beyond."""
+    d = (np.asarray(th) - c + np.pi) % (2 * np.pi) - np.pi
+    return np.where(np.abs(d) < half, np.cos(0.5 * np.pi * d / half) ** 2, 0.0)
+
+
+def hunch(m, deg):
+    """Rounded shoulders under a load: the upper spine and the chest bent forward `deg` more (0.4 and 0.6 of it), the
+    neck back by most of it so the head still looks ahead."""
+    mocap.bend(m, "spine_02", math.radians(deg) * 0.4)
+    mocap.bend(m, "chest", math.radians(deg) * 0.6)
+    mocap.bend(m, "neck", -math.radians(deg) * 0.85)
+
+
+def droop(m, deg):
+    """The head hung forward and down from the neck: the neck bent forward `deg`, the head a third as much more."""
+    mocap.bend(m, "neck", math.radians(deg))
+    mocap.bend(m, "head", math.radians(deg) / 3.0)
+
+
+def sway(m, metres, th, mid):
+    """The pelvis (and all he carries) shifted over the standing foot, `metres` to each side; the feet kept by IK."""
+    ank = _ankles(m)
+    m.H += _lat(m) * (metres * np.cos(th - mid))[:, None]
+    _keep_ankles(m, ank)
+
+
+def sag(m, depth, th, mid, lag=0.35):
+    """The knees giving under a weight on each landing: the pelvis lower by up to `depth` a little after the middle of
+    each stance (`lag` radians of the loop), the feet kept by IK."""
+    ank = _ankles(m)
+    m.H[:, 2] -= depth * 0.5 * (1.0 + np.cos(2.0 * (th - mid - lag)))
+    _keep_ankles(m, ank)
+
+
+def lurch(m, deg, nod, th, mid, half, shift=0.0):
+    """The limp's lurch over the hurt (left) leg while it bears him: the spine and chest rolled `deg` toward it at the
+    middle of its stance (eased over `half` radians either side), the neck taking back a third of it, the head dipping
+    `nod` degrees with it, the pelvis `shift` metres over that foot; the feet kept by IK."""
+    w = _bump(th, mid, half)
+    ank = _ankles(m)
+    if shift:
+        m.H += _lat(m) * (shift * w)[:, None]
+    a = -math.radians(deg) * w                          # (about his forward axis: - leans him to his LEFT)
+    ax = _fwd(m)
+    mocap.bend(m, "spine_01", a * 0.3, ax)
+    mocap.bend(m, "spine_02", a * 0.35, ax)
+    mocap.bend(m, "chest", a * 0.35, ax)
+    mocap.bend(m, "neck", -a * 0.33, ax)
+    if nod:
+        mocap.bend(m, "neck", math.radians(nod) * w * 0.5)
+        mocap.bend(m, "head", math.radians(nod) * w * 0.5)
+    _keep_ankles(m, ank)
+
+
+def stiff_swing(m, knee_most, hike, out, th, c, half):
+    """The hurt (left) leg swung through stiff: in its swing (centred at angle c, eased over `half` either side) the
+    pelvis hitched up on the hurt side `hike` degrees (the trunk kept upright over it, the standing foot kept by IK),
+    the knee kept from bending past `knee_most` degrees, and the leg swung out `out` degrees from the hip (it goes round,
+    not through). Returns the knee's most bend in the swing before and after, degrees."""
+    r = m.rest
+    w = _bump(th, c, half)
+    ax = _fwd(m)
+    ank = _ankles(m)
+    h = math.radians(hike) * w
+    mocap.bend(m, "pelvis", h, ax)                      # (+ about forward raises his LEFT hip)
+    mocap.bend(m, "spine_01", -h, ax)
+    mocap.two_bone_ik(m, "r", ank["r"], np.ones(len(m)), m.heads())
+    mocap.two_bone_ik(m, "l", ank["l"], np.ones(len(m)), m.heads())
+    hd = m.heads()
+    th_, ca, ft = r.i("thigh_l"), r.i("calf_l"), r.i("foot_l")
+    up = hd[:, ca] - hd[:, th_]
+    lo = hd[:, ft] - hd[:, ca]
+    cosb = np.sum(up * lo, 1) / (np.linalg.norm(up, axis=1) * np.linalg.norm(lo, axis=1))
+    bend = np.degrees(np.arccos(np.clip(cosb, -1, 1)))
+    before = float((bend * (w > 0.5)).max())
+    less = np.maximum(bend - knee_most, 0.0) * w
+    hinge = np.cross(up, lo)
+    hinge /= np.maximum(np.linalg.norm(hinge, axis=1, keepdims=True), 1e-9)
+    G = mocap.axis_angle(hinge, -np.radians(less))      # (the calf turned back toward the thigh's line: straighter)
+    for b in mocap.subtree(r, "calf_l"):
+        m.W[:, b] = G @ m.W[:, b]
+    if out:
+        G2 = mocap.axis_angle(ax, np.radians(out) * w)   # (+ about forward swings a hanging left leg out to his left)
+        for b in mocap.subtree(r, "thigh_l"):
+            m.W[:, b] = G2 @ m.W[:, b]
+    hd = m.heads()
+    up = hd[:, ca] - hd[:, th_]
+    lo = hd[:, ft] - hd[:, ca]
+    cosb = np.sum(up * lo, 1) / (np.linalg.norm(up, axis=1) * np.linalg.norm(lo, axis=1))
+    after = float((np.degrees(np.arccos(np.clip(cosb, -1, 1))) * (w > 0.5)).max())
+    return round(before, 1), round(after, 1)
+
+
 def warp_uneven(m, share):
     """One step a little longer than the other: the loop's time bent by `share` of a step (a loop in, a loop out)."""
     N = len(m) - 1
@@ -523,6 +668,21 @@ def make_gait(spec, rest, verbose=True):
         arms(out, *spec["arms"])
     if spec.get("weary"):
         weary(out, *spec["weary"], th, mid)
+    if spec.get("hunch"):
+        hunch(out, spec["hunch"])
+    if spec.get("droop"):
+        droop(out, spec["droop"])
+    if spec.get("sway"):
+        sway(out, spec["sway"], th, mid)
+    if spec.get("sag"):
+        sag(out, spec["sag"], th, mid)
+    stiff_info = None
+    if spec.get("lurch"):
+        deg, nod, shift = spec["lurch"]
+        lurch(out, deg, nod, th, mid, mid * 1.15, shift)
+    if spec.get("stiff"):
+        knee_most, hike, swing_out = spec["stiff"]
+        stiff_info = stiff_swing(out, knee_most, hike, swing_out, th, mid + np.pi, (np.pi - mid) * 1.0)
     close(out)
     rep = {}
     mocap.foot_lock(out, stride, loop=True, report=rep, glide=spec.get("glide", 6), **kw)
@@ -542,6 +702,8 @@ def make_gait(spec, rest, verbose=True):
             "speed_as_captured": round(stride / spec.get("reach", 1.0) / (n_nat / FPS), 3)}
     if favoured:
         info["favoured"] = favoured
+    if stiff_info:
+        info["hurt_knee_swing_deg"] = {"before": stiff_info[0], "after": stiff_info[1]}
     if verbose:
         print(spec["name"], info, flush=True)
     return out, info
@@ -749,7 +911,8 @@ def clip_of(m, info, spec):
                             for k, v in info.get("contacts", {}).items() if k in ("l", "r") and isinstance(v, dict)}
     c["build"]["laid_over"] = {k: spec[k] for k in ("frames", "mirror", "uneven", "reach", "scuff", "bounce", "crouch",
                                                     "tiptoe", "roll", "arms", "weary", "head", "span", "period",
-                                                    "stumble", "favour", "heel_clear", "ease_toes", "knee_side")
+                                                    "stumble", "favour", "heel_clear", "ease_toes", "knee_side", "hunch",
+                                                    "droop", "sway", "sag", "lurch", "stiff", "h_tol", "v_tol")
                             if k in spec}
     return c
 

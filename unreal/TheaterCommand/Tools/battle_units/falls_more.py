@@ -27,13 +27,16 @@ toward keyed joint poses with a wounded man's strength, as falls.py's crawl_deat
   - events only for what really comes down (a knee already on the ground at the hit is not a knee_down);
   - the fall runs until he is still (no cut at a fixed length while he is still moving); once his act is over and
     his trunk lies slow, the parts lying on the ground get a stronger soil-and-cloth damping (see Touch), so an arm
-    pressed under him does not go on pushing him along for seconds;
+    pressed under him does not go on pushing him along for seconds, and a second later the whole of him; and in the
+    last REST_END of the longest time a fall may run, whatever still rocks (a leg folded under him, caught between
+    his weight and the ground) is calmed and each joint held as it then is, so every clip ends still;
   - a blow can roll a lying man (a recipe's `roll`: see roll_him);
   - the reaction test does not count the ragdoll's own lift of the man clear of the ground at its start;
   - a man the recipe leaves outside the checks is made again with its tries (nudged blows; die_cover_f also leans
     him the other way), and the first try inside them is kept, else the nearest, its faults reported;
-  - die_prone_f and die_cover_f must end on his front (`face_down`), as their act says; where every clip ends (front
-    down, roll) is in the checks of all seven.
+  - die_prone_d and die_cover_f must end on his front (`face_down`: "sinks back", "slumps forward"), a check and a
+    retry if not; where every clip ends (front down, roll) is in the checks of all seven (die_prone_f may end half on
+    his side, curled over the drawn-up knee: said in its checks, not required).
 Speed, not behaviour: np.cross on two 3-vectors is replaced, for the ragdoll's run, by the same three products and
 differences without numpy's axis shuffling (the same bits: checked on a whole fall, every frame equal), and --build
 keeps one pool over every (file, fall) so no worker waits at a file's end.
@@ -356,6 +359,8 @@ class Drive:
 #            its own; each: {"push": scale} and/or {"later": more blows}, {"later_own": more shoves of his own},
 #            {"drive": strength scale}, {"lean": his lean, die_cover_f's})
 #   face_down  he must end on his front (the chest's front at least 45 degrees down): a check, and a retry if not
+#   hold_r   die_prone_d: his right arm held this strong (in the pose he was hit in) while he rolls onto it
+#   sit      die_cover_f, a try's: False leaves out the drive that sits him back onto his heel
 #   hit      (part, change of speed) the round itself, for the `hit` block: the first blow's part and its way, level
 #            or from above (a lying man's heave up off the ground, or a man's jerk up from a blow, is his own and goes
 #            in `push` beside it; the round never comes from under the ground). die_cover_d's first blow is it.
@@ -364,35 +369,41 @@ class Drive:
 
 def plan_prone_d(c):
     """Struck in the left side: the blow rolls his chest up off it (the roll, the upper body most); his left hand is
-    drawn in and planted under that shoulder and pushes, the back twists that side up and the left knee comes up a
-    little, so he lies half on his right side over his right elbow a moment; then the arm gives, the back untwists and
-    he sinks back onto his front."""
+    drawn in and planted under that shoulder and pushes hard (to near a straight arm), the back twists that side up
+    and the left knee is drawn up and out beside him, so he lies half on his right side over his right elbow a
+    moment (the chest turned 40-60 degrees onto that side, about 0.6-1 s); then the arm gives, the back untwists and
+    he sinks back onto his front. (The first take of this, a weaker push and twist and the knee barely drawn up,
+    turned his chest only 12-14 degrees and fell back at once: it did not read as a roll.)"""
     p = {}
     kc = c.rd.pix["chest"]
     down = c.frame("chest") @ np.array((1.0, 0.0, 0.0))          # (the chest's front: toward the ground, lying)
     out_r = c.frame("chest") @ np.array((0.0, 1.0, 0.0))
     sh = c.x0[kc] + c.R0[kc] @ c.j["upperarm_l"]["rp"]
     far = c.rc.get("push_len", 0.34)
+    k = c.rc.get("arm_k", 1.0)                       # (the push's and the twist's strength, a scale)
     cu0, ce0, m0 = c.reach("l", sh + 0.20 * down - 0.06 * out_r, normal=down, fore=down, seed=1)
     cu1, ce1, m1 = c.reach("l", sh + far * down - 0.04 * out_r, normal=down, fore=down, seed=2)
     c.note["plant_miss_cm_l"] = round(m0 * 100.0, 1)
     c.note["push_miss_cm_l"] = round(m1 * 100.0, 1)
     # (the arm does not just go dead under him, a strut: it gives, the hand sliding out forward again as he sinks)
-    p["upperarm_l"] = [(0.04, None, None), (0.25, cu0, 2.4), (0.55, cu1, 3.4), (0.85, cu1, 3.0), (1.2, None, 0.8),
-                       (1.55, None, 0.0)]
-    p["lowerarm_l"] = [(0.04, None, None), (0.25, (ce0, 0.0, 0.0), 2.4), (0.55, (ce1, 0.0, 0.0), 3.4),
-                       (0.85, (ce1, 0.0, 0.0), 3.0), (1.2, None, 0.8), (1.55, None, 0.0)]
+    p["upperarm_l"] = [(0.04, None, None), (0.25, cu0, 2.4 * k), (0.55, cu1, 3.4 * k), (0.85, cu1, 3.0 * k),
+                       (1.2, None, 0.8), (1.55, None, 0.0)]
+    p["lowerarm_l"] = [(0.04, None, None), (0.25, (ce0, 0.0, 0.0), 2.4 * k), (0.55, (ce1, 0.0, 0.0), 3.4 * k),
+                       (0.85, (ce1, 0.0, 0.0), 3.0 * k), (1.2, None, 0.8), (1.55, None, 0.0)]
     p["hand_l"] = [(0.04, None, None), (0.25, (-40.0, 0.0, 0.0), 2.0), (0.85, (-50.0, 0.0, 0.0), 2.0),
                    (1.2, (-20.0, 0.0, 0.0), 0.5), (1.55, (-20.0, 0.0, 0.0), 0.0)]
-    for n, a in (("spine_01", 11.0), ("spine_02", 10.0), ("chest", 10.0)):
+    tw = c.rc.get("twist", 10.0)
+    for n, a in (("spine_01", 1.1 * tw), ("spine_02", tw), ("chest", tw)):
         sg = c.way(n, 2, (0.0, -1.0, 0.0), (0.0, 0.0, 1.0))       # (the twist that lifts his left side)
-        p[n] = [(0.02, None, 0.8), (0.3, c.A(n, twist=sg * a), 1.3), (0.85, c.A(n, twist=sg * a), 1.2),
+        p[n] = [(0.02, None, 0.8), (0.3, c.A(n, twist=sg * a), 1.3 * k), (0.85, c.A(n, twist=sg * a), 1.2 * k),
                 (1.2, None, 1.4), (1.9, None, 0.6), (2.5, None, 0.0)]
-    # (the left knee comes up a little as he rolls, and goes back down as he sinks: no recovery position)
-    p["thigh_l"] = [(0.05, None, None), (0.45, c.D("thigh_l", flex=25.0, side=6.0), 0.4),
-                    (0.9, c.D("thigh_l", flex=25.0, side=6.0), 0.3), (1.25, None, 0.6), (1.9, None, 0.4),
+    # (the left knee is drawn up and out beside him as he rolls, propping him on his side, and lets go as he sinks;
+    # he ends with it drawn up a little, as it falls)
+    kf, ks, kc_, kst = c.rc.get("knee", (25.0, 6.0, 45.0, 0.4))
+    p["thigh_l"] = [(0.05, None, None), (0.45, c.D("thigh_l", flex=kf, side=ks), kst),
+                    (0.9, c.D("thigh_l", flex=kf, side=ks), 0.75 * kst), (1.25, None, 0.6), (1.9, None, 0.4),
                     (2.4, None, 0.0)]
-    p["calf_l"] = [(0.05, None, None), (0.45, c.A("calf_l", flex=45.0), 0.3), (0.9, c.A("calf_l", flex=45.0), 0.2),
+    p["calf_l"] = [(0.05, None, None), (0.45, c.A("calf_l", flex=kc_), 0.3), (0.9, c.A("calf_l", flex=kc_), 0.2),
                    (1.25, None, 0.3), (1.9, None, 0.2), (2.4, None, 0.0)]
     # (the right arm goes limp under him as he rolls onto it; as he sinks back it is drawn out forward again, so
     # it does not stay folded under his chest and roll him back onto his side)
@@ -520,23 +531,34 @@ def plan_cover_f(c):
         sg = c.way(n, 1, (0.0, 0.0, 1.0), (0.0, 1.0, 0.0))
         p[n] = [(0.1, None, None), (0.5, c.A(n, flex=20.0, side=sg * 4.0 * lean), 0.5),
                 (0.8, c.A(n, flex=22.0, side=sg * 5.0 * lean), 0.3), (1.1, c.A(n, flex=22.0), 0.0)]
-    p["calf_r"] = [(0.08, None, None), (0.6, c.A("calf_r", flex=137.0), 0.8), (0.9, c.A("calf_r", flex=137.0), 0.4),
-                   (1.3, c.A("calf_r", flex=125.0), 0.0)]
-    p["thigh_r"] = [(0.08, None, None), (0.6, c.D("thigh_r", flex=45.0), 0.6), (0.9, c.D("thigh_r", flex=50.0), 0.3),
-                    (1.3, c.D("thigh_r", flex=40.0), 0.0)]
+    if c.rc.get("sit", True):
+        # (a try may leave these out: a man with a heavy pack who sits back onto his heel can go over backwards)
+        p["calf_r"] = [(0.08, None, None), (0.6, c.A("calf_r", flex=137.0), 0.8), (0.9, c.A("calf_r", flex=137.0), 0.4),
+                       (1.3, c.A("calf_r", flex=125.0), 0.0)]
+        p["thigh_r"] = [(0.08, None, None), (0.6, c.D("thigh_r", flex=45.0), 0.6), (0.9, c.D("thigh_r", flex=50.0), 0.3),
+                        (1.3, c.D("thigh_r", flex=40.0), 0.0)]
     p["thigh_l"] = [(0.08, None, None), (0.6, c.A("thigh_l", flex=108.0), 0.3), (1.0, c.A("thigh_l", flex=108.0), 0.0)]
     return p
 
 
+TRIES = [dict(), dict(push=1.25), dict(push=0.85, drive=1.12)]
+TRIES_D = TRIES + [dict(push=0.7)]
+
 MORE = [
     # ---- lying. Struck in the left side from his left front: the blow and his own heave roll him (the upper body
-    # most) and he pushes off the ground with his left hand, half onto his right side; then the arm gives, the back
-    # untwists and he sinks back onto his front (a last shove of his own weight, 1.15 s, back toward it)
+    # most, the hips with it) and he pushes off the ground hard with his left hand, the left knee drawn up and out,
+    # half onto his right side (that arm, under him, held a little: limp, it was wrung 90 degrees and more past a
+    # shoulder's turn); then the arm gives, the back untwists and he sinks back onto his front (a last shove of his
+    # own weight, 1.15 s, back toward it)
     dict(name="die_prone_d", stance="prone", kind="side", start=("fire_prone", 0.5),
          push=[(0.0, "chest", (-0.3, 0.7, 0.6)), (0.0, "head", (-0.2, 0.4, 0.2)),
                (1.15, "chest", (0.0, -0.45, -0.25)), (1.15, "upperarm_l", (0.0, -0.3, -0.35))],
-         roll=dict(w=4.2, to="right", share={"pelvis": 0.3, "spine_01": 0.55, "spine_02": 0.85, "thigh": 0.15,
-                                             "calf": 0.08, "foot": 0.05}), push_len=0.36,
+         roll=dict(w=6.0, to="right", share={"pelvis": 0.6, "spine_01": 0.8, "spine_02": 0.85, "thigh": 0.15,
+                                             "calf": 0.08, "foot": 0.05}), push_len=0.55, arm_k=2.0, twist=16.0,
+         knee=(60.0, 20.0, 80.0, 0.7),
+         # (the radio man, the set on his back, stays on his side after the three usual tries: a softer blow, a
+         # smaller roll, lets him sink back)
+         tries=TRIES_D,
          hit=("chest", (-0.3, 0.7, 0.0)), hold_r=1.0,
          tone={"legs": (0.3, 0.4), "trunk": (0.6, 0.5), "neck": (0.4, 0.4), "arms": (0.0, 0.1)},
          plan=plan_prone_d, release=0.04, throw=(0.4, -0.5, 0.3), t_min=2.8, t_max=6.0, face_down=True),
@@ -587,9 +609,12 @@ MORE = [
          tone={"legs": (0.0, 0.12), "trunk": (0.0, 0.15), "neck": (0.0, 0.1), "arms": (0.0, 0.08)},
          hit=("chest", (-3.2, 0.2, 0.0)),
          release=0.03, throw=(0.8, 0.4, 1.4), t_min=1.2, t_max=5.0),
-    # ---- in cover, up at it. Struck in the head from in front: it snaps back, and he folds forward and down
+    # ---- in cover, up at it. Struck in the head from in front: it snaps back, and he folds forward and down (his own
+    # weight going forward as the head snaps back, 0.32 s: without it some men's bodies, JAP's, went over backwards
+    # off the knee and the radio man's onto his side)
     dict(name="die_cover_f", stance="cover", kind="forward", start=("fire_kneel", 1.3),
          push=[(0.0, "head", (-1.5, 0.15, 0.3))],
+         later_own=[(0.32, "chest", (0.8, 0.0, -0.1)), (0.32, "spine_02", (0.4, 0.0, 0.0))],
          tone={"legs": (0.2, 0.5), "trunk": (0.04, 0.2), "neck": (0.0, 0.04), "arms": (0.0, 0.1)},
          hit=("head", (-1.5, 0.15, 0.0)),
          plan=plan_cover_f, release=0.1, throw=(0.3, 0.2, 0.0), t_min=1.6, t_max=5.5, travel=True, face_down=True,
@@ -597,7 +622,6 @@ MORE = [
          # (USA, JAP); leaning him the other way, and a softer blow that knocks him back less, put him on his face)
          tries=[dict(), dict(lean=-1.2), dict(push=0.5, lean=-1.2)]),
 ]
-TRIES = [dict(), dict(push=1.25), dict(push=0.85, drive=1.12)]
 
 
 def recipes(only=None):
@@ -738,8 +762,9 @@ def changed(rc, tr):
     r["later_own"] = list(rc.get("later_own", [])) + list(tr.get("later_own", []))
     r["drive_scale"] = tr.get("drive", 1.0)
     r["push_scale"] = k
-    if "lean" in tr:
-        r["lean"] = tr["lean"]
+    for k in ("lean", "sit"):
+        if k in tr:
+            r[k] = tr[k]
     return r
 
 
@@ -909,8 +934,8 @@ ABOUT_EACH = {
                    "knee under him folding, the trunk held up and sagging to his right, that shoulder dragging down), "
                    "then tips over",
     "die_cover_e": "a hard blow to the chest from in front throws him over backwards, knees bent",
-    "die_cover_f": "struck in the head, it snaps back and he folds forward and down where he is (joints driven: back "
-                   "and hips folding as the knee under him gives)",
+    "die_cover_f": "struck in the head, it snaps back and he folds forward and down where he is (his weight going "
+                   "forward; joints driven: back and hips folding as the knee under him gives)",
 }
 
 
@@ -1141,13 +1166,14 @@ def front_check(man, c):
 
 
 def passes(ch):
-    """Whether a try is inside the checks a retry can mend (flat, still, reacting, the first key, the travel).
-    Still is read from the baked keys (the last 0.2 s); `came_to_rest` (ragdoll.py's own measure held for SETTLE
-    before the longest time allowed) is kept beside it as a note: a hand pressed under him can tremble on unseen."""
+    """Whether a try is inside the checks a retry can mend (flat, still, reacting, the first key, the travel, the
+    rifle on the ground, opening apart from the file's own falls of its row). Still is read from the baked keys (the
+    last 0.2 s); `came_to_rest` (ragdoll.py's own measure held for SETTLE before the longest time allowed) is kept
+    beside it as a note: a hand pressed under him can tremble on unseen."""
     g = ch["ground"]
     return bool(g["flat"] and g["still"] and ch["reacts"] and ch["first_key"]["ok"]
                 and g["under_1cm"] <= 60 and ch.get("travel", {"ok": True})["ok"] and front_ok(ch)
-                and (g["rifle"] is None or g["rifle"]["on_ground"]))
+                and (g["rifle"] is None or g["rifle"]["on_ground"]) and not ch.get("too_like_old"))
 
 
 def score(ch):
@@ -1155,7 +1181,29 @@ def score(ch):
     return ((0 if g["flat"] else 4) + (0 if g["still"] else 2) + (0 if ch["reacts"] else 2)
             + (0 if ch.get("travel", {"ok": True})["ok"] else 3) + (0 if ch["first_key"]["ok"] else 1)
             + (0 if front_ok(ch) else 3)
-            + (0 if g["under_1cm"] <= 60 else 1))
+            + (0 if g["under_1cm"] <= 60 else 1)
+            + (0 if g["rifle"] is None or g["rifle"]["on_ground"] else 1)
+            + (1 if ch.get("too_like_old") else 0))
+
+
+_OLD_OPEN = {}
+
+
+def too_like_old(man, rc, c):
+    """The file's own falls of the new clip's row (not the seven: they are made beside it) that it opens too like,
+    by the opening table's rule at 0.3 s: so a try can mend it, as it mends the others (the full table, the seven
+    against each other too, is made once all seven are in)."""
+    key = (id(man), rc["stance"])
+    if key not in _OLD_OPEN:
+        row = rows_of(man.data.get("deaths", {})).get(rc["stance"], [])
+        _OLD_OPEN[key] = {n: opening(man, man.clips[n]) for n in row if n in man.clips and n not in SEVEN}
+    o = opening(man, c)
+    out = []
+    for n, oo in _OLD_OPEN[key].items():
+        dr, mv = pair_diff(o, oo, 0.3)
+        if not (apart(dr) and apart(mv)):
+            out.append(n)
+    return out
 
 
 # ------------------------------------------------------------------------------------------------ where he was struck
@@ -1273,6 +1321,7 @@ _W = {}
 
 def _init(path):
     F._BODY.clear()                                  # (falls.rom_check keys its body by id(man): a new man may reuse it)
+    _OLD_OPEN.clear()                                # (and too_like_old the same)
     F._init(path)
     _W["m"], _W["rd"], _W["path"] = F._W["m"], F._W["rd"], path
 
@@ -1291,6 +1340,7 @@ def _job(rc):
         n_run = i + 1
         info["blows"], info["try"] = tr.get("push", 1.0), i
         ch = checks_of(m, rd, rc, c, info)
+        ch["too_like_old"] = too_like_old(m, rc, c)
         ok = passes(ch)
         if ok or best is None or score(ch) < best[3]:
             best = (c, ch, i, score(ch))

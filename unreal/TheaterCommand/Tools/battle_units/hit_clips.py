@@ -34,6 +34,7 @@ The output is the same bytes every run.
 import json
 import math
 import os
+import re
 import sys
 import time
 
@@ -432,6 +433,43 @@ def arm_ease(body, lq, mv, s, turn_hand=True, swivel=True, slack=0.0):
     return lq
 
 
+def elbow_out(body, lq, mv, s, most=30.0):
+    """An elbow tucked under his back or into his side (as rom reads them, el_back and el_torso): the upper arm swung
+    out from his side, the least (in 3 degree steps, at most `most`) that frees it; a pose with none is unchanged."""
+    man = body.man
+    bad = lambda l_: sum(o for k_, s2, o in pose_rom(body, [(l_, mv)]) if s2 == s and k_ in ("el_back", "el_torso"))
+    best = (bad(lq), lq)
+    if best[0] <= 0.0:
+        return lq
+    G, X = man.fk(lq, mv)
+    out = G[man.b("chest")] @ np.array((0.0, -1.0 if s == "l" else 1.0, 0.0))
+    ax = np.cross(unit(X[man.b("lowerarm_" + s)] - X[man.b("upperarm_" + s)]), out)
+    if np.linalg.norm(ax) < 1e-6:
+        return lq
+    for a in np.arange(3.0, most + 1e-6, 3.0):
+        l2 = turn_world(man, lq.copy(), mv, "upperarm_" + s, R_axis(unit(ax), float(a)))
+        v = bad(l2)
+        if v < best[0]:
+            best = (v, l2)
+        if v <= 0.0:
+            break
+    return best[1]
+
+
+def elbow_tucked(body, pose_, s, deg=8.0):
+    """How far (cm, as rom reads el_back and el_torso) his elbow would be under his back or in his side were the upper
+    arm swung `deg` degrees in toward his side: 0 where an arm lying out on the ground has that much room."""
+    man = body.man
+    lq, mv = pose_
+    G, X = man.fk(lq, mv)
+    out = G[man.b("chest")] @ np.array((0.0, -1.0 if s == "l" else 1.0, 0.0))
+    ax = np.cross(unit(X[man.b("lowerarm_" + s)] - X[man.b("upperarm_" + s)]), out)
+    if np.linalg.norm(ax) < 1e-6:
+        return 0.0
+    l2 = turn_world(man, lq.copy(), mv, "upperarm_" + s, R_axis(unit(ax), -deg))
+    return sum(o for k_, s2, o in pose_rom(body, [(l2, mv)]) if s2 == s and k_ in ("el_back", "el_torso"))
+
+
 def behind_ease(body, lq, mv, s):
     """An upper arm lying further behind his body than a shoulder lets it (a man on his back on his pack, his arms
     out on the ground): brought forward to where it can be; the arm rests propped, not flat."""
@@ -465,6 +503,101 @@ def behind_ease(body, lq, mv, s):
         lq = l2 if u2 @ out > u @ out else turn_world(man, lq, mv, "upperarm_" + s,
                                                       R_axis(G[ch] @ unit(ax), -(over + 1.0)))
     return lq
+
+
+def pose_rom(body, poses):
+    """rom.py's faults (the measures over their limits, not the speeds) in a pose or a short run of poses (locals),
+    as [(measure, side, over)]; [] where rom.py is not at hand."""
+    rom = rom_mod()
+    if rom is None:
+        return []
+    man = body.man
+    M = np.diag((1.0, -1.0, 1.0))
+    if not hasattr(body, "rom_body"):
+        ref = rom.Body.of_rest()
+        body.rom_body = rom.Body({n: M @ man.H[man.b(n)] for n in rom.CORE if n in man.ix}, ref.hands)
+    Ds, Hs = [], []
+    for lq, mv in poses:
+        G, X = man.fk(lq, mv)
+        Ds.append([M @ G[man.b(k)] @ M for k in rom.CORE])
+        Hs.append([M @ X[man.b(k)] for k in rom.CORE])
+    if len(Ds) == 1:
+        Ds, Hs = Ds * 2, Hs * 2
+    rep = rom.check(rom.Poses(np.array(Ds), np.array(Hs), 60.0, rom.CORE), body=body.rom_body)
+    return [(r["key"], r["side"], float(r["over"])) for r in rep["faults"]]
+
+
+def rom_values(body, pose_):
+    """rom.py's measures of one pose (locals): {measure_side: value}; {} where rom.py is not at hand."""
+    rom = rom_mod()
+    if rom is None:
+        return {}
+    man = body.man
+    M = np.diag((1.0, -1.0, 1.0))
+    if not hasattr(body, "rom_body"):
+        ref = rom.Body.of_rest()
+        body.rom_body = rom.Body({n: M @ man.H[man.b(n)] for n in rom.CORE if n in man.ix}, ref.hands)
+    G, X = man.fk(*pose_)
+    D = [M @ G[man.b(k)] @ M for k in rom.CORE]
+    Hh = [M @ X[man.b(k)] for k in rom.CORE]
+    rep = rom.check(rom.Poses(np.array([D, D]), np.array([Hh, Hh]), 60.0, rom.CORE), body=body.rom_body)
+    return {k: float(v[0]) for k, v in rep["series"].items()}
+
+
+FLINCH_ANKLE = 24.0            # (degrees: the most a flinch bends an ankle up, as rom.py reads it, short of its 25)
+WRIST_LIM = {"wr_dev": (-30.0, 20.0), "wr_flex": (-65.0, 75.0)}     # (rom.py's: ulnar/radial, extension/flexion)
+
+
+def wrist_swivel(body, lq, mv, s, margin=0.3, step=1.5, most=36.0):
+    """A wrist bent past a living wrist's range (as rom.py reads it) by a hand held where it is: the elbow swung about
+    the line from shoulder to wrist, the hand keeping its place and turn, the least (in `step` degree steps) that
+    brings the wrist back inside, and puts no other part of that arm out of its range; a wrist inside is unchanged."""
+    def wrist_over(v):
+        o = 0.0
+        for k_, (lo, hi) in WRIST_LIM.items():
+            x = v.get(k_ + "_" + s, float("nan"))
+            if x == x:
+                o += max(0.0, x - (hi - margin)) + max(0.0, (lo + margin) - x)
+        return o
+    v0 = rom_values(body, (lq, mv))
+    o0 = wrist_over(v0)
+    if not v0 or o0 <= 0.0:
+        return lq
+    arm_keys = ("sh_", "el_", "pron", "sup")
+    others0 = sum(o for k_, s2, o in pose_rom(body, [(lq, mv)]) if s2 == s and k_.startswith(arm_keys))
+    best = (o0, lq)
+    for k in range(1, int(most / step) + 1):
+        done = []
+        for sg in (1.0, -1.0):
+            l2 = swung_arm(body, lq, mv, s, sg * k * step)
+            v = rom_values(body, (l2, mv))
+            o = wrist_over(v)
+            if o < best[0] - 1e-6 and sum(x for k_, s2, x in pose_rom(body, [(l2, mv)])
+                                          if s2 == s and k_.startswith(arm_keys)) <= others0 + 1e-6:
+                best = (o, l2)
+                if o <= 0.0:
+                    done.append((v.get("sh_elev_" + s, 0.0), sg, l2))
+        if done:
+            # (of the two ways that do, the one that leaves the elbow lower)
+            return min(done, key=lambda x: (x[0], -x[1]))[2]
+    return best[1]
+
+
+def first_in_range(body, makers, also=None):
+    """The first pose of `makers` (functions making a pose, the one meant first) that a living body can be in (rom.py
+    finds nothing over its limits, nor `also`, a further test giving how far over a pose is); else the one least
+    over."""
+    best = None
+    for mk in makers:
+        p = mk()
+        f = pose_rom(body, [p])
+        more = also(p) if also is not None else 0.0
+        if not f and more <= 0.0:
+            return p
+        over = sum(x[2] for x in f) + more
+        if best is None or over < best[0]:
+            best = (over, p)
+    return best[1]
 
 
 def elbow_ease(body, lq, mv, s, least=3.0):
@@ -667,7 +800,7 @@ STANCE = {"stand": dict(base="fire_stand", travel=1.0, lean=1.0),
           "run": dict(base="run", travel=0.8, lean=0.9)}
 RUN_BREAK = 0.0              # (s: the legs stay on the run's own keys: the game moves the root at the run's speed, so a
 #                              leg played behind the run would skate its planted foot)
-RUN_DIP = 0.025              # (m: the stumble: his pelvis drops, his knees give, his feet stay where the run has them)
+RUN_DIP = 0.045              # (m: the stumble: his pelvis drops, his knees give, his feet stay where the run has them)
 GUN_LAG = 0.22               # (the weapon's share of the jolt it is left behind by, at first)
 
 
@@ -742,6 +875,25 @@ def flinch_pose(body, stance, way, t):
                 mv[pe] = mv[pe] + (K + unit(X[th] - K) * Ln - X[th])
         for s in "lr":
             ik2(man, lq, mv, LEG[s], base.foot[s][1], end_R=base.foot[s][0])
+        # (his knees give no further than his ankles let them: where the drop would bend an ankle up past its range
+        # (a man who stands crouched already), his pelvis is let down only as far as it can go)
+        most = {s: max(FLINCH_ANKLE, ankle_deg(body, base.lq, s) + 0.3) for s in "lr"}
+        over = lambda l_: max(ankle_deg(body, l_, s) - most[s] for s in "lr")
+        if over(lq) > 0.0:
+            lo_, hi_ = 0.0, 0.08
+            for _ in range(12):
+                mid = 0.5 * (lo_ + hi_)
+                l2, m2 = lq.copy(), mv.copy()
+                m2[pe] = m2[pe] + Z_ * mid
+                for s in "lr":
+                    ik2(man, l2, m2, LEG[s], base.foot[s][1], end_R=base.foot[s][0])
+                if over(l2) > 0.0:
+                    lo_ = mid
+                else:
+                    hi_ = mid
+            mv[pe] = mv[pe] + Z_ * hi_
+            for s in "lr":
+                ik2(man, lq, mv, LEG[s], base.foot[s][1], end_R=base.foot[s][0])
     # (the weapon rides his chest as the base has it, left behind a little at first; his hands stay on it)
     G, X = man.fk(lq, mv)
     c = man.b("chest")
@@ -749,6 +901,9 @@ def flinch_pose(body, stance, way, t):
     k = GUN_LAG * max(lag, 0.0) / 0.6
     Gw, Xw = qslerp(Gw, base.G[body.wi], k), Xw * (1 - k) + base.X[body.wi] * k
     lq, mv = hold(body, lq, mv, (Gw, Xw), base.rel)
+    # (a wrist the hold bends past its range: the elbow swung, the hand where it holds)
+    for s in "lr":
+        lq = wrist_swivel(body, lq, mv, s)
     lq, mv = keep_prop(body, lq, mv, base.prop)
     lq = steady_whip(body, lq, mv, base.G)
     return lq, mv
@@ -790,6 +945,9 @@ def duck(t, L=PRONE_LONG):
 
 
 HAND_T = (0.04, 0.21, 0.30, 0.46)
+TURN_T = (0.04, 0.25, 0.26, 0.48)   # (s: his left wrist's turn from the grip to the helmet and back)
+HELM_YAW = 0.0               # (degrees: his fingers on the helmet turned about its crown from across it)
+PRONE_SHARE = 0.6            # (hit_flinch_prone: how much of the left wrist's twist on its way to the helmet the forearm takes)
 
 
 def gun_off(t):
@@ -816,9 +974,11 @@ def hand_up(t, L=PRONE_LONG):
 
 
 def hand_turn(t, L=PRONE_LONG):
-    """How far his left hand has turned from its grip to lying on the helmet: half even, half eased, so the wrist
-    turns at a steady speed, not all at once in the middle."""
-    a, b, c, d = HAND_T
+    """How far his left hand has turned from its grip to lying on the helmet: mostly even, a little eased, so the
+    wrist turns at a steady speed, not all at once in the middle; over TURN_T, a little longer than the hand takes to
+    get there and back (HAND_T), so it is still settling as it comes onto the steel and starts back a little before
+    it leaves."""
+    a, b, c, d = TURN_T
     if t <= a or t >= d:
         return 0.0
     if t < b:
@@ -827,7 +987,7 @@ def hand_turn(t, L=PRONE_LONG):
         return 1.0
     else:
         u = 1.0 - (t - c) / (d - c)
-    return 0.5 * u + 0.5 * sm(u)
+    return 0.75 * u + 0.25 * sm(u)
 
 
 HEAD_DOWN = 40.0             # (degrees his head and neck go down at most, lying; stopped short of ground, fist, stock)
@@ -887,9 +1047,10 @@ def over_crown(body, G, X, mask, clear=0.005, near=0.02):
     return max(0.0, need)
 
 
-def prone_flinch_pose(body, t, full=False):
+def prone_flinch_pose(body, t, full=False, probe=False):
     """`full`: the pose with his head all the way down and his hand on his helmet, its arm eased into a living
-    arm's ranges: where the hand's way up and back is taken from."""
+    arm's ranges: where the hand's way up and back is taken from. `probe`: the pose before his elbows are kept off
+    the ground (what elbow_env reads)."""
     man = body.man
     lq, mv = body.pose("fire_prone", 0.0)
     L = PRONE_LONG
@@ -1033,6 +1194,7 @@ def prone_flinch_pose(body, t, full=False):
     up = G[h] @ Z_
     fwd = unit(G[h] @ np.array((-0.55, 0.75, 0.0)))               # (his fingers lie across the crown, toward its right)
     fwd = unit(fwd - up * (fwd @ up) * 0.6)
+    fwd = R_axis(up, HELM_YAW) @ fwd
     Gh_helm = frame_map(A["d0"], A["n0"], fwd, -up)               # (palm onto the helmet)
     wrist = crown + up * 0.035 - Gh_helm @ (A["d0"] * 0.075)
     U_, F_, H_ = (b(n) for n in ARM["l"])
@@ -1063,9 +1225,14 @@ def prone_flinch_pose(body, t, full=False):
     Gh = qslerp(Gh_grip, G[h] @ Rh, u)
     wp = u
     pole = unit(unit(base.X[F_] - 0.5 * (base.X[U_] + base.X[H_])) * (1 - wp) + (G[c_] @ pole_c) * wp)
-    ik2(man, lq, mv, ARM["l"], T, pole=pole, end_R=Gh, share=0.4)
-    if hu > 0.05:
-        lq = arm_ease(body, lq, mv, "l", swivel=False, slack=3.0)
+    ik2(man, lq, mv, ARM["l"], T, pole=pole, end_R=Gh, share=PRONE_SHARE)
+    if hu > 0.0 or u > 0.0:
+        # (its wrist eased into its range by degrees as the hand leaves the grip and turns, not all at once)
+        le = arm_ease(body, lq.copy(), mv, "l", swivel=False, slack=3.0)
+        w_ = min(1.0, 3.0 * max(hu, u))
+        for i in range(man.nb):
+            if not np.array_equal(le[i], lq[i]):
+                lq[i] = qslerp(lq[i], le[i], w_)
     if u > 0.05:
         # (his hand lies on the steel, not in it, and passes over its brim, not through it)
         G, X = man.fk(lq, mv)
@@ -1081,15 +1248,99 @@ def prone_flinch_pose(body, t, full=False):
     lq[fl] = qslerp(base.lq[fl], flat_f, hu)
     lq[tl] = qslerp(base.lq[tl], flat_t, hu)
     # (his elbows on the ground as his shoulders go down: swung out about shoulder-to-wrist, the hands where they are,
-    # never pressed deeper than fire_prone has them)
+    # never pressed deeper than fire_prone has them; each always the same way, and no faster than ELBOW_DEG_S)
+    if probe:
+        return lq, mv
+    env = elbow_env(body)
     for s in "lr":
-        fz0 = zone_low(body, base.lq, base.mv, body.Z["fore_" + s])[0]
-        lq = elbow_clear(body, lq, mv, s, min(fz0, 0.004))
+        g_, a_, sg_ = env[s]
+        ang = float(np.interp(t, g_, a_))
+        if ang > 1e-3:
+            lq = swung_arm(body, lq, mv, s, sg_ * ang)
     if body.armed:
         lq, mv = gun_rides(body, lq, mv, base.rel["r"])
     lq, mv = keep_prop(body, lq, mv, base.prop)
     lq = steady_whip(body, lq, mv, base.G)
     return lq, mv
+
+
+ELBOW_GIVE = (0.0, 0.008, 0.016, 0.024)   # (m: how far hit_flinch_prone may let an elbow into the ground, in turn)
+ELBOW_DEG_S = 540.0          # (degrees a second: the most hit_flinch_prone swings an elbow out to keep it off the ground)
+
+
+def swung_arm(body, lq, mv, s, ang):
+    """Arm s swung `ang` degrees about the line from its shoulder to its wrist, the hand keeping its place and turn."""
+    man = body.man
+    U_, F_, H_ = (man.b(n) for n in ARM[s])
+    G, X = man.fk(lq, mv)
+    l2 = turn_world(man, lq.copy(), mv, ARM[s][0], R_axis(unit(X[H_] - X[U_]), ang))
+    l2[H_] = man.fk(l2, mv)[0][F_].T @ G[H_]
+    return l2
+
+
+def elbow_need(body, lq, mv, s, floor, sg, most=45.0, step=1.0):
+    """The least swing (degrees, the way sg) of arm s about shoulder-to-wrist that keeps its forearm at or over
+    `floor`; where none up to `most` does, the one that brings it highest."""
+    mask = body.Z["fore_" + s]
+    z = zone_low(body, lq, mv, mask)[0]
+    if z >= floor - 2e-4:
+        return 0.0
+    best = (z, 0.0)
+    for k in range(1, int(most / step) + 1):
+        z = zone_low(body, swung_arm(body, lq, mv, s, sg * k * step), mv, mask)[0]
+        if z >= floor - 2e-4:
+            return k * step
+        if z > best[0]:
+            best = (z, k * step)
+    return best[1]
+
+
+def elbow_env(body):
+    """hit_flinch_prone's elbow swings, found once: for each arm the way that needs the least, and at each 60th of a
+    second how far (at least what keeps the forearm off the ground, swung sooner and back later, never faster than
+    ELBOW_DEG_S; from and back to none at the ends, so at the very first frames a little less than that)."""
+    key = ("elbow_env",)
+    if key in body.poses:
+        return body.poses[key]
+    man = body.man
+    L = PRONE_LONG
+    g = np.array(dense_times(L))
+    base = body.pose("fire_prone", 0.0)
+    poses = [prone_flinch_pose(body, float(t), probe=True) for t in g]
+    out = {}
+    arm_keys = ("sh_", "el_", "pron", "sup", "wr_")
+
+    def env_of(need):
+        a = need.copy()
+        for k in range(1, len(g) - 1):
+            a[k] = max(a[k], a[k - 1] - ELBOW_DEG_S * (g[k] - g[k - 1]))
+        for k in range(len(g) - 2, 0, -1):
+            a[k] = max(a[k], a[k + 1] - ELBOW_DEG_S * (g[k + 1] - g[k]))
+        return np.minimum(a, ELBOW_DEG_S * np.minimum(g, L - g))
+
+    def over(s, a, sg):
+        ps = [(swung_arm(body, lq, mv, s, sg * x) if x > 1e-3 else lq, mv) for x, (lq, mv) in zip(a, poses)]
+        return sum(o for k_, s2, o in pose_rom(body, ps) if s2 == s and k_.startswith(arm_keys))
+    for s in "lr":
+        fl = min(zone_low(body, base[0], base[1], body.Z["fore_" + s])[0], 0.004)
+        # (kept off the ground where a living arm can be swung so; where it cannot, his elbow let down into the soft
+        # ground a little (ELBOW_GIVE at the most) rather than his shoulder or wrist turned past their range)
+        best = None
+        for give in ELBOW_GIVE:
+            needs = {sg: np.array([elbow_need(body, lq, mv, s, fl - give, sg) if 0.0 < t < L else 0.0
+                                   for t, (lq, mv) in zip(g, poses)]) for sg in (1.0, -1.0)}
+            for sg in sorted((1.0, -1.0), key=lambda x: (needs[x].max(), -x)):
+                a = env_of(needs[sg])
+                o = over(s, a, sg) if a.max() > 1e-3 else 0.0
+                if best is None or o < best[0] - 1e-6:
+                    best = (o, a, sg)
+                if o <= 0.0:
+                    break
+            if best[0] <= 0.0:
+                break
+        out[s] = (g, best[1], best[2])
+    body.poses[key] = out
+    return out
 
 
 def elbow_clear(body, lq, mv, s, floor, most=45.0, step=1.0):
@@ -1768,8 +2019,11 @@ class Keys:
         return qslerp(Ga[bone], Gb[bone], u), Xa[bone] * (1 - u) + Xb[bone] * u
 
 
+WRIST_IN = 0.05              # (s: a wrist eased into its range from a clip's first or last key over this long)
+
+
 def play(body, keys, t, pins=(), grip=None, ground=True, clear=0.002, lift=True, limbs=True, wrists=True,
-         shin_first=False):
+         shin_first=False, one_turn=(), behind=True):
     """The pose at t of a keyed move: the keys' in-between; the limbs in `pins` [(limb, from, to)] (arm_l, arm_r,
     leg_l, leg_r) carried straight through the world between the keys there (a planted hand or foot stays planted);
     the weapon riding his right hand; and nothing left under the ground."""
@@ -1781,9 +2035,38 @@ def play(body, keys, t, pins=(), grip=None, ground=True, clear=0.002, lift=True,
     exact = any(abs(t - x) < 1e-6 for x in (keys.t[0], keys.t[-1]))
     if exact:
         return lq, mv
+    # (the first and last keys are played as they are, so a wrist turned into its range in between is turned so by
+    # degrees over WRIST_IN from either end, not all at once on the first frame)
+    w_in = sm(min(1.0, min(t - keys.t[0], keys.t[-1] - t) / WRIST_IN))
+
+    def wrist_eased(lq, s):
+        l2 = arm_ease(body, lq.copy(), mv, s, swivel=False, slack=3.0, turn_hand=wrists)
+        if w_in < 1.0:
+            for i in range(man.nb):
+                if not np.array_equal(l2[i], lq[i]):
+                    l2[i] = qslerp(lq[i], l2[i], w_in)
+        return l2
 
     def pinned(limb):
         return any(l == limb and t0 - 1e-6 <= t <= t1 + 1e-6 for l, t0, t1 in pins)
+
+    def hand_turn(limb, h, Ge):
+        # (a hand held on the ground keeps one turn while it bears, the mean of the keys' between the hold's first
+        # and last (each key's wrist eased into its range turns it a little, and a hand turned on its spot slides what
+        # touches); turned into it as it comes down over its first key gap, and out of it as it lifts over its last)
+        for l, t0, t1 in pins:
+            if l == limb and t0 - 1e-6 <= t <= t1 + 1e-6:
+                ks = [k for k in range(n) if t0 - 1e-6 <= keys.t[k] <= t1 + 1e-6]
+                if len(ks) < 3:
+                    return Ge
+                Rs = [keys.fk[k][0][h] for k in ks[1:-1]]
+                R = Rs[0]
+                for i, Ri in enumerate(Rs[1:], 2):
+                    R = qslerp(R, Ri, 1.0 / i)
+                a, b_ = keys.t[ks[1]], keys.t[ks[-2]]
+                w = 1.0 if a <= t <= b_ else sm((t - t0) / (a - t0)) if t < a else sm((t1 - t) / (t1 - b_))
+                return qslerp(Ge, R, w)
+        return Ge
 
     def knee_held(t, s_):
         # (a knee on the ground goes straight from where the hold's first key has it to where its last has it, not
@@ -1793,7 +2076,16 @@ def play(body, keys, t, pins=(), grip=None, ground=True, clear=0.002, lift=True,
             if l == "knee_" + s_ and t0 - 1e-6 <= t <= t1 + 1e-6:
                 a, c = keys.held(t0, ca)[1], keys.held(t1, ca)[1]
                 u = min(1.0, max(0.0, (t - t0) / max(t1 - t0, 1e-9)))
-                return a * (1 - u) + c * u
+                P = a * (1 - u) + c * u
+                # (its height, though, from each key's between: each was let down onto the ground for the way the
+                # thigh stands over it then, and the kneecap under a turning thigh sits higher or lower on the joint)
+                ks = [k for k in range(n) if t0 - 1e-6 <= keys.t[k] <= t1 + 1e-6]
+                for k0, k1 in zip(ks, ks[1:]):
+                    if keys.t[k0] - 1e-6 <= t <= keys.t[k1] + 1e-6:
+                        v = (t - keys.t[k0]) / max(keys.t[k1] - keys.t[k0], 1e-9)
+                        P[2] = keys.fk[k0][1][ca][2] * (1 - v) + keys.fk[k1][1][ca][2] * v
+                        break
+                return P
         return keys.held(t, ca)[1]
 
     def pin(limb):
@@ -1809,6 +2101,8 @@ def play(body, keys, t, pins=(), grip=None, ground=True, clear=0.002, lift=True,
             return
         chain = ARM[s_] if limb.startswith("arm") else LEG[s_]
         Ge, Xe = keys.held(t, man.b(chain[2]))
+        if limb in one_turn:
+            Ge = hand_turn(limb, man.b(chain[2]), Ge)
         knee = limb.startswith("leg") and pinned("knee_" + s_)
 
         def solve():
@@ -1825,7 +2119,8 @@ def play(body, keys, t, pins=(), grip=None, ground=True, clear=0.002, lift=True,
             Xe = Xe + Z_ * (clear - z)
             solve()
     for s in "lr":
-        lq = behind_ease(body, lq, mv, s)
+        if behind:
+            lq = behind_ease(body, lq, mv, s)
     # (a knee held on the ground: his pelvis at the height, and with two the roll, that lets the thighs reach them)
     Ks = {s: knee_held(t, s) for s in "lr" if pinned("knee_" + s)}
     if Ks:
@@ -1837,7 +2132,7 @@ def play(body, keys, t, pins=(), grip=None, ground=True, clear=0.002, lift=True,
         if not pinned("leg_" + s):
             lq = ankle_ease(body, lq, s)
         if not pinned("arm_" + s):
-            lq = arm_ease(body, lq, mv, s, swivel=False, slack=3.0, turn_hand=wrists)
+            lq = wrist_eased(lq, s)
     lq, mv = post(lq, mv)
     if ground:
         lq, mv = grounded(body, lq, mv, post, clear, lift, limbs, shin_first)
@@ -1849,7 +2144,7 @@ def play(body, keys, t, pins=(), grip=None, ground=True, clear=0.002, lift=True,
                 pin(limb)
             for s in "lr":
                 if not pinned("arm_" + s):
-                    lq = arm_ease(body, lq, mv, s, swivel=False, slack=3.0, turn_hand=wrists)
+                    lq = wrist_eased(lq, s)
             lq, mv = post(lq, mv)
             z = zone_low(body, lq, mv, ~body.is_whip)[0]
             if z >= clear - 2e-3 or it == 2:
@@ -1890,30 +2185,43 @@ def face_rest(body):
     still on the weapon lying by his right side, his legs a little apart, the right knee bent out."""
     man = body.man
 
-    def make(tw):
+    def make(tw, hand_l=(0.26, -0.20, -0.10), gun_at=(0.62, 0.40), leg=(-3.0, 14.0), rot_r=16.0):
         return over_root(body, pose_of(body, dict(
             at=(0.0, 0.0, 0.2), pel=(("y", 90.0),), rest=dict(rolls=(-12.0, -8.0, -4.0, 0.0, 4.0, 8.0, 12.0)),
             s1=(-2.0, 0.0, 0.0), s2=(-3.0, 0.0, -2.0), ch=(-3.0, 0.0, -3.0),
             nk=(-12.0, 0.0, -24.0 * tw), hd=(-6.0, 0.0, -30.0 * tw),
             cl=(0.0, -6.0, 0.0), cr=(0.0, 4.0, 0.0),
-            leg_l=(-3.0, 9.0, 14.0, 8.0, 44.0), leg_r=(2.0, 16.0, 16.0, 16.0, 42.0),
-            arm_l=dict(rel="sh", at=(0.26, -0.20, -0.10), pole=(-0.25, -1.0, 0.15), d=(1.0, 0.45, -0.05), t=(0.1,
+            leg_l=(leg[0], 9.0, leg[1], 8.0, 44.0), leg_r=(2.0, 16.0, rot_r, 16.0, 42.0),
+            arm_l=dict(rel="sh", at=hand_l, pole=(-0.25, -1.0, 0.15), d=(1.0, 0.45, -0.05), t=(0.1,
                 1.0, 0.25)),
             arm_r=dict(rel="sh", at=(0.20, 0.26, -0.08), pole=(-0.4, 1.0, 0.2), d=(1.0, -0.2, -0.1), t=(0.0, -1.0,
                 0.3)),
             fin_l=(28.0, 14.0),
-            gun=dict(at=(0.62, 0.40), yaw=-6.0, side=-1.0),
+            gun=dict(at=gun_at, yaw=-6.0, side=-1.0),
             ground=("leg_l", "leg_r", "arm_l", "arm_r", "head"))))
-    lq, mv = make(1.0)
-    for _ in range(2):
-        G = man.fk(lq, mv)[0]
-        q = quat(G[man.b("chest")].T @ G[man.b("head")])
-        turn_ = abs(math.degrees(2 * math.atan2(float(q[3]), float(q[0]))))
-        turn_ = min(turn_, 360.0 - turn_)
-        if turn_ <= 62.0:
-            break
-        lq, mv = make(max(0.2, (54.0 - (turn_ - 62.0)) / 54.0))
-    return lq, mv
+
+    def made(**kw):
+        lq, mv = make(1.0, **kw)
+        for _ in range(2):
+            G = man.fk(lq, mv)[0]
+            q = quat(G[man.b("chest")].T @ G[man.b("head")])
+            turn_ = abs(math.degrees(2 * math.atan2(float(q[3]), float(q[0]))))
+            turn_ = min(turn_, 360.0 - turn_)
+            if turn_ <= 62.0:
+                break
+            lq, mv = make(max(0.2, (54.0 - (turn_ - 62.0)) / 54.0), **kw)
+        return lq, mv
+    # (as meant first; where this man's build or kit would put a shoulder or a hip past where it turns, the weapon
+    # laid a little further out, the left hand lower by his head, the legs turned out less)
+    tries = [dict()]
+    for hl in ((0.26, -0.20, -0.10), (0.18, -0.30, -0.10), (0.10, -0.36, -0.10)):
+        for ga in ((0.62, 0.40), (0.62, 0.48), (0.55, 0.45)):
+            for rr in (16.0, 4.0):
+                for leg in ((-3.0, 14.0), (5.0, 14.0), (5.0, 0.0), (-3.0, 0.0), (10.0, -10.0)):
+                    kw = dict(hand_l=hl, gun_at=ga, leg=leg, rot_r=rr)
+                    if kw != dict(hand_l=(0.26, -0.20, -0.10), gun_at=(0.62, 0.40), leg=(-3.0, 14.0), rot_r=16.0):
+                        tries.append(kw)
+    return first_in_range(body, [lambda kw=kw: made(**kw) for kw in tries])
 
 
 
@@ -1922,17 +2230,27 @@ def face_rest(body):
 def back_rest(body):
     """Thrown onto his back (his pack, if he has one, under his shoulders): his head toward where he was thrown,
     arms out from his sides, the right hand on the weapon lying by his right side, the right knee up a little."""
-    return over_root(body, pose_of(body, dict(
-        at=(0.0, 0.0, 0.2), pel=(("y", -90.0),),
-        rest=dict(rolls=(-30.0, -24.0, -18.0, -12.0, -6.0, 0.0, 6.0, 12.0, 18.0, 24.0, 30.0), head=True),
-        s1=(3.0, 0.0, 0.0), s2=(3.0, 0.0, 2.0), ch=(2.0, 0.0, 2.0),
-        nk=(4.0, 0.0, 12.0), hd=(-4.0, 0.0, 16.0),
-        leg_l=(6.0, 10.0, 22.0, 10.0, 34.0), leg_r=(24.0, 15.0, 28.0, 44.0, 26.0),
-        arm_l=dict(rel="sh", at=(0.20, -0.36, -0.10), pole=(0.1, -0.8, -0.6), d=(0.8, -0.6, 0.0), t=(0.3, 0.2, 1.0)),
-        arm_r=dict(rel="sh", at=(0.36, 0.22, -0.08), pole=(0.0, 1.0, -0.3), d=(1.0, 0.2, 0.0), t=(0.0, -1.0, 0.3)),
-        fin_l=(34.0, 16.0),
-        gun=dict(at=(0.12, 0.40), yaw=10.0, side=-1.0),
-        ground=("leg_l", "leg_r", "arm_l", "arm_r", "head"))))
+    def make(hand_l=(0.20, -0.36, -0.10), rot=(22.0, 28.0)):
+        return over_root(body, pose_of(body, dict(
+            at=(0.0, 0.0, 0.2), pel=(("y", -90.0),),
+            rest=dict(rolls=(-30.0, -24.0, -18.0, -12.0, -6.0, 0.0, 6.0, 12.0, 18.0, 24.0, 30.0), head=True),
+            s1=(3.0, 0.0, 0.0), s2=(3.0, 0.0, 2.0), ch=(2.0, 0.0, 2.0),
+            nk=(4.0, 0.0, 12.0), hd=(-4.0, 0.0, 16.0),
+            leg_l=(6.0, 10.0, rot[0], 10.0, 34.0), leg_r=(24.0, 15.0, rot[1], 44.0, 26.0),
+            arm_l=dict(rel="sh", at=hand_l, pole=(0.1, -0.8, -0.6), d=(0.8, -0.6, 0.0), t=(0.3, 0.2, 1.0)),
+            arm_r=dict(rel="sh", at=(0.36, 0.22, -0.08), pole=(0.0, 1.0, -0.3), d=(1.0, 0.2, 0.0), t=(0.0, -1.0,
+                0.3)),
+            fin_l=(34.0, 16.0),
+            gun=dict(at=(0.12, 0.40), yaw=10.0, side=-1.0),
+            ground=("leg_l", "leg_r", "arm_l", "arm_r", "head"))))
+    # (as meant first; where his kit (a pack under his shoulders) would leave his left elbow under his back, that arm
+    # laid further out from his side)
+    tries = [dict()] + [dict(hand_l=hl, rot=rot) for hl in ((0.20, -0.36, -0.10), (0.16, -0.44, -0.10),
+                                                            (0.08, -0.48, -0.12))
+                        for rot in ((22.0, 28.0), (8.0, 14.0)) if (hl, rot) != ((0.20, -0.36, -0.10), (22.0, 28.0))]
+    # (and with room: an elbow that a little swing in toward his side would put under his back is laid further out,
+    # so the landing that comes down into this does not pass it under)
+    return first_in_range(body, [lambda kw=kw: make(**kw) for kw in tries], also=lambda p_: elbow_tucked(body, p_, "l"))
 
 
 def over_root(body, pose_):
@@ -1961,6 +2279,9 @@ BACK_X = (0.0, -0.20, -0.66, -1.12, -1.44, -1.62, -1.70)
 FLY_Z = (None, 0.968, 0.874, 0.60)
 KF_T = (0.0, 0.07, 0.14, 0.25, 0.33, 0.42, 0.55, 0.70)     # (knock_down_face's keys: a fall, not a dive)
 LAND_T = 0.5                 # (knock_down_back: the key between his seat striking and his shoulders down)
+LAG_AT = (0.43, 0.86)        # (knock_down_face: how far his arms are on their way back at 0.07 and 0.14 s)
+WRIST_LAG = 0.5              # (knock_down_face: how much of the arm's way back his wrists turn)
+ARM_SWING = 0.45             # (knock_down_face: how far his arms are on their way forward at 0.33 s, from 0.25 s's)
 
 
 def lead_arms(body, Ka, Kb, f=0.3):
@@ -1981,42 +2302,62 @@ def knock_face_keys(body):
     # (his arms and the weapon left behind by his trunk as it is thrown forward: back from the trunk's line, the
     # weapon trailing low in his right hand)
     lag = dict(
-        arm_l=dict(rel="chest", at=(-0.32, -0.16, -0.40), pole=(-0.4, -1.0, 0.0), d=(-0.3, 0.1, -1.0), t=(1.0, 0.2,
+        arm_l=dict(rel="chest", at=(-0.22, -0.18, -0.42), pole=(-0.4, -1.0, 0.0), d=(-0.3, 0.1, -1.0), t=(1.0, 0.2,
             0.0)),
-        arm_r=dict(rel="chest", at=(-0.30, 0.14, -0.40), pole=(-0.5, 1.0, 0.0), gun=((0.45, 0.05, -0.89), (0.89,
+        arm_r=dict(rel="chest", at=(-0.20, 0.16, -0.42), pole=(-0.4, 1.0, -0.2), gun=((0.45, 0.05, -0.89), (0.89,
             0.0, 0.45))),
         fin_l=(18.0, 10.0))
-    # (struck in the back: his chest driven forward, his head left behind, his heels coming up)
+    # (struck in the back: his chest driven forward, his head left behind, his heels coming up; his legs as he stood,
+    # turned out as the aim has them, carried back under him by his hips' pitch so his feet stay where they were)
     K.append((T[1],) + pose_of(body, dict(
         like=like, at=(0.16, 0.0, 0.955 * k), pel=(("y", 9.0), ("z", 2.0)),
-        s1=(2.0, 0.0, 0.0), s2=(2.0, 0.0, 1.0), ch=(1.0, 0.0, 2.0), nk=(-12.0, 0.0, 0.0), hd=(-14.0, 0.0, -3.0),
-        leg_l=(3.0, 4.0, 4.0, 12.0, 8.0), leg_r=(0.0, 6.0, 4.0, 16.0, 12.0))) + ("",))
-    # (pitched forward a third of the way over, his feet trailing low behind him)
+        s1=(2.0, 0.0, 0.0), s2=(2.0, 0.0, 1.0), ch=(1.0, 0.0, 2.0), nk=(-12.0, 0.0, 0.0), hd=(-14.0, 0.0, -3.0))) +
+             ("",))
+    # (pitched forward a third of the way over, his feet trailing low behind him, his legs turning in from the aim's)
+    # (his knees bent no less than the aim has them: a man who aims crouched does not straighten them to bend them again)
+    kn0 = {s_: float(lean_of(like[0][b("calf_" + s_)])[0]) for s_ in "lr"}
     K.append((T[2],) + pose_of(body, dict(
         like=like, at=(0.38, 0.01, 0.85 * k), pel=(("y", 23.0), ("z", 4.0)),
         s1=(3.0, 0.0, 0.0), s2=(3.0, 0.0, 2.0), ch=(2.0, 0.0, 2.0), nk=(-12.0, 0.0, 2.0), hd=(-10.0, 0.0, 0.0),
-        leg_l=(8.0, 5.0, 6.0, 18.0, 18.0), leg_r=(4.0, 7.0, 4.0, 24.0, 22.0), **lag)) + ("",))
-    lead_arms(body, K[1], K[2], 0.5)
+        leg_l=(8.0, 5.0, 16.0, max(26.0, kn0["l"]), 4.0),
+        leg_r=(4.0, 7.0, 20.0, max(26.0, kn0["r"]), 6.0), **lag)) + ("",))
     # (two thirds over, diving no more than falling: his legs trailing, his arms still behind)
     K.append((T[3],) + pose_of(body, dict(
         like=like, at=(0.74, 0.02, 0.66 * k), pel=(("y", 51.0), ("z", 7.0)),
         s1=(4.0, 0.0, 0.0), s2=(5.0, 0.0, 2.0), ch=(4.0, 0.0, 3.0), nk=(-12.0, 0.0, 2.0), hd=(-8.0, 0.0, -2.0),
-        leg_l=(8.0, 8.0, 8.0, 28.0, 26.0), leg_r=(2.0, 9.0, 4.0, 30.0, 28.0),
-        arm_l=dict(rel="chest", at=(-0.26, -0.22, -0.40), pole=(-0.5, -1.0, 0.2), d=(-0.1, -0.2, -1.0), t=(1.0,
+        leg_l=(6.0, 8.0, 10.0, 42.0, 4.0), leg_r=(2.0, 9.0, 10.0, 32.0, 12.0),
+        arm_l=dict(rel="chest", at=(-0.205, -0.225, -0.43), pole=(-0.5, -1.0, 0.0), d=(-0.1, -0.2, -1.0), t=(1.0,
             0.1, 0.2)),
-        arm_r=dict(rel="chest", at=(-0.24, 0.18, -0.40), pole=(-0.5, 1.0, 0.2), gun=((0.55, 0.05, -0.83), (0.83,
+        arm_r=dict(rel="chest", at=(-0.18, 0.18, -0.42), pole=(-0.5, 1.0, 0.0), gun=((0.55, 0.05, -0.83), (0.83,
             0.0, 0.55))),
         fin_l=(18.0, 10.0))) + ("",))
-    # (his arms coming forward to break the fall, the weapon pushed out in his right hand)
+    # (his arms left behind as his trunk is driven on, LAG_AT[0] and LAG_AT[1] of the way back from the aim's to how
+    # they trail at 0.14 s by then, the rest of the way by 0.25 s; his wrists turned only WRIST_LAG of the arm's way,
+    # the weapon swinging back with his forearm rather than wrung in his hand)
+    aim, lag2 = like[0], K[2][1].copy()
+    hr_ = b("hand_r")
+    for kk, f in ((1, LAG_AT[0]), (2, LAG_AT[1]), (3, 1.0)):
+        l_ = K[kk][1].copy()
+        if kk < 3:
+            for s_ in "lr":
+                for n_ in ("clavicle_" + s_,) + ARM[s_] + ("fingers_" + s_, "thumb_" + s_):
+                    if n_ in man.ix:
+                        l_[b(n_)] = qslerp(aim[b(n_)], lag2[b(n_)], f)
+        for h_ in (b("hand_l"), hr_):
+            l_[h_] = qslerp(aim[h_], l_[h_], WRIST_LAG)
+        K[kk] = (K[kk][0],) + keep_prop(body, *gun_rides(body, l_, K[kk][2].copy(), body.rel0["r"]), body.prop0) + \
+            (K[kk][3],)
+    # (his arms on their way forward to break the fall (they are thrown out before him only as he comes down), the
+    # weapon swinging out in his right hand)
     K.append((T[4],) + pose_of(body, dict(
         like=like, at=(1.04, 0.03, 0.50 * k), pel=(("y", 72.0), ("z", 8.0)),
         s1=(2.0, 0.0, 0.0), s2=(3.0, 0.0, 3.0), ch=(3.0, 0.0, 3.0), nk=(-14.0, 0.0, 0.0), hd=(-10.0, 0.0, -6.0),
         leg_l=(4.0, 10.0, 10.0, 32.0, 32.0), leg_r=(0.0, 11.0, 4.0, 38.0, 32.0),
-        arm_l=dict(rel="chest", at=(0.16, -0.26, -0.36), pole=(-0.6, -0.8, -0.2), d=(0.7, -0.1, -0.7), t=(0.3, 1.0,
-            0.1)),
-        arm_r=dict(rel="chest", at=(0.18, 0.22, -0.36), pole=(-0.5, 0.9, -0.2), gun=((0.95, 0.1, -0.3), (0.3, -0.3,
-            1.0))),
-        fin_l=(14.0, 8.0))) + ("",))
+        arm_l=dict(rel="chest", at=(-0.05, -0.26, -0.42), pole=(-0.6, -0.8, 0.0), d=(0.3, -0.15, -0.9), t=(0.7,
+            0.7, 0.1)),
+        arm_r=dict(rel="chest", at=(-0.03, 0.22, -0.42), pole=(-0.5, 0.9, 0.0), gun=((0.85, 0.08, -0.52), (0.52,
+            -0.15, 0.85))),
+        fin_l=(16.0, 9.0))) + ("",))
     # (his chest and forearms strike first, hips and lower legs still off the ground)
     rest = face_rest(body)
     Gr, Xr = man.fk(*rest)
@@ -2025,9 +2366,17 @@ def knock_face_keys(body):
         like=like, at=(1.46, 0.03, zr + 0.05), pel=(("y", 98.0), ("z", 7.0)),
         s1=(-8.0, 0.0, 0.0), s2=(-8.0, 0.0, 0.0), ch=(-6.0, 0.0, -2.0), nk=(-20.0, 0.0, -14.0), hd=(-14.0, 0.0, -16.0),
         leg_l=(10.0, 12.0, 12.0, 22.0, 30.0), leg_r=(10.0, 14.0, 12.0, 26.0, 30.0),
-        arm_l=dict(rel="sh", at=(0.14, -0.22, -0.20), pole=(-0.3, -1.0, 0.5), d=(1.0, 0.3, -0.1), t=(0.1, 1.0, 0.3)),
-        arm_r=dict(rel="sh", at=(0.20, 0.20, -0.16), pole=(-0.4, 1.0, 0.5), gun=((1.0, 0.1, -0.05), (0.0, -1.0, 0.25))),
+        arm_l=dict(rel="sh", at=(0.06, -0.26, -0.22), pole=(-0.3, -1.0, 0.5), d=(1.0, 0.3, -0.1), t=(0.1, 1.0, 0.3)),
+        arm_r=dict(rel="sh", at=(0.12, 0.24, -0.18), pole=(-0.4, 1.0, 0.5), gun=((1.0, 0.1, -0.05), (0.0, -1.0, 0.25))),
         fin_l=(20.0, 12.0), ground=("arm_l",))) + ("",))
+    # (at the key before, his arms and the weapon on their way from behind him to how they strike, ARM_SWING of the
+    # way: the swing forward to break the fall shared evenly between the two key gaps)
+    l4 = K[-2][1].copy()
+    for s_ in "lr":
+        for n_ in ("clavicle_" + s_,) + ARM[s_] + ("fingers_" + s_, "thumb_" + s_):
+            if n_ in man.ix:
+                l4[b(n_)] = qslerp(K[-3][1][b(n_)], K[-1][1][b(n_)], ARM_SWING)
+    K[-2] = (K[-2][0],) + keep_prop(body, *gun_rides(body, l4, K[-2][2].copy(), body.rel0["r"]), body.prop0) + ("",)
     # (between those two: his arms and the weapon held up off the ground on their way down, so the in-between does not
     # swing them through it and a lift there does not snap them up)
     post = lambda l, m: keep_prop(body, *gun_rides(body, l, m, body.rel0["r"]), body.prop0)
@@ -2042,7 +2391,7 @@ def knock_face_keys(body):
     for s_, d_ in (("l", 9.0), ("r", 0.0)):
         lq5 = turn_world(man, lq5, mv5, "upperarm_" + s_, Ry(-d_))
         lq5 = behind_ease(body, arm_ease(body, lq5, mv5, s_), mv5, s_)
-    K.append((T[6], lq5, mv5, ""))
+    K.append((T[6], lq5, mv5, "soft"))     # (soft: his arms, thrown forward onto the ground, do not swing on past it)
     K.append((T[7],) + shifted(body, rest, 1.76) + ("stop",))
     return K
 
@@ -2094,9 +2443,9 @@ def knock_back_keys(body):
     lq5[b("calf_l")] = Ry(30.0)
     lq5[b("calf_r")] = Ry(58.0)
     lq5 = turn_world(man, lq5, mv5, "neck", Ry(8.0))
-    for s_, d_ in (("l", 10.0), ("r", 6.0)):
+    for s_, d_ in (("l", 0.0), ("r", 6.0)):
         lq5 = turn_world(man, lq5, mv5, "upperarm_" + s_, Ry(d_))
-        lq5 = behind_ease(body, arm_ease(body, lq5, mv5, s_), mv5, s_)
+        lq5 = elbow_out(body, behind_ease(body, arm_ease(body, lq5, mv5, s_), mv5, s_), mv5, s_)
     lead_arms(body, K[1], K[2])
     # (his shoulders coming down onto the ground, the weapon swung out to his right so it lands beside him, rolling
     # onto its side: the landing eased over one more key)
@@ -2104,7 +2453,17 @@ def knock_back_keys(body):
     K.append((LAND_T,) + pose_of(body, dict(
         like=m45, arm_r=dict(rel="sh", at=(0.42, 0.36, -0.08), pole=(0.0, 1.0, -0.4),
                              gun=((0.95, 0.31, -0.03), (0.28, -0.85, 0.45))))) + ("",))
-    K.append((T[5], lq5, mv5, ""))
+    K.append((T[5], lq5, mv5, "soft"))     # (soft: his arms, flung out onto the ground, do not swing on past it)
+    # (the weapon rolling onto its side as it lands: his right wrist's turn shared evenly over the landing's two key
+    # gaps, the landing key's wrist moved along its way to the next key's as far as does that)
+    hr_ = b("hand_r")
+    A_, L_, B_ = K[-3][1][hr_], K[-2][1][hr_], K[-1][1][hr_]
+    d1, d2 = K[-2][0] - K[-3][0], K[-1][0] - K[-2][0]
+    f_ = min(np.linspace(-0.4, 0.6, 41), key=lambda u: max(angle_of(A_.T @ qslerp(L_, B_, u)) / d1,
+                                                           angle_of(qslerp(L_, B_, u).T @ B_) / d2))
+    l_ = K[-2][1].copy()
+    l_[hr_] = qslerp(L_, B_, float(f_))
+    K[-2] = (K[-2][0],) + keep_prop(body, *gun_rides(body, l_, K[-2][2].copy(), body.rel0["r"]), body.prop0) + ("",)
     K.append((T[6],) + shifted(body, rest, Xs[6]) + ("stop",))
     return K
 
@@ -2116,7 +2475,9 @@ def knock_pose(body, way, t):
     # (thrown forward, his feet trail low behind him: each carried straight from where one key has it to the next,
     # not swung down through the ground between them)
     pins = (("leg_l", KF_T[1], KF_T[4]), ("leg_r", KF_T[1], KF_T[4])) if way == "face" else ()
-    return play(body, body.poses[key], t, pins=pins)
+    # (thrown onto his back, his wrists as the keys have them: each key's are in their range, and the in-between's
+    # turning a wrist into a range of its own reading would wring the forearm past a living one's)
+    return play(body, body.poses[key], t, pins=pins, wrists=(way == "face"))
 
 
 def mix(a, b, u):
@@ -2161,7 +2522,26 @@ STIR_KNEE = 18.0             # (degrees: lying on his back, his right knee drawn
 
 def down_pose(body, way, t):
     """Lying stunned: a slow breath, his head stirring, the fingers of his left hand; a foot. Once a loop he stirs
-    where it can be seen: his head lifted and turned, his left forearm drawn in, on his back a knee drawn up."""
+    where it can be seen: his head lifted and turned, his left forearm drawn in, on his back a knee drawn up. How far
+    the forearm is drawn in is this man's own: the most (of STIR_ARM) that keeps his left shoulder, elbow and wrist
+    in a living arm's range at the height of the stir (his elbow not drawn in under his back), found once."""
+    key = ("stir_arm", way)
+    if key not in body.poses:
+        best = None
+        for k_ in (1.0, 0.8, 0.65, 0.5, 0.35, 0.2, 0.0):
+            p_, ok = _down_pose(body, way, 1.05, k_, probe=True)
+            over = sum(f[2] for f in pose_rom(body, [p_]) if f[1] == "l" and f[0].startswith(
+                ("sh_", "el_", "pron", "sup", "wr_")))
+            if ok and over <= 0.0:
+                best = (0.0, k_)
+                break
+            if best is None or over < best[0]:
+                best = (over, k_)
+        body.poses[key] = best[1]
+    return _down_pose(body, way, t, body.poses[key])
+
+
+def _down_pose(body, way, t, arm_k, probe=False):
     man = body.man
     b = man.b
     lq, mv = (face_rest if way == "face" else back_rest)(body)
@@ -2206,20 +2586,16 @@ def down_pose(body, way, t):
         f0 = X[Hl] - X[Fl]
         Ul = b("upperarm_l")
         had0 = arm_read(body, "l", G[ch], G[Ul], G[Hl], X[Ul], X[Fl], X[Hl])["hadd"]
-        l_in, m_in = lq.copy(), mv.copy()
-        for k_ in (1.0, 0.6, 0.35):
-            lq, mv = l_in.copy(), m_in.copy()
-            ik2(man, lq, mv, ARM["l"], X[Hl] + to * STIR_ARM * e * k_, end_R=G[Hl])
-            # (the hand turned on the ground with the forearm, not bent at the wrist)
-            G2, X2 = man.fk(lq, mv)
-            f1 = X2[Hl] - X2[Fl]
-            yaw = math.degrees(math.atan2(f1[1], f1[0]) - math.atan2(f0[1], f0[0]))
-            yaw = (yaw + 180.0) % 360.0 - 180.0
-            ik2(man, lq, mv, ARM["l"], X2[Hl], end_R=Rz(yaw) @ G[Hl])
-            G2, X2 = man.fk(lq, mv)
-            # (not drawn across his body further than a living shoulder lets it)
-            if arm_read(body, "l", G2[ch], G2[Ul], G2[Hl], X2[Ul], X2[Fl], X2[Hl])["hadd"] <= max(had0, 118.0):
-                break
+        ik2(man, lq, mv, ARM["l"], X[Hl] + to * STIR_ARM * e * arm_k, end_R=G[Hl])
+        # (the hand turned on the ground with the forearm, not bent at the wrist)
+        G2, X2 = man.fk(lq, mv)
+        f1 = X2[Hl] - X2[Fl]
+        yaw = math.degrees(math.atan2(f1[1], f1[0]) - math.atan2(f0[1], f0[0]))
+        yaw = (yaw + 180.0) % 360.0 - 180.0
+        ik2(man, lq, mv, ARM["l"], X2[Hl], end_R=Rz(yaw) @ G[Hl])
+        G2, X2 = man.fk(lq, mv)
+        # (not drawn across his body further than a living shoulder lets it)
+        hadd_ok = arm_read(body, "l", G2[ch], G2[Ul], G2[Hl], X2[Ul], X2[Fl], X2[Hl])["hadd"] <= max(had0, 118.0)
         if way == "back":
             # (his right knee drawn up, its heel sliding in along the ground: the thigh turned up at the hip, the shin
             # back down at the knee until the heel is as low as it lay)
@@ -2253,6 +2629,10 @@ def down_pose(body, way, t):
     # (nothing pressed into the ground by it)
     lq, mv, _ = chain_to_ground(body, lq, mv, "neck", body.far["head"], clear=0.003)
     lq, mv, _ = chain_to_ground(body, lq, mv, "upperarm_l", body.far["arm_l"], clear=0.003)
+    # (and his left hand, by his head under his shoulder where the upper arm has no lever on it, by his elbow)
+    lq, mv, _ = chain_to_ground(body, lq, mv, "lowerarm_l", body.Z["hand_l"], clear=0.003, most=12.0)
+    if probe:
+        return (lq, mv), e <= 0.0 or hadd_ok
     return lq, mv
 
 
@@ -2264,7 +2644,7 @@ UP_FACE = {k: f / 30.0 for k, f in dict(up=2, lift=5, stir=7, fours=10, l_up=11,
                                          r_dn=16, rock=18, off=20, tall=22, kup=24, swing=26, hover=27, land=28,
                                          kneel=31, rise=34, toe=35, step=37, over=39, plant=40, end=48).items()}
 UP_BACK = {k: f / 30.0 for k, f in dict(reach=2, sit1=5, prop=8, lb=10, roll=12, side=14, foot=16, load=18, lean=21,
-                                         push=24, hov=26, kneel=28, rise=32, toe=33, step=36, over=39, down=41,
+                                         unt=22, push=24, hov=26, kneel=28, rise=32, toe=33, step=36, over=39, down=41,
                                          end=48).items()}
 GRIP_T = (1.22, 1.5)         # (his right hand's grip shifts from the aim's to the carry's)
 LEFT_ON_T = {"face": (1.26, 1.52), "back": (1.33, 1.58)}     # (his left hand comes onto the weapon)
@@ -2567,6 +2947,13 @@ def up_face_keys(body):
             like=K[-1][1:3], at=(Kr0[0] + 0.06 + STEP_R[0] * (0.5 + 0.5 * u), mid_y + 0.02, 0.5), pel=(("y", 74.0),),
             **up_on),
             knees=(("l", Kl, rfl2[0], rfl2[1]), kr_), hip="both", balls=balls("rest", "kn" if not h else None)) + ("",))
+    if not body.armed:
+        # (an empty right hand stays as it is on the ground while the right knee comes up under him: the arm's
+        # solve with his shoulders over the knee carried would turn it over at the wrist)
+        i_up, i_on = len(K) - 3, len(K) - 2
+        for n_ in ("clavicle_r", "upperarm_r", "lowerarm_r", "hand_r"):
+            if n_ in man.ix:
+                K[i_on][1][b(n_)] = K[i_up][1][b(n_)].copy()
     # (rocked back towards his heels, his arms stretched out to his hands)
     both = (("l", Kl, rfl2[0], rfl2[1]), ("r", Kr, Fr, Rfr))
     K.append((T["rock"],) + up_key(body, dict(
@@ -2850,9 +3237,9 @@ def up_back_keys(body):
     mid_l = 0.5 * (man.fk(*K[-1][1:3])[1][b("hand_l")] + on_thigh) + Z_ * 0.04
     # (the left foot carried round behind the knee, the shin turning about it, the foot turned with the shin)
     Fk_, Rk_ = Xkk[b("foot_l")], Gkk[b("foot_l")]
-    Fp = about_knee(Kl, Fl_side + Z_ * 0.08, Fk_, 0.45, 0.07, Ls * 0.995)
+    Fp = about_knee(Kl, Fl_side + Z_ * 0.08, Fk_, 0.45, 0.11, Ls * 0.995)
     K.append((T["push"],) + up_key(body, dict(
-        like=up, at=(0.5 * (Xr[pe][0] + Xk[pe][0]) + 0.04, 0.5 * (Xr[pe][1] + Xk[pe][1]) - 0.04, 0.3),
+        like=up, at=(0.5 * (Xr[pe][0] + Xk[pe][0]) + 0.12, 0.5 * (Xr[pe][1] + Xk[pe][1]) - 0.04, 0.3),
         pel=(("z", -8.0), ("y", 2.0), ("x", 14.0)),
         s1=(12.0, -3.0, 0.0), s2=(12.0, -3.0, 2.0), ch=(8.0, -2.0, 2.0), nk=(10.0, -2.0, 4.0), hd=(8.0, 0.0, 4.0),
         arm_l=dict(rel="abs", at=mid_l, pole=(-0.3, -1.0, 0.0), d=(0.6, -0.2, -0.8), t=(0.3, 1.0, 0.2)),
@@ -2862,6 +3249,16 @@ def up_back_keys(body):
                                                                                                    Fk_[0] - Kl[0]))) @ Rk_),),
         feet=(("r", Fr, Rfr, (1.0, 0.2, 0.6)),),
         hip=("l", Kl)) + ("",))
+    # (before it: his left foot lifted off its spot first, straight up, as the shin starts round)
+    le_, pu_ = K[-2][1:3], K[-1][1:3]
+    Gle = man.fk(*le_)[0]
+    Fu = about_knee(Kl, Fl_side + Z_ * 0.08, Fk_, 0.12, 0.08, Ls * 0.995)
+    mu = mix(le_, pu_, 0.35)
+    unt = up_key(body, dict(like=mu, at=tuple(man.fk(*mu)[1][pe])),
+                 knees=(("l", Kl, Fu, Rz(math.degrees(math.atan2(Fu[1] - Kl[1], Fu[0] - Kl[0]) -
+                                                       math.atan2(Fl_side[1] - Kl[1], Fl_side[0] - Kl[0]))) @
+                         Gle[b("foot_l")]),), feet=(("r", Fr, Rfr, (1.0, 0.2, 0.6)),), hip=("l", Kl))
+    K.insert(len(K) - 1, (T["unt"],) + unt + ("",))
     K.append((T["kneel"],) + kneel_k + ("",))
     Gkk, Xkk = man.fk(K[-1][1], K[-1][2])
     Fl, Rfl = Xkk[b("foot_l")].copy(), Gkk[b("foot_l")].copy()
@@ -2924,7 +3321,7 @@ UP_PINS = {"face": (("arm_l", UP_FACE["lift"], UP_FACE["rock"]), ("arm_r", UP_FA
                     ("leg_l", UP_FACE["stir"], UP_FACE["fours"]), ("leg_l", UP_FACE["l_dn"], UP_FACE["tall"]),
                     ("leg_r", UP_FACE["stir"], UP_FACE["l_dn"]), ("leg_r", UP_FACE["r_dn"], UP_FACE["rise"]),
                     ("leg_l", UP_FACE["kup"], UP_FACE["end"]), ("leg_r", UP_FACE["plant"], UP_FACE["end"])),
-           "back": (("arm_l", UP_BACK["prop"], UP_BACK["load"]), ("knee_l", UP_BACK["side"], UP_BACK["kneel"]),
+           "back": (("arm_l", UP_BACK["sit1"], UP_BACK["load"]), ("knee_l", UP_BACK["side"], UP_BACK["kneel"]),
                     ("leg_r", UP_BACK["foot"], UP_BACK["step"]), ("leg_l", UP_BACK["hov"], UP_BACK["end"]),
                     ("leg_r", UP_BACK["step"], UP_BACK["end"]))}
 
@@ -2949,7 +3346,7 @@ def up_pose(body, way, t):
     if t <= 0.0 or t >= UP_LONG - 1e-9:
         return keys.at(min(max(t, 0.0), UP_LONG))
     lq, mv = play(body, keys, t, pins=UP_PINS[way], grip=lambda x: up_grip(body, x), wrists=False,
-                  shin_first=True)
+                  shin_first=True, one_turn=("arm_l",) if way == "back" else (), behind=False)
     # (his left hand comes onto the weapon as it comes up to port)
     t0, t1 = LEFT_ON_T[way]
     w = sm((t - t0) / (t1 - t0))
@@ -3079,6 +3476,55 @@ def fine_times(body, fn, clip, ts):
     return out
 
 
+TOE_DEG_S = 720.0            # (degrees a second: the most his toes bend or straighten at the ball of the foot)
+
+
+def toe_bend(R):
+    """How far a ball-of-the-foot turn bends the toes up (degrees): its part about the foot's own y, negated."""
+    q = quat(R)
+    if q[0] < 0:
+        q = -q
+    v = np.asarray(q[1:], float)
+    s_ = float(np.linalg.norm(v))
+    if s_ < 1e-9:
+        return 0.0
+    return -math.degrees(2.0 * math.atan2(s_, float(q[0]))) * float(v[1]) / s_
+
+
+def toe_envelope(body, fn, L, fps=60):
+    """Each foot's toes as bent up at least as far as the move bends them (to keep them out of the ground, or set
+    under him) at every 60th of a second, and never bent or straightened faster than TOE_DEG_S: they bend sooner and
+    straighten later, never later or less (the first and last pose are the stances' own, as they are)."""
+    man = body.man
+    grid = dense_times(L, fps)
+    out = {}
+    sides = [s for s in "lr" if "ball_" + s in man.ix]
+    if not sides:
+        return out
+    poses = [fn(t)[0] for t in grid]
+    for s in sides:
+        bl = man.b("ball_" + s)
+        b = np.array([toe_bend(lq[bl]) for lq in poses])
+        a = b.copy()
+        for k in range(1, len(grid) - 1):
+            a[k] = max(a[k], a[k - 1] - TOE_DEG_S * (grid[k] - grid[k - 1]))
+        for k in range(len(grid) - 2, 0, -1):
+            a[k] = max(a[k], a[k + 1] - TOE_DEG_S * (grid[k + 1] - grid[k]))
+        out[s] = (np.array(grid), a)
+    return out
+
+
+def toes_bent(body, lq, env, t):
+    """A pose with each foot's toes bent up to the envelope (toe_envelope) at t."""
+    for s, (g, a) in env.items():
+        bl = body.man.b("ball_" + s)
+        want = float(np.interp(t, g, a))
+        cur = toe_bend(lq[bl])
+        if want > cur + 1e-4:
+            lq[bl] = lq[bl] @ Ry(-(want - cur))
+    return lq
+
+
 SOUND = {"elbow_down": "kit_rattle"}       # (fx with no take of their own: the sound cue they play, LandSound's)
 
 
@@ -3110,8 +3556,9 @@ def make_clips(body, only=None, log=None):
     armed = body.armed
     hands = "both fists stay on his weapon" if armed else "his hands keep their places (he carries no weapon)"
 
-    def finish(name, fn, ts, like, clip, fine=False):
+    def finish(name, fn, ts, like, clip, fine=False, toes=False):
         memo = {}
+        env = toe_envelope(body, fn, clip["long"]) if toes else {}
 
         def fn2(t):
             k = round(float(t), 5)
@@ -3119,6 +3566,7 @@ def make_clips(body, only=None, log=None):
                 lq, mv = fn(t)
                 if body.whip and not name.startswith("hit_flinch") and 0.0 < t < clip["long"]:
                     lq = drape_whip(body, lq, mv)
+                lq = toes_bent(body, lq, env, t)
                 memo[k] = (lq.copy(), mv.copy())
             return memo[k][0].copy(), memo[k][1].copy()
         tracks, poses = bake(body, fn2, ts, like=like)
@@ -3156,19 +3604,23 @@ def make_clips(body, only=None, log=None):
                  "start": [base, 0.0], "end": end}
             if run:
                 c["events"] = [dict(e) for e in C[base]["events"] if e.get("fx") == "footstep" and e["t"] < FLINCH_LONG]
-                c["additive_base"] = [base, 0.0]
+                # (the base is the run itself run on with the clip, 0.0 to 0.3 s, never one pose of it)
+                c["additive_base"] = [base, 0.0, FLINCH_LONG]
                 c["additive_base_clip"] = base
             else:
                 c["additive_base"] = [base, 0.0]
             what = {"stand": "standing", "kneel": "kneeling", "run": "at a run"}[stance]
             c["about"] = (
                 f"Hit but not killed, {what}: a round from {FROM[way]} (his own frame) jolts him {GOES[way]}; the "
-                f"peak at {FLINCH_PEAK} s, back by 0.3 s with a small overshoot; {hands}. The game may either blend "
-                f"into it (0.12 s, from whatever pose he is in) and play it once, or lay its difference from its base "
-                f"over whatever he is doing (sharper: a 0.12 s blend-in softens a jolt that peaks at {FLINCH_PEAK} s). " +
-                (f"Its base is `additive_base` ({base} at 0.0 s, its first key) run on with the clip, i.e. {base} "
-                 f"sampled at this clip's own time (`additive_base_clip`), so laid over run, run_b, run_c or run_d at "
-                 f"his own phase the run's legs cancel out. The legs' part: his pelvis drops about "
+                f"peak at {FLINCH_PEAK} s, back by 0.3 s with a small overshoot; {hands}. The game may either lay its "
+                f"difference from its base over whatever he is doing (the better use: sharp, and right from any pose), "
+                f"or blend into it (0.12 s) and play it once; but played whole it puts him in {base}'s " +
+                ("stride" if run else "aim") + f", so blend into it only from {base} itself (and a 0.12 s blend-in "
+                f"softens a jolt that peaks at {FLINCH_PEAK} s: 0.03 s keeps it sharp). " +
+                (f"Its base is `additive_base` ({base} from 0.0 to {FLINCH_LONG} s: the run run on with the clip, "
+                 f"never one pose of it), i.e. {base} sampled at this clip's own time (`additive_base_clip`), so laid "
+                 f"over run, run_b, run_c or run_d at his own phase the run's legs cancel out and only the jolt and "
+                 f"the stumble are added. The legs' part: his pelvis drops about "
                  f"{RUN_DIP * 100:.1f} cm and his knees give from 0.02 to 0.25 s, his feet where the run has them. "
                  f"Played whole: first key = {base} at 0.0 s, last = {base} at 0.3 s; `stride` is the ground the run "
                  "covers in 0.3 s, so the game carries him on at the run's speed." if run else
@@ -3195,9 +3647,11 @@ def make_clips(body, only=None, log=None):
                        "0.12 s) and back by 0.5 s; " + ("his right hand keeps its grip on the weapon"
                                                         if armed else "his right hand stays on the ground (he "
                                                         "carries no weapon)") +
-                       ". First and last key = fire_prone at 0.0 s. ADDITIVE ONLY, with no blend-in: lay its "
-                       "difference from `additive_base` (fire_prone at 0.0 s) over the lying man's own pose. If it is "
-                       "ever played whole, blend in over no more than 0.03 s, and only from fire_prone.")}
+                       ". First and last key = fire_prone at 0.0 s. The game may lay its difference from "
+                       "`additive_base` (fire_prone at 0.0 s) over the lying man's own pose (the better use: sharp, "
+                       "and right however he lies), or blend into it and play it once; played whole it puts him in "
+                       "fire_prone, so blend into it only from fire_prone, over 0.03 s rather than 0.12 s if the jolt "
+                       "is to stay sharp.")}
         out["hit_flinch_prone"], _ = finish("hit_flinch_prone", lambda t: prone_flinch_pose(body, t), ts,
                                             ("fire_prone",), c)
     # ---- knocked flat, lying, getting up
@@ -3213,7 +3667,8 @@ def make_clips(body, only=None, log=None):
                          "path (about 3.6 m/s along, falling under gravity), his trunk turning over, head and limbs "
                          "left behind and thrown after; set down on the ground on his own mesh (his kit, his pack)",
                  "start": ["fire_stand", 0.0]}
-            clip, poses = finish(kd, lambda t, way=way: knock_pose(body, way, t), ts, ("fire_stand",), c, fine=True)
+            clip, poses = finish(kd, lambda t, way=way: knock_pose(body, way, t), ts, ("fire_stand",), c, fine=True,
+                                 toes=True)
             mv_end = poses[-1][2][pe]
             clip["end_offset"] = [round(float(v), 3) for v in mv_end]
             evs = []
@@ -3291,7 +3746,8 @@ def make_clips(body, only=None, log=None):
                            f"({shift[0]:.2f}, {shift[1]:.2f} m) is how far to move the root after it so idle at 0.0 s "
                            "carries on from the same place (end_offset less idle's own pelvis place). Events: "
                            "kit_rattle.")}
-            out[up], _ = finish(up, lambda t, way=way: up_pose(body, way, t), ts, ("idle", "fire_stand"), c, fine=True)
+            out[up], _ = finish(up, lambda t, way=way: up_pose(body, way, t), ts, ("idle", "fire_stand"), c, fine=True,
+                                toes=True)
     return out
 
 
@@ -3306,12 +3762,15 @@ def about_hits(body):
         "l his left, r his right, and he jolts the other way): hit_flinch_f/_b/_l/_r standing (first and last key "
         "fire_stand at 0.0 s), hit_flinch_kneel_f/_b/_l/_r (fire_kneel at 0.0 s), hit_flinch_run_f/_b/_l/_r (the "
         "run clip from 0.0 to 0.3 s) and hit_flinch_prone (0.5 s, fire_prone at 0.0 s: a jolt, then head down and "
-        "the left hand onto his helmet and back). All thirteen are ADDITIVE ONLY, with no blend-in: lay the clip's "
-        "difference from its base over whatever he is doing, so the onset stays sharp: the standing, kneeling and "
-        "prone ones carry `additive_base` [clip, 0.0] (one pose); the run ones carry `additive_base_clip` (run: the "
-        "run clip sampled at the flinch's own time) and are laid over run, run_b, run_c or run_d at his own phase "
-        "(their legs' part, a pelvis drop and knees giving, is the same at any phase). Played whole they join only "
-        "their base (blend in 0.03 s at most). The jolt peaks at "
+        "the left hand onto his helmet and back). The game may lay a flinch's difference from its base over "
+        "whatever he is doing (the better use: the onset stays sharp and it is right from any pose), or blend into "
+        "it (0.12 s) and play it once; but played whole a flinch puts him in its base (the aim, the kneeling aim, the "
+        "run's stride, prone), so blend into it only from that base, and over 0.03 s rather than 0.12 s if the jolt "
+        "is to stay sharp. Bases: the standing, kneeling and "
+        "prone ones carry `additive_base` [clip, 0.0] (one pose); the run ones carry `additive_base` [run, 0.0, "
+        "0.3] and `additive_base_clip` run: the run clip run on with the flinch (sampled at the flinch's own time), "
+        "never one pose of it, so laid over run, run_b, run_c or run_d at his own phase only the jolt and the "
+        "stumble (a pelvis drop and knees giving, the same at any phase) are added. The jolt peaks at "
         f"{FLINCH_PEAK} s. KNOCKED FLAT by a near burst, alive: knock_down_face (thrown forward onto his front: the "
         "burst behind him) and knock_down_back (onto his back: the burst before him), 0.7 s, from fire_stand at 0.0 "
         "s, NOT in place (`end_offset`, where his pelvis ends, as go_prone's: a fixed throw of about 1.7 to 1.8 m; "
@@ -3844,6 +4303,9 @@ def check_clip(body, name, clips, base_rom=None):
                 bad(f"rom: {r['key']}{'_' + r['side'] if r['side'] else ''} {r['value']} against {r['limit']} "
                     f"(over by {r['over']}) at {r['t']} s")
         for f in rep["fast"]:
+            # (the one this tool's own measure already reported is not listed twice)
+            if sp[0] > LIMIT["turn_deg_s"] and f["joint"] == sp[1] and abs(f["t"] - sp[2]) < 0.03:
+                continue
             bad(f"rom: {f['joint']} turns {f['deg_s']} degrees a second at {f['t']} s")
         R["rom"] = rep
     out["joints"] = R
@@ -3852,16 +4314,27 @@ def check_clip(body, name, clips, base_rom=None):
 
 
 # Faults accepted one by one, each with its reason: (file, or "*" for every file; the clip; how the fault's text
-# begins after the clip's name; why it is accepted). `deliver` sends a bundle only when every fault in its checks is
-# matched here; any other fault keeps that file back. Nothing is accepted wholesale.
+# begins after the clip's name; the most of its measure accepted (the first number after that beginning: degrees,
+# degrees a second, cm); why it is accepted). `deliver` sends a bundle only when every fault in its checks is matched
+# here; any other fault, or one past its most, keeps that file back. Nothing is accepted wholesale.
 ALLOW = ()
 
 
 def allowed(name, fault):
-    """The reason a fault of soldier_<name> is accepted (ALLOW), or None."""
+    """The reason a fault of soldier_<name> is accepted (ALLOW), or None. An entry's beginning is a pattern (re) the
+    fault's text must start with; its measure is the pattern's group `v`, or else the first number after it."""
     clip, _, what = fault.partition(": ")
-    for f, c, start, why in ALLOW:
-        if f in ("*", name) and c == clip and what.startswith(start):
+    for f, c, start, most, why in ALLOW:
+        if f not in ("*", name) or c != clip:
+            continue
+        m0 = re.match(start, what)
+        if m0 is None:
+            continue
+        v = m0.groupdict().get("v")
+        if v is None:
+            m = re.search(r"[-+]?\d+(?:\.\d+)?", what[m0.end():])
+            v = m.group(0) if m else None
+        if v is not None and abs(float(v)) <= most + 1e-9:
             return why
     return None
 
@@ -4041,26 +4514,40 @@ def merge_bytes(raw, B, name):
     before = {k: v for k, v in D.items() if k not in ("clips", "about_hits")}
     names = list(D["clips"])
     D = merged(D, B)
-    assert all(D[k] is before[k] for k in before), "something else was touched"
-    assert [n for n in D["clips"] if n in names] == names
+    if not all(D[k] is before[k] for k in before):
+        raise ValueError("something else in the file was touched: not written")
+    if [n for n in D["clips"] if n in names] != names:
+        raise ValueError("the file's own clips did not keep their order: not written")
     return text_of(D)
 
 
 def apply(names, src, out, stage, log=print):
+    """The staged bundles merged into copies of the files in `src`, written to `out` (never `src`): each file on its
+    own; one that fails is logged and the rest still go. True when every one was written and read back."""
+    if os.path.realpath(out) == os.path.realpath(src):
+        log("--out must not be --src: nothing written")
+        return False
     os.makedirs(out, exist_ok=True)
-    assert os.path.realpath(out) != os.path.realpath(src), "--out must not be --src"
+    ok = True
     for name in names:
-        with open(bundle_path(stage, name), "rb") as f:
-            B = json.loads(f.read())
-        with open(path_of(src, name), "rb") as f:
-            raw = f.read()
-        data = merge_bytes(raw, B, name)
-        write_whole(path_of(out, name), data)
-        with open(path_of(out, name), "rb") as f:
-            back = json.loads(f.read())
-        assert all(back["clips"][n] == c for n, c in B["clips"].items()) and back["about_hits"] == B["about_hits"]
+        try:
+            with open(bundle_path(stage, name), "rb") as f:
+                B = json.loads(f.read())
+            with open(path_of(src, name), "rb") as f:
+                raw = f.read()
+            data = merge_bytes(raw, B, name)
+            write_whole(path_of(out, name), data)
+            with open(path_of(out, name), "rb") as f:
+                back = json.loads(f.read())
+            if not (all(back["clips"].get(n) == c for n, c in B["clips"].items())
+                    and back.get("about_hits") == B["about_hits"]):
+                raise ValueError("the written file did not read back with the bundle's clips")
+        except (OSError, ValueError) as e:
+            log(f"soldier_{name}: NOT applied: {e}")
+            ok = False
+            continue
         log(f"soldier_{name}: {len(raw)} -> {len(data)} bytes, {len(back['clips'])} clips; {path_of(out, name)}")
-    return True
+    return ok
 
 
 def deliver(names, stage, content=False, log=print):
@@ -4072,8 +4559,13 @@ def deliver(names, stage, content=False, log=print):
     import hashlib
     done, held = [], []
     for name in names:
-        with open(bundle_path(stage, name), "rb") as f:
-            B = json.loads(f.read())
+        try:
+            with open(bundle_path(stage, name), "rb") as f:
+                B = json.loads(f.read())
+        except (OSError, ValueError) as e:
+            log(f"soldier_{name}: NOT delivered: its bundle could not be read ({e})")
+            held.append(name)
+            continue
         blocking, ok_ = sort_faults(name, B["checks"]["faults"])
         if blocking:
             held.append(name)
@@ -4086,11 +4578,11 @@ def deliver(names, stage, content=False, log=print):
         if content and os.path.exists(path_of(CONTENT, name)):
             targets.append(("content", path_of(CONTENT, name)))
         for where, path in targets:
-            with open(path, "rb") as f:                       # (read again just before the write)
-                raw = f.read()
             try:
+                with open(path, "rb") as f:                   # (read again just before the write)
+                    raw = f.read()
                 data = merge_bytes(raw, B, name)
-            except ValueError as e:
+            except (OSError, ValueError) as e:
                 log(f"soldier_{name} ({where}): NOT delivered: {e}")
                 held.append(name)
                 continue
@@ -4103,7 +4595,10 @@ def deliver(names, stage, content=False, log=print):
             if not os.path.exists(bpath):
                 write_whole(bpath, raw)
             with open(bpath, "rb") as f:
-                assert f.read() == raw, "the backup did not read back"
+                if f.read() != raw:
+                    log(f"soldier_{name} ({where}): NOT delivered: its backup {bpath} did not read back")
+                    held.append(name)
+                    continue
             with open(path, "rb") as f:
                 if f.read() != raw:
                     log(f"soldier_{name} ({where}): NOT delivered: the file changed while it was being merged")
@@ -4111,10 +4606,93 @@ def deliver(names, stage, content=False, log=print):
                     continue
             write_whole(path, data)
             with open(path, "rb") as f:
-                assert f.read() == data, "the file did not read back"
+                if f.read() != data:
+                    log(f"soldier_{name} ({where}): WRITTEN BUT DID NOT READ BACK: put back its backup {bpath}")
+                    held.append(name)
+                    continue
             log(f"soldier_{name} ({where}): {len(raw)} -> {len(data)} bytes; backup {bpath}")
             done.append(path)
+    if done:
+        try:
+            readme_deliver(log)
+        except (OSError, ValueError) as e:
+            log(f"README.md: NOT written: {e}")
+            held.append("README")
+    log(f"delivered {len(done)} file(s); held back: " + (", ".join(sorted(set(held))) if held else "none"))
     return done, held
+
+
+README_HEAD = "## Hit reactions, knock-downs and get-ups"
+
+
+def readme_section():
+    """The soldier README's section on this set (written by --deliver, in place of an older one)."""
+    rows = [("hit_flinch_f / _b / _l / _r", FLINCH_LONG, "no", "fire_stand 0.0", "fire_stand 0.0",
+             "additive_base [fire_stand, 0.0]"),
+            ("hit_flinch_kneel_f / _b / _l / _r", FLINCH_LONG, "no", "fire_kneel 0.0", "fire_kneel 0.0",
+             "additive_base [fire_kneel, 0.0]"),
+            ("hit_flinch_run_f / _b / _l / _r", FLINCH_LONG, "no", "run 0.0", "run 0.3",
+             "additive_base [run, 0.0, 0.3], stride (the run's)"),
+            ("hit_flinch_prone", PRONE_LONG, "no", "fire_prone 0.0", "fire_prone 0.0", "additive_base [fire_prone, 0.0]"),
+            ("knock_down_face / knock_down_back", KNOCK_LONG, "no", "fire_stand 0.0", "down_face / down_back 0.0",
+             "end_offset (the root moved after it)"),
+            ("down_face / down_back", DOWN_LONG, "yes", "the knock-down's last pose", "= first", ""),
+            ("get_up_face / get_up_back", UP_LONG, "no", "down_face / down_back 0.0", "idle 0.0 (its pose, not its place)",
+             "end_offset, root_shift (the root moved after it)")]
+    out = [README_HEAD + f" (release 2, {SET}.py, {time.strftime('%d %B %Y')})", "",
+           f"Nineteen clips in every infantry rifleman file (the twenty files of {SET}.py), each keyed on the man's "
+           "own rig and checked from its baked keys the way the game draws them. Each clip's `about` says how to "
+           "play it; the file's `about_hits` says it for the set.", "",
+           "| clip | long s | loop | first key | last key | fields |", "|---|---|---|---|---|---|"]
+    out += [f"| {a} | {b_} | {c} | {d} | {e} | {f} |" for a, b_, c, d, e, f in rows]
+    out += ["",
+            "- Flinches: lay the difference from additive_base on whatever he is doing (the better use), or blend "
+            "into the clip only from its base pose, over 0.03 s, and back. The run flinches are the run from 0.0 to "
+            "0.3 s with the stumble in it: start them from run phase 0, or lay them as a difference.",
+            "- Knock-downs: play once, then move the root by end_offset and go on with the down loop.",
+            "- Get-ups: from the down loop's first pose to idle's pose at 0.0. Not in place: he stands up where his "
+            "knees (face) or feet (back) were, so his feet do not slide; move the root by root_shift (x, y) after the "
+            "clip and idle carries on from there.",
+            f"- Checks: the `checks` of each file's staged bundle (`{STAGE}soldier_<N>.{SET}.json`). A file is "
+            f"delivered only when every fault in its checks is accepted, one by one with its reason, in {SET}.py's "
+            "ALLOW list.",
+            "- The game still needs: an additive (or once) layer for the flinches, a root shift by end_offset after "
+            "a knock-down or a get-up, and a turnover that plays the get-ups.", ""]
+    return "\n".join(out)
+
+
+def readme_deliver(log=print):
+    """The section put into the shared soldier README (an older one of the same heading replaced, else set in before
+    'Known limits'), the README backed up first and read again just before the write."""
+    import hashlib
+    path = os.path.join(SHARED, "README.md")
+    with open(path, "rb") as f:
+        raw = f.read()
+    text = raw.decode("utf-8")
+    sec = readme_section()
+    lines = text.split("\n")
+    a = next((i for i, l_ in enumerate(lines) if l_.startswith(README_HEAD)), None)
+    if a is not None:
+        z = next((i for i in range(a + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+    else:
+        a = z = next((i for i, l_ in enumerate(lines) if l_.startswith("## Known limits")), len(lines))
+    new = "\n".join(lines[:a] + sec.split("\n") + lines[z:]).encode("utf-8")
+    if new == raw:
+        log("README.md: already has the section")
+        return
+    bdir = os.path.join(BACKUP, "shared")
+    os.makedirs(bdir, exist_ok=True)
+    bpath = os.path.join(bdir, f"README.{hashlib.sha1(raw).hexdigest()[:12]}.md")
+    if not os.path.exists(bpath):
+        write_whole(bpath, raw)
+    with open(path, "rb") as f:
+        if f.read() != raw:
+            raise ValueError("it changed while the section was being made")
+    write_whole(path, new)
+    with open(path, "rb") as f:
+        if f.read() != new:
+            raise ValueError(f"written but did not read back: put back {bpath}")
+    log(f"README.md: section '{README_HEAD}' written; backup {bpath}")
 
 
 # ================================================================================================ pictures
