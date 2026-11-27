@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 73286b8b3 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f5038ba84 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1337,7 +1337,7 @@
     winChance: false,
     _spread: "The field spread (release 2; rules-builder/release2/field-spread/form.md, ruled by the design director 24 November 2026 19:47Z, 'Go ahead with step 1'; src/campaign/spread.ts, data/campaign/spread.json): one draw per battle, keyed on the field ticket's own seed and attempt. It holds the fortune share the field already fights on and one break point per side, the share of its power a side will lose before it quits, drawn about a level that comes from the side's own units (organisation, morale, experience, the general), never from a nation's flag or the date. Its own step inside Units decide: it needs 'unitsDecide' too, and is never on with 'winChance' (setSpread refuses the pair). Bench-only through the form's steps 1-4: nothing reads this key, no grand start offers it, and only a measuring harness sets the flag (setSpread) or lays the draw on its own tickets (spreadKeys). At step 5, if the six bands pass, card and field switch together. Off: no ticket carries reckoning.spread, no die is thrown on the campaign's dice or the field's, and every war and every field is the one without it.",
     spread: false,
-    _trueReach: "True reach (audit item 41; the design director's ruling of 13:58Z, 'Withering garrisons' 1, and 14:26Z, 'Ports fed by an ally's paper reach', 25 November 2026): a sea the shutting power holds closed to the nation fed is closed to every ship carrying it stores, whatever the flag, so an ally's ships feed a port only where they could truly sail there with that nation's stores (game.ts trueReach). On wherever the far side is on. On the old chart its own step inside Units decide: it needs 'unitsDecide' too, and stays off, bench only, until its 96-war gate passes (Malta's and Tripoli's months in supply, Britain's corps lost there, how often each is besieged and taken, Italy's months to fall). Off: the supply picture is today's. On: the grand campaigns opened from now on with Units decide carry the flag 'trueReach' as well. A test turns it on by setTrueReach; a run outside the browser by TC_UNITS=1 TC_TRUEREACH=1.",
+    _trueReach: "True reach (audit item 41; the design director's ruling of 13:58Z, 'Withering garrisons' 1, and 14:26Z, 'Ports fed by an ally's paper reach', 25 November 2026): a sea the shutting power holds closed to the nation fed is closed to every ship carrying it stores, whatever the flag, so an ally's ships feed a port only where they could truly sail there with that nation's stores (game.ts trueReach). On wherever the far side is on. On the old chart its own switch, with Units decide or without it, and off until its gate on the player's own start passes (the bridge's start, the world chart, the far side off, the ship list as shipped). Off: the supply picture is today's. On: the grand campaigns opened from now on carry the flag 'trueReach'. The ship list switches it only as a September 1939 war opens, never in a war already under way nor at a later start: stores filled with it off carry no record of whose they are. The 3D's ship list switches it by 'truereachrule'; a test by setTrueReach in that opening month; a run outside the browser by TC_TRUEREACH=1.",
     trueReach: false,
     _fromWait: "The old chart's 'from' rows wait on contact (release 2; the design director's ruling of 19:47Z, 25 November 2026, pacific-japan/dd-form-from-rows-contact-1125.md; game.ts expeditions, drawn.ts corpsInContact). In the grand campaign a dated row that takes a named corps whole (its 'from' list, or the book's) waits while that corps stands in contact, an enemy at war on its province or beside it, and its half year runs from the month the corps comes free; where the corps already stands at the place the row forms, the row goes ahead. The far side has the same wait under this same switch (the design director's 20:08Z: both charts one rule, and one Options row, named by the UI director; that row is not built yet, so a war takes the switch only as it opens), with three things of its own: a row with a body of its own ('adds') comes at that worth and takes nobody; where the player's rows are offers he is asked as before; and a row whose named corps is not on the board because the dated row that makes it still waits, waits with that row (game.ts fromWaits), so that no division is laid twice. On the far side the wait acts at stops 3 to 5 of the dial: at the stops that keep a book the book's rows keep their book (the design director's 21:25Z). Off until its gate passes: the row takes the corps wherever it stands, as today, and every war is the war without it. On: the grand campaigns opened from now on carry the flag 'fromWait'. A run outside the browser can force it: TC_FROMWAIT=1 or TC_FROMWAIT=0.",
     fromWait: false,
@@ -43194,7 +43194,11 @@
   };
   var townWorksPhrase = (g2, r) => townWorksWords(g2, r, fortTerm(r, worksFor(g2, r, r.ctrl)));
   var townHeld = (g2, r) => garrisonOf(r).length > 0 || guardOf(g2, r) > 0;
-  var storesOf = (g2, r) => SIEGE.stores[townSize(g2, r)] + (worksKept(r)?.lv ?? 0) * SIEGE.fortStores;
+  var storesOf = (g2, r) => rowStores(g2, r) ?? SIEGE.stores[townSize(g2, r)] + (worksKept(r)?.lv ?? 0) * SIEGE.fortStores;
+  function rowStores(g2, r) {
+    if (!r.overseas || !r.port || !worksKept(r) || !fortRows(g2) || !trueReach(g2)) return null;
+    return g2.flags[`sgs:${r.id}`] ?? portStores(g2, r);
+  }
   var monthsShut = (g2, r) => g2.flags[`sgm:${r.id}`] ?? 0;
   var investedOn = (g2, r) => g2.flags[`siege:${r.id}`] ?? -1;
   function feeders(g2, r) {
@@ -43525,6 +43529,8 @@
   }
   var placeWords = (g2, r) => r.cap && r.owner === r.ctrl ? `the capital of ${theName(g2.nations[r.owner])}` : `the ${TOWNS.words[townSize(g2, r)].toLowerCase()}`;
   var months = (n) => n <= 1 ? "a month" : `${n} months`;
+  var COUNTED = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+  var monthsSaid = (n) => n <= 1 ? "a month" : `${n <= 10 ? COUNTED[n] : n} months`;
   function keptAtOpening(g2, r, monthOpen = false) {
     if (!trueReach(g2)) return 0;
     return keptStoresRun(g2, r, !monthOpen && g2.order.indexOf(r.ctrl) <= g2.phase);
@@ -43535,6 +43541,9 @@
     g2.flags[key8] = g2.turn;
     g2.flags[`sgby:${r.id}`] = Object.keys(g2.nations).indexOf(by2);
     delete g2.flags[`sgm:${r.id}`];
+    delete g2.flags[`sgs:${r.id}`];
+    const row2 = rowStores(g2, r);
+    if (row2 !== null) g2.flags[`sgs:${r.id}`] = row2;
     let eaten = 0;
     if (g2.flags[`pkt:${r.id}`] !== void 0) {
       const pocket = Math.min(storesOf(g2, r), Math.floor((g2.flags[`pkte:${r.id}`] ?? 0) / 10));
@@ -43558,6 +43567,7 @@
     delete g2.flags[key8];
     delete g2.flags[`sgby:${r.id}`];
     delete g2.flags[`sgm:${r.id}`];
+    delete g2.flags[`sgs:${r.id}`];
     if (by2) g2.flags[`relieved:${r.id}`] = g2.turn;
     g2.supplyDirty = true;
     tallySiege(g2, "raised");
@@ -43579,6 +43589,7 @@
     delete g2.flags[`siege:${r.id}`];
     delete g2.flags[`sgby:${r.id}`];
     delete g2.flags[`sgm:${r.id}`];
+    delete g2.flags[`sgs:${r.id}`];
     delete g2.flags[`guard:${r.id}`];
     delete g2.flags[`storm:${r.id}`];
     delete g2.flags[`sally:${r.id}`];
@@ -43708,6 +43719,7 @@
       delete g2.flags[`siege:${r.id}`];
       delete g2.flags[`sgby:${r.id}`];
       delete g2.flags[`sgm:${r.id}`];
+      delete g2.flags[`sgs:${r.id}`];
       delete g2.flags[`guard:${r.id}`];
     }
   }
@@ -43894,9 +43906,15 @@
         const sat = Math.max(0, g2.turn - investedOn(g2, r));
         lines2.push(sat >= SIEGE.capitalYear ? `Shut in for ${months(sat)}, the government has lost its hold on the country: the capital counts as lost when it reckons whether to fight on.` : `A government shut in its capital loses its hold on the country month by month. After ${months(SIEGE.capitalYear)} of siege the capital counts as lost, whether it has fallen or not.`);
       }
+    } else if (!trueReach(g2)) {
+      lines2.push(`Closely invested, its stores would feed the defenders for ${months(stores2)}${r.port ? ", and for as long as ships can reach its harbour" : ""}.`);
     } else {
-      const would = stores2 - Math.min(stores2, keptAtOpening(g2, r));
-      lines2.push(would > 0 ? `Closely invested, its stores would feed the defenders for ${months(would)}${r.port ? ", and for as long as ships can reach its harbour" : ""}.` : `Closely invested, its defenders would go hungry at once: its stores have been eaten while no ship came in${r.port ? ", and only ships reaching its harbour could feed them" : ""}.`);
+      const eaten = Math.min(stores2, keptAtOpening(g2, r)), would = stores2 - eaten;
+      if (would <= 0) lines2.push(`Closely invested, its defenders would go hungry at once: its stores have been eaten with no ship coming in${r.port ? ", and only ships reaching its harbour could feed them" : ""}.`);
+      else {
+        const ate = monthsSaid(eaten);
+        lines2.push(`Closely invested, its stores would feed the defenders for ${monthsSaid(would)}${r.port ? ", and for as long as ships can reach its harbour" : ""}.` + (eaten > 0 ? ` ${ate[0].toUpperCase()}${ate.slice(1)} of its stores ${eaten === 1 ? "has" : "have"} been eaten with no ship coming in.` : ""));
+      }
     }
     return {
       region,
@@ -47923,7 +47941,7 @@
     openTrade(g2);
     if (CONVOY_STAGE) g2.flags.convoyBattle = 1;
     if (WINCHANCE_STAGE) g2.flags.winChance = 1;
-    if (UNITS_STAGE && TRUEREACH_STAGE) g2.flags.trueReach = 1;
+    if (TRUEREACH_STAGE) g2.flags.trueReach = 1;
     if (FROMWAIT_STAGE) g2.flags.fromWait = 1;
     openBargains(g2);
     openGovernment(g2);
@@ -50354,6 +50372,7 @@
     const since = g2.flags[`amb:held:${a.id}`] ?? (g2.flags[`amb:held:${a.id}`] = g2.turn);
     if (g2.turn - since + 1 < C2.treaty) return false;
     for (const r of ground) {
+      keptStoresHolder(g2, r, a.nat);
       r.owner = a.nat;
       r.since = g2.turn;
     }
@@ -62413,6 +62432,7 @@
     return true;
   }
   function transfer(g2, r, to) {
+    keptStoresHolder(g2, r, to);
     r.owner = to;
     r.ctrl = to;
     r.cap = false;
@@ -62786,13 +62806,13 @@
   }
   var ROME_HOLDS = "Rome holds, for now";
   var NO_LAST_MONTH = "There will be no last month";
-  var COUNTED = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+  var COUNTED2 = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
   function stakeDue(g2, viewer = g2.human) {
     const st = romeStake(g2, viewer);
     if (!st || st.due === void 0) return null;
     const month3 = turnToDate(st.due).label.split(" ")[0];
     const n = st.lost.length, of2 = st.grounds.length;
-    const num9 = (k) => COUNTED[k] ?? String(k);
+    const num9 = (k) => COUNTED2[k] ?? String(k);
     const unless = n > 3 ? `unless all ${num9(n)} places ${st.who} hold are retaken first: ${listed5(st.lost)}` : `unless ${listed5(st.lost)} ${n === 1 ? "is" : "are"} retaken first`;
     return {
       title: "Rome wavers",
@@ -62822,7 +62842,7 @@
     const are = lost.length === 1 ? "is" : "are";
     const changed = st.fell !== void 0;
     const date2 = turnToDate(falls).label;
-    const all = COUNTED[grounds2.length] ?? String(grounds2.length);
+    const all = COUNTED2[grounds2.length] ?? String(grounds2.length);
     const text = changed ? lost.length ? `Italy signs an armistice next month unless ${held3} ${are} taken back. Mussolini has fallen, and Rome signs while ${who} hold any of ${six}: that ends your campaign. Take back what they hold this month and Italy fights on.` : `Mussolini has fallen. If ${who} hold any of the ${all} as a month opens, Rome signs at once and your campaign ends. ${NO_LAST_MONTH}: hold all ${all}. They are ${listed5(grounds2)}.` : lost.length ? `Mussolini falls ${g2.turn < falls ? `in ${date2}` : "next month"} unless ${held3} ${are} taken back. The month after, Italy signs an armistice while ${who} hold any of ${six}, and that ends your campaign.` : `Mussolini falls if ${who} take one of six places. They are ${listed5(grounds2)}${g2.turn < falls ? `, and they count from ${date2}` : ""}. The month after he falls, Italy signs an armistice if one is still held, and that ends your campaign.`;
     return { title: changed && !lost.length ? ROME_HOLDS : "Rome wavers", text, nat: "ITA", about: "ITA", region: g2.byName[lost[0] ?? grounds2[grounds2.length - 1]]?.id, tested: turnToDate(g2.turn + 1).label.split(" ")[0] };
   }
@@ -76816,15 +76836,22 @@
   }
   var natIndex = (g2, nat) => Object.keys(g2.nations).indexOf(nat);
   function keptStoresRun(g2, r, drawn = false) {
+    if (!r.overseas || !r.port || !worksKept(r) || !keptStoresHis(g2, r)) return 0;
+    return Math.min(portKeep(g2, r), Math.max(0, g2.turn - (drawn ? 0 : 1) - g2.flags[storesKey(r.id)]));
+  }
+  function keptStoresHis(g2, r) {
     const last = g2.flags[storesKey(r.id)];
-    if (!r.overseas || !r.port || !worksKept(r) || last === void 0 || last <= r.since) return 0;
-    if (Object.keys(g2.nations)[g2.flags[storesByKey(r.id)] ?? -1] !== r.ctrl) return 0;
-    return Math.min(portKeep(g2, r), Math.max(0, g2.turn - (drawn ? 0 : 1) - last));
+    if (last === void 0 || Object.keys(g2.nations)[g2.flags[storesByKey(r.id)] ?? -1] !== r.ctrl) return false;
+    const at4 = g2.flags[storesAtKey(r.id)];
+    return (at4 !== void 0 ? at4 === r.since : last > r.since) || g2.flags[storesHeldKey(r.id)] === r.since;
+  }
+  function keptStoresHolder(g2, r, to) {
+    if (trueReach(g2) && r.ctrl === to && keptStoresHis(g2, r)) g2.flags[storesHeldKey(r.id)] = g2.turn;
   }
   function onPortStores(g2, c) {
     if (!fortRow(g2, c) || !c.supplied) return false;
     const r = g2.regions[c.reg], last = g2.flags[`stores:${r.id}`];
-    return r.overseas && !!r.port && !!r.fort && last !== void 0 && last < g2.turn && g2.turn - last <= portKeep(g2, r);
+    return r.overseas && !!r.port && !!r.fort && last !== void 0 && last < g2.turn && g2.turn - last <= portKeep(g2, r) && (!trueReach(g2) || keptStoresHis(g2, r));
   }
   function fortShare(g2, defenders) {
     let all = 0, forts2 = 0;
@@ -77007,6 +77034,9 @@
   var depotKey = (id) => depotKeys[id] ?? (depotKeys[id] = "depot:" + id);
   var storesKey = (id) => storesKeys[id] ?? (storesKeys[id] = `stores:${id}`);
   var storesByKey = (id) => storesByKeys[id] ?? (storesByKeys[id] = `stores:by:${id}`);
+  var storesHeldKey = (id) => `stores:held:${id}`;
+  var storesAtKeys = [];
+  var storesAtKey = (id) => storesAtKeys[id] ?? (storesAtKeys[id] = `stores:at:${id}`);
   function drawSupply(g2, id, pass, seeds, heads, wide3, long, deep, sand, rail2) {
     const size = g2.regions.length;
     const ok2 = new Uint8Array(size);
@@ -77035,7 +77065,15 @@
     }
     return { ok: ok2, reach: reach3, east };
   }
-  var trueReach = (g2) => farOn(g2) || unitsDecide(g2) && g2.flags.trueReach === 1;
+  var trueReach = (g2) => farOn(g2) || g2.flags.open === 1 && g2.flags.trueReach === 1;
+  var trueReachSettable = (g2) => g2.flags.open === 1 && g2.turn === 1 && g2.flags.openFrom === void 0;
+  function setTrueReach(g2, on2) {
+    if (on2 ? !trueReachSettable(g2) : g2.flags.open !== 1) return false;
+    if (on2) g2.flags.trueReach = 1;
+    else delete g2.flags.trueReach;
+    g2.supplyDirty = true;
+    return true;
+  }
   function computeSupply(g2) {
     const active = new Set(g2.corps.map((c) => c.nat));
     const withShips = Object.values(g2.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
@@ -77272,8 +77310,9 @@
             else if (by2 === 1 ? forHolder(id, r) : by2 === 2 || mates.some((a) => feeds(a, id, r) && forHolder(a, r))) {
               g2.flags[storesKey(r.id)] = g2.turn;
               g2.flags[storesByKey(r.id)] = (places ?? (places = new Map(Object.keys(g2.nations).map((n, i) => [n, i])))).get(r.ctrl);
+              g2.flags[storesAtKey(r.id)] = r.since;
             }
-          } else if (g2.turn - (g2.flags[storesKey(r.id)] ?? -99) <= portKeep(g2, r)) quay = true;
+          } else if (g2.turn - (g2.flags[storesKey(r.id)] ?? -99) <= portKeep(g2, r) && (!truly || keptStoresHis(g2, r))) quay = true;
         }
         if (!depot && !quay) continue;
         if (field4 && r.ctrl === id && pocketDry(g2, r, id)) continue;
@@ -79032,6 +79071,8 @@
     const owner = g2.nations[r.owner];
     r.ctrl = owner.alive && allied(g2, nat, r.owner) ? r.owner : nat;
     r.since = g2.turn;
+    if (g2.flags[storesAtKey(r.id)] !== void 0) delete g2.flags[storesAtKey(r.id)];
+    if (g2.flags[storesHeldKey(r.id)] !== void 0) delete g2.flags[storesHeldKey(r.id)];
     g2.flags[`fellP:${r.id}`] = g2.phase;
     moraleCapital(g2, r, old);
     r.prev = old;
@@ -123580,6 +123621,10 @@
       r2Switches: s.flags.open === 1,
       columnsOn: columnsOn(s),
       columnsCan: columnsSettable(s),
+      // (Release 2, game.ts) True reach as the options page shows it: whether it runs, and whether it can still be switched
+      // (only as a September 1939 war opens, in its first month).
+      trueReachOn: trueReach(s),
+      trueReachCan: trueReachSettable(s),
       // (Release 2, logistics.ts) The three supply orders' switches as thrown (each does something only with the columns on).
       lorryShiftSet: logisticsSet(s, "lorryShift"),
       wagonsSet: logisticsSet(s, "wagons"),
@@ -130311,6 +130356,11 @@ ${standing6}`,
       note4 = settledTownsOn(s) ? "Conquered towns settle: a few months after you take a town, every kind of building and works can go up there. Its schools, drill grounds and trade houses then serve you as at home; its pay stays at the conquered share." : "Conquered towns stay as they were: of the buildings only administration and medicine can go up there, and no factories, shipyards or fortifications.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
+    if (part[0] === "truereachrule") {
+      ok2 = setTrueReach(s, part[1] === "on");
+      note4 = !ok2 ? "True reach can be switched only as a new war opens, in its first month." : trueReach(s) ? "True reach is on: an ally's ships feed a port only where they truly reach it, so a port the enemy's fleets cut off lives on its own stores." : "True reach is off: ports are fed as before.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
+    }
     if (part[0] === "columns") {
       ok2 = setColumns(s, part[1] === "on");
       note4 = !ok2 ? "Supply columns can be switched only in the campaign's first month." : columnsOn(s) ? "Supply columns are on: each month lorries carry the supplies from the railhead to the armies beyond it, and enemy aircraft and partisans can catch them on the road." : "Supply columns are off: the armies beyond the railhead are fed as before.";
@@ -131838,7 +131888,11 @@ ${standing6}`,
     crewrollrule: (s) => setCrewRoll(s, true) && crewRollOn(s),
     diaryrule: (s) => setDiary(s, true) && diaryOn(s),
     heldlinerule: (s) => setHeld(s, true) && heldOn(s),
-    dumpfiresrule: (s) => setDumpFires(s, true) && dumpFiresOn(s)
+    dumpfiresrule: (s) => setDumpFires(s, true) && dumpFiresOn(s),
+    // (Release 2, game.ts trueReach: true reach on the old chart, taken only as a September 1939 war opens
+    // (trueReachSettable), so an older war and a later start are left as they are. The design director's 480-war fairness
+    // gate passed 15:53Z 27 Nov 2026: it ships ON, with its Options row (act('truereachrule:on' / ':off'), turn 1 only).)
+    truereachrule: (s) => setTrueReach(s, true) && trueReach(s)
   };
   function r2Ship(ids2) {
     const s = game();
