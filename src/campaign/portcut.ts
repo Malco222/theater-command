@@ -22,7 +22,8 @@
 //                     each fill of the stores, a ring's months or not: in the month they run out, or, where his reading
 //                     of that month could not yet see it, in the next month's (the UI director's 05:03Z, item 4), or at
 //                     the reading where the port's lines come back to him after a ring (portRing:, 13:23Z, item c).
-//                     Cleared with portTold.
+//                     Set too where it gives way to the rule's own line of the surrender, in the month the garrison is
+//                     lost (14:35Z, finding 2), with portTold where that is not yet set. Cleared with portTold.
 //   portRing:<id>     the month of the last reading at which the port was left to its holder's pocket for the player, its
 //                     holder (leftToPocket): once the port's lines come back to him, the ring broken or its clock no
 //                     longer the sooner, with the sea still shut, what is true of the port then is told once, in his next
@@ -922,9 +923,10 @@ function holdsMonth(g: Game, sweep: boolean): void {
  * a); the second by the clock too (the first month the stores feed none), or, where the larder was never the holder's,
  * the first month it is told. And at the reading where the port's lines come back to its holder after a ring that held
  * them from him, broken or no longer the sooner, with the sea still shut, whichever of the two is true then, once (the
- * UI director's 12:24Z, item 7, and 13:23Z, item c): the second still once for each fill. Only to a player who holds the
- * port or has corps there, and to its holder not while it is left to his pocket (12:24Z, item 1). Nothing with the
- * switch off, or with nobody at the table.
+ * UI director's 12:24Z, item 7, and 13:23Z, item c): each still once for each fill (14:35Z, finding 3). The second never
+ * in the reading where the garrison is lost, on any path: it gives way to the rule's own line of the surrender, its
+ * marks set all the same (14:35Z, finding 2). Only to a player who holds the port or has corps there, and to its holder
+ * not while it is left to his pocket (12:24Z, item 1). Nothing with the switch off, or with nobody at the table.
  */
 export function portsMonth(g: Game, nat: string): void {
   if (!portStoresOn(g)) return;
@@ -978,14 +980,21 @@ export function portsMonth(g: Game, nat: string): void {
     // (The mark keeps the month the first of the port's cut-off news was told: the relief is read from it. In the month a
     // ring is due to close, its "through" and "at" cannot be given: the news takes the "by" form, the latest at both
     // ends, as the card and the corps line do (the UI director's 12:24Z, item 3), and is told once, as the first-month
-    // news is, in the month after the fill (13:23Z, item a).)
-    if (f.state === 'stores' && (f.lastFilled === g.turn - 1 || back)) {
+    // news is, in the month after the fill (13:23Z, item a). Once for each fill, where the port's lines come back to him
+    // after a ring too: told before the ring for this fill (the mark later than the fill), it is not told again, and the
+    // card carries the port's clock, as it does for any other change within a fill (14:35Z, finding 3).)
+    if (f.state === 'stores' && (f.lastFilled === g.turn - 1 || (back && !(told !== undefined && told > f.lastFilled!)))) {
       headline(g, 'info', f.due
         ? `No ship reaches ${portOf(r)}: ${heldSaid(g, f.shut, null, false)}. Unless the sea is opened, the garrison is hungry by ${monthSaid(g, f.hungry!)} and lost by the start of ${monthSaid(g, f.lost)}.`
         : `No ship reaches ${portOf(r)}: ${heldSaid(g, f.shut, null, false)}. The garrison lives on the port's stores through ${monthSaid(g, f.feedsTo!)}; unless the sea is opened, it then goes hungry and is lost ${startOf(f.lostBy)} ${monthSaid(g, f.lost)}.`, r.ctrl, r.id, { lost: r.ctrl });
       g.flags[k] ??= g.turn;
     } else if (f.state === 'hungry' && spentDue(g, f, told, g.flags[ks], back)) {
-      headline(g, 'info', `${PortOf(r)}'s stores are spent and no ship has got through: the garrison goes hungry, and is lost ${startOf(f.lostBy)} ${monthSaid(g, f.lost)} unless the sea is opened.`, r.ctrl, r.id, { lost: r.ctrl });
+      // (In the reading where the garrison is lost, the month the news would name being this one, the spent news gives
+      // way to the rule's own line of the surrender, on every path, the clock's and the ring's alike: "unless the sea is
+      // opened" can no longer be met, and the corps are struck off and told in this month's reckoning. Its marks are set
+      // all the same, so that it is not told the month after. The UI director's 14:35Z, finding 2, as the struck-off line
+      // gives way at 23:50Z, item 4.)
+      if (f.lost !== g.turn) headline(g, 'info', `${PortOf(r)}'s stores are spent and no ship has got through: the garrison goes hungry, and is lost ${startOf(f.lostBy)} ${monthSaid(g, f.lost)} unless the sea is opened.`, r.ctrl, r.id, { lost: r.ctrl });
       g.flags[k] ??= g.turn;
       g.flags[ks] = g.turn;
     }

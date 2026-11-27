@@ -1922,7 +1922,7 @@ describe('12:24Z, items 1 and 2: a port in its holder\'s pocket is left to the p
       expect(wordsOnly(g)).toBe(wordsOnly(run(false).g));
     });
 
-    it('a ring that breaks with the port\'s stores spent: the fortress rows off, the ring closed as Britain\'s January opens, the pocket dry from his March, and Spain\'s peace in her April; his May news tells the spent news, as laid, once, after the ring\'s own line', () => {
+    it('a ring that breaks with the port\'s stores spent: the fortress rows off, the ring closed as Britain\'s January opens, the pocket dry from his March, and Spain\'s peace in her April; his May is the month the garrison is lost, and the spent news gives way to the rule\'s own line of the surrender (the UI director\'s 14:35Z, finding 2): no port news, its mark set all the same', () => {
       const { g, rows, shipped } = play(false, true, 20, 16);
       expect(rows).toEqual([
         [16, false, [true, 1], [], ['Cut off by sea, its stores would feed the garrison for two months.'], null, null],
@@ -1931,18 +1931,48 @@ describe('12:24Z, items 1 and 2: a port in its holder\'s pocket is left to the p
         [18, true, [true, 1], [], [], null, null],
         [19, true, [false, 0.6], [], [], null, null],
         [20, true, [false, 0.2], [], [], null, null],
-        // May: the ring broken by Spain's peace, the sea still shut. The port's stores have been spent since March, and he
-        // was told nothing of them while the ring held them: his news tells the spent news, as laid, once, after the
-        // ring's own line. Its corps are struck off as May opens, the month it names. (The 12:24Z build told nothing: it
-        // told the first-month news only, and only while the port was on its stores.)
-        [21, false, null, [NEWS_SPENT], [], null, null],
+        // May: the ring broken by Spain's peace, the sea still shut, the port's stores spent since March, and its corps
+        // struck off as May opens, in the reckoning that follows his reading. The spent news, which would name May, gives
+        // way to the rule's own line of the surrender, as the struck-off line does: "unless the sea is opened" can no
+        // longer be met (the UI director's 14:35Z, finding 2). (The 13:23Z build told it here, after the ring's own line:
+        // "Gibraltar's stores are spent and no ship has got through: the garrison goes hungry, and is lost at the start of
+        // May unless the sea is opened.")
+        [21, false, null, [], [], null, null],
+      ]);
+      expect(shipped).toEqual([SURROUNDED('2 months'), 'The ring closes at Gibraltar: 5 British corps, 150,000 men, are cut off from all supply.', BROKEN, 'Cut off and out of supply, the British army at Gibraltar lays down its arms: 6 corps, 101,332 men.']);
+      // May's lines of Gibraltar and of its corps, in order: the ring's own line, the corps struck off, and the rule's own
+      // line of the surrender, and nothing of the port's.
+      expect(g.headlines.filter((h) => h.turn === 21 && /Gibraltar|struck off the army's list/.test(h.text) && !/wireless/.test(h.text)).map((h) => h.text)).toEqual([
+        BROKEN,
+        ...['9th', '10th', '11th', '12th', '13th'].map((n) => `${n} Corps is struck off the army's list and written on the memorial wall.`),
+        'Cut off and out of supply, the British army at Gibraltar lays down its arms: 6 corps, 101,332 men.',
+      ]);
+      expect(g.headlines.filter((h) => OURS.test(h.text))).toEqual([]);
+      // (Its marks set all the same, as where it is told, so that it is not told the month after.)
+      const gib = g.byName.Gibraltar.id;
+      expect([g.flags[`portTold:${gib}`], g.flags[`portSpent:${gib}`]]).toEqual([21, 21]);
+      expect(wordsOnly(g)).toBe(wordsOnly(play(false, false, 20, 16).g));
+    });
+
+    it('the same war with Spain\'s peace a month sooner, in her March: the ring broken at his April, a month before the garrison is lost; his April news tells the spent news, as laid, once, after the ring\'s own line (13:23Z, item c), and May no port news', () => {
+      const { g, rows, shipped } = play(false, true, 19, 16);
+      expect(rows).toEqual([
+        [16, false, [true, 1], [], ['Cut off by sea, its stores would feed the garrison for two months.'], null, null],
+        [17, true, [true, 1], [], [], null, null],
+        [18, true, [true, 1], [], [], null, null],
+        [19, true, [false, 0.6], [], [], null, null],
+        // April: the ring broken by Spain's peace, the sea still shut, the port's stores spent since March. He was told
+        // nothing of them while the ring held them, and the garrison is lost as May opens: his news tells the spent news,
+        // as laid, once.
+        [20, false, [false, 0.2], [NEWS_SPENT], [SPENT, REMEDY('June')], HUNGRY, HUNGRY],
+        [21, false, null, [], [], null, null],
       ]);
       expect(shipped).toEqual([SURROUNDED('2 months'), 'The ring closes at Gibraltar: 5 British corps, 150,000 men, are cut off from all supply.', BROKEN, 'Cut off and out of supply, the British army at Gibraltar lays down its arms: 6 corps, 101,332 men.']);
       const all = g.headlines.map((h) => h.text);
-      expect(g.headlines.filter((h) => h.text === NEWS_SPENT).map((h) => h.turn)).toEqual([21]);
+      expect(g.headlines.filter((h) => h.text === NEWS_SPENT).map((h) => h.turn)).toEqual([20]);
       expect(all.indexOf(NEWS_SPENT)).toBeGreaterThan(all.indexOf(BROKEN));
-      expect(g.headlines[all.indexOf(BROKEN)].turn).toBe(21);
-      expect(wordsOnly(g)).toBe(wordsOnly(play(false, false, 20, 16).g));
+      expect(g.headlines[all.indexOf(BROKEN)].turn).toBe(20);
+      expect(wordsOnly(g)).toBe(wordsOnly(play(false, false, 19, 16).g));
     });
 
     it('once for each fill, the spent news\'s own rule: told in March before the ring went dry, it is not told again when the ring breaks in May; the mark of it is kept through the ring and goes as the port\'s lines would', () => {
@@ -2009,6 +2039,93 @@ describe('12:24Z, items 1 and 2: a port in its holder\'s pocket is left to the p
         [20, false, [], [FILLED], null, null, undefined],
       ]);
       expect(g.headlines.filter((h) => h.text === RELIEF).map((h) => h.turn)).toEqual([19]);
+      expect(wordsOnly(g)).toBe(wordsOnly(run(false).g));
+    });
+  });
+
+  describe('14:35Z: the spent news gives way in the month the garrison is lost, and "once" is once for each fill', () => {
+    /** The lines of Gibraltar and of the corps struck off, in the order told. */
+    const lines = (g: Game, from: number): string[] => g.headlines.slice(from).map((h) => h.text).filter((x) => /Gibraltar|struck off the army's list/.test(x) && !/wireless/.test(x));
+    const FIRST = 'No ship reaches Gibraltar: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast. The garrison lives on the port\'s stores through February; unless the sea is opened, it then goes hungry and is lost at the start of May.';
+    const NEWS_SPENT = 'Gibraltar\'s stores are spent and no ship has got through: the garrison goes hungry, and is lost at the start of May unless the sea is opened.';
+    const RING = 'The ring closes at Gibraltar: 5 British corps, 150,000 men, are cut off from all supply.';
+    const STRUCK = (names: string[]): string[] => names.map((n) => `${n} Corps is struck off the army's list and written on the memorial wall.`);
+
+    it('finding 2, the clock path with no ring (Spain neutral): the 9th Corps\' order set to 0.3 after Britain\'s February reading, so that it is lost as March opens, the month the stores are spent; his March news holds no port news, only the rule\'s own lines, and nothing from the port is told in April; at full order the spent news is told in March, before the loss in May, as laid', () => {
+      const run = (low: number | null, on = true): { g: Game; rows: unknown[] } => {
+        const { g, town } = pocketed(false, on, 'UK', { war: 999 });
+        const rows: unknown[] = [];
+        for (let t = 16; t <= 21; t++) {
+          const h0 = g.headlines.length;
+          month(g, t, ['GER', 'ITA', 'UK']);
+          rows.push([t, lines(g, h0)]);
+          if (t === 18 && low !== null) town.org = low;
+        }
+        return { g, rows };
+      };
+      const { g, rows } = run(0.3);
+      expect(rows).toEqual([
+        [16, []],
+        [17, [FIRST]],
+        [18, []],
+        // March: the stores spent, and the 9th Corps, at order 0.3, struck off as the month opens. The spent news, which
+        // would name March, gives way to the rule's own line of the surrender (the UI director's 14:35Z, finding 2). (The
+        // 13:23Z build told, after the ring's own line: "Gibraltar's stores are spent and no ship has got through: the
+        // garrison goes hungry, and is lost at the start of March unless the sea is opened.")
+        [19, [RING, ...STRUCK(['9th']), 'Cut off and out of supply, 9th Corps lays down its arms at Gibraltar.']],
+        // April: its mark was set in March all the same, so nothing from the port is told now. (Without it, the news of
+        // April told the stores spent, a month after they were, naming May.)
+        [20, []],
+        [21, [...STRUCK(['10th', '11th', '12th', '13th']), 'Cut off and out of supply, the British army at Gibraltar lays down its arms: 5 corps, 82,908 men.']],
+      ]);
+      expect(g.headlines.filter((h) => OURS.test(h.text)).map((h) => [h.turn, h.text])).toEqual([[17, FIRST]]);
+      expect(wordsOnly(g)).toBe(wordsOnly(run(0.3, false).g));
+      // At full order, the same war: the stores spent in March are told then, as laid, the loss in May named.
+      const full = run(null);
+      expect(full.rows).toEqual([
+        [16, []],
+        [17, [FIRST]],
+        [18, []],
+        [19, [RING, NEWS_SPENT]],
+        [20, []],
+        [21, [...STRUCK(['9th', '10th', '11th', '12th', '13th']), 'Cut off and out of supply, the British army at Gibraltar lays down its arms: 6 corps, 101,332 men.']],
+      ]);
+      expect(wordsOnly(full.g)).toBe(wordsOnly(run(null, false).g));
+    });
+
+    it('finding 3, the reviewer\'s play: the fortress rows on, Spain at war from her January 1941, the ring closed as Britain\'s February opens with the pocket\'s seven months the sooner, and the four corps of the field gone after his February reading; the pocket\'s stores then outlast the port\'s window, and its lines come back in his March, in the fill he was told the first-month news of in January: his March news tells nothing from the port, and his card carries its clock', () => {
+      const FIRST_42 = 'No ship reaches Gibraltar: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast. The garrison lives on the port\'s stores through April 1942; unless the sea is opened, it then goes hungry and is lost at the start of July 1942.';
+      const STORES_42 = 'Cut off by sea: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast, and no ship reaches the harbour. The garrison lives on the port\'s stores through April 1942; unless the sea is opened, it then goes hungry and is lost at the start of July 1942.';
+      const REMEDY_42 = 'A fleet of yours at sea there, strong enough to open the Western Mediterranean or the waters off the Iberian coast, lets the ships in and fills the stores: one such month feeds the garrison at least through April 1942.';
+      const LIVING_42 = 'Living on Gibraltar\'s stores through April 1942.';
+      const run = (on: boolean): { g: Game; rows: unknown[] } => {
+        const { g, gib, town, field } = pocketed(true, on, 'UK', { war: 17 });
+        const rows: unknown[] = [];
+        for (let t = 16; t <= 20; t++) {
+          const h0 = g.headlines.length;
+          month(g, t, ['GER', 'ITA', 'UK']);
+          rows.push([t, g.flags[`pkt:${gib}`] !== undefined, lines(g, h0), texts(portCardLines(g, gib, 'UK')), portCorpsLine(g, town), g.flags[`portTold:${gib}`]]);
+          if (t === 17) { g.nations.ESP.align = 'axis'; declareWar(g, 'ESP', 'UK'); }
+          if (t === 18) for (const c of field) removeCorps(g, c);
+          phase(g, 'ESP');
+        }
+        return { g, rows };
+      };
+      const { g, rows } = run(true);
+      expect(rows).toEqual([
+        [16, false, [], ['Cut off by sea, its stores would feed the garrison for 16 months.'], null, undefined],
+        // January: the first month no ship gets in since the December fill, told by the clock.
+        [17, false, [FIRST_42], [STORES_42, REMEDY_42], LIVING_42, 17],
+        // February: the ring closes as his month opens, and the pocket decides: no port line for him, the mark kept.
+        [18, true, ['Gibraltar is surrounded: no road and no ship reaches it from the rest of the United Kingdom. 6 British corps are cut off there, with stores for 7 months; after that the troops go hungry.'], [], null, 17],
+        // March: the ring stands, its stores, eaten now by the 9th Corps and the crew, outlasting the port's window: the
+        // port's lines come back to him. He was told the first-month news in January, of the same fill: it is not told
+        // again, and his card carries the port's clock (the UI director's 14:35Z, finding 3). (The 13:23Z build told it a
+        // second time here.)
+        [19, true, [], [STORES_42, REMEDY_42], LIVING_42, 17],
+        [20, true, [], [STORES_42, REMEDY_42], LIVING_42, 17],
+      ]);
+      expect(g.headlines.filter((h) => OURS.test(h.text)).map((h) => [h.turn, h.text])).toEqual([[17, FIRST_42]]);
       expect(wordsOnly(g)).toBe(wordsOnly(run(false).g));
     });
   });
