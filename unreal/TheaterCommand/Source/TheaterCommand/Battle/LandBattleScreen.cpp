@@ -2138,7 +2138,6 @@ void SLandBattleScreen::PaintFieldNote(const FGeometry& Geometry, FSlateWindowEl
 	Fill(NX + 2.0, NY + 4.0, NW, NH, FLinearColor(0.0f, 0.0f, 0.0f, 0.35f), 9);
 	Fill(NX - 1.0, NY - 1.0, NW + 2.0, NH + 2.0, Track, 10);
 	Fill(NX, NY, NW, NH, Cream, 10);
-	Fill(NX, NY + NH * 0.6, NW, NH * 0.4, Paper * FLinearColor(1.0f, 1.0f, 1.0f, 0.18f), 10);
 	Fill(NX + 26.0, NY - 8.0, 44.0, 15.0, Brass, 11);
 	Fill(NX + 27.0, NY - 7.0, 42.0, 5.0, BrightBrass, 12);
 	// (the paper's body takes the click: nothing under it is ordered through it; a stamped note or the closing note goes)
@@ -2200,7 +2199,9 @@ void SLandBattleScreen::PaintFieldNote(const FGeometry& Geometry, FSlateWindowEl
 			Write(Done, SX + 10.0 + Grow * 0.5, SY + 3.0 + Grow * 0.5, StampFace, LeafInk, 16);
 		}
 	}
-	// The foot: NOTES OFF, quiet, at the right (no more notes in any battle; the ship list's row brings them back).
+	// The foot: NOTES OFF, quiet, at the right (no more notes in any battle; FIRST COMMAND brings them back); not under
+	// the DONE stamp, whose note goes in two seconds anyway.
+	if (!NoteUp.bStamped)
 	{
 		const FString Off = TEXT("NOTES OFF");
 		const double OW = WideOf(Off, QuietFace), OX = NX + NW - Pad - OW, OY = NY + NH - 12.0 - 14.0;
