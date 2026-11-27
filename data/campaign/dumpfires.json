@@ -1,0 +1,6 @@
+{
+  "_note": "Supply dumps that burn (release 2; Brian's yes of 27 November 2026 13:40Z to the playtester's idea). src/campaign/dumpfires.ts. Works only where forward dumps do (logistics.json 'dumps'): enemy aircraft over a dump already burn part of what is in it each month. Under this switch a dump that loses at least 'least' division-months so is set burning: it smokes on the map that month and the next, and in the month that follows the bombing every corps of its side within its reach (logistics.json dumps 'reach', on its own side's ground) has 'slow' fewer moves, for want of the fuel and shells that went up. 'smoke': how big its smoke stands on the map, on the scale of the bombed towns' smoke (one aircraft's raid is 1).",
+  "least": 3,
+  "slow": 1,
+  "smoke": 40
+}
