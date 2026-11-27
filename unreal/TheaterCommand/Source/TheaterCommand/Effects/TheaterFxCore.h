@@ -2111,6 +2111,7 @@ namespace TheaterFx
 			uint8_t Kind = 1; // (1 runoff, 2 awash)
 			std::vector<Vec> Edge;
 			double Strength = 1.0, Start = 0.0, Until = 0.0, Next = 0.0, Length = 0.0, Cursor = 0.0; // (Cursor: along her edge, the next piece's place, a band every 1.5 m)
+			double LastLong = 1.0, LastSize = 1.0; // (the last sheet's length and size shares: its neighbour is made unlike it)
 			Dice D;
 		};
 		std::vector<Washing> Washes;

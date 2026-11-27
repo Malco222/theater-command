@@ -2151,7 +2151,9 @@ in `/mnt/project-files/effects-r2/seam/sea/` (README there: every call letter fo
     pieces, the last gone 14.8 s after the shell. Nothing when her edge is out of reach.
 - **DeckWash** (items 9 and 10, row `sea_splash.runoff`; switches `-TheaterSeaDrench=1`, `-TheaterSeaAwash=1`).
   Water running over her edge, in her frame.
-  - "runoff": white sheets over the edge and down her side, foam where they land.
+  - "runoff": white sheets over the edge and down her side, foam where they land. Each sheet takes its own step along
+    the edge (0.5 to 1.5 bands), its own length (0.6 to 1.4 of `stretch`), size and start (up to 0.25 s late), and is
+    never like the one before it. Over the band the water is the same; at 40 m it no longer reads as a comb.
   - "awash" (`runoff.awash`): the sea heaving in over the low edge of a ship heeled past 8 degrees, foam sliding
     inboard.
   - The sheets are laid as a band along her edge, one every `band_m` (1.5 m) with a little jitter, `wide_m` (3.5)

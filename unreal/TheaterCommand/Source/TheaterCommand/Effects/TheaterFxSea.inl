@@ -489,7 +489,25 @@
 		const double Jit = D.U(-0.5, 0.5);
 		double Along = W.Cursor + Jit * Band;
 		Along = Len > 1.0e-6 ? Along - Len * std::floor(Along / Len) : 0.0;
-		W.Cursor = Len > 1.0e-6 ? std::fmod(W.Cursor + Band, Len) : 0.0;
+		// (the next one a step of half to one and a half bands on, so they lie unevenly, as many to her length as ever)
+		const double StepK = D.U(0.5, 1.5);
+		W.Cursor = Len > 1.0e-6 ? std::fmod(W.Cursor + Band * StepK, Len) : 0.0;
+		// (each sheet its own length and size, never like the one before it, about the same on the whole; and its own
+		// start, a moment late or not, so no two neighbours pour as one)
+		double LongK = D.U(0.6, 1.4);
+		if (std::fabs(LongK - W.LastLong) < 0.15)
+		{
+			LongK += LongK < 1.0 ? 0.3 : -0.3;
+		}
+		W.LastLong = LongK;
+		double SizeK = D.U(0.75, 1.25);
+		if (std::fabs(SizeK - W.LastSize) < 0.08)
+		{
+			SizeK += SizeK < 1.0 ? 0.16 : -0.16;
+		}
+		W.LastSize = SizeK;
+		const double Late = D.U(0.0, 0.25);
+		T += Late;
 		Vec At = W.Edge[0];
 		double Gone = 0.0;
 		for (size_t I = 1; I < W.Edge.size(); ++I)
@@ -561,11 +579,11 @@
 				const double Drop = std::max(At.Z - 0.3, 0.2);
 				B.Life = std::clamp(std::sqrt(2.0 * Drop / G), 0.3, LifeS.B);
 			}
-			const double Size = D.U(0.75, 1.25);
+			const double Size = SizeK;
 			B.R0 = 0.35 * Wide * Size;
 			B.R1 = 0.6 * Wide * Size;
 			B.Grow = 0.5;
-			B.Stretch = Long;
+			B.Stretch = std::max(1.0, Long * LongK);
 			B.StretchFrom = 1.0;
 			B.StretchAfter = 0.0;
 			B.StretchBy = 0.35 * B.Life; // (a sheet drawn out as it pours)

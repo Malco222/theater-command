@@ -428,6 +428,48 @@ namespace
 			Count[K] = static_cast<double>(Y.Bits.size() - Before);
 		}
 		Check(Count[0] > 50.0 && Count[1] > 0.4 * Count[0] && Count[1] < 0.6 * Count[0] && Count[2] == 0.0, "strength scales the pieces", Say("10 s at 1: %.0f pieces; at 0.5: %.0f; at 0: %.0f", Count[0], Count[1], Count[2]));
+		{
+			// (the look review of 27 November, at 40 m: evenly spaced equal streaks, a machine-made comb. Each sheet now its
+			// own step along her edge, length, size and start, never like the one before it; as much water on the whole)
+			Battle Y;
+			Open(Y, Book);
+			Y.ShipRide(0.0, 1, Pose(0.0));
+			Y.DeckWash(0.0, 1, Edge, 3, 1.0, 10.0, "runoff");
+			for (int F = 1; F <= 300; ++F)
+			{
+				Y.ShipRide(F / Fps, 1, Pose(F / Fps));
+			}
+			const double Long = Y.Num("sea_splash.runoff.stretch", 2.6);
+			const double Wide = Y.Num("sea_splash.runoff.wide_m", 1.2);
+			std::vector<const Bit*> Pour;
+			for (const Bit& B : Y.Bits)
+			{
+				if (B.DeckShip != 0 && B.DeckMode == 1)
+				{
+					Pour.push_back(&B);
+				}
+			}
+			int Alike = 0;
+			double SumLong = 0.0, SumSize = 0.0, Gap0 = 1e9, Gap1 = 0.0;
+			for (size_t I = 0; I < Pour.size(); ++I)
+			{
+				SumLong += Pour[I]->Stretch / Long;
+				SumSize += Pour[I]->R0 / (0.35 * Wide);
+				if (I == 0)
+				{
+					continue;
+				}
+				const bool bSameLong = std::fabs(Pour[I]->Stretch - Pour[I - 1]->Stretch) < 0.1 * Long;
+				const bool bSameSize = std::fabs(Pour[I]->R0 - Pour[I - 1]->R0) < 0.05 * 0.35 * Wide;
+				Alike += bSameLong && bSameSize ? 1 : 0;
+				const double Gap = std::fabs(Pour[I]->DeckP.X - Pour[I - 1]->DeckP.X);
+				Gap0 = std::min(Gap0, Gap);
+				Gap1 = std::max(Gap1, Gap);
+			}
+			const double N = static_cast<double>(std::max<size_t>(Pour.size(), 1));
+			Check(Pour.size() > 30 && Alike == 0, "runoff: no two neighbouring streaks alike (length and size)", Say("%.0f streaks, %.0f neighbours alike; steps along her edge %.2f to %.2f m", N, Alike, Gap0, Gap1));
+			Check(SumLong / N > 0.9 && SumLong / N < 1.1 && SumSize / N > 0.9 && SumSize / N < 1.1 && Pour.size() * 10 > static_cast<size_t>(Count[0]) * 4, "  ...as much water on the whole: mean length and size as the row's", Say("mean length %.2f, size %.2f of the row's", SumLong / N, SumSize / N));
+		}
 		// (ends when told: no piece born after the stop, none left 4 s on)
 		{
 			Battle Y;
