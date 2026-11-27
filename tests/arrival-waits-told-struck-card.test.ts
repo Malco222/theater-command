@@ -353,16 +353,18 @@ describe("once: only the strike month's own card (the UI director's section 12, 
   // place. A loaded game's first card neither shows nor counts an older struck line; it stays in the Newsreel.")
   const one = (): Game => { const g = make(); lose(g, 'Kaifeng'); kill(g, BRIGADES); g.flags[`due:${M}`] = 55; return g; };
 
-  it("the sceptic's case: saved in the strike month and loaded, the next card has no struck line, does not count it, and the Newsreel holds it", () => {
+  it('unbroken, on the bridge: the strike month\'s own card has it first, and the card after, played on, has none', () => {
     const g = one();
     month(g, 61);
-    const saved = saveGame({ ...g, phase: g.order.indexOf('JAP') });
-    month(g, 62);
-    expect(struckOf(g, 62)).toEqual([ONE]);
-    // (Unbroken, on the bridge: the strike month's own card has it first, and the card after, played on, has none.)
-    onBridgeCard(loadGame(saved)!, [ONE]);
+    onBridgeCard(g, [ONE]);
     const next = TC().endMonth() as { month: Shown };
-    expect(next.month.home.some((x) => x.text.endsWith(TAIL))).toBe(false);
+    expect(next.month.home.some((x) => x.text.endsWith(TAIL) || x.tip.endsWith(TAIL))).toBe(false);
+  });
+
+  it("the sceptic's case: saved in the strike month and loaded, the next card has no struck line, does not count it, and the Newsreel holds it", () => {
+    const g = one();
+    month(g, 61); month(g, 62);
+    expect(struckOf(g, 62)).toEqual([ONE]);
     // (Loaded in the strike month, on the bridge: the loaded game's first card.)
     notOnLoadedCard(g, [ONE]);
     // (Loaded in the strike month, in the browser: ui/main.ts takes the mark as the game is loaded, `markFor`.)
