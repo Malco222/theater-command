@@ -209,7 +209,7 @@ describe('U1: under 1,000 there, both figures whole and the line adds up', () =>
     TC().load(saveGame(g));
     expect(TC().bySeaWhy([big.id], guam.id).why).toBe('Guam has room for 2 divisions, about 30,000 men, and 750 of yours are there: only 29,250 more can go, and you are sending 30,000.');
     const out = corps(g, 'USA', 'Goes Out (a test row)', guam, 1, 600 / 15000);
-    expect(swapRefusal(g, guam, big, out)).toBe('Guam has room for 2 divisions, about 30,000 men, and 750 of yours stay there after the swap: only 29,250 more can go, and Big has 30,000.');
+    expect(swapRefusal(g, guam, big, out)).toBe('Guam has room for 2 divisions, about 30,000 men, and 750 of yours stay there after the swap: only 29,250 more can go, and the Big has 30,000.');
   }, 300000);
 });
 
@@ -226,7 +226,7 @@ describe('U3: a march order reads the march sentence in 3D as on the page; the s
     TC().load(saveGame(g));
     expect(TC().move([group.id], pearl.id).note).toBe(march);
     // Asked to change places with the corps in the field, the swap's own sentence (game.ts whyNoSwap).
-    expect(whyNoSwap(g, group, field)).toBe('Pearl Harbor has room for 2 divisions, about 30,000 men, and 11,000 of yours stay there after the swap: only 19,000 more can go, and 24th Division Group has 30,000.');
+    expect(whyNoSwap(g, group, field)).toBe('Pearl Harbor has room for 2 divisions, about 30,000 men, and 11,000 of yours stay there after the swap: only 19,000 more can go, and the 24th Division Group has 30,000.');
   }, 300000);
 });
 
@@ -240,8 +240,8 @@ describe('U4: the swap line names the corps he picked, and where the game picks,
       const a = put[first as 'tiny' | 'big'](), b = put[first === 'tiny' ? 'big' : 'tiny']();
       const [tiny, big] = first === 'tiny' ? [a, b] : [b, a];
       const ninth = corps(g, 'JAP', '9th Corps', taihoku, 3, 44800 / 45000);
-      const withTiny = 'Formosa has room for 3 divisions, about 45,000 men, and 20,000 of yours stay there after the swap: only 25,000 more can go, and 9th Corps has 44,800.';
-      const withBig = 'Formosa has room for 3 divisions, about 45,000 men, and 600 of yours stay there after the swap: only 44,400 more can go, and 9th Corps has 44,800.';
+      const withTiny = 'Formosa has room for 3 divisions, about 45,000 men, and 20,000 of yours stay there after the swap: only 25,000 more can go, and the 9th Corps has 44,800.';
+      const withBig = 'Formosa has room for 3 divisions, about 45,000 men, and 600 of yours stay there after the swap: only 44,400 more can go, and the 9th Corps has 44,800.';
       // He picked the corps: the line is that swap's.
       expect(swapWhy(g, ninth, formosa.id, tiny), `${first} first, Tiny Guard picked`).toBe(withTiny);
       expect(swapWhy(g, ninth, formosa.id, big), `${first} first, Goes Out Too picked`).toBe(withBig);

@@ -228,7 +228,8 @@ function tooLarge(g: Game, r: Region, line: readonly Corps[]): string | null {
   if (!isle) return null;
   const all = line.filter((c) => menOfCorps(c) > isle.room * MEN_PER_DIV);
   if (!all.length) return null;
-  const big = all[0], head = `${r.name} has ${roomWords(isle.room)}. ${big.name} has ${cardMen(big)}`;
+  // (The corps' name as the news gives it, a capital at a sentence's head: the UI director, 00:19Z, 27 November 2026, U8.)
+  const big = all[0], head = `${r.name} has ${roomWords(isle.room)}. ${named(big.name, true)} has ${cardMen(big)}`;
   const first = whyNotBreakUp(g, big, [0]) === null ? `${head}, too many to go there whole: split it and send a part.` : `${head}: too many for the island.`;
   const more = all.length - 1;
   return more ? `${first} ${Count(more)} more of the corps you are sending ${more === 1 ? 'is' : 'are'} too large for ${r.name} as well.` : first;
@@ -248,7 +249,7 @@ export function swapRefusal(g: Game, r: Region, c: Corps, out: Corps): string | 
   const yours = onlyMine(g, r, c.nat, [c, out]) ? ' of yours' : '';
   // (Fewer than 1,000 more fit after the swap: the swap's full form, the UI director, 00:19Z, 27 November 2026, U2.)
   if (room - stay < 1000) return `${r.name} would still be full after the swap: it has room for about ${roomMen(room)} men, and ${roomMen(stay, 'up')}${yours} stay there.`;
-  return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(stay, 'up')}${yours} stay there after the swap: only ${canGo(room - stay, stay).toLocaleString('en-US')} more can go, and ${c.name} has ${cardMen(c)}.`;
+  return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(stay, 'up')}${yours} stay there after the swap: only ${canGo(room - stay, stay).toLocaleString('en-US')} more can go, and ${named(c.name)} has ${cardMen(c)}.`;
 }
 
 /**

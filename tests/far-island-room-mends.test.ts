@@ -125,8 +125,8 @@ describe("a group sent by rail onto an island that has no room for it (the UI di
     TC().load(saveGame(g));
     expect(TC().railTip([a.id], formosa.id).no).toBe('Formosa has room for 3 divisions, about 45,000 men, and 20,000 of yours are there: only 25,000 more can go, and you are sending 30,000.');
     expect(TC().railTip([a.id, b.id], formosa.id).no).toBe('Formosa has room for 3 divisions, about 45,000 men, and 20,000 of yours are there: only 25,000 more can go, and you are sending 60,000.');
-    expect(TC().railTip([b.id, big.id], formosa.id).no).toBe('Formosa has room for 3 divisions, about 45,000 men. Formosa Big has 60,000: too many for the island.');
-    expect(TC().railTip([big.id, big2.id], formosa.id).no).toBe('Formosa has room for 3 divisions, about 45,000 men. Formosa Big has 60,000: too many for the island. One more of the corps you are sending is too large for Formosa as well.');
+    expect(TC().railTip([b.id, big.id], formosa.id).no).toBe('Formosa has room for 3 divisions, about 45,000 men. The Formosa Big has 60,000: too many for the island.');
+    expect(TC().railTip([big.id, big2.id], formosa.id).no).toBe('Formosa has room for 3 divisions, about 45,000 men. The Formosa Big has 60,000: too many for the island. One more of the corps you are sending is too large for Formosa as well.');
     // A rail reason is still a rail reason, and is said as it always was: a corps with its month spent.
     b.ap = 0;
     TC().load(saveGame(g));
@@ -205,7 +205,7 @@ describe("a swap onto an island with fewer than 1,000 men's room left after it",
     expect(whyNoSwap(g, c, out)).toBe('Formosa would still be full after the swap: it has room for about 45,000 men, and 45,000 of yours stay there.'); // (the UI director, 00:19Z, 27 November 2026, U2)
     // With 1,000 or more left after it, the section 3 line with "stay there after the swap", as built.
     stays.str = 43000 / 45000; c.str = 3000 / 15000; out.str = 100 / 15000;
-    expect(whyNoSwap(g, c, out)).toBe('Formosa has room for 3 divisions, about 45,000 men, and 43,000 of yours stay there after the swap: only 2,000 more can go, and Thousand Men has 3,000.');
+    expect(whyNoSwap(g, c, out)).toBe('Formosa has room for 3 divisions, about 45,000 men, and 43,000 of yours stay there after the swap: only 2,000 more can go, and the Thousand Men has 3,000.');
   }, 300000);
 });
 

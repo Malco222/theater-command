@@ -340,22 +340,22 @@ describe('a corps larger than the whole room (b)', () => {
     expect(fits(g, wake, 'USA', [big])).toBe(false);
     expect(fits(g, wake, 'JAP', [{ ...big, nat: 'JAP' }])).toBe(false);
     // Without the split rules: too many for the island.
-    expect(whyNotShip(g, big, wake)).toBe('Wake has room for one division, about 15,000 men. XIV Corps has 32,000: too many for the island.');
+    expect(whyNotShip(g, big, wake)).toBe('Wake has room for one division, about 15,000 men. The XIV Corps has 32,000: too many for the island.');
     // Before how full the island is today, the first such corps of a group named (the UI director, 21:37Z, 26 November 2026, 3).
     const small = corps(g, 'USA', 'Small', honolulu);
     relocate(g, corps(g, 'USA', 'There', honolulu, 1, 0.5), wake);
-    expect(roomRefusal(g, wake, [small, big])).toBe('Wake has room for one division, about 15,000 men. XIV Corps has 32,000: too many for the island.');
+    expect(roomRefusal(g, wake, [small, big])).toBe('Wake has room for one division, about 15,000 men. The XIV Corps has 32,000: too many for the island.');
     // Where the split rules let him split it, he is told to.
     setBreakUp(g, true);
-    expect(whyNotShip(g, big, wake)).toBe('Wake has room for one division, about 15,000 men. XIV Corps has 32,000, too many to go there whole: split it and send a part.');
+    expect(whyNotShip(g, big, wake)).toBe('Wake has room for one division, about 15,000 men. The XIV Corps has 32,000, too many to go there whole: split it and send a part.');
     // More than one too large: the first is named, and the rest counted, so he is not refused again for the next.
     setBreakUp(g, false);
     const second = corps(g, 'USA', 'XV Corps', honolulu, 2, 0.9), third = corps(g, 'USA', 'XVI Corps', honolulu, 3, 1);
-    expect(roomRefusal(g, wake, [small, big, second])).toBe('Wake has room for one division, about 15,000 men. XIV Corps has 32,000: too many for the island. One more of the corps you are sending is too large for Wake as well.');
-    expect(roomRefusal(g, wake, [big, small, second, third])).toBe('Wake has room for one division, about 15,000 men. XIV Corps has 32,000: too many for the island. Two more of the corps you are sending are too large for Wake as well.');
+    expect(roomRefusal(g, wake, [small, big, second])).toBe('Wake has room for one division, about 15,000 men. The XIV Corps has 32,000: too many for the island. One more of the corps you are sending is too large for Wake as well.');
+    expect(roomRefusal(g, wake, [big, small, second, third])).toBe('Wake has room for one division, about 15,000 men. The XIV Corps has 32,000: too many for the island. Two more of the corps you are sending are too large for Wake as well.');
     // The corps' figure is its card's own, the exact men.
     big.str = 31950 / 45000;
-    expect(roomRefusal(g, wake, [big])).toBe('Wake has room for one division, about 15,000 men. XIV Corps has 31,950: too many for the island.');
+    expect(roomRefusal(g, wake, [big])).toBe('Wake has room for one division, about 15,000 men. The XIV Corps has 31,950: too many for the island.');
     // On other ground it is a corps as any other.
     expect(whyNotShip(g, big, at(g, 'Manila')) ?? '').not.toMatch(/too many/);
   }, 300000);
@@ -408,14 +408,14 @@ describe('two corps changing places onto an island', () => {
     expect(whyNoSwap(g, fitsIn, out)).toBeNull();
     fitsIn.str = 0.9;
     expect(men(fitsIn)).toBe(67500);
-    expect(whyNoSwap(g, fitsIn, out)).toBe('Singapore has room for 5 divisions, about 75,000 men, and 12,000 of yours stay there after the swap: only 63,000 more can go, and 9th Corps has 67,500.');
+    expect(whyNoSwap(g, fitsIn, out)).toBe('Singapore has room for 5 divisions, about 75,000 men, and 12,000 of yours stay there after the swap: only 63,000 more can go, and the 9th Corps has 67,500.');
     expect(swapCorps(g, fitsIn, out)).toBe(false);
     // A swap that brings no more men than goes out stands, however full the island (79,500 there before and after).
     out.divs = 5; out.str = 0.9;
     expect(whyNoSwap(g, fitsIn, out)).toBeNull();
     // A corps larger than the whole room never swaps on: the too-large line first.
     fitsIn.divs = 6;
-    expect(whyNoSwap(g, fitsIn, out)).toBe('Singapore has room for 5 divisions, about 75,000 men. 9th Corps has 81,000: too many for the island.');
+    expect(whyNoSwap(g, fitsIn, out)).toBe('Singapore has room for 5 divisions, about 75,000 men. The 9th Corps has 81,000: too many for the island.');
     expect(stay.reg).toBe(singapore.id);
   }, 300000);
 });
@@ -548,10 +548,10 @@ describe("the island's sentences on a live board", () => {
       expect(TC().railTip(ids([big, extra]), sg.id).no, "shortfall, none there (75,400 sent)").toBe("Singapore has room for 5 divisions, about 75,000 men: you are sending 400 men more than fit.");
       const huge = corps(g, 'UK', 'XIV Corps', jo, 6, 0.9), huge2 = corps(g, 'UK', 'XV Corps', jo, 6, 1), huge3 = corps(g, 'UK', 'XVI Corps', jo, 7, 1);
       TC().load(saveGame(g));
-      expect(TC().railTip(ids([huge]), sg.id).no, "too large, no split").toBe("Singapore has room for 5 divisions, about 75,000 men. XIV Corps has 81,000: too many for the island.");
+      expect(TC().railTip(ids([huge]), sg.id).no, "too large, no split").toBe("Singapore has room for 5 divisions, about 75,000 men. The XIV Corps has 81,000: too many for the island.");
       setBreakUp(g, true);
       TC().load(saveGame(g));
-      expect(TC().railTip(ids([huge]), sg.id).no, "too large, split on").toBe("Singapore has room for 5 divisions, about 75,000 men. XIV Corps has 81,000, too many to go there whole: split it and send a part.");
+      expect(TC().railTip(ids([huge]), sg.id).no, "too large, split on").toBe("Singapore has room for 5 divisions, about 75,000 men. The XIV Corps has 81,000, too many to go there whole: split it and send a part.");
       setBreakUp(g, false);
       const e = [1, 2, 3].map((k) => { const x = addCorps(g, 'UK', `Engineers ${k}`, 'eng', 1, jo.id, {}); x.ap = x.apMax; return x; });
       TC().load(saveGame(g));
@@ -571,7 +571,7 @@ describe("the island's sentences on a live board", () => {
       // (A march reads the march's sentence; the swap's only where a swap is asked, for the corps he picked: the UI
       // director, 00:19Z, 27 November 2026, U3 and U4.)
       expect(TC().move([ninth.id], sg.id).note, "march refused (two of 12,000 there; a corps of 67,500 marches from Johore)").toBe("Singapore has room for 5 divisions, about 75,000 men, and 24,000 of yours are there: only 51,000 more can go, and you are sending 68,000.");
-      expect(whyNoSwap(g, ninth, sg.units.find((u) => u.name === 'Stays')!), "swap asked (Stays picked)").toBe("Singapore has room for 5 divisions, about 75,000 men, and 12,000 of yours stay there after the swap: only 63,000 more can go, and 9th Corps has 67,500.");
+      expect(whyNoSwap(g, ninth, sg.units.find((u) => u.name === 'Stays')!), "swap asked (Stays picked)").toBe("Singapore has room for 5 divisions, about 75,000 men, and 12,000 of yours stay there after the swap: only 63,000 more can go, and the 9th Corps has 67,500.");
     }
     // Board B: seed 3, Japan seated, its first month, at war with America by hand; landings from Kwajalein.
     {
