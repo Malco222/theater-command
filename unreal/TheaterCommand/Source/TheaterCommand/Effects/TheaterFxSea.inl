@@ -699,7 +699,7 @@
 				}
 				// (landed: taken into her frame where her deck is under it now, and from there run as her foam)
 				const Vec Rel = B.DeckP - Her->Pose.At;
-				const double Lz = Her->Pose.Deck > 0.0 ? Her->Pose.Deck + 0.08 : Rel.Dot(Her->Pose.Up);
+				const double Lz = Her->Pose.Deck > 0.0 ? Her->Pose.Deck + 0.15 : Rel.Dot(Her->Pose.Up); // (a hand's breadth over her deck, as unridden)
 				B.DeckP = Vec(Rel.Dot(Her->Pose.Fore), Rel.Dot(Her->Pose.Left), Lz);
 				B.DeckMode = 2;
 				L = B.DeckP + B.DeckV * (1.0 - std::exp(-Age));

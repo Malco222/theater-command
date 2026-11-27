@@ -249,6 +249,8 @@ namespace
 			// (under way: a battleship at 10 m/s, the column 8 m off her starboard side 62.5 m ahead of her middle; her sheets
 			// lie in her frame from where they land, and ride her within a centimetre; a short ship at 15 m/s steams past
 			// some of the head, whose lumps fall on to the sea)
+			double LiftWorst = 0.0;
+			int LiftSeen = 0;
 			auto Run = [&](double Long, double Mps, double Ahead, int& Sheets_, int& ToSea, double& Err, double& Slid)
 			{
 				Battle Z;
@@ -285,6 +287,8 @@ namespace
 						{
 							Err = std::max(Err, (Z.Where(B, T - B.Born) - Expected(B, Q(T), T)).Length());
 							Slid = std::max(Slid, (B.DeckV * (1.0 - std::exp(-(T - B.Born)))).Length()); // (its slide on her deck, in her frame)
+							LiftWorst = std::max(LiftWorst, std::fabs(B.DeckP.Z - (Q(T).Deck + 0.15))); // (laid on her ridden deck: 0.15 m over it)
+							++LiftSeen;
 						}
 					}
 				}
@@ -292,10 +296,13 @@ namespace
 			int S1 = 0, Sea1 = 0, S2 = 0, Sea2 = 0;
 			double E1 = 0, Sl1 = 0, E2 = 0, Sl2 = 0;
 			Run(250.0, 10.0, 62.5, S1, Sea1, E1, Sl1);
+			const double Lift1 = LiftWorst;
+			const int Seen1 = LiftSeen;
 			const double Gc = 2.0 * H / (Fall * Fall), Tm = std::sqrt(2.0 * (0.85 * H - DeckZ) / Gc); // (a lump's fall from its crown to her deck)
 			Run(60.0, 15.0, 30.0 + 15.0 * (Rise + 0.72 * Hang + Tm), S2, Sea2, E2, Sl2); // (her bow passing the column as the head comes down)
 			Check(S1 > 10 && Sea1 == 0 && E1 < 0.01 && Sl1 < 3.0, "under way at 10 m/s: her sheets lie in her frame and go with her", Say("%.0f sheets, the worst %.2g m off her pose, sliding at most %.1f m on her deck (in the world they would slip 50 m aft)", S1, E1, Sl1));
 			Check(Sea2 > 0 && S2 > 0 && E2 < 0.01, "  ...a 60 m ship at 15 m/s steams past part of the head: those lumps fall on to the sea", Say("%.0f lumps to the sea, %.0f sheets on her", Sea2, S2));
+			Check(Seen1 > 0 && Lift1 < 1e-9, "  ...on her ridden deck (her pose's Deck) the sheets lie 0.15 m over it, as unridden", Say("%.0f sheet frames, the worst %.2g m from 0.15 m over her deck", Seen1, Lift1));
 		}
 		std::string Got;
 		const bool bSame = DiceUntouched(Book, [&](Battle& Z) { Z.DeckDrench(Now, Column, 406.0, Toward, DeckZ, 7); }, Got);
