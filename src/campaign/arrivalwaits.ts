@@ -386,10 +386,20 @@ const STRUCK_TAIL = ' is still not in friendly hands, and the arrival has waited
  * the switch off, where no such headline is ever said, there is none. The card takes them as its own (monthcard.ts:
  * first in `waits`, and not among its news): they are never cut, never counted and never said twice on it. Read as
  * the waiting line is: only with the switch on, and only for his own card.
+ *
+ * Once (her section 12, A1, 16:07Z, 27 November 2026): "Only the strike month's own card puts the struck line in the
+ * waiting line's place. A loaded game's first card neither shows nor counts an older struck line; it stays in the
+ * Newsreel." A struck line is said as his month opens (game.ts `expeditions`, in his startPhase), so it is dated in the
+ * month after the one the card reports (`mark.turn`, the card's month): the strike month's own card is the one whose
+ * month is before the headline's, `h.turn > markTurn`. A card that counts from the start of the strike month itself
+ * (the bridge's `markBackTo` for a game picked up from its file) has the headline in its own month, and the line was
+ * the card before's: it is `older`, which the card claims without a word (not shown, not counted); the headline stays
+ * in the Newsreel. Facts the card already holds; nothing is written to the save.
  */
-export function struckOnCard<H extends { text: string; kind: string; nat?: string }>(g: Game, hs: H[], nat: string | null): H[] {
-  if (!nat || g.flags.fromWait !== 1 || nat !== g.human) return [];
-  return hs.filter((h) => h.kind === 'info' && h.nat === nat && h.text.endsWith(STRUCK_TAIL) && h.text.includes(', will not form: '));
+export function struckOnCard<H extends { text: string; kind: string; nat?: string; turn: number }>(g: Game, hs: H[], nat: string | null, markTurn: number): { own: H[]; older: H[] } {
+  if (!nat || g.flags.fromWait !== 1 || nat !== g.human) return { own: [], older: [] };
+  const all = hs.filter((h) => h.kind === 'info' && h.nat === nat && h.text.endsWith(STRUCK_TAIL) && h.text.includes(', will not form: '));
+  return { own: all.filter((h) => h.turn > markTurn), older: all.filter((h) => h.turn <= markTurn) };
 }
 
 /**

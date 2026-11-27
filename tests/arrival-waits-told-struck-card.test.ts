@@ -16,8 +16,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { rowsWaitingOnRows, setFromWait } from '../src/campaign/arrivalwaits';
 import { signPeace } from '../src/campaign/diplomacy';
-import { createGame, declareWar, headline, relocate, removeCorps, startPhase } from '../src/campaign/game';
-import { setStop } from '../src/campaign/history';
+import { createGame, declareWar, headline, relocate, removeCorps, startPhase } from '../src/campaign/game';import { setStop } from '../src/campaign/history';
 import { markFor, monthCard, type MonthCard, type MonthMark } from '../src/campaign/monthcard';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -108,9 +107,13 @@ function onBridgeCard(g: Game, said: string[], padBefore = 0): void {
   pad(g, padBefore);
   TC().load(saveGame(g));
   const t0 = g.turn;
-  // (A card opened on a save tells the whole of the save's month, `markBackTo`: a struck line said earlier in that month,
-  // before the save, is on it too, before the lines its end says.)
-  const lines = [...struckOf(g, t0), ...said];
+  // (A card opened on a save tells the whole of the save's month, `markBackTo`. A struck line said earlier in that
+  // month, before the save, is NOT on it and NOT counted: it stays in the Newsreel. The UI director's section 12, A1,
+  // 16:07Z, 27 November 2026: "Only the strike month's own card puts the struck line in the waiting line's place. A
+  // loaded game's first card neither shows nor counts an older struck line; it stays in the Newsreel." Round 2 read
+  // `[...struckOf(g, t0), ...said]` here: changed by her A1.)
+  const older = struckOf(g, t0);
+  const lines = said;
   const res = TC().endMonth() as { headlines: { text: string; turn: number }[]; month: Shown };
   expect(res.headlines.filter((h) => h.text.endsWith(TAIL)).map((h) => h.text)).toEqual(said);
   const home = res.month.home;
@@ -119,14 +122,60 @@ function onBridgeCard(g: Game, said: string[], padBefore = 0): void {
     expect(home.filter((y) => y.text === x || y.tip === x)).toHaveLength(1);
     expect([...res.month.staff, ...res.month.elsewhere].some((y) => y.text === x)).toBe(false);
   }
+  for (const x of older) {
+    expect(home.some((y) => y.text === x || y.tip === x)).toBe(false);
+    expect([...res.month.staff, ...res.month.elsewhere].some((y) => y.text === x)).toBe(false);
+  }
   // (The rules' card the bridge read: from the month the save opened, the whole of it, as `markBackTo` reads it.)
   const after = loadGame((TC().save() as { text: string }).text)!;
   const start = after.headlines.findIndex((h) => h.turn >= t0);
   const mark: MonthMark = { ...markFor(after), turn: t0, h: start < 0 ? after.headlines.length : start, orders: [] } as MonthMark;
   const card = monthCard(after, mark, 'JAP', { whole: true });
   expect((card.waits ?? []).slice(0, lines.length)).toEqual(lines);
-  const without: Game = { ...after, headlines: after.headlines.filter((h) => !lines.includes(h.text)) };
+  for (const x of older) expect(card.waits ?? []).not.toContain(x);
+  // (Neither the strike month's own lines nor an older one are counted in "more"; the older one is still in the Newsreel.)
+  const without: Game = { ...after, headlines: after.headlines.filter((h) => !lines.includes(h.text) && !older.includes(h.text)) };
   expect(monthCard(without, mark, 'JAP', { whole: true }).more).toBe(card.more);
+  for (const x of older) expect(after.headlines.filter((h) => h.text === x)).toHaveLength(1);
+}
+
+/**
+ * The loaded game's first card on the bridge (her A1): a save made in the strike month, after the struck line was said,
+ * loaded and played on through TC.endMonth. No struck line of that month is on month.home or anywhere on the card; the
+ * rules' card the bridge read neither shows it in `waits` nor counts it in "more"; and the Newsreel holds it once.
+ * Returns the bridge card's "rest" line for the caller to weigh.
+ */
+function notOnLoadedCard(g: Game, older: string[]): { rest: string; home: Home[] } {
+  g.phase = g.order.indexOf('JAP');
+  TC().load(saveGame(g));
+  const t0 = g.turn;
+  expect(older.length).toBeGreaterThan(0);
+  const res = TC().endMonth() as { headlines: { text: string; turn: number }[]; month: Shown };
+  expect(res.headlines.some((h) => older.includes(h.text))).toBe(false);
+  for (const x of older) {
+    expect(res.month.home.some((y) => y.text === x || y.tip === x)).toBe(false);
+    expect([...res.month.staff, ...res.month.elsewhere].some((y) => y.text === x)).toBe(false);
+  }
+  const after = loadGame((TC().save() as { text: string }).text)!;
+  const start = after.headlines.findIndex((h) => h.turn >= t0);
+  const mark: MonthMark = { ...markFor(after), turn: t0, h: start < 0 ? after.headlines.length : start, orders: [] } as MonthMark;
+  // (The card does read the whole of the save's month, as `markBackTo` does for every line of news: the struck
+  // headline is among the lines it reads, and is claimed by the card without a word.)
+  expect(after.headlines.slice(mark.h).some((h) => older.includes(h.text))).toBe(true);
+  const card = monthCard(after, mark, 'JAP', { whole: true });
+  for (const x of older) {
+    expect(card.waits ?? []).not.toContain(x);
+    expect(card.also).not.toContain(x);
+    expect(card.alsoFull.join(' ')).not.toContain(x);
+  }
+  const without: Game = { ...after, headlines: after.headlines.filter((h) => !older.includes(h.text)) };
+  expect(monthCard(without, mark, 'JAP', { whole: true }).more).toBe(card.more);
+  for (const x of older) expect(after.headlines.filter((h) => h.text === x)).toHaveLength(1);
+  // (And the bridge's own "rest": the same save with the struck headline taken out of its news reads the same count.)
+  TC().load(saveGame({ ...g, headlines: g.headlines.filter((h) => !older.includes(h.text)) }));
+  const bare = TC().endMonth() as { month: Shown };
+  expect(res.month.rest).toBe(bare.month.rest);
+  return { rest: res.month.rest, home: res.month.home };
 }
 
 describe("the struck line on both month cards, in the muted line's place (the UI director's section 11 (a))", () => {
@@ -266,6 +315,63 @@ describe('said once, and nothing where nothing was told', () => {
       expect((card.waits ?? []).some((x) => /friendly hands/.test(x))).toBe(false);
       expect(homeOf(html(card)).some((x) => /friendly hands/.test(x))).toBe(false);
     }
+  });
+});
+
+describe("once: only the strike month's own card (the UI director's section 12, A1)", () => {
+  // (Her A1, 16:07Z, 27 November 2026: "Only the strike month's own card puts the struck line in the waiting line's
+  // place. A loaded game's first card neither shows nor counts an older struck line; it stays in the Newsreel.")
+  const one = (): Game => { const g = make(); lose(g, 'Kaifeng'); kill(g, BRIGADES); g.flags[`due:${M}`] = 55; return g; };
+
+  it("the sceptic's case: saved in the strike month and loaded, the next card has no struck line, does not count it, and the Newsreel holds it", () => {
+    const g = one();
+    month(g, 61);
+    const saved = saveGame({ ...g, phase: g.order.indexOf('JAP') });
+    month(g, 62);
+    expect(struckOf(g, 62)).toEqual([ONE]);
+    // (Unbroken, on the bridge: the strike month's own card has it first, and the card after, played on, has none.)
+    onBridgeCard(loadGame(saved)!, [ONE]);
+    const next = TC().endMonth() as { month: Shown };
+    expect(next.month.home.some((x) => x.text.endsWith(TAIL))).toBe(false);
+    // (Loaded in the strike month, on the bridge: the loaded game's first card.)
+    notOnLoadedCard(g, [ONE]);
+    // (Loaded in the strike month, in the browser: ui/main.ts takes the mark as the game is loaded, `markFor`.)
+    const b = loadGame(saveGame(g))!;
+    const mark = markFor(b);
+    month(b, 63);
+    const card = monthCard(b, mark, 'JAP');
+    expect((card.waits ?? []).some((x) => x.endsWith(TAIL))).toBe(false);
+    expect(homeOf(html(card)).some((x) => x.endsWith(TAIL))).toBe(false);
+    expect(b.headlines.filter((h) => h.text === ONE)).toHaveLength(1);
+  });
+
+  it('saved a month after the strike and loaded: no struck line on the next card, and the Newsreel holds it', () => {
+    const g = one();
+    month(g, 61); month(g, 62); month(g, 63);
+    g.phase = g.order.indexOf('JAP');
+    TC().load(saveGame(g));
+    const res = TC().endMonth() as { month: Shown };
+    expect(res.month.home.some((x) => x.text.endsWith(TAIL) || x.tip.endsWith(TAIL))).toBe(false);
+    const after = loadGame((TC().save() as { text: string }).text)!;
+    expect(after.headlines.filter((h) => h.text === ONE)).toHaveLength(1);
+  });
+
+  it("'three': saved in the strike month and loaded, the grouped line is not on the next card and not counted", () => {
+    const g = make(); lose(g, 'Kaifeng'); for (const j of K3) { empty(g, j); g.flags[`due:${j}`] = 56; }
+    month(g, 62); month(g, 63);
+    expect(struckOf(g, 63)).toEqual([THREE]);
+    notOnLoadedCard(g, [THREE]);
+  });
+
+  it("'frontplace': saved in the strike month (69) and loaded, neither 68's line nor 69's is on the next card", () => {
+    const g = make(); lose(g, 'Kaifeng'); g.flags[`due:${M}`] = 55;
+    const b = g.corps.find((x) => x.nat === 'JAP' && !x.dead && x.name === BRIGADES)!;
+    relocate(g, b, g.byName.Hsuchow); g.lastBattle = { [b.reg]: [b.id] };
+    month(g, 61);
+    kill(g, BRIGADES);
+    for (let t = 62; t <= 69; t++) month(g, t);
+    expect(struckOf(g, 69)).toEqual([FRONTPLACE]);
+    notOnLoadedCard(g, [FRONTPLACE]);
   });
 });
 

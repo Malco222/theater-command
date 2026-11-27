@@ -235,7 +235,8 @@ export interface MonthCard {
   /**
    * The telling (arrivalwaits.ts): a muted line for each of his dated arrivals that waits only for another arrival to
    * form, every month it waits; first, in the month a told row held for its place is struck, the struck line that ends
-   * its muted line (`struckOnCard`, the UI director's section 11 (a)). Absent where there is none.
+   * its muted line (`struckOnCard`, the UI director's section 11 (a)), on the strike month's own card only (her
+   * section 12, A1). Absent where there is none.
    */
   waits?: string[];
 }
@@ -516,9 +517,10 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
   const used = new Set<Headline>();
   // (The telling's struck lines, arrivalwaits.ts `struckOnCard`: the card's own from the start, first among the home
   // lines with the waiting lines (section 6), so that no other part of the card takes one and none is counted in
-  // "more". The UI director's section 11 (a), 06:56Z, 27 November 2026.)
-  const struck = struckOnCard(g, hs, me);
-  for (const h of struck) used.add(h);
+  // "more". The UI director's section 11 (a), 06:56Z, 27 November 2026. Only the strike month's own card shows one; an
+  // older struck line, on a card that counts from the start of its month, is claimed without a word: her section 12, A1.)
+  const { own: struck, older: struckBefore } = struckOnCard(g, hs, me, mark.turn);
+  for (const h of [...struck, ...struckBefore]) used.add(h);
   // The card tells everything since the mark, so its last items are dated in the month that has just opened: the
   // moves of those who go before him. Such an item names its month, or "week 1" under June's title reads as June's.
   const dated = (turn: number): { month?: string } => (turn !== mark.turn ? { month: turnToDate(turn).label.split(' ')[0] } : {});
