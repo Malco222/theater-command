@@ -26,7 +26,7 @@
  },
  "ground_cases": {
   "tank": {
-   "_how": "A tank gun's case pitched out of the hatch by hand: up and out to land beside her hull.",
+   "_how": "A tank gun's case pitched out of the hatch by hand: up and out to land beside her hull. Thrown while the eye is within within_m (100 m; the shared ground_cases.within_m is 40); drawn only within ground_cases.draw_within_m and at most most_lying at once.",
    "case_m": 0.42,
    "case_long_m": [0.35, 0.5],
    "case_d_m": 0.1,
@@ -41,7 +41,8 @@
    "colour": [140, 120, 89],
    "shade": [106, 91, 67],
    "glint": 1,
-   "odds": 1.0
+   "odds": 1.0,
+   "within_m": 100
   }
  }
 }

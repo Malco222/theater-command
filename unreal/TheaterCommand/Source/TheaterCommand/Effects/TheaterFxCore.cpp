@@ -5389,7 +5389,9 @@ namespace TheaterFx
 	bool Battle::CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& C, const char* Ground) const
 	{
 		const std::string P = "ground_cases." + Gun + ".";
-		if (Gun.empty() || !Has(P + "case_m") || !bEyeKnown || (LastEye - At).Length() > Num("ground_cases.within_m", 40.0))
+		// (Effects (R2): a row may give its own within_m, as the thrown cases' rows ground_cases.spg and .tank do, so the
+		// pile by a gun is there when the camera cuts in; without it the shared ground_cases.within_m, as before)
+		if (Gun.empty() || !Has(P + "case_m") || !bEyeKnown || (LastEye - At).Length() > Num(P + "within_m", Num("ground_cases.within_m", 40.0)))
 		{
 			return false;
 		}

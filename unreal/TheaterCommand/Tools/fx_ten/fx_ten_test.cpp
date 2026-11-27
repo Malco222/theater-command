@@ -739,15 +739,18 @@ namespace
 			}
 			return K.Fx.Seeds == Was;
 		};
-		std::vector<Bit> COff, COn, CFar;
+		std::vector<Bit> COff, COn, CFar, CMid, CMidOff;
 		Pitch(Off, Vec(-20.0, -15.0, 2.0), COff);
 		const bool bOwn = Pitch(On, Vec(-20.0, -15.0, 2.0), COn);
-		Pitch(On, Vec(-40.0, -30.0, 2.0), CFar);
+		Pitch(On, Vec(-88.0, -66.0, 2.0), CFar);
+		Pitch(On, Vec(-72.0, -54.0, 2.0), CMid);
+		Pitch(Off, Vec(-72.0, -54.0, 2.0), CMidOff);
 		Check(COff.empty(), "off: no row, no case", "none");
 		const double Long = COn.empty() ? 0.0 : 2.0 * COn[0].R0 * COn[0].Stretch;
 		Check(COn.size() == 1 && IsCase(COn[0]) && Long >= 0.35 && Long <= 0.5, "on: one case, 0.35 to 0.5 m long", Say("%.0f, %.2f m", static_cast<double>(COn.size()), Long));
 		Check(!COn.empty() && COn[0].Life - COn[0].Land2 >= 180.0 && COn[0].Life - COn[0].Land2 <= 240.5, "on: it lies 180 to 240 s", Say("%.0f s", COn.empty() ? 0.0 : COn[0].Life - COn[0].Land2));
-		Check(CFar.empty(), "on: 50 m from the eye (past ground_cases.within_m 40): none", "none");
+		Check(CMid.size() == 1 && IsCase(CMid[0]), "on: 90 m from the eye (the row's within_m 100, past the shared 40): one case", Say("%.0f", static_cast<double>(CMid.size())));
+		Check(CFar.empty() && CMidOff.empty(), "on: 110 m from the eye (past the row's within_m 100): none; off at 90 m: none", "none");
 		Check(bOwn, "a case's dice its own (the kit's shared dice not drawn)", "own");
 		// (its own dull brass: the row's colour, shade and glint, not the towed guns' shine)
 		Check(!COn.empty() && COn[0].Glint <= 1.0 && std::fabs(COn[0].Col2.G - TheaterFx::Rgb::FromPicture(106, 91, 67).G) < 1e-6, "on: dull handled brass, its row's shade and glint 1 (the towed guns' glint 4)", Say("glint %.1f", COn.empty() ? 0.0 : COn[0].Glint));
@@ -831,6 +834,57 @@ namespace
 		Check(BOn.Seeds == BOff.Seeds, "the kit's shared dice drawn as often as before", Say("%.0f draws", static_cast<double>(BOn.Seeds)));
 		std::printf("     the battery: %d shots, %zu cases over the side; most pieces %zu off, %zu on; lying most %zu off, %zu on\n", Shots, Thrown, BOff.MostBits, BOn.MostBits, BOff.MostLying, BOn.MostLying);
 		std::printf("     time: the densest frame's Draw, %.3f ms on (%zu pieces), %.3f ms off (%zu pieces); a frame's mean %.3f ms on, %.3f ms off\n", BOn.DensestMs, BOn.MostBits, BOff.DensestMs, BOff.MostBits, BOn.MeanMs, BOff.MeanMs);
+		// (thrown while the eye is within the row's within_m, 150 m: the general's place, not the shared 40)
+		auto Heave = [](const FxTen::Book& Book, const Vec& From)
+		{
+			Kit K(Book);
+			K.Fx.Draw(0.0, FxTen::Looking(From, Vec(0.0, 0.0, 1.9)));
+			size_t Cases = 0;
+			for (int I = 0; I < 20; ++I)
+			{
+				K.Fx.ThrowCase(1.0 + I, Vec(0.0, 0.0, 1.9), Vec(1.0, -0.2, 0.0), "spg", 5150 + I);
+			}
+			for (const Bit& B : K.Fx.Bits)
+			{
+				Cases += IsCase(B) ? 1u : 0u;
+			}
+			return Cases;
+		};
+		const size_t AtGeneral = Heave(On, Vec(0.0, -140.0, 40.0)), PastWithin = Heave(On, Vec(0.0, -155.0, 40.0)), AtGeneralOff = Heave(Off, Vec(0.0, -140.0, 40.0));
+		Check(AtGeneral >= 8 && PastWithin == 0 && AtGeneralOff == 0, "on: twenty rounds seen from the general's place, 145 m off and 40 m up: cases over the side; 160 m: none; off: none", Say("%.0f of 20, %.0f, %.0f", static_cast<double>(AtGeneral), static_cast<double>(PastWithin), static_cast<double>(AtGeneralOff)));
+		// (the densest: thirty open guns in five rows 110 to 180 m from the eye, each firing every 7 to 10 s for five minutes,
+		// seen from the general's place; the lying cases held to most_lying)
+		auto Thirty = [](Battle& Fx, double Now, int Frame)
+		{
+			static thread_local std::vector<double> Next;
+			if (Frame == 1)
+			{
+				Next.assign(30, 0.0);
+				for (size_t I = 0; I < 30; ++I)
+				{
+					Next[I] = 0.3 + 0.29 * static_cast<double>(I);
+				}
+			}
+			for (int I = 0; I < 30; ++I)
+			{
+				double& At = Next[static_cast<size_t>(I)];
+				if (At <= Now)
+				{
+					TheaterFx::Dice D(static_cast<uint64_t>(I) * 197ull + static_cast<uint64_t>(Frame));
+					const Vec Gun(-50.0 + 20.0 * (I % 6), -20.0 + 20.0 * (I / 6), 0.0);
+					Fx.Muzzle(Now, Gun + Vec(0.0, 3.0, 2.0), Vec(0.0, 1.0, 0.4), "tank_gun", "earth");
+					Fx.ThrowCase(Now + 1.4, Gun + Vec(1.5, -0.5, 1.9), Vec(1.0, -0.2, 0.0), "spg", 7100 + I * 31 + Frame);
+					At += D.U(7.0, 10.0);
+				}
+			}
+		};
+		const Vec General(0.0, -110.0, 40.0), Field(0.0, 20.0, 0.0);
+		const Fight GOff = Play(Off, General, Field, 9000, Thirty, false);
+		const Fight GOn = Play(On, General, Field, 9000, Thirty, false);
+		Check(GOn.MostLying > 0 && GOn.MostLying <= 200, "on: thirty open guns seen from the general's place: lying cases within most_lying 200", Say("%.0f at most (off %.0f)", static_cast<double>(GOn.MostLying), static_cast<double>(GOff.MostLying)));
+		Check(GOn.Seeds == GOff.Seeds, "the kit's shared dice drawn as often as before (thirty)", Say("%.0f draws", static_cast<double>(GOn.Seeds)));
+		std::printf("     thirty guns from the general's place: most pieces %zu off, %zu on; lying most %zu off, %zu on\n", GOff.MostBits, GOn.MostBits, GOff.MostLying, GOn.MostLying);
+		std::printf("     time: the densest frame's Draw, %.3f ms on (%zu pieces), %.3f ms off (%zu pieces); a frame's mean %.3f ms on, %.3f ms off\n", GOn.DensestMs, GOn.MostBits, GOff.DensestMs, GOff.MostBits, GOn.MeanMs, GOff.MeanMs);
 	}
 }
 
