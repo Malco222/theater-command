@@ -28,10 +28,12 @@ const bombers = (g: Game, nat: string): AirFleet => {
 };
 /** A group's crews given hours, row for row (the list taken round again where the roster is longer). */
 const give = (f: AirFleet, hrs: number[]): void => { f.bombers!.on.forEach((b, i) => { b[4] = hrs[i % hrs.length]; }); };
+/** The real case's roster on a group whose strength is the roster's, as muster leaves it. */
 const realRoster = (f: AirFleet): void => {
   const R = f.bombers!;
   while (R.on.length > REAL.length) R.on.pop();
   while (R.on.length < REAL.length) R.on.push([0, 0, 0, 0, 0, 0]);
+  f.bmr = REAL.length;
   give(f, REAL);
 };
 
@@ -118,6 +120,23 @@ describe('the trained crews edge reads every side by the same facts', () => {
     // The same raid with the seat taken by the groups' own side: the same figure.
     g.human = 'GER';
     expect(assessAir(g, two, 'bomb', t).drilled).toBe(a.drilled);
+  });
+
+  it('a roster longer than its group\'s strength (bombers lost, not yet mustered off) is read whole, on every side', () => {
+    // The group loses bombers in a fight (f.bmr falls) and its roster is made up again only at the next muster, so for
+    // a while the roster holds more rows than the group has bombers. The edge reads every row on it. The figure is the
+    // one trainedEdge gives on the untouched base 8410c3e2d for the player's own group with this roster and f.bmr 53,
+    // 60 and 74 (scratch out/c7-base.txt): the same as at full strength. The schooled rows are at the tail, so a
+    // reading of only the first f.bmr rows would give 0 at 53.
+    const g = createGame(1, 'GER');
+    const mine = bombers(g, 'GER'), theirs = bombers(g, 'UK');
+    realRoster(mine); realRoster(theirs);
+    for (const bmr of [74, 60, 53]) {
+      mine.bmr = bmr; theirs.bmr = bmr;
+      expect(mine.bombers!.on).toHaveLength(REAL.length);
+      expect(trainedEdge(g, mine)).toBe(REAL_EDGE);
+      expect(trainedEdge(g, theirs)).toBe(REAL_EDGE);
+    }
   });
 
   it('no roster, or an empty one, carries no edge on any side', () => {
