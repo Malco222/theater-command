@@ -535,6 +535,18 @@ export function rowsWaitingOnRows(g: Game, nat: string | null): string[] {
   return out;
 }
 
+/**
+ * The offers page's loans line for a held loan (the UI director's B6 of 16:07Z, 27 November 2026: "The held loan's line
+ * names no month that has passed: for a held loan, the loan's month gives way to its loan is over, but it is at the
+ * front in {Murzuk}: it goes the month after it leaves the front."): her words for loan row `i` while the one test holds
+ * it this month (game.ts `loanHeldNow`), the place with its article; null otherwise. The page puts them where the
+ * loan's month stood (offers-look.ts `asideLines`). A pure read: it writes nothing.
+ */
+export function heldLoanAside(g: Game, i: number): string | null {
+  const h = loanHeldNow(g, i);
+  return h ? theWords(`its loan is over, but it is at the front in ${placeOf(g, h.c)}: it goes the month after it leaves the front.`) : null;
+}
+
 // ---- 6. The Options row: the switch, in any month ------------------------------------------------------------------
 
 /**

@@ -17,6 +17,7 @@ import { startOpen } from '../src/campaign/staff';
 import { farOn } from '../src/campaign/world';
 import type { Corps, Game, Region } from '../src/campaign/types';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
+import { asideLines } from '../unreal/TheaterCommand/Rules/offers-look';
 
 type Call = (...a: unknown[]) => unknown;
 const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
@@ -178,5 +179,43 @@ describe("W4-2: a held loan carries a standing line on the corps' own cards ever
     TC().load(saveGame(g));
     const v = TC().view() as { corps: { name: string; nat: string; arrivalWait?: string }[] };
     expect(v.corps.filter((x) => x.nat === 'GER' && x.name === c.name).map((x) => x.arrivalWait)).toEqual(['This corps was due to leave for other fronts in October 1939. It goes the month after it leaves the front.']);
+  });
+});
+
+// ---- W4-4 (her B6): the offers page's loans line for a held loan ----------------------------------------------------
+
+describe("W4-4: the offers page's loans line names no month that has passed: for a held loan the loan's month gives way to her words", () => {
+  /** A second loan of his, away from the front, whose end is an offer (a regiment its division awaits): it opens the offers page. */
+  const offer = (g: Game): number => {
+    addCorps(g, 'GER', 'Lent Test Regiment', 'arm', 1, g.byName.Bavaria.id, {});
+    const k = addRow([1, 'GER', 'Lent Test Regiment', 'arm', 1, 'Bavaria', { until: 2 }]);
+    addRow([9, 'GER', 'Test Tank Division', 'arm', 1, 'Magdeburg', { awaits: ['Lent Test Regiment'], str: 1 }]);
+    g.flags[`sent:${k}`] = 1;
+    g.flags[`lent:${k}`] = g.corps.find((x) => x.name === 'Lent Test Regiment')!.id;
+    return k;
+  };
+  const page = (g: Game): { heading: string; text: string }[] => {
+    g.phase = g.order.indexOf('GER');
+    TC().load(saveGame(g));
+    const p = TC().page('offers') as { sections: { heading: string; text: string }[] } | null;
+    return (p?.sections ?? []).filter((x) => x.heading === 'LENT TO YOU').map(({ heading, text }) => ({ heading, text }));
+  };
+
+  it('before its end the line names the month; held, the month gives way: the whole line, with its head, on the page', () => {
+    const { g } = board();
+    offer(g);
+    month(g, 1);
+    expect(asideLines(g).loans).toEqual(['Lent Test Corps leaves your command by itself in October 1939, when its loan ends.']);
+    month(g, 2);
+    expect(asideLines(g).loans).toEqual(['Lent Test Corps leaves your command by itself: its loan is over, but it is at the front in the Grenzmark: it goes the month after it leaves the front.']);
+    expect(page(g)).toEqual([{ heading: 'LENT TO YOU', text: 'Lent Test Corps leaves your command by itself: its loan is over, but it is at the front in the Grenzmark: it goes the month after it leaves the front.' }]);
+  });
+
+  it("the switch turned off in the hold's month: the base's line, its month kept", () => {
+    const { g } = board();
+    offer(g);
+    month(g, 2);
+    expect(setFromWait(g, false)).toBe(true);
+    expect(asideLines(g).loans).toEqual(['Lent Test Corps leaves your command by itself in October 1939, when its loan ends.']);
   });
 });
