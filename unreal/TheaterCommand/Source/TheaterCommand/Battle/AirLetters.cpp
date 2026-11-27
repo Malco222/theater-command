@@ -310,7 +310,7 @@ namespace AirLetters
 		}
 	}
 
-	void Book::Take(const std::vector<AirShow::PlaneOut>& Planes)
+	void Book::Take(const std::vector<AirShow::PlaneOut>& Planes, const std::map<int, AirShow::Group>* InGroups)
 	{
 		if (!bBegun)
 		{
@@ -327,8 +327,14 @@ namespace AirLetters
 		{
 			if (Groups.find(P->Group) == Groups.end())
 			{
-				// (a group the show did not have at the start: lettered as it is first seen)
-				LetterOne(P->Group, "id:" + std::to_string(P->Group));
+				// (a group the show did not have at the start: lettered as it is first seen, by its name where it is given)
+				std::string Identity = "id:" + std::to_string(P->Group);
+				if (InGroups)
+				{
+					const auto Named = InGroups->find(P->Group);
+					if (Named != InGroups->end()) Identity = IdentityOf(Named->second);
+				}
+				LetterOne(P->Group, Identity);
 			}
 			Lettered& G = Groups[P->Group];
 			const int N = G.Made++;

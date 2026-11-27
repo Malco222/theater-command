@@ -92,7 +92,7 @@ void AAirBattle::WarmMarks()
 		return;
 	}
 	FAirBattleState& S = *State;
-	S.Letters.Take(S.Show.Planes());
+	S.Letters.Take(S.Show.Planes(), &S.Show.Groups());
 	int32 Made = 0;
 	TSet<FString> Done;
 	for (const AirShow::PlaneOut& P : S.Show.Planes())

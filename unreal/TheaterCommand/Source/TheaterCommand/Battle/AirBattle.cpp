@@ -6017,7 +6017,7 @@ void AAirBattle::Draw(double Real)
 	// (bomber markings, the row "flyBomberMarks", AirBattleLetters.cpp: read once a battle; the book takes this frame's aircraft
 	// before any is drawn, so none is bare for a frame; off, nothing more is read or drawn)
 	const double MarksPpm = LettersOnNow() ? MarksPixelsPerMetre(Lens) : 0.0;
-	if (S.LettersOn == 1) S.Letters.Take(S.Show.Planes());
+	if (S.LettersOn == 1) S.Letters.Take(S.Show.Planes(), &S.Show.Groups());
 	CopiesDrawn = 0;
 	TSet<int32> Seen;
 	for (const AirShow::PlaneOut& P : S.Show.Planes())

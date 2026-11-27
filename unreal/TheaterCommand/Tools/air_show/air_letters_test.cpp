@@ -310,11 +310,11 @@ namespace
 				{
 					std::vector<AirShow::PlaneOut> Hidden = Show.Planes();
 					for (AirShow::PlaneOut& P : Hidden) P.bShown = false;
-					Book.Take(Hidden);
+					Book.Take(Hidden, &Show.Groups());
 				}
 				else
 				{
-					Book.Take(Show.Planes());
+					Book.Take(Show.Planes(), &Show.Groups());
 				}
 			}
 			++Step;
@@ -793,6 +793,42 @@ int main(int Argc, char** Argv)
 		Check(bApart && All.size() == 560, "no squadron's code in two of 140 groups (560 codes)");
 		const std::vector<std::string> Hist = Book.CodesOf(41);
 		Check(Book.LetterOf(41) == 'C' && Hist.size() == 4 && Hist[0] == "VK", "the 303rd still C and VK among 140");
+	}
+
+	// A group the battle's start did not have (the 303rd arriving late): lettered by its name as it is first seen, so it
+	// still wears C, VK and A; and the same however many frames pass before it is seen.
+	{
+		std::map<int, AirShow::Group> Groups;
+		for (int K = 0; K < 3; ++K)
+		{
+			AirShow::Group G;
+			G.Id = K + 1;
+			G.Name = K == 2 ? std::string("303rd Bomb Group") : std::to_string(91 + K) + "st Bomb Group";
+			G.bFighter = false;
+			G.Nation = "USA";
+			G.Model = "B17";
+			Groups[G.Id] = G;
+		}
+		std::map<int, AirShow::Group> AtStart = Groups;
+		AtStart.erase(3);
+		std::vector<AirShow::PlaneOut> Planes;
+		for (int N = 0; N < 6; ++N)
+		{
+			AirShow::PlaneOut P;
+			P.Key = 3000 + N;
+			P.Group = N < 3 ? 1 : 3;
+			P.bFighter = false;
+			P.Nation = "USA";
+			P.Model = "B17";
+			Planes.push_back(P);
+		}
+		AirLetters::Book Book;
+		Book.Begin(Sheet, AtStart);
+		Book.Take(std::vector<AirShow::PlaneOut>(Planes.begin(), Planes.begin() + 3), &Groups);
+		Book.Take(Planes, &Groups);
+		const AirLetters::Wear* W = Book.Of(3003);
+		const std::string Got = W ? WearText(*W) : std::string("none");
+		Check(Got == "C VK A" && Book.LetterOf(1) != 'C', "the 303rd arriving late still wears C, VK and A (none other C)", Got);
 	}
 
 	// No word of the date in the book.

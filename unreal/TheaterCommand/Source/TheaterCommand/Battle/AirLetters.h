@@ -97,8 +97,10 @@ namespace AirLetters
 		 * (the history's known groups first, then the rest in their identities' order). */
 		void Begin(const Sheet& S, const std::map<int, AirShow::Group>& Groups);
 		/** A frame's aircraft: each new one that wears them is given hers (her group's letter and codes; her squadron and
-		 * letter from her place in her group, her key's order among her group's). A wear once given never changes. */
-		void Take(const std::vector<AirShow::PlaneOut>& Planes);
+		 * letter from her place in her group, her key's order among her group's). A wear once given never changes. A group
+		 * Begin did not see is lettered as it is first seen, by its name in Groups where they are given (so that a known
+		 * group arriving late still wears its history's letters), else as "id:<Id>". */
+		void Take(const std::vector<AirShow::PlaneOut>& Planes, const std::map<int, AirShow::Group>* Groups = nullptr);
 		/** An aircraft's wear, or null (she wears none, or has not been seen). */
 		const Wear* Of(int Key) const;
 		int Given() const { return static_cast<int>(Worn.size()); }
