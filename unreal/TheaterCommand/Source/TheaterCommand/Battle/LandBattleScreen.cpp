@@ -12,6 +12,7 @@
 #include "Misc/Paths.h"
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
+#include "TheaterCommand.h"
 
 namespace
 {
@@ -126,16 +127,34 @@ namespace
 
 	/** What may go to the engine's batcher. It stops the game on the render thread ("RenderBatch.NumIndices > 0") when a
 	 * batch comes out with no triangle in it, so nothing that can make none is handed over: a box with no area, words
-	 * with no ink in them, a line with no length; nor any place that is not a number. */
+	 * with no ink in them, a line with no length; nor any place that is not a number. The first few of each kind that the
+	 * engine would not have left out by itself are written to the log ("LAND SCREEN GUARD"), so a run names what the
+	 * screen tried to draw; an empty box and empty words, which the engine drops, are left out in silence. */
 	bool DrawnBox(double X, double Y, double Wd, double Ht)
 	{
-		return FMath::IsFinite(X) && FMath::IsFinite(Y) && FMath::IsFinite(Wd) && FMath::IsFinite(Ht) && Wd > 0.0 && Ht > 0.0;
+		if (!FMath::IsFinite(X) || !FMath::IsFinite(Y) || !FMath::IsFinite(Wd) || !FMath::IsFinite(Ht))
+		{
+			static int32 Told = 0;
+			if (Told < 8)
+			{
+				++Told;
+				UE_LOG(LogTheater, Display, TEXT("LAND SCREEN GUARD: a box left undrawn, not a number (%f by %f at %f, %f)"), Wd, Ht, X, Y);
+			}
+			return false;
+		}
+		return Wd > 0.0 && Ht > 0.0;
 	}
 
 	bool DrawnWords(const FString& Words, double X, double Y)
 	{
 		if (!FMath::IsFinite(X) || !FMath::IsFinite(Y))
 		{
+			static int32 ToldPlace = 0;
+			if (ToldPlace < 8)
+			{
+				++ToldPlace;
+				UE_LOG(LogTheater, Display, TEXT("LAND SCREEN GUARD: words left undrawn, their place not a number (%f, %f), %d letters"), X, Y, Words.Len());
+			}
 			return false;
 		}
 		for (int32 K = 0; K < Words.Len(); ++K)
@@ -143,6 +162,15 @@ namespace
 			if (!FChar::IsWhitespace(Words[K]))
 			{
 				return true;
+			}
+		}
+		if (Words.Len() > 0)
+		{
+			static int32 ToldBlank = 0;
+			if (ToldBlank < 8)
+			{
+				++ToldBlank;
+				UE_LOG(LogTheater, Display, TEXT("LAND SCREEN GUARD: words left undrawn, all white space (%d letters) at %f, %f"), Words.Len(), X, Y);
 			}
 		}
 		return false;
@@ -165,6 +193,15 @@ namespace
 				continue;
 			}
 			Kept.Add(P);
+		}
+		if (Points.Num() >= 2 && Kept.Num() < 2)
+		{
+			static int32 Told = 0;
+			if (Told < 8)
+			{
+				++Told;
+				UE_LOG(LogTheater, Display, TEXT("LAND SCREEN GUARD: a line left undrawn, no length (%d points, %d left; the first at %f, %f)"), Points.Num(), Kept.Num(), Points[0].X, Points[0].Y);
+			}
 		}
 		return Kept;
 	}
