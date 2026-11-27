@@ -37,7 +37,7 @@ import { CAPITAL_BESIEGED, fallWarning, withinReach } from './danger';
 import { NO_LAST_MONTH, ROME_HOLDS, majorsOf, stakeDue, stakeWarning } from './diplomacy';
 import { ARSENAL, workLevel, yardLevel } from './arsenal';
 import { BUDGET, PRODUCTION, ledger } from './economy';
-import { allied, atWar, men, theName } from './game';
+import { allied, atWar, men, placeName, theName } from './game';
 import { CLASSES, NAVY, shipCount, shipList } from './navy';
 import { cityOrders } from './orders';
 import { besieged, garrisonOf, guardMen } from './siege';
@@ -46,6 +46,8 @@ import { skyView, type SkyView } from './weather';
 import { menRules, raisable } from './manpower';
 import { bureauCost } from './research';
 import { MEN_PER_DIV, type AirReport, type Game, type Headline, type SeaSide, type ShipClass, type Ships } from './types';
+import { cityDefences } from './citydefences';
+import { harbourOf } from './air';
 import { seaSaid, seaWhere } from './sea-words';
 
 export type CardTone = 'good' | 'bad' | 'warn' | 'plain';
@@ -766,22 +768,29 @@ export function monthCard(g: Game, mark: MonthMark, viewer: string | null = g.hu
     } else {
       row.sign = 'bmr';
       row.tag = att ? (r.won ? 'HIT' : 'MISSED') : r.won ? 'HIT' : 'HELD';
+      // (City defences, the switch on: a harbour, the factories and the troops' ground are named as the news names
+      // them, one form for a harbour everywhere: "The harbour of the Cotentin", "The raid on the Ruhr fails"; off, as
+      // shipped. The UI director, 26 Nov 2026 21:26Z, 4. A town, a rail yard, a fleet and shipping are as they were.
+      // A raid on an airfield has no row of its own: it is drawn as a factories row, so its place is named the same way.)
+      const named = cityDefences(g);
       const [pic, place, hit, miss]: [CardPicture, string, string, string] =
         r.mission === 'line' ? ['rail-yard', `${town} rail yard`, `${what} cut the railway there.`, 'The bombs fell wide. The line still runs.']
-        : r.mission === 'harbour' ? ['harbour', /\bHarbou?r$/.test(r.place) ? r.place : `${r.place} harbour`, `${what} struck the ships in harbour.`, 'The raid on the harbour was beaten off.']
+        : r.mission === 'harbour' ? ['harbour', named ? cap(harbourOf(placeName(r.place))) : /\bHarbou?r$/.test(r.place) ? r.place : `${r.place} harbour`, `${what} struck the ships in harbour.`, 'The raid on the harbour was beaten off.']
         : r.mission === 'fleet' ? ['fleet', cap(the(r.ships?.[0]?.fleet ?? r.place)), `${what} struck the fleet at sea.`, 'The strike on the fleet was beaten off.']
         : r.mission === 'strike' ? ['fleet', cap(r.place.replace(/^the /, 'The ')), `${what} struck the shipping there.`, 'The strike on the shipping was beaten off.']
-        : r.mission === 'ground' ? ['troops', r.place, `${what} struck the troops there.`, 'The raid on the troops was beaten off.']
+        : r.mission === 'ground' ? ['troops', named ? placeName(r.place, true) : r.place, `${what} struck the troops there.`, 'The raid on the troops was beaten off.']
         : r.mission === 'town' ? ['town', town, `${what} broke down its defences.`, 'The raid on its defences was beaten off.']
-        : ['factories', r.place, `${what} hit its factories${r.mission === 'night' ? ' by night' : ''}.`, 'The bombers were beaten off.'];
+        : ['factories', named ? placeName(r.place, true) : r.place, `${what} hit its factories${r.mission === 'night' ? ' by night' : ''}.`, 'The bombers were beaten off.'];
       row.picture = pic; row.place = place;
       row.line = r.won ? (att ? hit : hit.replace(/^([\d,]+) (bombers|aircraft)/, 'Their $2')) : miss;
       const low = place.replace(/^The /, 'the ');
+      // The same place inside a sentence. A name that carries its own "The" keeps it: "The raid on The Pas fails".
+      const said = !named ? place : pic === 'harbour' ? harbourOf(placeName(r.place)) : pic === 'troops' || pic === 'factories' ? placeName(r.place) : place;
       // Shipping is where the sea is, by the sea words: "Shipping off the Azores", "the strike on shipping in the North Sea".
       const shipAt = g.seas[r.zone] ? seaWhere(g.seas[r.zone].name) : `in ${low}`;
       row.head = r.mission === 'fleet' || r.mission === 'strike'
         ? (r.won ? `${r.mission === 'fleet' ? place : `Shipping ${shipAt}`} is struck from the air` : att ? `The strike on ${r.mission === 'fleet' ? low : `shipping ${shipAt}`} fails` : `The strike on ${r.mission === 'fleet' ? low : `shipping ${shipAt}`} is beaten off`)
-        : r.won ? `${place} is bombed` : att ? `The raid on ${place} fails` : `${place} beats off the raid`;
+        : r.won ? `${place} is bombed` : att ? `The raid on ${said} fails` : `${place} beats off the raid`;
     }
     row.follows = r.result;
     const sunkHere = shipsHit ? shipCount(shipsHit) : 0;
