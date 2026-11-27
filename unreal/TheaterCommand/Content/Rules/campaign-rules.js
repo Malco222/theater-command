@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of c69e60131 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of dcc905f34 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -40513,6 +40513,12 @@
     crewsHome(g2, g2.human).order = how;
     return true;
   }
+  function bomberCard(g2, f) {
+    return (f.bombers?.on ?? []).map((b) => {
+      const m = bomberMark(g2, f, b);
+      return { name: m.name, mark: m.mark, missions: b[2], kills: b[3], crew: b[5], grade: crewGrade(b, f.nat), b };
+    }).sort((x, y) => y.missions - x.missions || y.kills - x.kills || x.name.localeCompare(y.name));
+  }
 
   // ../../src/campaign/valour.ts
   var VALOUR = stories_default.valour;
@@ -76021,6 +76027,114 @@
     return out;
   }
 
+  // ../../data/campaign/pressed.json
+  var pressed_default = {
+    _note: "Captured tanks pressed into service (release 2; Brian's yes of 27 November 2026 05:23Z). src/campaign/pressed.ts. repair: the share of the beaten side's tanks knocked out on a field the winner holds that its workshops can get running again. worth: what one of them adds to a corps, against one of its own (no spare parts, a crew new to it). wear: the share of those still running that break down each month for want of parts, and 'cut' that share again for a corps out of supply. least: fewer than this many vehicles is not news and is not booked. blocks: at most this many tank blocks of a battle side are drawn as the captured make.",
+    repair: 0.25,
+    worth: 0.5,
+    wear: 0.1,
+    cut: 2,
+    least: 3,
+    blocks: 3
+  };
+
+  // ../../src/campaign/pressed.ts
+  var PRESSED = pressed_default;
+  var perOf = (kind) => AFV_PER_DIV[kind] ?? 0;
+  var pressedOn = (g2) => g2.flags.pressedtanks === 1;
+  function setPressed(g2, on2) {
+    if (on2) {
+      g2.flags.pressedtanks = 1;
+      return true;
+    }
+    delete g2.flags.pressedtanks;
+    for (const c of g2.corps) delete c.kit;
+    for (const v of g2.atSea ?? []) delete v.corps.kit;
+    return true;
+  }
+  function pressTanks(g2, rep, attackers2, defenders) {
+    if (!pressedOn(g2) || rep.yielded) return null;
+    const attWon = rep.level.endsWith("victory");
+    const left = {};
+    for (const u of attWon ? rep.defenders : rep.attackers) {
+      const per = perOf(u.kind);
+      if (!per || u.guard || u.divs <= 0 || u.men <= 0 || u.lost <= 0) continue;
+      left[u.nat] = (left[u.nat] ?? 0) + per * u.divs * Math.min(1, u.lost / u.men);
+    }
+    const fixable = Object.values(left).reduce((s, n2) => s + n2, 0) * PRESSED.repair;
+    if (fixable < PRESSED.least) return null;
+    const from2 = Object.entries(left).reduce((a, b) => b[1] > a[1] ? b : a)[0];
+    const takers = (attWon ? attackers2 : defenders).filter((c) => !c.dead && c.divs > 0 && perOf(c.kind) > 0 && c.nat !== from2);
+    const gaps = takers.map((c) => Math.max(0, (c.full ?? 1) - c.str) * c.divs * perOf(c.kind));
+    const room2 = gaps.reduce((s, n2) => s + n2, 0);
+    if (room2 <= 0) return null;
+    const n = Math.min(fixable, room2 / PRESSED.worth);
+    if (n < PRESSED.least) return null;
+    const took = [];
+    takers.forEach((c, i) => {
+      const k = n * gaps[i] / room2;
+      if (k <= 0) return;
+      c.str = Math.min(c.full ?? 1, c.str + k * PRESSED.worth / (perOf(c.kind) * c.divs));
+      const had = c.kit;
+      c.kit = { from: had && had.from !== from2 && had.n > k ? had.from : from2, n: (had?.n ?? 0) + k, turn: g2.turn };
+      took.push({ id: c.id, n: k });
+    });
+    return { from: from2, n, took };
+  }
+  function pressedWords(g2, p, place3) {
+    const me = g2.human;
+    if (!me) return "";
+    const count4 = (k) => Math.max(1, Math.round(k)).toLocaleString("en-US");
+    const adj = g2.nations[p.from]?.adj ?? p.from;
+    const mine4 = p.took.map((t) => ({ c: g2.corps.find((c) => c.id === t.id), n: t.n })).filter((t) => t.c?.nat === me);
+    if (mine4.length) {
+      const n = mine4.reduce((s, t) => s + t.n, 0);
+      const who = mine4.length === 1 ? mine4[0].c.name : `${mine4.length} of our corps`;
+      return `${count4(n)} ${adj} tanks knocked out at ${place3} are got running again and join ${who}, in our colours. Without spare parts they will not last for ever.`;
+    }
+    if (p.from === me) return `The enemy has got ${count4(p.n)} of our tanks left on the field at ${place3} running again, and drives them in his own colours.`;
+    return "";
+  }
+  function pressedMonth(g2, nat) {
+    if (!pressedOn(g2)) return;
+    for (const c of g2.corps) {
+      if (c.nat !== nat || !c.kit) continue;
+      const per = perOf(c.kind);
+      if (c.dead || !per || c.divs <= 0) {
+        delete c.kit;
+        continue;
+      }
+      const n = Math.min(c.kit.n, c.str * c.divs * per / PRESSED.worth);
+      const broke = n * Math.min(1, PRESSED.wear * (c.supplied ? 1 : PRESSED.cut));
+      c.str = Math.max(0, c.str - broke * PRESSED.worth / (per * c.divs));
+      const still = n - broke;
+      if (still < 1) delete c.kit;
+      else c.kit.n = still;
+    }
+  }
+  function kitLook2(g2, cs) {
+    if (!pressedOn(g2)) return null;
+    let kit = 0, all = 0;
+    const by2 = {};
+    for (const c of cs) {
+      const per = perOf(c.kind);
+      if (!per || c.dead) continue;
+      all += per * c.divs * c.str;
+      if (c.kit) {
+        kit += c.kit.n;
+        by2[c.kit.from] = (by2[c.kit.from] ?? 0) + c.kit.n;
+      }
+    }
+    if (kit < 1 || all <= 0) return null;
+    const from2 = Object.entries(by2).reduce((a, b) => b[1] > a[1] ? b : a)[0];
+    return { from: from2, n: Math.max(1, Math.min(PRESSED.blocks, Math.ceil(10 * kit / all))) };
+  }
+  function kitLine(g2, c) {
+    if (!pressedOn(g2) || !c.kit || c.kit.n < 1) return "";
+    const n = Math.round(c.kit.n);
+    return `${n.toLocaleString("en-US")} captured ${g2.nations[c.kit.from]?.adj ?? c.kit.from} tank${n === 1 ? "" : "s"} in its own colours.`;
+  }
+
   // ../../src/campaign/game.ts
   var EASTERN = east_default;
   var DESERT = desert_default;
@@ -78621,7 +78735,11 @@
       g2.scars[target.id].mudLast = g2.turn;
     }
     wreckBump(g2, rep);
-    capturedKit(g2, rep, target);
+    if (pressedOn(g2)) {
+      const took = pressTanks(g2, rep, attackers2, defenders);
+      const words2 = took ? pressedWords(g2, took, target.name) : "";
+      if (took && words2) headline(g2, "info", words2, took.took.some((t) => g2.corps.find((c) => c.id === t.id)?.nat === g2.human) ? g2.human : took.from, target.id);
+    } else capturedKit(g2, rep, target);
     if (aside2) g2.flags.asideBattles = (g2.flags.asideBattles ?? 0) + 1;
     if (late) {
       g2.flags.lateBattles = (g2.flags.lateBattles ?? 0) + 1;
@@ -80544,6 +80662,7 @@
     const owed = budgeted(g2) && n.pp < 0 ? Math.min(1, -n.pp / credit2) : 0;
     const pcBase = pcIncome(nat, g2) + civicSum(g2, nat).pc + govCapital(g2, nat), pcNet = pcBase + footHold(g2, nat, pcBase);
     n.pc = Math.max(0, Math.min(Math.max(n.pc, DIPLOMACY.pcCap), n.pc + (g2.flags.open === 1 ? pcNet : Math.max(0, pcNet))));
+    pressedMonth(g2, nat);
     const perDiv = PRODUCTION.replacementCost;
     const tempo = freshOffensive(g2, nat);
     const army2 = g2.corps.filter((c) => c.nat === nat);
@@ -91360,6 +91479,8 @@
     ];
     if (carrierRules(g2)) top.push({ label: "SEARCH A SEA", act: `open:search:${id}`, ok: up && !x.scouted, tip: x.scouted ? "It has flown its reconnaissance this month." : "A few aircraft quarter one sea for the month: enemy ships there may be reported, or identified. A fleet has to be found before it can be struck." });
     if (!deck) top.push({ label: "MOVE TO ANOTHER AIRFIELD", act: `open:rebase:${id}`, ok: up, tip: "Settling in costs it some readiness for a month." });
+    const fleet = g2.airFleets.find((f) => f.id === id);
+    if (fleet && crewsShown(g2, fleet)) top.push({ label: "THE CREWS", act: `open:crews:${id}`, ok: true, tip: `Its bombers by name, the ${flownWord(fleet.nat)}s each has flown, and how near each crew is to the end of its tour.` });
     if (x.way) top.push({ label: "CALL IT OFF", act: `ferryoff:${id}`, ok: up, tip: `It stays at ${x.baseName}, the field it has reached, and is back in the fight.` });
     const mv2 = x.wingMove;
     if (mv2?.order === "ashore") {
@@ -91785,6 +91906,77 @@
       ]
     };
   }
+  var crewRollOn = (g2) => g2.flags.crewroll === 1;
+  function setCrewRoll(g2, on2) {
+    if (on2) g2.flags.crewroll = 1;
+    else delete g2.flags.crewroll;
+    return true;
+  }
+  function crewsShown(g2, f) {
+    return crewRollOn(g2) && f.nat === g2.human && keptByName(f) && (f.bombers?.on.length ?? 0) > 0;
+  }
+  var ORDER_WORDS = { school: "they train new crews", bonds: "they go on a war bond tour", split: "one goes to train new crews, the next on a war bond tour, and so on" };
+  function crewsPage(g2, id) {
+    const f = g2.airFleets.find((x) => x.id === id);
+    if (!f || !crewsShown(g2, f)) return null;
+    const R2 = f.bombers, rows = bomberCard(g2, f), shown2 = rows.slice(0, 12);
+    const tour = tourOf(f.nat), word3 = flownWord(f.nat), words2 = `${word3}s`, named5 = carriesNames(f.nat);
+    const shot = (k) => k === 1 ? "a fighter shot down" : `${num5(k)} fighters shot down`;
+    const called = (m) => m.mark && m.mark !== m.name ? `${m.mark}, ${m.name}` : m.name;
+    const bombers = shown2.map((r) => {
+      const toGo = tour - r.crew;
+      return {
+        nat: f.nat,
+        title: called(r) || "No name yet",
+        lines: [
+          `${num5(r.missions)} ${r.missions === 1 ? word3 : words2} flown${r.kills ? `, ${shot(r.kills)}` : ""}.`,
+          `${r.grade} crew: ${num5(r.crew)} of their ${tour}${toGo > 0 && toGo <= 5 ? `, ${toGo === 1 ? "one" : num5(toGo)} to go` : ""}.`
+        ],
+        buttons: []
+      };
+    });
+    const roll4 = R2.roll.slice(-6).reverse().map((x) => {
+      const name = bomberMark(g2, f, x.b, x.t).name;
+      const what = x.how === "home" ? `${name ? `${name}'s crew` : "A bomber's crew"} went home after ${tour} ${words2}${x.b[3] ? `, with ${shot(x.b[3])}` : ""}` : `${name || "A bomber"} was lost with ${num5(x.b[2])} ${x.b[2] === 1 ? word3 : words2} flown${x.b[3] ? ` and ${shot(x.b[3])}` : ""}`;
+      return `${turnToDate(x.t).label}: ${what}.`;
+    });
+    const C4 = g2.stories.crews?.[f.nat], now = C4?.order ?? "split", up = humanUp(g2);
+    const head = headStart(g2, f.nat), tours = C4?.bonds.length ?? 0;
+    const crews = (k) => `${countWord(k, true)} ${k === 1 ? "crew is" : "crews are"}`;
+    const state = [
+      C4?.school ? `${crews(C4.school)} at the schools${head ? `: new crews arrive with ${head === 1 ? `${/^[aeiou]/.test(word3) ? "an" : "a"} ${word3}'s` : `${head} ${words2}'`} experience` : ""}.` : "",
+      tours ? `${crews(tours)} on a war bond tour: ${Math.round(BOMBERS.bonds.pp * tours * BUDGET.scale).toLocaleString("en-US")} a month into the treasury.` : ""
+    ].filter(Boolean).join(" ");
+    const opt = (how, label, what) => ({
+      label,
+      act: `crews:${id}:${how}`,
+      ok: up && now !== how,
+      tip: now === how ? "This is your standing order now." : up ? what : "It is not your month."
+    });
+    const order2 = {
+      nat: f.nat,
+      title: `Crews go home after ${tour} ${words2}`,
+      lines: [`The group's readiness rises each time. Then ${ORDER_WORDS[now]}.`, state].filter(Boolean),
+      buttons: [
+        opt("school", "TRAIN NEW CREWS", `Every new crew arrives with experience before its first ${word3}, and fighters bring down fewer of a group so trained. Their own bomber flies on with a new crew.`),
+        opt("bonds", "WAR BOND TOUR", `They fly their bomber home, and bring money into the treasury every month for ${BOMBERS.bonds.months[0]} to ${BOMBERS.bonds.months[1]} months. A new aircraft takes its place.`),
+        opt("split", "BOTH IN TURN", "One crew to the schools, the next on a war bond tour, and so on.")
+      ]
+    };
+    const lost = R2.gone ? `${num5(R2.gone)} ${named5 ? "named bombers" : "bombers"} lost` : `no ${named5 ? "named bomber" : "bomber"} lost`;
+    return {
+      id: `crews:${id}`,
+      title: `THE CREWS  ·  ${f.name.toUpperCase()}`,
+      headline: `${num5(R2.on.length)} bomber${R2.on.length === 1 ? "" : "s"} on strength · ${R2.home ? `${num5(R2.home)} crew${R2.home === 1 ? "" : "s"} gone home` : "no crew gone home yet"} · ${lost}`,
+      note: `Every bomber of the group is known by ${named5 ? "its name" : "its marking"}, with the ${words2} it has flown and the aircraft its gunners have shot down. A crew that finishes its tour of ${tour} ${words2} goes home, and the group's readiness rises.`,
+      top: [{ label: "BACK TO THE GROUP", act: `open:group:${id}`, ok: true, tip: "" }],
+      sections: [
+        { heading: "THE BOMBERS, OLD HANDS FIRST", text: rows.length > shown2.length ? `And ${num5(rows.length - shown2.length)} more.` : "", rows: bombers },
+        { heading: "WHEN A TOUR IS OVER", text: "", rows: [order2] },
+        { heading: "HOME AND LOST", text: roll4.length ? roll4.join("\n") : "No crew has finished its tour yet, and no bomber with a name has been lost.", rows: [] }
+      ]
+    };
+  }
   function airPage(g2, id, region = -1) {
     if (!airWar(g2) || !g2.human) return null;
     const part = id.split(":");
@@ -91800,6 +91992,7 @@
     if (part[0] === "search") return searchPage(g2, Number(part[1]));
     if (id === "airreports") return raidReportsPage(g2);
     if (part[0] === "airreport") return raidReportPage(g2, Number(part[1]));
+    if (part[0] === "crews") return crewsPage(g2, Number(part[1]));
     return null;
   }
   function airAct(g2, action, fought) {
@@ -91821,6 +92014,11 @@
         fly: first2 && from2 ? { from: first2.base, fromX: from2.x, fromY: from2.y, x: p.x, y: p.y, nat: first2.nat, bombers: rep.att.some((s) => s.bmr > 0), region: rep.zone >= 0 ? -1 : target } : void 0,
         ...fought ? { after: afterCard(g2, rep, fought) } : {}
       };
+    }
+    if (part[0] === "crews" && part.length >= 3 && (part[2] === "school" || part[2] === "bonds" || part[2] === "split")) {
+      const f = g2.airFleets.find((x) => x.id === Number(part[1]));
+      const ok2 = !!f && crewsShown(g2, f) && orderCrews(g2, part[2]);
+      return { ok: ok2, note: ok2 ? `Crews who finish their tour: ${ORDER_WORDS[part[2]]}.` : "That order cannot be given now.", open: `crews:${part[1]}` };
     }
     if (part[0] === "search") {
       const r = orderSearch(g2, Number(part[1]), Number(part[2]));
@@ -117602,7 +117800,9 @@
           if (look) ticket.look = look;
         }
         const took = (nat) => (g2.captured?.[nat] ?? []).filter((k) => g2.turn - k.turn < 6).slice(-1)[0];
-        const ca = took(t.att.nat), cd = took(t.def.nat);
+        const inBattle = new Set(corps.map((c) => c.id));
+        const ca = pressedOn(g2) ? kitLook2(g2, corps) : took(t.att.nat);
+        const cd = pressedOn(g2) ? kitLook2(g2, g2.corps.filter((c) => c.reg === to && !inBattle.has(c.id))) : took(t.def.nat);
         if (ca || cd) ticket.captured = { ...ca ? { att: { from: ca.from, n: ca.n } } : {}, ...cd ? { def: { from: cd.from, n: cd.n } } : {} };
         const worn = (cs) => {
           const divs = cs.reduce((s2, c) => s2 + c.divs, 0);
@@ -122745,6 +122945,9 @@
           // How worn its uniforms and kit look (release 2, looks only): 0.1 fresh to 1 after six weeks in the line.
           wear: wearOf(c),
           fresh: c.fresh ?? 0,
+          // (Release 2, pressed.ts, behind its switch) The captured tanks it has pressed into service, as its card's line:
+          // "14 captured Soviet tanks in its own colours." Absent where it has none.
+          ...c.kit && pressedOn(s) && (c.nat === s.human || s.human && c.joint === s.human) ? { kit: kitLine(s, c) } : {},
           ...markOf2(c),
           ...fresh6.has(c.id) ? { ready: true } : {},
           // (Release 2, breakup.ts; Brian 24 November 2026 18:02Z) Where breaking corps up is on: why this corps cannot have
@@ -123127,6 +123330,9 @@
       beatReach: beatReachOn(s),
       // (Release 2, buildings.ts) Whether a conquered town can put up every kind of building once it has settled.
       settledTowns: settledTownsOn(s),
+      // (Release 2, pressed.ts) Whether captured tanks are pressed into service; (airpages.ts) whether a bomber group's page has THE CREWS.
+      pressedTanks: pressedOn(s),
+      crewRoll: crewRollOn(s),
       // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
       townQueue: townQueueOn(s),
       // (Release 2, citydefences.ts) Whether searchlights can be built, the guns fight by night by what they see and a
@@ -129858,6 +130064,16 @@ ${standing6}`,
       note4 = !ok2 ? `${label} can be switched only in the campaign's first month.` : `${label} ${logisticsSet(s, which) ? `${which === "dumps" ? "are" : which === "wagons" ? "are" : "is"} on${columnsOn(s) ? "" : " (they work only with the supply columns on)"}.` : `${which === "lorryShift" ? "is" : "are"} off.`}`;
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
+    if (part[0] === "crewrollrule") {
+      ok2 = setCrewRoll(s, part[1] === "on");
+      note4 = crewRollOn(s) ? "Bomber crews by name: a bomber group's page has THE CREWS, its bombers one by one with the missions each has flown and how near each crew is to the end of its tour." : "Bomber crews by name are off: the group's page has no list of its crews. Their tours go on as before.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
+    }
+    if (part[0] === "pressedtanksrule") {
+      ok2 = setPressed(s, part[1] === "on");
+      note4 = pressedOn(s) ? "Captured tanks are pressed into service: after a battle won, the beaten side's tanks left on the field that can be got running again join the winner's armour that fought, in its colours, and wear out for want of spare parts. The same for every army." : "Captured tanks are not pressed into service: a win shows a few of them in the winner's paint, and no more.";
+      return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
+    }
     if (part[0] === "atomrule") {
       ok2 = setAtom(s, part[1] === "on");
       note4 = !ok2 ? "The atomic project is part of the grand campaign only." : atomOn(s) ? "The atomic project is on: three steps of the Industry branch, then atomic plants that take a share of your earnings for years. Open THE ATOMIC PROJECT." : "The atomic project is off: its research leaves the tree, and no plants draw.";
@@ -131233,6 +131449,16 @@ ${standing6}`,
     return { set, on: logisticsSet(s, which) };
   };
   globalThis.TC.homeFront = () => homeBoard(game());
+  globalThis.TC.crewRoll = (on2) => {
+    const s = game();
+    setCrewRoll(s, !!on2);
+    return { on: crewRollOn(s) };
+  };
+  globalThis.TC.pressedTanks = (on2) => {
+    const s = game();
+    setPressed(s, !!on2);
+    return { on: pressedOn(s) };
+  };
   var R2_SHIP = {
     nicknames: (s) => {
       setNicknames(s, true);
@@ -131308,7 +131534,11 @@ ${standing6}`,
     "logistics:wagons": (s) => setLogistics(s, "wagons", true),
     "logistics:dumps": (s) => setLogistics(s, "dumps", true),
     // (Release 2, atom.ts: the atomic project, switched in any month, so an older war takes it too.)
-    atomrule: (s) => setAtom(s, true) && atomOn(s)
+    atomrule: (s) => setAtom(s, true) && atomOn(s),
+    // (Release 2, pressed.ts: captured tanks pressed into service, switched in any month, so an older war takes it too.)
+    pressedtanksrule: (s) => setPressed(s, true) && pressedOn(s),
+    // (Release 2, airpages.ts: the bomber crews' page, switched in any month; it shows records and moves nothing.)
+    crewrollrule: (s) => setCrewRoll(s, true) && crewRollOn(s)
   };
   function r2Ship(ids2) {
     const s = game();
