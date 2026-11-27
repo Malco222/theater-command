@@ -425,6 +425,11 @@ export interface Fall {
   back: boolean;
   /** A pilot or crew who bailed out over enemy ground: taken prisoner (shown only; the rules count no bomber crews). */
   captured: number;
+  /**
+   * The men the look draws from (release 2, 'bailouts' on; absent with it off): a bomber's crew by its kit; 1 for every
+   * fighter but the two-seat Fulmar, 2 until the historian confirms (hole H-FULMAR). `chutes + out` never more.
+   */
+  crew?: number;
   // What follows is drawn in a shown battle only (fates.ts): absent, play 'kind'.
   /** The loss's own number, which a collision or a strike names ('with'). */
   fid?: number;

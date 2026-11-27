@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 1571c5fc4 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of cfa1d2aa2 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -35773,7 +35773,23 @@
       crewsDated: [
         { model: "He111", to: 1941, crew: 4 },
         { model: "B17", from: 1944 + 6 / 12, crew: 9 }
-      ]
+      ],
+      /**
+       * Release 2, 'bailouts' (sim.ts airLooks): crews that differ by the kit the group flies (its guns' mark, guns.ts
+       * bomberGuns), read in place of crewsDated, never the calendar (the design director's D4, 26 November 2026). The
+       * He 111P, three gun positions, flew with four (the historian, air-fates-check.md section 6, H: "4 in 1940, 5 from
+       * 1941-42 with an extra gunner"); the He 111H's beam guns carried the fifth (the rules thread's reading, put to the
+       * historian as H4: hole H-HE111). Every other mark takes 'crews'. The B-17's "often 9" is a practice no kit in the
+       * game carries (hole H-B17), so every B-17 mark is 10. The mark itself is still picked by the month in guns.ts: that
+       * calendar is the guns', named on the known list, not cured here.
+       */
+      crewsByKit: [{ model: "He111", mark: "He 111P", crew: 4 }],
+      /**
+       * Release 2, 'bailouts': fighters that carry more than their pilot, by the model the 3D game draws (read in sim.ts
+       * sceneOf). The Fleet Air Arm's two-seat Fulmar, pilot and observer: 2 until the historian confirms (hole H-FULMAR,
+       * H5; mark G, a game placeholder, not the historian's; the design director's D8). Every other fighter is 1.
+       */
+      fighterCrews: { Fulmar: 2 }
     },
     /**
      * How a lost aircraft is seen to go, from its situation (fates.ts; Brian, 20 November: many ways down, a falling plane
@@ -35837,8 +35853,31 @@
       again: [0, 0.35, 0.6, 0.85],
       /** The ways a fighter pilot the rules save can get out of under a parachute. */
       saved: ["flamer", "burn", "wing", "tail", "spin"],
-      /** A lost fighter pilot over enemy ground seen to get out (taken prisoner), by the way down. */
-      captured: { flamer: 0.4, burn: 0.5, wing: 0.45, tail: 0.5, spin: 0.6 },
+      /**
+       * A fighter pilot the rules do not bring back, seen to get out under a parachute, by the way down (the pilot's
+       * share of getting out). Over the enemy's ground he is taken prisoner (the fall's own 'captured' says so). Release 2,
+       * 'bailouts' (sim.ts airLooks): this share times 'outBand' by height, on either ground, is S, the share of ALL the
+       * pilots of such falls shown getting out, the pilots the count brings back inside it (the design director's D1 and
+       * D3, 26 November 2026, priced once at 18:47Z); a pilot not brought back is drawn on the look stream's own fork
+       * (fates.ts GOT) at the rest of it, R (fates.ts backOf, restOut). Hole H-FTR-OUT (the historian's H2, by the way
+       * down and by height); mark G, a game placeholder, not the historian's.
+       */
+      pilotOut: { flamer: 0.4, burn: 0.5, wing: 0.45, tail: 0.5, spin: 0.6 },
+      /**
+       * A fighter pilot the rules do not bring back who rode it down climbs out after the forced landing or the ditching
+       * (fates.ts, today's 0.6, moved here unchanged). Over the enemy's ground as ever; release 2, 'bailouts': over his own
+       * ground too (D1). Hole H-FTR-LAND (the historian's H3); mark G, a game placeholder, no source.
+       */
+      ftrLand: 0.6,
+      /**
+       * The men a forced landing or a ditching loses of a crew of two (the Fulmar's pilot and observer; the two-seat dive
+       * bombers): the share of such landings that lose one of the two. Hole H-LAND-TWO; mark G, a game placeholder, not
+       * the historian's. The landing's one die (fates.ts landLost) loses up to a third of a crew, int(max(1, ceil(crew /
+       * 3))), a formula no source sized; for a crew of two it runs out at 0, so nobody of two is ever lost, and 0 holds
+       * that value (the design director, 27 November 2026 01:00Z, reading 5: "mark it G, read it at both ends, and the
+       * historian sizes it"). Its range: 0, nobody lost; 1, one of the two always lost. Release 2, 'bailouts' only.
+       */
+      landTwo: 0,
       /** A burning one blows apart on the way down: the chance, times 'loaded' with bombs aboard, and when, as a share of its fall. */
       boom: { burn: 0.12, flamer: 0.35, loaded: 2, at: [0.2, 0.65] },
       /** Air seconds after the hit before the fire shows: an engine smokes first; a flamer goes up at once. */
@@ -35857,8 +35896,20 @@
         struck: [45, 80],
         collide: [45, 80]
       },
-      /** Each of a bomber's crew seen to get out, by the way down, times 'outBand' by height (low down there is no time). */
+      /**
+       * Each of a bomber's crew seen to get out, by the way down, times 'outBand' by height (low down there is no time).
+       * Release 2, 'bailouts': the one getting-out rule across every way down (the design director's ruling and D11):
+       * - 'glide' is hole H-GLIDE-JUMP: each man's share of jumping from a controlled glide over land, read like every
+       *   other way down, times 'outBand' by height. Shipped 0, its value today, so nobody jumps and the glide is die for
+       *   die as today. Over the sea the ditching stays as today (hole H-GLIDE-SEA). If the historian's answer to H1 does
+       *   not fit outBand's shape (0.3, 1, 1.1), it goes back to the design director before any second height table is made.
+       * - a fighter pilot the rules do not bring back gets out of a breakup or a collision at 'breakup' and 'collide'
+       *   (0.1 each) times 'outBand', on either ground (D11; mark G, a game placeholder). That is S, the share of all
+       *   such pilots; a ram on purpose may hold a pilot brought back, so a rammer not brought back is drawn at the rest
+       *   of it (fates.ts backOf, sc.meantBack; the design director, 27 November 2026 01:00Z, reading 1).
+       */
       out: { explode: 0, flamer: 0.2, burn: 0.55, wing: 0.2, tail: 0.3, pilot: 0.35, spin: 0.35, glide: 0, breakup: 0.1, struck: 0.25, collide: 0.1 },
+      /** By height, low, middle, high. Release 2, 'bailouts': read for a fighter pilot's getting out too, on either ground (D3; mark G, until the historian's H2 by height). */
       outBand: [0.3, 1, 1.1],
       /** Air seconds after the hit the first canopy opens (later out of a spin, held there by the forces), and between canopies. */
       chute: { first: [2, 6], spin: [4, 10], gap: [1.5, 4] },
@@ -102604,10 +102655,10 @@
       this.ticket = ticket;
       this.rng = new Rng(ticket.attempt ? hashString(`field-run:${ticket.seed}:${ticket.attempt}`) : ticket.seed);
       this.style = { att: styleFor(ticket, "att"), def: styleFor(ticket, "def") };
-      const priced = ticket.reckoning.teamFire && [...ticket.att.forces, ...ticket.def.forces].some(isOwnTeam) ? ticket.reckoning.teamFire : void 0;
+      const priced2 = ticket.reckoning.teamFire && [...ticket.att.forces, ...ticket.def.forces].some(isOwnTeam) ? ticket.reckoning.teamFire : void 0;
       const sniped = ticket.reckoning.snipers && [...ticket.att.forces, ...ticket.def.forces].some((f) => f.kind === "snp") ? ticket.reckoning.snipers : void 0;
-      const A = ticket.reckoning.A / (priced ? Math.max(1e-6, priced.att) : 1) / (sniped ? Math.max(1e-6, sniped.att) : 1);
-      const D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds) / (priced ? Math.max(1e-6, priced.def) : 1) / (sniped ? Math.max(1e-6, sniped.def) : 1);
+      const A = ticket.reckoning.A / (priced2 ? Math.max(1e-6, priced2.att) : 1) / (sniped ? Math.max(1e-6, sniped.att) : 1);
+      const D2 = ticket.reckoning.A / Math.max(1e-6, ticket.reckoning.odds) / (priced2 ? Math.max(1e-6, priced2.def) : 1) / (sniped ? Math.max(1e-6, sniped.def) : 1);
       this.power = { att: A, def: D2 };
       this.teamParent = ownTeamParents(ticket);
       const att = makeBlocks("att", ticket.att, A, 1, void 0, ticket.turn);
@@ -112956,10 +113007,13 @@
     const r = SKY.fate.ram.meant.find((m) => m.nat === n && d >= m.from && d < m.to && (!m.four || engines === 4) && (!m.pass || m.pass === pass));
     return r ? r.p : 0;
   }
-  function crewOf(model, w) {
-    const F2 = SKY.fall, d = w.year + w.month / 12;
+  function crewOf(model, w, kit) {
+    const F2 = SKY.fall;
+    const plain2 = () => F2.crews[model] ?? F2.crews[model.split(":")[0]] ?? F2.crews.Bomber;
+    if (kit !== void 0) return F2.crewsByKit.find((c) => c.model === model && c.mark === kit)?.crew ?? plain2();
+    const d = w.year + w.month / 12;
     const dated2 = F2.crewsDated.find((c) => c.model === model && d >= (c.from ?? -Infinity) && d < (c.to ?? Infinity));
-    return dated2?.crew ?? F2.crews[model] ?? F2.crews[model.split(":")[0]] ?? F2.crews.Bomber;
+    return dated2?.crew ?? plain2();
   }
   function coolOf(model) {
     if (/^(Bf109|Bf110|Me410|Spitfire|Hurricane|Mustang|Warhawk|P38|P40|P51|Yak|Ki61|D4Y|Barracuda|Stuka|Ju87|Ju88|He111|Lancaster|Mosquito|MC202|C202|D520|Il2|Pe2|Whitley)/.test(model)) return "liquid";
@@ -113007,6 +113061,77 @@
     return w.some((v) => v > 0) ? w : was;
   }
   var range = (rng, [a, b]) => a + rng.next() * (b - a);
+  var GOT = 83;
+  var SAVED = (h) => SKY.fate.saved.includes(h);
+  function timesOf(R2, more, thrown, ours2, extra, how, upTo) {
+    const F2 = SKY.fate, at0 = [];
+    if (!thrown && !extra) return at0;
+    const first2 = how === "spin" || how === "wing" || how === "tail" ? F2.chute.spin : F2.chute.first;
+    let at4 = range(thrown ? R2 : more, first2);
+    const open3 = () => {
+      at0.push(Math.round(Math.min(at4, Math.max(0.5, upTo - 0.5)) * 10) / 10);
+    };
+    for (let i = 0; i < thrown; i++) {
+      if (i < ours2) open3();
+      at4 += range(R2, F2.chute.gap);
+    }
+    for (let i = 0; i < extra; i++) {
+      open3();
+      at4 += range(more, F2.chute.gap);
+    }
+    return at0;
+  }
+  function jumps(G5, crew, p, how, upTo) {
+    const DICE2 = SKY.fall.crew;
+    let thrown = 0, ours2 = 0, extra = 0;
+    const more = crew > DICE2 ? G5.fork(53) : void 0;
+    for (let i = 0; i < DICE2; i++) if (G5.chance(p)) {
+      thrown++;
+      if (i < crew) ours2++;
+    }
+    for (let i = DICE2; i < crew; i++) if (more.chance(p)) extra++;
+    return { chutes: ours2 + extra, at: timesOf(G5, more, thrown, ours2, extra, how, upTo) };
+  }
+  function backAmong(s, wB, totB, wN, totN) {
+    const b = totB > 0 ? s * wB / totB : 0, n = totN > 0 ? (1 - s) * wN / totN : 0;
+    return b + n > 0 ? b / (b + n) : 0;
+  }
+  function backOf(sc, mem2, how) {
+    if (sc.air !== "ftr") return 0;
+    if (how === "collide") return sc.meantBack ?? 0;
+    if (sc.backShare === void 0) throw new Error("fateOf: a fighter's fall with 'bailouts' needs the count's share back (Scene.backShare)");
+    const i = HOWS.indexOf(how);
+    if (i < 0) throw new Error(`backOf: no share back is read for '${how}'`);
+    const s = sc.backShare, sum3 = (w) => w.reduce((a, b) => a + b, 0);
+    const wB = weightsOf({ ...sc, back: true }, mem2), wN = weightsOf({ ...sc, back: false }, mem2);
+    return backAmong(s, wB[i], sum3(wB), wN[i], sum3(wN));
+  }
+  function restOut(S3, B3, K2) {
+    return B3 >= 1 ? 0 : Math.max(0, (S3 - B3 * K2) / (1 - B3));
+  }
+  function manOut(sc, how) {
+    const F2 = SKY.fate;
+    return how === "glide" && sc.sea ? 0 : Math.min(0.95, (F2.out[how] ?? 0) * F2.outBand[sc.band]);
+  }
+  var landLost = (R2, crew, bailouts) => bailouts && crew === 2 ? R2.chance(SKY.fate.landTwo) ? 1 : 0 : R2.int(Math.max(1, Math.ceil(crew / 3)));
+  var priced = (S3, B3) => restOut(S3, B3, 1);
+  function crewOut(G5, sc, how, B3) {
+    const p = priced(manOut(sc, how), B3);
+    if (p > 0 && G5.chance(p)) return "chute";
+    if (how !== "glide") return null;
+    return Math.max(0, 1 - landLost(G5, sc.crew, true)) > 0 ? "out" : null;
+  }
+  function oneOut(G5, sc, how, landed2, B3) {
+    const F2 = SKY.fate, band2 = F2.outBand[sc.band];
+    if (how === "glide") {
+      const jump = priced(sc.sea ? 0 : Math.min(0.95, (F2.out.glide ?? 0) * band2), B3);
+      if (jump > 0 && G5.chance(jump)) return "chute";
+      return landed2 ?? G5.chance(priced(F2.ftrLand, B3)) ? "out" : null;
+    }
+    const p = SAVED(how) ? F2.pilotOut[how] : how === "breakup" || how === "collide" ? F2.out[how] ?? 0 : 0;
+    const q = priced(Math.min(0.95, p * band2), B3);
+    return q > 0 && G5.chance(q) ? "chute" : null;
+  }
   function fateOf2(rng, sc, mem2, pair2) {
     const F2 = SKY.fate;
     let how, cause, wth;
@@ -113037,17 +113162,18 @@
     const fire2 = how === "burn" ? Math.round(range(rng, F2.fire.burn) * 10) / 10 : how === "flamer" ? Math.round(range(rng, F2.fire.flamer) * 10) / 10 : void 0;
     const upTo = boom ?? dur;
     const DICE2 = SKY.fall.crew;
-    let chutes = 0, out = 0, thrown = 0, ours2 = 0, extra = 0;
+    let chutes = 0, out = 0, thrown = 0, ours2 = 0, extra = 0, lost = 0;
     let more;
     if (sc.air === "ftr") {
       if (sc.back) chutes = 1;
-      else if (sc.over === "enemy" && F2.saved.includes(how)) chutes = rng.chance(F2.captured[how] ?? 0.5) ? 1 : 0;
-      if (how === "glide" && !sc.back && sc.over === "enemy") out = rng.chance(0.6) ? 1 : 0;
+      else if (sc.over === "enemy" && SAVED(how)) chutes = rng.chance(F2.pilotOut[how] ?? 0.5) ? 1 : 0;
+      if (how === "glide" && !sc.back && sc.over === "enemy") out = rng.chance(F2.ftrLand) ? 1 : 0;
       thrown = ours2 = chutes;
     } else if (how === "glide") {
-      out = sc.crew - rng.int(Math.max(1, Math.ceil(sc.crew / 3)));
+      lost = landLost(rng, sc.crew, sc.bailouts);
+      out = sc.crew - lost;
     } else {
-      const p = Math.min(0.95, (F2.out[how] ?? 0) * F2.outBand[sc.band]);
+      const p = manOut(sc, how);
       if (sc.crew > DICE2) more = rng.fork(53);
       for (let i = 0; i < DICE2; i++) if (rng.chance(p)) {
         thrown++;
@@ -113056,20 +113182,35 @@
       for (let i = DICE2; i < sc.crew; i++) if (more.chance(p)) extra++;
       chutes = ours2 + extra;
     }
-    const chuteAt = [];
-    if (thrown || extra) {
-      const first2 = how === "spin" || how === "wing" || how === "tail" ? F2.chute.spin : F2.chute.first;
-      let at4 = range(thrown ? rng : more, first2);
-      const open3 = () => {
-        chuteAt.push(Math.round(Math.min(at4, Math.max(0.5, upTo - 0.5)) * 10) / 10);
-      };
-      for (let i = 0; i < thrown; i++) {
-        if (i < ours2) open3();
-        at4 += range(rng, F2.chute.gap);
-      }
-      for (let i = 0; i < extra; i++) {
-        open3();
-        at4 += range(more, F2.chute.gap);
+    let chuteAt = timesOf(rng, more, thrown, ours2, extra, how, upTo);
+    if (sc.bailouts) {
+      if (sc.air === "ftr") {
+        const B3 = backOf(sc, mem2, how);
+        const G5 = rng.fork(GOT);
+        const pilot = sc.back ? "chute" : oneOut(G5, sc, how, how === "glide" && sc.over === "enemy" ? out === 1 : void 0, B3);
+        const men2 = sc.back ? [] : [pilot];
+        for (let i = 1; i < sc.crew; i++) men2.push(sc.back ? pilot : crewOut(G5, sc, how, B3));
+        const kept4 = sc.back ? chuteAt : [];
+        const up = men2.filter((m) => m === "chute").length;
+        chutes = kept4.length + up;
+        out = men2.filter((m) => m === "out").length;
+        chuteAt = [...kept4];
+        if (up) {
+          const cap18 = Math.max(0.5, upTo - 0.5), first2 = how === "spin" || how === "wing" || how === "tail" ? F2.chute.spin : F2.chute.first;
+          let at4 = kept4.length ? kept4[kept4.length - 1] + range(G5, F2.chute.gap) : range(G5, first2);
+          for (let i = 0; i < up; i++) {
+            chuteAt.push(Math.round(Math.min(at4, cap18) * 10) / 10);
+            at4 += range(G5, F2.chute.gap);
+          }
+        }
+      } else if (how === "glide") {
+        const p = manOut(sc, how);
+        if (p > 0) {
+          const got = jumps(rng.fork(GOT), sc.crew, p, how, upTo);
+          chutes = got.chutes;
+          chuteAt = got.at;
+          out = Math.max(0, sc.crew - got.chutes - lost);
+        }
       }
     }
     let roll4 = rng.chance(0.5) ? 1 : -1;
@@ -113369,6 +113510,13 @@
        * never moves its parent), and the tests run every battle with it on and off and find the same result.
        */
       __publicField(this, "show");
+      /**
+       * Release 2's 'bailouts' (airLooks below), read once when the battle opens, so a battle keeps its switch to the end.
+       * Looks only: on, every 'air:lost' carries its 'crew', a parachute shows for every man who got out whether or not he
+       * flies again, one getting-out rule runs across every way down, and a bomber's crew follows the kit it flies. Off, as
+       * shipped, every battle is what it was.
+       */
+      __publicField(this, "bailouts");
       __publicField(this, "when");
       __publicField(this, "stragRng");
       __publicField(this, "passRng");
@@ -113533,6 +113681,7 @@
       this.ticket = ticket;
       this.place = ticket.place;
       this.show = opts.show ?? true;
+      this.bailouts = opts.bailouts ?? airLooks().includes("bailouts");
       this.look = Math.max(1, opts.look ?? SKY.look.all);
       this.when = ticket.place.when ?? { year: 1939, month: 8 };
       this.rng = new Rng(ticket.seed);
@@ -114647,12 +114796,13 @@
           u.n--;
           u.mor = clamp013(u.mor - SKY.morale.perLoss / u.n0);
           const over = u.side === "att" ? "enemy" : "own";
-          const fall2 = drawFall(this.fallRng, u.air, over, P.saved[u.side]);
+          const saved = P.saved[u.side];
+          const fall2 = drawFall(this.fallRng, u.air, over, saved);
           if (fall2.back) u.back++;
           const alt = s ? Math.max(0, this.shownAlt(u) - s.down) : this.shownAlt(u);
           const before = u.figures;
           u.figures = this.modelsAfter(u, s);
-          lost.push({ u, fall: fall2, by: by2, s, alt, fid: this.fid++, seat: seat5, gun: gun2, models: before - u.figures });
+          lost.push({ u, fall: fall2, by: by2, s, alt, fid: this.fid++, seat: seat5, gun: gun2, models: before - u.figures, saved });
         }
         if (this.show && owed > 0 && u.n > 0) hit.push([u, owed, due]);
       }
@@ -114671,13 +114821,12 @@
     fated(lost) {
       const F2 = SKY.fate;
       const pair2 = /* @__PURE__ */ new Map(), meant2 = /* @__PURE__ */ new Set();
+      const ramBack = /* @__PURE__ */ new Map();
       for (const a of lost) {
         if (pair2.has(a) || a.u.air !== "ftr") continue;
         for (const b of lost) {
           if (b === a || pair2.has(b) || b.u.side === a.u.side || b.fall.back) continue;
-          const fire2 = a.u.fire.find((f) => f.on === b.u.id);
-          const m = b.u.air === "bmr" && fire2 ? this.ramMeant(a.u, b.u, fire2.pass) : 0;
-          const p = a.fall.back ? 0 : b.u.air === "bmr" ? fire2 ? fire2.pass === "headon" ? F2.ram.headon : F2.ram.other : 0 : a.u.contacts.includes(b.u.id) ? F2.ram.tangle : 0;
+          const { m, p } = this.ramOdds(a, b, a.fall.back);
           if (m + p <= 0) continue;
           const x = this.lookRng.next();
           if (x < m + p) {
@@ -114686,6 +114835,7 @@
             if (x < m) {
               meant2.add(a);
               meant2.add(b);
+              if (this.bailouts) ramBack.set(a, backAmong(a.saved, this.ramOdds(a, b, true).m, 1, this.ramOdds(a, b, false).m, 1));
             }
             break;
           }
@@ -114707,7 +114857,8 @@
         const { u, s } = L3;
         const other4 = pair2.get(L3);
         const near2 = u.air === "bmr" && !s && u.state === "steady" && !this.place.night ? this.recent.find((r) => r.box === u.id && !r.used && this.t - r.t >= F2.near.min) : void 0;
-        const fate = fateOf2(this.lookRng, this.sceneOf(L3, near2), this.fates, other4 ? { fid: other4.fid, cause: "ram" } : void 0);
+        const sc = this.sceneOf(L3, near2, ramBack.get(L3));
+        const fate = fateOf2(this.lookRng, sc, this.fates, other4 ? { fid: other4.fid, cause: "ram" } : void 0);
         if (fate.how === "struck" && near2) {
           for (const r of this.recent) if (r.fid === near2.fid) r.used = true;
         }
@@ -114718,6 +114869,7 @@
           ...fate,
           kind: kindOf3(fate.how),
           fid: L3.fid,
+          ...this.bailouts ? { crew: sc.crew } : {},
           ...meant2.has(L3) ? { meant: true } : {},
           captured: L3.fall.back || L3.fall.over !== "enemy" ? 0 : fate.chutes + (fate.out ?? 0)
         });
@@ -114747,12 +114899,25 @@
         }
       }
     }
+    /**
+     * The pairing's odds for a fighter a and a loss b of the other side, lost in the same moment, for a pilot the rules
+     * bring back or not ('back'): m, on purpose (the bomber it was firing on, by its nation and the month); p, by
+     * accident (head-on, otherwise, or two fighters locked in a fight), never one whose pilot the rules bring back. Read
+     * by the pairing, and with 'bailouts' by the look for a ram on purpose (fated: B).
+     */
+    ramOdds(a, b, back) {
+      const F2 = SKY.fate;
+      const fire2 = a.u.fire.find((f) => f.on === b.u.id);
+      const m = b.u.air === "bmr" && fire2 ? this.ramMeant(a.u, b.u, fire2.pass) : 0;
+      const p = back ? 0 : b.u.air === "bmr" ? fire2 ? fire2.pass === "headon" ? F2.ram.headon : F2.ram.other : 0 : a.u.contacts.includes(b.u.id) ? F2.ram.tangle : 0;
+      return { m, p };
+    }
     /** The chance a fighter lost in the same moment as the bomber it was firing on rammed it on purpose (fates.ts ramShare). */
     ramMeant(a, b, pass) {
       return ramShare(a.nat, this.when, enginesOf(b.model), pass);
     }
     /** One loss's situation (fates.ts Scene). */
-    sceneOf(L3, near2) {
+    sceneOf(L3, near2, meantBack) {
       const { u, s, by: by2 } = L3;
       const engines = u.air === "bmr" ? enginesOf(u.model) : fighterEngines(u.model);
       const at4 = s ? this.stragAt(u, s) : { x: u.x, y: u.y };
@@ -114778,9 +114943,19 @@
         night: !!this.place.night,
         back: L3.fall.back,
         over: L3.fall.over,
-        crew: u.air === "bmr" ? crewOf(u.model, this.when) : 1,
-        near: near2 ? { fid: near2.fid, how: near2.how, ...near2.foe ? { foe: true } : {} } : null
+        // With 'bailouts' a bomber's crew is by the kit its group flies (D4), and a fighter's by its model (the Fulmar 2, D8).
+        crew: u.air === "bmr" ? crewOf(u.model, this.when, this.bailouts ? this.kitOf(u) : void 0) : this.bailouts ? SKY.fall.fighterCrews[u.model] ?? 1 : 1,
+        near: near2 ? { fid: near2.fid, how: near2.how, ...near2.foe ? { foe: true } : {} } : null,
+        ...this.bailouts ? { bailouts: true } : {},
+        // With 'bailouts' a fighter's fall carries the share the count drew its pilot back at, to price who got out once.
+        ...this.bailouts && u.air === "ftr" ? { backShare: L3.saved } : {},
+        // And a fighter that rammed on purpose, the share of such rammers brought back, from the pairing (fated).
+        ...this.bailouts && meantBack !== void 0 ? { meantBack } : {}
       };
+    }
+    /** The mark a bomber group flies (guns.ts), as oneGun reads its loadout: what its crew follows with 'bailouts' on. */
+    kitOf(u) {
+      return (this.place.guns?.[u.nat]?.bmr ?? bomberGuns(u.model, u.nat, this.when)).mark;
     }
     /** The heaviest gun a fighter group carries that month (guns.ts), for the way what it shoots down goes. */
     heaviest(v) {
@@ -115878,6 +116053,14 @@
       this.say("end", null, `${this.ticket.title} is over.`);
     }
   };
+  var MORE_LOOKS = ["bailouts"];
+  var looksAsked = [];
+  function airLooks(names) {
+    if (names) looksAsked = MORE_LOOKS.filter((k) => names.includes(k));
+    const G5 = globalThis;
+    const forced3 = String(G5.TC_LOOKS ?? G5.process?.env?.TC_LOOKS ?? "").split(",").map((x) => x.trim());
+    return MORE_LOOKS.filter((k) => looksAsked.includes(k) || forced3.includes(k));
+  }
   function laneOf(pieces, road) {
     const T = SKY.target;
     const n = pieces.length;
@@ -120913,6 +121096,9 @@
       },
       airKinds(kinds) {
         return { kinds: flyKinds(Array.isArray(kinds) ? kinds.map(String) : void 0) };
+      },
+      airLooks(names) {
+        return { looks: airLooks(Array.isArray(names) ? names.map(String) : void 0) };
       },
       airLook(kind, target, ids2) {
         const t = airTicket(h.game(), kind, target, ids2);

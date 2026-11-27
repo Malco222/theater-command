@@ -18,7 +18,7 @@ import { enginesOf, escortRoles, fighterWay, passesOn, pickPass, type Pass, type
 import { collideWords, drawFall, fallWords } from './falls';
 import { ShipBook, splitWings } from './ships';
 import { TroopBook, TROOPS, type MarkNews, type MarkWhat } from './troops';
-import { coolOf, crewOf, fateOf, fighterEngines, freshMemory, hitOf, kindOf, ramShare, seaAt, type FateMemory, type Scene } from './fates';
+import { backAmong, coolOf, crewOf, fateOf, fighterEngines, freshMemory, hitOf, kindOf, ramShare, seaAt, type FateMemory, type Scene } from './fates';
 import { bomberGuns, fighterGuns, type GunKind } from './guns';
 import type { AirAim, AirHitWho, AirShown, AirJob, AirOutcome, AirPlace, AirUnit, BomberTold, Fall, FallHow, Straggler } from './types';
 import type { BomberSeat } from '../../campaign/types';
@@ -32,6 +32,8 @@ const C = SKY.cues;
 /** One of a tick's losses, before how it goes is drawn (AirSim.fated). */
 interface Loss {
   u: AirUnit; fall: Fall; by: number | 'flak' | null | undefined; s: Straggler | null; alt: number; fid: number;
+  /** The count's share of this side's pilots brought back, as the pilots-back stream drew 'back' at it (release 2's 'bailouts' reads it, a look only). */
+  saved: number;
   /** The models this loss brings down in the picture (AR1: a model falls only for its share of the losses): 0, 1, or the rest at the last. */
   models: number;
   /** A bomber known by name: its seat in its group's list (-1: none). A fighter that fell to a named box's gunners: that box and the seat of the bomber that got it. */
@@ -135,6 +137,13 @@ export class AirSim implements BattleSim<AirUnit> {
    * never moves its parent), and the tests run every battle with it on and off and find the same result.
    */
   readonly show: boolean;
+  /**
+   * Release 2's 'bailouts' (airLooks below), read once when the battle opens, so a battle keeps its switch to the end.
+   * Looks only: on, every 'air:lost' carries its 'crew', a parachute shows for every man who got out whether or not he
+   * flies again, one getting-out rule runs across every way down, and a bomber's crew follows the kit it flies. Off, as
+   * shipped, every battle is what it was.
+   */
+  readonly bailouts: boolean;
   private when: When;
   private stragRng: Rng;
   private passRng: Rng;
@@ -297,10 +306,11 @@ export class AirSim implements BattleSim<AirUnit> {
     dive: new Map<number, { at: number; from: number; to: number; edge: number }>(),
   };
 
-  constructor(ticket: FieldTicket<AirPlace>, opts: { show?: boolean; look?: number } = {}) {
+  constructor(ticket: FieldTicket<AirPlace>, opts: { show?: boolean; look?: number; bailouts?: boolean } = {}) {
     this.ticket = ticket;
     this.place = ticket.place;
     this.show = opts.show ?? true;
+    this.bailouts = opts.bailouts ?? airLooks().includes('bailouts');
     this.look = Math.max(1, opts.look ?? SKY.look.all);
     this.when = ticket.place.when ?? { year: 1939, month: 8 };
     this.rng = new Rng(ticket.seed);
@@ -1453,12 +1463,13 @@ export class AirSim implements BattleSim<AirUnit> {
         u.n--;
         u.mor = clamp01(u.mor - SKY.morale.perLoss / u.n0);
         const over = u.side === 'att' ? 'enemy' : 'own';
-        const fall = drawFall(this.fallRng, u.air, over, P.saved[u.side]);
+        const saved = P.saved[u.side];
+        const fall = drawFall(this.fallRng, u.air, over, saved);
         if (fall.back) u.back++;
         const alt = s ? Math.max(0, this.shownAlt(u) - s.down) : this.shownAlt(u);
         const before = u.figures;
         u.figures = this.modelsAfter(u, s);
-        lost.push({ u, fall, by, s, alt, fid: this.fid++, seat, gun, models: before - u.figures });
+        lost.push({ u, fall, by, s, alt, fid: this.fid++, seat, gun, models: before - u.figures, saved });
       }
       if (this.show && owed > 0 && u.n > 0) hit.push([u, owed, due]);
     }
@@ -1478,18 +1489,27 @@ export class AirSim implements BattleSim<AirUnit> {
   private fated(lost: Loss[]): void {
     const F = SKY.fate;
     const pair = new Map<Loss, Loss>(), meant = new Set<Loss>();
+    // Release 2, 'bailouts': for a fighter that rammed on purpose, B, the share of such rammers whose pilot the count
+    // brings back (the design director, 27 November 2026 01:00Z, reading 1: "read B there by the same formula"). A ram
+    // on purpose may hold a pilot brought back; one by accident, or two of one group, never does (B 0 there).
+    const ramBack = new Map<Loss, number>();
     for (const a of lost) {
       if (pair.has(a) || a.u.air !== 'ftr') continue;
       for (const b of lost) {
         if (b === a || pair.has(b) || b.u.side === a.u.side || b.fall.back) continue;
-        const fire = a.u.fire.find((f) => f.on === b.u.id);
-        // On purpose: the bomber it was firing on, by its nation and the month.
-        const m = b.u.air === 'bmr' && fire ? this.ramMeant(a.u, b.u, fire.pass) : 0;
-        // By accident: never one whose pilot the rules bring back.
-        const p = a.fall.back ? 0 : b.u.air === 'bmr' ? (fire ? (fire.pass === 'headon' ? F.ram.headon : F.ram.other) : 0) : a.u.contacts.includes(b.u.id) ? F.ram.tangle : 0;
+        const { m, p } = this.ramOdds(a, b, a.fall.back);
         if (m + p <= 0) continue;
         const x = this.lookRng.next();
-        if (x < m + p) { pair.set(a, b); pair.set(b, a); if (x < m) { meant.add(a); meant.add(b); } break; }
+        if (x < m + p) {
+          pair.set(a, b); pair.set(b, a);
+          if (x < m) {
+            meant.add(a); meant.add(b);
+            // B by the formula the saved ways read (fates.ts backAmong): the count's own share for this fall, and the
+            // weight of a ram on purpose for a pilot brought back and for one not, as the pairing holds them here.
+            if (this.bailouts) ramBack.set(a, backAmong(a.saved, this.ramOdds(a, b, true).m, 1, this.ramOdds(a, b, false).m, 1));
+          }
+          break;
+        }
       }
     }
     // Two of one group lost in the same moment: bombers of a tight box by day, one swerving from its hit into the next,
@@ -1511,14 +1531,15 @@ export class AirSim implements BattleSim<AirUnit> {
       // stream (the historian). Seen falling a moment first, so the eye can follow it down onto this one (the art director).
       const near = u.air === 'bmr' && !s && u.state === 'steady' && !this.place.night
         ? this.recent.find((r) => r.box === u.id && !r.used && this.t - r.t >= F.near.min) : undefined;
-      const fate = fateOf(this.lookRng, this.sceneOf(L, near), this.fates, other ? { fid: other.fid, cause: 'ram' } : undefined);
+      const sc = this.sceneOf(L, near, ramBack.get(L));
+      const fate = fateOf(this.lookRng, sc, this.fates, other ? { fid: other.fid, cause: 'ram' } : undefined);
       // A loss strikes at most one other (a fighter falling through a box it fired on is listed once for each box).
       if (fate.how === 'struck' && near) for (const r of this.recent) if (r.fid === near.fid) r.used = true;
       if (u.air === 'bmr' && !s) this.recent.push({ box: u.id, fid: L.fid, how: fate.how, t: this.t, used: false });
       // A fighter going down while it attacks a box may fall through it (never one that collided: it is already locked to its bomber).
       if (u.air === 'ftr' && fate.how !== 'collide') for (const f of u.fire) this.recent.push({ box: f.on, fid: L.fid, how: fate.how, t: this.t, used: false, foe: true });
       falls.set(L, {
-        ...L.fall, ...fate, kind: kindOf(fate.how), fid: L.fid, ...(meant.has(L) ? { meant: true as const } : {}),
+        ...L.fall, ...fate, kind: kindOf(fate.how), fid: L.fid, ...(this.bailouts ? { crew: sc.crew } : {}), ...(meant.has(L) ? { meant: true as const } : {}),
         captured: L.fall.back || L.fall.over !== 'enemy' ? 0 : fate.chutes + (fate.out ?? 0),
       });
     }
@@ -1555,13 +1576,27 @@ export class AirSim implements BattleSim<AirUnit> {
     }
   }
 
+  /**
+   * The pairing's odds for a fighter a and a loss b of the other side, lost in the same moment, for a pilot the rules
+   * bring back or not ('back'): m, on purpose (the bomber it was firing on, by its nation and the month); p, by
+   * accident (head-on, otherwise, or two fighters locked in a fight), never one whose pilot the rules bring back. Read
+   * by the pairing, and with 'bailouts' by the look for a ram on purpose (fated: B).
+   */
+  private ramOdds(a: Loss, b: Loss, back: boolean): { m: number; p: number } {
+    const F = SKY.fate;
+    const fire = a.u.fire.find((f) => f.on === b.u.id);
+    const m = b.u.air === 'bmr' && fire ? this.ramMeant(a.u, b.u, fire.pass) : 0;
+    const p = back ? 0 : b.u.air === 'bmr' ? (fire ? (fire.pass === 'headon' ? F.ram.headon : F.ram.other) : 0) : a.u.contacts.includes(b.u.id) ? F.ram.tangle : 0;
+    return { m, p };
+  }
+
   /** The chance a fighter lost in the same moment as the bomber it was firing on rammed it on purpose (fates.ts ramShare). */
   private ramMeant(a: AirUnit, b: AirUnit, pass?: Pass): number {
     return ramShare(a.nat, this.when, enginesOf(b.model), pass);
   }
 
   /** One loss's situation (fates.ts Scene). */
-  private sceneOf(L: Loss, near: { fid: number; how: FallHow; foe?: boolean } | undefined): Scene {
+  private sceneOf(L: Loss, near: { fid: number; how: FallHow; foe?: boolean } | undefined, meantBack?: number): Scene {
     const { u, s, by } = L;
     const engines = u.air === 'bmr' ? enginesOf(u.model) : fighterEngines(u.model);
     const at = s ? this.stragAt(u, s) : { x: u.x, y: u.y };
@@ -1581,9 +1616,20 @@ export class AirSim implements BattleSim<AirUnit> {
       sea: this.place.ships && !this.place.ships.law.harbour ? true : seaAt(this.place.ground, at.x, at.y),
       night: !!this.place.night,
       back: L.fall.back, over: L.fall.over,
-      crew: u.air === 'bmr' ? crewOf(u.model, this.when) : 1,
+      // With 'bailouts' a bomber's crew is by the kit its group flies (D4), and a fighter's by its model (the Fulmar 2, D8).
+      crew: u.air === 'bmr' ? crewOf(u.model, this.when, this.bailouts ? this.kitOf(u) : undefined) : this.bailouts ? SKY.fall.fighterCrews[u.model] ?? 1 : 1,
       near: near ? { fid: near.fid, how: near.how, ...(near.foe ? { foe: true } : {}) } : null,
+      ...(this.bailouts ? { bailouts: true } : {}),
+      // With 'bailouts' a fighter's fall carries the share the count drew its pilot back at, to price who got out once.
+      ...(this.bailouts && u.air === 'ftr' ? { backShare: L.saved } : {}),
+      // And a fighter that rammed on purpose, the share of such rammers brought back, from the pairing (fated).
+      ...(this.bailouts && meantBack !== undefined ? { meantBack } : {}),
     };
+  }
+
+  /** The mark a bomber group flies (guns.ts), as oneGun reads its loadout: what its crew follows with 'bailouts' on. */
+  private kitOf(u: AirUnit): string {
+    return (this.place.guns?.[u.nat]?.bmr ?? bomberGuns(u.model, u.nat, this.when)).mark;
   }
 
   /** The heaviest gun a fighter group carries that month (guns.ts), for the way what it shoots down goes. */
@@ -2662,7 +2708,27 @@ export class AirSim implements BattleSim<AirUnit> {
 }
 
 /** A battle from a ticket. */
-export const airBattle = (t: FieldTicket<AirPlace>, opts?: { show?: boolean; look?: number }): AirSim => new AirSim(t, opts);
+export const airBattle = (t: FieldTicket<AirPlace>, opts?: { show?: boolean; look?: number; bailouts?: boolean }): AirSim => new AirSim(t, opts);
+
+/**
+ * Release 2's further looks of the air battle, each behind its own switch, off as shipped (the design director's
+ * standing line on release 2 work). Today 'bailouts' (the owner, 26 November 2026: "if a fighter gets shot down the
+ * pilot can bail out and there will be a parachute"; "for a bomber have the max number of people on the plane and then
+ * have a certain amount bail out"; the design director's rulings of the same day). Looks only: no count moves.
+ */
+export const MORE_LOOKS = ['bailouts'] as const;
+let looksAsked: string[] = [];
+/**
+ * The switch, as flyKinds (ticket.ts): called with a list, sets the bridge's (TC.airLooks; an empty list switches them
+ * all off); either way answers the looks now on. A cloud run or a test can by TC_LOOKS=bailouts in its environment or
+ * (globalThis as any).TC_LOOKS = 'bailouts' (a comma list). A battle reads it once, when it opens.
+ */
+export function airLooks(names?: readonly string[]): string[] {
+  if (names) looksAsked = MORE_LOOKS.filter((k) => names.includes(k));
+  const G = globalThis as { TC_LOOKS?: unknown; process?: { env?: Record<string, string | undefined> } };
+  const forced = String(G.TC_LOOKS ?? G.process?.env?.TC_LOOKS ?? '').split(',').map((x) => x.trim());
+  return MORE_LOOKS.filter((k) => looksAsked.includes(k) || forced.includes(k));
+}
 
 /**
  * The lane a raid's fighters strafe down (a raid on troops): through the middle of the pieces on the ground, along the
