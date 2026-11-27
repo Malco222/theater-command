@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a339e4a6a 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e9a01e493 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -44478,14 +44478,11 @@
     for (const r of g2.regions) {
       const k = toldKey2(r.id), ks2 = spentKey(r.id), kr = ringKey(r.id);
       if (leftToPocket(g2, r, me, mine4 ? me : void 0)) {
-        delete g2.flags[k];
         g2.flags[kr] = g2.turn;
         continue;
       }
       if (g2.flags[kr] !== void 0 && (r.ctrl !== me || !watched(g2, r) || !involved(g2, r))) delete g2.flags[kr];
       let told2 = g2.flags[k];
-      const spent = g2.flags[ks2];
-      if (told2 === void 0 && spent !== void 0 && (!watched(g2, r) || r.since > spent || !involved(g2, r) || (g2.flags[`stores:${r.id}`] ?? -1) >= spent)) delete g2.flags[ks2];
       if (told2 !== void 0) {
         if (!watched(g2, r) || r.since > told2 || !involved(g2, r)) {
           delete g2.flags[k];
