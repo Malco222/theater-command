@@ -766,6 +766,7 @@ namespace
 			// a block's tanks (her block's model) and the same drawn as escorts' stand-ins (her own)
 			{ "Sherman", "tank", false, true }, { "Tiger", "tank", false, true }, { "PanzerIV", "tank", false, true }, { "Panther", "tank", false, true },
 			{ "T34", "tank", false, true }, { "LightTank", "tank", false, true }, { "Sherman", "tank", true, true },
+			{ "Type97", "tank", false, true },
 			// tank destroyers and assault guns (a tank block's, their own model; or a block of them)
 			{ "StuG3", "tank", true, true }, { "M10", "tank", true, true }, { "SU85", "tank", true, true }, { "Semovente", "tank", true, true },
 			{ "StuG3", "tank", false, true },
@@ -780,12 +781,16 @@ namespace
 			// a battery's self-propelled guns (their own model) and its towed guns (the battery's)
 			{ "M7", "gun", true, true }, { "Hummel", "gun", true, true }, { "Sexton", "gun", true, true }, { "SU76", "gun", true, true },
 			{ "Howitzer105", "gun", false, false }, { "leFH18", "gun", false, false }, { "ZiS3", "gun", false, false },
+			{ "Gun75", "gun", false, false },
 			// armoured infantry's half-tracks and the lorries (a lorry of a tank block: her block's model is no lorry's)
 			{ "Hanomag", "lorry", true, true }, { "M3Halftrack", "lorry", true, true }, { "Truck", "lorry", true, false }, { "Truck", "lorry", false, false },
 			{ "Sherman", "lorry", false, false },
 		};
-		// (models the game draws that are no vehicle: a field telephone, a cable reel, a stretcher)
-		static const char* NotVehicles[] = { "CableReel", "FieldPhone", "Stretcher" };
+		// (models the game draws that are no vehicle: a field telephone, a cable reel, a stretcher, a man's
+		// binoculars, and the support teams' machine guns and mortars, each carried by men's tracks)
+		static const char* NotVehicles[] = { "CableReel", "FieldPhone", "Stretcher", "Binoculars",
+			"HmgBreda37", "HmgHotchkiss", "HmgM1917", "HmgM1919", "HmgMG34", "HmgMG42", "HmgMaxim", "HmgType92", "HmgVickers",
+			"MortarFRA", "MortarGER", "MortarITA", "MortarJAP", "MortarSOV", "MortarUK", "MortarUSA" };
 		int Wrong = 0, Missing = 0, Armour = 0, Soft = 0, Files = 0;
 		std::error_code Ec;
 		for (const auto& Entry : std::filesystem::directory_iterator(Content + "/Models/Battle", Ec))
