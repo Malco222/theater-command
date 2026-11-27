@@ -153,7 +153,11 @@ return Math.max(0, dist(a.x, a.y, b.x, b.y) - (Math.max(a.w, a.d) + Math.max(b.w
   # here.)
   # (Two rows behind their own switches stand in it too, and change nothing for any other block. Sniper teams (team
   # 'snp'): silent while under fire or slipping away, no hold in hiding (it fires from hiding at its whole reach and
-  # may be found for each shot), only what it sees as a sniper (sniperSees) and its own choice of man (sniperPick).
+  # may be found for each shot), only what it sees as a sniper (sniperSees) and its own choice of man (sniperPick),
+  # and a target it keeps while that one still holds (alive, seen, in reach, and none in reach in a better class of
+  # sniperPick), a target it was sent at first: the DD's 26 November 03:51Z, a choice kept, not remade each tick.
+  # Every one of those lines stands under `snp` (u.team === 'snp'), so they change nothing for any other block:
+  # for every block but a sniper team the first form below is the second's lines, step for step.
   # Support teams in battle (teamsRule, ai.ts ownArm: the machine gun and mortar teams alone): which target in reach
   # their weapon harms most; never a sniper team. NOT held: sniperSees, sniperPick and ownArm themselves.)
   TARGET_WANT="targetOf(u: LandUnit): LandUnit | null {
@@ -164,6 +168,26 @@ let reach = reachOf(u);
 const snp = u.team === 'snp';
 if (snp && ((u.quietTo !== undefined && this.t < u.quietTo) || u.slipTo !== undefined)) return null;
 if (u.aim !== undefined) { const a = this.unit(u.aim); if (a && live(a) && a.side !== u.side && !a.hid && this.gap(u, a) <= reach) return a; }
+if (snp) {
+const holds = (id: number | undefined): LandUnit | null => {
+const e = id === undefined ? undefined : this.unit(id);
+if (!e || !live(e) || e.side === u.side || e.hid) return null;
+const d = this.gap(u, e);
+return d <= reach && this.sniperSees(u, e, d) ? e : null;
+};
+const sent = u.order?.kind === 'attack' ? holds(u.order.target) : null;
+if (sent) return sent;
+const kept = holds(u.engaged);
+if (kept) {
+const k = this.sniperPick(kept);
+const better = this.units.some((e) => {
+if (e === kept || e.side === u.side || !live(e) || e.hid || this.sniperPick(e) >= k) return false;
+const d = this.gap(u, e);
+return d <= reach && this.sniperSees(u, e, d);
+});
+if (!better) return kept;
+}
+}
 if (u.hid && u.order?.kind !== 'attack' && !snp) reach = Math.min(reach, this.ambushAt(u));
 let best: LandUnit | null = null, score = Infinity;
 const T = this.teamsRule && ownArm(u) ? LAND.teams[u.team] : null;
@@ -193,12 +217,14 @@ if (d <= reach && d < score) { score = d; best = e; }
 }
 return best;
 }"
-  # (Two forms of targetOf are held, each whole. The second is the ground thread's since 25 November (support teams
-  # in battle, behind `teams`, off): two lines more before the search and six in it, by which a machine gun or
-  # mortar team takes, of the enemies ALREADY within its reach, the one its weapon harms most, where every other
-  # block takes the nearest. The reach, the given target, the hidden block's hold and the hidden never struck are
-  # the same lines in both, in the same places, so the mark's words stand on either. A tree has one or the other:
-  # the first goes from here once no tree to be merged still has it.)
+  # (Two forms of targetOf are held, each whole. The first is release 2 pass 2's (next-bg 4af8f293d, as on next-ao
+  # 51956a70e and next-bc d57656614): support teams AND sniper teams, the sniper lines all under `snp`. The second is
+  # the ground thread's since 25 November (support teams in battle, behind `teams`, off) on a tree without the sniper
+  # teams: two lines more before the search and six in it, by which a machine gun or mortar team takes, of the
+  # enemies ALREADY within its reach, the one its weapon harms most, where every other block takes the nearest. The
+  # reach, the given target, the hidden block's hold and the hidden never struck are the same lines in both, in the
+  # same places, so the mark's words stand on either. A tree has one or the other: the second goes from here once no
+  # tree to be merged still has it.)
   TARGET_WANT_TEAMS="targetOf(u: LandUnit): LandUnit | null {
 const marching = u.order && u.order.kind !== 'attack' && u.path.length > 0;
 if (u.kind === 'art' && marching) return null;
