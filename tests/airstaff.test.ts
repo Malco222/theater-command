@@ -139,7 +139,13 @@ describe('what a raid costs in the grand campaign', () => {
     const lostB = rep.att.reduce((s, x) => s + x.lostBmr, 0), lostF = rep.att.reduce((s, x) => s + x.lostFtr, 0);
     expect(Math.abs(lostB - fc.bmrLoss)).toBeLessThanOrEqual(fc.bmrLoss * AIR.combat.luck + 2);
     expect(Math.abs(lostF - fc.ftrLoss)).toBeLessThanOrEqual(fc.ftrLoss * AIR.combat.luck + 2);
-    expect(lostB / 250).toBeLessThanOrEqual(0.1);
+    // The cap of this escorted raid, flown, at a tenth of its bombers lost (lostB / 250 at most 0.1, written by
+    // 7eb46e713, Version 50) is RETIRED by the design director's ruling of 27 Nov 2026 16:17Z, in her words: "retire
+    // line 142's 10% cap the same way, in its own commit with my words quoted, since a band with no record is a knob.
+    // The one exception: if the historian names a record for that raid's loss, it stays as a record check with its
+    // source beside it." He names none for a German escorted day raid into France in 1939 (his pages read 27 Nov
+    // 16:37Z). Her ruling: air-rules/price-once-ruhr-1127/DD-1617-RETITLE-HEADER-AND-142.md. The flown loss stays
+    // pinned to the forecast within the luck of the day (above); no figure of it is pinned here.
   });
 
   it('does not touch a historical scenario, which counts its losses as it always did', () => {
