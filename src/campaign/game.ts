@@ -5296,8 +5296,18 @@ const rowOut = (g: Game, nat: string, o: any): Corps[] => {
   return names.length ? g.corps.filter((c) => c.nat === nat && !c.dead && names.includes(c.name)) : [];
 };
 
-function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: Region; fell: boolean; ashore: { at: Region; adds: number | null } | null; waits: boolean; shifted: boolean; home: boolean } {
+function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: Region; fell: boolean; ashore: { at: Region; adds: number | null } | null; waits: boolean; shifted: boolean; home: boolean; moved: { from: number; to: number } | null } {
   let reg = at, fell = false, shifted = false;
+  // (Sent on for room: the place it would have formed on, held, with no room for it, and the place `roomNear` chose
+  // instead, said once here where the choice is made, for the offer's page (`RowOffer.moved`). The design director,
+  // 17:53Z, 27 November 2026, 1: "Okinawa full means 'to form at Kagoshima' with FORM IT lit, as a computer's row
+  // would." Never with the far side off.)
+  let moved: { from: number; to: number } | null = null;
+  const onFor = (r: Region): Region => {
+    const to = roomNear(g, nat, r, true, rowCorps(g, nat, row, o), rowOut(g, nat, o), true);
+    if (to && to !== r && farOn(g)) moved = { from: r.id, to: to.id };
+    return to ?? r;
+  };
   // (It has fallen back to forming at home, its own place lost or at peace: a division is laid once, drawn.ts.)
   let home = false;
   let ashore: { at: Region; adds: number | null } | null = null;
@@ -5317,10 +5327,10 @@ function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: 
   // same theatre, else at its capital, and waits for its war: ruling B7, `postedFor`. Never with the far side off.)
   const posted = fell ? null : postedFor(g, nat, row, reg);
   if (posted) {
-    if (posted.waits) return { reg, fell, ashore, waits: true, shifted, home };
+    if (posted.waits) return { reg, fell, ashore, waits: true, shifted, home, moved };
     if (posted.at && posted.takes) { reg = posted.at; fell = true; shifted = true; }
     else if (posted.at) { ashore = { at: posted.at, adds: posted.adds }; reg = posted.at; fell = true; }
-    return { reg: reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl) ? roomNear(g, nat, reg, true, rowCorps(g, nat, row, o), rowOut(g, nat, o), true) ?? reg : reg, fell, ashore, waits: false, shifted, home };
+    return { reg: reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl) ? onFor(reg) : reg, fell, ashore, waits: false, shifted, home, moved };
   }
   // The wider world: a player whose homeland lies across the ocean has such an army form at home, and shipping
   // it is his business. (A computer's staff ships the corps it raises itself, and is sent none of these: above.)
@@ -5339,8 +5349,8 @@ function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: 
   // A full province sends it on to the nearest ground with room. (The record's own place is counted against five on
   // an island of the Pacific too at stops 1 and 2, `roomNear`'s `record`: form B3 (c). So is it above, for a row
   // `postedFor` places. At stops 3 to 5 the island's room in men binds it: Q2.)
-  if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = roomNear(g, nat, reg, true, rowCorps(g, nat, row, o), rowOut(g, nat, o), true) ?? reg;
-  return { reg, fell, ashore, waits: false, shifted, home };
+  if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = onFor(reg);
+  return { reg, fell, ashore, waits: false, shifted, home, moved };
 }
 
 /** For the measuring harness: told of each dated row struck off unsent when its half year is out. Nothing in the game listens. */
@@ -5588,6 +5598,14 @@ export interface RowOffer {
    * formed, 'lost' where that division never came or is gone. Null for a formation offered.
    */
   lent: { to: string; division: string; goes: 'into' | 'later' | 'lost' } | null;
+  /**
+   * A formation offered whose own place is held ground with no room for it, sent on by the rule (`rowPlace`, through
+   * `roomNear`) to another place with room, where it would form this month: `from` the full place's region, `to` the
+   * place chosen (`region`). Null where it was not moved: its place not held, a row that joins, room at its place, or
+   * no room anywhere. Never set with the far side off; absent for the end of a loan and the formations list. The
+   * fact for the UI director's line saying why the place moved (the design director, 17:53Z, 27 November 2026, 1).
+   */
+  moved?: { from: number; to: number } | null;
 }
 
 /**
@@ -5636,7 +5654,8 @@ function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
     && (!r[6]?.stops || (r[6].stops as number[]).includes(stopOf(g)))
     && (names(r[6]?.cut).includes(row[2]) || (Array.isArray(r[6]?.from) && !(r[6].adds > 0) && r[6].from.includes(row[2])
       && rowTakes(g, nat, { from: (r[6].from as string[]).filter((nm) => nm !== row[2]) }).length === 0))).map((r) => r[2] as string))];
-  return { id: i, name: row[2], kind: row[3], divs, men: Math.round(divs * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(i)], last: offerLast(g, nat, row, i), region: reg ? reg.id : -1, joins: old ? old.name : null, takes, why, then, loan: null, rest: 'lost', lent: null };
+  return { id: i, name: row[2], kind: row[3], divs, men: Math.round(divs * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(i)], last: offerLast(g, nat, row, i), region: reg ? reg.id : -1, joins: old ? old.name : null, takes, why, then, loan: null, rest: 'lost', lent: null,
+    moved: !old && reg && P.moved && P.moved.to === reg.id ? P.moved : null };
 }
 
 const leaveKey = (i: number): string => `leave:${i}`;
