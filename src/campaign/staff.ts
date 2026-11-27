@@ -30,6 +30,7 @@ import { isCity, openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
 import { fieldCtrl, openSieges, raiseGarrisons, startGarrisons } from './siege';
 import { agentsOf, atWork, knowsBooks } from './intel';
+import { interceptEffort } from './intercepts';
 import { startEngineers } from './engineers';
 import { openMorale } from './morale';
 import { numberDivisions } from './armies';
@@ -1594,7 +1595,8 @@ function effortNamed(g: Game, e: Effort): void {
   const me = g.human;
   if (me === null || !g.nations[me]?.alive || e.nat === me) return;
   const how = plansKnown(g, e.nat, me);
-  if (!how) return;
+  // (Release 2, intercepts.ts, behind its switch: where he does not read its plans, he may overhear the order.)
+  if (!how) { interceptEffort(g, e); return; }
   const who = g.nations[e.nat]?.name ?? e.nat;
   const until = turnToDate(e.to).label;
   const name = e.name.replace(/^the /, '');

@@ -197,6 +197,7 @@ import { diaryEntries, diaryOn, setDiary } from '../../../src/campaign/diary';
 import { chanceWords as heldChanceWords, heldOn, heldRibbon, setHeld } from '../../../src/campaign/heldline';
 import { setWorn, wornLine, wornOn, WORN } from '../../../src/campaign/wornout';
 import { HOSP, hospOn, setHosp, woundedLine } from '../../../src/campaign/fieldhospitals';
+import { interceptsOn, setIntercepts } from '../../../src/campaign/intercepts';
 import { FIRES, burningAt, dumpFiresOn, setDumpFires } from '../../../src/campaign/dumpfires';
 import { cancelDump, dumpPlaces, dumpPrice, dumpsOf, dumpsOn as dumpsAreOn, dumpsView, firstFront, frontsAt, logisticsSet, lorryPool, orderDump, poolOn as lorryPoolOn, setLogistics, setLorryFirst, shiftOn as lorryShiftOn, wagonsOn as wagonsAreOn, whyNoDump, LOGI, type LogisticsSwitch } from '../../../src/campaign/logistics';
 import { railheads } from '../../../src/campaign/rails';
@@ -1143,6 +1144,8 @@ function drawView(step = false) {
     wornOut: wornOn(s),
     // (Release 2, batch 3) Field hospitals (fieldhospitals.ts).
     fieldHospitals: hospOn(s),
+    // (Release 2, batch 3) Radio intercepts (intercepts.ts): words only.
+    intercepts: interceptsOn(s),
     // (Release 2, townqueue.ts) Whether the player can queue the next buildings for his towns.
     townQueue: townQueueOn(s),
     // (Release 2, citydefences.ts) Whether searchlights can be built, the guns fight by night by what they see and a
@@ -8119,6 +8122,14 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       : 'Worn out in the line is off: every corps has its edge back.';
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'interceptsrule') {
+    // (Release 2, intercepts.ts) Radio intercepts, switched in any month. Words only.
+    ok = setIntercepts(s, part[1] === 'on');
+    note = interceptsOn(s)
+      ? "Radio intercepts are on: when an enemy staff orders a main effort against you, and your codebreakers have built more of the Intelligence branch than it has of counter-intelligence, you may overhear the order where your front touches it. An enemy that has turned one of your agents can feed you a false one, and a false one always comes through unusually clear."
+      : 'Radio intercepts are off: you learn an enemy\'s plans only from an agent on its books or from an ally.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'hospitalsrule') {
     // (Release 2, fieldhospitals.ts) Field hospitals, switched in any month.
     ok = setHosp(s, part[1] === 'on');
@@ -9346,6 +9357,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, offerCalls(g
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).wornOut = (on: boolean) => { const s = game(); setWorn(s, !!on); return { on: wornOn(s) }; };
 // (Release 2, batch 3) Field hospitals: TC.fieldHospitals(on) at any time; the options page uses act('hospitalsrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fieldHospitals = (on: boolean) => { const s = game(); setHosp(s, !!on); return { on: hospOn(s) }; };
+// (Release 2, batch 3) Radio intercepts: TC.intercepts(on) at any time; the options page uses act('interceptsrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).intercepts = (on: boolean) => { const s = game(); setIntercepts(s, !!on); return { on: interceptsOn(s) }; };
 // (Release 2, pressed.ts) Captured tanks pressed into service: TC.pressedTanks(on) at any time; the options page uses
 // act('pressedtanksrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).pressedTanks = (on: boolean) => { const s = game(); setPressed(s, !!on); return { on: pressedOn(s) }; };
@@ -9396,6 +9409,8 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   wornoutrule: (s) => setWorn(s, true) && wornOn(s),
   // (Release 2, batch 3: field hospitals, switched in any month; OFF on the Play list until the DD's gate passes.)
   hospitalsrule: (s) => setHosp(s, true) && hospOn(s),
+  // (Release 2, batch 3: radio intercepts, words only, switched in any month; ON after the Mac check.)
+  interceptsrule: (s) => setIntercepts(s, true) && interceptsOn(s),
 };
 function r2Ship(ids: string[]) {
   const s = game();
