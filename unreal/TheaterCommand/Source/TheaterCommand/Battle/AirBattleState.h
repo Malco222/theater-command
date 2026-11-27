@@ -133,6 +133,11 @@ struct FAirBattleState
 	 * made (AAirBattle::PropSpinOn): -1 not yet read, 0 off, 1 on. Looks only: nothing the rules count reads it. */
 	int PropSpinOn = -1;
 
+	/** The Battle rules card's "B-17 paint sheen" (rule "flyB17Sheen", release 2), read as the battle began, after "Worn
+	 * B-17 paint" (AAirBattle::B17SheenRead), and set back to 0 if M_AirPaint is missing or older than the build:
+	 * -1 not yet read, 0 off, 1 on. Looks only: nothing the rules count reads it. */
+	int B17SheenOn = -1;
+
 	/** The bombers' nose art (AirBattleNoseArt.cpp, release 2): its switch as read when the battle's first frame was drawn
 	 * (-1 not yet read, 0 off, 1 on); the list and the panels' text (Content/Data/NoseArt), read then; each model's panel
 	 * once asked for (Cols 0: none); whether each model the battle names has one; and which painting each aircraft wears. */

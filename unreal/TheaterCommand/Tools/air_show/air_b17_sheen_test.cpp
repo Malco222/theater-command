@@ -353,6 +353,68 @@ int main(int Argc, char** Argv)
 		T = AirSheen::Tune();
 		Check(AirSheen::ParseTune(",,,,,1", T, W) && T.Graze == 1.0 && T.Glare == 1.0, "the sixth is the grazing guard");
 	}
+	if (Argc >= 5)
+	{
+		std::printf("S7 the Unreal side, from its source\n");
+		const std::string Src = Argv[4];
+		std::string Battle, BattleH, Rules, StateH;
+		Check(ReadText(Src + "/Battle/AirBattle.cpp", Battle) && ReadText(Src + "/Battle/AirBattle.h", BattleH) && ReadText(Src + "/Battle/LandLive.cpp", Rules)
+				&& ReadText(Src + "/Battle/AirBattleState.h", StateH),
+			"the air battle's source read");
+		// (the row: once, off unless asked, its launch words)
+		Check(Count(Rules, "{ TEXT(\"flyB17Sheen\"), TEXT(\"B-17 paint sheen\"), ") == 1 && Count(Rules, "TEXT(\"TheaterAirNoB17Sheen\"), false, TEXT(\"TheaterAirB17Sheen\") }") == 1,
+			"the row: off unless asked, -TheaterAirB17Sheen / -TheaterAirNoB17Sheen");
+		Check(Count(StateH, "int B17SheenOn = -1;") == 1, "the state's B17SheenOn begins unread");
+		// (read in one place, right after her paint's own row, both battle starts)
+		Check(Count(Battle, "\tB17SheenRead();") == 2 && Count(BattleH, "void B17SheenRead();") == 1, "B17SheenRead called at both battle starts");
+		bool bOrder = true;
+		for (size_t At = Battle.find("\tB17SkinRead();"); At != std::string::npos; At = Battle.find("\tB17SkinRead();", At + 1))
+		{
+			const size_t Sheen = Battle.find("\tB17SheenRead();", At);
+			bOrder = bOrder && Sheen != std::string::npos && Sheen - At < 200;
+		}
+		Check(bOrder, "each B17SheenRead right after its B17SkinRead");
+		const size_t Body = Battle.find("void AAirBattle::B17SheenRead()");
+		const size_t BodyEnd = Body == std::string::npos ? std::string::npos : Battle.find("\n}\n", Body);
+		const std::string Read = Body == std::string::npos || BodyEnd == std::string::npos ? std::string() : Battle.substr(Body, BodyEnd - Body);
+		const size_t Unset = Read.find("SheenNow = nullptr;"), Rule = Read.find("if (!FLandLive::RuleNow(TEXT(\"flyB17Sheen\")))"), File = Read.find("FFileHelper::LoadFileToArray("),
+					 Said = Read.find("UE_LOG"), Word = Read.find("TEXT(\"TheaterAirB17SheenInk=\")"), On = Read.find("State->B17SheenOn = 1;");
+		Check(!Read.empty() && Unset != std::string::npos && Rule != std::string::npos && File != std::string::npos && Said != std::string::npos && Word != std::string::npos
+				&& Unset < Rule && Rule < File && Rule < Said && Rule < Word && On != std::string::npos && Word < On,
+			"off: unset first, then the row asked before any file is read, any word asked or any line said");
+		Check(Count(Battle, "FLandLive::RuleNow(TEXT(\"flyB17Sheen\"))") == 1 && Count(Battle, "AirSheen::Read(") == 1 && Count(Battle, "TEXT(\"TheaterAirB17SheenInk=\")") == 1,
+			"the sheen file and its launch word read in B17SheenRead alone");
+		Check(Read.find("SheenKept.SourceSha256 != Worn->SourceSha256") != std::string::npos, "refused unless made from her paint's own file");
+		// (her shapes: a key of their own, their texture coordinate filled, only with the row on and her paint on)
+		Check(Count(Battle, "const bool bSheen = bSkin && State && State->B17SheenOn == 1 && SheenNow;") == 1
+				&& Count(Battle, "\tif (bSheen)\n\t{\n\t\tShapeKey += TEXT(\"|sheen\");\n\t}") == 1 && Count(Battle, "+= TEXT(\"|sheen\")") == 1,
+			"'|sheen' added to her key only inside if (bSheen)");
+		int Onto = 0, OntoGuarded = 0;
+		for (size_t At = Battle.find("AirParts::SheenOnto("); At != std::string::npos; At = Battle.find("AirParts::SheenOnto(", At + 1))
+		{
+			++Onto;
+			const size_t If = Battle.rfind("if (bSheen)", At);
+			OntoGuarded += If != std::string::npos && At - If < 40 ? 1 : 0;
+		}
+		Check(Onto == 2 && OntoGuarded == 2, "her finish laid on her near and far shapes, each behind if (bSheen)", std::to_string(Onto) + " / " + std::to_string(OntoGuarded));
+		Check(Count(Battle, "static const TArray<FVector2D> None;") == 1 && Count(Battle, "return Carried.Num() == Points && Points > 0 ? Carried : None;") == 1
+				&& Count(Battle, "Shape.Sheen.Num() == Count ? FVector2f(") == 1 && Count(Battle, "TArray<FVector2D>(), First->Colors") == 0,
+			"an empty sheen draws no texture coordinate on her own mesh and zero on the copies, as before");
+		// (the ink: PlaneInk unless the shape is hers and M_AirPaint is made; the sentinel read, never set)
+		const size_t Ink = Battle.find("UMaterialInterface* AAirBattle::InkFor(const FString& Shape) const");
+		const std::string InkBody = Ink == std::string::npos ? std::string() : Battle.substr(Ink, Battle.find("\n}\n", Ink) - Ink);
+		Check(InkBody.find("if (SheenInk && Shape.Contains(TEXT(\"|sheen\")))") != std::string::npos && InkBody.find("return PlaneInk.Get();") != std::string::npos,
+			"InkFor gives PlaneInk without SheenInk or without '|sheen'");
+		Check(Count(Battle, "SetScalarParameterValue(TEXT(\"SheenEdge\")") == 0 && Count(Battle, "K2_GetScalarParameterValue(TEXT(\"SheenEdge\"))") == 1,
+			"the sentinel SheenEdge read and never set");
+		const size_t Load = Battle.find("TEXT(\"/Game/Campaign/Materials/M_AirPaint.M_AirPaint\")"), Gate = Battle.find("if (State && State->B17SheenOn == 1 && SheenNow)");
+		const size_t Sentinel = Battle.find("K2_GetScalarParameterValue(TEXT(\"SheenEdge\"))"), FirstSet = Battle.find("SheenMade->SetScalarParameterValue(");
+		Check(Count(Battle, "M_AirPaint.M_AirPaint") == 1 && Gate != std::string::npos && Load != std::string::npos && Gate < Load && Load - Gate < 300 && Sentinel < FirstSet,
+			"M_AirPaint loaded only with the row on, its sentinel read before anything is set");
+		Check(Count(Battle, "SetMaterial(0, PlaneInk)") == 0 && Count(Battle, "SetMaterial(1, PlaneInk)") == 0 && Count(Battle, "InkFor(Made->Shape)") == 3 && Count(Battle, "InkFor(ShapeKey)") == 1
+				&& Count(Battle, "InkFor(Lit->Shape)") == 1 && Count(Battle, "InkFor(Shape)") == 1 && Count(Battle, "if (SheenInk)\n\t{\n\t\tQuad(TEXT(\"AirWarmSheen\")") == 1,
+			"every section and copy of her shapes on InkFor; the sheen's ink warmed under the black");
+	}
 	std::printf("air_b17_sheen_test: %s\n", Bad ? "FAILED" : "ok");
 	return Bad ? 1 : 0;
 }

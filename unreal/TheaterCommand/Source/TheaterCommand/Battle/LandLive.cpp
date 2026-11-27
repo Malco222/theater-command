@@ -176,6 +176,17 @@ namespace
 		// fly-it-yourself row: its key begins "fly" only so that FLandLive::Start passes it over. The air battle reads it
 		// once as it starts (AAirBattle::B17SkinRead); it is never sent to the land rules.)
 		{ TEXT("flyB17Skin"), TEXT("Worn B-17 paint"), TEXT("The finer B-17s wear the approved worn olive: each panel its own shade, oil and exhaust stains behind the engines, dark glass and engine fronts. Needs Finer B-17. Off: her plain olive."), TEXT("TheaterAirNoB17Skin"), false, TEXT("TheaterAirB17Skin") },
+		// (B-17 paint sheen, release 2: Brian, 26 November 2026, "make the new ones work"; the look he approved on 25
+		// November has a cool satin sheen on her wing tops and back and glinting glass, which flat paint cannot draw. Her
+		// own finish a point (the model thread's gloss and metal, Content/Data/AirSkin/B17Fine-sheen.json, made by
+		// Tools/make_air_skin.py --sheen-out with her overlay; Battle/AirSheen) rides her meshes' first texture coordinate
+		// to M_AirPaint; where a low sun would glare off her she stays matt (the glare guard). Never by the year or month.
+		// Looks only: nothing the rules count reads it. Needs Worn B-17 paint. Off until the Mac's stills are judged
+		// (AIR-SCENE.md item 67); -TheaterAirB17Sheen turns it on for a run, -TheaterAirNoB17Sheen off,
+		// -TheaterAirB17SheenInk=gain,floor,spec,metal,glare,graze,metalfrom tunes it. NOT a fly-it-yourself row: its key
+		// begins "fly" only so that FLandLive::Start passes it over. The air battle reads it once as it starts
+		// (AAirBattle::B17SheenRead); it is never sent to the land rules.)
+		{ TEXT("flyB17Sheen"), TEXT("B-17 paint sheen"), TEXT("The finer B-17s' worn paint takes a soft satin sheen, her metal fittings and glass catch the light, and where a low sun would glare off her she stays matt. Needs Worn B-17 paint. Off: her paint matt, as every aircraft's."), TEXT("TheaterAirNoB17Sheen"), false, TEXT("TheaterAirB17Sheen") },
 		// (Old wrecks, Brian 23 November 20:09Z: starts off as Scarred ground does, until the effects thread's wrecks pass the
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)

@@ -25,6 +25,7 @@ class UDecalComponent;
 class UInstancedStaticMeshComponent;
 class UStaticMesh;
 namespace AirShow { struct Fx; struct Shape; struct Group; struct PlaneOut; }
+namespace AirSheen { struct Sheen; }
 class USceneComponent;
 class USkyLightComponent;
 class USoundAttenuation;
@@ -611,6 +612,16 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> ScrewHaze;
 	/** The haze's ink while the row is on this battle, else null. */
 	UMaterialInterface* ScrewHazeInk() const;
+	/** The finer B-17's paint with its sheen (M_AirPaint, the Battle rules card's "B-17 paint sheen", rule "flyB17Sheen"),
+	 * made as the battle opens with the row on and the material found and current; else null, and nothing draws on it. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> SheenInk;
+	/** Her sheen file as read with the row on (B17SheenRead), else null. */
+	const AirSheen::Sheen* SheenNow = nullptr;
+	/** The ink a shape is drawn with: SheenInk for a shape made with her sheen ("|sheen" in its key), else PlaneInk. */
+	UMaterialInterface* InkFor(const FString& Shape) const;
+	/** SheenInk's way to the sun ("SheenSun", the glare guard's), from TowardSun. */
+	void SheenSunSet();
 	/** The airscrews' see-through sort against the clouds, as the air fight's effects (AirFxMesh): 0 seen from over the
 	 * clouds' base, -30 from under it, behind every cloud between. */
 	int32 ScrewSort() const { return SkyOrder == 2 ? -30 : 0; }
@@ -1020,6 +1031,10 @@ private:
 	 * with it and the finer B-17 on, her overlay (Content/Data/AirSkin/B17Fine.json) set in Battle/AirSkin for every
 	 * reader of her file; off, AirSkin holds nothing and nothing is read or said. */
 	void B17SkinRead();
+	/** The Battle rules card's "B-17 paint sheen" (rule "flyB17Sheen"), read once as a battle begins, after B17SkinRead:
+	 * with it and her worn paint on, her sheen file (Content/Data/AirSkin/B17Fine-sheen.json) read into SheenNow and the
+	 * state's B17SheenOn; off, nothing is read or said. */
+	void B17SheenRead();
 	/** The most close-up shapes of the finer B-17 a battle makes (-TheaterAirB17FineNear=N, 8 unless asked), and whether
 	 * this aircraft may go to its close-up shape now: any aircraft but a finer B-17, one whose close-up shape is made,
 	 * or one while fewer than the most are made. */

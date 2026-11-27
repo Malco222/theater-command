@@ -11,6 +11,7 @@
 #include "Battle/AirLight.h"
 #include "Battle/AirLand.h"
 #include "Battle/AirScrew.h"
+#include "Battle/AirSheen.h"
 #include "Battle/AirSkin.h"
 #include "Battle/AirStage.h"
 #include "Battle/LandLive.h"
@@ -690,6 +691,7 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	State = MakeShared<FAirBattleState>();
 	B17FineRead(); // (the Battle rules card's "Finer B-17", read once as the battle begins: every shape it makes follows it)
 	B17SkinRead(); // (and its "Worn B-17 paint", after it: her paint for every shape the battle makes)
+	B17SheenRead(); // (and its "B-17 paint sheen", after that: her paint's own finish)
 	TimeEyeKey = TimeEyeGroup = -1; // (the timing eye, -TheaterAirTimeEye, begun afresh with each battle)
 	TimeEyeFrom = -1.0;
 	bTimeEyeQuit = false;
@@ -752,6 +754,7 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	State = MakeShared<FAirBattleState>();
 	B17FineRead(); // (the Battle rules card's "Finer B-17", read once as the battle begins: every shape it makes follows it)
 	B17SkinRead(); // (and its "Worn B-17 paint", after it: her paint for every shape the battle makes)
+	B17SheenRead(); // (and its "B-17 paint sheen", after that: her paint's own finish)
 	TimeEyeKey = TimeEyeGroup = -1; // (the timing eye, -TheaterAirTimeEye, begun afresh with each battle)
 	TimeEyeFrom = -1.0;
 	bTimeEyeQuit = false;
@@ -937,6 +940,54 @@ bool AAirBattle::Open(const FString& Why)
 		PaintRoughness = static_cast<float>(PaintRough);
 		PaintSpecular = static_cast<float>(PaintSpec);
 		PlainInk = Ink(0.85f, 0.2f);
+		// (the Battle rules card's "B-17 paint sheen", row "flyB17Sheen", read as the battle began (B17SheenRead): her paint
+		// on M_AirPaint, M_MapSurface's own nodes with her finish carried in the first texture coordinate; at nothing
+		// carried it gives PlaneInk's numbers exactly. Off, nothing here runs and nothing is said.)
+		SheenInk = nullptr;
+		if (State && State->B17SheenOn == 1 && SheenNow)
+		{
+			UMaterialInterface* SheenAsset = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_AirPaint.M_AirPaint"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+			if (!SheenAsset)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle: B-17 paint sheen: on, but /Game/Campaign/Materials/M_AirPaint is missing (run Tools/build_content.sh): she wears her matt paint."));
+				State->B17SheenOn = 0;
+				SheenNow = nullptr;
+			}
+			else
+			{
+				UMaterialInstanceDynamic* SheenMade = UMaterialInstanceDynamic::Create(SheenAsset, this);
+				// (the stale-asset sentinel, read before anything is set, so that it is the asset's own: "SheenEdge" is never
+				// set by the game; an M_AirPaint built before this build's nodes lacks it or holds another number)
+				const float SheenEdgeRead = SheenMade->K2_GetScalarParameterValue(TEXT("SheenEdge"));
+				if (FMath::Abs(SheenEdgeRead - static_cast<float>(AirSheen::Tune().Edge)) > 0.001f)
+				{
+					UE_LOG(LogTheater, Warning, TEXT("Air battle: B-17 paint sheen: on, but /Game/Campaign/Materials/M_AirPaint is older than this build (run TC_REBUILD=M_AirPaint Tools/build_content.sh): she wears her matt paint."));
+					State->B17SheenOn = 0;
+					SheenNow = nullptr;
+				}
+				else
+				{
+					const AirSheen::Tune& SheenLook = SheenNow->Look;
+					SheenMade->SetScalarParameterValue(TEXT("Roughness"), static_cast<float>(PaintRough));
+					SheenMade->SetScalarParameterValue(TEXT("Specular"), static_cast<float>(PaintSpec));
+					SheenMade->SetScalarParameterValue(TEXT("Grain"), 0.0f);
+					SheenMade->SetScalarParameterValue(TEXT("Tooth"), 0.0f);
+					SheenMade->SetScalarParameterValue(TEXT("SheenGain"), static_cast<float>(SheenLook.Gain));
+					SheenMade->SetScalarParameterValue(TEXT("SheenFloor"), static_cast<float>(SheenLook.Floor));
+					SheenMade->SetScalarParameterValue(TEXT("SheenSpec"), static_cast<float>(SheenLook.Spec));
+					SheenMade->SetScalarParameterValue(TEXT("SheenMetal"), static_cast<float>(SheenLook.Metal));
+					SheenMade->SetScalarParameterValue(TEXT("SheenMetalFrom"), static_cast<float>(SheenLook.MetalFrom));
+					SheenMade->SetScalarParameterValue(TEXT("SheenGlare"), static_cast<float>(SheenLook.Glare));
+					SheenMade->SetScalarParameterValue(TEXT("SheenGraze"), static_cast<float>(SheenLook.Graze));
+					SheenInk = SheenMade;
+					SheenSunSet();
+					const FVector SheenUp = TowardSun().GetSafeNormal();
+					UE_LOG(LogTheater, Display, TEXT("Air battle: B-17 paint sheen: on (the Battle rules card's B-17 paint sheen, or -TheaterAirB17Sheen): M_AirPaint, gain %.2f, floor %.2f, specular %.2f, metal %.2f from %.2f, glare guard %.2f, grazing guard %.2f (-TheaterAirB17SheenInk=gain,floor,spec,metal,glare,graze,metalfrom); her sun %.0f deg up; from %s."),
+						SheenLook.Gain, SheenLook.Floor, SheenLook.Spec, SheenLook.Metal, SheenLook.MetalFrom, SheenLook.Glare, SheenLook.Graze, FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(SheenUp.Z, -1.0, 1.0))),
+						UTF8_TO_TCHAR(SheenNow->SourceSha256.substr(0, 12).c_str()));
+				}
+			}
+		}
 		if (UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight")))
 		{
 			DiscInk = UMaterialInstanceDynamic::Create(Glow, this);
@@ -2745,6 +2796,7 @@ void AAirBattle::LayDeckShade()
 	DeckShadeInk = UMaterialInstanceDynamic::Create(ShadeMaterial, this);
 	DeckShadeInk->SetTextureParameterValue(TEXT("Shade"), DeckShadeSheet);
 	DeckShadeInk->SetVectorParameterValue(TEXT("SunWay"), FLinearColor(static_cast<float>(SunWay.X), static_cast<float>(SunWay.Y), static_cast<float>(SunWay.Z), 0.0f));
+	SheenSunSet(); // (the B-17's sheen's glare guard follows the sun as laid here too: nothing with its row off)
 	DeckShadeInk->SetVectorParameterValue(TEXT("Origin"), FLinearColor(static_cast<float>(Corner.X), static_cast<float>(Corner.Y), 0.0f, 0.0f));
 	DeckShadeInk->SetScalarParameterValue(TEXT("Period"), static_cast<float>(Shade.Period * U));
 	DeckShadeInk->SetScalarParameterValue(TEXT("DeckZ"), static_cast<float>(Middle.Z));
@@ -4053,6 +4105,70 @@ void AAirBattle::B17SkinRead()
 		UTF8_TO_TCHAR(WornKept.SourceSha256.substr(0, 12).c_str()), WornKept.ShadeStrength);
 }
 
+void AAirBattle::B17SheenRead()
+{
+	// The Battle rules card's "B-17 paint sheen" (FLandLive's rule "flyB17Sheen", release 2; off until the Mac's stills are
+	// judged): her paint's own finish a point, Content/Data/AirSkin/B17Fine-sheen.json (Tools/make_air_skin.py
+	// --sheen-out, in the same run as her overlay; Battle/AirSheen), read here once as the battle begins, after
+	// B17SkinRead and before any shape is made. With the row off nothing is read, nothing is said, no shape's key changes
+	// and every aircraft keeps PlaneInk. Read once a run and kept, with the launch word's numbers.
+	static AirSheen::Sheen SheenKept;
+	static bool bSheenKeptRead = false;
+	SheenNow = nullptr; // (an earlier battle's sheen never lingers)
+	SheenInk = nullptr;
+	if (!State)
+	{
+		return;
+	}
+	State->B17SheenOn = 0;
+	if (!FLandLive::RuleNow(TEXT("flyB17Sheen")))
+	{
+		return;
+	}
+	const AirSkin::Overlay* Worn = AirSkin::Active() ? AirSkin::For("B17Fine") : nullptr;
+	if (!Worn)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Air battle: B-17 paint sheen: on, but Worn B-17 paint is off, so no B-17 wears it (it is her paint's finish)."));
+		return;
+	}
+	if (!bSheenKeptRead)
+	{
+		TArray<uint8> Bytes;
+		const FString Path = FPaths::ProjectContentDir() / TEXT("Data/AirSkin/B17Fine-sheen.json");
+		if (!FFileHelper::LoadFileToArray(Bytes, *Path))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: B-17 paint sheen: Content/Data/AirSkin/B17Fine-sheen.json could not be read, so her paint stays matt."));
+			return;
+		}
+		const std::string Text(reinterpret_cast<const char*>(Bytes.GetData()), static_cast<size_t>(Bytes.Num()));
+		std::string Why;
+		if (!AirSheen::Read(Text, 143899, 15534, SheenKept, Why))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: B-17 paint sheen: Content/Data/AirSkin/B17Fine-sheen.json does not read (%s), so her paint stays matt."), UTF8_TO_TCHAR(Why.c_str()));
+			return;
+		}
+		if (SheenKept.SourceSha256 != Worn->SourceSha256 || SheenKept.BaseSha256 != Worn->BaseSha256)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: B-17 paint sheen: Content/Data/AirSkin/B17Fine-sheen.json is not her paint's (made from %s, her paint from %s): remake both with Tools/make_air_skin.py --out ... --sheen-out ...; her paint stays matt."),
+				UTF8_TO_TCHAR(SheenKept.SourceSha256.substr(0, 12).c_str()), UTF8_TO_TCHAR(Worn->SourceSha256.substr(0, 12).c_str()));
+			return;
+		}
+		// (the material's numbers, for stills without a rebuild: -TheaterAirB17SheenInk=gain,floor,spec,metal,glare,graze,
+		// metalfrom, each optional; read once with the file, so the kept sheen is never written again once a shape holds it)
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterAirB17SheenInk="), Asked, false))
+		{
+			if (!AirSheen::ParseTune(std::string(TCHAR_TO_UTF8(*Asked)), SheenKept.Look, Why))
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle: B-17 paint sheen: -TheaterAirB17SheenInk=%s: %s."), *Asked, UTF8_TO_TCHAR(Why.c_str()));
+			}
+		}
+		bSheenKeptRead = true;
+	}
+	SheenNow = &SheenKept;
+	State->B17SheenOn = 1;
+}
+
 int32 AAirBattle::B17FineNearMost()
 {
 	// (each finer B-17 that once comes near keeps her close-up shape for the battle, some 31 to 37 MB a copy by arithmetic:
@@ -4134,6 +4250,27 @@ UMaterialInterface* AAirBattle::ScrewHazeInk() const
 	return State && State->PropSpinOn == 1 ? ScrewHaze.Get() : nullptr;
 }
 
+UMaterialInterface* AAirBattle::InkFor(const FString& Shape) const
+{
+	// (a shape made with her sheen carries her finish in its first texture coordinate; every other is PlaneInk's, as before)
+	if (SheenInk && Shape.Contains(TEXT("|sheen")))
+	{
+		return SheenInk.Get();
+	}
+	return PlaneInk.Get();
+}
+
+void AAirBattle::SheenSunSet()
+{
+	if (!SheenInk)
+	{
+		return;
+	}
+	// (the way to the sun as the deck's shade takes it, without its floor: the guard's "low" reads its height)
+	const FVector Sun = TowardSun().GetSafeNormal();
+	SheenInk->SetVectorParameterValue(TEXT("SheenSun"), FLinearColor(static_cast<float>(Sun.X), static_cast<float>(Sun.Y), static_cast<float>(Sun.Z), 0.0f));
+}
+
 FString AAirBattle::ModelFor(const FString& Model, const FString& Nation, bool bFighter) const
 {
 	// The battle's model names (the unit table's, and the carrier aircraft's), as the miniature kit knows them: a
@@ -4179,6 +4316,10 @@ namespace AirParts
 		TArray<int32> Triangles;
 		TArray<FVector> Normals;
 		TArray<FColor> Colors;
+		/** Her paint's own finish a point, carried in the mesh's first texture coordinate (the row "flyB17Sheen":
+		 * Battle/AirSheen's Carry, U her roughness below 0.9, V her metal); empty for every other shape and with the row
+		 * off. Drawn only where it is one a point (UvOf). */
+		TArray<FVector2D> Sheen;
 		/** Its airscrews, their blades taken out of the shape to turn as discs of their own (in the shape's frame). */
 		struct FScrewAt
 		{
@@ -4195,6 +4336,7 @@ namespace AirParts
 			TArray<FVector> Points, Normals;
 			TArray<int32> Triangles;
 			TArray<FColor> Colors;
+			TArray<FVector2D> Sheen;
 			FVector Pivot = FVector::ZeroVector, Axis = FVector::ForwardVector;
 			double Most = 85.0;
 		};
@@ -4230,6 +4372,35 @@ namespace AirParts
 		Fresh.Normals = Made.Normals;
 		Fresh.Colors = Made.Colors;
 		return Fresh;
+	}
+
+	/**
+	 * Her paint's own finish onto a shape just made from her file (the row "flyB17Sheen"): the shape's point K is her
+	 * file's point K (the miniature kit lays one point a file point, in order, her markings after them), so point K takes
+	 * her sheen file's gloss and metal at K under her contact shade, and each point past her file's (her star and bar)
+	 * her coat's. Nothing unless her overlay and her sheen file are of one size and the shape holds at least as many points.
+	 */
+	static void SheenOnto(FShape& Shape, const AirSkin::Level& Skin, const AirSheen::Level& Own, double ShadeStrength, const AirSheen::Carried& Coat)
+	{
+		const size_t Count = Own.Count();
+		if (Skin.Count() != Count || Own.Metal.size() != Count || Shape.Points.Num() < static_cast<int32>(Count))
+		{
+			return;
+		}
+		Shape.Sheen.SetNum(Shape.Points.Num());
+		for (int32 K = 0; K < Shape.Points.Num(); ++K)
+		{
+			const size_t At = static_cast<size_t>(K);
+			const AirSheen::Carried C = At < Count ? AirSheen::Carry(Own.Gloss[At], Own.Metal[At], AirSkin::ShadeFactor(Skin.Shade[At], ShadeStrength)) : Coat;
+			Shape.Sheen[K] = FVector2D(C.U, C.V);
+		}
+	}
+
+	/** A shape's first texture coordinate as drawn: its sheen where it is one a point, else none (as every shape had). */
+	static const TArray<FVector2D>& UvOf(const TArray<FVector2D>& Carried, int32 Points)
+	{
+		static const TArray<FVector2D> None;
+		return Carried.Num() == Points && Points > 0 ? Carried : None;
 	}
 
 	/**
@@ -4828,6 +4999,10 @@ namespace AirParts
 					Into.Points.Add(Shape.Points[Corner]);
 					Into.Normals.Add(Shape.Normals.IsValidIndex(Corner) ? Shape.Normals[Corner] : FVector::UpVector);
 					Into.Colors.Add(Shape.Colors.IsValidIndex(Corner) ? Shape.Colors[Corner] : FColor::White);
+					if (Shape.Sheen.Num() == Shape.Points.Num())
+					{
+						Into.Sheen.Add(Shape.Sheen[Corner]);
+					}
 				}
 				Into.Triangles.Add(*Was);
 			}
@@ -5107,7 +5282,8 @@ namespace AirParts
 			Tangents[Corner] = FVector3f::CrossProduct(Across, Normal).GetSafeNormal(1e-6f, FVector3f::ForwardVector);
 			Signs[Corner] = 1.0f;
 			Colours[Corner] = FVector4f(FLinearColor(Shape.Colors[I]));
-			Uvs.Set(Corner, 0, FVector2f::ZeroVector);
+			// (her paint's own finish, the row "flyB17Sheen": zero for every other shape, as before)
+			Uvs.Set(Corner, 0, Shape.Sheen.Num() == Count ? FVector2f(static_cast<float>(Shape.Sheen[I].X), static_cast<float>(Shape.Sheen[I].Y)) : FVector2f::ZeroVector);
 			Corners[I] = Corner;
 		}
 		int32 Laid = 0;
@@ -5201,17 +5377,26 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 	// (and with the Battle rules card's "Worn B-17 paint" on, the finer B-17 a shape of her own in her worn paint:
 	// AirSkin, read as the battle began (B17SkinRead); off, nothing is asked and the key is what it was)
 	bool bSkin = false;
+	const AirSkin::Overlay* Worn = nullptr;
 	if (AirSkin::Active())
 	{
 		FString SkinKind = Name, SkinWhose;
 		Name.Split(TEXT(":"), &SkinKind, &SkinWhose);
-		bSkin = AirSkin::For(TCHAR_TO_UTF8(*SkinKind)) != nullptr;
+		Worn = AirSkin::For(TCHAR_TO_UTF8(*SkinKind));
+		bSkin = Worn != nullptr;
 	}
+	// (and with the Battle rules card's "B-17 paint sheen" on as well, a shape of her own again, her paint's own finish in
+	// its first texture coordinate (SheenOnto): read as the battle began (B17SheenRead); off, the key is what it was)
+	const bool bSheen = bSkin && State && State->B17SheenOn == 1 && SheenNow;
 	FString ShapeKey = (bStandIn ? FString::Printf(TEXT("%s@%.1f|%s"), *Name, Span, *Model) : Name) + (Scheme > 0 ? FString::Printf(TEXT("|scheme%d"), Scheme) : FString())
 		+ (bTorpedo ? TEXT("|torpedo") : TEXT("")) + (bScrews ? TEXT("|screws") : TEXT(""));
 	if (bSkin)
 	{
 		ShapeKey += TEXT("|skin");
+	}
+	if (bSheen)
+	{
+		ShapeKey += TEXT("|sheen");
 	}
 	TMap<FString, AirParts::FShape>& Shapes = AirParts::Shapes();
 	if (!Shapes.Contains(ShapeKey))
@@ -5228,6 +5413,12 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 			const double Across = FMath::Max(1.0, Box.GetSize().Y);
 			const double Fit = bStandIn ? Span * UnitsPerMetre / Across : 1.0;
 			Near = AirParts::ShapeOf(Made, Middle, Fit);
+			// (her paint's own finish, before her bay is lifted out, so that its doors and load carry it too)
+			const AirSheen::Carried Coat = bSheen ? AirSheen::Carry(SheenNow->CoatGloss, SheenNow->CoatMetal, 1.0) : AirSheen::Carried();
+			if (bSheen)
+			{
+				AirParts::SheenOnto(Near, Worn->Near, SheenNow->Near, Worn->ShadeStrength, Coat);
+			}
 			FString Kind, Whose;
 			Name.Split(TEXT(":"), &Kind, &Whose);
 			if (DiscInk)
@@ -5253,6 +5444,10 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 				// (about the same middle and the same size as the near shape's, so that the change from one to the
 				// other does not jump)
 				AirParts::FShape Away = AirParts::ShapeOf(Far, Middle, Fit);
+				if (bSheen)
+				{
+					AirParts::SheenOnto(Away, Worn->Far, SheenNow->Far, Worn->ShadeStrength, Coat);
+				}
 				if (bNavy)
 				{
 					AirParts::Recoat(Away.Colors, FMiniatureMesh::VehicleColour(Nation).ToFColor(true), Navy);
@@ -5352,8 +5547,8 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 	Mesh->RegisterComponent();
 	if (First && First->Points.Num() > 0)
 	{
-		Mesh->CreateMeshSection(0, First->Points, First->Triangles, First->Normals, TArray<FVector2D>(), First->Colors, TArray<FProcMeshTangent>(), false);
-		Mesh->SetMaterial(0, PlaneInk);
+		Mesh->CreateMeshSection(0, First->Points, First->Triangles, First->Normals, AirParts::UvOf(First->Sheen, First->Points.Num()), First->Colors, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(0, InkFor(ShapeKey));
 	}
 	Planes.Add(Key, Mesh);
 	FPlaneMade Made;
@@ -5383,20 +5578,20 @@ void AAirBattle::PlaneNear(int32 Key, UProceduralMeshComponent* Mesh, bool bNear
 		{
 			return;
 		}
-		Mesh->CreateMeshSection(1, Near->Points, Near->Triangles, Near->Normals, TArray<FVector2D>(), Near->Colors, TArray<FProcMeshTangent>(), false);
-		Mesh->SetMaterial(1, PlaneInk);
+		Mesh->CreateMeshSection(1, Near->Points, Near->Triangles, Near->Normals, AirParts::UvOf(Near->Sheen, Near->Points.Num()), Near->Colors, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(1, InkFor(Made->Shape));
 		Made->bNearMade = true;
 		// (its bay: the two doors, sections 2 and 3, turned by Draw as the flight core opens them; the racked load, 4)
 		for (int32 K = 0; K < Near->Doors.Num(); ++K)
 		{
 			const AirParts::FShape::FPiece& Door = Near->Doors[K];
-			Mesh->CreateMeshSection(2 + K, Door.Points, Door.Triangles, Door.Normals, TArray<FVector2D>(), Door.Colors, TArray<FProcMeshTangent>(), false);
-			Mesh->SetMaterial(2 + K, PlaneInk);
+			Mesh->CreateMeshSection(2 + K, Door.Points, Door.Triangles, Door.Normals, AirParts::UvOf(Door.Sheen, Door.Points.Num()), Door.Colors, TArray<FProcMeshTangent>(), false);
+			Mesh->SetMaterial(2 + K, InkFor(Made->Shape));
 		}
 		if (Near->Doors.Num() == 2 && Near->Racked.Triangles.Num() > 0)
 		{
-			Mesh->CreateMeshSection(4, Near->Racked.Points, Near->Racked.Triangles, Near->Racked.Normals, TArray<FVector2D>(), Near->Racked.Colors, TArray<FProcMeshTangent>(), false);
-			Mesh->SetMaterial(4, PlaneInk);
+			Mesh->CreateMeshSection(4, Near->Racked.Points, Near->Racked.Triangles, Near->Racked.Normals, AirParts::UvOf(Near->Racked.Sheen, Near->Racked.Points.Num()), Near->Racked.Colors, TArray<FProcMeshTangent>(), false);
+			Mesh->SetMaterial(4, InkFor(Made->Shape));
 		}
 		Made->bBay = Near->Doors.Num() == 2;
 		Made->BayShown = 0.0;
@@ -5668,7 +5863,8 @@ UStaticMesh* AAirBattle::PlaneStill(const FString& Shape, bool bLight)
 	}
 	const AirParts::FShape* From = bLight ? AirParts::LightOf(Shape) : AirParts::Shapes().Find(Key);
 	// (the far one with its airscrews' haze, the row "flyPropSpin" on: ScrewHazeInk is null with it off)
-	UStaticMesh* Made = From ? AirParts::StillOf(this, *From, PlaneInk, bLight ? nullptr : ScrewHazeInk()) : nullptr;
+	// (and on her sheen's ink, the row "flyB17Sheen", for a far shape made with it; the light shape carries none)
+	UStaticMesh* Made = From ? AirParts::StillOf(this, *From, bLight ? PlaneInk.Get() : InkFor(Shape), bLight ? nullptr : ScrewHazeInk()) : nullptr;
 	// (null kept too: a shape with no mesh is drawn on its own mesh, and not tried again)
 	PlaneStills.Add(Key, Made);
 	return Made;
@@ -5875,6 +6071,11 @@ void AAirBattle::WarmUp()
 	if (PlaneInk)
 	{
 		Quad(TEXT("AirWarmPlane"), PlaneInk.Get(), false, true);
+	}
+	// (the B-17's sheen's ink, the row "flyB17Sheen": its first draw under the black, as PlaneInk's; null with the row off)
+	if (SheenInk)
+	{
+		Quad(TEXT("AirWarmSheen"), SheenInk.Get(), true, true);
 	}
 }
 
@@ -6084,7 +6285,7 @@ void AAirBattle::Draw(double Real)
 				Still = PlaneStill(Lit->Shape, false);
 			}
 			const FString CopiesKey = Lit->Shape + (bLight ? TEXT("|light") : TEXT("|far")) + (Lit->bShadow ? TEXT("|shadow") : TEXT("|plain"));
-			if (FPlaneCopies* Group = Still ? CopiesFor(CopiesKey, Lit->bShadow, Still, PlaneInk) : nullptr)
+			if (FPlaneCopies* Group = Still ? CopiesFor(CopiesKey, Lit->bShadow, Still, bLight ? PlaneInk.Get() : InkFor(Lit->Shape)) : nullptr)
 			{
 				if (!Lit->bCopy)
 				{
