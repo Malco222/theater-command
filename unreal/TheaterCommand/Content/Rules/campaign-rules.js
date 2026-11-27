@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 262222588 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b2f10aa35 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -44033,8 +44033,8 @@
   var shutKey = (z, nat) => `seaShut:${z}:${nat}`;
   var lostKey = (id, c) => `portLost:${id}:${c.id}:${c.nat}:${c.name}`;
   var hadKey = (id) => `portHad:${id}`;
-  var WATCH = "portWatch";
-  var PORT_FLAGS = ["portTold:", "seaShut:", "portLost:", "portHad:", WATCH];
+  var WATCHED_OPEN = -1;
+  var PORT_FLAGS = ["portTold:", "seaShut:", "portLost:", "portHad:"];
   var portFlag = (k) => PORT_FLAGS.some((p) => k.startsWith(p));
   function setPortStores(g2, on2) {
     if (g2.flags.open !== 1) return false;
@@ -44053,13 +44053,15 @@
     for (let z = 0; z < g2.seas.length; z++) delete g2.flags[shutKey(z, nat)];
     for (const r of g2.regions) if (g2.flags[toldKey2(r.id)] !== void 0 && (r.ctrl === nat || nat === g2.human)) delete g2.flags[toldKey2(r.id)];
     if (nat === g2.human) {
-      for (const k of Object.keys(g2.flags)) if (k.startsWith("portLost:") || k.startsWith("portHad:") || k.startsWith("seaShut:") || k === WATCH) delete g2.flags[k];
+      for (const k of Object.keys(g2.flags)) if (k.startsWith("portLost:") || k.startsWith("portHad:") || k.startsWith("seaShut:")) delete g2.flags[k];
     }
   }
   function watched(g2, r) {
+    return portOfKind(g2, r) && !!g2.nations[r.ctrl].atWar.length;
+  }
+  function portOfKind(g2, r) {
     if (!r.overseas || !r.port || !worksKept(r)) return false;
-    const h = g2.nations[r.ctrl];
-    if (!h || !h.alive || !h.atWar.length) return false;
+    if (!g2.nations[r.ctrl]?.alive) return false;
     if (siegeRules(g2) && fieldCtrl(g2, r) !== r.ctrl) return false;
     return !r.nb.some((j) => allied(g2, g2.regions[j].ctrl, r.ctrl));
   }
@@ -44149,7 +44151,7 @@
     }
     return [...seen2];
   }
-  var sightKeep = (g2, r, sight2) => sight2 >= SIGHT.full ? portKeep(g2, r) : DESERT.stores;
+  var sightKeep = (g2, r, sight2) => sight2 >= SIGHT.full ? portKeep(g2, r) : fortRows(g2) ? null : DESERT.stores;
   function seenEmpty(g2, r, sight2) {
     if (sight2 >= SIGHT.full) return !garrisonOf(g2, r).length;
     if (sight2 >= SIGHT.glimpse) return !r.units.some((c) => !c.dead && allied(g2, c.nat, r.ctrl));
@@ -44169,10 +44171,10 @@
       if (!viewer || !g2.nations[viewer] || !atWar(g2, viewer, holder)) return null;
       if (shut.length !== r.seas.length || !shut.every((s) => s.by.some((b) => allied(g2, b.nat, viewer)))) return null;
       const starts2 = r.seas.map((z) => g2.flags[shutKey(z, holder)]);
-      const last2 = starts2.some((x) => x === void 0) ? null : Math.max(...starts2);
+      const last2 = starts2.some((x) => x === void 0 || x === WATCHED_OPEN) ? null : Math.max(...starts2);
       const since = last2 === 0 ? null : last2;
       const keep4 = sightKeep(g2, r, sightOf(g2, viewer)[r.id]);
-      const heldHungry = since === null ? null : since + keep4 + 1;
+      const heldHungry = since === null || keep4 === null ? null : since + keep4 + 1;
       return {
         region: r.id,
         holder,
@@ -44263,14 +44265,15 @@
       return [{ text: theWords(`${heldSaid(g2, f.shut, viewer, true)} since ${monthSaid(g2, f.heldSince)}. Counting from then, the garrison of ${portOf2(r)} goes hungry from ${monthSaid(g2, f.heldHungry)} and is lost by the start of ${monthSaid(g2, f.heldLost)}, unless ships get through.`), tone: "note" }];
     }
     if (f.lost === null) return [];
-    if (f.state === "filled") return [{ text: theWords(`Cut off by sea, its stores would feed the garrison for ${months(f.keep)}.`), tone: "note" }];
+    const keep3 = f.keep;
+    if (f.state === "filled") return [{ text: theWords(`Cut off by sea, its stores would feed the garrison for ${months(keep3)}.`), tone: "note" }];
     if (!f.cut) return [];
     const out = [];
     if (f.state === "stores") out.push({ text: theWords(`Cut off by sea: ${heldSaid(g2, f.shut, viewer, false)}, and no ship reaches the harbour. The garrison lives on the port's stores through ${monthSaid(g2, f.feedsTo)}; unless the sea is opened, it then goes hungry and is lost ${startOf(f.lostBy)} ${monthSaid(g2, f.lost)}.`), tone: "warn" });
     else out.push({ text: theWords(`Cut off by sea, and the port's stores are spent: the garrison goes hungry, losing order every month, and is lost ${startOf(f.lostBy)} ${monthSaid(g2, f.lost)} unless the sea is opened.`), tone: "bad" });
     const open3 = openers(g2, r, f.shut.map((s) => s.sea));
     const measured = opts.measure ? open3.map((z) => measureSaid(g2, z, viewer)).filter((x) => x !== null) : [];
-    out.push({ text: theWords(`A fleet of yours at sea there, strong enough to open ${seasSaid(g2, open3, "or")}, lets the ships in and fills the stores: one such month feeds the garrison through ${monthSaid(g2, g2.turn + f.keep)}.${measured.map((x) => ` ${x}`).join("")}`), tone: "note" });
+    out.push({ text: theWords(`A fleet of yours at sea there, strong enough to open ${seasSaid(g2, open3, "or")}, lets the ships in and fills the stores: one such month feeds the garrison through ${monthSaid(g2, g2.turn + keep3)}.${measured.map((x) => ` ${x}`).join("")}`), tone: "note" });
     return out;
   }
   function measureSaid(g2, z, viewer) {
@@ -44299,19 +44302,16 @@
     return !!me && (r.ctrl === me || [...r.units, ...r.garr ?? [], ...extra].some((c) => c.nat === me && (!c.dead || extra.includes(c))));
   };
   function holdsMonth(g2, sweep) {
-    var _a;
     const me = g2.human;
-    const first2 = g2.flags[WATCH] === void 0;
-    (_a = g2.flags)[WATCH] ?? (_a[WATCH] = g2.turn);
     const want = /* @__PURE__ */ new Set();
     for (const r of g2.regions) {
-      if (!watched(g2, r) || !atWar(g2, me, r.ctrl)) continue;
+      if (r.ctrl === me || !portOfKind(g2, r)) continue;
       for (const z of r.seas) {
         const k = shutKey(z, r.ctrl);
         if (want.has(k)) continue;
         want.add(k);
-        if (!closedTo(g2, z, r.ctrl)) delete g2.flags[k];
-        else if (g2.flags[k] === void 0) g2.flags[k] = first2 ? 0 : g2.turn;
+        const was = g2.flags[k];
+        g2.flags[k] = !closedTo(g2, z, r.ctrl) ? WATCHED_OPEN : was === void 0 ? 0 : was === WATCHED_OPEN ? g2.turn : was;
       }
     }
     if (sweep) {
