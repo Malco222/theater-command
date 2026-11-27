@@ -1397,7 +1397,7 @@ asked of the men and nothing drawn, as before.
   chest. Seen in `mist_head.png`, drawn from such a fall (no stand-in place).
 - **Without `-TheaterLandHits`.** The mist still comes, at each bullet fall's start (the round's firing time, no
   jolt, the old falls): the strike drawn a moment before its tracer arrives. Nothing harmful; best with both words.
-- **Tests and pictures.** `Tools/land_mist/run.sh` (with `LAND_MIST_BASE=4060f0923` also the word-absent proof);
+- **Tests and pictures.** `Tools/land_mist/run.sh` (with `LAND_MIST_BASE=d226a786d` also the word-absent proof);
   `land_mist_picture.cpp`, `land_mist_pictures.py`; pictures in `battle-fx/hits/pictures/mist_*.png`; the Mac ticket
   `effects-r2/tickets/hit-mist-ticket.md`.
 
