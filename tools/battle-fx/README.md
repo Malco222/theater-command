@@ -2147,8 +2147,9 @@ in `/mnt/project-files/effects-r2/seam/sea/` (README there: every call letter fo
     sheet in four throws a burst of spray: a flat mound (`Upright`, `Flatten` 0.25 to 0.4, drawn out 1.6 to 2.4 times
     along her), alpha 0.5, gone in 0.6 to 0.9 s. The look review of 27 November saw round bursts on one sheet in two
     as a row of snowballs on her deck from 600 m.
-  - At most `most` (2) drenches falling on a ship. A 16-inch: 70 lumps (`puffs`, `piece_r` 0.06, `alpha` 0.95), 175
-    pieces, the last gone 14.8 s after the shell. Nothing when her edge is out of reach.
+  - At most `most` (2) drenches falling on a ship. A 16-inch: 70 lumps (`puffs`, `piece_r` 0.06, `alpha` 0.95), 158
+    pieces (70 lumps, 70 sheets, 18 bursts), the last gone 14.56 s after the shell. Nothing when her edge is out of
+    reach. The sheets lie 0.15 m over her deck whether she is ridden (her pose's `Deck`) or not.
 - **DeckWash** (items 9 and 10, row `sea_splash.runoff`; switches `-TheaterSeaDrench=1`, `-TheaterSeaAwash=1`).
   Water running over her edge, in her frame.
   - "runoff": white sheets over the edge and down her side, foam where they land. Each sheet takes its own step along
@@ -2175,10 +2176,21 @@ in `/mnt/project-files/effects-r2/seam/sea/` (README there: every call letter fo
     cost about 2 ms a frame here, the rule read once makes it arithmetic).
     Under `floor_px` (1.5) the middle is widened to it and made fainter by the root of the widening only, never under
     `floor_alpha` (0.3) while the oil is that dark. Seen low, from `calm_from_deg` (5) of grazing angle down to
-    `calm_full_deg` (1), the paint goes over to the calm band: a pale reflected sky (124,140,152 written) at
-    `calm_alpha` (0.2), less as the oil thins. A real slick seen low reads by its calm film, not by its darkness. From
-    above and wide on the screen nothing changes. The look review of 27 November found the lane gone from another
-    ship's bridge 800 m off and 20 m up.
+    `calm_full_deg` (1), the paint goes over to the calm band: the sky at the horizon (200,208,214 written) at
+    `calm_alpha` (0.085), less as the oil thins; lower than `calm_far_deg` (0.85) more, as (`calm_far_deg` over the
+    angle) to the power `calm_far_pow` (3), at most `calm_far_most` (4) times, since the sea there closes on the sky's
+    colour fast. A fixed pale paint (124,140,152 at 0.2, the first mend) lifted the sea only +3 to +4 levels 2 km off,
+    30 m up, where the sea lands as light as it.
+    Measured in the previewer against the same scene unpainted (`FX_NO_LANE=1`; `preview/lane_lift.sh` draws and
+    holds them), the median over the screen's columns of what the lane adds: +15 levels 760 m off and 20 m up (+14 at
+    a 20-degree lens), +15 2 km off and 30 m up (+14 at 20 degrees), +15 300 m off and 40 m up where the lane in view
+    lies far off; 2 to 3 px across, in every column; its brightest pixel 181,188,194, under the wake's foam; from
+    straight above as before (46 levels darker than the sea). The power and its angle are fitted to the previewer's
+    sea; the Mac's sea may want `calm_alpha` or `calm_far_deg` moved, no code.
+    A real slick seen low reads by its calm film, not by its darkness. From above and wide on the screen nothing
+    changes. The previewer's sea has no sun term, so a sun ahead or behind draws the same lane (nothing here was
+    judged by the sun's side). The look review of 27 November found the lane gone from another ship's bridge 800 m
+    off and 20 m up.
   - At most `points` (200) a ship and `ships` (6); a 20-minute track is kept whole. No dice.
   - A lane never burns. The scene's patch lights its own oil fire (`OilFire`, ids 4100000 and up, at most 3) under a
     ship stopped and burning.

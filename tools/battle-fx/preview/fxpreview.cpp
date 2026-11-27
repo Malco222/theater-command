@@ -2479,7 +2479,7 @@ namespace
 				HullBox(C, Cam, P, Breech + Vec(1.5, -1.6, -2.0), Breech + Vec(1.6, 1.6, -1.1), Works);
 				HullBox(C, Cam, P, Breech + Vec(-0.4, -0.3, -2.0), Breech + Vec(0.9, 0.6, 0.2), Works);
 			}
-			if (Kind == "lane")
+			if (Kind == "lane" && !std::getenv("FX_NO_LANE")) // (FX_NO_LANE=1: the same scene with the strip left unpainted, to measure it)
 			{
 				// (the strip, as the sea scene's patch 04 lays it: five across, a brown-black film written to land about
 				// 28,25,20 in its middle (game_curve), browner toward its ragged edges, its sheen a dull lighter band (toward
@@ -2487,14 +2487,15 @@ namespace
 				// screen than 1.5 pixels, a lane under that widened to it and as much fainter, so a far lane fades and never
 				// breaks into dashes (a band under a pixel is caught by the pixels' centres only here and there); a hand's
 				// breadth up. Its look by the kit's OilLook: under the floor fainter by the root of the widening only, at
-				// least 0.3 in the middle; seen low (under 5 degrees, full by 1) going over to the calm band, a pale reflected
-				// sky (124,140,152 written) at about 0.2, a smooth streak a little lighter than the sea, never black)
+				// least 0.3 in the middle; seen low (under 5 degrees, full by 1) going over to the calm band, the sky at the
+				// horizon (200,208,214 written) at about 0.085 (more under 0.85 degrees, as its ratio cubed, at most 4 times), a smooth streak lighter than
+				// the sea, never black; FX_NO_LANE=1 leaves the strip unpainted, to measure what it adds)
 				std::vector<Battle::LanePoint> Strip;
 				const int Got = Fx.OilLane(Now, 1, Strip);
 				const Battle::LaneRule Rule = Fx.OilRule(); // (the rule's numbers read once a frame)
 				static const unsigned char Paints[5][3] = { { 66, 62, 56 }, { 66, 62, 56 }, { 59, 56, 50 }, { 66, 62, 56 }, { 66, 62, 56 } };
 				static const unsigned char SheenPaint[3] = { 96, 92, 84 };
-				static const unsigned char CalmPaint[3] = { 124, 140, 152 };
+				static const unsigned char CalmPaint[3] = { 200, 208, 214 }; // (the sky at the horizon, written: a lift over the sea there, far or near)
 				std::vector<std::array<unsigned char, 4>> Cols;
 				std::vector<Vec> Pts;
 				for (int K = 0; K < Got; ++K)

@@ -931,7 +931,10 @@
 		R.FloorAlpha = SafeNum(Num(P + "floor_alpha", 0.3), 0.0, 1.0, 0.3);
 		R.CalmFrom = SafeNum(Num(P + "calm_from_deg", 5.0), 0.0, 90.0, 5.0);
 		R.CalmFull = SafeNum(Num(P + "calm_full_deg", 1.0), 0.0, 90.0, 1.0);
-		R.CalmAlpha = SafeNum(Num(P + "calm_alpha", 0.2), 0.0, 1.0, 0.2);
+		R.CalmAlpha = SafeNum(Num(P + "calm_alpha", 0.085), 0.0, 1.0, 0.085);
+		R.CalmFarDeg = SafeNum(Num(P + "calm_far_deg", 0.85), 0.0, 90.0, 0.85);
+		R.CalmFarPow = SafeNum(Num(P + "calm_far_pow", 3.0), 0.0, 6.0, 3.0);
+		R.CalmFarMost = SafeNum(Num(P + "calm_far_most", 4.0), 1.0, 8.0, 4.0);
 		R.Dark0 = SafeNum(Num(P + "dark", 0.55), 0.01, 1.0, 0.55);
 		return R;
 	}
@@ -950,7 +953,13 @@
 		const double G = SafeNum(GrazeDeg, -90.0, 90.0, 90.0);
 		const double C = CalmFrom > CalmFull ? Clamp01((CalmFrom - G) / (CalmFrom - CalmFull)) : (G <= CalmFull ? 1.0 : 0.0);
 		L.Calm = C * C * (3.0 - 2.0 * C);
-		L.CalmAlpha = CalmA * std::sqrt(Clamp01(D / Dark0));
+		// (lower still than calm_full_deg the sea itself lightens toward the sky (more of it mirrored), so the calm paint
+		// lifts it less: lower than calm_far_deg its alpha grows as (calm_far_deg / the angle) to the power calm_far_pow,
+		// at most calm_far_most times, so that 2 km off the band still lands about as far over the sea as it does 800 m
+		// off; the power is steep because the sea there closes on the sky's colour fast)
+		const double FarDeg = Rule.CalmFarDeg;
+		const double Far = FarDeg > 0.0 && G < FarDeg ? std::min(std::pow(FarDeg / std::max(G, 1.0e-3), Rule.CalmFarPow), Rule.CalmFarMost) : 1.0;
+		L.CalmAlpha = Clamp01(CalmA * std::sqrt(Clamp01(D / Dark0)) * Far);
 		L.Mid = DarkMid + (L.CalmAlpha - DarkMid) * L.Calm;
 		L.Shoulder = 0.85 * DarkMid + (0.5 * L.CalmAlpha - 0.85 * DarkMid) * L.Calm;
 		return L;

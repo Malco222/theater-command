@@ -752,8 +752,11 @@ namespace TheaterFx
 		 * and made fainter by the root of it only (Mid, at least sea_leak.floor_alpha (0.3) while the oil is that dark,
 		 * never more than Dark), so a far lane stays a soft streak a few pixels across and never dashes. Calm: seen low, a
 		 * slick reads by the calm of its film, the sky smooth in it, not by its darkness: from sea_leak.calm_from_deg (5)
-		 * down to calm_full_deg (1) the paint goes over (eased, 0 to 1) to the scene's calm paint at CalmAlpha
-		 * (sea_leak.calm_alpha, less as the oil thins), lighter than the sea, never black. Mid and Shoulder (at 0.55 of
+		 * down to calm_full_deg (1) the paint goes over (eased, 0 to 1) to the scene's calm paint (the sky at the horizon,
+		 * 200,208,214 written) at CalmAlpha (sea_leak.calm_alpha 0.085, less as the oil thins; under calm_far_deg (0.85)
+		 * more, as (calm_far_deg / the angle) to the power calm_far_pow (3), at most calm_far_most (4) times, for the sea
+		 * there closes on the sky's colour fast), lighter than the
+		 * sea, never black. Mid and Shoulder (at 0.55 of
 		 * the way out) are the alphas with Calm already blended in; the edges are clear. From above (past calm_from_deg)
 		 * and wide on the screen: Widen 1, Mid = Dark, Shoulder 0.85 Dark, Calm 0, the lane as it was. */
 		struct LaneLook
@@ -761,10 +764,10 @@ namespace TheaterFx
 			double Widen = 1.0, Mid = 0.0, Shoulder = 0.0, Calm = 0.0, CalmAlpha = 0.0;
 		};
 		/** The rule's numbers from the row (sea_leak.floor_px, floor_alpha, calm_from_deg, calm_full_deg, calm_alpha,
-		 * dark), read once a frame: a lane's 1,200 points each reading the recipe cost about 2 ms a frame. */
+		 * calm_far_deg, calm_far_pow, calm_far_most, dark), read once a frame: a lane's 1,200 points each reading the recipe cost about 2 ms a frame. */
 		struct LaneRule
 		{
-			double FloorPx = 1.5, FloorAlpha = 0.3, CalmFrom = 5.0, CalmFull = 1.0, CalmAlpha = 0.2, Dark0 = 0.55;
+			double FloorPx = 1.5, FloorAlpha = 0.3, CalmFrom = 5.0, CalmFull = 1.0, CalmAlpha = 0.085, CalmFarDeg = 0.85, CalmFarPow = 3.0, CalmFarMost = 4.0, Dark0 = 0.55;
 		};
 		LaneRule OilRule() const;
 		static LaneLook OilLook(const LaneRule& Rule, double Dark, double MidPx, double GrazeDeg);
