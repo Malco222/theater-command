@@ -222,7 +222,8 @@ namespace
 		Check(OneBurst(Off, "light") == OffHeavy && OneBurst(Off, "medium") == OffHeavy, "off: light and medium burst as heavy (as before)", "piece for piece, 30 s");
 		Check(OneBurst(On, "light") != OffHeavy && OneBurst(On, "medium") != OffHeavy, "on: light and medium burst as their own rows (the control)", "differ from heavy");
 		Check(OneBurst(On, "heavy") == OffHeavy, "on: heavy bursts exactly as before", "piece for piece, 30 s");
-		// (each kind's size and life, a burst 600 m off at 1 s)
+		// (each kind's size and life: the mean of eight bursts 600 m off, one every 40 s from 1 s, each measured 2 s and
+		// 6 s after it; one burst alone reads a tenth apart on the two compilers, its dice falling a little apart)
 		const char* Kinds[3] = { "light", "medium", "heavy" };
 		double Across[3][2] = {}, Gone[3] = {};
 		for (int I = 0; I < 3; ++I)
@@ -230,16 +231,21 @@ namespace
 			Kit K(On);
 			const Battle::View V = FxTen::Looking(Vec(0.0, 0.0, 1500.0), Vec(0.0, 600.0, 1500.0));
 			K.Fx.Draw(0.0, V);
-			K.Fx.AirFlak(1.0, Vec(0.0, 600.0, 1500.0), Kinds[I]);
-			Gone[I] = LastGone(K.Fx) - 1.0;
-			Across[I][0] = SmokeAcross(K.Fx, 3.0);
-			Across[I][1] = SmokeAcross(K.Fx, 7.0);
+			for (int N = 0; N < 8; ++N)
+			{
+				const double T = 1.0 + 40.0 * N;
+				const size_t First = K.Fx.Bits.size();
+				K.Fx.AirFlak(T, Vec(10.0 * N, 600.0, 1500.0), Kinds[I]);
+				Gone[I] = std::max(Gone[I], LastGone(K.Fx, First) - T);
+				Across[I][0] += SmokeAcross(K.Fx, T + 2.0, First) / 8.0;
+				Across[I][1] += SmokeAcross(K.Fx, T + 6.0, First) / 8.0;
+			}
 		}
 		// (sizes in the kit's own measure, the one heavy's "22 m" is written in: heavy's long_m 22 stands about 40 m
 		// across its widest at 2 s, its lobes grown and stretched; each kind by the same measure, scaled to heavy's 22)
 		const double ByHeavy = Across[2][0] > 1e-6 ? 22.0 / Across[2][0] : 0.0;
-		Check(Across[0][0] * ByHeavy >= 2.5 && Across[0][0] * ByHeavy <= 5.0, "light: a 3 to 4 m puff at 2 s (as heavy's 22 m is measured)", Say("%.1f m", Across[0][0] * ByHeavy));
-		Check(Across[1][0] * ByHeavy >= 5.5 && Across[1][0] * ByHeavy <= 9.5, "medium: a 6 to 8 m burst at 2 s (as heavy's 22 m is measured)", Say("%.1f m", Across[1][0] * ByHeavy));
+		Check(Across[0][0] * ByHeavy >= 3.0 && Across[0][0] * ByHeavy <= 4.0, "light: a 3 to 4 m puff at 2 s (as heavy's 22 m is measured; 8 bursts' mean)", Say("%.1f m", Across[0][0] * ByHeavy));
+		Check(Across[1][0] * ByHeavy >= 6.0 && Across[1][0] * ByHeavy <= 8.0, "medium: a 6 to 8 m burst at 2 s (as heavy's 22 m is measured; 8 bursts' mean)", Say("%.1f m", Across[1][0] * ByHeavy));
 		Check(Across[2][0] >= 30.0 && Across[2][0] <= 60.0, "heavy: as it was (its 22 m stands 30 to 60 m at its widest at 2 s)", Say("%.1f m", Across[2][0]));
 		Check(Gone[0] <= 6.0, "light: gone by 6 s, lingering to linger.flak.by.light", Say("%.1f s", Gone[0]));
 		Check(Gone[1] <= 9.5, "medium: gone by 9.5 s, lingering to linger.flak.by.medium", Say("%.1f s", Gone[1]));
