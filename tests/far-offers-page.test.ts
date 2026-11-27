@@ -14,7 +14,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; (globalThis as any).TC_OFFERS
 import { describe, expect, it } from 'vitest';
 import { addCorps, createGame, men, placed, relocate, rowCorps, rowOffers, setWar, startPhase } from '../src/campaign/game';
 import { fits, roomLeft } from '../src/campaign/islands';
-import { saveGame } from '../src/campaign/save';
+import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { MEN_PER_DIV, STACK, type Corps, type Game, type Region } from '../src/campaign/types';
 import { menWords } from '../src/campaign/manpower';
@@ -241,12 +241,26 @@ describe('the offers page', () => {
   it("answered through the page's own acts: form one, decline one, then accept all with one that cannot form, which stays open", () => {
     const g = war();
     months(g, 1, 30);
-    fillOkinawa(g);
+    // (Moved by D1, the design director's ruling of 17:53Z, 27 November 2026, (1): with Okinawa alone full the 16th
+    // Division is sent on to Kagoshima and can form, so the one that cannot form is made on a board where no held
+    // ground anywhere has room for it, top-up 1's harbour fill: Okinawa full and every other harbour of Japan's too.
+    // Read by the rule's own readers: Okinawa refuses the row's own corps, and no harbour of Japan's takes it.)
+    noRoomForSixteenth(g);
+    const { going, out } = sixteenth(g), okinawa = g.byName.Okinawa;
+    expect([fits(g, okinawa, 'JAP', going, { out }), standing(g, okinawa), g.regions.filter((r) => r.port && r.ctrl === 'JAP' && fits(g, r, 'JAP', going, { rows: standing(g, r), out })).map((r) => r.name)]).toEqual([false, STACK, []]);
     open(g);
     expect(TC().act(`offers:take:${index(NOV41[0])}`)).toMatchObject({ ok: true, note: `${NOV41[0]} is formed.`, open: '' });
     expect(TC().act(`offers:decline:${index(NOV41[1])}`)).toMatchObject({ ok: true, note: `${NOV41[1]} is declined: your corps stay as they are.`, open: '' });
     expect(TC().page('offers').sections[0].rows.map((r: any) => r.title)).toEqual([NOV41[2], NOV41[3], NOV41[4], GARRISON]);
     TC().act('offers:ask:take');
+    // The head's figures from the rule's own readers: the offers that can form (no `why`), each corps of his they take
+    // counted once with its men by `men`; the one passed over is the 16th Division, for want of room. (Read on the war
+    // as the page's acts have left it: the bridge's own, through its save.)
+    const h = loadGame(TC().save().text)!;
+    const left = rowOffers(h), go = left.filter((o) => !o.why), passed = left.filter((o) => o.why);
+    const struck = [...new Set(go.flatMap((o) => o.takes.map((t) => t.id)))].map((id) => h.corps.find((c) => c.id === id && !c.dead)!);
+    expect([go.map((o) => o.name), passed.map((o) => [o.name, o.why])]).toEqual([[NOV41[3], NOV41[4], GARRISON], [[NOV41[2], 'There is no room for another corps at Okinawa, or near it.']]]);
+    expect(TC().page('offers').note).toBe(`Form all ${go.length}? ${struck.length} of your corps leave the map, ${menWords(struck.reduce((n, c) => n + men(c), 0))} men, and ${go.length} formations form. It cannot be undone. ${passed.length} cannot be formed this month and stays open.`);
     expect(TC().page('offers').note).toBe('Form all 3? 3 of your corps leave the map, 34,000 men, and 3 formations form. It cannot be undone. 1 cannot be formed this month and stays open.');
     const all = TC().act('offers:all:take');
     expect(all).toMatchObject({ ok: false, open: '' });
