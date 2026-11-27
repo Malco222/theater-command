@@ -12,7 +12,7 @@ import { seaPicture } from '../src/campaign/carriers';
 import { addCorps, computeSupply, createGame, declareWar, portKeep, removeCorps, startPhase } from '../src/campaign/game';
 import { SIGHT, fogOn, sightOf } from '../src/campaign/intel';
 import { closedTo, seaSide, zoneOf } from '../src/campaign/navy';
-import { PORTSTORES_ROW, monthSaid, portCardLines, portCorpsLine, portCutOff, portStoresOn, setPortStores, type PortLine } from '../src/campaign/portcut';
+import { PORTSTORES_ROW, monthSaid, portCardLines, portCorpsLine, portCutOff, portStoresOn, portsDone, setPortStores, type PortLine } from '../src/campaign/portcut';
 import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game } from '../src/campaign/types';
@@ -581,5 +581,58 @@ describe('item 4: two lines for one event, the rule\'s own line of a surrender s
     expect([french.dead, ninth.dead]).toEqual([true, true]);
     expect(news(g, h0)).toEqual(['Cut off on Malta, the 3rd Corps has starved and is lost.', 'Cut off and out of supply, 9th Corps lays down its arms at Malta.']);
     expect(Object.keys(g.flags).filter((k) => /^(portLost|portHad):/.test(k))).toEqual([]);
+  });
+});
+
+describe('item 5: the shutting side\'s "have held ... since" only for a hold the switch saw begin', () => {
+  it('switched on mid-war with Malta\'s sea already shut: the line waits; the sea opened and shut again, it gives the month it saw', () => {
+    // (The war runs with the switch off: Italy's fleets have held the Central Mediterranean since December 1940.)
+    const { g } = malta('ITA', ['9th Corps'], 16, (h) => sail(h, 'ITA', 'central'), false);
+    month(g, 17, ['ITA', 'UK']);
+    expect(Object.keys(g.flags).filter((k) => /^(seaShut:|portWatch)/.test(k))).toEqual([]);
+    // January 1941: the player turns it on. Its first look finds the sea already shut: no month is given.
+    expect(setPortStores(g, true)).toBe(true);
+    expect([g.flags['seaShut:20:UK'], g.flags.portWatch]).toEqual([0, 17]);
+    expect(portCutOff(g, MALTA, 'ITA')).toMatchObject({ side: 'shutting', heldSince: null, heldHungry: null, heldLost: null });
+    expect(portCardLines(g, MALTA, 'ITA')).toEqual([]);
+    month(g, 18, ['ITA', 'UK']);
+    expect([g.flags['seaShut:20:UK'], portCardLines(g, MALTA, 'ITA')]).toEqual([0, []]);
+    // March: Italy's fleets go home and the sea opens; April: they sail again, and the switch sees the hold begin.
+    for (const f of g.fleets) if (f.nat === 'ITA') f.stance = 'port';
+    g.supplyDirty = true;
+    month(g, 19, ['ITA', 'UK']);
+    expect([g.flags['seaShut:20:UK'], g.flags[`stores:${MALTA}`]]).toEqual([undefined, 19]);
+    sail(g, 'ITA', 'central');
+    g.supplyDirty = true;
+    month(g, 20, ['ITA', 'UK']);
+    expect(g.flags['seaShut:20:UK']).toBe(20);
+    expect(texts(portCardLines(g, MALTA, 'ITA'))).toEqual(['Your fleets have held the Central Mediterranean since April. Counting from then, the garrison of Malta goes hungry from July and is lost at the start of September, unless ships get through.']);
+  });
+
+  it('Gibraltar: the Western Mediterranean already shut at the first look, the Iberian waters shut in January under its watch: the count runs from January', () => {
+    const { g, gib } = gibraltar('ITA', (h) => sail(h, 'ITA', 'wmed', ['1st Fleet']));
+    const [wmed, iberia] = g.regions[gib].seas;
+    // (The switch off through December's months, and on after them.)
+    expect(setPortStores(g, false)).toBe(true);
+    g.turn = 16;
+    phase(g, 'ITA');
+    phase(g, 'UK');
+    expect(setPortStores(g, true)).toBe(true);
+    expect([g.flags[`seaShut:${wmed}:UK`], g.flags[`seaShut:${iberia}:UK`]]).toEqual([0, undefined]);
+    g.turn = 17;
+    phase(g, 'ITA');
+    sail(g, 'ITA', 'iberia', ['2nd Fleet']);
+    g.supplyDirty = true;
+    phase(g, 'UK');
+    expect([g.flags[`seaShut:${wmed}:UK`], g.flags[`seaShut:${iberia}:UK`]]).toEqual([0, 17]);
+    expect(texts(portCardLines(g, gib, 'ITA'))).toEqual(['Your fleets have held the Western Mediterranean and the waters off the Iberian coast since January. Counting from then, the garrison of Gibraltar goes hungry from April and is lost at the start of June, unless ships get through.']);
+  });
+
+  it('the player falls: the holds watched for him and the watch go with him', () => {
+    const { g } = malta('ITA');
+    month(g, 17, ['ITA', 'UK']);
+    expect([g.flags['seaShut:20:UK'], g.flags.portWatch]).toEqual([16, 1]);
+    portsDone(g, 'ITA');
+    expect(Object.keys(g.flags).filter((k) => /^(seaShut:|portWatch)/.test(k))).toEqual([]);
   });
 });

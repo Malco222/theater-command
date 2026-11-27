@@ -15,9 +15,14 @@
 //                     the player has no part in it any more, when the switch is turned off, and when its holder or the
 //                     player falls (portsDone).
 //   seaShut:<z>:<nat> the month sea z became shut to nation nat, read at every nation's month as it opens: the start of
-//                     the hold the shutting side sees on the port's card ("held ... since"). Kept only for a nation at
-//                     war with the player that holds a port of this kind on that sea; cleared as the sea opens to it,
-//                     when the switch is turned off, and when the nation falls.
+//                     the hold the shutting side sees on the port's card ("held ... since"). 0 where the sea was already
+//                     shut when the switch first watched it: a hold whose start the switch did not see, which gives no
+//                     month (the UI director's 23:50Z, item 5). Kept only for a nation at war with the player that holds
+//                     a port of this kind on that sea; cleared as the sea opens to it, when the switch is turned off,
+//                     when the nation falls, and when the player falls.
+//   portWatch         the month the switch began to watch the seas for the player at the table (its first look: as it
+//                     is turned on with a player seated, or at the first month it reads them). Cleared when the switch
+//                     is turned off and when the player falls, so that a player given his seat back is watched afresh.
 //   portLost:<id>:<corps>:<nat>:<name>
 //                     the month a corps of the port's garrison starved there, kept from its nation's reckoning to the
 //                     player's own, so that the corps a port loses in one month are told in one line ("Several"),
@@ -66,17 +71,25 @@ const toldKey = (id: number): string => `portTold:${id}`;
 const shutKey = (z: number, nat: string): string => `seaShut:${z}:${nat}`;
 const lostKey = (id: number, c: Corps): string => `portLost:${id}:${c.id}:${c.nat}:${c.name}`;
 const hadKey = (id: number): string => `portHad:${id}`;
+const WATCH = 'portWatch';
 /** The telling's own flags, by their prefixes. */
-const PORT_FLAGS = ['portTold:', 'seaShut:', 'portLost:', 'portHad:'];
+const PORT_FLAGS = ['portTold:', 'seaShut:', 'portLost:', 'portHad:', WATCH];
 const portFlag = (k: string): boolean => PORT_FLAGS.some((p) => k.startsWith(p));
 
 /**
  * Switches the telling on or off in any month of a grand campaign; outside one it does nothing and answers false. Off
- * deletes the flag and every flag of the telling's own, so that a war switched on and off holds nothing of it.
+ * deletes the flag and every flag of the telling's own, so that a war switched on and off holds nothing of it. On, with
+ * a player at the table, the switch takes its first look at the seas there and then (holdsMonth): a sea already shut
+ * to its holder is a hold whose start it did not see.
  */
 export function setPortStores(g: Game, on: boolean): boolean {
   if (g.flags.open !== 1) return false;
-  if (on) { g.flags.portStores = 1; return true; }
+  if (on) {
+    const was = portStoresOn(g);
+    g.flags.portStores = 1;
+    if (!was && g.human && g.nations[g.human]?.alive) holdsMonth(g, false);
+    return true;
+  }
   delete g.flags.portStores;
   for (const k of Object.keys(g.flags)) if (portFlag(k)) delete g.flags[k];
   return true;
@@ -92,8 +105,10 @@ export function portsDone(g: Game, nat: string): void {
   if (!portStoresOn(g)) return;
   for (let z = 0; z < g.seas.length; z++) delete g.flags[shutKey(z, nat)];
   for (const r of g.regions) if (g.flags[toldKey(r.id)] !== undefined && (r.ctrl === nat || nat === g.human)) delete g.flags[toldKey(r.id)];
-  // (The lines kept for the player's month, and the ports he had corps in, are his alone: they go when he falls.)
-  if (nat === g.human) for (const k of Object.keys(g.flags)) if (k.startsWith('portLost:') || k.startsWith('portHad:')) delete g.flags[k];
+  // (The lines kept for the player's month, and the ports he had corps in, are his alone: they go when he falls. So do
+  // the holds the switch watched for him, and its watch: given his seat back, he is watched afresh, and a sea already
+  // shut then is a hold whose start the switch did not see.)
+  if (nat === g.human) for (const k of Object.keys(g.flags)) if (k.startsWith('portLost:') || k.startsWith('portHad:') || k.startsWith('seaShut:') || k === WATCH) delete g.flags[k];
 }
 
 // ---- The facts -----------------------------------------------------------------------------------------------------
@@ -299,9 +314,12 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
     // and the stores are filled (game.ts computeSupply, `r.seas.some((z) => open[z])`). And the count is its own side's
     // only where its own side holds every one of them: what it has held, and since when, is what its own forces know.
     if (shut.length !== r.seas.length || !shut.every((s) => s.by.some((b) => allied(g, b.nat, viewer)))) return null;
-    // (The clock starts when the last of the port's seas was shut.)
+    // (The clock starts when the last of the port's seas was shut. A sea already shut when the switch first watched it
+    // keeps 0: shut before any hold whose start the switch saw, so the last such start is the clock's; with no such
+    // start there is no month to give, and the count waits: the UI director's 23:50Z, item 5.)
     const starts = r.seas.map((z) => g.flags[shutKey(z, holder)]);
-    const since = starts.some((x) => x === undefined) ? null : Math.max(...(starts as number[]));
+    const last = starts.some((x) => x === undefined) ? null : Math.max(...(starts as number[]));
+    const since = last === 0 ? null : last;
     const keep = sightKeep(g, r, sightOf(g, viewer)[r.id]);
     const heldHungry = since === null ? null : since + keep + 1;
     return {
@@ -471,9 +489,15 @@ const involved = (g: Game, r: Region, extra: Corps[] = []): boolean => {
  * The record of each hold, at every nation's month as it opens (after its draw of the supply picture): for every port
  * of the kind held by a nation at war with the player, each of its seas shut to that nation keeps the month it became
  * shut, and one open to it keeps none. At the player's own month, records no port of the kind still asks for go.
+ *
+ * Only a hold the switch saw begin has a month (the UI director's 23:50Z, item 5): at the switch's first look (no
+ * `portWatch` yet: as it is turned on, setPortStores, or at the first month it reads the seas), a sea already shut
+ * keeps 0, and keeps it while it stays shut; once open and shut again, it keeps that month.
  */
 function holdsMonth(g: Game, sweep: boolean): void {
   const me = g.human!;
+  const first = g.flags[WATCH] === undefined;
+  g.flags[WATCH] ??= g.turn;
   const want = new Set<string>();
   for (const r of g.regions) {
     if (!watched(g, r) || !atWar(g, me, r.ctrl)) continue;
@@ -482,7 +506,7 @@ function holdsMonth(g: Game, sweep: boolean): void {
       if (want.has(k)) continue;
       want.add(k);
       if (!closedTo(g, z, r.ctrl)) delete g.flags[k];
-      else if (g.flags[k] === undefined) g.flags[k] = g.turn;
+      else if (g.flags[k] === undefined) g.flags[k] = first ? 0 : g.turn;
     }
   }
   if (sweep) for (const k of Object.keys(g.flags)) if (k.startsWith('seaShut:') && !want.has(k)) delete g.flags[k];
