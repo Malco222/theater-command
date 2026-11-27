@@ -158,7 +158,8 @@ describe("the player's offer stays in the list for the same half year as the com
       // Room on Formosa in month 15: the player is offered it in that month, the computer forms it in that month.
       for (const c of g.corps.filter((x) => /^Test filler Taihoku/.test(x.name) && !x.dead)) removeCorps(g, c);
       month(g, 15);
-      const then = human ? [offer(g, FIFTH)?.since, offer(g, FIFTH)?.why, row(g, FIFTH)] : [g.flags[`sent:${fifthId}`], g.regions[row(g, FIFTH)!.reg].name, offer(g, FIFTH)];
+      const formed = row(g, FIFTH);
+      const then = human ? [offer(g, FIFTH)?.since, offer(g, FIFTH)?.why, formed] : [g.flags[`sent:${fifthId}`], formed && g.regions[formed.reg].name, offer(g, FIFTH)];
       return [human, seen, told, then];
     };
     const unstruck = Array.from({ length: 14 }, (_, k) => [k + 1, undefined, undefined, undefined, true]);
