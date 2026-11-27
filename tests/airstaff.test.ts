@@ -105,8 +105,11 @@ describe('what a raid costs in the grand campaign', () => {
     expect(escorted.E).toBeLessThan(550);
     // The escorted raid's band of bomberLoss 0.03 to 0.08 (written by 7eb46e713, Version 50) is RETIRED by the design
     // director's ruling of 27 Nov 2026 07:59Z, in her words: "no source, 227 bands escorts only for 1943-45, and the
-    // historian calls a 1939 escorted raid counterfactual. A band with no record is a knob." The read behind it:
-    // air-rules/price-once-ruhr-1127/READ-AIRSTAFF-106.md. The escort's strength above stays pinned; its saving is not.
+    // historian calls a 1939 escorted raid counterfactual. A band with no record is a knob." Her ruling:
+    // air-rules/price-once-ruhr-1127/DD-0759-CALLS-1-4-5-RULED.md. The historian's line it leans on:
+    // air-battles/realism/review-historian.md:91 (of a German escorted raid over Alsace in 1939). The read behind it:
+    // air-rules/price-once-ruhr-1127/READ-AIRSTAFF-106.md. The escort's strength above stays pinned; its saving is no
+    // longer pinned in this file.
     // By night few fighters find the bombers.
     const night = assessAir(g, [b], 'night', target);
     expect(night.bomberLoss).toBeGreaterThan(0);
