@@ -624,6 +624,20 @@ export function pocketSpentAt(g: Game, r: Region, next: number): number | null {
   return next + Math.max(0, Math.ceil((10 * storesOf(g, town) - (g.flags[`pkte:${r.id}`] ?? 0)) / bite) - 1);
 }
 
+/**
+ * Read only (release 2, portcut.ts, the UI director's 12:24Z, item 3): true where the next opening of the holder's
+ * month would find the province cut off from the rest of its country and record its pocket (pocketMonth's own test, as
+ * the month stands): its holder alive and at war, no enemy round the town, the roads out of a few provinces all held
+ * by the enemy, no ship of its own able to come in, and a depot or a harbour of its side to live on.
+ */
+export function pocketDue(g: Game, r: Region): boolean {
+  if (!siegeRules(g)) return false;
+  const nat = r.ctrl, n = g.nations[nat];
+  if (!n || !n.alive || !n.atWar.length || besieged(g, r)) return false;
+  const pocket = cutOffAt(g, nat, r, g.regions.reduce((s, x) => s + (x.owner === nat ? 1 : 0), 0));
+  return !!pocket && !!larder(g, nat, pocket) && pocket.some((id) => { const x = g.regions[id]; return depotOf(g, nat, x) || (x.port && allied(g, nat, x.ctrl)); });
+}
+
 // ---- Into the town and out of it ----------------------------------------------------------------
 
 /** Puts a corps on the town's list. The caller has already taken it off whatever list it was on. */

@@ -1313,8 +1313,11 @@ describe('03:13Z, item 2: a crew lost in battle, the count on the rule\'s own cl
       BEFORE(17), BEFORE(18), BEFORE(19),
       // April, read after the battle: Britain's draw, before it, fed the 9th on the crew's stores for April. The draws
       // after it read the port's own two: no month after April is fed. (Without the record, the build's count said here
-      // that the stores were spent, of a garrison fed this month.)
-      [20, true, 1, false, [], [STORES_G('April', 'July'), REMEDY_G('through June')], LIVING_G('April')],
+      // that the stores were spent, of a garrison fed this month.) Spain is at war beside it and the ring is due to close
+      // at Britain's next month, with no record yet: the card and the corps line take the "by" form, hungry by May and
+      // lost by the start of July, as it is (the UI director's 12:24Z, item 3; the 05:03Z build read "lives on the port's
+      // stores through April; ... lost at the start of July." and "Living on Gibraltar's stores through April.").
+      [20, true, 1, false, [], [`${HELD_G} Unless the sea is opened, the garrison is hungry by May and lost by the start of July.`, REMEDY_G('through June')], 'Living on Gibraltar\'s stores: hungry by May, and lost by the start of July unless ships get through.'],
       // May: Spain at war beside it, the ring closes as Britain's month opens with the pocket's four months to run; the
       // port's window, spent in April, decides, and the port keeps every line on its own clock (the UI director's 12:24Z,
       // item 1). (The 05:03Z build had no line here, of a corps going hungry.)
@@ -1512,12 +1515,13 @@ describe('12:24Z, items 1 and 2: a port in its holder\'s pocket is left to the p
    * pocketMonth), whose own lines tell the player both roads and ships ("Gibraltar is surrounded: no road and no ship
    * reaches it ..."). A pocket takes supply away only once its stores are spent (game.ts computeSupply, pocketDry): until
    * then the corps there are fed from the port's window alone. A British 9th Corps in the town and the 10th to the 13th
-   * in the field, and with `ally` a 1st Canadian Corps; the stores filled by a real draw in December 1940 (turn 16); Italy
-   * and Germany at war with Britain (and Canada), France's fleet in harbour, and Italy's 1st Fleet in the Western
+   * in the field, and with `ally` a 1st Canadian Corps (or a 1st French Corps); the stores filled by a real draw in
+   * December 1940 (turn 16); Italy and Germany at war with Britain (and Canada, or Italy with France), France's fleet in
+   * harbour, and Italy's 1st Fleet in the Western
    * Mediterranean and her 2nd off the Iberian coast. Spain at war from the first, or from her month `war`. The switch as
    * asked, and the player's seat (Italy's seeing Gibraltar whole).
    */
-  function pocketed(forts: boolean, on = true, human = 'UK', opts: { war?: number; ally?: boolean } = {}): { g: Game; gib: number; town: Corps; field: Corps[]; ally: Corps | null } {
+  function pocketed(forts: boolean, on = true, human = 'UK', opts: { war?: number; ally?: 'CAN' | 'FRA' } = {}): { g: Game; gib: number; town: Corps; field: Corps[]; ally: Corps | null } {
     const g = grand(human, on, forts);
     if (human === 'ITA') g.flags.nofog = 1;
     const r = g.byName.Gibraltar;
@@ -1525,12 +1529,13 @@ describe('12:24Z, items 1 and 2: a port in its holder\'s pocket is left to the p
     r.units.splice(r.units.indexOf(town), 1);
     joinTown(g, r, town);
     const field = ['10th Corps', '11th Corps', '12th Corps', '13th Corps'].map((n) => addCorps(g, 'UK', n, 'inf', 2, 'Gibraltar', {}));
-    const ally = opts.ally ? addCorps(g, 'CAN', '1st Canadian Corps', 'inf', 2, 'Gibraltar', {}) : null;
-    if (opts.war === undefined) { declareWar(g, 'ESP', 'UK'); if (ally) declareWar(g, 'ESP', 'CAN'); }
+    const ally = opts.ally ? addCorps(g, opts.ally, opts.ally === 'CAN' ? '1st Canadian Corps' : '1st French Corps', 'inf', 2, 'Gibraltar', {}) : null;
+    if (opts.war === undefined) { declareWar(g, 'ESP', 'UK'); if (ally) declareWar(g, 'ESP', ally.nat); }
     g.turn = 16;
     g.supplyDirty = true;
     computeSupply(g);
-    for (const nat of ally ? ['UK', 'CAN'] : ['UK']) { declareWar(g, 'ITA', nat); declareWar(g, 'GER', nat); }
+    for (const nat of opts.ally === 'CAN' ? ['UK', 'CAN'] : ['UK']) { declareWar(g, 'ITA', nat); declareWar(g, 'GER', nat); }
+    if (opts.ally === 'FRA' && !g.nations.FRA.atWar.includes('ITA')) declareWar(g, 'ITA', 'FRA');
     for (const f of g.fleets) if (f.nat === 'FRA') f.stance = 'port';
     sail(g, 'ITA', 'wmed', ['1st Fleet']);
     sail(g, 'ITA', 'iberia', ['2nd Fleet']);
@@ -1681,7 +1686,7 @@ describe('12:24Z, items 1 and 2: a port in its holder\'s pocket is left to the p
   });
 
   it('a Canadian corps in the British pocket, Canada\'s player: the pocket decides for the British corps, and his own corps keeps the port\'s card, news and corps line on the port\'s clock, the crew\'s 16 months, until it is struck off in June 1942; Britain, the pocket\'s nation, reads none of them (the UI director\'s 12:24Z, items 1 and 2)', () => {
-    const { g, gib, town, ally } = pocketed(true, true, 'CAN', { ally: true });
+    const { g, gib, town, ally } = pocketed(true, true, 'CAN', { ally: 'CAN' });
     const canadian = ally!;
     const rows: unknown[] = [];
     for (let t = 16; t <= 40 && !canadian.dead; t++) {
@@ -1714,6 +1719,42 @@ describe('12:24Z, items 1 and 2: a port in its holder\'s pocket is left to the p
       // Struck off as June opens, the month every line named: the rule's own line of the surrender stands, and the
       // struck-off line gives way to it (the UI director's 23:50Z, item 4).
       [34, true, null, ['Cut off and out of supply, 1st Canadian Corps lays down its arms at Gibraltar.'], [], null, [], null],
+    ]);
+  });
+
+  it('12:24Z, item 3: the month a ring is due to close, France\'s player reading before Britain\'s month: siege\'s cut-off test holds and no record stands yet, so his card and the corps lines take the "by" form, the latest at both ends; from the reading that first sees the record, items 1 and 2 rule', () => {
+    // (Under the fortress rows, a 1st French Corps beside the British corps; Spain comes into the war in her January
+    // 1941, after Britain's month, and the ring closes as Britain's February opens. France's month comes before
+    // Britain's.)
+    const { g, gib, town, ally } = pocketed(true, true, 'FRA', { war: 17, ally: 'FRA' });
+    const french = ally!;
+    expect(g.order.indexOf('FRA')).toBeLessThan(g.order.indexOf('UK'));
+    const rows: unknown[] = [];
+    for (let t = 16; t <= 19; t++) {
+      const h0 = g.headlines.length;
+      month(g, t, ['GER', 'ITA', 'FRA']);
+      // (France's player reads in his own month; the 9th's line beside his corps'.)
+      rows.push([t, g.flags[`pkt:${gib}`] !== undefined, g.headlines.slice(h0).map((h) => h.text).filter((x) => OURS.test(x)), texts(portCardLines(g, gib, 'FRA')), portCorpsLine(g, french), portCorpsLine(g, town)]);
+      phase(g, 'UK');
+      if (t === 17) { g.nations.ESP.align = 'axis'; declareWar(g, 'ESP', 'UK'); declareWar(g, 'ESP', 'FRA'); }
+      phase(g, 'ESP');
+    }
+    const HELD = 'Cut off by sea: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast, and no ship reaches the harbour.';
+    const STORES = `${HELD} The garrison lives on the port's stores through April 1942; unless the sea is opened, it then goes hungry and is lost at the start of July 1942.`;
+    const REMEDY = (through: string): string => `A fleet of yours at sea there, strong enough to open the Western Mediterranean or the waters off the Iberian coast, lets the ships in and fills the stores: one such month feeds the garrison through ${through}.`;
+    const LIVING = 'Living on Gibraltar\'s stores through April 1942.';
+    expect(rows).toEqual([
+      [16, false, [], ['Cut off by sea, its stores would feed the garrison for 16 months.'], null, null],
+      [17, false, ['No ship reaches Gibraltar: Italian fleets hold the Western Mediterranean and the waters off the Iberian coast. The garrison lives on the port\'s stores through April 1942; unless the sea is opened, it then goes hungry and is lost at the start of July 1942.'], [STORES, REMEDY('May 1942')], LIVING, LIVING],
+      // February: Spain at war since her January, the ring due to close at Britain's month, after his. The pocket's seven
+      // months will starve the British corps from September 1941 and strike them off as November opens; the port's
+      // window, his own corps' clock, feeds them through April 1942. Both are within the bounds. (The 05:03Z build read
+      // "The garrison lives on the port's stores through April 1942; ... lost at the start of July 1942.", eight and eight
+      // months late for the British corps.)
+      [18, false, [], [`${HELD} Unless the sea is opened, the garrison is hungry by May 1942 and lost by the start of July 1942.`, REMEDY('June 1942')], 'Living on Gibraltar\'s stores: hungry by May 1942, and lost by the start of July 1942 unless ships get through.', 'Living on Gibraltar\'s stores: hungry by May 1942, and lost by the start of July 1942 unless ships get through.'],
+      // March: the record stands, and the pocket decides for the British corps: France reads of his own, on the port's
+      // clock, and the 9th's line is the pocket's.
+      [19, true, [], [STORES, REMEDY('July 1942')], LIVING, null],
     ]);
   });
 

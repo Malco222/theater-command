@@ -74,7 +74,7 @@ import { MORALE, moraleRules } from './morale';
 import { NAVY, SeaPicture, canPass, closedTo, fleetReach, inPassage, openSeas, seaSide, seaStarts, shipCount } from './navy';
 import { skiesOver } from './pacific';
 import { seaWhat } from './sea-words';
-import { fieldCtrl, pocketDry, pocketNat, pocketSpentAt, siegeRules } from './siege';
+import { fieldCtrl, pocketDry, pocketDue, pocketNat, pocketSpentAt, siegeRules } from './siege';
 import { witherAt } from './wither';
 import { farOn } from './world';
 import type { Corps, Game, Region } from './types';
@@ -227,9 +227,10 @@ export interface PortCut {
   lost: number | null;
   /**
    * True where `lost` is only the latest month the first loss can come: something the count leaves out as the month
-   * stands (a treasury in debt, a corps that cannot count its month as rested) can bring it sooner. Its lines then say
-   * "by the start of", and otherwise "at the start of" (the UI director's 23:50Z, item 6). Null for the shutting side,
-   * whose count is always only the latest (it cannot see the garrison's order): its line says "by".
+   * stands (a treasury in debt, a corps that cannot count its month as rested, a ring due to close: `due`) can bring it
+   * sooner. Its lines then say "by the start of", and otherwise "at the start of" (the UI director's 23:50Z, item 6).
+   * Null for the shutting side, whose count is always only the latest (it cannot see the garrison's order): its line
+   * says "by".
    */
   lostBy: boolean | null;
   /** Each corps of the garrison that the rule would strike off from hunger, with its month. */
@@ -242,6 +243,14 @@ export interface PortCut {
    * who is not the pocket's nation reads of his own corps there, on the port's clock (item 2).
    */
   pocket: boolean;
+  /**
+   * True where the ring round the port is due to close this month: siege's cut-off test holds for it (siege.ts
+   * pocketDue, read only) and no record of the holder's pocket stands yet, so that a reader cannot see the record the
+   * holder's next opening will write (the UI director's 12:24Z, item 3). The pocket can only bring the hunger and the
+   * loss sooner, so every month the port's clock names is the latest it can come, whether the ring closes or not: the
+   * lines say "by", "hungry by" for the month the stores feed the garrison no longer.
+   */
+  due: boolean;
   // ---- The shutting side, from its own sight only (null for the holder's side) ----
   /** The month its side's hold on the port's seas began, as its own fleets and aircraft know it. */
   heldSince: number | null;
@@ -657,7 +666,7 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
     // whether his lanes reached the sea at them, say when his ships last got in.)
     const heldHungry = since === null || keep === null ? null : heldFed(g, r, since, keep) + 1;
     return {
-      region: r.id, holder, keep, shut, side: 'shutting', state: null, cut: false, lastFilled: null, feedsTo: null, hungry: null, refill: null, lost: null, lostBy: null, garrison: [], fleetInReach: null, pocket: false,
+      region: r.id, holder, keep, shut, side: 'shutting', state: null, cut: false, lastFilled: null, feedsTo: null, hungry: null, refill: null, lost: null, lostBy: null, garrison: [], fleetInReach: null, pocket: false, due: false,
       heldSince: since, heldHungry, heldLost: heldHungry === null ? null : heldHungry + hungryRun() - 1,
     };
   }
@@ -677,6 +686,8 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
   // The rule's own view, the struck-off news's, reads every corps the pocket does not decide for.)
   const pocket = pocketRules(g, r, fedFor(holder));
   if (pocket && viewer === holder) return null;
+  // (The ring due to close this month, its record not yet written: item 3.)
+  const due = pocketNat(g, r) !== holder && pocketDue(g, r);
   // (Each corps' month, and the soonest it can come: the first loss is "by" its month where any corps of the garrison
   // can be lost before it.)
   const corps = garrisonOf(g, r).filter((c) => !pocket || (c.nat !== holder && (viewer === null || c.nat === viewer)));
@@ -690,10 +701,10 @@ export function portCutOff(g: Game, regionId: number, viewer: string | null, unc
     hungry: feedsTo !== null ? feedsTo + 1 : g.turn,
     refill: refillTo(g, r, corps.length ? [...new Set(corps.map((c) => c.nat))] : [holder], uncharged),
     lost,
-    lostBy: lost !== null && counts.some((x) => x.soonest < lost),
-    garrison: counts.map((x) => ({ id: x.id, lost: x.lost, by: x.soonest < x.lost, fed: x.fed })),
+    lostBy: lost !== null && (due || counts.some((x) => x.soonest < lost)),
+    garrison: counts.map((x) => ({ id: x.id, lost: x.lost, by: due || x.soonest < x.lost, fed: x.fed })),
     fleetInReach: shut.length ? fleetFor(g, holder, shut.map((s) => s.sea)) : false,
-    pocket,
+    pocket, due,
     heldSince: null, heldHungry: null, heldLost: null,
   };
 }
@@ -783,7 +794,9 @@ export function portCardLines(g: Game, regionId: number, viewer: string | null, 
   if (f.state === 'filled') return [{ text: theWords(`Cut off by sea, its stores would feed the garrison for ${least ? `at least ${months(f.refill! - g.turn)}` : months(keep)}.`), tone: 'note' }];
   if (!f.cut) return [];
   const out: PortLine[] = [];
-  if (f.state === 'stores') out.push({ text: theWords(`Cut off by sea: ${heldSaid(g, f.shut, viewer, false)}, and no ship reaches the harbour. The garrison lives on the port's stores through ${monthSaid(g, f.feedsTo!)}; unless the sea is opened, it then goes hungry and is lost ${startOf(f.lostBy)} ${monthSaid(g, f.lost)}.`), tone: 'warn' });
+  // (A ring due to close this month: the "by" form, the latest at both ends, the UI director's 12:24Z, item 3.)
+  if (f.state === 'stores' && f.due) out.push({ text: theWords(`Cut off by sea: ${heldSaid(g, f.shut, viewer, false)}, and no ship reaches the harbour. Unless the sea is opened, the garrison is hungry by ${monthSaid(g, f.hungry!)} and lost by the start of ${monthSaid(g, f.lost)}.`), tone: 'warn' });
+  else if (f.state === 'stores') out.push({ text: theWords(`Cut off by sea: ${heldSaid(g, f.shut, viewer, false)}, and no ship reaches the harbour. The garrison lives on the port's stores through ${monthSaid(g, f.feedsTo!)}; unless the sea is opened, it then goes hungry and is lost ${startOf(f.lostBy)} ${monthSaid(g, f.lost)}.`), tone: 'warn' });
   else out.push({ text: theWords(`Cut off by sea, and the port's stores are spent: the garrison goes hungry, losing order every month, and is lost ${startOf(f.lostBy)} ${monthSaid(g, f.lost)} unless the sea is opened.`), tone: 'bad' });
   // (One sea opened is enough: the quay is open where any sea of the port is in the holder's lanes. With several shut,
   // the seas whose opening joins his lanes are named, joined by "or".)
@@ -842,6 +855,8 @@ export function portCorpsLine(g: Game, c: Corps): string | null {
   // comes after a crew starves is still drawn as fed by Britain's, with the crew living, and its own draw will not feed
   // it. Hungry by the clock, it reads hungry.)
   const fed = mine.fed !== null && mine.fed >= g.turn;
+  // (A ring due to close this month: the "by" form, the UI director's 12:24Z, item 3.)
+  if (fed && f.due) return theWords(`Living on ${port}'s stores: hungry by ${monthSaid(g, mine.fed! + 1)}, and lost by the start of ${monthSaid(g, mine.lost)} unless ships get through.`);
   return fed
     ? theWords(`Living on ${port}'s stores through ${monthSaid(g, mine.fed!)}.`)
     : theWords(`Hungry: ${port}'s stores are spent. Lost ${startOf(mine.by)} ${monthSaid(g, mine.lost)} unless ships get through.`);
@@ -932,8 +947,10 @@ export function portsMonth(g: Game, nat: string): void {
     // (Read for him: in his holder's pocket, of his own corps there, items 1 and 2.)
     const f = portCutOff(g, r.id, me, me);
     if (!f || !f.cut || f.lost === null) continue;
-    // (The mark keeps the month the first of the port's cut-off news was told: the relief is read from it.)
-    if (f.state === 'stores' && f.lastFilled === g.turn - 1) {
+    // (The mark keeps the month the first of the port's cut-off news was told: the relief is read from it. In the month a
+    // ring is due to close, its "through" and "at" cannot be given, and the marks give the news no "by" form (the UI
+    // director's 12:24Z, item 3, for the card and the corps line): it is not told.)
+    if (f.state === 'stores' && f.lastFilled === g.turn - 1 && !f.due) {
       headline(g, 'info', `No ship reaches ${portOf(r)}: ${heldSaid(g, f.shut, null, false)}. The garrison lives on the port's stores through ${monthSaid(g, f.feedsTo!)}; unless the sea is opened, it then goes hungry and is lost ${startOf(f.lostBy)} ${monthSaid(g, f.lost)}.`, r.ctrl, r.id, { lost: r.ctrl });
       g.flags[k] ??= g.turn;
     } else if (f.state === 'hungry' && spentDue(g, f, told, g.flags[ks])) {
