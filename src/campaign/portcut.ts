@@ -913,8 +913,9 @@ function holdsMonth(g: Game, sweep: boolean): void {
  * startPhase): the record of the holds; the relief of a port whose cut-off was told; and at the player's own month,
  * before his corps are charged, the first month no ship gets in and the month the stores run out (after the relief,
  * where it is told in the same reading: relieved and shut again in one month). Once each: the first by the clock (the
- * month after the last fill), or once at the reading after a ring that held the port's lines from its holder breaks
- * with the sea still shut (the UI director's 12:24Z, item 7); the second by the clock too (the first month the stores
+ * month after the last fill; in the "by" form where a ring is due to close that month, the UI director's 13:23Z, item
+ * a), or once at the reading after a ring that held the port's lines from its holder breaks with the sea still shut
+ * (the UI director's 12:24Z, item 7); the second by the clock too (the first month the stores
  * feed none), or, where the larder was never the holder's, the first month it is told. Only to a player who holds the
  * port or has corps there, and to its holder not while it is left to his pocket (12:24Z, item 1). Nothing with the
  * switch off, or with nobody at the table.
@@ -964,10 +965,13 @@ export function portsMonth(g: Game, nat: string): void {
     const f = portCutOff(g, r.id, me, me);
     if (!f || !f.cut || f.lost === null) continue;
     // (The mark keeps the month the first of the port's cut-off news was told: the relief is read from it. In the month a
-    // ring is due to close, its "through" and "at" cannot be given, and the marks give the news no "by" form (the UI
-    // director's 12:24Z, item 3, for the card and the corps line): it is not told.)
-    if (f.state === 'stores' && (f.lastFilled === g.turn - 1 || broken) && !f.due) {
-      headline(g, 'info', `No ship reaches ${portOf(r)}: ${heldSaid(g, f.shut, null, false)}. The garrison lives on the port's stores through ${monthSaid(g, f.feedsTo!)}; unless the sea is opened, it then goes hungry and is lost ${startOf(f.lostBy)} ${monthSaid(g, f.lost)}.`, r.ctrl, r.id, { lost: r.ctrl });
+    // ring is due to close, its "through" and "at" cannot be given: the news takes the "by" form, the latest at both
+    // ends, as the card and the corps line do (the UI director's 12:24Z, item 3), and is told once, as the first-month
+    // news is, in the month after the fill (13:23Z, item a).)
+    if (f.state === 'stores' && (f.lastFilled === g.turn - 1 || broken)) {
+      headline(g, 'info', f.due
+        ? `No ship reaches ${portOf(r)}: ${heldSaid(g, f.shut, null, false)}. Unless the sea is opened, the garrison is hungry by ${monthSaid(g, f.hungry!)} and lost by the start of ${monthSaid(g, f.lost)}.`
+        : `No ship reaches ${portOf(r)}: ${heldSaid(g, f.shut, null, false)}. The garrison lives on the port's stores through ${monthSaid(g, f.feedsTo!)}; unless the sea is opened, it then goes hungry and is lost ${startOf(f.lostBy)} ${monthSaid(g, f.lost)}.`, r.ctrl, r.id, { lost: r.ctrl });
       g.flags[k] ??= g.turn;
     } else if (f.state === 'hungry' && spentDue(g, f, told, g.flags[ks])) {
       headline(g, 'info', `${PortOf(r)}'s stores are spent and no ship has got through: the garrison goes hungry, and is lost ${startOf(f.lostBy)} ${monthSaid(g, f.lost)} unless the sea is opened.`, r.ctrl, r.id, { lost: r.ctrl });
