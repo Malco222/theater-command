@@ -6,6 +6,7 @@ import { flagDefs, flagIcon, flagUse } from './flags';
 import { ORDER_SIGN, ORDER_STAR } from './ordersigns';
 import { cardSeen, markFor, monthCard, monthOrders, opensCampaign, type MonthCard, type MonthMark } from '../monthcard';
 import { arrivalWaitOf } from '../arrivalwaits';
+import { portCardLines, portCorpsLine, setPortStores } from '../portcut';
 import { gunsAlone, homeAlarms, termsCard, warHome } from '../danger';
 import { monthCardHtml } from './monthview';
 import { footingCard, footingStrip } from './footingui';
@@ -89,7 +90,7 @@ import { nearX, ringStretch, wrapSpan } from '../wrap';
 import { WORLD, beyondEurope, closedGround, lakesOf, motherLine, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, gunsTo, shippingWords, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
 import { resultFor, strafedLine, type StrafeSection } from '../strafers';
-import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
+import { seaFigure, seaMeasure, whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import { ON_CAMPAIGN, landTicket, staffOnly } from '../../battle/land';
 import { fieldOpen, fightOnField } from '../../battle/ui/page';
@@ -2519,10 +2520,12 @@ function unitCard(c: Corps, mine: boolean): string {
   const resting = card.mood.resting && c.nat === g.human && (c.str < 0.97 || c.org < 0.9 || (card.mood.morale ?? 1) < 0.7) ? `<span class="tag good" title="${esc(REST_RULE)}">Resting</span>` : '';
   // (The telling: a corps of his at the front that a waiting arrival is to be formed from, arrivalwaits.ts.)
   const waits = mine ? arrivalWaitOf(g, c) : null;
+  // (Release 2, portcut.ts: a corps of his in a port cut off by sea, living on its stores or hungry. Nothing with the switch off.)
+  const port = mine ? portCorpsLine(g, c) : null;
   const flags = `${mine ? marchTag(c) : ''}${c.school && mine ? '<span class="tag good" title="At the battle schools this month: it takes no orders, and comes back a grade better if it is left in peace.">At battle school</span>' : resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digging ? '<span class="tag" title="Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.">Digging</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
   return `<${el} class="ucard corpsbox${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" style="--n:${c.divs}" ${can && !onlyCorps(c) ? `data-act="pick" data-id="${c.id}"` : can ? 'aria-current="true"' : ''} title="${esc(c.name)}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men">
     <span class="utop"><b>${esc(c.name)}</b>${pips}</span>${idle ? `<span class="noorders">${esc(idle)}</span>` : ''}
-    <span class="um vet">${c.joint ? `${chip(c.nat)} ${esc(g.nations[c.nat].adj)} · ` : ''}${esc(card.service)}${gen ? ` · ${esc(surname(gen.name))}` : ''}${c.leave !== undefined ? ' · at home' : ''} ${ribbons(c, 3)}</span>${waits ? `<span class="um" style="color:var(--ink-3)" title="${esc(waits.whole)}">${esc(waits.short)}</span>` : ''}
+    <span class="um vet">${c.joint ? `${chip(c.nat)} ${esc(g.nations[c.nat].adj)} · ` : ''}${esc(card.service)}${gen ? ` · ${esc(surname(gen.name))}` : ''}${c.leave !== undefined ? ' · at home' : ''} ${ribbons(c, 3)}</span>${waits ? `<span class="um" style="color:var(--ink-3)" title="${esc(waits.whole)}">${esc(waits.short)}</span>` : ''}${port ? `<span class="um" style="color:var(--ink-3)">${esc(port)}</span>` : ''}
     <span class="chits">${card.divisions.map((d) => chit(d)).join('')}</span>${carryRow(c)}
     ${moodMeters(c, card.mood)}${flags ? `<span class="tags">${flags}</span>` : ''}</${el}>`;
 }
@@ -3866,6 +3869,16 @@ function pocketNote(r: Region): string {
   return `<div class="note ${v.spent ? 'bad' : 'warn'} pocketnote"><b>${v.spent ? 'Cut off, and the stores are spent' : `Cut off since ${date(v.since)}: stores for ${monthsWord(v.left)}`}.</b> ${esc(v.text)}${tail}</div>`;
 }
 
+/**
+ * (Release 2, portcut.ts) A fortified port overseas whose sea is shut: to the player's side, the stores it lives on, the
+ * month they run out and the month its garrison is lost, and what opens the sea; to the side that shuts it, how long it
+ * has held the sea. Nothing with the switch off.
+ */
+function portNote(r: Region): string {
+  // (The browser's card follows the remedy line with the sea card's measure for this seat: the UI director's 23:50Z, item 3.)
+  return portCardLines(g, r.id, g.human, { measure: true }).map((l) => `<div class="note${l.tone === 'note' ? '' : ` ${l.tone}`}">${esc(l.text)}</div>`).join('');
+}
+
 function siegeBlock(r: Region): string {
   const v = townSiege(g, r.id);
   if (!v) return '';
@@ -4078,7 +4091,7 @@ function regionPane(): string {
   const inView = r.units.filter((c) => inFull(r, c.nat));
   const veiled = r.units.length - inView.length;
   const units = (inView.length ? knownRows(r, [...inView].sort((a, b) => (a.nat === me ? 0 : 1) - (b.nat === me ? 0 : 1))) : veiled || (fogOn(g) && seen[r.id] === 0) ? '' : guardLine(r)) + fogNote(r);
-  return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>${townLine(r)}${dirLine(r)}${vowLine(r)}${pocketNote(r)}${leftWorksNote(r)}${siegeBlock(r)}${freeNote(r)}${standingNote(r)}
+  return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>${townLine(r)}${dirLine(r)}${vowLine(r)}${pocketNote(r)}${portNote(r)}${leftWorksNote(r)}${siegeBlock(r)}${freeNote(r)}${standingNote(r)}
     <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}${railNote(g, r.id)?.ruined ? ` <small style="color:#f0b3a5;font-weight:500">${railNote(g, r.id)!.ruined} in ruins</small>` : ''}</b></div></div>
     ${tags.length ? `<div class="tags" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${tags.join('')}</div>` : ''}
     ${prizeBlock(r)}${placesBlock(r)}${groundBlock(r)}${riverBlock(r)}${railBlock(r)}${provinceWorth(r)}${repairBlock(r)}${oilNote(r)}${provinceSlots(r)}${townPlots(r)}
@@ -6172,11 +6185,13 @@ function seaPane(): string {
   const docked = g.fleets.filter((f) => f.home === z.id && !atSea(f) && afloat(f) && shown(f));
   let head: string;
   if (me && g.nations[me].atWar.length) {
-    const us = seaSide(g, z.id, me, false), them = seaSide(g, z.id, me, true);
-    const theirs = pic ? pic.theirs : them.total;
+    // (Its two figures, yours and the enemy's as found, are the sea's measure for this seat, which the port's card reads
+    // too: carriers.ts seaMeasure.)
+    const us = seaSide(g, z.id, me, false), them = seaSide(g, z.id, me, true), m = seaMeasure(g, z.id, me)!;
+    const theirs = m.theirs;
     const loss = Math.round(seaRisk(g, z.id, me) * NAVY.intercept.loss * 100);
     head = `<div class="sub">${closedTo(g, z.id, me) ? 'Closed to your troopships and supply ships: the enemy is much the stronger here.' : theirs >= 1 ? 'Contested, but still open to your shipping.' : 'Open to your shipping.'}</div>
-      <div class="facts"><div class="fact"><span>Your side</span><b>${num(us.total)}</b></div><div class="fact"><span>The enemy${pic ? ', as found' : ''}</span><b>${num(theirs)}</b></div><div class="fact"><span>Lost crossing</span><b>${loss ? `about ${loss}%` : 'None'}</b></div></div>
+      <div class="facts"><div class="fact"><span>Your side</span><b>${seaFigure(m.ours)}</b></div><div class="fact"><span>The enemy${m.found ? ', as found' : ''}</span><b>${seaFigure(theirs)}</b></div><div class="fact"><span>Lost crossing</span><b>${loss ? `about ${loss}%` : 'None'}</b></div></div>
       <p class="sub" style="margin-top:6px">Strength counts the fleets at sea here and the aircraft that can reach this sea from the coasts each side holds${us.air + them.air >= 1 ? `: yours ${num(us.air)}, the enemy's ${num(them.air)}` : ''}. The last figure is the share of a corps likely to be lost if it crossed this sea now.</p>
       ${pic ? `<div class="note"><b>The search.</b> ${esc(pic.word)}.${pic.reported ? ` ${pic.reported} enemy force${pic.reported === 1 ? ' is' : 's are'} reported here and not identified: ${pic.reported === 1 ? 'its' : 'their'} strength is not counted above.` : ''} Ships and carriers here, carriers in the seas next door and aircraft from your coasts all search this sea. A group or a carrier wing can fly a search of it from the Air tab.</div>` : ''}`;
   } else head = `<div class="sub">${z.coast.length} coastal region${z.coast.length === 1 ? '' : 's'} on this sea.</div>`;
@@ -8705,6 +8720,9 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   if (grand && human) layNetwork(g, human);
   // The support teams (release 2, teams.ts): on in a grand campaign once release 2 opens them, or with ?teams.
   if (grand && (TEAMS_RELEASE || /[?&]teams(=|&|$)/.test(location.search))) setTeams(g, true);
+  // Ports cut off by sea tell of their stores (release 2, portcut.ts; words only): the page has no Options screen for the
+  // release 2 switches, so besides stage.json a grand campaign takes it from the address, with ?portstores.
+  if (grand && /[?&]portstores(=|&|$)/.test(location.search)) setPortStores(g, true);
   // Honours earned before the player took over are his to carry; their citations are old news.
   if (from > 1) takeOver(g);
   if (human) openGoals(g, human, from);

@@ -222,3 +222,7 @@ export const FLAKGROUND_STAGE: boolean = staged('TC_FLAKGROUND', 'flakGround');
 // until its screen passes the Mac (his 13:39Z of that day). Forced by TC_OFFERS.
 /** True where new grand campaigns open with the player's dated rows as offers (stage.json 'offers'). */
 export const OFFERS_STAGE: boolean = staged('TC_OFFERS', 'offers');
+// Ports cut off by sea tell of their stores (release 2; the UI director's words of 26 November 2026, 18:46Z; portcut.ts):
+// the grand campaigns opened while this is true carry the flag 'portStores'. Words only. Forced by TC_PORTSTORES.
+/** True where new grand campaigns open with ports cut off by sea telling of their stores (stage.json 'portStores'). */
+export const PORTSTORES_STAGE: boolean = staged('TC_PORTSTORES', 'portStores');

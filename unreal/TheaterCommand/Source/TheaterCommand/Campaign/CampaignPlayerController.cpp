@@ -415,6 +415,9 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 			// (Release 2, arrivalwaits.ts; the UI director's words of 25 November 2026 21:49Z, section 6, its close of 22:13Z) A dated arrival waits while its corps are at the front.
 			Add(TEXT("fromwaitrule"), TEXT("Arrivals wait while their corps are at the front"), TEXT("An arrival due on a date and formed from a corps already in the field, yours or any other side's, waits while that corps is at the front, and forms the month after the corps leaves it. Where an arrival is offered to you, you decide instead. Off, the corps is taken wherever it stands, as before. This changes the month some arrivals form. It works only in a grand campaign: from History's shape to Anything goes, and at By the book and Close to history once History's book has closed where the arrival is due. It can be switched on or off in any month."),
 				Now.bFromWait ? TEXT("ON") : TEXT("OFF"), Now.bFromWait);
+			// (Release 2, portcut.ts; the UI director's words of 26 November 2026 18:46Z, section 4) Ports cut off by sea tell of their stores.
+			Add(TEXT("portstores"), TEXT("Ports cut off by sea tell you of their stores"), TEXT("When the sea round one of your ports is shut, its news, its card and the cards of the corps there say whose ships or aircraft shut it, the month its stores run out, the month its garrison would be lost, and what opens the sea again. The side that shuts it sees on the port's card how long it has held that sea. Off: none of this is said, as before. Words only: no result changes."),
+				Now.bPortStores ? TEXT("ON") : TEXT("OFF"), Now.bPortStores);
 			// (Release 2, fleetwhy.ts) The admirals say why each fleet is where it is.
 			// (Release 2, rearguard.ts; Brian 24 November 2026 18:24Z) A small corps holds a province a month.
 			Add(TEXT("rearguardrule"), TEXT("Rearguards"), TEXT("A corps of two divisions or fewer (split one off a bigger corps) can be told to HOLD AS REARGUARD from its card: it stays where it stands until your next month while the rest of the army pulls back. An enemy army that attacks it there loses a week or two of its month, so it cannot follow as far, and with Units decide on it shields the troops falling back behind it from the pursuit. It can be switched in any month."),
@@ -774,14 +777,14 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		++Opening.Revision;
 		return; // (kept by the campaign, not with the options)
 	}
-	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("teamsrule") || Id == TEXT("fromwaitrule") || Id == TEXT("settledtownsrule") || Id == TEXT("townqueuerule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("ownwaterrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("beatreachrule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule") || Id == TEXT("airnames") || Id == TEXT("citydefencesrule"))
+	else if (Id == TEXT("nicknames") || Id == TEXT("columns") || Id == TEXT("fleetattackrule") || Id == TEXT("breakuprule") || Id == TEXT("marked") || Id == TEXT("taskforcerule") || Id == TEXT("fleetwhyrule") || Id == TEXT("rearguardrule") || Id == TEXT("teamsrule") || Id == TEXT("fromwaitrule") || Id == TEXT("portstores") || Id == TEXT("settledtownsrule") || Id == TEXT("townqueuerule") || Id == TEXT("rearbridgesrule") || Id == TEXT("shadowrule") || Id == TEXT("voyagelogrule") || Id == TEXT("sailorsrule") || Id == TEXT("ownwaterrule") || Id == TEXT("seaminesrule") || Id == TEXT("heavyseasrule") || Id == TEXT("shadowrelayrule") || Id == TEXT("seekoncerule") || Id == TEXT("beatreachrule") || Id == TEXT("atomrule") || Id == TEXT("carrierstrikerule") || Id == TEXT("wingbydaterule") || Id == TEXT("airnames") || Id == TEXT("citydefencesrule"))
 	{
 		// (Release 2) Earned names, fleet attacks and breaking corps up, in any month; supply columns, in the campaign's first month only (the rules say so if not).
 		if (FCampaignSession* Session = GetSession())
 		{
 			FString Note;
 			const FCampaignView& Now = Session->GetView();
-			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("airnames") ? Now.bAirNames : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("teamsrule") ? Now.bSupportTeams : Id == TEXT("fromwaitrule") ? Now.bFromWait : Id == TEXT("settledtownsrule") ? Now.bSettledTowns : Id == TEXT("townqueuerule") ? Now.bTownQueue
+			const bool bOn = Id == TEXT("nicknames") ? Now.bNickFlags : Id == TEXT("airnames") ? Now.bAirNames : Id == TEXT("fleetattackrule") ? Now.bFleetAttack : Id == TEXT("breakuprule") ? Now.bBreakUp : Id == TEXT("marked") ? Now.bMarkedOn : Id == TEXT("taskforcerule") ? Now.bTaskForce : Id == TEXT("fleetwhyrule") ? Now.bFleetWhy : Id == TEXT("rearguardrule") ? Now.bRearguard : Id == TEXT("teamsrule") ? Now.bSupportTeams : Id == TEXT("fromwaitrule") ? Now.bFromWait : Id == TEXT("portstores") ? Now.bPortStores : Id == TEXT("settledtownsrule") ? Now.bSettledTowns : Id == TEXT("townqueuerule") ? Now.bTownQueue
 				: Id == TEXT("rearbridgesrule") ? Now.bRearBridges : Id == TEXT("shadowrule") ? Now.bShadowRule : Id == TEXT("voyagelogrule") ? Now.bVoyageLog : Id == TEXT("sailorsrule") ? Now.bSailors : Id == TEXT("ownwaterrule") ? Now.bOwnWater
 				: Id == TEXT("seaminesrule") ? Now.bSeaMines : Id == TEXT("heavyseasrule") ? Now.bHeavySeas : Id == TEXT("shadowrelayrule") ? Now.bShadowRelay : Id == TEXT("seekoncerule") ? Now.bSeekOnce : Id == TEXT("beatreachrule") ? Now.bBeatReach : Id == TEXT("atomrule") ? Now.bAtomBomb : Id == TEXT("carrierstrikerule") ? Now.bCarrierStrike : Id == TEXT("wingbydaterule") ? Now.bWingByDate : Id == TEXT("citydefencesrule") ? Now.bCityDefences : Now.bColumnsOn;
 			if (Session->Act(FString::Printf(TEXT("%s:%s"), *Id, bOn ? TEXT("off") : TEXT("on")), INDEX_NONE, Note))
@@ -9288,6 +9291,7 @@ void ACampaignPlayerController::LayOutLook()
 			Card.Carry = Unit.Carry; // (Version 84: an identified corps' weapons are known with it)
 			Card.Nickname = FText::FromString(Unit.Nickname);
 			Card.Marked = Unit.Marked; // (release 2, the marked army)
+			Card.PortLine = Unit.PortLine; // (release 2, portcut.ts: sent for his own corps only)
 			Card.bNew = Unit.bReady && bReadyNotice; // (release 2, new units ready)
 			Card.Grade = FText::FromString(Unit.Grade.IsEmpty() ? FString() : FString::Printf(TEXT("%s, %d"), *Unit.Grade, Unit.Experience));
 			Card.Honours = Unit.Honours;
@@ -10178,6 +10182,7 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.Nickname = FText::FromString(Unit.Nickname);
 		Card.Grade = FText::FromString(Unit.Grade.IsEmpty() ? FString() : FString::Printf(TEXT("%s, %d"), *Unit.Grade, Unit.Experience));
 		Card.Honours = Unit.Honours;
+		Card.PortLine = Unit.PortLine; // (release 2, portcut.ts)
 		SchoolButtonOnCard(Card, Unit, View); // (release 2: the battle schools)
 		Tray.Cards.Add(Card);
 		Divisions += Unit.Divisions;
@@ -15298,6 +15303,7 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			RegionPanel.PocketTitle = FText::FromString(Province.PocketTitle);
 			RegionPanel.PocketText = FText::FromString(Province.PocketText);
 			RegionPanel.bPocketSpent = Province.bPocketSpent;
+			RegionPanel.PortCut = Province.PortCut; // (release 2, portcut.ts)
 			if (Province.SiegeLines.Num() > 0)
 			{
 				RegionPanel.SiegeTitle = FText::FromString(Province.SiegeBy.IsEmpty() ? FString(TEXT("THE TOWN AS A FORTRESS")) : FString::Printf(TEXT("BESIEGED BY %s"), *Province.SiegeBy.ToUpper()));

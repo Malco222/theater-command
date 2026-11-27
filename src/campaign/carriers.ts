@@ -652,6 +652,26 @@ export function seaPicture(g: Game, z: number, viewer: string): SeaPicture {
   return { zone: z, ours: us.total, theirs: ships + air, theirAir: air, reported, search: w, needReport: S.report * open, needFind: S.find * open, word };
 }
 
+/** A sea's two figures as its card gives them to a seat: its own side's strength, and the enemy's, `found` where that is the enemy as far as its side has found him. */
+export interface SeaMeasure { ours: number; theirs: number; found: boolean }
+
+/**
+ * The measure the browser's sea card shows a seat at war (ui/main.ts seaPane: "Your side" and "The enemy", ", as found"
+ * where the seas are searched), and the port's card follows its remedy line with (portcut.ts; the UI director's 23:50Z,
+ * item 3): its own side's strength in the sea, and the enemy's, as far as its side has found him where the carriers'
+ * rules search the seas (seaPicture), whole otherwise. Null where the card gives no figures: a seat that is not alive,
+ * or at war with nobody. Reads only.
+ */
+export function seaMeasure(g: Game, z: number, viewer: string): SeaMeasure | null {
+  const n = g.nations[viewer];
+  if (!n?.alive || !n.atWar.length) return null;
+  const found = carrierRules(g);
+  return { ours: seaSide(g, z, viewer, false).total, theirs: found ? seaPicture(g, z, viewer).theirs : seaSide(g, z, viewer, true).total, found };
+}
+
+/** A figure of the sea card as it prints it: rounded, its thousands marked ("1,250"). */
+export const seaFigure = num;
+
 // ---- A search flown from the planner --------------------------------------------------------------------
 
 const mineOnly = (g: Game, id: number, nat: string | null): AirFleet | null => {

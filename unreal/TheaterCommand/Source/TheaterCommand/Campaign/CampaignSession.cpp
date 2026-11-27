@@ -1343,6 +1343,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("rearguard"), Out.bRearguard); // (release 2, rearguard.ts)
 	Object->TryGetBoolField(TEXT("supportTeams"), Out.bSupportTeams); // (release 2, teams.ts)
 	Object->TryGetBoolField(TEXT("fromWait"), Out.bFromWait); // (release 2, arrivalwaits.ts)
+	Object->TryGetBoolField(TEXT("portStores"), Out.bPortStores); // (release 2, portcut.ts)
 	Object->TryGetBoolField(TEXT("rearBridges"), Out.bRearBridges); // (release 2, rearguard.ts)
 	Object->TryGetBoolField(TEXT("shadow"), Out.bShadowRule); // (release 2, shadow.ts)
 	Object->TryGetBoolField(TEXT("voyageLog"), Out.bVoyageLog); // (release 2, voyage.ts)
@@ -1978,6 +1979,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			}
 			Unit->TryGetStringField(TEXT("nick"), C.Nickname); // null until it has earned one
 			Unit->TryGetStringField(TEXT("mark"), C.Marked); // (release 2, the marked army) absent unless it took one of his towns
+			Unit->TryGetStringField(TEXT("portLine"), C.PortLine); // (release 2, portcut.ts) absent unless it stands in a port cut off by sea
 			Unit->TryGetBoolField(TEXT("ready"), C.bReady); // (release 2, new units ready) absent unless handed over as his month opened
 			C.Honours = ReadRibbons(Unit, TEXT("honours"));
 			{
@@ -3697,6 +3699,22 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 			(*Pocket)->TryGetStringField(TEXT("title"), Info.PocketTitle);
 			(*Pocket)->TryGetStringField(TEXT("text"), Info.PocketText);
 			(*Pocket)->TryGetBoolField(TEXT("spent"), Info.bPocketSpent);
+		}
+		// (Release 2, portcut.ts) A port cut off by sea: its card's lines, {text, tone} each. Absent with the switch off.
+		const TArray<TSharedPtr<FJsonValue>>* PortCut = nullptr;
+		if (Object->TryGetArrayField(TEXT("portCut"), PortCut))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *PortCut)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				FPortCutLine Line;
+				if (!Entry.IsValid() || !Entry->TryGetStringField(TEXT("text"), Line.Text) || Line.Text.IsEmpty())
+				{
+					continue;
+				}
+				Entry->TryGetStringField(TEXT("tone"), Line.Tone);
+				Info.PortCut.Add(MoveTemp(Line));
+			}
 		}
 	}
 	Object->TryGetStringField(TEXT("directive"), Info.DirectiveLine);

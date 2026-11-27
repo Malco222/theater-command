@@ -42,6 +42,7 @@ struct FRegionPanelInfo
 	FText LeftWorksTitle, LeftWorksText; // fieldworks standing empty here, and who can use them
 	FText PocketTitle, PocketText; // a province cut off from the rest of its country: what its troops live on, and for how long
 	bool bPocketSpent = false;
+	TArray<FPortCutLine> PortCut; // (release 2, portcut.ts) a port cut off by sea: its card's lines, each in its tone (none with the switch off)
 	FText PlacesTitle, PlacesText; // the places of the province that are prizes of their own, and scorched earth
 	FText DirectiveText; // a directive of the war cabinet that names this province
 	TArray<FProvinceOption> Options;
@@ -114,6 +115,9 @@ struct FTrayCard
 	// (Release 2, rearguard.ts) It can be ordered to hold as a rearguard now (bCanRear), or it holds as one (bRear).
 	bool bCanRear = false;
 	bool bRear = false;
+	// (Release 2, portcut.ts) A corps of his in a port cut off by sea: its stores or its hunger, in the rules' sentence,
+	// under the card's order line. Empty with the switch off.
+	FString PortLine;
 };
 
 /** One ship of the fleet in hand, as a card. */

@@ -156,6 +156,9 @@ struct FViewCorps
 	bool bRearKnown = false;
 	bool bRear = false;
 	FString RearWhy;
+	// (Release 2, portcut.ts; the UI director's 23:50Z, item 8) A corps of his in a port cut off by sea: living on the
+	// port's stores, or hungry, in the rules' sentence. Absent (empty) with the switch 'portstores' off.
+	FString PortLine;
 };
 
 /** Something the player has on order: a new corps forming up, or works being dug. */
@@ -1362,6 +1365,7 @@ struct FCampaignView
 	bool bRearguard = false; // (release 2, rearguard.ts) a small corps can be ordered to hold as a rearguard
 	bool bSupportTeams = false; // (release 2, teams.ts) machine-gun and mortar brigades can be raised, by every power
 	bool bFromWait = false; // (release 2, arrivalwaits.ts) a dated arrival formed from corps in the field waits while they are at the front
+	bool bPortStores = false; // (release 2, portcut.ts) ports cut off by sea tell of their stores (words only)
 	bool bRearBridges = false; // (release 2, rearguard.ts) a rearguard lays charges on the bridges behind it (the switch as set)
 	bool bShadowRule = false; // (release 2, shadow.ts) a fleet of cruisers can shadow an enemy fleet and report where it goes
 	bool bVoyageLog = false; // (release 2, voyage.ts) each fleet keeps a voyage log on its page
@@ -2169,6 +2173,13 @@ struct FTownOffer
 	FString QueueAfter;
 };
 
+/** (Release 2, portcut.ts) A line of a port's card when its sea is shut: its words, and its tone (warn, bad or note). */
+struct FPortCutLine
+{
+	FString Text;
+	FString Tone;
+};
+
 struct FProvinceInfo
 {
 	bool bValid = false;
@@ -2205,6 +2216,9 @@ struct FProvinceInfo
 	// (Version 63) A province cut off from the rest of its country: a heading, what its troops live on and for how long.
 	FString PocketTitle, PocketText;
 	bool bPocketSpent = false;
+	// (Release 2, portcut.ts; the UI director's 23:50Z, item 8) A port cut off by sea: its card's lines, each in its tone.
+	// Absent (empty) with the switch 'portstores' off, and for any other province.
+	TArray<FPortCutLine> PortCut;
 	// The places of the province that are prizes of their own (Version 56), in plain lines.
 	FString DirectiveLine; // a directive of the war cabinet that names this province, in a sentence
 	FString PlacesHead;

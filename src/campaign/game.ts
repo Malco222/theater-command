@@ -58,6 +58,7 @@ import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willB
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
 import { formedLine, joinedLine, nationDone, notFormedLine, rowDone, tellWait, waitedOn } from './arrivalwaits';
+import { portCrewGone, portsDone, portsMonth, portsStarved, portsWatched } from './portcut';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -1734,7 +1735,7 @@ const gunsIn = (cs: Corps[]): number => cs.reduce((s, c) => s + (c.kind === 'art
 export const men = (c: Corps): number => Math.round(c.divs * c.str * MEN_PER_DIV);
 
 /** What a month cut off from its supplies costs a corps in order: it lays down its arms when none is left. */
-const UNFED = 0.4;
+export const UNFED = 0.4;
 /** How many months a corps in this order holds out on what it carries once it is cut off (a fresh one: three). */
 export const monthsUnfed = (org = 1): number => Math.max(1, Math.ceil(org / UNFED));
 
@@ -2567,6 +2568,9 @@ function reportUnit(c: Corps): ReportUnit {
 }
 
 export function removeCorps(g: Game, c: Corps): void {
+  // (Release 2, portcut.ts) A fortress crew lost in a port cut off by sea, whatever took it, is kept for the count of the
+  // port's stores. Words only; nothing with the switch off.
+  portCrewGone(g, c);
   c.dead = true;
   // (The whole-world chart: a withered island garrison's count goes with it. Ruling 173(e), wither.ts.)
   if (farOn(g)) witherDrop(g, c, true);
@@ -4335,6 +4339,7 @@ export function capitulate(g: Game, nat: string, by: string, said?: string): voi
   recordFall(g, nat, by, 'beaten');
   // (The telling's flags of its rows go with it: no dead data in a lost war. Nothing where none was ever written.)
   nationDone(g, nat);
+  portsDone(g, nat);
   // (Who it was at war with is kept: a freed country takes those wars up again, and its conquerors' allies finish theirs.)
   rememberWars(g, nat);
   // In the last act of the grand campaign nobody signs an armistice: a fallen France is simply conquered. So is a
@@ -6439,6 +6444,9 @@ export function startPhase(g: Game, nat: string): void {
   tellSettled(g, nat);
   computeSupply(g);
   cutOffNews(g);
+  // (Release 2, portcut.ts) Ports cut off by sea: the record of the holds, and the news of their stores, read from the
+  // picture just drawn. Words only; nothing with the switch off.
+  portsMonth(g, nat);
   // Supply columns (release 2, columns.ts): the month's lorries go out from the railhead to the corps beyond it, and some are caught on the road.
   columnsMonth(g, nat);
   // The month's production comes in, and in the grand campaign the forces are paid out of it. Losses are made good
@@ -6496,6 +6504,9 @@ export function startPhase(g: Game, nat: string): void {
   // (Ruling 173(e), the whole-world chart alone: on an island of the historian's table a cut-off garrison withers to
   // a floor and does not lay down its arms from hunger. wither.ts; with the far side off nothing of it is read.)
   const far = farOn(g);
+  // (Release 2, portcut.ts) The corps standing in ports cut off by sea, so that those starved out are told after the
+  // reckoning. Null with the switch off.
+  const inPorts = portsWatched(g, army);
   army.forEach((c, i) => {
     // What it knew before the month's drafts: a corps back from the battle schools is a grade better than when it went.
     // And its strength before them: the drafts come in new uniforms (wearMonth).
@@ -6581,13 +6592,18 @@ export function startPhase(g: Game, nat: string): void {
   }
   // A town whose last defenders laid down their arms this month falls.
   siegeFalls(g, nat);
+  // (Release 2, portcut.ts) The provinces whose surrender is told here, to whoever reads the news: the line of a port cut
+  // off by sea that names its corps struck off gives way to it (the UI director's 23:50Z, item 4).
+  const surrendered = new Set<number>();
   for (const [reg, lost] of starved) {
     // Small parties are not news, unless they are the end of an army the newsreel has already said was surrounded.
     if (lost.men <= 30000 && g.flags[`ring:${reg}`] === undefined) continue;
+    surrendered.add(reg);
     const place = g.regions[reg].name;
     if (lost.names.length === 1) headline(g, 'battle', `Cut off and out of supply, ${lost.names[0]} lays down its arms at ${place}.`, nat, reg, { arm: 'land', lost: nat });
     else headline(g, 'battle', `Cut off and out of supply, the ${n.adj} army at ${place} lays down its arms: ${lost.names.length} corps, ${lost.men.toLocaleString('en-US')} men.`, nat, reg, { arm: 'land', lost: nat });
   }
+  portsStarved(g, nat, inPorts, surrendered);
   // Replacements can spend the treasury to the last point: a rounding error below nothing is not a debt.
   n.pp = budgeted(g) ? (n.pp > -1e-9 ? Math.max(0, n.pp) : Math.max(-credit, n.pp)) : Math.max(0, n.pp);
   if (budgeted(g)) {
