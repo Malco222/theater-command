@@ -172,13 +172,18 @@ for file_name in sorted(os.listdir(MODELS)):
         carried.setdefault(mark.get("tag"), set()).add(file_name[:-5])
 with open(os.path.join(SRC, "CampaignMiniatures.cpp"), encoding="utf-8") as told:
     painter = told.read()
+# (A mark of the painter's own: no file carries it. The table draws it wherever the mark the files carry is asked for,
+# so a nation's mark is mended in one place for its aircraft, its tanks and the map's pieces, and no file changes.)
+PAINTERS_OWN = {"GER-BALKEN"}
 print("Marks: drawn as another with one look")
 for asked, drawn in one["marks"].items():
     check(asked in carried, "%s: some sculpted aircraft carries that mark" % asked)
-    check(drawn in carried, "%s: the mark drawn in its place (%s) is one some sculpted aircraft carries already" % (asked, drawn))
+    check((drawn in carried) != (drawn in PAINTERS_OWN),
+          "%s: the mark drawn in its place (%s) is one some sculpted aircraft carries already, or the painter's own and carried by no file" % (asked, drawn))
     check('Tag == TEXT("%s")' % drawn in painter, "%s: the painter draws %s" % (asked, drawn))
     check(drawn not in one["marks"], "%s: the mark drawn in its place is not itself drawn as another" % asked)
-    print("  %s (%s) is drawn as %s (as %s)" % (asked, ", ".join(sorted(carried.get(asked, []))), drawn, ", ".join(sorted(carried.get(drawn, [])))))
+    print("  %s (%s) is drawn as %s (%s)" % (asked, ", ".join(sorted(carried.get(asked, []))), drawn,
+                                           "the painter's own" if drawn in PAINTERS_OWN else "as " + ", ".join(sorted(carried.get(drawn, [])))))
 american = sorted(tag for tag in carried if tag and tag.startswith("USA"))
 check(sorted(set(one["marks"].get(tag, tag) for tag in american)) == ["USA-BAR"],
       "with one look every American machine carries the one mark, the star and bar (the marks carried are %s)" % ", ".join(american))
@@ -188,6 +193,36 @@ check(barred is not None
       and re.search(r'Disc\(1\.0, Navy\);\s*Star\(0\.95, White\);', barred.group(1)) is not None
       and "Red" not in barred.group(1) and "Disc(0.2" not in barred.group(1),
       "the American mark is the white star in its blue disc with a white bar each side, edged in blue, and no red anywhere")
+
+# (The German cross. Brian, 26 November 2026: "the german logo is wrong on the FW-190". The art director, 27 November:
+# one cross at its real proportions for aircraft, tanks and the map. Each number below is a share of the cross's length.)
+german_marks = sorted(tag for tag in carried if tag and tag.startswith("GER"))
+check(german_marks == ["GER"] and one["marks"].get("GER") == "GER-BALKEN",
+      "with one look every German machine carries the one cross, at its real proportions (the marks carried are %s)" % ", ".join(german_marks))
+
+
+def crosses(tag):
+    """The layers of a mark the painter draws as crosses, lowest first: (arm, half width, colour) in the mark's radius."""
+    branch = re.search(r'Tag == TEXT\("%s"\)\)\s*\{(.*?)\n\t\}' % re.escape(tag), painter, re.S)
+    if branch is None:
+        return None
+    body = "\n".join(line for line in branch.group(1).split("\n") if not line.strip().startswith("//"))
+    laid = re.findall(r'Cross\(([0-9.]+), ([0-9.]+), (\w+)\);', body)
+    rest = re.sub(r'Cross\([0-9.]+, [0-9.]+, \w+\);', "", body).strip()
+    return None if rest else [(float(arm), float(half), colour) for arm, half, colour in laid]
+
+
+mended = crosses("GER-BALKEN")
+check(mended is not None and [colour for _, _, colour in mended] == ["Black", "White", "Black"] and all(arm == 1.0 for arm, _, _ in mended),
+      "the mended German cross is three crosses and nothing else, black, white, black, each arm the full length: nothing lies across an arm's end")
+if mended is not None and len(mended) == 3:
+    edge, white, bar = (half for _, half, _ in mended)
+    check(abs(bar - 0.25) < 1e-9, "its black bars are a quarter of its length wide (%.4f)" % (bar,))
+    check(abs((white - bar) / 2.0 - 0.125) < 1e-9, "its white is an eighth of its length each side (%.4f)" % ((white - bar) / 2.0,))
+    check(abs((edge - white) / 2.0 - 0.03125) < 1e-9, "its thin black edge is a thirty-second of its length (%.5f)" % ((edge - white) / 2.0,))
+    print("  the German cross with one look: bars %.4f, white %.4f each side, edge %.5f of its length; an arm is %.4f across in all"
+          % (bar, (white - bar) / 2.0, (edge - white) / 2.0, edge))
+check(crosses("GER") == [(1.0, 0.36, "White"), (0.94, 0.19, "Black")], "without one look the German cross is drawn as it was, to the number")
 
 # ---------------------------------------------------------------- Germany's tanks: grey in every year
 print("German tanks on the map")
