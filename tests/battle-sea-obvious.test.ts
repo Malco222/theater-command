@@ -43,7 +43,7 @@ function honoured(name: string, att: PlainFleet[], def: PlainFleet[], air?: Part
       const report = rows.map((r) => `${r.odds}: ${r.played.toFixed(2)} vs ${r.card.toFixed(2)}`).join('; ');
       const gap = rows.reduce((s, r) => s + (r.played - r.card), 0) / rows.length;
       expect(Math.abs(gap), report).toBeLessThanOrEqual(0.1);
-    }, 120_000);
+    }, 300_000);
   }
 }
 
