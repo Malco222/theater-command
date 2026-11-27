@@ -14,12 +14,17 @@
 // Lost with months 5 to 24: the spring 1940 rows (some forty sent in months 9 to 11), the rows whose months run out
 // (`until`, from month 12) and seed 17's one row struck at its half year (month 20). In neither 24-month war did any row
 // read 'ended' for a cause other than being sent or struck.)
+//
+// (What the four months no longer reach, guard (b)'s struck half and the 'until' cause, is read on hand boards with no
+// war months, the sceptic's S1 of 27 November 2026: every row of a fresh board, its own war set on by hand, read month by
+// month from 0 to 89, reads 'ended' only for one of A5's causes, and rows whose months run out read 'due' and then
+// 'ended' in their 'until' month; and a row due seven months back and struck by the month's own start reads 'ended'.)
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { setFromWait } from '../src/campaign/arrivalwaits';
-import { createGame, farRow, rowComes, rowWords, warOver } from '../src/campaign/game';
+import { createGame, farRow, rowComes, rowWords, startPhase, warOver } from '../src/campaign/game';
 import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
@@ -83,4 +88,56 @@ describe('rowComes writes nothing, and reads ended only where a row has ended', 
       expect(sentRead).toBeGreaterThan(0);
     });
   }
+});
+
+/** A row's own war set on by hand, both ways, on a board nobody plays. */
+const warSet = (g: Game, w: string[] | undefined): void => {
+  if (!w || w[1] === '*' || !g.nations[w[0]] || !g.nations[w[1]]) return;
+  const [a, b] = w;
+  if (!g.nations[a].atWar.includes(b)) g.nations[a].atWar.push(b);
+  if (!g.nations[b].atWar.includes(a)) g.nations[b].atWar.push(a);
+};
+
+describe("rowComes reads 'ended' where a row is struck or its months are out, on hand boards", () => {
+  it("every row, its war on, months 0 to 89: 'ended' only for one of A5's causes, and in its 'until' month", () => {
+    const g = startOpen(createGame(34, null));
+    expect(setFromWait(g, true)).toBe(true);
+    let untilEnds = 0;
+    rows.forEach((row, j) => {
+      const nat = row[1] as string;
+      if (!g.nations[nat]) return;
+      const { o } = rowWords(g, nat, row);
+      const keep = Object.fromEntries(Object.entries(g.nations).map(([k, n]) => [k, [...n.atWar]]));
+      const turn = g.turn;
+      warSet(g, o.war);
+      const seq: string[] = [];
+      for (let t = 0; t < 90; t++) {
+        g.turn = t;
+        const v = rowComes(g, nat, j);
+        seq.push(v);
+        if (v === 'ended') expect(endedBecause(g, nat, j), `month ${t}, row ${j} ${row[2]}: ended`).toBe(true);
+      }
+      if (o.until && seq[o.until - 1] === 'due' && seq[o.until] === 'ended') untilEnds++;
+      g.turn = turn;
+      for (const [k, w] of Object.entries(keep)) g.nations[k].atWar = w;
+    });
+    // (Not an empty reading: rows whose months run out were read due and then ended, the Somaliland force among them.)
+    expect(untilEnds).toBeGreaterThan(20);
+  });
+
+  it("the Amhara command (Gondar), due seven months back, struck at the month's start: sent 2, and read 'ended'", () => {
+    const g = startOpen(createGame(34, null));
+    expect(setFromWait(g, true)).toBe(true);
+    const j = rows.findIndex((r) => r[1] === 'ITA' && r[2] === 'Amhara command (Gondar)');
+    const { o } = rowWords(g, 'ITA', rows[j]);
+    warSet(g, o.war);
+    g.turn = 20;
+    expect(o.until).toBeGreaterThan(g.turn);
+    expect(rowComes(g, 'ITA', j)).toBe('due');
+    g.flags[`due:${j}`] = g.turn - 7;
+    startPhase(g, 'ITA');
+    expect(g.flags[`sent:${j}`]).toBe(2);
+    expect(rowComes(g, 'ITA', j)).toBe('ended');
+    expect(endedBecause(g, 'ITA', j)).toBe(true);
+  });
 });
