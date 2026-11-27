@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <utility>
 
 namespace SeaShow
 {
@@ -4077,6 +4078,7 @@ namespace SeaShow
 		R.Ends.erase(R.Ends.begin() + static_cast<std::ptrdiff_t>(Tube));
 		R.RulesOnly.erase(R.RulesOnly.begin() + static_cast<std::ptrdiff_t>(Tube));
 		if (Tube < R.Across.size()) R.Across.erase(R.Across.begin() + static_cast<std::ptrdiff_t>(Tube)); // (the words' note kept in step)
+		if (Tube < R.AcrossShips.size()) R.AcrossShips.erase(R.AcrossShips.begin() + static_cast<std::ptrdiff_t>(Tube));
 	}
 
 	int Show::WhyHeld(const Held& R, size_t Tube, const std::vector<FirePlace>& From) const
@@ -4132,6 +4134,7 @@ namespace SeaShow
 		R.Ends.erase(R.Ends.begin() + static_cast<std::ptrdiff_t>(Tube));
 		R.RulesOnly.erase(R.RulesOnly.begin() + static_cast<std::ptrdiff_t>(Tube));
 		if (Tube < R.Across.size()) R.Across.erase(R.Across.begin() + static_cast<std::ptrdiff_t>(Tube)); // (the words' note kept in step)
+		if (Tube < R.AcrossShips.size()) R.AcrossShips.erase(R.AcrossShips.begin() + static_cast<std::ptrdiff_t>(Tube));
 		// (none of hers ever drawn: she turns away under smoke as she gives them up, L5)
 		Hull* H = FindHull(R.Ship);
 		if (R.Ks.empty() && !R.bFiredAny && !R.bBoat && H && H->Doing != Fate::Gone) H->ScreenUntil = ShownT + 60.0;
@@ -4148,12 +4151,16 @@ namespace SeaShow
 		const bool bJudge = ShownT >= R.NextJudge - 1e-9;
 		if (bJudge) R.NextJudge = ShownT + 1.0 - 1e-6;
 		// (for the torpedo words, each tube still held: the piece of the first own ship found across its way, at the first
-		// place a ship holds it; noted as she looks, never read in deciding)
+		// place a ship holds it; and where that is her own piece, every ship of her own piece across its way there, on its line
+		// or as its head runs, that one first (the UI director, 27 November 07:14Z: her own ships in the way told by their
+		// count); noted as she looks, never read in deciding)
 		std::vector<int> Across;
+		std::vector<std::vector<int>> AcrossShips;
 		for (size_t Tube = 0; Tube < R.Ks.size();)
 		{
 			bool bFired = false, bOwnOut = false;
 			int By = -1;
+			std::vector<int> Ships;
 			for (const FirePlace& P : From)
 			{
 				if (P.bIfOut && !bOwnOut) continue;
@@ -4164,7 +4171,19 @@ namespace SeaShow
 					if (By < 0 && W.FirstFoul >= 0)
 					{
 						const Hull* O = FindHull(W.FirstFoul);
-						if (O) By = O->Piece;
+						if (O)
+						{
+							By = O->Piece;
+							if (By == R.Piece)
+							{
+								// (her own piece's ships alone asked, each found: WhyHeld's own question, every one)
+								TubeWay Own;
+								PlanTube(R, Tube, P, R.Piece, Own, true);
+								Ships.push_back(O->Key);
+								for (const int Key : Own.Foul)
+									if (Key != O->Key) Ships.push_back(Key);
+							}
+						}
 					}
 					continue;
 				}
@@ -4176,9 +4195,11 @@ namespace SeaShow
 			if (bFired) continue;
 			if (bJudge && !R.RulesOnly[Tube] && WhyHeld(R, Tube, From) == 1) R.RulesOnly[Tube] = 1;
 			Across.push_back(By);
+			AcrossShips.push_back(std::move(Ships));
 			++Tube;
 		}
 		R.Across.swap(Across);
+		R.AcrossShips.swap(AcrossShips);
 		return !R.Ks.empty();
 	}
 
@@ -4193,9 +4214,11 @@ namespace SeaShow
 			T.Salvo = Pair.second;
 			T.Fired = TracksOf(Pair.second);
 		}
-		// Its tubes still held, the salvos they are of, and who stands across them as each ship last looked.
+		// Its tubes still held, the salvos they are of, and who stands across them as each ship last looked (and which of her
+		// own piece's ships, each once).
 		std::map<int, std::vector<int>> HeldSalvos;
 		std::map<int, std::map<int, int>> Votes;
+		std::map<int, std::set<int>> OwnShips;
 		for (const Held& R : Holding)
 		{
 			if (R.Ks.empty()) continue;
@@ -4204,7 +4227,26 @@ namespace SeaShow
 			std::vector<int>& Of = HeldSalvos[R.Piece];
 			if (std::find(Of.begin(), Of.end(), R.Salvo) == Of.end()) Of.push_back(R.Salvo);
 			for (size_t K = 0; K < R.Ks.size() && K < R.Across.size(); ++K)
+			{
 				if (R.Across[K] >= 0) ++Votes[R.Piece][R.Across[K]];
+				if (R.Across[K] == R.Piece && K < R.AcrossShips.size()) OwnShips[R.Piece].insert(R.AcrossShips[K].begin(), R.AcrossShips[K].end());
+			}
+		}
+		for (const auto& Pair : OwnShips)
+		{
+			// (their class where all are of one: else none)
+			TubesOut& T = Out[Pair.first];
+			T.OwnAcross = static_cast<int>(Pair.second.size());
+			bool bFirst = true, bOne = true;
+			for (const int Key : Pair.second)
+			{
+				const Hull* O = FindHull(Key);
+				const std::string Class = O ? O->Class : std::string();
+				if (bFirst) T.OwnClass = Class;
+				else if (Class != T.OwnClass) bOne = false;
+				bFirst = false;
+			}
+			if (!bOne) T.OwnClass.clear();
 		}
 		for (const auto& Pair : HeldSalvos)
 		{
@@ -4314,6 +4356,7 @@ namespace SeaShow
 				R->Ends.pop_back();
 				R->RulesOnly.pop_back();
 				if (R->Across.size() > R->Ks.size()) R->Across.pop_back(); // (the words' note kept in step)
+				if (R->AcrossShips.size() > R->Ks.size()) R->AcrossShips.pop_back();
 			}
 			return &Torps.back();
 		}

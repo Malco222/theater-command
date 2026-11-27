@@ -2,8 +2,8 @@
 // 25 November 12:52Z, and the UI director's words, final at 13:27Z): every word of the tags and the line, string for
 // string (her and their, is and are, has and have, your orders and hers or theirs, 1 second and N seconds, the count
 // down to 0; is and are as the phrase counts the ships where it does; routing, breaking off, no count and no orders,
-// his order or not, one ship or more); an enemy piece never has words; no fields, nothing; held wins over turning
-// clear; the line is the camera's subject's own or none. Where the tags stand (SeaWords::Lay): never on one another,
+// his order or not, one ship or more); an enemy piece never has words; no fields, nothing; turning clear wins over any
+// hold, the rules' or the scene's; the line is the camera's subject's own or none. Where the tags stand (SeaWords::Lay): never on one another,
 // the subject's first and on her ship, then the nearest; none over the bar, the line, the month scene's caption or its
 // way back; a lifted tag's stalk down to its ship behind the plates it passes. The shots' eyes, their axes the scene's
 // (the up square to the look). The fields as SeaFeed reads them and the show carries them, through a few views written
@@ -26,8 +26,13 @@
 // her line names the piece whose ship stands in the water, "Holding the rest of" once some of that salvo is in the water;
 // turning clear reads "about to be fired by" until the first torpedo of the launcher's latest salvo is in the water, then
 // "fired by", the count to clearUntil in both and ", once the torpedoes have passed" gone; turning clear wins over the
-// scene's hold while it lasts and the held words come back after (but the view's own hold, her salvo told since, wins
-// over its own turn clear until the view that ends it: the UI director's Destroyers 4, 416.3 to 418 s). Each ruled line string for string, and on every own-water
+// scene's hold while it lasts and the held words come back after. On the build 11f75827 (the UI director, 27 November
+// 07:14Z): turning clear wins whoever holds her tubes, the rules or the scene (light ships, Destroyers 4 410 to 416 s, held
+// by the rules with clearFrom 2 and her helm over, turns clear with the count to clearUntil); and a blocker of her own piece
+// is never named by the piece: her held line tells the count and kind of her own ships in the way, "of their own" ("three
+// of their own destroyers are", "one of their own destroyers is", "three of their own ships" for more than one kind),
+// before any torpedo is in the water as after, another piece's ships keeping their phrase and named first where both are in
+// the way. Each ruled line string for string, and on every own-water
 // recording as each side, from the scene's own tallies read apart (its salvos' tubes, tracks and tubes given up, and its
 // tracks in the water): no "fired by" while none of the launcher's torpedoes is in the water; no own piece holding tubes or
 // turning clear without words; the held tag on exactly while any of her tubes is held and off at her last launch; "the rest
@@ -236,8 +241,9 @@ namespace
 		}
 
 		// Routing: breaking off, she has no orders to take up again: the one line, no count and no orders, a ship alone or a
-		// division, his order or not, the count's 0 passed or not; the tag the same; no name, the tag alone; held, the held
-		// words unchanged; the enemy's, none.
+		// division, his order or not, the count's 0 passed or not; the tag the same; no name, the tag alone; held and turning
+		// clear, the breaking-off words (turning clear wins whoever holds her tubes); held alone, the held words unchanged; the
+		// enemy's, none.
 		{
 			auto Routing = [](SeaWords::Fields F)
 			{
@@ -273,9 +279,9 @@ namespace
 			Both.ClearUntil = 112.0;
 			Both.ClearFromName = Four;
 			const SeaWords::Said HeldToo = Of(Both, 0, 0, 4, 1, 100.0);
-			Same("routing, held and turning clear: the held tag", HeldToo.Tag, "Torpedoes held");
-			Same("routing, held and turning clear: the held line unchanged", HeldToo.Line,
-			     "Holding their torpedoes while a cruiser of the Home Fleet is in the line of fire. Your order stands: they fire the moment the water is clear.");
+			Same("routing, held by the rules and turning clear: the turning clear tag", HeldToo.Tag, "Turning clear of torpedoes");
+			Same("routing, held by the rules and turning clear: the breaking-off line", HeldToo.Line, BreakingBefore);
+			Same("routing, held by the rules and turning clear, the launcher's in the water: the breaking-off line", Of(Away(Both), 0, 0, 4, 1, 100.0).Line, Breaking);
 			Same("routing, held: the held line unchanged", Of(Routing(HeldFor(1, Four, false)), 0, 0, 1, 4, 100.0).Line,
 			     "Holding her torpedoes while four destroyers of the Home Fleet are in the line of fire. She fires the moment the water is clear.");
 			const SeaWords::Said Enemy = Of(Routing(ClearOf(12, 112.0, "four destroyers of the Battle Fleet", false)), 0, 1, 4, -1, 100.0);
@@ -381,22 +387,54 @@ namespace
 		Same("her, one ship", SeaWords::Agree(1, "her", "their"), "her");
 		Same("their, a division", SeaWords::Agree(4, "her", "their"), "their");
 
-		// Held wins over turning clear, both on one piece.
+		// Turning clear wins over the rules' own hold, both on one piece (the UI director, 27 November 07:14Z: whoever holds
+		// her tubes, the rules or the scene): the turning-clear tag and line, the count to clearUntil, about to be fired or
+		// fired; the turn over with the rules still holding her, the held tag and line back.
 		{
 			SeaWords::Fields Both = HeldFor(5, Cruiser, true);
 			Both.ClearFrom = 1;
 			Both.ClearUntil = 112.0;
 			Both.ClearFromName = Four;
 			const SeaWords::Said Said = Of(Both, 0, 0, 4, 1, 100.0);
-			Same("held wins: the tag", Said.Tag, "Torpedoes held");
-			Same("held wins: the line", Said.Line,
+			Expect(Said.What == SeaWords::Kind::Clearing, "the rules hold her while she turns clear: turning clear", Said.What == SeaWords::Kind::Clearing ? "turning clear" : "held",
+			       "turning clear");
+			Same("the rules hold her while she turns clear: the turning clear tag", Said.Tag, "Turning clear of torpedoes");
+			Same("the rules hold her while she turns clear: the turning clear line", Said.Line,
+			     "Turning clear of torpedoes about to be fired by four destroyers of the Home Fleet. They take up your orders again in 12 seconds.");
+			Same("the rules hold her while she turns clear, the launcher's in the water: the turning clear line", Of(Away(Both), 0, 0, 4, 1, 100.0).Line,
+			     "Turning clear of torpedoes fired by four destroyers of the Home Fleet. They take up your orders again in 12 seconds.");
+			{
+				SeaWords::Fields Alone = HeldFor(5, Cruiser, false);
+				Alone.ClearFrom = 1;
+				Alone.ClearUntil = 112.0;
+				Alone.ClearFromName = Four;
+				Same("the rules hold a ship alone while she turns clear, no order: the turning clear line", Of(Alone, 0, 0, 1, 1, 100.0).Line,
+				     "Turning clear of torpedoes about to be fired by four destroyers of the Home Fleet. She takes up her orders again in 12 seconds.");
+			}
+			// (the count to clearUntil while the rules hold her, never below 0)
+			bool bCount = true;
+			for (double Now = 95.0; Now <= 120.0 + 1e-9; Now += 0.25)
+			{
+				const std::string Left = SeaWords::SecondsWords(SeaWords::SecondsLeft(112.0, Now));
+				bCount = bCount && Of(Both, 0, 0, 4, 1, Now).Line ==
+				                       "Turning clear of torpedoes about to be fired by four destroyers of the Home Fleet. They take up your orders again in " + Left + ".";
+			}
+			Expect(bCount, "the rules hold her while she turns clear: the count to clearUntil (95 to 120 s, clearUntil 112 s), never below 0", bCount ? "the same" : "apart",
+			       "the same");
+			SeaWords::Fields Over = Both;
+			Over.ClearFrom = -1;
+			Over.ClearUntil = -1.0;
+			Over.ClearFromName.clear();
+			const SeaWords::Said Back = Of(Over, 0, 0, 4, 1, 113.0);
+			Same("the turn over, the rules still holding her: the held tag back", Back.Tag, "Torpedoes held");
+			Same("the turn over, the rules still holding her: the held line back", Back.Line,
 			     "Holding their torpedoes while a cruiser of the Home Fleet is in the line of fire. Your order stands: they fire the moment the water is clear.");
 		}
 
 		// The scene's own hold (the UI director, 26 November 05:17Z): its tag while any of her tubes is held, her line naming
 		// the piece whose ship stands in the water, "the rest of" once some torpedo of that salvo is in the water; a turn clear
-		// wins over it while it lasts, and it comes back after; the rules' own hold wins over both; with no phrase for the piece
-		// in the way, the tag alone.
+		// wins over it while it lasts, and it comes back after; the rules' own hold over the scene's (theirs the line, as
+		// built), but a turn clear over both (27 November 07:14Z); with no phrase for the piece in the way, the tag alone.
 		{
 			const std::string ForceH = "four destroyers of Force H";
 			const SeaWords::Said Rest = Of(SceneHeld(9, true, 1, ForceH, true), 0, 0, 4, 4, 100.0);
@@ -449,30 +487,64 @@ namespace
 			Expect(Back.What == SeaWords::Kind::Held && Back.Tag == "Torpedoes held", "both at once, the turn over with her tubes still held: held again", Back.Tag, "Torpedoes held");
 			Same("both at once, the turn over: the held line again", Back.Line,
 			     "Holding the rest of their torpedoes while four destroyers of Force H are in the line of fire. Your order stands: they fire the moment the water is clear.");
-			// (the view reached still holds her, her salvo told since (the rules have let her fire), while she turns clear too:
-			// the view's hold wins over its own turn clear until the view that ends it, the scene holding the rest; the UI
-			// director's timeline, light ships, Destroyers 4 held 416.3 to 418 s, turning clear from 418 s)
-			SeaWords::Fields LetGo = Both;
-			LetGo.bHeldLetGo = true;
-			const SeaWords::Said Kept = Of(LetGo, 0, 0, 4, 4, 100.0);
-			Expect(Kept.What == SeaWords::Kind::Held && Kept.Tag == "Torpedoes held", "the view's hold let go, turning clear too, the scene holding the rest: held",
-			       Kept.Tag, "Torpedoes held");
-			Same("the view's hold let go, turning clear too, the scene holding the rest: the scene's held line", Kept.Line,
-			     "Holding the rest of their torpedoes while four destroyers of Force H are in the line of fire. Your order stands: they fire the moment the water is clear.");
-			SeaWords::Fields LetGoAll = LetGo;
-			LetGoAll.SceneHeld = 0;
-			LetGoAll.bHeldAway = false;
-			LetGoAll.Across = -1;
-			LetGoAll.AcrossName.clear();
-			const SeaWords::Said Gone = Of(Away(LetGoAll), 0, 0, 4, 4, 100.0);
-			Expect(Gone.What == SeaWords::Kind::Clearing && Gone.Tag == "Turning clear of torpedoes", "the view's hold let go, turning clear too, none of her tubes held: turning clear",
-			       Gone.Tag, "Turning clear of torpedoes");
-			Same("the view's hold let go, none held: the turning clear line", Gone.Line,
+			// (the rules and the scene both holding her while she turns clear: turning clear, whoever holds her tubes; the turn
+			// over, the rules' held line, theirs winning over the scene's as built)
+			SeaWords::Fields AllThree = Both;
+			AllThree.HeldFor = 5;
+			AllThree.HeldForName = Cruiser;
+			const SeaWords::Said Three = Of(Away(AllThree), 0, 0, 4, 1, 100.0);
+			Expect(Three.What == SeaWords::Kind::Clearing && Three.Tag == "Turning clear of torpedoes", "the rules and the scene holding her, turning clear too: turning clear",
+			       Three.Tag, "Turning clear of torpedoes");
+			Same("the rules and the scene holding her, turning clear too: the turning clear line", Three.Line,
 			     "Turning clear of torpedoes fired by four destroyers of Force H. They take up your orders again in 12 seconds.");
-			SeaWords::Fields LetGoOnly = SceneHeld(0, false, -1, "", false);
-			LetGoOnly.bHeldLetGo = true;
-			Expect(Of(LetGoOnly, 0, 0, 4, 4, 100.0).What == SeaWords::Kind::None, "the view's hold let go, none of her tubes held, not turning clear: no words (off at her last launch)",
-			       Of(LetGoOnly, 0, 0, 4, 4, 100.0).Tag, "none");
+			SeaWords::Fields ThreeOver = AllThree;
+			ThreeOver.ClearFrom = -1;
+			ThreeOver.ClearUntil = -1.0;
+			ThreeOver.ClearFromName.clear();
+			Same("the rules and the scene holding her, the turn over: the rules' held line back", Of(ThreeOver, 0, 0, 4, 1, 113.0).Line,
+			     "Holding their torpedoes while a cruiser of the Home Fleet is in the line of fire. Your order stands: they fire the moment the water is clear.");
+			// (the view reached still holds her, her salvo told since (the rules have let her fire), while she turns clear too and
+			// the scene holds the rest: turning clear (no longer the view's hold until the view that ends it: the UI director,
+			// 27 November 07:14Z, whoever holds her tubes); none held, turning clear; not turning clear, none held, nothing: the
+			// show's piece through FieldsOf, its bHeldLetGo set, as light ships has Destroyers 4 416.3 to 418 s)
+			{
+				std::map<int, SeaShow::Piece> Pieces;
+				SeaShow::Piece& LetGo = Pieces[4];
+				LetGo.Id = 4;
+				LetGo.Side = 0;
+				LetGo.Ships = 4;
+				LetGo.bHeldLetGo = true;
+				LetGo.ClearFrom = 2;
+				LetGo.ClearUntil = 112.0;
+				LetGo.ClearFromName = ForceH;
+				SeaShow::Piece& Launcher = Pieces[2];
+				Launcher.Id = 2;
+				Launcher.Side = 0;
+				Launcher.Ships = 4;
+				SeaWords::Picture Pic;
+				Pic.Tubes[4].Salvo = 1;
+				Pic.Tubes[4].Fired = 5;
+				Pic.Tubes[4].Held = 3;
+				Pic.Tubes[4].HeldFired = 5;
+				Pic.Tubes[4].Across = 2;
+				Pic.Tubes[2].Salvo = 2;
+				Pic.Tubes[2].Fired = 6;
+				Pic.Phrases[2] = ForceH;
+				const SeaWords::Said Kept = SeaWords::Of(LetGo, Pieces, Pic, 0, 100.0);
+				Expect(Kept.What == SeaWords::Kind::Clearing && Kept.Tag == "Turning clear of torpedoes",
+				       "the view's hold let go, turning clear too, the scene holding the rest: turning clear", Kept.Tag, "Turning clear of torpedoes");
+				Same("the view's hold let go, turning clear too, the scene holding the rest: the turning clear line", Kept.Line,
+				     "Turning clear of torpedoes fired by four destroyers of Force H. They take up their orders again in 12 seconds.");
+				Pic.Tubes[4].Held = Pic.Tubes[4].HeldFired = 0;
+				Pic.Tubes[4].Across = -1;
+				Same("the view's hold let go, none held: the turning clear line", SeaWords::Of(LetGo, Pieces, Pic, 0, 100.0).Line,
+				     "Turning clear of torpedoes fired by four destroyers of Force H. They take up their orders again in 12 seconds.");
+				LetGo.ClearFrom = -1;
+				LetGo.ClearUntil = -1.0;
+				LetGo.ClearFromName.clear();
+				Expect(SeaWords::Of(LetGo, Pieces, Pic, 0, 100.0).What == SeaWords::Kind::None,
+				       "the view's hold let go, none of her tubes held, not turning clear: no words (off at her last launch)", SeaWords::Of(LetGo, Pieces, Pic, 0, 100.0).Tag, "none");
+			}
 			// (routing while the scene holds her: held, as the rules' hold is)
 			SeaWords::Fields RoutingHeld = SceneHeld(9, true, 1, ForceH, false);
 			RoutingHeld.bRouting = true;
@@ -485,20 +557,155 @@ namespace
 			Expect(Sunk.What == SeaWords::Kind::None && Sunk.Tag.empty(), "a piece the scene holds with none afloat: no words", Sunk.Tag, "none");
 			const SeaWords::Said Nobody = Of(SceneHeld(9, true, 1, ForceH, false), 0, -1, 4, 4, 100.0);
 			Expect(Nobody.What == SeaWords::Kind::None && Nobody.Tag.empty(), "the scene holds, no player's side: no words", Nobody.Tag, "none");
-			// (which of them shows: Held, Clearing, ShowsHeld)
+			// (which of them shows: Held, Clearing, ShowsHeld; turning clear over any hold)
+			SeaWords::Fields RulesTurning = HeldFor(5, Cruiser, false);
+			RulesTurning.ClearFrom = 1;
+			RulesTurning.ClearUntil = 112.0;
+			RulesTurning.ClearFromName = Four;
 			std::string Shows;
-			for (const SeaWords::Fields& F : { SceneHeld(1, false, -1, "", false), Both, RulesToo, HeldFor(5, Cruiser, false), ClearOf(1, 112.0, Four, false), SeaWords::Fields(), LetGo,
-			                                   LetGoAll, LetGoOnly })
+			for (const SeaWords::Fields& F : { SceneHeld(1, false, -1, "", false), Both, RulesToo, HeldFor(5, Cruiser, false), ClearOf(1, 112.0, Four, false), SeaWords::Fields(),
+			                                   RulesTurning, AllThree, ThreeOver })
 				Shows += std::string(Shows.empty() ? "" : " ") + (F.Held() ? "H" : "-") + (F.Clearing() ? "C" : "-") + (F.ShowsHeld() ? "s" : "-") + (F.Any() ? "a" : "-");
-			Same("Held, Clearing, ShowsHeld, Any: scene held, both, rules and scene, rules, turning clear, none, the view's hold let go (the scene holding, none held, "
-			     "not turning clear)",
-			     Shows, "H-sa HC-a H-sa H-sa -C-a ---- HCsa -C-a ----");
+			Same("Held, Clearing, ShowsHeld, Any: scene held, scene held turning clear, rules and scene, rules, turning clear, none, rules turning clear, rules and scene "
+			     "turning clear, the turn over",
+			     Shows, "H-sa HC-a H-sa H-sa -C-a ---- HC-a HC-a H-sa");
 			bool bClean = true;
 			for (int Ships : { 1, 4 })
 				for (bool bOrdered : { false, true })
 					for (bool bSome : { false, true })
 						bClean = bClean && Clean(Of(SceneHeld(9, bSome, 1, ForceH, bOrdered), 0, 0, Ships, 4, 100.0).Line);
 			Expect(bClean, "the scene's hold: the words never speak of dice or odds", bClean ? "never" : "they do", "never");
+		}
+
+		// Her own ships in the way (the UI director, 27 November 07:14Z, on the build 11f75827): a blocker of her own piece is
+		// never named by the piece; her line tells the count and kind of her own ships across her held tubes' way, "of their
+		// own", the verb by their count ("one ... is"), the count one to ten in words and figures from 11, the kind her ships'
+		// class as the log names it, "ships" for more than one kind; before any torpedo of the salvo is in the water as after;
+		// another piece's ships keep their phrase, and are named where both stand in the way.
+		{
+			const std::string ForceH = "four destroyers of Force H";
+			// (Destroyers 3, four destroyers of Force H, held by the scene for her own ships: her piece's own phrase given, never said)
+			auto OwnHeld = [&ForceH](int Tubes, bool bSomeAway, int Own, const std::string& Class, bool bOrdered)
+			{
+				SeaWords::Fields F = SceneHeld(Tubes, bSomeAway, 3, ForceH, bOrdered);
+				F.bAcrossOwn = true;
+				F.OwnAcross = Own;
+				F.OwnClass = Class;
+				return F;
+			};
+			Same("her own ships in the way, three destroyers, the rest held: the ruling's line", Of(OwnHeld(9, true, 3, "dd", false), 0, 0, 4, 4, 100.0).Line,
+			     "Holding the rest of their torpedoes while three of their own destroyers are in the line of fire. They fire the moment the water is clear.");
+			Same("her own ships in the way, three destroyers, under his order", Of(OwnHeld(9, true, 3, "dd", true), 0, 0, 4, 4, 100.0).Line,
+			     "Holding the rest of their torpedoes while three of their own destroyers are in the line of fire. Your order stands: they fire the moment the water is clear.");
+			Same("her own ships in the way, three destroyers, before any torpedo is in the water", Of(OwnHeld(9, false, 3, "dd", false), 0, 0, 4, 4, 100.0).Line,
+			     "Holding their torpedoes while three of their own destroyers are in the line of fire. They fire the moment the water is clear.");
+			Same("her own ships in the way, one destroyer: is", Of(OwnHeld(4, true, 1, "dd", false), 0, 0, 4, 4, 100.0).Line,
+			     "Holding the rest of their torpedoes while one of their own destroyers is in the line of fire. They fire the moment the water is clear.");
+			Same("her own ships in the way, one destroyer, before any torpedo is in the water: is", Of(OwnHeld(4, false, 1, "dd", false), 0, 0, 4, 4, 100.0).Line,
+			     "Holding their torpedoes while one of their own destroyers is in the line of fire. They fire the moment the water is clear.");
+			Same("her own ships in the way, three of more than one kind: ships", Of(OwnHeld(6, true, 3, "", false), 0, 0, 4, 4, 100.0).Line,
+			     "Holding the rest of their torpedoes while three of their own ships are in the line of fire. They fire the moment the water is clear.");
+			Same("her own ships in the way, three of more than one kind, before any torpedo is in the water", Of(OwnHeld(6, false, 3, "", false), 0, 0, 4, 4, 100.0).Line,
+			     "Holding their torpedoes while three of their own ships are in the line of fire. They fire the moment the water is clear.");
+			Same("her own ships in the way, two cruisers", Of(OwnHeld(4, true, 2, "ca", false), 0, 0, 3, 3, 100.0).Line,
+			     "Holding the rest of their torpedoes while two of their own cruisers are in the line of fire. They fire the moment the water is clear.");
+			Same("her own ships in the way, ten destroyers: in words", Of(OwnHeld(20, true, 10, "dd", false), 0, 0, 12, 12, 100.0).Line,
+			     "Holding the rest of their torpedoes while ten of their own destroyers are in the line of fire. They fire the moment the water is clear.");
+			Same("her own ships in the way, 12 destroyers: in figures from 11", Of(OwnHeld(24, true, 12, "dd", false), 0, 0, 14, 14, 100.0).Line,
+			     "Holding the rest of their torpedoes while 12 of their own destroyers are in the line of fire. They fire the moment the water is clear.");
+			// (a ship alone: her own, she fires, as she and her are built)
+			Same("her own ship in the way, a ship alone: her own, is", Of(OwnHeld(2, true, 1, "dd", false), 0, 0, 1, 1, 100.0).Line,
+			     "Holding the rest of her torpedoes while one of her own destroyers is in the line of fire. She fires the moment the water is clear.");
+			Same("her own ships in the way: the held tag", Of(OwnHeld(9, true, 3, "dd", false), 0, 0, 4, 4, 100.0).Tag, "Torpedoes held");
+			// (her own piece in the way with none of her ships counted: the tag alone, never her piece's phrase)
+			const SeaWords::Said NoneCounted = Of(OwnHeld(9, true, 0, "dd", false), 0, 0, 4, 4, 100.0);
+			Expect(NoneCounted.What == SeaWords::Kind::Held && NoneCounted.Tag == "Torpedoes held" && NoneCounted.Line.empty(),
+			       "her own piece in the way, none of her ships counted: the tag, no line (never her piece's phrase)", NoneCounted.Tag + " / " + NoneCounted.Line, "Torpedoes held / ");
+			{
+				// (never her piece's phrase, nor "of Force H", whatever her count, kind, order or salvo)
+				bool bNever = true;
+				for (int Own : { 1, 2, 3, 4, 11 })
+					for (const char* Class : { "dd", "ca", "" })
+						for (bool bSome : { false, true })
+							for (bool bOrdered : { false, true })
+							{
+								const std::string Line = Of(OwnHeld(9, bSome, Own, Class, bOrdered), 0, 0, 4, 4, 100.0).Line;
+								bNever = bNever && !Line.empty() && Line.find(ForceH) == std::string::npos && Line.find(" of Force H") == std::string::npos && Clean(Line) &&
+								         Line.find(" of their own ") != std::string::npos;
+							}
+				Expect(bNever, "her own ships in the way: never her piece's phrase, always \"of their own\", never dice or odds", bNever ? "never" : "named", "never");
+			}
+			// (another piece's ships keep their phrase: the built line, her own count not said)
+			SeaWords::Fields Other = SceneHeld(9, true, 1, ForceH, false);
+			Other.OwnAcross = 2;
+			Other.OwnClass = "dd";
+			Same("another piece's ships in the way: its phrase, as built", Of(Other, 0, 0, 4, 4, 100.0).Line,
+			     "Holding the rest of their torpedoes while four destroyers of Force H are in the line of fire. They fire the moment the water is clear.");
+			// (turning clear wins over her own ships' hold; the turn over, her own ships' line back)
+			SeaWords::Fields OwnTurning = OwnHeld(9, true, 3, "dd", false);
+			OwnTurning.ClearFrom = 2;
+			OwnTurning.ClearUntil = 112.0;
+			OwnTurning.ClearFromName = "two destroyers of Force H";
+			Same("her own ships in the way, turning clear too: the turning clear line", Of(Away(OwnTurning), 0, 0, 4, 4, 100.0).Line,
+			     "Turning clear of torpedoes fired by two destroyers of Force H. They take up their orders again in 12 seconds.");
+			// (the rules holding her too: the rules' line, as built)
+			SeaWords::Fields OwnRules = OwnHeld(9, true, 3, "dd", false);
+			OwnRules.HeldFor = 5;
+			OwnRules.HeldForName = Cruiser;
+			Same("her own ships in the way, the rules holding her too: the rules' line", Of(OwnRules, 0, 0, 4, 1, 100.0).Line,
+			     "Holding their torpedoes while a cruiser of the Home Fleet is in the line of fire. They fire the moment the water is clear.");
+			// (routing: the held line unchanged)
+			SeaWords::Fields OwnRouting = OwnHeld(9, true, 3, "dd", false);
+			OwnRouting.bRouting = true;
+			Same("her own ships in the way, routing: the held line unchanged", Of(OwnRouting, 0, 0, 4, 4, 100.0).Line,
+			     "Holding the rest of their torpedoes while three of their own destroyers are in the line of fire. They fire the moment the water is clear.");
+			// (the count, the kind and the phrase as the words make them)
+			std::string Counts;
+			for (int N : { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 20, -1 }) Counts += (Counts.empty() ? "" : " ") + (N == 0 || N < 0 ? std::string("(") + SeaWords::CountWords(N) + ")" : SeaWords::CountWords(N));
+			Same("the counts: 0, one to ten in words, figures from 11, below 0", Counts, "() one two three four five six seven eight nine ten 11 12 20 ()");
+			std::string Kinds;
+			for (const char* Class : { "bb", "cv", "ca", "dd", "ss", "mv", "cl", "" }) Kinds += (Kinds.empty() ? "" : ", ") + SeaWords::KindWord(Class);
+			Same("the kinds as the log names them: bb, cv, ca, dd, ss, mv, another class, more than one", Kinds,
+			     "battleships, carriers, cruisers, destroyers, submarines, merchant ships, ships, ships");
+			Same("her own ships' phrase: three destroyers, their", SeaWords::OwnPhrase(3, "dd", "their"), "three of their own destroyers");
+			Same("her own ships' phrase: one destroyer, their", SeaWords::OwnPhrase(1, "dd", "their"), "one of their own destroyers");
+			Same("her own ships' phrase: three of more than one kind", SeaWords::OwnPhrase(3, "", "their"), "three of their own ships");
+			Same("her own ships' phrase: none", SeaWords::OwnPhrase(0, "dd", "their"), "");
+			// (through the show's picture: her own piece across her held tubes, her own ships and their class read from it; the
+			// both-in-the-way case, another piece across more of them, its phrase; Destroyers 3 with no turn clear)
+			std::map<int, SeaShow::Piece> Pieces;
+			for (const int Id : { 1, 3 })
+			{
+				SeaShow::Piece& P = Pieces[Id];
+				P.Id = Id;
+				P.Side = 0;
+				P.Ships = 4;
+				P.Class = "dd";
+			}
+			SeaWords::Picture Pic;
+			Pic.Tubes[3].Salvo = 1;
+			Pic.Tubes[3].Fired = 7;
+			Pic.Tubes[3].Held = 9;
+			Pic.Tubes[3].HeldFired = 7;
+			Pic.Tubes[3].Across = 3;
+			Pic.Tubes[3].OwnAcross = 2;
+			Pic.Tubes[3].OwnClass = "dd";
+			Pic.Phrases[1] = Pic.Phrases[3] = ForceH;
+			const SeaWords::Fields F = SeaWords::FieldsOf(Pieces[3], Pic);
+			Expect(F.bAcrossOwn && F.Across == 3 && F.OwnAcross == 2 && F.OwnClass == "dd", "FieldsOf with the picture: her own piece in the way, two of her destroyers",
+			       std::string(F.bAcrossOwn ? "own " : "not own ") + std::to_string(F.Across) + " " + std::to_string(F.OwnAcross) + " " + F.OwnClass, "own 3 2 dd");
+			Same("through the picture: her own ships in the way, the rest held", SeaWords::Of(Pieces[3], Pieces, Pic, 0, 100.0).Line,
+			     "Holding the rest of their torpedoes while two of their own destroyers are in the line of fire. They fire the moment the water is clear.");
+			Pic.Tubes[3].HeldFired = 0;
+			Same("through the picture: her own ships in the way, none of that salvo in the water yet", SeaWords::Of(Pieces[3], Pieces, Pic, 0, 100.0).Line,
+			     "Holding their torpedoes while two of their own destroyers are in the line of fire. They fire the moment the water is clear.");
+			Pic.Tubes[3].HeldFired = 7;
+			Pic.Tubes[3].Across = 1;
+			const SeaWords::Fields G = SeaWords::FieldsOf(Pieces[3], Pic);
+			Expect(!G.bAcrossOwn && G.Across == 1 && G.OwnAcross == 0, "FieldsOf with the picture: both in the way, another piece across: not her own",
+			       std::string(G.bAcrossOwn ? "own " : "not own ") + std::to_string(G.Across) + " " + std::to_string(G.OwnAcross), "not own 1 0");
+			Same("through the picture: both in the way, another piece's ships named, as built", SeaWords::Of(Pieces[3], Pieces, Pic, 0, 100.0).Line,
+			     "Holding the rest of their torpedoes while four destroyers of Force H are in the line of fire. They fire the moment the water is clear.");
 		}
 
 		// A piece's phrase from its salvo's line in the log (the scene's blocker the rules never named): its words up to the
@@ -527,8 +734,8 @@ namespace
 			P.ClearUntil = 112.0;
 			P.ClearFromName = "four destroyers of Force H";
 			SeaWords::Picture Pic;
-			Pic.Tubes[3] = SeaShow::TubesOut{ 1, 7, 9, 7, 1 };
-			Pic.Tubes[2] = SeaShow::TubesOut{ 1, 0, 0, 0, -1 };
+			Pic.Tubes[3] = SeaShow::TubesOut{ 1, 7, 9, 7, 1, 0, "" };
+			Pic.Tubes[2] = SeaShow::TubesOut{ 1, 0, 0, 0, -1, 0, "" };
 			Pic.Phrases[1] = "four destroyers of Force H";
 			const SeaWords::Fields F = SeaWords::FieldsOf(P, Pic);
 			Expect(F.SceneHeld == 9 && F.bHeldAway && F.Across == 1 && F.AcrossName == "four destroyers of Force H" && !F.bLauncherAway && F.ClearFrom == 2,
@@ -1197,7 +1404,12 @@ namespace
 	 * (breaking off: no count); RoutingViews, his piece-views turning clear while routing (read apart from SeaFeed);
 	 * Returns, the held tag coming back as a turn clear ends with her tubes still held (the UI director, 26 November
 	 * 05:17Z); SceneHolds, whether the scene holds any of his tubes (0: none, and with no field of his own, nothing at all;
-	 * 1: some, each frame worded); Named, each of the scene's held lines names the piece in the way (never the tag alone). */
+	 * 1: some, each frame worded); Named, each of the scene's held lines names the piece in the way (never the tag alone).
+	 * And the UI director's marks of 27 November 07:14Z: RulesTurn, some of his pieces held by the rules turn clear at once,
+	 * each frame turning clear; OwnTold, some of his held lines tell her own ships in the way (never her piece's phrase);
+	 * Both, the first of his held lines said with her own ships and another piece's both across her held tubes (the piece,
+	 * the frame, how many of her own, the line), another piece's named by its phrase (the built preference), string for
+	 * string; none where not set. */
 	struct Pinned
 	{
 		const char* Key;
@@ -1209,6 +1421,8 @@ namespace
 		int LetGo = -1, LetGoRouting = -1, RoutingViews = -1;
 		int Returns = -1, SceneHolds = -1;
 		bool bNamed = false;
+		bool bRulesTurn = false, bOwnTold = false;
+		const char* Both = nullptr;
 	};
 
 	const std::vector<Pinned>& Pins()
@@ -1227,45 +1441,59 @@ namespace
 		static const char* const Fired = "Turning clear of torpedoes fired by four destroyers of Force H. They take up their orders again in ";
 		static const std::string About36 = std::string(About) + "36 seconds.", About2 = std::string(About) + "2 seconds.";
 		static const std::string Fired1 = std::string(Fired) + "1 second.", Fired0 = std::string(Fired) + "0 seconds.", Fired21 = std::string(Fired) + "21 seconds.",
-		                         Fired18 = std::string(Fired) + "18 seconds.", Fired7 = std::string(Fired) + "7 seconds.";
+		                         Fired18 = std::string(Fired) + "18 seconds.", Fired7 = std::string(Fired) + "7 seconds.", Fired22 = std::string(Fired) + "22 seconds.";
+		// (her own piece's ships in the way, not named by the piece: the count and kind "of their own", the UI director,
+		// 27 November 07:14Z; one ship, so "is"; two or three, "are"; every ship of her own piece across each held tube's way
+		// counted, not only the first found)
+		static const char* const OwnOne = "Holding the rest of their torpedoes while one of their own destroyers is in the line of fire. They fire the moment the water is clear.";
+		static const char* const OwnTwo = "Holding the rest of their torpedoes while two of their own destroyers are in the line of fire. They fire the moment the water is clear.";
+		static const char* const OwnThree = "Holding the rest of their torpedoes while three of their own destroyers are in the line of fire. They fire the moment the water is clear.";
 		// (a division routing has no orders to take up again: it breaks off, no count)
 		static const char* const Breaking = "Breaking off, and turning clear of torpedoes fired by four destroyers of Force H.";
 		// (two battle lines: the Battle Fleet's Destroyers 3, three afloat, holding for its Destroyers 2; then the scene
-		// holding the rest of its salvo, its own ships in the way, then its Destroyers 2's; with the sailors' rules the scene
-		// holds the rest of Destroyers 2's own salvo; the Home Fleet's Destroyers 2 the rest of its, its own ships in the way)
+		// holding the rest of its salvo, one of its own ships in the way, then its Destroyers 2's (another piece's, so the
+		// built phrase); with the sailors' rules the scene holds the rest of Destroyers 2's own salvo, one of its own ships in
+		// the way; the Home Fleet's Destroyers 2 the rest of its, one of its own ships in the way)
 		static const char* const ForBattle = "Holding their torpedoes while four destroyers of the Battle Fleet are in the line of fire. They fire the moment the water is clear.";
-		static const char* const RestBattle3 =
-		    "Holding the rest of their torpedoes while three destroyers of the Battle Fleet are in the line of fire. They fire the moment the water is clear.";
 		static const char* const RestBattle4 =
 		    "Holding the rest of their torpedoes while four destroyers of the Battle Fleet are in the line of fire. They fire the moment the water is clear.";
-		static const char* const RestHome2 =
-		    "Holding the rest of their torpedoes while two destroyers of the Home Fleet are in the line of fire. They fire the moment the water is clear.";
-		// (off Samar: Taffy 3's destroyers, the scene holding the rest of their salvo, their own ships in the way)
-		static const char* const RestTaffy =
-		    "Holding the rest of their torpedoes while three destroyers of Taffy 3 are in the line of fire. They fire the moment the water is clear.";
-		static const std::vector<Shown> TwoLinesAtt = { { 377.0, 12, "", "" }, { 377.0, -1, "2 Torpedoes held", "" }, { 377.0, 2, Held, RestHome2 }, { 388.0, 2, "", "" },
+		static const std::vector<Shown> TwoLinesAtt = { { 377.0, 12, "", "" }, { 377.0, -1, "2 Torpedoes held", "" }, { 377.0, 2, Held, OwnOne }, { 388.0, 2, "", "" },
 		                                                { 388.0, -1, "", "" } };
 		static const std::vector<Shown> TwoLinesSailorsAtt = { { 377.0, 12, "", "" }, { 377.0, -1, "", "" } };
 		static const std::vector<Shown> TwoLinesDef = { { 371.0, 12, "", "" },        { 377.0, 12, Held, ForBattle },   { 377.0, -1, "12 Torpedoes held", "" },
-		                                                { 377.0, 1, "", "" },         { 383.0, 12, Held, RestBattle3 }, { 390.0, 12, Held, RestBattle4 },
+		                                                { 377.0, 1, "", "" },         { 383.0, 12, Held, OwnOne },      { 386.75, 12, Held, RestBattle4 },
+		                                                { 390.0, 12, Held, RestBattle4 },
 		                                                { 414.0, 12, "", "" },        { 414.0, -1, "", "" } };
-		static const std::vector<Shown> TwoLinesSailorsDef = { { 371.0, 11, Held, RestBattle4 }, { 371.0, 12, "", "" },
-		                                                       { 377.0, 12, Held, ForBattle },   { 377.0, -1, "11 Torpedoes held, 12 Torpedoes held", "" },
-		                                                       { 383.0, 12, "", "" },            { 383.0, 11, Held, RestBattle4 },
-		                                                       { 390.0, 11, "", "" },            { 390.0, -1, "", "" } };
-		static const std::vector<Shown> SamarDef = { { 214.0, -1, "", "" }, { 216.0, 17, Held, RestTaffy }, { 216.0, -1, "17 Torpedoes held", "" }, { 236.0, 17, "", "" },
-		                                             { 236.0, -1, "", "" } };
+		static const std::vector<Shown> TwoLinesSailorsDef = { { 371.0, 11, Held, OwnOne },    { 371.0, 12, "", "" },
+		                                                       { 377.0, 12, Held, ForBattle }, { 377.0, -1, "11 Torpedoes held, 12 Torpedoes held", "" },
+		                                                       { 383.0, 12, "", "" },          { 383.0, 11, Held, OwnOne },
+		                                                       { 390.0, 11, "", "" },          { 390.0, -1, "", "" } };
+		// (off Samar: Taffy 3's destroyers, the scene holding the rest of their salvo, one, then two, then one of their own
+		// ships in the way; two from 220.97 s, a second of hers holding one of the tubes through its head's run as the first
+		// stands on its line)
+		static const std::vector<Shown> SamarDef = { { 214.0, -1, "", "" },        { 216.0, 17, Held, OwnOne }, { 216.0, -1, "17 Torpedoes held", "" },
+		                                             { 221.5, 17, Held, OwnTwo }, { 222.0, 17, Held, OwnTwo }, { 225.0, 17, Held, OwnOne },
+		                                             { 236.0, 17, "", "" },       { 236.0, -1, "", "" } };
+		// (the destroyer column stand-in, the switch on in its field, as the attacker: Force K's Destroyers 1, the scene holding
+		// the rest of its salvo with its own ships in the way: one, then two from 150.4 s (two on one tube's line), three
+		// 162.9 to 168.8 s (three on the held tubes' lines, the third behind another on one tube's), two, one from 180.2 s)
+		static const std::vector<Shown> ColumnAtt = { { 150.0, 1, Held, OwnOne },   { 152.0, 1, Held, OwnTwo }, { 165.0, 1, Held, OwnThree },
+		                                              { 165.0, -1, "1 Torpedoes held", "" }, { 170.0, 1, Held, OwnTwo }, { 183.0, 1, Held, OwnOne } };
 		static const std::vector<Pinned> All = {
 			// Light ships against battleships: Force H's destroyers hold and turn clear (35 piece-views held, 40 turning clear);
-			// the 1st Fleet's none. Destroyers 2 and 3 each hold for the other 382 to 388 s; Destroyers 4 holds and turns
-			// clear at once 410 to 416 s (held wins). clearUntil is the second the heads pass her, so each turn clear ends
+			// the 1st Fleet's none. Destroyers 2 and 3 each hold for the other 382 to 388 s; Destroyers 4 is held by the rules
+			// and turns clear at once 410 to 416 s (turning clear wins, whoever holds her tubes: the UI director, 27 November
+			// 07:14Z), its count to clearUntil from then on (22 seconds at 410 s, clearUntil 431.4 s; each view's clearUntil
+			// later by about its two seconds, so 22 to 20 seconds while the rules hold her). clearUntil is the second the heads
+			// pass her, so each turn clear ends
 			// within a view of its count's 0: Destroyers 3 at 408 s (its 0 at 406.1 s, the count read 0 seconds), Destroyers 5
 			// at 430 s (430.8 s) and Destroyers 4 at 444 s (443.2 s), both routing from 426 s, so breaking off, no count. The
-			// scene holds the rest of Destroyers 2's salvo 389.1 to 411.7 s (none in the water until 404.1 s), Destroyers 3's
-			// 397.6 to 425.7 s (turning clear 400 to 408 s, about to be fired until 404.1 s) and Destroyers 4's 416.3 to
-			// 449.7 s (held, the rest of, until the view at 418 s ends the rules' hold, its salvo told at 416.3 s, then turning
-			// clear until 444 s: the UI director's 1.7 s step); the held tag back on Destroyers 3 at 408 s and Destroyers 4 at
-			// 444 s.
+			// scene holds the rest of Destroyers 2's salvo 389.1 to 411.7 s (none in the water until 404.1 s; from its first
+			// frame one of its own destroyers and Destroyers 3's both in the way, so Destroyers 3's phrase, as built), Destroyers 3's
+			// 397.6 to 425.7 s (turning clear 400 to 408 s, about to be fired until 404.1 s; from about 419 s one of its own
+			// destroyers in the way, so "one of their own destroyers is") and Destroyers 4's 416.3 to 449.7 s (turning clear
+			// from 410 s until 444 s, with no held step between: the rules' hold no longer wins); the held tag back on
+			// Destroyers 3 at 408 s and Destroyers 4 at 444 s.
 			{ "light-ships", 63591, 289, 0, false, true, false,
 			  { { 352.5, 6, "", "" },
 			    { 355.0, 6, Held, For4 },
@@ -1273,6 +1501,7 @@ namespace
 			    { 379.0, 2, Held, For4 },
 			    { 385.0, 2, Held, For4 },
 			    { 385.0, 3, Held, For4 },
+			    { 389.125, 2, Held, For4 },
 			    { 389.5, 2, Held, For4 },
 			    { 389.5, -1, "2 Torpedoes held, 3 Torpedoes held, 4 Torpedoes held", "" },
 			    { 391.0, 2, Held, For4 },
@@ -1291,15 +1520,18 @@ namespace
 			    { 409.0, 3, Held, Rest4 },
 			    { 409.0, 2, Held, Rest4 },
 			    { 409.0, -1, "2 Torpedoes held, 3 Torpedoes held, 4 Torpedoes held, 5 Turning clear of torpedoes", "" },
-			    { 411.0, 4, Held, For2 },
+			    { 410.0, 4, Clear, Fired22.c_str() },
+			    { 411.0, 4, Clear, Fired21.c_str() },
 			    { 412.0, 2, "", "" },
-			    { 415.0, 4, Held, For4 },
-			    { 417.0, 4, Held, Rest4 },
-			    { 417.0, -1, "3 Torpedoes held, 4 Torpedoes held, 5 Turning clear of torpedoes", "" },
+			    { 413.0, -1, "3 Torpedoes held, 4 Turning clear of torpedoes, 5 Turning clear of torpedoes", "" },
+			    { 415.0, 4, Clear, Fired21.c_str() },
+			    { 416.0, 4, Clear, Fired22.c_str() },
+			    { 417.0, 4, Clear, Fired21.c_str() },
+			    { 417.0, -1, "3 Torpedoes held, 4 Turning clear of torpedoes, 5 Turning clear of torpedoes", "" },
 			    { 419.0, 4, Clear, Fired21.c_str() },
 			    { 425.0, 4, Clear, Fired18.c_str() },
 			    { 425.0, 5, Clear, Fired7.c_str() },
-			    { 425.0, 3, Held, Rest4 },
+			    { 425.0, 3, Held, OwnOne },
 			    { 426.0, 3, "", "" },
 			    { 427.0, -1, "4 Turning clear of torpedoes, 5 Turning clear of torpedoes", "" },
 			    { 427.0, 4, Clear, Breaking },
@@ -1313,24 +1545,36 @@ namespace
 			    { 445.0, -1, "4 Torpedoes held", "" },
 			    { 450.0, 4, "", "" },
 			    { 450.0, -1, "", "" } },
-			  1, 2, 11, 2, 1, true },
+			  1, 2, 11, 2, 1, true, true, true,
+			  "piece 2 at 389.125 s (1 of her own), Holding their torpedoes while four destroyers of Force H are in the line of fire. They fire the moment the water "
+			  "is clear." },
 			// (as the 1st Fleet: the rules give its pieces no field and the scene holds none of its tubes, so nothing)
 			{ "light-ships", 63591, 289, 1, false, false, false, { { 393.0, -1, "", "" }, { 409.0, -1, "", "" } }, -1, -1, -1, 0, 0, false },
 			// Two battle lines, and the same with the sailors' rules: only the Battle Fleet's Destroyers 3 is held by the rules
 			// (372 to 380 s, for its Destroyers 2); the scene holds the rest of the Home Fleet's Destroyers 2's salvo 375.9 to
 			// 387 s, and of the Battle Fleet's Destroyers 3's 380.7 to 413.5 s; with the sailors' rules, of the Battle Fleet's
-			// Destroyers 2's 369.9 to 389.8 s. The enemy's as the scene takes the player (att); his own as the defender.
-			{ "two-lines", 23996, 305, 0, false, false, true, TwoLinesAtt, -1, -1, -1, -1, 1, true },
-			{ "two-lines", 23996, 305, 1, false, false, false, TwoLinesDef, -1, -1, -1, -1, 1, true },
+			// Destroyers 2's 369.9 to 389.8 s. Where one of a piece's own ships is in the way, its count and kind, "of their
+			// own" (the UI director, 27 November 07:14Z): the Home Fleet's Destroyers 2 throughout, the Battle Fleet's
+			// Destroyers 3 380.7 to 386.8 s (then its Destroyers 2's, the built phrase, from 386.75 s with one of its own still in
+			// the way too: both, so another piece's named), and with the sailors' rules its
+			// Destroyers 2 throughout. The enemy's as the scene takes the player (att); his own as the defender.
+			{ "two-lines", 23996, 305, 0, false, false, true, TwoLinesAtt, -1, -1, -1, -1, 1, true, false, true },
+			{ "two-lines", 23996, 305, 1, false, false, false, TwoLinesDef, -1, -1, -1, -1, 1, true, false, true,
+			  "piece 12 at 386.750 s (1 of her own), Holding the rest of their torpedoes while four destroyers of the Battle Fleet are in the line of fire. They fire the "
+			  "moment the water is clear." },
 			{ "two-lines-sailors", 71510, 315, 0, false, false, true, TwoLinesSailorsAtt, -1, -1, -1, -1, 0, false },
-			{ "two-lines-sailors", 71510, 315, 1, false, false, false, TwoLinesSailorsDef, -1, -1, -1, -1, 1, true },
+			{ "two-lines-sailors", 71510, 315, 1, false, false, false, TwoLinesSailorsDef, -1, -1, -1, -1, 1, true, false, true },
 			// The action off Samar, and the same with the sailors' rules: recorded with the switch on (the own-water list: its
 			// views carry no field), no piece held by the rules or turning clear; the scene holds the rest of Taffy 3's
-			// destroyers' salvo 215.1 to 235.5 s, their own ships in the way, and nothing else shows.
+			// destroyers' salvo 215.1 to 235.5 s, their own ships in the way (one, two from 221 s, one again from 224.2 s:
+			// "of their own", never "of Taffy 3"), and nothing else shows.
 			{ "samar", 16077, 220, 0, true, false, false, {}, -1, -1, -1, -1, 0, false },
-			{ "samar", 16077, 220, 1, false, false, false, SamarDef, -1, -1, -1, -1, 1, true },
+			{ "samar", 16077, 220, 1, false, false, false, SamarDef, -1, -1, -1, -1, 1, true, false, true },
 			{ "samar-sailors", 16077, 220, 0, true, false, false, {}, -1, -1, -1, -1, 0, false },
-			{ "samar-sailors", 16077, 220, 1, false, false, false, SamarDef, -1, -1, -1, -1, 1, true },
+			{ "samar-sailors", 16077, 220, 1, false, false, false, SamarDef, -1, -1, -1, -1, 1, true, false, true },
+			// The destroyer column stand-in (its field's ownWater), as the attacker: the scene holds Destroyers 1's tubes, each
+			// frame worded, her own ships in the way told by their count, every one across her held tubes' way.
+			{ "destroyer-column", 251, 166, 0, false, false, false, ColumnAtt, -1, -1, -1, -1, 1, true, false, true },
 		};
 		return All;
 	}
@@ -1377,7 +1621,7 @@ namespace
 
 	/** Six views written here (100 to 110 s), for what the computer's sides never record (the own-water recordings are
 	 * fought by the computer on both sides): the player's order, a ship alone holding and turning clear, a division
-	 * turning clear under his order, held winning over turning clear under his order, the count's last second, a turn
+	 * turning clear under his order, turning clear winning over held under his order, the count's last second, a turn
 	 * clear the views keep past its salvo's landing and a turn clear without its clearFromName; what SeaFeed leaves
 	 * unread (a turn clear without its clearUntil, an id below 0); a view without the fields clearing them, ordered too;
 	 * and the enemy's pieces holding and turning clear under an order. Each piece's fields as the rules write them into
@@ -1417,7 +1661,7 @@ namespace
 				// at 112.4 s, so the tag and no line; nothing before or after)
 				case 4: return T == 102.0 ? ",\"clearFrom\":1,\"clearUntil\":112.4" : "";
 				// (Cruiser 3, a ship alone: holds for Destroyers 3 at 104 and 106 s; at 108 and 110 s holds for Destroyers 1 and
-				// turns clear of its salvo at once, under his order)
+				// turns clear of its salvo at once, under his order: turning clear, whoever holds her tubes)
 				case 5:
 					return T <= 102.0   ? ""
 					       : T <= 106.0 ? ",\"heldFor\":3,\"heldForName\":\"2 destroyers of the Home Fleet\""
@@ -1531,8 +1775,11 @@ namespace
 			{ 106.5, -1, "2 Turning clear of torpedoes, 5 Torpedoes held", "" },
 			{ 106.5, 2, Clear, "Turning clear of torpedoes about to be fired by 4 destroyers of the Home Fleet. She takes up her orders again in 0 seconds." },
 			{ 106.5, 3, "", "" },
-			{ 108.5, -1, "2 Turning clear of torpedoes, 5 Torpedoes held", "" },
-			{ 108.5, 5, Held, "Holding her torpedoes while 4 destroyers of the Home Fleet are in the line of fire. Your order stands: she fires the moment the water is clear." },
+			// (Cruiser 3 held by the rules and turning clear at once, under his order: turning clear, the count to clearUntil,
+			// never below 0; the UI director, 27 November 07:14Z)
+			{ 108.5, -1, "2 Turning clear of torpedoes, 5 Turning clear of torpedoes", "" },
+			{ 108.5, 5, Clear, "Turning clear of torpedoes about to be fired by 4 destroyers of the Home Fleet. She takes up your orders again in 1 second." },
+			{ 109.5, 5, Clear, "Turning clear of torpedoes about to be fired by 4 destroyers of the Home Fleet. She takes up your orders again in 0 seconds." },
 		};
 		const std::vector<Shown> Def = {
 			{ 101.0, -1, "11 Torpedoes held, 12 Turning clear of torpedoes", "" },
@@ -1624,10 +1871,11 @@ namespace
 		std::map<int, SeaShow::TubesOut> Tubes;
 		Show.TubesNow(Tubes);
 		std::string Out;
-		char Buf[120];
+		char Buf[160];
 		for (const auto& Pair : Tubes)
 		{
-			std::snprintf(Buf, sizeof Buf, "%d:%d,%d,%d,%d,%d;", Pair.first, Pair.second.Salvo, Pair.second.Fired, Pair.second.Held, Pair.second.HeldFired, Pair.second.Across);
+			std::snprintf(Buf, sizeof Buf, "%d:%d,%d,%d,%d,%d,%d,%s;", Pair.first, Pair.second.Salvo, Pair.second.Fired, Pair.second.Held, Pair.second.HeldFired, Pair.second.Across,
+			              Pair.second.OwnAcross, Pair.second.OwnClass.c_str());
 			Out += Buf;
 		}
 		return Out;
@@ -1709,6 +1957,14 @@ namespace
 		long TubesOff = 0, Silent = 0, SceneOnlyFrames = 0, ScenePieceFrames = 0, Returns = 0, BothFrames = 0, FiredDry = 0, AboutLate = 0, AboutFrames = 0, FiredFrames = 0,
 		     CountsAbout = 0, CountsFired = 0, CountOff = 0, CountBelow = 0, RestFrames = 0, RestOff = 0, SceneLines = 0, NamedOff = 0, OwnAcross = 0, UnnamedHeld = 0,
 		     OnceSaid = 0, HeldTagFrames = 0, SceneHeldFrames = 0, SceneHeldUnderHeld = 0, SceneHeldUnderClear = 0, SceneHeldBare = 0, SceneViewUnheld = 0;
+		// (the UI director's marks of 27 November 07:14Z: his own pieces the view reached holds and turns clear at once, as
+		// piece-frames judged and as worded (each turning clear: the tags held to the views); his own held lines telling her
+		// own ships, "of their own", before any torpedo of the salvo is in the water and after, and those naming her own
+		// piece's phrase (none may); and the frames another piece's ship and her own both stand across her held tubes, the
+		// other's phrase said)
+		long RulesTurning = 0, RulesTurningLines = 0, OwnBefore = 0, OwnAfter = 0, OwnNamed = 0, BothInWay = 0;
+		std::map<std::string, long> OwnSaid;
+		std::string FirstBoth;
 		std::map<std::string, long> HeldEnds;
 		std::string FirstSilent, FirstRuling, ReturnsAt;
 		auto NoteRuling = [&FirstRuling](double At, int Piece, const std::string& What)
@@ -1812,6 +2068,11 @@ namespace
 					const int WantSalvo = Latest != LatestSalvo.end() ? Latest->second : 0, WantHeld = Holds != HeldBy.end() ? Holds->second : 0;
 					bOff = bOff || Tb.Salvo != WantSalvo || Tb.Fired != LatestFired(Pair.first) || Tb.Held != WantHeld || (Tb.HeldFired > 0) != (HeldAwayBy.count(Pair.first) > 0) ||
 					       (Tb.Held == 0 && Tb.Across >= 0);
+					// (her own ships counted across her held tubes only while some are held, each a ship of her piece, so no more than
+					// it ever had, and all of her piece's class, as every ship of a piece is; none, and no class, without)
+					const auto Her = Pieces.find(Pair.first);
+					bOff = bOff || Tb.OwnAcross < 0 || (Tb.Held == 0 && Tb.OwnAcross > 0) || (Tb.OwnAcross == 0 && !Tb.OwnClass.empty()) ||
+					       (Tb.OwnAcross > 0 && (Her == Pieces.end() || Tb.OwnAcross > Her->second.Ships0 || Tb.OwnClass != Her->second.Class));
 				}
 				for (const auto& Pair : LatestSalvo) bOff = bOff || !Pic.Tubes.count(Pair.first);
 				for (const auto& Pair : HeldBy) bOff = bOff || !Pic.Tubes.count(Pair.first);
@@ -1845,10 +2106,10 @@ namespace
 				if (P.Side != Mine) { ++EnemySet; continue; }
 				const bool bHeldNow = P.bHeld && !LetGo.count(Pair.first);
 				if (P.bHeld && !bHeldNow && P.Ships >= 1) bLetGo = true;
-				// (held by the view, let go since, turning clear too: held while the scene holds some of her tubes, the view's
-				// hold winning over its own turn clear until the view that ends it; else turning clear)
-				const bool bKept = P.bHeld && !bHeldNow && P.bClear && HeldBy.count(Pair.first);
-				if (P.Ships >= 1 && (bHeldNow || P.bClear)) Want[Pair.first] = bHeldNow || bKept ? SeaWords::HeldTag : SeaWords::ClearingTag;
+				// (turning clear while she turns, whoever holds her tubes, the rules or the scene: the UI director, 27 November
+				// 07:14Z; else held by the rules)
+				if (P.Ships >= 1 && (bHeldNow || P.bClear)) Want[Pair.first] = P.bClear ? SeaWords::ClearingTag : SeaWords::HeldTag;
+				if (P.Ships >= 1 && bHeldNow && P.bClear) ++RulesTurning;
 			}
 			// (the scene's own holds: held, unless she turns clear, the turning-clear tag explaining the turn)
 			for (const auto& Pair : HeldBy)
@@ -1920,7 +2181,7 @@ namespace
 					const std::string NowTag = Has != Got.end() ? Has->second : std::string();
 					const auto Is = Pieces.find(Pair.first);
 					const int HeldNow = HeldBy.count(Pair.first) ? HeldBy.at(Pair.first) : 0;
-					if (Pair.second == SeaWords::ClearingTag && NowTag == SeaWords::HeldTag && HeldNow > 0 && Is != Pieces.end() && Is->second.HeldFor < 0)
+					if (Pair.second == SeaWords::ClearingTag && NowTag == SeaWords::HeldTag && Is != Pieces.end() && (HeldNow > 0 || Is->second.HeldFor >= 0))
 					{
 						++Returns;
 						char Buf[64];
@@ -2019,13 +2280,13 @@ namespace
 				{
 					const auto Read = Raw[RawAt].Pieces.find(Pair.first);
 					const RawPiece* R = Read != Raw[RawAt].Pieces.end() ? &Read->second : nullptr;
-					// (held as the view reached has it, but not once its salvo is told since: then it only turns clear, unless the
-					// scene holds some of her tubes, the view's hold winning over its own turn clear until the view that ends it)
+					// (turning clear as the view reached has it, whoever holds her tubes, the rules or the scene: the UI director,
+					// 27 November 07:14Z)
 					const bool bHeldNow = R && R->bHeld && !LetGo.count(Pair.first);
-					const bool bKept = R && R->bHeld && !bHeldNow && HeldBy.count(Pair.first);
 					bool bOff = false;
-					if (bOn && R && R->bClear && !bHeldNow && !bKept && R->bClearNamed && R->Ships >= 1)
+					if (bOn && R && R->bClear && R->bClearNamed && R->Ships >= 1)
 					{
+						if (bHeldNow) ++RulesTurningLines;
 						const std::string By = LatestFired(R->ClearFrom) > 0 ? "fired by " : "about to be fired by ";
 						if (R->bRouting)
 						{
@@ -2042,7 +2303,7 @@ namespace
 							SteadyOff += bOff ? 1 : 0;
 						}
 					}
-					else if (bTurnLine && !(R && R->bClear && !bHeldNow && !bKept))
+					else if (bTurnLine && !(R && R->bClear))
 					{
 						++ClearAfter;
 						bOff = true;
@@ -2102,17 +2363,44 @@ namespace
 						if (!bRules && Own.Line.empty()) ++UnnamedHeld;
 						if (!bRules && !Own.Line.empty())
 						{
-							// (the scene's: the own piece across her held tubes, by its phrase, its count its ships afloat)
+							// (the scene's: another own piece across her held tubes, by its phrase, its count its ships afloat; her own
+							// piece, never by its phrase (the UI director, 27 November 07:14Z): the count of her own ships across them, in
+							// words to ten, and their kind, her piece's class as the log names it, "of their own", the verb by the count)
 							++SceneLines;
 							const auto Tb = Pic.Tubes.find(Pair.first);
 							const int Across = Tb != Pic.Tubes.end() ? Tb->second.Across : -1;
 							const auto Ac = Pieces.find(Across);
 							const auto Ph = Pic.Phrases.find(Across);
-							bool bNameOk = Ac != Pieces.end() && Ac->second.Side == Mine && Ac->second.Ships >= 1 && Ph != Pic.Phrases.end();
-							if (bNameOk)
+							bool bNameOk = false;
+							if (Across == Pair.first && Tb != Pic.Tubes.end())
+							{
+								const int Ships = Tb->second.OwnAcross;
+								const std::string Her = SeaWords::Agree(P.Ships, "her", "their");
+								const std::string Told = SeaWords::CountWords(Ships) + " of " + Her + " own " + SeaWords::KindWord(P.Class) + (Ships == 1 ? " is " : " are ");
+								bNameOk = Ships >= 1 && Ships <= P.Ships0 && Tb->second.OwnClass == P.Class && Own.Line.find(" while " + Told + "in the line of fire. ") != std::string::npos;
+								if (Ph != Pic.Phrases.end() && Own.Line.find(Ph->second) != std::string::npos)
+								{
+									bNameOk = false;
+									++OwnNamed;
+								}
+								++(bRest ? OwnAfter : OwnBefore);
+								++OwnSaid[Told.substr(0, Told.size() - 1)];
+							}
+							else if (Ac != Pieces.end() && Ac->second.Side == Mine && Ac->second.Ships >= 1 && Ph != Pic.Phrases.end())
 							{
 								const int Counted = SeaWords::ShipsByName(Ph->second);
-								bNameOk = (Counted < 1 || Counted == Ac->second.Ships) && Own.Line.find(" while " + Ph->second + " ") != std::string::npos;
+								bNameOk = (Counted < 1 || Counted == Ac->second.Ships) && Own.Line.find(" while " + Ph->second + " ") != std::string::npos &&
+								          Own.Line.find(" of their own ") == std::string::npos && Own.Line.find(" of her own ") == std::string::npos;
+								if (Tb != Pic.Tubes.end() && Tb->second.OwnAcross > 0)
+								{
+									++BothInWay;
+									if (FirstBoth.empty())
+									{
+										char Buf[64];
+										std::snprintf(Buf, sizeof Buf, "piece %d at %.3f s (%d of her own), ", Pair.first, T, Tb->second.OwnAcross);
+										FirstBoth = Buf + Own.Line;
+									}
+								}
 							}
 							if (!bNameOk)
 							{
@@ -2417,8 +2705,21 @@ namespace
 			       "0, 0");
 			Expect(RestOff == 0, "\"Holding the rest of\" exactly while some of the salvo the scene holds is in the water (never while the rules hold her)",
 			       std::to_string(RestOff) + " off of " + std::to_string(RestFrames) + " said", "0");
-			Expect(NamedOff == 0, "the scene's held line names the own piece across her held tubes, by its phrase (its count its ships afloat)",
+			Expect(NamedOff == 0,
+			       "the scene's held line names the own piece across her held tubes: another's by its phrase (its count its ships afloat), her own by the count and kind of "
+			       "her own ships there",
 			       std::to_string(NamedOff) + " off of " + std::to_string(SceneLines), "0");
+			{
+				// (the UI director's marks of 27 November 07:14Z)
+				std::string Told;
+				for (const auto& Pair : OwnSaid) Told += (Told.empty() ? "" : ", ") + Pair.first + " " + std::to_string(Pair.second);
+				std::printf("  on the build 11f75827: his own pieces held by the rules and turning clear at once %ld piece-frames (%ld judged lines, each turning clear); her own "
+				            "ships told in the held line %ld piece-frames (%ld before any torpedo of the salvo is in the water, %ld after: %s); another piece's ships named with "
+				            "her own in the way too %ld%s%s\n",
+				            RulesTurning, RulesTurningLines, OwnBefore + OwnAfter, OwnBefore, OwnAfter, Told.empty() ? "none" : Told.c_str(), BothInWay,
+				            FirstBoth.empty() ? "" : ", the first ", FirstBoth.c_str());
+				Expect(OwnNamed == 0, "her own piece in the way is never named by its phrase", std::to_string(OwnNamed) + " of " + std::to_string(OwnBefore + OwnAfter), "0");
+			}
 			Expect(OnceSaid == 0, "no line says \", once the torpedoes have passed\"", std::to_string(OnceSaid), "0");
 		}
 		if (RoutingFrames + SteadyFrames > 0)
@@ -2573,6 +2874,29 @@ namespace
 		{
 			Expect(UnnamedHeld == 0 && SceneLines > 0, Of + ": the scene's held lines each name the piece in the way (never the tag alone)",
 			       std::to_string(SceneLines) + " lines, " + std::to_string(UnnamedHeld) + " without", "some, 0");
+		}
+		if (Pin->bRulesTurn)
+		{
+			// (turning clear wins while she turns, the rules holding her: each such frame's tag held to the views, turning clear,
+			// above; here, that the recording has some, and their lines turning clear)
+			Expect(RulesTurning > 0 && RulesTurningLines > 0 && TagsOff == 0 && TextOff == 0 && SteadyOff == 0 && RoutingOff == 0,
+			       Of + ": his pieces held by the rules while they turn clear show the turning clear tag and line (the UI director, 27 November 07:14Z)",
+			       std::to_string(RulesTurning) + " piece-frames, " + std::to_string(RulesTurningLines) + " lines judged, " + std::to_string(TextOff) + " worded off",
+			       "some, some, 0");
+		}
+		if (Pin->Both)
+		{
+			// (her own ships and another piece's both across her held tubes: the other's phrase, as built, the first such line
+			// string for string; each such line held to it above, NamedOff)
+			Expect(BothInWay > 0 && NamedOff == 0 && OwnNamed == 0 && FirstBoth == Pin->Both,
+			       Of + ": her own ships and another piece's both in the way, another piece's named by its phrase (the built preference)",
+			       std::to_string(BothInWay) + " piece-frames, " + std::to_string(NamedOff) + " off, the first " + FirstBoth,
+			       std::string("some, 0, the first ") + Pin->Both);
+		}
+		if (Pin->bOwnTold)
+		{
+			Expect(OwnBefore + OwnAfter > 0 && OwnNamed == 0 && NamedOff == 0, Of + ": her own ships in the way told by count and kind, \"of their own\", never her piece's phrase",
+			       std::to_string(OwnBefore + OwnAfter) + " piece-frames, " + std::to_string(OwnNamed) + " naming her piece", "some, 0");
 		}
 		if (Pin->bQuiet)
 		{
