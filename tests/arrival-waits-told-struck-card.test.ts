@@ -279,6 +279,36 @@ describe("the struck line on both month cards, in the muted line's place (the UI
   });
 });
 
+describe("every struck line first, then the rows still waiting (the UI director's section 12, A2)", () => {
+  // (Her A2, 16:07Z, 27 November 2026: "Pass: every struck line first, then the rows still waiting. 'Takes the place
+  // of' in 11 (a) meant its rank, first among the home lines." The round 2 verifier's V2: 'frontplace', month 68.)
+  const NCAA_WAIT = 'The North China Area Army (27th Division), due in Kaifeng since September 1944, waits until Kaifeng is in friendly hands.';
+  const NCAA_STRUCK = 'The North China Area Army (27th Division), due in Kaifeng since September 1944, will not form: Kaifeng is still not in friendly hands, and the arrival has waited as long as it may.';
+  const M_WAIT = 'The 12th Army (62nd Division), due in Kaifeng since October 1944, waits until Kaifeng is in friendly hands.';
+
+  it("'frontplace', month 68: a struck line whose muted line stood second goes ahead of the line that stood first, on both cards", () => {
+    const g = make(); lose(g, 'Kaifeng'); g.flags[`due:${M}`] = 55;
+    const b = g.corps.find((x) => x.nat === 'JAP' && !x.dead && x.name === BRIGADES)!;
+    relocate(g, b, g.byName.Hsuchow); g.lastBattle = { [b.reg]: [b.id] };
+    month(g, 61);
+    kill(g, BRIGADES);
+    for (let t = 62; t <= 67; t++) month(g, t);
+    // (The month before: the 12th Army's line first, the North China Area Army's after it.)
+    const before = rowsWaitingOnRows(g, 'JAP');
+    expect(before.indexOf(M_WAIT)).toBeGreaterThanOrEqual(0);
+    expect(before.indexOf(M_WAIT)).toBeLessThan(before.indexOf(NCAA_WAIT));
+    const saved = saveGame({ ...g, phase: g.order.indexOf('JAP') });
+    const mark = markFor(g);
+    month(g, 68);
+    expect(struckOf(g, 68)).toEqual([NCAA_STRUCK]);
+    const waits = monthCard(g, mark, 'JAP').waits ?? [];
+    expect(waits.slice(0, 2)).toEqual([NCAA_STRUCK, M_WAIT]);
+    TC().load(saved);
+    const res = TC().endMonth() as { month: Shown };
+    expect(res.month.home.slice(0, 2).map((x) => [x.text, x.grey])).toEqual([[NCAA_STRUCK, true], [M_WAIT, true]]);
+  });
+});
+
 describe('said once, and nothing where nothing was told', () => {
   it('the month after the strike reads no struck line on either card', () => {
     const g = make(); lose(g, 'Kaifeng'); kill(g, BRIGADES); g.flags[`due:${M}`] = 55;
