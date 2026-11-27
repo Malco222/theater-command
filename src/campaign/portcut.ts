@@ -828,10 +828,11 @@ function holdsMonth(g: Game, sweep: boolean): void {
 /**
  * The news of ports cut off by sea, as a nation's month opens, straight after its draw of the supply picture (game.ts
  * startPhase): the record of the holds; the relief of a port whose cut-off was told; and at the player's own month,
- * before his corps are charged, the first month no ship gets in and the month the stores run out. Once each: the first
- * by the clock (the month after the last fill), the second by the clock too (the first month the stores feed none),
- * or, where the larder was never the holder's, the first month it is told. Only to a player who holds the port or has
- * corps there. Nothing with the switch off, or with nobody at the table.
+ * before his corps are charged, the first month no ship gets in and the month the stores run out (after the relief,
+ * where it is told in the same reading: relieved and shut again in one month). Once each: the first by the clock (the
+ * month after the last fill), the second by the clock too (the first month the stores feed none), or, where the larder
+ * was never the holder's, the first month it is told. Only to a player who holds the port or has corps there. Nothing
+ * with the switch off, or with nobody at the table.
  */
 export function portsMonth(g: Game, nat: string): void {
   if (!portStoresOn(g) || !g.human || !g.nations[g.human]?.alive) { reading.delete(g); return; }
@@ -848,7 +849,7 @@ export function portsMonth(g: Game, nat: string): void {
   }
   for (const r of g.regions) {
     const k = toldKey(r.id);
-    const told = g.flags[k];
+    let told: number | undefined = g.flags[k];
     if (told !== undefined) {
       // (A port lost since, or one the player no longer has any part in, keeps no mark.)
       if (!watched(g, r) || r.since > told || !involved(g, r)) { delete g.flags[k]; continue; }
@@ -856,7 +857,9 @@ export function portsMonth(g: Game, nat: string): void {
       if (flag !== undefined && flag >= told && (!trueReach(g) || keptStoresHis(g, r))) {
         headline(g, 'info', `Ships reach ${portOf(r)} again: its stores are filled.`, r.ctrl, r.id, { won: r.ctrl });
         delete g.flags[k];
-        continue;
+        told = undefined;
+        // (Relieved and shut again in one month: the relief is told, and then the shut line as laid, in the same
+        // month's news. The UI director's 05:03Z, item 3.)
       }
     }
     if (!mine || !involved(g, r)) continue;

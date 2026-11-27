@@ -1170,7 +1170,9 @@ describe('03:13Z, item 1: the remedy line while a crew\'s clock runs, "at least 
     expect(rows).toEqual([
       // February: the crew eats its second month, and the line counts from it: a fill in February leaves the crew to
       // starve in March, and the port's own two feed the garrison through April.
-      [18, false, 2, true, 1, false, ['Ships reach Malta again: its stores are filled.'], [STORES, LEAST('April')], 'Living on Malta\'s stores through March.'],
+      // The stores filled in January, and the sea shut again: relieved and shut again in one month, the news tells both,
+      // in order (the UI director's 05:03Z, item 3). (The 03:13Z build told the relief alone, and the shut line never.)
+      [18, false, 2, true, 1, false, ['Ships reach Malta again: its stores are filled.', `No ship reaches Malta: Italian fleets hold the Central Mediterranean. The garrison lives on the port's stores through March; unless the sea is opened, it then goes hungry and is lost at the start of June.`], [STORES, LEAST('April')], 'Living on Malta\'s stores through March.'],
       // March: the crew starves in Britain's reckoning, after the draw that fed the garrison on its stores, as January's
       // line counted. No crew's clock runs now: the line is as laid.
       [19, true, null, true, 1, false, ['Cut off on Malta, the Malta fortress has starved and is lost.'], [STORES, REMEDY('May')], 'Living on Malta\'s stores through March.'],
