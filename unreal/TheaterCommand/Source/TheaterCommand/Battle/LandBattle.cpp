@@ -7983,6 +7983,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	}
 	WalkPan(Real);
 	LorryPan(Real);
+	CrewEye();
 	ReadDark(Real);
 	LandFell::Phase("tick: the dispatches");
 	if (!bNight)
@@ -8443,6 +8444,143 @@ void ALandBattle::LorryPan(double Real)
 		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, FString::Printf(TEXT("%s-lorrypan-%02d.png"), *Key, LorryPanStills)), true, false);
 		UE_LOG(LogTheater, Display, TEXT("Land battle: the lorry pan's still %02d at %.1f s"), LorryPanStills, S.Battle);
 		++LorryPanStills;
+	}
+}
+
+void ALandBattle::CrewEye()
+{
+	LAND_SCOPE(CrewEye);
+	if (CrewEyeNext >= CrewEyeAt.Num() || !State.IsValid())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	const int32 W = CrewEyeNext;
+	if (S.Battle < CrewEyeAt[W])
+	{
+		return;
+	}
+	bool bSnap = false;
+	if (CrewEyeTrack < 0)
+	{
+		// (the block's key man: its man of that k if one was asked, else its first standing; none: the window passes)
+		int Found = -1;
+		for (size_t T = 0; T < S.Rec.Tracks.size(); ++T)
+		{
+			const LandFeed::Track& Tr = S.Rec.Tracks[T];
+			if (Tr.Block != CrewEyeBlock[W] || Tr.J != 0 || (Tr.Role != "hmg" && Tr.Role != "mortar"))
+			{
+				continue;
+			}
+			if (CrewEyeK[W] >= 0 ? Tr.K != CrewEyeK[W] : (Tr.Fell >= 0.0 && S.Battle >= Tr.Fell))
+			{
+				continue;
+			}
+			Found = static_cast<int>(T);
+			break;
+		}
+		if (Found < 0)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle: the crew eye at %.1f s: block %d has no key man%s standing; that window passed by"),
+				S.Battle, CrewEyeBlock[W], CrewEyeK[W] >= 0 ? *FString::Printf(TEXT(" of k %d"), CrewEyeK[W]) : TEXT(""));
+			++CrewEyeNext;
+			return;
+		}
+		const LandFeed::Track& Tr = S.Rec.Tracks[static_cast<size_t>(Found)];
+		const LandFeed::Spot Sp = LandFeed::SpotAt(Tr, S.Battle);
+		const LandFeed::Block* Bl = S.Rec.BlockOf(Tr.Block);
+		// (his number two's side, the feed side: the right for the British, Soviet and Finnish guns, the left for the
+		// rest, DR.teamwork.seat.right, by the army's letters)
+		std::string Letters;
+		if (Bl)
+		{
+			for (const char Ch : Bl->Army)
+			{
+				if (!((Ch >= 'A' && Ch <= 'Z') || (Ch >= 'a' && Ch <= 'z')))
+				{
+					break;
+				}
+				Letters += Ch;
+			}
+		}
+		const double Feed = Letters == "UK" || Letters == "SOV" || Letters == "FIN" ? 1.0 : -1.0;
+		// The middle of the gun and its crew, a metre and a half behind him (his crew round and behind him), at a lying
+		// or kneeling man's height; the eye on his facing's right is (cos, -sin), ahead (sin, cos).
+		const double Sn = std::sin(Sp.F), Cs = std::cos(Sp.F);
+		const double Mx = Sp.X - Sn * 1.5, My = Sp.Y - Cs * 1.5;
+		const double Mz = (S.EyeWorld.Height ? S.EyeWorld.Height(Mx, My) : 0.0) + 0.6;
+		const LandPlay::Vec Look(Mx, My, Mz);
+		const double Off = CrewEyeOff[W];
+		const double Dists[3] = { Off, FMath::Max(4.0, Off - 2.0), Off + 2.0 };
+		const double Sides[4] = { Feed, -Feed, Feed, -Feed };
+		const double Aheads[4] = { 0.5, 0.5, -0.5, -0.5 };
+		const TCHAR* Names[4] = { TEXT("his number two's side, ahead of square"), TEXT("his other side, ahead of square"),
+			TEXT("his number two's side, behind square"), TEXT("his other side, behind square") };
+		int Chose = -1, ChoseD = 0;
+		LandPlay::Vec EyeAt = Look;
+		for (int Di = 0; Di < 3 && Chose < 0; ++Di)
+		{
+			for (int C = 0; C < 4 && Chose < 0; ++C)
+			{
+				const double A = Aheads[C], Across = std::sqrt(1.0 - A * A) * Sides[C];
+				const double Ex = Mx + (Sn * A + Cs * Across) * Dists[Di], Ey = My + (Cs * A - Sn * Across) * Dists[Di];
+				const double Ez = (S.EyeWorld.Height ? S.EyeWorld.Height(Ex, Ey) : Mz - 0.6) + 1.7;
+				const LandPlay::Vec Try(Ex, Ey, Ez);
+				const bool bGood = (!S.EyeWorld.Free || S.EyeWorld.Free(Try)) && (!S.EyeWorld.Open || S.EyeWorld.Open(Try, Look));
+				if (bGood || (Di == 0 && C == 0))
+				{
+					EyeAt = Try; // (the first place, should none be free and open)
+				}
+				if (bGood)
+				{
+					Chose = C;
+					ChoseD = Di;
+				}
+			}
+		}
+		CrewEyeTrack = Found;
+		CrewEyeFrom = S.Battle;
+		CrewEyeStillAt = RealT + 0.5;
+		CrewEyeStills = 0;
+		CrewEyeEye[0] = EyeAt.X;
+		CrewEyeEye[1] = EyeAt.Y;
+		CrewEyeEye[2] = EyeAt.Z;
+		CrewEyeLook[0] = Look.X;
+		CrewEyeLook[1] = Look.Y;
+		CrewEyeLook[2] = Look.Z;
+		bSnap = true;
+		const FString ArmyName = Bl ? FString(UTF8_TO_TCHAR(Bl->Army.c_str())) : FString(TEXT("?"));
+		const FString TeamName = Bl ? FString(UTF8_TO_TCHAR(Bl->Team.c_str())) : FString(TEXT("?"));
+		const FString RoleName(UTF8_TO_TCHAR(Tr.Role.c_str()));
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the crew eye from %.1f s for %.0f s: block %d (%s %s), its key man %s (track %d, k %d) at %.0f, %.0f; the eye %.0f m off on %s, 1.7 m up%s"),
+			S.Battle, CrewEyeFor[W], Tr.Block, *ArmyName, *TeamName, *RoleName, Found, Tr.K, Sp.X, Sp.Y, Chose >= 0 ? Dists[ChoseD] : Off,
+			Chose >= 0 ? Names[Chose] : Names[0], Chose >= 0 ? TEXT("") : TEXT(" (nowhere free and open: the first place taken)"));
+	}
+	if (S.Battle >= CrewEyeFrom + CrewEyeFor[W])
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the crew eye done at %.1f s: %d stills"), S.Battle, CrewEyeStills);
+		++CrewEyeNext;
+		CrewEyeTrack = -1;
+		// (the film's own shot again, laid round as on a cut)
+		S.Pose.bCut = true;
+		return;
+	}
+	// Held: no cut, no move, sharp through (the low shot's stop), wide enough for the gun and its crew at 6 to 12 m.
+	S.Pose.Eye = LandPlay::Vec(CrewEyeEye[0], CrewEyeEye[1], CrewEyeEye[2]);
+	S.Pose.Look = LandPlay::Vec(CrewEyeLook[0], CrewEyeLook[1], CrewEyeLook[2]);
+	S.Pose.Fov = 50.0;
+	S.Pose.Roll = 0.0;
+	S.Pose.Shot = LandEye::Kind::Low;
+	S.Pose.Subject = -1;
+	S.Pose.Focus = 0.0;
+	S.Pose.bCut = bSnap;
+	if (RealT >= CrewEyeStillAt)
+	{
+		CrewEyeStillAt = RealT + 1.0;
+		const FString Folder = ShotFolder.IsEmpty() ? FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("LandCrewEye")) : ShotFolder;
+		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, FString::Printf(TEXT("%s-creweye-%d-%02d.png"), *Key, W, CrewEyeStills)), true, false);
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the crew eye's still %d-%02d at %.1f s"), W, CrewEyeStills, S.Battle);
+		++CrewEyeStills;
 	}
 }
 

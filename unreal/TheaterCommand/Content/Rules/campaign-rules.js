@@ -94481,7 +94481,8 @@
         "run: a bearer brings ammunition up to the gun once its own runs low (supply.call, below), each bearer in turn, kneeling at the gun 'at' seconds; under fire he goes bent low and crawls back. watch: one bearer of each crew watches a flank 'keep' seconds [least, most] before another takes it, looking 'arc' radians [least, most] off the front. glasses: the crew's second man watches the fall of its fire through his glasses 'for' seconds [least, most] of each 'every'. posts: between its bombs a mortar's gunner is up on his knees checking his aiming posts 'for' seconds [least, most] of each 'every' (each his own).",
         "supply (release 2, Brian 25 November 18:39Z 'keep going', the 'running low' idea): each weapon's own ammunition, a machine gun's in seconds of fire (rapid fire uses 'rapid' times as fast), a mortar's in bombs: 'start' [least, most] where it first sets up; a bearer is sent once it is under 'call': back to the team's ammunition, 'dump' [least, most] metres behind its gun and 'lane' metres out to its feed side (marked as he is sent; he goes out to that lane first and keeps to it, outboard of his mates' rows, coming up level with the gun before stepping in), where he kneels 'load' [least, most] seconds filling up, then up to the gun (bent low under fire), and his load 'bring' [least, most] is the gun's as he hands it over. Under 'low' a machine gun fires short spells far apart ('spell.lowOn', 'spell.lowOff') of sparse bursts ('burst.low'); at none it is silent, its number two up on his knees looking back for the bearer, and a mortar fires no more till he comes.",
         "jam (the jammed gun drill): a machine gun stops after 'every' [least, most] seconds of its fire, its own, for 'for' [least, most] seconds while its gunner and number two clear it (up on their knees at the gun), then fires on. misfire: a mortar's bomb fails to fire one time in 1/'p'; its gunner and number two lie down beside the tube 'wait' [least, most] seconds in case it goes, then clear it 'clear' [least, most] seconds (the gunner tipping the tube, the number two at its muzzle).",
-        "fpl (the last-ditch fire idea): an enemy foot block coming on at the own line, within 'within' metres of the own foot block nearest it (or of the team) and closing on it at 'closing' metres a second or more, measured over 'every' seconds: for 'hold' seconds after, the team's machine guns fire their longest spells with the shortest pauses ('spell.finalOn', 'spell.finalOff') at rapid rate, low on the ground in front of the enemy's near edge (up to 'short' metres short of it, each gun its own share, the shares crossing), and its mortars drop their bombs every 'bombs' [least, most] seconds a tube on the enemy's way in, 'fpf' [least, most] metres out from the own line's front, never nearer than its first figure, and never more than 'reach' metres short of the enemy's near edge (a bomb is fired at them), each block's edge taken along the line between them; never nearer the own edge than one and a half times the bombs' spread, and none within 'clear' metres of any block of the team's own side (there the bombs go on the enemy itself)."
+        "fpl (the last-ditch fire idea): an enemy foot block coming on at the own line, within 'within' metres of the own foot block nearest it (or of the team) and closing on it at 'closing' metres a second or more, measured over 'every' seconds: for 'hold' seconds after, the team's machine guns fire their longest spells with the shortest pauses ('spell.finalOn', 'spell.finalOff') at rapid rate, low on the ground in front of the enemy's near edge (up to 'short' metres short of it, each gun its own share, the shares crossing), and its mortars drop their bombs every 'bombs' [least, most] seconds a tube on the enemy's way in, 'fpf' [least, most] metres out from the own line's front, never nearer than its first figure, and never more than 'reach' metres short of the enemy's near edge (a bomb is fired at them), each block's edge taken along the line between them; never nearer the own edge than one and a half times the bombs' spread, and none within 'clear' metres of any block of the team's own side (there the bombs go on the enemy itself).",
+        "held (the art director, 27 November 2026, 17:57Z: 'No drill state drawn for under 2 s'): each man of a team at work is drawn in a pose at least 'held' seconds before another, a shot excepted (a burst's or a bomb's fire, and the pose either side of it): a pose asked sooner waits its turn, and a move he begins is paced to take that long at least."
       ],
       seat: { mg: [0.6, 0.9], mortar: [0.95, 0.25], right: ["UK", "SOV", "FIN"], near: 0.7, slide: 0.9 },
       nco: { mg: [2.3, -2], mortar: [-2.4, -2.2] },
@@ -94511,7 +94512,8 @@
       supply: { mg: { start: [50, 80], call: 30, low: 12, bring: [35, 50], rapid: 1.6 }, mortar: { start: [6, 10], call: 5, low: 2, bring: [4, 6] }, dump: [20, 35], lane: 4.5, load: [3, 6] },
       jam: { every: [70, 180], for: [4, 9] },
       misfire: { p: 0.015, wait: [8, 14], clear: [3, 5] },
-      fpl: { within: 120, closing: 0.5, every: 2, hold: 20, short: 25, fpf: [25, 90], bombs: [3, 6], reach: 45, clear: 12 }
+      fpl: { within: 120, closing: 0.5, every: 2, hold: 20, short: 25, fpf: [25, 90], bombs: [3, 6], reach: 45, clear: 12 },
+      held: 2
     },
     sections: {
       _about: "Each model drawn as its section (release 2; the 3D ground battle scene for Brian, 21 November 2026, 18:29Z: 'the ground battle needs a lot more soldiers in it'). Looks only (ruling 217): the model stays the rules' one, its key man; the rest of his section stand round him and fall one by one as the block loses strength, the last of them when the rules lift the model. rifle: a rifle section by army (the default for the rest): men in all, its leader the key man, one automatic weapon (US the BAR, Germany the MG 42, Britain the Bren), its number twos and ammunition bearers (loaders), and its scouts out ahead on the move. officer: the headquarters (the officer and his runners); mg: a machine-gun section (the gun, two loaders, its leader); at: an anti-tank team (the launcher and its loader); sapper: an assault pioneer section; holder: a horse holder and the two with him; gun: a field gun's crew (beside the gun); hmg and mortar: a support team's ammunition bearers (beside the three the 3D game draws with each weapon). Each number counts the key man: a gun's counts the gun itself (8: the gun and seven crew), hmg's and mortar's the three drawn with the weapon (7: four bearers; 8: five). space: metres between the men of a section in its line; rows: metres between a block's front and second row of sections; files: men to a file on the march (more files for more men); ahead: metres a section's scouts go before it.",
@@ -95940,6 +95942,7 @@
           if (this.byBook) this.feel(sq);
           this.think(sq);
           this.pairs(sq, this.space(sq));
+          if (this.teamwork && u.team) this.steady(sq, true);
           if (b.escort) this.escort(sq);
           if (sq.screenQ) this.screenRound(sq);
           if (kept4) for (const [m, was] of kept4) Object.assign(m, was);
@@ -95947,6 +95950,7 @@
         if (this.hatches && u.kind === "arm" && !sq.esc) this.hatchNow(sq);
         this.walk(sq);
         this.fire(sq);
+        if (this.teamwork && u.team) this.steady(sq, false);
       }
       this.shellKills.clear();
       this.byOf.clear();
@@ -102010,6 +102014,55 @@
       m.pose = pose;
       m.lay = lay3;
       return true;
+    }
+    /**
+     * Support teams at work (Drill.teamwork; the art director, 27 November 2026, 17:57Z: "No drill state drawn for under
+     * 2 s"): each man of a team (its crews and its spotters; at work, carrying or falling back; not in a rout) is drawn in a pose DR.teamwork.held seconds at
+     * least before another, a shot excepted (a burst's or a bomb's fire, and the pose either side of it). At his crew's think (settle) a pose asked
+     * sooner waits its turn: a change of gait waits (the new pace kept), a move from a still pose waits where he is, a
+     * still pose waits as it was (a crewman's aim and facing with it), and one still on his way keeps going, slowly. A move
+     * begun is paced to take that long at least. After his step (not settle) a pose his step gave him (arriving) is only
+     * marked, its time from then. Looks only.
+     */
+    steady(sq, settle2) {
+      const t = this.b.t, H = DR.teamwork.held;
+      const at4 = sq.phase !== "flee";
+      for (const m of sq.fo ? [...sq.men, ...sq.fo] : sq.men) {
+        const key8 = CREWED.has(m.role), fo = m.role === "fo";
+        if (!at4 || m.fell !== void 0 || m.job || !m.pr && !key8 && !fo || !(fo || this.stands(sq, m))) {
+          m.ps = void 0;
+          continue;
+        }
+        const p = m.ps;
+        if (!p) {
+          m.ps = [m.pose, t, m.aim, m.lay];
+          continue;
+        }
+        if (settle2 && m.pose !== p[0] && t - p[1] < H - 1e-6 && m.pose !== "fire" && p[0] !== "fire") {
+          const go = MOVING.has(m.pose), went = MOVING.has(p[0]);
+          if (go && went) m.pose = p[0];
+          else if (go) {
+            m.pose = p[0];
+            m.v = 0;
+            if (!key8) {
+              m.aim = p[2];
+              m.lay = p[3];
+            }
+          } else if (went) {
+            m.pose = p[0];
+            m.v = 2.5;
+          } else {
+            m.pose = p[0];
+            if (!key8) {
+              m.aim = p[2];
+              m.lay = p[3];
+            }
+          }
+        }
+        if (m.pose !== p[0]) m.ps = [m.pose, t, m.aim, m.lay];
+        const q = m.ps, left = q[1] + H - t;
+        if (settle2 && MOVING.has(m.pose) && m.v > 0 && left > 0) m.v = Math.min(m.v, Math.max(Math.hypot(m.spot[0] - m.x, m.spot[1] - m.y) / (left + DT), 0.01));
+      }
     }
     /**
      * A battery's or a mortar team's mission at block e (the drill book, tactics.ts missionStep): steps it, sets each

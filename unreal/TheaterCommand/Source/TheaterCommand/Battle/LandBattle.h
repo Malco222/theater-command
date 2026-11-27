@@ -784,6 +784,21 @@ private:
 	double LorryPanAt = -1.0, LorryPanFor = 40.0, LorryPanStillAt = -1.0, LorryPanHeading = 0.0;
 	int32 LorryPanBlock = -1, LorryPanVehicle = -1, LorryPanSide = 1, LorryPanStills = 0, LorryPanTries = 12;
 	void LorryPan(double Real);
+	/** The crew eye ("-TheaterLandCrewEye=<battle s>,<seconds>,<block>[,<k>[,<metres>]]", several split by '/'; release 2,
+	 * the art director's P11c mend, 27 November 17:57Z: "A held eye, no cuts, at soldier height 6 to 10 m off, gun and
+	 * whole crew in frame"): for each window, from that battle second for that long, the eye held still 1.7 m over the
+	 * ground some metres off (8 unless said) a support team's key man (role hmg or mortar) of that block (its man of that
+	 * k, else its first standing), on his number two's side and a little ahead of square, looking at the middle of the
+	 * gun and its crew; the first place free and open to the crew (that side, the other, then a little behind each; the
+	 * metres asked, then 2 m nearer, then 2 m farther); a still each real second. The windows in the order said, one at a
+	 * time. Each window's battle second, seconds, block, k (-1 any) and metres; the next window; the one held now: its
+	 * track (-1 none yet), the battle second it began, its eye and look, its stills' next real time and count. */
+	TArray<double> CrewEyeAt, CrewEyeFor, CrewEyeOff;
+	TArray<int32> CrewEyeBlock, CrewEyeK;
+	int32 CrewEyeNext = 0, CrewEyeTrack = -1, CrewEyeStills = 0;
+	double CrewEyeFrom = -1.0, CrewEyeStillAt = -1.0;
+	double CrewEyeEye[3] = { 0.0, 0.0, 0.0 }, CrewEyeLook[3] = { 0.0, 0.0, 0.0 };
+	void CrewEye();
 	/** The dark reading for the camera director's dark rule (LandEye::World::DarkNow; the art director, cut 4 fix 6 and
 	 * cut 5: a shot over 30% darker than L 25 of 255 is left): the drawn frame copied at 64 x 36 four times a real second
 	 * by the engine's frame grabber, which waits on nothing, and the share of it under L 25 (-1 until the first comes

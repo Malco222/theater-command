@@ -198,6 +198,41 @@ bool ALandBattle::BeginLiveFrom(const FString& InKey, int32 Seed, const FString&
 		UE_LOG(LogTheater, Display, TEXT("Land battle (live): the lorry pan asked: from %.0f s for %.0f s, beside a lorry with men aboard%s"),
 			LorryPanAt, LorryPanFor, LorryPanBlock >= 0 ? *FString::Printf(TEXT(" of block %d"), LorryPanBlock) : TEXT(""));
 	}
+	// (the crew eye, the art director's held eye on a support team's gun and its crew: "-TheaterLandCrewEye=<battle s>,
+	// <seconds>,<block>[,<k>[,<metres>]]", several split by '/', read past its commas; CrewEye in LandBattle.cpp)
+	CrewEyeAt.Reset();
+	CrewEyeFor.Reset();
+	CrewEyeOff.Reset();
+	CrewEyeBlock.Reset();
+	CrewEyeK.Reset();
+	CrewEyeNext = 0;
+	CrewEyeTrack = -1;
+	CrewEyeStills = 0;
+	CrewEyeFrom = -1.0;
+	CrewEyeStillAt = -1.0;
+	FString CrewEyeAsked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandCrewEye="), CrewEyeAsked, false))
+	{
+		TArray<FString> Windows;
+		CrewEyeAsked.ParseIntoArray(Windows, TEXT("/"), true);
+		for (const FString& Window : Windows)
+		{
+			TArray<FString> Parts;
+			Window.ParseIntoArray(Parts, TEXT(","), false);
+			if (Parts.Num() < 3 || Parts[0].TrimStartAndEnd().IsEmpty() || Parts[2].TrimStartAndEnd().IsEmpty())
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Land battle (live): the crew eye '%s' left out: it reads <battle s>,<seconds>,<block>[,<k>[,<metres>]]"), *Window);
+				continue;
+			}
+			CrewEyeAt.Add(FMath::Max(0.0, FCString::Atod(*Parts[0])));
+			CrewEyeFor.Add(Parts[1].TrimStartAndEnd().IsEmpty() ? 8.0 : FMath::Clamp(FCString::Atod(*Parts[1]), 2.0, 120.0));
+			CrewEyeBlock.Add(FCString::Atoi(*Parts[2]));
+			CrewEyeK.Add(Parts.Num() > 3 && !Parts[3].TrimStartAndEnd().IsEmpty() ? FCString::Atoi(*Parts[3]) : -1);
+			CrewEyeOff.Add(Parts.Num() > 4 && !Parts[4].TrimStartAndEnd().IsEmpty() ? FMath::Clamp(FCString::Atod(*Parts[4]), 4.0, 30.0) : 8.0);
+			UE_LOG(LogTheater, Display, TEXT("Land battle (live): the crew eye asked: from %.1f s for %.0f s on block %d's gun%s, %.0f m off"),
+				CrewEyeAt.Last(), CrewEyeFor.Last(), CrewEyeBlock.Last(), CrewEyeK.Last() >= 0 ? *FString::Printf(TEXT(" (k %d)"), CrewEyeK.Last()) : TEXT(""), CrewEyeOff.Last());
+		}
+	}
 	// The crash locator (LandFell): on for the walk, or by -TheaterLandFell=<folder> for any live battle; a crash then
 	// leaves fell-over.txt (where it fell, its stack as library and offset) and fell-over-ring.txt (the frame's last
 	// parts, kept as it goes) in that folder.
