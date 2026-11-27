@@ -341,6 +341,7 @@ void ACampaignGameMode::LayOutWar()
 		Table->ShowWrecked(Now.Wrecked);
 		Table->SetWarAtNight(Now.Blackout, Now.Fronts);
 		Table->ShowFrontLine(Now.Wars, Now.Human);
+		Table->ShowFrontChurn(Now); // (release 2: churned ground between dug-in lines; nothing while tc.Map.FrontChurn is off)
 		Table->ShowWrecks(Now.Wrecks, Now.Turn);
 		Table->ShowIdle(Now.Cold);
 		Table->ShowPrizes(Now.Prizes);

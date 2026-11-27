@@ -495,9 +495,9 @@ namespace
 		return Work;
 	}
 
-	/** Paints the squares of a picture a front is crossing (or has crossed since it was last painted), and sends just those. */
-	template <typename FPaintCell>
-	void PaintSeasonPlay(FSeasonTurnTable::FPlay& Play, TArray<FSeasonTurnTable::FTile>& Tiles, double FrontNow, TArray<FColor>& Picture, UTexture2D* Texture, FPaintCell&& PaintCell)
+	/** Paints the squares of a picture a front is crossing (or has crossed since it was last painted), and sends just those (through Send: the box and how many of its smaller copies, so that churned ground is laid over them as they go). */
+	template <typename FSendBox, typename FPaintCell>
+	void PaintSeasonPlay(FSeasonTurnTable::FPlay& Play, TArray<FSeasonTurnTable::FTile>& Tiles, double FrontNow, FSendBox&& Send, FPaintCell&& PaintCell)
 	{
 		// (a point changes while the front stands between its arrival and its arrival and the band behind it)
 		const double Changing = FMath::Max(TheaterSeasonTurn::FrontWidth, TheaterSeasonTurn::BandWidth);
@@ -534,11 +534,38 @@ namespace
 				++End;
 			}
 			const FSeasonTurnTable::FTile& From = Tiles[Active[K]];
-			CampaignTextures::UpdateBoxAll(Texture, Picture, From.X0, From.Y0, Tiles[Active[End]].X1, From.Y1, 3);
+			Send(From.X0, From.Y0, Tiles[Active[End]].X1, From.Y1, 3);
 			K = End + 1;
 		}
 		Play.Painted = FrontNow;
 	}
+}
+
+const TArray<FColor>& ACampaignMapActor::SeasonGroundShown() const
+{
+	// (release 2, churned ground: what the ground picture holds now, under the churn)
+	if (SeasonTurn.IsValid() && SeasonTurn->Ground.Num() == Paint.Ground.Num() && (SeasonTurn->MudLies() || SeasonTurn->Mud.bOn))
+	{
+		return SeasonTurn->Ground;
+	}
+	return Paint.Ground;
+}
+
+void ACampaignMapActor::SeasonMasksShown(TArray<FColor>& Out) const
+{
+	// (and the masks: the season's own while its snow is spreading over them; the month before's while the new snow
+	// waits for its turn; else the month's snow as SetSeason sent it)
+	if (SeasonTurn.IsValid() && SeasonTurn->Snow.bOn && SeasonTurn->Masks.Num() == Paint.Masks.Num())
+	{
+		Out = SeasonTurn->Masks;
+		return;
+	}
+	if (SeasonTurn.IsValid() && SeasonTurn->bSnowTaken)
+	{
+		MakeSnowMasks(SeasonTurn->HardBefore, Out);
+		return;
+	}
+	MakeSnowMasks(MasksSentFor >= 0.0f ? MasksSentFor : WinterHard, Out);
 }
 
 void ACampaignMapActor::NoteSeason(int32 Month, float Hard, float HardBefore, bool bStepped)
@@ -627,7 +654,7 @@ void ACampaignMapActor::UpdateSeasonTurn()
 			if (Table.Snow.bOn || Table.bSnowTaken || Table.bSendMasks)
 			{
 				Table.SettleSnow();
-				CampaignTextures::Update(MasksPicture, Table.Masks);
+				SendMasks(Table.Masks);
 			}
 			Table.Masks.Empty();
 			Table.bSendMasks = false;
@@ -641,7 +668,7 @@ void ACampaignMapActor::UpdateSeasonTurn()
 			Table.bSendGround = false;
 			if (bGroundChanged)
 			{
-				CampaignTextures::Update(GroundPicture, Paint.Ground);
+				SendGround(Paint.Ground);
 			}
 		}
 		const TArray<int32> Was = ShownMud;
@@ -679,7 +706,7 @@ void ACampaignMapActor::UpdateSeasonTurn()
 		Table.SettleSnow();
 		if (bSnowUnsent && Table.Hard == Table.HardBefore)
 		{
-			CampaignTextures::Update(MasksPicture, Table.Masks);
+			SendMasks(Table.Masks);
 		}
 		Table.Masks.Empty();
 		Table.bSendMasks = false;
@@ -687,7 +714,7 @@ void ACampaignMapActor::UpdateSeasonTurn()
 		{
 			TArray<FColor> Before;
 			MakeSnowMasks(Table.HardBefore, Before);
-			CampaignTextures::Update(MasksPicture, Before);
+			SendMasks(Before);
 			MakeSnowMasks(Table.Hard, Table.Masks);
 			Table.bSnowTaken = true;
 			Table.SnowTakenAt = Now;
@@ -702,7 +729,7 @@ void ACampaignMapActor::UpdateSeasonTurn()
 					Table.Ground[Cell] = Paint.Ground[Cell];
 				}
 			}
-			CampaignTextures::Update(GroundPicture, Table.Ground);
+			SendGround(Table.Ground);
 			Table.bSendGround = false;
 			Table.Begin(Table.Mud, Now, false);
 		}
@@ -912,7 +939,7 @@ void ACampaignMapActor::UpdateSeasonTurn()
 		else
 		{
 			// (the table changed under it: the new month's snow at once)
-			CampaignTextures::Update(MasksPicture, Table.Masks);
+			SendMasks(Table.Masks);
 			Table.Masks.Empty();
 		}
 	}
@@ -945,7 +972,7 @@ void ACampaignMapActor::UpdateSeasonTurn()
 			if (Table.Snow.bOn && SnowFront > Table.Snow.Painted)
 			{
 				bPainted = true;
-				PaintSeasonPlay(Table.Snow, Table.SnowTiles, SnowFront, Table.Masks, MasksPicture, [&](FSeasonTurnTable::FTile& Tile, int32 C)
+				PaintSeasonPlay(Table.Snow, Table.SnowTiles, SnowFront, [&](int32 X0, int32 Y0, int32 X1, int32 Y1, int32 MaxLevel) { SendMasksBox(Table.Masks, X0, Y0, X1, Y1, MaxLevel); }, [&](FSeasonTurnTable::FTile& Tile, int32 C)
 				{
 					Table.Masks[Tile.Cells[C]].G = TheaterSeasonTurn::SnowNow(Tile.SnowWas[C], Tile.SnowWill[C], TheaterSeasonTurn::At(Tile.Arrive[C], SnowFront));
 				});
@@ -962,7 +989,7 @@ void ACampaignMapActor::UpdateSeasonTurn()
 				bPainted = true;
 				const bool bDrying = Table.Mud.bBackward;
 				const TArray<FColor>& DryGround = Paint.Ground;
-				PaintSeasonPlay(Table.Mud, Table.MudTiles, MudFront, Table.Ground, GroundPicture, [&](FSeasonTurnTable::FTile& Tile, int32 C)
+				PaintSeasonPlay(Table.Mud, Table.MudTiles, MudFront, [&](int32 X0, int32 Y0, int32 X1, int32 Y1, int32 MaxLevel) { SendGroundBox(Table.Ground, X0, Y0, X1, Y1, MaxLevel); }, [&](FSeasonTurnTable::FTile& Tile, int32 C)
 				{
 					const int32 Cell = Tile.Cells[C];
 					const FColor Dry = DryGround[Cell], Whole = Tile.Whole[C], Banded = Tile.Banded[C];
@@ -1007,7 +1034,7 @@ void ACampaignMapActor::UpdateSeasonTurn()
 			Table.bSendMasks = false;
 			if (Table.Masks.Num() == Paint.Masks.Num())
 			{
-				CampaignTextures::Update(MasksPicture, Table.Masks);
+				SendMasks(Table.Masks);
 			}
 			Table.Masks.Empty();
 		}
@@ -1016,11 +1043,11 @@ void ACampaignMapActor::UpdateSeasonTurn()
 			Table.bSendGround = false;
 			if (Table.MudLies() || Table.Mud.bOn)
 			{
-				CampaignTextures::Update(GroundPicture, Table.Ground);
+				SendGround(Table.Ground);
 			}
 			else
 			{
-				CampaignTextures::Update(GroundPicture, Paint.Ground);
+				SendGround(Paint.Ground);
 				Table.Ground.Empty();
 			}
 		}

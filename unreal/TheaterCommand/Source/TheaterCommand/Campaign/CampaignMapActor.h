@@ -26,6 +26,10 @@ class UMaterialInstanceDynamic;
 class UStaticMesh;
 class AArmyPiece;
 struct FSeasonTurnTable; // (release 2, the season turns: Campaign/CampaignSeasonTurn.cpp)
+struct FFrontChurnTable; // (release 2, churned ground between dug-in lines: Campaign/CampaignFrontChurn.cpp)
+struct FFrontChurnCell;
+struct FFrontChurnTile;
+struct FFrontChurnVeilWork;
 class UTexture2D;
 struct FCampaignMeshBuffers;
 
@@ -622,6 +626,12 @@ public:
 	void ShowPrizes(const TArray<FPrizeMark>& Marks);
 	/** The night's war: the nations whose towns are blacked out, and the fronts (pairs of regions) where the guns flicker. */
 	void SetWarAtNight(const TArray<FString>& Blackout, const TArray<int32>& Fronts);
+	/**
+	 * (Release 2, fronts that feel alive, piece 1: churned ground between dug-in lines; tc.Map.FrontChurn, off as it
+	 * comes.) The fronts the view shows and the corps on them: which pairs of provinces have both sides dug in and for
+	 * how long, and which heal. Nothing is laid here: the frames after lay what has changed. Nothing at all while off.
+	 */
+	void ShowFrontChurn(const FCampaignView& View);
 	/** How far the table is into a moonlit night, 0 to 1 (nothing by day, and nothing by lamplight). */
 	float GetMoonlight() const { return bLamplightNow ? 0.0f : NightNow; }
 	/** How far the table has gone over to the staff's paper map: nothing until the eye is high, all of it at the top of the zoom (art fix 11). */
@@ -1635,7 +1645,38 @@ private:
 	/** A frame of the turn: the mud's field is worked out on another thread, and a spreading turn paints its next step. Nothing at all while no turn is in hand. */
 	void UpdateSeasonTurn();
 	TSharedPtr<FSeasonTurnTable, ESPMode::ThreadSafe> SeasonTurn;
+	/** The ground picture as the table holds it now, under any churned ground: the season's own copy while its mud lies or soaks in, else the table's paint. */
+	const TArray<FColor>& SeasonGroundShown() const;
+	/** The same for the masks: the season's own while its snow spreads, else the month's snow as it was sent. */
+	void SeasonMasksShown(TArray<FColor>& Out) const;
 	// ---- (end release 2, the season turns) ----
+	// ---- (release 2, fronts that feel alive, piece 1: churned ground between dug-in lines. Campaign/FrontChurn.h has the
+	// arithmetic, Campaign/CampaignFrontChurn.cpp the rest; tc.Map.FrontChurn, off as it comes) ----
+	/** A frame of it: the lines laid a frame after a view that changed them, the pictures' squares sent two a frame, the fine veil and the craters near the eye. Nothing at all while off. */
+	void UpdateFrontChurn(const FVector& CameraFocus, float CameraDistance);
+	void LayFrontChurn();
+	/** One point of the pictures, churned as far as its square shows it, into the pictures as this table keeps them. */
+	void LayChurnCell(FFrontChurnCell& Cell);
+	void PutChurnTileAway(FFrontChurnTile& Tile);
+	void BuildChurnVeil(FFrontChurnTile& Tile, const FFrontChurnVeilWork& Work);
+	int32 BuildChurnCraters(FFrontChurnTile& Tile, int32 Most);
+	/**
+	 * Every send of the ground picture and the masks goes through these, whoever sends them: with tc.Map.FrontChurn on,
+	 * the churned ground is laid over the pixels as they are sent, and the arrays the table and the season keep never
+	 * hold it. Off, each is the plain send it was.
+	 */
+	void SendGround(const TArray<FColor>& Pixels);
+	void SendGroundBox(const TArray<FColor>& Pixels, int32 X0, int32 Y0, int32 X1, int32 Y1, int32 MaxLevel = MAX_int32);
+	void SendMasks(const TArray<FColor>& Pixels);
+	void SendMasksBox(const TArray<FColor>& Pixels, int32 X0, int32 Y0, int32 X1, int32 Y1, int32 MaxLevel = MAX_int32);
+	/** The woods at a point of the ground picture for the trees standing close up: thinned in the core of churned ground. */
+	float ChurnWoods(int32 Index, float Wooded) const;
+	TSharedPtr<FFrontChurnTable, ESPMode::ThreadSafe> FrontChurn;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> ChurnMeshes; // the veil's and the craters' squares, made as they are wanted and kept to be used again
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> ChurnInks; // each one's ink, faded by itself
+	// ---- (end release 2, churned ground) ----
 	TSet<int32> RiversHazedFor; // the provinces under the haze when the rivers were last drawn: a river under it is darker
 	bool bRiversNightFor = false; // and whether it was night then: by night it is darker still
 	/**

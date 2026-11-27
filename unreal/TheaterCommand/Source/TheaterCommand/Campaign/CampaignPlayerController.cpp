@@ -12226,6 +12226,7 @@ void ACampaignPlayerController::ShowWarRest(const FCampaignView& View)
 		Map->ShowWrecked(View.Wrecked);
 		Map->SetWarAtNight(View.Blackout, View.Fronts);
 		Map->ShowFrontLine(View.Wars, View.Human);
+		Map->ShowFrontChurn(View); // (release 2: churned ground between dug-in lines; nothing while tc.Map.FrontChurn is off)
 		Map->ShowWrecks(View.Wrecks, View.Turn);
 		Map->ShowIdle(View.Cold);
 		Map->ShowPrizes(View.Prizes);
