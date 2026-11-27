@@ -34,7 +34,7 @@ import { storyFallen } from './stories';
 import { TOWNS, townName, townSize, type TownSize } from './towns';
 import { PRIZES, harbourOpen, prizesOnLoss, willBurn } from './prizes';
 import { cityHit } from './repairs';
-import { fits, roomLeft, roomRefusal } from './islands';
+import { fits, roomLeft, roomRefusal, roomForDivision } from './islands';
 import { KIND, MEN_PER_DIV, type BattleReport, type Corps, type Game, type Region } from './types';
 import { seaWhatList } from './sea-words';
 import { flagName } from './flagnames';
@@ -698,7 +698,7 @@ export function musterNear(g: Game, nat: string, r: Region): Region | null {
   for (let i = 0; i < q.length; i++) {
     const x = g.regions[q[i]];
     if (x !== r && allied(g, nat, x.ctrl) && allied(g, nat, fieldCtrl(g, x))) {
-      if (roomLeft(g, x, nat, x.units.filter((u) => u.kind !== 'eng' && allied(g, u.nat, nat) && !roomless(g, u)).length) >= 1) return x;
+      if (roomForDivision(g, x, nat, x.units.filter((u) => u.kind !== 'eng' && allied(g, u.nat, nat) && !roomless(g, u)).length)) return x;
       crowded ??= x;
     }
     for (const j of x.nb) if (!seen[j]) { seen[j] = 1; q.push(j); }

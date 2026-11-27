@@ -9,7 +9,7 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import setup from '../../data/campaign/setup-1939.json';
 import rivalsData from '../../data/campaign/rivals.json';
-import { fits, islandOf, roomLeft } from './islands';
+import { fits, islandOf, roomLeft, roomForDivision } from './islands';
 import type { Build, Corps, Game, Kind, Region, ShipClass, Terrain } from './types';
 import { addCorps, allied, armySize, fights, headline, roomless } from './game';
 import { reformNames } from './drawn';
@@ -709,7 +709,7 @@ export function deliver(g: Game, nat: string): void {
     // refuses only new corps, the design director, 21:37Z, 26 November 2026, 4. Other ground: a place among the five.)
     const room = (x: Region): boolean => canRaise(g, nat, x) && (islandOf(g, x)
       ? fits(g, x, nat, [{ nat, kind: b.kind!, divs: b.divs!, str: 1 } as Corps])
-      : roomLeft(g, x, nat, x.units.filter((u) => allied(g, u.nat, nat) && !roomless(g, u)).length) >= 1);
+      : roomForDivision(g, x, nat, x.units.filter((u) => allied(g, u.nat, nat) && !roomless(g, u)).length));
     let at: Region | null = room(r) ? r : null;
     if (!at && n.capital >= 0 && room(g.regions[n.capital])) at = g.regions[n.capital];
     if (!at) at = g.regions.find((x) => room(x) && x.fac > 0) ?? g.regions.find(room) ?? null;

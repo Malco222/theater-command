@@ -76,7 +76,7 @@ import { chargeDelay, isRearguard, rearguardWeeks, rearguardsAt, rearguardsLapse
 import { clientWar, tiedPair } from './far';
 import { atomFallen, atomMonth, atomPress } from './atom';
 import { demandInstead, keepersOf, keptForces, pacificWar } from './pacific';
-import { fits, fitCount, islandOf, roomLeft, roomRefusal, roomSays, swapFits, swapRefusal } from './islands';
+import { fits, fitCount, islandOf, roomLeft, roomRefusal, roomSays, swapFits, swapRefusal, roomForDivision } from './islands';
 import { frontOfRow, onLiveFront } from './planfronts';
 import { bookKept } from './stations';
 import { floorWords, witherAt, witherDrop, witherFed, witherMonth, withered } from './wither';
@@ -4533,7 +4533,7 @@ function mobilise(g: Game, nat: string): void {
     // Form up in the industrial towns still held, emptiest first, away from the fighting.
     let best: Region | null = null, bs = 1e9;
     for (const r of g.regions) {
-      if (r.owner !== nat || r.ctrl !== nat || r.fac < 1 || roomLeft(g, r, nat, r.units.filter((u) => !roomless(g, u)).length) < 1 || enemyNear(r) || besieged(g, r)) continue;
+      if (r.owner !== nat || r.ctrl !== nat || r.fac < 1 || !roomForDivision(g, r, nat, r.units.filter((u) => !roomless(g, u)).length) || enemyNear(r) || besieged(g, r)) continue;
       const s = r.units.length * 10 - r.fac - (r.cap ? 3 : 0);
       if (s < bs) { bs = s; best = r; }
     }
@@ -4645,7 +4645,7 @@ export function refugeHeld(g: Game, c: Corps, from: Region): Region | null {
  */
 export function nearHarbour(g: Game, nat: string, from: Region, narrow: (r: Region) => boolean = () => true): Region | null {
   return g.regions
-    .filter((r) => r.port && r.id !== from.id && r.owner === from.owner && r.ctrl === nat && !hostileUnits(g, r, nat).length && roomLeft(g, r, nat, placed(g, r, nat).length) >= 1 && seaOpenAt(g, nat, r) && narrow(r))
+    .filter((r) => r.port && r.id !== from.id && r.owner === from.owner && r.ctrl === nat && !hostileUnits(g, r, nat).length && roomForDivision(g, r, nat, placed(g, r, nat).length) && seaOpenAt(g, nat, r) && narrow(r))
     .sort((a, b) => chartDist(g, a, from) - chartDist(g, b, from) || a.id - b.id)[0] ?? null;
 }
 
@@ -4794,7 +4794,7 @@ const sharesWar = (g: Game, nat: string, friend: string): boolean => !!g.nations
  */
 function roomNear(g: Game, nat: string, at: Region, record = false, going: readonly Corps[] = [], out: readonly Corps[] = [], row = false): Region | null {
   const rows = (r: Region): number => placed(g, r, nat).filter((u) => u.kind !== 'eng').length;
-  const full = (r: Region): boolean => (going.length ? !fits(g, r, nat, going, { rows: rows(r), out }) : roomLeft(g, r, nat, rows(r)) < 1);
+  const full = (r: Region): boolean => (going.length ? !fits(g, r, nat, going, { rows: rows(r), out }) : !roomForDivision(g, r, nat, rows(r)));
   // (The record's hand: at stops 1 and 2 its own place against five, island or not; record's hand. At stops 3 to 5 it
   // reads the room as every placing does: the design director, 21:37Z, 26 November 2026, 1, "at stops 3 to 5 the
   // record's place reads the room in men like every other placing; stops 1 and 2 as built".)
@@ -4985,7 +4985,7 @@ function fallbackHarbour(g: Game, nat: string, at: Region): Region | null {
   let best: Region | null = null, bd = Infinity;
   for (const r of g.regions) {
     if (!r.port || r.id === at.id || THEATRE_OF.get(r.name) !== k) continue;
-    if (!allied(g, nat, r.ctrl) || hostileUnits(g, r, nat).length || roomLeft(g, r, nat, placed(g, r, nat).filter((u) => u.kind !== 'eng').length) < 1) continue;
+    if (!allied(g, nat, r.ctrl) || hostileUnits(g, r, nat).length || !roomForDivision(g, r, nat, placed(g, r, nat).filter((u) => u.kind !== 'eng').length)) continue;
     const d = chartDist(g, r, at);
     if (d < bd || (d === bd && best && r.id < best.id)) { bd = d; best = r; }
   }

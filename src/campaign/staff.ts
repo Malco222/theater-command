@@ -48,7 +48,7 @@ import { armOrder, canArm, openRifles } from './rifles';
 import { WORLD_FIRST, WORLD_MAP, acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oceanShares, overseasOf, shoreOf } from './world';
 import { patronOfClient, stationed, tieWar } from './far';
 import { inTheWay, pacificGround, runQuays } from './pacific';
-import { roomLeft } from './islands';
+import { roomLeft, roomForDivision } from './islands';
 import { EASTERN, addCorps, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
 import { ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, TOWNQUEUE_STAGE, TRUEREACH_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE, AIRNAMES_STAGE, FERRY_STAGE, CITYDEFENCES_STAGE, OFFERS_STAGE, FLAKGROUND_STAGE } from './stage';
@@ -921,7 +921,7 @@ export function rearMonth(g: Game, nat: string): void {
     if ((r.owner !== nat && allied(g, nat, r.owner) && g.nations[r.owner]?.alive) || !r.prev || !atWar(g, nat, r.prev)) continue;
     const since = r.since ?? 0;
     if (since <= 0 || g.turn <= since || g.flags[`rear:${r.id}`] === since) continue;
-    if (hostileUnits(g, r, nat).length || roomLeft(g, r, nat, friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length) < 1) continue;
+    if (hostileUnits(g, r, nat).length || !roomForDivision(g, r, nat, friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length)) continue;
     const row = T.towns[r.name], worth = row?.[0] ?? T.each;
     if (!(worth > 0)) { g.flags[`rear:${r.id}`] = since; continue; }
     if (menRules(g) && menLeft(g, nat) + 1e-9 < worth) continue;

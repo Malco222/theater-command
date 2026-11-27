@@ -38,7 +38,7 @@ import { SIGHT, sightOf } from './intel';
 import { raiseMorale } from './morale';
 import { planAt } from './plannow';
 import { raisedXp } from './stories';
-import { roomLeft } from './islands';
+import { roomLeft, roomForDivision } from './islands';
 import { TEAMS, isTeam } from './teams';
 import { type Corps, type Game, type Kind, type Region } from './types';
 
@@ -137,7 +137,7 @@ export class Reckoning {
     let best = 0;
     for (const f of this.fronts) {
       // (Room as every rule counts it: five corps, or an island's room in men. islands.ts `roomLeft`.)
-      if (roomLeft(g, f.r, nat, friendlyUnits(g, f.r, nat).length) < 1) continue;
+      if (!roomForDivision(g, f.r, nat, friendlyUnits(g, f.r, nat).length)) continue;
       if (isTeam({ kind }) && f.mine.filter(isTeam).length >= TEAMS.frontage) continue;
       const before = queued.map((d) => this.standIn(kind, d, f));
       best = Math.max(best, this.gain(f, before, [...before, this.standIn(kind, divs, f)]));

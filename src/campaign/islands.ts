@@ -173,7 +173,8 @@ export function fits(g: Game, r: Region | undefined | null, nat: string, going: 
 /**
  * THE room left at r for nat's side: on an island of the table, in divisions' worth of men (men / 15,000, not
  * rounded, never below none); on all other ground and with the far side off, five less the reader's own count
- * (`rows`, or the side's corps in the field, engineers apart). "Full" is `roomLeft(...) < 1` where no corps is at hand.
+ * (`rows`, or the side's corps in the field, engineers apart). Where no corps is at hand a reader asks
+ * `roomForDivision`, never "full".
  * `without`: corps of the side left out of those there on an island (a staff's own corps, when it asks what room its
  * allies and the town leave it); the reader's `rows` leave them out elsewhere.
  */
@@ -183,6 +184,18 @@ export function roomLeft(g: Game, r: Region | undefined | null, nat: string, row
   if (isle) return Math.max(0, isle.room * MEN_PER_DIV - menOn(g, r, nat, without)) / MEN_PER_DIV;
   return STACK - (rows ?? placed(g, r, nat).filter((u) => u.kind !== 'eng').length);
 }
+
+/**
+ * Whether r has room for a division: at least one division's worth of men (15,000) left on an island of the table,
+ * one place among the five on all other ground and with the far side off (`roomLeft(...) >= 1`, as built). The test a
+ * reader makes where no corps is at hand, named for what it asks and never called "full": an island with less than a
+ * division's worth left may still take a smaller corps, which `fits` answers. Where a reader names its corps it asks
+ * `fits` with that corps. The design director, 00:20Z, 27 November 2026, D6: "Where a check names its corps, it asks
+ * with that corps. Where it has none, it is named for what it asks ('room for a division') in the code and in any
+ * words, never called 'full'." (As built for this gate, flagged and counted: before ON it must be one reading.)
+ */
+export const roomForDivision = (g: Game, r: Region | undefined | null, nat: string, rows?: number, without: readonly Corps[] = []): boolean =>
+  roomLeft(g, r, nat, rows, without) >= 1;
 
 /**
  * The corps of `list`, in plan order, that still go to r: each that fits beside those of its side there and those of

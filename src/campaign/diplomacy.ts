@@ -8,7 +8,7 @@ import './far-rows'; // the far side's rows are laid over the data before anythi
 import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
-import { fits, roomLeft } from './islands';
+import { fits, roomLeft, roomForDivision } from './islands';
 import { addCorps, allied, atWar, bloc, capture, declareWar, endVoyages, headline, keptStoresHolder, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, theWords, warning, roomless } from './game';
 import { leagueMonth, ownPath, playersOwn, spared, standsWith } from './league';
 import { turnToDate } from '../core/ticket';
@@ -914,7 +914,7 @@ function fire(g: Game, e0: DiploEvent): boolean {
     let at: Region | undefined;
     const seen = new Set([r.id]);
     for (let ring = [r], step = 0; ring.length && !at && step <= 3; step++) {
-      at = ring.find((x) => roomLeft(g, x, row[0], x.units.filter((u) => !roomless(g, u)).length) >= 1);
+      at = ring.find((x) => roomForDivision(g, x, row[0], x.units.filter((u) => !roomless(g, u)).length));
       const next: Region[] = [];
       for (const x of ring) for (const j of x.nb) if (!seen.has(j) && g.regions[j].ctrl === row[0]) { seen.add(j); next.push(g.regions[j]); }
       ring = next;

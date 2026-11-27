@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { addCorps, createGame, placed, removeCorps, retreatTarget, startPhase, whyNoRoom } from '../src/campaign/game';
 import { saveGame } from '../src/campaign/save';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
-import { fits, roomRefusal } from '../src/campaign/islands';
+import { fits, islandOf, roomForDivision, roomRefusal } from '../src/campaign/islands';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -24,6 +24,8 @@ function corps(g: Game, nat: string, name: string, at: Region, divs = 1, str = 1
   c.ap = c.apMax;
   return c;
 }
+type Glob = (p: string, o: { eager: boolean; as: string }) => Record<string, string>;
+const SOURCES = (import.meta as unknown as { glob: Glob }).glob('../src/**/*.ts', { eager: true, as: 'raw' });
 const ROWS = (setup as unknown as { expeditions: any[][] }).expeditions;
 /** The record's two rows for Kwajalein in January 1942 (T27): the Maizuru 2nd landing force and the 61st Guard Unit. */
 const KWAJ = [171, 263];
@@ -151,4 +153,29 @@ describe('an island holds no more corps than any ground (the design director, 00
     for (let k = 1; k <= 5; k++) corps(g, 'UK', `Johore ${k}`, jo, 1, 0.2);
     expect(fits(g, jo, 'UK', [corps(g, 'UK', 'One more', g.byName['Kuala Lumpur'], 1, 0.2)])).toBe(false);
   }, 300000);
+});
+
+describe("a staff's check asks with its corps where it names one, and is named 'room for a division' where it has none (the design director, 00:20Z, 27 November 2026, D6)", () => {
+  it('Kwajalein with 7,500 of Japan\'s men has no room for a division, and still takes a corps of 4,000', () => {
+    const g = startOpen(createGame(3, null));
+    const k = g.byName['Kwajalein'];
+    corps(g, 'JAP', 'Half a division (a test row)', k, 1, 0.5);
+    const small = corps(g, 'JAP', 'A small corps (a test row)', g.byName['Eastern Marshalls'], 1, 4000 / 15000);
+    expect(roomForDivision(g, k, 'JAP')).toBe(false);
+    expect(fits(g, k, 'JAP', [small])).toBe(true);
+    // Ground that is no island: one place among the five, as before.
+    const kl = g.byName['Kuala Lumpur'];
+    expect(islandOf(g, kl)).toBeNull();
+    expect(roomForDivision(g, kl, 'JAP', 4)).toBe(true);
+    expect(roomForDivision(g, kl, 'JAP', 5)).toBe(false);
+  });
+
+  it('no reader tests the room left against one division by a path of its own: it asks roomForDivision, or fits with its corps', () => {
+    const bad: string[] = [];
+    for (const [f, src] of Object.entries(SOURCES)) {
+      if (f.endsWith('/campaign/islands.ts')) continue;
+      src.split('\n').forEach((line, i) => { if (/roomLeft\([^;]*\)\s*(<|>=)\s*1\b/.test(line)) bad.push(`${f}:${i + 1}: ${line.trim()}`); });
+    }
+    expect(bad).toEqual([]);
+  });
 });

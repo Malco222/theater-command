@@ -45,7 +45,7 @@ import {
   DEFENCE, EASTERN, aidOf, allied, assess, atWar, collapseScore, fortRows, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, placed, roomless, frontage, gunsMayFollow, gunsRule, havensOf, headline,
   hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, sailOn, shipMove, shoreRoom, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
 } from './game';
-import { fitCount, fitWave, fits, islandOf, roomLeft } from './islands';
+import { fitCount, fitWave, fits, islandOf, roomForDivision, roomLeft } from './islands';
 
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
 
@@ -1168,7 +1168,7 @@ function lineMarch(g: Game, nat: string, t: number): void {
     let goal: Region | null = null, full: Region | null = null;
     for (const r of g.regions) {
       if (d[r.id] <= 0 || !allied(g, nat, r.ctrl) || lineLeaves(g, nat, r, t)) continue;
-      if (roomy && roomLeft(g, r, nat, friendlyUnits(g, r, nat).length) < 1) { if (!full || d[r.id] < d[full.id]) full = r; }
+      if (roomy && !fits(g, r, nat, [c], { rows: friendlyUnits(g, r, nat).length })) { if (!full || d[r.id] < d[full.id]) full = r; }
       else { if (!goal || d[r.id] < d[goal.id]) goal = r; if (roomy) rooms.push(r.id); }
     }
     goal ??= full;
@@ -1182,7 +1182,7 @@ function lineMarch(g: Game, nat: string, t: number): void {
     // the 3rd and 13th had no step, with Chuanhsien next door empty and Lingling beyond it open. In August the line
     // gave Chuanhsien back and they stood at Kweilin beyond the line for good. With no such road it is as it was.)
     if (rooms.length) {
-      const has = (r: Region): boolean => roomLeft(g, r, nat, friendlyUnits(g, r, nat).length) >= 1;
+      const has = (r: Region): boolean => fits(g, r, nat, [c], { rows: friendlyUnits(g, r, nat).length });
       const near = new Int16Array(g.regions.length).fill(-1);
       for (const id of rooms) near[id] = 0;
       for (let i = 0; i < rooms.length; i++) for (const j of g.regions[rooms[i]].nb) {
@@ -1434,7 +1434,8 @@ function mass(g: Game, nat: string, ph: PlanPhase | null, watchOnly = false): vo
       .filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && !KIND[c.kind].mobile && c.ap > 0 && !massed.has(c.id) && c.reg !== r.id && d[c.reg] > 0 && d[c.reg] <= 3 && (own(g.regions[c.reg]).length >= 2 || (first && spare(c, 2))))
       .sort((a, b) => d[a.reg] - d[b.reg] || atkPower(g, b) - atkPower(g, a));
     for (const c of pool) {
-      if (have >= count || roomLeft(g, r, nat, placed(g, r, nat).length) < 1) break;
+      if (have >= count) break;
+      if (!fits(g, r, nat, [c], { rows: placed(g, r, nat).length })) { if (islandOf(g, r)) continue; break; }
       if (own(g.regions[c.reg]).length < 2 && !(first && spare(c, 2))) continue;
       walkToward(g, c, r);
       if (c.reg === r.id) { massed.add(c.id); have++; }
@@ -1450,12 +1451,13 @@ function mass(g: Game, nat: string, ph: PlanPhase | null, watchOnly = false): vo
         .filter((c) => c.nat === nat && !c.dead && !c.hold && c.kind === 'inf' && c.ap >= 4 && !massed.has(c.id) && d[c.reg] > 3 && spare(c, 2))
         .sort((a, b) => d[a.reg] - d[b.reg] || a.id - b.id);
       for (const c of far) {
-        if (have >= count || roomLeft(g, r, nat, placed(g, r, nat).length) < 1) break;
+        if (have >= count) break;
+        if (!fits(g, r, nat, [c], { rows: placed(g, r, nat).length })) { if (islandOf(g, r)) continue; break; }
         if (!spare(c, 2)) continue;
         if (railCorps(g, c, r)) { massed.add(c.id); have++; }
         else if (railToward(g, c, r)) have++;
       }
-    } else if (have < count && !pool.length && ph.watch?.includes(name) && roomLeft(g, r, nat, placed(g, r, nat).length) >= 1) {
+    } else if (have < count && !pool.length && ph.watch?.includes(name) && roomForDivision(g, r, nat, placed(g, r, nat).length)) {
       const far = g.corps
         .filter((c) => c.nat === nat && !c.dead && !c.hold && c.kind === 'inf' && c.ap >= 4 && !massed.has(c.id) && d[c.reg] > 3 && own(g.regions[c.reg]).length >= 3)
         .sort((a, b) => d[a.reg] - d[b.reg] || a.id - b.id);
@@ -1478,7 +1480,7 @@ function fallBack(g: Game, nat: string, cap = g.nations[nat].capital): void {
     .sort((a, b) => home[a.reg] - home[b.reg]);
   // Where the one road home is full of the nation's own troops, one of them goes a stage further to make room.
   const makeRoom = (r: Region, depth = 0): boolean => {
-    if (roomLeft(g, r, nat, placed(g, r, nat).length) >= 1) return true;
+    if (roomForDivision(g, r, nat, placed(g, r, nat).length)) return true;
     if (depth > 3) return false;
     const movers = r.units.filter((u) => u.nat === nat && !u.hold && u.kind !== 'fort' && u.ap > 0);
     const nexts = r.nb.map((j) => g.regions[j]).filter((x) => allied(g, nat, ctl(g, x)) && home[x.id] >= 0 && home[x.id] < home[r.id]).sort((a, b) => friendlyUnits(g, a, nat).length - friendlyUnits(g, b, nat).length);
@@ -1724,9 +1726,9 @@ function gather(g: Game, nat: string, ph: PlanPhase | null): void {
   for (const r of places) {
     const want = ph.concentrate[r.name];
     for (let guard = 0; guard < want && fast(r).length < want; guard++) {
-      if (roomLeft(g, r, nat, crowd(r)) < 1) {
+      if (!roomForDivision(g, r, nat, crowd(r))) {
         const foot = r.units.find((u) => u.nat === nat && !u.hold && u.kind !== 'fort' && !KIND[u.kind].mobile && u.ap > 0);
-        const next = r.nb.map((j) => g.regions[j]).filter((x) => ctl(g, x) === nat && within(x) && !at.has(x.id) && roomLeft(g, x, nat, crowd(x)) >= 1).sort((a, b) => crowd(a) - crowd(b))[0];
+        const next = r.nb.map((j) => g.regions[j]).filter((x) => ctl(g, x) === nat && within(x) && !at.has(x.id) && !!foot && fits(g, x, nat, [foot], { rows: crowd(x) })).sort((a, b) => crowd(a) - crowd(b))[0];
         if (!foot || !next || !moveCorps(g, foot, next)) break;
       }
       const d = hops(g, r.id, (x) => allied(g, nat, ctl(g, x)));
@@ -2800,7 +2802,8 @@ export function ferry(g: Game, nat: string): void {
     const pool = home().filter((c) => c.kind === 'inf' && !c.hold && c.reg !== door.id && !c.airborne && !c.town && c.joint === undefined && c.str >= 0.6 && c.ap >= 4 && !massed.has(c.id) && free(c)).sort(byWorth);
     let have = kept.length;
     for (const c of pool) {
-      if (have >= want || roomLeft(g, door, nat, placed(g, door, nat).length) < 1) break;
+      if (have >= want) break;
+      if (!fits(g, door, nat, [c], { rows: placed(g, door, nat).length })) { if (islandOf(g, door)) continue; break; }
       if (!lone(c) && railToward(g, c, door)) { massed.add(c.id); have++; }
     }
   }
@@ -2850,7 +2853,8 @@ export function ferry(g: Game, nat: string): void {
     // (Nor is a corps taken from another run's quay, but for this run's own formation: one run's corps are not the other's.)
     const pool = home().filter((c) => !c.hold && c.reg !== run.from.id && (!quays.has(c.reg) || (!!lead && c.elite === lead)) && !c.airborne && !c.town && c.joint === undefined && c.str >= 0.6 && c.ap >= 4 && !massed.has(c.id) && !theirs(c)).sort(inOrder);
     for (const c of pool) {
-      if (roomLeft(g, run.from, nat, placed(g, run.from, nat).length) < 1 || (have >= want && !(lacks && c.elite === lead))) break;
+      if (have >= want && !(lacks && c.elite === lead)) break;
+      if (!fits(g, run.from, nat, [c], { rows: placed(g, run.from, nat).length })) { if (islandOf(g, run.from)) continue; break; }
       if (railToward(g, c, run.from) && c.reg === run.from.id) { massed.add(c.id); have++; if (c.elite === lead) lacks = false; }
     }
   }
@@ -2898,7 +2902,7 @@ function reinforce(g: Game, nat: string): void {
     const path = seaPath(g, nat, from, p);
     return !!path && (!by.size || path.every((z) => by.has(z))) && crossingRisk(g, nat, path) <= R.risk;
   };
-  const room = (p: Region): boolean => roomLeft(g, p, nat, placed(g, p, nat).length) >= 1;
+  const room = (p: Region, c: Corps): boolean => fits(g, p, nat, [c], { rows: placed(g, p, nat).length });
   // Never the corps the staff keeps at its quay for a landing, nor the one that stands alone in a harbour on the coast watch.
   const quay = g.turn - (g.flags[`st:quayAt:${nat}`] ?? -99) < 6 ? (g.flags[`st:quay:${nat}`] ?? 0) - 1 : -1;
   const watch = coastWatch(g, nat);
@@ -2928,13 +2932,14 @@ function reinforce(g: Game, nat: string): void {
     if (!to.length || mayLeave(g, nat) < 1 || liftLeft(g, nat) < 1) break;
     if (lone(c)) continue;
     const here = g.regions[c.reg];
-    const dest = here.port ? to.find((p) => room(p) && way(here, p) && shipMove(g, c, p)) : undefined;
+    const dest = here.port ? to.find((p) => room(p, c) && way(here, p) && shipMove(g, c, p)) : undefined;
     if (!dest) { waiting.push(c); continue; }
     if (g.human !== null && (allied(g, g.human, nat) || atWar(g, g.human, nat)) && allied(g, g.human, dest.ctrl)) headline(g, 'info', `${c.name} of the ${n.adj} army has landed at ${dest.name}.`, nat, dest.id);
     to = short();
   }
   // The next to sail are brought by rail to the best harbour at home for the way: as many as the ships could take next month.
-  const dest = to.find(room);
+  // (No corps at hand: the harbour asked for room for a division, the design director, 00:20Z, 27 November 2026, D6.)
+  const dest = to.find((p) => roomForDivision(g, p, nat, placed(g, p, nat).length));
   if (!dest || !waiting.length) return;
   const home = g.regions.filter((r) => homeland(r, nat) && r.port && r.ctrl === nat && way(r, dest));
   if (!home.length) return;
@@ -2943,7 +2948,8 @@ function reinforce(g: Game, nat: string): void {
   let have = best.units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.hold).length;
   const want = Math.min(mayLeave(g, nat), n.sealift);
   for (const c of waiting) {
-    if (have >= want || roomLeft(g, best, nat, placed(g, best, nat).length) < 1) break;
+    if (have >= want) break;
+    if (!fits(g, best, nat, [c], { rows: placed(g, best, nat).length })) { if (islandOf(g, best)) continue; break; }
     if (c.reg !== best.id && railToward(g, c, best) && c.reg === best.id) have++;
   }
 }
@@ -3204,7 +3210,7 @@ export function gunsUp(g: Game, nat: string, enemies: Set<string>, targets: Set<
     if (!best) continue;
     // An army overseas has one road, and the sector at the end of it stands full. Its weakest corps on foot, one the
     // road would not carry into the attack in any case, steps back to where the guns stood and they take its place.
-    if (scope && here.nb.includes(best.id) && roomLeft(g, best, nat, placed(g, best, nat).length) < 1) {
+    if (scope && here.nb.includes(best.id) && !roomForDivision(g, best, nat, placed(g, best, nat).length)) {
       const out = best.units
         .filter((u) => u.nat === nat && !u.dead && u.kind === 'inf' && !u.hold && !u.town && u.ap > 0 && u.joint === undefined && u.leave === undefined && !massed.has(u.id))
         .sort((a, b) => atkPower(g, a) - atkPower(g, b) || a.id - b.id)[0];
@@ -3525,7 +3531,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
   const N = g.regions.length;
   const dist = new Float32Array(N).fill(1e9);
   const atFront = new Uint8Array(N);
-  const full = (r: Region): boolean => roomLeft(g, r, nat, placed(g, r, nat).length) < 1;
+  const noRoomForDivision = (r: Region): boolean => !roomForDivision(g, r, nat, placed(g, r, nat).length);
   const q: number[] = [];
   for (const r of g.regions) {
     // An army closes up to its own front, not to an ally's. Overseas the allies share one front.
@@ -3540,12 +3546,12 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
     }
     if (open) atFront[r.id] = 1;
     // A stretch of front already packed with troops needs no more: the columns behind look further along.
-    if ((open || walled) && !full(r)) { dist[r.id] = open ? 0 : 4; q.push(r.id); }
+    if ((open || walled) && !noRoomForDivision(r)) { dist[r.id] = open ? 0 : 4; q.push(r.id); }
   }
   for (let i = 0; i < q.length; i++) {
     const a = q[i];
     // A region packed with troops cannot be marched through: the columns behind it go round.
-    if (full(g.regions[a])) continue;
+    if (noRoomForDivision(g.regions[a])) continue;
     for (const j of g.regions[a].nb) {
       if (!allied(g, nat, ctl(g, g.regions[j])) || !within(g.regions[j])) continue;
       if (dist[a] + 1 < dist[j]) { dist[j] = dist[a] + 1; q.push(j); }
@@ -3613,7 +3619,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
 function redeploy(g: Game, nat: string, ph: PlanPhase, enemies: Set<string>): void {
   const engaged = (c: Corps): boolean => g.regions[c.reg].nb.some((j) => enemies.has(ctl(g, g.regions[j])) && atWar(g, nat, ctl(g, g.regions[j])));
   const free = (): Corps[] => g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap >= 4 && !engaged(c));
-  const room = (r: Region): boolean => allied(g, nat, ctl(g, r)) && roomLeft(g, r, nat, placed(g, r, nat).length) >= 1;
+  const room = (r: Region, c: Corps): boolean => allied(g, nat, ctl(g, r)) && fits(g, r, nat, [c], { rows: placed(g, r, nat).length });
   const nearest = (list: Corps[], to: Region): Corps | null => {
     const d = hops(g, to.id, (r) => allied(g, nat, ctl(g, r)));
     let best: Corps | null = null, bd = 1e9;
@@ -3658,10 +3664,10 @@ function redeploy(g: Game, nat: string, ph: PlanPhase, enemies: Set<string>): vo
     if (mobile && armour.has(here)) continue;
     if (!mobile && assembly.includes(here) && !armour.has(here)) continue;
     let to: Region | null = null;
-    if (mobile) to = (ph.armour ?? []).map((nm) => g.byName[nm]).find((r) => r && room(r)) ?? null;
+    if (mobile) to = (ph.armour ?? []).map((nm) => g.byName[nm]).find((r) => r && room(r, c)) ?? null;
     if (!to) {
       // Infantry leaves the armour's assembly areas free while there is room elsewhere.
-      const open = assembly.map((nm) => g.byName[nm]).filter((r) => r && room(r));
+      const open = assembly.map((nm) => g.byName[nm]).filter((r) => r && room(r, c));
       const pref = mobile ? open : open.filter((r) => !armour.has(r.name)).concat(open.filter((r) => armour.has(r.name)));
       if (!mobile && assembly.includes(here)) continue;
       let bu = 99;
