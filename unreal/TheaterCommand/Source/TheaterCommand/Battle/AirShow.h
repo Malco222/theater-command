@@ -654,6 +654,39 @@ namespace AirShow
 		bool Smooth() const { return bSmooth; }
 		double PathSpan = 0.5, RollDamping = 0.7;
 		/**
+		 * Real dogfights (release 2, row realDogfights; Brian, 27 November 2026: "i never see the fighters shooting each
+		 * other down or dog fighting", "it looks like they loop around vs actually realistic dog fights", "i want the
+		 * pilots AI to be very smart and realistic as real fighter pilots back then"). With this on, a fighter against
+		 * fighters flies by the doctrine of his air force and the strengths of his type (Battle/AirDogfight.inl): he
+		 * sees what his eyes, the sun and the cloud let him see; he bounces from above and out of the sun; the diving
+		 * types fight up and down and never round and round; the turning types turn; he closes to his own range and
+		 * fires short bursts with lead; he breaks into an attack he sees, and reverses, scissors or dives away by his
+		 * type; his wingman stays on him; and the fight drifts down and away from the bombers. The rules still decide
+		 * who falls (ruling 217): the scene only flies the fight that shows it. Off (the default): the fights as before,
+		 * byte for byte.
+		 */
+		void SetDogfights(bool bOn) { bDogfights = bOn; }
+		bool Dogfights() const { return bDogfights; }
+		/** A fighter type's own figures as the flight core flies them with real dogfights on (from Battle/AirPerf's table,
+		 * Content/Data/Air/performance.json: Battle/AirDogfightTypes.h finds them), for a model as the battle names it
+		 * ("Bf109", "Mustang", "Zero") and its nation. A model with none flies as every fighter flew before. */
+		struct TypeFigures
+		{
+			double VMin = 0.0, VMax = 0.0, VTop = 0.0, VDive = 0.0; // m/s
+			double RMin = 0.0, GMax = 0.0;                          // m, g
+			double RollMax = 0.0, RollTime = 0.0;                   // rad/s, s
+			double RollPeakV = 0.0, RollFast = 0.0, RollFastV = 0.0; // m/s, rad/s, m/s
+			double Climb = 0.0;                                     // m/s
+			int Style = 0;                                          // 1 turn, 2 dive, 3 both
+		};
+		using TypeFinder = std::function<bool(const std::string& Model, const std::string& Nation, TypeFigures& Out)>;
+		void SetTypes(TypeFinder Find_) { FindType = std::move(Find_); Types.clear(); }
+		/** The figures found so far, by "model|nation" (a model with none: Style -1). */
+		const std::map<std::string, TypeFigures>& TypesFlown() const { return Types; }
+		/** The way toward the sun, board axes (x east, y north, z up), as the sky lays it (AirSky::Placing::Sun): a
+		 * pilot coming out of it is the hardest to see. */
+		void SetSun(const Vec& Way) { SunWay = Way; }
+		/**
 		 * Drop on the lead and the rally (Brian, 22 November 04:11Z). A level bombing box lets its bombs go on its lead:
 		 * his stick first, and each of the others as her bombardier sees his bombs leave, DropOnLeadLeast to
 		 * DropOnLeadMost air seconds after his first (each craft its own, from its key, the same every run). Her doors
@@ -946,6 +979,23 @@ namespace AirShow
 			double LaneU0 = 0.0, LaneSide = 0.0;
 			int LaneHold = -1;
 			bool bLaneGuns = false;
+			// (Release 2, real dogfights: SetDogfights) His type's own figures (FitType), past the limits above: how fast
+			// it may dive before its controls stiffen (its placard dive), how it climbs, its roll falling off at speed,
+			// and the way it fights (TypeFigures::Style).
+			double VDive = 0.0;      // m/s; 0: VTop
+			double ClimbRate = 0.0;  // initial climb, m/s; 0: not known
+			double RollPeakV = 0.0, RollFast = 0.0, RollFastV = 0.0; // its peak roll's speed, its roll at a high speed, that speed (m/s, rad/s)
+			int Style = 0;           // 0 not known (his group's), 1 turns, 2 dives (boom and zoom), 3 both
+			// His mind in a fight with fighters (DogDuel): what he means to do, from when, and when he next thinks again.
+			int Plan = 0;            // DogPlan
+			double PlanT = 0.0;      // air time the plan began
+			double Think = 0.0;      // air time of his next look at the fight
+			double PlanZ = 0.0;      // the height the plan began at (a slash's zoom climbs back to it)
+			int Executes = -1;       // an enemy fighter he goes for to show a loss the battle counted on it (DogExecute), -1 none
+			double ExecSince = 0.0;
+			double FoeSince = 0.0;   // air time he took his present foe
+			int YoYoWay = 0;         // his yo-yo (DogAngles): +1 high, -1 low
+			double ExecNext = 0.0;   // the air time he may next go in for one the battle has counted (an overshoot gives it up a while)
 		};
 
 		/** The beat of a fighter group's passes on one box, as the battle gives it (Fire::Go, Fire::Wait). */
@@ -1153,6 +1203,34 @@ namespace AirShow
 		double ShownT = 0.0, AirT = 0.0;
 		double ViewT = 0.0;                  // the battle time of the view the groups shown now are read from
 		bool bSmooth = true;                 // (SetSmooth)
+		bool bDogfights = false;             // (SetDogfights)
+		TypeFinder FindType;                 // (SetTypes)
+		std::map<std::string, TypeFigures> Types; // (what it found, by "model|nation")
+		Vec SunWay = Vec(-0.35, -0.45, 0.82);     // (SetSun)
+		Dice DogRoll{ 0x9E3779B97F4A7C15ull };    // the dogfights' own dice, so that the rest of the scene's fall as before
+		/** Real dogfights (AirDogfight.inl). */
+		enum DogPlan { PlanNone = 0, PlanSlash, PlanZoom, PlanPerch, PlanAngles, PlanExtend, PlanHeadOn };
+		void FitType(Craft& C);
+		/** His roll rate at his speed (his type's roll chart), radians a second. */
+		double RollAtSpeed(const Craft& C, double Speed) const;
+		/** The way he fights: 1 turns, 2 up and down (boom and zoom), 3 either, by his type or his group's style. */
+		int StyleOf(const Craft& C, const Group& G) const;
+		/** The chance, each look behind him, that he picks out the enemy fighter F coming for him. */
+		double SpotChance(const Craft& C, const Craft& F) const;
+		/** Whether, an enemy close behind him, he half-rolls and dives away rather than breaking into him. */
+		bool DogFlees(const Craft& C, const Group& G, const Craft& F, bool bHigh, double Over);
+		bool DogExecute(Craft& C, const Group& G, double Dt);
+		bool DogDuel(Craft& C, const Group& G, const Group& E, double Dt);
+		void DogThink(Craft& C, const Craft& T, const Group& G);
+		void DogAngles(Craft& C, Craft& T, const Group& G, double Dt);
+		void DogEnergy(Craft& C, Craft& T, const Group& G, double Dt);
+		void DogShoot(Craft& C, Craft& T, const Group& G, double Dt, double Least = 0.0);
+		Craft* DogPick(Craft& C, const Group& G, const Group& E, const Vec& Middle);
+		bool DogMarked(const Craft& C) const;
+		bool DogInbound(const Event& E) const;
+		double EnergyOf(const Craft& C) const { return C.P.Z + C.Spd * C.Spd / (2.0 * 9.81); }
+		void DogPlanTo(Craft& C, int Plan);
+		void DogAway(Craft& C, const Group& G, double Dt);
 		/** How far ahead of the battle time shown the formations' velocities are read (GroupVelocity): PathSpan where
 		 * the views in hand reach that far (a live raid's always do: its rules run a battle second ahead), less where a
 		 * recording's next view has yet to come, and never moved faster than the clock, so that a view's coming is

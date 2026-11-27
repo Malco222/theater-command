@@ -7,6 +7,7 @@
 #include "Battle/AirBattleScreen.h"
 #include "Battle/AirBattleState.h"
 #include "Battle/AirBattleUnitColours.inl"
+#include "Battle/AirDogfightTypes.h"
 #include "Battle/AirGround.h"
 #include "Battle/AirLight.h"
 #include "Battle/AirLand.h"
@@ -700,6 +701,38 @@ static bool AirOldFlying()
 	return bAsked;
 }
 
+// (Real dogfights, release 2, the Battle rules card's row realDogfights: Brian, 27 November 2026 01:25Z, "i want the
+// pilots AI to be very smart and realistic as real fighter pilots back then".) Read once as a battle begins: on, the
+// flight core's new pilots fly it (AirShow::Show::SetDogfights), each fighter type to its own figures from the
+// historian's table for the battle's month, the sun where its sky puts it. Off, or with the table missing from the
+// build, the fights fly as before, byte for byte; said only when on.
+static void DogfightsRead(AirShow::Show& Show, const AirFeed::Sky& Board, const AirSky::Placing& Place)
+{
+	if (!FLandLive::RuleNow(TEXT("realDogfights")))
+	{
+		return;
+	}
+	// (the table read once a run: the same for every battle)
+	static std::shared_ptr<const AirPerf::Table> Table;
+	if (!Table)
+	{
+		const FString File = FPaths::ProjectContentDir() / TEXT("Data/Air/performance.json");
+		FString Text;
+		auto Loaded = std::make_shared<AirPerf::Table>();
+		std::string Why;
+		if (!FFileHelper::LoadFileToString(Text, *File) || !AirPerf::Read(AirParts::Narrow(Text), *Loaded, Why))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: real dogfights: the aircraft table %s could not be read (%s), so the older pilots fly."), *File, *AirParts::Wide(Why));
+			return;
+		}
+		Table = Loaded;
+	}
+	Show.SetDogfights(true);
+	Show.SetTypes(AirDogfightTypes::FinderOf(Table, AirDogfightTypes::YearOf(Board.Year, Board.Month + 1)));
+	Show.SetSun(AirShow::Vec(Place.Sun.X, Place.Sun.Y, Place.Sun.Z));
+	UE_LOG(LogTheater, Display, TEXT("Air battle: real dogfights: on (the Battle rules card's Real dogfights, or -TheaterAirDogfights): each fighter flown to its own type's figures for %d/%d."), Board.Month + 1, Board.Year);
+}
+
 void AAirBattle::ReplayWhenReady(const FString& Key)
 {
 	PendingReplay = Key;
@@ -751,6 +784,7 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	AirFeed::Apply(S.Board, S.Show);
 	S.Show.SetSmooth(!AirOldFlying());
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, S.Recording.Views.front().Groups, S.Recording.Seed);
+	DogfightsRead(S.Show, S.Board, S.SkyPlace);
 	S.Desk.Begin(S.Board, S.Recording.Views.front().Head.Me);
 	S.Card = S.Desk.CardOf(S.Recording.Card);
 	S.BattleT = S.Recording.Views.front().Head.T;
@@ -807,6 +841,7 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	AirFeed::Apply(S.Board, S.Show);
 	S.Show.SetSmooth(!AirOldFlying());
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, First.Groups, 0);
+	DogfightsRead(S.Show, S.Board, S.SkyPlace);
 	S.Desk.Begin(S.Board, First.Head.Me);
 	// (Release 2, the scramble offer; Brian, 24 November 2026 22:21Z: "i want every air battle playable". With the Battle
 	// rules card's "Scramble your fighters" on, a battle he fights as the defender reads as his: the staff's chance his own,
@@ -2291,6 +2326,10 @@ void AAirBattle::LaySky()
 	S.Show.DeckReach = 0.0;
 	const FVector Sun = TowardSun();
 	S.SkyPlace.Sun = AirSky::Vec(Sun.Y, Sun.X, Sun.Z);
+	if (S.Show.Dogfights())
+	{
+		S.Show.SetSun(AirShow::Vec(S.SkyPlace.Sun.X, S.SkyPlace.Sun.Y, S.SkyPlace.Sun.Z)); // (real dogfights: out of the sun the stage draws)
+	}
 	S.SkyPlace.Ground = S.Show.Ground;
 	// ("-TheaterWeather=0.2" lays the day's cloud over that share of the sky, "-TheaterWeather=deck,0.95" a deck of it:
 	// each kind of day for a picture, the battle's own height and seed kept)

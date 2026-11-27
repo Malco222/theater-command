@@ -236,6 +236,17 @@ namespace
 		// -TheaterAirB17Fine turns it on for a run, -TheaterAirNoB17Fine off. The air battle reads it once as it starts
 		// (AAirBattle::B17FineRead); the campaign map keeps the older one; it is never sent to the land rules.)
 		{ TEXT("b17Fine"), TEXT("Finer B-17"), TEXT("The B-17s in the air battles are drawn as the newer, finer model: her riveted skin, her own engines, nose-art panel and kill tally. Slower to draw. Off: the older B-17."), TEXT("TheaterAirNoB17Fine"), false, TEXT("TheaterAirB17Fine") },
+		// (Real dogfights, release 2: Brian, 27 November 2026 01:25Z, "i never see the fighters shooting each other down or
+		// dog fighting", "it looks like they loop around vs actually realistic dog fights" and "i want the pilots AI to be
+		// very smart and realistic as real fighter pilots back then". The flight core's new pilots (AirShow::Show::
+		// SetDogfights, Battle/AirDogfight.inl): each fighter type flown to its own figures from the historian's table
+		// (Content/Data/Air/performance.json), sun and blind-spot spotting, bounces, energy against turning fighters, yo-yos,
+		// head-on passes, the Thach weave, extending away, and the one of a group whose guns the battle gave a loss going in
+		// behind his man to show it with a short close burst. Looks only: the rules still decide who falls (ruling 217).
+		// Off until the Mac has filmed it and the art director has passed it, then this row flips to on in one line;
+		// -TheaterAirDogfights turns it on for a run, -TheaterAirOldDogfights off. The air battle reads it once as it starts
+		// (AAirBattle::DogfightsRead); it is never sent to the land rules.)
+		{ TEXT("realDogfights"), TEXT("Real dogfights"), TEXT("Fighter pilots fight as the aces of the war did: each type flown to its own speed, turn and climb, bounces out of the sun and from above, fast fighters diving and zooming while nimble ones turn, short close bursts. Off: the older circling fights."), TEXT("TheaterAirOldDogfights"), false, TEXT("TheaterAirDogfights") },
 		// (Old wrecks, Brian 23 November 20:09Z: starts off as Scarred ground does, until the effects thread's wrecks pass the
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)
@@ -538,9 +549,9 @@ bool FLandLive::Start(const FString& InKey, int32 InSeed, const FString& InMe, b
 	{
 		const FString RuleKey(LandRuleTable[R].Key);
 		if (RuleKey.StartsWith(TEXT("fly"), ESearchCase::CaseSensitive) || RuleKey.Equals(TEXT("noseArt"), ESearchCase::CaseSensitive) || RuleKey.Equals(TEXT("unitColours"), ESearchCase::CaseSensitive)
-			|| RuleKey.Equals(TEXT("b17Fine"), ESearchCase::CaseSensitive))
+			|| RuleKey.Equals(TEXT("b17Fine"), ESearchCase::CaseSensitive) || RuleKey.Equals(TEXT("realDogfights"), ESearchCase::CaseSensitive))
 		{
-			continue; // (the air battles' own switches, on the same card: flyLive, flyTroops, flyDefend, noseArt, unitColours, b17Fine and those to come; the campaign and the air battle read them, the land rules never do)
+			continue; // (the air battles' own switches, on the same card: flyLive, flyTroops, flyDefend, noseArt, unitColours, b17Fine, realDogfights and those to come; the campaign and the air battle read them, the land rules never do)
 		}
 		const bool bOn = RuleNow(LandRuleTable[R].Key);
 		Switches += FString::Printf(TEXT(",\"%s\":%s"), LandRuleTable[R].Key, bOn ? TEXT("true") : TEXT("false"));

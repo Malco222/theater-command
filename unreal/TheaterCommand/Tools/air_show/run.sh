@@ -125,5 +125,33 @@ if [ "${AIR_LAND_PICTURES:-}" = "1" ]; then
     esac
   done
 fi
+# Real dogfights (release 2, the Battle rules card's row realDogfights; Brian, 27 November 2026 01:25Z: "i never see the
+# fighters shooting each other down or dog fighting", "it looks like they loop around vs actually realistic dog fights"):
+# the dogfight probe (air_dogfight_probe.cpp) flies the Bremen raid with the old pilots and with the new. The new must
+# show more of the fighters' falls with the shooter on the victim's tail and firing than the old do, and circle flat less
+# than 0.08 a fighter-minute; and the row must be on the card, off unless asked, read as each battle begins and never
+# sent to the land rules.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_dogfight_probe.cpp" "$SRC/Battle/AirPerf.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  -o "$OUT/air_dogfight_probe"
+DOG_RAID="$ROOT/Content/Data/AirBattles/bremen-b17.json"
+DOG_OLD=$(AIR_DOGFIGHTS=0 "$OUT/air_dogfight_probe" "$DOG_RAID" 30 | sed -n 's/.*shooter on his tail and firing \([0-9]*\).*/\1/p')
+if [ -z "$DOG_OLD" ]; then
+  echo "dogfights: the old pilots' Bremen raid did not play"; STATUS=1
+else
+  echo "dogfights: the old pilots show $DOG_OLD falls on a tail over Bremen"
+  AIR_DOGFIGHTS=1 AIR_PERF="$ROOT/Content/Data/Air/performance.json" AIR_DOG_TAIL_MORE_THAN="$DOG_OLD" AIR_DOG_FLAT_UNDER=0.08 \
+    "$OUT/air_dogfight_probe" "$DOG_RAID" 30 || STATUS=1
+fi
+DOG_RULES="$SRC/Battle/LandLive.cpp"
+DOG_BATTLE="$SRC/Battle/AirBattle.cpp"
+if [ "$(grep -c 'TEXT("realDogfights"), TEXT("Real dogfights")' "$DOG_RULES")" != 1 ] \
+  || [ "$(grep -c 'TEXT("TheaterAirOldDogfights"), false, TEXT("TheaterAirDogfights")' "$DOG_RULES")" != 1 ] \
+  || [ "$(grep -c 'RuleKey.Equals(TEXT("realDogfights")' "$DOG_RULES")" != 1 ] \
+  || [ "$(grep -c 'DogfightsRead(S.Show, S.Board, S.SkyPlace);' "$DOG_BATTLE")" != 2 ]; then
+  echo "dogfights: the row realDogfights is not on the card off unless asked, never sent to the land rules, and read as each battle begins"; STATUS=1
+else
+  echo "dogfights: the row on the card, off unless asked (-TheaterAirDogfights), read as each battle begins, never sent to the land rules"
+fi
 echo "tracks in $OUT"
 exit $STATUS
