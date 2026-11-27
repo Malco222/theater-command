@@ -1849,7 +1849,9 @@ why are they green?", then of the first matt pictures 03:12Z: "thats white. it s
    Mustang as before. With the row on, ModelFor names every Mustang "MustangBare" (only the drawing: her flight is the
    Mustang's, the same span and figures, so nothing counted moves), MustangMetalRead reads her file's own near and far
    `gloss`, `metal` and `shade` (AirSheen::ReadOwn), OwnOnto carries them in her shapes' first texture coordinate as the
-   B-17's sheen does (AirSheen::Carry), and InkFor draws her on BareInk: the same M_AirPaint with her own numbers
+   B-17's sheen does (AirSheen::Carry) and multiplies each of her points' colour by its shade in linear light, as the
+   kit does the B-17's worn skin (her file's meaning; without it her rivets, seams and lines on her black paint, shade
+   0.00 to 0.02, drew as pale studs: the 3D sceptic's find of 27 Nov), and InkFor draws her on BareInk: the same M_AirPaint with her own numbers
    (AirSheen::BareTune): a roughness floor of 0.25, not the B-17's 0.45 (her pick, 0.28, would be held at 0.45 satin),
    and no glare guard on her (the art director: no glare guard on bare skin). Her paint and her marks keep metal 0.
    Her far copies carry her finish too (StillOf draws them on InkFor), so she glints at 300 m; her light shapes past

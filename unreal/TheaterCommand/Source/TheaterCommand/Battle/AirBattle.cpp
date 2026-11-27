@@ -5093,7 +5093,10 @@ namespace AirParts
 	}
 
 	/** The same for an aircraft whose own file carries her finish (the silver Mustang's): her gloss, metal and shade a
-	 * point, as her file lists them; a point past them (her marks) wears Marks. */
+	 * point, as her file lists them; a point past them (her marks) wears Marks. Her shade is also her colour's: each of
+	 * her file's points has its colour multiplied by its shade in linear light, as the B-17's worn skin has hers in the
+	 * kit (her file's meaning: "the contact shading the game multiplies the point's colour by"). So her rivets, seams and
+	 * lines on her black paint (shade 0.00 to 0.02) lie at the black, a shade darker, not pale. */
 	static void OwnOnto(FShape& Shape, const AirSheen::Level& Own, const std::vector<float>& Shade, const AirSheen::Carried& Marks)
 	{
 		const size_t Count = Own.Count();
@@ -5102,11 +5105,17 @@ namespace AirParts
 			return;
 		}
 		Shape.Sheen.SetNum(Shape.Points.Num());
+		const bool bOwnColours = Shape.Colors.Num() == Shape.Points.Num();
 		for (int32 K = 0; K < Shape.Points.Num(); ++K)
 		{
 			const size_t At = static_cast<size_t>(K);
 			const AirSheen::Carried C = At < Count ? AirSheen::Carry(Own.Gloss[At], Own.Metal[At], Shade[At]) : Marks;
 			Shape.Sheen[K] = FVector2D(C.U, C.V);
+			if (bOwnColours && At < Count && Shade[At] < 1.0f)
+			{
+				const FLinearColor Lit(Shape.Colors[K]);
+				Shape.Colors[K] = FLinearColor(Lit.R * Shade[At], Lit.G * Shade[At], Lit.B * Shade[At], Lit.A).ToFColor(true);
+			}
 		}
 	}
 
