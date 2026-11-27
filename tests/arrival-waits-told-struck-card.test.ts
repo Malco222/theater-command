@@ -15,6 +15,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { rowsWaitingOnRows, setFromWait } from '../src/campaign/arrivalwaits';
+import { signPeace } from '../src/campaign/diplomacy';
 import { createGame, declareWar, headline, relocate, removeCorps, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { markFor, monthCard, type MonthCard, type MonthMark } from '../src/campaign/monthcard';
@@ -265,5 +266,62 @@ describe('said once, and nothing where nothing was told', () => {
       expect((card.waits ?? []).some((x) => /friendly hands/.test(x))).toBe(false);
       expect(homeOf(html(card)).some((x) => /friendly hands/.test(x))).toBe(false);
     }
+  });
+});
+
+describe("S6: a told place hold the row can no longer form from: its muted line does not stand on (the UI director's section 11, point 3 of the thread's ruling)", () => {
+  // (No row of the setup that takes named corps whole has an 'until', and none of Japan's has a war of its own: the
+  // row's words are set by hand here, and set back after.)
+  const WAIT = 'The 12th Army (62nd Division), due in Kaifeng since March 1944, waits until Kaifeng is in friendly hands.';
+  const withWords = (words: Record<string, unknown>, f: () => void): void => {
+    const was = rows[M][6];
+    rows[M][6] = { ...was, ...words };
+    try { f(); } finally { rows[M][6] = was; }
+  };
+  const kaifeng = (): Game => { const g = make(); lose(g, 'Kaifeng'); kill(g, BRIGADES); g.flags[`due:${M}`] = 55; return g; };
+
+  it("its 'until' passes mid-hold (month 58): the muted line goes that month, on the rules' card and the browser's; the strike at the half year is as before", () => {
+    withWords({ until: 58 }, () => {
+      const g = kaifeng();
+      month(g, 55); month(g, 56); month(g, 57);
+      expect(rowsWaitingOnRows(g, 'JAP')).toContain(WAIT);
+      const mark = markFor(g);
+      month(g, 58);
+      expect(g.flags[`rowPlace:${M}`]).toBe(g.byName.Kaifeng.id);
+      expect(rowsWaitingOnRows(g, 'JAP')).not.toContain(WAIT);
+      const card = monthCard(g, mark, 'JAP');
+      expect(card.waits ?? []).not.toContain(WAIT);
+      expect(homeOf(html(card))).not.toContain(WAIT);
+      for (let t = 59; t <= 61; t++) { month(g, t); expect(rowsWaitingOnRows(g, 'JAP')).not.toContain(WAIT); }
+      month(g, 62);
+      expect(g.flags[`sent:${M}`]).toBe(2);
+      expect(struckOf(g, 62)).toEqual(['The 12th Army (62nd Division), due in Kaifeng since March 1944, will not form: Kaifeng is still not in friendly hands, and the arrival has waited as long as it may.']);
+    });
+  });
+
+  it('its war off while its flags stand: the reader skips it, and writes nothing', () => {
+    const g = kaifeng();
+    month(g, 55);
+    expect(rowsWaitingOnRows(g, 'JAP')).toContain(WAIT);
+    withWords({ war: ['JAP', 'SOV'] }, () => {
+      expect(g.nations.JAP.atWar.includes('SOV')).toBe(false);
+      const before = JSON.stringify(g.flags);
+      expect(rowsWaitingOnRows(g, 'JAP')).not.toContain(WAIT);
+      expect(JSON.stringify(g.flags)).toBe(before);
+    });
+    expect(rowsWaitingOnRows(g, 'JAP')).toContain(WAIT);
+  });
+
+  it('its war (Japan and China, set by hand) ends in peace mid-hold: struck at once with its flags, and no line stands on, as before', () => {
+    withWords({ war: ['JAP', 'CHN'] }, () => {
+      const g = kaifeng();
+      month(g, 55); month(g, 56);
+      expect(rowsWaitingOnRows(g, 'JAP')).toContain(WAIT);
+      expect(signPeace(g, 'JAP', 'CHN')).toBe(true);
+      month(g, 57);
+      expect(g.flags[`sent:${M}`]).toBe(2);
+      expect(rowsWaitingOnRows(g, 'JAP')).not.toContain(WAIT);
+      expect(g.headlines.some((h) => h.text.endsWith(TAIL))).toBe(false);
+    });
   });
 });

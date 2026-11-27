@@ -32,7 +32,7 @@
  */
 import setup from '../../data/campaign/setup-1939.json';
 import { turnToDate } from '../core/ticket';
-import { allied, atFrontNow, headline, rowHolds, theWords } from './game';
+import { allied, atFrontNow, headline, rowHolds, rowWords, theWords, warOn } from './game';
 import { contactRuleActs, stopOf } from './history';
 import type { Corps, Game, Region } from './types';
 
@@ -437,6 +437,12 @@ function waiting(g: Game, nat: string): { i: number; row: any[]; at: number; sin
     // false. Its three flags are kept, not cleared: the dial can come back to a stop it acts at, and then the card
     // returns with the wait's first month and the row is not told a second time. The refuter's interplay-3.)
     if (Array.isArray(row[6]?.stops) && !(row[6].stops as number[]).includes(stopOf(g))) return;
+    // (Nor a row that can no longer form: its war is off, or its 'until' has passed. game.ts `expeditions` returns there
+    // before it can wait or form, so "waits until {place} is in friendly hands" would stand on, untrue, until the row's
+    // half year strikes it. The words as that month reads them (`rowWords`, which writes nothing); its flags are kept,
+    // as above. The thread's ruling on the sceptic's S6, 07:51Z, 27 November 2026: the reader skips such a row.)
+    const { o } = rowWords(g, nat, row);
+    if ((o.war && !warOn(g, o.war)) || (o.until && g.turn >= o.until)) return;
     const at = g.flags[atKey(i)];
     if (at === undefined || !g.regions[at]) return;
     out.push({ i, row, at, since, from: fromOf(row) });
