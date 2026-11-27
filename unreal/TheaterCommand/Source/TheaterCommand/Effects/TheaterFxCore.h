@@ -760,7 +760,15 @@ namespace TheaterFx
 		{
 			double Widen = 1.0, Mid = 0.0, Shoulder = 0.0, Calm = 0.0, CalmAlpha = 0.0;
 		};
-		LaneLook OilLook(double Dark, double MidPx, double GrazeDeg) const;
+		/** The rule's numbers from the row (sea_leak.floor_px, floor_alpha, calm_from_deg, calm_full_deg, calm_alpha,
+		 * dark), read once a frame: a lane's 1,200 points each reading the recipe cost about 2 ms a frame. */
+		struct LaneRule
+		{
+			double FloorPx = 1.5, FloorAlpha = 0.3, CalmFrom = 5.0, CalmFull = 1.0, CalmAlpha = 0.2, Dark0 = 0.55;
+		};
+		LaneRule OilRule() const;
+		static LaneLook OilLook(const LaneRule& Rule, double Dark, double MidPx, double GrazeDeg);
+		LaneLook OilLook(double Dark, double MidPx, double GrazeDeg) const { return OilLook(OilRule(), Dark, MidPx, GrazeDeg); }
 
 		/** Item 11 part 4: the deck's brass. Spent cases from her light and medium guns lying on her deck, piling by the
 		 * mount and rolling in her own frame (ShipRide / CasesRide once a frame): thrown from Breech (metres, world) along

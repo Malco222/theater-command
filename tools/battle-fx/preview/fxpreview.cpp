@@ -2491,6 +2491,7 @@ namespace
 				// sky (124,140,152 written) at about 0.2, a smooth streak a little lighter than the sea, never black)
 				std::vector<Battle::LanePoint> Strip;
 				const int Got = Fx.OilLane(Now, 1, Strip);
+				const Battle::LaneRule Rule = Fx.OilRule(); // (the rule's numbers read once a frame)
 				static const unsigned char Paints[5][3] = { { 66, 62, 56 }, { 66, 62, 56 }, { 59, 56, 50 }, { 66, 62, 56 }, { 66, 62, 56 } };
 				static const unsigned char SheenPaint[3] = { 96, 92, 84 };
 				static const unsigned char CalmPaint[3] = { 124, 140, 152 };
@@ -2509,7 +2510,7 @@ namespace
 					const Vec Normal = Line.Cross(Vec(Way.X, Way.Y, 0.0));
 					const double Wide = (Normal.Length() > 1.0e-3 * std::max(Way.Length(), 1.0e-6) ? std::fabs(Span.Dot(Normal.Unit(Vec(0.0, 0.0, 1.0)))) : (Span - Line * Span.Dot(Line)).Length()) * Cam.Ppr / Off;
 					const double Graze = std::asin(std::clamp((Cam.Eye.Z - 0.08) / Off, -1.0, 1.0)) * 180.0 / 3.14159265358979;
-					const Battle::LaneLook Lk = Fx.OilLook(L.Dark, 0.55 * Wide, Graze);
+					const Battle::LaneLook Lk = Battle::OilLook(Rule, L.Dark, 0.55 * Wide, Graze);
 					const double Floor = Lk.Widen;
 					const Vec Left = L.At + L.Across * (L.Left * Floor), Right = L.At - L.Across * (L.Right * Floor);
 					const Vec Across[5] = { Left, L.At + (Left - L.At) * 0.55, L.At, L.At + (Right - L.At) * 0.55, Right };

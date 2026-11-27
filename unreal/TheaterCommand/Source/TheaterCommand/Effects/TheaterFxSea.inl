@@ -923,17 +923,25 @@
 		return static_cast<int>(Strip.size());
 	}
 
-	Battle::LaneLook Battle::OilLook(double Dark, double MidPx, double GrazeDeg) const
+	Battle::LaneRule Battle::OilRule() const
+	{
+		LaneRule R;
+		const std::string P = "sea_leak.";
+		R.FloorPx = SafeNum(Num(P + "floor_px", 1.5), 0.1, 20.0, 1.5);
+		R.FloorAlpha = SafeNum(Num(P + "floor_alpha", 0.3), 0.0, 1.0, 0.3);
+		R.CalmFrom = SafeNum(Num(P + "calm_from_deg", 5.0), 0.0, 90.0, 5.0);
+		R.CalmFull = SafeNum(Num(P + "calm_full_deg", 1.0), 0.0, 90.0, 1.0);
+		R.CalmAlpha = SafeNum(Num(P + "calm_alpha", 0.2), 0.0, 1.0, 0.2);
+		R.Dark0 = SafeNum(Num(P + "dark", 0.55), 0.01, 1.0, 0.55);
+		return R;
+	}
+
+	Battle::LaneLook Battle::OilLook(const LaneRule& Rule, double Dark, double MidPx, double GrazeDeg)
 	{
 		LaneLook L;
-		const std::string P = "sea_leak.";
 		const double D = SafeNum(Dark, 0.0, 1.0, 0.0);
-		const double FloorPx = SafeNum(Num(P + "floor_px", 1.5), 0.1, 20.0, 1.5);
-		const double FloorA = SafeNum(Num(P + "floor_alpha", 0.3), 0.0, 1.0, 0.3);
-		const double CalmFrom = SafeNum(Num(P + "calm_from_deg", 5.0), 0.0, 90.0, 5.0);
-		const double CalmFull = SafeNum(Num(P + "calm_full_deg", 1.0), 0.0, 90.0, 1.0);
-		const double CalmA = SafeNum(Num(P + "calm_alpha", 0.2), 0.0, 1.0, 0.2);
-		const double Dark0 = SafeNum(Num(P + "dark", 0.55), 0.01, 1.0, 0.55);
+		const double FloorPx = Rule.FloorPx, FloorA = Rule.FloorAlpha, CalmFrom = Rule.CalmFrom, CalmFull = Rule.CalmFull;
+		const double CalmA = Rule.CalmAlpha, Dark0 = std::max(Rule.Dark0, 0.01);
 		const double Px = SafeNum(MidPx, 0.0, 1.0e7, 0.0);
 		// (under the floor: widened to it, fainter by the root of that only, and never under floor_alpha while so dark)
 		L.Widen = Px < FloorPx ? FloorPx / std::max(Px, 1.0e-3) : 1.0;

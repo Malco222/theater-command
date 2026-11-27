@@ -751,6 +751,27 @@ namespace
 			std::printf("    the calm band's lift at its middle (bytes of G over the sea, before the game's curve): %.1f %.1f %.1f %.1f at 1, 3, 5, 10 degrees\n", Lift[0], Lift[1], Lift[2], Lift[3]);
 			const Battle::LaneLook Old = Y.OilLook(0.02, 0.15, 1.0);
 			Check(Old.CalmAlpha < Thin.CalmAlpha && Old.Mid <= Old.CalmAlpha + 1e-12, "  ...thinner as the oil thins, never more than the calm paint's own", Say("an old lane's calm alpha %.3f against a fresh one's %.3f", Old.CalmAlpha, Thin.CalmAlpha));
+			// (the scene reads the rule once a frame (OilRule) and paints its 1,200 points by it: the same numbers, and cheap)
+			const Battle::LaneRule Rule = Y.OilRule();
+			int Same = 0;
+			double Sum = 0.0;
+			const auto T0 = std::chrono::steady_clock::now();
+			for (int F = 0; F < 100; ++F)
+			{
+				for (int I = 0; I < 1200; ++I)
+				{
+					const Battle::LaneLook A = Battle::OilLook(Rule, 0.55 * I / 1200.0, 0.01 * I, 0.01 * I);
+					Sum += A.Mid;
+					if (F == 0 && I % 100 == 0)
+					{
+						const Battle::LaneLook B = Y.OilLook(0.55 * I / 1200.0, 0.01 * I, 0.01 * I);
+						Same += A.Mid == B.Mid && A.Shoulder == B.Shoulder && A.Calm == B.Calm && A.Widen == B.Widen ? 1 : 0;
+					}
+				}
+			}
+			const double Ms = Since(T0) / 100.0;
+			Check(Same == 12 && Sum > 0.0, "  ...the rule read once a frame paints the same", Say("%.0f of 12 points the same", Same));
+			std::printf("    time: the paint of 1,200 lane points, the rule read once, %.3f ms a frame on this box\n", Ms);
 		}
 		std::string Got;
 		Check(DiceUntouched(Book, [&](Battle& Z) { for (int F = 0; F < 600; ++F) { Z.OilLeak(F / 10.0, 4, Vec(F * 1.0, 0.0, 0.0), 1.0); } Z.OilLane(60.0, 4, Strip); }, Got), "no draw on the shared seed", Got);

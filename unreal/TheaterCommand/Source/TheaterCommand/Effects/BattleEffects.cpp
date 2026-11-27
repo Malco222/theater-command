@@ -833,7 +833,23 @@ FOilLaneLook FBattleEffects::OilLook(float Dark, double MidPixels, double GrazeD
 		return Out;
 	}
 	// (the recipe alone: nothing the kit's draw on its worker reads or writes)
-	const TheaterFx::Battle::LaneLook L = Core.OilLook(static_cast<double>(Dark), MidPixels, GrazeDegrees);
+	return OilLook(OilRule(), Dark, MidPixels, GrazeDegrees);
+}
+
+FOilLaneRule FBattleEffects::OilRule() const
+{
+	FOilLaneRule Out;
+	if (IsReady())
+	{
+		Out.Rule = Core.OilRule();
+	}
+	return Out;
+}
+
+FOilLaneLook FBattleEffects::OilLook(const FOilLaneRule& Rule, float Dark, double MidPixels, double GrazeDegrees)
+{
+	FOilLaneLook Out;
+	const TheaterFx::Battle::LaneLook L = TheaterFx::Battle::OilLook(Rule.Rule, static_cast<double>(Dark), MidPixels, GrazeDegrees);
 	Out.Widen = static_cast<float>(L.Widen);
 	Out.Mid = static_cast<float>(L.Mid);
 	Out.Shoulder = static_cast<float>(L.Shoulder);

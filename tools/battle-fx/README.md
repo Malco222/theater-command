@@ -2170,7 +2170,9 @@ in `/mnt/project-files/effects-r2/seam/sea/` (README there: every call letter fo
   - The scene paints it as a dull band: the sea's own colour darkened toward 66,62,56 (the middle 59,56,50), written
     to land about 28,25,20; its sheen a dull grey, never a rainbow; and never under 1.5 px across, a narrower lane
     lighter for it instead of a hairline.
-  - The scene asks the kit how to paint each point: `OilLook(Dark, MidPx, GrazeDeg)` (wrapper `FBattleEffects::OilLook`).
+  - The scene asks the kit how to paint each point: `OilRule()` once a frame, then `OilLook(Rule, Dark, MidPx,
+    GrazeDeg)` a point (wrapper `FBattleEffects::OilRule` / `OilLook`; reading the recipe for each of 1,200 points
+    cost about 2 ms a frame here, the rule read once makes it arithmetic).
     Under `floor_px` (1.5) the middle is widened to it and made fainter by the root of the widening only, never under
     `floor_alpha` (0.3) while the oil is that dark. Seen low, from `calm_from_deg` (5) of grazing angle down to
     `calm_full_deg` (1), the paint goes over to the calm band: a pale reflected sky (124,140,152 written) at

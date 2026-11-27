@@ -36,6 +36,12 @@ struct FOilLaneLook
 	float Widen = 1.0f, Mid = 0.0f, Shoulder = 0.0f, Calm = 0.0f, CalmAlpha = 0.0f;
 };
 
+/** The lane paint rule's numbers from the recipe (FBattleEffects::OilRule), read once a frame. */
+struct FOilLaneRule
+{
+	TheaterFx::Battle::LaneRule Rule;
+};
+
 /** The camera's jolt from hits close by, for the caller to add to its own camera if it wants it: it is never moved
  * here. Offset is in world units. A setting turns it off (FBattleEffects::bShake). */
 struct FBattleJolt
@@ -329,6 +335,9 @@ public:
 	 * calm_alpha): from its Dark, its dark middle's width on the screen across the lane (pixels) and the eye's grazing
 	 * angle to the sea there (degrees). Reads the recipe only; may be asked any time on the game thread. */
 	FOilLaneLook OilLook(float Dark, double MidPixels, double GrazeDegrees) const;
+	/** The same with the rule read once (OilRule, once a frame): what a strip of 1,200 points should use. */
+	FOilLaneRule OilRule() const;
+	static FOilLaneLook OilLook(const FOilLaneRule& Rule, float Dark, double MidPixels, double GrazeDegrees);
 	/** The ships with a lane on the sea now. */
 	void OilLanes(TArray<int32>& Ships) const;
 	/** Item 11 part 4, the deck's brass: Count (1 to 16) spent cases of Kind (deck_cases.<kind>: aa25, aa40, in4, in5,
