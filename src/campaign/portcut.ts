@@ -192,10 +192,11 @@ export interface PortCut {
   hungry: number | null;
   /**
    * The last month a fill of the stores this month would feed the garrison through, by the rule's clock as it stands
-   * (the remedy line's month): under the fortress rows a crew whose nation has had this month's reckoning has eaten its
-   * month already, and a fill after it leaves its count running, so that it starves when it would have; and a corps of a
-   * nation whose month comes after a crew's is drawn without it in the month it starves (refillTo). The soonest of the
-   * garrison's nations, or with no garrison the holder's own.
+   * (the remedy line's month, and in the month a ship got in, the count of the stores just filled): under the fortress
+   * rows a crew whose nation has had this month's reckoning has eaten its month already, and a fill after it leaves its
+   * count running, so that it starves when it would have; and a corps of a nation whose month comes after a crew's is
+   * drawn without it in the month it starves (refillTo). The soonest of the garrison's nations, or with no garrison the
+   * holder's own.
    */
   refill: number | null;
   /** The month the first corps of the garrison is struck off if no ship gets in (null with no garrison that starves). */
@@ -714,7 +715,12 @@ export function portCardLines(g: Game, regionId: number, viewer: string | null, 
   }
   if (f.lost === null) return [];
   const keep = f.keep!;
-  if (f.state === 'filled') return [{ text: theWords(`Cut off by sea, its stores would feed the garrison for ${months(keep)}.`), tone: 'note' }];
+  // (What a fill feeds: the keep, counted from this month. Where a fill this month may feed the garrison less long than
+  // that, a fortress crew's clock running on through it (PortCut.refill), the lines count the shorter and say it is the
+  // least: the remedy line (the UI director's 03:13Z, item 1), and the line of the stores just filled, by the crew's
+  // count (05:03Z, item 2). Everywhere else, as laid.)
+  const least = f.refill !== null && f.refill < g.turn + keep;
+  if (f.state === 'filled') return [{ text: theWords(`Cut off by sea, its stores would feed the garrison for ${least ? `at least ${months(f.refill! - g.turn)}` : months(keep)}.`), tone: 'note' }];
   if (!f.cut) return [];
   const out: PortLine[] = [];
   if (f.state === 'stores') out.push({ text: theWords(`Cut off by sea: ${heldSaid(g, f.shut, viewer, false)}, and no ship reaches the harbour. The garrison lives on the port's stores through ${monthSaid(g, f.feedsTo!)}; unless the sea is opened, it then goes hungry and is lost ${startOf(f.lostBy)} ${monthSaid(g, f.lost)}.`), tone: 'warn' });
@@ -726,10 +732,7 @@ export function portCardLines(g: Game, regionId: number, viewer: string | null, 
   // sea card shows each side's strength there and no threshold, so the line is followed by those two figures, a
   // sentence for each sea it names, and no figure of the strength needed: the UI director's 23:50Z, item 3.)
   const measured = opts.measure ? open.map((z) => measureSaid(g, z, viewer)).filter((x): x is string => x !== null) : [];
-  // (What one such month feeds: the keep, counted from this month. Where a fill this month may feed the garrison less
-  // long than that, a fortress crew's clock running on through it (PortCut.refill), the line counts the shorter and says
-  // it is the least: the UI director's 03:13Z, item 1. Everywhere else, as laid.)
-  const least = f.refill !== null && f.refill < g.turn + keep;
+  // (What one such month feeds: as the line of the stores filled, above.)
   const feeds = least ? `at least through ${monthSaid(g, f.refill!)}` : `through ${monthSaid(g, g.turn + keep)}`;
   out.push({ text: theWords(`A fleet of yours at sea there, strong enough to open ${seasSaid(g, open, 'or')}, lets the ships in and fills the stores: one such month feeds the garrison ${feeds}.${measured.map((x) => ` ${x}`).join('')}`), tone: 'note' });
   return out;

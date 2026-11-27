@@ -1135,7 +1135,7 @@ describe('01:14Z, item 3: the keep the stores were filled with, under the fortre
 });
 
 describe('03:13Z, item 1: the remedy line while a crew\'s clock runs, "at least through"', () => {
-  it('Britain\'s own fleets fill Malta\'s stores in January after his reckoning, and the crew still starves in March: "one such month feeds the garrison at least through March", and so it is', () => {
+  it('Britain\'s own fleets fill Malta\'s stores in January after his reckoning, and the crew still starves in March: "one such month feeds the garrison at least through March", the stores filled "would feed the garrison for at least two months" (05:03Z, item 2), and so it is', () => {
     const { g, ninth, crew } = crewed('UK');
     const r = g.regions[MALTA];
     // January: Britain's reckoning has eaten a month of the crew's three. A fill now comes after it and does not restock
@@ -1152,8 +1152,10 @@ describe('03:13Z, item 1: the remedy line while a crew\'s clock runs, "at least 
     g.supplyDirty = true;
     computeSupply(g);
     expect([closedTo(g, zoneOf(g, 'central'), 'UK'), g.flags[`stores:${MALTA}`], storesEaten(g, crew)]).toEqual([false, 17, 1]);
-    // (With the sea open, the line counts the keep, as laid.)
-    expect(texts(portCardLines(g, MALTA, 'UK'))).toEqual(['Cut off by sea, its stores would feed the garrison for three months.']);
+    // With the sea open and the stores just filled, the line counts the crew's months as the remedy line does, and says
+    // it is the least: the crew starves in March, and the fill feeds the garrison through February and March (the UI
+    // director's 05:03Z, item 2; the rows below). (The 03:13Z build said "for three months", the keep.)
+    expect(texts(portCardLines(g, MALTA, 'UK'))).toEqual(['Cut off by sea, its stores would feed the garrison for at least two months.']);
     // His fleets go home, and Italy's still hold the sea: one such month, and the months after it.
     for (const x of home) { x.f.zone = x.zone; x.f.stance = x.stance; }
     g.supplyDirty = true;
