@@ -467,6 +467,62 @@ namespace TheaterFx
 		/** Rounds fired by one gun (Gun: any number that is the same for the same gun) from From toward To, PerSecond:
 		 * every fifth is a tracer (tracer.one_in), out of step between guns; machine guns flicker at the muzzle. */
 		void Shots(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond, const char* Ground = "earth");
+		/** Effects (R2), small arms off armour: the plate a burst strikes, as the caller knows her at Now (the battle's
+		 * LandPlay: her plain box's face, or the face cast on her model by the tank core, LandKit::Vehicle::PlateNow). */
+		struct ArmourPlate
+		{
+			Vec At;     // where the burst is aimed on her plate
+			Vec Normal; // the plate's outward way there
+			/** How far the plate runs flat about RoomMid (on the plate, about At): RoomA and RoomB two ways along it,
+			 * square to each other, each as long as the plate runs from RoomMid that way and as far the other way (RoomA
+			 * level where the plate stands up). Every round strikes inside it, an edge_m short of its edges, so none is
+			 * drawn in the air past her edge, on a curve that leaves the plate, or inside her. Both of no length: no room
+			 * known, every round strikes at At. */
+			Vec RoomMid, RoomA, RoomB;
+			/** How she goes: her velocity (Carry, metres a second of the kit's clock) and her turn about the upright through
+			 * Pivot (her middle at Now), Spin radians a second of the kit's clock, + turning x toward y. Every strike is
+			 * where her plate is when it strikes, turned as she turns, and its flash, sparks and paint ride with her plate
+			 * there (none is left in her as she drives on or turns, nor hangs behind her). */
+			Vec Carry, Pivot;
+			double Spin = 0.0;
+			/** Her path through the burst where the caller knows it (two moments or more): her middle (At) and how far she
+			 * has turned since Now (Turn, radians, + turning x toward y) at moments Dt seconds of the kit's clock after
+			 * Now, rising, the first at 0 (her middle Pivot). Every strike is then where her plate is on it (straight
+			 * between its moments, held past the last), as she slows, stops or turns; Carry and Spin are her way and turn
+			 * where it has none. At most PathMost of them are taken. */
+			struct PathPoint
+			{
+				double Dt = 0.0;
+				Vec At;
+				double Turn = 0.0;
+			};
+			static constexpr size_t PathMost = 64;
+			std::vector<PathPoint> Path;
+			/** Her own height under the plate where a spark thrown down goes out (her deck under her turret's side, her
+			 * track guard under her hull's side), at Now; under -1e29: none, the ground. */
+			double Floor = -1.0e30;
+		};
+		/** Effects (R2), small arms off armour (Brian, 25 November: "bullets should be bouncing off it"): the same burst as
+		 * Shots (its flicker, its brass, its tracers by the gun's own count), its rounds striking her Plate and bouncing
+		 * off it by the recipe's bullet_ricochet row. Each round that strikes, spread over the plate about its At inside
+		 * its room (on it, never off its face, never inside the hull) and where the plate is by then, is a tiny two-frame
+		 * white-yellow flash on the plate, 3 to 8 short sparks thrown in a cone about the mirror of its way in (most
+		 * short, a few long, falling, gone in under 0.3 s, out before they reach the plate again, her floor or the
+		 * ground) and now and then a faint grey puff of paint; a tracer that strikes mostly leaves again as a ricochet,
+		 * 10 to 50 degrees off the plate, slower, tumbling, short-lived. Never a dust spurt, nothing drawn past the
+		 * plate. Far off fewer, bigger sparks drawn out to a few pixels (never beads), each flash held to its pixel
+		 * floor; on a busy screen fewer sparks again, never none. Its own dice: Shots' are not touched. */
+		void ShotsOnArmour(double Now, int Gun, const Vec& From, const ArmourPlate& Plate, const char* Weapon, int Rounds, double PerSecond, const char* Ground = "earth");
+		/** ShotsOnArmour since Setup, for a scene's log and the cloud test: rounds struck, sparks thrown, tracers sent off. */
+		int RicochetStrikes() const { return static_cast<int>(std::min<uint64_t>(RicoStrikes, 1000000000u)); }
+		int RicochetSparks() const { return static_cast<int>(std::min<uint64_t>(RicoSparks, 1000000000u)); }
+		int RicochetTracers() const { return static_cast<int>(std::min<uint64_t>(RicoTracers, 1000000000u)); }
+		/** For the cloud tests (tools/battle-fx/preview/ricochet_test.cpp): every piece alive or still to be born, and
+		 * where one is Age seconds after its birth. Read only: nothing here changes what is drawn. */
+		const std::vector<Bit>& PiecesForTest() const { return Bits; }
+		Vec PieceAtForTest(const Bit& B, double Age) const { return Where(B, Age); }
+		/** For the cloud tests: Shots' dust spurts laid since Setup (ShotsOnArmour must lay none, however low the plate). */
+		int SpurtsForTest() const { return static_cast<int>(std::min<uint64_t>(ShotSpurts, 1000000000u)); }
 		/** A gun on an aircraft firing, called every frame while its trigger is down. Muzzle is where the gun is now;
 		 * Aim the point this gun is laid on (the battle decides lead and convergence, so wing guns converge where it
 		 * says); Carry the aircraft's own velocity (metres a second). Kind is an air_guns row ("rifle", "hmg",
@@ -1302,6 +1358,10 @@ namespace TheaterFx
 		uint64_t Seeds = 1;
 		uint32_t RideNo = 0; // (the last number given to a moving fire for the pieces that lie on its ship)
 		int OwnColumns = 0; // (big fires given a column of their own so far: each takes an id above every caller's, for the column's width measure)
+		uint64_t RicoStrikes = 0, RicoSparks = 0, RicoTracers = 0; // (ShotsOnArmour since Setup: rounds struck, sparks thrown, tracers sent off)
+		uint64_t ShotSpurts = 0; // (Shots' dust spurts since Setup, for the cloud tests only: counting them changes nothing drawn)
+		/** Shots and ShotsOnArmour: Plate null, Shots as ever; else the plate struck, its At the To given. */
+		void ShotsLaid(double Now, int Gun, const Vec& From, const Vec& To, const char* Weapon, int Rounds, double PerSecond, const char* GroundIn, const ArmourPlate* Plate);
 		uint64_t Glances = 0; // (ricochets so far: with the place, the moment and the kit's seed, each one's own dice, so no two fly alike)
 		std::vector<double> ShotEnds; // (when each ricochet's shot now in flight is done: no more than glance.most_shots are followed at once)
 		double GlanceAt = -1.0e18; int GlanceSame = 0; // (the moment of the last ricochet, and how many shots began to be followed at that moment: glance.most_a_frame)

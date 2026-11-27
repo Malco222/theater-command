@@ -632,6 +632,45 @@ namespace LandKit
 		void ScarNow(size_t I, V3& OutAt, V3& OutNormal) const;
 		/** Where round N struck her (a glance, worn or kill with a face), at the pose now; false if it did not. */
 		bool StruckNow(int RoundN, V3& OutAt, V3& OutNormal) const;
+		/** Effects (R2), small arms off armour (LandPlay::World::Plate): the plate a rifle's or machine gun's round struck,
+		 * at the pose now (field), for the effects kit's ricochets. At, the strike, and Normal its outward way; Mid, A and
+		 * B how far it runs flat about it (two half-widths along it, A level where it stands up, along her where it lies
+		 * flat, each as far as it runs from Mid that way and as far the other: within 3 cm of its plane, facing within 25
+		 * degrees, nothing of her standing out in front of it), so every strike the kit spreads over it is on her; Floor
+		 * her own height under it where a spark thrown down lands on her (her deck under her turret's side, a track guard
+		 * or her running gear under her hull's side), under -1e29 none. */
+		struct PlateSpot
+		{
+			V3 At, Normal, Mid, A, B;
+			double Floor = -1.0e30;
+		};
+		/** Round N's plate (StruckNow's strike; where the scar's cast passed through a road wheel, a sprocket, an idler or
+		 * a track standing in front of her hull, the round strikes that, as it would have). False if it did not strike.
+		 * Kept (bKeepPlates, KeepPlate): searched once, as she stood when it struck, kept in the struck body's own axes
+		 * and only turned by her pose now here (a few microseconds); a round not kept (a shell, a soft vehicle's, one not
+		 * searched yet, or bKeepPlates off) gives her skin's point with no room (every round there), never the search on
+		 * the game's frame. */
+		bool PlateNow(int RoundN, PlateSpot& Out) const;
+		/** Effects (R2), small arms off armour: the plate of each rifle's or machine gun's round that strikes her is to be
+		 * searched (KeepPlate: PlateAbout as she stood then, about 0.5 to 3 ms each) and kept for PlateNow. Building and
+		 * growing her never search (never on a live battle's frame): Battle::Load searches a whole recording's at once,
+		 * and Battle::KeepPlates a few a frame. Off unless set (Battle::bKeepPlates gives it, for armour only, before
+		 * Build). */
+		bool bKeepPlates = false;
+		/** bKeepPlates: the battle time of her earliest small arm's strike at or after From not searched yet (+inf: none). */
+		double NextPlate(double From) const;
+		/** bKeepPlates: search that strike's plate and keep it (a strike whose search finds none is not searched again).
+		 * False: none waiting. */
+		bool KeepPlate(double From);
+		/** bKeepPlates: how many of her strikes at or after From wait to be searched. */
+		size_t PlatesWaitingCount(double From) const;
+		/** Whether round N's plate is kept (the checks'). */
+		bool PlateKept(int RoundN) const;
+		/** The same about any strike on her at the pose now (field), its round coming in along In: the checks' way in. */
+		bool PlateAbout(const V3& At, const V3& Normal, const V3& In, PlateSpot& Out) const;
+		/** A ray across her as posed now (field, Way a unit way): the nearest of her drawn surfaces (her tracks and running
+		 * wheels too, not the aerial) within Most metres, how far, and its outward way there (toward From). */
+		bool RayNow(const V3& From, const V3& Way, double Most, double& OutT, V3& OutNormal) const;
 		/** The national marks at the pose now. */
 		void MarksNow(std::vector<MarkPlace>& Out) const;
 		/** The near track links of a side posed for her run now (see Model::PoseLinks). */
@@ -675,6 +714,12 @@ namespace LandKit
 			bool bOnSurface = false;
 			std::string W, R, Face;
 			double TurretAt = 0.0; // her turret's training at L when it was cast (Grow casts it again if that changes)
+			// (Effects (R2), bKeepPlates: a small arm's round's plate, PlateAbout as she stood at L, in the struck body's
+			// own axes (points from its pivot, ways), and her floor that far under the strike)
+			bool bPlate = false;
+			bool bPlateTried = false; // (searched: kept, or none found; searched again only if its cast moves to another body or 0.25 m)
+			V3 PlateAt, PlateNormal, PlateMid, PlateA, PlateB;
+			double PlateDrop = -1.0;
 		};
 		/** The passes' running state as they enter a step, kept every Resume step (a battle second): Grow takes up there. */
 		struct Resume
@@ -728,6 +773,10 @@ namespace LandKit
 		void PosePinned(std::vector<Xf>& OutParts, Xf* OutRoot, double* OutPitch = nullptr, double* OutRoll = nullptr) const;
 		Xf Seat(double X, double Y, double F, double* OutPitch, double* OutRoll) const;
 		bool Cast(const std::string& Face, double U, double H, double TurretAt, int& OutBody, V3& OutLocal, V3& OutNormal) const;
+		/** PlateAbout with her bodies placed at Places and her way ahead Ahead (field). */
+		bool PlateIn(const std::vector<Place>& Places, const V3& Ahead, const V3& AtIn, const V3& NormalIn, const V3& In, PlateSpot& Out) const;
+		/** bKeepPlates: whether strike S is one whose plate is kept (a small arm's, on a body of hers). */
+		bool PlateWanted(const Strike& S) const;
 		void Finish(const Xf& RootXf);
 		static double Latest(const std::vector<double>& Times, double T);
 	};
@@ -901,6 +950,20 @@ namespace LandKit
 		bool bNewMarks = false;
 		/** Marks at their real size (release 2, the trial word "realmarks"; Dress::bRealMarks). Off: as before. */
 		bool bRealMarks = false;
+		/** Effects (R2), small arms off armour (-TheaterLandRicochet): the plate of each rifle's or machine gun's round that
+		 * strikes an armoured vehicle (Armoured) is searched and kept (Vehicle::bKeepPlates), so PlateNow costs nothing on
+		 * the game's frame. A whole recording's are searched as Load ends; a live battle's never as it grows (Extend):
+		 * KeepPlates searches them a few a frame. Off unless set; set before Load. */
+		bool bKeepPlates = false;
+		/** bKeepPlates: whether a vehicle (her words, her block's model) is armour whose plates are kept (the game gives
+		 * LandPlay::ArmouredVehicle; a lorry's strikes are never drawn off a plate). Empty: every vehicle. Set before Load. */
+		std::function<bool(const TrackWords& Words, const std::string& BlockModel)> Armoured;
+		/** bKeepPlates: search the plates still waiting whose strikes come at or after battle time From, the earliest
+		 * first, until Most are searched or Seconds have passed (at least one, if any waits): a live battle's frame calls
+		 * it once with a millisecond or so. Gives how many were searched. */
+		size_t KeepPlates(double From, size_t Most, double Seconds);
+		/** bKeepPlates: how many plates wait at or after From. */
+		size_t PlatesWaiting(double From) const;
 
 	private:
 		std::vector<Vehicle> All;
