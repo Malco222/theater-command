@@ -108,8 +108,9 @@ describe("the player's offer stays in the list for the same half year as the com
    * island of the table goes by sea to the nearest held harbour with room (game.ts roomNear, commit b180e02e4, the
    * design director's D1 of 00:20Z, 27 November 2026), where the base found none by land and the row had no place: at
    * 1084839a0 it is offered and formed at Amoy. So every other harbour of Japan's is filled too, held for its staff,
-   * until `fits`, asked as roomNear asks it, refuses the row there. (Whether the row is sent on by sea for the player's
-   * offer is asked of the design director, unbuilt: this board holds whatever she rules, since no harbour has room.)
+   * until `fits`, asked as roomNear asks it, refuses the row there. (The player's offer is sent on by sea as a
+   * computer's row is: the design director, 17:53Z, 27 November 2026, 1. This board has no room anywhere, so neither
+   * seat's row is sent on.)
    */
   const fill = (g: Game): void => {
     const { going, out } = fifth(g);
