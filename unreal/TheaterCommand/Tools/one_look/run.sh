@@ -3,7 +3,8 @@
 # be on it regardless of the year"). Two parts. The table (one_look_check.py): the art director's "one_look" in
 # Content/Data/Campaign/unit-table.json against the sculpted models and the map's own source: each dominion's last
 # dated mark and fin are whole, its own and without red; each coat is the coat of the machine the model follows, by
-# that machine's own file; each mark drawn as another is one the painter draws; Germany's sculpted tanks take the
+# that machine's own file, or the model's own with a black nose and boss (the Mustang: Brian, 27 November 2026, "silver
+# with black paint"); each mark drawn as another is one the painter draws; Germany's sculpted tanks take the
 # nation's grey in every year. The reckoning (one_look_test.cpp): builds Campaign/OneLook.h (the game's own code, no
 # engine) with the strictest warnings and runs it over the table's own months: with one look the last dated mark
 # stands in every month and never changes; without, the marks change by the month as before.
