@@ -1273,6 +1273,31 @@ describe('(j) the design director\'s 01:00Z, reading 1: a ram on purpose reads i
     expect(R).toBeGreaterThan(0);
     near(t.notShown, t.not, R, 'enemy high, not brought back');
   });
+  // The design director, 27 November 2026 06:30Z, (ii): "Add one pin at the game's own ram table figure, with n sized
+  // to the 30 s limit and its tolerance stated from that n before the run." The table as the book holds it (row 1, the
+  // Soviet 1941-42, p 0.2; nothing set by the test). Speed measured first (count and seconds only, at a load of 30 to
+  // 31 on 4 CPUs, 06:33Z to 06:34Z): 1,164 to 1,254 rams on purpose a second. n = 10,000 in all (8.6 s at the slower
+  // speed, under a third of the limit): 1,000 over his own ground (seed 4_410) and 9,000 over the enemy's (seed 4_400),
+  // both at the high band. Stated before the run (06:35:32Z): every B the pairing carried is the count's share to
+  // 1e-12 (no tolerance); and over the enemy's ground the share of rammers not brought back who are shown out is within
+  // tol = 4 x sqrt(R (1 - R) / N) of the law's R, N = 9,000 x (1 - 0.1) = 8,100 the expected count not brought back,
+  // R = (0.11 - 0.1) / 0.9 = 0.0111: tol = 0.0046588, the band 0.00645 to 0.01577; a right code fails it about once in
+  // 10,000 (6.3e-5 by the normal, 9.5e-5 by the exact binomial). R = 0 and R = S = 0.11 both lie outside it.
+  it('through fated(), at the game\'s own ram table figure (row 1, p 0.2, nothing set), high band: every B the pairing carries is the count\'s share on both grounds (1,000 own, 9,000 enemy), and over the enemy\'s ground a rammer not brought back is shown out at R within 4 SE stated from n', () => {
+    const nOwn = 1_000, nEnemy = 9_000;
+    expect(SKY.fate.ram.meant[0]).toMatchObject({ nat: 'SOV', p: 0.2 });
+    const own = ramsThrough('own', 2, nOwn, 4_410), enemy = ramsThrough('enemy', 2, nEnemy, 4_400);
+    for (const [what, t, n] of [['own', own, nOwn], ['enemy', enemy, nEnemy]] as const) {
+      expect(t.meant, what).toBeGreaterThanOrEqual(n);
+      expect(t.carried.length, what).toBe(t.meant);
+      for (const B of t.carried) expect(Math.abs(B - t.saved), `${what}: B ${B} against the count's share ${t.saved}`).toBeLessThan(1e-12);
+    }
+    const S = Math.min(0.95, F.out.collide * F.outBand[2]), R = restOut(S, enemy.saved, 1);
+    const N = nEnemy * (1 - enemy.saved), tol = 4 * Math.sqrt((R * (1 - R)) / N);
+    console.log(`(j) at the game's figure, enemy high: rams on purpose ${enemy.meant}, not brought back ${enemy.not}, shown out ${enemy.notShown} (${(enemy.notShown / enemy.not).toFixed(4)} against R ${R.toFixed(4)}, tol ${tol.toFixed(5)}); own: rams on purpose ${own.meant}`);
+    expect(R).toBeGreaterThan(0);
+    expect(Math.abs(enemy.notShown / enemy.not - R), `enemy high at the game's figure: ${enemy.notShown}/${enemy.not} against R ${R}, tol ${tol}`).toBeLessThanOrEqual(tol);
+  });
 });
 
 // The design director, 01:00Z, reading 5: "the landing's 0 for a crew of 2 must be the crew rule's own sized figure. If it
