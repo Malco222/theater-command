@@ -88,22 +88,25 @@ const farOf = (m: MenOut): number => {
 const keyOf = (b: number, m: MenOut, fo = false): string => `${b}:${fo ? 'fo' : ''}${m.k}.${m.j ?? -1}`;
 const sig = (b: LandBattle): string => JSON.stringify({ t: b.t, over: b.over, units: b.units.map((u) => [u.id, u.figures, u.str, u.state]) });
 
-type Pairs = { booked: Record<string, number>; keys: Record<string, number>; men: Record<string, number>; crush?: string[] };
+type Pairs = { booked: Record<string, number>; keys: Record<string, number>; men: Record<string, number>; crush?: Record<string, number> };
 
 /**
  * Bar (d), on against off, STRICT (the design director, 27 November 05:03Z: "the allowance comes out, because a bar
  * never moves after a result"): the rules' booked pairs, the drawn key-model pairs AND the drawn men's kills by pair,
- * all three exactly. Nothing is allowed for. A man drawn run over by a tank (a 'track' kill) is only listed, by block
- * and moment, where it comes in one arm and not the other, so a failure names itself: such a crush was the base's own
- * fault (drill.ts crushOf drew a man to a block the rules had not booked), mended in the base by its owner
- * (the ground thread, "a crush is drawn only where the crushing block IS the booked striker"), never by this row.
+ * all three exactly. Nothing is allowed for. A man drawn run over by a tank (a 'track' kill) is only listed, by the pair
+ * (striker > struck) with its count, where the two arms' counts differ, so a failure names itself: such a crush was the
+ * base's own fault (drill.ts crushOf drew a man to a block the rules had not booked), mended in the base by its owner
+ * (the ground thread, "a crush is drawn only where the crushing block IS the booked striker"), never by this row. The
+ * listing keys on the pair and not on the moment (the design director, 27 November 17:08Z): the same crush drawn a
+ * step apart in the two arms (plains 5: 8>15 at 203.9 s off, 204.0 s on) is one crush, not one in each arm only. No
+ * bar rests on the listing.
  */
-function pairsDiff(on: Pairs, off: Pairs): { ok: boolean; why: string } {
+function pairsDiff(on: Pairs, off: Pairs): { ok: boolean; why: string; lone: boolean } {
   const diff = (a: Record<string, number>, b: Record<string, number>): string[] => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => (a[k] ?? 0) !== (b[k] ?? 0)).map((k) => `${k} ${b[k] ?? 0}/${a[k] ?? 0}`);
   const booked = diff(on.booked, off.booked), keys = diff(on.keys, off.keys), men = diff(on.men, off.men);
-  const cOn = new Set(on.crush ?? []), cOff = new Set(off.crush ?? []), lone = [...[...cOn].filter((c) => !cOff.has(c)).map((c) => 'on ' + c), ...[...cOff].filter((c) => !cOn.has(c)).map((c) => 'off ' + c)];
+  const lone = diff(on.crush ?? {}, off.crush ?? {});
   const ok = !booked.length && !keys.length && !men.length;
-  return { ok, why: `booked ${booked.join(' ') || 'same'}; key kills ${keys.join(' ') || 'same'}; men's kills (off/on) ${men.join(' ') || 'same'}; crushes in one arm only ${lone.join(' ') || 'none'}` };
+  return { ok, lone: lone.length > 0, why: `booked ${booked.join(' ') || 'same'}; key kills ${keys.join(' ') || 'same'}; men's kills (off/on) ${men.join(' ') || 'same'}; crushes drawn, by pair, where the arms differ (off/on) ${lone.join(' ') || 'none'}` };
 }
 /**
  * The design director's bar (d), 26 November 05:55Z: the rules book, for each model lost, the striking block (sim.ts
@@ -121,7 +124,7 @@ function tally(L: LiveBattle): () => Pairs {
   drill.struckBy = (by, t, k) => { add(P.booked, `${by}>${t}`); return sb(by, t, k); };
   drill.fromAir = (t, k) => { add(P.booked, `air>${t}`); return fa(t, k); };
   return () => {
-    for (const r of drill.rounds()) if (!seen.has(r.n)) { seen.add(r.n); if (r.r === 'kill') { add(r.oj === undefined ? P.keys : P.men, `${r.by ?? 'none'}>${r.on}`); if (r.w === 'track' && r.oj !== undefined) (P.crush ??= []).push(`${r.by}>${r.on}@${r.t}`); } }
+    for (const r of drill.rounds()) if (!seen.has(r.n)) { seen.add(r.n); if (r.r === 'kill') { add(r.oj === undefined ? P.keys : P.men, `${r.by ?? 'none'}>${r.on}`); if (r.w === 'track' && r.oj !== undefined) add((P.crush ??= {}), `${r.by}>${r.on}`); } }
     return P;
   };
 }
@@ -457,7 +460,7 @@ describe('wounded and knocked-down men', () => {
         expect(on.sig).toBe(off.sig);
         // (the bar (d): each fall to the block the rules booked, the same on as off; (c): never more drawn down ahead of
         // the rules' count than off, where a key man falls as his model is lifted)
-        { const pd = pairsDiff(on.pairs, off.pairs); if (!pd.ok || pd.why.includes('one arm only on') || pd.why.includes('one arm only off')) console.log(`${B.name} blast ${blast ? 'on' : 'off'} pairs: ${pd.why}`); expect(pd.ok, pd.why).toBe(true); }
+        { const pd = pairsDiff(on.pairs, off.pairs); if (!pd.ok || pd.lone) console.log(`${B.name} blast ${blast ? 'on' : 'off'} pairs: ${pd.why}`); expect(pd.ok, pd.why).toBe(true); }
         expect(on.over).toBeLessThanOrEqual(off.over);
         // (block by block, at every moment both saw: never more men down beyond the rules' count than off, key men too)
         const worse = overWorse(on.overAt, off.overAt, off.times);
