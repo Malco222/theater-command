@@ -4,7 +4,8 @@
 Reads the art director's table (Content/Data/Campaign/unit-table.json), the sculpted models it names
 (Content/Models) and the map's own source, and checks that what the table's "one_look" says can be painted and is
 what the ruling asks: each dominion's last dated mark and fin are whole and its own; each coat is the coat of the
-machine the model follows, by that machine's own file; each mark that is drawn as another is one the painter draws;
+machine the model follows, by that machine's own file, or the model's own with only its nose and boss changed (the
+Mustang, whose coat Brian named himself); each mark that is drawn as another is one the painter draws;
 and Germany's tanks take the nation's grey in every year as they are played. It writes the months of the dated marks
 for the C++ test, which runs the game's own reckoning (Campaign/OneLook.h) over them.
 
@@ -140,6 +141,26 @@ for name, coat in one["coats"].items():
         check(is_hex(code), "%s: paint %s is a colour" % (name, key))
         if key.isdigit() and is_hex(code):
             numbers[int(key)] = code.upper()
+    if coat.get("own") is True:
+        # (A coat of her OWN: the owner named it himself. Brian, 27 November 2026: "also shouldnt the p-51 mustangs be
+        # silver with black paint? why are they green?" She keeps her file's coat in every month; the row may change
+        # her nose and her boss, nothing else, and follows no other machine.)
+        check("follows" not in coat and "number_ink" not in coat, "%s: a coat of her own follows no other machine and keeps her own side number's ink" % name)
+        check(len(numbers) > 0 and set(numbers) <= {3, 4}, "%s: a coat of her own changes only her nose and her boss (paints 3 and 4)" % name)
+        laid = [numbers.get(k, own[k].upper()) for k in range(len(own))]
+        check(all(laid[k] == own[k].upper() for k in range(len(own)) if k not in (3, 4)), "%s: laid, every paint but her nose and boss is her file's own" % name)
+        ink = mine.get("number_ink", "F2F0E8")
+        check(abs(luma(ink) - luma(laid[0])) >= 60.0, "%s: her side number stands off her coat (60 levels or more)" % name)
+        check(all(abs(luma(laid[k]) - luma(laid[0])) >= 60.0 for k in (3, 4) if k in numbers), "%s: her nose and boss stand off her coat (60 levels or more)" % name)
+        if name == "Mustang":
+            spread = [max(rgb(laid[k])) - min(rgb(laid[k])) for k in (0, 1, 2, 6)]
+            check(all(luma(laid[k]) >= 150.0 for k in (0, 1, 2, 6)) and max(spread) <= 12,
+                  "Mustang: her coat is bare metal, a pale grey with no colour in it, above, below and on her frame (%s)" % ", ".join(laid[k] for k in (0, 1, 2, 6)))
+            check(all(luma(laid[k]) <= 40.0 and max(rgb(laid[k])) - min(rgb(laid[k])) <= 8 for k in (3, 4)),
+                  "Mustang: her nose and boss are black, with no red (%s, %s)" % (laid[3], laid[4]))
+        print("  %-8s her own      %s" % (name, "  ".join("%d %s [%s]" % (k, laid[k], own[k].upper()) for k in OUTER)))
+        print("  %-8s side number %s (her own)" % ("", ink.upper()))
+        continue
     check(sorted(numbers) == OUTER, "%s: the whole outer coat is given (upper, upper2, under, nose, boss, frame, stain)" % name)
     followed = model(coat.get("follows", ""))
     check(followed is not None, "%s: the machine it follows (%s) is a sculpted model" % (name, coat.get("follows")))
