@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e9a01e493 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 958c96e97 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -44502,11 +44502,11 @@
       delete g2.flags[kr];
       const f = portCutOff(g2, r.id, me, me);
       if (!f || !f.cut || f.lost === null) continue;
-      if (f.state === "stores" && (f.lastFilled === g2.turn - 1 || back)) {
+      if (f.state === "stores" && (f.lastFilled === g2.turn - 1 || back && !(told2 !== void 0 && told2 > f.lastFilled))) {
         headline(g2, "info", f.due ? `No ship reaches ${portOf2(r)}: ${heldSaid(g2, f.shut, null, false)}. Unless the sea is opened, the garrison is hungry by ${monthSaid(g2, f.hungry)} and lost by the start of ${monthSaid(g2, f.lost)}.` : `No ship reaches ${portOf2(r)}: ${heldSaid(g2, f.shut, null, false)}. The garrison lives on the port's stores through ${monthSaid(g2, f.feedsTo)}; unless the sea is opened, it then goes hungry and is lost ${startOf(f.lostBy)} ${monthSaid(g2, f.lost)}.`, r.ctrl, r.id, { lost: r.ctrl });
         (_a = g2.flags)[k] ?? (_a[k] = g2.turn);
       } else if (f.state === "hungry" && spentDue(g2, f, told2, g2.flags[ks2], back)) {
-        headline(g2, "info", `${PortOf(r)}'s stores are spent and no ship has got through: the garrison goes hungry, and is lost ${startOf(f.lostBy)} ${monthSaid(g2, f.lost)} unless the sea is opened.`, r.ctrl, r.id, { lost: r.ctrl });
+        if (f.lost !== g2.turn) headline(g2, "info", `${PortOf(r)}'s stores are spent and no ship has got through: the garrison goes hungry, and is lost ${startOf(f.lostBy)} ${monthSaid(g2, f.lost)} unless the sea is opened.`, r.ctrl, r.id, { lost: r.ctrl });
         (_b = g2.flags)[k] ?? (_b[k] = g2.turn);
         g2.flags[ks2] = g2.turn;
       }
