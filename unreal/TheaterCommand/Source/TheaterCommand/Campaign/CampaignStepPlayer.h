@@ -135,6 +135,11 @@ private:
 	// graphics chip's share of a frame.
 	double ActMs = 0.0, FirstMs = -1.0, LastMs = -1.0, SinceAct = 0.0;
 	TArray<float> Frames;
+	// (The design director's 13:31Z ruling, 27 November 2026: a gap in a shared tool, mended at the tool.) Frames is read
+	// tick to tick at the step player's own place in the frame, so a long frame whose work falls on both sides of that
+	// place is read as two shorter ones (M1-B, March 1942: the speed log's 306 ms frame read 189 ms here). EngineFrames
+	// holds the engine's own length of each frame (FApp::GetDeltaTime), which a frame's work cannot split.
+	TArray<float> EngineFrames;
 	double GameMs = 0.0, DrawMs = 0.0, ChipMs = 0.0;
 	FString ShownBefore, ShownLast;
 	TArray<FString> Screens; // (a month's end) each screen that came up on the way
