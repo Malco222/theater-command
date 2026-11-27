@@ -15,6 +15,10 @@ import { fieldCtrl } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import { stepAI } from '../src/campaign/turn';
 import type { Corps, Game } from '../src/campaign/types';
+import BRIDGE from '../unreal/TheaterCommand/Rules/campaign-bridge.ts?raw';
+import SESSION from '../unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignSession.cpp?raw';
+import SESSION_H from '../unreal/TheaterCommand/Source/TheaterCommand/Campaign/CampaignSession.h?raw';
+import SHIP from '../unreal/TheaterCommand/Source/TheaterCommand/Release2Ship.cpp?raw';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
 
 type Call = (...a: unknown[]) => unknown;
@@ -96,6 +100,85 @@ describe('the switch', () => {
     expect(off).not.toBeNull();
     expect('churned' in wire(off)).toBe(false);
     expect(TC().churnSwitch(false)).toBeNull();
+  });
+
+  // (The design director, 27 November 2026 21:26Z: one setter for every change. The Options row and the console both
+  // change tc.Map.FrontChurn with a war in hand, so the table lays the record at every change, not only at the war's
+  // start and at a load. These three pin it: the rules mid-war, the bridge mid-war, and the table's own lines.)
+  it('mid-war, every change: off deletes it and the months after write nothing; on again starts from the works months', () => {
+    const g = war('GER'), twin = war('GER'); // (the twin is the same war, never switched on)
+    const [a, b] = facing(g);
+    for (const w of [g, twin]) {
+      dig(w, a, lord(w, b), true, 4);
+      dig(w, b, lord(w, a), true, 2);
+    }
+    setChurned(g, true);
+    for (let k = 0; k < 2; k++) { month(g); month(twin); }
+    expect(row(g, a, b)).toMatchObject({ ma: a < b ? 5 : 3, mb: a < b ? 3 : 5, pm: 3 });
+    setChurned(g, false); // off, mid-war
+    expect(saveGame(g)).toBe(saveGame(twin));
+    month(g); month(twin);
+    expect(g.churned).toBeUndefined();
+    expect(saveGame(g)).toBe(saveGame(twin));
+    setChurned(g, true); // on again, mid-war: kept from the next month's end
+    expect(g.churned).toBeUndefined();
+    month(g);
+    // (not from 1, and not from the record that was deleted: from the works months the rules keep)
+    expect(row(g, a, b)).toMatchObject({ ma: a < b ? 4 : 2, mb: a < b ? 2 : 4, pm: 2 });
+    expect(row(g, a, b)!.scars).toBeUndefined();
+  });
+
+  it('mid-war through the bridge: TC.churnSwitch on a war in hand, a month\'s end either side of each change', () => {
+    const kept = (): Game => loadGame((TC().save() as { text: string }).text)!;
+    const wire = (v: unknown): Record<string, unknown> => JSON.parse(JSON.stringify(v));
+    TC().load(saveGame(war('GER')));
+    expect(TC().churnSwitch(true)).not.toBeNull();
+    TC().endMonth();
+    expect(Array.isArray(kept().churned)).toBe(true); // (the record is kept at the month's end)
+    expect((wire(TC().view()).churned as { kept: boolean }).kept).toBe(true);
+    const off = TC().churnSwitch(false); // off, with the war in hand
+    expect(off).not.toBeNull();
+    expect('churned' in wire(off)).toBe(false);
+    expect(kept().churned).toBeUndefined();
+    expect(kept().flags.churned).toBeUndefined();
+    TC().endMonth();
+    expect(kept().churned).toBeUndefined(); // (a month's end after: nothing is written)
+    expect('churned' in wire(TC().view())).toBe(false);
+    const on = TC().churnSwitch(true) as { churned?: { kept: boolean } } | null; // on again, with the war in hand
+    expect(on?.churned?.kept).toBe(false);
+    TC().endMonth();
+    expect(Array.isArray(kept().churned)).toBe(true);
+  }, 60000);
+
+  it('the table lays it at every change of the map switch: the session watches tc.Map.FrontChurn', () => {
+    const body = (text: string, head: string): string => {
+      const at = text.indexOf(head);
+      expect(at, head).toBeGreaterThanOrEqual(0);
+      return text.slice(at, text.indexOf('\n}\n', at));
+    };
+    // The session's making puts a watch on the switch that calls SyncFrontChurn, and its going takes the watch off.
+    const made = body(SESSION, 'FCampaignSession::FCampaignSession()');
+    expect(made).toContain('FindConsoleVariable(TEXT("tc.Map.FrontChurn"))');
+    expect(made).toMatch(/FrontChurnWatch = Switch->OnChangedDelegate\(\)\.AddLambda\(\[this\]\(IConsoleVariable\*\) \{ SyncFrontChurn\(\); \}\);/);
+    expect(body(SESSION, 'FCampaignSession::~FCampaignSession()')).toContain('Switch->OnChangedDelegate().Remove(FrontChurnWatch);');
+    // SyncFrontChurn lays it through the one setter, with a war in hand, and takes the picture the setter answers.
+    const sync = body(SESSION, 'void FCampaignSession::SyncFrontChurn()');
+    expect(sync).toContain('if (!bRunning || !Host.IsValid())');
+    expect(sync).toContain('Settle();');
+    expect(sync).toContain('ShipChurnRecord(*Host, Json, View.ChurnYear > 0)');
+    expect(sync).toContain('View = ParseView(Object);');
+    expect(sync).toContain('OnViewChanged.Broadcast();');
+    expect(SESSION_H).toContain('void SyncFrontChurn();');
+    expect(SESSION_H).toContain('FDelegateHandle FrontChurnWatch;');
+    // One setter: TC.churnSwitch is called from one place in the table, and that place is called at the war's start, at
+    // a load and at a change. The switch is passed as it stands, so off after on deletes.
+    expect(SESSION.split('TEXT("churnSwitch")').length - 1).toBe(1);
+    expect(body(SESSION, 'bool ShipChurnRecord(FRulesHost& Host, FString& Json, bool bCarried)')).toContain('Host.Call(TEXT("churnSwitch"), bOn ? TEXT("[true]") : TEXT("[false]"), Laid, Error)');
+    expect(SESSION.split('ShipChurnRecord(*Host,').length - 1).toBe(3);
+    // The Options row that changes it mid-war is the ship list's variable row on the same switch: no second name.
+    expect(SHIP).toMatch(/\{ TEXT\("frontchurn"\), EKind::Variable, [^\n]*TEXT\("tc\.Map\.FrontChurn"\)/);
+    expect(SHIP).not.toContain('churnSwitch');
+    expect(BRIDGE.split('.churnSwitch = churnSwitch').length - 1).toBe(1);
   });
 
   it('the month end keeps it (turn.ts), nobody seated', () => {

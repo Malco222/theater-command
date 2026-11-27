@@ -36,7 +36,8 @@
  *    Each view (ShowFrontChurn) brings that picture under fronts' sight rule, with the art director's healing year,
  *    and this table draws it as it comes: growing by the months, healing by the months since, keeping nothing of its
  *    own, so a war taken up again heals as it was saved. The record follows this switch: the session lays it on or off
- *    with tc.Map.FrontChurn as a war is set up or read in (CampaignSession.cpp, ShipChurnRecord).
+ *    with tc.Map.FrontChurn as a war is set up or read in, and at every change of it with a war in hand
+ *    (CampaignSession.cpp, ShipChurnRecord and SyncFrontChurn).
  *    Until a war's first month's end with the record (a war from before it), the view as it stands, read only as the
  *    player's own cards allow: a corps known as it is today for its dig and months; a corps he cannot know for
  *    nothing, not even its standing order. Beside his own lines dug in, an enemy he cannot know is taken at his side's
@@ -72,7 +73,7 @@ namespace
 		TEXT("With tc.Map.FrontChurn, for pictures: 0 or more takes every front on the table as dug in on both sides for this many months (6 is whole); -1 reads the corps, as the game has it."));
 	TAutoConsoleVariable<float> CVarFrontChurnHeal(
 		TEXT("tc.Map.FrontChurnHeal"), -1.0f,
-		TEXT("With tc.Map.FrontChurn, for pictures: 0 or more takes every front on the table as left this many months ago, after standing tc.Map.FrontChurnMonths (or six), and healing over the rules' year (sent with their record: set tc.Map.FrontChurn before the war is set up or read in); -1 as the game has it."));
+		TEXT("With tc.Map.FrontChurn, for pictures: 0 or more takes every front on the table as left this many months ago, after standing tc.Map.FrontChurnMonths (or six), and healing over the rules' year (sent with their record, which follows tc.Map.FrontChurn at once, mid-war too); -1 as the game has it."));
 	TAutoConsoleVariable<int32> CVarFrontChurnCraters(
 		TEXT("tc.Map.FrontChurnCraters"), 600,
 		TEXT("With tc.Map.FrontChurn: the most craters modelled in view at once, nearest the eye first (0 to 3000)."));
