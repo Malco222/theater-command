@@ -35,6 +35,22 @@ function flown(g: Game): AirFleet {
 }
 
 describe('the crews page (release 2)', () => {
+  it("says the bomber's own count only where it adds something: a veteran with a new crew, or fighters shot down", () => {
+    const g = war(3, 'USA');
+    const f = flown(g);
+    setCrewRoll(g, true);
+    const b = f.bombers!.on[0];
+    b[2] = 40; b[5] = 24; b[3] = 0;
+    let row = (airPage(g, `crews:${f.id}`) as P).sections[1].rows[0];
+    expect(row.lines).toEqual([expect.stringMatching(/: 24 of their 25, one to go\.$/), 'The bomber has flown 40 missions.']);
+    b[3] = 3;
+    row = (airPage(g, `crews:${f.id}`) as P).sections[1].rows[0];
+    expect(row.lines[1]).toBe('The bomber has flown 40 missions, with 3 fighters shot down.');
+    b[2] = 24; b[3] = 1;
+    row = (airPage(g, `crews:${f.id}`) as P).sections[1].rows[0];
+    expect(row.lines[1]).toBe('A fighter shot down.');
+  });
+
   it('is off until its switch is on: no page and no button, and the war is as it was', () => {
     const g = war(3, 'USA');
     const f = flown(g);
@@ -58,7 +74,8 @@ describe('the crews page (release 2)', () => {
     // The old hand a mission from home comes first, says so, and has a name (America names her bombers).
     expect(rows[0].title).not.toBe('No name yet');
     expect(rows[0].lines[0]).toMatch(/: 24 of their 25, one to go\.$/);
-    expect(rows[0].lines[1]).toBe(`${tourOf('USA') - 1} missions flown.`);
+    // (The UI director, 16:12Z: no second line that only says the crew's count again.)
+    expect(rows[0].lines.length).toBe(1);
     // Nearest home first: no crew below has flown more of its tour than the one above it.
     const crewOf = (r: (typeof rows)[number]): number => Number(/: (\d+) of their/.exec(r.lines[0])![1]);
     expect(rows.every((r, i) => i === 0 || crewOf(rows[i - 1]) >= crewOf(r))).toBe(true);
