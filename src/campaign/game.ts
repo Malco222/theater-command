@@ -4941,8 +4941,17 @@ function rowDue(g: Game, i: number, row: any[], o: any): number {
  * waited for room come off the player's offer (offerLast) exactly as off the computer's half year." With the far side
  * off the count is never kept, and this is the due month and six, as it always was.
  */
-function halfYearLast(g: Game, i: number, due: number): number {
+export function halfYearLast(g: Game, i: number, due: number): number {
   return due + 6 + (g.flags[`roomwait:${i}`] ?? 0);
+}
+
+/**
+ * A month a dated row waited for room, counted so that it never runs out the row's half year (`halfYearLast`): a
+ * computer's row with no room this month (`expeditions`), and the player's standing offer whose FORM IT is shut for
+ * room alone this month (`offerRead`), the same months for both seats. Kept on the far side alone.
+ */
+function roomWaited(g: Game, i: number): void {
+  if (farOn(g)) g.flags[`roomwait:${i}`] = (g.flags[`roomwait:${i}`] ?? 0) + 1;
 }
 
 /**
@@ -5621,6 +5630,17 @@ function rowFits(g: Game, nat: string, reg: Region, row: any[], o: any): boolean
 
 /** One open offer of the player's, read with nothing changed. */
 function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
+  return offerRead(g, nat, row, i).view;
+}
+
+/**
+ * An open offer read with nothing changed (`offerView`), and whether FORM IT is shut this month for want of room alone
+ * at the place the rule would form it (`forRoom`): the gate at which a computer's row of the same month counts a month
+ * waited for room (`expeditions`, `roomWaited`), read in the same order, so that a standing offer counts the same
+ * months. The design director, 17:53Z, 27 November 2026, 3.
+ */
+function offerRead(g: Game, nat: string, row: any[], i: number): { view: RowOffer; forRoom: boolean } {
+  let forRoom = false;
   const o = row[6] ?? {}, posting = g.byName[row[5]];
   const divs = g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4];
   const takes = rowTakes(g, nat, o).map((c) => ({ id: c.id, name: c.name, kind: c.kind, region: c.reg, divs: c.divs, men: men(c) }));
@@ -5637,6 +5657,7 @@ function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
     if (old) return null;
     if (!reg) return `There is nowhere for it to form: ${posting?.name ?? row[5]} is not yours, and you hold no harbour on that ground, nor your capital.`;
     if (!o.join && !rowFits(g, nat, reg, row, o)) {
+      forRoom = true;
       // (On an island at stops 3 to 5 the row is refused for its men: the section 3 line for the row's own men, in the
       // offer's words, "only {3,000} more fit, and this takes {5,000}": a formation is not sent, it forms there (the UI
       // director, 00:19Z, 27 November 2026, U5). The row is no corps on
@@ -5654,8 +5675,8 @@ function offerView(g: Game, nat: string, row: any[], i: number): RowOffer {
     && (!r[6]?.stops || (r[6].stops as number[]).includes(stopOf(g)))
     && (names(r[6]?.cut).includes(row[2]) || (Array.isArray(r[6]?.from) && !(r[6].adds > 0) && r[6].from.includes(row[2])
       && rowTakes(g, nat, { from: (r[6].from as string[]).filter((nm) => nm !== row[2]) }).length === 0))).map((r) => r[2] as string))];
-  return { id: i, name: row[2], kind: row[3], divs, men: Math.round(divs * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(i)], last: offerLast(g, nat, row, i), region: reg ? reg.id : -1, joins: old ? old.name : null, takes, why, then, loan: null, rest: 'lost', lent: null,
-    moved: !old && reg && P.moved && P.moved.to === reg.id ? P.moved : null };
+  return { view: { id: i, name: row[2], kind: row[3], divs, men: Math.round(divs * (o.str ?? 1) * MEN_PER_DIV), since: g.flags[offerKey(i)], last: offerLast(g, nat, row, i), region: reg ? reg.id : -1, joins: old ? old.name : null, takes, why, then, loan: null, rest: 'lost', lent: null,
+    moved: !old && reg && P.moved && P.moved.to === reg.id ? P.moved : null }, forRoom };
 }
 
 const leaveKey = (i: number): string => `leave:${i}`;
@@ -5960,7 +5981,9 @@ function expeditions(g: Game, nat: string, take?: number): void {
     }
     // (The far side: a row the player has been offered stands open until he answers, and nothing is read of it but
     // whether the corps it needs are still there: ruling B8, `offerStands`.)
-    if (take !== i && offerOpen(g, nat, i)) { offerStands(g, nat, row, i); return; }
+    // (And a month in which it stands with no room for it is counted as a computer's row's is, `roomWaited`: the same
+    // count for both seats, the design director, 17:53Z, 27 November 2026, 3.)
+    if (take !== i && offerOpen(g, nat, i)) { if (!offerStands(g, nat, row, i) && offerRead(g, nat, row, i).forRoom) roomWaited(g, i); return; }
     let reg = g.byName[row[5]];
     let due = row[0];
     let fell = false, shifted = false;
@@ -6220,7 +6243,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // islands' table: the design director's D1, `roomwait`.)
     if (!o.join && !rowFits(g, nat, reg, row, o)) {
       // (The far side: a month waited for room, counted so that it never runs out the row's half year: D1, above.)
-      if (farOn(g)) g.flags[`roomwait:${i}`] = (g.flags[`roomwait:${i}`] ?? 0) + 1;
+      roomWaited(g, i);
       return;
     }
     if (asks) { offerMade(g, nat, i, o); return; }
