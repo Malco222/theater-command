@@ -333,6 +333,15 @@ int main(int Argc, char** Argv)
 		Check(Count(Battle, "|| (TimeEyeKey >= 0 && P.Key == TimeEyeKey);") == 1 && Count(Battle, "TimeEyeKey = TimeEyeGroup = -1;") == 2,
 			"the timing eye's box rider ridden as the close view's (her own close-up shape, counted past the bound), and no rider unless it rides");
 		Check(Count(Art, "panels-fine.json") >= 1 && Count(Art, "if (S.B17FineOn == 1)") == 1, "panels-fine.json read only while the row is on");
+		// (the nose art's grey chequer, the art director's P48 find, 27 November 2026: each painting's ink is made from
+		// M_TallyMark itself with the shared ink's settings, not as a child of the shared ink, and the first painting
+		// laid reports in the log whether its picture reached its ink)
+		Check(Count(Art, "UMaterialInstanceDynamic::Create(NoseArtBase ? NoseArtBase.Get() : static_cast<UMaterialInterface*>(NoseArtInk.Get()), this);") == 1
+				&& Count(Art, "UMaterialInstanceDynamic::Create(NoseArtInk, this)") == 0 && Count(Art, "NoseArtBase = Base;") == 1
+				&& Count(Art, "Own->SetTextureParameterValue(TEXT(\"Sheet\"), Picture);") == 1 && Count(Art, "Own->SetVectorParameterValue(TEXT(\"Tin\"), FLinearColor::White);") == 1,
+			"each painting's ink made from M_TallyMark itself, with its Tin, Roughness and Specular, and its picture as Sheet");
+		Check(Count(Art, "Air battle: nose art check: painting %d is %dx%d, %d levels, %s; its ink's Sheet %s; M_TallyMark %s.") == 1 && Count(Art, "bNoseArtChecked = true;") == 1,
+			"the first painting laid in a battle reports whether its picture reached its ink, once");
 		Check(Count(Rules, "TEXT(\"b17Fine\"), TEXT(\"Finer B-17\")") == 1 && Count(Rules, "RuleKey.Equals(TEXT(\"b17Fine\")") == 1
 				&& Count(Rules, "TEXT(\"TheaterAirNoB17Fine\"), false, TEXT(\"TheaterAirB17Fine\")") == 1,
 			"the row on the card, off unless asked (-TheaterAirB17Fine), and never sent to the land rules");

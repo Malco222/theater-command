@@ -90,6 +90,7 @@ bool AAirBattle::NoseArtReady()
 		UE_LOG(LogTheater, Warning, TEXT("Air battle: nose art: no M_TallyMark (Tools/build_content.sh makes it), so no bomber's nose art is painted."));
 		return false;
 	}
+	NoseArtBase = Base;
 	NoseArtInk = UMaterialInstanceDynamic::Create(Base, this);
 	NoseArtInk->SetVectorParameterValue(TEXT("Tin"), FLinearColor::White);
 	NoseArtInk->SetScalarParameterValue(TEXT("Roughness"), PaintRoughness);
@@ -194,13 +195,36 @@ bool AAirBattle::MakeNoseArt(int32 Key, FPlaneMade& Made, UProceduralMeshCompone
 		{
 			Triangles.Add(Corner);
 		}
-		// (an ink of its own: its painting, and its strength following her size on the screen)
-		UMaterialInstanceDynamic* Own = UMaterialInstanceDynamic::Create(NoseArtInk, this);
+		// (an ink of its own: its painting, and its strength following her size on the screen. Made from M_TallyMark
+		// itself with the shared ink's settings, not as a child of the shared ink: on the Mac's P48 stills every
+		// painting showed as the material's own grey chequer, its picture never reaching the paint, and a painting's ink
+		// one step from the material is the plain way an ink takes its picture)
+		UMaterialInstanceDynamic* Own = UMaterialInstanceDynamic::Create(NoseArtBase ? NoseArtBase.Get() : static_cast<UMaterialInterface*>(NoseArtInk.Get()), this);
 		if (!Own)
 		{
 			continue;
 		}
+		Own->SetVectorParameterValue(TEXT("Tin"), FLinearColor::White);
+		Own->SetScalarParameterValue(TEXT("Roughness"), PaintRoughness);
+		Own->SetScalarParameterValue(TEXT("Specular"), PaintSpecular);
 		Own->SetTextureParameterValue(TEXT("Sheet"), Picture);
+		if (!bNoseArtChecked)
+		{
+			// (once a battle, the first painting laid: what the Mac's log must show for a painting to draw. A picture
+			// with no levels or not on the draw thread, an ink whose Sheet reads back as anything but the picture, or
+			// M_TallyMark with no Sheet at all, each names where the chequer comes from)
+			bNoseArtChecked = true;
+			// (the shared ink was made from M_TallyMark and never given a Sheet, so it reads back the material's own: the
+			// engine's grey chequer when M_TallyMark has a Sheet, nothing when it has none)
+			UTexture* Read = Own->K2_GetTextureParameterValue(TEXT("Sheet"));
+			UTexture* Default = NoseArtInk ? NoseArtInk->K2_GetTextureParameterValue(TEXT("Sheet")) : nullptr;
+			const FTexturePlatformData* Data = Picture->GetPlatformData();
+			UE_LOG(LogTheater, Display, TEXT("Air battle: nose art check: painting %d is %dx%d, %d levels, %s; its ink's Sheet %s; M_TallyMark %s."),
+				Number, Picture->GetSizeX(), Picture->GetSizeY(), Data ? Data->Mips.Num() : 0,
+				Picture->GetResource() ? TEXT("on the draw thread") : TEXT("NOT on the draw thread"),
+				Read == Picture ? TEXT("is the painting") : Read ? *FString::Printf(TEXT("is %s, not the painting"), *Read->GetName()) : TEXT("reads nothing"),
+				Default ? *FString::Printf(TEXT("has a Sheet, %s when none is given"), *Default->GetName()) : TEXT("reads no Sheet (rebuild it: TC_REBUILD=M_TallyMark Tools/build_content.sh)"));
+		}
 		Art->CreateMeshSection(Section, Corners, Triangles, Normals, Places, Colours, TArray<FProcMeshTangent>(), false);
 		Art->SetMaterial(Section, Own);
 		++Section;

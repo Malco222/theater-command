@@ -450,6 +450,11 @@ private:
 	int32 NoseArtLogged = 0;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> NoseArtInk;
+	/** M_TallyMark itself: each painting's ink is made from it, one step from the material (not from NoseArtInk). */
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> NoseArtBase;
+	/** The first painting laid in a battle reports how its picture reached its ink (the grey chequer hunt). */
+	bool bNoseArtChecked = false;
 	UPROPERTY()
 	TMap<int32, TObjectPtr<UTexture2D>> NoseArtPictures;
 	/**
