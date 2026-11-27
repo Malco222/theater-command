@@ -4,7 +4,9 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, createGame, men, removeCorps, setWar } from '../src/campaign/game';
+import { addCorps, createGame, men, removeCorps, setWar, startPhase } from '../src/campaign/game';
+import { atWar } from '../src/campaign/game';
+import setup from '../data/campaign/setup-1939.json';
 import { fits, islandOf } from '../src/campaign/islands';
 import { rearMonth, startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -52,5 +54,33 @@ describe("a check with no corps at hand is named for what it asks, room for a di
       });
     }
     expect([...new Set(hits)]).toEqual([]);
+  });
+});
+
+describe("a row's months waited for room count against its half year only from its current due month (rules sceptic 2, S2R-7; the design director, 00:20Z, 27 November 2026, D1)", () => {
+  it('the 61st Guard Unit waits four months for room, then waits on a posting held in peace: the room months before that wait are not carried past it', () => {
+    const ROWS = (setup as unknown as { expeditions: any[][] }).expeditions;
+    expect([ROWS[263][0], ROWS[263][5]]).toEqual([27, 'Kwajalein']);
+    const g = startOpen(createGame(3, null));
+    const k = g.byName['Kwajalein'];
+    addCorps(g, 'JAP', 'A full division (a test row)', 'inf', 1, k.id, {});
+    const one = { nat: 'JAP', kind: 'inf', divs: 1, str: 0.07 } as unknown as Corps;
+    const filled = (r: Region): boolean => !fits(g, r, 'JAP', [one], { rows: r.units.filter((u) => u.kind !== 'eng').length });
+    for (const r of g.regions) if (r.port && r !== k && r.ctrl === 'JAP') for (let n = 0; n < 8 && !filled(r); n++) addCorps(g, 'JAP', `Filler ${r.id}.${n} (a test row)`, 'inf', 1, r.id, {});
+    for (let t = 24; t <= 30; t++) { g.turn = t; startPhase(g, 'JAP'); }
+    expect(g.flags['roomwait:263']).toBe(4);
+    // T31: Kwajalein held by America, at peace with Japan: the row waits for that war (ruling B7), its due moved to T32.
+    expect(atWar(g, 'JAP', 'USA')).toBe(false);
+    const owner = k.owner;
+    k.ctrl = 'USA'; k.owner = 'USA';
+    g.turn = 31; startPhase(g, 'JAP');
+    expect(g.flags['wait:263']).toBe(31);
+    // The four months it waited for room lie before its new due month: none of them is taken off its new half year.
+    expect(g.flags['roomwait:263'] ?? 0).toBe(0);
+    // Japan holds it again with no room: from T32 each month waited for room counts again.
+    k.ctrl = 'JAP'; k.owner = owner;
+    g.turn = 32; startPhase(g, 'JAP');
+    expect(g.flags['sent:263']).toBeUndefined();
+    expect(g.flags['roomwait:263']).toBe(1);
   });
 });

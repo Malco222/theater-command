@@ -4898,6 +4898,18 @@ function warOver(g: Game, i: number, w: string[]): boolean {
 }
 
 /**
+ * A dated row made to wait this month (`wait:N`: for its war by ruling B7, for a live front, for an offer it is made
+ * from): its half year is counted again from the month after (`rowDue`). The months it waited for room before this
+ * (`roomwait:N`, the far side alone) lie before that new due month, so they are not taken off the new half year: only
+ * the months waited for room after its current due are (the design director, 00:20Z, 27 November 2026, D1: "every
+ * other cause of a strike stands as it was"). With the far side off the count is never kept and nothing changes.
+ */
+function waitRow(g: Game, i: number): void {
+  g.flags[`wait:${i}`] = g.turn;
+  delete g.flags[`roomwait:${i}`];
+}
+
+/**
  * The month a dated row's half year is counted from, as the rule of dated rows reads it (`expeditions`): its date,
  * or in the grand campaign the month its war let it come (`due:N`), and never before the month after the last month
  * it was made to wait (`wait:N`: for its war by ruling B7, for a live front, for an offer it is made from).
@@ -5873,7 +5885,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
       const P = rowPlace(g, nat, row, o, reg);
       // (The far side: a row raised to take the ground of a country its own is at peace with waits for that war, and
       // has its half year from the month it begins: ruling B7, `postedFor`. Never with the far side off.)
-      if (P.waits) { g.flags[`wait:${i}`] = g.turn; return; }
+      if (P.waits) { waitRow(g, i); return; }
       reg = P.reg; fell = P.fell; ashore = P.ashore; shifted = P.shifted; home = P.home;
     }
     // (The far side: a dated row takes no corps standing on a live front of its staff's plan (planfronts.ts): the
@@ -5908,7 +5920,7 @@ function expeditions(g: Game, nat: string, take?: number): void {
       && (onLiveFront(g, nat, x) || (inFight && x.reg !== reg?.id && corpsInContact(g, nat, x))))
       || (inFight && fromWaits(g, nat, o.from)))) {
       if (o.adds > 0) own = true;
-      else { if (inFight) tellWait(g, i, reg); g.flags[`wait:${i}`] = g.turn; return; }
+      else { if (inFight) tellWait(g, i, reg); waitRow(g, i); return; }
     }
     // (The old chart, the grand campaign: a row that takes a named corps whole waits while that corps is in contact, an
     // enemy at war on its province or beside it, as the far side's waits for a live front, and its half year is counted
@@ -5921,13 +5933,13 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // 22:05Z; history.ts `contactRuleActs`.)
     const formsAt = reg?.id;
     if (g.flags.fromWait === 1 && g.flags.open === 1 && !farOn(g) && contactRuleActs(g, g.byName[row[5]]) && Array.isArray(o.from) && !ashore && row[1] === nat && formsAt !== undefined
-      && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt && corpsInContact(g, nat, x))) { if (inFight) tellWait(g, i, reg); g.flags[`wait:${i}`] = g.turn; return; }
+      && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && x.reg !== formsAt && corpsInContact(g, nat, x))) { if (inFight) tellWait(g, i, reg); waitRow(g, i); return; }
     // (The far side: a row that waits on a formation the player has been offered and has not answered, the one that
     // makes its cut or the one it is itself made from, waits on his answer and has its half year from the month he
     // gives it: he is never struck a row for the months he took, nor given its men twice. And a row made from a
     // formation he did not make, whose corps he kept, never comes. Ruling B8; the mending of 25 November 2026:
     // `sourceAsked`, `menKept`.)
-    if (take !== i && sourceAsked(g, nat, o)) { g.flags[`wait:${i}`] = g.turn; return; }
+    if (take !== i && sourceAsked(g, nat, o)) { waitRow(g, i); return; }
     if (take !== i && row[1] === nat && menKept(g, nat, o)) { g.flags[`sent:${i}`] = 2; rowDone(g, i); g.flags[unmadeKey(i)] = g.turn; return; }
     // (The telling: what it waited on, read before its corps are taken: arrivalwaits.ts. Only where the rule still acts:
     // a row the rule no longer holds, the dial turned to a book stop whose book is open, forms with today's bare line, as
