@@ -185,6 +185,43 @@ describe("the player's offer stays in the list for the same half year as the com
     expect([offer(g, FIFTH), g.flags[`sent:${fifthId}`], row(g, FIFTH)]).toEqual([undefined, 2, undefined]);
     expect(g.headlines.slice(news).map((h) => h.text).filter((t) => t.includes(FIFTH))).toEqual([`The offer to form ${FIFTH} has lapsed: its time has passed.`]);
   });
+
+  it("the same count for both seats, from one function: each month without room is counted alike before the offer and after it, and the offer's last month is the computer's", () => {
+    // (The design director, 17:53Z, 27 November 2026, 3: "The same count for both seats, called from one function."
+    // A computer's row that gets room forms in that month, so the two seats cannot be walked to one last month by
+    // forming. The same walk instead, each seat on its own board, filled alike: the one function, `halfYearLast`, asked
+    // for both in the same months, and the months each counts.)
+    const p = war('JAP'), c = war(null);
+    fill(p);
+    fill(c);
+    const due = rows[fifthId][0], rw = `roomwait:${fifthId}`;
+    for (let t = 1; t <= 5; t++) {
+      month(p, t);
+      month(c, t);
+      // (No room anywhere: from its due month on, each month is counted, in both seats alike.)
+      expect([t, p.flags[rw] ?? 0, halfYearLast(p, fifthId, due)]).toEqual([t, c.flags[rw] ?? 0, halfYearLast(c, fifthId, due)]);
+      expect([t, c.flags[rw] ?? 0]).toEqual([t, Math.max(0, t - due + 1)]);
+    }
+    // Room on Formosa in month 6: the computer forms the row in that month; the player is offered it, open through the
+    // last month the computer's own count gives it, the same four months waited.
+    const last = halfYearLast(c, fifthId, due);
+    for (const g of [p, c]) for (const x of g.corps.filter((y) => /^Test filler Taihoku/.test(y.name) && !y.dead)) removeCorps(g, x);
+    month(p, 6);
+    month(c, 6);
+    expect([c.flags[`sent:${fifthId}`], c.regions[row(c, FIFTH)!.reg].name]).toEqual([1, 'Taihoku']);
+    expect(offer(p, FIFTH)).toMatchObject({ since: 6, last, why: null });
+    expect(offerLines(p, offer(p, FIFTH)!).map((l) => l.text).slice(-1)).toEqual(['Offered in February 1940, open until August 1940.']);
+    // Taihoku full again from month 7 (and every harbour still full): FORM IT shut for room. Each such month is counted
+    // for the standing offer as for a computer's row with no room, through the same count, and its last month moves on
+    // with it; the month it was offered, which had room, is not.
+    const { going, out } = fifth(p), tk = p.byName.Taihoku;
+    for (let k = 0; standing(p, tk) < STACK || fits(p, tk, 'JAP', going, { out }); k++) addCorps(p, 'JAP', `Test refill ${k}`, 'inf', 1, 'Taihoku', {});
+    for (let t = 7; t <= 10; t++) {
+      month(p, t);
+      expect([t, p.flags[rw], offer(p, FIFTH)?.why]).toEqual([t, 4 + (t - 6), 'There is no room for another corps at Taihoku, or near it.']);
+      expect(offer(p, FIFTH)!.last).toBe(halfYearLast(p, fifthId, due));
+    }
+  });
 });
 
 // (The skeptic's review of 25 November 2026: the half year reached offers of rows on the old chart too, beyond ruling
