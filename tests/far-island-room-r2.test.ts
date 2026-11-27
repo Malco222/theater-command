@@ -5,7 +5,7 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, createGame, removeCorps, startPhase } from '../src/campaign/game';
+import { addCorps, createGame, removeCorps, retreatTarget, startPhase } from '../src/campaign/game';
 import { fits } from '../src/campaign/islands';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -62,5 +62,26 @@ describe('a dated row is never struck for room (the design director, 00:20Z, 27 
     expect(g.flags['sent:171']).toBe(1);
     expect(g.flags['sent:263']).toBeUndefined();
     expect(g.flags['roomwait:263']).toBeGreaterThan(6);
+  });
+});
+
+/** Ground emptied of every corps, field and town. */
+const clear = (g: Game, r: Region): void => { for (const u of [...r.units, ...(r.garr ?? [])]) removeCorps(g, u); };
+
+describe('a beaten engineer corps falls back onto an island at room plus two (the design director, 00:20Z, 27 November 2026, D2)', () => {
+  it('a British engineer corps beaten in Johore falls back onto Singapore, which holds its two engineers and a corps', () => {
+    const g = startOpen(createGame(3, null));
+    const sg = g.byName['Singapore'], jo = g.byName['Johore'];
+    for (const r of [sg, jo]) clear(g, r);
+    addCorps(g, 'UK', '1st Engineers (a test row)', 'eng', 1, sg.id, {});
+    addCorps(g, 'UK', '2nd Engineers (a test row)', 'eng', 1, sg.id, {});
+    addCorps(g, 'UK', 'A corps (a test row)', 'inf', 1, sg.id, {});
+    const beaten = addCorps(g, 'UK', '3rd Engineers (a test row)', 'eng', 1, jo.id, {});
+    const banned = new Set(jo.nb.filter((j) => j !== sg.id));
+    // Ordered there, it does not fit: the island takes two engineer corps.
+    expect(fits(g, sg, 'UK', [beaten])).toBe(false);
+    // Beaten, it has the retreat's two places more.
+    expect(fits(g, sg, 'UK', [beaten], { slack: 2 })).toBe(true);
+    expect(retreatTarget(g, beaten, jo, banned)?.name).toBe('Singapore');
   });
 });

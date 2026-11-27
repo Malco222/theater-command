@@ -129,7 +129,10 @@ export function fits(g: Game, r: Region | undefined | null, nat: string, going: 
   const isle = islandOf(g, r);
   if (isle) {
     const plan = o.with ?? [], gone = [...going, ...(o.out ?? [])];
-    if (riding && engThere(g, r, nat, gone) + plan.filter((c) => c.kind === 'eng').length + riding > engRoom(g, r)) return false;
+    // (A retreat's two places more are for every beaten corps, engineers among them: the design director, 00:20Z, 27
+    // November 2026, D2: "YES: room plus two is the retreat's allowance for every beaten corps on any ground, engineers
+    // included (the engineer places plus two)". Elsewhere a retreating engineer is one of the seven already, `rows`.)
+    if (riding && engThere(g, r, nat, gone) + plan.filter((c) => c.kind === 'eng').length + riding > engRoom(g, r) + slack) return false;
     if (!line) return true;
     let sending = 0;
     for (const c of [...plan, ...going]) if (c.kind !== 'eng') sending += menOfCorps(c);
