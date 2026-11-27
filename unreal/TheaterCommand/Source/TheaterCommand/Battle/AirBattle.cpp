@@ -11,6 +11,7 @@
 #include "Battle/AirGround.h"
 #include "Battle/AirGroundKeep.h"
 #include "Battle/AirLight.h"
+#include "Battle/AirNear.h"
 #include "Battle/AirLand.h"
 #include "Battle/AirScrew.h"
 #include "Battle/AirSheen.h"
@@ -4806,6 +4807,25 @@ int32 AAirBattle::B17FineNearMost()
 	return Most;
 }
 
+int32 AAirBattle::B17FinePerFrame()
+{
+	// (a close-up is paid for in the frame it is made: on the Mac, 27 Nov, 4 or 5 made in one frame gave a 49-64 ms
+	// frame, 8 gave 145 ms, 20 gave 201 ms. With N, at most N are made a frame, the nearest first, and the rest wait a
+	// frame or two on their far shape; 0, unless asked, keeps the old order: any in the battle's order while there is room)
+	static const int32 PerFrame = []()
+	{
+		int32 Asked = 0;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterAirB17FinePerFrame="), Asked);
+		Asked = FMath::Clamp(Asked, 0, 1000);
+		if (Asked > 0)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Air battle: finer B-17: her close-up shapes made at most %d a frame, the nearest first (-TheaterAirB17FinePerFrame=N)."), Asked);
+		}
+		return Asked;
+	}();
+	return PerFrame;
+}
+
 bool AAirBattle::B17FineNearRoom(const FPlaneMade& Made)
 {
 	if (!Made.bFine || Made.bNearMade)
@@ -4817,11 +4837,13 @@ bool AAirBattle::B17FineNearRoom(const FPlaneMade& Made)
 	{
 		Kept += Each.Value.bFine && Each.Value.bNearMade ? 1 : 0;
 	}
-	if (Kept < B17FineNearMost())
+	// (with -TheaterAirB17FinePerFrame=N, only those Draw chose this frame, the nearest first: AirNear::MayMake, which
+	// keeps the same most; without it, any while fewer than the most are made, as before)
+	if (B17FinePerFrame() > 0 ? Made.bMayMake : Kept < B17FineNearMost())
 	{
 		return true;
 	}
-	if (!bB17FineHeldSaid)
+	if (Kept >= B17FineNearMost() && !bB17FineHeldSaid)
 	{
 		bB17FineHeldSaid = true;
 		UE_LOG(LogTheater, Display, TEXT("Air battle: finer B-17: %d close-up shapes made, the most a battle keeps (-TheaterAirB17FineNear=N): any other B-17 that comes near stays on her far shape."), Kept);
@@ -7190,6 +7212,38 @@ void AAirBattle::Draw(double Real)
 	{
 		S.VapourWas.swap(S.VapourKeys);
 		S.VapourKeys.clear();
+	}
+	if (S.B17FineOn == 1 && B17FinePerFrame() > 0)
+	{
+		// (which finer B-17s may have their close-up made this frame, the nearest first and at most N: AirNear, read by
+		// B17FineNearRoom; one first seen this frame has no FPlaneMade yet, and waits for the next)
+		int32 FineMade = 0;
+		for (TPair<int32, FPlaneMade>& Each : PlaneMade)
+		{
+			Each.Value.bMayMake = false;
+			FineMade += Each.Value.bFine && Each.Value.bNearMade ? 1 : 0;
+		}
+		std::vector<AirNear::FSeen> Fine;
+		for (const AirShow::PlaneOut& P : S.Show.Planes())
+		{
+			const FPlaneMade* Each = PlaneMade.Find(P.Key);
+			if (!P.bShown || !Each || !Each->bFine || Each->bNearMade)
+			{
+				continue;
+			}
+			AirNear::FSeen One;
+			One.Key = P.Key;
+			One.Away = FVector::Dist(World(P.At.X, P.At.Y, P.At.Z), EyeAt) / U;
+			One.bRidden = (S.bClose && S.Subject.Plane == P.Key) || (TimeEyeKey >= 0 && TimeEyeKey == P.Key); // (as the loop's bRidden)
+			Fine.push_back(One);
+		}
+		for (const int Chosen : AirNear::MayMake(Fine, FineMade, B17FineNearMost(), B17FinePerFrame(), 300.0))
+		{
+			if (FPlaneMade* Each = PlaneMade.Find(Chosen))
+			{
+				Each->bMayMake = true;
+			}
+		}
 	}
 	for (const AirShow::PlaneOut& P : S.Show.Planes())
 	{
