@@ -109,3 +109,20 @@ describe('T3-2: the lent corps whose loans end in the same pass keep nothing for
     expect([a.c, b.c].filter((c) => !c.dead && c.reg === nm.id).length).toBeGreaterThan(0);
   });
 });
+
+// ---- T3-3: a stand-in that stands where the row forms is not held -------------------------------------------------
+
+describe('T3-3: a stand-in in contact in the province the row forms in is not held: the row lands there', () => {
+  it('the stand-in alone in the Neumark beside Poland, the row forming in the Neumark: it lands that month, no hold noted', () => {
+    const { g, nm } = board();
+    const stand = add(g, 'Stand-in Test Corps', nm, 2);
+    const j = addRow([1, 'GER', 'Stand-in Test Corps', 'inf', 2, 'Neumark', { unless: W }]);
+    g.flags[`sent:${j}`] = 1;
+    const i = addRow([2, 'GER', W, 'inf', 2, 'Neumark', {}]);
+    month(g, 2);
+    expect(g.flags[`wait:${i}`]).toBeUndefined();
+    expect(g.flags[`sent:${i}`]).toBe(1);
+    expect(stand.dead).toBe(true);
+    expect(ruleHolds(g).filter((h) => h.path === 'standDown')).toEqual([]);
+  });
+});
