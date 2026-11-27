@@ -67,8 +67,13 @@ describe('an offered formation refused for an island\'s room: the sentence and t
     // room says.)
     for (const r of g.regions) {
       if (!r.port || r === palau || r.ctrl !== 'JAP') continue;
+      // (No `hold`: this is the player's Japan, whose corps no staff moves. far-lapse holds its harbour fillers because
+      // its board is walked in the computer's seat too: top-up 1's verifier, F3.)
       for (let k = 0; k < 12 && fits(g, r, 'JAP', going(g), { rows: standing(g, r) }); k++) addCorps(g, 'JAP', `Fill ${r.name} ${k}`, 'inf', 1, r.id, {});
     }
+    // (Every harbour so filled is full for the row: `fits`, asked as roomNear's sea branch asks it, refuses the row's own
+    // corps at each. The loop stops at twelve corps; this says that was enough.)
+    expect(g.regions.filter((r) => r.port && r !== palau && r.ctrl === 'JAP' && fits(g, r, 'JAP', going(g), { rows: standing(g, r) })).map((r) => r.name)).toEqual([]);
     const takes = men(going(g)[0]), whole = islandOf(g, palau)!.room * MEN_PER_DIV;
     const offer = () => formationOffers(g).find((o) => o.id === ROW)!;
     const formed = (): boolean => g.corps.some((c) => c.name === NAME && !c.dead);

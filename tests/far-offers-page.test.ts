@@ -70,8 +70,13 @@ const noRoomForSixteenth = (g: Game): void => {
   okinawaFull(g);
   for (const r of g.regions) {
     if (!r.port || r === okinawa || r.ctrl !== 'JAP') continue;
+    // (No `hold`: this is the player's Japan, whose corps no staff moves. far-lapse holds its harbour fillers because
+    // its board is walked in the computer's seat too: top-up 1's verifier, F3.)
     for (let k = 0; k < 12 && fits(g, r, 'JAP', going, { rows: standing(g, r), out }); k++) addCorps(g, 'JAP', `Test harbour ${r.name} ${k}`, 'inf', 1, r.id, {});
   }
+  // (Every harbour so filled is full for the row: `fits`, asked as roomNear's sea branch asks it, refuses the row's own
+  // corps at each. The loop stops at twelve corps; this says that was enough.)
+  expect(g.regions.filter((r) => r.port && r !== okinawa && r.ctrl === 'JAP' && fits(g, r, 'JAP', going, { rows: standing(g, r), out })).map((r) => r.name)).toEqual([]);
 };
 /** A player's Japan in December 1941 (month 28), at war with Britain and with Singapore his: two loans have ended. */
 const singapore = (): Game => {

@@ -120,8 +120,15 @@ describe("the player's offer stays in the list for the same half year as the com
     }
     for (const r of g.regions) {
       if (!r.port || r.ctrl !== 'JAP' || r === g.byName.Taihoku || r === g.byName.Formosa) continue;
+      // (Held for its staff, `hold: true`: this board is walked in the computer's seat too, and a computer's staff
+      // would march an unheld filler away and leave the harbour room. far-offers-page's and far-island-room-topup's
+      // boards are the player's Japan alone, whose corps no staff moves, so theirs need no hold: top-up 1's verifier,
+      // F3.)
       for (let k = 0; k < 12 && fits(g, r, 'JAP', going, { rows: standing(g, r), out }); k++) addCorps(g, 'JAP', `Test harbour ${r.name} ${k}`, 'inf', 1, r.id, { hold: true });
     }
+    // (Every harbour so filled is full for the row: `fits`, asked as roomNear's sea branch asks it, refuses the row's
+    // own corps at each. The loop stops at twelve corps; this says that was enough.)
+    expect(g.regions.filter((r) => r.port && r.ctrl === 'JAP' && r !== g.byName.Taihoku && r !== g.byName.Formosa && fits(g, r, 'JAP', going, { rows: standing(g, r), out })).map((r) => r.name)).toEqual([]);
     // (The no-room case comes from the fill and is read by the rule's own readers: each ground of the island refuses the
     // row's own corps, has less room left than its men, and holds five fighting corps.)
     for (const nm of ['Taihoku', 'Formosa']) {
