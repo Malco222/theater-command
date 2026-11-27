@@ -2571,7 +2571,7 @@ export interface AirAssess {
   bomberLoss: number;
   /** What the bombers can do for themselves (formation, guns and turrets): their side of the fighting weight a bomber, and the fighters their guns bring down (ruling 227). */
   defence: number;
-  /** How many fewer of the raid's bombers the fighters bring down for their crews' training at the player's schools (bombers.ts): a share, 0 for most raids. */
+  /** How many fewer of the raid's bombers the fighters bring down for their crews' training (bombers.ts trainedEdge, the roster's hours, every side alike): a share, 0 for most raids. */
   drilled: number;
   /** The level of anti-aircraft guns round the industry being bombed. */
   aa: number;
@@ -2935,8 +2935,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const cn = night && !transit && cityDefences(g) ? cityNight(g, target, out.B, sky, false, known ? { guns: known.aa, lights: lightsAt(g, target) } : undefined) : null;
   const aaGun = gun * (cn ? cn.share : nightGunShare(g, night));
   if (cn) out.lights = { level: cn.lights, cloud: cn.cloud, lit: cn.litShare };
-  // Crews the player's instructors trained keep their formation: the fighters bring down fewer of them (bombers.ts).
-  // The guns' share is as it was. 0 until the player has sent a crew to the schools, and always for everyone else.
+  // Crews the schools trained keep their formation: the fighters bring down fewer of them (bombers.ts trainedEdge, read
+  // by the roster's hours on every side alike: the mend of 27 Nov 2026, DD 05:13Z item 6). The guns' share is as it was.
+  // 0 for a group whose crews arrived with no hours.
   out.drilled = out.B > 0 ? out.att.reduce((t, x) => t + x.bmr * trainedEdge(g, x.f), 0) / out.B : 0;
   out.bomberLoss = out.B > 0 ? Math.min(most, (L ? L.bombers * Math.pow(met, L.power) : C.bombers * met) * (1 - out.drilled) * I + (night ? C.night.flak : C.flak) * gun * I) : 0;
   // Guns round the factories bring down more of the bombers that come for them.

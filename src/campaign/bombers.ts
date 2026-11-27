@@ -26,7 +26,7 @@
 // The stories' one rule holds (stories.ts): every nation keeps these records, but only the player's own gain anything
 // by them. For the player a finished tour lifts the group's readiness, a crew at the schools
 // gives every later replacement experience before its first mission (and fighters bring down fewer of a group so
-// trained), and a crew on a bond tour pays the treasury each month. Nothing here draws on the dice of the war: every
+// trained, whoever runs it: trainedEdge reads the roster's hours on every side), and a crew on a bond tour pays the treasury each month. Nothing here draws on the dice of the war: every
 // draw is from a stream of the group's own.
 
 import data from '../../data/campaign/stories.json';
@@ -401,13 +401,16 @@ export function bondsMonth(g: Game, nat: string): number {
 }
 
 /**
- * How many fewer of one of the player's groups the fighters bring down for its crews' training: 'school.edge' for a
- * group whose crews all arrived with the most the schools give, and in proportion for less. 0 for everyone else, and
- * for the player until he has sent a crew to the schools.
+ * How many fewer of a group's bombers the fighters bring down for its crews' training: 'school.edge' for a group whose
+ * crews all arrived with the most the schools give, and in proportion for less; 0 for a group whose crews arrived with
+ * none. Every side's crews are read by the same facts, the hours on the group's own roster, whoever runs the group.
+ * (Mend, the design director's ruling of 27 Nov 2026 05:13Z, item 6: "one rule for all sides is broken in his game
+ * today ... The mend reads every side's crews by the same facts". Before it, a group the player did not run read 0
+ * whatever its crews had.) Who can put hours on a roster is headStart's question, not this one's.
  */
 export function trainedEdge(g: Game, f: AirFleet): number {
   const R = f.bombers;
-  if (f.nat !== g.human || !R || !R.on.length) return 0;
+  if (!R || !R.on.length) return 0;
   let h = 0;
   for (const b of R.on) h += b[4];
   return (BOMBERS.school.edge * h) / (R.on.length * BOMBERS.school.most);
