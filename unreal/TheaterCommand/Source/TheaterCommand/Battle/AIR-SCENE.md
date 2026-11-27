@@ -1636,8 +1636,10 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    What the owner sees, honestly: nicer, a satin cast and glinting glass, not yet the studio picture (no chips, grain or
    streaks; evener than the studio picture up close; Lumen decides how pale and cool her wing tops go).
    The cloud test: air_b17_sheen_test in run.sh (the file her overlay's; nothing carried is PlaneInk exactly; the glare
-   guard; no garbage between corners along every edge of her meshes; the launch word; M_AirPaint's nodes and the Unreal
-   side read from their source) and Tools/air_skin/test_make_air_skin.py.
+   guard; no garbage between corners along every edge of her meshes; the launch word; metal on her fittings alone,
+   counted; M_AirPaint's nodes and the Unreal side read from their source), air_b17_sheen_grid with
+   air_b17_sheen_material.py (M_AirPaint's own nodes run as numbers against the law, case for case) and
+   Tools/air_skin/test_make_air_skin.py.
    The Mac: editor closed, `TC_REBUILD=M_AirPaint Tools/build_content.sh` (it says "Theater Command: wrote
    /Game/Campaign/Materials/M_AirPaint", never "M_AirPaint was not built"), then the C++ build; (1)
    `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=both -TheaterAirB17Fine -TheaterAirB17Skin -TheaterAirNoB17Sheen`
@@ -1645,5 +1647,17 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    says "B-17 paint sheen: on ... her sun 13 deg up" or so and no Warning, time-eye within 0.5 ms, first window's
    worst frame no worse; (3) stills with and without: the riding front quarter, a look toward the sun over her wing (as
    today there), the Overview, the far-to-near swap at 300-450 m (no pop), an earned-colours B-17 (matt, by design),
-   her bay open. Wing tops may go pale only if COOL (blue at least 0.95 of green, as the picture's); pale AND warm is
-   the sand the art director ruled out. (4) M_AirPaint renamed away once: one Warning, the look of run 1.
+   her bay open, her rivet rows close up; ONE STILL with an escort fighter beside her in the same light (she is first,
+   not alone: if the two read as two paint worlds she waits for the fighters); and a slow 10 second ORBIT through the
+   sun's mirror (no patch that breathes, no matt hole where the glint should be, no edge). The art director's targets
+   (27 November 00:14Z): where her paint is pale (over 130) blue at least 0.95 of green AND red no more than green;
+   wing tops no paler than the picture's 181; nothing on her paint over 200 (glass or a fitting may glint); her sides
+   and fin stay olive (blue about 0.90 to 0.95 of green); no sparkle in the 60 m still. Glare guard on, grazing guard
+   off. Nothing is passed until these stills. (4) M_AirPaint renamed away once: one Warning, the look of run 1.
+   Her metal: only her true fittings carry any (the art director, 27 November 00:16Z): the sheen file is written with
+   metal 0 on every point whose paint is not steel, blade, line, engine, exhaust, gunmetal, hub or head
+   (make_air_skin.py's FITTINGS, recorded as "metal_paints"), so no rivet head, seam or paint point turns metal; worn
+   rivets show by tone, in blend and soot, as before. Her glass keeps its glint in a shaded nook (its depth is not
+   shaded). Her glare guard follows the sun the key light is aimed from (set after the stage is raised), so her finish
+   follows the sun's height as every lit surface does; her files hold no date. Her far feathered blades (section 6)
+   stay on PlaneInk, matt, as intended.
