@@ -130,6 +130,20 @@ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
   "$HERE/air_b17_skin_test.cpp" "$SRC/Battle/AirSkin.cpp" "$SRC/Battle/LandJson.cpp" "$SRC/Battle/AirUnitColours.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_b17_skin_test"
 "$OUT/air_b17_skin_test" "$ROOT/Content/Models/B17Fine.json" "$ROOT/Content/Data/AirSkin/B17Fine.json" "$SRC" || STATUS=1
 python3 -I -B "$ROOT/Tools/air_skin/test_make_air_skin.py" || STATUS=1
+# The B-17 paint sheen (the Battle rules card's "B-17 paint sheen", row flyB17Sheen; Brian, 26 November 2026: "make the
+# new ones work"): her own finish a point (the model thread's gloss and metal), Content/Data/AirSkin/B17Fine-sheen.json
+# (Battle/AirSheen, made by Tools/make_air_skin.py --sheen-out in the same run as her overlay), read with her counts and
+# made from the overlay's very files; M_AirPaint's law: nothing carried is PlaneInk's numbers exactly, the glare guard,
+# no garbage between corners; the launch word; M_AirPaint's nodes and the Unreal side from their source.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_b17_sheen_test.cpp" "$SRC/Battle/AirSheen.cpp" "$SRC/Battle/AirSkin.cpp" "$SRC/Battle/LandJson.cpp" "$SRC/Battle/AirUnitColours.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_b17_sheen_test"
+"$OUT/air_b17_sheen_test" "$ROOT/Content/Models/B17Fine.json" "$ROOT/Content/Data/AirSkin/B17Fine-sheen.json" "$ROOT/Content/Data/AirSkin/B17Fine.json" "$SRC" "$ROOT/Tools/build_content.py" || STATUS=1
+# ... and M_AirPaint's own nodes (build_content.py's "if air:" block, run on plain numbers) against AirSheen's law, case
+# for case on a fixed grid: wiring and all, not only names and defaults.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_b17_sheen_grid.cpp" "$SRC/Battle/AirSheen.cpp" "$SRC/Battle/LandJson.cpp" -o "$OUT/air_b17_sheen_grid"
+"$OUT/air_b17_sheen_grid" > "$OUT/air_b17_sheen_grid.txt" || STATUS=1
+python3 -I -B "$HERE/air_b17_sheen_material.py" "$ROOT/Tools/build_content.py" "$OUT/air_b17_sheen_grid.txt" || STATUS=1
 # The sky's picture (the clouds as the scene lays and turns them, drawn by a small software painter): AIR_SKY_PICTURES=1.
 if [ "${AIR_SKY_PICTURES:-}" = "1" ]; then
   $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \

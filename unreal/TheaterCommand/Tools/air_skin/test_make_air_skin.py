@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """The test of Tools/make_air_skin.py (the worn B-17 paint's overlay; row flyB17Skin).
 
-    python3 -I Tools/air_skin/test_make_air_skin.py [<base B17Fine.json> <model thread's skin file> <overlay>]
+    python3 -I Tools/air_skin/test_make_air_skin.py [<base B17Fine.json> <model thread's skin file> <overlay> [<sheen file>]]
 
 On small made-up files: two runs give the same bytes; blend, soot, shade and the repaint list come out as the skin
 has them, with the rounding bounded; nothing keyed by month or year and no marks reach the overlay; gloss and metal
 only when asked; each refusal (the base's sha256, unequal points/facings/triangles/part/wear, 45 colours, other paint
 names, a value out of range, a colour not hex, a file not JSON (exit 2 from main, nothing written), and a dated
 scheme: "schemes", a key holding "month", a key "from"; a "year" key is let through). Given the three real files: the committed overlay is what the tool makes from them,
-byte for byte, and its check colours are the game's law of its own numbers.
+byte for byte, and its check colours are the game's law of its own numbers; given the sheen file too
+(Content/Data/AirSkin/B17Fine-sheen.json, row flyB17Sheen), it is the tool's --sheen-out of the same files, byte for
+byte. make_sheen (--sheen-out) on the made-up files: the same bytes twice, its keys in order, the coat's medians, the
+overlay's sha256s, its refusals, and main writing both files or neither.
 """
 import contextlib
 import copy
@@ -43,6 +46,10 @@ def level(n, seed):
 
 def made_up():
     names = ["p%d" % i for i in range(46)]
+    # (the sheen's FITTINGS, the paints whose metal it keeps: paint 2 and 11 among them, so that the made-up points
+    # carry some metal and some not; the rest of the eight where no point wears them)
+    for at, name in zip((2, 11, 20, 21, 22, 23, 24, 25), ("steel", "exhaust", "blade", "line", "engine", "gunmetal", "hub", "head")):
+        names[at] = name
     base = {"kind": "aircraft", "colours": ["%02X%02X%02X" % (i * 5, i * 4, i * 3) for i in range(46)], "paint_names": names,
             "marks": [{"tag": "USA-BAR"}], "mark_months": [1, 2, 3], "near": level(12, 1), "far": level(6, 2)}
     skin = copy.deepcopy(base)
@@ -190,7 +197,129 @@ def made_up_tests():
         check(code == 2 and not os.path.exists(op) and "not JSON" in err.getvalue(), "a cut-off skin: exit 2, said, and no file written")
 
 
-def real_tests(base_path, skin_path, overlay_path):
+def sheen_tests():
+    """make_sheen (row flyB17Sheen): the same bytes twice, its keys in order, the coat the medians of the near paint-0
+    points, gloss and metal as the skin has them, the overlay's sha256s; each refusal; main writes both or neither."""
+    base, skin = made_up()
+    t1, fig = M.make_sheen(dump(base), dump(skin), base_sha_prefix="")
+    t2, _ = M.make_sheen(dump(base), dump(skin), base_sha_prefix="")
+    check(t1 == t2, "sheen: two runs, the same bytes")
+    d = json.loads(t1)
+    check(list(d.keys()) == ["sheen_of", "base_sha256", "base_fnv64", "source_sha256", "coat", "metal_paints", "near", "far"], "sheen: top keys in their order")
+    check(d["metal_paints"] == list(M.FITTINGS) and M.FITTINGS == ("steel", "blade", "line", "engine", "exhaust", "gunmetal", "hub", "head"),
+          "sheen: metal_paints the eight fittings")
+    o = json.loads(M.make(dump(base), dump(skin), base_sha_prefix="")[0])
+    check(d["source_sha256"] == o["source_sha256"] and d["base_sha256"] == o["base_sha256"] and d["base_fnv64"] == o["base_fnv64"], "sheen: the overlay's sha256s and fnv64")
+    for name in ("near", "far"):
+        check(list(d[name].keys()) == ["gloss", "metal"], "sheen: %s keys" % name)
+        names = skin["paint_names"]
+        kept = [v if names[p] in M.FITTINGS else 0 for v, p in zip(skin[name]["metal"], skin[name]["paints"])]
+        check(d[name]["gloss"] == skin[name]["gloss"], "sheen: %s gloss as the skin's, every point" % name)
+        check(d[name]["metal"] == kept and any(kept) and kept != skin[name]["metal"], "sheen: %s metal the skin's on her fittings, 0 on every other paint" % name)
+        zeroed = {}
+        for v, p in zip(skin[name]["metal"], skin[name]["paints"]):
+            if names[p] not in M.FITTINGS and v:
+                zeroed[names[p]] = zeroed.get(names[p], 0) + 1
+        check(fig["zeroed"][name] == zeroed and sum(zeroed.values()) > 0, "sheen: %s points set to 0 counted per paint" % name)
+    zero = [k for k, p in enumerate(skin["near"]["paints"]) if p == 0]
+    g = sorted(skin["near"]["gloss"][k] for k in zero)
+    m = sorted(d["near"]["metal"][k] for k in zero)
+    check(d["coat"] == [g[len(g) // 2], m[len(m) // 2]] and fig["coat"] == d["coat"], "sheen: coat the medians of the near paint-0 points")
+    flat = t1.lower()
+    for word in ("month", "year", "mark", "scheme", "\"from\"", "usa", "blend", "soot", "shade", "colours"):
+        check(word not in flat, "sheen: no %s in it" % word)
+
+    def sheen_refused(b, sk, what, prefix=""):
+        try:
+            M.make_sheen(dump(b), dump(sk), base_sha_prefix=prefix)
+        except M.Refused:
+            return
+        FAILS.append("sheen not refused: " + what)
+        print("FAIL: sheen not refused:", what)
+    sheen_refused(base, skin, "a base whose sha256 is not the game's", prefix=M.BASE_SHA_PREFIX)
+    s = copy.deepcopy(skin)
+    del s["far"]["gloss"]
+    sheen_refused(base, s, "no far gloss")
+    s = copy.deepcopy(skin)
+    s["near"]["metal"] = s["near"]["metal"][:-1]
+    sheen_refused(base, s, "near metal one short")
+    s = copy.deepcopy(skin)
+    s["near"]["gloss"][0] = 101
+    sheen_refused(base, s, "gloss 101")
+    s = copy.deepcopy(skin)
+    s["far"]["metal"][1] = -1
+    sheen_refused(base, s, "metal -1")
+    s = copy.deepcopy(skin)
+    s["near"]["triangles"][0] += 1
+    sheen_refused(base, s, "near triangles unequal (make's refusal)")
+    s = copy.deepcopy(skin)
+    s["near"]["month"] = 4
+    sheen_refused(base, s, "a month key (make's refusal)")
+    s = copy.deepcopy(skin)
+    s["near"]["paints"] = [3 if p == 0 else p for p in s["near"]["paints"]]
+    b2 = copy.deepcopy(base)
+    b2["near"]["paints"] = list(s["near"]["paints"])
+    sheen_refused(b2, s, "no near paint-0 point")
+    b2, s = copy.deepcopy(base), copy.deepcopy(skin)
+    del b2["paint_names"]
+    del s["paint_names"]
+    sheen_refused(b2, s, "no paint_names")
+    for gone in M.FITTINGS:
+        b2, s = copy.deepcopy(base), copy.deepcopy(skin)
+        b2["paint_names"] = [x if x != gone else "other" for x in b2["paint_names"]]
+        s["paint_names"] = list(b2["paint_names"])
+        sheen_refused(b2, s, "paint_names without %s" % gone)
+    # main: a refusal of the sheen writes neither file
+    with tempfile.TemporaryDirectory() as tmp:
+        bp, sp, op, hp = (os.path.join(tmp, n) for n in ("base.json", "skin.json", "out.json", "sheen.json"))
+        s = copy.deepcopy(skin)
+        del s["far"]["metal"]
+        with open(bp, "wb") as f:
+            f.write(dump(base))
+        with open(sp, "wb") as f:
+            f.write(dump(s))
+        err = io.StringIO()
+        kept, kept_sheen = M.make.__defaults__, M.make_sheen.__defaults__
+        M.make.__defaults__ = (False, "")
+        M.make_sheen.__defaults__ = ("",)
+        try:
+            with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+                code = M.main(["--base", bp, "--skin", sp, "--out", op, "--sheen-out", hp])
+                with open(sp, "wb") as f:
+                    f.write(dump(skin))
+                code2 = M.main(["--base", bp, "--skin", sp, "--out", op, "--sheen-out", hp])
+                both = os.path.exists(op) and os.path.exists(hp)
+                code3 = M.main(["--base", bp, "--skin", sp])
+                os.remove(hp)
+                code4 = M.main(["--base", bp, "--skin", sp, "--sheen-out", hp])
+        finally:
+            M.make.__defaults__ = kept
+            M.make_sheen.__defaults__ = kept_sheen
+        check(code == 2 and "metal" in err.getvalue(), "main: a skin without far metal refused (exit 2)")
+        check(code2 == 0 and both, "main: both written in one run")
+        check(code3 == 2, "main: nothing asked to be written is refused")
+        check(code4 == 2 and not os.path.exists(hp), "main: --sheen-out without --out refused, nothing written")
+    with tempfile.TemporaryDirectory() as tmp:
+        bp, sp, op, hp = (os.path.join(tmp, n) for n in ("base.json", "skin.json", "out.json", "sheen.json"))
+        s = copy.deepcopy(skin)
+        del s["far"]["metal"]
+        with open(bp, "wb") as f:
+            f.write(dump(base))
+        with open(sp, "wb") as f:
+            f.write(dump(s))
+        kept, kept_sheen = M.make.__defaults__, M.make_sheen.__defaults__
+        M.make.__defaults__ = (False, "")
+        M.make_sheen.__defaults__ = ("",)
+        try:
+            with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
+                code = M.main(["--base", bp, "--skin", sp, "--out", op, "--sheen-out", hp])
+        finally:
+            M.make.__defaults__ = kept
+            M.make_sheen.__defaults__ = kept_sheen
+        check(code == 2 and not os.path.exists(op) and not os.path.exists(hp), "main: the sheen refused, the overlay not written either")
+
+
+def real_tests(base_path, skin_path, overlay_path, sheen_path=None):
     with open(base_path, "rb") as f:
         base = f.read()
     with open(skin_path, "rb") as f:
@@ -207,12 +336,27 @@ def real_tests(base_path, skin_path, overlay_path):
         FAILS.append("a base one byte changed not refused")
     except M.Refused:
         pass
+    if sheen_path:
+        with open(sheen_path, "rb") as f:
+            sheen = f.read()
+        made, _ = M.make_sheen(base, skin)
+        check(made.encode("ascii") == sheen, "the committed sheen file is the tool's of these files, byte for byte")
+        h = json.loads(sheen)
+        check(h["source_sha256"] == d["source_sha256"] and h["base_sha256"] == d["base_sha256"] and h["base_fnv64"] == d["base_fnv64"],
+              "the sheen file names the overlay's very files")
+        check(len(h["near"]["gloss"]) == 143899 and len(h["far"]["metal"]) == 15534 and h["coat"] == [39, 0], "the sheen's counts and her coat (no metal: paint 0 is no fitting)")
+        names = json.loads(skin)["paint_names"]
+        sk = json.loads(skin)
+        for lv in ("near", "far"):
+            off = sum(1 for v, p in zip(h[lv]["metal"], sk[lv]["paints"]) if v and names[p] not in M.FITTINGS)
+            check(off == 0 and h["metal_paints"] == list(M.FITTINGS), "the sheen's %s metal on her fittings alone" % lv)
 
 
 def main():
     made_up_tests()
-    if len(sys.argv) == 4:
-        real_tests(*sys.argv[1:4])
+    sheen_tests()
+    if len(sys.argv) in (4, 5):
+        real_tests(*sys.argv[1:])
     print("test_make_air_skin: %s" % ("FAILED %d" % len(FAILS) if FAILS else "ok"))
     return 1 if FAILS else 0
 

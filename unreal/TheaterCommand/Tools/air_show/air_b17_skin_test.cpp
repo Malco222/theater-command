@@ -291,8 +291,10 @@ int main(int Argc, char** Argv)
 			const std::string Line = All.substr(LineAt + 1, At - LineAt - 1);
 			Guarded += Line.find("AirSkin::Active() ?") != std::string::npos ? 1 : 0;
 		}
-		Check(Asked == 4 && Guarded == 3 && Count(Battle, "\tif (AirSkin::Active())\n\t{\n\t\tFString SkinKind = Name, SkinWhose;") == 1,
-			"AirSkin::For asked four times, each behind AirSkin::Active()", std::to_string(Asked) + " asked, " + std::to_string(Guarded + 1) + " guarded");
+		// (five since the paint sheen, row flyB17Sheen: B17SheenRead asks for her overlay too, behind AirSkin::Active() as
+		// every other)
+		Check(Asked == 5 && Guarded == 4 && Count(Battle, "\tif (AirSkin::Active())\n\t{\n\t\tFString SkinKind = Name, SkinWhose;") == 1,
+			"AirSkin::For asked five times, each behind AirSkin::Active()", std::to_string(Asked) + " asked, " + std::to_string(Guarded + 1) + " guarded");
 		Check(Count(Battle, "\tif (bSkin)\n\t{\n\t\tShapeKey += TEXT(\"|skin\");\n\t}") == 1 && Count(Miniatures, "+ (WornSkin ? TEXT(\"|skin\") : TEXT(\"\"))") == 1,
 			"her shape and her read kept apart under the skin ('|skin')");
 		Check(Count(Miniatures, "const int32 Livery = Raw->bAircraft && !Raw->bSkinned ? SchemeStanding(Raw->SchemeFrom) : 0;") == 1 && Count(Miniatures, "Raw->bSkinned = true;") == 1,

@@ -1669,3 +1669,72 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    can make the same still with and without it. Unknown until the Mac's stills: whether Lumen's own occlusion darkens
    her creases a second time on top of it. Her earned colours' bands are laid without it (their model has no shade):
    where a band crosses a shaded crease it is a little lighter than the coat beside it.
+67. **B-17 paint sheen** (release 2; Brian, 26 November 2026: "why is the video showing the old b-17s again", "i want
+   the new ones in the game", "make the new ones work"; the picture he approved on 25 November,
+   battle-models/air/b17-next-look/jump/skin-3-in-flight.jpg: worn olive with a cool, satin, worn-metal sheen on her
+   wing tops and back, glinting glass). Item 66's paint alone is flat (PlaneInk, 0.9 rough, 0.15 specular, the art
+   director's rule of 22 November, items 23 and 32); the model thread's own sheet of 26 November shows that the larger
+   step to the picture is the sheen. This item draws it for the finer B-17 alone, under the art director's principle of
+   26 November 21:42Z (the approved picture governs), and keeps out exactly what her 22 November rule was for: SAND, a
+   pale and WARM wash where a low sun mirrors in the paint. Never by the year or month. Looks only: nothing the rules
+   count reads it, and no random draw is made.
+   How: the Battle rules card's **B-17 paint sheen** (FLandLive's rule `flyB17Sheen`, off by default, needs Worn B-17
+   paint; `-TheaterAirB17Sheen` / `-TheaterAirNoB17Sheen`). AAirBattle::B17SheenRead, right after B17SkinRead at both
+   battle starts: with the row off it returns before anything is read or said; on, it reads
+   Content/Data/AirSkin/B17Fine-sheen.json once a run (the model thread's gloss = roughness x 100 and metal x 100, one a
+   point, near and far, and her coat's 39/18; Battle/AirSheen) and refuses one not made from her overlay's very source
+   file. Each of her shapes is then kept under "|sheen" and carries, in its FIRST TEXTURE COORDINATE, U = how far her
+   roughness is below 0.9 (times the square root of her contact shade) and V = her metal (AirParts::SheenOnto; her star
+   and bar, laid after her file's points, take her coat's): both on her close-up sections and on the static mesh behind
+   her far copies (the light shape past 1.5 km stays as it is). Her sections and copies draw with M_AirPaint
+   (Tools/build_content.py, `build_map_surface("M_AirPaint", air=True)`: M_MapSurface's own nodes with roughness,
+   specular and metal from U and V by AirSheen::Law's sums). At U = V = 0 those sums give PlaneInk's numbers exactly,
+   so anything that carries nothing (an earned-colours copy, for now) draws as today.
+   The law (defaults): her paint no smoother than 0.45 (SheenFloor), her glass alone smoother (0.07: it glints),
+   specular 0.25 where she carries a finish (SheenSpec), metal only over 0.5 (SheenMetalFrom 0.5: a point at 0.45 carries
+   none, one at 0.55 all of its own; the art director, 27 November 00:16Z: metal on true fittings only), and THE GLARE GUARD (on): within some 25 degrees of a low sun's mirror (sun under 15 degrees fully, none over
+   30; Bremen's December sun is some 13 degrees up all raid) her finish goes back to PlaneInk's. The grazing guard (a
+   look along her skin) is OFF: it would remove the approved picture's own cool-grey sky sheen on her wing tops.
+   Every number is a launch word, no rebuild: `-TheaterAirB17SheenInk=gain,floor,spec,metal,glare,graze,metalfrom`
+   (each optional, e.g. `=,,0.35` brighter, `=1,0.55` duller, `=,,,,,1` grazing guard on, `=,,,,0` glare guard off).
+   Fallbacks: M_AirPaint missing, or older than the build (its "SheenEdge" sentinel, read before anything is set), or
+   the sheen file missing, unreadable or not her paint's: one Warning, the row stays off for the battle, she wears
+   item 66's matt paint.
+   The files: one run of `python3 -I Tools/make_air_skin.py --base Content/Models/B17Fine.json --skin <the model
+   thread's B17.json> --out Content/Data/AirSkin/B17Fine.json --sheen-out Content/Data/AirSkin/B17Fine-sheen.json`
+   makes the overlay and the sheen file together from the same bytes (both or neither). A re-issued model file is that
+   one run and one commit.
+   Cost: 0 extra draw calls (the same sections; her copies' groups already differ by "|skin", so "|sheen" renames them,
+   it does not split them); 0 extra graphics memory on the far copies (their texture coordinate was there, zero); some
+   35 sums a pixel on her alone; 16 bytes a point on the CPU (2.3 MB for her near shape). A GUESS of 0.05 to 0.2 ms; the
+   Mac's time-eye lines decide (budget 0.5 ms). The first draw of M_AirPaint on her close-up sections is warmed under
+   the black (AirWarmSheen); her far copies' first draw is NOT proven warm (no living example): the first window's
+   worst frame decides.
+   What the owner sees, honestly: nicer, a satin cast and glinting glass, not yet the studio picture (no chips, grain or
+   streaks; evener than the studio picture up close; Lumen decides how pale and cool her wing tops go).
+   The cloud test: air_b17_sheen_test in run.sh (the file her overlay's; nothing carried is PlaneInk exactly; the glare
+   guard; no garbage between corners along every edge of her meshes; the launch word; metal on her fittings alone,
+   counted; M_AirPaint's nodes and the Unreal side read from their source), air_b17_sheen_grid with
+   air_b17_sheen_material.py (M_AirPaint's own nodes run as numbers against the law, case for case) and
+   Tools/air_skin/test_make_air_skin.py.
+   The Mac: editor closed, `TC_REBUILD=M_AirPaint Tools/build_content.sh` (it says "Theater Command: wrote
+   /Game/Campaign/Materials/M_AirPaint", never "M_AirPaint was not built"), then the C++ build; (1)
+   `-TheaterAirBattle=bremen-b17 -TheaterAirTimeEye=both -TheaterAirB17Fine -TheaterAirB17Skin -TheaterAirNoB17Sheen`
+   matches the build before it frame for frame and line for line; (2) the same with `-TheaterAirB17Sheen`: the log
+   says "B-17 paint sheen: on ... her sun 13 deg up" or so and no Warning, time-eye within 0.5 ms, first window's
+   worst frame no worse; (3) stills with and without: the riding front quarter, a look toward the sun over her wing (as
+   today there), the Overview, the far-to-near swap at 300-450 m (no pop), an earned-colours B-17 (matt, by design),
+   her bay open, her rivet rows close up; ONE STILL with an escort fighter beside her in the same light (she is first,
+   not alone: if the two read as two paint worlds she waits for the fighters); and a slow 10 second ORBIT through the
+   sun's mirror (no patch that breathes, no matt hole where the glint should be, no edge). The art director's targets
+   (27 November 00:14Z): where her paint is pale (over 130) blue at least 0.95 of green AND red no more than green;
+   wing tops no paler than the picture's 181; nothing on her paint over 200 (glass or a fitting may glint); her sides
+   and fin stay olive (blue about 0.90 to 0.95 of green); no sparkle in the 60 m still. Glare guard on, grazing guard
+   off. Nothing is passed until these stills. (4) M_AirPaint renamed away once: one Warning, the look of run 1.
+   Her metal: only her true fittings carry any (the art director, 27 November 00:16Z): the sheen file is written with
+   metal 0 on every point whose paint is not steel, blade, line, engine, exhaust, gunmetal, hub or head
+   (make_air_skin.py's FITTINGS, recorded as "metal_paints"), so no rivet head, seam or paint point turns metal; worn
+   rivets show by tone, in blend and soot, as before. Her glass keeps its glint in a shaded nook (its depth is not
+   shaded). Her glare guard follows the sun the key light is aimed from (set after the stage is raised), so her finish
+   follows the sun's height as every lit surface does; her files hold no date. Her far feathered blades (section 6)
+   stay on PlaneInk, matt, as intended.
