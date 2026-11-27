@@ -6444,6 +6444,206 @@ namespace TheaterFx
 		}
 	}
 
+	void Battle::Struck(double Now, const Vec& At, const Vec& DirIn, const char* WeaponIn, const char* PartIn, int Through)
+	{
+		// Effects (R2), the blood mist (Brian, 26 November: "like a puff or mist of blood"), to how a rifle's or a
+		// machine gun's round truly struck: on the side it went in almost nothing, a little pale dust off the cloth; on
+		// the side it left, where it passed through, a fine dull red-pink mist thrown on along its path a forearm to an
+		// arm long, widening, mostly gone in 0.3 to 0.5 s, and a few dark drops falling short. No fountain, no pool,
+		// nothing that hangs. Every number is the row's; its own dice, so every other effect draws as before.
+		StruckLaid = 0;
+		bStruckThrough = false;
+		const std::string P = "men.struck.";
+		if (!(Num(P + "on", 0.0) > 0.0) || !RealPlace(At) || !(Now == Now))
+		{
+			return;
+		}
+		const double Within = SafeNum(Num(P + "within_m", 400.0), 1.0, 5000.0, 400.0);
+		if (bEyeKnown && (LastEye - At).Length() > Within)
+		{
+			return; // (far past what the eye could see of it: nothing laid, nothing counted)
+		}
+		// (the room as the screen holds it, what can be drawn: a barrage behind the eye does not stop it)
+		const double RoomK = SafeNum(Num(P + "room_share", 0.8), 0.0, 1.0, 0.8);
+		if (static_cast<double>(RoomSeen()) >= RoomK * static_cast<double>(std::max(1, MaxPuffs)))
+		{
+			return;
+		}
+		const Vec Dir = DirIn.Unit(Vec(1.0, 0.0, 0.0));
+		const std::string Weapon = WeaponIn && *WeaponIn ? WeaponIn : "other";
+		const std::string Part = PartIn ? PartIn : "";
+		const bool bHead = Part == "head" || Part == "neck";
+		const bool bLimb = Part.rfind("thigh", 0) == 0 || Part.rfind("calf", 0) == 0 || Part.rfind("foot", 0) == 0 || Part.rfind("upperarm", 0) == 0
+			|| Part.rfind("lowerarm", 0) == 0 || Part.rfind("hand", 0) == 0;
+		const uint64_t When = static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0));
+		const uint64_t High = static_cast<uint64_t>(static_cast<int64_t>(std::floor(At.Z * 100.0)));
+		Dice D(Mix64(PlaceKey(At) ^ 0xA0761D6478BD642Full) ^ Mix64(When * 0x9E3779B97F4A7C15ull + High * 0xC2B2AE3D27D4EB4Full + 0x5EEDull));
+		// Whether it passed through: a rifle's or an mg's full-power round at battle ranges mostly does, through a limb
+		// almost always; a sub-machine gun's or a pistol's slower round mostly stays in the body.
+		double Odds = Num(P + "through." + Weapon, Num(P + "through.other", 0.4));
+		if (bLimb)
+		{
+			Odds *= Num(P + "through.limb_k", 1.15);
+		}
+		else if (bHead)
+		{
+			Odds *= Num(P + "through.head_k", 1.0);
+		}
+		const double Roll = D.U();
+		bStruckThrough = Through >= 0 ? Through > 0 : Roll < SafeNum(Odds, 0.0, 1.0, 0.4);
+		const Span EntryLife = Range(P + "entry.life_s", 0.2, 0.28);
+		const Span EntryR = Range(P + "entry.r_m", 0.07, 0.11);
+		const Rgb Cloth = Picture(P + "entry.colour", Rgb::FromPicture(141, 135, 124));
+		const double LeastKeep = SafeNum(Num(P + "least_keep", 0.35), 0.0, 1.0, 0.35);
+		// The way in: a small pale puff of the cloth's dust, kicked back toward the shot.
+		{
+			const double Back = D.U(0.3, 0.7);
+			const double Life = SafeNum(EntryLife.Pick(D), 0.05, 0.9, 0.25);
+			const double Grown = EntryR.Pick(D);
+			Bit B;
+			B.Born = Now;
+			B.From = At - Dir * SafeNum(Num(P + "entry.skin_m", 0.1), 0.0, 0.5, 0.1);
+			B.Vel = Dir * -Back + Vec(0.0, 0.0, 0.3);
+			B.Drag = 6.0;
+			B.Windage = 0.5;
+			B.Life = Life;
+			B.R0 = 0.03;
+			B.R1 = SafeNum(Grown, 0.01, 0.5, 0.09);
+			B.Grow = 0.4;
+			B.Col = Cloth;
+			B.Col2 = Cloth;
+			B.Alpha = SafeNum(Num(P + "entry.alpha", 0.35), 0.0, 1.0, 0.35);
+			B.FadeIn = 0.01;
+			B.Hold = 0.1;
+			B.Heart = 0.6;
+			B.Rim = 0.0;
+			B.Rough = 0.3;
+			B.LeastPx = SafeNum(Num(P + "entry.least_px", 1.5), 0.0, 16.0, 1.5);
+			B.LeastKeep = LeastKeep;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			Bits.push_back(B);
+			++StruckLaid;
+		}
+		if (!bStruckThrough)
+		{
+			return;
+		}
+		// The way out: the mist, thrown on along the round's path from the far side, each puff its own speed so they
+		// string out along it, widening fast and thinning; a head's shorter and denser.
+		const std::string Q = bHead ? P + "head." : P + "mist.";
+		const Span Pieces = Range(Q + "pieces", 3.0, 4.0);
+		const Span Speed = Range(Q + "speed_mps", 3.0, 8.0);
+		const Span Life = Range(Q + "life_s", 0.3, 0.5);
+		const Span Wide = Range(Q + "r1_m", 0.14, 0.24);
+		const double Drag = SafeNum(Num(Q + "drag", 10.0), 0.5, 60.0, 10.0);
+		const double Spread = SafeNum(Num(Q + "spread", 0.12), 0.0, 1.0, 0.12);
+		const double MistAlpha = SafeNum(Num(Q + "alpha", 0.5), 0.0, 1.0, 0.5);
+		const double Exit = SafeNum(Num(P + "exit_m", 0.1), 0.0, 0.5, 0.1);
+		// (each piece set off a little further along the path by its share, so end-on it breaks into an uneven smear,
+		// not a ball; and when it starts to thin: no row, as before)
+		const double ExitStep = SafeNum(Num(Q + "exit_step_m", 0.0), 0.0, 0.5, 0.0);
+		const double MistHold = SafeNum(Num(Q + "hold", 0.12), 0.0, 1.0, 0.12);
+		// (and set off a little across the path too, by the piece's own jitter with its part along the path taken out,
+		// each a size by its share and the first thinner, so seen end-on, along the line of sight, it is an uneven
+		// smear and not a ball; no row, as before, and no new die)
+		const double SideM = SafeNum(Num(Q + "side_m", 0.0), 0.0, 0.3, 0.0);
+		const double WideK = SafeNum(Num(Q + "r1_share_k", 0.0), -0.9, 0.9, 0.0);
+		const double FirstK = SafeNum(Num(Q + "first_alpha_k", 1.0), 0.0, 1.0, 1.0);
+		const Rgb Mist = Picture(Q + "colour", Picture(P + "mist.colour", Rgb::FromPicture(124, 88, 85)));
+		const Rgb MistOld = Picture(Q + "colour_late", Picture(P + "mist.colour_late", Rgb::FromPicture(125, 104, 99)));
+		const int N = std::clamp(D.Whole(static_cast<int>(SafeNum(Pieces.A, 0.0, 6.0, 3.0)), static_cast<int>(SafeNum(Pieces.B, 0.0, 6.0, 4.0))), 0, 6);
+		const double MistPx = SafeNum(Num(P + "mist.least_px", 2.0), 0.0, 16.0, 2.0);
+		for (int K = 0; K < N; ++K)
+		{
+			const double Share = (K + 0.5) / std::max(1, N);
+			const double Jx = D.Bell();
+			const double Jy = D.Bell();
+			const double Jz = D.Bell();
+			const double Fast = D.U(0.85, 1.15);
+			const double Lives = Life.Pick(D);
+			const double Grown = Wide.Pick(D);
+			const Vec Way = (Dir + Vec(Jx, Jy, Jz) * Spread).Unit(Dir);
+			Bit B;
+			B.Born = Now;
+			B.From = At + Dir * (Exit + ExitStep * Share);
+			if (SideM > 0.0)
+			{
+				const Vec Jit(Jx, Jy, Jz);
+				const double AlongJ = Jit.Dot(Dir);
+				const Vec Across = Jit - Dir * AlongJ;
+				B.From = B.From + Across * SideM;
+			}
+			B.Vel = Way * ((Speed.A + (Speed.B - Speed.A) * Share) * Fast);
+			B.Drag = Drag;
+			B.Gravity = 0.6;
+			B.Windage = 0.4;
+			B.Life = SafeNum(Lives, 0.05, 0.9, 0.4);
+			B.R0 = 0.03;
+			B.R1 = SafeNum(Grown, 0.02, 0.6, 0.18);
+			if (WideK != 0.0)
+			{
+				B.R1 = SafeNum(B.R1 * (1.0 + WideK * (Share - 0.5)), 0.02, 0.6, 0.18);
+			}
+			B.Grow = 0.45;
+			B.Along = Way;
+			B.Stretch = 1.5;
+			B.Col = Mist;
+			B.Col2 = MistOld;
+			B.Alpha = MistAlpha * (1.0 - 0.35 * Share); // (thickest where it leaves him, thinning along its throw)
+			if (K == 0)
+			{
+				B.Alpha = B.Alpha * FirstK;
+			}
+			B.FadeIn = 0.008;
+			B.Hold = MistHold;
+			B.Heart = 0.75;
+			B.Rim = 0.0;
+			B.Inner = 0.4;
+			B.Rough = 0.35;
+			B.LeastPx = MistPx;
+			B.LeastKeep = LeastKeep;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			Bits.push_back(B);
+			++StruckLaid;
+		}
+		// A few heavier drops, dark, falling short within a metre.
+		const Span Drops = Range(P + "drops.pieces", 2.0, 3.0);
+		const Span DropSpeed = Range(P + "drops.speed_mps", 1.5, 3.0);
+		const Span DropLife = Range(P + "drops.life_s", 0.3, 0.45);
+		const Span DropR = Range(P + "drops.r_m", 0.006, 0.01);
+		const Rgb Dark = Picture(P + "drops.colour", Rgb::FromPicture(85, 56, 54));
+		const int ND = std::clamp(D.Whole(static_cast<int>(SafeNum(Drops.A, 0.0, 4.0, 2.0)), static_cast<int>(SafeNum(Drops.B, 0.0, 4.0, 3.0))), 0, 4);
+		for (int K = 0; K < ND; ++K)
+		{
+			const double Jx = D.Bell();
+			const double Jy = D.Bell();
+			const double Jz = D.Bell();
+			const double Fast = DropSpeed.Pick(D);
+			const double Lives = DropLife.Pick(D);
+			const double Size = DropR.Pick(D);
+			const Vec Way = (Dir + Vec(Jx, Jy, Jz) * (Spread * 1.5)).Unit(Dir);
+			Bit B;
+			B.Form = Bit::Shape::Streak;
+			B.Born = Now;
+			B.From = At + Dir * Exit;
+			B.Vel = Way * Fast;
+			B.Drag = 2.0;
+			B.Gravity = 9.8;
+			B.Life = SafeNum(Lives, 0.05, 0.9, 0.4);
+			B.R0 = B.R1 = SafeNum(Size, 0.002, 0.05, 0.008);
+			B.Col = Dark;
+			B.Col2 = Dark;
+			B.Alpha = SafeNum(Num(P + "drops.alpha", 0.85), 0.0, 1.0, 0.85);
+			B.FadeIn = 0.005;
+			B.Hold = 0.6;
+			B.Heart = 0.9;
+			B.Rim = 0.3;
+			B.LeastPx = SafeNum(Num(P + "drops.least_px", 0.8), 0.0, 8.0, 0.8);
+			Bits.push_back(B);
+			++StruckLaid;
+		}
+	}
+
 	void Battle::Tracer(double Born, const Vec& Start, const Vec& Way, const Vec& Vel, double For, double Drag, double Drop, double Half, double AlphaK, double Behind, double Until)
 	{
 		if (Half <= 0.0)

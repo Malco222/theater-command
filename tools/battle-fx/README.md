@@ -2279,3 +2279,50 @@ because the lamps went to the strongest flashes alone.
   - Every default lamp of a scripted land and sea fight, held to the kit before the rule byte for byte.
 - Preview: `FX_GUN=naval_heavy` on the sea shot.
 - Notes for the sea scene: `/mnt/project-files/sea-storm-night/effects-lamps-for-sea.md`.
+
+## A bullet striking a man: the blood mist (men.struck, behind the scene's -TheaterLandHitMist)
+
+Brian, 26 November: "i do want a better look when a guy gets hit", "like a puff or mist of blood". The look is what a
+rifle's or a machine gun's round truly did, sober, never a game's: `Battle::Struck(Now, At, Dir, Weapon, Part,
+Through = -1)`, called by the land scene for each man a bullet strikes (LandMen's `Crowd::StrikesIn`: where on him,
+the way the round went, its weapon, the part struck).
+
+- **Where it goes in:** almost nothing. One pale puff of cloth dust off the tunic (`entry`: 7 to 11 cm, alpha 0.35,
+  kicked a little back toward the shot), gone in 0.2 to 0.28 s.
+- **Whether it passes through:** the strike's own dice, by weapon (`through`): rifle and mg 0.8 (full-power 7.92 mm,
+  .303, .30-06 and 7.62 mm rounds at 750 to 850 m/s mostly went through the body at battle ranges), sub-machine gun
+  0.3 and pistol 0.25 (the slower 9 mm or .45 mostly stayed in), a wound with no round known 0.4; times `limb_k` 1.15
+  through an arm or a leg (rifle 0.92), `head_k` 1 through the head. A lodged round: the cloth puff alone.
+- **Where it leaves:** a fine dull red-pink mist thrown on along the round's path from 10 cm past the strike (`mist`:
+  3 to 4 puffs strung along it by their speeds, each set off a little further along it (`exit_step_m` 0.1 m times
+  its share), set off a little across it too (`side_m` 0.06 m times each piece's own jitter with its part along the
+  path taken out: no new die), sized by its place along it (`r1_share_k` 0.6: the first smaller, the last larger),
+  the first thinner (`first_alpha_k` 0.8: alpha 0.4), and spread a fifth of a radian about it (`spread` 0.2), so
+  seen end-on, along the line of sight, it breaks into an uneven smear, not a ball (no `side_m`, `r1_share_k` or
+  `first_alpha_k` row: as before, to the byte); 3 to 8 m/s against drag 10, so 0.3 to 0.8 m: a forearm to an arm
+  long), each widening to 14 to 24 cm and thinning along the throw, alpha 0.5 down to a third less at its end, gone
+  in 0.3 to 0.5 s, the young colour turning darker and browner as it thins, never paler (`colour`, `colour_late`: a
+  pale tail over dark ground read as dust), its alpha carrying the thinning (`hold` 0.06: it starts to thin early). A head strike (`head`): 4 to
+  5 puffs, shorter (2 to 5 m/s, drag 12), smaller and denser (alpha 0.62), gone in 0.25 to 0.4 s. And 2 to 3 heavier
+  dark drops (`drops`: streaks 6 to 10 mm, falling under gravity, gone in 0.3 to 0.45 s, within a metre).
+- **Bounded:** nine pieces at the most (1 + 5 + 3), all gone within the second; no lamp, no mark, nothing on the
+  ground. Nothing past `within_m` (400 m) of the eye, or with the screen's room `room_share` (0.8) full of what can be
+  drawn. Far off a mist puff is held at `mist.least_px` (2 px) across and thinned to match, never under `least_keep`
+  (0.35) of itself: a few pixels of dark pink at 100 m that fade rather than pop, next to nothing at 300 m.
+- **Colour, written to land:** the land battle grades its own picture, so the row's colours under `land_grade.men.struck`
+  are written with `land_grade.py write` and land (`land_grade.py lands`): the mist young 162,97,47 lands 111,69,48 (aimed at 110,66,46: green
+  well over blue, so it holds red-brown and not mauve as it blends into a blue-grey sky; 112,64,56 was not enough), as
+  it thins 141,101,77 lands 91,64,54 (darker and browner than the young, aimed at 92,66,54), the drops 126,64,58 land 55,23,25, the cloth 166,154,126 lands 152,146,128. The
+  plain row (`men.struck`, for the game's own curve) lands about the same through `game_curve.py`. A dull dark
+  pink-brown against the grass; against the sky, thin as it is, a pale rose-grey darker than the sky (measured in the graded 20 m picture: 151,144,143 against 169,171,174 at +0.05 s, 180,177,180 against 203,206,210 at +0.15 s; green now at or a little above blue young, about level with it as it thins: a warm grey-rose, no longer mauve, but not red-brown either; thin over a bright sky a dark mist cannot land dark),
+  not black; not paint. **The red is the art director's to rule on.**
+- **Own dice** (the strike's place and its time in ms), so every other effect draws as before with strikes among
+  them; one draw a statement.
+- **Switch:** the call itself and the row. No call, or no `men.struck.on` in the recipe: nothing is laid or drawn, and
+  every frame of the kit is as before to the byte (fxpreview: 4060f0923's core and recipe against this core with
+  4060f0923's recipe and with this recipe, the men.struck row in and never called: 8 shots, 18 frames and their prints,
+  the same; the land grade, sRGB bytes and soft contact among them).
+- **Tests and pictures:** `unreal/TheaterCommand/Tools/land_mist/run.sh` (the kit alone, the men's strikes, the four
+  recordings, g++ and clang++); `land_mist_picture.cpp` and `land_mist_pictures.py` (the men from LandMen's own skinning
+  with the kit's previewer's painter, graded through the land battle's grade). Pictures in
+  `battle-fx/hits/pictures/mist_*.png`.
