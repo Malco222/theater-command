@@ -13660,6 +13660,39 @@ float ACampaignMapActor::SnowLying(const FVector2D& P, float Hard)
 	return 1.0f - static_cast<float>(FMath::SmoothStep(Line - 170.0, Line + 60.0, P.Y + Ragged));
 }
 
+void ACampaignMapActor::MakeSnowMasks(float Hard, TArray<FColor>& Pixels) const
+{
+	// (Release 2, the season turns: SetSeason's own paint of the snow, unchanged, made a function of its own so that
+	// the turn can paint the month before's snow too, for a turn played again for a picture.)
+	Pixels = Paint.Masks;
+	if (Hard > 0.0f)
+	{
+		const int32 NX = Terrain.NX, NY = Terrain.NY;
+		ParallelFor(NY, [&](int32 J)
+		{
+			for (int32 I = 0; I < NX; ++I)
+			{
+				const int32 Idx = Terrain.Index(I, J);
+				if (Terrain.Coverage[Idx] < 0.4f)
+				{
+					continue; // the sea does not lie under snow
+				}
+				const FVector2D P(I * Terrain.Cell, J * Terrain.Cell);
+				const float Lying = SnowLying(P, Hard);
+				// It lies thinner than on the crests, so that each country's colour still shows through it: under
+				// the stained paint a dusting is enough to turn the country white, so it is a thin one.
+				const float Plain = 0.15f * FMath::Sqrt(Hard) * Lying;
+				// And the snow line on the mountains comes down.
+				const float H = Terrain.Height[Idx];
+				const float High = 0.9f * FMath::SmoothStep(5.0f - 1.5f * Hard, 6.6f - 1.7f * Hard, H);
+				const float Rock = Pixels[Idx].R / 255.0f;
+				const float Snow = FMath::Max3(Pixels[Idx].G / 255.0f, Plain * (1.0f - 0.35f * Rock), High);
+				Pixels[Idx].G = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Snow * 255.0f), 0, 255));
+			}
+		});
+	}
+}
+
 void ACampaignMapActor::SetSeason(int32 Turn)
 {
 	THEATER_SPEED_SCOPE(SetSeason);
@@ -13675,9 +13708,11 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 	{
 		return;
 	}
+	const bool bStepped = ShownMonth >= 0 && Month == (ShownMonth + 1) % 12; // (release 2, the season turns: the month has turned on by one in play)
 	ShownMonth = Month;
 	// How hard the winter lies in each month of the year.
 	const float Hard = WinterHardInMonth(Month);
+	NoteSeason(Month, Hard, WinterHardInMonth(Month + 11), bStepped);
 	{
 		// (The stripes of occupied ground are laid stronger where snow lies, so that they show as well in January as
 		// in July: the painter is told how far the snow takes each province toward white, and occupied ground is
@@ -13749,34 +13784,14 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 	{
 		THEATER_SPEED_SCOPE(SeasonMasks);
 		MasksSentFor = Hard;
-		TArray<FColor> Pixels = Paint.Masks;
-		if (Hard > 0.0f)
+		TArray<FColor> Pixels;
+		MakeSnowMasks(Hard, Pixels);
+		// (Release 2, the season turns: with tc.Map.SeasonTurn the month's new snow is handed to the turn, which spreads
+		// it over the land in the frames after this one, in place of sending it now.)
+		if (!TakeSeasonSnow(Pixels))
 		{
-			const int32 NX = Terrain.NX, NY = Terrain.NY;
-			ParallelFor(NY, [&](int32 J)
-			{
-				for (int32 I = 0; I < NX; ++I)
-				{
-					const int32 Idx = Terrain.Index(I, J);
-					if (Terrain.Coverage[Idx] < 0.4f)
-					{
-						continue; // the sea does not lie under snow
-					}
-					const FVector2D P(I * Terrain.Cell, J * Terrain.Cell);
-					const float Lying = SnowLying(P, Hard);
-					// It lies thinner than on the crests, so that each country's colour still shows through it: under
-					// the stained paint a dusting is enough to turn the country white, so it is a thin one.
-					const float Plain = 0.15f * FMath::Sqrt(Hard) * Lying;
-					// And the snow line on the mountains comes down.
-					const float H = Terrain.Height[Idx];
-					const float High = 0.9f * FMath::SmoothStep(5.0f - 1.5f * Hard, 6.6f - 1.7f * Hard, H);
-					const float Rock = Pixels[Idx].R / 255.0f;
-					const float Snow = FMath::Max3(Pixels[Idx].G / 255.0f, Plain * (1.0f - 0.35f * Rock), High);
-					Pixels[Idx].G = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Snow * 255.0f), 0, 255));
-				}
-			});
+			CampaignTextures::Update(MasksPicture, Pixels);
 		}
-		CampaignTextures::Update(MasksPicture, Pixels);
 	}
 	// The year turns on the table. The woods: fresh green in spring, gold and russet through the autumn, bare in
 	// winter where they are not fir. The cloth of the woods seen from far off takes the same turn.
@@ -14170,6 +14185,12 @@ void ACampaignMapActor::ShowMud(const TArray<int32>& Regions)
 	}
 	ShownMud = Regions;
 	OrdersMesh->ClearMeshSection(7);
+	// (Release 2, the season turns, tc.Map.SeasonTurn: the mud painted into the ground itself, soaking out from the
+	// rivers and the low ground and stopping inside the rules' ground; Campaign/CampaignSeasonTurn.cpp.)
+	if (AskSeasonMud(Regions))
+	{
+		return;
+	}
 	if (Regions.Num() == 0)
 	{
 		return;
@@ -18180,6 +18201,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	UpdateSidesFade(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f); // (release 2: the Y key's sides view fades, tc.Speed.SidesFade)
 	PlantTreesDue(CameraFocus); // (release 2, map run 8: the woods' month turn, a few squares a frame, tc.Speed.TreesSpread)
 	UpdateOwnershipPaint();
+	UpdateSeasonTurn(); // (release 2: the season turns, CampaignSeasonTurn.cpp; tc.Map.SeasonTurn, nothing while it is off)
 	// The showpiece turns slowly on its stand.
 	if (ShowMesh && !ShowModel.IsEmpty() && GetWorld())
 	{
