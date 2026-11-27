@@ -1132,13 +1132,29 @@ int main(int argc, char** argv)
 		}
 		// (a captured tank: her captor's mark stays large, at half as big again as its real size; the art director's
 		// ruling of 17:56Z, with the reason in the caption)
+		// (LAND_KIT_TAKEN=<model>,<captor>,<taken from>, as Tiger,USA,GER: these panels of another captured tank
+		// than the T-34 in German hands, for looking at where each one's plates take her captor's mark)
+		std::string TakenModel = "T34", TakenBy = "GER", TakenFrom = "SOV", TakenSays = "captured T-34 in German hands", TakenShort = "captured T-34";
+		if (const char* Taken = std::getenv("LAND_KIT_TAKEN"))
+		{
+			const std::string Words = Taken;
+			const size_t C1 = Words.find(','), C2 = C1 == std::string::npos ? C1 : Words.find(',', C1 + 1);
+			if (C2 != std::string::npos)
+			{
+				TakenModel = Words.substr(0, C1);
+				TakenBy = Words.substr(C1 + 1, C2 - C1 - 1);
+				TakenFrom = Words.substr(C2 + 1);
+				TakenShort = "captured " + TakenModel;
+				TakenSays = TakenShort + " (" + TakenFrom + ") in " + TakenBy + " hands";
+			}
+		}
 		for (int After = 0; After < 2; ++After)
 		{
 			Panel P;
 			P.File = std::string("realmarks_h_captured") + (After ? "_2_real" : "_1_was");
-			P.ModelName = "T34";
-			P.Nation = "GER";
-			P.Captured = "SOV";
+			P.ModelName = TakenModel;
+			P.Nation = TakenBy;
+			P.Captured = TakenFrom;
 			P.Year = 1943;
 			P.Month = 7;
 			P.bMarks = true;
@@ -1148,7 +1164,7 @@ int main(int argc, char** argv)
 			P.CameraBearing = 62.0;
 			P.CameraUp = 9.0;
 			P.bDay = true;
-			P.Caption = std::string("captured T-34 in German hands") + (After ? ", kept large on purpose (crews painted a captured tank's mark oversize so their own gunners held fire)" : ", as it was");
+			P.Caption = TakenSays + (After ? ", kept large on purpose (crews painted a captured tank's mark oversize so their own gunners held fire)" : ", as it was");
 			Panels.push_back(P);
 		}
 		// (her back plate and her roof: the back's mark by her sides' rule, the roof's an air mark of 0.6 m at most; the
@@ -1159,9 +1175,9 @@ int main(int argc, char** argv)
 			{
 				Panel P;
 				P.File = std::string(View == 0 ? "realmarks_i_captured_back" : "realmarks_j_captured_top") + (After ? "_2_real" : "_1_was");
-				P.ModelName = "T34";
-				P.Nation = "GER";
-				P.Captured = "SOV";
+				P.ModelName = TakenModel;
+				P.Nation = TakenBy;
+				P.Captured = TakenFrom;
 				P.Year = 1943;
 				P.Month = 7;
 				P.bMarks = true;
@@ -1171,7 +1187,7 @@ int main(int argc, char** argv)
 				P.CameraBearing = View == 0 ? 200.0 : 62.0;
 				P.CameraUp = View == 0 ? 14.0 : 58.0;
 				P.bDay = true;
-				P.Caption = std::string(View == 0 ? "the captured T-34's back plate" : "the captured T-34 from above")
+				P.Caption = "the " + TakenShort + (View == 0 ? "'s back plate" : " from above")
 					+ (After ? (View == 0 ? ", by her sides' rule" : ", her roof's air mark, bounded") : (View == 0 ? ", as it was: 0.50 m across" : ", as it was: 0.60 m across"));
 				Panels.push_back(P);
 			}
