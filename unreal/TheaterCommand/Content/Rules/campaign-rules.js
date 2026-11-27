@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ae74b605a 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f5c8fcec8 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -26934,22 +26934,26 @@
     for (const nat of Object.keys(g2.nations)) if (binds(g2, nat)) stampLevels(g2, nat);
   }
   function riflesFold(g2, keep3, gone, from2) {
-    if (!carries(g2, keep3.nat)) return 0;
+    const r = foldReckon(g2, keep3, gone, from2);
+    if (r.lvl !== null) setLevel(g2, keep3, r.lvl);
+    if (r.past > 0) riflesBack(g2, keep3.nat, r.past);
+    if (r.worn > 0) riflesBack(g2, keep3.nat, r.worn);
+    return r.past + r.worn;
+  }
+  function riflesFoldGives(g2, keep3, gone, from2) {
+    const r = foldReckon(g2, keep3, gone, from2);
+    return r.past + r.worn;
+  }
+  function foldReckon(g2, keep3, gone, from2) {
+    if (!carries(g2, keep3.nat)) return { lvl: null, past: 0, worn: 0 };
     const worn = Math.max(0, levelOf(g2, gone) - gone.str) * gone.divs;
-    let gave = 0;
+    let lvl = null, past = 0;
     if (from2 > 0 && keep3.divs > 0) {
-      const full = keep3.full ?? 1, lvl = levelOf(g2, keep3) + from2 / keep3.divs;
-      setLevel(g2, keep3, Math.min(full, lvl));
-      if (lvl > full) {
-        riflesBack(g2, keep3.nat, (lvl - full) * keep3.divs);
-        gave += (lvl - full) * keep3.divs;
-      }
+      const full = keep3.full ?? 1, l = levelOf(g2, keep3) + from2 / keep3.divs;
+      lvl = Math.min(full, l);
+      if (l > full) past = (l - full) * keep3.divs;
     }
-    if (worn > 0) {
-      riflesBack(g2, keep3.nat, worn);
-      gave += worn;
-    }
-    return gave;
+    return { lvl, past, worn };
   }
   function storeRifles(g2, nat, divs) {
     if (!carries(g2, nat) || !(divs > 0)) return null;
@@ -80753,11 +80757,19 @@
     const n = per === null ? v.back > 0 ? v.back.toLocaleString("en-US") : null : Math.round(v.over * per / 1e3) > 0 ? `about ${men1000(v.over * per)}` : null;
     if (n === null) {
       const spare = gave === void 0 ? null : storeRifles(g2, nat, gave + v.over);
-      return { men: men2, back: null, over: null, ...gave === void 0 ? {} : { spare: spare === null ? null : `and ${spare} spare rifle${spare === "one" ? "" : "s"} to the store` } };
+      const one2 = spare === "one";
+      return { men: men2, back: null, over: spare === null ? null : `${spare[0].toUpperCase()}${spare.slice(1)} spare rifle${one2 ? "" : "s"} go${one2 ? "es" : ""} to the store.`, ...gave === void 0 ? {} : { spare: spare === null ? null : `and ${spare} spare rifle${one2 ? "" : "s"} to the store` } };
     }
     const up = n[0].toUpperCase() + n.slice(1);
     const more = gave === void 0 || !rifles ? null : storeRifles(g2, nat, gave);
-    return { men: men2, back: `${n} sent back to the reserve${more === null ? rifles : `, and their rifles and ${more} more to the store`}`, over: `${up} men over go back to the reserve${rifles}.` };
+    const their = more === null ? rifles : `, and their rifles and ${more} more to the store`;
+    return { men: men2, back: `${n} sent back to the reserve${their}`, over: `${up} men over go back to the reserve${their}.` };
+  }
+  var fromOf2 = (keep3, v) => Math.max(0, v.str * keep3.divs - keep3.str * keep3.divs);
+  function foldCardLines(g2, nat, v) {
+    const keep3 = g2.corps.find((c) => c.id === v.keep), gone = g2.corps.find((c) => c.id === v.gone);
+    const w = foldWords(g2, nat, v, keep3 && gone ? riflesFoldGives(g2, keep3, gone, fromOf2(keep3, v)) : void 0);
+    return { men: w.men, one: `in one ${orderNoun(keep3?.kind)}`, over: w.over };
   }
   function foldCardWords(nat) {
     const per = menScale(nat);
@@ -80781,7 +80793,7 @@
   function foldCorps(g2, keep3, gone) {
     if (whyNotFold(g2, keep3, gone) !== null) return false;
     const v = foldView(g2, keep3, gone), n = g2.nations[keep3.nat], reg = keep3.reg;
-    const mine4 = keep3.str * keep3.divs, fill9 = v.str * keep3.divs, from2 = Math.max(0, fill9 - mine4);
+    const mine4 = keep3.str * keep3.divs, fill9 = v.str * keep3.divs, from2 = fromOf2(keep3, v);
     if (keep3.mor !== void 0 && gone.mor !== void 0 && fill9 > 0) keep3.mor = (keep3.mor * mine4 + gone.mor * from2) / fill9;
     keep3.xp = v.xp;
     keep3.org = v.org;
@@ -109244,7 +109256,7 @@
       reckon: { k: AIRWAR.success.k, value: fc.worth - 300 * ((fc.rail ?? 0) + (fc.ruin ?? 0)), rail: fc.rail ?? 0, ruin: fc.ruin ?? 0 },
       bombs: bombLaw(g2, a, m, target),
       starts: starts2,
-      from: fromOf2(att.map((f) => !!carrierOf(g2, a.att.find((x) => x.f.id === f.corps).f))),
+      from: fromOf3(att.map((f) => !!carrierOf(g2, a.att.find((x) => x.f.id === f.corps).f))),
       saved: { att: AIR.pilots.away, def: AIR.pilots.home },
       ...ships ? { ships } : {},
       ...marks ? { marks } : {},
@@ -109289,7 +109301,7 @@
   var harbourOf2 = (place3) => /\bHarbou?r\b/.test(place3) ? place3 : `the harbour of ${place3}`;
   var OPEN_SEA = { land: [], rivers: [], borders: [], target: [], terrain: "sea", inland: false, north: [0, 1] };
   var seaGround = (turn2) => ({ ...OPEN_SEA, north: [Math.round(-Math.sin(turn2) * 1e6) / 1e6 + 0, Math.round(Math.cos(turn2) * 1e6) / 1e6 + 0] });
-  function fromOf2(decks) {
+  function fromOf3(decks) {
     return decks.length && decks.every(Boolean) ? "sea" : decks.some(Boolean) ? "both" : "land";
   }
   function force(g2, f, kind, n, share) {
@@ -122822,20 +122834,24 @@ ${standing6}`,
       return {
         heading: a && b ? `${a.name.toUpperCase()} AND ${b.name.toUpperCase()}` : "TWO CORPS",
         text: a && b ? `${a.name}: ${fw.men(a)}, ${pct14(fw.share(a.str, a))} of its strength. ${b.name}: ${fw.men(b)}, ${pct14(fw.share(b.str, b))}.` : "",
-        rows: p.map((v) => ({
-          nat: s.human,
-          title: `Keep ${v.keepName}`,
-          lines: [
-            `${upFirst5(foldWords(s, s.human, v).men)} in one corps at ${pct14(fw.share(v.str, corpsOfId(v.keep)))} of its strength, ${grade(v.xp).toLowerCase()}.`,
-            v.general ? `${v.general} commands${v.stepsDown ? `; ${v.stepsDown} goes to the list of generals waiting for a corps` : ""}.` : "No general commands it.",
-            // (The men in words from fold.ts foldWords, as the news and the page say them: the UI director's point 4 of 26 November 2026.)
-            foldWords(s, s.human, v).over ?? "",
-            v.works !== void 0 ? `It takes over the fieldworks ${v.goneName} stands in.` : "",
-            `${v.goneName} goes home as a cadre: it can be raised again from the arsenal for ${fw.cadre(v, shown(v.cadreCost).toLocaleString("en"))}, in ${fw.months(v.cadreMonths, `${v.cadreMonths} month${v.cadreMonths === 1 ? "" : "s"}`)}.`,
-            v.why ?? ""
-          ].filter(Boolean),
-          buttons: [{ label: `FOLD INTO ${v.keepName.toUpperCase()}`, act: `fold:${v.keep}:${v.gone}`, ok: !v.why, danger: true, tip: v.why ?? `${v.keepName} takes in the men of ${v.goneName}. It cannot be undone.` }]
-        }))
+        rows: p.map((v) => {
+          const w = foldCardLines(s, s.human, v);
+          return {
+            nat: s.human,
+            title: `Keep ${v.keepName}`,
+            lines: [
+              // (The men, the kept unit's noun and the men sent back from fold.ts foldCardLines, as the page says them: the UI director's seventh read of 26 November 2026, point 1.)
+              `${upFirst5(w.men)} ${w.one} at ${pct14(fw.share(v.str, corpsOfId(v.keep)))} of its strength, ${grade(v.xp).toLowerCase()}.`,
+              v.general ? `${v.general} commands${v.stepsDown ? `; ${v.stepsDown} goes to the list of generals waiting for a corps` : ""}.` : "No general commands it.",
+              // (The men in words from fold.ts foldWords, as the news and the page say them: the UI director's point 4 of 26 November 2026.)
+              w.over ?? "",
+              v.works !== void 0 ? `It takes over the fieldworks ${v.goneName} stands in.` : "",
+              `${v.goneName} goes home as a cadre: it can be raised again from the arsenal for ${fw.cadre(v, shown(v.cadreCost).toLocaleString("en"))}, in ${fw.months(v.cadreMonths, `${v.cadreMonths} month${v.cadreMonths === 1 ? "" : "s"}`)}.`,
+              v.why ?? ""
+            ].filter(Boolean),
+            buttons: [{ label: `FOLD INTO ${v.keepName.toUpperCase()}`, act: `fold:${v.keep}:${v.gone}`, ok: !v.why, danger: true, tip: v.why ?? `${v.keepName} takes in the men of ${v.goneName}. It cannot be undone.` }]
+          };
+        })
       };
     });
     return {

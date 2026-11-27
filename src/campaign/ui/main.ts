@@ -71,7 +71,7 @@ import { GOOD_NAME, RES, fieldCard, fieldOverseas, fieldYield, keepsStores, lane
 import { LEAGUE, leagueFounded, leagueMembers, ownPath, small as isSmall, type PathId, type PathOption } from '../league';
 import { ARSENAL, canLay, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel, worksOpening, yardLevel, type Hull, type Offer } from '../arsenal';
 import { arsenalTop, riflesWait } from '../rifles';
-import { foldCardWords, foldWords } from '../fold';
+import { foldCardLines, foldCardWords } from '../fold';
 import { PLANS, buildsOwn, planRules } from '../plans';
 import { GUARD_TOP, guardSays, guardTabs, type GuardTab } from '../guard';
 import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf, type Trait } from '../traits';
@@ -3740,9 +3740,10 @@ function foldCard(reg: number): string {
   // (Each corps' men and the cadre's price at the nation's own scale, from fold.ts as the 3D card says them: the UI director's second read of 26 November 2026, 03:16Z, point 1.)
   const fw = foldCardWords(g.human!);
   const row = (v: (typeof vs)[number]): string => {
-    const w = foldWords(g, g.human!, v);
+    // (The men, the kept unit's noun and the men sent back from fold.ts foldCardLines, as the 3D card says them: the UI director's seventh read of 26 November 2026, point 1.)
+    const w = foldCardLines(g, g.human!, v);
     const bits = [
-      `<b>${esc(upFirst(w.men))}</b> in one corps at ${pct(fw.share(v.str, g.corps.find((c) => c.id === v.keep)))} of its strength, ${esc(grade(v.xp).toLowerCase())}.`,
+      `<b>${esc(upFirst(w.men))}</b> ${esc(w.one)} at ${pct(fw.share(v.str, g.corps.find((c) => c.id === v.keep)))} of its strength, ${esc(grade(v.xp).toLowerCase())}.`,
       v.general ? `${esc(v.general)} commands${v.stepsDown ? `; ${esc(v.stepsDown)} goes to the list of generals waiting for a corps` : ''}.` : 'No general commands it.',
       // (The men in words from fold.ts foldWords, as the news and the 3D card say them: the UI director's point 4 of 26 November 2026.)
       w.over ? esc(w.over) : '',
