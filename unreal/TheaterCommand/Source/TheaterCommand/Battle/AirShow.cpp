@@ -115,7 +115,7 @@ namespace AirShow
 		return S;
 	}
 
-	Show::Show(uint64_t Seed) : Roll(Seed), Shots(Seed * 2654435761ull + 2111ull)
+	Show::Show(uint64_t Seed) : Roll(Seed), Shots(Seed * 2654435761ull + 2111ull), DogRoll(Seed * 0x9E3779B97F4A7C15ull + 977ull)
 	{
 		// (the effects kit's air_guns rows, 21 November)
 		Rounds["rifle"] = Flight{ 0.5, 9.81, 1.2 };
@@ -709,6 +709,8 @@ namespace AirShow
 		{
 			C.VMin = 80.0; C.VMax = 153.0; C.VTop = 200.0; C.RMin = 210.0; C.GMax = 6.0; C.RollMax = 120.0 * Deg;
 			C.RollTime = 0.12;
+			// (real dogfights: his type's own figures, AirDogfight.inl)
+			if (bDogfights) FitType(C);
 		}
 		else
 		{
@@ -1026,8 +1028,13 @@ namespace AirShow
 			}
 		}
 		const double S = std::max(C.Spd, 30.0);
+		// (real dogfights: a fighter of a known type flies to its own figures, its dive limit, its roll at speed, its climb)
+		const bool bTyped = bDogfights && C.bFighter && C.VDive > 0.0 && C.Doing != Role::Fall;
 		// The pull a pilot dares: his full g only at speed, easing off as he slows toward the stall.
-		const double GNow = C.Doing == Role::Fall ? C.GMax : std::min(C.GMax, 2.0 + (C.GMax - 2.0) * Clamp((S - C.VMin) / 45.0, 0.0, 1.0));
+		double GNow = C.Doing == Role::Fall ? C.GMax : std::min(C.GMax, 2.0 + (C.GMax - 2.0) * Clamp((S - C.VMin) / 45.0, 0.0, 1.0));
+		// (past his dive limit the controls stiffen and the nose tucks: little pull and less roll until he slows)
+		const bool bStiff = bTyped && S > 0.97 * C.VDive;
+		if (bStiff) GNow = std::min(GNow, 2.5);
 		// The tightest turn this speed allows: no tighter than its radius, no more than that g.
 		const double OmegaTurn = S / C.RMin;
 		const double OmegaG = Gee * std::sqrt(std::max(0.0, GNow * GNow - 1.0)) / S;
@@ -1045,6 +1052,7 @@ namespace AirShow
 		// the Pe-2, 17.2 m, and the plain bomber, 19.8, banked 21 degrees with her doors open, and her box spread on its
 		// rally turn)
 		double RollMost = C.RollMax;
+		if (bTyped) RollMost = RollAtSpeed(C, S) * (bStiff ? 0.35 : 1.0);
 		bool bBoxed = false;
 		if (!C.bFighter && (C.bHeavy || C.Form.Span >= 20.0 || C.Form.Engines.size() >= 2) && C.Doing != Role::Fall)
 		{
@@ -1094,11 +1102,15 @@ namespace AirShow
 		// turn settles at three or four.
 		// (a leader flies with a little throttle in hand so that his wingman can hold him: the wingman has it)
 		// (and one parted from him comes back flat out, the throttle through the gate)
-		const double PushMost = bHeld ? C.FlownPush : C.Step != Phase::Wing ? 3.0 : C.bRejoin ? 5.6 : 4.2;
+		const double PushBase = bHeld ? C.FlownPush : C.Step != Phase::Wing ? 3.0 : C.bRejoin ? 5.6 : 4.2;
+		// (his type's power: the better it climbs, the faster it gathers speed)
+		const double PushMost = bTyped && !bHeld && C.ClimbRate > 0.0 ? PushBase * Clamp(C.ClimbRate / 15.5, 0.7, 1.3) : PushBase;
 		const double Push = Clamp((K.Spd - S) / 4.0, -4.0, PushMost);
 		const double Load2 = TurnG * TurnG + Vert * Vert;
 		const double Bleed = C.Doing == Role::Fall ? 0.0 : 0.3 * std::max(0.0, Load2 - 1.0);
-		C.Spd = Clamp(S + (Push - Gee * std::sin(C.Gam) * 0.85 - Bleed) * Dt, C.Doing == Role::Fall ? 20.0 : C.VMin * 0.75, C.VTop);
+		// (his type in a dive: on past his top speed to his dive limit; level again, the extra bleeds away)
+		const double Fastest = bTyped ? (C.Gam < -0.09 ? C.VDive : std::max(C.VTop, std::min(C.VDive, S) - 5.0 * Dt)) : C.VTop;
+		C.Spd = Clamp(S + (Push - Gee * std::sin(C.Gam) * 0.85 - Bleed) * Dt, C.Doing == Role::Fall ? 20.0 : C.VMin * 0.75, Fastest);
 		C.P += Ahead(C.Hdg, C.Gam) * (C.Spd * Dt);
 		C.TurnNow = Omega;
 		C.PullNow = Q;
@@ -2138,16 +2150,21 @@ namespace AirShow
 			}
 			if (C.Step == Phase::Away) { C.Step = Phase::None; C.StepT = 0.0; }
 		}
+		// (real dogfights: a loss the battle counted, shown under the guns of his group, by whoever is best placed)
+		if (bDogfights && DogExecute(C, G, Dt)) return true;
 		// Then the enemy on his partner's tail.
 		if (Covering(C, G, L ? L : W, Dt)) return true;
-		if (L)
+		// (real dogfights: a wingman the battle has counted lost, an enemy coming in behind him to show it, has drifted off
+		// his leader's wing and flies on steady: the tail-end man, picked off)
+		if (L && !(bDogfights && DogMarked(C)))
 		{
 			FlyWing(C, *L, G, Dt);
 			return true;
 		}
 		// (one going in on a box for its gunners goes on in, whatever else is owed)
 		if (!Pressing(C, G) && Answering(C, G, Dt)) return true;
-		if (C.bGuard && FlyGuard(C, G, Dt)) return true;
+		// (real dogfights: an escort the battle has counted lost drifts back off his station, the tail-end man)
+		if (C.bGuard && !(bDogfights && DogMarked(C)) && FlyGuard(C, G, Dt)) return true;
 		auto EIt = Now.find(C.TargetGroup);
 		if (EIt == Now.end() || !Fights(G, C.TargetGroup)) return false;
 		const Group& E = EIt->second;
@@ -2158,7 +2175,7 @@ namespace AirShow
 			FlyPass(C, G, E, Dt);
 			return true;
 		}
-		return FlyDuel(C, G, E, Dt);
+		return bDogfights ? DogDuel(C, G, E, Dt) : FlyDuel(C, G, E, Dt);
 	}
 
 	bool Show::KeepsSight(Craft& C, double Dt)
@@ -2302,7 +2319,8 @@ namespace AirShow
 		const bool bShotAt = F->bFiring && F->Target == C.Key;
 		const Craft* Mate = C.Lead != 0 && C.Lead != C.Key ? Find(C.Lead) : C.Wing ? Find(C.Wing) : nullptr;
 		if (Mate && (!Live(*Mate) || Mate->Doing != Role::Fight || Len(Mate->P - C.P) > 500.0)) Mate = nullptr;
-		if (bWasBlind || bShotAt || Roll.U() < (0.05 + 0.12 * C.Skill) * (Mate ? 2.0 : 1.0))
+		// (real dogfights: the sun, the blind cone under his tail, and his own eyes on his own target, SpotChance)
+		if (bWasBlind || bShotAt || (bDogfights ? DogRoll.U() < SpotChance(C, *F) * (Mate ? 1.8 : 1.0) : Roll.U() < (0.05 + 0.12 * C.Skill) * (Mate ? 2.0 : 1.0)))
 		{
 			C.Threat = Best;
 			C.ThreatSeen = AirT + (bShotAt || bWasBlind ? 0.3 : 0.2 + (1.0 - C.Skill) * Roll.U(0.4, 1.0));
@@ -2420,7 +2438,8 @@ namespace AirShow
 			// (not from below the enemy he is there to attack: the dive would take him out of the fight)
 			const auto Mark = Now.find(C.TargetGroup);
 			const bool bHigh = Mark == Now.end() || C.P.Z > Mark->second.Alt - 150.0;
-			C.bFleeing = G.Style == "dive" && bHigh && Over > 1600.0 && Len(F->P - C.P) < 450.0 && Roll.U() < 0.4;
+			// (real dogfights: by his type and the enemy's, DogFlees)
+			C.bFleeing = bDogfights ? DogFlees(C, G, *F, bHigh, Over) : G.Style == "dive" && bHigh && Over > 1600.0 && Len(F->P - C.P) < 450.0 && Roll.U() < 0.4;
 			Check.Evasions++;
 			if (C.bFleeing) Check.SplitS++;
 			// Or the break makes him overshoot: an enemy close behind comes on too fast to hold the turn, slides out past
@@ -2500,6 +2519,14 @@ namespace AirShow
 			const Vec Rel = F->P - C.P;
 			const double D = Len(Rel);
 			K.Hdg = std::atan2(Rel.X, Rel.Y);
+			// (real dogfights: a Navy pair's weave, the beam defence: he turns toward his partner, who turns toward him, and
+			// the one on his tail is drawn across his partner's guns)
+			if (bDogfights && (C.Model == "Wildcat" || C.Model == "Hellcat" || C.Model == "F4F" || C.Model == "F6F"))
+			{
+				const Craft* Mate = C.Lead != 0 && C.Lead != C.Key ? Find(C.Lead) : C.Wing ? Find(C.Wing) : nullptr;
+				if (Mate && Live(*Mate) && Mate->Doing == Role::Fight && Len(Mate->P - C.P) < 700.0 && Len(Mate->P - C.P) > 60.0)
+					K.Hdg = std::atan2(Mate->P.X - C.P.X, Mate->P.Y - C.P.Y);
+			}
 			K.Gam = -8.0 * Deg;
 			K.Spd = C.VMax;
 			MindGround(C, K);
@@ -2785,6 +2812,11 @@ namespace AirShow
 			WingOn(C, *Follow, 70.0, 60.0, Dt);
 			return;
 		}
+		if (bDogfights)
+		{
+			DogAway(C, G, Dt);
+			return;
+		}
 		// Out to the side of the fight toward home (the raider away from the target, the defender toward it), lower,
 		// and round and round there.
 		Vec Way = C.Side == 0 ? Vec(G.X - TargetX, G.Y - TargetY, 0.0) : Vec(TargetX - G.X, TargetY - G.Y, 0.0);
@@ -2904,7 +2936,9 @@ namespace AirShow
 				Fly(C, K, Dt, true);
 			}
 		}
-		if (!bOwn) WingOn(C, L, bIn ? 40.0 : 60.0 + Loose, bIn ? 75.0 : 55.0 + Loose, Dt);
+		// (real dogfights: off a fighter's run, the fighting wing as it was flown, 150 to 300 m off his leader, guarding him)
+		if (!bOwn && bDogfights && !bIn) WingOn(C, L, 110.0 + 2.0 * Loose, 170.0 + 2.0 * Loose, Dt);
+		else if (!bOwn) WingOn(C, L, bIn ? 40.0 : 60.0 + Loose, bIn ? 75.0 : 55.0 + Loose, Dt);
 		if (bGoing)
 		{
 			if (T->bFighter) Squeeze(C, *T, G, Range, 8.0 * Deg, 1.0, 2.0, Dt);
@@ -3281,6 +3315,11 @@ namespace AirShow
 
 	void Show::TailChase(Craft& C, Craft& T, const Group& G, double Dt)
 	{
+		if (bDogfights)
+		{
+			DogAngles(C, T, G, Dt);
+			return;
+		}
 		// After his tail: cutting the corner while he is far, the nose on the lead as the range closes, the circle
 		// never tighter than the aircraft turns; a burst when the nose comes on.
 		const Vec Tp = T.P, Tv = Velocity(T);
@@ -4851,6 +4890,9 @@ namespace AirShow
 				const auto Lost = Now.find(Ev.Unit);
 				const bool bHeavy = Lost != Now.end() && !Lost->second.bFighter;
 				Wait = bHeavy ? 24.0 : Opening(Ev.By) || Opening(Ev.Unit) ? 22.0 : 20.0;
+				// (real dogfights: a fighter lost to fighters waits a little longer for the one who is to show it to come in
+				// behind him, as a pass from out of the sun takes)
+				if (bDogfights && !bHeavy && BoxOf(Ev) < 0) Wait += 8.0;
 				Bands[Ev.Unit].Pending++;
 				Check.ToGuns++;
 				if (BoxOf(Ev) >= 0) Check.GunnerKills++;
@@ -7521,10 +7563,18 @@ namespace AirShow
 			// (its time up, a fighter the gunners are to have and one coming into their reach: until it is there)
 			if (Later[K].bForShot && !bEnded && Later[K].At <= AirT && AwaitsGunners(Later[K])) Later[K].At = AirT + 0.25;
 			// (its time up with a fighter going in on one of them: a few seconds more, once, for his guns to bear)
-			if (Later[K].bForShot && !bEnded && Later[K].At <= AirT && !Later[K].bMore && Inbound(Later[K].E))
+			// (real dogfights: again while he is still coming in, to 40 s from the battle's count at most)
+			if (Later[K].bForShot && !bEnded && Later[K].At <= AirT && (!Later[K].bMore || (bDogfights && AirT - Later[K].Since < 33.0)) && Inbound(Later[K].E))
 			{
 				Later[K].bMore = true;
 				Later[K].At = AirT + 7.0;
+			}
+			// (real dogfights: one of them going in behind him to show it and closing, from farther out: while he
+			// closes, to 45 s from the battle's count at most)
+			if (bDogfights && Later[K].bForShot && !bEnded && Later[K].At <= AirT && AirT - Later[K].Since < 45.0 && DogInbound(Later[K].E))
+			{
+				Later[K].bMore = true;
+				Later[K].At = AirT + 2.0;
 			}
 			if (Later[K].At <= AirT || ((Later[K].bForShot || Later[K].Fell >= 0) && bEnded))
 			{
@@ -7841,4 +7891,6 @@ namespace AirShow
 		}
 		Emit(FxKind::Flak, Burst, "heavy");
 	}
+
+#include "Battle/AirDogfight.inl"
 }

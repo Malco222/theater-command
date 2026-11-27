@@ -1478,3 +1478,57 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    the kill tally under her port window (new on screen: the older file had none); her airscrews each turning on its own
    engine; past 1.5 km her light shape (2,000 triangles); and, in run 2 if it comes, a finer B-17 the guard holds back
    within 300 m (standing blades, a closed bay) so that N can be judged. Off: the picture exactly as before.
+
+80. **Real dogfights** (release 2; Brian, 27 November 2026 01:25Z: "i never see the fighters shooting each other down or
+   dog fighting", "it looks like they loop around vs actually realistic dog fights" and "i want the pilots AI to be very
+   smart and realistic as real fighter pilots back then"). The rules always counted the fighters' losses to fighters
+   (Bremen 16, Midway 9, Pearl Harbor 29); the scene lost them. Its duel was a flat circle (TailChase's climb held to
+   26 degrees, a new foe every 14 to 22 s), nobody went in after a loss the battle had counted, so most were let go
+   with no gun on them, and every fighter flew the same. Looks only: the rules still decide who falls (ruling 217).
+   How (AirShow::Show::SetDogfights, Battle/AirDogfight.inl; every hook in AirShow.cpp behind it, its own dice, DogRoll):
+   - Each fighter type flies its own figures (Battle/AirDogfightTypes.h: the historian's Content/Data/Air/performance.json
+     by the model, nation and the battle's month): stall, top and dive speeds, turn, roll by speed (stiff in a fast
+     dive), climb; and its style, a turner (Zero, Spitfire, Hurricane), a diver (Fw 190, P-47, P-51, P-40) or both.
+   - Spotting: an attacker out of the sun (within 15 degrees of it) is seen an eighth as often; one low behind, a third;
+     a pilot firing or tracking his own man looks round less; a wingman nearly doubles the look.
+   - The duel (DogDuel, DogThink every half second to a second and a half by skill): a diver above slashes down, zooms
+     back up and perches up-sun 650 m over; short of energy with the foe coming on, he extends away; a turner turns,
+     with high and low yo-yos; a turning type that is out-turned, or a diver, dives away from a bounce; nose to nose,
+     a head-on pass, one over, one under; Wildcats and Hellcats weave across their mate (the Thach weave). Fire opens
+     inside 450 m (200 m for an ace), in bursts of half a second (an ace) to nearly 4 s (a novice), lead only as wide
+     as the pilot dares.
+   - The kill (DogExecute): for a loss the battle counted on an enemy fighter group at his group's guns, the one of his
+     group best placed goes in behind one of them (leader before wingman, one hunter to each); the man he is after flies
+     steady, eyes on his own target; a hunter who shoots past gives it up 4 s for the next. While a hunter is closing
+     from as far as 2.5 km, the loss waits on him (DogInbound), to 45 s from the battle's count at most.
+   - Going home: straight for his own side, then a wide circle at the edge, never a tight orbit by the fight.
+   The Battle rules card's **Real dogfights** (FLandLive's rule `realDogfights`, never sent to the land rules), read once
+   as a battle begins (AAirBattle.cpp DogfightsRead in BeginReplay and BeginLiveCall; the sun given again where the sky
+   is laid). Off until the Mac has filmed it and the art director has passed it; `-TheaterAirDogfights` turns it on for
+   a run, `-TheaterAirOldDogfights` off. Off: every track byte for byte as before (the probe's tracks of all five raids
+   below compared whole).
+   Measured (Tools/air_show/air_dogfight_probe.cpp; four throws of the scene's dice each; a fall "on a tail": the
+   shooter within 600 m, inside 45 degrees of the victim's tail, firing in the 2 s before):
+   | battle | fighters' falls to fighters | on a tail, old pilots | new pilots |
+   |---|---|---|---|
+   | Bremen (bremen-b17) | 60 | 43% | 78% |
+   | Bremen escorted (scratch recording) | 40 | 22% | 55% |
+   | Bremen even (scratch recording) | 80 | 35% | 84% |
+   | Midway (midway-fleet) | 28 | 14% | 43% |
+   | Pearl Harbor (oahu) | 112 | 19% | 12% |
+   Averaged over the four throws, old to new: flat circles a fighter-minute of fighting, Bremen 0.09 to 0.06, Bremen even
+   0.14 to 0.07, Midway 0.22 to 0.22 (unchanged: its Zeros are turners and fight turning, low over the sea, as they did); height lost
+   a minute in a duel, Bremen 1,284 m to 937 m, Midway 2,217 m to 1,456 m (less spiralling down, more climbing back);
+   the median range they fire from, Bremen 352 m to 282 m, Midway 300 m to 179 m.
+   Known weak: Pearl Harbor. Its 72 Zeros are one group and the Warhawks scramble into them; when a loss comes due the
+   hunter is often 1 to 2 km out, so fewer are shown under a gun than before. (Its "unseen" also holds the ships' flak.)
+   The cloud test (run.sh): the new pilots must show more of Bremen's falls on a tail than the old (13 of 15 against 5
+   of 15) and circle flat under 0.08 a fighter-minute; the row on the card, off unless asked, read at both beginnings.
+   The Mac's film (one launch each, the whole raid, about 5 minutes; the game window in front):
+   1. `-TheaterAirBattle=bremen-b17 -TheaterAirOldDogfights`
+   2. `-TheaterAirBattle=bremen-b17 -TheaterAirDogfights`
+   3. `-TheaterAirBattle=midway-fleet -TheaterAirDogfights`
+   By eye, run 2 against run 1: fighters diving and climbing, not circling flat; a Mustang or Fw 190 coming down from
+   above onto one's tail, a short burst at a couple of hundred metres and the one in front going down; no fighter
+   falling with nobody near him (run 1 has several). Send back the log's "Air battle: real dogfights: on" line, and from
+   the speed log the frames a second over the fight (the new pilots think more often: 45 is the mark, as before).
