@@ -930,7 +930,7 @@ namespace
 			};
 			for (const Taken& K : { Taken{ "T34", "GER", "SOV", 0.375, true, true }, Taken{ "Sherman", "GER", "USA", 0.375, true, true },
 					 Taken{ "PanzerIV", "USA", "GER", 0.5715, true, true }, Taken{ "PanzerIV", "SOV", "GER", 0.45, true, true },
-					 Taken{ "Tiger", "USA", "GER", 0.5715, false, true }, Taken{ "LightTank", "GER", "UK", 0.375, true, true } })
+					 Taken{ "Tiger", "USA", "GER", 0.5715, true, true }, Taken{ "LightTank", "GER", "UK", 0.375, true, true } })
 			{
 				std::string Text, Error;
 				if (!ReadFile(Content + "/Models/Battle/" + K.Model + ".json", Text))
@@ -951,7 +951,7 @@ namespace
 				const bool bReal = bWas && Real.Load(Text, D, Error);
 				std::string Why;
 				double Least = 1e9, Most = 0.0, FileMost = 0.0, Roof = 0.0, Back = 0.0;
-				size_t Sides = 0;
+				size_t Sides = 0, Under = 0;
 				if (!bReal)
 				{
 					Why = "did not load: " + Error;
@@ -978,6 +978,35 @@ namespace
 					{
 						FileMost = std::max(FileMost, Mk.Radius);
 					}
+					// (her back and roof marks lie clear of whatever of hers stands proud of the plate, a hatch, a cupola, an
+					// exhaust: counted here by itself, every point of every body of hers 3 cm or more above the mark's own
+					// flat within the mark's reach and 4 cm more; her rule asks 5 cm. As first built her T-34's roof mark lay
+					// between her two hatches and under their rims.)
+					for (const Mark& Mk : Real.Painted)
+					{
+						if (Mk.Tag != "_roof" && Mk.Tag != "_back")
+						{
+							continue;
+						}
+						const V3 Fc = Mk.Facing.Unit();
+						const double Reach = Mk.Radius + 0.04;
+						for (const Body& Bo : Real.Bodies)
+						{
+							if (Bo.bTrack)
+							{
+								continue;
+							}
+							for (size_t P = 0; P + 2 < Bo.Near.Points.size(); P += 3)
+							{
+								const V3 Dv = V3(Bo.Near.Points[P], Bo.Near.Points[P + 1], Bo.Near.Points[P + 2]) + Bo.Pivot - Mk.At;
+								const double Above = Dv.Dot(Fc);
+								if (Above > 0.03 && Dv.Dot(Dv) - Above * Above < Reach * Reach)
+								{
+									++Under;
+								}
+							}
+						}
+					}
 					if (!Was.Painted.empty())
 					{
 						Why = "with the word off a captor's mark is kept as a place of her own";
@@ -997,6 +1026,10 @@ namespace
 					else if ((Back > 0.0 && Back <= 0.05) || (Roof > 0.0 && Roof <= 0.05))
 					{
 						Why = "a captor's back or roof mark that is a speck (10 cm across or less)";
+					}
+					else if (Under > 0)
+					{
+						Why = "her back or roof mark lies within 4 cm of something of hers that stands 3 cm proud of the plate (" + std::to_string(Under) + " points)";
 					}
 					else if (K.bBack && Back <= 0.0)
 					{
