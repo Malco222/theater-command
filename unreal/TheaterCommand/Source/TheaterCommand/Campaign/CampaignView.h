@@ -1373,6 +1373,9 @@ struct FCampaignView
 	bool bSettledTowns = false; // (release 2, buildings.ts) a conquered town held three months can put up every building
 	bool bPressedTanks = false; // (release 2, pressed.ts; Brian 27 November 2026 05:23Z) captured tanks join the winner's armour
 	bool bCrewRoll = false; // (release 2, airpages.ts; Brian 27 November 2026 05:23Z) a bomber group's crews page
+	bool bWarDiary = false; // (release 2, diary.ts; Brian 27 November 2026 13:40Z) the war diary
+	bool bHeldLine = false; // (release 2, heldline.ts; Brian 27 November 2026 13:40Z) the 'held the line' medal
+	bool bDumpFires = false; // (release 2, dumpfires.ts; Brian 27 November 2026 13:40Z) supply dumps that burn
 	bool bTownQueue = false; // (release 2, townqueue.ts) the player can queue the next buildings for his towns
 	bool bCityDefences = false; // (release 2, citydefences.ts) searchlights, the guns by night by what they see, a garrison's town works (the town's guns on tanks: sub-switch flakGround, off)
 	// (Release 2) The options page's two switches: shown in a grand campaign only; the columns can be thrown in its
