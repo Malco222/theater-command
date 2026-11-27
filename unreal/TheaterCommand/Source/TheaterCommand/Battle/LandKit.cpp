@@ -2279,7 +2279,8 @@ namespace LandKit
 		 * the skin under it does not step by more than that between three samples in a row, across or up (a pistol
 		 * port's boss, a hatch's lip: a round turret's own curve is a few millimetres, a rivet's head under a
 		 * centimetre), so a mark made larger is moved clear of a fitting rather than laid over it.
-		 * AtLeast (metres, half its width; a captured tank's back mark, the art director's floor of 27 November 2026): none
+		 * AtLeast (metres, half its width; a captured tank's back and roof marks, the art director's floor of 27 November
+		 * 2026): none
 		 * at all where the skin takes the mark only smaller than that.
 		 */
 		struct MarkSkin
@@ -4377,8 +4378,8 @@ namespace LandKit
 					// bounded: it is an air mark, and a captured vehicle is the one whose shape lies to whoever looks
 					// down on her. At most 0.6 m across, never over three quarters of the clear plate's shorter side,
 					// 5 cm clear of hatches and edges. Where the plate takes no mark of the size wanted, the largest of
-					// a few smaller ones it does take; but her back plate none under a quarter of a metre across (her
-					// ruling of 27 November 2026, the floor below).
+					// a few smaller ones it does take; but none under a quarter of a metre across, back or roof (her
+					// rulings of 27 November 2026, the floor below).
 					if (Level == 0)
 					{
 						// (her plate's whole run through a place, along the mark's up or across it, and the way from the place
@@ -4905,26 +4906,25 @@ namespace LandKit
 							CaptorFind(RoofPart, 2, 1.0, 0.3, true, CaptorRoof);
 							const double Real = MarkReal(CaptorKind, Kind, R["role"].Str(), Name, false);
 							CaptorFind(BackPart, 0, -1.0, Real > 0.0 ? 1.5 * Real : 0.25, false, CaptorBack);
-						// (a roof mark no wider than the clear it must keep each side is a speck, not a mark: none)
-						if (CaptorRoof.Size <= 0.05)
+						// Each has a floor (the art director's rulings of 27 November 2026, "one tank, one floor"): under a
+						// quarter of a metre across, her smallest captor's mark at its real size, NO mark on that plate. Smaller, a
+						// back mark is a speck low in a corner of her plate and reads as a blemish, and a roof mark is a speck from
+						// the air as surely; her sides' marks and her captor's coat carry her. The floor is for the mark as
+						// painted, so the painting keeps it too where her skin would take the mark only smaller.
+						const double MarkLeast = 0.125;
+						for (CaptorPlate* Speck : { &CaptorRoof, &CaptorBack })
 						{
-							CaptorRoof = CaptorPlate();
-						}
-						// Her back mark has a floor (the art director's ruling of 27 November 2026): under a quarter of a metre
-						// across, her smallest captor's mark at its real size, NO back mark. Smaller it is a speck low in a corner
-						// of her plate and reads as a blemish, and her turret's marks show plainly from behind. The floor is for
-						// the mark as painted, so the painting keeps it too where her skin would take the mark only smaller.
-						const double BackLeast = 0.125;
-						if (CaptorBack.Size < BackLeast)
-						{
-							CaptorBack = CaptorPlate();
+							if (Speck->Size < MarkLeast)
+							{
+								*Speck = CaptorPlate();
+							}
 						}
 						for (int Which = 0; Which < 2; ++Which)
 						{
 							CaptorPlate& Pl = Which == 0 ? CaptorRoof : CaptorBack;
 							const int PartIx = Which == 0 ? RoofPart : BackPart;
 							double Sized = 1.0;
-							if (Pl.Size > 0.0 && PaintCaptor(Parts[static_cast<size_t>(PartIx)].Body, Pl.At, Pl.Facing, Pl.Size, CaptorDust, 1000 + static_cast<uint64_t>(Which), &Sized, Which == 1 ? BackLeast : 0.0) > 0)
+							if (Pl.Size > 0.0 && PaintCaptor(Parts[static_cast<size_t>(PartIx)].Body, Pl.At, Pl.Facing, Pl.Size, CaptorDust, 1000 + static_cast<uint64_t>(Which), &Sized, MarkLeast) > 0)
 							{
 								Pl.Size *= Sized;
 								Mark Laid;
