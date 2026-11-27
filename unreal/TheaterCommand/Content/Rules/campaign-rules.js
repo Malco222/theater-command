@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 27fc1edb7 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 73286b8b3 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -74850,6 +74850,7 @@
   var dumpFiresOn = (g2) => g2.flags.dumpfires === 1;
   function setDumpFires(g2, on2) {
     if (on2) {
+      if (!dumpsOn(g2)) return false;
       g2.flags.dumpfires = 1;
       return true;
     }
@@ -74865,16 +74866,17 @@
   function bookFire(g2, fire2) {
     (g2.dumpFires ?? (g2.dumpFires = [])).push(fire2);
   }
+  function noteFed(g2, nat, region, to) {
+    if (!dumpFiresOn(g2) || !g2.dumpFires) return;
+    const fire2 = g2.dumpFires.find((f) => f.nat === nat && f.region === region && f.turn === g2.turn);
+    if (!fire2) return;
+    const ids2 = g2.corps.filter((c) => c.nat === nat && c.reg === to && !c.dead && c.kind !== "fort" && c.supplied).map((c) => c.id);
+    if (ids2.length) fire2.fed = [...fire2.fed ?? [], ...ids2];
+  }
   function slowedByFire(g2, nat) {
     if (!dumpFiresOn(g2) || !g2.dumpFires) return null;
     const out = /* @__PURE__ */ new Set();
-    for (const f of g2.dumpFires) {
-      if (f.nat !== nat || f.turn !== g2.turn) continue;
-      const road = dumpRoads(g2, nat, f.region);
-      road.forEach((d, i) => {
-        if (d >= 0) out.add(i);
-      });
-    }
+    for (const f of g2.dumpFires) if (f.nat === nat && f.turn === g2.turn) for (const id of f.fed ?? []) out.add(id);
     return out.size ? out : null;
   }
   var burningAt = (g2, nat, region) => dumpFiresOn(g2) && !!g2.dumpFires?.some((f) => f.nat === nat && f.region === region && f.turn >= g2.turn - 1);
@@ -74891,7 +74893,10 @@
     if (on2) g2.flags[which] = 1;
     else {
       delete g2.flags[which];
-      if (which === "dumps") delete g2.dumps;
+      if (which === "dumps") {
+        delete g2.dumps;
+        setDumpFires(g2, false);
+      }
       if (which === "lorryShift") delete g2.lorryFirst;
     }
     return true;
@@ -75237,6 +75242,7 @@
       }
       if (from2) {
         from2.dump.stock -= divs;
+        noteFed(g2, nat, from2.dump.region, to);
         if (from2.road[to] === 0) continue;
       }
       const path = roadFrom(g2, from2 ? from2.road : road, to, danger);
@@ -76199,6 +76205,7 @@
   var heldOn = (g2) => g2.flags.heldline === 1;
   function setHeld(g2, on2) {
     if (on2) {
+      if (!moraleRules(g2)) return false;
       g2.flags.heldline = 1;
       return true;
     }
@@ -80936,7 +80943,7 @@
       c.fought = false;
       if (c.blows !== void 0) delete c.blows;
       if (c.gaveWay) delete c.gaveWay;
-      c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + cmdAp(g2, c) - (fuelSlows(g2, c) ? 1 : 0) - (slowed?.has(c.reg) ? FIRES.slow : 0);
+      c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + cmdAp(g2, c) - (fuelSlows(g2, c) ? 1 : 0) - (slowed?.has(c.id) ? FIRES.slow : 0);
       if (jointHold(g2, c)) c.ap = 0;
       if (c.town) c.ap = 0;
       if (far && withered(g2, c)) c.ap = 0;
@@ -130333,7 +130340,7 @@ ${standing6}`,
     }
     if (part[0] === "dumpfiresrule") {
       ok2 = setDumpFires(s, part[1] === "on");
-      note4 = dumpFiresOn(s) ? `Supply dumps that burn are on: a forward dump badly bombed burns on the map, and its side's corps near it have ${FIRES.slow === 1 ? "one move" : `${FIRES.slow} moves`} less the month after. The same for every army.${dumpsOn(s) ? "" : " They work only with the forward dumps on."}` : "Supply dumps that burn are off: a bombed dump loses what burned, and no more.";
+      note4 = dumpFiresOn(s) ? `Supply dumps that burn are on: a forward dump badly bombed burns on the map, and the corps that draw their supply on it have ${FIRES.slow === 1 ? "one move" : `${FIRES.slow} moves`} less the month after. The same for every army.` : part[1] === "on" && !dumpsOn(s) ? "Supply dumps that burn need the forward dumps, which a war takes only as it opens. This war has none, so they stay off. They reach new wars." : "Supply dumps that burn are off: a bombed dump loses what burned, and no more.";
       return { ok: ok2, note: note4, fly: fly2, flies, open: open3, view: view2() };
     }
     if (part[0] === "pressedtanksrule") {
