@@ -17,6 +17,9 @@
 // His ruling of 27 November 2026 00:31Z, the three readings confirmed, and one line more:
 //   - going round a block on the side it now stands on is no reason: where the pursuer crosses to the side chosen,
 //     the way round ends there.
+// And of 00:52Z and 01:07Z: a way round by the further end is chosen with that block on that side, so the crossing
+// does not end it; it is held by "ahead" (middles), as every way round, and by the end still open by the block's own
+// sight; the nearer end opening later does not unseat it; "wholly ahead" is the further end's test at the choice only.
 //
 // What is tested here is that, on a field set by hand as the three traced pursuits had it. A block marks time only
 // where both of these hold, and the field below has both: it walks slower than spread() eases (foot in woods: 3.6 m
@@ -401,6 +404,71 @@ describe('falling back round an enemy in the way (wayround)', () => {
     f.x = 180;
     expect(far.ask()).toBeNull();
     expect(far.u.round).toBeUndefined();
+  });
+
+  it('a way round by the further end is held while that block is ahead and the end still open by its own sight; wholly ahead is read at the choice only', () => {
+    // (the nearer end, the west, is off the field: it goes by the east, the further end, across that block's front;
+    // a second enemy block stands far off for now)
+    const far = (): ReturnType<typeof choice> & { end: number } => {
+      const c = choice(140, 1000, [[170, 940, NORTH], [900, 300, NORTH]]);
+      const end = 170 + c.clear + 1;
+      expect(c.ask(c.them[0])![0]).toBeCloseTo(end, 6);
+      expect(c.u.round).toMatchObject({ by: c.them[0].id, side: -1, near: false });
+      return { ...c, end };
+    };
+    // (That block comes on, or turns to meet it, until it no longer stands wholly ahead, box clear of box along the
+    // way: the further end would not be CHOSEN so, but the way round chosen is kept, as every way round, while that
+    // block's middle is ahead. Read again on the boxes it would be dropped and chosen again as the pursuer turns.)
+    const on = far(), [e] = on.them, boxes = on.u.d / 2 + e.d / 2;
+    e.y = on.u.y - boxes - 1;
+    expect(on.ask()![0]).toBeCloseTo(on.end, 6);
+    e.y = on.u.y - boxes + 1;
+    expect(on.ask()![0]).toBeCloseTo(on.end, 6);
+    e.y = on.u.y - 1;
+    expect(on.ask()![0]).toBeCloseTo(on.end, 6);
+    expect(on.u.round).toMatchObject({ by: e.id, side: -1, near: false });
+    // (level with it: the round is done, as any)
+    e.y = on.u.y + 1;
+    expect(on.ask()).toBeNull();
+    expect(on.u.round).toBeUndefined();
+    // (and so placed from the first, not wholly ahead, the further end is not chosen at all)
+    const beside = choice(140, 1000, [[170, 1000 - boxes + 1, NORTH]]);
+    expect(beside.ask(beside.them[0])).toBeNull();
+    expect(beside.u.round).toBeUndefined();
+    // (a seen enemy block comes to stand end on in the step across, clear of this block where it is and of where the
+    // step ends: ended. Still hidden, it is not known to this block, and the way round is kept.)
+    for (const hidden of [false, true]) {
+      const c = far(), o = c.them[1], reach = c.u.w / 2 + o.d / 2 + LAND.apart;
+      o.x = (c.u.x + c.end) / 2; o.y = 1000; o.face = END_ON; o.hid = hidden;
+      expect(o.x - c.u.x).toBeGreaterThan(reach);
+      expect(c.end - o.x).toBeGreaterThan(reach);
+      if (hidden) expect(c.ask()![0]).toBeCloseTo(c.end, 6);
+      else { expect(c.ask()).toBeNull(); expect(c.u.round).toBeUndefined(); }
+    }
+    // (one comes to stand where the step would end: ended)
+    const ends = far();
+    ends.them[1].x = ends.end; ends.them[1].y = 1000;
+    expect(ends.ask()).toBeNull();
+    expect(ends.u.round).toBeUndefined();
+    // (one comes to bar the lane on from there, where that lane ends, clear of the step and of where it ends: ended,
+    // as the pocket reads)
+    const pocket = far(), lane = pocket.clear + (pocket.u.y - pocket.them[0].y);
+    pocket.them[1].x = pocket.end; pocket.them[1].y = pocket.u.y - lane;
+    expect(lane).toBeGreaterThan(pocket.clear);
+    expect(pocket.ask()).toBeNull();
+    expect(pocket.u.round).toBeUndefined();
+    // (The nearer end opening later does not unseat it. Here the nearer end, the west, is closed by a second enemy
+    // block where the step west would end, and it goes by the east; that block goes off, the west is open, and it
+    // keeps the east, barred again by the first or not.)
+    const shut = choice(300, 1000, [[320, 940, NORTH], [0, 1000, NORTH]]);
+    const [f, g] = shut.them;
+    g.x = 320 - (shut.clear + 1);
+    expect(shut.ask(f)![0]).toBeCloseTo(320 + shut.clear + 1, 6);
+    expect(shut.u.round).toMatchObject({ by: f.id, side: -1, near: false });
+    g.x = 900; g.y = 300;
+    expect(shut.ask()![0]).toBeCloseTo(320 + shut.clear + 1, 6);
+    expect(shut.ask(f)![0]).toBeCloseTo(320 + shut.clear + 1, 6);
+    expect(shut.u.round).toMatchObject({ by: f.id, side: -1, near: false });
   });
 
   it('the row: a key and a switch of its own, off, beside pursue', () => {
