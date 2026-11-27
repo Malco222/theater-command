@@ -1224,6 +1224,16 @@ feed's halves and the blasts' knock-down come in a later build.
   at 30 fps, Life 2). No clip gets up from lying on his back yet, so a man who will get up takes a fall ending face
   down until `get_up_back` comes. A still frame shows a held face-down man much as the dead (pictures): he reads alive
   by his motion; the soldier modeller's `wounded_*` loops are the real cure.
+- **With the rules' wounded option (release 2's bearers).** The drill gives a man struck and not killed `wd` and, from
+  then, the stance `wounded` (with bearers, `cy` and his stance `carried` once they have him; a light case `back`).
+  Off, LandMen plays that stance as before (`wounded_waiting`, else `carried_wounded`, else `fire_prone` held; no fall
+  between). With `-TheaterLandHits` one authority a man: a man with `cy` is the bearers' (the stance plays, no wound's
+  fall); any other man with `wd` is this build's from `wd` to `back` (his fall, what he does down there, his get-up), and
+  the rules' stances wait meanwhile, `wounded` among them. Down there he lies where he went down whatever his track does
+  after `wd` (his place and facing held, eased back to the track's over the get-up); `d` while he lies: still where he
+  lies, no second fall; `wd` after `d`: never down. Checked in `Tools/land_hits` (the rules' wounded men: no man falls
+  twice, none down wounded stands or slides). The blasts' knock-down (`kd`) is not on this line; when it joins, its
+  stand-in steps aside for a man whose round carries `wd` (its own rule) and this build does not touch its clips or times.
 - **The graze flinch (`bFlinch`).** Kept for the switch; nothing yet (the men read misses only as shots; a near miss
   needs the rounds' `l` and each block's men at its time in `Book`).
 - **Pictures.** `Tools/land_hits/land_hits_picture.cpp` and `land_hits_pictures.py` (the crowd's own skinning, a small
