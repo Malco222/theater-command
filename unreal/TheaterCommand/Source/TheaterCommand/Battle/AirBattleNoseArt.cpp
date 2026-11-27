@@ -17,6 +17,7 @@
 #include "Battle/AirBattleState.h"
 #include "Battle/AirNoseArt.h"
 #include "Battle/AirShow.h"
+#include "Battle/AirSkin.h"
 #include "Battle/LandLive.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -164,8 +165,10 @@ bool AAirBattle::MakeNoseArt(int32 Key, FPlaneMade& Made, UProceduralMeshCompone
 	Art->bUseAsyncCooking = false;
 	Art->RegisterComponent();
 	const double U = UnitsPerMetre;
-	// (the paint it lies on: what it fades into when it is small on the screen)
-	const FColor Under = ColourOf(Panel->Skin);
+	// (the paint it lies on: what it fades into when it is small on the screen; under the Battle rules card's "Worn B-17
+	// paint", her worn coat, AirSkin::PanelUnder; AirSkin holds nothing with the row off)
+	const AirSkin::Overlay* const WornSkin = AirSkin::Active() ? AirSkin::For(TCHAR_TO_UTF8(*Kind)) : nullptr;
+	const FColor Under = ColourOf(WornSkin ? AirSkin::PanelUnder(*WornSkin) : Panel->Skin);
 	int32 Section = 0;
 	for (const AirNoseArt::Side* Side : { &Panel->Port, &Panel->Starboard })
 	{

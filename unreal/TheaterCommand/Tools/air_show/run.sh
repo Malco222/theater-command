@@ -121,6 +121,15 @@ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
   "$HERE/air_letters_test.cpp" "$SRC/Battle/AirLetters.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirShowTroops.cpp" "$SRC/Battle/AirMarks.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
   -o "$OUT/air_letters_test"
 "$OUT/air_letters_test" "$ROOT/Content/Data/AirMarks/b17-fine-marks.json" "$ROOT/Content/Models" "$SRC" "$@" || STATUS=1
+# Worn B-17 paint (the Battle rules card's "Worn B-17 paint", row flyB17Skin; Brian, 26 November 2026: "i want the new
+# ones in the game"): the model thread's paint for her shape, Content/Data/AirSkin/B17Fine.json (Battle/AirSkin, made by
+# Tools/make_air_skin.py), read with her counts and made for B17Fine.json's very bytes; every fault refused, a key by
+# month or year among them; the law gives the tool's check colours; the earned colours' model and the nose-art panel
+# under it; the Unreal side from its source. Then the tool's own test on small made-up files.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_b17_skin_test.cpp" "$SRC/Battle/AirSkin.cpp" "$SRC/Battle/LandJson.cpp" "$SRC/Battle/AirUnitColours.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_b17_skin_test"
+"$OUT/air_b17_skin_test" "$ROOT/Content/Models/B17Fine.json" "$ROOT/Content/Data/AirSkin/B17Fine.json" "$SRC" || STATUS=1
+python3 -I -B "$ROOT/Tools/air_skin/test_make_air_skin.py" || STATUS=1
 # The sky's picture (the clouds as the scene lays and turns them, drawn by a small software painter): AIR_SKY_PICTURES=1.
 if [ "${AIR_SKY_PICTURES:-}" = "1" ]; then
   $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \

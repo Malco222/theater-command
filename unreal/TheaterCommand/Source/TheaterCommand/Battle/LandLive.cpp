@@ -176,6 +176,15 @@ namespace
 		// -TheaterAirNoBomberMarks off. Its key begins "fly" only so that FLandLive::Start passes it over; the air battle
 		// reads it once a battle (AAirBattle::LettersOnNow), only while the finer B-17 flies.)
 		{ TEXT("flyBomberMarks"), TEXT("Bomber markings"), TEXT("Every finer B-17 wears her group's white triangle and letter on her fin and right wing, her squadron's two letters and her own letter on her side and fin, near and far off, the same in every month of the war. Off: olive with the star only."), TEXT("TheaterAirNoBomberMarks"), false, TEXT("TheaterAirBomberMarks") },
+		// (Worn B-17 paint, release 2: Brian, 26 November 2026, "i want the new ones in the game", the look he approved on
+		// 25 November. The finer B-17 keeps her shape (Content/Models/B17Fine.json) and wears the model thread's paint for
+		// it, Content/Data/AirSkin/B17Fine.json (Tools/make_air_skin.py; Battle/AirSkin): the one army olive 5B5A44 over
+		// 9A9EA1, panel tones and stains, dark glass. Never by the year or month. Looks only: nothing the rules count reads
+		// it. Needs Finer B-17. Off until the Mac's stills are judged with her markings (AIR-SCENE.md item 66), then this
+		// row flips to on in one line; -TheaterAirB17Skin turns it on for a run, -TheaterAirNoB17Skin off. NOT a
+		// fly-it-yourself row: its key begins "fly" only so that FLandLive::Start passes it over. The air battle reads it
+		// once as it starts (AAirBattle::B17SkinRead); it is never sent to the land rules.)
+		{ TEXT("flyB17Skin"), TEXT("Worn B-17 paint"), TEXT("The finer B-17s wear the approved worn olive: each panel its own shade, oil and exhaust stains behind the engines, dark glass and engine fronts. Needs Finer B-17. Off: her plain olive."), TEXT("TheaterAirNoB17Skin"), false, TEXT("TheaterAirB17Skin") },
 		// (Old wrecks, Brian 23 November 20:09Z: starts off as Scarred ground does, until the effects thread's wrecks pass the
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)
