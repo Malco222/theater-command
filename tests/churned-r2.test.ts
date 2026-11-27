@@ -2,7 +2,9 @@
 // on map-looks/fronts-alive/churn-healing-row-FORM.md): a record for the 3D map at the month's end, never a rule. Off it
 // writes nothing; on, its months are facts, uncapped; a stand ends on its three causes and heals for the art director's
 // year; the player's picture moves only on what he can know; it is saved and read back whole.
+// @ts-ignore node's own module: the tree's type check loads three's types only
 import { readFileSync, readdirSync, statSync } from 'node:fs';
+// @ts-ignore node's own module: the tree's type check loads three's types only
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CHURN, churnMonth, churnedOn, churnedView, setChurned } from '../src/campaign/churned';
@@ -206,14 +208,14 @@ describe('the record: facts', () => {
     dig(g, a, lord(g, b), false);
     month(g);
     const text = saveGame(g);
-    const h = loadGame(text);
+    const h = loadGame(text)!;
     expect(h.churned).toEqual(g.churned);
     expect(saveGame(h)).toBe(text);
     // (An empty record is kept too: it says the record has been kept.)
     const e = war('GER');
     setChurned(e, true);
     e.churned = [];
-    expect(loadGame(saveGame(e)).churned).toEqual([]);
+    expect(loadGame(saveGame(e))!.churned).toEqual([]);
   });
 
   it('on, the save is equal less the record and its switch (every reader writes nothing)', () => {
@@ -252,7 +254,7 @@ describe('the player\'s picture: only what he can know (fronts\' sight rule)', (
   /** What crosses to the table, and the picture's months, after a month's end on a copy. */
   // (The picture's months for every pair, and its scars: the record's facts, ma and mb, may hold what he cannot see.)
   function sent(g: Game, change: (h: Game) => void): { pairs: number[]; pm: string[] } {
-    const h = loadGame(saveGame(g));
+    const h = loadGame(saveGame(g))!;
     change(h);
     churnMonth(h);
     const pm = (h.churned ?? []).filter((r) => r.pm > 0 || r.scars).map((r) => `${r.a}-${r.b}:${r.pm}:${JSON.stringify(r.scars ?? [])}`);
@@ -332,7 +334,7 @@ describe('a record, never a rule', () => {
         else if (p.endsWith('.ts')) files.push(p);
       }
     };
-    walk(join(__dirname, '../src'));
+    walk(decodeURIComponent(new URL('../src', import.meta.url).pathname));
     const touch = files.filter((p) => /\.churned\b/.test(readFileSync(p, 'utf8'))).map((p) => p.replace(/^.*\/src\//, 'src/')).sort();
     expect(touch).toEqual(['src/campaign/churned.ts', 'src/campaign/save.ts']);
   });
