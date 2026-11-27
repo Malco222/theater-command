@@ -4934,6 +4934,18 @@ function rowDue(g: Game, i: number, row: any[], o: any): number {
 }
 
 /**
+ * The last month of a dated row's half year: its due month (`rowDue`), six months on, and the months it waited for
+ * room since (`roomwait:N`, kept on the far side alone), which never run out its half year. The one count both seats
+ * read: the computer's strike (`expeditions`: struck once the month is past it) and the player's offer (`offerLast`).
+ * The design director, 17:53Z, 27 November 2026, 3: "The same count for both seats, called from one function. Months
+ * waited for room come off the player's offer (offerLast) exactly as off the computer's half year." With the far side
+ * off the count is never kept, and this is the due month and six, as it always was.
+ */
+function halfYearLast(g: Game, i: number, due: number): number {
+  return due + 6 + (g.flags[`roomwait:${i}`] ?? 0);
+}
+
+/**
  * The allies a dated row sent a corps to fight beside: the countries its 'war' names other than its own (Creforce and
  * W Force, for Greece). ai.ts wantsOut reads them: on such a country's ground the corps is its guest.
  */
@@ -5511,7 +5523,7 @@ function countedWords(g: Game, nat: string, row: any[], base: any = row[6] ?? {}
 function offerLast(g: Game, nat: string, row: any[], i: number): number | null {
   const o = countedWords(g, nat, row);
   if (!offerRow(i)?.form && !farRow(g, nat, row)) return o.until ? o.until - 1 : null;
-  const half = rowDue(g, i, row, o) + 6;
+  const half = halfYearLast(g, i, rowDue(g, i, row, o));
   return o.until ? Math.min(o.until - 1, half) : half;
 }
 
@@ -6049,7 +6061,10 @@ function expeditions(g: Game, nat: string, take?: number): void {
     // not run out against room. The design director, 00:20Z, 27 November 2026, D1: "No row is ever struck for room, on
     // any ground ... Where no held ground anywhere has room, it waits until one does." Every other cause of a strike
     // stands as it was. With the far side off the count is never kept, and nothing changes.)
-    const late = g.turn - due - (g.flags[`roomwait:${i}`] ?? 0) > 6 && take !== i;
+    // (Its last month is `halfYearLast`, the one count the player's offer reads too, from the due month as `rowDue`
+    // reads it: the same month as `due` here for every dated row that reaches this line, by a reading and by a run
+    // of 36 months, far on and off, seeds 17 and 18. The design director, 17:53Z, 27 November 2026, 3.)
+    const late = g.turn > halfYearLast(g, i, rowDue(g, i, row, o)) && take !== i;
     if (late || (o.war && !warOn(g, o.war)) || (o.until && g.turn >= o.until)) {
       if (late) {
         g.flags[`sent:${i}`] = g.flags.open === 1 ? 2 : 1;
