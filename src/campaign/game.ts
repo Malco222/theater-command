@@ -5325,10 +5325,13 @@ function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: 
   // (`by`: the way `roomNear` answered, by land or by the sea branch: the UI director's line is for the sea's answer
   // alone, 18:04Z, 27 November 2026.)
   let moved: { from: number; to: number; by: 'land' | 'sea' } | null = null;
-  const onFor = (r: Region): Region => {
+  // (Only from the row's own place (`own`): a place it reached for another cause, its capital or a harbour for a place
+  // not held, is no move to tell, and the fact stays null there, as the brief's T2-1 says: the sceptic's F3, 27
+  // November 2026.)
+  const onFor = (r: Region, own: boolean): Region => {
     const how = { sea: false };
     const to = roomNear(g, nat, r, true, rowCorps(g, nat, row, o), rowOut(g, nat, o), true, how);
-    if (to && to !== r && farOn(g)) moved = { from: r.id, to: to.id, by: how.sea ? 'sea' : 'land' };
+    if (own && to && to !== r && farOn(g)) moved = { from: r.id, to: to.id, by: how.sea ? 'sea' : 'land' };
     return to ?? r;
   };
   // (It has fallen back to forming at home, its own place lost or at peace: a division is laid once, drawn.ts.)
@@ -5353,7 +5356,7 @@ function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: 
     if (posted.waits) return { reg, fell, ashore, waits: true, shifted, home, moved };
     if (posted.at && posted.takes) { reg = posted.at; fell = true; shifted = true; }
     else if (posted.at) { ashore = { at: posted.at, adds: posted.adds }; reg = posted.at; fell = true; }
-    return { reg: reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl) ? onFor(reg) : reg, fell, ashore, waits: false, shifted, home, moved };
+    return { reg: reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl) ? onFor(reg, false) : reg, fell, ashore, waits: false, shifted, home, moved };
   }
   // The wider world: a player whose homeland lies across the ocean has such an army form at home, and shipping
   // it is his business. (A computer's staff ships the corps it raises itself, and is sent none of these: above.)
@@ -5372,7 +5375,7 @@ function rowPlace(g: Game, nat: string, row: any[], o: any, at: Region): { reg: 
   // A full province sends it on to the nearest ground with room. (The record's own place is counted against five on
   // an island of the Pacific too at stops 1 and 2, `roomNear`'s `record`: form B3 (c). So is it above, for a row
   // `postedFor` places. At stops 3 to 5 the island's room in men binds it: Q2.)
-  if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = onFor(reg);
+  if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = onFor(reg, reg === at);
   return { reg, fell, ashore, waits: false, shifted, home, moved };
 }
 
