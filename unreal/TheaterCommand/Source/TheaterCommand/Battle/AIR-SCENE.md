@@ -1614,3 +1614,15 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    AirBattle.cpp that the arc is laid into the turning disc's own section 0. And B1's rule that no blade mark is left
    standing was the test's own copy: the test now also reads the game's lines (the marks looked up by the triangle, the
    near shape's keep test with `!bMark`). Each new check fails on a broken copy and passes on the branch.
+
+   **The blade marks mend (a fault in his game, no row; 27 November 2026).** The art director's P48 stills of the close
+   B-17 (r2-play c6eb5a021, the same on his Play icon) showed a red disc in a white ring on her lower fuselage under the
+   wing root and two small red marks under the chin. They are the makers' marks painted on each airscrew blade (paints
+   decal 9E3A2F and decal_rim CFCABA, 84 triangles a hub on the finer B-17 and the Wellington; the only red-and-white
+   paint in B17Fine.json, all of it inside the four airscrew discs). The near shape has taken its blades out to turn as
+   a disc since release 1.5, whatever the rows, but left the marks behind, standing still about half the radius out.
+   Mend: TakeScrews finds the marks (BladeDecals) always and drops them with the blades; only the tips' arc waits for
+   "flyPropBlur". With the row off the near B-17 and Wellington lose those 672 still triangles and nothing else; every
+   other aircraft carries no mark and is drawn as before. Test: air_prop_blur_test's "the blade marks mend" (the marks
+   found before the row's test, the tips' paint inside it; fails on the old lines). The Mac's still to judge it: a close
+   B-17 at the P48 nose-art eye, engines turning, no still red disc anywhere on her.

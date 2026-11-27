@@ -155,9 +155,9 @@ namespace AirScrew
 	 * By triangle of a mesh: true where it is a blade's painted mark (all three corners painted decal or decal_rim) inside
 	 * one of Screws' discs (a quarter of its radius either side of the disc at most, out to a twentieth past its
 	 * radius, as Find takes a blade's painted band). Left in the near shape when its blades are taken out to turn as the
-	 * disc, each hub's 84 (the finer B-17's; the Wellington's the same) stand still about half the radius out while the
-	 * disc turns, with the row "flyPropSpin" on or off; with "flyPropBlur" they go with their blades. A point past the
-	 * paints is no mark.
+	 * disc, each hub's 84 (the finer B-17's; the Wellington's the same) stood still about half the radius out while the
+	 * disc turned (on the close B-17, a red disc in a white ring under the wing root: the art director's P48 find), so
+	 * they always go with their blades (the blade marks mend, 27 November 2026). A point past the paints is no mark.
 	 */
 	std::vector<bool> BladeDecals(const std::vector<Vec3>& Points, const std::vector<int>& Paints, const PaintsAre& Are, const std::vector<int>& Triangles,
 	                              const std::vector<Screw>& Screws);

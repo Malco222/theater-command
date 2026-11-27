@@ -607,7 +607,18 @@ int main(int Argc, char** Argv)
 			"the row on, every shape under a key of its own and only then its far shape stripped (off: the keys and shapes of before)");
 		Check(Count(Battle, "AirParts::TakeScrews(Near, Made, Kind, Middle, Fit, UnitsPerMetre, bBlur);") == 1
 				&& Count(Battle, "if (bPropBlur)") == 1 && Count(Battle, "AirScrew::BladeDecals(") == 1 && Count(Battle, "AirScrew::TipColour(") == 1,
-			"the near shape's marks and tips' paint taken only with the row on (off: the near shape of before)");
+			"the near shape's marks found once and the tips' paint taken once, in TakeScrews");
+		{
+			// (the blade marks mend, 27 November 2026, a fault in his game: the marks go with the blades whenever the blades
+			// go, row or no row, so they are found BEFORE the row's "if (bPropBlur)" and never inside it; only the tips'
+			// paint waits for the row. The art director's P48 stills: left standing in the turning disc they read as a red
+			// disc in a white ring under the close B-17's wing root.)
+			const size_t MarksAt = Battle.find("const std::vector<bool> Marks = AirScrew::BladeDecals(Points, Paints, Are, Triangles, Found.Screws);");
+			const size_t IfAt = Battle.find("if (bPropBlur)");
+			const size_t TipAt = Battle.find("bTip = AirScrew::TipColour(FileText, Paints, Tip);");
+			Check(MarksAt != std::string::npos && IfAt != std::string::npos && TipAt != std::string::npos && MarksAt < IfAt && IfAt < TipAt,
+				"the blade marks mend: the near shape's blade marks go with the blades row or no row (found before the row's test), the tips' paint only with the row");
+		}
 		// (B1 holds the test's own copy of TakeScrews' keep rule; these are the game's: the marks found on the triangles
 		// Find read, each looked up by its own triangle, and a marked triangle not kept. Off, Marks is empty: no change.)
 		Check(Count(Battle, "Marks = AirScrew::BladeDecals(Points, Paints, Are, Triangles, Found.Screws);") == 1

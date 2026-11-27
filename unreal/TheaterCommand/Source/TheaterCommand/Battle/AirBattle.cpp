@@ -4110,7 +4110,7 @@ bool AAirBattle::PropBlurOn()
 			}
 			if (ScrewHaze)
 			{
-				UE_LOG(LogTheater, Display, TEXT("Air battle: far airscrews a faint blur: on (the Battle rules card's Far airscrews a faint blur, or -TheaterAirPropBlur): past 300 m no solid disc and no still blades, each airscrew a faint grey disc (M_ScrewHaze); close to, the blades' painted marks go with the blades and the tips' paint is a faint arc."));
+				UE_LOG(LogTheater, Display, TEXT("Air battle: far airscrews a faint blur: on (the Battle rules card's Far airscrews a faint blur, or -TheaterAirPropBlur): past 300 m no solid disc and no still blades, each airscrew a faint grey disc (M_ScrewHaze); close to, the tips' paint is a faint arc."));
 			}
 			else
 			{
@@ -4227,10 +4227,12 @@ namespace AirParts
 	/**
 	 * A sculpted aircraft's airscrews (Battle/AirScrew), found by the paints its file gives the points the model was made
 	 * from, in order: their blades are taken out of its near shape, which turns them as discs. Read wrong (its points
-	 * not in the file's order, a screw that is not one) and the blades stay where they are, standing still. With the row
-	 * "flyPropBlur" on (bPropBlur) the blades' painted marks go with them (AirScrew's BladeDecals: the finer B-17's and
-	 * the Wellington's 84 a screw, left standing still half the radius out in the turning disc otherwise), and each
-	 * screw is given its tips' paint (TipColour) for the disc's arc.
+	 * not in the file's order, a screw that is not one) and the blades stay where they are, standing still. The blades'
+	 * painted marks always go with them (AirScrew's BladeDecals: the finer B-17's and the Wellington's 84 a screw; a
+	 * named mend of a fault in his game, 27 November 2026: left behind, they stood still half the radius out in the
+	 * turning disc, and on the close B-17 read as a red disc in a white ring under the wing root and two red marks under
+	 * the chin, the art director's P48 find). With the row "flyPropBlur" on (bPropBlur) each screw is also given its
+	 * tips' paint (TipColour) for the disc's arc.
 	 */
 	static void TakeScrews(FShape& Shape, const FMiniatureMesh& Made, const FString& Kind, const FVector& Middle, double Fit, double U, bool bPropBlur = false)
 	{
@@ -4271,13 +4273,13 @@ namespace AirParts
 		}
 		TArray<int32> Kept;
 		Kept.Reserve(Shape.Triangles.Num());
-		// (the row "flyPropBlur": the blades' painted marks in the discs, and the tips' paint; off, none and none)
-		std::vector<bool> Marks;
+		// (the blades' painted marks in the discs go with the blades, row or no row: the blade marks mend; the row
+		// "flyPropBlur": the tips' paint, off none)
+		const std::vector<bool> Marks = AirScrew::BladeDecals(Points, Paints, Are, Triangles, Found.Screws);
 		unsigned char Tip[3] = { 0, 0, 0 };
 		bool bTip = false;
 		if (bPropBlur)
 		{
-			Marks = AirScrew::BladeDecals(Points, Paints, Are, Triangles, Found.Screws);
 			bTip = AirScrew::TipColour(FileText, Paints, Tip);
 		}
 		// (the blades go, and with them the model's own painted blur disc where it has one: the turning disc stands
