@@ -34,7 +34,7 @@ function corps(g: Game, nat: string, name: string, at: Region, divs = 1, str = 1
 }
 const clear = (g: Game, r: Region): void => { for (const u of [...r.units, ...(r.garr ?? [])]) removeCorps(g, u); };
 /** What the board printed, for the report: one line a sentence. */
-const say = (board: string, line: string): void => { process.stderr.write(`\nLIVE ${board} | ${line}`); };
+const say = (board: string, line: string): void => { (globalThis as unknown as { process: { stderr: { write: (s: string) => void } } }).process.stderr.write(`\nLIVE ${board} | ${line}`); };
 
 describe('the round 2 sentences on live boards through the bridge', () => {
   it("D5: Singapore with five of Britain's fighting corps refuses a sixth whose men fit, in the sentence any ground that holds five says", () => {
