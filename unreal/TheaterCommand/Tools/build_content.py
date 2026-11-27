@@ -266,7 +266,10 @@ def build_map_surface(name="M_MapSurface", soot=False, crowd=False, sway=False, 
         # M_AirPaint (row flyB17Sheen): the finer B-17's own finish a point, carried in the mesh's first texture coordinate
         # by Battle/AirSheen (U: how far below 0.9 her roughness is; V: her metal). U = V = 0 is PlaneInk exactly.
         # The sums are AirSheen::Law's; air_b17_sheen_test reads this block's names and defaults (keep each scalar(...)
-        # on one line).
+        # on one line). "SheenEdge" is also the game's stale-asset sentinel (it reads the asset's default against
+        # AirSheen::Tune::Edge): whoever changes these nodes changes SheenEdge's default and Tune::Edge with it (say 20 to
+        # 20.5), or a Mac that keeps an older M_AirPaint is not told. A material that saves but does not compile is not
+        # caught by it either: the content build's own log says so.
         rough_ink = scalar(m, "Roughness", 0.9, -450, 200)
         spec_ink = scalar(m, "Specular", 0.25, -450, 300)
         carried = node(m, unreal.MaterialExpressionTextureCoordinate, -1500, 1500)

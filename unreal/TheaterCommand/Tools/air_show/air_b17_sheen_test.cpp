@@ -260,7 +260,7 @@ int main(int Argc, char** Argv)
 			const AirSheen::Level& L = Sh.LevelOf(bFar);
 			const AirSkin::Level& SkinL = Skin.LevelOf(bFar);
 			const AirUnitColours::Mesh& Me = bFar ? Base.Far : Base.Near;
-			int Floored = 0, Glass = 0, Fittings = 0, Untouched = 0, Smooth = 0, Rough = 0, Spec = 0, Under = 0, Metal = 0, Kept = 0, CoatMetal = 0, RivetMetal = 0;
+			int Floored = 0, Glass = 0, Fittings = 0, Untouched = 0, Smooth = 0, Rough = 0, Spec = 0, Under = 0, Metal = 0, Kept = 0, CoatMetal = 0, RivetMetal = 0, GlassDull = 0;
 			for (size_t K = 0; K < L.Count(); ++K)
 			{
 				const AirSheen::Carried C = CarryAt(L, SkinL, K);
@@ -268,6 +268,7 @@ int main(int Argc, char** Argv)
 				const int Paint = SkinL.PaintAt(K, Me.Paints[K]);
 				const bool bGlass = L.Gloss[K] < 12;
 				Glass += bGlass ? 1 : 0;
+				GlassDull += bGlass && !(F.Rough < 0.2) ? 1 : 0;
 				Floored += !bGlass && F.Rough == T.Floor ? 1 : 0;
 				Smooth += !bGlass && F.Rough < T.Floor - 1e-12 ? 1 : 0;
 				Rough += F.Rough > 0.9 + 1e-12 ? 1 : 0;
@@ -291,6 +292,7 @@ int main(int Argc, char** Argv)
 			const std::string Name = bFar ? "far" : "near";
 			Check(Smooth == 0, Name + ": no paint smoother than the floor 0.45 (glass alone)", std::to_string(Smooth));
 			Check(Rough == 0, Name + ": none rougher than today's 0.9");
+			Check(Glass > 0 && GlassDull == 0, Name + ": every glass point glints (under 0.2 rough), her contact shade at full strength", std::to_string(GlassDull) + " of " + std::to_string(Glass));
 			Check(Spec == 0, Name + ": specular 0.15 to 0.25");
 			Check(Under == 0, Name + ": no metal where her file's is 0.5 or under", std::to_string(Under));
 			Check(Fittings > 0 && Metal == 0, Name + ": her fittings' metal her file's own", std::to_string(Fittings) + " fitting points");

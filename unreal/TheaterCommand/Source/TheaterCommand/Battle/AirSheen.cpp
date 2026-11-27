@@ -171,7 +171,9 @@ namespace AirSheen
 		const double Below = std::min(std::max(Untouched - Gloss / 100.0, 0.0), Untouched);
 		const double Shade = std::min(std::max(ShadeFactor, 0.0), 1.0);
 		Carried C;
-		C.U = static_cast<float>(Below * std::sqrt(Shade));
+		// (her glass (gloss under 12) keeps its whole depth, so that it glints in a shaded nook too: the shade would
+		// otherwise carry it under the material's glass test, SheenGlassBelow, and floor it to her paint's satin)
+		C.U = static_cast<float>(Below * (Gloss < 12 ? 1.0 : std::sqrt(Shade)));
 		C.V = static_cast<float>(std::min(std::max(Metal / 100.0, 0.0), 1.0));
 		return C;
 	}

@@ -55,7 +55,8 @@ namespace AirSheen
 		float U = 0.0f, V = 0.0f;
 	};
 
-	/** U = clamp(0.9 - Gloss/100, 0, 0.9) x sqrt(clamp(ShadeFactor, 0, 1)); V = clamp(Metal/100, 0, 1). */
+	/** U = clamp(0.9 - Gloss/100, 0, 0.9) x sqrt(clamp(ShadeFactor, 0, 1)), her glass (Gloss under 12) not shaded;
+	 * V = clamp(Metal/100, 0, 1). */
 	Carried Carry(int Gloss, int Metal, double ShadeFactor);
 
 	struct Finish
