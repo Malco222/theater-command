@@ -129052,12 +129052,12 @@
       corps: s.corps.filter((c) => !c.dead && seen2[c.reg] > 0).map((c) => {
         const kn = s.human && c.nat !== s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: "exact", age: 0 };
         if (seen2[c.reg] === 1 || kn.level === "none") {
-          return { id: c.id, nat: c.nat, name: seen2[c.reg] === 1 ? "An army seen from afar" : "A corps not identified", kind: "inf", elite: "", divs: 0, str: 0, org: 0, reg: c.reg, ap: 0, apMax: 0, gen: null, posture: postureOf(c), canOrder: false, supplied: true, men: 0, xp: 0, grade: "", nick: null, honours: [], dim: true, near: seen2[c.reg] !== 1 };
+          return { id: c.id, nat: c.nat, name: seen2[c.reg] === 1 ? "An army seen from afar" : "A corps not identified", kind: "inf", elite: "", divs: 0, str: 0, org: 0, reg: c.reg, ap: 0, apMax: 0, gen: null, canOrder: false, supplied: true, men: 0, xp: 0, grade: "", nick: null, honours: [], dim: true, near: seen2[c.reg] !== 1 };
         }
         if (kn.level === "report") {
           const card = corpsKnownAs(s, c);
           const lo = card?.strLo ?? c.str, hi = card?.strHi ?? c.str, mid = (lo + hi) / 2;
-          return { id: c.id, nat: c.nat, name: c.name, kind: c.kind, elite: "", divs: c.divs, str: mid, org: 0.5, reg: c.reg, ap: 0, apMax: 0, gen: null, posture: postureOf(c), canOrder: false, supplied: true, men: Math.round(c.divs * 15e3 * mid), xp: 0, grade: "", nick: null, honours: [], dim: false, stale: kn.age, strLo: lo, strHi: hi, carry: carriedBy(s, c), ...markOf2(c) };
+          return { id: c.id, nat: c.nat, name: c.name, kind: c.kind, elite: "", divs: c.divs, str: mid, org: 0.5, reg: c.reg, ap: 0, apMax: 0, gen: null, canOrder: false, supplied: true, men: Math.round(c.divs * 15e3 * mid), xp: 0, grade: "", nick: null, honours: [], dim: false, stale: kn.age, strLo: lo, strHi: hi, carry: carriedBy(s, c), ...markOf2(c) };
         }
         return {
           id: c.id,

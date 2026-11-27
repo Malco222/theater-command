@@ -786,14 +786,17 @@ function drawView(step = false) {
     corps: s.corps.filter((c) => !c.dead && seen[c.reg] > 0).map((c) => {
       // A foreign corps is known exactly, from a report gone stale, or not identified at all (the grand campaign).
       const kn = s.human && c.nat !== s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: 'exact' as const, age: 0 };
+      // (Its standing order, `posture`, is sent only where the corps is known as it is today: an army only glimpsed, a
+      // corps not identified and a corps known from a stale report carry none, because the order as it truly is must
+      // not cross the fog, shown or not. The design director, 27 November 2026 21:26Z; tests/view-posture-known-r2.)
       if (seen[c.reg] === 1 || kn.level === 'none') {
-        return { id: c.id, nat: c.nat, name: seen[c.reg] === 1 ? 'An army seen from afar' : 'A corps not identified', kind: 'inf', elite: '', divs: 0, str: 0, org: 0, reg: c.reg, ap: 0, apMax: 0, gen: null, posture: postureOf(c), canOrder: false, supplied: true, men: 0, xp: 0, grade: '', nick: null, honours: [], dim: true, near: seen[c.reg] !== 1 };
+        return { id: c.id, nat: c.nat, name: seen[c.reg] === 1 ? 'An army seen from afar' : 'A corps not identified', kind: 'inf', elite: '', divs: 0, str: 0, org: 0, reg: c.reg, ap: 0, apMax: 0, gen: null, canOrder: false, supplied: true, men: 0, xp: 0, grade: '', nick: null, honours: [], dim: true, near: seen[c.reg] !== 1 };
       }
       if (kn.level === 'report') {
         // Known from a report some months old: its name and its arm, and its strength only as a band.
         const card = corpsKnownAs(s, c);
         const lo = card?.strLo ?? c.str, hi = card?.strHi ?? c.str, mid = (lo + hi) / 2;
-        return { id: c.id, nat: c.nat, name: c.name, kind: c.kind, elite: '', divs: c.divs, str: mid, org: 0.5, reg: c.reg, ap: 0, apMax: 0, gen: null, posture: postureOf(c), canOrder: false, supplied: true, men: Math.round(c.divs * 15000 * mid), xp: 0, grade: '', nick: null, honours: [], dim: false, stale: kn.age, strLo: lo, strHi: hi, carry: carriedBy(s, c), ...markOf(c) };
+        return { id: c.id, nat: c.nat, name: c.name, kind: c.kind, elite: '', divs: c.divs, str: mid, org: 0.5, reg: c.reg, ap: 0, apMax: 0, gen: null, canOrder: false, supplied: true, men: Math.round(c.divs * 15000 * mid), xp: 0, grade: '', nick: null, honours: [], dim: false, stale: kn.age, strLo: lo, strHi: hi, carry: carriedBy(s, c), ...markOf(c) };
       }
       return ({
       id: c.id, nat: s.human && c.joint === s.human ? s.human : c.nat, ally: s.human && c.joint === s.human ? c.nat : '', name: c.name, kind: c.kind, elite: c.elite ?? '', divs: c.divs, str: c.str, org: c.org, reg: c.reg,
