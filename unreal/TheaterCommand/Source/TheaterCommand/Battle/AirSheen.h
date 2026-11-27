@@ -95,6 +95,35 @@ namespace AirSheen
 		const Level& LevelOf(bool bFar) const { return bFar ? Far : Near; }
 	};
 
+	/**
+	 * An aircraft whose own model file carries her finish point by point: the Mustang's bare metal (battle-models
+	 * air-bar-1126 issue-13, row "flyMustangMetal"; Brian, 27 November: "it should be shiny silver", "metalic"). Near
+	 * and far "gloss" and "metal" (whole numbers 0 to 100) and "shade" (her contact shade with her panels' tone, 0 to 1)
+	 * one a point, as the file lists them beside its paints. A point the file does not hold (her star and bar and her
+	 * number, laid after her file's points) wears paint: satin, no metal (the art director, 27 Nov 03:21Z: "paint stays
+	 * paint: metal 0, satin at most").
+	 */
+	struct OwnFinish
+	{
+		Level Near, Far;
+		std::vector<float> NearShade, FarShade;
+		int MarkGloss = 50, MarkMetal = 0;
+		/** The material's numbers for this run (BareTune, or the launch word's): not in the file. */
+		Tune Look;
+		const Level& LevelOf(bool bFar) const { return bFar ? Far : Near; }
+		const std::vector<float>& ShadeOf(bool bFar) const { return bFar ? FarShade : NearShade; }
+	};
+
+	/** Bare metal's numbers on M_AirPaint (the art director, 27 Nov 04:58Z): a floor of its own at 0.25, not the B-17's
+	 * 0.45 (her pick is roughness 0.28; 0.32 is the fall-back if the Mac shows sparkle); no glare guard on bare skin;
+	 * the rest as the B-17's. */
+	Tune BareTune();
+
+	/** Reads OwnFinish from a model file's "near" and "far": gloss, metal and shade, each one a point of its "paints";
+	 * false (and why) for a list missing, of another length, a gloss or metal not a whole number 0 to 100, or a shade
+	 * not a number 0 to 1. Nothing else in the file is read. */
+	bool ReadOwn(const std::string& Text, OwnFinish& Out, std::string& Why);
+
 	/** Reads the sheen file: sheen_of "B17Fine", the two sha256s and the base's FNV-1a 64, coat, near and far gloss and
 	 * metal of NearCount and FarCount whole numbers 0 to 100; false (and why) otherwise, or where any key anywhere names a
 	 * month, a year, a scheme, a mark or a "from". */

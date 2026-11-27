@@ -144,6 +144,11 @@ $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" 
   "$HERE/air_b17_sheen_grid.cpp" "$SRC/Battle/AirSheen.cpp" "$SRC/Battle/LandJson.cpp" -o "$OUT/air_b17_sheen_grid"
 "$OUT/air_b17_sheen_grid" > "$OUT/air_b17_sheen_grid.txt" || STATUS=1
 python3 -I -B "$HERE/air_b17_sheen_material.py" "$ROOT/Tools/build_content.py" "$OUT/air_b17_sheen_grid.txt" || STATUS=1
+# The silver Mustang (row flyMustangMetal): her issue-13 file beside the old one, its finish read as the game reads it
+# (AirSheen::ReadOwn), M_AirPaint's law on her numbers under her own tune (floor 0.25, no glare guard), the Unreal side.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_mustang_metal_test.cpp" "$SRC/Battle/AirSheen.cpp" "$SRC/Battle/LandJson.cpp" -o "$OUT/air_mustang_metal_test"
+"$OUT/air_mustang_metal_test" "$ROOT/Content/Models/MustangBare.json" "$ROOT/Content/Models/Mustang.json" "$SRC" || STATUS=1
 # The sky's picture (the clouds as the scene lays and turns them, drawn by a small software painter): AIR_SKY_PICTURES=1.
 if [ "${AIR_SKY_PICTURES:-}" = "1" ]; then
   $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \

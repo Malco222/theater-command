@@ -621,7 +621,14 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> SheenInk;
 	/** Her sheen file as read with the row on (B17SheenRead), else null. */
 	const AirSheen::Sheen* SheenNow = nullptr;
-	/** The ink a shape is drawn with: SheenInk for a shape made with her sheen ("|sheen" in its key), else PlaneInk. */
+	/** The silver Mustang's bare metal on M_AirPaint (the Battle rules card's "Silver Mustang", rule "flyMustangMetal"):
+	 * made as the battle opens with the row on and the material found and current, else null; and her finish as her own
+	 * file (MustangBare.json) lists it, read with the row on (MustangMetalRead), else null. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> BareInk;
+	const AirSheen::OwnFinish* BareNow = nullptr;
+	/** The ink a shape is drawn with: SheenInk for a shape made with her sheen ("|sheen" in its key), BareInk for the silver
+	 * Mustang's ("MustangBare:" its name), else PlaneInk. */
 	UMaterialInterface* InkFor(const FString& Shape) const;
 	/** SheenInk's way to the sun ("SheenSun", the glare guard's), from TowardSun. */
 	void SheenSunSet();
@@ -1063,6 +1070,10 @@ private:
 	 * with it and her worn paint on, her sheen file (Content/Data/AirSkin/B17Fine-sheen.json) read into SheenNow and the
 	 * state's B17SheenOn; off, nothing is read or said. */
 	void B17SheenRead();
+	/** The Battle rules card's "Silver Mustang" (rule "flyMustangMetal"), read once as a battle begins: with it on, every
+	 * Mustang is drawn from Content/Models/MustangBare.json (ModelFor) and her finish read from that file into BareNow and
+	 * the state's MustangMetalOn; off, nothing is read or said and every Mustang is drawn as before. */
+	void MustangMetalRead();
 	/** The most close-up shapes of the finer B-17 a battle makes (-TheaterAirB17FineNear=N, 8 unless asked), and whether
 	 * this aircraft may go to its close-up shape now: any aircraft but a finer B-17, one whose close-up shape is made,
 	 * or one while fewer than the most are made. */

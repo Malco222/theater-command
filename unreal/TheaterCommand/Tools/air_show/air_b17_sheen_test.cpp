@@ -524,12 +524,18 @@ int main(int Argc, char** Argv)
 		const std::string InkBody = Ink == std::string::npos ? std::string() : Battle.substr(Ink, Battle.find("\n}\n", Ink) - Ink);
 		Check(InkBody.find("if (SheenInk && Shape.Contains(TEXT(\"|sheen\")))") != std::string::npos && InkBody.find("return PlaneInk.Get();") != std::string::npos,
 			"InkFor gives PlaneInk without SheenInk or without '|sheen'");
-		Check(Count(Battle, "SetScalarParameterValue(TEXT(\"SheenEdge\")") == 0 && Count(Battle, "K2_GetScalarParameterValue(TEXT(\"SheenEdge\"))") == 1,
-			"the sentinel SheenEdge read and never set");
+		// (twice since the silver Mustang's ink, row flyMustangMetal: hers is made from the same M_AirPaint, gated by her row)
+		Check(Count(Battle, "SetScalarParameterValue(TEXT(\"SheenEdge\")") == 0 && Count(Battle, "K2_GetScalarParameterValue(TEXT(\"SheenEdge\"))") == 2,
+			"the sentinel SheenEdge read and never set (the B-17's ink and the silver Mustang's)");
 		const size_t Load = Battle.find("TEXT(\"/Game/Campaign/Materials/M_AirPaint.M_AirPaint\")"), Gate = Battle.find("if (State && State->B17SheenOn == 1 && SheenNow)");
 		const size_t Sentinel = Battle.find("K2_GetScalarParameterValue(TEXT(\"SheenEdge\"))"), FirstSet = Battle.find("SheenMade->SetScalarParameterValue(");
-		Check(Count(Battle, "M_AirPaint.M_AirPaint") == 1 && Gate != std::string::npos && Load != std::string::npos && Gate < Load && Load - Gate < 300 && Sentinel < FirstSet,
-			"M_AirPaint loaded only with the row on, its sentinel read before anything is set");
+		const size_t Load2 = Load == std::string::npos ? std::string::npos : Battle.find("TEXT(\"/Game/Campaign/Materials/M_AirPaint.M_AirPaint\")", Load + 1);
+		const size_t Gate2 = Battle.find("if (State && State->MustangMetalOn == 1 && BareNow)");
+		const size_t Sentinel2 = Sentinel == std::string::npos ? std::string::npos : Battle.find("K2_GetScalarParameterValue(TEXT(\"SheenEdge\"))", Sentinel + 1);
+		const size_t FirstSet2 = Battle.find("BareMade->SetScalarParameterValue(");
+		Check(Count(Battle, "M_AirPaint.M_AirPaint") == 2 && Gate != std::string::npos && Load != std::string::npos && Gate < Load && Load - Gate < 300 && Sentinel < FirstSet
+				&& Gate2 != std::string::npos && Load2 != std::string::npos && Gate2 < Load2 && Load2 - Gate2 < 300 && Sentinel2 < FirstSet2 && FirstSet2 != std::string::npos,
+			"M_AirPaint loaded only with its row on (the B-17's sheen, the silver Mustang's), its sentinel read before anything is set");
 		// (her glare guard's sun: set once the key light is aimed, after HideTheTable, a stage battle's sun with it; and
 		// not before Raise, where a stage battle's TowardSun is still the default 30 degrees)
 		const size_t Hide = Battle.find("\tHideTheTable();\n\tif (SheenInk && SheenNow)\n\t{");

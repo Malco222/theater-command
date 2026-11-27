@@ -692,6 +692,7 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	B17FineRead(); // (the Battle rules card's "Finer B-17", read once as the battle begins: every shape it makes follows it)
 	B17SkinRead(); // (and its "Worn B-17 paint", after it: her paint for every shape the battle makes)
 	B17SheenRead(); // (and its "B-17 paint sheen", after that: her paint's own finish)
+	MustangMetalRead(); // (the Battle rules card's "Silver Mustang": her bare metal file and its finish)
 	TimeEyeKey = TimeEyeGroup = -1; // (the timing eye, -TheaterAirTimeEye, begun afresh with each battle)
 	TimeEyeFrom = -1.0;
 	bTimeEyeQuit = false;
@@ -755,6 +756,7 @@ bool AAirBattle::BeginLiveCall(FCampaignSession* InSession, const FString& Funct
 	B17FineRead(); // (the Battle rules card's "Finer B-17", read once as the battle begins: every shape it makes follows it)
 	B17SkinRead(); // (and its "Worn B-17 paint", after it: her paint for every shape the battle makes)
 	B17SheenRead(); // (and its "B-17 paint sheen", after that: her paint's own finish)
+	MustangMetalRead(); // (the Battle rules card's "Silver Mustang": her bare metal file and its finish)
 	TimeEyeKey = TimeEyeGroup = -1; // (the timing eye, -TheaterAirTimeEye, begun afresh with each battle)
 	TimeEyeFrom = -1.0;
 	bTimeEyeQuit = false;
@@ -983,6 +985,40 @@ bool AAirBattle::Open(const FString& Why)
 					// (her glare guard's sun is set, and she is announced, once the stage is raised and the key light aimed:
 					// after HideTheTable below, since a stage battle's sun is the stage's)
 				}
+			}
+		}
+		// (the Battle rules card's "Silver Mustang", row "flyMustangMetal", read as the battle began (MustangMetalRead): her
+		// bare metal on the same M_AirPaint, with its own numbers (AirSheen::BareTune: a floor of 0.25, no glare guard).
+		// Off, nothing here runs and nothing is said.)
+		BareInk = nullptr;
+		if (State && State->MustangMetalOn == 1 && BareNow)
+		{
+			UMaterialInterface* BareAsset = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_AirPaint.M_AirPaint"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+			UMaterialInstanceDynamic* BareMade = BareAsset ? UMaterialInstanceDynamic::Create(BareAsset, this) : nullptr;
+			if (!BareMade || FMath::Abs(BareMade->K2_GetScalarParameterValue(TEXT("SheenEdge")) - static_cast<float>(AirSheen::Tune().Edge)) > 0.001f)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle: silver Mustang: on, but /Game/Campaign/Materials/M_AirPaint is %s (run TC_REBUILD=M_AirPaint Tools/build_content.sh): every Mustang flies as before."),
+					BareMade ? TEXT("older than this build") : TEXT("missing"));
+				State->MustangMetalOn = 0;
+				BareNow = nullptr;
+			}
+			else
+			{
+				const AirSheen::Tune& BareLook = BareNow->Look;
+				BareMade->SetScalarParameterValue(TEXT("Roughness"), static_cast<float>(PaintRough));
+				BareMade->SetScalarParameterValue(TEXT("Specular"), static_cast<float>(PaintSpec));
+				BareMade->SetScalarParameterValue(TEXT("Grain"), 0.0f);
+				BareMade->SetScalarParameterValue(TEXT("Tooth"), 0.0f);
+				BareMade->SetScalarParameterValue(TEXT("SheenGain"), static_cast<float>(BareLook.Gain));
+				BareMade->SetScalarParameterValue(TEXT("SheenFloor"), static_cast<float>(BareLook.Floor));
+				BareMade->SetScalarParameterValue(TEXT("SheenSpec"), static_cast<float>(BareLook.Spec));
+				BareMade->SetScalarParameterValue(TEXT("SheenMetal"), static_cast<float>(BareLook.Metal));
+				BareMade->SetScalarParameterValue(TEXT("SheenMetalFrom"), static_cast<float>(BareLook.MetalFrom));
+				BareMade->SetScalarParameterValue(TEXT("SheenGlare"), static_cast<float>(BareLook.Glare));
+				BareMade->SetScalarParameterValue(TEXT("SheenGraze"), static_cast<float>(BareLook.Graze));
+				BareInk = BareMade;
+				UE_LOG(LogTheater, Display, TEXT("Air battle: silver Mustang: on (the Battle rules card's Silver Mustang, or -TheaterAirMustangMetal): MustangBare.json on M_AirPaint, floor %.2f, glare guard %.2f, metal %.2f from %.2f (-TheaterAirMustangMetalInk=gain,floor,spec,metal,glare,graze,metalfrom); her marks satin, no metal."),
+					BareLook.Floor, BareLook.Glare, BareLook.Metal, BareLook.MetalFrom);
 			}
 		}
 		if (UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight")))
@@ -4177,6 +4213,59 @@ void AAirBattle::B17SheenRead()
 	State->B17SheenOn = 1;
 }
 
+void AAirBattle::MustangMetalRead()
+{
+	// The Battle rules card's "Silver Mustang" (FLandLive's rule "flyMustangMetal", release 2; off until the Mac's stills
+	// are judged). Brian, 27 November: "shouldnt the p-51 mustangs be silver with black paint?", then "it should be shiny
+	// silver", "metalic". Her file is the air rules thread's issue-13 (battle-models/air-bar-1126/issue-13/Mustang.json,
+	// sha256 4b7fe030..., the art director's pick: E0E3E5 at roughness 0.28), kept beside the old one as
+	// Content/Models/MustangBare.json so that the row off draws every Mustang as before. Read once a run and kept.
+	static AirSheen::OwnFinish BareKept;
+	static bool bBareKeptRead = false;
+	BareNow = nullptr; // (an earlier battle's never lingers)
+	BareInk = nullptr;
+	if (!State)
+	{
+		return;
+	}
+	State->MustangMetalOn = 0;
+	if (!FLandLive::RuleNow(TEXT("flyMustangMetal")))
+	{
+		return;
+	}
+	if (!bBareKeptRead)
+	{
+		TArray<uint8> Bytes;
+		const FString Path = FPaths::ProjectContentDir() / TEXT("Models/MustangBare.json");
+		if (!FFileHelper::LoadFileToArray(Bytes, *Path))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: silver Mustang: Content/Models/MustangBare.json could not be read, so every Mustang flies as before."));
+			return;
+		}
+		const std::string Text(reinterpret_cast<const char*>(Bytes.GetData()), static_cast<size_t>(Bytes.Num()));
+		std::string Why;
+		if (!AirSheen::ReadOwn(Text, BareKept, Why))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: silver Mustang: Content/Models/MustangBare.json does not read (%s), so every Mustang flies as before."), UTF8_TO_TCHAR(Why.c_str()));
+			return;
+		}
+		// (the material's numbers, for stills without a rebuild: -TheaterAirMustangMetalInk=gain,floor,spec,metal,glare,
+		// graze,metalfrom, each optional, over her own (a floor of 0.25, no glare guard); 0.32 is the art director's
+		// fall-back floor if the Mac shows sparkle)
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterAirMustangMetalInk="), Asked, false))
+		{
+			if (!AirSheen::ParseTune(std::string(TCHAR_TO_UTF8(*Asked)), BareKept.Look, Why))
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle: silver Mustang: -TheaterAirMustangMetalInk=%s: %s."), *Asked, UTF8_TO_TCHAR(Why.c_str()));
+			}
+		}
+		bBareKeptRead = true;
+	}
+	BareNow = &BareKept;
+	State->MustangMetalOn = 1;
+}
+
 int32 AAirBattle::B17FineNearMost()
 {
 	// (each finer B-17 that once comes near keeps her close-up shape for the battle, some 31 to 37 MB a copy by arithmetic:
@@ -4265,6 +4354,11 @@ UMaterialInterface* AAirBattle::InkFor(const FString& Shape) const
 	{
 		return SheenInk.Get();
 	}
+	// (the silver Mustang's: her bare metal carried the same way, on her own ink; null with her row off)
+	if (BareInk && Shape.StartsWith(TEXT("MustangBare:")))
+	{
+		return BareInk.Get();
+	}
 	return PlaneInk.Get();
 }
 
@@ -4300,13 +4394,17 @@ FString AAirBattle::ModelFor(const FString& Model, const FString& Nation, bool b
 	// for the run (AirParts::Shapes, the miniature kit's, the earned colours', the nose-art panels') is the newer one's;
 	// with the row off, the name and every one of them is what it always was)
 	const bool bFine = State && State->B17FineOn == 1;
-	const FString Asked = Model + TEXT("|") + Nation + (bFighter ? TEXT("|f") : TEXT("|b")) + (bFine ? TEXT("|fine") : TEXT(""));
+	// (and its "Silver Mustang": every Mustang drawn from MustangBare.json, her bare metal file, the same way; with the row
+	// off, or her file not read, the name is what it always was)
+	const bool bBare = State && State->MustangMetalOn == 1 && BareNow;
+	const FString Asked = Model + TEXT("|") + Nation + (bFighter ? TEXT("|f") : TEXT("|b")) + (bFine ? TEXT("|fine") : TEXT("")) + (bBare ? TEXT("|bare") : TEXT(""));
 	if (const FString* Answered = Found.Find(Asked))
 	{
 		return *Answered;
 	}
 	const FString* Named = Known.Find(Model);
-	const FString Name = bFine ? AirParts::Wide(AirShow::FileOf(AirParts::Narrow(Named ? *Named : Model), true)) : Named ? *Named : Model;
+	const FString Plain = bFine ? AirParts::Wide(AirShow::FileOf(AirParts::Narrow(Named ? *Named : Model), true)) : Named ? *Named : Model;
+	const FString Name = bBare && Plain == TEXT("Mustang") ? FString(TEXT("MustangBare")) : Plain;
 	FMiniatureMesh Probe;
 	const FString Out = !Name.IsEmpty() && Probe.Vehicle(Name + TEXT(":") + Nation, FVector::ZeroVector, 1.0, 0.0, false)
 		? Name + TEXT(":") + Nation : (bFighter ? TEXT("Fighter:") : TEXT("Bomber:")) + Nation;
@@ -4400,6 +4498,24 @@ namespace AirParts
 		{
 			const size_t At = static_cast<size_t>(K);
 			const AirSheen::Carried C = At < Count ? AirSheen::Carry(Own.Gloss[At], Own.Metal[At], AirSkin::ShadeFactor(Skin.Shade[At], ShadeStrength)) : Coat;
+			Shape.Sheen[K] = FVector2D(C.U, C.V);
+		}
+	}
+
+	/** The same for an aircraft whose own file carries her finish (the silver Mustang's): her gloss, metal and shade a
+	 * point, as her file lists them; a point past them (her marks) wears Marks. */
+	static void OwnOnto(FShape& Shape, const AirSheen::Level& Own, const std::vector<float>& Shade, const AirSheen::Carried& Marks)
+	{
+		const size_t Count = Own.Count();
+		if (Shade.size() != Count || Own.Metal.size() != Count || Shape.Points.Num() < static_cast<int32>(Count))
+		{
+			return;
+		}
+		Shape.Sheen.SetNum(Shape.Points.Num());
+		for (int32 K = 0; K < Shape.Points.Num(); ++K)
+		{
+			const size_t At = static_cast<size_t>(K);
+			const AirSheen::Carried C = At < Count ? AirSheen::Carry(Own.Gloss[At], Own.Metal[At], Shade[At]) : Marks;
 			Shape.Sheen[K] = FVector2D(C.U, C.V);
 		}
 	}
@@ -5400,6 +5516,9 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 	// (and with the Battle rules card's "B-17 paint sheen" on as well, a shape of her own again, her paint's own finish in
 	// its first texture coordinate (SheenOnto): read as the battle began (B17SheenRead); off, the key is what it was)
 	const bool bSheen = bSkin && State && State->B17SheenOn == 1 && SheenNow;
+	// (the Battle rules card's "Silver Mustang": a Mustang drawn from her bare metal file (ModelFor's name) carries that
+	// file's own finish the same way (OwnOnto); its name is already its own, so no key is added)
+	const bool bBare = State && State->MustangMetalOn == 1 && BareNow && Name.StartsWith(TEXT("MustangBare:"));
 	FString ShapeKey = (bStandIn ? FString::Printf(TEXT("%s@%.1f|%s"), *Name, Span, *Model) : Name) + (Scheme > 0 ? FString::Printf(TEXT("|scheme%d"), Scheme) : FString())
 		+ (bTorpedo ? TEXT("|torpedo") : TEXT("")) + (bLetters ? TEXT("|letters") : TEXT("")) + (bScrews ? TEXT("|screws") : TEXT(""));
 	if (bSkin)
@@ -5432,6 +5551,12 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 			{
 				AirParts::SheenOnto(Near, Worn->Near, SheenNow->Near, Worn->ShadeStrength, Coat);
 			}
+			// (the silver Mustang: her own file's finish, her marks satin with no metal)
+			const AirSheen::Carried BareMarks = bBare ? AirSheen::Carry(BareNow->MarkGloss, BareNow->MarkMetal, 1.0) : AirSheen::Carried();
+			if (bBare)
+			{
+				AirParts::OwnOnto(Near, BareNow->Near, BareNow->NearShade, BareMarks);
+			}
 			FString Kind, Whose;
 			Name.Split(TEXT(":"), &Kind, &Whose);
 			if (DiscInk)
@@ -5460,6 +5585,10 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 				if (bSheen)
 				{
 					AirParts::SheenOnto(Away, Worn->Far, SheenNow->Far, Worn->ShadeStrength, Coat);
+				}
+				if (bBare)
+				{
+					AirParts::OwnOnto(Away, BareNow->Far, BareNow->FarShade, BareMarks);
 				}
 				if (bNavy)
 				{
@@ -6142,6 +6271,11 @@ void AAirBattle::WarmUp()
 	if (SheenInk)
 	{
 		Quad(TEXT("AirWarmSheen"), SheenInk.Get(), true, true);
+	}
+	// (and the silver Mustang's, the row "flyMustangMetal"; null with the row off)
+	if (BareInk)
+	{
+		Quad(TEXT("AirWarmBare"), BareInk.Get(), true, true);
 	}
 }
 

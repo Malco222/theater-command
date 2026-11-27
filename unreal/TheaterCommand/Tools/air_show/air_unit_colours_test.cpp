@@ -71,6 +71,9 @@ namespace
 			{ "Bomber", { false, 2, 1 } },
 			// (the finer B-17, Content/Models/B17Fine.json, the Battle rules card's "Finer B-17": four engines, one fin)
 			{ "B17Fine", { false, 4, 1 } },
+			// (the Silver Mustang, Content/Models/MustangBare.json, the Battle rules card's "Silver Mustang": her bare metal
+			// file, drawn for every Mustang with the row on; one engine, one fin)
+			{ "MustangBare", { true, 1, 1 } },
 		};
 		return E;
 	}

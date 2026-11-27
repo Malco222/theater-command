@@ -309,4 +309,64 @@ namespace AirSheen
 		Out = std::move(S);
 		return true;
 	}
+
+	Tune BareTune()
+	{
+		Tune T;
+		T.Floor = 0.25;
+		T.Glare = 0.0;
+		return T;
+	}
+
+	bool ReadOwn(const std::string& Text, OwnFinish& Out, std::string& Why)
+	{
+		LandJson::Json Root;
+		if (!LandJson::Parse(Text, Root, Why))
+		{
+			return false;
+		}
+		if (!Root.IsObject())
+		{
+			Why = "not an object";
+			return false;
+		}
+		OwnFinish F;
+		F.Look = BareTune();
+		const char* Names[2] = { "near", "far" };
+		for (int L = 0; L < 2; ++L)
+		{
+			const LandJson::Json& Node = Root[Names[L]];
+			const LandJson::Json& Paints = Node["paints"];
+			if (!Node.IsObject() || !Paints.IsArray() || Paints.Items.empty())
+			{
+				Why = std::string("no ") + Names[L] + " paints";
+				return false;
+			}
+			const size_t Count = Paints.Items.size();
+			if (!SheenLevel(Node, Count, L == 0 ? F.Near : F.Far, Why, Names[L]))
+			{
+				return false;
+			}
+			const LandJson::Json& Shade = Node["shade"];
+			if (!Shade.IsArray() || Shade.Items.size() != Count)
+			{
+				Why = std::string(Names[L]) + ": shade must be one number 0 to 1 a point (" + std::to_string(Count) + " points)";
+				return false;
+			}
+			std::vector<float>& Into = L == 0 ? F.NearShade : F.FarShade;
+			Into.resize(Count);
+			for (size_t K = 0; K < Count; ++K)
+			{
+				const LandJson::Json& N = Shade.Items[K];
+				if (!N.IsNumber() || !(N.Value >= 0.0) || !(N.Value <= 1.0))
+				{
+					Why = std::string(Names[L]) + ": shade must be one number 0 to 1 a point";
+					return false;
+				}
+				Into[K] = static_cast<float>(N.Value);
+			}
+		}
+		Out = std::move(F);
+		return true;
+	}
 }

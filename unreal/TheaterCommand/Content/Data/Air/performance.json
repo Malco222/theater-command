@@ -3136,12 +3136,14 @@
     "P51",
     "P-51D",
     "P-51K",
-    "Mustang IV"
+    "Mustang IV",
+    "MustangBare"
    ],
    "models": [
     "Mustang",
     "P-51",
-    "P51"
+    "P51",
+    "MustangBare"
    ],
    "nation": "USA",
    "role": "fighter",
