@@ -3242,10 +3242,13 @@ def build_land_stalks_or_tell():
     except Exception:
         unreal.log_error("Theater Command: M_LandStalks was not built (the corn keeps its bundles to the lens):\n" + traceback.format_exc())
         try:
-            if eal.does_asset_exist(f"{MATERIALS}/M_LandStalks"):
-                eal.delete_asset(f"{MATERIALS}/M_LandStalks")
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandStalks") and not eal.delete_asset(f"{MATERIALS}/M_LandStalks"):
+                unreal.log_error("Theater Command: and the half-built M_LandStalks could not be removed (delete_asset said no)")
         except Exception:
             unreal.log_error("Theater Command: and the half-built M_LandStalks could not be removed:\n" + traceback.format_exc())
+        # (its failure is told to the loop below, which builds no blast press twin beside it in this run: the
+        # environments thread's find of 27 November 2026, 16:35Z)
+        return False
 
 
 def build_land_shade():
@@ -3342,10 +3345,13 @@ def build_land_leaves_or_tell():
     except Exception:
         unreal.log_error("Theater Command: M_LandLeaves was not built (the ground battle draws its solid sprigs):\n" + traceback.format_exc())
         try:
-            if eal.does_asset_exist(f"{MATERIALS}/M_LandLeaves"):
-                eal.delete_asset(f"{MATERIALS}/M_LandLeaves")
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandLeaves") and not eal.delete_asset(f"{MATERIALS}/M_LandLeaves"):
+                unreal.log_error("Theater Command: and the half-built M_LandLeaves could not be removed (delete_asset said no)")
         except Exception:
             unreal.log_error("Theater Command: and the half-built M_LandLeaves could not be removed:\n" + traceback.format_exc())
+        # (its failure is told to the loop below, which builds no blast press twin beside it in this run: the
+        # environments thread's find of 27 November 2026, 16:35Z)
+        return False
 
 
 def build_land_cloud_shade():
@@ -3402,10 +3408,13 @@ def build_land_blades_or_tell():
     except Exception:
         unreal.log_error("Theater Command: M_LandBlades was not built (the grass and trees stand still in the wind):\n" + traceback.format_exc())
         try:
-            if eal.does_asset_exist(f"{MATERIALS}/M_LandBlades"):
-                eal.delete_asset(f"{MATERIALS}/M_LandBlades")
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandBlades") and not eal.delete_asset(f"{MATERIALS}/M_LandBlades"):
+                unreal.log_error("Theater Command: and the half-built M_LandBlades could not be removed (delete_asset said no)")
         except Exception:
             unreal.log_error("Theater Command: and the half-built M_LandBlades could not be removed:\n" + traceback.format_exc())
+        # (its failure is told to the loop below, which builds no blast press twin beside it in this run: the
+        # environments thread's find of 27 November 2026, 16:35Z)
+        return False
 
 
 def build_land_cloud_shade_or_tell():
@@ -3705,7 +3714,7 @@ REBUILD = os.environ.get("TC_REBUILD", "")
 # trial word, so without it M_LandBlades, M_LandLeaves and M_LandStalks are built node for node as before. To try the
 # word on the Mac: TC_LODGED=1 TC_REBUILD=M_LandBlades,M_LandLeaves,M_LandStalks; the same without TC_LODGED puts them back.)
 LODGED = os.environ.get("TC_LODGED", "") == "1"
-FAILED_THIS_RUN = set()  # (the materials whose build raised in this run, in the try below: their press twins are not built this run)
+FAILED_THIS_RUN = set()  # (the materials whose build raised, or said False, in this run, in the try below: their press twins are not built this run)
 BUILT_THIS_RUN = set()  # (the materials the loop below built in this run: the blast press's twins follow their plain ones)
 # (M_LandSurface, the ground battle's ground, comes after M_MapSurface and can never stop the rest: see
 # build_land_surface_or_tell. After the pictures are painted again, TC_REBUILD=M_LandSurface brings them in again.
@@ -3736,8 +3745,10 @@ for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_l
             built_whole = True
         else:
             try:
-                build()
-                built_whole = True
+                # (an "or tell" builder catches its own failure and says False: M_LandBlades, M_LandLeaves, M_LandStalks)
+                built_whole = build() is not False
+                if not built_whole:
+                    FAILED_THIS_RUN.add(name)
             except Exception as why:
                 built_whole = False
                 FAILED_THIS_RUN.add(name)
