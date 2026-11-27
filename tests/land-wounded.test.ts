@@ -91,19 +91,18 @@ const sig = (b: LandBattle): string => JSON.stringify({ t: b.t, over: b.over, un
 type Pairs = { booked: Record<string, number>; keys: Record<string, number>; men: Record<string, number>; crush?: string[] };
 
 /**
- * Bar (d), on against off: the rules' booked pairs and the drawn key-model pairs exactly, and the drawn men's kills by
- * pair exactly but for one thing the drawing off does on its own: a man the rules take while he lies under an enemy
- * tank's nose on the move is drawn run over by HER block (thin's crushOf, the escort row), which need not be the block
- * the rules booked. Where he lies is the drawing's, and with the switch on men lie elsewhere (knocked down, rolled clear
- * of a vehicle), so such a crush can come in one arm and not the other: each crush in one arm only (by its block and
- * moment) may move one loss between two pairs, and no more. Every such case is printed.
+ * Bar (d), on against off, STRICT (the design director, 27 November 05:03Z: "the allowance comes out, because a bar
+ * never moves after a result"): the rules' booked pairs, the drawn key-model pairs AND the drawn men's kills by pair,
+ * all three exactly. Nothing is allowed for. A man drawn run over by a tank (a 'track' kill) is only listed, by block
+ * and moment, where it comes in one arm and not the other, so a failure names itself: such a crush was the base's own
+ * fault (drill.ts crushOf drew a man to a block the rules had not booked), mended in the base by its owner
+ * (the ground thread, "a crush is drawn only where the crushing block IS the booked striker"), never by this row.
  */
 function pairsDiff(on: Pairs, off: Pairs): { ok: boolean; why: string } {
   const diff = (a: Record<string, number>, b: Record<string, number>): string[] => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((k) => (a[k] ?? 0) !== (b[k] ?? 0)).map((k) => `${k} ${b[k] ?? 0}/${a[k] ?? 0}`);
   const booked = diff(on.booked, off.booked), keys = diff(on.keys, off.keys), men = diff(on.men, off.men);
   const cOn = new Set(on.crush ?? []), cOff = new Set(off.crush ?? []), lone = [...[...cOn].filter((c) => !cOff.has(c)).map((c) => 'on ' + c), ...[...cOff].filter((c) => !cOn.has(c)).map((c) => 'off ' + c)];
-  const moved = [...new Set([...Object.keys(on.men), ...Object.keys(off.men)])].reduce((a, k) => a + Math.abs((on.men[k] ?? 0) - (off.men[k] ?? 0)), 0);
-  const ok = !booked.length && !keys.length && moved <= 2 * lone.length;
+  const ok = !booked.length && !keys.length && !men.length;
   return { ok, why: `booked ${booked.join(' ') || 'same'}; key kills ${keys.join(' ') || 'same'}; men's kills (off/on) ${men.join(' ') || 'same'}; crushes in one arm only ${lone.join(' ') || 'none'}` };
 }
 /**
