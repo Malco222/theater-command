@@ -835,5 +835,8 @@ describe('item 8: the 3D cards (C++ for the Mac pass, not compiled here)', () =>
     expect(HUD).toContain('for (const FPortCutLine& Line : Info.PortCut)');
     expect(HUD).toContain('const FLinearColor Tone = Line.Tone == TEXT("bad") ? Alarm : Line.Tone == TEXT("warn") ? BrightBrass : Muted;');
     expect(HUD).toContain('.Text(FText::FromString(Card.PortLine)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bGoing ? Muted : Faint).AutoWrapText(true)');
+    // (The tray gives a card the width it asks for: the corps' line asks for no more than about four tiles' width, and
+    // so wraps inside the card rather than stretch it. The review of the 23:50Z build, finding 4.)
+    expect(HUD).toMatch(/SNew\(SBox\)\.MaxDesiredWidth\(340\.0f\)\s*\[\s*SNew\(STextBlock\)\.Visibility\(Card\.PortLine\.IsEmpty\(\)/);
   });
 });

@@ -20754,10 +20754,16 @@ namespace
 					]
 					// (Release 2, portcut.ts; the UI director's 23:50Z, item 8.) A corps of his in a port cut off by sea: its
 					// stores or its hunger, under its order line, one line wrapping and never cut. None with the switch off.
+					// (The tray gives a card the width it asks for, so a line that wraps at the width it is given would ask
+					// for its whole length and never wrap: the box asks for no more than about four tiles' width, and the
+					// line wraps inside the card at the card's width. The review of the 23:50Z build, finding 4.)
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 4.0f, Card.PortLine.IsEmpty() ? 0.0f : 5.0f)
 					[
-						SNew(STextBlock).Visibility(Card.PortLine.IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible)
-						.Text(FText::FromString(Card.PortLine)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bGoing ? Muted : Faint).AutoWrapText(true)
+						SNew(SBox).MaxDesiredWidth(340.0f)
+						[
+							SNew(STextBlock).Visibility(Card.PortLine.IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible)
+							.Text(FText::FromString(Card.PortLine)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bGoing ? Muted : Faint).AutoWrapText(true)
+						]
 					]
 					+ SVerticalBox::Slot().AutoHeight()[BargainLayer::TrayLine(Card.CorpsId)] // R2 bargains hook: a legion's Courier line (collapsed for any other corps)
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 4.0f, Card.bMood ? 6.0f : 0.0f)[Mood]
