@@ -11,6 +11,7 @@
 #include "Campaign/EnemyMoves.h" // (Release 2, the enemy's month near you: the corner pings)
 #include "Battle/LandBattle.h"
 #include "Battle/LandLive.h"
+#include "Battle/FieldNotesStore.h" // (release 2, field notes: the attack card's tip)
 #include "EngineUtils.h"
 #include "Campaign/BargainLayer.h" // R2 bargains hook
 #include "Brushes/SlateRoundedBoxBrush.h"
@@ -7768,6 +7769,32 @@ namespace
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Cream).AutoWrapText(true)
 										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->Alone.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->Alone : FText::GetEmpty(); })
+									]
+									// (release 2, field notes: the one tip that leads a new general off the card onto the field, on the
+									// first card that offers FIGHT IT YOURSELF, for as long as that card is open; -TheaterFieldNotes)
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 14.0f, 12.0f, 0.0f)
+									[
+										SNew(SBox).MaxDesiredWidth(560.0f)
+										.Visibility_Lambda([this, Face]()
+										{
+											const FFaceOff* F = Face();
+											return F && !F->bResolved && Controller.IsValid() && Controller->CanFightLive() && !FieldNotesStore::FightTip().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+										})
+										[
+											SNew(SHorizontalBox)
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, 10.0f, 0.0f)
+											[
+												SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FLinearColor(FColor::FromHex(TEXT("2F5068")))).Padding(FMargin(6.0f, 1.0f))
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("TIP"))).Font(Font(TEXT("Bold"), 10, 140)).ColorAndOpacity(Cream)
+												]
+											]
+											+ SHorizontalBox::Slot().FillWidth(1.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Cream).AutoWrapText(true)
+												.Text_Lambda([]() { return FText::FromString(FieldNotesStore::FightTip()); })
+											]
+										]
 									]
 									// What to do about it. (The foot stands at the right: CALL IT OFF, then the order.)
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 20.0f, 12.0f, 0.0f)

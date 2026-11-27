@@ -20,6 +20,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Battle/AirBattle.h"
+#include "Battle/FieldNotesStore.h" // (release 2, field notes: FIRST COMMAND arms them again)
 #include "Battle/LandBattle.h"
 #include "Battle/LandField.h"
 #include "Battle/LandScape.h"
@@ -1481,6 +1482,8 @@ void ACampaignPlayerController::BeginFirstCommand()
 	{
 		return;
 	}
+	// (release 2, field notes: FIRST COMMAND turns the field's notes on too, and arms all of them again once all were done)
+	FieldNotesStore::ArmAgain();
 	const int32 Seed = NewSeed();
 	BeginWar([Door, Seed](ACampaignGameMode& Laid)
 	{

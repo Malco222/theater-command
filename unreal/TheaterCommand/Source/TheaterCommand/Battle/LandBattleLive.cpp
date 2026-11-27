@@ -655,6 +655,7 @@ void ALandBattle::OrderLive(const FString& CommandJson)
 		Command = Command.LeftChop(1) + FString::Printf(TEXT(",\"at\":%.2f}"), State->Battle);
 	}
 	Live->Order(Command);
+	++State->FieldOrders; // (field notes: an order given)
 }
 
 void ALandBattle::PlaceLive(int32 Block, double X, double Y, double Face)
@@ -662,6 +663,10 @@ void ALandBattle::PlaceLive(int32 Block, double X, double Y, double Face)
 	if (Live.IsValid())
 	{
 		Live->Place(Block, X, Y, Face);
+		if (State.IsValid())
+		{
+			++State->FieldPlaced; // (field notes: a unit set down)
+		}
 	}
 }
 

@@ -2390,6 +2390,37 @@ with the switch off and on (`Tools/land_show`). The bench window (`LandKit::Benc
 Two exposure words came with it (`LandScape::AirOf`): `desertstop` takes the desert's fields half a stop down and
 `islandstop` an island's a third, for sand that washed pale on the Mac. Both off until a before and after still.
 
+## Field notes for a new general (release 2, off until passed)
+
+Brian's guided start (27 November 2026, "add all of them": a builder to teach a new player, with a guided first battle
+and a first campaign turn). The first campaign turn is FIRST COMMAND's ten staff notes, already in the game; the field
+had none. Field notes carry the same staff note onto the general's screen of a live ground battle: one note at a time,
+30 words at most and one deed, stamped DONE when he does it, never taking the controls; the brass corners frame what it
+names. Seven, in this order, each when its moment comes: set out your army (only in the setup step; placing a unit or
+BEGIN THE BATTLE), look over the field (the view moved 25 m, turned 20 degrees, zoomed a fifth, or the top view), take a
+unit in hand, give an order, take your time (PAUSE or a pace of his own), what decides it (the core idea: nothing is
+scripted, men and machines, training, doctrine, supply, the ground and the air decide; a unit pointed at), and who gives
+up the field (the bar and HOW NEAR TO BREAKING OFF; a minute fought). Then the closing note, once. LATER puts a note away
+for this battle, NOTES OFF for good, and FIRST COMMAND turns them on again (all of them again once all were done). One tip
+leads into the field: on the first attack card that offers FIGHT IT YOURSELF, a TIP line says what it and SEND THEM IN
+are, and that what each side brings decides it either way.
+
+- `FieldNotes.h/.cpp`: the words, the notebook and the desk (which note is up from the battle's facts). Plain C++;
+  `Tools/field_notes/run.sh` plays a first battle through it with both compilers' strict flags (86 checks, the shipped
+  words among them: 30 words a note at most).
+- `FieldNotesStore.h/.cpp`: the switch, the words file, the player's notebook (`Saved/Campaign/field-notes.json`, kept
+  with the player, never a save), the attack card's tip.
+- `LandBattleNotes.cpp`: ALandBattle's side: the desk begun when his screen first comes up, its facts each frame (after
+  `ShowGeneral`), the notebook written when a note is stamped. `OrderLive` and `PlaceLive` count his orders and units set
+  down; the screen hands it the unit under his pointer (a tag or a card).
+- `SLandBattleScreen::PaintFieldNote`: the note (the art director's first-hour look: paper, clip, head row FIELD NOTE
+  and "3 OF 7", LATER, heading, sentences, the deed line, DONE), at the left edge under the dispatches, or the right edge
+  where it would lie on a unit in hand or on what it points at; never over ALL FALL BACK's question or the after card.
+- Words: `Content/Data/Battle/field-notes.json` (the design director's to rule; the UI director rules the look).
+- Switch: the ship list's row `fieldnotes` (`-TheaterFieldNotes`), OFF. A run (pictures, steps, a scripted walk) keeps
+  its own notebook (`field-notes-runs.json`) with the notes off: `-TheaterFieldNotesRun` starts it as a new general with
+  them on, `-TheaterKeepFieldNotes` keeps what the last run left. Off: nothing drawn, nothing read, nothing written.
+
 ## Packaging
 
 Stage `Content/Data` (LandBattles, Battle, Sound) and `Content/Models` (Soldiers, Battle) with the game, as

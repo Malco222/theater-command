@@ -11,6 +11,7 @@
 #include "Battle/LandEye.h"
 #include "Battle/LandFeed.h"
 #include "Battle/LandField.h"
+#include "Battle/FieldNotes.h"
 #include "Battle/LandGeneral.h"
 #include "Battle/LandGeneralEye.h"
 #include "Battle/LandHulk.h"
@@ -241,6 +242,15 @@ struct FLandBattleState
 
 	/** A live battle's general: his clipboard and what his screen draws this frame (LandBattleCommand.cpp). */
 	FLandGeneralShown General;
+	/**
+	 * Field notes (release 2, -TheaterFieldNotes; FieldNotes.h): a new general's first battle taught on his screen, one
+	 * note at a time (LandBattleNotes.cpp fills the desk's facts, SLandBattleScreen draws the note). Begun once his
+	 * screen first comes up; the units he has set down and the orders he has given so far, counted where they go to the
+	 * rules (PlaceLive, OrderLive); the unit under his pointer, a tag or a card (the screen's, -1 none).
+	 */
+	FieldNotes::Desk FieldDesk;
+	bool bFieldBegun = false;
+	int FieldPlaced = 0, FieldOrders = 0, FieldHover = -1;
 	/** The camera's world as the film has it (Open), kept for the general's view. */
 	LandEye::World EyeWorld;
 	/** The general's view (LandGeneralEye, the camera thread's): his own camera over the field while the film is not

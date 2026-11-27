@@ -565,6 +565,16 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 		}
 	}
 
+	// ---- Field notes (release 2, -TheaterFieldNotes; FieldNotes.h): FIRST COMMAND's staff note carried onto his screen,
+	// one at a time, with the art director's look of it (first-hour-look-brief.md: the paper, the clip, the head row,
+	// the heading, the sentences, the deed line, DONE, the brass corners). Home: the left edge under the dispatches; the
+	// right edge where it would lie on a unit in hand or on the thing it points at. Never over a question or the after
+	// card (the desk holds it then). ----
+	if (bGeneral && !S.General.bAllBackAsk && !S.bCard)
+	{
+		PaintFieldNote(Geometry, OutDrawElements, LayerId, BarH);
+	}
+
 	// ---- ALL FALL BACK's question (release 1.5; Brian, 23 November 14:47Z): asked once, in the middle of the screen;
 	// ALL FALL BACK gives the order, KEEP FIGHTING (or Esc) takes the question away. ----
 	if (bGeneral && S.General.bAllBackAsk && !S.General.bAllBack && !S.bCard)
@@ -1960,6 +1970,268 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	return CardsH;
 }
 
+// ---- Field notes (release 2) ---------------------------------------------------------------------------------
+
+void SLandBattleScreen::PaintFieldNote(const FGeometry& Geometry, FSlateWindowElementList& OutDrawElements, int32 LayerId, double BarH) const
+{
+	const ALandBattle* Scene = Battle.Get();
+	const FLandBattleState* State = Scene ? Scene->GetState() : nullptr;
+	if (!State)
+	{
+		return;
+	}
+	const FLandBattleState& S = *State;
+	const FieldNotes::Up& NoteUp = S.FieldDesk.Now();
+	const FieldNotes::Note* N = S.FieldDesk.Current();
+	if (!S.FieldDesk.Showing() || !NoteUp.bShown || !N)
+	{
+		return;
+	}
+	const bool bClosing = NoteUp.Index < 0;
+	static const FSlateColorBrush Solid(FLinearColor::White);
+	const FVector2D Size = Geometry.GetLocalSize();
+	const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+	const float TextScale = FMath::Max(Geometry.GetAccumulatedLayoutTransform().GetScale(), 0.01f);
+	auto WideOf = [&Measure, TextScale](const FString& Words, const FSlateFontInfo& Face) { return static_cast<double>(Measure->Measure(Words, Face, TextScale).X) / TextScale; };
+	auto Fill = [&](double X, double Y, double Wd, double Ht, const FLinearColor& Ink, int32 Layer)
+	{
+		if (DrawnBox(X, Y, Wd, Ht))
+		{
+			FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(Wd, Ht), FSlateLayoutTransform(FVector2D(X, Y))), &Solid, ESlateDrawEffect::None, Ink);
+		}
+	};
+	auto Write = [&](const FString& Words, double X, double Y, const FSlateFontInfo& Face, const FLinearColor& Ink, int32 Layer)
+	{
+		if (DrawnWords(Words, X, Y))
+		{
+			FSlateDrawElement::MakeText(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(1400.0, 60.0), FSlateLayoutTransform(FVector2D(X, Y))), Words, Face, ESlateDrawEffect::None, Ink);
+		}
+	};
+	auto Wrap = [&WideOf](const FString& Text, const FSlateFontInfo& Face, double Room) -> TArray<FString>
+	{
+		TArray<FString> Pieces, Out;
+		Text.ParseIntoArray(Pieces, TEXT(" "), true);
+		FString Now;
+		for (const FString& Piece : Pieces)
+		{
+			const FString Tried = Now.IsEmpty() ? Piece : Now + TEXT(" ") + Piece;
+			if (!Now.IsEmpty() && WideOf(Tried, Face) > Room)
+			{
+				Out.Add(Now);
+				Now = Piece;
+			}
+			else
+			{
+				Now = Tried;
+			}
+		}
+		if (!Now.IsEmpty() || Out.Num() == 0)
+		{
+			Out.Add(Now);
+		}
+		return Out;
+	};
+	auto HandHas = [](const std::vector<int>& Hand, int Block)
+	{
+		for (const int Each : Hand)
+		{
+			if (Each == Block)
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+	auto Rect = [](double X, double Y, double Wd, double Ht) { return FSlateRect(static_cast<float>(X), static_cast<float>(Y), static_cast<float>(X + Wd), static_cast<float>(Y + Ht)); };
+
+	// The words, measured: 340 wide, 18 above, 16 at the sides, 12 below (the art director's section 1).
+	const double NW = FMath::Min(340.0, FMath::Max(240.0, Size.X - 48.0)), Pad = 16.0, Inner = NW - Pad * 2.0;
+	const FSlateFontInfo HeadFace = Typed(11.0f, true, 140), CountFace = Typed(11.0f), HeadingFace = Serif(TEXT("Bold"), 18.0f),
+		TextFace = Serif(TEXT("Regular"), 15.0f), DeedFace = Typed(13.0f), QuietFace = Typed(9.0f, true, 60);
+	const FString Label = Wide(S.FieldDesk.TheWords().Label.empty() ? std::string("FIELD NOTE") : S.FieldDesk.TheWords().Label);
+	const FString Count = bClosing ? FString() : FString::Printf(TEXT("%d OF %d"), NoteUp.Number, NoteUp.Of);
+	const FString Quiet = bClosing || NoteUp.bStamped ? FString(TEXT("CLOSE")) : FString(TEXT("LATER"));
+	const TArray<FString> Heading = Wrap(Wide(N->Heading), HeadingFace, Inner);
+	const TArray<FString> Text = Wrap(Wide(N->Text), TextFace, Inner);
+	const bool bDeed = !bClosing && !N->Deed.empty();
+	const double HeadH = 18.0, DeedH = bDeed ? 1.0 + 10.0 + 22.0 : 0.0, FootH = 20.0;
+	const double NH = 18.0 + HeadH + 10.0 + 24.0 * Heading.Num() + 6.0 + 22.0 * Text.Num() + 10.0 + DeedH + FootH + 12.0;
+
+	// What it points at (the brass corners), as drawn this frame: a button, one of his units' tags, the tug of war.
+	bool bAim = false;
+	FSlateRect AimAt;
+	if (!NoteUp.bStamped && !bClosing)
+	{
+		if (N->Aim == "begin" || N->Aim == "pause")
+		{
+			const FString Want = N->Aim == "begin" ? FString(TEXT("general:begin")) : FString(TEXT("speed:0"));
+			for (const FButton& B : Buttons)
+			{
+				if (B.Action == Want)
+				{
+					AimAt = B.Rect;
+					bAim = true;
+				}
+			}
+		}
+		else if (N->Aim == "tag")
+		{
+			const LandCommand::General& Clip = S.General.Clipboard;
+			const std::vector<int> Hand = Clip.Chosen();
+			for (const FTagBox& B : TagBoxes)
+			{
+				const LandCommand::Tag* T = Clip.TagOf(B.Block);
+				if (!T || !T->bMine || !T->bOrderable)
+				{
+					continue;
+				}
+				const bool bInHand = HandHas(Hand, B.Block);
+				if (!bAim || bInHand)
+				{
+					AimAt = B.Rect;
+					bAim = true;
+				}
+				if (bInHand)
+				{
+					break;
+				}
+			}
+		}
+		else if (N->Aim == "bar")
+		{
+			const double Mid = Size.X * 0.5;
+			AimAt = Rect(Mid - 190.0 - 40.0, 6.0, 460.0, 50.0);
+			bAim = true;
+		}
+	}
+
+	// Home: the left edge under the dispatches; the right edge where it would lie on a unit in hand or on what it points
+	// at; it chooses when it comes and does not move while he reads (kept by the desk's note: the side is worked out
+	// from the first frame's tags and held).
+	const double LeftX = 24.0, RightX = Size.X - 24.0 - NW, NY = BarH + 4.0 + 3.0 * 20.0 + 16.0;
+	auto Covers = [&](double X)
+	{
+		const FSlateRect Sheet = Rect(X, NY - 10.0, NW, NH + 10.0);
+		if (bAim && FSlateRect::DoRectanglesIntersect(Sheet, AimAt))
+		{
+			return true;
+		}
+		const std::vector<int> Hand = S.General.Clipboard.Chosen();
+		for (const FTagBox& B : TagBoxes)
+		{
+			if (HandHas(Hand, B.Block) && FSlateRect::DoRectanglesIntersect(Sheet, B.Rect))
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+	if (NoteShown != NoteUp.Index || NoteSince > S.Real)
+	{
+		NoteShown = NoteUp.Index;
+		NoteSince = S.Real;
+		bNoteRight = Covers(LeftX) && !Covers(RightX);
+	}
+	const double NX = bNoteRight ? RightX : LeftX;
+
+	// The paper, its shadow and its clip.
+	Fill(NX + 2.0, NY + 4.0, NW, NH, FLinearColor(0.0f, 0.0f, 0.0f, 0.35f), 9);
+	Fill(NX - 1.0, NY - 1.0, NW + 2.0, NH + 2.0, Track, 10);
+	Fill(NX, NY, NW, NH, Cream, 10);
+	Fill(NX, NY + NH * 0.6, NW, NH * 0.4, Paper * FLinearColor(1.0f, 1.0f, 1.0f, 0.18f), 10);
+	Fill(NX + 26.0, NY - 8.0, 44.0, 15.0, Brass, 11);
+	Fill(NX + 27.0, NY - 7.0, 42.0, 5.0, BrightBrass, 12);
+	// (the paper's body takes the click: nothing under it is ordered through it; a stamped note or the closing note goes)
+	Buttons.Add({ Rect(NX, NY - 8.0, NW, NH + 8.0), FString(TEXT("notes:paper")) });
+
+	// The head row: the label, the count, LATER (or CLOSE) at the right over a brass rule.
+	double Y = NY + 18.0;
+	Write(Label, NX + Pad, Y, HeadFace, DeskInk, 12);
+	if (!Count.IsEmpty())
+	{
+		Write(Count, NX + Pad + WideOf(Label, HeadFace) + 10.0, Y, CountFace, InkSoft, 12);
+	}
+	{
+		const double QW = WideOf(Quiet, HeadFace), QX = NX + NW - Pad - QW;
+		Write(Quiet, QX, Y, HeadFace, InkSoft, 12);
+		Fill(QX, Y + 16.0, QW, 1.0, Brass, 12);
+		Buttons.Add({ Rect(QX - 6.0, Y - 4.0, QW + 12.0, 26.0), bClosing || NoteUp.bStamped ? FString(TEXT("notes:close")) : FString(TEXT("notes:later")) });
+	}
+	Y += HeadH + 10.0;
+	for (const FString& Line : Heading)
+	{
+		Write(Line, NX + Pad, Y, HeadingFace, DeskInk, 12);
+		Y += 24.0;
+	}
+	Y += 6.0;
+	for (const FString& Line : Text)
+	{
+		Write(Line, NX + Pad, Y, TextFace, DeskInk, 12);
+		Y += 22.0;
+	}
+	Y += 10.0;
+	// The deed line: a dashed rule, its box (ticked once done) and its words; DONE stamped at its right.
+	if (bDeed)
+	{
+		for (double DX = 0.0; DX < Inner; DX += 8.0)
+		{
+			Fill(NX + Pad + DX, Y, FMath::Min(4.0, Inner - DX), 1.0, InkSoft * FLinearColor(1.0f, 1.0f, 1.0f, 0.6f), 12);
+		}
+		Y += 11.0;
+		const double BoxX = NX + Pad, BoxY = Y + 1.0;
+		Fill(BoxX, BoxY, 18.0, 18.0, InkSoft, 12);
+		Fill(BoxX + 1.5, BoxY + 1.5, 15.0, 15.0, Cream, 13);
+		if (NoteUp.bStamped)
+		{
+			Fill(BoxX + 4.0, BoxY + 4.0, 10.0, 10.0, LeafInk, 13);
+		}
+		Write(Wide(N->Deed), BoxX + 28.0, Y + 1.0, DeedFace, DeskInk, 12);
+		Y += 22.0;
+		if (NoteUp.bStamped)
+		{
+			const FSlateFontInfo StampFace = Serif(TEXT("Bold"), 22.0f);
+			const FString Done = TEXT("DONE");
+			const double SW = WideOf(Done, StampFace) + 20.0, SH = 36.0;
+			// (lands with a little thump: a touch larger for its first fifth of a second)
+			const double Grow = FMath::Clamp(1.0 - NoteUp.StampAge / 0.22, 0.0, 1.0) * 6.0;
+			const double SX = NX + NW - Pad - SW - Grow * 0.5, SY = Y - 30.0 - Grow * 0.5;
+			Fill(SX, SY, SW + Grow, SH + Grow, LeafInk, 14);
+			Fill(SX + 3.0, SY + 3.0, SW + Grow - 6.0, SH + Grow - 6.0, Cream, 15);
+			Write(Done, SX + 10.0 + Grow * 0.5, SY + 3.0 + Grow * 0.5, StampFace, LeafInk, 16);
+		}
+	}
+	// The foot: NOTES OFF, quiet, at the right (no more notes in any battle; the ship list's row brings them back).
+	{
+		const FString Off = TEXT("NOTES OFF");
+		const double OW = WideOf(Off, QuietFace), OX = NX + NW - Pad - OW, OY = NY + NH - 12.0 - 14.0;
+		Write(Off, OX, OY, QuietFace, InkSoft * FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), 12);
+		Buttons.Add({ Rect(OX - 6.0, OY - 4.0, OW + 12.0, 20.0), FString(TEXT("notes:off")) });
+	}
+
+	// The brass corners round what it points at: 6 clear of it, breathing out 4 and back in two seconds.
+	if (bAim)
+	{
+		const double Breath = 2.0 + 2.0 * FMath::Sin(S.Real * UE_PI), Clear = 6.0 + Breath;
+		const double L = AimAt.Left - Clear, T = AimAt.Top - Clear, R = AimAt.Right + Clear, B = AimAt.Bottom + Clear;
+		const double Arm = (R - L) < 60.0 && (B - T) < 60.0 ? 12.0 : 16.0, Th = 3.0;
+		const FLinearColor Glow = BrightBrass * FLinearColor(1.0f, 1.0f, 1.0f, 0.3f), Under = FLinearColor(0.02f, 0.015f, 0.01f, 0.6f);
+		const double Xs[2] = { L, R - Th }, Ys[2] = { T, B - Th };
+		for (int32 CX = 0; CX < 2; ++CX)
+		{
+			for (int32 CY = 0; CY < 2; ++CY)
+			{
+				const double AX = CX == 0 ? L : R - Arm, AY = CY == 0 ? T : B - Arm;
+				Fill(AX - 1.5, Ys[CY] - 1.5, Arm + 3.0, Th + 3.0, Under, 9);
+				Fill(Xs[CX] - 1.5, AY - 1.5, Th + 3.0, Arm + 3.0, Under, 9);
+				Fill(AX - 2.5, Ys[CY] - 2.5, Arm + 5.0, Th + 5.0, Glow, 10);
+				Fill(Xs[CX] - 2.5, AY - 2.5, Th + 5.0, Arm + 5.0, Glow, 10);
+				Fill(AX, Ys[CY], Arm, Th, BrightBrass, 11);
+				Fill(Xs[CX], AY, Th, Arm, BrightBrass, 11);
+			}
+		}
+	}
+}
+
 bool SLandBattleScreen::PressDrawn(const FString& Action)
 {
 	for (const FButton& Shown : Buttons)
@@ -2002,6 +2274,12 @@ void SLandBattleScreen::Do(const FString& Action)
 	else if (Action.StartsWith(TEXT("general:")))
 	{
 		Scene->GeneralDo(Action.Mid(8));
+	}
+	else if (Action.StartsWith(TEXT("notes:")))
+	{
+		// (field notes: LATER, NOTES OFF, or a click on a stamped note or the closing note, which sends it)
+		const FString Word = Action.Mid(6);
+		Scene->FieldNotesDo(Word == TEXT("paper") ? FString(TEXT("close")) : Word);
 	}
 	else if (Action == TEXT("cards:next") || Action == TEXT("cards:back"))
 	{
@@ -2292,6 +2570,10 @@ FReply SLandBattleScreen::OnMouseMove(const FGeometry& Geometry, const FPointerE
 		if (bAsking)
 		{
 			HoverBlock = -1;
+		}
+		if (FLandBattleState* Pointed = Battle->EditState())
+		{
+			Pointed->FieldHover = HoverBlock; // (field notes: a unit pointed at, a tag or a card)
 		}
 		Battle->GeneralMove(GeneralHeld < 0 && (bAsking || Over) ? FVector2D(-1.0, -1.0) : ToPixels(Geometry, Local), bAsking ? -1 : TagHere);
 		return FReply::Handled();

@@ -149,6 +149,9 @@ public:
 	/** His word from a button or a key: double (the next order at the double), fire (fire on), hold, fallback, staff,
 	 * next, back (Tab, Shift-Tab), clear (Esc), film (C), map (Esc from the film), begin. */
 	void GeneralDo(const FString& Word);
+	/** Field notes (release 2): a word from the note's buttons: later (this note away for this battle), off (no more
+	 * notes), close (a stamped note or the closing note sent at once). LandBattleNotes.cpp. */
+	void FieldNotesDo(const FString& Word);
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
@@ -867,6 +870,9 @@ private:
 	FVector2D GeneralClickWhere = FVector2D::ZeroVector;
 	/** Each frame, after the clock: the clipboard brought to the time shown, its tags and routes put on the screen. */
 	void ShowGeneral();
+	/** Field notes: the desk begun when his screen first comes up, its facts read this frame, the notebook written when
+	 * it changed (LandBattleNotes.cpp). */
+	void TickFieldNotes();
 	/** Each frame, after the film's pose: the general's own view takes the picture while his map is up (the film's
 	 * again on C), cutting where the two switch. */
 	void GeneralView(double Real);

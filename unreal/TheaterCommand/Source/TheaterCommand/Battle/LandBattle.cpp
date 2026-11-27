@@ -7723,6 +7723,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 		const double ScreenBegan = LandParts::Seconds();
 		LAND_SCOPE(ShowGeneral);
 		ShowGeneral();
+		TickFieldNotes();
 		GeneralScreenMs += (LandParts::Seconds() - ScreenBegan) * 1000.0;
 		LandFell::Phase("tick: the walk", ScriptStep);
 		TickScript();

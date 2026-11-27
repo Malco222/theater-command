@@ -118,4 +118,12 @@ private:
 	int32 TagUnder(const FVector2D& Local) const;
 	/** The general's tags, routes, drags, cards and order bar; the height his cards take at the bottom. */
 	double PaintGeneral(const FGeometry& Geometry, FSlateWindowElementList& OutDrawElements, int32 LayerId) const;
+	/** Field notes (release 2, FieldNotes.h): the note up, its buttons (LATER or CLOSE, NOTES OFF, the paper itself) and
+	 * the brass corners round what it points at. Painted after the rest of his screen, so the buttons it points at are
+	 * known. */
+	void PaintFieldNote(const FGeometry& Geometry, FSlateWindowElementList& OutDrawElements, int32 LayerId, double BarH) const;
+	/** Which note the home was chosen for (-2 none yet), when, and whether it stands at the right edge. */
+	mutable int32 NoteShown = -2;
+	mutable double NoteSince = 0.0;
+	mutable bool bNoteRight = false;
 };
