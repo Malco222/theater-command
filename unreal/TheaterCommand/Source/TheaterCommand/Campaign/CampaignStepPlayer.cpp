@@ -18,6 +18,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Input/HittestGrid.h"
 #include "Layout/WidgetPath.h"
+#include "Misc/App.h" // (FApp::GetDeltaTime: the engine's own frame length)
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "RenderTimer.h"
@@ -1636,6 +1637,10 @@ void FStepPlayer::Log(ACampaignPlayerController& Player, const FStep& Step)
 		{
 			Worst = FMath::Max(Worst, Each);
 		}
+		for (const float Each : EngineFrames)
+		{
+			Worst = FMath::Max(Worst, Each); // (the worse of the two clocks: see EngineFrames)
+		}
 		Pass = (Worst <= FCString::Atof(*Expect.Mid(12).TrimStartAndEnd()) && (!bMonth || After.Bare != Before.Bare)) ? TEXT("true") : TEXT("false");
 	}
 	// (a land step's expect words are read on the field it was played on: nothing, asks, closed, falls-back, view, paused,
@@ -1650,15 +1655,22 @@ void FStepPlayer::Log(ACampaignPlayerController& Player, const FStep& Step)
 	TArray<float> Sorted = Frames;
 	Sorted.Sort();
 	const float Longest = Sorted.Num() > 0 ? Sorted.Last() : 0.0f, Middle = Sorted.Num() > 0 ? Sorted[Sorted.Num() / 2] : 0.0f;
+	// (engine_low: the same lowest frame rate on the engine's own frame lengths; fps_low keeps the tick-to-tick clock it
+	// always had, so earlier runs compare like with like. A bar is read on the worse of the two.)
+	float EngineLongest = 0.0f;
+	for (const float Each : EngineFrames)
+	{
+		EngineLongest = FMath::Max(EngineLongest, Each);
+	}
 	const int32 FrameCount = FMath::Max(Frames.Num(), 1);
 	FString Came;
 	for (const FString& Each : Screens)
 	{
 		Came += (Came.IsEmpty() ? TEXT("") : TEXT(",")) + Quote(Each);
 	}
-	const FString Smooth = FString::Printf(TEXT("\"act_ms\":%.0f,\"first_ms\":%s,\"settled_ms\":%s,\"wait_ms\":%.0f,\"fps_low\":%.1f,\"fps_mid\":%.1f,\"game_ms\":%.1f,\"draw_ms\":%.1f,\"chip_ms\":%.1f,\"on_screen\":%s,\"screens\":[%s]"),
+	const FString Smooth = FString::Printf(TEXT("\"act_ms\":%.0f,\"first_ms\":%s,\"settled_ms\":%s,\"wait_ms\":%.0f,\"fps_low\":%.1f,\"fps_mid\":%.1f,\"engine_low\":%.1f,\"game_ms\":%.1f,\"draw_ms\":%.1f,\"chip_ms\":%.1f,\"on_screen\":%s,\"screens\":[%s]"),
 		ActMs, FirstMs < 0.0 ? TEXT("null") : *FString::Printf(TEXT("%.0f"), FirstMs), LastMs < 0.0 ? TEXT("null") : *FString::Printf(TEXT("%.0f"), LastMs), SinceAct * 1000.0,
-		Longest > 0.0f ? 1.0f / Longest : 0.0f, Middle > 0.0f ? 1.0f / Middle : 0.0f, GameMs / FrameCount, DrawMs / FrameCount, ChipMs / FrameCount, OnScreen < 0 ? TEXT("null") : OnScreen > 0 ? TEXT("true") : TEXT("false"), *Came);
+		Longest > 0.0f ? 1.0f / Longest : 0.0f, Middle > 0.0f ? 1.0f / Middle : 0.0f, EngineLongest > 0.0f ? 1.0f / EngineLongest : 0.0f, GameMs / FrameCount, DrawMs / FrameCount, ChipMs / FrameCount, OnScreen < 0 ? TEXT("null") : OnScreen > 0 ? TEXT("true") : TEXT("false"), *Came);
 	const FString Line = FString::Printf(TEXT("{\"n\":%d,\"line\":%d,\"verb\":%s,\"target\":%s,\"expect\":%s,\"hand\":%s,\"open\":%s,\"words\":%s,\"before\":%s,\"after\":%s,\"verdict\":%s,\"said\":%s,\"pass\":%s,\"note\":%s,%s,\"picture\":%s}\n"),
 		Logged, Step.Line, *Quote(Step.bSweep ? FString(TEXT("press-each: press")) : Step.Verb), *Quote(Step.Target), *Quote(Step.Expect), *Quote(After.Hand), *Quote(After.Open), *Quote(Words),
 		Before.Digest.IsEmpty() ? TEXT("null") : *Before.Digest, After.Digest.IsEmpty() ? TEXT("null") : *After.Digest, *Quote(Verdict), bSaid ? TEXT("true") : TEXT("false"), *Pass, *Quote(Note), *Smooth, *Quote(Picture));
@@ -1756,6 +1768,7 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 		FirstMs = LastMs = -1.0;
 		SinceAct = 0.0;
 		Frames.Reset();
+		EngineFrames.Reset();
 		Screens.Reset();
 		GameMs = DrawMs = ChipMs = 0.0;
 		Phase = 1;
@@ -1768,6 +1781,7 @@ bool FStepPlayer::Tick(ACampaignPlayerController& Player, float DeltaSeconds)
 		{
 			const double NowAt = FPlatformTime::Seconds();
 			Frames.Add(static_cast<float>(NowAt - LastTickAt));
+			EngineFrames.Add(static_cast<float>(FApp::GetDeltaTime())); // (the engine's length of the frame just ended)
 			LastTickAt = NowAt;
 			SinceAct = NowAt - ActBegan;
 		}
