@@ -18,6 +18,30 @@ class UPointLightComponent;
 class UProceduralMeshComponent;
 class USceneComponent;
 
+/** One point of a holed ship's oil lane (release 2, item 10: FBattleEffects::OilLane), oldest first, in world units:
+ * Mid its middle on the sea, LeftEdge and RightEdge its two edges (ragged), Dark how dark the oil is (0 none to 1, the
+ * scene's slick paint's darkness), Sheen a faint sheen's share, AgeSeconds since it left her. */
+struct FOilLanePoint
+{
+	FVector Mid = FVector::ZeroVector, LeftEdge = FVector::ZeroVector, RightEdge = FVector::ZeroVector;
+	float Dark = 0.0f, Sheen = 0.0f, AgeSeconds = 0.0f;
+};
+
+/** How the scene paints one point of an oil lane (FBattleEffects::OilLook): Widen, how many times wider than its strip
+ * to lay it (1 when its dark middle is 1.5 px or more on the screen); Mid and Shoulder, its alpha at the middle and at
+ * 0.55 of the way out (its edges clear); Calm, 0 to 1, how far its paint goes over to the scene's calm paint (a pale
+ * reflected sky) when seen low; CalmAlpha, that paint's own alpha. */
+struct FOilLaneLook
+{
+	float Widen = 1.0f, Mid = 0.0f, Shoulder = 0.0f, Calm = 0.0f, CalmAlpha = 0.0f;
+};
+
+/** The lane paint rule's numbers from the recipe (FBattleEffects::OilRule), read once a frame. */
+struct FOilLaneRule
+{
+	TheaterFx::Battle::LaneRule Rule;
+};
+
 /** The camera's jolt from hits close by, for the caller to add to its own camera if it wants it: it is never moved
  * here. Offset is in world units. A setting turns it off (FBattleEffects::bShake). */
 struct FBattleJolt
@@ -296,6 +320,63 @@ public:
 	 * dye name from the recipe's sea_splash.dyes ("pink" Nagato, "red" Kongo, "yellow" Haruna, ...; empty for none,
 	 * Yamato), and a stained foam patch. Without the sea_splash row: ShellOfSize on "water" as before. */
 	void SeaSplash(const FVector& WorldAt, float CalibreMm, const FString& Dye = FString());
+	// ---- Release 2, the ten dramatic moments: the sea's items 9, 10 and 11 (TheaterFx::Battle's, TheaterFxSea.inl). No
+	// scene calls them until the sea scene wires each behind its own switch; uncalled, every frame is as before.
+	/** A shell's column close off a ship's side whose head falls across her deck (item 9): ColumnAt where the shell fell
+	 * (world), CalibreMm as SeaSplash's, Toward from the column to her nearest deck edge, level (world units; its length
+	 * is how far off her side it stands), DeckZ her deck's world height there (world units), ShipId hers, BeamMetres her
+	 * beam (metres; 0: her ShipRide pose's, if she is ridden). Call it with the column's SeaSplash, and ShipRide her
+	 * first, so its sheets lie in her own frame and go with her. Nothing beyond sea_splash.drench.reach_k of the
+	 * column's height, or with two drenches already falling on her; nothing lands past her far edge. */
+	void DeckDrench(const FVector& ColumnAt, float CalibreMm, const FVector& Toward, float DeckZ, int32 ShipId = -1, float BeamMetres = 0.0f);
+	/** Ship ShipId lies so this frame (once a frame for each ship that carries anything in her own frame: DeckWash's
+	 * water, the deck's brass; before Tick). Hull: her frame in the world, its X toward her bow, Z up through her
+	 * deck, its origin on her waterline amidships (her hull as drawn, turned, heeled and trimmed; its scale is not
+	 * read); as Unreal turns a frame its Y then points to her STARBOARD side, and the kit takes her port side as minus Y
+	 * (what DeckWash's edge calls Y is to port). LongMetres her length, HalfBeamMetres half her beam, CoamingMetres what stands at her deck's
+	 * edge (a bulwark; 0 for a rail with open sides), DeckMetres her deck's height over her waterline amidships (her
+	 * freeboard: the deck's brass lies on it; 0, not known). A ship not told of for 5 s is let go, and all she carries
+	 * fades out over a second where it was. */
+	void ShipRide(int32 ShipId, const FTransform& Hull, float LongMetres, float HalfBeamMetres, float CoamingMetres = 0.0f, float DeckMetres = 0.0f);
+	/** The plan's name for ShipRide (item 11, the deck's brass): the same call. */
+	void CasesRide(int32 ShipId, const FTransform& Hull, float LongMetres, float HalfBeamMetres, float CoamingMetres = 0.0f, float DeckMetres = 0.0f) { ShipRide(ShipId, Hull, LongMetres, HalfBeamMetres, CoamingMetres, DeckMetres); }
+	/** She is gone (sunk, or out of the scene): her wash stops, and what she carries fades out over a second where it is. */
+	void ShipRideStop(int32 ShipId);
+	/** Water on her deck running off her edge (item 9's runoff after a drench, item 10's awash on a ship listing far
+	 * over), in her own frame and moved with her (ShipRide first). EdgeMetres: points along the edge it runs over, in
+	 * METRES in her frame (X toward her bow, Y to port, Z up from her waterline: Z is her freeboard there). Strength 0 to
+	 * 1 scales how much; Seconds how long it runs; Kind "runoff" or "awash". The recipe's sea_splash.runoff row. */
+	void DeckWash(int32 ShipId, const TArray<FVector>& EdgeMetres, float Strength, float Seconds, const FString& Kind = TEXT("runoff"));
+	/** Her wash stops: what is running is gone in a second or two. */
+	void DeckWashStop(int32 ShipId);
+	/** A holed ship leaking oil as she steams on (item 10): call it every frame while she leaks, WorldAt where the oil
+	 * leaves her, Rate 0 to 1. The kit keeps her track (sea_leak: a point every 2 s, at most 200 a ship, 6 ships) and
+	 * draws nothing; the scene lays OilLane's strip with its own slick paint. Oil, never fire: a trail never burns. */
+	void OilLeak(int32 ShipId, const FVector& WorldAt, float Rate = 1.0f);
+	/** She stops leaking (sunk, or the leak stopped): her lane stays, widening and fading, until it is gone. */
+	void OilLeakStop(int32 ShipId);
+	/** Her lane now, oldest first, into Out (world units): how many points. Reads only the lanes, which the kit's draw on
+	 * its worker never touches, so it may be asked any time on the game thread. */
+	int32 OilLane(int32 ShipId, TArray<FOilLanePoint>& Out) const;
+	/** One lane point's paint by the kit's rule (sea_leak.floor_px, floor_alpha, calm_from_deg, calm_full_deg,
+	 * calm_alpha, calm_far_deg, calm_far_pow, calm_far_most, dark): from its Dark, its dark middle's width on the screen across the lane (pixels) and the eye's grazing
+	 * angle to the sea there (degrees). Reads the recipe only; may be asked any time on the game thread. */
+	FOilLaneLook OilLook(float Dark, double MidPixels, double GrazeDegrees) const;
+	/** The same with the rule read once (OilRule, once a frame): what a strip of 1,200 points should use. CalmShare (0 to
+	 * 1, 1 by default: today's numbers bit for bit) is how much of the calm band the light there allows: 0 on a night
+	 * sea (no band: the lane a dark film), the scene's day share for its unlit inks at dusk; Calm, Mid and Shoulder follow. */
+	FOilLaneRule OilRule() const;
+	static FOilLaneLook OilLook(const FOilLaneRule& Rule, float Dark, double MidPixels, double GrazeDegrees, double CalmShare = 1.0);
+	/** The ships with a lane on the sea now. */
+	void OilLanes(TArray<int32>& Ships) const;
+	/** Item 11 part 4, the deck's brass: Count (1 to 16) spent cases of Kind (deck_cases.<kind>: aa25, aa40, in4, in5,
+	 * cm127, hmg) thrown from Breech (world) along Away (world, rough) onto ship ShipId's deck (DeckMetres of her ShipRide),
+	 * lying and rolling in her frame (ShipRide once a frame first). Laid within 90 m of the eye, drawn within 40 to 60 m.
+	 * Nothing without the row or her pose. */
+	void DeckBrass(int32 ShipId, const FVector& Breech, const FVector& Away, const FString& Kind, int32 Count = 1);
+	/** A ship's light gun stream (AirGun's Gun) is on ship ShipId (-1: none): while she is ridden its aircraft-style
+	 * cases stay off, and each round it fires throws its case on her deck (DeckBrass) when deck_cases has its kind. */
+	void AirGunShip(int32 Gun, int32 ShipId);
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */
 	void SetWind(const FVector& MetresPerSecond);
 	/** The sky or haze behind the battle's smoke as the SCREEN shows it at this hour (as GroundColour's: red, green and

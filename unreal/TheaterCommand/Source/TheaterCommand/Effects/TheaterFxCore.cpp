@@ -625,6 +625,7 @@ namespace TheaterFx
 		LastDrawn = 0;
 		ShadowRoom = ShadowsWere = 0;
 		AirTenClear(); // (the air's own rooms: their pieces and their trails)
+		SeaClear(); // (release 2's sea items, TheaterFxSea.inl)
 	}
 
 	void Battle::SetLensFade(double Gone, double Whole, double Plane)
@@ -3807,7 +3808,9 @@ namespace TheaterFx
 		if (Bits.size() > First)
 		{
 			const double Foot = Height(At.X, At.Y);
+			const bool bHazeCount = HazeCountIn(GunIn); // (release 2: the AA haze overlay's ship AA smoke counts its own staying puffs; nothing without it)
 			LingerFrom(First, LingerOf("gun", GunIn ? GunIn : "rifle"), Now, Vec(At.X, At.Y, Foot), 0.65, std::max(At.Z - Foot, 1.0));
+			HazeGate(Now, First, GunIn, bHazeCount); // (release 2: the AA haze overlay's cap on a ship's AA smoke that hangs; nothing without it)
 		}
 		if (bLook)
 		{
@@ -6648,6 +6651,14 @@ namespace TheaterFx
 			R.SmokeEvery = static_cast<int>(SafeNum(Num(P + "smoke_every", 3.0), 1.0, 1.0e6, 3.0));
 			R.SmokeS = SafeNum(Num(P + "smoke_s", 0.8), 0.0, 60.0, 0.8);
 			R.SmokeAlpha = SafeNum(Num(P + "smoke_alpha", 0.1), 0.0, 1.0, 0.1);
+			if (Has(P + "smoke_hang_one_in"))
+			{
+				// (release 2, the AA haze overlay alone sets these: see HazeHang)
+				R.HangOneIn = static_cast<int>(SafeNum(Num(P + "smoke_hang_one_in", 0.0), 0.0, 1.0e6, 0.0));
+				R.HangA = SafeNum(Num(P + "smoke_hang_s.0", 6.0), 0.1, 120.0, 6.0);
+				R.HangB = SafeNum(Num(P + "smoke_hang_s.1", R.HangA), R.HangA, 120.0, R.HangA);
+				R.HangWide = SafeNum(Num(P + "smoke_hang_wide", 1.0), 0.5, 4.0, 1.0);
+			}
 			R.Licks = static_cast<int>(SafeNum(Num(P + "licks", 0.0), 0.0, 16.0, 0.0)); // (held to 16: a wild recipe value asked a billion licks a shot, the fuzz of 22 November)
 			R.Lamp = SafeNum(Num(P + "lamp", 0.0), 0.0, 100.0, 0.0);
 			R.FlashLeastPx = SafeNum(Num(P + "flash_least_px", Num("air_guns.flash_least_px", 0.0)), 0.0, 100.0, 0.0);
@@ -6766,7 +6777,12 @@ namespace TheaterFx
 			const Vec Way = (F->Dir + (Dir - F->Dir) * K).Unit(Dir);
 			const Vec By = F->Carry + (Carry - F->Carry) * K;
 			const int Which = F->Count++;
+			const size_t BeforeRound = Bits.size(); // (release 2: a gun on a ship throws its brass on her deck, DeckRound)
 			AirRound(F->Next, At, Way, By, Row, Mps, Which % Row.OneIn == 0, Which % Row.SmokeEvery == 0, D, Hue);
+			if (!GunShips.empty())
+			{
+				DeckRound(Gun, BeforeRound, F->Next, At, Way, Kind && *Kind ? Kind : "hmg");
+			}
 			if (Row.Hose > 0.0)
 			{
 				HoseLink(F->Next, *F, At, Way * Mps + By, Row, Hue, Gap); // (fx-air r2: the hose back to the last round)
@@ -7140,6 +7156,7 @@ namespace TheaterFx
 			B.Hold = 0.15;
 			B.Heart = 0.6;
 			B.Rim = 0.0;
+			HazeHang(B, Row, T); // (release 2: the AA haze overlay's one puff in N that hangs; none without it)
 			Bits.push_back(B);
 		}
 		if (bTracer)
@@ -17322,6 +17339,8 @@ namespace TheaterFx
 		UpWas = Eye.Up;
 		bEyeWas = true;
 		Run(Now);
+		HazeShed(Now); // (release 2: the AA haze overlay's hanging puffs, shed first as the room fills; none without it)
+		DeckPlace(Now); // (release 2's sea items: what lies in a ship's frame to where she is now; no ship told of, nothing)
 		CutTrails();
 		// (Bit::Serial: what was made since the last Draw lies at the end of Bits in the order it was made; numbered so
 		// before Prune moves anything)
@@ -17558,6 +17577,10 @@ namespace TheaterFx
 				continue;
 			}
 			const bool bCase = B.bThrown && B.Form == Bit::Shape::Plate;
+			if (bCase && B.DeckShip != 0 && !(B.Alpha > 0.004))
+			{
+				continue; // (release 2, a case on a ship's deck past deck_cases.gone_m: as LayCase would lay nothing of it)
+			}
 			if (bCase && (At - Eye.Eye).Length() > CaseFar)
 			{
 				// (a spent case past its own distance is neither counted nor laid: with the eye gone back to the overview,
@@ -17595,7 +17618,9 @@ namespace TheaterFx
 			// pre-check, 05:14Z: by depth alone the far side of a fight went bare, flames and all)
 			if (!bOff)
 			{
-				Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward) - B.Nearer, B.bKeep || B.bLight || (B.FarRep >= 2 && bFarKept), B.Lumps > 0 ? (At - Eye.Eye).Length() : 0.0, B.Serial });
+				// (release 2: the AA haze overlay's hanging puffs, at most sea_haze.keep of them once the room is short, are kept as
+				// the haze's own share; bHaze is never set without the overlay)
+				Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward) - B.Nearer, B.bKeep || B.bLight || (B.FarRep >= 2 && bFarKept) || B.bHaze, B.Lumps > 0 ? (At - Eye.Eye).Length() : 0.0, B.Serial });
 			}
 			if (B.OilId >= 0)
 			{
@@ -19206,4 +19231,8 @@ namespace TheaterFx
 	{
 		(void)Now;
 	}
+
+	// Release 2, the ten dramatic moments: the sea's items 9, 10 and 11 (DeckDrench, DeckWash, the oil lane, the deck's
+	// brass, the guns' haze), kept in their own file so that they sit in one place
+#include "Effects/TheaterFxSea.inl"
 }
