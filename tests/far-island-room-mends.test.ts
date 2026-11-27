@@ -253,7 +253,7 @@ describe("a group march onto an island that takes some of it", () => {
     TC().load(saveGame(g));
     const part = TC().move([small.id, second.id], pearl.id) as { moved: { id: number }[]; note: string };
     expect(part.moved.map((x) => x.id)).toEqual([small.id]);
-    expect(part.note).toBe('Pearl Harbor is full: it has room for about 30,000 men and 30,000 of yours are there.');
+    expect(part.note).toBe('The Second stays behind. Pearl Harbor is full: it has room for about 30,000 men and 30,000 of yours are there.'); // (named, the UI director, 00:19Z, 27 November 2026, U6)
   }, 300000);
 });
 

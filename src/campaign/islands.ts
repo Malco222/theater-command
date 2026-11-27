@@ -9,6 +9,7 @@
 import data from '../../data/campaign/far-islands.json';
 import { FAR_STAGE } from './stage';
 import { allied, men, placed, roomless } from './game';
+import { named } from './arrivalwaits';
 import { whyNotBreakUp } from './breakup';
 import { MEN_PER_DIV, STACK, type Corps, type Game, type Region } from './types';
 import { farOn } from './world';
@@ -359,6 +360,23 @@ export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[
   const are = n === 1 ? (mine ? 'one of yours is there' : 'one is there') : `${n}${mine ? ' of yours' : ''} are there`;
   if (left > 0) return `${r.name} has ${has} and ${are}: only ${count(left)} more can go.`;
   return `${r.name} can take no more engineers: it has ${has}, and ${most === 1 && n === 1 && mine ? 'yours is there' : are}.`;
+}
+
+/**
+ * A group march onto an island that lets some of its corps in and not the rest: the corps that stayed behind are
+ * named, and the island's line follows for them, what they would have brought being their own men (the UI director,
+ * 00:19Z, 27 November 2026, U6: "{The 24th Division Group} stays behind. {Pearl Harbor} is full: ..."; several, "{The
+ * 24th Division Group} and {the 25th Division Group} stay behind. ..."). One sentence for the page (ui/main.ts
+ * marchTo) and the 3D game (campaign-bridge.ts move) alike. `stayed` are the corps next door kept out for room. Null
+ * for ground that is no island of the table, with the far side off, and where none stayed.
+ */
+export function stayBehind(g: Game, r: Region | undefined | null, stayed: Corps[]): string | null {
+  if (!r || !islandOf(g, r) || !stayed.length) return null;
+  const line = roomRefusal(g, r, stayed);
+  if (!line) return null;
+  const names = stayed.map((c, i) => named(c.name, i === 0));
+  const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `${who} ${stayed.length === 1 ? 'stays' : 'stay'} behind. ${line}`;
 }
 
 /** Every island of the table, by its province's name (for the lists an interface or a test draws). */

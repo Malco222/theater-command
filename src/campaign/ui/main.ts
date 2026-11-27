@@ -122,7 +122,7 @@ import type { Mood } from '../morale';
 import { STORIES, awardOf, drillTo, whyNoSchool, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, envoysWord, freeCourt, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, placeName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoRoom, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
-import { roomSays } from '../islands';
+import { roomSays, stayBehind } from '../islands';
 import { setTeams, TEAMS_RELEASE } from '../teams';
 import { KIND, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance, type CrewOrder, type Hero } from '../types';
 import { tenthPct } from '../../core/math';
@@ -2904,6 +2904,10 @@ function marchTo(id: number, picked: Corps[], look = false): boolean {
     if (full) { ui.msg = full; refresh(); return true; }
     return false;
   }
+  // (A group march onto an island that let some of its corps in: those that stayed behind for its room are named, and
+  // the island's line follows, the UI director, 00:19Z, 27 November 2026, U6: islands.ts stayBehind, the 3D game's too.)
+  const behind = stayBehind(g, r, picked.filter((c) => c.reg !== id && g.regions[c.reg].nb.includes(id) && whyNoRoom(g, c, r) !== null));
+  if (behind) ui.msg = behind;
   if (gateGone(leftGate)) ui.msg = gateGone(leftGate);
   // (His own order has left only guns round a town he was besieging: said as the infantry leave, ruling 211(a).)
   for (const from of new Set(left)) { const alone = from !== id ? gunsLeftAlone(g, from) : null; if (alone) ui.msg = alone; }

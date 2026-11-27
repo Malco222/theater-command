@@ -160,7 +160,7 @@ import { chanceOn, headline, offersOn } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
 import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
 import { CHART_NOW, answersOf, attachWorld, closedCountry, motherLine, patronOf } from '../../../src/campaign/world';
-import { islandOf, roomRefusal, roomSays } from '../../../src/campaign/islands';
+import { islandOf, roomRefusal, roomSays, stayBehind } from '../../../src/campaign/islands';
 import { FAR_PATHS } from '../../../src/campaign/far-rows';
 // (Release 2, Japan and the Pacific: ruling 201's two lines, read where the war between the alliances goes on after a great power's fall.)
 import { warGoesOn } from '../../../src/campaign/domination';
@@ -2975,7 +2975,8 @@ function move(ids: number[], to: number, army = '', armyIds: number[] = []) {
     try {
       const stayed = sent.filter((c) => c.reg !== to && !moved.some((x) => x.id === c.id) && !kept.includes(c) && s.regions[c.reg].nb.includes(to) && whyNoRoom(s, c, isleTo) !== null);
       if (stayed.length && moved.length) {
-        const line = roomRefusal(s, isleTo, stayed);
+        // (Named, the UI director, 00:19Z, 27 November 2026, U6: islands.ts stayBehind, the page's sentence too.)
+        const line = stayBehind(s, isleTo, stayed);
         if (line) note = note ? `${note} ${line}` : line;
       } else if (stayed.length > 1 && !moved.length && note === whyNoRoom(s, stayed[0], isleTo)) note = roomRefusal(s, isleTo, stayed) ?? note;
     } catch { /* the march's own sentence stands */ }

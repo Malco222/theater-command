@@ -5,10 +5,10 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, createGame, men, placed, removeCorps, retreatTarget, rowCorps, startPhase, whyNoRoom, whyNoSwap } from '../src/campaign/game';
+import { addCorps, createGame, men, placed, relocate, removeCorps, retreatTarget, rowCorps, startPhase, whyNoRoom, whyNoSwap } from '../src/campaign/game';
 import { saveGame } from '../src/campaign/save';
 import '../unreal/TheaterCommand/Rules/campaign-bridge';
-import { fits, islandOf, roomForDivision, roomRefusal, swapRefusal } from '../src/campaign/islands';
+import { fits, islandOf, roomForDivision, roomRefusal, stayBehind, swapRefusal } from '../src/campaign/islands';
 import { garrison } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
@@ -227,5 +227,40 @@ describe('U3: a march order reads the march sentence in 3D as on the page; the s
     expect(TC().move([group.id], pearl.id).note).toBe(march);
     // Asked to change places with the corps in the field, the swap's own sentence (game.ts whyNoSwap).
     expect(whyNoSwap(g, group, field)).toBe('Pearl Harbor has room for 2 divisions, about 30,000 men, and 11,000 of yours stay there after the swap: only 19,000 more can go, and 24th Division Group has 30,000.');
+  }, 300000);
+});
+
+describe('U6: a group march let in only in part names the corps that stay behind, on the page and in 3D alike', () => {
+  const board = (inside: number) => {
+    const g = war('USA');
+    const pearl = g.byName['Pearl Harbor'], hon = g.byName['Honolulu'];
+    clear(g, pearl);
+    expect(garrison(g, corps(g, 'USA', 'Inside', pearl, 1, inside / 15000))).toBe(true);
+    return { g, pearl, hon };
+  };
+  it('one stays behind on a full island; two stay behind; one stays behind where some room is left', () => {
+    {
+      const { g, pearl, hon } = board(14000);
+      const small = corps(g, 'USA', 'Small', hon, 1, 4000 / 15000), d24 = corps(g, 'USA', '24th Division Group', hon), d25 = corps(g, 'USA', '25th Division Group', hon);
+      TC().load(saveGame(g));
+      // (26,000 there: 12,000 more fit, the small one goes in; then 4,000 can go, and the full line is a reading below.)
+      const one = TC().move([small.id, d24.id], pearl.id) as { moved: { id: number }[]; note: string };
+      expect(one.moved.map((x) => x.id)).toEqual([small.id]);
+      expect(one.note).toBe('The 24th Division Group stays behind. Pearl Harbor has room for 2 divisions, about 30,000 men, and 18,000 of yours are there: only 12,000 more can go, and you are sending 15,000.');
+      TC().load(saveGame(g));
+      const two = TC().move([small.id, d24.id, d25.id], pearl.id) as { moved: { id: number }[]; note: string };
+      expect(two.note).toBe('The 24th Division Group and the 25th Division Group stay behind. Pearl Harbor has room for 2 divisions, about 30,000 men, and 18,000 of yours are there: only 12,000 more can go, and you are sending 30,000.');
+      // The page's sentence is the same function's (ui/main.ts marchTo calls it: the page's wiring is a reading).
+      relocate(g, small, pearl);
+      expect(stayBehind(g, pearl, [d24, d25])).toBe(two.note);
+    }
+    {
+      const { g, pearl, hon } = board(26000);
+      const small = corps(g, 'USA', 'Small', hon, 1, 4000 / 15000), d24 = corps(g, 'USA', '24th Division Group', hon);
+      TC().load(saveGame(g));
+      const full = TC().move([small.id, d24.id], pearl.id) as { moved: { id: number }[]; note: string };
+      expect(full.moved.map((x) => x.id)).toEqual([small.id]);
+      expect(full.note).toBe('The 24th Division Group stays behind. Pearl Harbor is full: it has room for about 30,000 men and 30,000 of yours are there.');
+    }
   }, 300000);
 });
