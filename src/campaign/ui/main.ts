@@ -122,7 +122,7 @@ import type { Mood } from '../morale';
 import { STORIES, awardOf, drillTo, whyNoSchool, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, envoysWord, freeCourt, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc, corpsNamed, forceWords, hasRoom, moveCost, newsName, placeName, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, trainReachFor, whyNoRoom, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
-import { roomSays, stayBehind } from '../islands';
+import { refusedWhole, roomSays, stayBehind } from '../islands';
 import { setTeams, TEAMS_RELEASE } from '../teams';
 import { KIND, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance, type CrewOrder, type Hero } from '../types';
 import { tenthPct } from '../../core/math';
@@ -2900,7 +2900,10 @@ function marchTo(id: number, picked: Corps[], look = false): boolean {
     // the corps next door that was refused, where nobody there can change places with it: "Singapore has room for
     // 5 divisions, about 75,000 men: you are sending 90,000." (rulings 173(b) and 179(s), counted in men by the UI
     // director's marks of 15:02Z 25 November 2026; the 3D game's march says the same, campaign-bridge.ts).
-    const full = picked.filter((c) => g.regions[c.reg].nb.includes(id)).map((c) => whyNoRoom(g, c, r)).find(Boolean);
+    // (Refused whole on an island: the line once for all the corps refused, as the 3D game says it, islands.ts
+    // refusedWhole: the UI director, 00:19Z, 27 November 2026, U3. Other ground: the first corps' line, as it was.)
+    const full = refusedWhole(g, r, picked.filter((c) => g.regions[c.reg].nb.includes(id) && whyNoRoom(g, c, r) !== null))
+      ?? picked.filter((c) => g.regions[c.reg].nb.includes(id)).map((c) => whyNoRoom(g, c, r)).find(Boolean);
     if (full) { ui.msg = full; refresh(); return true; }
     return false;
   }

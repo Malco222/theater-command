@@ -387,6 +387,19 @@ export function stayBehind(g: Game, r: Region | undefined | null, stayed: Corps[
   return `${who} ${stayed.length === 1 ? 'stays' : 'stay'} behind. ${line}`;
 }
 
+/**
+ * A march order onto an island refused whole for its room: the island's line once for every corps next door that was
+ * refused, what they would have brought being all their men, "... and you are sending 30,000" for two corps of 15,000
+ * (the UI director, 00:19Z, 27 November 2026, U3: a march order reads the march sentence on the page and in the 3D
+ * game alike; words sceptic 2, W2-1). One sentence for the page (ui/main.ts marchTo) and the 3D game (campaign-bridge.ts
+ * move) alike, as `stayBehind` is for a group let in only in part. `refused` are the corps next door kept out for
+ * room. Null for ground that is no island of the table, with the far side off, and where none was refused.
+ */
+export function refusedWhole(g: Game, r: Region | undefined | null, refused: Corps[]): string | null {
+  if (!r || !islandOf(g, r) || !refused.length) return null;
+  return roomRefusal(g, r, refused);
+}
+
 /** Every island of the table, by its province's name (for the lists an interface or a test draws). */
 export const islandNames = (): string[] => (ROWS ? Object.keys(ROWS) : []);
 
