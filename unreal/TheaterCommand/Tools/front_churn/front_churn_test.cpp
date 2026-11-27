@@ -69,7 +69,12 @@ namespace
 		FBandIn In;
 		In.X = X;
 		In.Y = D;
-		In.D = D;
+		In.D = std::fabs(D);
+		In.Side = D;
+		In.bSided = true;
+		In.bFoot = true;
+		In.FootX = X;
+		In.FootY = 0.0;
 		In.Facing = Facing;
 		In.State = State;
 		return Band(In);
@@ -91,7 +96,7 @@ namespace
 		Check(CratersLeft(4.0) < Left(4.0) && CratersLeft(6.0) == 0.0, "the craters green over first (" + Num(CratersLeft(4.0)) + " left at 4 months)");
 		const FState Whole = Growing(6.0), Healed = Healing(Whole, 8.0);
 		Check(Whole.Size == 1.0f && Whole.Pale == 0.0f, "whole at six months, not pale");
-		Check(Healed.Size < 0.3f && Healed.Pits == 0.0f && Healed.Pale > 0.7f, "healing: narrower, no craters, a paler strip");
+		Check(Healed.Size < 0.3f && Healed.Pits == 0.0f && Healed.Pale > 0.7f, "healing: weaker, no craters, a paler strip");
 		Check(IsNothing(Growing(1.0)) && IsNothing(Healing(Whole, 12.0)), "nothing in the first month, nothing after a year");
 		const FState Half = Mix(Growing(2.0), Growing(4.0), 0.5);
 		Check(std::fabs(Half.Size - 0.5f) < 1e-6f, "the month's cross-fade runs evenly between the two");
@@ -108,16 +113,17 @@ namespace
 		{
 			const double X = K * 0.05;
 			const FBand B = BandAt(X, 0.0, 3.0, Whole);
-			// where does the body end?
-			double Reach = 0.0;
-			for (double D = 0.0; D < 3.0; D += 0.01)
+			// where does the body end, either side?
+			double Lo = 0.0, Hi = 0.0;
+			for (double D = -3.5; D < 3.5; D += 0.01)
 			{
 				if (BandAt(X, D, 3.0, Whole).Body > 0.0f)
 				{
-					Reach = D;
+					Lo = std::min(Lo, D);
+					Hi = std::max(Hi, D);
 				}
 			}
-			Widest = std::max(Widest, 2.0 * Reach);
+			Widest = std::max(Widest, Hi - Lo);
 			SumCore += 2.0 * B.HalfCore;
 			SumFirst += 2.0 * BandAt(X, 0.0, 3.0, First).HalfCore;
 			LeastHalf = std::min<double>(LeastHalf, B.HalfCore);
@@ -131,35 +137,139 @@ namespace
 		Check(Swing > 0.25 && Swing < 0.7, "its width wanders by about two fifths (" + Num(Swing) + ")");
 		// Strongest where the armies stand; nothing far along the frontier from them.
 		const double Far = BandAt(5.0, 0.0, 30.0, Whole).Strength;
-		Check(Far > 0.3 && Far < 0.5, "far along a dug-in pair's own border it thins to about two fifths (" + Num(Far) + "), as the fires thin to embers");
+		Check(Far > 0.45 && Far < 0.55, "far along a dug-in pair's own border it thins to about half (" + Num(Far) + "), as the fires thin to embers");
 		Check(BandAt(5.0, 0.0, 12.0, Whole).Strength < BandAt(5.0, 0.0, 2.0, Whole).Strength, "tapering away from where they face each other");
+		// Weak is broken, never thin: wherever it shows, its body is at least about 1.4 wide.
+		double Thinnest = 1e9;
+		for (const double Size : { 0.05, 0.15, 0.3, 0.6, 1.0 })
+		{
+			FState Weak = Whole;
+			Weak.Size = Weak.Dark = Weak.Pits = static_cast<float>(Size);
+			for (int K = 0; K < 1500; ++K)
+			{
+				const double X = K * 0.13;
+				if (BandAt(X, 0.0, 3.0, Weak).Whole < 0.5f)
+				{
+					continue;
+				}
+				double Lo = 0.0, Hi = 0.0;
+				for (double D = -3.0; D <= 3.0; D += 0.01)
+				{
+					FBandIn In;
+					In.X = X;
+					In.Y = D;
+					In.D = std::fabs(D);
+					In.Side = D;
+					In.bSided = true;
+					In.bFoot = true;
+					In.FootX = In.X;
+					In.FootY = 0.0;
+					In.Facing = 3.0;
+					In.State = Weak;
+					const FBand B = Band(In);
+					if (B.Body >= 0.5f * B.Whole)
+					{
+						Lo = std::min(Lo, D);
+						Hi = std::max(Hi, D);
+					}
+				}
+				Thinnest = std::min(Thinnest, Hi - Lo);
+			}
+		}
+		Check(Thinnest >= Narrowest - 0.05, "weak is broken, never thin: wherever it shows it is at least about 1.4 wide (thinnest " + Num(Thinnest) + ")");
+		// Weaker shows as patches two to five units long with gaps between; whole, it is unbroken.
+		auto Patches = [&](const FState& State, double Facing, double& Covered, double& Typical)
+		{
+			std::vector<double> Runs;
+			double Run = 0.0, On = 0.0;
+			const double Step = 0.05;
+			int Samples = 0;
+			for (int K = 0; K < 8000; ++K)
+			{
+				const bool bOn = BandAt(K * Step, 0.0, Facing, State).Whole >= 0.5f;
+				On += bOn ? 1.0 : 0.0;
+				++Samples;
+				if (bOn)
+				{
+					Run += Step;
+				}
+				else if (Run > 0.0)
+				{
+					Runs.push_back(Run);
+					Run = 0.0;
+				}
+			}
+			Covered = On / Samples;
+			std::sort(Runs.begin(), Runs.end());
+			Typical = Runs.empty() ? 0.0 : Runs[Runs.size() / 2];
+		};
+		double Covered = 0.0, Typical = 0.0;
+		Patches(Whole, 3.0, Covered, Typical);
+		Check(Covered > 0.995, "whole where the armies stand it is unbroken (" + Num(Covered) + ")");
+		Patches(First, 3.0, Covered, Typical);
+		Check(Covered > 0.3 && Covered < 0.8 && Typical >= 1.5 && Typical <= 6.0, "at first show it is patches (" + Num(Covered) + " laid, patches about " + Num(Typical) + " long)");
+		Patches(Healing(Whole, 8.0), 3.0, Covered, Typical);
+		Check(Covered > 0.15 && Covered < 0.6, "eight months healed it is islands (" + Num(Covered) + " left)");
+		Patches(Healing(Whole, 3.0), 3.0, Covered, Typical);
+		Check(Covered > 0.85, "three months healed it is still whole (" + Num(Covered) + ")");
+		// Its middle strays off the frontier by up to half a unit.
+		double Stray0 = 0.0;
+		for (int K = 0; K < 4000; ++K)
+		{
+			Stray0 = std::max(Stray0, std::fabs(static_cast<double>(BandAt(K * 0.1, 0.0, 3.0, Whole).Middle)));
+		}
+		Check(Stray0 > 0.3 && Stray0 <= Stray + 1e-6, "its middle strays off the frontier by up to half a unit (most " + Num(Stray0) + ")");
+		// And it shows only where the whole band is four pixels wide or more on the screen.
+		Check(Shown(2.4) == 0.0 && Shown(14.0) == 1.0 && Shown(4.0) > 0.2 && Shown(4.0) < 0.8, "from theatre height (the band about 2.4 pixels) it fades out; from working height (about 14) it shows");
+		Check(CraterShown(2.0) == 0.0 && CraterShown(6.5) == 1.0, "a crater draws only from three pixels across, whole from six");
 	}
 
 	// ---- the ragged edge ----
 	void CheckEdge()
 	{
-		// Along a straight frontier, the fine edge (where the ragged body crosses a half) never runs straight for more than about 3 units.
+		// Along a straight frontier, the fine edge (where the ragged body crosses a half), on the left side.
 		const FState Whole = Growing(6.0);
 		std::vector<double> EdgeAt;
 		const double Step = 0.05;
+		auto RaggedAt = [&](double X, double D)
+		{
+			FBandIn In;
+			In.X = X;
+			In.Y = D;
+			In.D = std::fabs(D);
+			In.Side = D;
+			In.bSided = true;
+			In.bFoot = true;
+			In.FootX = In.X;
+			In.FootY = 0.0;
+			In.Along = X;
+			In.Facing = 3.0;
+			In.State = Whole;
+			return static_cast<double>(Band(In).Ragged);
+		};
+		double Softest = 0.0;
 		for (int K = 0; K < 3000; ++K)
 		{
 			const double X = K * Step;
-			double Last = 0.0;
-			for (double D = 0.0; D < 2.5; D += 0.005)
+			double Last = 0.0, From = -1.0, To = -1.0;
+			for (double D = 0.0; D < 3.2; D += 0.005)
 			{
-				FBandIn In;
-				In.X = X;
-				In.Y = D;
-				In.D = D;
-				In.Facing = 3.0;
-				In.State = Whole;
-				if (Band(In).Ragged >= 0.5f)
+				const double R = RaggedAt(X, D);
+				if (R >= 0.5)
 				{
 					Last = D;
 				}
+				if (R >= 0.9)
+				{
+					From = D;
+				}
+				if (R >= 0.1)
+				{
+					To = D;
+				}
 			}
 			EdgeAt.push_back(Last);
+			Softest = std::max(Softest, To - From);
 		}
 		// a straight stretch: the edge within 0.06 units of the straight line between its two ends
 		double LongestStraight = 0.0;
@@ -181,27 +291,26 @@ namespace
 			}
 		}
 		Check(LongestStraight <= 3.0, "no stretch of the edge runs straight for more than about 3 units (longest " + Num(LongestStraight) + ")");
-		// and it is smooth: no cell steps (the ragged body changes by little between points a twentieth of a unit apart, either way)
-		double Jump = 0.0;
-		for (int K = 0; K < 4000; ++K)
+		Check(Softest < 0.3, "the veil's edge is crisp (it falls from nine tenths to one tenth within " + Num(Softest) + " of a unit)");
+		// Tongues: reaching out from the edge as it lies over three units, 0.3 to 0.8 of a unit, a few of them in every ten units.
+		double Longest = 0.0;
+		int Tongues = 0;
+		bool bIn = false;
+		for (size_t K = 30; K + 30 < EdgeAt.size(); ++K)
 		{
-			const double X = K * 0.05;
-			for (double D = 0.0; D < 2.5; D += 0.05)
+			std::vector<double> Round(EdgeAt.begin() + static_cast<long>(K) - 30, EdgeAt.begin() + static_cast<long>(K) + 31);
+			std::nth_element(Round.begin(), Round.begin() + 30, Round.end());
+			const double Out = EdgeAt[K] - Round[30];
+			Longest = std::max(Longest, Out);
+			if (Out >= 0.3 && !bIn)
 			{
-				auto R = [&](double PX, double PD)
-				{
-					FBandIn In;
-					In.X = PX;
-					In.Y = PD;
-					In.D = PD;
-					In.Facing = 3.0;
-					In.State = Whole;
-					return static_cast<double>(Band(In).Ragged);
-				};
-				Jump = std::max({ Jump, std::fabs(R(X + 0.05, D) - R(X, D)), std::fabs(R(X, D + 0.05) - R(X, D)) });
+				++Tongues;
 			}
+			bIn = Out >= 0.2;
 		}
-		Check(Jump < 0.35, "the edge has no steps (largest change in a twentieth of a unit " + Num(Jump) + ")");
+		const double Per10 = Tongues * 10.0 / (static_cast<double>(EdgeAt.size()) * Step);
+		Check(Longest >= 0.3 && Longest <= TongueLongest + 0.1, "the veil's tongues reach out up to about 0.8 of a unit (longest " + Num(Longest) + ")");
+		Check(Per10 >= 1.0 && Per10 <= 12.0, "uneven, a few in every ten units (" + Num(Per10) + ")");
 	}
 
 	// ---- the ground picture ----
@@ -323,45 +432,66 @@ namespace
 		Check(bOff, "and nothing off the band");
 
 		const FLine Line = Straight(-40.0, 40.0, Whole, 0.0);
-		std::vector<FPit> Holes;
-		Pits(Line, Holes);
+		std::vector<FPit> All, Holes, Flecks;
+		Pits(Line, All);
 		std::vector<FPit> Again;
 		Pits(Line, Again);
-		bool bSame = Holes.size() == Again.size();
-		for (size_t K = 0; bSame && K < Holes.size(); ++K)
+		bool bSame = All.size() == Again.size();
+		for (size_t K = 0; bSame && K < All.size(); ++K)
 		{
-			bSame = Holes[K].X == Again[K].X && Holes[K].Y == Again[K].Y && Holes[K].Radius == Again[K].Radius;
+			bSame = All[K].X == Again[K].X && All[K].Y == Again[K].Y && All[K].Radius == Again[K].Radius;
+		}
+		for (const FPit& Hole : All)
+		{
+			(Hole.bSpoil ? Flecks : Holes).push_back(Hole);
 		}
 		Check(bSame && !Holes.empty(), "the craters are the same each time (" + std::to_string(Holes.size()) + " along 80 units)");
 		double Small = 1e9, Big = 0.0;
-		bool bInCore = true;
+		bool bInCore = true, bFlecksOut = true;
 		for (const FPit& Hole : Holes)
 		{
 			Small = std::min(Small, 2.0 * Hole.Radius);
 			Big = std::max(Big, 2.0 * Hole.Radius);
-			const FBand B = BandAt(Hole.X, std::fabs(Hole.Y), std::fabs(Hole.X), Whole);
-			bInCore &= std::fabs(Hole.Y) + Hole.Radius <= B.HalfCore + 0.12;
+			const FBand B = BandAt(Hole.X, 0.0, std::fabs(Hole.X), Whole);
+			bInCore &= std::fabs(Hole.Y - B.Middle) + Hole.Radius <= B.HalfCore + 0.12;
+		}
+		for (const FPit& Fleck : Flecks)
+		{
+			const FBand B = BandAt(Fleck.X, 0.0, std::fabs(Fleck.X), Whole);
+			bFlecksOut &= std::fabs(Fleck.Y - B.Middle) >= B.HalfCore - 0.05;
 		}
 		Check(Small >= 0.15 - 1e-9 && Big <= 0.5 + 1e-9 && Big / Small > 2.5, "craters 0.15 to 0.5 across, about three to one (" + Num(Small) + " to " + Num(Big) + ")");
 		Check(bInCore, "none in the soft edge");
-		// About a third of the core pitted where whole and the armies stand (within 8 units of them), in clusters.
-		double Pitted = 0.0, Core = 0.0;
+		Check(!Flecks.empty() && Flecks.size() * 3 < Holes.size() && bFlecksOut, "a few flecks of dry spoil toward the edges (" + std::to_string(Flecks.size()) + ")");
+		// Where whole and the armies stand (within 8 units of them): the pit floors about 7% of the band at most, in clusters.
+		double Floor = 0.0, Laid = 0.0;
 		int Windows = 0, Empty = 0, Dense = 0;
 		for (double X = -8.0; X < 8.0; X += 0.05)
 		{
-			for (double Y = -1.6; Y <= 1.6; Y += 0.05)
+			for (double Y = -2.2; Y <= 2.2; Y += 0.05)
 			{
-				const FBand B = BandAt(X, std::fabs(Y), std::fabs(X), Whole);
-				if (std::fabs(Y) > B.HalfCore)
+				FBandIn In;
+				In.X = X;
+				In.Y = Y;
+				In.D = std::fabs(Y);
+				In.Side = Y;
+				In.bSided = true;
+				In.bFoot = true;
+				In.FootX = In.X;
+				In.FootY = 0.0;
+				In.Facing = std::fabs(X);
+				In.State = Whole;
+				if (Band(In).Body < 0.5f)
 				{
 					continue;
 				}
-				Core += 1.0;
+				Laid += 1.0;
 				for (const FPit& Hole : Holes)
 				{
-					if ((Hole.X - X) * (Hole.X - X) + (Hole.Y - Y) * (Hole.Y - Y) <= Hole.Radius * Hole.Radius)
+					const double Floor2 = 0.62 * Hole.Radius * 0.62 * Hole.Radius;
+					if ((Hole.X - X) * (Hole.X - X) + (Hole.Y - Y) * (Hole.Y - Y) <= Floor2)
 					{
-						Pitted += 1.0;
+						Floor += 1.0;
 						break;
 					}
 				}
@@ -376,26 +506,47 @@ namespace
 			}
 			++Windows;
 			Empty += In == 0 ? 1 : 0;
-			Dense += In >= 12 ? 1 : 0;
+			Dense += In >= 10 ? 1 : 0;
 		}
-		Check(Pitted / Core > 0.15 && Pitted / Core < 0.45, "about a third of the core is pitted where it is whole (" + Num(Pitted / Core) + ")");
+		Check(Floor / Laid > 0.03 && Floor / Laid <= 0.08, "the pit floors are about 7% of the band at most where it is whole (" + Num(Floor / Laid) + ")");
 		Check(Empty * 5 >= Windows && Dense > 0, "in clusters with bare stretches between, never an even pepper (" + std::to_string(Empty) + " of " + std::to_string(Windows) + " units bare)");
-		// Healing: the craters go first.
-		std::vector<FPit> Later;
+		// Healing and weak ground: the craters go first, and a weak band has fewer.
+		std::vector<FPit> Later, Weak;
 		Pits(Straight(-40.0, 40.0, Healing(Whole, 4.0), 0.0), Later);
-		Check(Later.size() * 4 < Holes.size(), "four months after the front moved on, few craters are left (" + std::to_string(Later.size()) + ")");
-		// A crater: the pit about the art director's pit colour, never black; its rim lighter than the band's earth; in the mud months a few pools.
-		uint8_t Rim[3], Bottom[3];
-		PitColours(EGround::Common, ESeason::Dry, Holes.front(), Rim, Bottom);
-		const uint8_t Want[3] = { 43, 35, 27 }, Earth[3] = { 106, 85, 61 };
-		Check(std::fabs(Lstar(Bottom) - Lstar(Want)) < 1.0 && Lstar(Bottom) > 10.0 && Lstar(Rim) > Lstar(Earth), "a crater: its pit 2B231B, never black; its rim lighter than the band");
-		int Pools = 0;
+		Pits(Straight(-40.0, 40.0, Growing(2.0), 0.0), Weak);
+		auto CratersIn = [](const std::vector<FPit>& Set) { return static_cast<size_t>(std::count_if(Set.begin(), Set.end(), [](const FPit& P) { return !P.bSpoil; })); };
+		Check(CratersIn(Later) * 4 < Holes.size(), "four months after the front moved on, few craters are left (" + std::to_string(CratersIn(Later)) + ")");
+		Check(CratersIn(Weak) * 4 < Holes.size(), "at first show, few craters (" + std::to_string(CratersIn(Weak)) + ")");
+		// A crater: its sunny rim 7D6748, its pit 4A3B2B, the shaded third of a large one 2B231B, never black; in the mud months a few pools, only in large pits.
+		uint8_t Rim[3], Bottom[3], Shade[3];
+		FPit SmallPit = Holes.front(), LargePit = Holes.front();
 		for (const FPit& Hole : Holes)
 		{
-			PitColours(EGround::Common, ESeason::Mud, Hole, Rim, Bottom);
-			Pools += Bottom[2] > Bottom[0] ? 1 : 0;
+			SmallPit = Hole.Radius < SmallPit.Radius ? Hole : SmallPit;
+			LargePit = Hole.Radius > LargePit.Radius ? Hole : LargePit;
 		}
-		Check(Pools * 20 > static_cast<int>(Holes.size()) && Pools * 3 < static_cast<int>(Holes.size()), "in the mud months a few pits hold a dull sky pool (" + std::to_string(Pools) + " of " + std::to_string(Holes.size()) + ")");
+		const uint8_t WantRim[3] = { 125, 103, 72 }, WantPit[3] = { 74, 59, 43 }, WantShade[3] = { 43, 35, 27 };
+		PitColours(EGround::Common, ESeason::Dry, SmallPit, Rim, Bottom, Shade);
+		bool bColours = std::fabs(Lstar(Rim) - Lstar(WantRim)) < 2.5 && std::fabs(Lstar(Bottom) - Lstar(WantPit)) < 2.5 && Shade[0] == Bottom[0];
+		PitColours(EGround::Common, ESeason::Dry, LargePit, Rim, Bottom, Shade);
+		bColours &= std::fabs(Lstar(Shade) - Lstar(WantShade)) < 2.5 && Lstar(Shade) > 10.0;
+		Check(bColours, "a crater: its sunny rim 7D6748, its pit 4A3B2B, the shaded third of a large one 2B231B, never black");
+		int Pools = 0, Large = 0, SmallPools = 0;
+		for (const FPit& Hole : Holes)
+		{
+			PitColours(EGround::Common, ESeason::Mud, Hole, Rim, Bottom, Shade);
+			const bool bPool = Bottom[2] > Bottom[0];
+			if (Hole.Radius >= 0.15)
+			{
+				++Large;
+				Pools += bPool ? 1 : 0;
+			}
+			else
+			{
+				SmallPools += bPool ? 1 : 0;
+			}
+		}
+		Check(SmallPools == 0 && Large > 0 && Pools * 12 > Large && Pools * 3 < Large, "in the mud months about one large pit in six holds a dull sky pool, and no small one (" + std::to_string(Pools) + " of " + std::to_string(Large) + ")");
 	}
 
 	// ---- measuring ----
@@ -428,6 +579,46 @@ namespace
 		FLine Open = Straight(0.0, 20.0, Growing(6.0), 10.0);
 		EaseEnds(Open);
 		Check(Open.State.front().Size == 0.0f && Open.State.back().Size == 0.0f && Open.State[20].Size == 1.0f, "an open line's band comes to nothing at its ends");
+		// Two pairs on one line, the one whole where its armies face and the other at first show: they join at the stronger, with no notch.
+		FLine Two = Straight(0.0, 40.0, Growing(6.0), 10.0);
+		for (size_t K = 0; K < Two.X.size(); ++K)
+		{
+			if (Two.X[K] > 20.0)
+			{
+				Two.State[K] = Growing(2.0);
+				Two.Facing[K] = static_cast<float>(std::fabs(Two.X[K] - 30.0));
+			}
+		}
+		Strengthen(Two);
+		double Dip = 1e9;
+		bool bFalls = true;
+		for (size_t K = 0; K < Two.X.size(); ++K)
+		{
+			if (Two.X[K] >= 17.0 && Two.X[K] <= 25.0)
+			{
+				Dip = std::min<double>(Dip, Two.Strength[K]);
+				bFalls &= Two.X[K] <= 17.0 || Two.Strength[K] <= Two.Strength[K - 1] + 1e-6f;
+			}
+		}
+		const double Weaker = 0.3;
+		Check(Dip >= Weaker - 0.01 && bFalls && Two.Strength[40] > 0.85f && Two.Strength[36] > 0.99f, "two pairs join at the stronger, blended over about 3 units, with no notch (least " + Num(Dip) + ")");
+		// The end of a band: weaker over its last 3 to 4 units, so that it breaks up and dies, never a stump.
+		FLine End = Straight(0.0, 30.0, Growing(6.0), 15.0);
+		Strengthen(End);
+		EaseEnds(End);
+		bool bBreaks = false;
+		for (double X = 0.0; X < 3.5; X += 0.05)
+		{
+			FBandIn In;
+			In.X = X;
+			In.Y = 0.0;
+			In.D = 0.0;
+			In.Facing = 15.0 - X;
+			In.Strength = End.Strength[static_cast<size_t>(X / 0.5)];
+			In.State = End.State[static_cast<size_t>(X / 0.5)];
+			bBreaks |= Band(In).Whole < 0.5f;
+		}
+		Check(End.Strength.front() == 0.0f && End.Strength[8] > 0.9f && bBreaks, "a band's end breaks up and dies over its last 3 to 4 units");
 	}
 
 	// ---- drawings over the game's own ground ----
@@ -616,6 +807,43 @@ namespace
 		std::vector<int> PairOf;
 		LayLines(Board, Lines, PairOf);
 		std::printf("front: %zu pieces, %zu pairs, %zu lines\n", Board.Pieces.size(), Board.Pairs.size(), Lines.size());
+		// (and three more looks the art director asked for: one edge at twice the close look's scale, one band's end and
+		// its sharpest corner, each at the close look's scale)
+		for (const FBoard::FView& View : std::vector<FBoard::FView>(Board.Views))
+		{
+			if (std::strcmp(View.Name, "close") == 0)
+			{
+				const double CX = 0.5 * (View.X0 + View.X1), CY = 0.5 * (View.Y0 + View.Y1);
+				FBoard::FView Edge{ CX - 7.0, CY - 4.5, CX + 7.0, CY + 4.5, View.Px * 0.5, "edge" };
+				Board.Views.push_back(Edge);
+			}
+		}
+		for (const FLine& Line : Lines)
+		{
+			const size_t N = Line.X.size();
+			if (!Line.bClosed && N > 10)
+			{
+				Board.Views.push_back({ Line.X[0] - 14.0, Line.Y[0] - 9.0, Line.X[0] + 14.0, Line.Y[0] + 9.0, 0.07, "end" });
+			}
+			double Sharpest = 0.0;
+			size_t At = 0;
+			for (size_t K = 6; K + 6 < N; ++K)
+			{
+				const double A = std::atan2(Line.Y[K] - Line.Y[K - 6], Line.X[K] - Line.X[K - 6]), B = std::atan2(Line.Y[K + 6] - Line.Y[K], Line.X[K + 6] - Line.X[K]);
+				double Turn = std::fabs(B - A);
+				Turn = std::min(Turn, 2.0 * 3.14159265358979 - Turn);
+				if (Turn > Sharpest)
+				{
+					Sharpest = Turn;
+					At = K;
+				}
+			}
+			if (Sharpest > 0.5)
+			{
+				Board.Views.push_back({ Line.X[At] - 14.0, Line.Y[At] - 9.0, Line.X[At] + 14.0, Line.Y[At] + 9.0, 0.07, "corner" });
+			}
+			break;
+		}
 		const FMoment Moments[] = {
 			{ "m0", 0.0, 0.0, ESeason::Dry }, { "m2", 2.0, 0.0, ESeason::Dry }, { "m4", 4.0, 0.0, ESeason::Dry }, { "m6", 6.0, 0.0, ESeason::Dry },
 			{ "heal3", 6.0, 3.0, ESeason::Dry }, { "heal8", 6.0, 8.0, ESeason::Dry }, { "heal12", 6.0, 12.0, ESeason::Dry },
@@ -630,10 +858,11 @@ namespace
 			for (FLine& Line : Here)
 			{
 				std::fill(Line.State.begin(), Line.State.end(), Now);
+				Strengthen(Line);
 				EaseEnds(Line);
 			}
 			// The ground picture: the band painted in, the woods thinned, the snow broken; then the woods' cloth and the snow over it, as the material lays them.
-			std::vector<double> Picture(static_cast<size_t>(NX) * static_cast<size_t>(NY) * 3);
+			std::vector<double> Picture(static_cast<size_t>(NX) * static_cast<size_t>(NY) * 3), Plain(Picture.size());
 			std::vector<uint8_t> Painted(static_cast<size_t>(NX) * static_cast<size_t>(NY) * 3);
 			for (int J = 0; J < NY; ++J)
 			{
@@ -643,6 +872,7 @@ namespace
 					const double X = Board.X0 + I * Board.Cell, Y = Board.Y0 + J * Board.Cell;
 					uint8_t Out[3] = { Board.Rgb[Idx * 3], Board.Rgb[Idx * 3 + 1], Board.Rgb[Idx * 3 + 2] };
 					uint8_t Woods = Board.Wooded[Idx], SnowShare = Moment.Season == ESeason::Snow ? 225 : 0;
+					const uint8_t Bare[3] = { Out[0], Out[1], Out[2] }, BareWoods = Woods, BareSnow = SnowShare;
 					FBandIn In;
 					if (Board.Kind[Idx] < 3 && At(Here, Coarse, static_cast<int>(Idx), X, Y, In))
 					{
@@ -655,20 +885,28 @@ namespace
 					Painted[Idx * 3] = Out[0];
 					Painted[Idx * 3 + 1] = Out[1];
 					Painted[Idx * 3 + 2] = Out[2];
-					const double W = 0.55 * Woods / 255.0, S = SnowShare / 255.0;
 					const double WoodsColour[3] = { 58.0, 74.0, 46.0 }, SnowColour[3] = { 236.0, 238.0, 240.0 };
-					for (int C = 0; C < 3; ++C)
+					auto Lay = [&](const uint8_t Ground[3], uint8_t WoodsShare, uint8_t SnowOn, std::vector<double>& Into)
 					{
-						double L = ToLight(Out[C]) * (1.0 - W) + ToLight(WoodsColour[C]) * W;
-						L = L * (1.0 - S) + ToLight(SnowColour[C]) * S;
-						Picture[Idx * 3 + static_cast<size_t>(C)] = Board.Kind[Idx] == 3 ? ToLight(Board.Rgb[Idx * 3 + static_cast<size_t>(C)]) : L;
-					}
+						const double W = 0.55 * WoodsShare / 255.0, S = SnowOn / 255.0;
+						for (int C = 0; C < 3; ++C)
+						{
+							double L = ToLight(Ground[C]) * (1.0 - W) + ToLight(WoodsColour[C]) * W;
+							L = L * (1.0 - S) + ToLight(SnowColour[C]) * S;
+							Into[Idx * 3 + static_cast<size_t>(C)] = Board.Kind[Idx] == 3 ? ToLight(Board.Rgb[Idx * 3 + static_cast<size_t>(C)]) : L;
+						}
+					};
+					Lay(Out, Woods, SnowShare, Picture);
+					Lay(Bare, BareWoods, BareSnow, Plain);
 				}
 			}
 			for (const FBoard::FView& View : Board.Views)
 			{
 				const int W = static_cast<int>((View.X1 - View.X0) / View.Px), H = static_cast<int>((View.Y1 - View.Y0) / View.Px);
-				const bool bFine = View.Px < Board.Cell * 0.75; // (the veil and the craters show only when the eye is low: from theatre height they fade out)
+				// (where the whole band, about 3.6 units, would be under about four pixels wide it fades out: the picture's
+				// share, the veil and the craters alike; and the veil is drawn only where the eye is lower than the picture's points)
+				const double Show = Shown(3.6 / View.Px);
+				const bool bFine = View.Px < Board.Cell * 0.75 && Show > 0.0;
 				std::vector<double> Light(static_cast<size_t>(W) * static_cast<size_t>(H) * 3);
 				for (int J = 0; J < H; ++J)
 				{
@@ -681,8 +919,10 @@ namespace
 						for (int C = 0; C < 3; ++C)
 						{
 							auto P = [&](int A, int B) { return Picture[(static_cast<size_t>(B) * static_cast<size_t>(NX) + static_cast<size_t>(A)) * 3 + static_cast<size_t>(C)]; };
-							Light[(static_cast<size_t>(J) * static_cast<size_t>(W) + static_cast<size_t>(I)) * 3 + static_cast<size_t>(C)] =
-								(P(I0, J0) * (1 - U) + P(I0 + 1, J0) * U) * (1 - V) + (P(I0, J0 + 1) * (1 - U) + P(I0 + 1, J0 + 1) * U) * V;
+							auto Q = [&](int A, int B) { return Plain[(static_cast<size_t>(B) * static_cast<size_t>(NX) + static_cast<size_t>(A)) * 3 + static_cast<size_t>(C)]; };
+							const double Churned = (P(I0, J0) * (1 - U) + P(I0 + 1, J0) * U) * (1 - V) + (P(I0, J0 + 1) * (1 - U) + P(I0 + 1, J0 + 1) * U) * V;
+							const double Bare = (Q(I0, J0) * (1 - U) + Q(I0 + 1, J0) * U) * (1 - V) + (Q(I0, J0 + 1) * (1 - U) + Q(I0 + 1, J0 + 1) * U) * V;
+							Light[(static_cast<size_t>(J) * static_cast<size_t>(W) + static_cast<size_t>(I)) * 3 + static_cast<size_t>(C)] = Bare + (Churned - Bare) * Show;
 						}
 					}
 				}
@@ -699,7 +939,7 @@ namespace
 							FBandIn In;
 							if (At(Here, Fine, static_cast<int>(Idx), X, Y, In))
 							{
-								const float V = Veil(Band(In), In.State, X, Y);
+								const double V = Veil(Band(In), In.State, X, Y) * Show;
 								for (int C = 0; C < 3; ++C)
 								{
 									Light[Idx * 3 + static_cast<size_t>(C)] *= 1.0 - V;
@@ -719,16 +959,24 @@ namespace
 							{
 								continue;
 							}
-							uint8_t Rim[3], Bottom[3];
-							PitColours(static_cast<EGround>(Board.Kind[GIdx]), Moment.Season, Hole, Rim, Bottom);
+							uint8_t Rim[3], Bottom[3], Shade[3];
+							PitColours(static_cast<EGround>(Board.Kind[GIdx]), Moment.Season, Hole, Rim, Bottom, Shade);
+							// (drawn only from three pixels across, whole from six: smaller, its cluster shows as the veil's mottle)
+							const double Seen = CraterShown(2.0 * Hole.Radius / View.Px) * Show * Hole.Dark;
+							if (Seen <= 0.0)
+							{
+								continue;
+							}
 							const int PI0 = static_cast<int>((Hole.X - Hole.Radius - View.X0) / View.Px) - 1, PI1 = static_cast<int>((Hole.X + Hole.Radius - View.X0) / View.Px) + 1;
 							const int PJ0 = static_cast<int>((Hole.Y - Hole.Radius - View.Y0) / View.Px) - 1, PJ1 = static_cast<int>((Hole.Y + Hole.Radius - View.Y0) / View.Px) + 1;
 							for (int PJ = std::max(0, PJ0); PJ <= std::min(H - 1, PJ1); ++PJ)
 							{
 								for (int PI = std::max(0, PI0); PI <= std::min(W - 1, PI1); ++PI)
 								{
-									// (a low ring of rim, lit on the side toward the sun in the north-west and shaded away from it, round a dark pit; four samples a pixel)
-									double Mix[3] = { 0.0, 0.0, 0.0 }, Cover = 0.0;
+									// (a low ring of rim round a pit, lit from the north-west: the rim shows its own colour on the sunny
+									// side only and darkens the ground a little on the far side; the pit's floor is shaded in the third
+									// nearest the sun, under the near wall; a fleck of spoil is its colour all over; four samples a pixel)
+									const size_t Idx = static_cast<size_t>(PJ) * static_cast<size_t>(W) + static_cast<size_t>(PI);
 									for (int S = 0; S < 4; ++S)
 									{
 										const double SX = View.X0 + (PI + 0.25 + 0.5 * (S % 2)) * View.Px, SY = View.Y0 + (PJ + 0.25 + 0.5 * (S / 2)) * View.Px;
@@ -737,20 +985,29 @@ namespace
 										{
 											continue;
 										}
-										const double Facing = R > 1e-6 ? (-DX * 0.7071 - DY * 0.7071) / R : 0.0; // (toward the sun)
+										const double Sunward = R > 1e-6 ? (-DX * 0.7071 - DY * 0.7071) / R : 0.0;
 										for (int C = 0; C < 3; ++C)
 										{
-											const double Colour = R < 0.62 ? ToLight(Bottom[C]) * (1.0 - 0.25 * Facing) : ToLight(Rim[C]) * (0.82 + 0.3 * Facing);
-											Mix[C] += 0.25 * Colour;
+											double& L = Light[Idx * 3 + static_cast<size_t>(C)];
+											double Want = L;
+											if (Hole.bSpoil)
+											{
+												Want = ToLight(Rim[C]);
+											}
+											else if (R < 0.62)
+											{
+												Want = ToLight(Sunward * R > 0.62 / 3.0 ? Shade[C] : Bottom[C]);
+											}
+											else if (Sunward > 0.0)
+											{
+												Want = L + (ToLight(Rim[C]) - L) * std::min(1.0, 1.6 * Sunward);
+											}
+											else
+											{
+												Want = L * (1.0 + 0.14 * Sunward);
+											}
+											L += 0.25 * Seen * (Want - L);
 										}
-										Cover += 0.25;
-									}
-									const double Show = Hole.Dark;
-									const size_t Idx = static_cast<size_t>(PJ) * static_cast<size_t>(W) + static_cast<size_t>(PI);
-									for (int C = 0; C < 3; ++C)
-									{
-										double& L = Light[Idx * 3 + static_cast<size_t>(C)];
-										L = L * (1.0 - Cover * Show) + Mix[C] * Show;
 									}
 								}
 							}

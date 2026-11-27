@@ -137,39 +137,67 @@ namespace TheaterChurn
 
 	// ---- the band ---------------------------------------------------------------------------------------------------
 
+	namespace
+	{
+		/** The taper away from where the armies face: whole within Reach, half at Gone and beyond (where a weaker band shows a few gaps, never a thread). */
+		double Taper(double Facing) { return 0.5 + 0.5 * (1.0 - Smooth(Reach, Gone, Facing)); }
+
+		/** Where the craters cluster (and where a weak band keeps its patches, and a healing strip its islands). */
+		double ClusterField(double X, double Y) { return 0.6 * Noise(X / 2.2, Y / 2.2, 83) + 0.4 * Noise(X / 0.9, Y / 0.9, 84); }
+	}
+
 	FBand Band(const FBandIn& In)
 	{
 		FBand Out;
-		// Strongest where the armies face each other, tapering to nothing along the rest of the frontier.
-		// (along a dug-in pair's own border it thins to two fifths toward its far ends, as the night's fires thin to
-		// embers there; beyond the pairs that are dug in it comes to nothing, by their states and the lines' ends)
-		const double Taper = 0.4 + 0.6 * (1.0 - Smooth(Reach, Gone, In.Facing));
-		const double Strength = static_cast<double>(In.State.Size) * Taper;
+		const double Strength = std::min(1.0, In.Strength >= 0.0 ? In.Strength : static_cast<double>(In.State.Size) * Taper(In.Facing));
 		if (Strength < 0.004 || In.D > Touch)
 		{
 			return Out;
 		}
 		Out.Strength = static_cast<float>(Strength);
-		// The core: a metre wide at first show (a strength of 0.3), 2.4 when whole; narrowing from its edges as it heals.
+		// The core: 1.0 wide at first show, 2.4 when whole; weaker than at first show it keeps its width and breaks up
+		// instead (below).
 		const double Grow = Clamp01((Strength - 0.3) / 0.7);
-		double Wide = Strength < 0.3 ? CoreFirst * Strength / 0.3 : Lerp(CoreFirst, CoreWhole, Grow);
-		const double Edge = Strength < 0.3 ? EdgeFirst * (0.5 + 0.5 * Strength / 0.3) : Lerp(EdgeFirst, EdgeWhole, Grow);
+		double Wide = Lerp(CoreFirst, CoreWhole, Grow);
+		const double Edge = Lerp(EdgeFirst, EdgeWhole, Grow);
 		// It wanders by about two fifths over stretches of four to eight units, and bulges a little where the armies stand.
-		const double Wander = 0.62 * Noise(In.X / 6.0, In.Y / 6.0, 71) + 0.38 * Noise(In.X / 3.4, In.Y / 3.4, 72);
+		const double FX = In.bFoot ? In.FootX : In.X, FY = In.bFoot ? In.FootY : In.Y;
+		const double Wander = 0.62 * Noise(FX / 6.0, FY / 6.0, 71) + 0.38 * Noise(FX / 3.4, FY / 3.4, 72);
 		Wide *= 1.0 + 0.55 * (Wander - 0.5);
 		Wide *= 0.9 + 0.2 * (1.0 - Smooth(0.0, Reach, In.Facing));
-		double Half = 0.5 * Wide;
-		Half = std::min(Half, 0.5 * Widest - Edge);
+		// (never over Widest in all, never under Narrowest where its body is half laid)
+		const double Half = std::clamp(0.5 * Wide, 0.5 * Narrowest - 0.45 * Edge, 0.5 * Widest - Edge);
 		Out.HalfCore = static_cast<float>(Half);
-		const double D = std::fabs(In.D);
-		Out.Body = static_cast<float>(1.0 - Smooth(Half - 0.1 * Edge, Half + Edge, D));
-		Out.Core = static_cast<float>(1.0 - Smooth(0.7 * Half, Half, D));
-		// The ragged edge, for the fine veil: tongues a unit or two long, so that no stretch of edge runs straight.
-		const double Tongue = 0.65 * Noise(In.X / 1.4, In.Y / 1.4, 73) + 0.35 * Noise(In.X / 0.6, In.Y / 0.6, 79);
-		const double Ragged = D + (0.3 + 0.5 * Edge) * (2.0 * Tongue - 1.0) * 1.1;
-		Out.Ragged = static_cast<float>(1.0 - Smooth(Half - 0.15, Half + 0.25 + 0.4 * Edge, Ragged));
+		// Its middle strays off the frontier by up to half a unit, over stretches of four to eight units: never a ruler
+		// laid on the border.
+		const double Middle = Stray * std::clamp(2.6 * (Noise(FX / 5.5, FY / 5.5, 74) - 0.5), -1.0, 1.0);
+		Out.Middle = static_cast<float>(Middle);
+		const double Off = (In.bSided ? In.Side : In.D) - Middle;
+		const double D = std::fabs(Off);
+		// Weak is broken, never thin: patches two to five units long with gaps between, more of them the stronger it is,
+		// where the craters cluster (so that a healing strip keeps islands where its craters were).
+		const double Field = ClusterField(In.X, In.Y);
+		const double Cover = Smooth(0.03, 0.62, Strength);
+		const double Bar = 0.80 - 0.62 * Cover;
+		const double Patch = std::max(Smooth(Bar - 0.05, Bar + 0.05, Field), Smooth(0.85, 1.0, Cover));
+		Out.Whole = static_cast<float>(Patch);
+		Out.Cluster = static_cast<float>(Smooth(0.40, 0.56, Field));
+		Out.Body = static_cast<float>(Patch * (1.0 - Smooth(Half - 0.1 * Edge, Half + Edge, D)));
+		Out.Core = static_cast<float>(Patch * (1.0 - Smooth(0.7 * Half, Half, D)));
+		// The ragged edge, for the fine veil: crisp, with uneven tongues reaching out 0.3 to 0.8 of a unit and a few
+		// bites in, a different run of them on each side.
+		const uint32_t SideSeed = Off >= 0.0 ? 73u : 77u;
+		const double Tongue = 0.85 * Noise(In.Along / 0.6, 0.37, SideSeed) + 0.15 * Noise(In.Along / 0.3, 0.71, SideSeed + 6u);
+		const double Reach2 = 0.9 * TongueLongest * Smooth(0.46, 0.84, Tongue) - 0.1 * (1.0 - Smooth(0.14, 0.42, Tongue));
+		const double Wobble = 0.09 * (2.0 * Noise(In.Along / 1.3, 0.53, SideSeed + 11u) - 1.0);
+		const double Rim = Half + 0.35 * Edge + Reach2 * (0.55 + 0.45 * Grow) + Wobble;
+		Out.Ragged = static_cast<float>(Patch * (1.0 - Smooth(Rim - 0.07, Rim + 0.07, D)));
 		return Out;
 	}
+
+	double Shown(double BandPixels) { return Smooth(3.0, 5.0, BandPixels); }
+
+	double CraterShown(double Pixels) { return Smooth(3.0, 6.0, Pixels); }
 
 	// ---- the ground picture -----------------------------------------------------------------------------------------
 
@@ -177,9 +205,10 @@ namespace TheaterChurn
 	{
 		double DarkOf(const FBand& Band, const FState& State)
 		{
-			// (the darkness tapers with the strength: State.Dark against State.Size, where the armies are)
-			const double Taper = State.Size > 0.001f ? Band.Strength / State.Size : 0.0;
-			return Clamp01(static_cast<double>(State.Dark) * Taper);
+			// (the darkness tapers with the strength, State.Dark against State.Size where the armies are; but gently, so
+			// that a weak band's patches still read as broken earth, not as a faint pencil line)
+			const double Share = State.Size > 0.001f ? Clamp01(Band.Strength / State.Size) : 0.0;
+			return std::sqrt(Clamp01(static_cast<double>(State.Dark) * Share));
 		}
 	}
 
@@ -257,26 +286,166 @@ namespace TheaterChurn
 		{
 			return 0.0f;
 		}
-		const double Mottle = 0.65 * Noise(X / 0.8, Y / 0.8, 89) + 0.35 * Noise(X / 0.3, Y / 0.3, 97);
-		return static_cast<float>(Band.Ragged * Dark * (VeilMost * 0.45 + VeilMost * 0.55 * Mottle));
+		// A grain of 0.2 to 0.6 of a unit, and the clusters of craters a little darker (from high up, where the
+		// craters themselves are too small to draw, they show as this mottle and never as dots).
+		const double Grain = 0.55 * Noise(X / 0.55, Y / 0.55, 89) + 0.45 * Noise(X / 0.22, Y / 0.22, 97);
+		const double Pitted = State.Size > 0.001f ? Clamp01(static_cast<double>(State.Pits) / State.Size) : 0.0;
+		const double Share = std::clamp(0.52 + 1.7 * (Grain - 0.5) + 0.25 * Band.Cluster * Pitted - 0.1, 0.0, 1.0);
+		return static_cast<float>(Band.Ragged * Dark * VeilMost * Share);
 	}
 
-	void PitColours(EGround Kind, ESeason Season, const FPit& Hole, uint8_t Rim[3], uint8_t Bottom[3])
+	void PitColours(EGround Kind, ESeason Season, const FPit& Hole, uint8_t Rim[3], uint8_t Bottom[3], uint8_t Shade[3])
 	{
-		// The rim: the band's earth lifted a little toward the spoil, the colour of its lit side; the pit: the scars'
-		// own pit, never black. In the mud months a few pits hold a dull sky pool. A crater's own few levels of light
-		// and dark come from its place.
-		const double Lift = 0.32 + 0.12 * Unit(Hash(static_cast<int64_t>(std::llround(Hole.X * 97.0)), static_cast<int64_t>(std::llround(Hole.Y * 97.0)), 5));
-		const bool bPool = Season == ESeason::Mud && Kind != EGround::Desert && Unit(Hash(static_cast<int64_t>(std::llround(Hole.X * 61.0)), static_cast<int64_t>(std::llround(Hole.Y * 61.0)), 9)) < 0.18;
+		const int64_t QX = static_cast<int64_t>(std::llround(Hole.X * 97.0)), QY = static_cast<int64_t>(std::llround(Hole.Y * 97.0));
+		// (each its own few levels of light and dark)
+		const double Lift = 0.94 + 0.1 * Unit(Hash(QX, QY, 5));
+		if (Hole.bSpoil)
+		{
+			for (int C = 0; C < 3; ++C)
+			{
+				const double Fleck = Season == ESeason::Snow ? SnowDirty[C] : Kind == EGround::Desert ? Lerp(Spoil[C], 230.0, 0.3) : Spoil[C];
+				Rim[C] = Bottom[C] = Shade[C] = Byte(Fleck * Lift);
+			}
+			return;
+		}
+		const bool bLarge = Hole.Radius >= 0.15;
+		const bool bPool = bLarge && Season == ESeason::Mud && Kind != EGround::Desert && Unit(Hash(QX, QY, 9)) < 1.0 / 6.0;
 		for (int C = 0; C < 3; ++C)
 		{
-			const double Earth = Kind == EGround::Desert ? DesertChurned[C] : Season == ESeason::Mud ? MudChurned[C] : Kind == EGround::BlackEarth ? BlackEarthChurned[C] : Churned[C];
-			Rim[C] = Byte(Lerp(Earth, Spoil[C], Lift));
-			Bottom[C] = Byte(bPool ? SkyPool[C] : Kind == EGround::Desert ? DesertPit[C] : Season == ESeason::Mud ? Pit[C] * 1.06 : Pit[C]);
+			double R = RimLit[C], B = PitSmall[C], S = Pit[C];
+			if (Kind == EGround::Desert)
+			{
+				R = Lerp(DesertChurned[C], 240.0, 0.25);
+				B = DesertPit[C];
+				S = DesertPit[C] * 0.72;
+			}
+			else if (Season == ESeason::Snow)
+			{
+				R = SnowDirty[C];
+			}
+			else if (Season == ESeason::Mud)
+			{
+				R *= 0.82;
+				B *= 0.88;
+			}
+			else if (Kind == EGround::BlackEarth)
+			{
+				R = Lerp(R, BlackEarthChurned[C], 0.35);
+				B *= 0.8;
+				S *= 0.85;
+			}
+			if (bPool)
+			{
+				B = SkyPool[C];
+				S = SkyPool[C] * 0.86;
+			}
+			Rim[C] = Byte(R * Lift);
+			Bottom[C] = Byte(B * Lift);
+			Shade[C] = Byte(bLarge ? S * Lift : B * Lift);
 		}
 	}
 
 	// ---- the lines ----------------------------------------------------------------------------------------------------
+
+	namespace
+	{
+		/** The running length of a line at each point (a closed line's last stretch back to its first is not counted in). */
+		void RunOf(const FLine& Line, std::vector<double>& Run)
+		{
+			const size_t N = Line.X.size();
+			Run.assign(N, 0.0);
+			for (size_t K = 1; K < N; ++K)
+			{
+				Run[K] = Run[K - 1] + std::hypot(Line.X[K] - Line.X[K - 1], Line.Y[K] - Line.Y[K - 1]);
+			}
+		}
+
+		/** A line's strength at a point (its own, once strengthened; else from its state and facing). */
+		double StrengthAt(const FLine& Line, size_t K)
+		{
+			if (Line.Strength.size() == Line.X.size())
+			{
+				return Line.Strength[K];
+			}
+			return static_cast<double>(Line.State[K].Size) * Taper(Line.Facing[K]);
+		}
+	}
+
+	void Strengthen(FLine& Line, double Over)
+	{
+		const size_t N = Line.X.size();
+		if (N == 0 || Line.Y.size() != N || Line.Facing.size() != N || Line.State.size() != N)
+		{
+			return;
+		}
+		RunOf(Line, Line.Run);
+		const double Whole = Line.Run[N - 1] + (Line.bClosed ? std::hypot(Line.X[0] - Line.X[N - 1], Line.Y[0] - Line.Y[N - 1]) : 0.0);
+		std::vector<double> Own(N);
+		for (size_t K = 0; K < N; ++K)
+		{
+			Own[K] = static_cast<double>(Line.State[K].Size) * Taper(Line.Facing[K]);
+		}
+		// (the points within half of Over either way along the line, round a closed one's join)
+		auto Gap = [&](size_t A, size_t B)
+		{
+			const double Apart = std::fabs(Line.Run[A] - Line.Run[B]);
+			return Line.bClosed ? std::min(Apart, Whole - Apart) : Apart;
+		};
+		auto Near = [&](size_t K, auto&& Each)
+		{
+			Each(K);
+			const size_t Most = Line.bClosed ? N / 2 : N;
+			for (size_t Step = 1; Step <= Most; ++Step)
+			{
+				bool bAny = false;
+				const bool bUp = Line.bClosed || K + Step < N, bDown = Line.bClosed || Step <= K;
+				const size_t Up = (K + Step) % N, Down = (K + N - Step % N) % N;
+				if (bUp && Gap(K, Up) <= 0.5 * Over + 1.0e-9)
+				{
+					Each(Up);
+					bAny = true;
+				}
+				if (bDown && Down != Up && Gap(K, Down) <= 0.5 * Over + 1.0e-9)
+				{
+					Each(Down);
+					bAny = true;
+				}
+				if (!bAny)
+				{
+					break;
+				}
+			}
+		};
+		// Where two stretches meet they join at the stronger (no notch), and the join is blended over about Over.
+		std::vector<double> Most(N, 0.0);
+		for (size_t K = 0; K < N; ++K)
+		{
+			Near(K, [&](size_t J) { Most[K] = std::max(Most[K], Own[J]); });
+		}
+		std::vector<float> Strength(N);
+		std::vector<FState> State(N);
+		for (size_t K = 0; K < N; ++K)
+		{
+			double Sum = 0.0, Size = 0.0, Dark = 0.0, Pits = 0.0, Pale = 0.0;
+			int Count = 0;
+			Near(K, [&](size_t J)
+			{
+				Sum += Most[J];
+				Size += Line.State[J].Size;
+				Dark += Line.State[J].Dark;
+				Pits += Line.State[J].Pits;
+				Pale += Line.State[J].Pale;
+				++Count;
+			});
+			Strength[K] = static_cast<float>(Sum / Count);
+			State[K].Size = static_cast<float>(std::max<double>(Size / Count, Line.State[K].Size));
+			State[K].Dark = static_cast<float>(std::max<double>(Dark / Count, Line.State[K].Dark));
+			State[K].Pits = static_cast<float>(Pits / Count);
+			State[K].Pale = static_cast<float>(Pale / Count);
+		}
+		Line.Strength = std::move(Strength);
+		Line.State = std::move(State);
+	}
 
 	void Pits(const FLine& Line, std::vector<FPit>& Out)
 	{
@@ -285,16 +454,23 @@ namespace TheaterChurn
 		{
 			return;
 		}
+		std::vector<double> Run = Line.Run;
+		if (Run.size() != Line.X.size())
+		{
+			RunOf(Line, Run);
+		}
 		const double Step = 0.35;
-		// (at full strength about a third of the core is pitted, all of it in clusters that cover a little under half the line)
+		// (where whole and where the armies stand, the pit floors come to about 7% of the band: the art director's
+		// ceiling, from the close drawing of 27 November; all of them in clusters that cover a little under half the line)
 		const double PerStep = 6.0;
 		const int Stretches = Line.bClosed ? N : N - 1;
 		double Carry = 0.0;
 		for (int K = 0; K < Stretches; ++K)
 		{
 			const int J = (K + 1) % N;
-			const double AX = Line.X[static_cast<size_t>(K)], AY = Line.Y[static_cast<size_t>(K)];
-			const double BX = Line.X[static_cast<size_t>(J)], BY = Line.Y[static_cast<size_t>(J)];
+			const size_t UK = static_cast<size_t>(K), UJ = static_cast<size_t>(J);
+			const double AX = Line.X[UK], AY = Line.Y[UK];
+			const double BX = Line.X[UJ], BY = Line.Y[UJ];
 			const double Long = std::hypot(BX - AX, BY - AY);
 			if (Long < 1.0e-6)
 			{
@@ -308,22 +484,37 @@ namespace TheaterChurn
 				In.X = AX + TX * S;
 				In.Y = AY + TY * S;
 				In.D = 0.0;
-				In.Facing = Lerp(Line.Facing[static_cast<size_t>(K)], Line.Facing[static_cast<size_t>(J)], T);
-				In.State = Mix(Line.State[static_cast<size_t>(K)], Line.State[static_cast<size_t>(J)], T);
+				In.bSided = true;
+				In.Side = 0.0;
+				In.bFoot = true;
+				In.FootX = In.X;
+				In.FootY = In.Y;
+				In.Along = Run[UK] + S;
+				In.Facing = Lerp(Line.Facing[UK], Line.Facing[UJ], T);
+				In.Strength = Lerp(StrengthAt(Line, UK), StrengthAt(Line, UJ), T);
+				In.State = Mix(Line.State[UK], Line.State[UJ], T);
 				const FBand Here = Band(In);
-				const double Pitted = Here.Strength > 0.0f && In.State.Size > 0.001f ? static_cast<double>(In.State.Pits) * Here.Strength / In.State.Size : 0.0;
-				if (Pitted < 0.02 || Here.HalfCore < 0.12f)
-				{
-					continue;
-				}
-				// In clusters, with bare stretches between.
-				const double Cluster = Smooth(0.40, 0.56, 0.6 * Noise(In.X / 2.2, In.Y / 2.2, 83) + 0.4 * Noise(In.X / 0.9, In.Y / 0.9, 84));
-				if (Cluster <= 0.0)
-				{
-					continue;
-				}
 				const int64_t QX = static_cast<int64_t>(std::llround(In.X * 64.0)), QY = static_cast<int64_t>(std::llround(In.Y * 64.0));
-				const double Many = PerStep * Pitted * Cluster * (2.0 * Here.HalfCore / CoreWhole);
+				// A few flecks of dry spoil in the soft edge, either side, where the band is laid.
+				const double Edge = Lerp(EdgeFirst, EdgeWhole, Clamp01((Here.Strength - 0.3) / 0.7));
+				if (Here.Whole > 0.5f && Unit(Hash(QX, QY, 41)) < 0.16 * Here.Whole * std::min(1.0, Here.Strength / 0.5))
+				{
+					FPit Fleck;
+					Fleck.bSpoil = true;
+					Fleck.Radius = 0.04 + 0.05 * Unit(Hash(QX, QY, 42));
+					const double Across = Here.Middle + (Unit(Hash(QX, QY, 43)) < 0.5 ? -1.0 : 1.0) * (Here.HalfCore + Edge * (0.1 + 0.6 * Unit(Hash(QX, QY, 44))));
+					Fleck.X = In.X + NXd * Across + TX * (Unit(Hash(QX, QY, 45)) - 0.5) * Step;
+					Fleck.Y = In.Y + NYd * Across + TY * (Unit(Hash(QX, QY, 45)) - 0.5) * Step;
+					Fleck.Dark = static_cast<float>(0.7 + 0.3 * Here.Whole);
+					Out.push_back(Fleck);
+				}
+				// The craters: fewer where it is weaker, none in its gaps.
+				const double Pitted = Here.Strength > 0.0f && In.State.Size > 0.001f ? std::min(1.0, static_cast<double>(In.State.Pits) * Here.Strength / In.State.Size) * Here.Whole : 0.0;
+				if (Pitted < 0.02 || Here.HalfCore < 0.12f || Here.Cluster <= 0.0f)
+				{
+					continue;
+				}
+				const double Many = PerStep * Pitted * Here.Cluster * (2.0 * Here.HalfCore / CoreWhole);
 				const int Count = static_cast<int>(Many) + (Unit(Hash(QX, QY, 1)) < Many - std::floor(Many) ? 1 : 0);
 				for (int P = 0; P < Count; ++P)
 				{
@@ -332,7 +523,7 @@ namespace TheaterChurn
 					FPit Hole;
 					Hole.Radius = 0.075 + 0.175 * U * U; // (0.15 to 0.5 across, most of them small)
 					const double Room = std::max(0.0, static_cast<double>(Here.HalfCore) - Hole.Radius);
-					const double Across = (2.0 * Unit(Hash(QX, QY, Seed + 1u)) - 1.0) * std::min(Room, 0.85 * Here.HalfCore);
+					const double Across = Here.Middle + (2.0 * Unit(Hash(QX, QY, Seed + 1u)) - 1.0) * std::min(Room, 0.85 * Here.HalfCore);
 					const double Along = (Unit(Hash(QX, QY, Seed + 2u)) - 0.5) * Step;
 					Hole.X = In.X + TX * Along + NXd * Across;
 					Hole.Y = In.Y + TY * Along + NYd * Across;
@@ -360,11 +551,8 @@ namespace TheaterChurn
 		{
 			return;
 		}
-		std::vector<double> Run(N, 0.0);
-		for (size_t K = 1; K < N; ++K)
-		{
-			Run[K] = Run[K - 1] + std::hypot(Line.X[K] - Line.X[K - 1], Line.Y[K] - Line.Y[K - 1]);
-		}
+		std::vector<double> Run;
+		RunOf(Line, Run);
 		const double Whole = Run[N - 1];
 		for (size_t K = 0; K < N; ++K)
 		{
@@ -373,6 +561,10 @@ namespace TheaterChurn
 			State.Size = static_cast<float>(State.Size * Ease);
 			State.Dark = static_cast<float>(State.Dark * Ease);
 			State.Pits = static_cast<float>(State.Pits * Ease);
+			if (Line.Strength.size() == N)
+			{
+				Line.Strength[K] = static_cast<float>(Line.Strength[K] * Ease);
+			}
 		}
 	}
 
@@ -441,12 +633,22 @@ namespace TheaterChurn
 			return false;
 		}
 		const int J = (K + 1) % N;
+		const size_t UK = static_cast<size_t>(K), UJ = static_cast<size_t>(J);
 		const double T = Nearest.At[static_cast<size_t>(Index)];
 		In.X = X;
 		In.Y = Y;
 		In.D = Nearest.Dist[static_cast<size_t>(Index)];
-		In.Facing = Lerp(Line.Facing[static_cast<size_t>(K)], Line.Facing[static_cast<size_t>(J)], T);
-		In.State = Mix(Line.State[static_cast<size_t>(K)], Line.State[static_cast<size_t>(J)], T);
+		// (which side: to the left of the stretch's way is plus)
+		const double DX = Line.X[UJ] - Line.X[UK], DY = Line.Y[UJ] - Line.Y[UK];
+		In.bSided = true;
+		In.Side = DX * (Y - Line.Y[UK]) - DY * (X - Line.X[UK]) >= 0.0 ? In.D : -In.D;
+		In.bFoot = true;
+		In.FootX = Line.X[UK] + DX * T;
+		In.FootY = Line.Y[UK] + DY * T;
+		In.Along = (Line.Run.size() == Line.X.size() ? Line.Run[UK] : 0.0) + T * std::hypot(DX, DY);
+		In.Facing = Lerp(Line.Facing[UK], Line.Facing[UJ], T);
+		In.Strength = Line.Strength.size() == Line.X.size() ? Lerp(Line.Strength[UK], Line.Strength[UJ], T) : -1.0;
+		In.State = Mix(Line.State[UK], Line.State[UJ], T);
 		return true;
 	}
 }

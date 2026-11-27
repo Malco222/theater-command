@@ -186,6 +186,11 @@ def main():
     sheet('working', seasons, 3, 1, 'churn-working-seasons.png')
     sheet('close', growth[1:] + [('heal3', 'Moved on 3 months')], 2, 1, 'churn-close.png')
     sheet('theatre', [('m0', 'Theatre height, month 1'), ('m6', 'Theatre height, month 6')], 2, 2, 'churn-theatre.png')
+    sheet('edge', [('m6', 'An edge at 2x close, month 6'), ('m2', 'The same, month 2')], 1, 1, 'churn-edge-2x.png')
+    if os.path.exists(os.path.join(out, 'churn-end-m6.ppm')):
+        sheet('end', [('m6', 'A band end, month 6'), ('m2', 'A band end, month 2')], 2, 1, 'churn-end.png')
+    if os.path.exists(os.path.join(out, 'churn-corner-m6.ppm')):
+        sheet('corner', [('m6', 'A corner, month 6'), ('heal8', 'A corner, 8 months healed')], 2, 1, 'churn-corner.png')
 
 
 if __name__ == '__main__':
