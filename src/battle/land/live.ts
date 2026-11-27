@@ -56,6 +56,12 @@ export interface TrackOut {
   sw?: Record<string, string>;
   /** A sniper team's man (release 2, looks only; MenOut.sn): 1 the sniper with his scoped rifle, 2 his spotter with his glasses. */
   sn?: 1 | 2;
+  /**
+   * Wounded and knocked-down men (release 2, Drill.wounded; never while it is off): the battle time he fell wounded (he
+   * lies for good), and his knock-downs, each [t, round, hold], in the order sent (one beginning inside the hold before
+   * it holds him to its own later end in its stead).
+   */
+  wd?: number; kd?: number[][];
 }
 
 /** What a delta says of one track: n its number in the order tracks were first seen; who it is only the first time. */
@@ -65,6 +71,8 @@ export interface TrackDelta {
   at?: Pt[]; ch?: Ch[]; s?: number[]; d?: number; mk?: unknown[];
   /** Battle time he left the list; -1: he is back on it. */
   out?: number;
+  /** Wounded and knocked-down men (release 2, Drill.wounded; never while it is off): wd, and the knock-downs new since the last delta, each [t, round, hold] (MenOut.kd). */
+  wd?: number; kd?: number[][];
 }
 
 /** What the battle did since the last delta. */
@@ -116,6 +124,8 @@ interface Kept {
   ch: Ch;
   shot: number | undefined;
   d?: number; mk?: unknown[]; mkKey?: string; out?: number;
+  /** Wounded and knocked-down men (LiveKeeper hurt): his wd, whether it is sent, his last kd and those not yet sent. */
+  wd?: number; sentWd?: boolean; kd?: number[]; newKd?: number[][];
   /** Not yet sent. */
   newAt: Pt[]; newCh: Ch[]; newS: number[];
   sentWho: boolean; sentD: boolean; sentMk: boolean; sentOut: number | undefined; sentTail: Pt | null;
@@ -128,6 +138,13 @@ interface Kept {
 export class LiveKeeper {
   private men = new Map<string, Kept>();
   private order: Kept[] = [];
+
+  /**
+   * hurt: wounded and knocked-down men (release 2, Drill.wounded) are at work (Drill.woundsOn, asked each time: the
+   * bearers rule, which turns them off, is set after the keeper is made): each track carries its wd (the battle time he
+   * fell wounded) and its kd (each knock-down as the drill sends it, [t, round, hold]). Off, neither is sent.
+   */
+  constructor(private readonly hurtOn: () => boolean = () => false) {}
 
   see(t: number, b: number, m: MenOut, fo: boolean): void {
     const key = keyOf(b, m, fo);
@@ -153,6 +170,10 @@ export class LiveKeeper {
     if (m.mk) {
       const mk = JSON.stringify(m.mk);
       if (mk !== k.mkKey) { k.mk = m.mk; k.mkKey = mk; k.sentMk = false; }
+    }
+    if (this.hurtOn()) {
+      if (m.wd !== undefined && k.wd !== m.wd) { k.wd = m.wd; k.sentWd = false; }
+      if (m.kd && (!k.kd || k.kd.some((v, i) => v !== m.kd![i]))) { k.kd = [...m.kd]; (k.newKd ??= []).push(k.kd); }
     }
     k.out = undefined;
   }
@@ -200,7 +221,7 @@ export class LiveKeeper {
       const shown = k.sentTail && k.sentTail[0] > k.last[0] ? k.sentTail : k.last;
       const tail = k.pend.length ? k.pend[k.pend.length - 1] : null;
       if (tail && tail[0] > k.last[0] && !same(tail, shown)) { tails.push(k.n, tail[1], tail[2], tail[3]); k.sentTail = tail; }
-      const changed = !k.sentWho || k.newAt.length || k.newCh.length || k.newS.length || !k.sentD || !k.sentMk || k.out !== k.sentOut;
+      const changed = !k.sentWho || k.newAt.length || k.newCh.length || k.newS.length || !k.sentD || !k.sentMk || k.out !== k.sentOut || (k.wd !== undefined && !k.sentWd) || !!k.newKd?.length;
       if (!changed) continue;
       const d: TrackDelta = { n: k.n };
       if (!k.sentWho) { Object.assign(d, k.who); k.sentWho = true; }
@@ -211,6 +232,8 @@ export class LiveKeeper {
       k.sentD = true;
       if (k.mk && !k.sentMk) { d.mk = k.mk; }
       k.sentMk = true;
+      if (k.wd !== undefined && !k.sentWd) { d.wd = k.wd; k.sentWd = true; }
+      if (k.newKd?.length) { d.kd = k.newKd; k.newKd = undefined; }
       // out -1: he is back on the list (the recorder deletes his out).
       if (k.out !== k.sentOut) { d.out = k.out ?? -1; k.sentOut = k.out; }
       out.push(d);
@@ -231,6 +254,8 @@ export class LiveKeeper {
         if (d.s) tr.s.push(...d.s);
         if (d.d !== undefined) tr.d = d.d;
         if (d.mk) tr.mk = d.mk;
+        if (d.wd !== undefined) tr.wd = d.wd;
+        if (d.kd) (tr.kd ??= []).push(...d.kd);
         if (d.out === -1) delete tr.out; else if (d.out !== undefined) tr.out = d.out;
       }
     }
@@ -375,6 +400,8 @@ export interface LiveOpts {
    * Counts never change. Off unless true.
    */
   wounded?: boolean;
+  /** Stunned men (release 2, with wounded only; the design director, 26 November 12:57Z): on with wounded unless false. */
+  stunned?: boolean;
   /**
    * Every man his own pace (release 2, looks only; Brian, 25 November 17:30Z: "it looks like they are all jogging at
    * the same speed"; 16:24Z: "the soldiers of a squad keep zig zaging at the same time"; Drill.paces): each man's own
@@ -630,7 +657,7 @@ export class LiveBattle {
   readonly sim: LandBattle;
   readonly drill: Drill;
   readonly me: Side | null;
-  private keeper = new LiveKeeper();
+  private keeper: LiveKeeper;
   /** A campaign battle's sky (no set piece): as given, or drawn from its ticket. */
   private readonly skyOf: LiveSky;
   private steppe: Steppe | null;
@@ -681,7 +708,8 @@ export class LiveBattle {
     if (opts.cars === true && !piece) sim.cars = true;
     if (opts.aa === true && !piece) sim.aa = true;
     if (opts.light === true && !piece) sim.light = true;
-    this.drill = sim.drillOn({ sections: true, ...(opts.platoons === false ? {} : { platoons: true }), ...(opts.book !== undefined ? { book: opts.book } : {}), ...(opts.life === true ? { life: true } : {}), ...(opts.hatches === true ? { hatches: true } : {}), ...(opts.seasoned === true ? { seasoned: true } : {}), ...(opts.leaders === true ? { leaders: true } : {}), ...(opts.tankmind === true ? { tankmind: true } : {}), ...(opts.tankmg === true ? { tankmg: true } : {}), ...(opts.exits === true ? { exits: true } : {}), ...(opts.wounded === true ? { wounded: true } : {}), ...(opts.paces === true ? { paces: true } : {}), ...(opts.teamwork === true ? { teamwork: true } : {}) });
+    this.keeper = new LiveKeeper(() => this.drill.woundsOn);
+    this.drill = sim.drillOn({ sections: true, ...(opts.platoons === false ? {} : { platoons: true }), ...(opts.book !== undefined ? { book: opts.book } : {}), ...(opts.life === true ? { life: true } : {}), ...(opts.hatches === true ? { hatches: true } : {}), ...(opts.seasoned === true ? { seasoned: true } : {}), ...(opts.leaders === true ? { leaders: true } : {}), ...(opts.tankmind === true ? { tankmind: true } : {}), ...(opts.tankmg === true ? { tankmg: true } : {}), ...(opts.exits === true ? { exits: true } : {}), ...(opts.wounded === true ? { wounded: true } : {}), ...(opts.paces === true ? { paces: true } : {}), ...(opts.teamwork === true ? { teamwork: true } : {}), ...(opts.wounded === true && opts.stunned === false ? { stunned: false } : {}) });
     // Every block of his side placeable (the rules' setupOn all), not only his guns and teams.
     if (opts.setup && this.me) sim.setupOn(this.me, true);
     if (opts.hide !== false) sim.hideOn();
@@ -765,6 +793,10 @@ export class LiveBattle {
     return {
       what: 'LIVE: a land battle fought as the 3D game shows it (src/battle/land/live.ts). The recording\'s shapes; the men, rounds, events, views and phases come in the deltas.',
       recording: true, live: true, key: p?.key ?? 'field', seed: t.seed, dt: DT, title: t.title, date: t.date, turn: t.turn,
+      // (wounded and knocked-down men, release 2: the drill's own wounded and knock-downs are in this battle, so the 3D
+      // game leaves its own stand-in for them off for the whole of it; absent while the switch is off, and with the
+      // bearers rule on, where the switch changes nothing: the rulings, sections 2 and 5.6)
+      ...(this.drill.woundsOn ? { wounded: true } : {}),
       // (the campaign's weather word, for the ground under it, and scarred ground: looks only, release 2; the 3D game
       // lays thaw mud from "mud", weathered old craters from the scars, old ruts from the battles fought in mud, and the
       // burnt-out armour of the battles here from oldWrecks)
@@ -1090,7 +1122,7 @@ export class LiveBattle {
 
   /** The men stand somewhere new before the clock has run: every track starts again from where they stand now. */
   private replace(): void {
-    this.keeper = new LiveKeeper();
+    this.keeper = new LiveKeeper(() => this.drill.woundsOn);
     this.phases.clear(); this.phaseNew.clear();
     this.lastView = -1;
     this.placed = true;

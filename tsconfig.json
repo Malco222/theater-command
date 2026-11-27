@@ -10,7 +10,8 @@
     "skipLibCheck": true,
     "noEmit": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["three"]
+    "types": ["three"],
+    "paths": { "@tc/*": ["./src/*"], "@gates/*": ["/mnt/project-files/gates/*"] }
   },
   "include": ["src", "tests", "data"]
 }
