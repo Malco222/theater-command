@@ -5,9 +5,9 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { addCorps, createGame, men, removeCorps, setWar, startPhase } from '../src/campaign/game';
-import { atWar } from '../src/campaign/game';
+import { atWar, theWords } from '../src/campaign/game';
 import setup from '../data/campaign/setup-1939.json';
-import { fits, islandOf, roomRefusal } from '../src/campaign/islands';
+import { fits, islandNames, islandOf, roomRefusal, roomSays } from '../src/campaign/islands';
 import { rearMonth, startOpen } from '../src/campaign/staff';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
@@ -97,5 +97,26 @@ describe("a corps named in an island's line shows its card's own figure, never a
     expect(roomRefusal(g, wake, [bn], { named: true })).toBe('Wake has room for one division, about 15,000 men, and 6,000 of yours are there: only 9,000 more can go, and the Defense Battalion has 9,400.');
     // Unnamed, what he sends keeps the shortfall her answer gives "you are sending".
     expect(roomRefusal(g, wake, [bn])).toBe('Wake has room for one division, about 15,000 men, and 6,000 of yours are there: you are sending 400 men more than fit.');
+  });
+});
+
+describe("an island's name reads in its room's sentences as the news gives it, with its article (words sceptic 2, W2-3; the UI director's list of the places that take 'the')", () => {
+  it('the Eastern Marshalls, the Admiralty Islands and the Seychelles, and every island head as the news would print it', () => {
+    const g = startOpen(createGame(3, null));
+    expect(roomSays(g, g.byName['Eastern Marshalls'])).toBe('The Eastern Marshalls has room for one division, about 15,000 men.');
+    expect(roomSays(g, g.byName['Admiralty Islands'])).toMatch(/^The Admiralty Islands has room for /);
+    expect(roomSays(g, g.byName['Seychelles'])).toMatch(/^The Seychelles has room for /);
+    const differ = islandNames().filter((n) => g.byName[n]).map((n) => roomSays(g, g.byName[n])!).filter((l) => theWords(l) !== l);
+    expect(differ).toEqual([]);
+  });
+  it('the too-large line onto the Eastern Marshalls names the island with its article at the head and inside the sentence', () => {
+    const g = startOpen(createGame(3, null));
+    const em = g.byName['Eastern Marshalls'], kw = g.byName['Kwajalein'];
+    clear(g, em);
+    const xx = corps(g, 'JAP', 'XX Corps', kw, 2, 1), yy = corps(g, 'JAP', 'XXI Corps', kw, 2, 1);
+    const one = roomRefusal(g, em, [xx])!, two = roomRefusal(g, em, [xx, yy])!;
+    expect(one).toMatch(/^The Eastern Marshalls has room for one division, about 15,000 men\. The XX Corps has 30,000(: too many for the island|, too many to go there whole: split it and send a part)\.$/);
+    expect(two).toBe(`${one} One more of the corps you are sending is too large for the Eastern Marshalls as well.`);
+    expect(theWords(two)).toBe(two);
   });
 });

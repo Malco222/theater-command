@@ -94,4 +94,13 @@ describe("round 2's mended sentences on live boards through the bridge", () => {
     const at = page.findIndex((l) => /^function swapCard\(/.test(l));
     expect(page.slice(at, at + 30).some((l) => /swapHead\(g, r, c \?\? null\)/.test(l))).toBe(true);
   }, 300000);
+
+  it("W2-3: the Eastern Marshalls' room line in the 3D game's province card names the island with its article", () => {
+    const g = war('JAP');
+    const em = g.byName['Eastern Marshalls'];
+    TC().load(saveGame(g));
+    const line = (TC().province(em.id) as { island: { line: string } }).island.line;
+    say('W2-3 province card, Eastern Marshalls', line);
+    expect(line).toBe('The Eastern Marshalls has room for one division, about 15,000 men.');
+  }, 300000);
 });

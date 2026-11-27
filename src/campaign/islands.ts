@@ -8,7 +8,7 @@
 // (This file and game.ts read each other's functions, as world.ts and game.ts do: nothing of either runs as they load.)
 import data from '../../data/campaign/far-islands.json';
 import { FAR_STAGE } from './stage';
-import { allied, men, placed, roomless } from './game';
+import { allied, men, placeName, placed, roomless } from './game';
 import { named } from './arrivalwaits';
 import { whyNotBreakUp } from './breakup';
 import { MEN_PER_DIV, STACK, type Corps, type Game, type Region } from './types';
@@ -229,10 +229,10 @@ function tooLarge(g: Game, r: Region, line: readonly Corps[]): string | null {
   const all = line.filter((c) => menOfCorps(c) > isle.room * MEN_PER_DIV);
   if (!all.length) return null;
   // (The corps' name as the news gives it, a capital at a sentence's head: the UI director, 00:19Z, 27 November 2026, U8.)
-  const big = all[0], head = `${r.name} has ${roomWords(isle.room)}. ${named(big.name, true)} has ${cardMen(big)}`;
+  const big = all[0], head = `${placeName(r.name, true)} has ${roomWords(isle.room)}. ${named(big.name, true)} has ${cardMen(big)}`;
   const first = whyNotBreakUp(g, big, [0]) === null ? `${head}, too many to go there whole: split it and send a part.` : `${head}: too many for the island.`;
   const more = all.length - 1;
-  return more ? `${first} ${Count(more)} more of the corps you are sending ${more === 1 ? 'is' : 'are'} too large for ${r.name} as well.` : first;
+  return more ? `${first} ${Count(more)} more of the corps you are sending ${more === 1 ? 'is' : 'are'} too large for ${placeName(r.name)} as well.` : first;
 }
 
 /**
@@ -248,8 +248,8 @@ export function swapRefusal(g: Game, r: Region, c: Corps, out: Corps): string | 
   const room = isle.room * MEN_PER_DIV, stay = menOn(g, r, c.nat, [c, out]);
   const yours = onlyMine(g, r, c.nat, [c, out]) ? ' of yours' : '';
   // (Fewer than 1,000 more fit after the swap: the swap's full form, the UI director, 00:19Z, 27 November 2026, U2.)
-  if (room - stay < 1000) return `${r.name} would still be full after the swap: it has room for about ${roomMen(room)} men, and ${roomMen(stay, 'up')}${yours} stay there.`;
-  return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(stay, 'up')}${yours} stay there after the swap: only ${canGo(room - stay, stay).toLocaleString('en-US')} more can go, and ${named(c.name)} has ${cardMen(c)}.`;
+  if (room - stay < 1000) return `${placeName(r.name, true)} would still be full after the swap: it has room for about ${roomMen(room)} men, and ${roomMen(stay, 'up')}${yours} stay there.`;
+  return `${placeName(r.name, true)} has ${roomWords(isle.room)}, and ${roomMen(stay, 'up')}${yours} stay there after the swap: only ${canGo(room - stay, stay).toLocaleString('en-US')} more can go, and ${named(c.name)} has ${cardMen(c)}.`;
 }
 
 /**
@@ -299,12 +299,15 @@ const Count = (k: number): string => { const w = ['One', 'Two', 'Three', 'Four',
 
 /**
  * The head of the swap card on an island (the UI director, 15:02Z, section 2): "Okinawa has room for 4 divisions, about
- * 60,000 men." Null for ground that is no island of the table (and with the far side off), where each rule keeps the
+ * 60,000 men." The island's name, here and in every island sentence, as the news gives it (game.ts placeName, the
+ * places that take "the" by the UI director's list and rule): "The Eastern Marshalls has room for one division, about
+ * 15,000 men." (Words sceptic 2, W2-3. The verb after a plural name, "has" or "have", is asked of the UI director:
+ * "has" as built until she answers.) Null for ground that is no island of the table (and with the far side off), where each rule keeps the
  * sentence it had.
  */
 export function roomSays(g: Game, r: Region | undefined | null): string | null {
   const isle = islandOf(g, r);
-  return isle && r ? `${r.name} has ${roomWords(isle.room)}.` : null;
+  return isle && r ? `${placeName(r.name, true)} has ${roomWords(isle.room)}.` : null;
 }
 
 /**
@@ -328,7 +331,7 @@ export function swapHead(g: Game, r: Region | undefined | null, c: Corps | null)
  */
 export function swapOffer(g: Game, r: Region | undefined | null, c: Corps, other: Corps, from: Region): string | null {
   const says = roomSays(g, r);
-  return says ? `${says} Order the march again and ${named(c.name)} changes places with ${named(other.name)}, which comes back to ${from.name}.` : null;
+  return says ? `${says} Order the march again and ${named(c.name)} changes places with ${named(other.name)}, which comes back to ${placeName(from.name)}.` : null;
 }
 
 /**
@@ -361,7 +364,7 @@ export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[
     // (The men fit and the count does not: the sentence the game says on any ground that holds five (game.ts
     // whyNoTrainFor and the march's), the design director, 00:20Z, 27 November 2026, D5: "use the sentence the game
     // already says on any ground that holds five".)
-    if (!fewEnough(g, r, nat, corps, [], line.length, 0) && menOn(g, r, nat, corps) + line.reduce((n, c) => n + menOfCorps(c), 0) <= room) return `${r.name} has no room for ${line.length === 1 ? 'another corps' : `${line.length} more corps`}.`;
+    if (!fewEnough(g, r, nat, corps, [], line.length, 0) && menOn(g, r, nat, corps) + line.reduce((n, c) => n + menOfCorps(c), 0) <= room) return `${placeName(r.name, true)} has no room for ${line.length === 1 ? 'another corps' : `${line.length} more corps`}.`;
     const there = menOn(g, r, nat, corps), sending = line.reduce((n, c) => n + menOfCorps(c), 0), left = room - there;
     const yours = onlyMine(g, r, nat, corps) ? ' of yours' : '';
     // (One corps named, U7: its card's figure, as in the swap, and never a shortfall: a named corps shows its card's
@@ -376,10 +379,10 @@ export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[
     const verb = o.forms ? 'this takes' : 'you are sending', more = o.forms ? 'more fit' : 'more can go';
     const sends = one ? `${one} has ${cardMen(line[0])}`
       : short ? `${verb} ${roomMen(sending - left)} men more than fit` : `${verb} ${roomMen(sending)}`;
-    if (there === 0) return `${r.name} has ${roomWords(isle.room)}: ${sends}.`;
-    if (left < 1000) return `${r.name} is full: it has room for about ${roomMen(room)} men and ${roomMen(there, 'up')}${yours} are there.`;
-    if (short) return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(there, 'up')}${yours} are there: ${sends}.`;
-    return `${r.name} has ${roomWords(isle.room)}, and ${roomMen(there, 'up')}${yours} are there: only ${canGo(left, there).toLocaleString('en-US')} ${more}, and ${sends}.`;
+    if (there === 0) return `${placeName(r.name, true)} has ${roomWords(isle.room)}: ${sends}.`;
+    if (left < 1000) return `${placeName(r.name, true)} is full: it has room for about ${roomMen(room)} men and ${roomMen(there, 'up')}${yours} are there.`;
+    if (short) return `${placeName(r.name, true)} has ${roomWords(isle.room)}, and ${roomMen(there, 'up')}${yours} are there: ${sends}.`;
+    return `${placeName(r.name, true)} has ${roomWords(isle.room)}, and ${roomMen(there, 'up')}${yours} are there: only ${canGo(left, there).toLocaleString('en-US')} ${more}, and ${sends}.`;
   }
   const riding = corps.length - line.length;
   if (!riding) return null;
@@ -388,10 +391,10 @@ export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[
   if (riding <= left) return null;
   const count = (k: number): string => (k === 1 ? 'one' : `${k}`);
   const has = `room for ${count(most)} engineer corps as well as its troops`, mine = here.every((u) => u.nat === nat);
-  if (n === 0) return `${r.name} has ${has}: only ${count(most)} can go.`;
+  if (n === 0) return `${placeName(r.name, true)} has ${has}: only ${count(most)} can go.`;
   const are = n === 1 ? (mine ? 'one of yours is there' : 'one is there') : `${n}${mine ? ' of yours' : ''} are there`;
-  if (left > 0) return `${r.name} has ${has} and ${are}: only ${count(left)} more can go.`;
-  return `${r.name} can take no more engineers: it has ${has}, and ${most === 1 && n === 1 && mine ? 'yours is there' : are}.`;
+  if (left > 0) return `${placeName(r.name, true)} has ${has} and ${are}: only ${count(left)} more can go.`;
+  return `${placeName(r.name, true)} can take no more engineers: it has ${has}, and ${most === 1 && n === 1 && mine ? 'yours is there' : are}.`;
 }
 
 /**
