@@ -1962,15 +1962,54 @@ describe('12:24Z, items 1 and 2: a port in its holder\'s pocket is left to the p
         [21, false, null, [], [], null, null],
       ]);
       expect(g.headlines.filter((h) => h.text === NEWS_SPENT).map((h) => h.turn)).toEqual([19]);
-      // (The mark of March's telling, kept through the ring. It goes once the stores are filled again: Italy's fleets go
-      // back to harbour, and Britain's own ships reach Gibraltar at his June draw. Nothing is told: no garrison is left.)
+      // (The marks of January's first news and of March's spent news, both kept through the ring. They go once the
+      // stores are filled again: Italy's fleets go back to harbour, and Britain's own ships reach Gibraltar at his June
+      // draw. The first line was told, so the relief is told, as laid, as it is where no ring stood, with every corps of
+      // the garrison already struck off.)
       const gib = g.byName.Gibraltar.id;
-      expect(g.flags[`portSpent:${gib}`]).toBe(19);
+      expect([g.flags[`portTold:${gib}`], g.flags[`portSpent:${gib}`]]).toEqual([17, 19]);
       for (const f of g.fleets) if (f.nat === 'ITA') f.stance = 'port';
       g.supplyDirty = true;
       const h0 = g.headlines.length;
       month(g, 22, ['GER', 'ITA', 'UK']);
-      expect([g.flags[`stores:${gib}`], g.flags[`portSpent:${gib}`], g.headlines.slice(h0).map((h) => h.text).filter((x) => OURS.test(x))]).toEqual([22, undefined, []]);
+      expect([g.flags[`stores:${gib}`], g.flags[`portTold:${gib}`], g.flags[`portSpent:${gib}`], g.headlines.slice(h0).map((h) => h.text).filter((x) => OURS.test(x))]).toEqual([22, undefined, undefined, ['Ships reach Gibraltar again: its stores are filled.']]);
+    });
+
+    it('the relief after a ring, where the first line was told before it: told in January, the ring closed as Britain\'s February opens with the pocket the sooner, and the sea opened after his February; his March news tells the ring\'s own line and then the relief, as laid', () => {
+      // (The fortress rows off; Spain comes into the war in her January 1941, after Britain's month, and four corps more
+      // stand in Gibraltar, so that the pocket's stores, for ten corps, are the sooner clock as his February opens: the
+      // port is left to the pocket's lines. Italy's fleets go back to harbour after his February: as his March opens the
+      // sea is open, the ring breaks and his own ships fill the stores.)
+      const RELIEF = 'Ships reach Gibraltar again: its stores are filled.';
+      const FILLED = 'Cut off by sea, its stores would feed the garrison for two months.';
+      const run = (on: boolean): { g: Game; rows: unknown[] } => {
+        const { g, gib, town, field } = pocketed(false, on, 'UK', { war: 17 });
+        for (const n of ['20th Corps', '21st Corps', '22nd Corps', '23rd Corps']) addCorps(g, 'UK', n, 'inf', 2, 'Gibraltar', {});
+        const rows: unknown[] = [];
+        for (let t = 16; t <= 20; t++) {
+          const h0 = g.headlines.length;
+          month(g, t, ['GER', 'ITA', 'UK']);
+          rows.push([t, g.flags[`pkt:${gib}`] !== undefined, g.headlines.slice(h0).map((h) => h.text).filter((x) => /Gibraltar/.test(x) && !/wireless/.test(x)), texts(portCardLines(g, gib, 'UK')), portCorpsLine(g, town), portCorpsLine(g, field[0]), g.flags[`portTold:${gib}`]]);
+          if (t === 17) { g.nations.ESP.align = 'axis'; declareWar(g, 'ESP', 'UK'); }
+          phase(g, 'ESP');
+          if (t === 18) { for (const f of g.fleets) if (f.nat === 'ITA') f.stance = 'port'; g.supplyDirty = true; }
+        }
+        return { g, rows };
+      };
+      const { g, rows } = run(true);
+      expect(rows).toEqual([
+        [16, false, [], [FILLED], null, null, undefined],
+        [17, false, [FIRST], [STORES, REMEDY('March')], LIVING, LIVING, 17],
+        // February: the ring closes, and the pocket decides: no port line for him, and the mark of January's news kept.
+        [18, true, ['Gibraltar is surrounded: no road and no ship reaches it from the rest of the United Kingdom. 10 British corps are cut off there, with stores for a month; after that the troops go hungry.'], [], null, null, 17],
+        // March: the ring broken by the open sea, and the stores filled. The first line was told in January: the relief is
+        // told, as laid, after the ring's own line (the marks, section 1). (The 13:23Z build told nothing: the mark of
+        // January's news went with the ring.)
+        [19, false, ['The ring round Gibraltar is broken: the roads are open to the British troops there again.', RELIEF], [FILLED], null, null, undefined],
+        [20, false, [], [FILLED], null, null, undefined],
+      ]);
+      expect(g.headlines.filter((h) => h.text === RELIEF).map((h) => h.turn)).toEqual([19]);
+      expect(wordsOnly(g)).toBe(wordsOnly(run(false).g));
     });
   });
 

@@ -13,16 +13,16 @@
 //
 // Its own flags (numbers only, saved with the game, written only with the switch on and a player at the table):
 //   portTold:<id>     the month the first cut-off news of the port was told to the player: the relief is told only after
-//                     it ("Relief, after the first line was told"). Cleared at the relief, when the port changes hands,
-//                     is left to a siege's lines (watched) or, for its holder, to his pocket's (leftToPocket), or the
-//                     player has no part in it any more, when the switch is turned off, and when its holder or the player
-//                     falls (portsDone).
+//                     it ("Relief, after the first line was told"). Kept while the port is left to its holder's pocket
+//                     for him (leftToPocket), so that the relief waits and is told once the port's lines come back to
+//                     him. Cleared at the relief, when the port changes hands, is left to a siege's lines (watched), or
+//                     the player has no part in it any more, when the switch is turned off, and when its holder or the
+//                     player falls (portsDone).
 //   portSpent:<id>    the month the news of the port's stores spent was told to the player, so that it is told once for
-//                     each fill of the stores: in the month they run out, or, where his reading of that month could not
-//                     yet see it, in the next month's (the UI director's 05:03Z, item 4), or at the reading where the
-//                     port's lines come back to him after a ring (portRing:, 13:23Z, item c). Cleared with portTold; kept
-//                     where portTold goes as the port is left to its holder's pocket, so that a ring's months never tell
-//                     it twice for one fill, and then cleared once the stores are filled again, or as portTold would be.
+//                     each fill of the stores, a ring's months or not: in the month they run out, or, where his reading
+//                     of that month could not yet see it, in the next month's (the UI director's 05:03Z, item 4), or at
+//                     the reading where the port's lines come back to him after a ring (portRing:, 13:23Z, item c).
+//                     Cleared with portTold.
 //   portRing:<id>     the month of the last reading at which the port was left to its holder's pocket for the player, its
 //                     holder (leftToPocket): once the port's lines come back to him, the ring broken or its clock no
 //                     longer the sooner, with the sea still shut, what is true of the port then is told once, in his next
@@ -943,16 +943,13 @@ export function portsMonth(g: Game, nat: string): void {
   for (const r of g.regions) {
     const k = toldKey(r.id), ks = spentKey(r.id), kr = ringKey(r.id);
     // (A port left to its holder's pocket for the player, its holder: the pocket's own lines tell him of it, and the
-    // port's news, its relief among them, waits with its mark gone; the mark that it was, so that what is true of the
-    // port is told once its lines come back to him. The UI director's 12:24Z, items 1 and 7, and 13:23Z, item c. The
-    // mark of the stores spent stays: that news is told once for each fill, the ring's months or not.)
-    if (leftToPocket(g, r, me, mine ? me : undefined)) { delete g.flags[k]; g.flags[kr] = g.turn; continue; }
+    // port's news waits, its marks kept: the relief, where the first line was told before the ring, is told once the
+    // port's lines come back to him (the marks, section 1, "Relief, after the first line was told"), and the stores
+    // spent are told once for each fill, the ring's months or not. The mark that it was, so that what is true of the
+    // port is told once its lines come back to him. The UI director's 12:24Z, items 1 and 7, and 13:23Z, item c.)
+    if (leftToPocket(g, r, me, mine ? me : undefined)) { g.flags[kr] = g.turn; continue; }
     if (g.flags[kr] !== undefined && (r.ctrl !== me || !watched(g, r) || !involved(g, r))) delete g.flags[kr];
     let told: number | undefined = g.flags[k];
-    const spent = g.flags[ks];
-    // (The mark of the stores spent, kept through a ring with no mark of the first news: it goes as it would with that
-    // mark, and once the stores are filled again.)
-    if (told === undefined && spent !== undefined && (!watched(g, r) || r.since > spent || !involved(g, r) || (g.flags[`stores:${r.id}`] ?? -1) >= spent)) delete g.flags[ks];
     if (told !== undefined) {
       // (A port lost since, or one the player no longer has any part in, keeps no mark.)
       if (!watched(g, r) || r.since > told || !involved(g, r)) { delete g.flags[k]; delete g.flags[ks]; continue; }
