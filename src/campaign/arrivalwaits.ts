@@ -335,6 +335,45 @@ export function notFormedLine(g: Game, i: number, place: string): string | null 
 }
 
 /**
+ * A told row held for its place, struck at its half year (game.ts `expeditions`, the rows' own end: `sent` 2 and
+ * `rowDone`; the rule is not changed by a day). Read in the month of the strike, before the row's flags go, and only
+ * where the caller reads the telling's scope (the switch on, where the rule acts): his own row, its place hold told
+ * (`rowPlace`), and that place still not in friendly hands. Null otherwise, and nothing is said, as before. `since` is
+ * the place hold's month (`rowPlaceSince`; a save made before it, the row's month, `rowTold`).
+ */
+export interface StruckForPlace { i: number; name: string; at: number; since: number }
+export function struckForPlace(g: Game, i: number): StruckForPlace | null {
+  const row = ROWS()[i];
+  if (!row || g.flags.fromWait !== 1 || !g.human || row[1] !== g.human) return null;
+  const p = g.flags[placeKey(i)];
+  const place = p === undefined ? undefined : g.regions[p];
+  const since = g.flags[placeSinceKey(i)] ?? g.flags[toldKey(i)];
+  if (!place || since === undefined || allied(g, row[1], place.ctrl)) return null;
+  return { i, name: row[2], at: place.id, since };
+}
+
+/**
+ * The headlines the month told rows held for their place are struck (the UI director's section 10, T2, 00:39Z, 27
+ * November 2026, in the form of section 8.3's "will not form"): "{The 11th Army (3rd Division)}, due in {Yochow} since
+ * {January 1942}, will not form: {Yochow} is still not in friendly hands, and the arrival has waited as long as it
+ * may." Several struck in one month of one country, due in one place, whose place holds began in one month, read as ONE
+ * headline, the names joined as section 8.5 joins them ("{A}, {b} and {c}, due in ..."); any that differ in place or
+ * month read their own line. In the order the rows are read. One maker for the page, the month's report card and the
+ * bridge: game.ts says each as a headline in the place.
+ */
+export function struckForPlaceLines(g: Game, xs: StruckForPlace[]): { text: string; at: number }[] {
+  const groups: { at: number; since: number; names: string[] }[] = [];
+  for (const x of xs) {
+    const one = groups.find((q) => q.at === x.at && q.since === x.since);
+    if (one) one.names.push(x.name); else groups.push({ at: x.at, since: x.since, names: [x.name] });
+  }
+  return groups.map((q) => {
+    const place = g.regions[q.at].name;
+    return { text: `${join(q.names.map((x, k) => named(x, k === 0)))}, due in ${place} since ${turnToDate(q.since).label}, will not form: ${place} is still not in friendly hands, and the arrival has waited as long as it may.`, at: q.at };
+  });
+}
+
+/**
  * The words after "{Row} has arrived in {place}, " and after "The arrival is ": how the row is formed, true of the month
  * it forms (sections 4 and 8), or null where nothing true is to be said and today's line stands. `name` is the formed
  * row's own name, for "your corps of that name".
