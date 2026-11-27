@@ -58,5 +58,14 @@ describe("R3-3 and R3-4 on a war: the telling's leaving set is the rule's, and e
     // (The war reaches sets beyond a row's own `from` corps: loan ends this pass, so the check is not empty.)
     expect(beyondTakes).toBeGreaterThan(0);
     expect(withLoans).toBeGreaterThan(0);
-  }, 900_000);
+  },
+  // TIME LIMIT, not an assertion: the 900 s guards a hung run and proves nothing about the rule (the design director, 17:08Z,
+  // 27 November 2026, the naval pattern). Measured, this file run ALONE (one file, --maxWorkers=1, nice -n 12, bash
+  // `time` around the one vitest command), 27 November 2026 at head 441b52968, 4 cores shared with other teams:
+  //   18:22Z, load 7.34: 54.1 s wall, 53.1 s user + 1.0 s sys = 54.0 s CPU;
+  //   18:23Z, load 7.78: 57.5 s wall, 57.4 s user + 1.0 s sys = 58.4 s CPU.
+  // (Round 3's verifier read 58 s wall at a load of 6 to 8.) The box is not quiet, so the CPU time is the figure a later
+  // run is set against. WATCH LINE: 88 s of CPU (one and a half times today's larger CPU time, 58.4 s). A later quiet run
+  // over it is traced (a finding for the thread), never failed, and never a reason to raise the 900 s or to cut the war.
+  900_000);
 });
