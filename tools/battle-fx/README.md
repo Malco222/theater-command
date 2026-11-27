@@ -2164,12 +2164,6 @@ in `/mnt/project-files/effects-r2/seam/sea/` (README there: every call letter fo
   - The scene paints it as a dull band: the sea's own colour darkened toward 66,62,56 (the middle 59,56,50), written
     to land about 28,25,20; its sheen a dull grey, never a rainbow; and never under 1.5 px across, a narrower lane
     lighter for it instead of a hairline.
-  - At most `points` (200) a ship and `ships` (6); a 20-minute track is kept whole. No dice.
-  - A lane never burns. The scene's patch lights its own oil fire (`OilFire`, ids 4100000 and up, at most 3) under a
-    ship stopped and burning.
-- **The deck's brass** (item 11 part 4, row `deck_cases`; switch `-TheaterSeaBrass=1`). `AirGunShip(stream, ship)`
-  ties a light gun's stream to her: each round's case falls on her deck in place of the aircraft-style spent case,
-  whatever the gun (the `hmg` row serves a .50). `DeckBrass(ship, breech, away, kind, count)` serves the 4- and
   - The scene asks the kit how to paint each point: `OilLook(Dark, MidPx, GrazeDeg)` (wrapper `FBattleEffects::OilLook`).
     Under `floor_px` (1.5) the middle is widened to it and made fainter by the root of the widening only, never under
     `floor_alpha` (0.3) while the oil is that dark. Seen low, from `calm_from_deg` (5) of grazing angle down to
@@ -2177,6 +2171,12 @@ in `/mnt/project-files/effects-r2/seam/sea/` (README there: every call letter fo
     `calm_alpha` (0.2), less as the oil thins. A real slick seen low reads by its calm film, not by its darkness. From
     above and wide on the screen nothing changes. The look review of 27 November found the lane gone from another
     ship's bridge 800 m off and 20 m up.
+  - At most `points` (200) a ship and `ships` (6); a 20-minute track is kept whole. No dice.
+  - A lane never burns. The scene's patch lights its own oil fire (`OilFire`, ids 4100000 and up, at most 3) under a
+    ship stopped and burning.
+- **The deck's brass** (item 11 part 4, row `deck_cases`; switch `-TheaterSeaBrass=1`). `AirGunShip(stream, ship)`
+  ties a light gun's stream to her: each round's case falls on her deck in place of the aircraft-style spent case,
+  whatever the gun (the `hmg` row serves a .50). `DeckBrass(ship, breech, away, kind, count)` serves the 4- and
   5-inch.
   - Cases lie on her deck (`ShipPose.Deck`), and are laid only within `lay_m` (90 m) of the eye; past the cap the
     case farthest from the eye goes first, so a far ship never takes the cases in view.

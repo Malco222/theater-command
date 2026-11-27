@@ -656,6 +656,32 @@ namespace
 		W.OilLeak(0.0, 4, Vec(), 1.0);
 		W.OilLeak(5.0, 4, Vec(50.0, 0.0, 0.0), 1.0);
 		Check(W.OilLane(5.0, 4, Strip) == 0, "without the row: no lane", "");
+		{
+			// (the scene's paint, OilLook. The look review of 27 November: from another ship's bridge 800 m off, 20 m up, the
+			// lane was gone: its darkness divided away under the 1.5 px floor, and a slick seen low reads by its calm)
+			Battle Y;
+			Open(Y, Book);
+			const double Dark = Y.Num("sea_leak.dark", 0.55);
+			const Battle::LaneLook Wide = Y.OilLook(Dark, 6.0, 30.0);
+			const Battle::LaneLook Thin = Y.OilLook(Dark, 0.15, 30.0);
+			const Battle::LaneLook Half = Y.OilLook(Dark, 0.75, 30.0);
+			Check(Wide.Widen == 1.0 && Wide.Mid == Dark && std::fabs(Wide.Shoulder - 0.85 * Dark) < 1e-12 && Wide.Calm == 0.0, "the lane's paint from above and wide: as it was (its dark, 0.85 at the shoulder)", Say("mid %.3f, shoulder %.3f", Wide.Mid, Wide.Shoulder));
+			Check(std::fabs(Thin.Widen - 10.0) < 1e-9 && std::fabs(Thin.Mid - 0.3) < 1e-9 && std::fabs(Half.Mid - Dark / std::sqrt(2.0)) < 1e-9, "  ...at the floor: widened to 1.5 px, fainter by the root, its middle at least 0.3", Say("0.15 px widened %.1f times, mid %.3f; 0.75 px mid %.3f (the dark / root of 2)", Thin.Widen, Thin.Mid, Half.Mid));
+			// (the calm band by grazing angle; its lift in sRGB bytes over the sea (53,76,99 landed: its G byte 76 under the
+			// scene's calm paint byte 140) at the middle)
+			const double Graze[4] = { 1.0, 3.0, 5.0, 10.0 };
+			double Calm[4], Lift[4];
+			for (int G = 0; G < 4; ++G)
+			{
+				const Battle::LaneLook L = Y.OilLook(Dark, 0.15, Graze[G]);
+				Calm[G] = L.Calm;
+				Lift[G] = L.Calm * L.CalmAlpha * (140.0 - 76.0);
+			}
+			Check(Calm[0] == 1.0 && std::fabs(Calm[1] - 0.5) < 1e-9 && Calm[2] == 0.0 && Calm[3] == 0.0, "  ...seen low, the calm band: full by 1 degree, half at 3, none from 5", Say("calm at 1, 3, 5, 10 degrees: %.2f %.2f %.2f %.2f", Calm[0], Calm[1], Calm[2], Calm[3]));
+			std::printf("    the calm band's lift at its middle (bytes of G over the sea, before the game's curve): %.1f %.1f %.1f %.1f at 1, 3, 5, 10 degrees\n", Lift[0], Lift[1], Lift[2], Lift[3]);
+			const Battle::LaneLook Old = Y.OilLook(0.02, 0.15, 1.0);
+			Check(Old.CalmAlpha < Thin.CalmAlpha && Old.Mid <= Old.CalmAlpha + 1e-12, "  ...thinner as the oil thins, never more than the calm paint's own", Say("an old lane's calm alpha %.3f against a fresh one's %.3f", Old.CalmAlpha, Thin.CalmAlpha));
+		}
 		std::string Got;
 		Check(DiceUntouched(Book, [&](Battle& Z) { for (int F = 0; F < 600; ++F) { Z.OilLeak(F / 10.0, 4, Vec(F * 1.0, 0.0, 0.0), 1.0); } Z.OilLane(60.0, 4, Strip); }, Got), "no draw on the shared seed", Got);
 	}
@@ -726,32 +752,6 @@ namespace
 		Open(X, Book);
 		auto P = [&](double T)
 		{
-		{
-			// (the scene's paint, OilLook. The look review of 27 November: from another ship's bridge 800 m off, 20 m up, the
-			// lane was gone: its darkness divided away under the 1.5 px floor, and a slick seen low reads by its calm)
-			Battle Y;
-			Open(Y, Book);
-			const double Dark = Y.Num("sea_leak.dark", 0.55);
-			const Battle::LaneLook Wide = Y.OilLook(Dark, 6.0, 30.0);
-			const Battle::LaneLook Thin = Y.OilLook(Dark, 0.15, 30.0);
-			const Battle::LaneLook Half = Y.OilLook(Dark, 0.75, 30.0);
-			Check(Wide.Widen == 1.0 && Wide.Mid == Dark && std::fabs(Wide.Shoulder - 0.85 * Dark) < 1e-12 && Wide.Calm == 0.0, "the lane's paint from above and wide: as it was (its dark, 0.85 at the shoulder)", Say("mid %.3f, shoulder %.3f", Wide.Mid, Wide.Shoulder));
-			Check(std::fabs(Thin.Widen - 10.0) < 1e-9 && std::fabs(Thin.Mid - 0.3) < 1e-9 && std::fabs(Half.Mid - Dark / std::sqrt(2.0)) < 1e-9, "  ...at the floor: widened to 1.5 px, fainter by the root, its middle at least 0.3", Say("0.15 px widened %.1f times, mid %.3f; 0.75 px mid %.3f (the dark / root of 2)", Thin.Widen, Thin.Mid, Half.Mid));
-			// (the calm band by grazing angle; its lift in sRGB bytes over the sea (53,76,99 landed: its G byte 76 under the
-			// scene's calm paint byte 140) at the middle)
-			const double Graze[4] = { 1.0, 3.0, 5.0, 10.0 };
-			double Calm[4], Lift[4];
-			for (int G = 0; G < 4; ++G)
-			{
-				const Battle::LaneLook L = Y.OilLook(Dark, 0.15, Graze[G]);
-				Calm[G] = L.Calm;
-				Lift[G] = L.Calm * L.CalmAlpha * (140.0 - 76.0);
-			}
-			Check(Calm[0] == 1.0 && std::fabs(Calm[1] - 0.5) < 1e-9 && Calm[2] == 0.0 && Calm[3] == 0.0, "  ...seen low, the calm band: full by 1 degree, half at 3, none from 5", Say("calm at 1, 3, 5, 10 degrees: %.2f %.2f %.2f %.2f", Calm[0], Calm[1], Calm[2], Calm[3]));
-			std::printf("    the calm band's lift at its middle (bytes of G over the sea, before the game's curve): %.1f %.1f %.1f %.1f at 1, 3, 5, 10 degrees\n", Lift[0], Lift[1], Lift[2], Lift[3]);
-			const Battle::LaneLook Old = Y.OilLook(0.02, 0.15, 1.0);
-			Check(Old.CalmAlpha < Thin.CalmAlpha && Old.Mid <= Old.CalmAlpha + 1e-12, "  ...thinner as the oil thins, never more than the calm paint's own", Say("an old lane's calm alpha %.3f against a fresh one's %.3f", Old.CalmAlpha, Thin.CalmAlpha));
-		}
 			Battle::ShipPose Q = Pose(T, 0.0, Roll, List, 10.0);
 			Q.Coaming = Coaming;
 			return Q;

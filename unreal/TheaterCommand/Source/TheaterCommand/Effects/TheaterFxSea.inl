@@ -899,30 +899,6 @@
 		return static_cast<int>(Strip.size());
 	}
 
-	// ---------------------------------------------------------------------------------------------------------------
-	// Item 11 part 4: the deck's brass. A light or medium gun's spent cases on her deck, in her own frame (as her wash):
-	// thrown from the breech, tumbling down to her deck, then lying there, and rolling to her low side once she heels
-	// past deck_cases.stick_deg; stopped by a coaming or over the side where there is none. Its dice are its own: the
-	// mount's place on her, the moment and its own count, one draw a statement.
-
-	void Battle::AirGunShip(int Gun, int ShipId)
-	{
-		GunShips.erase(std::remove_if(GunShips.begin(), GunShips.end(), [Gun](const std::pair<int, int>& G) { return G.first == Gun; }), GunShips.end());
-		if (ShipId >= 0 && GunShips.size() < 4096)
-		{
-			GunShips.emplace_back(Gun, ShipId);
-		}
-	}
-
-	void Battle::DeckRound(int Gun, size_t FromBit, double T, const Vec& At, const Vec& Way, const char* Kind)
-	{
-		// (AirGun, a round just fired: is the gun on a ridden ship, with the deck_cases table? Then the aircraft-style cases
-		// Spent threw for it (if the eye was near) are taken back, after every draw was made, whatever its kind: none falls
-		// through her deck. With a row for its kind, its case goes on her deck)
-		int Ship = -1;
-		for (const std::pair<int, int>& G : GunShips)
-		{
-			if (G.first == Gun)
 	Battle::LaneLook Battle::OilLook(double Dark, double MidPx, double GrazeDeg) const
 	{
 		LaneLook L;
@@ -948,6 +924,30 @@
 		return L;
 	}
 
+	// ---------------------------------------------------------------------------------------------------------------
+	// Item 11 part 4: the deck's brass. A light or medium gun's spent cases on her deck, in her own frame (as her wash):
+	// thrown from the breech, tumbling down to her deck, then lying there, and rolling to her low side once she heels
+	// past deck_cases.stick_deg; stopped by a coaming or over the side where there is none. Its dice are its own: the
+	// mount's place on her, the moment and its own count, one draw a statement.
+
+	void Battle::AirGunShip(int Gun, int ShipId)
+	{
+		GunShips.erase(std::remove_if(GunShips.begin(), GunShips.end(), [Gun](const std::pair<int, int>& G) { return G.first == Gun; }), GunShips.end());
+		if (ShipId >= 0 && GunShips.size() < 4096)
+		{
+			GunShips.emplace_back(Gun, ShipId);
+		}
+	}
+
+	void Battle::DeckRound(int Gun, size_t FromBit, double T, const Vec& At, const Vec& Way, const char* Kind)
+	{
+		// (AirGun, a round just fired: is the gun on a ridden ship, with the deck_cases table? Then the aircraft-style cases
+		// Spent threw for it (if the eye was near) are taken back, after every draw was made, whatever its kind: none falls
+		// through her deck. With a row for its kind, its case goes on her deck)
+		int Ship = -1;
+		for (const std::pair<int, int>& G : GunShips)
+		{
+			if (G.first == Gun)
 			{
 				Ship = G.second;
 				break;
