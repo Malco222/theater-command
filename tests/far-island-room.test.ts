@@ -612,6 +612,10 @@ describe('one body', () => {
     const bad: string[] = [];
     for (const [f, src] of Object.entries(SOURCES)) {
       if (f.endsWith('/campaign/islands.ts')) continue;
+      // (The reckoning, orderworth.ts, is the balance sweep thread's file and is the base's again: how it reads room is
+      // handed to the balance sweep, whose own commit reads it through `fits` and brings its own test. Owed before ON:
+      // the design director, 00:20Z, 27 November 2026, D6, "before ON it must be one reading".)
+      if (f.endsWith('/campaign/orderworth.ts')) continue;
       if (/\broomAt\b/.test(src)) bad.push(`${f}: roomAt`);
       if (/islandOf\([^)]*\)\??\.room\b/.test(src)) bad.push(`${f}: islandOf(...).room`);
       // A count of corps (`.length`) compared with STACK is a room check by a path of its own, unless it is the
