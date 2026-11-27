@@ -597,6 +597,7 @@ namespace TheaterFx
 		Sticks.clear();
 		InSight = HeldAtDraw = TwinBits = 0;
 		SeenBits = SeenTwin = 0;
+		WispIn = WispSeen = WispSince = 0;
 		Serials = 0;
 		Numbered = 0;
 		TrailCuts.clear();
@@ -605,6 +606,7 @@ namespace TheaterFx
 		EyeMoved = EyeTurned = 0.0;
 		DustInSight = DustSince = 0;
 		CaseUntil.clear();
+		BarrelWisps.clear(); // (Effects (R2): no wisp of another battle's guns)
 		BallLamps.clear();
 		LampsKept.clear(); // (the pre-check, 22 November: kept lamps outlived a Clear, so a fire lit again with the clock set back
 		LampsAt = -1.0e18; // had no lamp until the clock passed where it was)
@@ -3787,7 +3789,7 @@ namespace TheaterFx
 	// ---------------------------------------------------------------------------------------------------------------
 	// Guns
 
-	void Battle::Muzzle(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn)
+	void Battle::Muzzle(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn, bool bMoving, bool bOverSide)
 	{
 		GroundIn = GroundOn(GroundIn); // (a ground whose own switch is off is drawn as earth)
 		// (Effects (R2): "mg:star", the row mg with its own look, muzzle.look.star; a name with no colon as ever)
@@ -3801,7 +3803,9 @@ namespace TheaterFx
 		}
 		// (a tank's or a field gun's smoke and the dust it kicks up go slowly into the air: linger.gun, by the gun's row)
 		const size_t First = Bits.size();
+		bCaseOverSide = bOverSide && Has("ground_cases.spg.case_m"); // (Effects (R2), -TheaterLandCasesOut: her case goes over her side)
 		MuzzleLaid(Now, At, Facing, GunIn, GroundIn, bLook ? &GL : nullptr);
+		bCaseOverSide = false;
 		if (Bits.size() > First)
 		{
 			const double Foot = Height(At.X, At.Y);
@@ -3811,6 +3815,136 @@ namespace TheaterFx
 		{
 			LookLaid(Now, At, Facing.Unit(Vec(1.0, 0.0, 0.0)), GL, GroundIn);
 		}
+		if (!bMoving) // (Effects (R2), -TheaterLandBarrelSmoke: a gun on the move or turning lays none, the mend of 27 November)
+		{
+			AfterWisp(Now, At, Facing, GunIn); // (laid last, so the shot is laid as ever)
+		}
+	}
+
+	void Battle::WispStop(double Now, const Vec& At)
+	{
+		// (Effects (R2), -TheaterLandBarrelSmoke, the mend of 27 November: smoke stays in the air where it was made and is
+		// never made at a place the muzzle has left. Her wisp's puffs not yet born are cut (Bit::CutAt, never drawn); those
+		// in the air drift and fade where they are. No dice)
+		for (Wisping& Was : BarrelWisps)
+		{
+			if ((Was.At - At).Length() > 0.25 || !(Was.Until > Now))
+			{
+				continue;
+			}
+			for (Bit& B : Bits)
+			{
+				if (B.bWisp && B.Born > Now && (B.From - Was.At).Length() < 0.5)
+				{
+					B.CutAt = std::min(B.CutAt, Now);
+				}
+			}
+			Was.Until = Now;
+		}
+	}
+
+	void Battle::AfterWisp(double Now, const Vec& At, const Vec& Facing, const char* GunIn)
+	{
+		// The barrel's wisp (Effects (R2), -TheaterLandBarrelSmoke, battle-fx-barrel.json; item 7 of the owner's film
+		// details, 26 November): after a tank gun, an anti-tank gun or a howitzer fires, once its smoke has rolled away,
+		// a thin wisp of the burnt charge still curls from the bore for a few seconds, rising and leaning on the wind and
+		// thinning as the barrel cools. Only within within_m of the eye; from one gun's place (same_gun_m) at most
+		// per_gun at once and on the field most; only while the screen is under two fifths full (what can be drawn).
+		// Small, so held to least_px across on the screen and thinner to match far off, never a twinkle. Its own dice,
+		// from the place and the moment. Without muzzle.<gun>.after_wisp: nothing.
+		if (!GunIn || !*GunIn)
+		{
+			return;
+		}
+		const std::string W = std::string("muzzle.") + GunIn + ".after_wisp.";
+		if (!Has(W + "puffs.0") || !bEyeKnown || !(std::fabs(At.X) <= 1e9 && std::fabs(At.Y) <= 1e9 && std::fabs(At.Z) <= 1e9) || !(std::fabs(Now) <= 1.0e9))
+		{
+			return;
+		}
+		// (the room: only while the screen is under two fifths full (RoomSeen, what can be drawn), and while the room every
+		// gate reads, with the wisp's own puffs, stays short of linger.spare_from, where the smoke's slow fade begins to
+		// spare puffs for the room: a wisp, a small thing, never thins a gun's smoke or takes its room)
+		if ((LastEye - At).Length() > Num(W + "within_m", 300.0) || RoomSeen() >= static_cast<size_t>(MaxPuffs) * 2 / 5)
+		{
+			return;
+		}
+		const double PuffsMost = SafeNum(Range(W + "puffs", 10.0, 13.0).B, 1.0, 40.0, 13.0);
+		if (static_cast<double>(RoomGate()) + PuffsMost >= LingerSpareFrom * static_cast<double>(std::max(1, MaxPuffs)))
+		{
+			return;
+		}
+		BarrelWisps.erase(std::remove_if(BarrelWisps.begin(), BarrelWisps.end(), [Now](const Wisping& Was) { return Was.Until < Now; }), BarrelWisps.end());
+		const double Same = SafeNum(Num(W + "same_gun_m", 3.0), 0.0, 50.0, 3.0);
+		size_t Here = 0;
+		for (const Wisping& Was : BarrelWisps)
+		{
+			Here += (Was.At - At).Length() < Same ? 1u : 0u;
+		}
+		const size_t PerGun = static_cast<size_t>(SafeNum(Num(W + "per_gun", 1.0), 0.0, 8.0, 1.0));
+		const size_t Most = static_cast<size_t>(SafeNum(Num(W + "most", 16.0), 0.0, 200.0, 16.0));
+		if (Here >= PerGun || BarrelWisps.size() >= Most)
+		{
+			return;
+		}
+		Dice D(PlaceKey(At) * 0x2B7E151628AED2A7ull ^ (static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) + 0xA17E5ull));
+		const Vec Fw = Facing.Unit(Vec(1.0, 0.0, 0.0));
+		const Vec Side = Fw.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
+		const double From = SafeNum(Range(W + "from_s", 3.0, 4.0).Pick(D), 0.0, 60.0, 3.0);
+		const double For = SafeNum(Range(W + "for_s", 4.0, 6.0).Pick(D), 0.5, 60.0, 5.0);
+		const double PuffsIs = Range(W + "puffs", 10.0, 13.0).Pick(D);
+		const int Puffs = static_cast<int>(std::lround(SafeNum(PuffsIs, 1.0, 40.0, 10.0)));
+		const Span Life = Range(W + "life_s", 1.8, 2.6);
+		const Span R0 = Range(W + "r0_m", 0.03, 0.05);
+		const Span R1 = Range(W + "r1_m", 0.22, 0.34);
+		const Span Rise = Range(W + "rise_mps", 0.35, 0.6);
+		const Span Alpha = Range(W + "alpha", 0.16, 0.24);
+		const double Cool = Clamp01(Num(W + "cool", 0.6)); // (how much thinner its last puffs are than its first)
+		const double Stretch = SafeNum(Num(W + "stretch", 1.8), 1.0, 4.0, 1.8);
+		const double LeastPx = SafeNum(Num(W + "least_px", 2.0), 0.0, 20.0, 2.0);
+		const Rgb Young = Picture(W + "colour", Rgb::FromPicture(139, 141, 144));
+		const Rgb Old = Picture(W + "colour_old", Rgb::FromPicture(154, 156, 158));
+		double LastEnd = Now;
+		// (the mend, 26 November: one ribbon, not a row of dashes: many small round puffs close together, each leaning a
+		// little further along one slow curl than the last, a little jitter on it)
+		const double Phase = D.U(0.0, 2.0 * Pi);
+		for (int I = 0; I < Puffs; ++I)
+		{
+			const double Share = (I + 0.5) / Puffs;
+			const double Late = D.U(-0.3, 0.3);
+			const double Jitter = D.Bell();
+			const double Curl = 0.8 * std::sin(3.0 * Pi * Share + Phase) + 0.3 * Jitter;
+			Bit B;
+			B.Born = Now + From + For * std::clamp(Share + Late / Puffs, 0.0, 1.0);
+			B.Life = std::max(0.3, Life.Pick(D));
+			B.From = At + Fw * 0.12;
+			B.Vel = Side * (0.08 * Curl) + Fw * 0.05;
+			B.Rise = Rise.Pick(D);
+			B.Windage = 0.85;
+			B.R0 = std::max(0.01, R0.Pick(D));
+			B.R1 = std::max(B.R0, R1.Pick(D));
+			B.Grow = 0.6;
+			B.Along = ZUp;
+			B.Stretch = Stretch;
+			B.Col = Young;
+			B.Col2 = Old;
+			B.Alpha = Alpha.Pick(D) * (1.0 - Cool * Share);
+			B.FadeIn = 0.25;
+			B.Hold = 0.3;
+			B.Heart = 0.5;
+			B.HeartEnd = 0.2;
+			B.Inner = 0.4;
+			B.Rough = 0.45;
+			B.LeastPx = LeastPx;
+			B.LeastKeep = 0.0;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			B.TurnRate = 0.3 * D.Bell();
+			B.bWisp = true;
+			LastEnd = std::max(LastEnd, B.Born + B.Life);
+			Bits.push_back(B);
+			++WispSince;
+		}
+		BarrelWisps.push_back({ At, LastEnd });
 	}
 
 	void Battle::MuzzleLaid(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn, const GunLook* Look)
@@ -4044,7 +4178,7 @@ namespace TheaterFx
 		// so the cases pile up behind the gun through a fight. Its own dice)
 		{
 			CaseRow Cases;
-			if (CaseRowOf(GunIn ? GunIn : "", At, Cases) && RoomForCases() < static_cast<size_t>(MaxPuffs) * 3 / 5)
+			if (!bCaseOverSide && CaseRowOf(GunIn ? GunIn : "", At, Cases, GroundIn) && RoomForCases() < static_cast<size_t>(MaxPuffs) * 3 / 5)
 			{
 				Dice DC(PlaceKey(At) * 0xD1B54A32D192ED03ull ^ static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)));
 				const Vec Flat_ = Vec(Fw.X, Fw.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
@@ -5281,12 +5415,32 @@ namespace TheaterFx
 		LookLamp(Now, At, Fw, L);
 	}
 
-	bool Battle::CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& C) const
+	bool Battle::CaseRowOf(const std::string& Gun, const Vec& At, CaseRow& C, const char* Ground) const
 	{
 		const std::string P = "ground_cases." + Gun + ".";
-		if (Gun.empty() || !Has(P + "case_m") || !bEyeKnown || (LastEye - At).Length() > Num("ground_cases.within_m", 40.0))
+		// (Effects (R2): a row may give its own within_m, as the thrown cases' rows ground_cases.spg and .tank do, so the
+		// pile by a gun is there when the camera cuts in; without it the shared ground_cases.within_m, as before)
+		if (Gun.empty() || !Has(P + "case_m") || !bEyeKnown || (LastEye - At).Length() > Num(P + "within_m", Num("ground_cases.within_m", 40.0)))
 		{
 			return false;
+		}
+		// (Effects (R2), no false brass at sea, -TheaterSeaNoFalseCases: a ship's big turrets fire by the howitzer's row,
+		// whose 0.4 m field-gun case would lie on the water behind the muzzle, fixed in the world. A gun standing on a
+		// ground named in ground_cases.not_on throws none; without the key, as before)
+		if (Ground && *Ground && Book)
+		{
+			for (int I = 0; I < 8; ++I)
+			{
+				std::string NotOn;
+				if (!Book->FindWord(("ground_cases.not_on." + std::to_string(I)).c_str(), NotOn))
+				{
+					break;
+				}
+				if (NotOn == Ground)
+				{
+					return false;
+				}
+			}
 		}
 		C.M = std::max(0.005, Num(P + "case_m", 0.08));
 		C.D = std::max(0.003, Num(P + "case_d_m", 0.012));
@@ -5299,10 +5453,12 @@ namespace TheaterFx
 		C.Up = Range(P + "up_mps", 1.0, 2.5);
 		C.Lie = Range(P + "lie_s", 2.0, 4.0);
 		C.Tumble = Range(P + "tumble", 15.0, 30.0);
-		C.Glint = Num("ground_cases.glint", 4.0);
 		C.LeastPx = Num("ground_cases.least_px", 0.8);
-		C.Col = Picture("ground_cases.colour", Rgb::FromPicture(196, 156, 82));
-		C.Dark = Picture("ground_cases.shade", Picture("ground_cases.dark", Rgb::FromPicture(112, 82, 37)));
+		// (Effects (R2): a row may give its own colour, shade and glint, as the thrown cases' rows ground_cases.spg and
+		// .tank do (dull, handled brass, not a shine); without them the shared values, as before)
+		C.Glint = Num(P + "glint", Num("ground_cases.glint", 4.0));
+		C.Col = Picture(P + "colour", Picture("ground_cases.colour", Rgb::FromPicture(196, 156, 82)));
+		C.Dark = Picture(P + "shade", Picture("ground_cases.shade", Picture("ground_cases.dark", Rgb::FromPicture(112, 82, 37))));
 		return true;
 	}
 
@@ -5358,6 +5514,52 @@ namespace TheaterFx
 		B.LeastPx = C.LeastPx;
 		B.LeastKeep = 0.6;
 		Bits.push_back(B);
+	}
+
+	AfterShot AfterShotOf(const AfterShotAsk& Ask)
+	{
+		AfterShot Out;
+		if (Ask.Kind == "gun")
+		{
+			Out.bBreechPuff = Ask.bBarrelSmoke && Ask.bBreech;
+		}
+		else if (Ask.Kind == "tank" && Ask.bLoader)
+		{
+			Out.bBreechPuff = Ask.bBarrelSmoke && Ask.bBreech;
+			Out.bOverSide = Ask.bCasesOut;
+		}
+		else if (Ask.Kind == "tank" && Ask.bHatch && Ask.HatchOpen > 0.5 && Ask.bHatchFumes && Ask.Shot > 0)
+		{
+			// (only when she is stopped, as the case: the scene's Steam is laid at one place and does not ride with her, so
+			// fumes from a tank on the move would hang where her hatch was. The mend, 26 November)
+			Out.bHatchFumes = Ask.bStopped && (Ask.Shot % 5 == 2 || Ask.Shot % 5 == 0);
+			Out.bHatchCase = Ask.bStopped && Ask.Shot % 8 == 0;
+		}
+		return Out;
+	}
+
+	void Battle::ThrowCase(double Now, const Vec& At, const Vec& Away, const char* Kind, int Key)
+	{
+		// (Effects (R2): an open-topped gun's loader heaving the case over her side, a closed tank's crewman pitching one
+		// out of the hatch. The row's odds against its own dice: not every case went over the side)
+		CaseRow C;
+		if (!Kind || !*Kind || !(std::fabs(At.X) <= 1e9 && std::fabs(At.Y) <= 1e9 && std::fabs(At.Z) <= 1e9) || !(std::fabs(Now) <= 1.0e9) || !CaseRowOf(Kind, At, C) || RoomForCases() >= static_cast<size_t>(MaxPuffs) * 3 / 5)
+		{
+			return;
+		}
+		const std::string P = std::string("ground_cases.") + Kind + ".";
+		Dice D(static_cast<uint64_t>(static_cast<uint32_t>(Key)) * 0x9E6C63D0676A9A99ull ^ PlaceKey(At) ^ (static_cast<uint64_t>(static_cast<int64_t>(std::max(0.0, Now) * 1000.0)) + 0xCA5Eull));
+		const double Odds = Clamp01(Num(P + "odds", 1.0));
+		const double Roll = D.U();
+		if (Roll >= Odds)
+		{
+			return;
+		}
+		if (Has(P + "case_long_m.0"))
+		{
+			C.M = SafeNum(Range(P + "case_long_m", C.M, C.M).Pick(D), 0.05, 1.5, C.M);
+		}
+		GroundCase(Now + C.After, At, Vec(Away.X, Away.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0)), C, D);
 	}
 
 	const Battle::DustRow& Battle::DustRowOf(const std::string& Ground)
@@ -6992,8 +7194,33 @@ namespace TheaterFx
 	{
 		// (a burst's smoke keeps its dark until its thick time, then greys, widens and thins into the air: linger.flak)
 		const size_t First = Bits.size();
+		// (Effects (R2), -TheaterAirFlakKinds: a kind with a row of its own, which before burst as heavy, lingers on a
+		// count of its own and leaves the shared count, LingerNo, where heavy would have: heavy laid and lingered dry,
+		// taken away, the shared dice put back; so every cloud lingered after it is as before, piece for piece)
+		const bool bOwnCount = Kind && *Kind && std::string(Kind) != "heavy" && Has(std::string("air_flak.") + Kind + ".long_m");
+		uint64_t LingerAfter = LingerNo;
+		if (bOwnCount)
+		{
+			const uint64_t SeedsWas = Seeds;
+			const size_t FlashesWas = Flashes.size(); // (the dry burst's lamp taken away with it)
+			AirFlakLaid(Now, At, "heavy");
+			LingerFrom(First, LingerOf("flak"), Now, At, 1.0, 0.0);
+			Bits.erase(Bits.begin() + static_cast<std::ptrdiff_t>(First), Bits.end());
+			Flashes.erase(Flashes.begin() + static_cast<std::ptrdiff_t>(FlashesWas), Flashes.end());
+			Seeds = SeedsWas;
+			LingerAfter = LingerNo;
+			LingerNo = Mix64(PlaceKey(At) ^ (static_cast<uint64_t>(static_cast<int64_t>(std::clamp(Now, 0.0, 1.0e9) * 1000.0)) + 0xF1A4C0ull));
+		}
 		AirFlakLaid(Now, At, Kind);
-		LingerFrom(First, LingerOf("flak"), Now, At, 1.0, 0.0);
+		// (Effects (R2), flak by its size, -TheaterAirFlakKinds: a kind with its own linger.flak.by.<kind>.gone_s
+		// lingers by that row, as battle-fx-flak.json gives medium and light; any other, heavy too, by linger.flak as
+		// before. Asked by name only where the row is: by a name with none, LingerOf would take no linger at all)
+		const std::string LingerName = Kind && *Kind && Has(std::string("linger.flak.by.") + Kind + ".gone_s") ? std::string(Kind) : std::string();
+		LingerFrom(First, LingerOf("flak", LingerName), Now, At, 1.0, 0.0);
+		if (bOwnCount)
+		{
+			LingerNo = LingerAfter;
+		}
 	}
 
 	void Battle::AirFlakLaid(double Now, const Vec& At, const char* Kind)
@@ -9960,6 +10187,7 @@ namespace TheaterFx
 		R.Alpha = Safe(Num(P + "alpha", 0.9), 0.0, 1.0, 0.9);
 		R.Waver = Safe(Num(P + "waver", 0.25), 0.0, 1.0, 0.25);
 		R.Rough = Safe(Num(P + "rough", 0.35), 0.0, 0.6, 0.35);
+		R.LeastPx = Safe(Num(P + "least_px", 0.0), 0.0, 20.0, 0.0);
 		R.Lance = Safe(Num(P + "lance", 0.0), 0.0, 1.0, 0.0);
 		R.LanceLife = Safe(Num(P + "lance_life_s", 0.3), 0.05, 5.0, 0.3);
 		R.LanceLong = Safe(Num(P + "lance_long", 3.5), 1.0, 12.0, 3.5);
@@ -10022,6 +10250,7 @@ namespace TheaterFx
 		B.HeartEnd = 0.1;
 		B.Inner = 0.5;
 		B.Rough = R.Rough;
+		B.LeastPx = R.LeastPx;
 		B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 		B.Turn = D.U(0.0, 2.0 * Pi);
 		// (the art director on the first cut, 15:40Z: "give the rags a visible cool shadow side, about 0.75 to 0.8 of
@@ -16922,6 +17151,7 @@ namespace TheaterFx
 		DustInSight = 0;
 		SeenTwin = 0;
 		CaseOff = 0;
+		WispIn = WispSeen = 0;
 		size_t OffSight = 0;
 		const Vec RightLevel = Vec(Eye.Right.X, Eye.Right.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
 		for (const Bit& B : Bits)
@@ -17015,6 +17245,8 @@ namespace TheaterFx
 			OffSight += bOff ? 1u : 0u;
 			SeenTwin += bOff ? 0u : Twins;
 			CaseOff += bOff && bCase ? 1u + Twins : 0u;
+			WispIn += B.bWisp ? 1u : 0u;
+			WispSeen += B.bWisp && !bOff ? 1u : 0u;
 			// (counted first when the room is short: an oil fire's kept column, and every light: flames, flashes and
 			// tracers are few and are what an air fight is read by from far off, so its smoke is what goes. The
 			// pre-check, 05:14Z: by depth alone the far side of a fight went bare, flames and all)
@@ -17056,6 +17288,7 @@ namespace TheaterFx
 		SeenBits = Sorted.size();
 		InSight = SeenBits + OffSight;
 		HeldAtDraw = Bits.size();
+		WispSince = 0;
 		DustSince = 0;
 		if (ShareDustFloor >= 0.0)
 		{

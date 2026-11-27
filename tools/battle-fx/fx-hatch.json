@@ -1,0 +1,48 @@
+{
+ "what": "A closed tank's hatch fumes and the odd case (release 2, behind the land battle's -TheaterLandHatchFumes; item 7 of the owner's film details, 26 November). Laid over battle-fx.json for that battle alone (FBattleEffects::LayOver). Closed tanks kept their spent cases inside; with her hatch open, every second or third shot by her count a faint wisp of fumes rises out of it (steam.hatch_fumes, the scene's Steam at her commander's place), and about one shot in eight, only when she is stopped, a crewman pitches a case out (ground_cases.tank, the scene's ThrowCase), as the Panther's crews threw empties from the turret's rear hatch and the T-34's to clear the fumes. Rare and small. Colours written to land (tools/battle-fx/game_curve.py write): the fumes 127,126,124 lands 132,130,127 and old 138,136,133 lands 148,146,142, at alpha 0.34 (the first cut, 147,145,142 at 0.16, moved the frame 4 levels at 30 m: unseen).",
+ "steam": {
+  "hatch_fumes": {
+   "_how": "The burnt charge's fumes let out of an open hatch after the shot: a faint pale grey wisp rising a metre or two and gone; never a jet, never white steam.",
+   "reach_m": [0.6, 1.1],
+   "across_m": 0.3,
+   "by_width": 0.7,
+   "cone_deg": 30,
+   "gap_m": 0.0,
+   "every_s": 0.14,
+   "roar": 0.1,
+   "least": 0.5,
+   "mouth": 0.9,
+   "rag": 0.7,
+   "rise_mps": 0.7,
+   "windage": 0.9,
+   "alpha": 0.34,
+   "waver": 0.4,
+   "rough": 0.45,
+   "least_px": 3,
+   "life_s": [1.6, 2.6],
+   "colour": [127, 126, 124],
+   "colour_old": [138, 136, 133]
+  }
+ },
+ "ground_cases": {
+  "tank": {
+   "_how": "A tank gun's case pitched out of the hatch by hand: up and out to land beside her hull. Thrown while the eye is within within_m (100 m; the shared ground_cases.within_m is 40); drawn only within ground_cases.draw_within_m and at most most_lying at once.",
+   "case_m": 0.42,
+   "case_long_m": [0.35, 0.5],
+   "case_d_m": 0.1,
+   "after_s": 0.8,
+   "breech_back_m": 0,
+   "side": 0,
+   "scatter_mps": 0.3,
+   "throw_mps": [2.6, 3.6],
+   "up_mps": [1.2, 2.0],
+   "lie_s": [180, 240],
+   "tumble": [4, 8],
+   "colour": [140, 120, 89],
+   "shade": [106, 91, 67],
+   "glint": 1,
+   "odds": 1.0,
+   "within_m": 100
+  }
+ }
+}

@@ -14,6 +14,7 @@
 //   ./fxpreview /tmp/recipe.txt <out folder> raid <earth|town|water> <frames> [WxH]
 //   ./fxpreview /tmp/recipe.txt <out folder> wreck <side|battle|far|tall> <frames> [WxH]
 //   ./fxpreview /tmp/recipe.txt <out folder> seafx <screen...|splash...> <frames> [WxH]
+//   ./fxpreview /tmp/recipe.txt <out folder> ten <flak|wisp|breech|spg|hatch|sea> <frames> [WxH]   (Effects (R2), fx_ten's stills; see Ten)
 //
 // The sea shot (the sea battle's range): three ships in line ahead, FX_GAP m (500) apart and FX_SHIP_LONG m (200)
 // long, steaming along +X at FX_KNOTS (25), seen broadside on from FX_DIST m (15000) by an eye FX_EYE_H m (24) up with
@@ -2831,6 +2832,178 @@ namespace
 	}
 }
 
+namespace
+{
+	/** The film details' first batch (Effects (R2), 26 November; see the top of the file): one look at a time, for the
+	 * stills of fx_ten. "flak": one FX_FLAK burst (light, medium, heavy) FX_DIST m (300) off at the bombers' height at
+	 * 0.1 s, the eye level with it. "wisp": a tank's gun (FX_GUN, tank_gun) firing once at 0.1 s, seen from FX_DIST m (40)
+	 * off. "breech": a field gun firing at 0.1 s and its breech's puff as the case comes out at 1.5 s, FX_DIST m (25).
+	 * "spg": an open self-propelled gun firing every 8 s from 0.1 s, each case heaved over her side 1.4 s after (ThrowCase
+	 * spg), FX_DIST m (30). "hatch": a closed tank, stopped, her hatch open, firing every 8 s from 0.1 s, the fumes and the
+	 * pitched case as AfterShotOf gives them by her count, FX_DIST m (30). "sea": three turrets on the water firing at
+	 * 0.1 s by the howitzer's and the tank gun's rows (as the sea scene's), FX_DIST m (30). FX_TEN_OFF=1: the land words not
+	 * given (no breech puff, fumes nor thrown case: the scene calls none). Frames ppm as ten-<shot>-fNNNN. */
+	int Ten(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Shot, std::vector<int> Frames, int W, int H)
+	{
+		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+		const bool bSea = Shot == "sea", bAir = Shot == "flak";
+		Battle Fx;
+		Fx.Setup(&Book, bSea || bAir ? &FlatSea : &Swell, nullptr, 3u);
+		Fx.SetSrgbBytes(GammaWanted());
+		Fx.SetLandGrade(LandGradeWanted());
+		Fx.SetSoftContact(SoftWanted());
+		SkyFromEnv(Fx);
+		Fx.SetGroundColour(&GroundPaint, nullptr);
+		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0));
+		const double Dist = EnvNum("FX_DIST", bAir ? 300.0 : Shot == "wisp" ? 40.0 : Shot == "breech" ? 25.0 : 30.0);
+		const double G0 = bSea || bAir ? 0.0 : Swell(nullptr, 0.0, 0.0);
+		const Vec At = bAir ? Vec(0.0, 0.0, 1500.0) : Vec(0.0, 0.0, G0);
+		Camera Cam;
+		Cam.W = W;
+		Cam.H = H;
+		Cam.Ppr = W / (2.0 * std::tan(EnvNum("FX_LENS", 42.0) * 3.14159265358979 / 360.0));
+		const double EyeH = EnvNum("FX_EYE_H", bAir ? 0.0 : bSea ? 14.0 : 2.0), LookH = EnvNum("FX_LOOK_H", bAir ? 0.0 : bSea ? 8.0 : 1.8);
+		Cam.Eye = At + Vec(-0.3, -1.0, 0.0).Unit() * Dist + Vec(0.0, 0.0, EyeH);
+		Cam.Forward = (At + Vec(0.0, 0.0, LookH) - Cam.Eye).Unit();
+		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
+		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+		Battle::View View;
+		View.Eye = Cam.Eye;
+		View.Right = Cam.Right;
+		View.Up = Cam.Up;
+		View.Forward = Cam.Forward;
+		View.PixelsPerRadian = Cam.Ppr;
+		View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+		View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+		if (bAir || bSea)
+		{
+			Fx.SetDrawBeyond(Fx.AirBeyond());
+		}
+		// (the gun or the vehicle faces across the view, to the right)
+		const Vec Fw = Vec(Cam.Right.X, Cam.Right.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
+		const Vec Side(-Fw.Y, Fw.X, 0.0); // (her left, away from the eye)
+		const Vec Hull = At + Vec(0.0, 0.0, 0.0);
+		int Shots = 0;
+		double Next = 0.1;
+		std::vector<double> Cases; // (a case due over the side)
+		auto Play = [&](double Now)
+		{
+			while (Next <= Now && (Shot == "spg" || Shot == "hatch" || Shots == 0))
+			{
+				++Shots;
+				const double T = Next;
+				if (bAir)
+				{
+					Fx.AirFlak(T, At, std::getenv("FX_FLAK") ? std::getenv("FX_FLAK") : "heavy");
+				}
+				else if (bSea)
+				{
+					for (int Turret = 0; Turret < 3; ++Turret)
+					{
+						Fx.Muzzle(T, At + Fw * (-14.0 + 14.0 * Turret) + Vec(0.0, 0.0, 6.0), (Fw * 0.3 + Side + Vec(0.0, 0.0, 0.3)).Unit(), Turret == 1 ? "tank_gun" : "howitzer", "water");
+					}
+				}
+				else if (Shot == "wisp")
+				{
+					Fx.Muzzle(T, Hull + Fw * 3.2 + Vec(0.0, 0.0, 2.0), Fw + Vec(0.0, 0.0, 0.02), std::getenv("FX_GUN") ? std::getenv("FX_GUN") : "tank_gun", "earth");
+				}
+				else if (Shot == "breech")
+				{
+					Fx.Muzzle(T, Hull + Fw * 3.0 + Vec(0.0, 0.0, 1.2), Fw + Vec(0.0, 0.0, 0.15), "howitzer", "earth");
+					if (std::getenv("FX_TEN_OFF") == nullptr) // (FX_TEN_OFF=1: the words not given, as the scene then calls nothing)
+					{
+						Fx.Steam(T + 1.4, 300007, Hull + Vec(0.0, 0.0, 1.0), (Fw * -1.0 + Vec(0.0, 0.0, 1.0)).Unit(), 0.25, 0.6, "breech");
+					}
+				}
+				else
+				{
+					const bool bSpg = Shot == "spg";
+					Fx.Muzzle(T, Hull + Fw * 4.2 + Vec(0.0, 0.0, 2.0), Fw + Vec(0.0, 0.0, bSpg ? 0.3 : 0.02), "tank_gun", "earth");
+					TheaterFx::AfterShotAsk Ask;
+					Ask.Kind = "tank";
+					Ask.bBreech = bSpg;
+					Ask.bLoader = bSpg;
+					Ask.bHatch = !bSpg;
+					Ask.HatchOpen = 1.0;
+					Ask.bStopped = true;
+					Ask.Shot = Shots;
+					Ask.bBarrelSmoke = std::getenv("FX_TEN_OFF") == nullptr;
+					Ask.bHatchFumes = Ask.bBarrelSmoke;
+					Ask.bCasesOut = Ask.bBarrelSmoke;
+					const TheaterFx::AfterShot Out = TheaterFx::AfterShotOf(Ask);
+					if (Out.bBreechPuff)
+					{
+						Fx.Steam(T + 1.4, 300000 + Shots, Hull + Fw * -0.6 + Vec(0.0, 0.0, 1.9), (Fw * -1.0 + Vec(0.0, 0.0, 1.0)).Unit(), 0.25, 0.6, "breech");
+					}
+					if (Out.bOverSide)
+					{
+						Fx.ThrowCase(T + 1.4, Hull + Fw * -0.8 - Side * 1.5 + Vec(0.0, 0.0, 1.9), Side * -1.0, "spg", 7000 + Shots);
+					}
+					if (Out.bHatchFumes)
+					{
+						Fx.Steam(T + 1.4, 300000 + Shots, Hull + Fw * -0.3 + Vec(0.0, 0.0, 2.6), Vec(0.0, 0.0, 1.0), 0.3, 2.0, "hatch_fumes");
+					}
+					if (Out.bHatchCase)
+					{
+						Fx.ThrowCase(T + 1.4, Hull + Fw * -0.3 + Vec(0.0, 0.0, 2.8), Side * -1.0, "tank", 7000 + Shots);
+					}
+				}
+				Next += EnvNum("FX_EVERY", 8.0);
+			}
+		};
+		std::vector<Vec> Men;
+		if (!bAir)
+		{
+			const Vec M = At + Fw * -4.5 - Side * 2.0;
+			Men.push_back(Vec(M.X, M.Y, bSea ? 2.0 : Swell(nullptr, M.X, M.Y)));
+		}
+		Fx.Draw(-0.1, View);
+		std::sort(Frames.begin(), Frames.end());
+		int Drawn = 0;
+		for (int Frame : Frames)
+		{
+			for (; Drawn < Frame; ++Drawn)
+			{
+				Play(Drawn / 30.0);
+				Fx.Draw(Drawn / 30.0, View);
+			}
+			Drawn = Frame + 1;
+			const double Now = Frame / 30.0;
+			Play(Now);
+			const int N = Fx.Draw(Now, View);
+			Battle::Lamp Lamps[2];
+			const int NL = Fx.Lamps(Now, Lamps, 2, Fx.DayOf(View.SmokeLight));
+			Canvas C;
+			C.Init(W, H);
+			Paint(C, Cam, Lamps, NL, Men, false, bSea || bAir);
+			if (Shot == "wisp" || Shot == "spg" || Shot == "hatch" || Shot == "breech")
+			{
+				// (her hull, or the gun's shield and trail: a plain grey-green box for scale)
+				const double Col[3] = { ToLinear(84), ToLinear(88), ToLinear(70) };
+				if (Shot == "breech")
+				{
+					Box(C, Cam, Hull + Fw * 0.6, Fw, 1.2, 1.8, 1.4, Col, 1);
+				}
+				else
+				{
+					Box(C, Cam, Hull, Fw, 6.2, 3.0, Shot == "spg" ? 1.9 : 2.3, Col, 1);
+				}
+			}
+			if (bSea)
+			{
+				const double Col[3] = { ToLinear(96), ToLinear(100), ToLinear(104) };
+				Box(C, Cam, At + Vec(0.0, 0.0, -1.0), Fw, 60.0, 14.0, 6.0, Col, 1);
+			}
+			Puffs(C, Cam, Fx, N);
+			char Name[256];
+			std::snprintf(Name, sizeof(Name), "%s/ten-%s-f%04d.ppm", OutDir.c_str(), Shot.c_str(), Frame);
+			C.Save(Name);
+			std::printf("frame %d: %d puffs, %d shots\n", Frame, N, Shots);
+		}
+		return 0;
+	}
+}
+
 int main(int Argc, char** Argv)
 {
 	if (Argc < 6)
@@ -2906,6 +3079,10 @@ int main(int Argc, char** Argv)
 	if (Size == "fleet")
 	{
 		return Fleet(Book, OutDir, Ground, Frames, W, H);
+	}
+	if (Size == "ten")
+	{
+		return Ten(Book, OutDir, Ground, Frames, W, H);
 	}
 	if (Size == "air")
 	{

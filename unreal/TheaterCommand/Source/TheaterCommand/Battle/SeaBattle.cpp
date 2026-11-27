@@ -1822,6 +1822,14 @@ bool ASeaBattle::OpenOn(const FString& Text, const FString& InKey, const FString
 
 	// The effects kit, drawn out to the sea distance (a fleet action is watched from far off).
 	Effects = MakeUnique<FBattleEffects>();
+	// Effects (R2), no false brass at sea (-TheaterSeaNoFalseCases; item 11 of Brian's film details, 26 November): the big
+	// turrets fire by the howitzer's row, whose field-gun case was thrown on the water and left lying there; laid over,
+	// no gun standing on "water" throws one (battle-fx-sea-cases.json, ground_cases.not_on)
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterSeaNoFalseCases")))
+	{
+		Effects->LayOver(TEXT("battle-fx-sea-cases.json"));
+		UE_LOG(LogTheater, Log, TEXT("Sea battle: no ground gun's case thrown on the water (-TheaterSeaNoFalseCases, release 2)"));
+	}
 	// (its ground: a ship's deck where the point lies over one, so a hit that is not on armour bursts on her deck, not at
 	// the sea inside her hull; the sea's face everywhere else)
 	if (!Effects->Begin(Root, UnitsPerMetre, [this](const FVector& Point)
