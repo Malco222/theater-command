@@ -278,7 +278,7 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 		if (S.bFreeView)
 		{
 			Tops.Add({ TEXT("HILL VIEW"), TEXT("I"), TEXT("general:hillview"), S.GeneralEye.HillView() });
-			Tops.Add({ TEXT("LOCK ON"), TEXT("L"), TEXT("general:lockon"), S.GeneralIn.bFollow && S.GeneralEye.Following() >= 0 });
+			Tops.Add({ TEXT("LOCK ON"), TEXT("J"), TEXT("general:lockon"), S.GeneralIn.bFollow && S.GeneralEye.Following() >= 0 });
 		}
 	}
 	auto TopWidth = [&](const FTop& P)
@@ -1660,7 +1660,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			if (S.bFreeView)
 			{
 				Ends.Add({ TEXT("HILL VIEW"), TEXT("I"), TEXT("general:hillview"), S.GeneralEye.HillView() });
-				Ends.Add({ TEXT("LOCK ON"), TEXT("L"), TEXT("general:lockon"), S.GeneralIn.bFollow && S.GeneralEye.Following() >= 0 });
+				Ends.Add({ TEXT("LOCK ON"), TEXT("J"), TEXT("general:lockon"), S.GeneralIn.bFollow && S.GeneralEye.Following() >= 0 });
 			}
 		}
 		// (the map of the field folded away leaves its button at the row's right end, wherever the clock's buttons stand)
@@ -2771,9 +2771,9 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		else if (Key == EKeys::Escape) { Scene->GeneralDo(TEXT("clear")); return FReply::Handled(); }
 		else if (Key == EKeys::C) { Scene->GeneralDo(TEXT("film")); return FReply::Handled(); }
 		else if (Key == EKeys::O) { Scene->GeneralDo(TEXT("topview")); return FReply::Handled(); }
-		// (the free view, release 2: I the hill view, L the lock-on on the unit in hand, or off; one press each, a key
+		// (the free view, release 2: I the hill view, J the lock-on on the unit in hand, or off; one press each, a key
 		// held does not press again; with the row off the keys are nobody's)
-		else if ((Key == EKeys::I || Key == EKeys::L) && S->bFreeView)
+		else if ((Key == EKeys::I || Key == EKeys::J) && S->bFreeView)
 		{
 			if (!Event.IsRepeat())
 			{

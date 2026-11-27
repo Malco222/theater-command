@@ -1672,11 +1672,11 @@ void ALandBattle::GeneralDo(const FString& Word)
 	}
 	else if (Word == TEXT("lockon"))
 	{
-		// (L or LOCK ON, the free view, release 2; Brian, 26 November 2026 04:14Z: the view locks on the unit in hand,
+		// (J or LOCK ON, the free view, release 2; Brian, 26 November 2026 04:14Z: the view locks on the unit in hand,
 		// the first of several, and follows it till he moves the view; pressed while it follows, it lets go)
 		if (S.bFreeView && S.bGeneralEye && !G.bFilm)
 		{
-			// (locked on the unit in hand already, or on one with none in hand: L lets go. Another in hand: the lock
+			// (locked on the unit in hand already, or on one with none in hand: J lets go. Another in hand: the lock
 			// goes over to it.)
 			const int32 Locked = S.GeneralIn.bFollow ? S.GeneralEye.Following() : -1;
 			const int32 Wanted = bHand ? Clip.Chosen().front() : -1;
@@ -1689,11 +1689,11 @@ void ALandBattle::GeneralDo(const FString& Word)
 			{
 				S.GeneralIn.GoBlock = Wanted;
 				S.GeneralIn.bFollow = true;
-				Say("LOCKED ON: THE VIEW FOLLOWS THIS UNIT. MOVE THE VIEW ELSEWHERE, OR PRESS L AGAIN, TO LET GO");
+				Say("LOCKED ON: THE VIEW FOLLOWS THIS UNIT. MOVE THE VIEW ELSEWHERE, OR PRESS J AGAIN, TO LET GO");
 			}
 			else
 			{
-				Say("TAKE A UNIT IN HAND FIRST: L THEN LOCKS THE VIEW ON IT");
+				Say("TAKE A UNIT IN HAND FIRST: J THEN LOCKS THE VIEW ON IT");
 			}
 		}
 	}
