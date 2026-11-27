@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ac185a037 2026-11-26. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 84dc5eab6 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -100648,8 +100648,11 @@
       const d = Math.hypot(p[0] - m.x, p[1] - m.y);
       if (run && (run.stage === "fetch" || run.stage === "up")) {
         const dx = m.x - L3.x, dy = m.y - L3.y, ma = (dx * Math.cos(face) - dy * Math.sin(face)) * feed, ml = dx * Math.sin(face) + dy * Math.cos(face);
-        if (run.stage === "fetch" && ma < S3.lane - 0.8 && ml > -12) m.spot = this.onField(this.leash(sq, toWorld(L3, face, feed * (S3.lane + 1), Math.min(ml, -1) - 6), -4));
-        if (run.stage === "up" && ml < -1.5) m.spot = this.onField(this.leash(sq, toWorld(L3, face, feed * S3.lane, 3), -4));
+        const lane = run.stage === "fetch" ? ma < S3.lane - 0.8 && ml > -12 ? toWorld(L3, face, feed * (S3.lane + 1), Math.min(ml, -1) - 6) : void 0 : ml < -1.5 ? toWorld(L3, face, feed * S3.lane, 3) : void 0;
+        if (lane) {
+          const q = this.leash(sq, lane, -4), c = this.onField(q);
+          if (c[0] === q[0] && c[1] === q[1]) m.spot = q;
+        }
       }
       const under = t - sq.shelledAt < C4.move.shelled || sq.harm > DR.pin.harm, down = this.crewDown(sq, m, false);
       if (run) {
