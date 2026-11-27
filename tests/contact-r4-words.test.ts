@@ -8,13 +8,18 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
 import setup from '../data/campaign/setup-1939.json';
-import { loanHeldLine, setFromWait } from '../src/campaign/arrivalwaits';
+import { arrivalWaitOf, loanHeldLine, setFromWait } from '../src/campaign/arrivalwaits';
 import { divisionsOf } from '../src/campaign/armies';
 import { recordBattle } from '../src/campaign/drawn';
 import { addCorps, atWar, createGame, relocate, startPhase, theWords } from '../src/campaign/game';
+import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { farOn } from '../src/campaign/world';
 import type { Corps, Game, Region } from '../src/campaign/types';
+import '../unreal/TheaterCommand/Rules/campaign-bridge';
+
+type Call = (...a: unknown[]) => unknown;
+const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
 
 const ROWS = (setup as any).expeditions as any[];
 let added = 0;
@@ -94,5 +99,84 @@ describe('W4-1: the loan-hold headline for a corps whose divisions go back, in h
     const { g } = board({ words: { ends: 'surrender' } });
     month(g, 2);
     expect(said(g, 'Lent Test Corps')).toEqual([`The Lent Test Corps is due to lay down its arms this month, ${AT} It fights on, and lays them down the month after it leaves the front.`]);
+  });
+});
+
+// ---- W4-2 (her B2): a held loan's standing line on the corps' own cards ----------------------------------------------
+
+describe("W4-2: a held loan carries a standing line on the corps' own cards every month it is held, built as section 2's", () => {
+  // (Her B2: tray "Its loan is over", its hover the whole line; record card and 3D note by the way the loan ends.)
+  const line = (whole: string): { short: string; whole: string } => ({ short: 'Its loan is over', whole });
+  const relieve = (g: Game, gz: Region): Corps => addCorps(g, 'GER', 'Relief Test Corps', 'inf', 2, gz.id, {});
+  const flagsOf = (g: Game): string => JSON.stringify(g.flags);
+
+  it('leaves for other fronts: the line from the month the hold begins, every month it is held, gone the month the loan ends', () => {
+    const { g, c, gz } = board();
+    expect(arrivalWaitOf(g, c)).toBeNull();
+    month(g, 2);
+    const was = flagsOf(g);
+    expect(arrivalWaitOf(g, c)).toEqual(line('This corps was due to leave for other fronts in October 1939. It goes the month after it leaves the front.'));
+    // (A pure read: nothing written to the save for it.)
+    expect(flagsOf(g)).toBe(was);
+    month(g, 3);
+    expect(arrivalWaitOf(g, c)).toEqual(line('This corps was due to leave for other fronts in October 1939. It goes the month after it leaves the front.'));
+    relieve(g, gz);
+    month(g, 4);
+    expect(c.dead).toBe(true);
+    expect(arrivalWaitOf(g, c)).toBeNull();
+  });
+
+  it('goes back into the corps it came out of: her "go back into {the corps}" line', () => {
+    const { g, c } = board({ drawnFrom: ['Parent Test Corps'] });
+    month(g, 2);
+    expect(arrivalWaitOf(g, c)).toEqual(line('This corps was due to go back into the Parent Test Corps in October 1939. It goes back the month after it leaves the front.'));
+  });
+
+  it('home to its division, his offer to follow: "You are asked then whether to let it go."; the line stops the month the offer is made', () => {
+    const { g, c, j, gz } = board({ awaited: true });
+    month(g, 2);
+    expect(arrivalWaitOf(g, c)).toEqual(line('This corps was due to go home to its division in October 1939. It goes the month after it leaves the front. You are asked then whether to let it go.'));
+    relieve(g, gz);
+    month(g, 3);
+    expect([c.dead, g.flags[`leave:${j}`]]).toEqual([false, 3]);
+    expect(arrivalWaitOf(g, c)).toBeNull();
+  });
+
+  it('home to its division with offers off: no offer follows', () => {
+    const { g, c } = board({ awaited: true });
+    delete g.flags.offers;
+    month(g, 2);
+    expect(arrivalWaitOf(g, c)).toEqual(line('This corps was due to go home to its division in October 1939. It goes the month after it leaves the front.'));
+  });
+
+  it('the line stops with the corps (her B3: the memorial line is enough)', () => {
+    const { g, c } = board();
+    month(g, 2);
+    expect(arrivalWaitOf(g, c)).not.toBeNull();
+    c.dead = true;
+    expect(arrivalWaitOf(g, c)).toBeNull();
+  });
+
+  it('switch off: no line; and a loan never held has none', () => {
+    const off = board({ on: false });
+    month(off.g, 2);
+    expect(arrivalWaitOf(off.g, off.c)).toBeNull();
+    const { g, c, gz } = board();
+    relieve(g, gz);
+    month(g, 2);
+    expect(arrivalWaitOf(g, c)).toBeNull();
+    const held = board();
+    month(held.g, 2);
+    expect(setFromWait(held.g, false)).toBe(true);
+    expect(arrivalWaitOf(held.g, held.c)).toBeNull();
+  });
+
+  it("the 3D corps card's muted note carries the whole line (the bridge's view, `arrivalWait`)", () => {
+    const { g, c } = board();
+    month(g, 2);
+    g.phase = g.order.indexOf('GER');
+    TC().load(saveGame(g));
+    const v = TC().view() as { corps: { name: string; nat: string; arrivalWait?: string }[] };
+    expect(v.corps.filter((x) => x.nat === 'GER' && x.name === c.name).map((x) => x.arrivalWait)).toEqual(['This corps was due to leave for other fronts in October 1939. It goes the month after it leaves the front.']);
   });
 });

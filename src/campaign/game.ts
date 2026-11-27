@@ -5897,6 +5897,18 @@ function standInsOf(g: Game, nat: string, row: any[]): Corps[] {
 export type LoanWay = 'gone' | 'back' | 'down' | 'home' | 'rejoin';
 
 /**
+ * How an `until` row's loan would end for lent corps `c` (`loanHeld`): 'home', 'down', 'back', 'rejoin' or 'gone', as
+ * `loanHeld` says them. Writes nothing.
+ */
+function untilWay(g: Game, nat: string, row: any[], o: any, c: Corps): LoanWay {
+  const drawn = g.flags.open === 1 && !!c.drew?.length && divisionsOf(g, c).every((d) => c.drew!.some((r) => r.name[0] === d.name && r.from !== c.id && !r.conv));
+  // ('rejoin': a regiment a division's row awaits, on the far side, whose loan's end is no offer: the base sends it
+  // home to its division as it goes, `comeHome`, so the hold says so. Sceptic finding S1-9 (b).)
+  return hisOffers(g, nat) && awaitedBy(nat, row[2]) >= 0 ? 'home' : o.ends === 'surrender' && farOn(g) ? 'down' : drawn ? 'back'
+    : farOn(g) && awaitedBy(nat, row[2]) >= 0 && !(g.flags.open === 1 && (c.drew || c.rowed)) ? 'rejoin' : 'gone';
+}
+
+/**
  * A loan's end held by the one contact test (the design director's "3 RULED IN", 01:37Z, 27 November 2026), read where
  * `expeditions` would end the loan of sent row `i` this month, in the contact rule's scope (the theatre draw's, her
  * Q2): the lent corps living, the loan over (an `until` row's by `lentOver`, unless the player's offer of its end is
@@ -5914,11 +5926,7 @@ function loanHeld(g: Game, nat: string, row: any[], o: any, i: number, id: numbe
   let way: LoanWay;
   if (o.until) {
     if (g.flags[leaveKey(i)] !== undefined || g.flags[keptKey(i)] || !lentOver(g, nat, row, o)) return null;
-    const drawn = g.flags.open === 1 && !!c.drew?.length && divisionsOf(g, c).every((d) => c.drew!.some((r) => r.name[0] === d.name && r.from !== c.id && !r.conv));
-    // ('rejoin': a regiment a division's row awaits, on the far side, whose loan's end is no offer: the base sends it
-    // home to its division as it goes, `comeHome`, so the hold says so. Sceptic finding S1-9 (b).)
-    way = hisOffers(g, nat) && awaitedBy(nat, row[2]) >= 0 ? 'home' : o.ends === 'surrender' && farOn(g) ? 'down' : drawn ? 'back'
-      : farOn(g) && awaitedBy(nat, row[2]) >= 0 && !(g.flags.open === 1 && (c.drew || c.rowed)) ? 'rejoin' : 'gone';
+    way = untilWay(g, nat, row, o, c);
     // (A corps the loan's end leaves standing where it is, `rowOver`, takes nobody from the front: nothing to hold, and
     // no way to tell. Read as the base reads it where the loan ends. Sceptic finding S1-9 (a).)
     if (g.flags.open === 1 && (c.drew || c.rowed) && !(o.ends === 'surrender' && farOn(g)) && rowStandsOn(g, c, leaving)) return null;
@@ -5927,6 +5935,25 @@ function loanHeld(g: Game, nat: string, row: any[], o: any, i: number, id: numbe
     way = 'back';
   } else return null;
   return corpsInContact(g, nat, c, new Set(endingNow(g, leaving))) ? { c, way } : null;
+}
+
+/**
+ * The player's own loan the one contact test holds this month (row `i`), as the save has it, for the telling's cards
+ * (arrivalwaits.ts `arrivalWaitOf`, the UI director's B2 of 16:07Z, 27 November 2026): under the switch 'fromWait', the
+ * row his and sent, its lent corps living, the hold told (`rowTold:<i>`, written by `tellLoan` the month it began: the
+ * month the loan was due to end) and its wait written this month (`wait:<i>` is this month: `expeditions` writes it each
+ * month the test holds the loan, and the hold's end clears the telling's flags, `rowDone`). With the way it would end, as
+ * `loanHeld` reads it. Null otherwise. A pure read: it writes nothing.
+ */
+export function loanHeldNow(g: Game, i: number): { c: Corps; way: LoanWay; since: number } | null {
+  const row = ((setup as any).expeditions as any[])[i];
+  if (g.flags.fromWait !== 1 || !g.human || !row || row[1] !== g.human || !g.flags[`sent:${i}`]) return null;
+  const id = g.flags[`lent:${i}`], since = g.flags[`rowTold:${i}`];
+  if (!(id > 0) || since === undefined || g.flags[`wait:${i}`] !== g.turn) return null;
+  const c = g.corps.find((x) => x.id === id && x.nat === row[1] && !x.dead);
+  if (!c) return null;
+  const { o } = rowWords(g, row[1], row);
+  return { c, way: o.until ? untilWay(g, row[1], row, o, c) : 'back', since };
 }
 
 /**

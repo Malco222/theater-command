@@ -26,7 +26,7 @@
  */
 import setup from '../../data/campaign/setup-1939.json';
 import { turnToDate } from '../core/ticket';
-import { allied, atFrontNow, headline, loanBackInto, rowHolds, theWords } from './game';
+import { allied, atFrontNow, headline, loanBackInto, loanHeldNow, rowHolds, theWords } from './game';
 import type { LoanWay } from './game';
 import { contactRuleActs, stopOf } from './history';
 import type { Corps, Game, Region } from './types';
@@ -438,7 +438,7 @@ function waiting(g: Game, nat: string): { i: number; row: any[]; at: number; sin
  * month as section 7 case 8 gives it: "has waited for it since {month}"; and section 7 case 2 for a row that also
  * waits for another row to form): `short` for the tray card ("An arrival waits for it"), `whole` for its hover, the
  * record card and the 3D corps card's muted note. Read from the board as it stands: the line goes the moment the corps
- * leaves the front. Null otherwise.
+ * leaves the front. Where no arrival waits for it, a held loan's line (her B2, `loanStandingOf`). Null otherwise.
  */
 export function arrivalWaitOf(g: Game, c: Corps): { short: string; whole: string } | null {
   if (c.dead || g.flags.fromWait !== 1 || c.nat !== g.human) return null;
@@ -455,6 +455,34 @@ export function arrivalWaitOf(g: Game, c: Corps): { short: string; whole: string
       ? `${due}, and has waited for it since ${since}. It forms the month after ${who} the front.`
       : `${due} and from ${rest}, which ${hasOrHave(unformed)} not formed yet, and has waited for it since ${since}. It forms once ${who} the front and ${rest} ${hasOrHave(unformed)} formed.`;
     return { short: 'An arrival waits for it', whole: theWords(whole) };
+  }
+  return loanStandingOf(g, c);
+}
+
+/**
+ * A held loan's standing line on the corps' own cards (the UI director's B2 of 16:07Z, 27 November 2026: "Yes, a
+ * standing line on the corps' own cards, as section 2"), read by `arrivalWaitOf` where no arrival waits for the corps,
+ * so the tray card, the record card and the 3D note read it where they read section 2's: `short` for the tray card,
+ * "Its loan is over", `whole` for its hover, the record card and the 3D corps card's muted note, by the way the loan
+ * ends, in the month it was due to end (the month the hold began: `rowTold:<i>`, as section 7 case 8 keeps the wait's
+ * month). Every month the test holds the loan (game.ts `loanHeldNow`: the wait written this month), and only then: the
+ * line stops the month the hold ends, and with the corps (her B3). Two ways she has not worded are not built, for her:
+ * the garrison's (tray "Due to lay down its arms"; no record-card sentence) and "go back" where the rule cannot name the
+ * corps. A pure read: it writes nothing.
+ */
+function loanStandingOf(g: Game, c: Corps): { short: string; whole: string } | null {
+  for (const i of ROWS().keys()) {
+    if (g.flags[`lent:${i}`] !== c.id) continue;
+    const h = loanHeldNow(g, i);
+    if (!h || h.c !== c) continue;
+    const since = turnToDate(h.since).label;
+    const into = h.way === 'back' ? loanBackInto(g, c) : null;
+    const whole = h.way === 'gone' ? `This corps was due to leave for other fronts in ${since}. It goes the month after it leaves the front.`
+      : h.way === 'back' ? (into ? `This corps was due to go back into ${named(into)} in ${since}. It goes back the month after it leaves the front.` : null)
+        : h.way === 'home' ? `This corps was due to go home to its division in ${since}. It goes the month after it leaves the front. You are asked then whether to let it go.`
+          : h.way === 'rejoin' ? `This corps was due to go home to its division in ${since}. It goes the month after it leaves the front.`
+            : null;
+    return whole ? { short: 'Its loan is over', whole: theWords(whole) } : null;
   }
   return null;
 }
