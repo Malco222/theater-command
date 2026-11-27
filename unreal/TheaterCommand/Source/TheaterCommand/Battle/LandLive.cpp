@@ -93,10 +93,6 @@ namespace
 		// turns them on for a run. The 3D's -TheaterLandWorn=N stand-in is another flag.)
 		{ TEXT("worn"), TEXT("Worn uniforms"), TEXT("Men long in the line without a rest wear faded, patched kit. Off: every army is turned out fresh."), TEXT("TheaterLandNoWorn"), false, TEXT("TheaterLandRuleWorn") },
 		{ TEXT("mud"), TEXT("Old ruts"), TEXT("A field fought over in the mud keeps its ruts for the next battle there. Off: the ground dries out between battles."), TEXT("TheaterLandNoOldRuts"), false, TEXT("TheaterLandRuleOldRuts") },
-		// (Shell blasts, release 2: Brian, 23 November 05:04Z, "explosions on the ground should be able to take out multiple
-		// people if they are close to it". The drill's, looks only: the rules' counts are untouched. Off until a Mac
-		// off/on line and the art director pass; -TheaterLandRuleBlast turns it on for a run.)
-		{ TEXT("escort"), TEXT("Infantry with tanks"), TEXT("Riflemen near a friendly tank walk behind it for cover as it advances, and step out of the way of their own tanks and lorries. An enemy tank can run a man over. Off: men and vehicles move on their own."), TEXT("TheaterLandNoEscort"), false, TEXT("TheaterLandRuleEscort") },
 		// (Squad life, release 2: Brian, 25 November 13:40Z, "i dont want all the soldiers of a squad doing the exact same
 		// thing at the same time. I want them to work together and look real as individuals apart of a squad". The drill's,
 		// looks only: nothing in the fight reads it, and a battle ends the same with it on or off (tests/land-squad-life). It
@@ -172,6 +168,9 @@ namespace
 		{ TEXT("cars"), TEXT("Armoured cars"), TEXT("Some units bring their army's armoured cars (the German Sd.Kfz. 222, the American M8, the rest a generic car), out ahead on the flanks until the enemy is near, then back behind the unit. Campaign battles only. Off: none drawn."), TEXT("TheaterLandNoCars"), false, TEXT("TheaterLandRuleCars") },
 		{ TEXT("aa"), TEXT("AA vehicles"), TEXT("Some units and batteries bring their army's anti-aircraft vehicles (the American M16, the German flak half-track, the rest a flak lorry), kept behind them. Campaign battles only. Off: none drawn."), TEXT("TheaterLandNoAa"), false, TEXT("TheaterLandRuleAa") },
 		{ TEXT("light"), TEXT("Jeeps and motorcycles"), TEXT("Units bring their army's jeeps, field cars and motorcycles (the Willys jeep, the Kubelwagen, the BMW with its sidecar and more), riding out ahead with the screen or parked behind, despatch riders coming and going. Campaign battles only. Off: none drawn."), TEXT("TheaterLandNoLight"), false, TEXT("TheaterLandRuleLight") },
+		// (Shell blasts, release 2: Brian, 23 November 05:04Z, "explosions on the ground should be able to take out multiple
+		// people if they are close to it". The drill's, looks only: the rules' counts are untouched. Off until a Mac
+		// off/on line and the art director pass; -TheaterLandRuleBlast turns it on for a run.)
 		{ TEXT("blast"), TEXT("Shell blasts"), TEXT("One shell can take out several men standing close to where it bursts; men lying down or in cover are hit less often. Off: each man falls to a shell of his own."), TEXT("TheaterLandNoBlast"), false, TEXT("TheaterLandRuleBlast") },
 		// (Men in lorries, release 1.5: Brian, 23 November 14:10Z, "troops are stuck under the truck", and 15:50Z "yes" to the
 		// ride and the hop out in 1.5 if it passes the pre-check and his Mac in time. The drill seats each lorried man on
@@ -268,6 +267,34 @@ namespace
 		// Off until the island look has its Mac still and the art director's pass; -TheaterLandRuleIsland turns it on
 		// for a run. The campaign side's keys, ticket.look and ticket.latLon, are the Japan and Pacific thread's.)
 		{ TEXT("island"), TEXT("Island ground"), TEXT("A battle on a Pacific island is drawn as that island: beach, reef and palms, or jungle on the big islands, under its own sun. Campaign battles only. Off: it is drawn on the same ground as any other battle."), TEXT("TheaterLandNoIsland"), false, TEXT("TheaterLandRuleIsland") },
+		// (Drawing up while he places his army, release 2: Brian, 26 November 2026 03:45Z, "i should be able to move my
+		// units in a formation before the battle begins during the deployed phase". A control of the setup step and no
+		// battle rule (the design director, 03:50Z): several units dragged as one, a line drawn on his ground, and LINE,
+		// TWO LINES, WEDGE, COLUMN, each place by the rules' own land:place, all of them or none. Off until the Mac and
+		// the art director pass it; -TheaterLandRuleDrawUp turns it on for a run. Name and line the UI director's of
+		// 03:51Z. The rules do not read the key: the screen does (LandBattleCommand.cpp, LandBattleScreen.cpp).)
+		{ TEXT("drawup"), TEXT("Draw up units together before battle"), TEXT("Before the battle begins you can take several units in hand, drag them as one, and draw them up in a line, two lines, a wedge or a column. Off: you place them one at a time, as before. Only how you place them: no result changes."), TEXT("TheaterLandNoDrawUp"), false, TEXT("TheaterLandRuleDrawUp") },
+		// (Groups on the number keys, release 2: Brian, 26 November 2026 03:51Z, "you should be able to group units so
+		// you can hit the #1 and the units tied to it are all selected". Cmd on a Mac, Ctrl elsewhere, with a number
+		// ties those in hand to it; the number takes them in hand again, with Shift adds them, twice glides the view to
+		// them. The clock's pace moves from the numbers to the minus and plus keys while the row is on. A control and
+		// no battle rule. Off until the Mac and the art director pass it; -TheaterLandRuleGroups turns it on for a run.
+		// Name and line the UI director's of 03:53Z. The rules do not read the key: the screen does.)
+		{ TEXT("groups"), TEXT("Groups on the number keys"), TEXT("Tie the units in hand to a number with Cmd and that number (Ctrl on Windows); press the number to take them in hand again, twice to look at them. The clock's pace moves to \u2212 and +. Off: the numbers set the pace, as before. Only how you give orders: no result changes."), TEXT("TheaterLandNoGroups"), false, TEXT("TheaterLandRuleGroups") },
+		// (A map of the field in the corner, release 2: Brian, 26 November 2026 03:45Z, "its would be helpful to see a
+		// small map of the battle on the bottom right to know where everyone is". It shows the field, his units, the
+		// enemy units the field itself shows him and where he is looking (the design director, 03:50Z: the player's
+		// sight only); a click glides the view there, M folds it. Looks only. Off until the Mac and the art director
+		// pass it; -TheaterLandRuleFieldMap turns it on for a run. Name and line the UI director's of 03:51Z. The rules
+		// do not read the key: the screen does (Battle/LandFieldMap, LandBattleScreen.cpp).)
+		{ TEXT("fieldmap"), TEXT("A map of the field in the corner"), TEXT("A small map at the bottom right of the battle shows the field, your units, the enemy your men can see and where you are looking. Click it to look there; M folds it away. Looks only: no result changes."), TEXT("TheaterLandNoFieldMap"), false, TEXT("TheaterLandRuleFieldMap") },
+		// (Infantry with tanks, release 2: Brian, 23 November 05:05Z. NOT looks only: with it on the rules' tanks overrun
+		// foot in the open (sim.escort, sim.overruns, LAND.overrun) and results change (the design director, 27 November
+		// 2026, 01:54Z). So it sits here, with the rows whose lines say "This changes how battles turn out", and its line
+		// says so: the UI director's words of 27 November 2026, 03:49Z, each condition checked against sim.overruns. It is
+		// read when the field opens, as the rows below are. Off until its own gate; -TheaterLandRuleEscort turns it on for
+		// a run.)
+		{ TEXT("escort"), TEXT("Infantry with tanks"), TEXT("Riflemen near a friendly tank walk behind it for cover as it advances, and step out of the way of their own tanks and lorries. An enemy tank can run a man over. Tanks attacking a unit on foot across open ground drive through it and back out, when their own infantry is beside them, the unit is not dug in and has no anti-tank weapon of its own, and no enemy weapon that can hurt a tank reaches their way. Off: men and vehicles move on their own, and no tank drives through a unit. This changes how battles turn out. A change takes effect from the next battle."), TEXT("TheaterLandNoEscort"), false, TEXT("TheaterLandRuleEscort") },
 		// (Attackers stay where they stop to fight, release 2: the art director's number of 26 November 2026 00:50Z and
 		// the design director's rulings of 01:02Z and 01:28Z. Off, a block on an attack order asks afresh every tick
 		// whether it is well in reach, with no memory: its target hovering at that edge, it stands a tick and wheels to
@@ -303,27 +330,6 @@ namespace
 		// battle, the custom battles too: a team's fire shakes by its own harm, and a defence's line stays in its
 		// places while its teams fire. So the line says "into battle", not "campaign battles".)
 		{ TEXT("teams"), TEXT("Support teams in battle"), TEXT("Every infantry corps takes its own machine gun and mortar teams into battle, drawn from its own men, not extra ones, and they fire in support from behind its line. This changes how battles turn out. A change takes effect from the next battle. It works only with \u201CAttackers stay where they stop to fight\u201D and \u201CUnits face the fire that hurts most\u201D on."), TEXT("TheaterLandNoTeams"), false, TEXT("TheaterLandRuleTeams") },
-		// (Drawing up while he places his army, release 2: Brian, 26 November 2026 03:45Z, "i should be able to move my
-		// units in a formation before the battle begins during the deployed phase". A control of the setup step and no
-		// battle rule (the design director, 03:50Z): several units dragged as one, a line drawn on his ground, and LINE,
-		// TWO LINES, WEDGE, COLUMN, each place by the rules' own land:place, all of them or none. Off until the Mac and
-		// the art director pass it; -TheaterLandRuleDrawUp turns it on for a run. Name and line the UI director's of
-		// 03:51Z. The rules do not read the key: the screen does (LandBattleCommand.cpp, LandBattleScreen.cpp).)
-		{ TEXT("drawup"), TEXT("Draw up units together before battle"), TEXT("Before the battle begins you can take several units in hand, drag them as one, and draw them up in a line, two lines, a wedge or a column. Off: you place them one at a time, as before. Only how you place them: no result changes."), TEXT("TheaterLandNoDrawUp"), false, TEXT("TheaterLandRuleDrawUp") },
-		// (Groups on the number keys, release 2: Brian, 26 November 2026 03:51Z, "you should be able to group units so
-		// you can hit the #1 and the units tied to it are all selected". Cmd on a Mac, Ctrl elsewhere, with a number
-		// ties those in hand to it; the number takes them in hand again, with Shift adds them, twice glides the view to
-		// them. The clock's pace moves from the numbers to the minus and plus keys while the row is on. A control and
-		// no battle rule. Off until the Mac and the art director pass it; -TheaterLandRuleGroups turns it on for a run.
-		// Name and line the UI director's of 03:53Z. The rules do not read the key: the screen does.)
-		{ TEXT("groups"), TEXT("Groups on the number keys"), TEXT("Tie the units in hand to a number with Cmd and that number (Ctrl on Windows); press the number to take them in hand again, twice to look at them. The clock's pace moves to \u2212 and +. Off: the numbers set the pace, as before. Only how you give orders: no result changes."), TEXT("TheaterLandNoGroups"), false, TEXT("TheaterLandRuleGroups") },
-		// (A map of the field in the corner, release 2: Brian, 26 November 2026 03:45Z, "its would be helpful to see a
-		// small map of the battle on the bottom right to know where everyone is". It shows the field, his units, the
-		// enemy units the field itself shows him and where he is looking (the design director, 03:50Z: the player's
-		// sight only); a click glides the view there, M folds it. Looks only. Off until the Mac and the art director
-		// pass it; -TheaterLandRuleFieldMap turns it on for a run. Name and line the UI director's of 03:51Z. The rules
-		// do not read the key: the screen does (Battle/LandFieldMap, LandBattleScreen.cpp).)
-		{ TEXT("fieldmap"), TEXT("A map of the field in the corner"), TEXT("A small map at the bottom right of the battle shows the field, your units, the enemy your men can see and where you are looking. Click it to look there; M folds it away. Looks only: no result changes."), TEXT("TheaterLandNoFieldMap"), false, TEXT("TheaterLandRuleFieldMap") },
 		// (Sniper teams, release 2: Brian, 25 November 16:07Z, "should we add snipers? how would that impact the battle?",
 		// then "yes". The rules' LAND.snipers: each side's foot gives its army's share of its power to a few sniper teams,
 		// so the card's odds stand; they change how a battle goes, so this row waits for the design director's ruling and
