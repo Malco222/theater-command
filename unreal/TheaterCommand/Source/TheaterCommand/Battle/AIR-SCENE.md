@@ -1851,3 +1851,86 @@ why are they green?", then of the first matt pictures 03:12Z: "thats white. it s
    shows sparkle: `=,0.32`). Cloud test: Tools/air_show/air_mustang_metal_test.cpp.
    The Mac's stills the art director judges (her 04:58Z list): beside a B-17, sun high and at 14 degrees, from above and
    the chase eye, at 300 m, a slow 10 s orbit, and the same shots with the row off.
+
+85. **Far airscrews a faint blur** (release 2; Brian, 27 November 2026 01:23:16Z: "yeah the far propellers don't move
+   and dont look good"; his picture of the Overview showed each far B-17's airscrew as a big solid disc with a yellow
+   rim). What draws those discs: past 300 m from the eye (450 going out) every aircraft is a copy of its far shape
+   (FMiniatureMesh's far mesh, AirParts::ShapeOf, StillOf, the copies' instanced mesh), all on the aircraft's own solid
+   ink (M_MapSurface). The newer models' far meshes carry their modeller's blur disc, painted blur (3A3A36) with a ring
+   of blur_tip (D9B224 yellow on the American and British ones, B4281F red on the Japanese), and the solid ink draws it
+   as a solid disc (the file's "clear" is not read), the blades standing still behind it. That is the base's drawing,
+   in every build played (a15b57beb, before "Turning airscrews"; that commit is not in this repository, and the far
+   path is the same in this branch's base) and in the next one with the row `flyPropSpin` off; and with that row on
+   whenever M_ScrewHaze is missing. It is not that row's drawing (its haze is grey, 222224, with no yellow), so this is
+   a row of its own and that one is left as it was. On the finer B-17 the solid disc stands 108 levels of 255 off the
+   sky at 434 m and 91 at 832 m, its rim 16 and 12 levels redder than blue on the disc's mean (the cloud test's own
+   painter, 1,008 pixels a radian, the disc 8.2 and 4.3 pixels across). And close to, on her near shape, each hub's 84
+   painted marks (decal and decal_rim, 42 and 42, about half the radius out on each blade) stayed where they were when
+   the blades were taken out to turn as the disc: standing still in the turning disc, with "Turning airscrews" on or
+   off. The Wellington has the same, on two hubs. Looks only: nothing the rules count reads it.
+   How: AAirBattle::PropBlurOn reads the Battle rules card's **Far airscrews a faint blur** (FLandLive's rule
+   `flyPropBlur`; its key begins "fly" so that FLandLive::Start passes it over; never sent to the land rules) once a
+   battle, beside PropSpinOn, as its first shape is made. On, every shape is kept under a key of its own (`|blur`), and:
+   - its far shape loses its blades and its blur disc as "Turning airscrews" takes them (AirScrew::StripScrews,
+     TakeFarScrews; the far machinery of that row runs with either row on: ScrewHazeInk, FarScrews for one on its own
+     mesh, a feathered bomber's own mesh with its blades standing, the sort against the clouds), and the copies draw
+     each airscrew as a faint grey disc in their place (AirScrew::MakeBlurDisc: the haze's rings and 288 triangles,
+     colour 28282A, alpha 0/30/42/0 out from the boss, the tips' band a little stronger) on M_ScrewHaze. It stands 6.3
+     and 5.7 levels off the sky at 434 and 832 m (that row's haze 12.5 and 11.5), red and blue within a level: a grey
+     shimmer at most, no yellow. Without M_ScrewHaze the log says so once and the far shapes stay as before.
+   - its near shape loses the marks inside its discs with the blades (AirScrew::BladeDecals: the finer B-17's 336, the
+     Wellington's 168, every mark either carries; no other aircraft has any, and no far mesh has a mark in a disc).
+   - its near discs (the old disc, or "Turning airscrews"' smear with that row on too) carry the tips' own paint as a
+     faint arc behind each blade, turning with it (AirScrew::MakeTipArcs, 384 triangles, alpha at most 100 of 255 just
+     behind the blade, a faint ring between): the paint read from the file (AirScrew::TipColour: blade_tip, else
+     blur_tip, where the near mesh paints it: C9A030 on the finer B-17 and the Wellington, yellow on the Dauntless,
+     Devastator, Hellcat, Hurricane, Mustang, Spitfire, Warhawk and Wildcat, red on the Betty, Kate, Nell, Val and Zero;
+     none, no arc, on the rest, the Bf 109 and Fw 190 among them), made linear as the aircraft's own ink makes it
+     (Power 2.2), since the airscrews' ink takes a colour's bytes as light. On the old disc the tips' band is 7.4, 5.7
+     and 3.6 levels toward the paint at 50, 150 and 280 m, no pixel moved more than 24 by it; only the near shape has
+     it (under 300 m), never the copies.
+   The near smear stays "Turning airscrews"' alone; both rows on, the far disc is this row's.
+   `-TheaterAirPropBlur` on for a run, `-TheaterAirNoPropBlur` off, `-TheaterRulesFlip=flyPropBlur` clicks the card's
+   switch.
+   The cloud test: Tools/air_show/air_prop_blur_test.cpp in run.sh (every aircraft in Content/Models and Old: the marks
+   found and nothing painted blade, blur or mark left standing in a disc with the row on; no mark in a far disc; the
+   tips' paint as filed; the far disc against today's solid one and against the haze at 434 and 832 m; the tips' arc
+   seen and faint at 50, 150 and 280 m on the old disc and the smear, and turning; the Unreal side's lines from their
+   source). air_prop_spin_test's lines for the far guards now read the shared ones ("either row on"). The row off was
+   proved on the plain C++ side: the base's and the head's air_screw_test, air_prop_spin_test and the light test built
+   with AIR_LIGHT_SCREWS give the same output (AirScrew's additions are new functions only, and PaintKinds' new Decal
+   list is read by nothing else); the Unreal side is read from its source, and the Mac's run 1 below against a build of
+   the branch's base is the real proof.
+   The Mac's run (build_content.sh first, for M_ScrewHaze): the Bremen raid with the finer B-17, the Overview and a ride:
+   1. `-TheaterAirBattle=bremen-b17 -TheaterAirB17Fine -TheaterAirTimeEye=both -TheaterAirNoPropBlur`
+   2. `-TheaterAirBattle=bremen-b17 -TheaterAirB17Fine -TheaterAirTimeEye=both -TheaterAirPropBlur`
+   3. stills by hand: `-TheaterAirBattle=bremen-b17 -TheaterAirB17Fine -TheaterAirPropBlur`, and the same with
+      `-TheaterAirPropSpin` too.
+   Pass: run 1 as before (the picture and the log); run 2's "time eye" frames a second within 1 of run 1's, the log
+   "far airscrews a faint blur: on" with M_ScrewHaze. By eye (a still each, for the art director): at the Overview no
+   solid disc and no yellow rim on any B-17, a faint grey shimmer at each engine, or none; close to, no marks standing
+   still in a turning disc, a faint yellow arc at the tips that turns; a bomber crossing 300 m with no jump that
+   catches the eye from the near disc's faint arc to the far grey disc; no grey checkered discs (M_ScrewHaze missing
+   on a copy). The grey and the alphas are the
+   cloud painter's guess of how M_ScrewHaze lights them; the Mac's eye is the judge, and BlurRgb and BlurAlpha
+   (AirScrew.h) are the numbers to turn.
+   Mended after review (the test only; no game code changed, the row off as before): the cloud test's check that the
+   tips' arc turns measured the arc laid over the disc, and the disc changes the tips' band by itself when it turns, so
+   it passed with the arc standing still or drawn as an even ring. It now turns the arc alone over the sky (its band
+   changes 2.7, 1.3 and 0.4 levels a frame at 50, 150 and 280 m; a still arc 0, an even ring 0.11 at most), checks that
+   round its ring the arc is strongest just behind each blade (alpha 85 against 19, falling once a blade), and reads from
+   AirBattle.cpp that the arc is laid into the turning disc's own section 0. And B1's rule that no blade mark is left
+   standing was the test's own copy: the test now also reads the game's lines (the marks looked up by the triangle, the
+   near shape's keep test with `!bMark`). Each new check fails on a broken copy and passes on the branch.
+
+   **The blade marks mend (a fault in his game, no row; 27 November 2026).** The art director's P48 stills of the close
+   B-17 (r2-play c6eb5a021, the same on his Play icon) showed a red disc in a white ring on her lower fuselage under the
+   wing root and two small red marks under the chin. They are the makers' marks painted on each airscrew blade (paints
+   decal 9E3A2F and decal_rim CFCABA, 84 triangles a hub on the finer B-17 and the Wellington; the only red-and-white
+   paint in B17Fine.json, all of it inside the four airscrew discs). The near shape has taken its blades out to turn as
+   a disc since release 1.5, whatever the rows, but left the marks behind, standing still about half the radius out.
+   Mend: TakeScrews finds the marks (BladeDecals) always and drops them with the blades; only the tips' arc waits for
+   "flyPropBlur". With the row off the near B-17 and Wellington lose those 672 still triangles and nothing else; every
+   other aircraft carries no mark and is drawn as before. Test: air_prop_blur_test's "the blade marks mend" (the marks
+   found before the row's test, the tips' paint inside it; fails on the old lines). The Mac's still to judge it: a close
+   B-17 at the P48 nose-art eye, engines turning, no still red disc anywhere on her.

@@ -286,6 +286,16 @@ namespace
 		// (AAirBattle::B17SheenRead); it is never sent to the land rules.)
 		{ TEXT("flyMustangMetal"), TEXT("Silver Mustang"), TEXT("Every Mustang flies in bare polished metal with her black nose, spinner, glare panel and bands: a bright streak along her back and wings that moves with the eye, darker beneath, her markings satin. The same in every month of the war. Off: her painted coat, as before."), TEXT("TheaterAirNoMustangMetal"), false, TEXT("TheaterAirMustangMetal") },
 		{ TEXT("flyB17Sheen"), TEXT("B-17 paint sheen"), TEXT("The finer B-17s' worn paint takes a soft satin sheen, her metal fittings and glass catch the light, and where a low sun would glare off her she stays matt. Needs Worn B-17 paint. Off: her paint matt, as every aircraft's."), TEXT("TheaterAirNoB17Sheen"), false, TEXT("TheaterAirB17Sheen") },
+		// (Far airscrews a faint blur, release 2: Brian, 27 November 2026 01:23:16Z, "yeah the far propellers don't move and
+		// dont look good"; his picture of the Overview showed each far B-17's airscrew a big solid disc with a yellow rim,
+		// the modeller's blur disc drawn on the far shape's solid ink, as every build played draws it and as "Turning
+		// airscrews" does too without its haze's ink. On: past 300 m no solid disc and no still blades, each airscrew a
+		// faint grey disc on the copies (M_ScrewHaze); close to, the blades' painted marks (the finer B-17's, the
+		// Wellington's) go with the blades and the tips' paint is a faint arc on the turning disc. Looks only: nothing the
+		// rules count reads it. Off until the Mac and the art director have passed it (AIR-SCENE.md item 85);
+		// -TheaterAirPropBlur turns it on for a run, -TheaterAirNoPropBlur off. NOT a fly-it-yourself row: its key begins
+		// "fly" only so that FLandLive::Start passes it over. The air battle reads it once a battle (AAirBattle::PropBlurOn).)
+		{ TEXT("flyPropBlur"), TEXT("Far airscrews a faint blur"), TEXT("Past 300 m each aircraft's airscrews are drawn as a faint, see-through grey disc in place of the solid disc with its yellow rim and the blades standing still; close to, the blades' painted marks turn away with them and the yellow tips show as a faint arc. Off: the far airscrews as before."), TEXT("TheaterAirNoPropBlur"), false, TEXT("TheaterAirPropBlur") },
 		// (Old wrecks, Brian 23 November 20:09Z: starts off as Scarred ground does, until the effects thread's wrecks pass the
 		// art director and 45 fps; -TheaterLandRuleOldWrecks turns it on for a run. The 3D's -TheaterLandOldWrecks=N and
 		// -TheaterLandOldWreckMonths=M stand-ins are other flags.)

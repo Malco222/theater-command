@@ -151,6 +151,9 @@ struct FAirBattleState
 	 * (AAirBattle::MustangMetalRead), and set back to 0 if her file or M_AirPaint is missing or M_AirPaint is older than
 	 * the build: -1 not yet read, 0 off, 1 on. Looks only: her flight is the Mustang's; nothing the rules count reads it. */
 	int MustangMetalOn = -1;
+	/** The Battle rules card's "Far airscrews a faint blur" (rule "flyPropBlur", release 2), read with PropSpinOn
+	 * (AAirBattle::PropBlurOn): -1 not yet read, 0 off, 1 on. Looks only: nothing the rules count reads it. */
+	int PropBlurOn = -1;
 
 	/** The bombers' nose art (AirBattleNoseArt.cpp, release 2): its switch as read when the battle's first frame was drawn
 	 * (-1 not yet read, 0 off, 1 on); the list and the panels' text (Content/Data/NoseArt), read then; each model's panel

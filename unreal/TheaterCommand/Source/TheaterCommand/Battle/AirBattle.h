@@ -609,11 +609,23 @@ private:
 	 * is read, made or drawn otherwise.
 	 */
 	bool PropSpinOn();
+	/**
+	 * The Battle rules card's "Far airscrews a faint blur" (rule "flyPropBlur", -TheaterAirPropBlur; Brian, 27 November
+	 * 2026 01:23:16Z, "yeah the far propellers don't move and dont look good", his picture each far B-17's airscrew a
+	 * solid disc with a yellow rim): read once a battle, with PropSpinOn, into its state's PropBlurOn. On, every shape is
+	 * kept under its own key ("|blur"): its far shape loses its blades and its modeller's blur disc as PropSpinOn's does,
+	 * and the copies draw each airscrew as a faint grey disc in their place (AirScrew's MakeBlurDisc, on ScrewHaze;
+	 * without it the far shape stays as before); close to, the blades' painted marks go with the blades and the tips'
+	 * paint is a faint arc on the turning disc. Either row on, the far machinery of "flyPropSpin" runs (ScrewHazeInk,
+	 * FarScrews, a feathered bomber's own mesh, ResortScrews); the near smear stays "flyPropSpin"'s alone. Off: nothing
+	 * is read, made or drawn otherwise.
+	 */
+	bool PropBlurOn();
 	/** The far airscrews' haze (M_ScrewHaze: M_Highlight's look, usable on the copies), made when the row is first read on;
 	 * null where the content has none (the far shapes then keep their blades, as with the row off; the near smear stays). */
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ScrewHaze;
-	/** The haze's ink while the row is on this battle, else null. */
+	/** The haze's ink while the row (or "flyPropBlur") is on this battle, else null. */
 	UMaterialInterface* ScrewHazeInk() const;
 	/** The finer B-17's paint with its sheen (M_AirPaint, the Battle rules card's "B-17 paint sheen", rule "flyB17Sheen"),
 	 * made as the battle opens with the row on and the material found and current; else null, and nothing draws on it. */

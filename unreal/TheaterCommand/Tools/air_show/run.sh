@@ -110,6 +110,14 @@ AIR_SHOW_B17_FINE=1 "$OUT/air_show_test" "$ROOT/Content/Data/AirBattles/bremen-b
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
   "$HERE/air_prop_spin_test.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_prop_spin_test"
 "$OUT/air_prop_spin_test" "$SRC" "$ROOT"/Content/Models/*.json "$ROOT"/Content/Models/Old/*.json || STATUS=1
+# Far airscrews a faint blur (the Battle rules card's row flyPropBlur; Brian, 27 November 2026 01:23:16Z: "yeah the far
+# propellers don't move and dont look good"): past 300 m the modeller's blur disc, drawn solid with its yellow rim, and
+# the still blades give way to a faint grey disc, 3 to 10 levels off the sky with no yellow; close to, the blades'
+# painted marks go with the blades (none left standing in a disc) and the tips' paint is a faint arc that turns; the
+# row off draws what it drew before (its source). Content/Models and Old.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_prop_blur_test.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_prop_blur_test"
+"$OUT/air_prop_blur_test" "$SRC" "$ROOT"/Content/Models/*.json "$ROOT"/Content/Models/Old/*.json || STATUS=1
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -DAIR_LIGHT_SCREWS -I"$SRC" \
   "$HERE/air_light_test.cpp" "$SRC/Battle/AirLight.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_light_screws_test"
 "$OUT/air_light_screws_test" "$ROOT"/Content/Models/*.json "$ROOT"/Content/Models/Old/*.json || STATUS=1

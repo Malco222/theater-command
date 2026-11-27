@@ -3535,8 +3535,8 @@ void AAirBattle::DrawSky()
 		{
 			RainShafts->SetTranslucentSortPriority(Want == 1 ? -21 : -12);
 		}
-		// (the airscrews' discs and haze, the row "flyPropSpin" on, with the air fight's)
-		if (State && State->PropSpinOn == 1)
+		// (the airscrews' discs and haze, the row "flyPropSpin" or "flyPropBlur" on, with the air fight's)
+		if (State && (State->PropSpinOn == 1 || State->PropBlurOn == 1))
 		{
 			ResortScrews();
 		}
@@ -4482,7 +4482,45 @@ bool AAirBattle::PropSpinOn()
 
 UMaterialInterface* AAirBattle::ScrewHazeInk() const
 {
-	return State && State->PropSpinOn == 1 ? ScrewHaze.Get() : nullptr;
+	return State && (State->PropSpinOn == 1 || State->PropBlurOn == 1) ? ScrewHaze.Get() : nullptr;
+}
+
+bool AAirBattle::PropBlurOn()
+{
+	// The Battle rules card's "Far airscrews a faint blur" (FLandLive's rule "flyPropBlur", release 2; Brian, 27 November
+	// 2026 01:23:16Z: "yeah the far propellers don't move and dont look good", his picture of the Overview each far B-17's
+	// airscrew a big solid disc with a yellow rim, the modeller's blur disc drawn on the far shape's solid ink): read
+	// once a battle with PropSpinOn (ShapeFor), so that every shape it makes follows it. Without the airscrews' own ink
+	// (DiscInk) no screw is found, and the row stays off. Said only when on: off, the battle's log is as it was before.
+	if (!State)
+	{
+		return false;
+	}
+	if (State->PropBlurOn < 0)
+	{
+		State->PropBlurOn = DiscInk && FLandLive::RuleNow(TEXT("flyPropBlur")) ? 1 : 0;
+		if (State->PropBlurOn == 1)
+		{
+			if (!ScrewHaze)
+			{
+				// (the same see-through ink as "flyPropSpin"'s haze, Tools/build_content.py's M_ScrewHaze)
+				if (UMaterialInterface* Haze = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_ScrewHaze.M_ScrewHaze"), nullptr, LOAD_NoWarn | LOAD_Quiet))
+				{
+					ScrewHaze = UMaterialInstanceDynamic::Create(Haze, this);
+					ScrewHaze->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+				}
+			}
+			if (ScrewHaze)
+			{
+				UE_LOG(LogTheater, Display, TEXT("Air battle: far airscrews a faint blur: on (the Battle rules card's Far airscrews a faint blur, or -TheaterAirPropBlur): past 300 m no solid disc and no still blades, each airscrew a faint grey disc (M_ScrewHaze); close to, the tips' paint is a faint arc."));
+			}
+			else
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle: far airscrews a faint blur: on, but /Game/Campaign/Materials/M_ScrewHaze is missing (run Tools/build_content.sh): past 300 m the airscrews stay as before (no faint disc to put in their place); close to, the marks go and the tips' arc is drawn."));
+			}
+		}
+	}
+	return State->PropBlurOn == 1;
 }
 
 UMaterialInterface* AAirBattle::InkFor(const FString& Shape) const
@@ -4570,8 +4608,13 @@ namespace AirParts
 			FVector Hub = FVector::ZeroVector;
 			double Radius = 0.0;
 			int32 Blades = 3;
+			/** Its tips' paint as the file gives it (the row "flyPropBlur", AirScrew::TipColour; alpha 0: none, no arc). */
+			FColor Tip = FColor(0, 0, 0, 0);
 		};
 		TArray<FScrewAt> Screws;
+		/** A far shape stripped with the row "flyPropBlur" on: its airscrews drawn as the faint grey disc
+		 * (AirScrew::MakeBlurDisc), not "flyPropSpin"'s haze. */
+		bool bBlurDisc = false;
 		/** Its bomb bay (the modeller's batch of 21 November: the file's near.part and parts): each door's triangles,
 		 * taken out of the near shape to turn about its hinge (Pivot, Axis, at most Most degrees), and the load racked
 		 * in the bay, hidden once her stick begins to fall. In the shape's frame. */
@@ -4668,9 +4711,14 @@ namespace AirParts
 	/**
 	 * A sculpted aircraft's airscrews (Battle/AirScrew), found by the paints its file gives the points the model was made
 	 * from, in order: their blades are taken out of its near shape, which turns them as discs. Read wrong (its points
-	 * not in the file's order, a screw that is not one) and the blades stay where they are, standing still.
+	 * not in the file's order, a screw that is not one) and the blades stay where they are, standing still. The blades'
+	 * painted marks always go with them (AirScrew's BladeDecals: the finer B-17's and the Wellington's 84 a screw; a
+	 * named mend of a fault in his game, 27 November 2026: left behind, they stood still half the radius out in the
+	 * turning disc, and on the close B-17 read as a red disc in a white ring under the wing root and two red marks under
+	 * the chin, the art director's P48 find). With the row "flyPropBlur" on (bPropBlur) each screw is also given its
+	 * tips' paint (TipColour) for the disc's arc.
 	 */
-	static void TakeScrews(FShape& Shape, const FMiniatureMesh& Made, const FString& Kind, const FVector& Middle, double Fit, double U)
+	static void TakeScrews(FShape& Shape, const FMiniatureMesh& Made, const FString& Kind, const FVector& Middle, double Fit, double U, bool bPropBlur = false)
 	{
 		FString Text;
 		if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models") / (Kind + TEXT(".json")))))
@@ -4709,13 +4757,23 @@ namespace AirParts
 		}
 		TArray<int32> Kept;
 		Kept.Reserve(Shape.Triangles.Num());
+		// (the blades' painted marks in the discs go with the blades, row or no row: the blade marks mend; the row
+		// "flyPropBlur": the tips' paint, off none)
+		const std::vector<bool> Marks = AirScrew::BladeDecals(Points, Paints, Are, Triangles, Found.Screws);
+		unsigned char Tip[3] = { 0, 0, 0 };
+		bool bTip = false;
+		if (bPropBlur)
+		{
+			bTip = AirScrew::TipColour(FileText, Paints, Tip);
+		}
 		// (the blades go, and with them the model's own painted blur disc where it has one: the turning disc stands
 		// in for both, and the blur would draw solid here)
 		auto IsBlur = [&](int32 Point) { return Point >= 0 && static_cast<size_t>(Point) < Paints.size() && Are.IsBlur(Paints[static_cast<size_t>(Point)]); };
 		for (int32 T = 0; T + 2 < Shape.Triangles.Num(); T += 3)
 		{
 			const bool bBlur = IsBlur(Made.Triangles[T]) && IsBlur(Made.Triangles[T + 1]) && IsBlur(Made.Triangles[T + 2]);
-			if (!Found.BladeTriangle[static_cast<size_t>(T / 3)] && !bBlur)
+			const bool bMark = !Marks.empty() && Marks[static_cast<size_t>(T / 3)];
+			if (!Found.BladeTriangle[static_cast<size_t>(T / 3)] && !bBlur && !bMark)
 			{
 				Kept.Append({ Shape.Triangles[T], Shape.Triangles[T + 1], Shape.Triangles[T + 2] });
 			}
@@ -4727,6 +4785,10 @@ namespace AirParts
 			At.Hub = (FVector(S.Hub.X, S.Hub.Y, S.Hub.Z) - Middle) * Fit;
 			At.Radius = S.Radius * Fit;
 			At.Blades = S.Blades;
+			if (bTip)
+			{
+				At.Tip = FColor(Tip[0], Tip[1], Tip[2], 255);
+			}
 			Shape.Screws.Add(At);
 		}
 	}
@@ -5565,7 +5627,8 @@ namespace AirParts
 			return nullptr;
 		}
 		// (the row "flyPropSpin": each airscrew an even haze at its hub, a second section on its own see-through ink, Haze;
-		// the far shape's only, the light shape has no screws. Each face its own corners, facing its own way.)
+		// the far shape's only, the light shape has no screws. Each face its own corners, facing its own way. A far shape
+		// the row "flyPropBlur" stripped draws the faint grey disc in its place, bBlurDisc.)
 		const bool bHaze = Haze && Shape.Screws.Num() > 0;
 		if (bHaze)
 		{
@@ -5573,7 +5636,7 @@ namespace AirParts
 			Attributes.GetPolygonGroupMaterialSlotNames()[Hazed] = TEXT("Haze");
 			for (const FShape::FScrewAt& Screw : Shape.Screws)
 			{
-				const AirScrew::DiscMade Disc = AirScrew::MakeDisc(Screw.Radius, Screw.Blades, true);
+				const AirScrew::DiscMade Disc = Shape.bBlurDisc ? AirScrew::MakeBlurDisc(Screw.Radius, Screw.Blades) : AirScrew::MakeDisc(Screw.Radius, Screw.Blades, true);
 				const int32 Many = static_cast<int32>(Disc.Points.size());
 				TArray<FVertexInstanceID> Faces;
 				Faces.SetNum(Many * 2);
@@ -5634,7 +5697,8 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 	// (and one of a torpedo group a shape of its own: a model with both loads in its file carries its torpedo there,
 	// its bombs anywhere else; FMiniatureMesh::bTorpedoLoad)
 	// (and with the Battle rules card's "Turning airscrews" on, a shape of its own too, its far shape without its blades:
-	// the shapes are kept for the whole run, and a battle with the row off must draw what it drew before)
+	// the shapes are kept for the whole run, and a battle with the row off must draw what it drew before; so too with
+	// "Far airscrews a faint blur", its far shape without its blades and blur disc, its near one without the marks)
 	const bool bScrews = PropSpinOn();
 	// (and with the Battle rules card's "Bomber markings" from its second bundle on, the finer B-17 a shape of her own without
 	// her "#" number, which stands where her squadron's codes go: the row off, her key and her shape as before)
@@ -5657,8 +5721,11 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 	// (the Battle rules card's "Silver Mustang": a Mustang drawn from her bare metal file (ModelFor's name) carries that
 	// file's own finish the same way (OwnOnto); its name is already its own, so no key is added)
 	const bool bBare = State && State->MustangMetalOn == 1 && BareNow && Name.StartsWith(TEXT("MustangBare:"));
+	// (and with the Battle rules card's "Far airscrews a faint blur" on, a shape of its own: its far form without the
+	// solid disc, its marks with its blades)
+	const bool bBlur = PropBlurOn();
 	FString ShapeKey = (bStandIn ? FString::Printf(TEXT("%s@%.1f|%s"), *Name, Span, *Model) : Name) + (Scheme > 0 ? FString::Printf(TEXT("|scheme%d"), Scheme) : FString())
-		+ (bTorpedo ? TEXT("|torpedo") : TEXT("")) + (bLetters ? TEXT("|letters") : TEXT("")) + (bScrews ? TEXT("|screws") : TEXT(""));
+		+ (bTorpedo ? TEXT("|torpedo") : TEXT("")) + (bLetters ? TEXT("|letters") : TEXT("")) + (bBlur ? TEXT("|blur") : TEXT("")) + (bScrews ? TEXT("|screws") : TEXT(""));
 	if (bSkin)
 	{
 		ShapeKey += TEXT("|skin");
@@ -5699,7 +5766,7 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 			Name.Split(TEXT(":"), &Kind, &Whose);
 			if (DiscInk)
 			{
-				AirParts::TakeScrews(Near, Made, Kind, Middle, Fit, UnitsPerMetre);
+				AirParts::TakeScrews(Near, Made, Kind, Middle, Fit, UnitsPerMetre, bBlur);
 			}
 			FColor Navy;
 			const bool bNavy = bStandIn && AirParts::NavyCoat(Nation, Model, Navy);
@@ -5733,18 +5800,21 @@ FString AAirBattle::ShapeFor(const FString& Model, const FString& Nation, bool b
 					AirParts::Recoat(Away.Colors, FMiniatureMesh::VehicleColour(Nation).ToFColor(true), Navy);
 				}
 				// (the row "flyPropSpin": its airscrews out of the far shape as well, to turn as its copies' haze; only with
-				// the haze's ink there to draw them, else the far shape keeps its blades: never no airscrew at all)
-				if (bScrews && Near.Screws.Num() > 0 && ScrewHazeInk())
+				// the haze's ink there to draw them, else the far shape keeps its blades: never no airscrew at all. The row
+				// "flyPropBlur" the same, its copies drawing the faint grey disc in their place, bBlurDisc.)
+				if ((bScrews || bBlur) && Near.Screws.Num() > 0 && ScrewHazeInk())
 				{
 					const int32 Before = Away.Triangles.Num() / 3;
+					const TCHAR* Row = bBlur ? TEXT("far airscrews a faint blur") : TEXT("turning airscrews");
 					if (AirParts::TakeFarScrews(Away, Far, Near, Kind, Middle, Fit))
 					{
-						UE_LOG(LogTheater, Display, TEXT("Air battle: turning airscrews: %s's far shape %d triangles, %d after its %d airscrews' blades and blur disc are taken out."),
-							*ShapeKey, Before, Away.Triangles.Num() / 3, Away.Screws.Num());
+						Away.bBlurDisc = bBlur;
+						UE_LOG(LogTheater, Display, TEXT("Air battle: %s: %s's far shape %d triangles, %d after its %d airscrews' blades and blur disc are taken out."),
+							Row, *ShapeKey, Before, Away.Triangles.Num() / 3, Away.Screws.Num());
 					}
 					else
 					{
-						UE_LOG(LogTheater, Warning, TEXT("Air battle: turning airscrews: %s's far airscrews are not its near ones, so its far shape keeps its blades standing still."), *ShapeKey);
+						UE_LOG(LogTheater, Warning, TEXT("Air battle: %s: %s's far airscrews are not its near ones, so its far shape keeps its blades standing still."), Row, *ShapeKey);
 					}
 				}
 				Shapes.Add(ShapeKey + TEXT("|far"), MoveTemp(Away));
@@ -5893,9 +5963,17 @@ void AAirBattle::PlaneNear(int32 Key, UProceduralMeshComponent* Mesh, bool bNear
 			// (the row "flyPropSpin": its stronger smear, sorted against the clouds as the air fight's effects are)
 			const bool bSmear = State && State->PropSpinOn == 1;
 			AirParts::DiscOf(Screw.Radius, Screw.Blades, Points, Triangles, Normals, Colours, bSmear);
+			// (the row "flyPropBlur": its tips' paint a faint arc behind each blade, laid over the disc, turning with it;
+			// close to only, the far copies' disc is grey. Sorted as "flyPropSpin"'s, either row on.)
+			const bool bTips = State && State->PropBlurOn == 1 && Screw.Tip.A > 0;
+			if (bTips)
+			{
+				const unsigned char Tip[3] = { Screw.Tip.R, Screw.Tip.G, Screw.Tip.B };
+				AirParts::LayDisc(AirScrew::MakeTipArcs(Screw.Radius, Screw.Blades, Tip), FVector::ZeroVector, Points, Triangles, Normals, Colours);
+			}
 			Disc->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
 			Disc->SetMaterial(0, DiscInk);
-			if (bSmear)
+			if (bSmear || (State && State->PropBlurOn == 1))
 			{
 				Disc->SetTranslucentSortPriority(ScrewSort());
 			}
@@ -6040,7 +6118,8 @@ void AAirBattle::FarScrews(FPlaneMade& Made, UProceduralMeshComponent* Mesh, con
 		{
 			if ((Still & (1 << K)) == 0)
 			{
-				AirParts::LayDisc(AirScrew::MakeDisc(Far->Screws[K].Radius, Far->Screws[K].Blades, true), Far->Screws[K].Hub, Points, Triangles, Normals, Colours);
+				AirParts::LayDisc(Far->bBlurDisc ? AirScrew::MakeBlurDisc(Far->Screws[K].Radius, Far->Screws[K].Blades) : AirScrew::MakeDisc(Far->Screws[K].Radius, Far->Screws[K].Blades, true),
+					Far->Screws[K].Hub, Points, Triangles, Normals, Colours);
 			}
 		}
 		if (Triangles.Num() > 0)
@@ -6660,8 +6739,9 @@ void AAirBattle::Draw(double Real)
 		// ridden one never: B17FineNearRoom, the rule "b17Fine")
 		const bool bNearShape = Lit && Lit->bTwoShapes && (bRidden || Away < (Lit->bNear ? 450.0 : 300.0) || (Lit->bNear && Lit->bBay && P.Bay > 0.0))
 			&& (bRidden || B17FineNearRoom(*Lit));
-		// (the row "flyPropSpin": one with an engine stopped and feathered stays on its own mesh, where its still blades are)
-		const bool bFeatheredFar = S.PropSpinOn == 1 && P.bFeathered && !P.DeadEngines.empty() && ScrewHazeInk();
+		// (the row "flyPropSpin", or "flyPropBlur": one with an engine stopped and feathered stays on its own mesh, where its
+		// still blades are)
+		const bool bFeatheredFar = (S.PropSpinOn == 1 || S.PropBlurOn == 1) && P.bFeathered && !P.DeadEngines.empty() && ScrewHazeInk();
 		if (bCopiesOn && Lit && Lit->bTwoShapes && !bNearShape && !bFeatheredFar)
 		{
 			const bool bLightWanted = Away * Enlarged > LightFromM * (Lit->bCopy && Lit->bLight ? 0.9 : 1.0);
@@ -6708,7 +6788,7 @@ void AAirBattle::Draw(double Real)
 			if (Lit->bTwoShapes)
 			{
 				PlaneNear(P.Key, Mesh, bNearShape);
-				if (S.PropSpinOn == 1)
+				if (S.PropSpinOn == 1 || S.PropBlurOn == 1)
 				{
 					FarScrews(*Lit, Mesh, P, !bNearShape);
 				}
