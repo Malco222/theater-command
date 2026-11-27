@@ -7169,9 +7169,11 @@ namespace TheaterFx
 		if (bOwnCount)
 		{
 			const uint64_t SeedsWas = Seeds;
+			const size_t FlashesWas = Flashes.size(); // (the dry burst's lamp taken away with it)
 			AirFlakLaid(Now, At, "heavy");
 			LingerFrom(First, LingerOf("flak"), Now, At, 1.0, 0.0);
 			Bits.erase(Bits.begin() + static_cast<std::ptrdiff_t>(First), Bits.end());
+			Flashes.erase(Flashes.begin() + static_cast<std::ptrdiff_t>(FlashesWas), Flashes.end());
 			Seeds = SeedsWas;
 			LingerAfter = LingerNo;
 			LingerNo = Mix64(PlaceKey(At) ^ (static_cast<uint64_t>(static_cast<int64_t>(std::clamp(Now, 0.0, 1.0e9) * 1000.0)) + 0xF1A4C0ull));

@@ -282,6 +282,7 @@ namespace
 			{
 				K.Fx.AirFlak(1.0 + 0.7 * I, Vec(40.0 * I - 100.0, 600.0 + 25.0 * I, 1500.0), Mixed[I]);
 				Counts.push_back(K.Fx.LingerNo);
+				Counts.push_back(K.Fx.Flashes.size()); // (one lamp a burst: the dry heavy one taken away)
 			}
 			size_t First = K.Fx.Bits.size();
 			K.Fx.AirFlak(6.0, Vec(30.0, 650.0, 1510.0), "heavy");
@@ -307,7 +308,7 @@ namespace
 			SameAt += PiecesOff[I] == PiecesOn[I] ? 1u : 0u;
 		}
 		Check(!PiecesOff.empty() && PiecesOn == PiecesOff, "on: a heavy burst and a cannon's hit after light and medium ones, piece for piece as off", Say("%.0f of %.0f the same", static_cast<double>(SameAt), static_cast<double>(PiecesOff.size())));
-		Check(CountsOn == CountsOff, "on: the shared linger count after each burst and after the hit where it was off", Say("LingerNo %.0f after the six, %.0f after the hit", static_cast<double>(CountsOn[5]), static_cast<double>(CountsOn.back())));
+		Check(CountsOn == CountsOff, "on: the shared linger count and the lamps (one a burst) after each burst and after the hit where they were off", Say("LingerNo %.0f after the six, %.0f after the hit; %.0f lamps after the six", static_cast<double>(CountsOn[10]), static_cast<double>(CountsOn.back()), static_cast<double>(CountsOn[11])));
 	}
 
 	// ----------------------------------------------------------------------------------------------------------------
