@@ -31,6 +31,13 @@ afterEach(() => { while (added > 0) { ROWS.pop(); added--; } spy.calls.length = 
 const addRow = (row: any[]): number => { ROWS.push(row); added++; return ROWS.length - 1; };
 const flagsOf = (g: Game, i: number): string[] => Object.entries(g.flags).filter(([k]) => k === `rowTold:${i}` || k === `rowAt:${i}` || k === `rowFront:${i}` || k.startsWith(`rowId:${i}:`)).map(([k, v]) => `${k}=${v}`).sort();
 
+/**
+ * (The contact rule's second form, the design director's ruling of 06:10Z, 26 November 2026: a corps beside the enemy
+ * is held while it took part in the battle last resolved on its ground, or where nobody of its side keeps its province.
+ * This board's corps at the front stand with others of their side, so each is set, by hand, as having fought the battle
+ * last resolved where it stands, and is held as the board means. The relieved case: tests/contact-fact.test.ts.)
+ */
+const fought = (g: Game): void => { if (g.flags.fromWait !== 1) return; g.lastBattle = {}; for (const c of g.corps) if (!c.dead) (g.lastBattle[c.reg] ??= []).push(c.id); };
 interface Rows { i: number; u: number; k: number }
 interface Board extends Rows { g: Game; c: Corps; d: Corps; nat: string; at: number }
 
@@ -56,6 +63,7 @@ function board(g: Game, nat: string, place: string, rows: Rows, on = true): Boar
   const k = rows.k;
   if (on) Object.assign(g.flags, { [`rowTold:${k}`]: 1, [`rowAt:${k}`]: g.byName.Magdeburg.id, [`rowFront:${k}`]: 1, [`rowId:${k}:0`]: 99999 });
   g.turn += 1;
+  fought(g);
   startPhase(g, nat);
   return { ...rows, g, c, d, nat, at: g.byName[place].id };
 }

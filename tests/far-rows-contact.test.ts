@@ -36,12 +36,20 @@ const D56 = '56th Division', SAKAGUCHI = 'Sakaguchi Detachment (56th Mixed Infan
 
 /** A grand campaign with the far side on and the switch 'fromWait' set by hand, as a campaign opened with it on carries it. */
 const open = (seed: number, seat: string | null): Game => { const g = startOpen(createGame(seed, seat)); g.flags.fromWait = 1; return g; };
-const inContact = (g: Game, c: Corps): boolean => corpsInContact(g, c.nat, c);
 const rows = (setup as any).expeditions as any[][];
 const index = (name: string): number => rows.findIndex((r) => r[1] === 'JAP' && r[2] === name);
 const corps = (g: Game, name: string): Corps | undefined => g.corps.find((c) => c.nat === 'JAP' && c.name === name && !c.dead);
 const at = (g: Game, c: Corps): string => g.regions[c.reg].name;
-const month = (g: Game, t: number): void => { g.turn = t; startPhase(g, 'JAP'); };
+/**
+ * (The contact rule's second form, the design director's ruling of 06:10Z, 26 November 2026: a corps beside the enemy
+ * is held while it took part in the battle last resolved on its ground, or where nobody of its side keeps its province.
+ * This board's corps at the front stand with others of their side, so each is set, by hand, as having fought the battle
+ * last resolved where it stands, and is held as the board means. The relieved case: tests/contact-fact.test.ts.)
+ */
+const fought = (g: Game): void => { if (g.flags.fromWait !== 1) return; g.lastBattle = {}; for (const c of g.corps) if (!c.dead) (g.lastBattle[c.reg] ??= []).push(c.id); };
+/** Read on this board: every corps as having fought where it stands (`fought`), so the test reads `beside`, as the board means. */
+const inContact = (g: Game, c: Corps): boolean => { fought(g); return corpsInContact(g, c.nat, c); };
+const month = (g: Game, t: number): void => { fought(g); g.turn = t; startPhase(g, 'JAP'); };
 const months = (g: Game, from: number, to: number): void => { for (let t = from; t <= to; t++) month(g, t); };
 const enemyHeld = (g: Game, r: Region): boolean => (!!r.ctrl && atWar(g, 'JAP', r.ctrl)) || r.units.some((u) => !u.dead && atWar(g, 'JAP', u.nat));
 /** A province of Japan's with no enemy on it and an enemy at war beside it: a place in the line. */
@@ -201,6 +209,21 @@ describe('on, a dated row takes no corps standing in contact', () => {
     expect(src.reg).toBe(line.id);
     expect(g.flags[`wait:${index(LESS)}`]).toBe(30);
   });
+
+  it("the contact rule's second form: the same corps there, relieved by a corps of its side it did not fight beside, is lifted to Hsuchow in the row's month", () => {
+    // (The design director's ruling of 06:10Z, 26 November 2026: held only where nobody of its side keeps its province,
+    // unless it took part in the battle last resolved there. No battle is recorded on this board.)
+    const g = open(3, null);
+    const src = corps(g, GARRISON)!;
+    const line = g.regions.find((r) => r.ctrl === 'JAP' && r.name !== 'Hsuchow' && !enemyHeld(g, r) && r.nb.some((j) => enemyHeld(g, g.regions[j])))!;
+    relocate(g, src, line);
+    addCorps(g, 'JAP', 'Relief Test Corps', 'inf', 2, line.id, {});
+    expect(corpsInContact(g, 'JAP', src)).toBe(false);
+    g.turn = 30; startPhase(g, 'JAP');
+    expect(corps(g, GARRISON)).toBeUndefined();
+    expect(at(g, corps(g, LESS)!)).toBe('Hsuchow');
+    expect(g.flags[`wait:${index(LESS)}`]).toBeUndefined();
+  });
 });
 
 describe("the dial: the rule acts at stops 3 to 5, and at the book's stops the book's rows keep their book", () => {
@@ -293,8 +316,9 @@ describe("a closed book, the far side on: an old-chart row through the far side'
     expect(setStop(g, stop, true)).toBe(true);
     for (const t of shut) g.flags[`hist:off:${t}`] = 1;
     const held = addCorps(g, 'GER', 'Test Corps', 'inf', 2, g.byName.Grenzmark.id, {});
-    expect(corpsInContact(g, 'GER', held)).toBe(true);
+    expect(inContact(g, held)).toBe(true);
     const i = addRow([2, 'GER', 'Test Army', 'inf', 2, 'Magdeburg', { from: ['Test Corps'] }]);
+    fought(g);
     g.turn = 2; startPhase(g, 'GER');
     return { g, i, held };
   };
