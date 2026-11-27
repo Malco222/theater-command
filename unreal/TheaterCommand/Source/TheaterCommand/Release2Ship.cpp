@@ -290,6 +290,27 @@ namespace
 
 	const TCHAR* const TrialStem = TEXT("-TheaterLandTrial=");
 
+	/** -TheaterLandTrial=+word,word as typed: words laid on top of the list's own, never in place of them. */
+	TArray<FString> TrialAdded;
+
+	/** What was typed after -TheaterLandTrial= (the first such token), or nothing. */
+	FString TypedTrial()
+	{
+		const FString Line = FCommandLine::Get();
+		const int32 At = FindToken(Line, TrialStem);
+		if (At == INDEX_NONE)
+		{
+			return FString();
+		}
+		const int32 From = At + FCString::Strlen(TrialStem);
+		int32 End = From;
+		while (End < Line.Len() && !FChar::IsWhitespace(Line[End]))
+		{
+			++End;
+		}
+		return Line.Mid(From, End - From);
+	}
+
 	/** The list's own -TheaterLandTrial=: every trial word that is on, put back as one word ("houses,church,..."). */
 	void LayTrial()
 	{
@@ -305,6 +326,10 @@ namespace
 			{
 				Words.Add(Release2Ship::At(Index).Words);
 			}
+		}
+		for (const FString& Word : TrialAdded)
+		{
+			Words.AddUnique(Word);
 		}
 		if (Words.Num() > 0)
 		{
@@ -360,7 +385,19 @@ void Release2Ship::Apply()
 	{
 		return; // (the content and sound builds run the editor as a commandlet: the list is the game's, not theirs)
 	}
-	bTrialTyped = FindToken(FCommandLine::Get(), TrialStem) != INDEX_NONE;
+	// (-TheaterLandTrial=word replaces the list's trial words for a test run; -TheaterLandTrial=+word adds to them)
+	const FString Typed = TypedTrial();
+	TrialAdded.Reset();
+	if (Typed.StartsWith(TEXT("+")))
+	{
+		Typed.Mid(1).ParseIntoArray(TrialAdded, TEXT(","), true);
+		for (FString& Word : TrialAdded)
+		{
+			Word.TrimStartAndEndInline();
+		}
+		TrialAdded.RemoveAll([](const FString& Word) { return Word.IsEmpty(); });
+	}
+	bTrialTyped = FindToken(FCommandLine::Get(), TrialStem) != INDEX_NONE && !Typed.StartsWith(TEXT("+"));
 	TArray<FString> On, Off;
 	for (int32 Index = 0; Index < Count(); ++Index)
 	{
