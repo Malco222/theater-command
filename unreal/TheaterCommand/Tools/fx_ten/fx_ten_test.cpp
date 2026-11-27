@@ -443,7 +443,7 @@ namespace
 		{
 			const std::vector<Bit> W = WispOf(On, Off, Guns[G], Eye, Vec(0.0, 0.0, 2.0));
 			Count[G] = static_cast<int>(W.size());
-			bFew = bFew && W.size() >= 10 && W.size() <= 15;
+			bFew = bFew && W.size() >= 28 && W.size() <= 36;
 			FirstAt[G] = 1e9;
 			for (const Bit& B : W)
 			{
@@ -451,14 +451,14 @@ namespace
 				LastAt[G] = std::max(LastAt[G], B.Born + B.Life - 1.0);
 				Widest = std::max(Widest, B.R1);
 				Thickest = std::max(Thickest, B.Alpha);
-				bSizes = bSizes && B.R0 >= 0.03 && B.R1 <= 0.5;
+				bSizes = bSizes && B.R0 >= 0.06 && B.R1 <= 0.5;
 				bFloor = bFloor && B.LeastPx >= 2.0;
 			}
 			bWhen = bWhen && FirstAt[G] >= (G == 2 ? 5.0 : 3.0) && LastAt[G] <= (G == 2 ? 6.5 + 7.0 + 3.0 + 0.5 : 4.0 + 6.0 + 2.6 + 0.5);
 		}
-		Check(bFew, "on: one shot of each gun, 10 to 15 puffs of wisp", Say("%.0f, %.0f, %.0f", Count[0], Count[1], Count[2]));
+		Check(bFew, "on: one shot of each gun, 28 to 36 small puffs of wisp (one ribbon)", Say("%.0f, %.0f, %.0f", Count[0], Count[1], Count[2]));
 		Check(bWhen, "on: from 3 to 4 s after the shot (the howitzer 5 to 6.5 s), gone by 13 s", Say("from %.1f, %.1f, %.1f s; gone %.1f s", FirstAt[0], FirstAt[1], FirstAt[2], std::max(LastAt[0], std::max(LastAt[1], LastAt[2]))));
-		Check(bSizes && Thickest <= 0.501, "on: thin, 0.03 m at the bore to 0.5 m, see-through (alpha 0.5 at most)", Say("widest %.2f m, alpha at most %.2f", Widest, Thickest));
+		Check(bSizes && Thickest <= 0.401, "on: thin, 0.06 m at the bore to 0.5 m, see-through (alpha 0.4 at most)", Say("widest %.2f m, alpha at most %.2f", Widest, Thickest));
 		Check(bFloor, "on: each puff held to 2 px across, thinner to match (no twinkle)", "least_px 2");
 		Check(WispOf(Off, Off, "tank_gun", Eye, Vec(0.0, 0.0, 2.0)).empty(), "off: no wisp (the recipe has no after_wisp)", "none");
 		const Vec FarEye(-280.0, -150.0, 3.0);
@@ -544,7 +544,7 @@ namespace
 		const Fight FOff = Play(Off, FEye, FLook, 9000, Exchange(40));
 		const Fight FOn = Play(On, FEye, FLook, 9000, Counting(Exchange(40)));
 		Check(MostWisps <= 16, "on: forty guns for five minutes: at most 16 wisps at once (most)", Say("%.0f at most", static_cast<double>(MostWisps)));
-		Check(FOn.MostBits <= FOff.MostBits + 16 * 15, "on: the densest frame no fuller than off and every wisp's puffs", Say("%.0f pieces, %.0f off", static_cast<double>(FOn.MostBits), static_cast<double>(FOff.MostBits)));
+		Check(FOn.MostBits <= FOff.MostBits + 16 * 36, "on: the densest frame no fuller than off and every wisp's puffs", Say("%.0f pieces, %.0f off", static_cast<double>(FOn.MostBits), static_cast<double>(FOff.MostBits)));
 		// (the wisps in a room of their own: the gates that read how full the screen is read it without them, so even
 		// here every piece off is laid on)
 		Check(MissingAll(FOff, FOn) == 0, "on: forty guns, every piece off laid on (the wisps' own room)", Say("%.0f missing", static_cast<double>(MissingAll(FOff, FOn))));
@@ -556,7 +556,7 @@ namespace
 		}
 		std::printf("     twelve guns: most pieces %zu off, %zu on; forty guns: most pieces %zu off, %zu on, most wisps at once %zu; off's pieces not laid on %.2f%%\n", TOff.MostBits, TOn.MostBits, FOff.MostBits, FOn.MostBits, MostWisps, 100.0 * static_cast<double>(MissingAll(FOff, FOn)) / static_cast<double>(std::max<size_t>(Pieces, 1)));
 		std::printf("     time: the densest frame's Draw, %.3f ms on (%zu pieces), %.3f ms off (%zu pieces); a frame's mean %.3f ms on, %.3f ms off\n", FOn.DensestMs, FOn.MostBits, FOff.DensestMs, FOff.MostBits, FOn.MeanMs, FOff.MeanMs);
-		std::printf("     on the screen (1600 px, 42 degrees): a wisp puff 0.03 to %.2f m is %.1f to %.1f px at 40 m, %.1f to %.1f px at 300 m (held to 2)\n", Widest, Px(0.06, 40.0), Px(2.0 * Widest, 40.0), Px(0.06, 300.0), Px(2.0 * Widest, 300.0));
+		std::printf("     on the screen (1600 px, 42 degrees): a wisp puff 0.06 to %.2f m is %.1f to %.1f px at 40 m, %.1f to %.1f px at 300 m (held to 2)\n", Widest, Px(0.12, 40.0), Px(2.0 * Widest, 40.0), Px(0.12, 300.0), Px(2.0 * Widest, 300.0));
 	}
 
 	// ----------------------------------------------------------------------------------------------------------------

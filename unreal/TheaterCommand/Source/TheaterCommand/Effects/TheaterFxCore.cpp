@@ -3875,11 +3875,15 @@ namespace TheaterFx
 		const Rgb Young = Picture(W + "colour", Rgb::FromPicture(139, 141, 144));
 		const Rgb Old = Picture(W + "colour_old", Rgb::FromPicture(154, 156, 158));
 		double LastEnd = Now;
+		// (the mend, 26 November: one ribbon, not a row of dashes: many small round puffs close together, each leaning a
+		// little further along one slow curl than the last, a little jitter on it)
+		const double Phase = D.U(0.0, 2.0 * Pi);
 		for (int I = 0; I < Puffs; ++I)
 		{
 			const double Share = (I + 0.5) / Puffs;
 			const double Late = D.U(-0.3, 0.3);
-			const double Curl = D.Bell();
+			const double Jitter = D.Bell();
+			const double Curl = 0.8 * std::sin(3.0 * Pi * Share + Phase) + 0.3 * Jitter;
 			Bit B;
 			B.Born = Now + From + For * std::clamp(Share + Late / Puffs, 0.0, 1.0);
 			B.Life = std::max(0.3, Life.Pick(D));
