@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e0d3c6f9f 2026-11-27. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ddef90d11 2026-11-27. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -40590,7 +40590,7 @@
   }
   function trainedEdge(g2, f) {
     const R2 = f.bombers;
-    if (f.nat !== g2.human || !R2 || !R2.on.length) return 0;
+    if (!R2 || !R2.on.length) return 0;
     let h = 0;
     for (const b of R2.on) h += b[4];
     return BOMBERS.school.edge * h / (R2.on.length * BOMBERS.school.most);
