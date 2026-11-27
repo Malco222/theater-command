@@ -536,13 +536,15 @@ describe('what the player\'s finished crews are worth', () => {
     expect(drilled.drilled).toBeCloseTo(BOMBERS.school.edge, 9);
     expect(drilled.gunLoss).toBe(plain.gunLoss);
     expect(drilled.bomberLoss - drilled.gunLoss).toBeCloseTo((plain.bomberLoss - plain.gunLoss) * (1 - BOMBERS.school.edge), 9);
-    // Half the crews trained half as well: a quarter of the edge. And never for a nation the player does not run.
+    // Half the crews trained half as well: a quarter of the edge. And the same for a nation the player does not run
+    // (one rule for all sides: the mend of 27 Nov 2026, the design director's 05:13Z item 6).
     f.bombers!.on.forEach((b, i) => { b[4] = i % 2 ? BOMBERS.school.most / 2 : 0; });
     const half = f.bombers!.on.filter((_, i) => i % 2).length / f.bombers!.on.length;
     expect(trainedEdge(g, f)).toBeCloseTo((BOMBERS.school.edge * half) / 2, 9);
+    const quarter = trainedEdge(g, f), seated = assessAir(g, [f], 'bomb', t).bomberLoss;
     g.human = 'UK';
-    expect(trainedEdge(g, f)).toBe(0);
-    expect(assessAir(g, [f], 'bomb', t).bomberLoss).toBe(plain.bomberLoss);
+    expect(trainedEdge(g, f)).toBe(quarter);
+    expect(assessAir(g, [f], 'bomb', t).bomberLoss).toBe(seated);
   });
 });
 
