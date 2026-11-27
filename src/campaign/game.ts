@@ -5802,8 +5802,21 @@ let PASS: { g: Game; nat: string; leaving: (x: Corps) => boolean } | null = null
  */
 export const loanEnding = (g: Game, nat: string): ((x: Corps) => boolean) => (PASS && PASS.g === g && PASS.nat === nat ? PASS.leaving : loanLeaving(g, nat, [], [], [], []));
 
-/** The living corps `ending` says leave in this pass. */
-const endingNow = (g: Game, ending: (x: Corps) => boolean): Corps[] => g.corps.filter((x) => !x.dead && ending(x));
+/**
+ * A lent regiment of the player's whose loan's end is his offer (`loanStays`, the part of it that writes nothing: his
+ * offers on, and a division's row awaits it): it stays on the map until he says yes, and then leaves in the pass that
+ * reads his answer alone. So it is no leaver for a corps beside it (the rule sceptic's finding S4-2, round 4). Writes
+ * nothing.
+ */
+const offerKeeps = (g: Game, x: Corps): boolean => hisOffers(g, x.nat)
+  && ((setup as any).expeditions as any[]).some((r2, j) => r2[1] === x.nat && r2[6]?.until && g.flags[`lent:${j}`] === x.id && awaitedBy(x.nat, r2[2]) >= 0);
+
+/**
+ * The living corps `ending` says leave in this pass, as the contact rule and its telling read them (`loanHeld`,
+ * `leavingOf`): never a regiment whose loan's end is the player's offer (`offerKeeps`). The base's own readers of
+ * `ending` (drawn.ts `rowOver`, and `rowStandsOn` beside it) read it as it was.
+ */
+const endingNow = (g: Game, ending: (x: Corps) => boolean): Corps[] => g.corps.filter((x) => !x.dead && ending(x) && !offerKeeps(g, x));
 
 /**
  * The ONE leaving set (the design director's "Q1 YES: the telling reads leavingNow", 01:37Z, 27 November 2026; section
