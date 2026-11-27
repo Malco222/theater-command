@@ -195,14 +195,14 @@ describe("a garrison that would take the field on an island over its room", () =
 });
 
 describe("a swap onto an island with fewer than 1,000 men's room left after it", () => {
-  it("says the island is full, counting the men who stay, and promises no room that is not there (the section 3 full line with the swap's change; the sceptic's lean until the UI director rules)", () => {
+  it("says the island would still be full after the swap, counting the men who stay, and promises no room that is not there (the UI director, 00:19Z, 27 November 2026, U2)", () => {
     const g = war('JAP');
     const formosa = at(g, 'Formosa'), taihoku = at(g, 'Taihoku');
     clear(g, formosa);
     const stays = corps(g, 'JAP', 'Stays', formosa, 3, 44500 / 45000);
     const out = corps(g, 'JAP', 'Goes Out', formosa, 1, 400 / 15000);
     const c = corps(g, 'JAP', 'Thousand Men', taihoku, 1, 1000 / 15000);
-    expect(whyNoSwap(g, c, out)).toBe('Formosa is full: it has room for about 45,000 men and 45,000 of yours stay there after the swap.');
+    expect(whyNoSwap(g, c, out)).toBe('Formosa would still be full after the swap: it has room for about 45,000 men, and 45,000 of yours stay there.'); // (the UI director, 00:19Z, 27 November 2026, U2)
     // With 1,000 or more left after it, the section 3 line with "stay there after the swap", as built.
     stays.str = 43000 / 45000; c.str = 3000 / 15000; out.str = 100 / 15000;
     expect(whyNoSwap(g, c, out)).toBe('Formosa has room for 3 divisions, about 45,000 men, and 43,000 of yours stay there after the swap: only 2,000 more can go, and Thousand Men has 3,000.');
