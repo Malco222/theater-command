@@ -539,7 +539,9 @@ int main(int Argc, char** Argv)
 			"M_AirPaint loaded only with its row on (the B-17's sheen, the silver Mustang's), its sentinel read before anything is set");
 		// (her glare guard's sun: set once the key light is aimed, after HideTheTable, a stage battle's sun with it; and
 		// not before Raise, where a stage battle's TowardSun is still the default 30 degrees)
-		const size_t Hide = Battle.find("\tHideTheTable();\n\tif (SheenInk && SheenNow)\n\t{");
+		// (the hitch's naming line, -TheaterSpeedLog, may stand between: PressSteps.Step("HideTheTable"))
+		size_t Hide = Battle.find("\tHideTheTable();\n\tif (SheenInk && SheenNow)\n\t{");
+		if (Hide == std::string::npos) Hide = Battle.find("\tHideTheTable();\n\tPressSteps.Step(TEXT(\"HideTheTable\"));\n\tif (SheenInk && SheenNow)\n\t{");
 		const size_t SunAfter = Hide == std::string::npos ? std::string::npos : Battle.find("\t\tSheenSunSet();", Hide);
 		const size_t Raised = Battle.find("\tRaise();\n");
 		Check(Count(Battle, "\tHideTheTable();\n") == 1 && Hide != std::string::npos && SunAfter != std::string::npos && SunAfter - Hide < 400 && Raised != std::string::npos && Raised < Hide
