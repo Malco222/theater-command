@@ -152,7 +152,7 @@ int main(int Argc, char** Argv)
 
 	std::map<int, Mine> State;
 	// totals
-	double DuelFrames = 0, TailFrames = 0, VertFrames = 0, FiringFrames = 0, TurningFrames = 0, FrameCount = 0;
+	double DuelFrames = 0, TailFrames = 0, VertFrames = 0, FiringFrames = 0, TurningFrames = 0;
 	int FlatCircles = 0, Bounces = 0, DuelOpens = 0, HeadOnOpens = 0;
 	std::vector<double> DuelFromBombers, DuelAltBelowBombers, DuelSpeed, DuelTurn, FireRange, DuelLength, DuelSink;
 	int FighterFalls = 0, CleanTail = 0, CleanHeadOn = 0, FiredNoAspect = 0, NoShooter = 0, VictimUnaware = 0;
@@ -257,7 +257,6 @@ int main(int Argc, char** Argv)
 			}
 			S.bWasDuel = bDuel;
 			S.LastTarget = P.Target;
-			++FrameCount;
 			const double H = P.Heading * Deg;
 			double Turn = 0.0;
 			if (S.bHas) Turn = Wrap(H - S.LastH) / Dt;
