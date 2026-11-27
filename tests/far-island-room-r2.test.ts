@@ -5,7 +5,9 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { addCorps, createGame, removeCorps, retreatTarget, startPhase } from '../src/campaign/game';
+import { addCorps, createGame, placed, removeCorps, retreatTarget, startPhase, whyNoRoom } from '../src/campaign/game';
+import { saveGame } from '../src/campaign/save';
+import '../unreal/TheaterCommand/Rules/campaign-bridge';
 import { fits, roomRefusal } from '../src/campaign/islands';
 import { startOpen } from '../src/campaign/staff';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
@@ -13,6 +15,15 @@ import type { Corps, Game, Region } from '../src/campaign/types';
 import { chartDist } from '../src/campaign/wrap';
 import setup from '../data/campaign/setup-1939.json';
 
+type Call = (...a: unknown[]) => any;
+const TC = (): Record<string, Call> => (globalThis as unknown as { TC: Record<string, Call> }).TC;
+/** A corps of infantry put down for the test, with its month in hand. */
+function corps(g: Game, nat: string, name: string, at: Region, divs = 1, str = 1): Corps {
+  const c = addCorps(g, nat, name, 'inf', divs, at.id, {});
+  c.str = str;
+  c.ap = c.apMax;
+  return c;
+}
 const ROWS = (setup as unknown as { expeditions: any[][] }).expeditions;
 /** The record's two rows for Kwajalein in January 1942 (T27): the Maizuru 2nd landing force and the 61st Guard Unit. */
 const KWAJ = [171, 263];
@@ -108,5 +119,36 @@ describe('a fortress crew takes no room on an island, whatever the fortress rows
     const one = addCorps(g, 'USA', 'One more (a test row)', 'inf', 2, hon.id, {});
     one.str = 19000 / 30000;
     expect(fits(g, pearl, 'USA', [one])).toBe(true);
+  }, 300000);
+});
+
+describe('an island holds no more corps than any ground (the design director, 00:20Z, 27 November 2026, D5)', () => {
+  it("Singapore with five small corps of his refuses a sixth whose men fit, in the sentence any ground that holds five says; seven on a retreat; engineers and the coast guns apart", () => {
+    const g = war('UK');
+    const sg = g.byName['Singapore'], jo = g.byName['Johore'];
+    // (Malaya Command and four small corps of 3,000: five fighting corps, 19,050 men of a room of 75,000; the coast
+    // guns, a fortress crew, beside them.)
+    for (let k = 1; k <= 4; k++) corps(g, 'UK', `Small ${k}`, sg, 1, 0.2);
+    const field = placed(g, sg, 'UK');
+    expect(field.filter((u) => u.kind !== 'eng' && u.kind !== 'fort').length).toBe(5);
+    expect([...field, ...(sg.garr ?? [])].some((u) => u.kind === 'fort')).toBe(true);
+    const sixth = corps(g, 'UK', 'Sixth (a test row)', jo, 1, 0.2), seventh = corps(g, 'UK', 'Seventh (a test row)', jo, 1, 0.2);
+    expect(fits(g, sg, 'UK', [sixth])).toBe(false);
+    expect(whyNoRoom(g, sixth, sg)).toBe('Singapore has no room for another corps.');
+    expect(roomRefusal(g, sg, [sixth, seventh])).toBe('Singapore has no room for 2 more corps.');
+    TC().load(saveGame(g));
+    expect(TC().railTip([sixth.id], sg.id).no).toBe('Singapore has no room for another corps.');
+    expect(TC().railTip([sixth.id, seventh.id], sg.id).no).toBe('Singapore has no room for 2 more corps.');
+    // A retreat: seven, as on any ground.
+    expect(fits(g, sg, 'UK', [sixth, seventh], { slack: 2 })).toBe(true);
+    const eighth = corps(g, 'UK', 'Eighth (a test row)', jo, 1, 0.2);
+    expect(fits(g, sg, 'UK', [sixth, seventh, eighth], { slack: 2 })).toBe(false);
+    // Engineers are not barred by the five.
+    const eng = addCorps(g, 'UK', 'Engineers (a test row)', 'eng', 1, jo.id, {});
+    expect(fits(g, sg, 'UK', [eng])).toBe(true);
+    // Ground that is no island: five, as it always was.
+    for (const u of [...jo.units]) if (u.nat === 'UK' && u.kind !== 'eng') removeCorps(g, u);
+    for (let k = 1; k <= 5; k++) corps(g, 'UK', `Johore ${k}`, jo, 1, 0.2);
+    expect(fits(g, jo, 'UK', [corps(g, 'UK', 'One more', g.byName['Kuala Lumpur'], 1, 0.2)])).toBe(false);
   }, 300000);
 });

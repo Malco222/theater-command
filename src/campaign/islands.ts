@@ -102,6 +102,17 @@ function onlyMine(g: Game, r: Region, nat: string, going: readonly Corps[]): boo
 const engThere = (g: Game, r: Region, nat: string, going: readonly Corps[]): number =>
   placed(g, r, nat).filter((u) => u.kind === 'eng' && !going.includes(u)).length;
 
+/**
+ * Whether the side's fighting corps on an island's ground, with those going, number no more than any ground holds:
+ * five, seven on a retreat (STACK + slack). Engineers and fortress crews apart, as for men (`counted`). The design
+ * director, 00:20Z, 27 November 2026, D5: "YES, both: men, and no more corps than any ground holds (five, seven on a
+ * retreat)." The field's corps, as the five are counted on any ground (`placed`); the town's are its own.
+ */
+function fewEnough(g: Game, r: Region, nat: string, gone: readonly Corps[], plan: readonly Corps[], line: number, slack: number): boolean {
+  const here = placed(g, r, nat).filter((u) => counted(u) && !gone.includes(u)).length;
+  return here + plan.filter(counted).length + line <= STACK + slack;
+}
+
 /** How a fit is asked. */
 export interface FitAsk {
   /**
@@ -147,7 +158,7 @@ export function fits(g: Game, r: Region | undefined | null, nat: string, going: 
     if (!line) return true;
     let sending = 0;
     for (const c of [...plan, ...going]) if (c.kind !== 'eng') sending += menOfCorps(c);
-    return menOn(g, r, nat, gone) + sending <= (isle.room + slack) * MEN_PER_DIV;
+    return menOn(g, r, nat, gone) + sending <= (isle.room + slack) * MEN_PER_DIV && fewEnough(g, r, nat, gone, plan, line, slack);
   }
   if (o.rows === undefined) {
     const here = placed(g, r, nat).filter((u) => !going.includes(u));
@@ -297,6 +308,10 @@ export function roomRefusal(g: Game, r: Region | undefined | null, corps: Corps[
   const big = tooLarge(g, r, line);
   if (big) return big;
   if (line.length && !fits(g, r, nat, line)) {
+    // (The men fit and the count does not: the sentence the game says on any ground that holds five (game.ts
+    // whyNoTrainFor and the march's), the design director, 00:20Z, 27 November 2026, D5: "use the sentence the game
+    // already says on any ground that holds five".)
+    if (!fewEnough(g, r, nat, corps, [], line.length, 0) && menOn(g, r, nat, corps) + line.reduce((n, c) => n + menOfCorps(c), 0) <= room) return `${r.name} has no room for ${line.length === 1 ? 'another corps' : `${line.length} more corps`}.`;
     const there = menOn(g, r, nat, corps), sending = line.reduce((n, c) => n + menOfCorps(c), 0), left = room - there;
     const yours = onlyMine(g, r, nat, corps) ? ' of yours' : '';
     // (What he sends would read at or under what can go once rounded: say the shortfall instead, the UI director's
