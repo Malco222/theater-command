@@ -24,9 +24,10 @@ import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Region } from './types';
 import { groundRules } from './ground';
 import { downBetween } from './rivers';
-import { allied, atWar, headline, inDesert, lineOwner } from './game';
+import { allied, atWar, ensureSupply, headline, inDesert, lineOwner } from './game';
 import { besieged } from './siege';
 import { junctionOpenTo, worksBurnt } from './prizes';
+import { fitsGauge, gaugeOn, relay, relayChoice, tellRelay } from './gauge';
 
 /** A line between two neighbouring provinces (a is the lower id), and the point where it crosses from one into the other. */
 export interface RailLink { a: number; b: number; x: number; y: number }
@@ -150,6 +151,8 @@ export function mendHasty(g: Game, nat: string): number[] {
 /** Whether a train of this nation can run from one province to the next: a line between them, both ends friendly and whole, the bridges standing. */
 export function railOpen(g: Game, nat: string, a: number, b: number): boolean {
   if (!railsAt(a).includes(b) || railCut(g, a) || railCut(g, b) || downBetween(g, a, b)) return false;
+  // (Release 2, gauge.ts, behind its switch) Its trains run only on track of its own gauge.
+  if (!fitsGauge(g, nat, a) || !fitsGauge(g, nat, b)) return false;
   // The station is in the town: no train runs through a province whose town is under siege, whoever is winning there.
   // A great junction is the exception: it lies outside the town, and the army that holds the field runs its trains through.
   const end = (r: Region): boolean => (allied(g, nat, r.ctrl) && !besieged(g, r)) || junctionOpenTo(g, nat, r);
@@ -265,17 +268,7 @@ export function railheads(g: Game, nat: string): Int16Array | null {
   if (have) return have;
   const ok = g.supply[nat];
   if (!ok) return null;
-  const d = new Int16Array(g.regions.length).fill(-1);
-  const net: number[] = [];
-  for (let i = 0; i < ok.length; i++) if (ok[i] === 2) { d[i] = 0; net.push(i); }
-  for (let i = 0; i < net.length; i++) {
-    const a = net[i];
-    if (g.flags[key(a)] !== undefined) continue; // the stores are there, but no train leaves
-    for (const j of railsAt(a)) {
-      if (d[j] === 0 || !ok[j] || g.flags[key(j)] !== undefined || downBetween(g, a, j)) continue;
-      d[j] = 0; net.push(j);
-    }
-  }
+  const { d, net } = workingNet(g, nat, ok);
   // Beyond the railhead everything comes by road: a step for every province.
   const q = net.slice();
   for (let i = 0; i < q.length; i++) {
@@ -285,6 +278,48 @@ export function railheads(g: Game, nat: string): Int16Array | null {
     }
   }
   return (g.railhead[nat] = d);
+}
+
+/**
+ * A nation's working net from a supply picture (`ok`: 2 where its stores are): every province joined to its stores by
+ * whole, friendly track, 0 in `d` (-1 elsewhere), in the order the walk found them. (Release 2, gauge.ts, behind its
+ * switch: only track of its own gauge carries its trains. Off, the walk is the one it always was.)
+ */
+export function workingNet(g: Game, nat: string, ok: Uint8Array): { d: Int16Array; net: number[] } {
+  const gauge = gaugeOn(g);
+  const d = new Int16Array(g.regions.length).fill(-1);
+  const net: number[] = [];
+  for (let i = 0; i < ok.length; i++) if (ok[i] === 2) { d[i] = 0; net.push(i); }
+  for (let i = 0; i < net.length; i++) {
+    const a = net[i];
+    if (g.flags[key(a)] !== undefined) continue; // the stores are there, but no train leaves
+    if (gauge && !fitsGauge(g, nat, a)) continue; // nor where the track is not of its gauge
+    for (const j of railsAt(a)) {
+      if (d[j] === 0 || !ok[j] || g.flags[key(j)] !== undefined || downBetween(g, a, j)) continue;
+      if (gauge && !fitsGauge(g, nat, j)) continue;
+      d[j] = 0; net.push(j);
+    }
+  }
+  return { d, net };
+}
+
+/**
+ * (Release 2, gauge.ts, behind its switch) A nation's railway troops re-lay this month's provinces of captured track to
+ * its own gauge, from its working net as the supply picture stands, before its supply is drawn (game.ts startPhase).
+ * Returns the provinces. Nothing with the switch off.
+ */
+export function relayMonth(g: Game, nat: string): number[] {
+  if (!gaugeOn(g)) return [];
+  ensureSupply(g);
+  const d = railheads(g, nat), ok = g.supply[nat];
+  if (!d || !ok) return [];
+  // (The net it re-lays from is track its own trains run on: a depot on track of another gauge is stores, not a railhead.)
+  const net = d.map((v, i) => (v === 0 && fitsGauge(g, nat, i) ? 0 : -1)) as Int16Array;
+  const whole = (a: number, b: number): boolean => !railCut(g, a) && !railCut(g, b) && !downBetween(g, a, b);
+  const done = relayChoice(g, nat, net, (r) => ok[r] === 2, railsAt, whole, (r) => railCut(g, r));
+  for (const r of done) relay(g, r, nat);
+  tellRelay(g, nat, done);
+  return done;
 }
 
 /** Forgets every nation's railheads: called whenever the supply picture is drawn, so that they are counted from it afresh. */

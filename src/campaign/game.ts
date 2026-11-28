@@ -52,8 +52,9 @@ import { teamFire, teamFireLine, teamFireOn, type TeamFire } from './teamfire';
 import { isTeam, TEAMS, teamsIn } from './teams';
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, onWheels, riverBetween, riverName, worksName } from './rivers';
 import { bridgingMonth, bridgingOn, columnAt, columnFor, crossOver } from './bridging';
+import { fitsGauge, gaugeName, gaugeOn, homeGauge, trackGauge } from './gauge';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
-import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
+import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, relayMonth, resetRailheads, workingNet } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willBurn } from './prizes';
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
@@ -884,6 +885,12 @@ export function lineOwners(g: Game): string[] {
 }
 export const lineOwner = (g: Game, o: string): boolean => lineOwners(g).includes(o);
 
+/**
+ * What a step of the long line onto ground not yet held costs: the gauge and the roads, or (release 2, gauge.ts, behind
+ * its switch) the roads alone, the gauge being read from the track itself.
+ */
+export const freshStep = (g: Game): number => (gaugeOn(g) ? EASTERN.stepConverted : EASTERN.stepFresh);
+
 /** True when this corps is campaigning on Soviet ground in winter without the equipment for it. */
 export function frozen(g: Game, nat: string, r: Region): boolean {
   return weather(g).winter && EASTERN.deepOwners.includes(r.owner) && !EASTERN.winter.hardy.includes(nat) && !winterReady(g, nat);
@@ -915,7 +922,7 @@ export function lineDrag(g: Game, c: Corps, to: Region): number {
   const roads = EASTERN.roads;
   if (!allied(g, c.nat, to.ctrl)) {
     const w = weather(g);
-    length = reach[c.reg] + EASTERN.stepFresh * (w.mud || w.winter ? EASTERN.badWeather : 1);
+    length = reach[c.reg] + freshStep(g) * (w.mud || w.winter ? EASTERN.badWeather : 1);
   }
   for (const [max, extra] of EASTERN.drag) if (length <= max) return roads + extra;
   return roads;
@@ -1137,12 +1144,14 @@ export function computeSupply(g: Game): void {
   // What each step of the long line costs this month, on Soviet-owned ground: a region held long enough has had its
   // track relaid (in the grand campaign, unless the line there is torn up), and mud and winter lengthen every step.
   const w = weather(g), bad = w.mud || w.winter ? EASTERN.badWeather : 1;
+  const gauge = gaugeOn(g);
   const step = new Float64Array(size), home = new Uint8Array(size);
   for (let j = 0; j < size; j++) {
     if (!deep[j]) continue;
     const r = g.regions[j];
     if (EASTERN.deepOwners.includes(r.owner)) home[j] = 1;
-    step[j] = (g.turn - lineSince(g, j, r.since) >= EASTERN.convertAfter && !railCut(g, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
+    // (Release 2, gauge.ts, behind its switch: the gauge half of the line goes, and every step costs the roads' alone.)
+    step[j] = (gauge || (g.turn - lineSince(g, j, r.since) >= EASTERN.convertAfter && !railCut(g, j)) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
   }
   // The pictures kept from the last call hold while the chart, the rules, the long line's owners and the desert are the
   // same; those reaching into the east hold only while every eastern step costs what it did when they were drawn.
@@ -1362,7 +1371,9 @@ export function computeSupply(g: Game): void {
     // Its picture: the one kept, if nothing it was drawn from moved (the provinces its roads may pass are laid out only
     // to draw it again, or when its friends have changed).
     const kept = book.drawn.get(id);
-    if (kept && sameBytes(kept.seeds, seeds) && sameBytes(kept.heads, heads) && railHolds(kept.rail) && roadsHold(kept, friend, road)) {
+    // (Release 2, gauge.ts, behind its switch: a picture reaching into the east is counted from the railheads, which the
+    // cuts, the bridges and the track re-laid move, so it is drawn afresh at every call.)
+    if (kept && sameBytes(kept.seeds, seeds) && sameBytes(kept.heads, heads) && railHolds(kept.rail) && !(gauge && kept.rail) && roadsHold(kept, friend, road)) {
       if (supplyCheck) {
         const pass = maskOf(friend, road);
         if (!sameBytes(pass, kept.mask)) throw new Error(`roads kept for ${id} in month ${g.turn} differ from fresh ones`);
@@ -1436,9 +1447,12 @@ function reachInto(g: Game, id: string, ok: Uint8Array, long: string[], deep: Ui
   if (long.includes(id)) return d; // at home on their own railways
   // Off Soviet ground (ruling 221, L), a harbour the invader holds on the long line's ground is a railhead too.
   const quay = (j: number): boolean => ok[j] === 2 && !rail.home[j];
+  // (Release 2, gauge.ts, behind its switch: counted from the invader's own railheads, by the track's own gauge, so
+  // ground on its working net, re-laid to its gauge, is a railhead too.)
+  const own = gaugeOn(g) ? workingNet(g, id, ok).d : null;
   d.fill(1e6);
   const q: number[] = [];
-  for (let j = 0; j < d.length; j++) if (ok[j] && (!deep[j] || quay(j))) { d[j] = 0; q.push(j); }
+  for (let j = 0; j < d.length; j++) if (ok[j] && (!deep[j] || quay(j) || (own !== null && own[j] === 0 && fitsGauge(g, id, j)))) { d[j] = 0; q.push(j); }
   for (let i = 0; i < q.length; i++) {
     const a = q[i];
     for (const j of g.regions[a].nb) {
@@ -3753,6 +3767,9 @@ function railWalk(g: Game, c: Corps): { out: Set<number>; through: number[]; end
   if (c.kind === 'fort' || c.ap < 4 || sandNoRail(g.regions[c.reg]) || (besieged(g, g.regions[c.reg]) && !junctionOpenTo(g, c.nat, g.regions[c.reg]))) return { out, through: [], ends: [] };
   const net = groundRules(g);
   if (net && railCut(g, c.reg)) return { out, through: [], ends: [] };
+  // (Release 2, gauge.ts, behind its switch) Its trains run only on track of its own gauge.
+  const gauge = net && gaugeOn(g);
+  if (gauge && !fitsGauge(g, c.nat, c.reg)) return { out, through: [], ends: [] };
   const seen = new Uint8Array(g.regions.length);
   const q = [c.reg], ends: number[] = [];
   seen[c.reg] = 1;
@@ -3762,6 +3779,7 @@ function railWalk(g: Game, c: Corps): { out: Set<number>; through: number[]; end
       if (seen[j] || sandNoRail(r)) continue;
       if ((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) continue;
       if (downBetween(g, q[i], j)) continue; // no train crosses a river whose bridges are down
+      if (gauge && !fitsGauge(g, c.nat, j)) continue; // nor runs on track of another gauge
       if (net && railCut(g, j)) {
         // Engineers alone ride the works train to the break itself. Nothing goes on through it.
         if (c.kind === 'eng') { seen[j] = 1; out.add(j); ends.push(j); }
@@ -3812,7 +3830,8 @@ export function railMove(g: Game, c: Corps, to: Region): boolean {
 
 /** Why a corps cannot go by train: the kind of reason, the sentence, and the province the trouble is at, where there is one. */
 export interface NoTrain {
-  code: 'fort' | 'town' | 'spent' | 'desert' | 'siege' | 'cut' | 'noline' | 'foe' | 'steep' | 'room' | 'broken' | 'unjoined';
+  // ('gauge': release 2, gauge.ts, behind its switch: track of another gauge where the train would leave or arrive.)
+  code: 'fort' | 'town' | 'spent' | 'desert' | 'siege' | 'cut' | 'noline' | 'foe' | 'steep' | 'room' | 'broken' | 'unjoined' | 'gauge';
   line: string;
   /**
    * Set where the reason is a break he can act on (a cut, a siege, bridges down): the opening of `line` that takes
@@ -3859,6 +3878,10 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
   if (besieged(g, from) && !junctionOpenTo(g, c.nat, from)) return news('siege', `${from.name} is under siege.`, 'No train leaves it.', from.id);
   if (net && !onNet(from.id)) return { code: 'noline', line: `No railway runs through ${from.name}: ${c.name} goes by road.`, at: from.id };
   if (net && railCut(g, from.id)) return news('cut', `The railway at ${from.name} is cut${cutAside(g, from.id)}.`, `No train leaves until ${mended(from.id)}.`, from.id);
+  // (Release 2, gauge.ts, behind its switch) Track of another gauge carries none of its trains until it is re-laid.
+  const gauge = net && gaugeOn(g);
+  const otherGauge = (r: number): string => `its track is ${gaugeName(trackGauge(g, r))} gauge and ${c.nat === g.human ? 'your' : 'its'} trains need ${gaugeName(homeGauge(c.nat))} gauge. Railway troops re-lay captured track a little every month`;
+  if (gauge && onNet(from.id) && !fitsGauge(g, c.nat, from.id)) return news('gauge', `No train leaves ${from.name}:`, `${otherGauge(from.id)}.`, from.id);
   if (to === undefined || to === c.reg || !g.regions[to]) return null;
   const dest = g.regions[to];
   if (sandNoRail(dest)) return { code: 'desert', line: 'No railway crosses the desert.', at: to };
@@ -3868,12 +3891,13 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
   if (barred(g, c, dest)) return { code: 'steep', line: whyBarred(g, c, dest)!, at: to };
   if (railReach(g, c).has(to)) return hasRoom(g, dest, c) ? null : { code: 'room', line: roomRefusal(g, dest, [c]) ?? roomSays(g, dest) ?? `${dest.name} has no room for another corps.`, at: to };
   if (net && railCut(g, to)) return news('cut', `The railway at ${dest.name} is cut${cutAside(g, to)}.`, `No train runs into it until ${mended(to)}.`, to);
+  if (gauge && !fitsGauge(g, c.nat, to)) return news('gauge', `No train runs into ${dest.name}:`, `${otherGauge(to)}.`, to);
   // Where the line is broken: the way there over the map's lines that meets the fewest breaks, and the first of them.
   // A break on his own side's ground (a cut, a siege, bridges down) is a smaller thing than ground he does not hold,
   // so he is told of the cut on his own line before he is told of a way round through another country.
   const INF = 1e9;
   const cost = new Int32Array(g.regions.length).fill(INF), prev = new Int32Array(g.regions.length).fill(-1);
-  const weigh = (a: number, b: number): number => { const r = g.regions[b]; return !allied(g, c.nat, r.ctrl) && !junctionOpenTo(g, c.nat, r) ? 4 : !open(r) || (net && railCut(g, b)) || downBetween(g, a, b) ? 1 : 0; };
+  const weigh = (a: number, b: number): number => { const r = g.regions[b]; return !allied(g, c.nat, r.ctrl) && !junctionOpenTo(g, c.nat, r) ? 4 : !open(r) || (net && railCut(g, b)) || downBetween(g, a, b) || (gauge && !fitsGauge(g, c.nat, b)) ? 1 : 0; };
   cost[c.reg] = 0;
   const dq: number[] = [c.reg];
   while (dq.length) {
@@ -3897,6 +3921,7 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
     if (net && railCut(g, b)) return news('broken', `The line to ${dest.name} is broken at ${r.name}:`, `the railway there is cut${cutAside(g, b)}.`, b);
     const x = riverBetween(g, a, b);
     if (x && bridgeDown(g, x)) return news('broken', `The line to ${dest.name} is broken between ${g.regions[a].name} and ${r.name}:`, `the bridges over the ${riverName(x)} are down.`, b);
+    if (gauge && !fitsGauge(g, c.nat, b)) return news('broken', `The line to ${dest.name} is broken at ${r.name}:`, `${otherGauge(b)}.`, b);
     a = b;
   }
   return { code: 'unjoined', line: `No train can reach ${dest.name} from ${from.name} this month.` };
@@ -4009,7 +4034,7 @@ export function nearestBreak(g: Game, corps: Corps[]): NoTrain | null {
       seen.add(j);
       const r = g.regions[j];
       if (sandNoRail(r)) continue;
-      const open = !((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) && !downBetween(g, q[i], j) && !(net && railCut(g, j));
+      const open = !((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) && !downBetween(g, q[i], j) && !(net && railCut(g, j)) && fitsGauge(g, c.nat, j);
       if (open) { q.push(j); continue; }
       if (reach.has(j) || !allied(g, c.nat, r.ctrl)) continue;
       const why = whyNoTrain(g, c, j);
@@ -6331,6 +6356,8 @@ export function startPhase(g: Game, nat: string): void {
   pocketMonth(g, nat);
   // The places outside a town this nation's army has now held long enough: they start to work for it.
   tellSettled(g, nat);
+  // (Release 2, gauge.ts, behind its switch) Its railway troops re-lay captured track to its gauge before its supply is drawn.
+  relayMonth(g, nat);
   computeSupply(g);
   cutOffNews(g);
   // Supply columns (release 2, columns.ts): the month's lorries go out from the railhead to the corps beyond it, and some are caught on the road.

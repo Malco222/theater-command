@@ -49,7 +49,7 @@ import { WORLD_FIRST, WORLD_MAP, acrossOcean, attachWorld, beyondEurope, farOn, 
 import { patronOfClient, stationed, tieWar } from './far';
 import { inTheWay, pacificGround, runQuays } from './pacific';
 import { roomAt } from './islands';
-import { EASTERN, addCorps, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
+import { EASTERN, addCorps, freshStep, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor, placed, roomless } from './game';
 import { openWinter, winterOver } from './winter';
 import { ATOM_STAGE, BREAKUP_STAGE, CARRIERSTRIKE_STAGE, COLUMNS_STAGE, CONVOY_STAGE, DUMPS_STAGE, FLEETATTACK_STAGE, FLEETWHY_STAGE, HEAVYSEAS_STAGE, LORRYSHIFT_STAGE, MARKED_STAGE, NICKNAMES_STAGE, REARBRIDGES_STAGE, REARGUARD_STAGE, SEAMINES_STAGE, SEEKONCE_STAGE, SETTLEDTOWNS_STAGE, SHADOWRELAY_STAGE, SHADOW_STAGE, TASKFORCE_STAGE, TOWNQUEUE_STAGE, TRUEREACH_STAGE, UNITS_STAGE, VOYAGELOG_STAGE, WAGONS_STAGE, WINCHANCE_STAGE, WINGBYDATE_STAGE, AIRNAMES_STAGE, FERRY_STAGE, CITYDEFENCES_STAGE, FLAKGROUND_STAGE, OFFERS_STAGE } from './stage';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
@@ -404,7 +404,8 @@ export function edgeLine(g: Game, nat: string, ours: { has(id: number): boolean 
   const reach = g.reach[nat], fed = g.supply[nat];
   let best = Infinity;
   for (const j of g.regions[id].nb) if (ours.has(j) && (!fed || fed[j])) best = Math.min(best, reach ? reach[j] : 0);
-  return best === Infinity ? null : best + EASTERN.stepFresh;
+  // (Release 2, gauge.ts: under its switch a fresh step is the roads' alone, game.ts freshStep.)
+  return best === Infinity ? null : best + freshStep(g);
 }
 
 /** Every front this nation has, with the balance of strength on each. */

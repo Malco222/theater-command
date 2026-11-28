@@ -1,0 +1,7 @@
+{
+  "_about": "Railway gauge (release 2, batch 3; Brian's yes of 27 November 2026 17:10Z; the design director's rulings of 17:15Z and 17:48Z on r2-three-ideas/FORM-rails-rivers-1127.md, part A). Behind the grand campaign's flag 'gauge', OFF until its gate. 'home' is each nation's own gauge, by the nation; every nation not listed runs on the standard gauge. A province's track at the war's opening is the gauge of its owner that day (the region's owner), until a nation's railway troops re-lay it to their own; then the province's flag 'ga:<id>' holds the new gauge, and whoever takes it next finds that gauge. 'relay' is how many provinces of captured track a nation's railway troops re-lay a month: a capacity, the same for every nation. A nation's trains run only on track of its own gauge.",
+  "_owed": "PLACEHOLDERS. The historian's table, asked 17:26Z 27 November and still owed: broad for the Soviet Union and Finland, the Baltic states in 1939, Iberian for Spain and Portugal; and the relay pace (provinces a month, for example the German conversion of 1941 and the Soviet one of 1944), named with its source. Until both are in, no gate runs on these figures and the switch stays off.",
+  "names": { "standard": "standard", "broad": "broad", "iberian": "Iberian" },
+  "home": { "SOV": "broad", "FIN": "broad", "ESP": "iberian", "POR": "iberian" },
+  "relay": 2
+}

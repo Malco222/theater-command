@@ -197,6 +197,7 @@ import { diaryEntries, diaryOn, setDiary } from '../../../src/campaign/diary';
 import { chanceWords as heldChanceWords, heldOn, heldRibbon, setHeld } from '../../../src/campaign/heldline';
 import { setWorn, wornLine, wornOn, WORN } from '../../../src/campaign/wornout';
 import { bridgingOn, columnFor, columnLine, setBridging } from '../../../src/campaign/bridging';
+import { GAUGE, gaugeOn, setGauge } from '../../../src/campaign/gauge';
 import { HOSP, hospOn, setHosp, woundedLine } from '../../../src/campaign/fieldhospitals';
 import { interceptsOn, setIntercepts } from '../../../src/campaign/intercepts';
 import { FIRES, burningAt, dumpFiresOn, setDumpFires } from '../../../src/campaign/dumpfires';
@@ -1146,8 +1147,8 @@ function drawView(step = false) {
     warDiary: diaryOn(s), heldLine: heldOn(s), dumpFires: dumpFiresOn(s),
     // (Release 2, batch 3) Worn out in the line (wornout.ts).
     wornOut: wornOn(s),
-    // (Release 2, batch 3) Bridging columns (bridging.ts).
-    bridging: bridgingOn(s),
+    // (Release 2, batch 3) Bridging columns (bridging.ts) and railway gauge (gauge.ts).
+    bridging: bridgingOn(s), gauge: gaugeOn(s),
     // (Release 2, batch 3) Field hospitals (fieldhospitals.ts).
     fieldHospitals: hospOn(s),
     // (Release 2, batch 3) Radio intercepts (intercepts.ts): words only.
@@ -8139,6 +8140,14 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       : 'Worn out in the line is off: every corps has its edge back.';
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'gaugerule') {
+    // (Release 2, gauge.ts) Railway gauge, switched in any month.
+    ok = setGauge(s, part[1] === 'on');
+    note = gaugeOn(s)
+      ? `Railway gauge is on: trains run only on track of their own gauge, so captured track carries nothing until railway troops re-lay it, up to ${GAUGE.relay} provinces a month next to your working lines. In the east supply is counted from your own railheads. The same for every army.`
+      : 'Railway gauge is off: every train runs on every track, and captured track needs no re-laying.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'bridgingrule') {
     // (Release 2, bridging.ts) Bridging columns, switched in any month.
     ok = setBridging(s, part[1] === 'on');
@@ -9380,6 +9389,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, offerCalls(g
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).dumpFires = (on: boolean) => { const s = game(); setDumpFires(s, !!on); return { on: dumpFiresOn(s) }; };
 // (Release 2, batch 3) Worn out in the line: TC.wornOut(on) at any time; the options page uses act('wornoutrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).wornOut = (on: boolean) => { const s = game(); setWorn(s, !!on); return { on: wornOn(s) }; };
+// (Release 2, batch 3) Railway gauge: TC.gauge(on) at any time; the options page uses act('gaugerule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).gauge = (on: boolean) => { const s = game(); setGauge(s, !!on); return { on: gaugeOn(s) }; };
 // (Release 2, batch 3) Bridging columns: TC.bridging(on) at any time; the options page uses act('bridgingrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).bridging = (on: boolean) => { const s = game(); setBridging(s, !!on); return { on: bridgingOn(s) }; };
 // (Release 2, batch 3) Field hospitals: TC.fieldHospitals(on) at any time; the options page uses act('hospitalsrule:on' / ':off').
@@ -9440,6 +9451,8 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   interceptsrule: (s) => setIntercepts(s, true) && interceptsOn(s),
   // (Release 2, batch 3: bridging columns, switched in any month; OFF on the Play list until the DD's gate passes.)
   bridgingrule: (s) => setBridging(s, true) && bridgingOn(s),
+  // (Release 2, batch 3: railway gauge, switched in any month; OFF until the historian's figures are in and the DD's gate passes.)
+  gaugerule: (s) => setGauge(s, true) && gaugeOn(s),
 };
 function r2Ship(ids: string[]) {
   const s = game();
