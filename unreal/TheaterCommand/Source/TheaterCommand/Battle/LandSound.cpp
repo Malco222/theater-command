@@ -451,6 +451,49 @@ namespace LandSound
 				if (Ld.Values[K][Band].IsArray()) Lists["landing." + Ld.Keys[K] + "." + Band] = Takes(Ld.Values[K][Band]);
 			}
 		}
+		// Release 2's battle acoustics (land.acoustics): read whatever the switches say, used only where one is on.
+		const Json& Ac = Land["acoustics"];
+		const Json& Tr = Ac["travel"];
+		if (Tr["families"].IsArray()) TravelFamilies = Takes(Tr["families"]);
+		TravelFrom = Tr["from"].Num(TravelFrom);
+		TravelMost = Tr["maxSeconds"].Num(TravelMost);
+		BulletSpeed = std::max(100.0, Tr["bulletMetresPerSecond"].Num(BulletSpeed));
+		const Json& Tl = Ac["tails"];
+		TailFadeIn = Tl["fadeIn"].Num(TailFadeIn);
+		TailFloorDb = Tl["floorDb"].Num(TailFloorDb);
+		for (size_t K = 0; K < Tl["takes"].Keys.size(); ++K)
+		{
+			const Json& Row = Tl["takes"].Values[K];
+			if (!Row.IsArray() || !Row.At(0).IsNumber()) continue;
+			TailOf[Tl["takes"].Keys[K]] = TailPart{ Row.At(0).Num(0.0), Row.At(1).Num(0.0), Row.At(2).Num(0.0) };
+		}
+		const Json& Ec = Ac["echo"];
+		EchoReach = Ec["reach"].Num(EchoReach);
+		EchoStep = std::max(1.0, Ec["step"].Num(EchoStep));
+		EchoRays = std::clamp(static_cast<int>(Ec["rays"].Num(EchoRays)), 4, 72);
+		EchoBelow = Ec["cameraBelow"].Num(EchoBelow);
+		EchoLagLeast = Ec["lagLeast"].Num(EchoLagLeast);
+		EchoUnder = std::max(0.0, Ec["leastUnderDb"].Num(EchoUnder));
+		EchoLagMost = Ec["lagMost"].Num(EchoLagMost);
+		EchoFloorDb = Ec["floorDb"].Num(EchoFloorDb);
+		EchoFloorBusyDb = std::max(EchoFloorDb, Ec["floorDbBusy"].Num(EchoFloorBusyDb));
+		EchoGap = Ec["smallArmsGap"].Num(EchoGap);
+		EchoMost = std::max(0, static_cast<int>(Ec["most"].Num(EchoMost)));
+		EchoOfBig = std::max(0, static_cast<int>(Ec["ofBigGuns"].Num(EchoOfBig)));
+		EchoApart = Ec["apartDegrees"].Num(EchoApart);
+		EchoLookMoved = Ec["lookAgainMoved"].Num(EchoLookMoved);
+		EchoLookEvery = Ec["lookAgainEvery"].Num(EchoLookEvery);
+		auto ReadFace = [](const Json& J, Face& F)
+		{
+			F.Db = J["db"].Num(F.Db);
+			F.LpfHz = J["lpfHz"].Num(F.LpfHz);
+			F.HpfHz = J["hpfHz"].Num(F.HpfHz);
+		};
+		ReadFace(Ec["woods"], EchoWoods);
+		ReadFace(Ec["buildings"], EchoWalls);
+		ReadFace(Ec["hedges"], EchoHedges);
+		EchoMostSmall = std::clamp(static_cast<int>(Ec["mostSmallArms"].Num(EchoMostSmall)), 0, EchoMost);
+		EchoDice ^= Seed * 0x9FB21C651E98DF25ull;
 		if (Lists["byNation.rifle.*"].empty())
 		{
 			OutError = "the mix has no rifle takes (byNation.rifle)";
@@ -464,6 +507,248 @@ namespace LandSound
 		// (Far / 343 is life's seconds: a real second holds Speed x Life of them)
 		if (Far <= FtbFrom) return 0.0;
 		return std::min(FtbMost, Far / std::max(1.0, FtbSpeed)) / std::max(0.05, Speed * std::max(0.01, Life));
+	}
+
+	double Mixer::Travel(const std::string& FamilyName, double Far, double Speed) const
+	{
+		// Release 2 (bTravel): a rifle's or a machine gun's report crosses the ground as a big gun's does, Far / 343 life
+		// seconds (never more than the travel's most), a real second holding Speed x Life of them. From the first metre:
+		// 20 m is six hundredths of a second, which no eye catches, and a line of rifles is heard as it stands, the near
+		// men first.
+		if (!bTravel || Far <= TravelFrom) return 0.0;
+		if (std::find(TravelFamilies.begin(), TravelFamilies.end(), FamilyName) == TravelFamilies.end()) return 0.0;
+		return std::min(TravelMost, Far / std::max(1.0, FtbSpeed)) / std::max(0.05, Speed * std::max(0.01, Life));
+	}
+
+	double Mixer::LossDb(const std::string& FamilyName, double Far) const
+	{
+		// (as the scene's players lose it, ALandBattle::FamilyOf: Unreal's "natural sound" law, 60 dB down at `silent`)
+		const Family& F = FamilyOf(FamilyName);
+		if (Far <= F.Full) return 0.0;
+		if (Far >= F.Silent) return -120.0;
+		return -60.0 * (Far - F.Full) / std::max(1.0, F.Silent - F.Full);
+	}
+
+	double Mixer::EchoRoll()
+	{
+		EchoDice += 0x9E3779B97F4A7C15ull;
+		uint64_t Z = EchoDice;
+		Z = (Z ^ (Z >> 30)) * 0xBF58476D1CE4E5B9ull;
+		Z = (Z ^ (Z >> 27)) * 0x94D049BB133111EBull;
+		Z ^= Z >> 31;
+		return static_cast<double>(Z >> 11) / 9007199254740992.0;
+	}
+
+	void Mixer::TailAfter(const Take& Cut, double Far, double Now, std::vector<Take>& Out)
+	{
+		// Release 2 (bTails): a burst cut to its rounds ended in a fade of four hundredths of a second, the gun shut off
+		// like a tap, because the recording fires on past the burst's last round. Its dying echo is in the recording all
+		// the same, after the firing's end (land.acoustics.tails: where each take's lies, measured): that stretch is laid
+		// on as the cut fades, at the burst's own place, pitch and level, so the burst rings out as the gun's own
+		// recording does. A take with no echo recorded after its firing (the town's MG 42s) ends as before.
+		if (!bTails || Cut.Cut <= 0.0) return;
+		auto Found = TailOf.find(Cut.Name);
+		if (Found == TailOf.end()) return;
+		const TailPart& Part = Found->second;
+		// (only where it would be heard: the stretch lies some 22 dB under its burst's rounds, so under a burst that
+		// reaches the ear fainter than tails.floorDb it is a player spent on nothing)
+		if (Cut.bSpatial && Cut.Db + LossDb(Cut.Family, Far) < TailFloorDb) { ++TailsFaint; return; }
+		const double Whole = Length ? Length(Cut.Name) : 0.0;
+		const double Long = Part.Long > 0.0 ? Part.Long : Whole - Part.From;
+		if (Long < 0.1) return;
+		Take T = Cut;
+		T.From = Part.From;
+		T.Cut = Part.Long > 0.0 && Whole > Part.From + Part.Long + 0.02 ? Part.Long : 0.0;
+		T.CutFade = T.Cut > 0.0 ? std::min(0.15, Part.Long * 0.3) : 0.0;
+		T.FadeIn = std::max(0.005, std::min(TailFadeIn, Cut.CutFade > 0.0 ? Cut.CutFade : TailFadeIn));
+		T.Delay = Cut.Delay + Cut.Cut;
+		T.Db = Cut.Db + Part.Db;
+		T.bBig = false;
+		// (the same-take rule, for the tails among themselves: two guns on one recording whose bursts end together
+		// would ring out as two copies of the one stretch; within the rule's 0.15 s of a tail already laid at a pitch
+		// under its repitch apart, that tail is this burst's too)
+		std::vector<std::pair<double, double>>& Laid = TailsLaid[T.Name];
+		const double Starts = Now + T.Delay;
+		Laid.erase(std::remove_if(Laid.begin(), Laid.end(), [Now](const std::pair<double, double>& One) { return One.first < Now - 0.15; }), Laid.end());
+		for (const std::pair<double, double>& One : Laid)
+		{
+			if (std::abs(Starts - One.first) < 0.15 && std::abs(T.Pitch / One.second - 1.0) < Repitch)
+			{
+				++TailsShared;
+				return;
+			}
+		}
+		Laid.push_back({ Starts, T.Pitch });
+		++Tails;
+		Out.push_back(std::move(T));
+	}
+
+	int Mixer::CoverAt(double X, double Y, double& OutGroundZ)
+	{
+		// (each cell of the look's own step asked of the field once: a wood does not move)
+		OutGroundZ = 0.0;
+		if (!CoverOf) return 0;
+		const std::pair<int, int> Cell(static_cast<int>(std::floor(X / EchoStep)), static_cast<int>(std::floor(Y / EchoStep)));
+		auto Seen = CoverSeen.find(Cell);
+		if (Seen == CoverSeen.end())
+		{
+			CoverCell Asked;
+			Asked.What = CoverOf((Cell.first + 0.5) * EchoStep, (Cell.second + 0.5) * EchoStep, Asked.Z);
+			Seen = CoverSeen.emplace(Cell, Asked).first;
+			++EchoCellsAsked;
+		}
+		OutGroundZ = Seen->second.Z;
+		return Seen->second.What;
+	}
+
+	void Mixer::LookForWalls(const Listener& Ear, double Now)
+	{
+		// The faces that throw a sound back to the ear: along each bearing round it, the first place where open ground
+		// gives way to a wood's edge or to a house. Looked for again when the ear has moved or the look is old; the
+		// field's cover is asked once a cell, so a look costs a few hundred small steps.
+		const double Moved = std::hypot(Ear.At.X - WallsFrom.X, Ear.At.Y - WallsFrom.Y);
+		if (bWallsLooked && Moved < EchoLookMoved && Now - WallsAt < EchoLookEvery) return;
+		bWallsLooked = true;
+		WallsFrom = Ear.At;
+		WallsAt = Now;
+		Walls.clear();
+		if (!CoverOf) return;
+		++EchoLooks;
+		double GroundZ = 0.0;
+		const int Here = CoverAt(Ear.At.X, Ear.At.Y, GroundZ);
+		for (int R = 0; R < EchoRays; ++R)
+		{
+			const double Bearing = 6.283185307179586 * R / EchoRays;
+			const double WX = std::cos(Bearing), WY = std::sin(Bearing);
+			int Before = Here;
+			for (double Out = EchoStep; Out <= EchoReach; Out += EchoStep)
+			{
+				const double X = Ear.At.X + WX * Out, Y = Ear.At.Y + WY * Out;
+				const int What = CoverAt(X, Y, GroundZ);
+				// (a face is where the way out over open ground, a garden or water runs into trees, a house or a hedgerow;
+				// standing in the wood itself, the trees all round are no one face: the first is past the wood's far edge.
+				// A hedgerow is the least of them: the way runs on past it to a wood or a house within three steps more)
+				if (FaceOf(What) && What != Before)
+				{
+					int Kind = What;
+					double FaceOut = Out, FaceZ = GroundZ;
+					for (int More = 1; Kind == 4 && More <= 3 && Out + More * EchoStep <= EchoReach; ++More)
+					{
+						double Z2 = 0.0;
+						const int Next = CoverAt(Ear.At.X + WX * (Out + More * EchoStep), Ear.At.Y + WY * (Out + More * EchoStep), Z2);
+						if (Next == 1 || Next == 2) { Kind = Next; FaceOut = Out + More * EchoStep; FaceZ = Z2; }
+					}
+					// (half a step back from the trees or the wall and a little up it: where its sound comes from)
+					Walls.push_back({ Vec(Ear.At.X + WX * (FaceOut - EchoStep * 0.5), Ear.At.Y + WY * (FaceOut - EchoStep * 0.5), FaceZ + (Kind == 1 ? 5.0 : 3.0)), Kind, Bearing });
+					break;
+				}
+				Before = What;
+			}
+		}
+		EchoFaces = static_cast<int>(Walls.size());
+	}
+
+	void Mixer::EchoOf(const Take& Sounded, double Far, double Now, double Speed, const Listener& Ear, int Most, bool bSmall, std::vector<Take>& Out)
+	{
+		// Release 2 (bEcho): open country is not a padded room. A shot goes out all round, and what stands round the ear,
+		// a wood's edge, a farm, a street's houses, throws a part of it back: the same sound again, later by the longer
+		// way round (the gun to the face to the ear, at 343 m/s), softer by that longer way and by what the face keeps
+		// (trees scatter most of it and send back a thin, dull clatter; a wall sends back more, and harder), from where
+		// the face stands. It is the recording itself played again, never a made sound. Only for an ear near the ground,
+		// only faces that give an echo clear of its own sound (lagLeast) and loud enough to hear, a few at once.
+		if (!bEcho || !CoverOf || Most <= 0 || !Sounded.bSpatial || Ear.CameraHeight > EchoBelow) return;
+		LookForWalls(Ear, Now);
+		if (Walls.empty()) return;
+		if (bSmall && Now - EchoLast < EchoGap) return;
+		// (the share this sound's echoes take their places in: the small arms' own, or the guns' and blasts')
+		std::vector<double>& Share = bSmall ? EchoEndsSmall : EchoEnds;
+		const int Places = bSmall ? EchoMostSmall : EchoMost - EchoMostSmall;
+		if (Places <= 0) return;
+		Share.erase(std::remove_if(Share.begin(), Share.end(), [Now](double Ends) { return Ends <= Now; }), Share.end());
+		const double PerLife = std::max(0.05, Speed * std::max(0.01, Life));
+		const double Direct = std::max(1.0, Far);
+		const double DirectDb = LossDb(Sounded.Family, Direct);
+		struct Found { double Db; double Lag; const Wall* From; double FromEar; };
+		std::vector<Found> Good;
+		bool bFaint = false;
+		for (const Wall& W : Walls)
+		{
+			const double FromGun = (W.At - Sounded.At).Length();
+			const double FromEar = (W.At - Ear.At).Length();
+			const double Way = FromGun + FromEar;
+			const double Lag = (Way - Direct) / std::max(1.0, FtbSpeed);
+			// (on the real clock no sooner after its own sound than the same-take rule lets a recording follow itself,
+			// whatever the battle's pace; on life's clock no later than an echo is still heard as that sound's)
+			if (Lag / PerLife < EchoLagLeast || Lag > EchoLagMost) continue;
+			const Face& F = *FaceOf(W.Kind);
+			// (what reaches the ear: the family's loss over the whole way round, and the face's own)
+			const double AtEar = LossDb(Sounded.Family, Way) + F.Db;
+			if (AtEar < EchoFloorDb || AtEar - DirectDb > -EchoUnder) { bFaint = bFaint || AtEar < EchoFloorDb; continue; }
+			Good.push_back({ AtEar, Lag, &W, FromEar });
+		}
+		if (Good.empty())
+		{
+			if (bFaint) ++EchoesFaint;
+			return;
+		}
+		std::stable_sort(Good.begin(), Good.end(), [](const Found& A, const Found& B) { return A.Db > B.Db; });
+		std::vector<double> Taken;
+		int Started = 0;
+		for (const Found& G : Good)
+		{
+			if (Started >= Most) break;
+			// (a second echo of a gun comes from another quarter, not the next tree along)
+			bool bApart = true;
+			for (const double Bearing : Taken)
+			{
+				double Turn = std::abs(G.From->Bearing - Bearing);
+				if (Turn > 3.141592653589793) Turn = 6.283185307179586 - Turn;
+				bApart = bApart && Turn * 57.29577951308232 >= EchoApart;
+			}
+			if (!bApart) continue;
+			// (at most so many at once in its share, and the fuller the share the louder it must be at the ear: the
+			// loudest was tried first, so the rest of this sound's are under it too)
+			const int Busy = static_cast<int>(Share.size());
+			if (Busy >= Places)
+			{
+				++EchoesFull;
+				break;
+			}
+			if (G.Db < EchoFloorDb + (EchoFloorBusyDb - EchoFloorDb) * Busy / Places)
+			{
+				++EchoesUnder;
+				break;
+			}
+			const Face& F = *FaceOf(G.From->Kind);
+			Take E = Sounded;
+			E.At = G.From->At;
+			E.Track = -1;
+			E.bBig = false;
+			E.bEcho = true;
+			E.Bus = "close";
+			E.Delay = Sounded.Delay + G.Lag / PerLife;
+			// (the player at the face loses only the face's own distance to the ear: the rest of the way round, and what
+			// the face keeps, are taken off here; a little of the dice's level so a volley's echoes are no one copy)
+			E.Db = Sounded.Db + G.Db - LossDb(Sounded.Family, G.FromEar) + (EchoRoll() * 2.0 - 1.0) * 1.0;
+			E.LpfHz = F.LpfHz;
+			E.HpfHz = F.HpfHz;
+			E.FadeIn = std::max(E.FadeIn, 0.004);
+			const double Long = Length ? Length(E.Name) : 1.5;
+			const double Plays = E.Cut > 0.0 ? E.Cut + E.CutFade : std::max(0.05, Long - E.From);
+			Share.push_back(Now + E.Delay + Plays);
+			Taken.push_back(G.From->Bearing);
+			++Echoes;
+			++(G.From->Kind == 1 ? EchoesWoods : G.From->Kind == 2 ? EchoesWalls : EchoesHedges);
+			++Started;
+			Out.push_back(std::move(E));
+		}
+		if (Started > 0)
+		{
+			if (bSmall) EchoLast = Now;
+			EchoStarts.erase(std::remove_if(EchoStarts.begin(), EchoStarts.end(), [Now](double At) { return At <= Now - 1.0; }), EchoStarts.end());
+			for (int K = 0; K < Started; ++K) EchoStarts.push_back(Now);
+			EchoesMostASecond = std::max(EchoesMostASecond, static_cast<int>(EchoStarts.size()));
+		}
 	}
 
 	void Mixer::Count(double Now, const std::string& WeightKey, double Far)
@@ -749,7 +1034,7 @@ namespace LandSound
 		return true;
 	}
 
-	void Mixer::Crack(const Noise& N, double Now, const Listener& Ear, std::vector<Take>& Out)
+	void Mixer::Crack(const Noise& N, double Now, const Listener& Ear, std::vector<Take>& Out, double Speed, double ReportDelay)
 	{
 		// The crack of rounds passing near the ear: a rifle or machine-gun bullet is faster than sound, and its shock
 		// wave cracks where it passes, before the shot itself is heard from the muzzle. Rounds whose line comes within
@@ -771,6 +1056,10 @@ namespace LandSound
 		T.At = Nearest;
 		T.Family = "small_arms";
 		T.Delay = Along / 760.0;
+		// (release 2, bTravel: the round's flight at the battle clock's speed, as its gun's report is held, so the crack
+		// keeps its place ahead of the thump whatever the clock; and the two counted, on or off, for the log)
+		if (bTravel) T.Delay = Along / BulletSpeed / std::max(0.05, Speed * std::max(0.01, Life));
+		const bool bAhead = ReportDelay >= 0.0 && T.Delay < ReportDelay;
 		T.Db = CrackDb0 + CrackDbPerMetre * Miss;
 		const bool bRun = N.Weapon == "mg" && N.Rounds > 1 && N.PerSecond > 0.0 && !CrackRunParts.empty() && Now - RunAt >= RunGap;
 		if (bRun)
@@ -785,11 +1074,11 @@ namespace LandSound
 			T.Cut = std::max(0.02, std::min(Burst, Part) - T.CutFade);
 			T.FadeIn = 0.01;
 			RunAt = Now;
-			if (Start(T, Now, Miss, true, Out)) { ++Cracks; ++CrackRuns; }
+			if (Start(T, Now, Miss, true, Out)) { ++Cracks; ++CrackRuns; if (ReportDelay >= 0.0) ++(bAhead ? CracksBeforeThump : CracksAfterThump); }
 			return;
 		}
 		T.Name = Pick("crack.single");
-		if (Start(T, Now, Miss, true, Out)) ++Cracks;
+		if (Start(T, Now, Miss, true, Out)) { ++Cracks; if (ReportDelay >= 0.0) ++(bAhead ? CracksBeforeThump : CracksAfterThump); }
 	}
 
 	void Mixer::Strike(const Noise& N, double Now, const Listener& Ear, std::vector<Take>& Out)
@@ -967,6 +1256,13 @@ namespace LandSound
 		Take T;
 		T.At = N.At;
 		T.Track = N.Track;
+		// (release 2, bEcho: the gun or the blast just started, thrown back by the faces round the ear)
+		auto Thrown = [&](double From, int Most)
+		{
+			if (!bEcho || Out.empty()) return;
+			const Take Was = Out.back();
+			EchoOf(Was, From, Now, Speed, Ear, Most, false, Out);
+		};
 		switch (N.Kind)
 		{
 		case NoiseKind::Shot:
@@ -1004,6 +1300,8 @@ namespace LandSound
 				if (bTeamMg) MgList = "teamMg." + N.Mount;
 				const bool bFarMg = bMg && Far > F.FarFrom;
 				T.Name = Pick(ShotFar > F.FarFrom ? (bMg ? "mg.far" : "rifle.far") : bMg ? MgList : Nation("rifle"));
+				// (release 2, bTravel: the report crosses the ground to the ear; 0 with it off, as before)
+				T.Delay = Travel(T.Family, ShotFar, Speed);
 				const double Want = bMg && N.PerSecond > 0.0 ? N.Rounds / N.PerSecond : 0.0;
 				Take Uncut;
 				const int CutsWere = BurstsCut;
@@ -1117,6 +1415,17 @@ namespace LandSound
 						}
 					}
 				}
+				// (release 2's acoustics: the report as it was started, held for its crossing; a cut burst's own tail; the
+				// faces round the ear throwing it back. Each only with its switch: off, nothing here starts a take)
+				double ReportDelay = -1.0;
+				if (bStarted && !Out.empty())
+				{
+					const Take Was = Out.back();
+					ReportDelay = Was.Delay;
+					if (bTravel && T.Delay > 0.0) { ++Travelled; MostTravel = std::max(MostTravel, T.Delay); }
+					TailAfter(Was, ShotFar, Now, Out);
+					EchoOf(Was, ShotFar, Now, Speed, Ear, 1, true, Out);
+				}
 				Count(Now, bMg ? "mg" : "small_arms", ShotFar);
 				if (!bMg && !bUnseen && N.Track >= 0)
 				{
@@ -1128,7 +1437,7 @@ namespace LandSound
 						Take Ping = T;
 						Ping.Name = PingTake;
 						Ping.Family = "body";
-						Ping.Delay = PingAfter;
+						Ping.Delay = T.Delay + PingAfter;
 						Ping.From = Ping.Cut = Ping.CutFade = 0.0;
 						if (Start(Ping, Now, Far, bOnScreen, Out)) ++Clips;
 						// (the reload itself comes from the GI's reload clip, in step with his hands, unless the mix says
@@ -1137,7 +1446,7 @@ namespace LandSound
 						{
 							Take Reload = Ping;
 							Reload.Name = ReloadTake;
-							Reload.Delay = PingAfter + ReloadAfterPing;
+							Reload.Delay = T.Delay + PingAfter + ReloadAfterPing;
 							if (Start(Reload, Now, Far, bOnScreen, Out)) ++Reloads;
 						}
 					}
@@ -1147,11 +1456,11 @@ namespace LandSound
 						Take Bolt = T;
 						Bolt.Name = Pick(Nation("bolt"));
 						Bolt.Family = "body";
-						Bolt.Delay = 0.55 + Roll() * 0.3;
+						Bolt.Delay = T.Delay + (0.55 + Roll() * 0.3);
 						Start(Bolt, Now, Far, bOnScreen, Out);
 					}
 				}
-				Crack(N, Now, Ear, Out);
+				Crack(N, Now, Ear, Out, Speed, ReportDelay);
 				Strike(N, Now, Ear, Out);
 				// Shouts in the thick of it: a man of the shooter's side near the ear calls out now and then, more often
 				// as the fight thickens (land.shouts).
@@ -1177,6 +1486,7 @@ namespace LandSound
 				T.Delay = FlashToBang(Far, Speed);
 				bStarted = Start(T, Now, Far, bOnScreen, Out);
 				bTooFar = bLastTooFar;
+				if (bStarted) Thrown(Far, EchoOfBig);
 				Count(Now, "big_guns", Far);
 				if (N.Weapon == "tank" && Far < CaseWithin)
 				{
@@ -1195,6 +1505,7 @@ namespace LandSound
 				T.Delay = FlashToBang(Far, Speed);
 				bStarted = Start(T, Now, Far, bOnScreen, Out);
 				bTooFar = bLastTooFar;
+				if (bStarted) Thrown(Far, EchoOfBig);
 				Count(Now, "big_guns", Far);
 				HearIncoming(N, Now, Battle, Speed, Ear, Out);
 			}
@@ -1206,6 +1517,7 @@ namespace LandSound
 				T.Delay = FlashToBang(Far, Speed);
 				bStarted = Start(T, Now, Far, bOnScreen, Out);
 				bTooFar = bLastTooFar;
+				if (bStarted) Thrown(Far, 1);
 				Count(Now, "big_guns", Far);
 				HearIncoming(N, Now, Battle, Speed, Ear, Out);
 			}
@@ -1253,7 +1565,7 @@ namespace LandSound
 				T.Name = Pick("size." + Size);
 				T.bBig = Far < BigWithin;
 				T.Bus = T.bBig ? "big" : "close";
-				Start(T, Now, Far, bOnScreen, Out);
+				if (Start(T, Now, Far, bOnScreen, Out)) Thrown(Far, EchoOfBig);
 			}
 			else if (Far < NearWithin)
 			{
@@ -1261,7 +1573,7 @@ namespace LandSound
 				T.bBig = Far < BigWithin;
 				T.Bus = T.bBig ? "big" : "close";
 				if (T.Name == "shell_impact_near_02") { T.Cut = NearTwoCut; T.CutFade = NearTwoCutFade; }
-				Start(T, Now, Far, bOnScreen, Out);
+				if (Start(T, Now, Far, bOnScreen, Out)) Thrown(Far, EchoOfBig);
 				// Earth coming down, as the picture's clods land.
 				if (T.Name != "explosion_debris")
 				{
@@ -1285,7 +1597,7 @@ namespace LandSound
 				const std::string Band = Far < MiddleWithin ? "middle" : "far";
 				const std::string Own = "landing." + Size + "." + Band;
 				T.Name = Pick(ListOf(Own).empty() ? "impact." + Band : Own);
-				Start(T, Now, Far, bOnScreen, Out);
+				if (Start(T, Now, Far, bOnScreen, Out)) Thrown(Far, EchoOfBig);
 			}
 			Count(Now, T.bBig ? "big" : "explosions", Far);
 			if (Far < ShockWithin && Ear.CameraHeight < ShockBelow && Now - ShockAt > ShockEvery)
@@ -1368,7 +1680,7 @@ namespace LandSound
 			T.Bus = "big";
 			T.bBig = true;
 			T.Delay = FlashToBang(Far, Speed);
-			Start(T, Now, Far, true, Out);
+			if (Start(T, Now, Far, true, Out)) Thrown(Far, EchoOfBig);
 			Count(Now, "big", Far);
 			break;
 		}

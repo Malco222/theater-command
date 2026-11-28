@@ -6,6 +6,12 @@
 # for: LAND_PLAY_RICOCHET=1 Tools/land_play/run.sh runs the same recordings with it on and its checks (what is armour,
 # the carriers the rules name, every burst at armour off her plate, following her, never inside her, the rattle). Run it
 # both ways before a release-2 change to the ricochets: off, every output must be as before but for timings.
+# Release 2's battle acoustics (the game's -TheaterLandSoundTravel, -TheaterLandSoundTails, -TheaterLandSoundEcho, on
+# trial) are off here as in the game unless asked for: LAND_PLAY_ACOUSTICS=all (or any of travel,tails,echo) runs the
+# same recordings with those parts on and their checks. LAND_PLAY_TAKES_DUMP=<file> (one recording at a time) writes
+# every frame's ear, take and bed as the sound core asked for them: with the parts off that file must be the same, byte
+# for byte, as the code before a change to them writes, and Tools/land_sound/render_clip.py lays a stretch of it on a
+# track from the recordings for a person's ear.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"

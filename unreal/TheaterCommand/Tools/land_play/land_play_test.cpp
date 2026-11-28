@@ -2593,6 +2593,38 @@ int main(int argc, char** argv)
 	LandSight::Room Sight;
 	Sight.Lay(&Field);
 	std::printf("field: laid in %.2f s, %zu things standing for the camera\n", std::chrono::duration<double>(std::chrono::steady_clock::now() - FieldT0).count(), Sight.Things());
+	// Release 2's battle acoustics (LandSound's bTravel, bTails, bEcho; the scene's -TheaterLandSoundTravel,
+	// -TheaterLandSoundTails, -TheaterLandSoundEcho): off here as in the game unless asked for,
+	// LAND_PLAY_ACOUSTICS=travel,tails,echo (any of them, or "all"). The echoes ask the field what stands where, as the
+	// scene does (ALandBattle::BeginSound's twin of this). LAND_PLAY_TAKES_DUMP=file writes every take started, the ear
+	// and the beds a frame, for the clip renderer (Tools/land_sound/render_clip.py): asked or not, nothing else changes.
+	const std::string AcousticsAsked = std::getenv("LAND_PLAY_ACOUSTICS") ? std::getenv("LAND_PLAY_ACOUSTICS") : "";
+	auto AcousticsHas = [&AcousticsAsked](const char* Word) { return AcousticsAsked == "all" || ("," + AcousticsAsked + ",").find(std::string(",") + Word + ",") != std::string::npos; };
+	Mix.bTravel = AcousticsHas("travel");
+	Mix.bTails = AcousticsHas("tails");
+	Mix.bEcho = AcousticsHas("echo");
+	double CoverMs = 0.0;
+	long CoverAsks = 0;
+	Mix.CoverOf = [&Field, &CoverMs, &CoverAsks](double X, double Y, double& OutGroundZ)
+	{
+		const auto C0 = std::chrono::steady_clock::now();
+		LandField::Drawn What = LandField::Drawn::Pasture;
+		OutGroundZ = Field.HeightAt(X, Y, &What);
+		CoverMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - C0).count();
+		++CoverAsks;
+		switch (What)
+		{
+		case LandField::Drawn::Woods: return 1;
+		case LandField::Drawn::Floor: return 2;
+		case LandField::Drawn::Water: return 3;
+		case LandField::Drawn::Bank: return 4;
+		default: return 0;
+		}
+	};
+	std::printf("acoustics (release 2): the reports' crossing %s, the bursts' tails %s, the echoes %s\n", Mix.bTravel ? "ON" : "off", Mix.bTails ? "ON" : "off", Mix.bEcho ? "ON" : "off");
+	std::FILE* TakesDump = std::getenv("LAND_PLAY_TAKES_DUMP") ? std::fopen(std::getenv("LAND_PLAY_TAKES_DUMP"), "w") : nullptr;
+	double EchoLookMs = 0.0, EchoLookSlowest = 0.0;
+	int EchoesBadLag = 0, EchoTakesSeen = 0;
 	// (and a hedge cutter's gap, once torn, its floor, as the scene's PlayWorld and eye take it: the holes set below)
 	const LandCrater::Field* GapHoles = nullptr;
 	int GapsTorn = 0;
@@ -3898,7 +3930,43 @@ int main(int argc, char** argv)
 		Ear.At = Vec(Pose.Look.X, Pose.Look.Y, Ground + Mix.EarHeightFactor() * std::max(0.0, Ear.CameraHeight));
 		// (on the ground among the men the ear is where the eye is: the look point may be 70 m ahead)
 		if (Ear.CameraHeight < 4.0) Ear.At = Pose.Eye;
+		const int LooksWere = Mix.EchoLooks;
+		const double CoverMsWere = CoverMs;
 		for (const LandPlay::Noise& N : Noises) Mix.Hear(N, Real, Battle, Speed, Ear, Takes);
+		if (Mix.EchoLooks > LooksWere)
+		{
+			// (the echoes' look for faces: what its asks of the field cost this frame)
+			EchoLookMs += CoverMs - CoverMsWere;
+			EchoLookSlowest = std::max(EchoLookSlowest, CoverMs - CoverMsWere);
+		}
+		{
+			// (release 2's acoustics, as each take is started: an echo follows the sound it copies in the frame's list,
+			// the same piece of the same recording at the same pitch, and never starts within 0.15 real seconds of it,
+			// the same-take rule's gap; only an echo is dulled)
+			std::map<std::string, std::pair<double, double>> SoundOf;
+			for (const LandSound::Take& T : Takes)
+			{
+				char Piece[32];
+				std::snprintf(Piece, sizeof(Piece), "@%.3f/%.3f", T.From, T.Cut);
+				if (T.bEcho)
+				{
+					++EchoTakesSeen;
+					const auto Own = SoundOf.find(T.Name + Piece);
+					if (!Mix.bEcho || Own == SoundOf.end() || T.Delay - Own->second.first < 0.15 - 1e-9 || std::fabs(T.Pitch - Own->second.second) > 1e-9) ++EchoesBadLag;
+				}
+				else
+				{
+					if (T.LpfHz > 0.0 || T.HpfHz > 0.0) ++EchoesBadLag;
+					SoundOf[T.Name + Piece] = { T.Delay, T.Pitch };
+				}
+			}
+		}
+		if (TakesDump)
+		{
+			std::fprintf(TakesDump, "E %.4f %.4f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.2f %.3f\n", Real, Battle, Pose.Eye.X, Pose.Eye.Y, Pose.Eye.Z, Pose.Look.X, Pose.Look.Y, Pose.Look.Z, Ear.At.X, Ear.At.Y, Ear.At.Z, Ear.CameraHeight, Speed * Life);
+			for (const LandSound::Take& T : Takes)
+				std::fprintf(TakesDump, "T %.4f %s %.2f %.2f %.2f %s %s %.3f %.5f %.4f %.4f %.4f %.4f %d %.0f %.0f %d %d\n", Real + std::max(0.0, T.Delay), T.Name.c_str(), T.At.X, T.At.Y, T.At.Z, T.Family.c_str(), T.Bus.c_str(), T.Db, T.Pitch, T.From, T.Cut, T.CutFade, T.FadeIn, T.bSpatial ? 1 : 0, T.LpfHz, T.HpfHz, T.bEcho ? 1 : 0, T.bBig ? 1 : 0);
+		}
 		int Fighting = 0, Blocks = 0;
 		if (const LandFeed::View* V = Rec.ViewAt(Battle))
 		{
@@ -3909,6 +3977,11 @@ int main(int argc, char** argv)
 			}
 		}
 		Mix.Tick(Real, Dt, Ear, Fighting, Blocks ? static_cast<double>(Fighting) / Blocks : 0.0, Battle >= Contact, "open", Beds);
+		if (TakesDump)
+		{
+			for (const LandSound::Bed& Bed : Beds)
+				if (!Bed.bSilent) std::fprintf(TakesDump, "B %.4f %s %.2f\n", Real, Bed.Name.c_str(), Bed.Db);
+		}
 		const LandDesk::Words& W = Desk.Update(Battle, Dt);
 		const double FrameMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - F0).count() - MeasureMs;
 		if (FrameMs > Slowest) { Slowest = FrameMs; SlowestAt = Battle; }
@@ -4109,6 +4182,10 @@ int main(int argc, char** argv)
 		for (const LandSound::Take& T : Takes)
 		{
 			// The same piece of a recording never within 0.15 s of itself, or within its own length when shorter.
+			// (release 2's acoustics: an echo is the one copy made on purpose, the sound itself come back off a wood or
+			// a wall, softer, duller and from another place; it is held to its own rule where the takes are heard above,
+			// never within that 0.15 s of the sound it copies, and is no copy against any other here)
+			if (T.bEcho) continue;
 			const double Starts = Real + T.Delay;
 			char Piece[32];
 			std::snprintf(Piece, sizeof(Piece), "@%.3f", T.From);
@@ -4241,6 +4318,8 @@ int main(int argc, char** argv)
 	const int ShotNoises = NoiseCount["shot"];
 	if (ShotNoises != static_cast<int>(Rec.Rounds.size())) Fault("a round had no shot to hear");
 	if (Mix.ShotsOnScreenDropped > 0) Fault("a shot on the screen was dropped");
+	// (release 2's acoustics: the echoes the battle's own frames started, before the probes below hear a few more)
+	const int EchoesInBattle = Mix.Echoes;
 	if (SameTakeTooSoon > 0) Fault("the same take started twice within 0.15 s");
 	if (ShortestShot < 3.0) Fault("the camera cut within 3 s");
 	if (std::abs(KnotStart - 0.5) > 0.06) Fault("the bar did not start level");
@@ -4756,6 +4835,158 @@ int main(int argc, char** argv)
 		const bool bLife = LifeOne > 1.9 && std::fabs(LifeTwo - LifeOne) < 1e-6;
 		std::printf("flash to bang 700 m off: %.2f s at life's clock, %.2f s with the battle clock at half life's (Life 2, Speed 0.5)%s\n", LifeOne, LifeTwo, bLife ? "" : " WRONG");
 		if (!bLife) Fault("a bang's delay after its flash changed with the battle clock's pace against life's (Mixer::Life)");
+		// Release 2's battle acoustics: what the run heard of them, and the probes that hold each part to its word.
+		if (TakesDump) { std::fclose(TakesDump); TakesDump = nullptr; }
+		std::printf("acoustics: %d small-arms reports held for their crossing (the longest %.2f s); cracks ahead of their own gun's report %d, behind it %d; %d bursts ended in their recording's tail (%d too faint at the ear for one, %d on another gun's tail of the same recording); echoes %d (woods %d, houses %d, hedgerows %d), left out with every echo voice of their share sounding %d, under what a busy share asks %d, too faint %d, at most %d started in a second; %d looks for faces, %d cells of the field asked in %.2f ms in all (%.3f ms the slowest frame's look), %d faces at the last look\n",
+			Mix.Travelled, Mix.MostTravel, Mix.CracksBeforeThump, Mix.CracksAfterThump, Mix.Tails, Mix.TailsFaint, Mix.TailsShared, Mix.Echoes, Mix.EchoesWoods, Mix.EchoesWalls, Mix.EchoesHedges, Mix.EchoesFull, Mix.EchoesUnder, Mix.EchoesFaint, Mix.EchoesMostASecond,
+			Mix.EchoLooks, Mix.EchoCellsAsked, EchoLookMs, EchoLookSlowest, Mix.EchoFaces);
+		if (!Mix.bTravel && Mix.Travelled > 0) Fault("a small-arms report was held for its crossing with the acoustics' travel off");
+		if (!Mix.bTails && Mix.Tails > 0) Fault("a burst was given a tail with the acoustics' tails off");
+		if (!Mix.bEcho && (Mix.Echoes > 0 || Mix.EchoLooks > 0 || EchoTakesSeen > 0)) Fault("an echo was started, or the field asked for its faces, with the acoustics' echoes off");
+		if (Mix.bTravel && Mix.CracksAfterThump > 0) Fault("with the reports' crossing on, a round's crack was started after its own gun's report (a bullet outruns its sound)");
+		if (EchoesBadLag > 0) Fault("an echo was started within 0.15 real seconds of its own sound, without one, at another pitch, or with the echoes off (or a take that is no echo was dulled)");
+		if (EchoTakesSeen != EchoesInBattle) Fault("the echoes started are not the echoes counted");
+		if (Mix.bEcho && EchoLookSlowest > 2.0) Fault("a look for the echoes' faces took over 2 ms of a frame");
+		{
+			// The probes: a mixer of its own with every part on, on a field of its own: open ground with a wood's edge 100 m
+			// north of the ear and a house 60 m east of it.
+			LandSound::Mixer AcProbe;
+			std::string ProbeError;
+			if (AcProbe.Begin(MixText, 7, ProbeError))
+			{
+				AcProbe.Length = Mix.Length;
+				AcProbe.bTravel = AcProbe.bTails = AcProbe.bEcho = true;
+				AcProbe.CoverOf = [](double X, double Y, double& OutGroundZ)
+				{
+					OutGroundZ = 0.0;
+					if (Y > 100.0 && Y < 400.0) return 1;
+					if (X > 60.0 && X < 72.0 && std::fabs(Y) < 6.0) return 2;
+					return 0;
+				};
+				LandSound::Listener AcEar;
+				AcEar.At = Vec(0.0, 0.0, 1.6);
+				AcEar.CameraHeight = 1.6;
+				std::vector<LandSound::Take> AcCue;
+				// (a rifle 343 m off to the west, its round passing 3 m from the ear: the crack at the round's flight, the
+				// report a second after the flash, an echo of it off a face later still)
+				LandPlay::Noise AcShot;
+				AcShot.Kind = LandPlay::NoiseKind::Shot;
+				AcShot.Weapon = "rifle";
+				AcShot.Army = "GER";
+				AcShot.At = AcShot.From = Vec(-343.0, 0.0, 1.5);
+				AcShot.To = Vec(60.0, 3.0, 1.5);
+				AcShot.bMiss = true;
+				AcProbe.Hear(AcShot, 300.0, 300.0, 1.0, AcEar, AcCue);
+				double AcReport = -1.0, AcCrack = -1.0, AcEcho = -1.0, NearReport = -1.0, EchoUnder = 0.0;
+				int EchoFrom = 0;
+				bool bFarEcho = false;
+				for (const LandSound::Take& T : AcCue)
+				{
+					if (T.bEcho) bFarEcho = true;
+					else if (AcProbe.InList("crack.single", T.Name)) AcCrack = T.Delay;
+					else if (AcReport < 0.0 && T.Family == "small_arms") AcReport = T.Delay;
+				}
+				const bool bCrossed = std::fabs(AcReport - 1.0) < 0.06, bCrackFirst = AcCrack >= 0.0 && AcCrack < AcReport && std::fabs(AcCrack - 343.0 / 760.0) < 0.05;
+				// (a rifle 60 m off to the west: thrown back by the house's near wall, some 57 m east of the ear (the face
+				// is set half a look's step short of the first cell of house), the way round twice that longer, a third
+				// of a second behind its report and softer by that way and the wall's 9 dB; the rifle 343 m off is thrown
+				// back by nothing: its echo would be too faint to hear)
+				LandPlay::Noise AcClose = AcShot;
+				AcClose.At = AcClose.From = Vec(-60.0, 0.0, 1.5);
+				AcClose.To = Vec(-60.0, -200.0, 1.5);
+				AcCue.clear();
+				AcProbe.Hear(AcClose, 320.0, 320.0, 1.0, AcEar, AcCue);
+				double EchoAtEar = 0.0, ReportAtEar = 0.0, EchoWay = 0.0;
+				bool bAtWall = false;
+				for (const LandSound::Take& T : AcCue)
+				{
+					if (T.bEcho)
+					{
+						AcEcho = T.Delay;
+						EchoFrom = T.At.Y > 50.0 ? 1 : T.At.X > 30.0 ? 2 : 0;
+						EchoAtEar = T.Db + AcProbe.LossDb(T.Family, (T.At - AcEar.At).Length());
+						// (the echo sounds from the house's near wall, and later by its own way round against the straight one)
+						bAtWall = T.At.X > 52.0 && T.At.X <= 60.0 && std::fabs(T.At.Y) < 9.0;
+						EchoWay = (T.At - AcClose.At).Length() + (T.At - AcEar.At).Length() - 60.0;
+					}
+					else if (NearReport < 0.0 && T.Family == "small_arms")
+					{
+						NearReport = T.Delay;
+						ReportAtEar = T.Db + AcProbe.LossDb(T.Family, 60.0);
+					}
+				}
+				// (the echo at the ear against its report at the ear, dB: the wall's 9 and the longer way's 11, the dice's 1)
+				EchoUnder = EchoAtEar - ReportAtEar;
+				const bool bEchoRight = EchoFrom == 2 && bAtWall && std::fabs(AcEcho - NearReport - EchoWay / 343.0) < 0.01 && EchoUnder < -17.0 && EchoUnder > -24.0 && !bFarEcho;
+				// (the same shot with the battle clock at twice life's pace: half the wait)
+				LandSound::Mixer AcFast;
+				AcFast.Begin(MixText, 7, ProbeError);
+				AcFast.Length = Mix.Length;
+				AcFast.bTravel = true;
+				AcCue.clear();
+				AcFast.Hear(AcShot, 300.0, 300.0, 2.0, AcEar, AcCue);
+				double FastReport = -1.0;
+				for (const LandSound::Take& T : AcCue) if (FastReport < 0.0 && T.Family == "small_arms" && !AcFast.InList("crack.single", T.Name)) FastReport = T.Delay;
+				const bool bClock = std::fabs(FastReport - 0.5) < 0.04;
+				// (a machine gun 80 m south fires a burst of 6: cut to its rounds, then its recording's own tail from past its
+				// firing, started as the cut fades; and its echo, the burst again cut the same)
+				LandPlay::Noise AcBurst = AcShot;
+				AcBurst.Weapon = "mg";
+				AcBurst.Army = "USA";
+				AcBurst.At = AcBurst.From = Vec(0.0, -80.0, 1.5);
+				AcBurst.To = Vec(300.0, -80.0, 1.5);
+				AcBurst.Rounds = 6;
+				AcBurst.PerSecond = 8.0;
+				bool bTail = false, bBurstEcho = false, bTailListed = false;
+				for (int AcTry = 0; AcTry < 8 && !(bTail && bBurstEcho); ++AcTry)
+				{
+					AcCue.clear();
+					AcProbe.Hear(AcBurst, 400.0 + AcTry * 5.0, 400.0 + AcTry * 5.0, 1.0, AcEar, AcCue);
+					const LandSound::Take* AcCut = nullptr;
+					for (const LandSound::Take& T : AcCue)
+					{
+						if (!AcCut && T.Family == "mg" && T.Cut > 0.0 && !T.bEcho) { AcCut = &T; continue; }
+						if (AcCut && !T.bEcho && T.Name == AcCut->Name && T.From > AcCut->From + AcCut->Cut && T.Cut <= 0.0 && std::fabs(T.Delay - (AcCut->Delay + AcCut->Cut)) < 1e-6 && T.FadeIn > 0.0) bTail = true;
+						if (AcCut && T.bEcho && T.Name == AcCut->Name && std::fabs(T.Cut - AcCut->Cut) < 1e-9 && std::fabs(T.From - AcCut->From) < 1e-9 && T.Delay > AcCut->Delay + 0.12 - 1e-9 && T.LpfHz > 0.0) bBurstEcho = true;
+					}
+					bTailListed = bTailListed || bTail;
+				}
+				// (a tank's gun 150 m west: thrown back by two faces a quarter apart, the wood's and the house's)
+				LandPlay::Noise AcGun = AcShot;
+				AcGun.Weapon = "tank";
+				AcGun.At = AcGun.From = Vec(-150.0, 0.0, 2.0);
+				AcCue.clear();
+				AcProbe.Hear(AcGun, 500.0, 500.0, 1.0, AcEar, AcCue);
+				int GunEchoes = 0, GunWood = 0, GunHouse = 0;
+				double GunDirect = -1.0, GunEchoLate = 0.0;
+				for (const LandSound::Take& T : AcCue)
+				{
+					if (T.bEcho) { ++GunEchoes; if (T.At.Y > 50.0) ++GunWood; else if (T.At.X > 30.0) ++GunHouse; GunEchoLate = std::max(GunEchoLate, T.Delay); }
+					else if (GunDirect < 0.0 && T.Family == "big_guns") GunDirect = T.Delay;
+				}
+				// (the house 60 m east of the ear, the gun 150 m west: the way round is 210 + 60 m against 150, 0.35 s late)
+				const bool bGun = GunEchoes == 2 && GunWood == 1 && GunHouse == 1;
+				// (a camera 300 m up hears no echo; a mixer with no field hears none)
+				LandSound::Listener AcHigh = AcEar;
+				AcHigh.CameraHeight = 300.0;
+				AcHigh.At = Vec(0.0, 0.0, 180.0);
+				AcCue.clear();
+				AcProbe.Hear(AcGun, 600.0, 600.0, 1.0, AcHigh, AcCue);
+				bool bHighEcho = false;
+				for (const LandSound::Take& T : AcCue) bHighEcho = bHighEcho || T.bEcho;
+				std::printf("acoustics, probes: a rifle 343 m off heard %.2f s after its flash (%.2f s at twice life's pace), its round's crack at %.2f s, %s; a rifle 60 m off heard at %.2f s and thrown back at %.2f s off the %s, %.1f dB under its report at the ear; a cut burst %s and is thrown back cut the same %s; a tank's gun 150 m off thrown back by %d faces (the wood %d, the house %d), the later %.2f s after its flash; from 300 m up %s\n",
+					AcReport, FastReport, AcCrack, bFarEcho ? "an echo (WRONG: too faint to hear)" : "no echo (too faint)", NearReport, AcEcho, EchoFrom == 1 ? "wood" : EchoFrom == 2 ? "house" : "?", EchoUnder, bTail ? "ends in its own tail" : "has NO tail", bBurstEcho ? "yes" : "NO", GunEchoes, GunWood, GunHouse, GunEchoLate, bHighEcho ? "an echo (WRONG)" : "no echo");
+				if (!bCrossed) Fault("acoustics: a rifle's report 343 m off was not held a second for its crossing");
+				if (!bCrackFirst) Fault("acoustics: the round's crack did not come at its flight, ahead of its gun's report");
+				if (!bClock) Fault("acoustics: the report's crossing did not halve with the battle clock at twice life's pace");
+				if (!bEchoRight) Fault("acoustics: a rifle 60 m off was not thrown back by the house, the longer way's time behind its report and the wall's and the way's loss under it (or the far rifle was thrown back at all)");
+				if (!bTail) Fault("acoustics: a cut machine-gun burst did not end in its recording's own tail");
+				if (!bBurstEcho) Fault("acoustics: a cut burst's echo was not the burst cut the same, later and dulled");
+				if (!bGun) Fault("acoustics: a tank's gun was not thrown back by the wood's edge and the house, one echo each");
+				if (bHighEcho) Fault("acoustics: an echo was started for a camera over cameraBelow");
+			}
+			else Fault("acoustics: the probe's mixer could not read the mix");
+		}
 		for (const char* Model : { "Panzer IV", "Tiger", "M4 Sherman" })
 		{
 			for (const char* Loop : { "tank_loop", "tank_idle_loop", "tank_sherman_drive_loop", "tank_idle_sherman_loop" })

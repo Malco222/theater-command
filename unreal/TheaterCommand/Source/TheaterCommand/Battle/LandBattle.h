@@ -658,6 +658,8 @@ private:
 		double Started = 0.0;
 		int32 Voice = -1;
 		int32 Use = 0;
+		/** Sound (R2), battle acoustics: the take's own low-pass (an echo's, off its face), 0 none: a blast's dulling goes under it and leaves it on. */
+		float Lpf = 0.0f;
 	};
 	TArray<FRecent> Recent;
 	/** The ears dulled by a blast close by: when it began, its low-pass, and how long down, held and back. */

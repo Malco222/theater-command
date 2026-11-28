@@ -2246,6 +2246,37 @@ bool ALandBattle::Open()
 	PlayWorld.bRicochet = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandRicochet"));
 	PlayWorld.Life = S.Life; // (Effects (R2): the kit's clock against the battle's, for a burst's path off armour)
 	UE_LOG(LogTheater, Log, TEXT("Land battle: small arms on armour %s"), PlayWorld.bRicochet ? TEXT("bounce off it (ricochets and a rattle of steel; -TheaterLandRicochet, release 2, on trial)") : TEXT("as before (off unless -TheaterLandRicochet)"));
+	// Sound (R2), battle acoustics (Brian, 27 November 23:33Z: the gunfire more real; LandSound::Mixer::bTravel, bTails,
+	// bEcho; the numbers in mix.json land.acoustics). Three parts, each off unless its switch (release 2, on trial: the
+	// ship list turns them on after the Mac listen): a rifle's or machine gun's report crossing the ground at the speed
+	// of sound, the round's crack ahead of it (-TheaterLandSoundTravel); a burst cut to its rounds ending in its own
+	// recording's dying echo (-TheaterLandSoundTails); a gun's or a burst's own recording thrown back off the wood
+	// edges, houses and hedgerows round the ear, later by the longer way (-TheaterLandSoundEcho; the faces read from
+	// this field's drawn ground). All off, every take as before.
+	S.Mix.bTravel = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandSoundTravel"));
+	S.Mix.bTails = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandSoundTails"));
+	S.Mix.bEcho = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandSoundEcho"));
+	S.Mix.CoverOf = nullptr;
+	if (S.Mix.bEcho)
+	{
+		S.Mix.CoverOf = [FieldPtr](double X, double Y, double& OutGroundZ)
+		{
+			LandField::Drawn What2 = LandField::Drawn::Pasture;
+			OutGroundZ = FieldPtr->HeightAt(X, Y, &What2);
+			switch (What2)
+			{
+			case LandField::Drawn::Woods: return 1;
+			case LandField::Drawn::Floor: return 2;
+			case LandField::Drawn::Water: return 3;
+			case LandField::Drawn::Bank: return 4;
+			default: return 0;
+			}
+		};
+	}
+	UE_LOG(LogTheater, Log, TEXT("Land battle sound, acoustics: the reports' crossing %s, the bursts' tails %s, the echoes %s"),
+		S.Mix.bTravel ? TEXT("ON (-TheaterLandSoundTravel, release 2, on trial)") : TEXT("off (-TheaterLandSoundTravel)"),
+		S.Mix.bTails ? TEXT("ON (-TheaterLandSoundTails, release 2, on trial)") : TEXT("off (-TheaterLandSoundTails)"),
+		S.Mix.bEcho ? TEXT("ON (-TheaterLandSoundEcho, release 2, on trial)") : TEXT("off (-TheaterLandSoundEcho)"));
 	S.Play.Begin(Rec, PlayWorld);
 	MakeRiders();
 	SeatLight(0);
@@ -11689,6 +11720,16 @@ void ALandBattle::PlaySound(double RealDt)
 		};
 		for (const FRecent& One : Recent)
 		{
+			if (One.Lpf > 0.0f)
+			{
+				// (Sound (R2), battle acoustics: an echo keeps its face's dulling, the blast's under it while it is on)
+				if (UAudioComponent* Echoed = One.Player.Get())
+				{
+					Echoed->SetLowPassFilterEnabled(true);
+					Echoed->SetLowPassFilterFrequency(bOn ? FMath::Min(Hz, One.Lpf) : One.Lpf);
+				}
+				continue;
+			}
 			Dull(One.Player.Get());
 		}
 		for (TPair<FName, TObjectPtr<UAudioComponent>>& Pair : BedPlayers)
@@ -11714,6 +11755,13 @@ void ALandBattle::LogSound() const
 	UE_LOG(LogTheater, Display, TEXT("Land battle sound: %d shots heard, %d takes started, %d dropped (%d on the screen), %d out of hearing; %d cracks (%d runs), %d rounds struck near the ear (%d whined off), %d bursts cut to their rounds, %d Garand clips (%d reloads), %d shouts, %d shells heard coming in; held at most %.2f s, %d on time at another pitch; lift down among the men %+.1f dB; meter %.2f"),
 		S.Mix.ShotsHeard, S.Mix.ShotTakes, S.Mix.ShotsDropped, S.Mix.ShotsOnScreenDropped, S.Mix.ShotsOutOfHearing, S.Mix.Cracks, S.Mix.CrackRuns, S.Mix.GroundStrikes,
 		S.Mix.Whines, S.Mix.BurstsCut, S.Mix.Clips, S.Mix.Reloads, S.Mix.Shouts, S.Mix.Incoming, S.Mix.MostDelay, S.Mix.Repitched, LiftDb, S.Mix.Meter());
+	if (S.Mix.bTravel || S.Mix.bTails || S.Mix.bEcho)
+	{
+		// (Sound (R2), battle acoustics: what each part did, for the Mac listen's log)
+		UE_LOG(LogTheater, Display, TEXT("Land battle sound, acoustics: %d reports crossed the ground (the longest %.2f s), %d cracks ahead of their report, %d behind; %d bursts' tails (%d too faint for one, %d on another gun's); %d echoes (%d off woods, %d off houses, %d off hedgerows; %d too faint, %d over the most at once, %d under what a busy share asks, the most in a second %d), %d faces round the ear on %d looks, %d places of the field asked"),
+			S.Mix.Travelled, S.Mix.MostTravel, S.Mix.CracksBeforeThump, S.Mix.CracksAfterThump, S.Mix.Tails, S.Mix.TailsFaint, S.Mix.TailsShared, S.Mix.Echoes, S.Mix.EchoesWoods, S.Mix.EchoesWalls, S.Mix.EchoesHedges,
+			S.Mix.EchoesFaint, S.Mix.EchoesFull, S.Mix.EchoesUnder, S.Mix.EchoesMostASecond, S.Mix.EchoFaces, S.Mix.EchoLooks, S.Mix.EchoCellsAsked);
+	}
 	if (bPoolVoices)
 	{
 		// (land.voices: a take that gave way to another means land.voices.most is too few; players made during the
@@ -11763,11 +11811,24 @@ void ALandBattle::StartTakes()
 			{
 				Moving.Add({ Player, T.Track, LastVoice, LastVoiceUse });
 			}
-			Recent.Add({ Player, RealT, LastVoice, LastVoiceUse });
+			Recent.Add({ Player, RealT, LastVoice, LastVoiceUse, static_cast<float>(T.LpfHz) });
 			if (ShockLeft > 0.0)
 			{
 				Player->SetLowPassFilterEnabled(true);
 				Player->SetLowPassFilterFrequency(static_cast<float>(ShockLpf));
+			}
+			// Sound (R2), battle acoustics: an echo's own filters (the face it came off: leaves take the top, a hedge
+			// the top and the body). Only an echo carries any (LandSound::Take::LpfHz, HpfHz), so with -TheaterLandSoundEcho
+			// off nothing here runs.
+			if (T.LpfHz > 0.0)
+			{
+				Player->SetLowPassFilterEnabled(true);
+				Player->SetLowPassFilterFrequency(static_cast<float>(ShockLeft > 0.0 ? FMath::Min(ShockLpf, T.LpfHz) : T.LpfHz));
+			}
+			if (T.HpfHz > 0.0)
+			{
+				Player->SetHighPassFilterEnabled(true);
+				Player->SetHighPassFilterFrequency(static_cast<float>(T.HpfHz));
 			}
 		}
 	}
@@ -11872,6 +11933,11 @@ UAudioComponent* ALandBattle::StartPooled(USoundBase* Played, const FName& Take,
 	Player->SetPitchMultiplier(Pitch);
 	// (a voice keeps its last take's dulling: StartTakes dulls it again while a blast's is on)
 	Player->SetLowPassFilterEnabled(false);
+	if (State->Mix.bEcho)
+	{
+		// (Sound (R2), battle acoustics: nor an echo's high-pass, which only -TheaterLandSoundEcho ever sets)
+		Player->SetHighPassFilterEnabled(false);
+	}
 	if (bSpatial)
 	{
 		Player->SetWorldLocation(Where);

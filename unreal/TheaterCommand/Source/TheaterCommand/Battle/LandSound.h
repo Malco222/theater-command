@@ -47,6 +47,11 @@ namespace LandSound
 		bool bBig = false;
 		/** The shooter's track whose take moves with him (-1 none). */
 		int Track = -1;
+		/** Release 2's battle acoustics (land.acoustics): an echo thrown back by a wood's edge or a house is the same
+		 * recording dulled and thinned as that face does it, a low-pass and a high-pass over the whole take (Hz; 0: none),
+		 * and bEcho says it is one (the scene's count; never a shot of its own). Every other take: 0, 0, false. */
+		double LpfHz = 0.0, HpfHz = 0.0;
+		bool bEcho = false;
 	};
 
 	/** A loop under the battle and its level now (a bed or the place's air), dB; Silent when it should not play. */
@@ -98,6 +103,32 @@ namespace LandSound
 		 * beds.place.rain played over the place's own air, heard through the fight, softer the lighter it falls. 0:
 		 * none, as before. */
 		double RainShare = 0.0;
+		/** Release 2's battle acoustics (the mix's land.acoustics; Brian, 27 November 2026: "lets make the gunfire look
+		 * more realistic", and its sound with it), three parts, each off until its own word is given (the scene's
+		 * -TheaterLandSoundTravel, -TheaterLandSoundTails, -TheaterLandSoundEcho). All three off: every take is started
+		 * as before, to the roll of the dice.
+		 * bTravel: a rifle's or a machine gun's report crosses the ground at the speed of sound as the big guns' does, so
+		 * a section firing 300 m off is seen to fire and heard most of a second later, and a round passing the ear cracks
+		 * before the thump of the gun that fired it.
+		 * bTails: a machine-gun burst cut to its rounds ends in its own recording's dying echo (the stretch after its
+		 * firing), not in a fade of four hundredths of a second.
+		 * bEcho: a shot, a gun or a blast is thrown back by the woods' edges and the houses round the ear: the same
+		 * recording again from that face, later by the longer way round, softer, dulled and thinned. */
+		bool bTravel = false, bTails = false, bEcho = false;
+		/** The cover at a place of the field, for the echoes: 0 open ground, 1 woods, 2 a house, 3 water, 4 a hedgerow on
+		 * its bank, and the ground's height there (the scene's field, asked once a cell). Unset: nothing throws a sound
+		 * back. */
+		std::function<int(double X, double Y, double& OutGroundZ)> CoverOf;
+		/** The acoustics' log: small arms' reports held for their crossing and the longest held (real seconds); rounds
+		 * whose crack was started ahead of their own report; bursts ended in their recording's tail; echoes started, off
+		 * woods, off houses and off hedgerows; echoes left out with every echo voice sounding, and as too faint to hear;
+		 * the most echoes started in any one real second; the faces found round the ear at the last look, the looks
+		 * taken, and the cells of the field asked for their cover in all. */
+		int Travelled = 0, CracksBeforeThump = 0, CracksAfterThump = 0, Tails = 0, TailsFaint = 0, TailsShared = 0, Echoes = 0, EchoesWoods = 0, EchoesWalls = 0, EchoesHedges = 0, EchoesFull = 0, EchoesUnder = 0, EchoesFaint = 0, EchoesMostASecond = 0, EchoFaces = 0, EchoLooks = 0, EchoCellsAsked = 0;
+		double MostTravel = 0.0;
+		/** The family's loss over distance as the scene's players have it (ALandBattle::FamilyOf: none to `full`, then
+		 * falling evenly in decibels to -60 at `silent`), dB at Far metres: the echoes' own level is worked from it. */
+		double LossDb(const std::string& FamilyName, double Far) const;
 
 		/** A source heard: what to start. Now is the real clock (seconds), Speed the battle clock's against it (Life says
 		 * how many life seconds a battle second is), Battle
@@ -269,6 +300,41 @@ namespace LandSound
 		std::map<int, Shooter> LastShooter;
 		std::map<int, double> ShoutFree, ShoutNext;
 		double IncomingWithin = 150.0;
+		// Release 2's battle acoustics (land.acoustics), each row at its default where the mix has none.
+		// (travel: the families whose reports cross the ground, past how many metres, and never held longer than this)
+		std::vector<std::string> TravelFamilies{ "small_arms", "mg", "sniper" };
+		double TravelFrom = 0.0, TravelMost = 3.0, BulletSpeed = 760.0;
+		// (tails: a take's own dying echo after its firing: from, how long (0: to its end), dB over the burst's level)
+		struct TailPart { double From = 0.0, Long = 0.0, Db = 0.0; };
+		std::map<std::string, TailPart> TailOf;
+		double TailFadeIn = 0.03, TailFloorDb = -24.0;
+		std::map<std::string, std::vector<std::pair<double, double>>> TailsLaid;
+		// (echoes: the faces are looked for along EchoRays bearings round the ear out to EchoReach, a step at a time,
+		// again when the ear has moved EchoLookMoved or after EchoLookEvery seconds; none with the camera over EchoBelow;
+		// an echo comes no sooner than EchoLagLeast real seconds behind its own sound (the same-take rule's gap: the
+		// one copy of a recording the mix makes on purpose never falls inside it) and no later than EchoLagMost life
+		// seconds, at least EchoUnder dB under that sound at the ear, is left out under EchoFloorDb at the ear, and at most EchoMost sound at once: EchoMostSmall of them the rifles' and machine guns', the rest the
+		// guns' and blasts', so a barrage's long echoes never take the small arms' share. The busier a share, the
+		// louder an echo must be to take a place in it, rising to EchoFloorBusyDb with every place taken: a lone shot
+		// in a lull is thrown back however thin, and in the thick of a fight only what would be heard through it. A
+		// rifle's or a machine gun's no closer together than EchoGap)
+		struct Face { double Db = -15.0, LpfHz = 0.0, HpfHz = 0.0; };
+		Face EchoWoods{ -15.0, 4000.0, 250.0 }, EchoWalls{ -9.0, 8000.0, 0.0 }, EchoHedges{ -20.0, 4000.0, 300.0 };
+		const Face* FaceOf(int Kind) const { return Kind == 1 ? &EchoWoods : Kind == 2 ? &EchoWalls : Kind == 4 ? &EchoHedges : nullptr; }
+		double EchoReach = 300.0, EchoStep = 6.0, EchoBelow = 150.0, EchoLagLeast = 0.15, EchoUnder = 6.0, EchoLagMost = 1.5, EchoFloorDb = -40.0, EchoFloorBusyDb = -26.0, EchoGap = 0.06;
+		double EchoLookMoved = 12.0, EchoLookEvery = 2.0, EchoApart = 60.0;
+		int EchoRays = 24, EchoMost = 8, EchoMostSmall = 4, EchoOfBig = 2;
+		struct Wall { Vec At; int Kind = 0; double Bearing = 0.0; };
+		std::vector<Wall> Walls;
+		Vec WallsFrom;
+		double WallsAt = -1e9, EchoLast = -1e9;
+		bool bWallsLooked = false;
+		std::vector<double> EchoEnds, EchoEndsSmall;
+		std::vector<double> EchoStarts;
+		struct CoverCell { int What = 0; double Z = 0.0; };
+		std::map<std::pair<int, int>, CoverCell> CoverSeen;
+		/** The acoustics' own dice: nothing of theirs moves the picks of the takes themselves. */
+		uint64_t EchoDice = 0xC2B2AE3D27D4EB4Full;
 		std::map<std::string, std::string> BodyCue;
 		std::map<std::string, std::map<std::string, std::string>> EngineByModel;
 		/** The ear's camera height at the last noise heard (for the lift down among the men). */
@@ -299,8 +365,20 @@ namespace LandSound
 		/** Starts a take if the limits allow (always when on the screen): false if it was dropped. */
 		bool Start(Take T, double Now, double Far, bool bOnScreen, std::vector<Take>& Out);
 		double FlashToBang(double Far, double Speed) const;
+		/** Release 2 (bTravel): how long a rifle's or a machine gun's report is in crossing Far metres to the ear, real
+		 * seconds at the battle clock's Speed; 0 with the part off or for a family that is not on its list. */
+		double Travel(const std::string& FamilyName, double Far, double Speed) const;
+		/** Release 2 (bTails): a burst just started as Cut (its last take in Out) ends in its recording's own tail. */
+		void TailAfter(const Take& Cut, double Far, double Now, std::vector<Take>& Out);
+		/** Release 2 (bEcho): the sound just started (Sounded, as Start left it, from Far metres) thrown back by up to Most
+		 * of the faces round the ear. bSmall: a rifle's or a machine gun's (no closer together than the gap). */
+		void EchoOf(const Take& Sounded, double Far, double Now, double Speed, const Listener& Ear, int Most, bool bSmall, std::vector<Take>& Out);
+		/** The faces round the ear, looked for again when it has moved or the look is old. */
+		void LookForWalls(const Listener& Ear, double Now);
+		int CoverAt(double X, double Y, double& OutGroundZ);
+		double EchoRoll();
 		void Count(double Now, const std::string& WeightKey, double Far);
-		void Crack(const LandPlay::Noise& N, double Now, const Listener& Ear, std::vector<Take>& Out);
+		void Crack(const LandPlay::Noise& N, double Now, const Listener& Ear, std::vector<Take>& Out, double Speed = 1.0, double ReportDelay = -1.0);
 		/** A round that missed and struck the ground near the ear: the strike in the earth, sometimes a whine off. */
 		void Strike(const LandPlay::Noise& N, double Now, const Listener& Ear, std::vector<Take>& Out);
 		/** A ricochet's whine off At (a piece of groundStrikes.whines), Delay real seconds from now, if the gap allows and
