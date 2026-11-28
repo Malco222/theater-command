@@ -483,7 +483,9 @@ namespace
 	}
 
 	/** The held views: at each second asked, the battle paused, each setting laid in turn on the one view and a still
-	 * taken of it, then the battle let go and the timing taken up again from a fresh window. True while one is under way. */
+	 * taken of it, then the battle let go and the timing taken up again from a fresh window. True while one is under way.
+	 * (The speed file's frame count, tc.Speed.FrameCap and tc.Speed.Pace are ticked from the player's tick, which the
+	 * engine does not call while paused: all three stand still while a view is held, and take up again as it is let go.) */
 	bool TickLookHold(float DeltaSeconds)
 	{
 		UWorld* World = PlayWorld();

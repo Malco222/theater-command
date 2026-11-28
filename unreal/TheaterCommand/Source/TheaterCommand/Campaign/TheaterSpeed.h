@@ -221,17 +221,26 @@ class APlayerController;
  *                         a second (50), and when it says heavy or worse, to tc.Speed.PaceHot (45): the cap is put in
  *                         force as tc.Speed.FrameCap's is, and a lower tc.Speed.FrameCap stands. A step is lifted once
  *                         the Mac has said the lower level for tc.Speed.PaceRest seconds together (60), twice as long
- *                         for each time it warmed again soon after a lift. tc.Speed.PaceTry (0, 1, 2; -1 the Mac's own)
- *                         tells the pace a heat for a test. The same picture either way; nothing is done where the
- *                         machine does not tell its heat. With the switch off the log is as it was, letter for letter.
+ *                         for each time it warmed again soon after a lift. The Mac's word is coarse (the speed
+ *                         guardian's audit, 28 November: moderate while the chip was still slowed), so a lifted step is
+ *                         on trial for tc.Speed.PaceTrial seconds (15; 0 none): if the game does not hold 95 in 100 of
+ *                         the frames the lifted step asks, the step is taken back and counted as a relapse. The pace
+ *                         only ever asks for fewer frames: it does not take the place of the screen's refresh unless
+ *                         its cap is under 60, and a t.MaxFPS already at or under its cap is left. tc.Speed.PaceTry
+ *                         (0, 1, 2; -1 the Mac's own) tells the pace a heat for a test. The same picture either way;
+ *                         nothing is done where the machine does not tell its heat. With the switch off the log is as
+ *                         it was, letter for letter. It is ticked from the player's tick, which stands still while the
+ *                         engine is paused (the whole-look timing's held views): so does the pace.
  *   tc.Speed.LeanLand     0 (default): nothing, as before. 1: a land battle lays the settings in
- *                         tc.Speed.LeanLandSet (name:value;name:value) once its own light is set and lifts them as it
- *                         ends: a lighter frame for the battle alone. As it stands the set is the sun's shadow detail
+ *                         tc.Speed.LeanLandSet (name:value;name:value) once everything of its own is set and lifts
+ *                         them as it ends: a lighter frame for the battle alone. As it stands the set is the sun's shadow detail
  *                         half way from the battle's to the map's, the soft shadow's rays halved and the upscaler's
  *                         lighter history, the set the Mac's S1b prices and pictures as "lean". Each setting is laid
  *                         at the rank it already has, so nothing is held against a later change of its quality group;
- *                         one set by hand or by -TheaterSet is left alone. It changes the picture a little: off until
- *                         the art director has passed the pairs.
+ *                         one set by hand or by -TheaterSet is left alone. The lift puts back only a setting that
+ *                         still reads as it was laid: one changed since is left and named, and the line counts what
+ *                         was read back. Not laid where the battle keeps the map's light (-TheaterLandMapLight). It
+ *                         changes the picture a little: off until the art director has passed the pairs.
  * And the log's line on held frames, each five seconds: the cap in force, how long the engine waited each frame to
  * keep to it and by how much its waits overran what it asked, and in how many frames the game's window was in front.
  * And the log's line on the machine itself, each five seconds, on a Mac: the system's own word on its heat (nominal,
@@ -255,9 +264,10 @@ namespace TheaterSpeed
 	/** Once a frame, from the player's controller: keeps the frame count, and writes the summary when it is due. */
 	void NoteFrame(float DeltaSeconds, UWorld* World);
 
-	/** tc.Speed.LeanLand: a land battle's lighter frame, laid once the battle has set its own light and lifted as it
-	 * ends, before the battle's own trims are put back. Nothing with the switch at 0. */
-	void LayLeanLand();
+	/** tc.Speed.LeanLand: a land battle's lighter frame, laid once the battle has set everything of its own (its light,
+	 * its picture's size) and lifted as it ends, before the battle's own trims are put back. Nothing with the switch
+	 * at 0, and nothing where the battle keeps the map's light (bBattleLight false: -TheaterLandMapLight). */
+	void LayLeanLand(bool bBattleLight);
 	void LiftLeanLand();
 	/** The last five seconds the log closed (its line "Speed: N s, F frames a second (worst frame W ms ..."): false before
 	 * the first. For a reader that prints them beside its own counts, so that there is one meter (the air battle's

@@ -2733,7 +2733,6 @@ bool ALandBattle::Open()
 			BattleKey->ContactShadowLength = Contact > 0.0f ? FMath::Clamp(Contact, 0.02f, 3.0f) * static_cast<float>(UnitsPerMetre) : 0.05f;
 			BattleKey->MarkRenderStateDirty();
 		}
-		TheaterSpeed::LayLeanLand(); // (tc.Speed.LeanLand: the battle's lighter frame over the light just set; nothing with the switch off)
 	}
 	// The film's shallow focus (the graphics audit's E9, Brian's D3): depth of field drawn only while the camera holds a
 	// close follow shot (LandEye::Pose::Focus), the map's trims keeping it off everywhere else; put back as it ends.
@@ -2770,6 +2769,10 @@ bool ALandBattle::Open()
 			Variable->Set(static_cast<float>(LandSize), ECVF_SetByCode);
 		}
 	}
+	// (tc.Speed.LeanLand: the battle's lighter frame, laid last, over everything of the battle's own just set and after
+	// everything it keeps to put back, so that what this lays is never what the battle keeps as "the map's"; lifted
+	// first in EndPlay. Nothing with the switch off, and nothing where the battle keeps the map's light.)
+	TheaterSpeed::LayLeanLand(!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandMapLight")));
 	// (the eye stood on the opening shot before it is the view: spawned at the world's middle, its first frame was
 	// drawn from there)
 	if (Eye)
