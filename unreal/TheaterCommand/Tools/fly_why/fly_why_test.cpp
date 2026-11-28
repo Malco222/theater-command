@@ -17,6 +17,10 @@
 //  5. The rules' refusals (src/battle/air/ticket.ts airTicket) are each a whole sentence, and the test prints what the
 //     card says for each it can show (two never reach the card: a night raid is never weighed by airLook, and FLY THE
 //     RAID is shut where nobody is at the controls).
+//  6. (A second mend in his game, 27 November: the design director's yes of 23:54Z) The offer is weighed again each time
+//     the card is read from the rules, not once a pick for good: the memo is kept for the card read (Page.Revision) as
+//     well as the pick, everywhere it is kept, and the card's line is the memo of this read. Why, through the bridge's
+//     own calls: tests/air-fly-fresh.test.ts (one pick, two answers, within a month and across one, both ways).
 
 #include <cstdio>
 #include <fstream>
@@ -168,8 +172,9 @@ int main(int Argc, char** Argv)
 	CHECK(Count(Can, Read) == 1);
 	const std::string Why = Between(Pc, "FString ACampaignPlayerController::FlyNotOfferedWhy() const", "\n}\n");
 	const std::string WhyWhole = "FString ACampaignPlayerController::FlyNotOfferedWhy() const\n{\n"
-		"\t// (weighed as the button is, once a pick: nothing to say where it is offered, or before CanFlyLive has weighed this pick)\n"
-		"\tif (CanFlyLive() || FlyOffer != 0 || FlyOfferAct != Page.Card.Fly.Act || FlyOfferWhy.IsEmpty())\n\t{\n\t\treturn FString();\n\t}\n"
+		"\t// (weighed as the button is, once a pick and card read: nothing to say where it is offered, or before CanFlyLive has\n"
+		"\t// weighed this pick on this read of the card)\n"
+		"\tif (CanFlyLive() || FlyOffer != 0 || FlyOfferAct != Page.Card.Fly.Act || FlyOfferRevision != Page.Revision || FlyOfferWhy.IsEmpty())\n\t{\n\t\treturn FString();\n\t}\n"
 		"\t// (the gates CanFlyLive passes before it weighs: with the switch off, a scripted run, no card, a raid FLY THE RAID cannot\n"
 		"\t// send, a battle already open, or a raid he does not fly himself, the card says nothing new)\n"
 		"\t" + Gate + "\n\t{\n\t\treturn FString();\n\t}\n"
@@ -203,6 +208,41 @@ int main(int Argc, char** Argv)
 		"\t\t\t\t\t\tSNew(STextBlock).Text(FText::FromString(Card.Fly.Label.IsEmpty() ? FString(TEXT(\"FLY THE RAID\")) : Card.Fly.Label)).Font(Font(TEXT(\"Bold\"), Card.bBomb ? 11 : 12, Card.bBomb ? 200 : 240)).ColorAndOpacity(!Card.Fly.bOk ? Faint : Card.bBomb ? Cream : Ink)\n"
 		"\t\t\t\t\t])") == 1);
 	CHECK(Count(Foot, "TEXT(\"ANOTHER KIND OF RAID\")") == 1);
+
+	// 6. (The second mend) Weighed again at each read of the card: the memo is kept for the read as well as the pick.
+	CHECK(Count(Ph, "mutable int32 FlyOfferRevision = INDEX_NONE;") == 1);
+	CHECK(Count(Can, "if (FlyOfferAct != Page.Card.Fly.Act || FlyOfferRevision != Page.Revision)\n") == 1);
+	CHECK(Count(Can, "\t\tFlyOfferAct = Page.Card.Fly.Act;\n\t\tFlyOfferRevision = Page.Revision;\n\t\tFlyOffer = 0;\n\t\tFlyOfferWhy.Reset();\n") == 1);
+	// (everywhere a pick's memo is set, the read it was set on with it: the weighing, and the card brought back after a raid
+	// that closed with no result, whose failed open is kept until the card is next read)
+	for (const std::string& After : LineAfterEach(Pc, "FlyOfferAct = "))
+	{
+		CHECK_SAID(After == "FlyOfferRevision = Page.Revision;", "after FlyOfferAct = : " + After);
+	}
+	CHECK(Count(Pc, "FlyOfferAct = ") == 2);
+	CHECK(Count(Pc, "\t\t\t\tFlyOfferAct = FlownAct;\n\t\t\t\tFlyOfferRevision = Page.Revision;\n\t\t\t\tFlyOffer = 0;\n\t\t\t\tFlyOfferWhy = FlyNotOfferedLine(FString());\n") == 1);
+	CHECK(Count(Pc, "FlyOfferRevision =") == 2);
+	CHECK(Count(Pc, "FlyOfferRevision") == 4);
+	CHECK(Count(Ph, "FlyOfferRevision") == 2);
+	CHECK(Count(Ph, "FlyOfferRevision =") == 1);
+	CHECK(Count(Hud, "FlyOfferRevision") == 0);
+	// (the failed open's memo, kept for this read: FlyLive's failure leaves the pick and its read as they are)
+	CHECK(Count(Pc, "\t\tSky->HandBack = nullptr;\n\t\tSky->Destroy();\n\t\tFlyOffer = 0;\n\t\tFlyOfferWhy = FlyNotOfferedLine(FString());\n\t\tNotify(FlyNotOfferedLine(FString()), 6.0);\n\t\treturn;\n") == 1);
+	CHECK(Count(Pc, "FlyOfferAct.Reset") == 1);
+	// (the memo reads the card's read and never moves it; and each of the five reads of a page from the rules gives the
+	// card a new read, as before: OpenPage and an order's re-read, a step back, a door, and the room the rules name next)
+	CHECK(Count(Pc, "Page.Revision") == 17);
+	CHECK(Count(Pc, "Page.Revision = ") == 4);
+	CHECK(Count(Pc, "++Page.Revision;") == 4);
+	CHECK(Count(Pc, "Session->Page(") == 5);
+	CHECK(Count(Pc, "\tPage = ") == 5);
+	CHECK(Count(Pc, "\tconst int32 Revision = Page.Revision + 1;\n\tPage = Session->Page(Id, SelectedRegion);\n\tPage.Revision = Revision;\n") == 2);
+	CHECK(Count(Pc, "\t\t\tWas.Revision = Page.Revision + 1;\n\t\t\tPage = MoveTemp(Was);\n") == 1);
+	CHECK(Count(Pc, "\t\tconst int32 Opened = Page.Revision + 1;\n\t\tconst FString Left = Page.Id, Into = Action.Mid(5);\n\t\tPage = Session->Page(Into, SelectedRegion);\n\t\tPage.Revision = Opened;\n") == 1);
+	CHECK(Count(Pc, "\t\tconst int32 Opened = Page.Revision + 1;\n\t\tconst FOfficePage Then = Session->Page(Next, SelectedRegion);\n\t\tif (Then.bValid)\n\t\t{\n\t\t\tPage = Then;\n\t\t\tPage.Revision = Opened;\n") == 1);
+	// (the card is laid out again on its read and cannot move it: the HUD has the page only as a const reference)
+	CHECK(Count(Hud, "GetPage().Revision") == 2);
+	CHECK(Count(Ph, "const FOfficePage& GetPage() const { return Page; }") == 1);
 
 	// 5. The rules' refusals: whole sentences, and what the card says for each it can show.
 	const std::string Air = Between(Ticket, "export function airTicket(", "\n}\n");

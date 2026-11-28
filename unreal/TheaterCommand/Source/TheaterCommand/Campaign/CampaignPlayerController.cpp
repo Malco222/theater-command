@@ -13350,10 +13350,14 @@ bool ACampaignPlayerController::CanFlyLive() const
 	{
 		return false;
 	}
-	if (FlyOfferAct != Page.Card.Fly.Act)
+	if (FlyOfferAct != Page.Card.Fly.Act || FlyOfferRevision != Page.Revision)
 	{
 		// (weighed once a pick, the first time it is asked: the rules must have a battle in the air for this raid)
+		// (a second mend in his game, 27 November: and weighed again each time the card is read from the rules, opened, a
+		// pick changed or an order given on it, for the rules' answer to one pick changes with the war: the bomb armed for
+		// the city or taken back, dropped last month)
 		FlyOfferAct = Page.Card.Fly.Act;
+		FlyOfferRevision = Page.Revision;
 		FlyOffer = 0;
 		FlyOfferWhy.Reset();
 		FCampaignSession* Session = GetSession();
@@ -13403,8 +13407,9 @@ FString ACampaignPlayerController::FlyNotOfferedLine(const FString& RulesWhy)
 
 FString ACampaignPlayerController::FlyNotOfferedWhy() const
 {
-	// (weighed as the button is, once a pick: nothing to say where it is offered, or before CanFlyLive has weighed this pick)
-	if (CanFlyLive() || FlyOffer != 0 || FlyOfferAct != Page.Card.Fly.Act || FlyOfferWhy.IsEmpty())
+	// (weighed as the button is, once a pick and card read: nothing to say where it is offered, or before CanFlyLive has
+	// weighed this pick on this read of the card)
+	if (CanFlyLive() || FlyOffer != 0 || FlyOfferAct != Page.Card.Fly.Act || FlyOfferRevision != Page.Revision || FlyOfferWhy.IsEmpty())
 	{
 		return FString();
 	}
@@ -13461,7 +13466,8 @@ void ACampaignPlayerController::FlyLive()
 	};
 	if (!Sky->BeginLive(Session, Kind, Target, Ids))
 	{
-		// (the rules would not open it after all: the card stays, FLY THE RAID with it, and the offer is not made again for this pick)
+		// (the rules would not open it after all: the card stays, FLY THE RAID with it, and the offer is not made again for this
+		// pick on this read of the card)
 		Sky->HandBack = nullptr;
 		Sky->Destroy();
 		FlyOffer = 0;
@@ -13500,13 +13506,15 @@ void ACampaignPlayerController::AirHandBack(const FString& Kind, int32 Target, c
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Campaign: the raid (%s on %d) closed with no result; nothing booked"), *Kind, Target);
 		// (release 1.5: nothing booked, so the raid card comes back as he left it, FLY THE RAID on it; FLY IT YOURSELF is not
-		// offered again for that pick, whose rules have just failed, as when BeginLive cannot open it)
+		// offered again for that pick, whose rules have just failed, as when BeginLive cannot open it, until the card is next
+		// read)
 		if (!FlownPage.IsEmpty())
 		{
 			OpenPage(FlownPage);
 			if (bPageOpen)
 			{
 				FlyOfferAct = FlownAct;
+				FlyOfferRevision = Page.Revision;
 				FlyOffer = 0;
 				FlyOfferWhy = FlyNotOfferedLine(FString());
 			}

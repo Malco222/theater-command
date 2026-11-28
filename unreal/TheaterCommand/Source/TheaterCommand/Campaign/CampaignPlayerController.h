@@ -1695,11 +1695,15 @@ private:
 	void FightCustom();
 	/** A battle of his own handed back (its scene's CONTINUE): the door again, its outcome in a line. */
 	void CustomHandBack(const FString& Domain, const FString& ResultJson);
-	/** (Release 1.6) FLY IT YOURSELF's offer, weighed once for the fly act it was asked of (TC.airLook): 1 offered, 0 not, -1 not yet. */
+	/** (Release 1.6) FLY IT YOURSELF's offer, weighed once for the fly act it was asked of (TC.airLook), on the card read
+	 * FlyOfferRevision: 1 offered, 0 not, -1 not yet. */
 	mutable FString FlyOfferAct;
 	mutable int32 FlyOffer = -1;
 	/** (The known-faults mend of 27 November) The card's line kept with FlyOffer 0 for FlyOfferAct (FlyNotOfferedWhy); empty with 1 or -1. */
 	mutable FString FlyOfferWhy;
+	/** (A second mend in his game, 27 November) The card read (Page.Revision) FlyOffer was weighed on: weighed again each time
+	 * the card is read from the rules, so that neither FLY IT YOURSELF nor the card's line outlives the war it was weighed in. */
+	mutable int32 FlyOfferRevision = INDEX_NONE;
 	/** (Release 1.5) The raid card his raid was flown from (its page and its fly act), for the card to come back as he left
 	 * it when the raid closes with no result (AirHandBack). */
 	FString FlyLivePage;

@@ -4,6 +4,8 @@
 # holds the mend: the card's words, a line kept with every refusal and cleared with every offer, the log and the rules'
 # calls as before, the card's line drawn only where there is one, and the rules' refusals whole sentences. The bridge
 # probe of a refused raid is the rules' own test, tests/air-fly-why.test.ts (npx vitest run tests/air-fly-why.test.ts).
+# And the second mend (the design director's yes of 27 November 23:54Z): the offer weighed again at each read of the
+# card, its why held through the bridge's own calls by tests/air-fly-fresh.test.ts.
 # Usage: Tools/fly_why/run.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
