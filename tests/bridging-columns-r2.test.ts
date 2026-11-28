@@ -4,7 +4,7 @@
 // it; it counts as standing for its side at war only, is promised once, carries no trains, and comes back by fact, at
 // once where its engineer corps is gone. With the switch off nothing is written or read.
 import { describe, expect, it } from 'vitest';
-import { bridgingMonth, bridgingOn, columnAt, columnFor, columnLine, columnsOf, freeColumn, overColumns, setBridging } from '../src/campaign/bridging';
+import { bridgingMonth, bridgingOn, columnAt, columnFor, columnLine, columnsOf, freeColumn, overColumns, sameSideAtWar, setBridging } from '../src/campaign/bridging';
 import { ENGINEERING, blocked, crossingOf, downBetween, noCrossing } from '../src/campaign/rivers';
 import { addCorps, assess, createGame, moveCost, moveCorps, removeCorps, resolveBattle, setWar } from '../src/campaign/game';
 import { reach } from '../src/campaign/turn';
@@ -114,6 +114,18 @@ describe('bridging columns (release 2)', () => {
     expect(moveCorps(g, lorries, g.regions[MAG])).toBe(true);
     expect(columnsOf(g, 'GER')[0].used).toBe(g.turn);
     expect(columnsOf(g, 'ITA')).toEqual([]);
+  });
+
+  it('its side at war, case by case: the answers the land rules builder\'s allyAtWar must give at the join (read both ways)', () => {
+    // (Join list: sameSideAtWar becomes a call to siege.ts allyAtWar, a === b || (allyAtWar(a, b) && allyAtWar(b, a)),
+    // and this test asks both and finds them alike. The design director, 28 November 01:42Z, 1.)
+    const g = war();
+    const cases: [string, string][] = [['GER', 'GER'], ['GER', 'ITA'], ['ITA', 'GER'], ['GER', 'POL'], ['POL', 'GER'], ['UK', 'FRA'], ['FRA', 'POL'], ['GER', 'SOV']];
+    const before = cases.map(([a, b]) => sameSideAtWar(g, a, b));
+    expect(before).toEqual([true, false, false, false, false, true, true, false]);
+    setWar(g, 'ITA', 'FRA');
+    expect(sameSideAtWar(g, 'GER', 'ITA')).toBe(true);
+    expect(sameSideAtWar(g, 'ITA', 'GER')).toBe(true);
   });
 
   it('is promised once: two crossings in one attack, one free column, and the card and the battle lay it once', () => {

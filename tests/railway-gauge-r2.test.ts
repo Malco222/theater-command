@@ -3,7 +3,7 @@
 // railway troops re-lay captured track a few provinces a month; in the east the line is counted from the invader's own
 // railheads and every step costs the roads' alone. With the switch off nothing is written or read.
 import { describe, expect, it } from 'vitest';
-import { GAUGE, fitsGauge, gaugeOn, homeGauge, relay, relayChoice, setGauge, startTrack, trackGauge } from '../src/campaign/gauge';
+import { GAUGE, fitsGauge, gaugeOn, homeGauge, relay, relayChoice, setGauge, startKey, startTrack, trackGauge } from '../src/campaign/gauge';
 import { railheads, railsAt, relayMonth, onNet } from '../src/campaign/rails';
 import { EASTERN, addCorps, computeSupply, removeCorps, createGame, ensureSupply, freshStep, railReach, weather, whyNoTrain } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
@@ -102,25 +102,33 @@ describe('railway gauge (release 2)', () => {
     expect(gaugeFlags(g)).toEqual([]);
   });
 
-  it('the track at the start is the table by province, read at the start month by the one start-key reader', () => {
+  it('the track at the start is the table by province, read through the one start-key reader at the exact start', () => {
     const g = war();
     setGauge(g, true);
     const { pol, sov } = into(g);
     const P = g.regions[pol].name;
     const rows = [
-      { region: P, turns: [1, 17], gauge: 'broad', lay: true, why: 'test' },
-      { region: P, turns: [5], gauge: 'iberian', lay: true, why: 'test' },
+      { region: P, starts: ['1', '17'], gauge: 'broad', why: 'test' },
+      { region: P, starts: ['5'], gauge: 'iberian', why: 'test' },
     ];
+    expect(startKey(g)).toBe('1');
     expect(startTrack(g, rows)[pol]).toBe(homeGauge('SOV'));
     expect(startTrack(g, rows)[sov]).toBe(0);
     g.flags.openFrom = 5;
-    expect(startTrack(g, rows)[pol]).toBe(homeGauge('ESP'));
-    g.flags.openFrom = 11;
+    expect(startKey(g)).toBe('5');
     expect(startTrack(g, rows)[pol]).toBe(homeGauge('ESP'));
     g.flags.openFrom = 17;
     expect(startTrack(g, rows)[pol]).toBe(homeGauge('SOV'));
-    // The shipped table, placeholders named as such, has a row for every province and start it is not standard on.
-    expect(GAUGE.track.every((r) => r.why.startsWith('placeholder'))).toBe(true);
+    // Never the latest start at or before: a month that is no start has no key and no table, and the switch is refused there.
+    g.flags.openFrom = 11;
+    expect(startKey(g)).toBeUndefined();
+    expect(startTrack(g, rows)[pol]).toBe(0);
+    const h = war();
+    h.flags.openFrom = 11;
+    expect(setGauge(h, true)).toBe(false);
+    expect(gaugeOn(h)).toBe(false);
+    // The shipped table, placeholders named as such.
+    expect(GAUGE.track.every((r) => r.why.startsWith('placeholder') && r.starts.every((k) => ['1', '5', '17', '29'].includes(k)))).toBe(true);
   });
 
   it('the track keeps its gauge when its province changes owner; switching on again re-lays nothing', () => {

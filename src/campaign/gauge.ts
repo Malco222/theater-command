@@ -5,8 +5,9 @@
 // 'gauge', OFF until its gate.
 //
 // 1. Each province's track has a gauge, a fact of the ground: at the war's start, the table by province
-//    (data/campaign/gauge.json 'track', read at the start month by the one start-key reader, citydefences.ts
-//    startRowsAt; no row is standard), and after that whatever the last railway troops to re-lay it laid (flag
+//    (data/campaign/gauge.json 'track', read through the one start-key reader, startKey: the exact start, never the
+//    latest at or before a day; no row is standard; a start with no key refuses the switch), and after that whatever
+//    the last railway troops to re-lay it laid (flag
 //    'ga:<id>'). The owner of a province never changes its track: ground handed over by a treaty, a claim or a
 //    liberation keeps the track it had. Which track a nation's trains run on is its home gauge, by the nation
 //    (gauge.json 'home'; every nation not listed is standard). Never a date.
@@ -23,13 +24,24 @@
 // With the switch off nothing here is written, and every answer is the answer without it.
 
 import data from '../../data/campaign/gauge.json';
-import { startRowsAt } from './citydefences';
 import { headline } from './game';
 import { groundRules } from './ground';
 import type { Game } from './types';
 
-/** A row of the track's table: a province by name, the start months it reads at, its gauge, and why (gauge.json 'track'). */
-export interface TrackRow { region: string; turns: number[]; gauge: string; lay: boolean; why: string }
+/** A row of the track's table: a province by name, the starts it holds at (startKey), its gauge, and why (gauge.json 'track'). */
+export interface TrackRow { region: string; starts: string[]; gauge: string; why: string }
+
+/**
+ * The start the war opened at, as the door's days name it: '1', '5', '17' or '29', from g.flags.openFrom or the
+ * first day; undefined at any other month, never the latest start at or before it. The one start-key reader of the
+ * start rows form (FORM-START-ROWS-BY-SERVICE-4, ruled 27 November 19:15Z), written here to its signature until its
+ * own lands: at the join this becomes a call to it, with a test that the two answer alike (the design director,
+ * 28 November 01:42Z). It never ships as a copy.
+ */
+export function startKey(g: Game): '1' | '5' | '17' | '29' | undefined {
+  const m = g.flags.openFrom ?? 1;
+  return m === 1 ? '1' : m === 5 ? '5' : m === 17 ? '17' : m === 29 ? '29' : undefined;
+}
 export const GAUGE = data as unknown as { names: Record<string, string>; home: Record<string, string>; relay: number; track: TrackRow[] };
 
 /** The switch: a grand campaign's own, off unless the release 2 ship list or the player turns it on. */
@@ -44,21 +56,24 @@ export const homeGauge = (nat: string): number => HOME.get(nat) ?? 0;
 
 const KEYS: string[] = [];
 const key = (r: number): string => (KEYS[r] ??= `ga:${r}`);
-// The track at the war's start, by province: the table's rows at the start month (no row: standard). Worked out once a
-// game and start month: it reads the table and the provinces' names, which do not change.
-const STARTS = new WeakMap<Game, { from: number; rows: TrackRow[]; at: Int8Array }>();
-/** The gauge of every province's track at the war's start, by number. `rows` is for tests. */
+// The track at the war's start, by province: the table's rows at the start's key (no row: standard). Worked out once a
+// game and start: it reads the table and the provinces' names, which do not change.
+const STARTS = new WeakMap<Game, { key: string | undefined; rows: TrackRow[]; at: Int8Array }>();
+/** The gauge of every province's track at the war's start, by number (all standard at a start with no key). `rows` is for tests. */
 export function startTrack(g: Game, rows: TrackRow[] = GAUGE.track): Int8Array {
-  const from = g.flags.openFrom ?? 1;
+  const key = startKey(g);
   const kept = STARTS.get(g);
-  if (kept && kept.from === from && kept.rows === rows && kept.at.length === g.regions.length) return kept.at;
+  if (kept && kept.key === key && kept.rows === rows && kept.at.length === g.regions.length) return kept.at;
   const at = new Int8Array(g.regions.length);
-  const byName = new Map(g.regions.map((r) => [r.name, r.id]));
-  for (const row of startRowsAt(rows, from)) {
-    const id = byName.get(row.region);
-    if (id !== undefined) at[id] = codeOf(row.gauge);
+  if (key !== undefined) {
+    const byName = new Map(g.regions.map((r) => [r.name, r.id]));
+    for (const row of rows) {
+      if (!row.starts.includes(key)) continue;
+      const id = byName.get(row.region);
+      if (id !== undefined) at[id] = codeOf(row.gauge);
+    }
   }
-  STARTS.set(g, { from, rows, at });
+  STARTS.set(g, { key, rows, at });
   return at;
 }
 /** The gauge of a province's track, by number: what its last railway troops laid, or the table's at the war's start. */
@@ -69,10 +84,13 @@ export const gaugeName = (code: number): string => GAUGE.names[CODES[code] ?? 's
 /** Whether a nation's trains run on a province's track: always with the switch off. */
 export const fitsGauge = (g: Game, nat: string, r: number): boolean => !gaugeOn(g) || trackGauge(g, r) === homeGauge(nat);
 
-/** Turns the switch on or off at any time. On again while on, nothing changes. Off forgets every track re-laid. The supply picture is drawn afresh. */
+/**
+ * Turns the switch on or off at any time. On again while on, nothing changes. Refused on at a start with no key: there
+ * is no table there to read. Off forgets every track re-laid. The supply picture is drawn afresh.
+ */
 export function setGauge(g: Game, on: boolean): boolean {
   if (on) {
-    if (g.flags.open !== 1) return false;
+    if (g.flags.open !== 1 || startKey(g) === undefined) return false;
     if (g.flags.gauge === 1) return true;
     g.flags.gauge = 1;
   } else {
