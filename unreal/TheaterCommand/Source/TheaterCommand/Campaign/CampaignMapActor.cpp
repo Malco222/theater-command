@@ -12164,6 +12164,9 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 	const FIntVector4 ChartNow(Data.Seas.Num(), Terrain.NX, WorldTerrain.NX, Data.bFar ? 2 : Data.bWorld ? 1 : 0);
 	if (bFleetBerths && BerthsChart != ChartNow)
 	{
+		// (The joiner's ask, 28 November 2026: what the find costs is timed under one name, the islets here and a
+		// sea's berths below, so that the Mac's pair of pictures can read it against the month end's bar.)
+		THEATER_SPEED_SCOPE(FleetBerths);
 		BerthsChart = ChartNow;
 		BerthsKept.Reset();
 		// (A land under a dozen units across may be lost to the ground's grid, whose smoothed shore puts a rock of
@@ -12194,6 +12197,7 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 		{
 			return KeptBerths;
 		}
+		THEATER_SPEED_SCOPE(FleetBerths);
 		const FVector2D OwnMiddle = Data.Seas[SeaNumber].Center;
 		// (the islets within reach of this sea's berths, in the turn of the world its middle is counted in)
 		TArray<FVector> NearIslets;
