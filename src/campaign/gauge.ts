@@ -1,13 +1,15 @@
 // Railway gauge (release 2, batch 3).
 //
 // Brian, 27 November 2026 17:10Z, "Yes to all" to the idea; the design director's rulings of 17:15Z and 17:48Z on
-// r2-three-ideas/FORM-rails-rivers-1127.md, part A. Behind the grand campaign's flag 'gauge', OFF until its gate.
+// r2-three-ideas/FORM-rails-rivers-1127.md, part A, and of 28 November 01:12Z. Behind the grand campaign's flag
+// 'gauge', OFF until its gate.
 //
-// 1. Each province's track has a gauge: the day the switch comes on (the war's opening, on the ship list) its owner's
-//    that day (data/campaign/gauge.json 'home'; every nation not listed is standard), and after that whatever the last
-//    railway troops to re-lay it laid. Both are written on the province (flag 'ga:<id>'; none is standard), so a
-//    province that changes owner by a treaty, a claim or a liberation keeps the track it had. It is a fact of the map,
-//    never a date.
+// 1. Each province's track has a gauge, a fact of the ground: at the war's start, the table by province
+//    (data/campaign/gauge.json 'track', read at the start month by the one start-key reader, citydefences.ts
+//    startRowsAt; no row is standard), and after that whatever the last railway troops to re-lay it laid (flag
+//    'ga:<id>'). The owner of a province never changes its track: ground handed over by a treaty, a claim or a
+//    liberation keeps the track it had. Which track a nation's trains run on is its home gauge, by the nation
+//    (gauge.json 'home'; every nation not listed is standard). Never a date.
 // 2. A nation's trains run only on track of its own gauge. One reading, in rails.ts: the working net a nation's
 //    railheads are counted over (railheads), its trains' walk (game.ts railWalk, whyNoTrain, nearestBreak), and the
 //    long line in the east (game.ts reachInto). So supply, rail moves, the railhead's worth and every staff read it.
@@ -21,11 +23,14 @@
 // With the switch off nothing here is written, and every answer is the answer without it.
 
 import data from '../../data/campaign/gauge.json';
+import { startRowsAt } from './citydefences';
 import { headline } from './game';
 import { groundRules } from './ground';
 import type { Game } from './types';
 
-export const GAUGE = data as unknown as { names: Record<string, string>; home: Record<string, string>; relay: number };
+/** A row of the track's table: a province by name, the start months it reads at, its gauge, and why (gauge.json 'track'). */
+export interface TrackRow { region: string; turns: number[]; gauge: string; lay: boolean; why: string }
+export const GAUGE = data as unknown as { names: Record<string, string>; home: Record<string, string>; relay: number; track: TrackRow[] };
 
 /** The switch: a grand campaign's own, off unless the release 2 ship list or the player turns it on. */
 export const gaugeOn = (g: Game): boolean => g.flags.open === 1 && g.flags.gauge === 1 && groundRules(g);
@@ -39,27 +44,37 @@ export const homeGauge = (nat: string): number => HOME.get(nat) ?? 0;
 
 const KEYS: string[] = [];
 const key = (r: number): string => (KEYS[r] ??= `ga:${r}`);
-/** The gauge of a province's track, by number: what its owner had when the switch came on, or its last railway troops laid since. */
-export const trackGauge = (g: Game, r: number): number => g.flags[key(r)] ?? 0;
+// The track at the war's start, by province: the table's rows at the start month (no row: standard). Worked out once a
+// game and start month: it reads the table and the provinces' names, which do not change.
+const STARTS = new WeakMap<Game, { from: number; rows: TrackRow[]; at: Int8Array }>();
+/** The gauge of every province's track at the war's start, by number. `rows` is for tests. */
+export function startTrack(g: Game, rows: TrackRow[] = GAUGE.track): Int8Array {
+  const from = g.flags.openFrom ?? 1;
+  const kept = STARTS.get(g);
+  if (kept && kept.from === from && kept.rows === rows && kept.at.length === g.regions.length) return kept.at;
+  const at = new Int8Array(g.regions.length);
+  const byName = new Map(g.regions.map((r) => [r.name, r.id]));
+  for (const row of startRowsAt(rows, from)) {
+    const id = byName.get(row.region);
+    if (id !== undefined) at[id] = codeOf(row.gauge);
+  }
+  STARTS.set(g, { from, rows, at });
+  return at;
+}
+/** The gauge of a province's track, by number: what its last railway troops laid, or the table's at the war's start. */
+export const trackGauge = (g: Game, r: number): number => g.flags[key(r)] ?? startTrack(g)[r];
 /** The gauge's name, for the words: "broad", "standard", "Iberian". */
 export const gaugeName = (code: number): string => GAUGE.names[CODES[code] ?? 'standard'];
 
 /** Whether a nation's trains run on a province's track: always with the switch off. */
 export const fitsGauge = (g: Game, nat: string, r: number): boolean => !gaugeOn(g) || trackGauge(g, r) === homeGauge(nat);
 
-/**
- * Turns the switch on or off at any time. On, the track is laid as it lies that day: each province its owner's gauge.
- * On again while on, nothing changes. Off forgets every gauge. The supply picture is drawn afresh.
- */
+/** Turns the switch on or off at any time. On again while on, nothing changes. Off forgets every track re-laid. The supply picture is drawn afresh. */
 export function setGauge(g: Game, on: boolean): boolean {
   if (on) {
     if (g.flags.open !== 1) return false;
     if (g.flags.gauge === 1) return true;
     g.flags.gauge = 1;
-    for (const r of g.regions) {
-      const k = homeGauge(r.owner);
-      if (k) g.flags[key(r.id)] = k;
-    }
   } else {
     delete g.flags.gauge;
     for (const k of Object.keys(g.flags)) if (k.startsWith('ga:')) delete g.flags[k];
@@ -68,11 +83,11 @@ export function setGauge(g: Game, on: boolean): boolean {
   return true;
 }
 
-/** Re-lays a province's track to a nation's gauge; standard is no flag at all. */
+/** Re-lays a province's track to a nation's gauge; the gauge it had at the war's start again is no flag at all. */
 export function relay(g: Game, r: number, nat: string): void {
   const k = homeGauge(nat);
-  if (k) g.flags[key(r)] = k;
-  else delete g.flags[key(r)];
+  if (k === startTrack(g)[r]) delete g.flags[key(r)];
+  else g.flags[key(r)] = k;
   g.supplyDirty = true;
 }
 
