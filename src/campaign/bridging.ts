@@ -60,8 +60,8 @@ function carrying(g: Game, nat: string): Set<number> {
   return out;
 }
 
-/** An engineer corps that can carry a column: alive, of the nation, on land in the field. */
-const inField = (c: Corps, nat: string): boolean => !c.dead && c.kind === 'eng' && c.nat === nat && c.town === undefined && c.leave === undefined && !c.school;
+/** An engineer corps that can carry a column: alive, of the nation, on land in the field (not shut in a town, not home on leave, not at the schools, not at sea). */
+const inField = (c: Corps, nat: string): boolean => !c.dead && c.kind === 'eng' && c.nat === nat && c.town === undefined && c.leave === undefined && !c.school && c.sail === undefined;
 
 /**
  * The engineer corps of the nation whose column is free and that can reach the near bank this month by its own march,
