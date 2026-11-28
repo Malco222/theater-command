@@ -1176,8 +1176,9 @@ export function computeSupply(g: Game): void {
   if (!sameBytes(rail.step, step) || !sameBytes(rail.home, home)) book.rail = rail = { step, home };
   const railHolds = (then: RailNow | null): boolean => !then || then === rail || (sameBytes(then.step, rail.step) && sameBytes(then.home, rail.home));
   // (Release 2, gauge.ts, behind its switch) The track a picture into the east was counted over: the lines cut, the
-  // bridges down and the track re-laid, as they stand. Null with the switch off.
-  const track = gauge ? trackStamp(g) : null;
+  // bridges down and the track re-laid, as they stand, written out once a call where a picture into the east asks it.
+  let trackSeen: string | undefined;
+  const trackNow = (): string => (trackSeen ??= trackStamp(g));
   // Each country's friends among every holder numbered, asked once a country while what allied() reads of the war is
   // the same as when they were asked (friendsKeyOf: an alliance, a surrender, a war or the far side's ties change it,
   // and the tables are asked afresh) and no new holder has been numbered. (Only this call's holders are looked at by
@@ -1376,7 +1377,7 @@ export function computeSupply(g: Game): void {
     const kept = book.drawn.get(id);
     // (Release 2, gauge.ts, behind its switch: a picture reaching into the east is counted from the railheads, which the
     // cuts, the bridges and the track re-laid move, so it is drawn afresh in a call where the track has changed.)
-    if (kept && sameBytes(kept.seeds, seeds) && sameBytes(kept.heads, heads) && railHolds(kept.rail) && !(gauge && kept.rail && kept.track !== track) && roadsHold(kept, friend, road)) {
+    if (kept && sameBytes(kept.seeds, seeds) && sameBytes(kept.heads, heads) && railHolds(kept.rail) && !(gauge && kept.rail && kept.track !== trackNow()) && roadsHold(kept, friend, road)) {
       if (supplyCheck) {
         const pass = maskOf(friend, road);
         if (!sameBytes(pass, kept.mask)) throw new Error(`roads kept for ${id} in month ${g.turn} differ from fresh ones`);
@@ -1391,7 +1392,7 @@ export function computeSupply(g: Game): void {
     const drawn = drawSupply(g, id, pass, seeds, heads, wide, long, deep, sand, rail);
     g.supply[id] = drawn.ok;
     g.reach[id] = drawn.reach;
-    book.drawn.set(id, { mask: pass, friend, at: logEnd, seeds, heads, ...drawn, rail: drawn.east ? rail : null, ...(track !== null ? { track } : {}) });
+    book.drawn.set(id, { mask: pass, friend, at: logEnd, seeds, heads, ...drawn, rail: drawn.east ? rail : null, ...(gauge && drawn.east ? { track: trackNow() } : {}) });
   }
   // An army at peace is fed by its own country wherever it stands.
   for (const c of g.corps) c.supplied = !g.nations[c.nat].atWar.length || !!g.supply[c.nat]?.[c.reg];

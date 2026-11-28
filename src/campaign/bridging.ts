@@ -35,6 +35,9 @@ import type { Corps, Game, Region } from './types';
 export const bridgingOn = (g: Game): boolean => g.flags.open === 1 && g.flags.bridging === 1;
 
 const PREFIXES = ['bc:', 'bce:', 'bcu:'];
+// How many columns are laid, every nation's together: while it is 0 nothing below looks through the flags.
+const COUNT = 'bcn';
+const laidCount = (g: Game): number => g.flags[COUNT] ?? 0;
 /** Turns the switch on or off at any time. Off takes every column up. */
 export function setBridging(g: Game, on: boolean): boolean {
   if (on) {
@@ -43,6 +46,7 @@ export function setBridging(g: Game, on: boolean): boolean {
     return true;
   }
   delete g.flags.bridging;
+  delete g.flags[COUNT];
   for (const k of Object.keys(g.flags)) if (PREFIXES.some((p) => k.startsWith(p))) delete g.flags[k];
   return true;
 }
@@ -79,6 +83,7 @@ export const columnAt = (g: Game, nat: string, x: Crossing): boolean => columnOf
 /** The engineer corps of a nation whose columns are laid somewhere, by id. */
 function carrying(g: Game, nat: string): Set<number> {
   const out = new Set<number>();
+  if (!laidCount(g)) return out;
   const head = `bce:${nat}:`;
   for (const k in g.flags) if (k.startsWith(head)) out.add(g.flags[k]);
   return out;
@@ -143,6 +148,7 @@ function goOver(g: Game, c: Corps, from: number, to: number, wheels: boolean, wr
     nat = e.nat; laid = e;
     write(fromKey(nat, x), from);
     write(byKey(nat, x), e.id);
+    write(COUNT, laidCount(g) + 1);
     if (tell && g.human !== null && (e.nat === g.human || c.nat === g.human)) headline(g, 'info', `${e.name} lays a bridging column over the ${riverName(x)} between ${g.regions[from].name} and ${g.regions[to].name}. Wheels and tracks cross by it while your side uses it and holds the bank.`, g.human, from, { arm: 'land' });
   }
   write(usedKey(nat, x), g.turn);
@@ -190,21 +196,27 @@ export function overColumns(g: Game, attackers: readonly Corps[], target: Region
 export function columnsOf(g: Game, nat: string): { x: Crossing; from: number; by: number; used: number }[] {
   return laidOf(g, nat).filter((c) => !c.gone).map(({ x, from, by, used }) => ({ x, from, by, used }));
 }
-function laidOf(g: Game, nat: string): { x: Crossing; from: number; by: number; used: number; gone: boolean }[] {
-  const out: { x: Crossing; from: number; by: number; used: number; gone: boolean }[] = [];
-  if (!bridgingOn(g)) return out;
-  const head = `bc:${nat}:`;
+type Laid = { nat: string; x: Crossing; from: number; by: number; used: number; gone: boolean };
+/** The columns laid, of one nation's engineer corps or (no nation) of every nation's, in one look through the flags. */
+function laidOf(g: Game, nat?: string): Laid[] {
+  const out: Laid[] = [];
+  if (!bridgingOn(g) || !laidCount(g)) return out;
+  const head = nat === undefined ? 'bc:' : `bc:${nat}:`;
   for (const k in g.flags) {
     if (!k.startsWith(head)) continue;
-    const [, , a, b] = k.split(':');
+    const [, n, a, b] = k.split(':');
     const x = crossingOf(+a, +b);
     if (!x) continue;
-    const by = g.flags[byKey(nat, x)];
-    out.push({ x, from: g.flags[k], by, used: g.flags[usedKey(nat, x)] ?? -1, gone: corpsOf(g, by) === undefined });
+    const by = g.flags[byKey(n, x)];
+    out.push({ nat: n, x, from: g.flags[k], by, used: g.flags[usedKey(n, x)] ?? -1, gone: corpsOf(g, by) === undefined });
   }
   return out;
 }
-const takeUp = (g: Game, nat: string, x: Crossing): void => { delete g.flags[fromKey(nat, x)]; delete g.flags[byKey(nat, x)]; delete g.flags[usedKey(nat, x)]; };
+function takeUp(g: Game, nat: string, x: Crossing): void {
+  delete g.flags[fromKey(nat, x)]; delete g.flags[byKey(nat, x)]; delete g.flags[usedKey(nat, x)];
+  const n = laidCount(g) - 1;
+  if (n > 0) g.flags[COUNT] = n; else delete g.flags[COUNT];
+}
 
 /**
  * The reckoning that opens a nation's month (game.ts startPhase): each column of its engineer corps comes back where
@@ -214,14 +226,13 @@ const takeUp = (g: Game, nat: string, x: Crossing): void => { delete g.flags[fro
  */
 export function bridgingMonth(g: Game, nat: string): { x: Crossing; why: 'gone' | 'bridge' | 'bank' | 'unused' }[] {
   const back: { x: Crossing; why: 'gone' | 'bridge' | 'bank' | 'unused' }[] = [];
-  if (!bridgingOn(g)) return back;
-  for (const col of laidOf(g, nat)) {
+  for (const col of laidOf(g)) {
+    if (col.nat !== nat) { if (col.gone) takeUp(g, col.nat, col.x); continue; }
     const why = col.gone ? 'gone' : !bridgeDown(g, col.x) ? 'bridge' : !sameSideAtWar(g, nat, g.regions[col.from].ctrl) ? 'bank' : col.used < g.turn - 1 ? 'unused' : null;
     if (!why) continue;
     takeUp(g, nat, col.x);
     back.push({ x: col.x, why });
   }
-  for (const n of Object.keys(g.nations)) if (n !== nat) for (const col of laidOf(g, n)) if (col.gone) takeUp(g, n, col.x);
   return back;
 }
 
