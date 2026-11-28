@@ -102,7 +102,7 @@ import { carried } from '../../../src/campaign/support';
 import { briefTicket } from '../../../src/campaign/facing';
 import { guardMen, guardOf, garrisonOf, previewSally, salliers } from '../../../src/campaign/siege';
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
-import { blocked, bridgeDown, crossingsOf, onWheels, riverBetween, riverName, riverNotes, riversOf } from '../../../src/campaign/rivers';
+import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, riversOf } from '../../../src/campaign/rivers';
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
 import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
@@ -196,7 +196,7 @@ import { kitLine, pressedOn, setPressed } from '../../../src/campaign/pressed';
 import { diaryEntries, diaryOn, setDiary } from '../../../src/campaign/diary';
 import { chanceWords as heldChanceWords, heldOn, heldRibbon, setHeld } from '../../../src/campaign/heldline';
 import { setWorn, wornLine, wornOn, WORN } from '../../../src/campaign/wornout';
-import { bridgingOn, columnFor, columnLine, setBridging } from '../../../src/campaign/bridging';
+import { bridgingOn, columnLine, overColumns, setBridging } from '../../../src/campaign/bridging';
 import { GAUGE, gaugeOn, setGauge } from '../../../src/campaign/gauge';
 import { HOSP, hospOn, setHosp, woundedLine } from '../../../src/campaign/fieldhospitals';
 import { interceptsOn, setIntercepts } from '../../../src/campaign/intercepts';
@@ -3376,8 +3376,9 @@ function approach(ids: number[], to: number) {
       const cross = riverBetween(s, j, to);
       const river = cross ? riverName(cross) : '';
       const down = !!cross && bridgeDown(s, cross);
-      // (Release 2, bridging.ts, behind its switch) Where a column of his stands there or the order to cross would lay one.
-      const overColumn = down && going.some(({ c }) => columnFor(s, c.nat, j, to, onWheels(c.kind)));
+      // (Release 2, bridging.ts, behind its switch) Where a column of his side stands there, or the order to cross would
+      // lay one: the attack's own laying, asked of the hand as it would stand on that bank (a column promised once).
+      const overColumn = down && bridgingOn(s) && overColumns(s, going.map(({ c }) => ({ ...c, reg: j })), target).over.size > 0;
       const arrive = attack ? `${left} move${left === 1 ? '' : 's'} left on arrival: you can attack this month`
         : left > 0 ? `${left} move${left === 1 ? '' : 's'} left on arrival, but the way in from there is barred to this army this month`
           : 'No move left on arrival: the attack waits for next month';

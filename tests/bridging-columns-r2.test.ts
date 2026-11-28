@@ -1,11 +1,13 @@
 // Bridging columns (release 2; Brian's yes of 27 November 2026 17:10Z; the design director's rulings of 17:15Z and
-// 17:48Z on r2-three-ideas/FORM-rails-rivers-1127.md, part B): each engineer corps carries one; where the bridges are
-// down, the first corps of its nation on wheels to cross within its march lays it; it counts as standing for that
-// nation only, carries no trains, and comes back by fact. With the switch off nothing is written or read.
+// 17:48Z on r2-three-ideas/FORM-rails-rivers-1127.md, part B, and of 28 November 01:12Z): each engineer corps carries
+// one; where the bridges are down, the first corps of its side on wheels to cross within the engineers' own march lays
+// it; it counts as standing for its side at war only, is promised once, carries no trains, and comes back by fact, at
+// once where its engineer corps is gone. With the switch off nothing is written or read.
 import { describe, expect, it } from 'vitest';
-import { bridgingMonth, bridgingOn, columnAt, columnFor, columnLine, columnsOf, freeColumn, setBridging } from '../src/campaign/bridging';
+import { bridgingMonth, bridgingOn, columnAt, columnFor, columnLine, columnsOf, freeColumn, overColumns, setBridging } from '../src/campaign/bridging';
 import { ENGINEERING, blocked, crossingOf, downBetween, noCrossing } from '../src/campaign/rivers';
-import { addCorps, assess, createGame, moveCost, moveCorps } from '../src/campaign/game';
+import { addCorps, assess, createGame, moveCost, moveCorps, removeCorps, resolveBattle, setWar } from '../src/campaign/game';
+import { reach } from '../src/campaign/turn';
 import { startOpen } from '../src/campaign/staff';
 import { railsAt } from '../src/campaign/rails';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -90,7 +92,7 @@ describe('bridging columns (release 2)', () => {
     expect(freeColumn(g, 'GER', BER)).toBeNull();
   });
 
-  it('counts as standing for its nation only: another army gains nothing from it', () => {
+  it('serves its side at war: an ally at war crosses by it and uses it; an ally at peace and the enemy gain nothing', () => {
     const g = war();
     setBridging(g, true);
     blowAt(g, HAN, MAG);
@@ -98,8 +100,75 @@ describe('bridging columns (release 2)', () => {
     corps(g, 'GER', HAN, 'eng');
     const tank = corps(g, 'GER', HAN, 'arm');
     expect(moveCorps(g, tank, g.regions[MAG])).toBe(true);
-    expect(columnAt(g, 'ITA', crossingOf(HAN, MAG)!)).toBe(false);
+    const x = crossingOf(HAN, MAG)!;
+    // The enemy gains nothing; nor a member of the bloc at peace.
     expect(noCrossing(g, 'arm', HAN, MAG, 'POL')).toBe(true);
+    expect(g.nations.ITA.atWar.length).toBe(0);
+    expect(columnAt(g, 'ITA', x)).toBe(false);
+    // At war, the ally's lorries cross by the German column, and their crossing counts as using it.
+    setWar(g, 'ITA', 'FRA');
+    expect(columnAt(g, 'ITA', x)).toBe(true);
+    expect(noCrossing(g, 'mot', HAN, MAG, 'ITA')).toBe(false);
+    g.flags[`bcu:GER:${x.a}:${x.b}`] = g.turn - 5;
+    const lorries = corps(g, 'ITA', HAN, 'mot');
+    expect(moveCorps(g, lorries, g.regions[MAG])).toBe(true);
+    expect(columnsOf(g, 'GER')[0].used).toBe(g.turn);
+    expect(columnsOf(g, 'ITA')).toEqual([]);
+  });
+
+  it('is promised once: two crossings in one attack, one free column, and the card and the battle lay it once', () => {
+    const g = war();
+    setBridging(g, true);
+    pinEngineers(g);
+    // Hanover attacked over its rivers from Magdeburg and from a second bank the engineers in Magdeburg reach this month.
+    const eng = corps(g, 'GER', MAG, 'eng');
+    const m = reach(g, eng);
+    const B = g.regions[HAN].nb.find((j) => j !== MAG && crossingOf(j, HAN) !== null && g.regions[j].ctrl === 'GER' && m.has(j) && !m.get(j)!.attack);
+    expect(B).toBeDefined();
+    blowAt(g, MAG, HAN);
+    blowAt(g, B!, HAN);
+    const t1 = corps(g, 'GER', MAG, 'arm'), t2 = corps(g, 'GER', B!, 'arm');
+    g.regions[HAN].ctrl = 'POL';
+    corps(g, 'POL', HAN, 'inf');
+    // Either tank alone could have the one column.
+    expect(columnFor(g, 'GER', MAG, HAN, true)).toBe(true);
+    expect(columnFor(g, 'GER', B!, HAN, true)).toBe(true);
+    // Both in one attack: it is promised once, to the first crossing ordered; the other waits on its bank.
+    const plan = overColumns(g, [t1, t2], g.regions[HAN]);
+    expect([...plan.over]).toEqual([t1.id]);
+    expect(plan.laid.map((e) => e.id)).toEqual([eng.id]);
+    const river = assess(g, [t1, t2], g.regions[HAN]).lines.find((l) => l.label === 'River')!;
+    expect(river.effect).toMatch(/one corps of tanks, lorries or guns cannot cross/);
+    expect(river.effect).toMatch(/lays its one column as the attack goes in, and the first crossing ordered takes it/);
+    // Asking wrote nothing.
+    expect(flagsOf(g)).toEqual([]);
+    // Going in lays the one the card named, once.
+    resolveBattle(g, [t1, t2], g.regions[HAN]);
+    expect(columnsOf(g, 'GER').map((c) => [c.from, c.by])).toEqual([[MAG, eng.id]]);
+  });
+
+  it('a column whose engineer corps is gone stands nowhere at once; ringed or on leave, the corps keeps it', () => {
+    const g = war();
+    setBridging(g, true);
+    blowAt(g, HAN, MAG);
+    pinEngineers(g);
+    const eng = corps(g, 'GER', HAN, 'eng');
+    const tank = corps(g, 'GER', HAN, 'arm');
+    expect(moveCorps(g, tank, g.regions[MAG])).toBe(true);
+    const x = crossingOf(HAN, MAG)!;
+    // Home on leave, it still exists: its column keeps the three facts.
+    eng.leave = g.turn + 2;
+    expect(columnAt(g, 'GER', x)).toBe(true);
+    delete eng.leave;
+    // Destroyed: at once the column stands nowhere, and the tanks wait on the bank again.
+    removeCorps(g, eng);
+    expect(columnAt(g, 'GER', x)).toBe(false);
+    expect(columnsOf(g, 'GER')).toEqual([]);
+    expect(noCrossing(g, 'arm', MAG, HAN, 'GER')).toBe(true);
+    // Its flags go at the next opening of its nation's month.
+    g.turn += 1;
+    expect(bridgingMonth(g, 'GER')).toEqual([{ x, why: 'gone' }]);
+    expect(flagsOf(g)).toEqual([]);
   });
 
   it('comes back by fact at the opening of its nation\'s month: unused in the month gone, the bridge rebuilt, the bank lost', () => {
