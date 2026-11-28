@@ -295,6 +295,9 @@ namespace
 		EConsoleVariableFlags By = ECVF_SetByScalability;
 	};
 	TArray<FLeanKept> LeanKept; // (tc.Speed.LeanLand: each setting laid, as it stood before and the rank it was laid at)
+	TArray<FString> LeanSayNames; // (...the settings the log is to read back two seconds after a lay or a lift)
+	double LeanSayAt = 0.0; // (...and when; 0: nothing owed)
+	bool bLeanSayLaid = false; // (...after a lay, or after a lift)
 	int32 Summaries = 0;
 	// (the last five seconds the log closed, its frames a second and worst frame, for a reader that prints them beside
 	// its own counts: TheaterSpeed::LastWindow, the air battle's timing eye)
@@ -1032,6 +1035,18 @@ namespace TheaterSpeed
 		}
 	}
 
+	/** tc.Speed.LeanLand: the log owes a line on what the settings now kept stand at, two seconds from now (SayLeanLand). */
+	static void OweLeanSay(bool bLaid)
+	{
+		LeanSayNames.Reset();
+		for (const FLeanKept& Kept : LeanKept)
+		{
+			LeanSayNames.Add(Kept.Name);
+		}
+		bLeanSayLaid = bLaid;
+		LeanSayAt = LeanSayNames.Num() > 0 ? FPlatformTime::Seconds() + 2.0 : 0.0;
+	}
+
 	/**
 	 * tc.Speed.LeanLand: a land battle's lighter frame. (The speed hunter's finding 1, 27 November: a frame must cost the
 	 * chip about 15.5 ms or less on a cool Mac to hold 45 frames a second on a hot one; Prokhorovka's costs 15 and
@@ -1081,6 +1096,7 @@ namespace TheaterSpeed
 			LeanKept.Add(MoveTemp(Kept));
 		}
 		UE_LOG(LogTheater, Display, TEXT("Speed: the land battle's lighter frame laid: %s (tc.Speed.LeanLand)"), Laid.IsEmpty() ? TEXT("nothing") : *Laid);
+		OweLeanSay(true);
 	}
 
 	void LiftLeanLand()
@@ -1095,8 +1111,33 @@ namespace TheaterSpeed
 		if (LeanKept.Num() > 0)
 		{
 			UE_LOG(LogTheater, Display, TEXT("Speed: the land battle's lighter frame lifted, %d settings as they stood (tc.Speed.LeanLand)"), LeanKept.Num());
+			OweLeanSay(false);
 		}
 		LeanKept.Reset();
+	}
+
+	/**
+	 * tc.Speed.LeanLand: what the settings stand at two seconds after a lay or a lift, for the log. (A quality group lays
+	 * its own settings when its level changes, and the battle changes the shadows' level just before the lay and just
+	 * after the lift. The line after a lay shows that the lay stood and was not laid over a frame later; the line after
+	 * a lift shows the map's own values back, which the battle's trims put there after this file's lift.)
+	 */
+	static void SayLeanLand(double Now)
+	{
+		if (LeanSayAt <= 0.0 || Now < LeanSayAt)
+		{
+			return;
+		}
+		LeanSayAt = 0.0;
+		FString Stand;
+		for (const FString& Name : LeanSayNames)
+		{
+			const IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*Name);
+			Stand += FString::Printf(TEXT("%s%s %s"), Stand.IsEmpty() ? TEXT("") : TEXT(", "), *Name, Variable ? *Variable->GetString() : TEXT("gone"));
+		}
+		UE_LOG(LogTheater, Display, TEXT("Speed: the land battle's lighter frame, two seconds after it was %s: %s (tc.Speed.LeanLand)"),
+			bLeanSayLaid ? TEXT("laid") : TEXT("lifted"), *Stand);
+		LeanSayNames.Reset();
 	}
 
 	/** tc.Speed.Pace: the seconds of a lower heat before a step is lifted, now: twice as long for each relapse. */
@@ -1198,6 +1239,7 @@ namespace TheaterSpeed
 		}
 		if (Want == CapInForce)
 		{
+			bCapPaced = bPaced; // (the same cap, and whose it is now: the pace's 45 under a tc.Speed.FrameCap since set to 45, or the other way)
 			return;
 		}
 		const TCHAR* const Why = bPaced ? TEXT("tc.Speed.Pace") : TEXT("tc.Speed.FrameCap");
@@ -1260,6 +1302,7 @@ namespace TheaterSpeed
 	{
 		ApplyCommandLineSets(); // (in case no table was laid first: it is done once)
 		TickPace(FPlatformTime::Seconds()); // (tc.Speed.Pace: the step the Mac's heat asks for, which the cap below puts in force)
+		SayLeanLand(FPlatformTime::Seconds()); // (tc.Speed.LeanLand: the line owed two seconds after a lay or a lift)
 		ApplyFrameCap(); // (after the command line's sets, so that -TheaterSet=tc.Speed.FrameCap=60 is in force from the first frame)
 		// (Speed: tc.Speed.TidyAside, the second half. The frame just ended by the machine's own clock, which the game's
 		// speed and its pauses do not stretch; and when the engine last cleared out, whoever asked.)
