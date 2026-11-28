@@ -104,6 +104,7 @@ import { airWarMonth } from './aircampaigns';
 import { cancelFerry, ferryMonth, ferryOn, ferryRoutes, orderFerry, type FerryRoute } from './ferry';
 import { bargainsFirstDay, bargainsMonth, placeBid, chooseBuyer } from './bargains';
 import { legionsMonth, recallLegion, sendLegion } from './legions';
+import { columnReach } from './bridging';
 
 export const current = (g: Game): string => g.order[g.phase];
 
@@ -412,6 +413,10 @@ export function canOrder(g: Game, c: Corps): boolean {
 const ownOrder = (g: Game, c: Corps): boolean => c.nat === g.human && canOrder(g, c);
 
 export interface Reach { cost: number; prev: number; attack: boolean }
+
+// The column rule (bridging.ts) asks this very reach whether an engineer corps can march to the bank this month. It is
+// handed over here because bridging.ts sits below this file: game.ts and rivers.ts load it.
+columnReach.reach = reach;
 
 /** Every region this corps could get to this month, and the enemy-held ones it could attack. */
 export function reach(g: Game, c: Corps): Map<number, Reach> {

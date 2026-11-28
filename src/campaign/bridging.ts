@@ -10,7 +10,8 @@
 // 2. A column serves its side: one nation, or the nations of its bloc at war (the ally feed ruling's word (e): an ally
 //    is a nation of the bloc at war). Where a corps of the side on wheels or tracks crosses a river whose bridges are
 //    down, by a march or an attack, and an engineer corps of the side whose column is free can reach the near bank
-//    this month by its own march (turn.ts reach, called: the move rule's own reach), that corps' column is laid there.
+//    this month by its own march (turn.ts reach, called: the move rule's own reach, which turn.ts hands to columnReach as
+//    it loads), that corps' column is laid there.
 //    The order to cross lays it. A column cannot be in two places. The engineer corps stays where it is.
 // 3. A laid column makes the crossing count as standing for its side only: wheels cross, the march costs what it costs
 //    over a bridge, and an attack across is priced at river.attack, so the boats' figure, with or without engineers,
@@ -26,10 +27,17 @@
 // and assess), the same for every army. With the switch off nothing here is written, and every answer is the
 // answer without it.
 
-import { reach } from './turn';
 import { bridgeDown, crossingOf, onWheels, riverName, type Crossing } from './rivers';
 import { allied, headline } from './game';
+import type { Reach } from './turn';
 import type { Corps, Game, Region } from './types';
+
+/**
+ * The move rule's own reach (turn.ts reach), the very function, handed over by turn.ts as it loads, the way turn.ts
+ * hands atom.ts its raid (atomFly). This file never imports turn.ts: game.ts and rivers.ts load it, and turn.ts sits
+ * above them both, so an import here would load the whole month's turn under the board's own rules.
+ */
+export const columnReach: { reach?: (g: Game, c: Corps) => Map<number, Reach> } = {};
 
 /** The switch: a grand campaign's own, off unless the release 2 ship list or the player turns it on. */
 export const bridgingOn = (g: Game): boolean => g.flags.open === 1 && g.flags.bridging === 1;
@@ -108,7 +116,8 @@ export function freeColumn(g: Game, nat: string, from: number): Corps | null {
     let k: number;
     if (e.reg === from) k = 0;
     else {
-      const m = reach(g, e).get(from);
+      if (!columnReach.reach) throw new Error('bridging: turn.ts has not handed over the move rule\'s reach (columnReach)');
+      const m = columnReach.reach(g, e).get(from);
       if (!m || m.attack) continue;
       k = m.cost;
     }
