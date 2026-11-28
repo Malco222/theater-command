@@ -24,6 +24,7 @@ import { allied, atWar, headline } from './game';
 import { REARGUARD, chargesLaid } from './rearguard';
 import { stationBars, tieBars, whyStationBars, whyTieBars } from './far';
 import { halted } from './history';
+import { columnFor } from './bridging';
 
 export interface River { name: string; /** The course in map units. */ pts: [number, number][]; /** The same course as [latitude, longitude]. */ ll: [number, number][] }
 /** A river between two neighbouring regions (a is the lower id), and where on the map its bridge stands. */
@@ -91,8 +92,14 @@ export function downBetween(g: Game, a: number, b: number): boolean {
   const c = riverBetween(g, a, b);
   return c !== null && bridgeDown(g, c);
 }
-/** Whether a corps of this kind cannot cross: anything on wheels or tracks, while the bridges are down. */
-export const noCrossing = (g: Game, kind: Kind, from: number, to: number): boolean => WHEELS.has(kind) && downBetween(g, from, to);
+/** True for a corps on wheels or tracks: what waits on the bank while the bridges are down (engineering.json blown.barred). */
+export const onWheels = (kind: Kind): boolean => WHEELS.has(kind);
+/**
+ * Whether a corps of this kind cannot cross: anything on wheels or tracks, while the bridges are down. (Release 2,
+ * bridging.ts, behind its switch: given the corps' nation, not where a column of that nation stands there or can be
+ * laid by the order to cross. Off, the nation is not read.)
+ */
+export const noCrossing = (g: Game, kind: Kind, from: number, to: number, nat?: string): boolean => WHEELS.has(kind) && downBetween(g, from, to) && !(nat !== undefined && columnFor(g, nat, from, to, true));
 
 /**
  * Whether a corps cannot go from where it stands (or from another region) into a neighbour: ground too steep, or
@@ -102,7 +109,7 @@ export const noCrossing = (g: Game, kind: Kind, from: number, to: number): boole
  * that is shut to it (straitOpen). And ground its holder stands on by agreement with an owner the corps' country is
  * at peace with (far.ts `stationBars`: Indochina under Japan's demand).
  */
-export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id) || tieBars(g, c, to, from) || stationBars(g, c.nat, to) || halted(g, c.nat, to.name) || keepsHome(g, c, to) || !straitOpen(g, c, g.regions[from], to);
+export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id, c.nat) || tieBars(g, c, to, from) || stationBars(g, c.nat, to) || halted(g, c.nat, to.name) || keepsHome(g, c, to) || !straitOpen(g, c, g.regions[from], to);
 
 /** True where a computer-run country whose war is only declared (diplomacy.json 'stay') would send a corps off its own ground. */
 export const keepsHome = (g: Game, c: Corps, to: Region): boolean => !!g.flags[`stay:${c.nat}`] && c.nat !== g.human && to.owner !== c.nat;
@@ -111,7 +118,7 @@ export const keepsHome = (g: Game, c: Corps, to: Region): boolean => !!g.flags[`
 export function whyBlocked(g: Game, c: Corps, to: Region, from = c.reg): string | null {
   const high = whyBarred(g, c, to);
   if (high) return high;
-  if (!noCrossing(g, c.kind, from, to.id)) return whyTieBars(g, c, to, from) ?? whyStationBars(g, c.nat, to);
+  if (!noCrossing(g, c.kind, from, to.id, c.nat)) return whyTieBars(g, c, to, from) ?? whyStationBars(g, c.nat, to);
   const x = crossingOf(from, to.id)!;
   return `The bridges over the ${riverName(x)} between ${g.regions[from].name} and ${to.name} are down. ${c.name} cannot cross until engineers rebuild them.`;
 }

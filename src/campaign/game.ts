@@ -50,7 +50,8 @@ import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMa
 import { SUPPORT, antiTank, assaultFire, footShare, machineGuns, mortars, snipedIn, tollFor, tollOf, whoPaid, type Faced, type Facing } from './support';
 import { teamFire, teamFireLine, teamFireOn, type TeamFire } from './teamfire';
 import { isTeam, TEAMS, teamsIn } from './teams';
-import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName, worksName } from './rivers';
+import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, onWheels, riverBetween, riverName, worksName } from './rivers';
+import { bridgingMonth, bridgingOn, columnAt, columnFor, crossOver } from './bridging';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled, willBurn } from './prizes';
@@ -936,7 +937,9 @@ export function moveCost(g: Game, c: Corps, to: Region, from = c.reg): number {
   if (!road) cost += groundMarch(g, c.kind, to);
   if (groundRules(g)) {
     // A river whose bridges are down is crossed in boats, and an enemy's minefields are felt for yard by yard.
-    if (downBetween(g, from, to.id)) cost += ENGINEERING.blown.march;
+    // (Release 2, bridging.ts, behind its switch: over a column of its nation's, or one its order to cross lays, the
+    // river is crossed as over a bridge. Off, the boats' march as before.)
+    if (downBetween(g, from, to.id) && !columnFor(g, c.nat, from, to.id, onWheels(c.kind))) cost += ENGINEERING.blown.march;
     if (!allied(g, c.nat, to.ctrl) && minesAt(g, to)) cost += ENGINEERING.mines.march;
   }
   if (to.terrain === 'mountain' && c.kind !== 'mtn') cost += 1;
@@ -1931,7 +1934,10 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const wide = groundRules(g);
   const land = opts.sea === undefined;
   // Tanks that cannot get over a river whose bridges are down are no help to the infantry that does.
-  const armsA = wide ? combinedArms(g, land ? attackers.filter((c) => !noCrossing(g, c.kind, c.reg, target.id)) : attackers, target, false) : null, armsD = wide && !town ? combinedArms(g, defenders, target, true) : null;
+  const armsA = wide ? combinedArms(g, land ? attackers.filter((c) => !noCrossing(g, c.kind, c.reg, target.id, c.nat)) : attackers, target, false) : null, armsD = wide && !town ? combinedArms(g, defenders, target, true) : null;
+  // (overColumn: attackers over a bridging column, bridging.ts; 0 with its switch off.)
+  const bridging = wide && land && bridgingOn(g);
+  let overColumn = 0;
   let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1, shortA = 1, shortD = 1, spied = '', streets = false;
   // (Release 2, wornout.ts) The most any corps of each side has lost of its edge to its months in the line: 0 with the switch off.
   let spentA = 0, spentD = 0;
@@ -1971,7 +1977,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const flak = town ? townFlakCut(g, target) : 0;
   for (const c of attackers) {
     if (wide && barred(g, c, target)) { tooSteep++; continue; }
-    if (wide && land && noCrossing(g, c.kind, c.reg, target.id)) { noBridge++; continue; }
+    if (wide && land && noCrossing(g, c.kind, c.reg, target.id, c.nat)) { noBridge++; continue; }
     let p = corpsBase(g, c) * KIND[c.kind].atk;
     if (hasty) p *= rushed;
     if (wide) {
@@ -1981,7 +1987,10 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       const x = land ? riverBetween(g, c.reg, target.id) : null;
       if (x) {
         rivers.add(riverName(x));
-        if (bridgeDown(g, x)) { p *= sap ? ENGINEERING.blown.withEngineers : ENGINEERING.blown.attack; inBoats++; }
+        // (Release 2, bridging.ts, behind its switch) Over a column of its nation's, or one a corps of its nation on
+        // wheels beside it would lay by going in, the crossing counts as standing, and the boats are not also read.
+        if (bridgeDown(g, x) && bridging && (columnAt(g, c.nat, x) || attackers.some((w) => w.nat === c.nat && w.reg === c.reg && onWheels(w.kind) && columnFor(g, c.nat, c.reg, target.id, true)))) { p *= ENGINEERING.river.attack; overColumn++; }
+        else if (bridgeDown(g, x)) { p *= sap ? ENGINEERING.blown.withEngineers : ENGINEERING.blown.attack; inBoats++; }
         else { p *= ENGINEERING.river.attack; overBridges++; }
       }
       if (mined !== 1) p *= mined;
@@ -2175,7 +2184,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // its works, the town's guard a block of its own). Each side's teams count at their worth after the lines meet, and
   // their fire before the lines meet wears the line it falls on. Last of all, so the power before it is the field's.
   const teamFx = teamFireOn(g) && land && !town && !opts.sally && defenders.length > 0 ? teamFire({
-    att: attackers.filter((c) => !(wide && (barred(g, c, target) || noCrossing(g, c.kind, c.reg, target.id)))).map((c) => [c.kind, corpsBase(g, c) * KIND[c.kind].atk]),
+    att: attackers.filter((c) => !(wide && (barred(g, c, target) || noCrossing(g, c.kind, c.reg, target.id, c.nat)))).map((c) => [c.kind, corpsBase(g, c) * KIND[c.kind].atk]),
     def: defenders.map((d) => [d.kind, corpsBase(g, d) * KIND[d.kind].def * (1 + 0.25 * Math.min(1, worksOf(d)))]),
     guard: guarded > 0 ? guardPower(g, target) * 1.25 : 0,
     odds: A / D, terrain: target.terrain, fort: served && target.fort && fortFaced > 0 ? target.fort.lv : 0,
@@ -2261,16 +2270,18 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     });
   }
   if (wide && (rivers.size || noBridge)) {
-    const name = rivers.size ? [...rivers].join(' and the ') : riverName(riverBetween(g, attackers.find((c) => noCrossing(g, c.kind, c.reg, target.id))!.reg, target.id)!);
-    const crossing = overBridges + inBoats, all = attackers.length - tooSteep;
+    const name = rivers.size ? [...rivers].join(' and the ') : riverName(riverBetween(g, attackers.find((c) => noCrossing(g, c.kind, c.reg, target.id, c.nat))!.reg, target.id)!);
+    const crossing = overBridges + inBoats + overColumn, all = attackers.length - tooSteep;
     const fx = [
       overBridges ? `over the bridges the attack is cut to ${Math.round(ENGINEERING.river.attack * 100)}%` : '',
+      // (Release 2, bridging.ts: 0 with its switch off.)
+      overColumn ? `over a bridging column the attack is cut to ${Math.round(ENGINEERING.river.attack * 100)}%` : '',
       inBoats ? `infantry crossing in boats fights at ${Math.round((sap ? ENGINEERING.blown.withEngineers : ENGINEERING.blown.attack) * 100)}%${sap ? ', with engineers to get it over' : ''}` : '',
       noBridge ? `${noBridge === 1 ? 'one corps of tanks, lorries or guns' : `${noBridge} corps of tanks, lorries or guns`} cannot cross and ${noBridge === 1 ? 'takes' : 'take'} no part` : '',
     ].filter(Boolean).join('; ');
     lines.push({
       label: 'River',
-      value: inBoats || noBridge ? `The bridges over the ${name} are down` : crossing < all ? `${crossing} of the ${all} attacking corps cross the ${name}` : `The attack crosses the ${name}`,
+      value: inBoats || noBridge ? `The bridges over the ${name} are down` : overColumn ? `The bridges over the ${name} are down: the attack goes over a bridging column` : crossing < all ? `${crossing} of the ${all} attacking corps cross the ${name}` : `The attack crosses the ${name}`,
       effect: fx[0].toUpperCase() + fx.slice(1),
     });
   }
@@ -3013,6 +3024,12 @@ function ticketAfter(lines: TicketLine[]): TicketLine[] {
 }
 
 export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts: AttackOpts = {}): BattleReport {
+  // (Release 2, bridging.ts, behind its switch) Going in over a river whose bridges are down: the attackers' own column,
+  // or one laid now where wheels go in, the assessment below reading it as standing. Off, nothing.
+  if (opts.sea === undefined && bridgingOn(g)) {
+    for (const c of attackers) if (onWheels(c.kind)) crossOver(g, c, c.reg, target.id, true);
+    for (const c of attackers) if (!onWheels(c.kind)) crossOver(g, c, c.reg, target.id, false);
+  }
   let a = assess(g, attackers, target, opts);
   // The grand campaign: the fight may be for the town itself, or to raise the siege of a town of the attackers' own side.
   const town = !!opts.town, sieges = siegeRules(g);
@@ -3665,6 +3682,8 @@ export function moveCorps(g: Game, c: Corps, to: Region): boolean {
   if (!friendly && gunsRule(g) && !fights(c) && !gunsMayFollow(g, c, to)) return false;
   if (!hasRoom(g, to, c)) return false;
   g.week = weekOf(c, cost);
+  // (Release 2, bridging.ts, behind its switch) Where the bridges are down, wheels go over its nation's column, or lay one.
+  crossOver(g, c, from.id, to.id, onWheels(c.kind));
   leaveWorks(g, c);
   place(g, c, to);
   c.ap = Math.max(0, c.ap - cost);
@@ -6271,6 +6290,8 @@ export function startPhase(g: Game, nat: string): void {
   fadeWorks(g, nat);
   // (Release 2, rearguard.ts) The nation's rearguards of last month stand down, the player's and the staffs' alike.
   rearguardsLapse(g, nat);
+  // (Release 2, bridging.ts, behind its switch) Its bridging columns come back where the facts say: nothing with it off.
+  bridgingMonth(g, nat);
   if (!n.alive) return;
   // Shipping by the record's dates (ruling 234, rider b630).
   liftDates(g, nat);

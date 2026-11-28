@@ -1682,7 +1682,7 @@ function refresh(): void {
     // Ground the picked tanks cannot enter, where they stand next to it or to somewhere they can reach.
     if (groundRules(g)) {
       const near = new Set<number>([...goes.keys(), ...picked.map((c) => c.reg)]);
-      for (const r of g.regions) if (picked.some((c) => barred(g, c, r) || (g.regions[c.reg].nb.includes(r.id) && noCrossing(g, c.kind, c.reg, r.id))) && r.nb.some((j) => near.has(j))) mark(`<path class="mk nogo" d="${pathOf(r.polys)}"/>`, r);
+      for (const r of g.regions) if (picked.some((c) => barred(g, c, r) || (g.regions[c.reg].nb.includes(r.id) && noCrossing(g, c.kind, c.reg, r.id, c.nat))) && r.nb.some((j) => near.has(j))) mark(`<path class="mk nogo" d="${pathOf(r.polys)}"/>`, r);
     }
   }
   if (ui.sel >= 0) mark(`<path class="mk sel" d="${pathOf(g.regions[ui.sel].polys)}"/>`, g.regions[ui.sel]);

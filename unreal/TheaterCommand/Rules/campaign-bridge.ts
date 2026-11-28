@@ -102,7 +102,7 @@ import { carried } from '../../../src/campaign/support';
 import { briefTicket } from '../../../src/campaign/facing';
 import { guardMen, guardOf, garrisonOf, previewSally, salliers } from '../../../src/campaign/siege';
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
-import { blocked, bridgeDown, crossingsOf, riverBetween, riverName, riverNotes, riversOf } from '../../../src/campaign/rivers';
+import { blocked, bridgeDown, crossingsOf, onWheels, riverBetween, riverName, riverNotes, riversOf } from '../../../src/campaign/rivers';
 import { cutRail, railCut, railLinks, railNote, railsAt, ruinedAt, workingFactories, type RailCause } from '../../../src/campaign/rails';
 import { INTEL as SERVICE, agentAt, corpsKnown, cutSays, cutsKnown, layNetwork, orderSecretWar } from '../../../src/campaign/intel';
 import { secretWarOn, secretWarSettable } from '../../../src/campaign/secretwar';
@@ -196,6 +196,7 @@ import { kitLine, pressedOn, setPressed } from '../../../src/campaign/pressed';
 import { diaryEntries, diaryOn, setDiary } from '../../../src/campaign/diary';
 import { chanceWords as heldChanceWords, heldOn, heldRibbon, setHeld } from '../../../src/campaign/heldline';
 import { setWorn, wornLine, wornOn, WORN } from '../../../src/campaign/wornout';
+import { bridgingOn, columnFor, columnLine, setBridging } from '../../../src/campaign/bridging';
 import { HOSP, hospOn, setHosp, woundedLine } from '../../../src/campaign/fieldhospitals';
 import { interceptsOn, setIntercepts } from '../../../src/campaign/intercepts';
 import { FIRES, burningAt, dumpFiresOn, setDumpFires } from '../../../src/campaign/dumpfires';
@@ -830,6 +831,9 @@ function drawView(step = false) {
       // (Release 2, wornout.ts, behind its switch) What its months in the line have taken off its edge, as its card's line:
       // "Worn out: 6% weaker after 5 months in the line. A month at rest brings it back." Absent where it has lost none.
       ...(c.spent && (c.nat === s.human || (s.human && c.joint === s.human)) ? { worn: wornLine(c) } : {}),
+      // (Release 2, bridging.ts, behind its switch) An engineer corps' bridging column, as its card's line: where it is
+      // laid, or that it is free. Absent for any other corps, and with the switch off.
+      ...(c.kind === 'eng' && bridgingOn(s) && c.nat === s.human ? { column: columnLine(s, c) } : {}),
       // (Release 2, fieldhospitals.ts, behind its switch) Its wounded, as its card's line: "Wounded: 3,400 men in the
       // hospitals; about 900 rejoin next month." Absent where it has none.
       ...(c.wd && (c.nat === s.human || (s.human && c.joint === s.human)) ? { wounded: woundedLine(s, c, c.supplied, hospitalNear(s, c, (h) => h === c.nat || allied(s, h, c.nat))) } : {}),
@@ -1142,6 +1146,8 @@ function drawView(step = false) {
     warDiary: diaryOn(s), heldLine: heldOn(s), dumpFires: dumpFiresOn(s),
     // (Release 2, batch 3) Worn out in the line (wornout.ts).
     wornOut: wornOn(s),
+    // (Release 2, batch 3) Bridging columns (bridging.ts).
+    bridging: bridgingOn(s),
     // (Release 2, batch 3) Field hospitals (fieldhospitals.ts).
     fieldHospitals: hospOn(s),
     // (Release 2, batch 3) Radio intercepts (intercepts.ts): words only.
@@ -3369,11 +3375,13 @@ function approach(ids: number[], to: number) {
       const cross = riverBetween(s, j, to);
       const river = cross ? riverName(cross) : '';
       const down = !!cross && bridgeDown(s, cross);
+      // (Release 2, bridging.ts, behind its switch) Where a column of his stands there or the order to cross would lay one.
+      const overColumn = down && going.some(({ c }) => columnFor(s, c.nat, j, to, onWheels(c.kind)));
       const arrive = attack ? `${left} move${left === 1 ? '' : 's'} left on arrival: you can attack this month`
         : left > 0 ? `${left} move${left === 1 ? '' : 's'} left on arrival, but the way in from there is barred to this army this month`
           : 'No move left on arrival: the attack waits for next month';
       // (its river in words, as sheet 34 has it; the ground goes by its key, and each game prints its own label for it)
-      const riverWords = river ? `across the ${river.replace(/^the /i, '')}${down ? ', bridges down' : ''}` : 'no river to cross';
+      const riverWords = river ? `across the ${river.replace(/^the /i, '')}${down ? (overColumn ? ', bridges down: over a bridging column' : ', bridges down') : ''}` : 'no river to cross';
       const how = `${riverWords} \u00B7 ${r.terrain}`;
       // The road there, as the first corps that can go would march it.
       const first = going.slice().sort((a, b) => a.m.get(j)!.cost - b.m.get(j)!.cost)[0];
@@ -8131,6 +8139,14 @@ function act(action: string, region = -1, fought?: FoughtAir) {
       : 'Worn out in the line is off: every corps has its edge back.';
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'bridgingrule') {
+    // (Release 2, bridging.ts) Bridging columns, switched in any month.
+    ok = setBridging(s, part[1] === 'on');
+    note = bridgingOn(s)
+      ? 'Bridging columns are on: each engineer corps carries one. Where the bridges are down, the first of your corps on wheels to cross within its march lays it, and it stays while your troops use it and hold the bank. The same for every army.'
+      : 'Bridging columns are off: every column is taken up.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'interceptsrule') {
     // (Release 2, intercepts.ts) Radio intercepts, switched in any month. Words only.
     ok = setIntercepts(s, part[1] === 'on');
@@ -9364,6 +9380,8 @@ Object.assign((globalThis as Record<string, unknown>).TC as object, offerCalls(g
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).dumpFires = (on: boolean) => { const s = game(); setDumpFires(s, !!on); return { on: dumpFiresOn(s) }; };
 // (Release 2, batch 3) Worn out in the line: TC.wornOut(on) at any time; the options page uses act('wornoutrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).wornOut = (on: boolean) => { const s = game(); setWorn(s, !!on); return { on: wornOn(s) }; };
+// (Release 2, batch 3) Bridging columns: TC.bridging(on) at any time; the options page uses act('bridgingrule:on' / ':off').
+((globalThis as Record<string, unknown>).TC as Record<string, unknown>).bridging = (on: boolean) => { const s = game(); setBridging(s, !!on); return { on: bridgingOn(s) }; };
 // (Release 2, batch 3) Field hospitals: TC.fieldHospitals(on) at any time; the options page uses act('hospitalsrule:on' / ':off').
 ((globalThis as Record<string, unknown>).TC as Record<string, unknown>).fieldHospitals = (on: boolean) => { const s = game(); setHosp(s, !!on); return { on: hospOn(s) }; };
 // (Release 2, batch 3) Radio intercepts: TC.intercepts(on) at any time; the options page uses act('interceptsrule:on' / ':off').
@@ -9420,6 +9438,8 @@ const R2_SHIP: Record<string, (s: Game) => boolean> = {
   hospitalsrule: (s) => setHosp(s, true) && hospOn(s),
   // (Release 2, batch 3: radio intercepts, words only, switched in any month; ON after the Mac check.)
   interceptsrule: (s) => setIntercepts(s, true) && interceptsOn(s),
+  // (Release 2, batch 3: bridging columns, switched in any month; OFF on the Play list until the DD's gate passes.)
+  bridgingrule: (s) => setBridging(s, true) && bridgingOn(s),
 };
 function r2Ship(ids: string[]) {
   const s = game();
