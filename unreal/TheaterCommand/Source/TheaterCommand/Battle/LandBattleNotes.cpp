@@ -64,11 +64,13 @@ namespace
 				F.Smoke = T->Smoke;
 				F.OrderIn = T->OrderIn;
 			}
+			// (every unit in hand a gun, as the click's FIRE ON IT: kind "art", the guns and the machine gun and mortar teams;
+			// never a sniper team, which holds its fire under fire or while it slips away, sim.ts's targetOf)
 			F.bAllGuns = true;
 			for (const int Id : Hand)
 			{
 				const LandCommand::Tag* T = G.Clipboard.TagOf(Id);
-				F.bAllGuns = F.bAllGuns && T && T->Kind == "art";
+				F.bAllGuns = F.bAllGuns && T && T->Kind == "art" && T->Team != "snp";
 			}
 		}
 		if (S.WhisperDesk.Tick(F) && S.WhisperDesk.Now().bShown)

@@ -20495,36 +20495,45 @@ namespace
 				}
 				return FReply::Handled();
 			};
-			// (release 2, -TheaterPracticeNotes beside -TheaterFieldNotes; Brian's yes, 28 November 00:09Z: the practice
-			// battle is where the staff notes are learnt without a campaign at stake. The line says whether they come
-			// with it as it stands; STAFF NOTES FROM THE FIRST begins them again from the first note, and opens it.)
-			if (FieldNotesStore::PracticeOn())
-			{
-				Body->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
-				[
-					SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true).LineHeightPercentage(1.15f)
-					.Text_Lambda([]()
-					{
-						const FieldNotes::Words* Notes = FieldNotesStore::Words();
-						const bool bComing = FieldNotesStore::Shown() && Notes && !FieldNotesStore::Book().AllDone(*Notes);
-						return FText::FromString(bComing ? TEXT("Your staff notes come with it, one short note at a time.")
-							: TEXT("STAFF NOTES FROM THE FIRST: this battle with your staff notes again, one short note at a time."));
-					})
-				];
-				Body->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0.0f, 6.0f, 0.0f, 0.0f)
-				[
-					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(0.0f, 4.0f)).IsFocusable(false)
-					.OnClicked_Lambda([Open]() { return Open(true); })
-					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("STAFF NOTES FROM THE FIRST"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(BrightBrass)
-					]
-				];
-			}
-			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 10.0f, 14.0f, 12.0f)).IsFocusable(false)
+			// The card, pressed anywhere, opens the battle.
+			const TSharedRef<SWidget> Card = SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 10.0f, 14.0f, 12.0f)).IsFocusable(false)
 				.OnClicked_Lambda([Open]() { return Open(false); })
 				[
 					Body
 				];
+			// (release 2, -TheaterPracticeNotes beside -TheaterFieldNotes; Brian's yes, 28 November 00:09Z: the practice
+			// battle is where the staff notes are learnt without a campaign at stake. Under the card, never inside its button
+			// (the pre-check's note: one press, one battle): a line that says whether they come with it as it stands, and
+			// STAFF NOTES FROM THE FIRST, which begins them again from the first note and opens the battle. The UI
+			// director's and the design director's words, 28 November.)
+			if (!FieldNotesStore::PracticeOn())
+			{
+				return Card;
+			}
+			return SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						Card
+					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(14.0f, 8.0f, 14.0f, 0.0f)
+					[
+						SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true).LineHeightPercentage(1.15f)
+						.Text_Lambda([]()
+						{
+							const FieldNotes::Words* Notes = FieldNotesStore::Words();
+							const bool bComing = FieldNotesStore::Shown() && Notes && !FieldNotesStore::Book().AllDone(*Notes);
+							return FText::FromString(bComing ? TEXT("Your staff notes come with it, one short note at a time.")
+								: TEXT("Your staff notes can start again from the first, one short note at a time. They come back on the campaign map too."));
+						})
+					]
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(14.0f, 6.0f, 14.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(10.0f, 4.0f)).IsFocusable(false)
+						.OnClicked_Lambda([Open]() { return Open(true); })
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("STAFF NOTES FROM THE FIRST"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(BrightBrass)
+						]
+					];
 		}
 
 		/**

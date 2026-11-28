@@ -20,12 +20,18 @@ namespace LandReplay
 			return D;
 		}
 
-		/** The field's cells of one look laid as few rectangles: each row's runs, and a run carried up the rows above
-		 * while they hold the same run. */
+		/**
+		 * The field's woods, town and wet ground laid smooth, as few rectangles. Each look's cells are read as a value at
+		 * their middles (1 that look, 0 not) and joined between them (bilinear), and the field is sampled Fine times finer
+		 * than its cells: a sample takes the look whose value there is greatest, where that is at least a half. So a cell's
+		 * middle is always its own look, the edge between two cells runs half way between their middles, and a corner is
+		 * cut across instead of stepped (marching squares' edge, drawn in small squares). Then each row's runs, and a run
+		 * carried up the rows above while they hold the same run.
+		 */
 		void Lay(const LandFeed::Field& F, std::vector<Patch>& Out)
 		{
 			const int Cols = F.Cols, Rows = F.Rows;
-			if (Cols <= 0 || Rows <= 0 || F.Ground.size() < static_cast<size_t>(Cols) * static_cast<size_t>(Rows))
+			if (Cols <= 0 || Rows <= 0 || F.Cell <= 0.0 || F.Ground.size() < static_cast<size_t>(Cols) * static_cast<size_t>(Rows))
 			{
 				return;
 			}
@@ -41,8 +47,38 @@ namespace LandReplay
 			}
 			auto At = [&](int C, int R) -> int
 			{
+				C = std::clamp(C, 0, Cols - 1);
+				R = std::clamp(R, 0, Rows - 1);
 				const size_t G = F.Ground[static_cast<size_t>(R) * static_cast<size_t>(Cols) + static_cast<size_t>(C)];
 				return G < Of.size() ? Of[G] : -1;
+			};
+			const int SubCols = Cols * Fine, SubRows = Rows * Fine;
+			const double Sub = F.Cell / Fine;
+			// The sampled looks, row by row (-1 none).
+			auto Sampled = [&](int I, int J) -> int
+			{
+				const double U = (I + 0.5) / Fine - 0.5, V = (J + 0.5) / Fine - 0.5;
+				const int C0 = static_cast<int>(std::floor(U)), R0 = static_cast<int>(std::floor(V));
+				const double Fu = U - C0, Fv = V - R0;
+				double Weight[3] = { 0.0, 0.0, 0.0 };
+				const int Corner[4] = { At(C0, R0), At(C0 + 1, R0), At(C0, R0 + 1), At(C0 + 1, R0 + 1) };
+				const double Share[4] = { (1.0 - Fu) * (1.0 - Fv), Fu * (1.0 - Fv), (1.0 - Fu) * Fv, Fu * Fv };
+				for (int K = 0; K < 4; ++K)
+				{
+					if (Corner[K] >= 0)
+					{
+						Weight[Corner[K]] += Share[K];
+					}
+				}
+				int Best = -1;
+				for (int L = 0; L < 3; ++L)
+				{
+					if (Weight[L] >= 0.5 && (Best < 0 || Weight[L] > Weight[Best]))
+					{
+						Best = L;
+					}
+				}
+				return Best;
 			};
 			struct Run
 			{
@@ -52,29 +88,37 @@ namespace LandReplay
 			auto Shut = [&](const Run& R, int RowEnd)
 			{
 				Patch P;
-				P.X0 = R.C0 * F.Cell;
-				P.X1 = std::min(F.W, R.C1 * F.Cell);
-				P.Y0 = R.R0 * F.Cell;
-				P.Y1 = std::min(F.H, RowEnd * F.Cell);
+				P.X0 = R.C0 * Sub;
+				P.X1 = std::min(F.W, R.C1 * Sub);
+				P.Y0 = R.R0 * Sub;
+				P.Y1 = std::min(F.H, RowEnd * Sub);
 				P.Kind = static_cast<Look>(R.Look);
-				Out.push_back(P);
-			};
-			for (int R = 0; R < Rows; ++R)
-			{
-				std::vector<Run> Here;
-				for (int C = 0; C < Cols;)
+				if (P.X1 > P.X0 && P.Y1 > P.Y0)
 				{
-					const int L = At(C, R);
-					int E = C + 1;
-					while (E < Cols && At(E, R) == L)
+					Out.push_back(P);
+				}
+			};
+			std::vector<int> Row(static_cast<size_t>(SubCols), -1);
+			for (int J = 0; J < SubRows; ++J)
+			{
+				for (int I = 0; I < SubCols; ++I)
+				{
+					Row[static_cast<size_t>(I)] = Sampled(I, J);
+				}
+				std::vector<Run> Here;
+				for (int I = 0; I < SubCols;)
+				{
+					const int L = Row[static_cast<size_t>(I)];
+					int E = I + 1;
+					while (E < SubCols && Row[static_cast<size_t>(E)] == L)
 					{
 						++E;
 					}
 					if (L >= 0)
 					{
-						Here.push_back({ C, E, L, R });
+						Here.push_back({ I, E, L, J });
 					}
-					C = E;
+					I = E;
 				}
 				std::vector<Run> Next;
 				for (Run& H : Here)
@@ -89,13 +133,13 @@ namespace LandReplay
 				}
 				for (const Run& O : Open)
 				{
-					Shut(O, R);
+					Shut(O, J);
 				}
 				Open = std::move(Next);
 			}
 			for (const Run& O : Open)
 			{
-				Shut(O, Rows);
+				Shut(O, SubRows);
 			}
 		}
 	}
@@ -211,6 +255,12 @@ namespace LandReplay
 		}
 		for (Piece& P : M.Pieces)
 		{
+			for (const Mark& K : P.Marks)
+			{
+				M.bUnfound = M.bUnfound || !K.bSeen;
+				M.bFled = M.bFled || K.State == "gone";
+				M.bFellBack = M.bFellBack || K.State == "withdrawn";
+			}
 			for (size_t K = 0; K < P.Marks.size(); ++K)
 			{
 				const Mark& A = P.Marks[K];
@@ -232,6 +282,81 @@ namespace LandReplay
 		}
 		Out = std::move(M);
 		return true;
+	}
+
+	void AddLine(Map& M, const std::vector<std::pair<double, double>>& Points, Edge Kind)
+	{
+		if (M.W <= 0.0 || M.H <= 0.0)
+		{
+			return;
+		}
+		Line Now;
+		Now.Kind = Kind;
+		auto Keep = [&](double X, double Y, bool bLast)
+		{
+			if (Now.Points.empty() || bLast || std::hypot(X - Now.Points.back().first, Y - Now.Points.back().second) >= LineStep)
+			{
+				if (bLast && Now.Points.size() > 1 && std::hypot(X - Now.Points.back().first, Y - Now.Points.back().second) < LineStep)
+				{
+					Now.Points.pop_back();
+				}
+				Now.Points.emplace_back(X, Y);
+			}
+		};
+		auto Close = [&]()
+		{
+			if (Now.Points.size() >= 2)
+			{
+				M.Lines.push_back(Now);
+			}
+			Now.Points.clear();
+		};
+		for (size_t K = 1; K < Points.size(); ++K)
+		{
+			// (the segment clipped to the field: Liang and Barsky's way, its part from T0 to T1)
+			const double X0 = Points[K - 1].first, Y0 = Points[K - 1].second, Dx = Points[K].first - X0, Dy = Points[K].second - Y0;
+			double T0 = 0.0, T1 = 1.0;
+			bool bIn = true;
+			const double Ps[4] = { -Dx, Dx, -Dy, Dy }, Qs[4] = { X0, M.W - X0, Y0, M.H - Y0 };
+			for (int E = 0; E < 4 && bIn; ++E)
+			{
+				if (Ps[E] == 0.0)
+				{
+					bIn = Qs[E] >= 0.0;
+				}
+				else
+				{
+					const double R = Qs[E] / Ps[E];
+					if (Ps[E] < 0.0)
+					{
+						T0 = std::max(T0, R);
+					}
+					else
+					{
+						T1 = std::min(T1, R);
+					}
+					bIn = T0 <= T1;
+				}
+			}
+			if (!bIn)
+			{
+				Close();
+				continue;
+			}
+			const double Ax = X0 + Dx * T0, Ay = Y0 + Dy * T0, Bx = X0 + Dx * T1, By = Y0 + Dy * T1;
+			if (T0 > 0.0 || Now.Points.empty())
+			{
+				Close();
+				Now.Points.emplace_back(Ax, Ay);
+			}
+			const bool bLeaves = T1 < 1.0;
+			Keep(Bx, By, bLeaves || K + 1 == Points.size());
+			if (bLeaves)
+			{
+				Close();
+			}
+		}
+		Close();
 	}
 
 	Pose PoseAt(const Piece& P, double T)

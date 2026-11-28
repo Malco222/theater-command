@@ -1,5 +1,5 @@
 {
-  "_about": "The chief of staff's whisper (release 2; Brian's yes 28 November 2026 00:09Z): one quiet line on the general's screen about the first unit in his hand, said once a battle (scope once) or once for each unit (each), 20 words at most, never over a staff note. when: radio (an order on the air: {s} the seconds of battle till it lands), wavering (its state), hidden (in cover, not found; never a sniper team, which fires from hiding and is found only by odds), cutters (a tank with hedge cutters, once the clock runs), smoke (smoke left to lay, once the clock runs), guns (every unit in hand a gun, once the clock runs). keys and shows as field-notes.json's: Tools/field_notes checks them against LandBattleScreen.cpp. Every line's file and line is in joins/guided-start/NOTES.md; a line with none comes out. Behind the ship list's row whisper (-TheaterStaffWhisper), OFF, and the staff notes' one switch.",
+  "_about": "The chief of staff's whisper (release 2; Brian's yes 28 November 2026 00:09Z): one quiet line on the general's screen about the first unit in his hand, said once a battle (scope once) or once for each unit (each), 20 words at most, never over a staff note. when: radio (an order on the air: {s} the seconds of battle till it lands), wavering (its state), hidden (in cover, not found; never a sniper team, which fires from hiding and is found only by odds), cutters (a tank with hedge cutters, once the clock runs), smoke (smoke left to lay, once the clock runs), guns (every unit in hand a gun, a machine gun team or a mortar team, never a sniper team, once the clock runs). keys and shows as field-notes.json's: Tools/field_notes checks them against LandBattleScreen.cpp. Every line's file and line is in joins/guided-start/NOTES.md; a line with none comes out. Behind the ship list's row whisper (-TheaterStaffWhisper), OFF, and the staff notes' one switch.",
   "label": "CHIEF OF STAFF",
   "lines": [
     {
@@ -14,7 +14,7 @@
       "id": "wavering",
       "when": "wavering",
       "scope": "each",
-      "text": "Their nerve is going. R pulls them off the field.",
+      "text": "Their nerve is going. R sends them back to your edge and out of the battle.",
       "keys": [
         [
           "R",
@@ -27,7 +27,7 @@
       "id": "hidden",
       "when": "hidden",
       "scope": "once",
-      "text": "Hidden in cover. Their first shots spring an ambush and give them away, and so does leaving cover.",
+      "text": "Hidden in cover. Firing springs an ambush and gives them away. So does leaving cover, or an enemy close.",
       "keys": [],
       "shows": []
     },
@@ -61,7 +61,7 @@
       "id": "guns",
       "when": "guns",
       "scope": "once",
-      "text": "Guns fire from where they stand. Click an enemy and they fire on it.",
+      "text": "Guns fire from where they stand. Click an enemy in reach and they fire on it.",
       "keys": [],
       "shows": []
     }

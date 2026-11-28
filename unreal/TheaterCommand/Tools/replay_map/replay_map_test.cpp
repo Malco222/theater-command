@@ -58,6 +58,7 @@ namespace
 		LandReplay::Map M;
 		const bool bBuilt = LandReplay::Build(Rec, M, Why);
 		Check(bBuilt, Name + ": the map is laid (" + Why + ")");
+		Check(!M.bUnfound, Name + ": a film's map shows every block, so its key has no NOT YET FOUND");
 		if (!bBuilt)
 		{
 			return;
@@ -125,10 +126,16 @@ namespace
 			Check(Near(Mid.X, (A.X + B.X) * 0.5, 1.0e-6) && Near(Mid.Y, (A.Y + B.Y) * 0.5, 1.0e-6), Name + ": between two views, the place in proportion");
 		}
 
-		// The ground: the patches cover every woods, town and wet cell once, and nothing else.
+		// The ground, laid smooth (LandReplay::Fine): read on the finer grid the patches are laid on, each square of it at
+		// most one patch's and inside the field; the middle half of every cell (across and up) its own look, or nothing
+		// where the cell has none; no square shaded a look farther than the next cell from a cell of that look; each
+		// look's area near its cells' (a corner cut, a nook filled); and far fewer patches than shaded squares.
 		const LandFeed::Field& F = Rec.Ground;
-		std::vector<int> Laid(static_cast<size_t>(F.Cols) * static_cast<size_t>(F.Rows), -1);
-		size_t Over = 0, Outside = 0;
+		const int Fine = LandReplay::Fine, SubCols = F.Cols * Fine, SubRows = F.Rows * Fine;
+		const double Sub = F.Cell / Fine;
+		std::vector<int> Laid(static_cast<size_t>(SubCols) * static_cast<size_t>(SubRows), -1);
+		size_t Over = 0, Outside = 0, Squares = 0;
+		double Area[3] = { 0.0, 0.0, 0.0 };
 		for (const LandReplay::Patch& P : M.Patches)
 		{
 			if (P.X0 < -1.0e-6 || P.Y0 < -1.0e-6 || P.X1 > F.W + 1.0e-6 || P.Y1 > F.H + 1.0e-6 || P.X1 <= P.X0 || P.Y1 <= P.Y0)
@@ -136,43 +143,92 @@ namespace
 				++Outside;
 				continue;
 			}
-			const int C0 = static_cast<int>(std::lround(P.X0 / F.Cell)), C1 = static_cast<int>(std::ceil(P.X1 / F.Cell - 1.0e-6));
-			const int R0 = static_cast<int>(std::lround(P.Y0 / F.Cell)), R1 = static_cast<int>(std::ceil(P.Y1 / F.Cell - 1.0e-6));
-			for (int R = R0; R < R1; ++R)
+			Area[static_cast<int>(P.Kind)] += (P.X1 - P.X0) * (P.Y1 - P.Y0);
+			const int I0 = static_cast<int>(std::lround(P.X0 / Sub)), I1 = static_cast<int>(std::ceil(P.X1 / Sub - 1.0e-6));
+			const int J0 = static_cast<int>(std::lround(P.Y0 / Sub)), J1 = static_cast<int>(std::ceil(P.Y1 / Sub - 1.0e-6));
+			for (int J = J0; J < J1; ++J)
 			{
-				for (int C = C0; C < C1; ++C)
+				for (int I = I0; I < I1; ++I)
 				{
-					int& Cell = Laid[static_cast<size_t>(R) * static_cast<size_t>(F.Cols) + static_cast<size_t>(C)];
-					if (Cell >= 0)
+					int& Square = Laid[static_cast<size_t>(J) * static_cast<size_t>(SubCols) + static_cast<size_t>(I)];
+					if (Square >= 0)
 					{
 						++Over;
 					}
-					Cell = static_cast<int>(P.Kind);
+					Square = static_cast<int>(P.Kind);
+					++Squares;
 				}
 			}
 		}
-		size_t Missed = 0, Shaded = 0, Cells = 0;
-		for (size_t K = 0; K < Laid.size(); ++K)
+		auto LookAt = [&](int C, int R) -> int
 		{
+			if (C < 0 || R < 0 || C >= F.Cols || R >= F.Rows)
+			{
+				return -1;
+			}
+			const size_t G = F.Ground[static_cast<size_t>(R) * static_cast<size_t>(F.Cols) + static_cast<size_t>(C)];
 			LandReplay::Look L = LandReplay::Look::Woods;
-			const bool bLook = F.Ground[K] < F.Grounds.size() && LandReplay::LookOf(F.Grounds[F.Ground[K]], L);
-			if (bLook)
+			return G < F.Grounds.size() && LandReplay::LookOf(F.Grounds[G], L) ? static_cast<int>(L) : -1;
+		};
+		size_t Missed = 0, Stray = 0, Cells = 0;
+		double CellArea[3] = { 0.0, 0.0, 0.0 };
+		for (int R = 0; R < F.Rows; ++R)
+		{
+			for (int C = 0; C < F.Cols; ++C)
 			{
-				++Cells;
+				const int L = LookAt(C, R);
+				if (L >= 0)
+				{
+					++Cells;
+					CellArea[L] += (std::min(F.W, (C + 1) * F.Cell) - C * F.Cell) * (std::min(F.H, (R + 1) * F.Cell) - R * F.Cell);
+				}
+				for (int J = R * Fine; J < (R + 1) * Fine; ++J)
+				{
+					for (int I = C * Fine; I < (C + 1) * Fine; ++I)
+					{
+						const double U = (I + 0.5) / Fine - C, V = (J + 0.5) / Fine - R;
+						const int Has = Laid[static_cast<size_t>(J) * static_cast<size_t>(SubCols) + static_cast<size_t>(I)];
+						if (U > 0.25 && U < 0.75 && V > 0.25 && V < 0.75 && Has != L)
+						{
+							++Missed;
+						}
+						bool bNear = Has < 0;
+						for (int Dr = -1; Dr <= 1 && !bNear; ++Dr)
+						{
+							for (int Dc = -1; Dc <= 1 && !bNear; ++Dc)
+							{
+								bNear = LookAt(C + Dc, R + Dr) == Has;
+							}
+						}
+						if (!bNear)
+						{
+							++Stray;
+						}
+					}
+				}
 			}
-			if (bLook && Laid[K] != static_cast<int>(L))
+		}
+		bool bAreas = true;
+		std::string Areas;
+		for (int L = 0; L < 3; ++L)
+		{
+			if (CellArea[L] > 0.0)
 			{
-				++Missed;
+				const double Ratio = Area[L] / CellArea[L];
+				bAreas = bAreas && Ratio > 0.8 && Ratio < 1.2;
+				Areas += (Areas.empty() ? "" : ", ") + std::to_string(static_cast<int>(std::lround(Ratio * 100.0))) + "%";
 			}
-			if (!bLook && Laid[K] >= 0)
+			else
 			{
-				++Shaded;
+				bAreas = bAreas && Area[L] == 0.0;
 			}
 		}
 		Check(Cells > 0, Name + ": the field has woods, town or wet ground to shade");
 		Check(Over == 0 && Outside == 0, Name + ": no patch lies over another or off the field");
-		Check(Missed == 0 && Shaded == 0, Name + ": the patches shade every woods, town and wet cell, as its look, and no other (" + std::to_string(Missed) + " missed, " + std::to_string(Shaded) + " shaded wrongly)");
-		Check(M.Patches.size() * 3 < Cells, Name + ": the patches are far fewer than the cells (" + std::to_string(M.Patches.size()) + " for " + std::to_string(Cells) + ")");
+		Check(Missed == 0, Name + ": the middle of every cell is shaded as its look, or not at all where it has none (" + std::to_string(Missed) + " squares wrong)");
+		Check(Stray == 0, Name + ": nothing shaded farther than the next cell from a cell of its look (" + std::to_string(Stray) + " squares)");
+		Check(bAreas, Name + ": each look's shaded area is within a fifth of its cells' (" + Areas + ")");
+		Check(M.Patches.size() * 6 < Squares, Name + ": the patches are far fewer than the squares they shade (" + std::to_string(M.Patches.size()) + " for " + std::to_string(Squares) + ")");
 
 		// The ways: from the first mark to the last, each kept point at least a step from the one before, never longer
 		// than the marks' own path, never shorter than the straight line.
@@ -206,8 +262,8 @@ namespace
 		}
 		Check(WayWrong == 0, Name + ": every way runs from the first mark to the last, a step apart, between the path and the straight line");
 		Check(Movers > 0, Name + ": some blocks moved far enough for an arrow (" + std::to_string(Movers) + " of " + std::to_string(M.Pieces.size()) + ")");
-		std::printf("  %s: %zu pieces, %zu marks, %zu patches for %zu cells, %zu arrows, %.1f s of battle\n", Name.c_str(), M.Pieces.size(), Marks, M.Patches.size(), Cells, Movers,
-			M.T1 - M.T0);
+		std::printf("  %s: %zu pieces, %zu marks, %zu patches for %zu cells (%zu squares; areas %s of the cells'), %zu arrows, %.1f s of battle\n", Name.c_str(), M.Pieces.size(), Marks,
+			M.Patches.size(), Cells, Squares, Areas.c_str(), Movers, M.T1 - M.T0);
 	}
 
 	/** A live battle's views made by hand: his side 0, the enemy met at 20 s. */
@@ -261,6 +317,8 @@ namespace
 		std::string Why;
 		Check(LandReplay::Build(Rec, M, Why), "live: the map is laid (" + Why + ")");
 		Check(M.Me == 0, "live: the map is his side's");
+		Check(M.bUnfound, "live: the enemy stood on the map before it was found, so the key says NOT YET FOUND");
+		Check(M.bFled && !M.bFellBack, "live: the enemy ran off the field (gone): the key says FLED, and no FELL BACK");
 		Check(M.Pieces.size() == 2, "live: two pieces");
 		if (M.Pieces.size() != 2)
 		{
@@ -310,6 +368,106 @@ namespace
 		LandFeed::Recording NoField = Rec;
 		NoField.Ground.W = 0.0;
 		Check(!LandReplay::Build(NoField, None, Why) && !Why.empty(), "no field: no map, and why (" + Why + ")");
+	}
+
+	/** A field made by hand: a wood of four cells, its corners cut round and its sides where the cells' are; and the
+	 * ground's lines added to a map: cut at the field's edge, a new line where one comes back in, thinned. */
+	void Smooth()
+	{
+		LandFeed::Recording Rec;
+		Rec.Ground.W = 150.0;
+		Rec.Ground.H = 150.0;
+		Rec.Ground.Cell = 25.0;
+		Rec.Ground.Cols = 6;
+		Rec.Ground.Rows = 6;
+		Rec.Ground.Grounds = { "open", "woods" };
+		Rec.Ground.Ground.assign(36, 0);
+		for (int R = 2; R <= 3; ++R)
+		{
+			for (int C = 2; C <= 3; ++C)
+			{
+				Rec.Ground.Ground[static_cast<size_t>(R * 6 + C)] = 1;
+			}
+		}
+		for (int T = 0; T <= 2; ++T)
+		{
+			LandFeed::View V;
+			V.T = T;
+			LandFeed::Unit U;
+			U.Id = 1;
+			U.Side = 0;
+			U.X = 20.0;
+			U.Y = 20.0;
+			U.State = T == 2 ? "withdrawn" : "steady";
+			V.Units = { U };
+			Rec.Views.push_back(V);
+		}
+		LandReplay::Map M;
+		std::string Why;
+		const bool bLaid = LandReplay::Build(Rec, M, Why);
+		Check(bLaid, "smooth: a hand-made field is laid (" + Why + ")");
+		Check(M.bFellBack && !M.bFled && !M.bUnfound, "smooth: a block that fell back (withdrawn): the key says FELL BACK, not FLED");
+		auto Shaded = [&](double X, double Y)
+		{
+			for (const LandReplay::Patch& P : M.Patches)
+			{
+				if (X >= P.X0 && X < P.X1 && Y >= P.Y0 && Y < P.Y1)
+				{
+					return P.Kind == LandReplay::Look::Woods;
+				}
+			}
+			return false;
+		};
+		double Area = 0.0;
+		for (const LandReplay::Patch& P : M.Patches)
+		{
+			Area += (P.X1 - P.X0) * (P.Y1 - P.Y0);
+		}
+		// (the wood is 50 to 100 m each way)
+		Check(Shaded(75.0, 75.0) && Shaded(62.5, 62.5) && Shaded(87.5, 87.5) && Shaded(62.5, 87.5), "smooth: the wood's middle and the middles of its cells are shaded");
+		Check(Shaded(75.0, 52.0) && Shaded(52.0, 75.0) && !Shaded(75.0, 47.0) && !Shaded(47.0, 75.0), "smooth: the middle of each side lies where the cells' edge does");
+		Check(!Shaded(51.0, 51.0) && !Shaded(99.0, 99.0) && !Shaded(51.0, 99.0) && !Shaded(99.0, 51.0), "smooth: the wood's corners are cut round");
+		Check(Area > 0.8 * 2500.0 && Area < 2500.0, "smooth: a little less than the four cells' area (" + std::to_string(static_cast<int>(Area)) + " of 2500 square metres)");
+
+		// The ground's lines.
+		LandReplay::Map L;
+		L.W = 100.0;
+		L.H = 80.0;
+		std::vector<std::pair<double, double>> Dense;
+		for (int K = 0; K <= 100; ++K)
+		{
+			Dense.emplace_back(10.0 + 0.5 * K, 10.0);
+		}
+		LandReplay::AddLine(L, Dense, LandReplay::Edge::Hedge);
+		bool bStep = L.Lines.size() == 1;
+		if (bStep)
+		{
+			const std::vector<std::pair<double, double>>& P = L.Lines[0].Points;
+			bStep = P.size() >= 2 && Near(P.front().first, 10.0) && Near(P.back().first, 60.0) && L.Lines[0].Kind == LandReplay::Edge::Hedge;
+			for (size_t K = 1; K < P.size() && bStep; ++K)
+			{
+				bStep = std::hypot(P[K].first - P[K - 1].first, P[K].second - P[K - 1].second) >= LandReplay::LineStep - 1.0e-9;
+			}
+		}
+		Check(bStep, "lines: a hedge drawn densely is kept a step apart, from its first point to its last");
+		LandReplay::AddLine(L, { { 10.0, 40.0 }, { 120.0, 40.0 }, { 120.0, 60.0 }, { 50.0, 60.0 } }, LandReplay::Edge::Wall);
+		bool bCut = L.Lines.size() == 3;
+		if (bCut)
+		{
+			const std::vector<std::pair<double, double>>& Out = L.Lines[1].Points;
+			const std::vector<std::pair<double, double>>& Back = L.Lines[2].Points;
+			bCut = Out.size() >= 2 && Near(Out.front().first, 10.0) && Near(Out.back().first, 100.0) && Near(Out.back().second, 40.0)
+				&& Back.size() >= 2 && Near(Back.front().first, 100.0) && Near(Back.front().second, 60.0) && Near(Back.back().first, 50.0)
+				&& L.Lines[2].Kind == LandReplay::Edge::Wall;
+		}
+		Check(bCut, "lines: a wall that runs off the field and comes back is two lines, each cut at the edge");
+		const size_t Before = L.Lines.size();
+		LandReplay::AddLine(L, { { -50.0, -10.0 }, { 150.0, -10.0 } }, LandReplay::Edge::Lane);
+		LandReplay::AddLine(L, { { 30.0, 30.0 } }, LandReplay::Edge::Lane);
+		Check(L.Lines.size() == Before, "lines: nothing for a lane wholly off the field, or one point");
+		LandReplay::AddLine(L, { { -20.0, 20.0 }, { 40.0, 20.0 } }, LandReplay::Edge::Lane);
+		Check(L.Lines.size() == Before + 1 && Near(L.Lines.back().Points.front().first, 0.0) && Near(L.Lines.back().Points.back().first, 40.0),
+			"lines: a lane coming in from beyond starts at the field's edge");
 	}
 
 	void Fitting()
@@ -386,7 +544,7 @@ namespace
 		Check(Keys.find("// (the replay map open") < Keys.find("if (Key == EKeys::Enter && S->bCard)"), "screen: the map's keys come before the after card's Enter");
 		const std::string Paint = Between(Text, "void SLandBattleScreen::PaintReplay(", "\n}\n");
 		Check(!Paint.empty(), "screen: PaintReplay drawn");
-		for (const char* Word : { "TEXT(\"REPLAY MAP\")", "TEXT(\"AGAIN\")", "TEXT(\"SPACE\")", "TEXT(\"CLOSE\")", "TEXT(\"ESC\")", "TEXT(\"NOT YET FOUND\")", "TEXT(\"GONE\")",
+		for (const char* Word : { "TEXT(\"REPLAY MAP\")", "TEXT(\"AGAIN\")", "TEXT(\"SPACE\")", "TEXT(\"CLOSE\")", "TEXT(\"ESC\")", "TEXT(\"NOT YET FOUND\")", "TEXT(\"FLED\")", "TEXT(\"FELL BACK\")",
 				 "\"replay:again\"", "\"replay:close\"" })
 		{
 			Check(Paint.find(Word) != std::string::npos, std::string("screen: the map shows ") + Word);
@@ -395,6 +553,14 @@ namespace
 		Check(Card.find("TEXT(\"REPLAY MAP\")") != std::string::npos && Card.find("\"replay:open\"") != std::string::npos && Card.find("TEXT(\"M\")") != std::string::npos,
 			"screen: the after card offers REPLAY MAP with its key M");
 		Check(Card.find("ReplayShown()") != std::string::npos, "screen: the after card offers it only where the map is on and laid");
+		auto Guarded = [&](const char* Flag, const char* Word)
+		{
+			const size_t If = Paint.find(std::string("if (M.") + Flag + ")"), Said = Paint.find(Word);
+			return If != std::string::npos && Said != std::string::npos && If < Said && Said - If < 160;
+		};
+		Check(Guarded("bUnfound", "TEXT(\"NOT YET FOUND\")") && Guarded("bFled", "TEXT(\"FLED\")") && Guarded("bFellBack", "TEXT(\"FELL BACK\")"),
+			"screen: NOT YET FOUND, FLED and FELL BACK are in the key only where the map has one");
+		Check(Paint.find("TEXT(\"GONE\")") == std::string::npos, "screen: the key never says GONE (the rules' gone is a block that fled, not one lost)");
 		const std::string Scene = ReadFile(ScenePath);
 		for (const char* Word : { "\"open\"", "\"again\"", "\"close\"" })
 		{
@@ -416,6 +582,7 @@ int main(int Argc, char** Argv)
 	Shipped(Argv[1]);
 	Shipped(Argv[2]);
 	Live();
+	Smooth();
 	Fitting();
 	Playing();
 	Screen(Argv[3], Argv[4], Argv[5]);

@@ -5,15 +5,18 @@
 #include "Battle/LandBattle.h"
 
 #include "Battle/LandBattleState.h"
+#include "Battle/LandField.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "TheaterCommand.h"
 
 namespace
 {
+	/** The ship list's row (read once: the screen asks every frame). */
 	bool ReplayMapOn()
 	{
-		return FParse::Param(FCommandLine::Get(), TEXT("TheaterReplayMap"));
+		static const bool bOn = FParse::Param(FCommandLine::Get(), TEXT("TheaterReplayMap"));
+		return bOn;
 	}
 }
 
@@ -32,18 +35,47 @@ void ALandBattle::TickReplay(double Real)
 	{
 		std::string Why;
 		S.ReplayLaid = LandReplay::Build(S.Rec, S.ReplayMap, Why) ? 1 : -1;
+		if (S.ReplayLaid > 0 && S.Field)
+		{
+			// (the hedgerows, walls and lanes the scene laid: a lane's bank and a garden's hedge drawn as hedgerows; a
+			// wood's edge is its patch's, and the far strips lie beyond the field)
+			for (const LandField::HedgeLine& H : S.Field->Hedges())
+			{
+				if (H.Kind == 0 || H.Kind == 1 || H.Kind == 3)
+				{
+					LandReplay::AddLine(S.ReplayMap, H.Points, LandReplay::Edge::Hedge);
+				}
+				else if (H.Kind == 4)
+				{
+					LandReplay::AddLine(S.ReplayMap, H.Points, LandReplay::Edge::Wall);
+				}
+			}
+			for (const std::vector<std::pair<double, double>>& Lane : S.Field->Lanes())
+			{
+				LandReplay::AddLine(S.ReplayMap, Lane, LandReplay::Edge::Lane);
+			}
+		}
 		if (S.ReplayLaid > 0)
 		{
-			size_t Moved = 0;
+			size_t Moved = 0, Fled = 0, FellBack = 0;
 			for (const LandReplay::Piece& P : S.ReplayMap.Pieces)
 			{
 				if (LandReplay::Length(LandReplay::WayTo(P, S.ReplayMap.T1)) >= LandReplay::LeastMove)
 				{
 					++Moved;
 				}
+				const LandReplay::Pose End = LandReplay::PoseAt(P, S.ReplayMap.T1);
+				Fled += End.bGone ? 1 : 0;
+				FellBack += End.bOff ? 1 : 0;
 			}
-			UE_LOG(LogTheater, Display, TEXT("Replay map: laid, %d units (%d moved far enough for an arrow), %d patches of ground, %.0f s of battle"),
-				static_cast<int32>(S.ReplayMap.Pieces.size()), static_cast<int32>(Moved), static_cast<int32>(S.ReplayMap.Patches.size()), S.ReplayMap.T1 - S.ReplayMap.T0);
+			size_t Points = 0;
+			for (const LandReplay::Line& L : S.ReplayMap.Lines)
+			{
+				Points += L.Points.size();
+			}
+			UE_LOG(LogTheater, Display, TEXT("Replay map: laid, %d units (%d moved far enough for an arrow, %d fled, %d fell back), %d patches of ground, %d hedgerows, walls and lanes (%d points), %.0f s of battle"),
+				static_cast<int32>(S.ReplayMap.Pieces.size()), static_cast<int32>(Moved), static_cast<int32>(Fled), static_cast<int32>(FellBack), static_cast<int32>(S.ReplayMap.Patches.size()),
+				static_cast<int32>(S.ReplayMap.Lines.size()), static_cast<int32>(Points), S.ReplayMap.T1 - S.ReplayMap.T0);
 		}
 		else
 		{

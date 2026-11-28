@@ -585,7 +585,8 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 	{
 		const StaffWhisper::Up& Whisper = S.WhisperDesk.Now();
 		const float Fade = static_cast<float>(FMath::Clamp(FMath::Min(Whisper.Age / 0.25, (StaffWhisper::Desk::Stays - Whisper.Age) / 0.5), 0.0, 1.0));
-		const FSlateFontInfo TagFace = Typed(9.0f, true, 120), SaidFace = Typed(10.5f), QuietFace = Typed(9.0f, true, 60);
+		// (its words at the staff note's own body size, Serif Regular 15 on 22: one staff speaking in one hand)
+		const FSlateFontInfo TagFace = Typed(9.0f, true, 120), SaidFace = Serif(TEXT("Regular"), 15.0f), QuietFace = Typed(9.0f, true, 60);
 		const FString Head = Wide(S.WhisperDesk.TheWords().Label.empty() ? std::string("CHIEF OF STAFF") : S.WhisperDesk.TheWords().Label);
 		const FString Quiet = TEXT("QUIET");
 		const double HeadW = WideOf(Head, TagFace), QuietW = WideOf(Quiet, QuietFace);
@@ -596,18 +597,18 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 		{
 			SaidW = FMath::Max(SaidW, WideOf(Line, SaidFace));
 		}
-		const double LineH = 20.0, X = 18.0, PlateH = 8.0 + LineH * Said.Num();
+		const double LineH = 22.0, X = 18.0, PlateH = 10.0 + LineH * Said.Num();
 		const double Y = Size.Y - CardsH - 10.0 - PlateH;
 		const FLinearColor Seen(1.0f, 1.0f, 1.0f, Fade);
 		Fill(X, Y, 12.0 + HeadW + 12.0 + SaidW + 16.0 + QuietW + 12.0, PlateH, Plate * FLinearColor(1.0f, 1.0f, 1.0f, Fade), 6);
 		Fill(X, Y, 3.0, PlateH, Brass * Seen, 7);
-		Write(Head, X + 12.0, Y + 6.0, TagFace, Brass * Seen, 7);
+		Write(Head, X + 12.0, Y + 10.0, TagFace, Brass * Seen, 7);
 		for (int32 K = 0; K < Said.Num(); ++K)
 		{
-			Write(Said[K], X + 12.0 + HeadW + 12.0, Y + 4.0 + LineH * K, SaidFace, Cream * Seen, 7);
+			Write(Said[K], X + 12.0 + HeadW + 12.0, Y + 5.0 + LineH * K, SaidFace, Cream * Seen, 7);
 		}
 		const double QX = X + 12.0 + HeadW + 12.0 + SaidW + 16.0;
-		Write(Quiet, QX, Y + 6.0, QuietFace, Muted * Seen, 7);
+		Write(Quiet, QX, Y + 10.0, QuietFace, Muted * Seen, 7);
 		Buttons.Add({ FSlateRect(static_cast<float>(QX - 6.0), static_cast<float>(Y), static_cast<float>(QX + QuietW + 6.0), static_cast<float>(Y + PlateH)), FString(TEXT("notes:quiet")) });
 	}
 
@@ -2334,14 +2335,18 @@ void SLandBattleScreen::PaintReplay(const FGeometry& Geometry, FSlateWindowEleme
 		}
 	};
 	// A button with its key's cap after it, as the after card's CONTINUE: its width first, for laying them from the right.
+	// Lit brass (AGAIN once the 20 seconds are played), plain leather (CLOSE), or muted: no fill of its own, its words and
+	// edge soft on the paper (AGAIN while they play, a button still).
+	enum class Press { Muted, Plain, Lit };
 	const FSlateFontInfo KeyFace = Typed(10.0f, true, 30), KeyCapFace = Typed(10.0f, true, 0);
 	auto KeyWidth = [&](const FString& Label, const FString& Key) { return WideOf(Label, KeyFace) + 22.0 + WideOf(Key, KeyCapFace) + 10.0 + 8.0; };
-	auto KeyButton = [&](const FString& Label, const FString& Key, const FString& Action, double X, double Y, bool bLit)
+	auto KeyButton = [&](const FString& Label, const FString& Key, const FString& Action, double X, double Y, Press Look)
 	{
 		const double LabelW = WideOf(Label, KeyFace), CapW = WideOf(Key, KeyCapFace) + 10.0;
 		const double Wd = LabelW + 22.0 + CapW + 8.0, Ht = 26.0;
-		const FLinearColor Face = bLit ? FLinearColor(Brass.R, Brass.G, Brass.B, 1.0f) : Leather, Ink = bLit ? DeskInk : Cream;
-		Fill(X, Y, Wd, Ht, Brass, 31);
+		const FLinearColor Face = Look == Press::Lit ? FLinearColor(Brass.R, Brass.G, Brass.B, 1.0f) : Look == Press::Plain ? Leather : Paper;
+		const FLinearColor Ink = Look == Press::Lit ? DeskInk : Look == Press::Plain ? Cream : InkSoft;
+		Fill(X, Y, Wd, Ht, Look == Press::Muted ? InkSoft * FLinearColor(1.0f, 1.0f, 1.0f, 0.4f) : Brass, 31);
 		Fill(X + 1.0, Y + 1.0, Wd - 2.0, Ht - 2.0, Face, 32);
 		Write(Label, X + 11.0, Y + 5.0, KeyFace, Ink, 33);
 		const double CapX = X + 11.0 + LabelW + 8.0;
@@ -2375,39 +2380,76 @@ void SLandBattleScreen::PaintReplay(const FGeometry& Geometry, FSlateWindowEleme
 	};
 	const FLinearColor FieldPaper = FMath::Lerp(Paper, Cream, 0.55f);
 	const FLinearColor Woods = Leaf * FLinearColor(1.0f, 1.0f, 1.0f, 0.85f), Town = InkSoft * FLinearColor(1.0f, 1.0f, 1.0f, 0.45f);
-	const FLinearColor Wet = FLinearColor(FColor::FromHex(TEXT("A9C2C9")));
+	// (wet ground pale, with fine level hatching, so that it never reads as the enemy's slate)
+	const FLinearColor Wet = FLinearColor(FColor::FromHex(TEXT("C9DADD"))), WetLine = FLinearColor(FColor::FromHex(TEXT("7FA1AA")));
 	Fill(Fit.X0, Fit.Y0, MapW, MapH, FieldPaper, 23);
 	for (const LandReplay::Patch& P : M.Patches)
 	{
 		const FVector2D TopLeft = On(P.X0, P.Y1), BottomRight = On(P.X1, P.Y0);
 		Fill(TopLeft.X, TopLeft.Y, BottomRight.X - TopLeft.X, BottomRight.Y - TopLeft.Y, P.Kind == LandReplay::Look::Woods ? Woods : P.Kind == LandReplay::Look::Town ? Town : Wet, 24);
+		if (P.Kind == LandReplay::Look::Wet)
+		{
+			// (one hatch line every 4 pixels down the map, so the lines of patches side by side meet)
+			for (double Y = Fit.Y0 + FMath::CeilToDouble((TopLeft.Y - Fit.Y0) / 4.0) * 4.0; Y < BottomRight.Y; Y += 4.0)
+			{
+				Lines({ FVector2D(TopLeft.X, Y), FVector2D(BottomRight.X, Y) }, WetLine, 1.0f, 25);
+			}
+		}
 	}
-	if (!M.TownName.empty() && M.TownR > 0.0)
+	// (the scene's lanes, walls and hedgerows, thin, under the blocks: a lane a soft broad band, a wall stone grey, a
+	// hedgerow dark green)
+	for (const LandReplay::Line& L : M.Lines)
 	{
-		// (on a pale plate of the field's paper, so it reads over the town's own shading; the blocks lie over it)
-		const FString Name = Wide(M.TownName).ToUpper();
-		const FVector2D At = On(M.TownX, M.TownY);
-		const double NameW = WideOf(Name, SmallCaps());
-		Fill(At.X - NameW * 0.5 - 4.0, At.Y - 7.0, NameW + 8.0, 15.0, FieldPaper * FLinearColor(1.0f, 1.0f, 1.0f, 0.85f), 25);
-		Write(Name, At.X - NameW * 0.5, At.Y - 6.0, SmallCaps(), DeskInk * FLinearColor(1.0f, 1.0f, 1.0f, 0.75f), 26);
+		TArray<FVector2D> Drawn;
+		Drawn.Reserve(static_cast<int32>(L.Points.size()));
+		for (const std::pair<double, double>& Each : L.Points)
+		{
+			Drawn.Add(On(Each.first, Each.second));
+		}
+		if (L.Kind == LandReplay::Edge::Lane)
+		{
+			Lines(Drawn, Muted, 2.5f, 25);
+		}
+		else if (L.Kind == LandReplay::Edge::Wall)
+		{
+			Lines(Drawn, InkSoft * FLinearColor(1.0f, 1.0f, 1.0f, 0.7f), 1.25f, 26);
+		}
+		else
+		{
+			Lines(Drawn, LeafInk * FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), 1.0f, 26);
+		}
 	}
-	Lines({ FVector2D(Fit.X0, Fit.Y0), FVector2D(Fit.X0 + MapW, Fit.Y0), FVector2D(Fit.X0 + MapW, Fit.Y0 + MapH), FVector2D(Fit.X0, Fit.Y0 + MapH), FVector2D(Fit.X0, Fit.Y0) }, DeskInk, 1.0f, 25);
+	Lines({ FVector2D(Fit.X0, Fit.Y0), FVector2D(Fit.X0 + MapW, Fit.Y0), FVector2D(Fit.X0 + MapW, Fit.Y0 + MapH), FVector2D(Fit.X0, Fit.Y0 + MapH), FVector2D(Fit.X0, Fit.Y0) }, DeskInk, 1.0f, 26);
 	{
 		// (north: an arrow up in the top right corner, N under it)
 		const double NX = Fit.X0 + MapW - 22.0, NY = Fit.Y0 + 10.0;
 		Lines({ FVector2D(NX, NY + 22.0), FVector2D(NX, NY) }, DeskInk, 1.5f, 26);
 		Lines({ FVector2D(NX - 5.0, NY + 7.0), FVector2D(NX, NY), FVector2D(NX + 5.0, NY + 7.0) }, DeskInk, 1.5f, 26);
 		Write(TEXT("N"), NX - WideOf(TEXT("N"), SmallCaps()) * 0.5, NY + 24.0, SmallCaps(), DeskInk, 26);
-		// (the scale: a kilometre, or 500 metres where a kilometre would take more than a third of the map's width)
+		// (the scale, on a pale plate over the blocks: a kilometre, or 500 metres where a kilometre would take more than a
+		// third of the map's width)
 		const double Metres = 1000.0 * Fit.Scale <= MapW / 3.0 ? 1000.0 : 500.0;
 		const double SX = Fit.X0 + 12.0, SY = Fit.Y0 + MapH - 14.0, Long = Metres * Fit.Scale;
-		Lines({ FVector2D(SX, SY - 4.0), FVector2D(SX, SY), FVector2D(SX + Long, SY), FVector2D(SX + Long, SY - 4.0) }, DeskInk, 1.5f, 26);
-		Write(Metres >= 1000.0 ? FString(TEXT("1 KM")) : FString(TEXT("500 M")), SX + Long + 6.0, SY - 11.0, SmallCaps(), DeskInk, 26);
+		const FString Says = Metres >= 1000.0 ? FString(TEXT("1 KM")) : FString(TEXT("500 M"));
+		Fill(SX - 6.0, SY - 14.0, Long + 6.0 + WideOf(Says, SmallCaps()) + 12.0, 20.0, FieldPaper * FLinearColor(1.0f, 1.0f, 1.0f, 0.9f), 31);
+		Lines({ FVector2D(SX, SY - 4.0), FVector2D(SX, SY), FVector2D(SX + Long, SY), FVector2D(SX + Long, SY - 4.0) }, DeskInk, 1.5f, 32);
+		Write(Says, SX + Long + 6.0, SY - 11.0, SmallCaps(), DeskInk, 32);
+	}
+	if (!M.TownName.empty() && M.TownR > 0.0)
+	{
+		// (the town's name on a pale plate of the field's paper, over the blocks, so it reads over the town's shading and
+		// whatever stands in it)
+		const FString Name = Wide(M.TownName).ToUpper();
+		const FVector2D At = On(M.TownX, M.TownY);
+		const double NameW = WideOf(Name, SmallCaps());
+		Fill(At.X - NameW * 0.5 - 4.0, At.Y - 7.0, NameW + 8.0, 15.0, FieldPaper * FLinearColor(1.0f, 1.0f, 1.0f, 0.85f), 31);
+		Write(Name, At.X - NameW * 0.5, At.Y - 6.0, SmallCaps(), DeskInk * FLinearColor(1.0f, 1.0f, 1.0f, 0.75f), 32);
 	}
 
 	// The blocks at the battle time the 20 seconds have reached: the way each went behind it (one that moved far enough),
-	// itself as a bar of its side's ink its frontage long and its depth thick (one not yet found: its outline only), an
-	// arrowhead ahead of it the way it last went, and a cross on one gone.
+	// itself as a bar of its side's ink its frontage long and its depth thick, keylined (one not yet found: its outline
+	// only), an arrowhead ahead of it the way it last went. One that fled (broke and ran off the field: the rules' gone)
+	// faded, with a cross; one that fell back out of the fight (withdrawn, at its out line) faded, without one.
 	const double T = S.Replay.BattleAt(M);
 	auto InkOf = [&](const LandReplay::Piece& P)
 	{
@@ -2421,7 +2463,8 @@ void SLandBattleScreen::PaintReplay(const FGeometry& Geometry, FSlateWindowEleme
 		{
 			continue;
 		}
-		const FLinearColor Ink = InkOf(P) * FLinearColor(1.0f, 1.0f, 1.0f, At.bGone ? 0.45f : 1.0f);
+		const bool bOut = At.bGone || At.bOff;
+		const FLinearColor Ink = InkOf(P) * FLinearColor(1.0f, 1.0f, 1.0f, bOut ? 0.45f : 1.0f);
 		const std::vector<std::pair<double, double>> Way = LandReplay::WayTo(P, T);
 		const bool bMoved = LandReplay::Length(Way) >= LandReplay::LeastMove;
 		if (bMoved)
@@ -2447,21 +2490,25 @@ void SLandBattleScreen::PaintReplay(const FGeometry& Geometry, FSlateWindowEleme
 		const double Deep = FMath::Max(4.0, P.D * Fit.Scale);
 		if (At.bSeen)
 		{
-			Lines({ Left, Right }, Ink, static_cast<float>(Deep), 28);
+			// (a thin dark keyline round the bar, so that two sides' bars and the woods under them stay apart)
+			const FVector2D Out = (Right - Left).GetSafeNormal();
+			Lines({ Left - Out, Right + Out }, DeskInk * FLinearColor(1.0f, 1.0f, 1.0f, bOut ? 0.4f : 0.85f), static_cast<float>(Deep + 2.0), 28);
+			Lines({ Left, Right }, Ink, static_cast<float>(Deep), 29);
 		}
 		else
 		{
 			// (not yet found by his side: the outline of where it stood, its true ground unknown to him then)
 			const FVector2D Along = (Right - Left).GetSafeNormal(), Ahead(Along.Y, -Along.X);
 			const FVector2D A = Left + Ahead * (Deep * 0.5), B = Right + Ahead * (Deep * 0.5), D = Right - Ahead * (Deep * 0.5), E = Left - Ahead * (Deep * 0.5);
-			Lines({ A, B, D, E, A }, Ink, 1.5f, 28);
+			Lines({ A, B, D, E, A }, Ink, 1.5f, 29);
 		}
 		if (At.bGone)
 		{
-			Lines({ Middle + FVector2D(-5.0, -5.0), Middle + FVector2D(5.0, 5.0) }, DeskInk, 2.0f, 29);
-			Lines({ Middle + FVector2D(-5.0, 5.0), Middle + FVector2D(5.0, -5.0) }, DeskInk, 2.0f, 29);
+			// (over every bar, so a block that fell under another's still shows its cross)
+			Lines({ Middle + FVector2D(-5.0, -5.0), Middle + FVector2D(5.0, 5.0) }, DeskInk, 2.0f, 30);
+			Lines({ Middle + FVector2D(-5.0, 5.0), Middle + FVector2D(5.0, -5.0) }, DeskInk, 2.0f, 30);
 		}
-		else if (bMoved)
+		else if (bMoved && !At.bOff)
 		{
 			// (the arrowhead: the way's last stretch longer than 2 on the screen gives its heading)
 			FVector2D Heading = FVector2D::ZeroVector;
@@ -2478,7 +2525,7 @@ void SLandBattleScreen::PaintReplay(const FGeometry& Geometry, FSlateWindowEleme
 			{
 				const FVector2D Side(-Heading.Y, Heading.X);
 				const FVector2D Tip = Middle + Heading * (Deep * 0.5 + 9.0);
-				Lines({ Tip - Heading * 8.0 + Side * 5.0, Tip, Tip - Heading * 8.0 - Side * 5.0 }, Ink, 2.0f, 29);
+				Lines({ Tip - Heading * 8.0 + Side * 5.0, Tip, Tip - Heading * 8.0 - Side * 5.0 }, Ink, 2.0f, 30);
 			}
 		}
 	}
@@ -2495,13 +2542,20 @@ void SLandBattleScreen::PaintReplay(const FGeometry& Geometry, FSlateWindowEleme
 		const double KY = FY + 38.0;
 		auto Swatch = [&](const FLinearColor& Ink, bool bHollow, const FString& Words)
 		{
-			if (bHollow)
+			if (Ink.A < 0.01f)
+			{
+				// (a cross: FLED)
+				Lines({ FVector2D(KX + 4.0, KY + 2.0), FVector2D(KX + 14.0, KY + 12.0) }, DeskInk, 2.0f, 31);
+				Lines({ FVector2D(KX + 4.0, KY + 12.0), FVector2D(KX + 14.0, KY + 2.0) }, DeskInk, 2.0f, 31);
+			}
+			else if (bHollow)
 			{
 				Lines({ FVector2D(KX, KY + 3.0), FVector2D(KX + 18.0, KY + 3.0), FVector2D(KX + 18.0, KY + 11.0), FVector2D(KX, KY + 11.0), FVector2D(KX, KY + 3.0) }, Ink, 1.5f, 31);
 			}
 			else
 			{
-				Fill(KX, KY + 3.0, 18.0, 8.0, Ink, 31);
+				Fill(KX - 1.0, KY + 2.0, 20.0, 10.0, DeskInk * FLinearColor(1.0f, 1.0f, 1.0f, 0.85f), 31);
+				Fill(KX, KY + 3.0, 18.0, 8.0, Ink, 32);
 			}
 			Write(Words, KX + 24.0, KY, SmallCaps(), DeskInk, 31);
 			KX += 24.0 + WideOf(Words, SmallCaps()) + 18.0;
@@ -2510,21 +2564,32 @@ void SLandBattleScreen::PaintReplay(const FGeometry& Geometry, FSlateWindowEleme
 		{
 			Swatch(Brass, false, TEXT("YOURS"));
 			Swatch(Slate, false, TEXT("THE ENEMY"));
-			Swatch(Slate, true, TEXT("NOT YET FOUND"));
+			// (only where some block stands on this map before it was found: a battle fought in the open has none)
+			if (M.bUnfound)
+			{
+				Swatch(Slate, true, TEXT("NOT YET FOUND"));
+			}
 		}
 		else
 		{
 			Swatch(Brass, false, Wide(M.Adj[0]).ToUpper());
 			Swatch(Slate, false, Wide(M.Adj[1]).ToUpper());
 		}
-		Lines({ FVector2D(KX + 4.0, KY + 2.0), FVector2D(KX + 14.0, KY + 12.0) }, DeskInk, 2.0f, 31);
-		Lines({ FVector2D(KX + 4.0, KY + 12.0), FVector2D(KX + 14.0, KY + 2.0) }, DeskInk, 2.0f, 31);
-		Write(TEXT("GONE"), KX + 24.0, KY, SmallCaps(), DeskInk, 31);
+		// (each only where this map has one: the rules' gone is a block that broke and ran off the field, its men with it,
+		// never one destroyed; withdrawn, one that fell back out of the fight)
+		if (M.bFled)
+		{
+			Swatch(FLinearColor::Transparent, false, TEXT("FLED"));
+		}
+		if (M.bFellBack)
+		{
+			Swatch(InkSoft * FLinearColor(1.0f, 1.0f, 1.0f, 0.45f), false, TEXT("FELL BACK"));
+		}
 	}
 	const FString Again = TEXT("AGAIN"), Space = TEXT("SPACE"), Close = TEXT("CLOSE"), Esc = TEXT("ESC");
 	const double CloseX = Left + Wd - KeyWidth(Close, Esc), AgainX = CloseX - 10.0 - KeyWidth(Again, Space);
-	KeyButton(Again, Space, TEXT("replay:again"), AgainX, FY + 14.0, S.Replay.IsDone());
-	KeyButton(Close, Esc, TEXT("replay:close"), CloseX, FY + 14.0, false);
+	KeyButton(Again, Space, TEXT("replay:again"), AgainX, FY + 14.0, S.Replay.IsDone() ? Press::Lit : Press::Muted);
+	KeyButton(Close, Esc, TEXT("replay:close"), CloseX, FY + 14.0, Press::Plain);
 }
 
 bool SLandBattleScreen::PressDrawn(const FString& Action)

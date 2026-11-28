@@ -1,7 +1,8 @@
 #!/bin/bash
 # The replay map (release 2), checked in the cloud: builds Battle/LandReplay (the game's own code, no engine) with both
 # compilers' strict flags, lays the shipped battles' recordings as the map (every unit of every view where the view has
-# it; the woods, town and wet ground shaded cell for cell; the ways), a live battle's views made by hand (his side's,
+# it; the woods, town and wet ground laid smooth, each cell's middle its own look; the ways), a wood and the ground's
+# lines made by hand, a live battle's views made by hand (his side's,
 # the enemy's before and after they are met), the 20 seconds played at 30 frames a second, and the screen's words and
 # keys and the ship list's row read from their files.
 # Usage: Tools/replay_map/run.sh

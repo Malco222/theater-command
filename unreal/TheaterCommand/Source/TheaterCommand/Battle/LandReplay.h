@@ -36,6 +36,22 @@ namespace LandReplay
 		Look Kind = Look::Woods;
 	};
 
+	/** A line the map draws under the blocks, from the ground the scene laid (LandField's): a hedgerow (a lane's bank
+	 * and a garden hedge with them), a stone wall, a lane. */
+	enum class Edge
+	{
+		Hedge,
+		Wall,
+		Lane
+	};
+
+	struct Line
+	{
+		Edge Kind = Edge::Hedge;
+		/** Field metres, inside the field, a point at least LineStep from the one before (the last kept as it was). */
+		std::vector<std::pair<double, double>> Points;
+	};
+
 	/** One block at one view of the battle. */
 	struct Mark
 	{
@@ -76,9 +92,22 @@ namespace LandReplay
 		/** The two sides' adjectives (American, German, ...), for a film's key. */
 		std::string Adj[2];
 		std::vector<Patch> Patches;
+		/** The hedgerows, walls and lanes (none until the scene adds its ground's: AddLine). */
+		std::vector<Line> Lines;
 		std::vector<Piece> Pieces;
+		/** Some block stands on the map at some view before his side has found it (drawn as its outline then): the key's
+		 * NOT YET FOUND is shown only for such a map, all through its 20 seconds. Never on a film's. */
+		bool bUnfound = false;
+		/** Some block fled (Pose::bGone) or fell back (Pose::bOff) by the last view: the key's FLED and FELL BACK, each
+		 * shown only where the map has one. */
+		bool bFled = false, bFellBack = false;
 	};
 
+	/** The ground's patches are sampled this many times finer than the field's cells, across and up. */
+	constexpr int Fine = 4;
+	/** A line's points are kept this far apart at least (metres): a few pixels on the map (a 3 km field across a
+	 * thousand), so Normandy's fifteen hundred hedgerows stay a few thousand points to draw. */
+	constexpr double LineStep = 10.0;
 	/** A block's way keeps a point once it is this far from the last kept (metres). */
 	constexpr double WayStep = 20.0;
 	/** A block whose way is shorter than this has not moved: no arrow (metres). */
@@ -98,9 +127,15 @@ namespace LandReplay
 		bool bThere = false;
 		double X = 0.0, Y = 0.0, Face = 0.0;
 		bool bSeen = true;
-		/** Its state's word then: gone (lost), off the field (withdrawn), running (routing). */
+		/** Its state's word then. "gone": it broke and ran off the field (the rules' only gone, sim.ts's "has fled the
+		 * field": its men went with it, never destroyed). "withdrawn": it fell back out of the fight (R, ALL FALL BACK, or
+		 * the rules' own pulling back of a worn block or a sniper team), stopped at its out line. "routing": running. */
 		bool bGone = false, bOff = false, bRouting = false;
 	};
+
+	/** A line of the ground added to the map: cut where it leaves the field (each piece inside a line of its own),
+	 * thinned to LineStep; nothing where no piece of it lies inside. */
+	void AddLine(Map& M, const std::vector<std::pair<double, double>>& Points, Edge Kind);
 
 	/** The block's pose at a battle time: between its two views, the place and facing in proportion; the state and what
 	 * his side knew from the earlier. */

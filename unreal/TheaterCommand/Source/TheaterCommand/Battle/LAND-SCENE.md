@@ -2413,7 +2413,7 @@ today they reach it only inside each side's starting strength). The test reads e
 `OnKeyDown`'s branch for his screen and fails where it does another deed, and every screen word against the screen.
 
 - `FieldNotes.h/.cpp`: the words, the notebook and the desk (which note is up from the battle's facts). Plain C++;
-  `Tools/field_notes/run.sh` plays a first battle through it with both compilers' strict flags (196 checks with the
+  `Tools/field_notes/run.sh` plays a first battle through it with both compilers' strict flags (198 checks with the
   whisper's and the practice card's, the shipped words among them: 30 words a note at most, each key and screen word against `LandBattleScreen.cpp`).
 - `FieldNotesStore.h/.cpp`: the switch, the words file, the player's notebook (`Saved/Campaign/field-notes.json`, kept
   with the player, never a save), the attack card's tip, the Guide's switch (`SetOn`, `OffInBattle`, `TakeOffAsked`).
@@ -2436,14 +2436,18 @@ Brian's yes, 28 November 2026 00:09Z, to the guided start's three ideas; each be
 - **The whisper** (`StaffWhisper.h/.cpp`, words `Content/Data/Battle/staff-whispers.json`, row `whisper`,
   `-TheaterStaffWhisper`): one quiet line, CHIEF OF STAFF in brass before it and QUIET after it, low on the left above
   his cards, about the first unit in his hand when there is something true to say: an order on the radio and the seconds
-  till it lands (live.ts orderIn), a unit wavering (R pulls it off the field), one hidden in cover (its first shots or
-  leaving cover give it away; never a sniper team, found only by odds), hedge cutters (X, then a hedge), smoke to lay
-  (K), guns (a click on an enemy fires on it). Each once a battle (the wavering one once for each unit); the unit
-  held 0.6 s first; up 7 s, then 10 s quiet; never over a staff note, a question or the after card. It follows the staff
-  notes' one switch, and QUIET or NOTES OFF puts it away for the battle. `LandBattleNotes.cpp` fills its facts.
+  till it lands (live.ts orderIn), a unit wavering (R sends it back to his edge and out of the battle: sim.ts's
+  withdraw), one hidden in cover (firing springs its ambush and gives it away, as leaving cover or an enemy close does:
+  sim.ts's reveal; never a sniper team, found only by odds), hedge cutters (X, then a hedge), smoke to lay (K), guns
+  (every unit in hand a gun or a machine gun or mortar team, never a sniper team: a click on an enemy in reach fires on
+  it; out of reach they fire on what is). Each once a battle (the wavering one once for each unit); the unit held 0.6 s
+  first; up 7 s, then 10 s quiet; never over a staff note, a question or the after card. Its words at the staff note's
+  body size (Serif 15). No key for QUIET, as LATER and NOTES OFF have none. It follows the staff notes' one switch, and
+  QUIET or NOTES OFF puts it away for the battle. `LandBattleNotes.cpp` fills its facts.
 - **The practice battle with staff notes** (row `practicenotes`, `-TheaterPracticeNotes`, only beside `fieldnotes`):
-  the front door's practice card says whether the staff notes come with it, and STAFF NOTES FROM THE FIRST opens it with
-  them again from the first note (`FieldNotes::Book::StartOver`, `FieldNotesStore::StartOver`): on, none done, the closing
+  under the front door's practice card (never inside its button: one press, one battle), a line says whether the staff
+  notes come with it, or that they can start again from the first and come back on the campaign map too; STAFF NOTES
+  FROM THE FIRST opens it with them again from the first note (`FieldNotes::Book::StartOver`, `FieldNotesStore::StartOver`): on, none done, the closing
   note to come, the tips seen kept, and the campaign map's staff notes owed on (`TakeOnAsked`, the Guide's one switch, as
   NOTES OFF owes the off).
 
@@ -2451,20 +2455,30 @@ Brian's yes, 28 November 2026 00:09Z, to the guided start's three ideas; each be
 
 Brian's yes, 28 November 2026 00:09Z. After a land battle the after card offers REPLAY MAP (key M) beside CONTINUE, and
 the whole battle plays again in 20 real seconds on a map seen from straight above, north up: the field's woods, town and
-wet ground shaded (`LandReplay::LookOf` names which ground words), the town's name, north and a scale; every unit a bar
-of its side's ink its frontage long and its depth thick, where the recording's view had it (the rules send one a second
-of battle; between two, in proportion); behind each that went 60 m or more the way it went (kept every 20 m), with an
-arrowhead ahead of it, and a cross on a unit gone. His side brass, the enemy slate (never red); an enemy his side had not
-yet met (live.ts `known`) only its outline; a film's two sides by their nations. A second on the first view, then the
-battle at an even pace, then it holds on the last: the battle's story as arrows. AGAIN (SPACE) plays it again, CLOSE
-(ESC, M or Enter) is back to the after card.
+wet ground shaded (`LandReplay::LookOf` names which ground words), laid smooth (the cells sampled four times finer and
+joined between their middles, so a corner is cut round, never stepped; wet ground pale and hatched, never the enemy's
+slate); the scene's own hedgerows, walls and lanes as thin lines (LandField's, added once the map is laid); the town's
+name and the scale on pale plates over the units, north; every unit a keylined bar of its side's ink its frontage long
+and its depth thick, where the recording's view had it (the rules send one a second of battle; between two, in
+proportion; only this battle's own blocks, a corps from next door from the view it walks on); behind each that went
+60 m or more the way it went (kept every 20 m), with an arrowhead ahead of it. A unit that fled (the rules' only gone: it
+broke and ran off the field, its men with it, never one destroyed) faded with a cross over every bar; one that fell
+back out of the fight (withdrawn: R, ALL FALL BACK, or the rules' own pulling back) faded, without one. The key names
+NOT YET FOUND, FLED and FELL BACK only where the map has one. His side brass, the enemy slate (never red); an enemy his
+side had not yet met (live.ts `known`) only its outline (none in a battle fought without fog, the practice battle's); a
+film's two sides by their nations. A second on the first view, then the
+battle at an even pace, then it holds on the last: the battle's story as arrows. AGAIN (SPACE) plays it again (muted while it
+plays, lit brass once done), CLOSE (ESC, M or Enter) is back to the after card.
 
 - `LandReplay.h/.cpp`: the map from the recording (`Build`), a block's pose at a battle time, its way so far, its
   corners, the fit onto the screen, the 20 seconds' player, the clock. Plain C++; `Tools/replay_map/run.sh` lays both
-  shipped battles' recordings (every unit of every view where the view has it, the ground's patches cell for cell, the
-  ways), a live battle made by hand (his side's, the enemy's before and after it is met), the 20 seconds at 30 frames a
-  second, and the screen's words, keys and row from their files (95 checks, g++ and clang++).
-- `LandBattleReplay.cpp`: the map laid once the after card is up, its 20 seconds ticked, REPLAY MAP, AGAIN and CLOSE.
+  shipped battles' recordings (every unit of every view where the view has it; the ground's patches on the finer grid,
+  none over another, every cell's middle its own look, none stray, each look's area within a fifth of its cells'; the
+  ways), a wood made by hand (its corners cut round), the ground's lines (cut at the field's edge, thinned), a live
+  battle made by hand (his side's, the enemy's before and after it is met, fled), the 20 seconds at 30 frames a second,
+  and the screen's words, keys and row from their files (116 checks, g++ and clang++).
+- `LandBattleReplay.cpp`: the map laid once the after card is up (with the scene's hedgerows, walls and lanes), its 20
+  seconds ticked, REPLAY MAP, AGAIN and CLOSE; the log line counts the units, those fled and fallen back, and the lines.
 - `SLandBattleScreen::PaintReplay`: the panel over the after card. The Mac walk presses REPLAY MAP after its after
   card still and takes `12-replay-start`, `13-replay-half-way` and `14-replay-end`, then CLOSE.
 - Switch: the ship list's row `replaymap` (`-TheaterReplayMap`), OFF. Off: nothing laid, nothing drawn.

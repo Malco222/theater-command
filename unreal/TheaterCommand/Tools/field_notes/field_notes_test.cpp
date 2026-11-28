@@ -418,8 +418,14 @@ int main(int Argc, char** Argv)
 			const size_t Card = Hud.find("TSharedRef<SWidget> MakePractice()"), End = Hud.find("TSharedRef<SWidget> MakeBattleRules()");
 			const std::string Practice = Card != std::string::npos && End != std::string::npos && End > Card ? Hud.substr(Card, End - Card) : std::string();
 			Check(!Practice.empty(), "the practice card read");
-			const size_t Guard = Practice.find("if (FieldNotesStore::PracticeOn())"), Press = Practice.find("TEXT(\"STAFF NOTES FROM THE FIRST\")");
+			const size_t Made = Practice.find("const TSharedRef<SWidget> Card = SNew(SButton)"), Guard = Practice.find("if (!FieldNotesStore::PracticeOn())\n\t\t\t{\n\t\t\t\treturn Card;"),
+				Press = Practice.find("TEXT(\"STAFF NOTES FROM THE FIRST\")");
 			Check(Guard != std::string::npos && Press != std::string::npos && Guard < Press, "STAFF NOTES FROM THE FIRST only with its row on");
+			Check(Made != std::string::npos && Made < Guard && Practice.find("Body\n\t\t\t\t];", Made) < Guard,
+				"the card's own button is shut before the line and the press, so they are never a button inside its button");
+			Check(Practice.find("TEXT(\"Your staff notes come with it, one short note at a time.\")") != std::string::npos
+				&& Practice.find("TEXT(\"Your staff notes can start again from the first, one short note at a time. They come back on the campaign map too.\")") != std::string::npos,
+				"the practice line's two sayings, the directors' words");
 			Check(Practice.find("Open(true)") != std::string::npos && Practice.find("Open(false)") != std::string::npos, "the press opens the battle with the notes over, the card as before without");
 			const size_t Over = Practice.find("FieldNotesStore::StartOver()"), Spawn = Practice.find("SpawnActor<ALandBattle>");
 			Check(Over != std::string::npos && Spawn != std::string::npos && Over < Spawn && Practice.find("TActorIterator<ALandBattle>(World)") < Over,
