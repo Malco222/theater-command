@@ -104083,7 +104083,7 @@
       } else if (u.order?.kind === "withdraw" && (u.side === "att" ? u.y <= this.outLine("att") : u.y >= this.outLine("def"))) {
         u.state = "withdrawn";
         u.act = "down";
-        this.say({ what: "withdrawn", unit: u.id, side: u.side, text: `${this.named(u)} has fallen back off the field.` });
+        this.say({ what: "withdrawn", unit: u.id, side: u.side, text: `${this.named(u)} has fallen back out of the battle.` });
       }
     }
     /** Within LAND.queue.near metres of ground this block can hardly cross or not at all: at a bridge, a pass, a gap. */

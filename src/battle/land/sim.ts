@@ -3872,8 +3872,9 @@ export class LandBattle implements BattleSim<LandUnit> {
         this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${this.named(u)} has fallen back off the field.` });
       }
     } else if (u.order?.kind === 'withdraw' && (u.side === 'att' ? u.y <= this.outLine('att') : u.y >= this.outLine('def'))) {
+      // (at its out line it still stands on the field: out of the battle, not off the field; the design director, 28 Nov)
       u.state = 'withdrawn'; u.act = 'down';
-      this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${this.named(u)} has fallen back off the field.` });
+      this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${this.named(u)} has fallen back out of the battle.` });
     }
   }
 

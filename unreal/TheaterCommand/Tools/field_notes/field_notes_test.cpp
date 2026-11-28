@@ -453,6 +453,14 @@ int main(int Argc, char** Argv)
 		{
 			Check(FieldNotes::CountWords(L.Text) <= 20, L.Id + ": 20 words at most (" + std::to_string(FieldNotes::CountWords(L.Text)) + ")");
 		}
+		// (R's one deed in one wording: the wavering whisper's and the closing note's; the design director, 28 November)
+		bool bWaver = false;
+		for (const StaffWhisper::Line& L : SW.Lines)
+		{
+			bWaver = bWaver || (L.Id == "wavering" && L.Text.find("R sends them back to your edge and out of the battle") != std::string::npos);
+		}
+		Check(bWaver && W.Closing.Text.find("R sends it back to your edge and out of the battle") != std::string::npos,
+			"R says one thing: \"sends it back to your edge and out of the battle\" in the wavering whisper and the closing note");
 		StaffWhisper::Words Bad;
 		Check(!StaffWhisper::ReadWords("{\"lines\":[{\"id\":\"a\",\"when\":\"luck\",\"text\":\"t\"}]}", Bad, WWhy), "a whisper for a moment the desk does not know is refused");
 
@@ -558,7 +566,8 @@ int main(int Argc, char** Argv)
 		Check(N.When == "setup" || N.When == "fight" || N.When == "any", N.Id + ": a known moment");
 		Check(N.Aim == "begin" || N.Aim == "pause" || N.Aim == "tag" || N.Aim == "bar" || N.Aim == "none", N.Id + ": a known aim");
 	}
-	Check(FieldNotes::CountWords(W.Closing.Text) <= 30 && !W.Closing.Heading.empty(), "the closing note");
+	Check(FieldNotes::CountWords(W.Closing.Text) <= 30 && !W.Closing.Heading.empty(), "the closing note (" + std::to_string(FieldNotes::CountWords(W.Closing.Text)) + " words, a key such as H or R one of them)");
+	Check(FieldNotes::CountWords("H holds it and R sends it") == 7, "a key such as H or R counts as a word");
 	Check(!W.FightTip.empty() && FieldNotes::CountWords(W.FightTip) <= 30, "the attack card's tip");
 	{
 		FieldNotes::Words Bad;

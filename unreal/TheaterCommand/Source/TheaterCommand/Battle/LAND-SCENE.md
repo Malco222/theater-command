@@ -2413,7 +2413,7 @@ today they reach it only inside each side's starting strength). The test reads e
 `OnKeyDown`'s branch for his screen and fails where it does another deed, and every screen word against the screen.
 
 - `FieldNotes.h/.cpp`: the words, the notebook and the desk (which note is up from the battle's facts). Plain C++;
-  `Tools/field_notes/run.sh` plays a first battle through it with both compilers' strict flags (198 checks with the
+  `Tools/field_notes/run.sh` plays a first battle through it with both compilers' strict flags (200 checks with the
   whisper's and the practice card's, the shipped words among them: 30 words a note at most, each key and screen word against `LandBattleScreen.cpp`).
 - `FieldNotesStore.h/.cpp`: the switch, the words file, the player's notebook (`Saved/Campaign/field-notes.json`, kept
   with the player, never a save), the attack card's tip, the Guide's switch (`SetOn`, `OffInBattle`, `TakeOffAsked`).
