@@ -31,9 +31,11 @@ most). What he does with his arms is the CARRY:
             ("low", rehold: turned muzzle-down about his right fist and lowered, both arms set to it by IK, as far
             as clears him and as the arms reach, the drop given up first, per key and eased): the dash's rifle low
             across his body at the hip (4 degrees over level, 7 cm down, turned across him to 38 degrees left of
-            ahead: "heading"), dash_b's a little higher (14 degrees, 3 cm); the loaded jog's low across his belt (8
-            degrees, 10 cm; a two-handed man's 24 and 5) and kept at his run's heading across him ("steady": not
-            swung out by the trunk's roll and twist); a two-handed man's tired run 20 degrees and 8 cm;
+            ahead: "heading"), dash_b's low and further across (6 degrees, 5 cm, 60 degrees left of ahead: the
+            pair differ from above, the one rifle hidden by his body, the other a line across it); the loaded jog's
+            low across his belt (8 degrees, 10 cm, held steady at 58 degrees left of ahead, the most across of his
+            run's port and no more than 5 past it, not swung by the trunk's roll and twist; a two-handed man's 24
+            degrees and 5 cm, kept at his run's heading, "steady"); a two-handed man's tired run 20 degrees and 8 cm;
     hang    the tired run of a rifle file: the rifle hanging in the right hand at the trail, low and almost still
             (TRAIL["tired"]), the left arm hanging and swinging low: a spent man, not a runner;
     trail   the rifle in the RIGHT hand at the trail: the right arm hangs by IK and swings a little with the capture's,
@@ -42,7 +44,8 @@ most). What he does with his arms is the CARRY:
             (it pumps free); where it would pass into his kit or chest its elbow is bent more first (to 120 degrees
             of bend at most: a sprinter's elbow is about square), the forearm carried in across his chest or out
             past it (the upper arm turned about its length), its swing drawn toward its middle (a man in webbing
-            pumps shorter), and only then the upper arm opened out from his side (OPEN_MOST, 15 degrees at most),
+            pumps shorter, to the whole swing where nothing less clears his chest kit), and only then the upper
+            arm opened out from his side (OPEN_MOST, 15 degrees at most),
             the least of these, eased between keys, the hand kept within 25 cm of his midline where any way that
             clears does; only where none of these clears his kit (a chest rig, a greatcoat's pouches) is it opened
             to 30 degrees and the forearm carried out to 30 (OPEN_LAST); it may lie a centimetre into the soft
@@ -95,6 +98,19 @@ the boot's outline (a boot on its toe cap is on the ground), and key_phase also 
 the limps quickened to the exact speed asked (their pace holds 0.6 to 1.4 to the centimetre a second); the loaded
 jog played at 2.2 m/s (2.4 steps a second, slower than his run's 2.5) and its pace widened to 0.77 to 1.40 of its
 time, the tired run's to 0.78 to 1.30.
+
+Mended a third time 27 November 2026 (the pictures still showed the advance's upright rifle by dash_b's head and the
+loaded jog's muzzle over his left shoulder from the game's camera, and the trail sprint's free hand 35 to 42 cm out
+from his midline on CHN and JAP): dash_b's rifle low too (6 degrees, 5 cm) and turned across him to 60 degrees left of
+ahead, so the pair still differ (the dash's rifle hidden by his body, dash_b's a line across it); the loaded jog's
+held steady at 58 degrees left of ahead; the free arm's swing may be drawn in to the whole of it (CALM_STEPS) before
+the arm is opened past 15 degrees.
+
+Mended a fourth time 27 November 2026 (USA's dash had his rifle 3.2 cm into his right thigh between two keys, where
+the joints turning straight from one kept key to the next carry the swinging thigh up into the low-held rifle): in
+the gaits planted at 30 keys a second and kept at 15 ("dense"), the held-low weapon is kept LOW_MARGIN (1 cm) clearer
+of him at the keys than his own clip is; where no hold tried clears as asked, the clearest of them is taken (it was
+his own hold, untried); and the search gives up the drop before the turn, as tilt_needed always said it did.
 
     python3 gaits.py --stage [DIR] [names...]          key and check; DIR/soldier_<N>.gaits.json = {"clips",
                                                        "about_gaits", "pace_add", "checks"} (DIR: STAGE below)
@@ -158,9 +174,9 @@ GAITS = [
     dict(name="dash", cut="dash_a", rate=15, band=(3.8, 5.5), asked=4.2, hold="advance", rifle="own", kind="dash",
          quicken=True, low=(4.0, 0.07), heading=-38.0, dense=2),
     dict(name="dash_b", cut="dash_b", rate=15, band=(3.8, 5.5), asked=4.9, hold="advance", rifle="own", kind="dash",
-         quicken=True, low=(14.0, 0.03), style_of="dash", dense=2),
+         quicken=True, low=(6.0, 0.05), heading=-60.0, style_of="dash", dense=2),
     dict(name="jog_loaded", cut="jog_loaded", rate=15, band=(1.8, 3.0), asked=2.2, hold="run", rifle="own", kind="jog",
-         quicken=True, low=(8.0, 0.10), low_two=(24.0, 0.05), steady=True, widen=(0.77, 1.40)),
+         quicken=True, low=(8.0, 0.10), low_two=(24.0, 0.05), heading=-58.0, steady=True, widen=(0.77, 1.40)),
     dict(name="run_tired", cut="run_tired", rate=15, band=(2.0, 3.2), asked=2.5, hold="run", rifle="hang", kind="jog",
          quicken=True, low=(10.0, 0.14), low_two=(20.0, 0.08), trail="tired", left_hangs=True, widen=(0.78, 1.30)),
     dict(name="run_stumble", cut="stumble", rate=15, band=None, asked=None, hold="run", rifle="own", kind="stumble"),
@@ -176,7 +192,7 @@ GAITS = [
 #  lowered that much (rehold), as far as clearing him allows: the dash's weapon low at the hip, the loaded man's low
 #  across his belt; low_two: (degrees, metres) as low, for the men in LOW_TWO (a weapon carried across him in both
 #  hands: less, the gun is long and heavy); the drop is given up 2 cm at a time where the arms do not reach it;
-#  heading: the dash's hold turned (yaw) to this many degrees from ahead (left -), across his body;
+#  heading: the hold turned (yaw) to this many degrees from ahead (left -), across his body: a rifleman's only;
 #  steady: the hold kept at his run's heading across him (yaw), not swung by the trunk's roll and twist;
 #  widen: how far the clip may be played from its own time to reach the family's band (widen_paces);
 #  hang (the tired run's carry on a rifle file): the rifle hanging in the right hand at the trail (TRAIL[trail]), the
@@ -480,11 +496,17 @@ HIPS_LEGS = ("pelvis", "pouch_l", "pouch_r") + LEG_SHAPES      # (lift_needed's 
 
 # ================================================================================================ one file
 def held_across(fit, g):
-    """Whether gait g's low hold, its heading and its steadiness (low, heading, steady) are for this man: a rifleman's
-    own two-handed hold, or one of LOW_TWO's where the gait has low_two (the heading is the riflemen's only)."""
+    """Whether gait g's low hold and its steadiness (low, steady) are for this man: a rifleman's own two-handed hold,
+    or one of LOW_TWO's where the gait has low_two. A heading of its own is the riflemen's only (heading_for)."""
     if fit.name not in TWO_HANDS:
         return True
-    return fit.name in LOW_TWO and bool(g.get("low_two")) and g.get("heading") is None
+    return fit.name in LOW_TWO and bool(g.get("low_two"))
+
+
+def heading_for(fit, g):
+    """The heading gait g turns his weapon to (degrees from ahead, left -), or None: the riflemen's only (a two-handed
+    man's long gun or load is kept at his own clip's heading, steady where the gait says so)."""
+    return g.get("heading") if fit.name not in TWO_HANDS else None
 
 
 def carry_of(name, D, g):
@@ -804,9 +826,11 @@ HAND_MID_MOST = 0.25         # (the free hand kept within this of his midline, s
 OPEN_LAST = 30.0             # (only where nothing within OPEN_MOST and TWIST_RANGE clears his kit (a chest rig, a
 TWIST_LAST = 30.0            #  greatcoat's pouches): opened out to this at most and the forearm carried out to this,
 LAST_COST = 200.0            #  each such way counted this much dearer than any within them; check_clip reports it)
-CALM_STEPS = (0.0, 0.2, 0.4, 0.6)   # (and the upper arm's swing drawn toward its middle by these shares, fore and
-CALM_COST = 25.0             #  back, where his kit at the hip or on his chest stops it: a man in webbing pumps
-#                              shorter; a share of it counts as this many degrees opened out: before opening wide)
+CALM_STEPS = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)   # (and the upper arm's swing drawn toward its middle by these shares,
+CALM_COST = 25.0             #  fore and back, where his kit at the hip or on his chest stops it: a man in webbing
+#                              pumps shorter; a share of it counts as this many degrees opened out: before opening
+#                              wide; up to the whole swing at a key where nothing less clears his chest kit: the third
+#                              mending, the hand had gone 35 to 42 cm out from his midline on CHN and JAP)
 
 
 def open_out(fit, q, mv, s, deg):
@@ -1145,9 +1169,13 @@ def rehold(fit, q, mv, tilt, lower, yaw=0.0):
 
 
 REACH_MISS = 0.006           # (rehold: a turned hold whose wrist the arm misses by more than this is not taken)
+LOW_MARGIN = 0.01            # (rehold: in a gait planted at 30 keys a second and kept at 15 ("dense"), a held-low
+#                              weapon kept this much clearer of him at the keys than his own clip is, as the joints
+#                              turning straight between the kept keys carry a swinging thigh up into it: the fourth
+#                              mending, USA's dash had it 3.2 cm into his right thigh between two keys)
 
 
-def tilt_needed(fit, pose_at, nk, hold, target, lower=0.0, loop=True):
+def tilt_needed(fit, pose_at, nk, hold, target, lower=0.0, loop=True, margin=0.0):
     """rehold's turn and drop per key: the weapon brought down to `target` degrees above level (none where it is
     already lower) and lowered `lower` metres, less of either wherever that would put it into him (as clear of his
     trunk, kit and legs as in his own clip, 5 cm over the ground) or out of his arms' reach (the drop given up 2 cm
@@ -1155,7 +1183,7 @@ def tilt_needed(fit, pose_at, nk, hold, target, lower=0.0, loop=True):
     lowers)."""
     sk = fit.sk
     base = fit.base_clear(hold)
-    want = min(0.0, base) + 0.004
+    want = min(0.0, base) + 0.004 + margin
     allowed = np.zeros(nk)
     dropped = np.zeros(nk)
     drops = [lower] if lower <= 0.0 else list(np.arange(lower, -0.001, -0.02))
@@ -1163,20 +1191,23 @@ def tilt_needed(fit, pose_at, nk, hold, target, lower=0.0, loop=True):
         q, mv = pose_at(j, 0.0, 0.0)
         G, X = sk.fk(q, mv)
         t0 = max(0.0, weapon_pitch(fit, G) - target)
-        got = None
-        for lw in drops:
-            for tl in np.arange(t0, -0.01, -3.0):
+        got, best = None, None
+        for tl in np.arange(t0, -0.01, -3.0):     # (the drop given up first, then the turn)
+            for lw in drops:
                 fit._reach_miss = 0.0
                 q, mv = pose_at(j, tl, lw)
                 G, X = sk.fk(q, mv)
                 c, which, zmin = fit.weapon_clear(G, X)
-                if c >= want and zmin >= 0.05 and fit._reach_miss <= REACH_MISS:
-                    got = (tl, lw)
-                    break
+                if zmin >= 0.05 and fit._reach_miss <= REACH_MISS:
+                    if c >= want:
+                        got = (tl, lw)
+                        break
+                    if best is None or c > best[0]:
+                        best = (c, tl, lw)
             if got is not None:
                 break
-        if got is None:
-            got = (0.0, 0.0)
+        if got is None:                       # (nothing clears as asked: the clearest of the holds tried)
+            got = (best[1], best[2]) if best is not None else (0.0, 0.0)
         allowed[j] = max(got[0], 0.0)
         dropped[j] = max(got[1], 0.0)
 
@@ -1328,12 +1359,13 @@ def key_gait(fit, g, log=print, quick=1.0, legs_only=False, phase=0.0):
                 q[n] = Gw
                 mv[n] = Xw - sk.H0[r] - (sk.H0[i] - sk.H0[r])
             yaw_c = 0.0
-            if (g.get("steady") or g.get("heading") is not None) and "weapon" in q \
+            hd_ = heading_for(fit, g)
+            if (g.get("steady") or hd_ is not None) and "weapon" in q \
                     and fit.run.get("weapon") not in (None, "none") and held_across(fit, g):
                 Gs, _ = sk.fk(q, mv)
-                if g.get("heading") is not None:          # (a heading of its own: across him)
+                if hd_ is not None:                       # (a heading of its own: across him)
                     a_ = Gs[sk.ix["weapon"]][:, 0]
-                    yaw_c = (g["heading"] - math.degrees(math.atan2(a_[1], a_[0])) + 180.0) % 360.0 - 180.0
+                    yaw_c = (hd_ - math.degrees(math.atan2(a_[1], a_[0])) + 180.0) % 360.0 - 180.0
                 else:                                     # (his own clip's heading at this moment)
                     yaw_c = heading_off(fit, Go, Gs)
                 note["yaw_c"] = yaw_c
@@ -1411,7 +1443,8 @@ def key_gait(fit, g, log=print, quick=1.0, legs_only=False, phase=0.0):
         target, drop = g["low"] if fit.name not in TWO_HANDS else g["low_two"]
         tv, lv_ = tilt_needed(fit, lambda j, tl, lw: pose(j, lift=float(lift[j]), tilt=tl, lower=lw,
                                                           nod=float(nodded[j]), up=float(stood[j]))[:2], K,
-                              g["hold"], target, lower=drop, loop=True)
+                              g["hold"], target, lower=drop, loop=True,
+                              margin=LOW_MARGIN if int(g.get("dense", 1)) > 1 else 0.0)
         tilt[:K] = tv
         tilt[K] = tv[0]
         lower[:K] = lv_
@@ -1419,6 +1452,8 @@ def key_gait(fit, g, log=print, quick=1.0, legs_only=False, phase=0.0):
         info["held_low"] = {"tilt_deg": [round(float(tv.min()), 1), round(float(tv.max()), 1)],
                             "lowered_m": [round(float(lv_.min()), 3), round(float(lv_.max()), 3)],
                             "asked": [target, drop], "muzzle_up_to_deg": target}
+        if heading_for(fit, g) is not None:
+            info["held_low"]["heading_deg"] = heading_for(fit, g)
 
     # ---- the limp's hand on the thigh: the elbow's side at each key where the forearm passes his hip kit, eased
     #      between keys (pole_path)
@@ -1580,7 +1615,7 @@ def key_gait(fit, g, log=print, quick=1.0, legs_only=False, phase=0.0):
             if has_move[n]:
                 keys[n]["move"].append([round(t, 4)] + [round(float(x), 4) for x in mv.get(n, np.zeros(3))])
     info["left_hangs"] = left_hangs[0] if carry in ("limp", "hang") else None
-    if (g.get("steady") or g.get("heading") is not None) and carry == "own" and fit.w_pts is not None \
+    if (g.get("steady") or heading_for(fit, g) is not None) and carry == "own" and fit.w_pts is not None \
             and fit.run.get("weapon") not in (None, "none") and not legs_only:
         yc = [pose(j, out, float(opened[j]), float(lift[j]), float(tilt[j]), float(lower[j]), float(flexed[j]), float(twisted[j]),
                    float(nodded[j]), float(stood[j]))[2].get("yaw_c", 0.0) for j in range(K)]
@@ -2854,7 +2889,9 @@ def hold_changes(info):
         out.append(f"the weapon held low: turned {hl['tilt_deg'][0]:.0f} to {hl['tilt_deg'][1]:.0f} degrees "
                    f"muzzle-down about his right fist"
                    + (f" and lowered {hl['lowered_m'][0] * 100:.0f} to {hl['lowered_m'][1] * 100:.0f} cm"
-                      if hl["lowered_m"][1] else "") + ", both arms set to it by IK")
+                      if hl["lowered_m"][1] else "")
+                   + (f", turned across him to {-hl['heading_deg']:.0f} degrees left of ahead"
+                      if hl.get("heading_deg") is not None else "") + ", both arms set to it by IK")
     return (", " + "; ".join(out)) if out else ""
 
 
@@ -2958,7 +2995,10 @@ def about_gaits(fit, clips, pace_add):
         "and in it the clip whose pace holds his speed (where two do, either; where none does, the nearest). A clip "
         "with style_of is another runner of that family (sprint_b, sprint_c, dash_b): style_of names the family only, "
         "and a clip chosen by its pace is played as it is, not picked again among its family by style (each has its "
-        "own pace). Play run_stumble once, now and then, in a tired man's run, then the run from rejoin. The carry: "
+        "own pace). Play run_stumble once, now and then, in a tired man's run, then the run from rejoin. Until "
+        "cycles are baked for the new gaits, a far man's pose bank may stand them in as the old ones: sprint, "
+        "sprint_b, sprint_c as flee; dash, dash_b as advance; jog_loaded, run_tired, run_stumble as run; limp_l, "
+        "limp_r as reel_walk (or walk). The carry: "
         + ("the rifle in the right hand at the trail in " + ", ".join(trail) + (" and " + ", ".join(limp) if limp else "") + "; "
            if trail else "")
         + "his own hold on his weapon in the rest (the dashes take his advance's hold, the weapon low in both hands; "

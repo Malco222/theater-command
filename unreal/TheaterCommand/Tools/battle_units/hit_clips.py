@@ -1865,9 +1865,11 @@ def pose_of(body, sp):
             c = arm_over(arm_read(body, "r", G2[b("chest")], G2[U_], G2[H_], X2[U_], X2[F_], X2[H_]))
             return c + 0.02 * dyaw * dyaw + 400.0 * dy * dy + 150.0 * dx * dx, l2
         best = lay(0.0)
-        if best[0] > 1e-9 and "hand" not in g:
+        if best[0] > 1e-9 and ("hand" not in g or g.get("search")):
+            # (laid where his right hand is, `search`: turned on the ground the least that lets the wrist hold it
+            # inside a wrist's range, not moved)
             for dx in (0.0,):
-                for dy in (0.0, -0.06, 0.06, 0.12):
+                for dy in ((0.0, -0.06, 0.06, 0.12) if "hand" not in g else (0.0,)):
                     for dw in (0.0, -8.0, 8.0, -16.0, 16.0, -24.0, 24.0, -32.0, 32.0):
                         if best[0] > 1e-9 and (dw or dy or dx):
                             c = lay(dw, dy, dx)
@@ -2022,15 +2024,90 @@ class Keys:
 WRIST_IN = 0.05              # (s: a wrist eased into its range from a clip's first or last key over this long)
 
 
+PIVOT_DEV = (-26.0, 16.0)    # (degrees: a hand bearing on the ground has its wrist kept between these sideways (rom.py's
+#                              wr_dev: ulnar -, radial +; its limits -30 and 20), by turning on its palm (hand_pivot))
+
+
+def hand_pivot(body, lq, mv, s, lim=PIVOT_DEV):
+    """A hand bearing on the ground with its wrist bent sideways past `lim`: the hand turned about the upright through
+    what of it bears on the ground (it pivots on its palm: that stays where it is), the least that brings the wrist
+    back inside, the arm solved to it. A wrist inside, or a hand off the ground, is left as it is. Changes lq."""
+    man = body.man
+    U, F, Hd = (man.b(n) for n in ARM[s])
+    ch = man.b("chest")
+
+    def dev(l_):
+        G_, X_l = man.fk(l_, mv)
+        return arm_read(body, s, G_[ch], G_[U], G_[Hd], X_l[U], X_l[F], X_l[Hd])["wr_dev"]
+
+    def excess(d):
+        return d - lim[1] if d > lim[1] else d - lim[0] if d < lim[0] else 0.0
+    d0 = dev(lq)
+    if excess(d0) == 0.0:
+        return lq
+    G, X = man.fk(lq, mv)
+    V = body.skin(G, X)
+    on = body.Z["hand_" + s] & (V[:, 2] < 0.012)
+    if on.sum() < 3:
+        return lq
+    c = V[on].mean(0)
+
+    def turned(a):
+        l2 = lq.copy()
+        R = Rz(a)
+        ik2(man, l2, mv, ARM[s], c + R @ (X[Hd] - c), end_R=R @ G[Hd])
+        return l2
+    k = (dev(turned(2.0)) - d0) / 2.0
+    if abs(k) < 0.2:
+        return lq
+    a = float(np.clip(-excess(d0) / k, -35.0, 35.0))
+    l2 = turned(a)
+    e = excess(dev(l2))
+    if e != 0.0:
+        a = float(np.clip(a - e / k, -35.0, 35.0))
+        l2 = turned(a)
+    lq[:] = l2
+    return lq
+
+
+def gun_up(body, lq, mv, post, clear=0.002, most=40.0, step=2.0):
+    """The weapon riding his right hand (post: carried on it) turned up or down at his wrist about the level line
+    across it, the least that keeps it out of the ground; one that is out of it is left as it is. Returns (lq, mv)."""
+    man = body.man
+    if not body.armed or zone_low(body, lq, mv, body.is_gun)[0] >= clear - 1e-3:
+        return lq, mv
+    h, f = man.b("hand_r"), man.b("lowerarm_r")
+    G, X = man.fk(lq, mv)
+    ax = np.cross(G[body.wi] @ X_, Z_)
+    if np.linalg.norm(ax) < 1e-6:
+        return lq, mv
+    ax = unit(ax)
+    best = None
+    for k in range(1, int(most / step) + 1):
+        for sg in (1.0, -1.0):
+            l2 = lq.copy()
+            l2[h] = G[f].T @ R_axis(ax, sg * k * step) @ G[h]
+            l2, m2 = post(l2, mv.copy())
+            z = zone_low(body, l2, m2, body.is_gun)[0]
+            if z >= clear:
+                return l2, m2
+            if best is None or z > best[0]:
+                best = (z, l2, m2)
+    return best[1], best[2]
+
+
 def play(body, keys, t, pins=(), grip=None, ground=True, clear=0.002, lift=True, limbs=True, wrists=True,
-         shin_first=False, one_turn=(), behind=True):
+         shin_first=False, one_turn=(), behind=True, locks=None, pivot=False, gun_clear=False):
     """The pose at t of a keyed move: the keys' in-between; the limbs in `pins` [(limb, from, to)] (arm_l, arm_r,
     leg_l, leg_r) carried straight through the world between the keys there (a planted hand or foot stays planted);
     the weapon riding his right hand; and nothing left under the ground."""
     man = body.man
     lq, mv = keys.at(t)
     rel = grip(t) if callable(grip) else (grip or body.rel0["r"])
-    post = lambda l, m: keep_prop(body, *gun_rides(body, l, m, rel), body.prop0)
+    ride = lambda l, m: keep_prop(body, *gun_rides(body, l, m, rel), body.prop0)
+    # (gun_clear: the weapon in his hand kept out of the ground by his wrist, not by lifting the whole of him off it,
+    # each time it is carried on his hand)
+    post = (lambda l, m: gun_up(body, *ride(l, m), ride, clear)) if gun_clear else ride
     n = len(keys.t)
     exact = any(abs(t - x) < 1e-6 for x in (keys.t[0], keys.t[-1]))
     if exact:
@@ -2049,6 +2126,14 @@ def play(body, keys, t, pins=(), grip=None, ground=True, clear=0.002, lift=True,
 
     def pinned(limb):
         return any(l == limb and t0 - 1e-6 <= t <= t1 + 1e-6 for l, t0, t1 in pins)
+
+    def shift(limb):
+        # (a planted hand, foot or knee: its joint moved over the ground the way that keeps what of it bears on the
+        # ground where it is while the bones above it turn (contact_locks))
+        for t0, t1, tt, S in (locks or {}).get(limb, ()):
+            if t0 - 1e-6 <= t <= t1 + 1e-6:
+                return np.array((np.interp(t, tt, S[:, 0]), np.interp(t, tt, S[:, 1]), 0.0))
+        return np.zeros(3)
 
     def hand_turn(limb, h, Ge):
         # (a hand held on the ground keeps one turn while it bears, the mean of the keys' between the hold's first
@@ -2085,7 +2170,7 @@ def play(body, keys, t, pins=(), grip=None, ground=True, clear=0.002, lift=True,
                         v = (t - keys.t[k0]) / max(keys.t[k1] - keys.t[k0], 1e-9)
                         P[2] = keys.fk[k0][1][ca][2] * (1 - v) + keys.fk[k1][1][ca][2] * v
                         break
-                return P
+                return P + shift("knee_" + s_)
         return keys.held(t, ca)[1]
 
     def pin(limb):
@@ -2101,6 +2186,17 @@ def play(body, keys, t, pins=(), grip=None, ground=True, clear=0.002, lift=True,
             return
         chain = ARM[s_] if limb.startswith("arm") else LEG[s_]
         Ge, Xe = keys.held(t, man.b(chain[2]))
+        toe = None
+        if limb.startswith("leg") and "ball_" + s_ in man.ix:
+            # (a foot carried by the ball of the foot, not the ankle: as it rolls up onto its ball or down onto its
+            # heel between two keys the ball stays on its line and the toes keep the keys' turn in the world)
+            bl_, f_ = man.b("ball_" + s_), man.b(chain[2])
+            Gb, Xb = keys.held(t, bl_)
+            k_, _ = keys.seg(t)
+            G0, X0 = keys.fk[k_]
+            Xe = Xb - Ge @ (G0[f_].T @ (X0[bl_] - X0[f_]))
+            toe = Gb
+        Xe = Xe + shift(limb)
         if limb in one_turn:
             Ge = hand_turn(limb, man.b(chain[2]), Ge)
         knee = limb.startswith("leg") and pinned("knee_" + s_)
@@ -2110,6 +2206,8 @@ def play(body, keys, t, pins=(), grip=None, ground=True, clear=0.002, lift=True,
                 knee_leg(body, lq, mv, s_, knee_held(t, s_), Xe, Ge)
             else:
                 ik2(man, lq, mv, chain, Xe, end_R=Ge)
+            if toe is not None:
+                lq[man.b("ball_" + s_)] = Ge.T @ toe
         solve()
         zone = body.Z[("hand_" if limb.startswith("arm") else "foot_") + s_]
         for _ in range(4):
@@ -2118,6 +2216,10 @@ def play(body, keys, t, pins=(), grip=None, ground=True, clear=0.002, lift=True,
                 break
             Xe = Xe + Z_ * (clear - z)
             solve()
+        if pivot and limb.startswith("arm"):
+            # (a hand bearing on the ground turns a little on its palm as the body moves over it, so the wrist stays
+            # inside its range)
+            hand_pivot(body, lq, mv, s_)
     for s in "lr":
         if behind:
             lq = behind_ease(body, lq, mv, s)
@@ -2652,6 +2754,9 @@ ANKLE_UP = (-42.0, 23.0)     # (degrees: the most a planted foot is pointed down
 SIDE_TUCK = 155.0            # (degrees: his left shin's way over the ground from his thigh's while he sits on that hip)
 KNEE_SINK = 0.017            # (m: his own kneel holds the knee this far off the ground: set down onto it)
 UP_FPS = 30                  # (the get-ups are keyed 30 a second)
+PUSH_AT = (-0.05, 0.22)
+LIFT_H = 0.04               # (m: get_up_face's hands held this far over their spots before they are set down)
+ARM_BEND = 15.0              # (degrees: the least a get-up's elbow is bent while that hand bears his weight)      # (m: get_up_face's hands set down for the push, behind (-) and out from each shoulder)
 
 
 def kneel_at(body, foot, flip=False):
@@ -2774,8 +2879,13 @@ def up_key(body, sp, knees=(), feet=(), hip=None, touch=0.002, balls=None):
             if RF is not None:
                 # (a foot set down flat: on its heel where the leg is stretched out, on its ball where the shin is
                 # pitched far over it, inside an ankle's range either way)
+                Gf0 = man.fk(lq, mv)[0][man.b("foot_" + s)]
                 lq = heel_pivot(body, lq, mv, s, ANKLE_UP[0])
                 lq = heel_up(body, lq, mv, s, ANKLE_UP[1])
+                if (balls or {}).get(s) is not None and "ball_" + s in man.ix:
+                    # (its toes, held as they lie, stay flat on the ground as the heel comes up about them)
+                    Gf1 = man.fk(lq, mv)[0][man.b("foot_" + s)]
+                    balls = dict(balls, **{s: Gf1.T @ Gf0 @ balls[s]})
         for s, R in (balls or {}).items():
             # (the toes of a foot that bears on the ground kept as they are bent through the whole hold)
             if R is not None and "ball_" + s in man.ix:
@@ -2848,6 +2958,13 @@ def hand_as(body, G, X, s, pole, **kw):
     return dict(rel="abs", at=X[h].copy(), pole=pole, d=G[h] @ A["d0"], t=G[h] @ A["t0"], fixed=True, **kw)
 
 
+FACE_HAND_L = (1.0, 0.15, -0.12)   # (get_up_face: his left hand set down for the push, its fingers along this)
+OFF_GUN = ((0.9, -0.05, -0.05), (0.05, 0.0, 1.0))  # (get_up_face: the weapon as it comes up off the ground with his
+#                              right hand: about level, its muzzle not swung down into the ground on the way)
+FACE_STEP = 0.28             # (m: each knee stepped forward under him once he is on his hands and knees)
+FACE_ROCK = (-0.10, 0.42, 50.0)  # (get_up_face's rock: his pelvis this far forward of his right knee, this high, pitched)
+
+
 def up_face_keys(body):
     man = body.man
     b = man.b
@@ -2859,7 +2976,7 @@ def up_face_keys(body):
     Gi, Xi = man.fk(*idle)
     # (each knee is stepped forward once he is up on his hands: where it comes down, and his kneel set so its right
     # knee is there; he stands up over its left foot)
-    STEP_L, STEP_R = np.array((0.15, 0.08, 0.0)), np.array((0.15, -0.05, 0.0))
+    STEP_L, STEP_R = np.array((FACE_STEP, 0.08, 0.0)), np.array((FACE_STEP, -0.05, 0.0))
     k0 = body.pose("fire_kneel", 0.0)
     Xk0 = man.fk(*k0)[1]
     S = Xr[b("calf_r")][:2] + STEP_R[:2] - Xk0[b("calf_r")][:2]
@@ -2881,7 +2998,11 @@ def up_face_keys(body):
     rfl, rfr = (Xr[b("foot_l")], Gr[b("foot_l")]), (Xr[b("foot_r")], Gr[b("foot_r")])
     rfl2 = (rfl[0] + STEP_L, rfl[1])
     Fre, Rfre = Xe[b("foot_r")], Ge[b("foot_r")]
-    hl, hr = np.array((0.32, -0.31)), np.array((0.34, 0.31))
+    # (his hands set down for the push beside his shoulders, a little behind and out from them: a push from further
+    # back would carry his elbows up behind his back)
+    shl, shr = Xr[b("upperarm_l")], Xr[b("upperarm_r")]
+    hl = np.array((shl[0] + PUSH_AT[0], shl[1] - PUSH_AT[1]))
+    hr = np.array((shr[0] + PUSH_AT[0], shr[1] + PUSH_AT[1]))
     gun_r = (Gr[body.wi] @ X_, Gr[body.wi] @ Z_)
     lying = (("l", Kl0, rfl[0], rfl[1]), ("r", Kr0, rfr[0], rfr[1]))
     K = [(0.0,) + rest + ("stop",)]
@@ -2890,30 +3011,26 @@ def up_face_keys(body):
 
     def balls(l=None, r=None):
         return None if bl is None else {"l": bl[l][0] if l else None, "r": bl[r][1] if r else None}
-    # (he stirs: his hands come up off the ground, the right with the weapon in it)
-    K.append((T["up"],) + up_key(body, dict(
-        like=rest, nk=(-6.0, 0.0, -20.0), hd=(-4.0, 0.0, -22.0),
-        arm_l=dict(rel="abs", at=lifted(Xr[b("hand_l")], (hl[0], hl[1], 0.06), 0.08, 0.3), pole=(-0.4, -0.7, 0.6),
-                   d=(1.0, 0.3, -0.15), t=(0.1, 1.0, 0.1)),
-        arm_r=dict(rel="abs", at=lifted(Xr[b("hand_r")], (hr[0], hr[1], 0.07), 0.08, 0.3), pole=(-0.4, 0.7, 0.6),
-                   gun=gun_r),
-        fin_l=(10.0, 2.0))) + ("",))
+    # (he stirs: his head comes up; his arms still as they lay, so the left is not wrung over at the shoulder as it
+    # comes off the ground from beside his head (it comes up on its way to the lift))
+    K.append((T["up"],) + up_key(body, dict(like=rest, nk=(-6.0, 0.0, -20.0), hd=(-4.0, 0.0, -22.0),
+                                            fin_l=(10.0, 2.0))) + ("",))
     # (his hands set down beside his chest, pushing; his chest coming up)
     stir = up_key(body, dict(
         like=rest,
         s1=(-4.0, 0.0, 0.0), s2=(-6.0, 0.0, 0.0), ch=(-6.0, 0.0, 0.0), nk=(-16.0, 0.0, -8.0), hd=(-10.0, 0.0, -6.0),
-        arm_l=dict(rel="abs", at=(hl[0], hl[1], 0.055), pole=(-0.3, -0.9, 0.4), d=(1.0, 0.15, -0.12),
+        arm_l=dict(rel="abs", at=(hl[0], hl[1], 0.055), pole=(-0.3, -0.9, 0.4), d=FACE_HAND_L,
                    t=(0.1, 1.0, 0.1), plant=True),
         arm_r=dict(rel="abs", at=(hr[0], hr[1], 0.07), pole=(-0.3, 0.9, 0.4), d=(1.0, 0.0, -0.1), t=(0.0, -1.0, 0.3)),
-        fin_l=(6.0, -4.0), gun=dict(hand=hr, yaw=-3.0, side=-1.0)),
+        fin_l=(6.0, -4.0), gun=dict(hand=hr, yaw=-3.0, side=-1.0, search=True)),
         knees=lying)
     G2, X2 = man.fk(*stir)
     # (drawn in by his ribs, his hands held over where they go down, turned as they will be; his head coming up)
     K.append((T["lift"],) + up_key(body, dict(
         like=rest, s1=(-2.0, 0.0, 0.0), s2=(-3.0, 0.0, 0.0), ch=(-3.0, 0.0, 0.0), nk=(-14.0, 0.0, -14.0),
         hd=(-8.0, 0.0, -14.0),
-        arm_l=dict(hand_as(body, G2, X2, "l", (-0.3, -0.9, 0.4)), at=X2[b("hand_l")] + Z_ * 0.08),
-        arm_r=dict(hand_as(body, G2, X2, "r", (-0.3, 0.9, 0.4)), at=X2[b("hand_r")] + Z_ * 0.08),
+        arm_l=dict(hand_as(body, G2, X2, "l", (-0.3, -0.9, 0.4)), at=X2[b("hand_l")] + Z_ * LIFT_H),
+        arm_r=dict(hand_as(body, G2, X2, "r", (-0.3, 0.9, 0.4)), at=X2[b("hand_r")] + Z_ * LIFT_H),
         fin_l=(6.0, -4.0))) + ("",))
     K.append((T["stir"],) + stir + ("",))
     hands = dict(arm_l=hand_as(body, G2, X2, "l", (-0.6, -0.8, 0.3)), arm_r=hand_as(body, G2, X2, "r", (-0.6, 0.8,
@@ -2922,31 +3039,50 @@ def up_face_keys(body):
     up_on = dict(s1=(5.0, 0.0, 0.0), s2=(6.0, 0.0, 0.0), ch=(4.0, 0.0, 0.0), nk=(8.0, 0.0, 4.0), hd=(10.0, 0.0, 6.0),
                  **hands)
     mid_y = 0.25 * (Kl0[1] + Kr0[1])
+    def bent(make, dxs):
+        # (a key on his hands has the arms bent a little at the elbows, not locked straight with the hands beyond
+        # reach (where the least change of reach turns an elbow fast): his pelvis the least further forward that
+        # gives both elbows ARM_BEND)
+        best = None
+        for dx in dxs:
+            p_ = make(dx)
+            v = rom_values(body, p_)
+            m = min(v.get("el_flex_l", 90.0), v.get("el_flex_r", 90.0))
+            if m >= ARM_BEND:
+                return p_, dx
+            if best is None or m > best[0]:
+                best = (m, p_, dx)
+        return best[1], best[2]
     # (pushed up onto his hands and knees, his head hanging)
-    K.append((T["fours"],) + up_key(body, dict(
-        like=K[-1][1:3], at=(Kr0[0] + 0.06, mid_y, 0.5), pel=(("y", 76.0),), **up_on),
-        knees=lying, hip="both", balls=balls("rest", "rest")) + ("",))
+    p4, dx4 = bent(lambda dx: up_key(body, dict(
+        like=K[-1][1:3], at=(Kr0[0] + dx, mid_y, 0.5), pel=(("y", 76.0),), **up_on),
+        knees=lying, hip="both", balls=balls("rest", "rest")), (0.06, 0.09, 0.12, 0.15, 0.18, 0.21))
+    K.append((T["fours"],) + p4 + ("",))
     # (his left knee stepped forward under him: lifted with its shin, carried, set down; his weight on his hands
     # and right knee)
     def shin(s, K0, F0, R0, u, h):
         Kx = K0 + STEP_L * u + Z_ * h
         return (s, Kx, F0 + STEP_L * u + Z_ * (h * 0.8), R0, False)
-    for key, u, h, pl in (("l_up", 0.15, 0.045, 0.06), ("l_on", 0.85, 0.045, 0.09), ("l_dn", 1.0, 0.0, 0.10)):
+    # (lifted straight up off its spot, carried over the ground, set straight down onto the next: it does not skid as
+    # it leaves the ground or as it meets it)
+    for key, u, h, pl in (("l_up", 0.0, 0.045, 0.06), ("l_on", 1.0, 0.045, 0.09), ("l_dn", 1.0, 0.0, 0.10)):
         kl_ = shin("l", Kl0, rfl[0], rfl[1], u, h) if h else ("l", Kl, rfl2[0], rfl2[1])
-        K.append((T[key],) + up_key(body, dict(
-            like=K[-1][1:3], at=(Kr0[0] + 0.06 + STEP_L[0] * 0.5 * u, mid_y - 0.02, 0.5), pel=(("y", 76.0),), **up_on),
-            knees=(kl_, ("r", Kr0, rfr[0], rfr[1])), hip="both", balls=balls("rest", "rest")) + ("",))
+        K.append((T[key],) + bent(lambda dx: up_key(body, dict(
+            like=K[-1][1:3], at=(Kr0[0] + dx + STEP_L[0] * 0.5 * u, mid_y - 0.02, 0.5), pel=(("y", 76.0),), **up_on),
+            knees=(kl_, ("r", Kr0, rfr[0], rfr[1])), hip="both", balls=balls("rest", "rest")),
+            [dx4 + 0.03 * i for i in range(5)])[0] + ("",))
     # (then his right, coming down with its toes set under)
-    for key, u, h in (("r_up", 0.15, 0.045), ("r_on", 0.85, 0.045), ("r_dn", 1.0, 0.0)):
+    for key, u, h in (("r_up", 0.0, 0.045), ("r_on", 1.0, 0.045), ("r_dn", 1.0, 0.0)):
         if h:
             kr_ = ("r", Kr0 + STEP_R * u + Z_ * h, lifted(rfr[0], Fr, h * 0.8 + 0.01, u) - Z_ * 0.0,
                    qslerp(rfr[1], Rfr, u), False)
         else:
             kr_ = ("r", Kr, Fr, Rfr)
-        K.append((T[key],) + up_key(body, dict(
-            like=K[-1][1:3], at=(Kr0[0] + 0.06 + STEP_R[0] * (0.5 + 0.5 * u), mid_y + 0.02, 0.5), pel=(("y", 74.0),),
+        K.append((T[key],) + bent(lambda dx: up_key(body, dict(
+            like=K[-1][1:3], at=(Kr0[0] + dx + STEP_R[0] * (0.5 + 0.5 * u), mid_y + 0.02, 0.5), pel=(("y", 74.0),),
             **up_on),
-            knees=(("l", Kl, rfl2[0], rfl2[1]), kr_), hip="both", balls=balls("rest", "kn" if not h else None)) + ("",))
+            knees=(("l", Kl, rfl2[0], rfl2[1]), kr_), hip="both", balls=balls("rest", "kn" if not h else None)),
+            [dx4 + 0.03 * i for i in range(5)])[0] + ("",))
     if not body.armed:
         # (an empty right hand stays as it is on the ground while the right knee comes up under him: the arm's
         # solve with his shoulders over the knee carried would turn it over at the wrist)
@@ -2956,19 +3092,21 @@ def up_face_keys(body):
                 K[i_on][1][b(n_)] = K[i_up][1][b(n_)].copy()
     # (rocked back towards his heels, his arms stretched out to his hands)
     both = (("l", Kl, rfl2[0], rfl2[1]), ("r", Kr, Fr, Rfr))
+    # (his weight taken back over his knees while his hands are still down: when they come off, he is over his knees)
     K.append((T["rock"],) + up_key(body, dict(
-        like=K[-1][1:3], at=(Kr[0] - 0.01, mid_y, 0.46), pel=(("y", 58.0),),
+        like=K[-1][1:3], at=(Kr[0] + FACE_ROCK[0], mid_y, FACE_ROCK[1]), pel=(("y", FACE_ROCK[2]),),
         s1=(12.0, 0.0, 0.0), s2=(12.0, 0.0, 0.0), ch=(8.0, 0.0, 0.0), nk=(10.0, 0.0, 4.0), hd=(10.0, 0.0, 6.0),
         **hands), knees=both, hip="both", balls=balls("rest", "kn")) + ("",))
     # (his hands off the ground, his trunk coming up over his knees, the weapon low in his right hand)
     arms_low = dict(
         arm_l=dict(rel="sh", at=(0.14, -0.04, -0.40), pole=(-0.5, -1.0, 0.0), d=(0.6, 0.2, -0.8), t=(0.3, 1.0, 0.2)),
-        arm_r=dict(rel="sh", at=(0.14, 0.10, -0.42), pole=(-0.7, 0.6, 0.0), gun=((0.9, -0.05, -0.30), (0.3, 0.0, 1.0))),
+        arm_r=dict(rel="sh", at=(0.15, 0.15, -0.41), pole=(-0.5, 0.9, 0.0), gun=((0.9, -0.05, -0.30), (0.3, 0.0, 1.0))),
         fin_l=(24.0, 18.0))
     K.append((T["off"],) + up_key(body, dict(
         like=K[-1][1:3], at=(Kr[0] - 0.12, mid_y, 0.47), pel=(("y", 30.0),),
         s1=(10.0, 0.0, 0.0), s2=(10.0, 0.0, 0.0), ch=(8.0, 0.0, 0.0), nk=(16.0, 0.0, 4.0), hd=(12.0, 2.0, 6.0),
-        **arms_low), knees=both, hip="both", balls=balls("rest", "kn")) + ("",))
+        **dict(arms_low, arm_r=dict(arms_low["arm_r"], gun=OFF_GUN))), knees=both, hip="both",
+        balls=balls("rest", "kn")) + ("",))
     # (up on his knees, his weight going over his right knee)
     K.append((T["tall"],) + up_key(body, dict(
         like=K[-1][1:3], at=(Kr[0] - 0.06, Kr[1] - 0.11, 0.5), pel=(("y", 4.0), ("x", 5.0)),
@@ -3066,6 +3204,11 @@ def up_face_keys(body):
     return K
 
 
+BACK_LEAN = {"prop": -70.0, "roll": -66.0, "side": -62.0, "foot": -63.0, "load": -51.0}
+#                            (degrees: his pelvis pitched back as he sits propped on his left hand)
+BACK_HAND = (-0.04, -0.12)   # (m: his left hand set down this far behind (-x) and out (-y) from his left shoulder)
+
+
 def up_back_keys(body):
     man = body.man
     b = man.b
@@ -3080,7 +3223,7 @@ def up_back_keys(body):
     Gk0, Xk0 = man.fk(*k0)
     kz = float(Xk0[b("calf_l")][2]) - KNEE_SINK
     # (on his left hip: where its knee comes down, a thigh's length forward and out from his left hip)
-    side_pel = (("z", -18.0), ("y", -62.0), ("x", 36.0))
+    side_pel = (("z", -18.0), ("y", BACK_LEAN["side"]), ("x", 36.0))
     trial = pose_of(body, dict(like=rest, at=(Xr[pe][0] + 0.02, Xr[pe][1] - 0.04, zr), pel=side_pel, ease=False,
                                clean=False))
     hipl = man.fk(*trial)[1][b("thigh_l")]
@@ -3100,7 +3243,12 @@ def up_back_keys(body):
     Gk, Xk = man.fk(*kn)
     Fl, Rfl = Xk[b("foot_l")].copy(), Gk[b("foot_l")].copy()
     Fle = Xe[b("foot_l")]
-    HL = np.array((Xr[pe][0] - 0.35, Xr[pe][1] - 0.30))
+    # (his left hand set down beside and a little behind where his left shoulder will be as he sits on his left hip,
+    # so that the arm he props on goes down from it, not back behind his back)
+    trial_s = pose_of(body, dict(like=rest, at=(Xr[pe][0], Xr[pe][1] - 0.06, zr), pel=side_pel, sit=True,
+                                 s1=(4.0, -4.0, 0.0), s2=(4.0, -4.0, 4.0), ch=(3.0, -3.0, 4.0), ease=False, clean=False))
+    Sl_ = man.fk(*trial_s)[1][b("upperarm_l")]
+    HL = np.array((Sl_[0] + BACK_HAND[0], Sl_[1] + BACK_HAND[1]))
     K = [(0.0,) + rest + ("stop",)]
     # (the foot of that knee while he is on his hip: tucked back under him and toward his right, the shin across
     # behind the knee as a man sitting on one hip has it (the thigh turned out, not in))
@@ -3111,7 +3259,7 @@ def up_back_keys(body):
     Fl_side = np.array((Kl[0], Kl[1], 0.0)) + dsh * math.sqrt(max(0.0, Ls * Ls - (0.08 - Kl[2]) ** 2)) * 0.995
     # (he props himself up on his left hand, his head and shoulders coming up, his feet lifted and drawn in)
     prop_sp = dict(
-        like=rest, at=(Xr[pe][0], Xr[pe][1], zr), pel=(("z", -6.0), ("y", -70.0), ("x", 10.0)), sit=True,
+        like=rest, at=(Xr[pe][0], Xr[pe][1], zr), pel=(("z", -6.0), ("y", BACK_LEAN["prop"]), ("x", 10.0)), sit=True,
         s1=(10.0, -2.0, 0.0), s2=(12.0, -2.0, 2.0), ch=(10.0, -2.0, 2.0), nk=(16.0, 0.0, 4.0), hd=(10.0, 0.0, 4.0),
         arm_l=dict(rel="abs", at=(HL[0], HL[1], 0.06), pole=(0.3, -1.0, 0.4), d=(-0.3, -0.95, -0.05),
                    t=(0.95, -0.3, 0.1), plant=True),
@@ -3150,7 +3298,7 @@ def up_back_keys(body):
     prop_l = hand_as(body, G1, X1, "l", (0.3, -1.0, 0.4))
     # (rolled onto his left hip, leaning on that hand; his left knee falling to the ground, the right foot drawn in)
     K.append((T["roll"],) + seat_key(body, dict(
-        like=K[-1][1:3], at=(Xr[pe][0] - 0.01, Xr[pe][1] - 0.05, zr), pel=(("z", -12.0), ("y", -66.0), ("x", 34.0)),
+        like=K[-1][1:3], at=(Xr[pe][0] - 0.01, Xr[pe][1] - 0.05, zr), pel=(("z", -12.0), ("y", BACK_LEAN["roll"]), ("x", 34.0)),
         sit=True,
         s1=(6.0, -4.0, 0.0), s2=(6.0, -4.0, 3.0), ch=(4.0, -3.0, 3.0), nk=(14.0, -2.0, 6.0), hd=(8.0, 0.0, 6.0),
         arm_l=prop_l,
@@ -3183,7 +3331,7 @@ def up_back_keys(body):
     Kl, Xk, Fl = Kl + dK, Xk + dK, Fl + dK
     # (his right foot flat; he begins to push up off hand, knee and foot)
     K.append((T["foot"],) + seat_key(body, dict(
-        like=K[-1][1:3], at=(Xr[pe][0] + 0.02, Xr[pe][1] - 0.06, zr + 0.02), pel=(("z", -14.0), ("y", -63.0), ("x",
+        like=K[-1][1:3], at=(Xr[pe][0] + 0.02, Xr[pe][1] - 0.06, zr + 0.02), pel=(("z", -14.0), ("y", BACK_LEAN["foot"]), ("x",
             32.0)),
         s1=(4.0, -3.0, 0.0), s2=(4.0, -3.0, 3.0), ch=(3.0, -2.0, 3.0), nk=(12.0, -2.0, 6.0), hd=(6.0, 0.0, 6.0),
         arm_l=prop_l,
@@ -3195,7 +3343,7 @@ def up_back_keys(body):
     # (his weight coming forward onto his left knee and right foot, the hand lifting straight off its spot)
     Gfo, Xfo = man.fk(*K[-1][1:3])
     K.append((T["load"],) + seat_key(body, dict(
-        like=K[-1][1:3], at=(Xr[pe][0] + 0.04, Xr[pe][1] - 0.06, zr + 0.02), pel=(("z", -14.0), ("y", -51.0), ("x",
+        like=K[-1][1:3], at=(Xr[pe][0] + 0.04, Xr[pe][1] - 0.06, zr + 0.02), pel=(("z", -14.0), ("y", BACK_LEAN["load"]), ("x",
             29.0)),
         s1=(8.0, -3.0, 0.0), s2=(8.0, -3.0, 3.0), ch=(5.0, -2.0, 3.0), nk=(10.0, -2.0, 5.0), hd=(6.0, 0.0, 4.0),
         arm_l=dict(hand_as(body, Gfo, Xfo, "l", (0.3, -1.0, 0.4)), at=Xfo[b("hand_l")] + Z_ * 0.06),
@@ -3315,12 +3463,15 @@ def up_back_keys(body):
     return K
 
 
-UP_PINS = {"face": (("arm_l", UP_FACE["lift"], UP_FACE["rock"]), ("arm_r", UP_FACE["lift"], UP_FACE["rock"]),
+UP_PINS = {"face": (("arm_l", UP_FACE["lift"], UP_FACE["off"]), ("arm_r", UP_FACE["lift"], UP_FACE["off"]),
                     ("knee_l", UP_FACE["stir"], UP_FACE["fours"]), ("knee_l", UP_FACE["l_dn"], UP_FACE["tall"]),
                     ("knee_r", UP_FACE["stir"], UP_FACE["l_dn"]), ("knee_r", UP_FACE["r_dn"], UP_FACE["kneel"]),
                     ("leg_l", UP_FACE["stir"], UP_FACE["fours"]), ("leg_l", UP_FACE["l_dn"], UP_FACE["tall"]),
                     ("leg_r", UP_FACE["stir"], UP_FACE["l_dn"]), ("leg_r", UP_FACE["r_dn"], UP_FACE["rise"]),
-                    ("leg_l", UP_FACE["kup"], UP_FACE["end"]), ("leg_r", UP_FACE["plant"], UP_FACE["end"])),
+                    ("leg_l", UP_FACE["kup"], UP_FACE["end"]), ("leg_r", UP_FACE["over"], UP_FACE["end"]),
+                    # (a knee stepped forward: its foot carried straight from key to key, lifted, not swung down
+                    # through the ground between them)
+                    ("leg_l", UP_FACE["l_up"], UP_FACE["l_dn"]), ("leg_r", UP_FACE["r_up"], UP_FACE["r_dn"])),
            "back": (("arm_l", UP_BACK["sit1"], UP_BACK["load"]), ("knee_l", UP_BACK["side"], UP_BACK["kneel"]),
                     ("leg_r", UP_BACK["foot"], UP_BACK["step"]), ("leg_l", UP_BACK["hov"], UP_BACK["end"]),
                     ("leg_r", UP_BACK["step"], UP_BACK["end"]))}
@@ -3340,13 +3491,132 @@ def up_keys(body, way):
     return body.poses[key]
 
 
-def up_pose(body, way, t):
+LOCK_FPS = 120               # (a second: how finely contact_locks follows what of a planted limb bears on the ground)
+
+
+def contact_locks(body, fn, pins, prior=None):
+    """For each hold in `pins` (limb, from, to), how far to move that hand's, foot's or knee's joint over the ground
+    (x, y) at each LOCK_FPS'th of a second so that what of it bears on the ground stays where it is while the bones
+    above it turn: what bears on the ground in two steps running (under 1 cm, as the checks read it) has its mean
+    way over the ground taken back, step by step from the hold's first key, as `fn` (the move without the locks)
+    has it. Less an even share of where that leaves it at the hold's last key, so the first and the last key are the
+    keys' own: {limb: [(from, to, times, shifts)]}. With `prior` (the locks `fn` already plays), what is left is
+    added to them."""
+    man = body.man
+    out = {}
+    for j, (limb, t0, t1) in enumerate(pins):
+        part = ("hand_" if limb.startswith("arm") else "foot_" if limb.startswith("leg") else "knee_") + limb[-1]
+        idx = np.nonzero(np.isin(body.pa, [man.b(n) for n in CONTACT[part] if n in man.ix]))[0]
+        n = max(2, int(round((t1 - t0) * LOCK_FPS)) + 1)
+        tt = np.linspace(t0, t1, n)
+        V = [body.skin(*man.fk(*fn(float(x))))[idx] for x in tt]
+        S = np.zeros((n, 2))
+        air = np.zeros(n)
+        for k in range(1, n):
+            a, b_ = V[k - 1], V[k]
+            m = (a[:, 2] < 0.01) & (b_[:, 2] < 0.01)
+            S[k] = S[k - 1] - ((b_ - a)[m][:, :2].mean(0) if m.sum() >= 3 else 0.0)
+            air[k] = 0.0 if m.sum() >= 3 else 1.0
+        # (what is left at the last key is let go of while the hand, foot or knee is off the ground, if it is at all
+        # in the hold (it comes down, or lifts, that much to one side): else by an even share of it at each step)
+        share = np.cumsum(air) / air.sum() if air.sum() >= 2 else (tt - t0) / max(t1 - t0, 1e-9)
+        S = S - np.outer(share, S[-1])
+        if prior is not None:
+            S = S + next(h[3] for h in prior[limb] if abs(h[0] - t0) < 1e-9 and abs(h[1] - t1) < 1e-9)
+        out.setdefault(limb, []).append((t0, t1, tt, S))
+    return out
+
+
+UP_LOCK_PASSES = 2
+
+
+def up_toes(body, way):
+    """The get-up's toes (toe_envelope) as the move without the locks bends them, found once."""
+    key = ("up_toes", way)
+    if key not in body.poses:
+        body.poses[key] = {}
+        body.poses[key] = toe_envelope(body, lambda x: up_pose(body, way, x, locks=None), UP_LONG)
+    return body.poses[key]
+
+
+def up_locks(body, way):
+    """The get-up's contact_locks, found once (UP_LOCK_PASSES times over, each on the move the last leaves)."""
+    key = ("up_locks", way)
+    if key not in body.poses:
+        L = None
+        for _ in range(UP_LOCK_PASSES):
+            L = contact_locks(body, lambda x, L=L: up_pose(body, way, x, locks=L), UP_PINS[way], prior=L)
+        body.poses[key] = L
+    return body.poses[key]
+
+
+UP_ONE_TURN = {"face": ("arm_r",), "back": ("arm_l",)}     # (a planted hand that keeps one turn while it bears (play's one_turn);
+#                                                   the others turn on their spot about what of them bears (up_locks))
+
+
+UP_SEAM = 0.012              # (s of key time: a hold's first or last key is eased through over twice this)
+
+
+SEAM_DEG = 1.0               # (degrees: a hold's end whose poses either side of it differ by more than this at a joint
+#                              (or SEAM_MM at his pelvis) is eased through (up_pose))
+SEAM_MM = 1.5
+
+
+def up_seams(body, way):
+    """The key times where a hold (UP_PINS) begins or ends, inside the get-up, and the poses either side of it are
+    not the same (found once, without the locks)."""
+    key = ("up_seams", way)
+    if key not in body.poses:
+        man = body.man
+        keep = [i for i in range(man.nb) if man.rig.names[i] not in GUN_BONES + WHIP]
+        pe = man.b("pelvis")
+        out = []
+        for x in sorted({x for _, a, b in UP_PINS[way] for x in (a, b) if 1e-6 < x < UP_LONG - 1e-6}):
+            A, B = _up_pose(body, way, x - 1e-4, None), _up_pose(body, way, x + 1e-4, None)
+            d = max(angle_of(A[0][i].T @ B[0][i]) for i in keep)
+            if d > SEAM_DEG or float(np.linalg.norm(A[1][pe] - B[1][pe])) > SEAM_MM * 1e-3:
+                out.append(x)
+        body.poses[key] = out
+    return body.poses[key]
+
+
+def up_pose(body, way, t, locks="found"):
+    """The get-up at t (_up_pose). Where a hold begins or ends (up_seams) the pose solved with it and the one solved
+    without it are not quite the same (a knee let go of, his hips no longer fitted to it): the get-up is eased from
+    the pose UP_SEAM before it to the pose UP_SEAM after it there, so he does not jerk from one to the other; the
+    weapon carried on his right hand through it."""
+    if 0.0 < t < UP_LONG - 1e-9:
+        for b in up_seams(body, way):
+            if abs(t - b) < UP_SEAM - 1e-9:
+                def at(x):
+                    key = ("up_seam", way, round(x, 6))
+                    if locks != "found":
+                        return _up_pose(body, way, x, locks)
+                    if key not in body.poses:
+                        body.poses[key] = _up_pose(body, way, x, locks)
+                    return body.poses[key]
+                a, c = at(b - UP_SEAM), at(b + UP_SEAM)
+                lq, mv = mix(a, c, sm((t - b + UP_SEAM) / (2.0 * UP_SEAM)))
+                gt = up_clip_time(body, way, t) if ("up_pace", way) in body.poses else t
+                return keep_prop(body, *gun_rides(body, lq, mv, up_grip(body, gt)), body.prop0)
+    return _up_pose(body, way, t, locks)
+
+
+def _up_pose(body, way, t, locks="found"):
+    """The get-up at t: the keys played with each planted hand, knee and foot held (UP_PINS) and kept from skidding
+    (up_locks; `locks` None: without, or the locks given), the left hand onto the weapon, the toes (up_toes)."""
     man = body.man
     keys = up_keys(body, way)
     if t <= 0.0 or t >= UP_LONG - 1e-9:
         return keys.at(min(max(t, 0.0), UP_LONG))
-    lq, mv = play(body, keys, t, pins=UP_PINS[way], grip=lambda x: up_grip(body, x), wrists=False,
-                  shin_first=True, one_turn=("arm_l",) if way == "back" else (), behind=False)
+    if isinstance(locks, str):
+        locks = up_locks(body, way)
+    # (his right hand's grip shifts at GRIP_T as the clip is played: at the clip time of this key time, once the
+    # pace (up_pace) is found)
+    gt = (lambda x: up_clip_time(body, way, x)) if ("up_pace", way) in body.poses else (lambda x: x)
+    lq, mv = play(body, keys, t, pins=UP_PINS[way], grip=lambda x: up_grip(body, gt(x)), wrists=False,
+                  shin_first=True, one_turn=UP_ONE_TURN[way], behind=False,
+                  locks=locks, pivot=True, gun_clear=True)
     # (his left hand comes onto the weapon as it comes up to port)
     t0, t1 = LEFT_ON_T[way]
     w = sm((t - t0) / (t1 - t0))
@@ -3360,7 +3630,75 @@ def up_pose(body, way, t):
         r0 = lq[h].copy()
         ik2(man, lq, mv, ARM["l"], X[h] * (1 - w) + (Xw + Gw @ pl) * w, end_R=Gw @ Rl, share=0.3)
         lq[h] = qslerp(r0, lq[h], w)
+        # (the elbow swung, the hand kept, so the wrist is not bent sideways past its range on the way)
+        lq = wrist_swivel(body, lq, mv, "l")
+    lq = toes_bent(body, lq, up_toes(body, way), t)
     return lq, mv
+
+
+# ---- the get-up's pace: the keys above are laid out on their own clock ("key time"); the clip plays that clock
+# slower where a joint would turn faster than a living man's (pushing up, a knee swung through) and quicker where
+# little moves (the first stir, the last settling), the same poses in the same order, its 1.6 s and its first and
+# last pose exactly as they are. What bears on the ground, his balance and his joints' ranges are the poses' own and
+# do not change with the pace; only how fast he goes through them does.
+UP_TURN = 830.0              # (degrees a second: the most any joint of his turns as the get-up is played: rom.py's 900
+#                              less a margin for the game's in-between)
+PACE_FPS = 120               # (a second: how finely the key time's joint turns are read)
+PACE_BLUR = 2.0              # (steps of 1/PACE_FPS: the pace eased so it does not jerk from one step to the next)
+
+
+def up_pace(body, way):
+    """(t, k): the clip's time t at which each 1/PACE_FPS step k of the get-up's key time is played (both arrays
+    0 .. UP_LONG): each step's clip time is its key time stretched by its fastest joint over UP_TURN where that is
+    over 1, and by an even factor under 1 elsewhere (found so the whole stays UP_LONG), eased over PACE_BLUR steps,
+    never less than its fastest joint needs. Found once."""
+    key = ("up_pace", way)
+    if key not in body.poses:
+        man = body.man
+        n = int(round(UP_LONG * PACE_FPS))
+        k = np.array([UP_LONG * i / n for i in range(n + 1)])
+        P = [up_pose(body, way, float(x))[0] for x in k]
+        skip = set(body.whip) | {man.b(x) for x in GUN_BONES if x in man.ix}
+        bones = [i for i in range(man.nb) if man.par[i] is not None and i not in skip]
+        dk = UP_LONG / n
+        s = np.array([max(angle_of(P[j][i].T @ P[j + 1][i]) for i in bones) / dk for j in range(n)])
+        need = s / UP_TURN
+        w = np.exp(-0.5 * (np.arange(-6, 7) / PACE_BLUR) ** 2)
+        w /= w.sum()
+
+        def g_of(c):
+            g = np.maximum(need, c)
+            g = np.convolve(np.pad(g, 6, mode="edge"), w, mode="valid")
+            return np.maximum(g, need)
+        lo, hi = 0.0, 1.0
+        if g_of(0.0).sum() * dk > UP_LONG:
+            # (more turning than UP_LONG holds at UP_TURN: the pace that keeps the fastest joint the least over it)
+            g = need / (need.sum() * dk / UP_LONG)
+        else:
+            for _ in range(60):
+                c = 0.5 * (lo + hi)
+                if g_of(c).sum() * dk > UP_LONG:
+                    hi = c
+                else:
+                    lo = c
+            g = g_of(lo)
+        t = np.concatenate(([0.0], np.cumsum(g * dk)))
+        t = t * (UP_LONG / t[-1])
+        t[-1] = UP_LONG
+        body.poses[key] = (t, k)
+    return body.poses[key]
+
+
+def up_key_time(body, way, t):
+    """The get-up's key time at clip time t (up_pace)."""
+    tt, k = up_pace(body, way)
+    return float(np.interp(t, tt, k))
+
+
+def up_clip_time(body, way, x):
+    """The clip time at which the get-up's key time x is played (up_pace)."""
+    tt, k = up_pace(body, way)
+    return float(np.interp(x, k, tt))
 
 
 # ================================================================================================ what he carries
@@ -3716,14 +4054,19 @@ def make_clips(body, only=None, log=None):
         if want(up):
             T = UP_FACE if way == "face" else UP_BACK
             keys = up_keys(body, way)
-            ts = times_at(UP_LONG, UP_FPS, [round(float(x), 4) for x in keys.t])
+            # (played at its own pace (up_pace): each key at the clip time its key time is played at)
+            ct = lambda x, way=way: round(up_clip_time(body, way, x), 4)
+            kts = [ct(x) for x in keys.t]
+            ts = times_at(UP_LONG, UP_FPS, kts)
+            # (a key's own time, not one of the even 30 a second beside it: no two keys a few thousandths apart)
+            ts = [x for x in ts if x in kts or x in (0.0, UP_LONG) or min(abs(x - y) for y in kts) > 0.006]
             Xend = keys.at(UP_LONG)[1][pe]
             idle_mv = body.pose("idle", 0.0)[1][pe]
             shift = [round(float(Xend[0] - idle_mv[0]), 3), round(float(Xend[1] - idle_mv[1]), 3)]
             c = {"long": UP_LONG, "loop": False, "stride": 0.0, "weapon": C["idle"].get("weapon", "rifle"),
                  "tracks": None,
-                 "events": [ev("kit_rattle", T["fours" if way == "face" else "side"] + 0.02, "chest"),
-                            ev("kit_rattle", T["kneel"] + 0.05, "chest")],
+                 "events": [ev("kit_rattle", ct(T["fours" if way == "face" else "side"] + 0.02), "chest"),
+                            ev("kit_rattle", ct(T["kneel"] + 0.05), "chest")],
                  "from": f"{TOOL}: keyed on this man's rig from {dn}'s first pose to idle at 0.0 s, through this "
                          "file's own kneel" + (" (mirrored: the left knee down)" if way == "back" else "") +
                          ", 30 keys a second; each hand, knee and foot that bears on the ground held on its spot "
@@ -3737,7 +4080,8 @@ def make_clips(body, only=None, log=None):
                             "he props himself up on his left hand, rolls onto his left hip, puts his left knee down "
                             "and his right foot flat, pushes up into a kneel on the left knee, rises over the right "
                             "foot and steps his left foot up beside it") +
-                           (f"; the weapon in his right hand, brought back to port in both by {LEFT_ON_T[way][1]} s"
+                           (f"; the weapon in his right hand, brought back to port in both by "
+                            f"{ct(LEFT_ON_T[way][1]):.2f} s"
                             if armed else "; his hands coming back to his sides as idle has them") +
                            f". From {dn}'s first pose (blend 0.12 s from wherever the loop is) to idle at 0.0 s "
                            "exactly. NOT in place: he stands up where his " +
@@ -3746,8 +4090,9 @@ def make_clips(body, only=None, log=None):
                            f"({shift[0]:.2f}, {shift[1]:.2f} m) is how far to move the root after it so idle at 0.0 s "
                            "carries on from the same place (end_offset less idle's own pelvis place). Events: "
                            "kit_rattle.")}
-            out[up], _ = finish(up, lambda t, way=way: up_pose(body, way, t), ts, ("idle", "fire_stand"), c, fine=True,
-                                toes=True)
+            # (its toes are up_pose's own: the locks that keep what bears on the ground from skidding are found on them)
+            out[up], _ = finish(up, lambda t, way=way: up_pose(body, way, up_key_time(body, way, t)), ts,
+                                ("idle", "fire_stand"), c, fine=True)
     return out
 
 

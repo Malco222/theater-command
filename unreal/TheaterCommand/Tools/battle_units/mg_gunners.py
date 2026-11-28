@@ -304,6 +304,9 @@ SOLID_GAP = 0.012                                         # (kit this far clear 
 CLEAR_NAMES = ("crawl", "cower", "flee", "car_ride", "car_ride_back", "kneel_down", "stand_up", "go_prone")
 CLEAR_PREFIXES = ("bench_", "out_")
 CLEAR_OFFS = (0.03, 0.06, 0.10, 0.15, 0.21, 0.30)
+# (where that search leaves the gun in him, it is searched again with set-offs no more than a key's move apart, so the
+# gun can go from one to the next, and any leap left spread over the keys either side; the clearer of the two is kept)
+CLEAR_OFFS_FINE = (0.03, 0.06, 0.10, 0.14, 0.18, 0.22, 0.26, 0.30)
 CLEAR_ROLL, CLEAR_OFF = 60.0, 0.05
 CLEAR_REACH = 0.99
 CLEAR_SHRUG = 15.0            # (where his arm is short of the gun, his shoulder comes forward to it by up to this, degrees)
@@ -317,6 +320,7 @@ CLEAR_PORT = 0.02
 CLEAR_EASE = 0.5
 CLEAR_DEEP = 0.05
 CLEAR_KEEP = 0.01             # (his own carry is kept unless the rifle's hold comes out this much clearer of him)
+CLEAR_SETTLE = 0.005          # (searched again, his arms on the gun, where they put it this much deeper in him)
 CLEAR_SAME = (10.0, 40.0, 0.03, 0.15)   # (the rifle held as at a carried end: within 10 degrees and 3 cm, not by 40, 15)
 CLEAR_STEER = (20.0, 0.10)    # (a straight path only from one hold to another this different: degrees, metres)
 
@@ -1145,6 +1149,10 @@ class Fit:
             Xw = X[ch] + G[ch] @ GI[ch].T @ (XI[self.wi] - XI[ch])
         return float(sol.depth(G, X, Xw + self._probe @ Gw.T).max())
 
+    def depth_keys(self, clip):
+        """The deepest the gun lies inside him (his solid) at any key of the clip (15 a second)."""
+        return max(self.depth_at(clip, t) for t in fc.times_of(float(clip["long"])))
+
     def carry_ends(self, clip, ref, skip=()):
         """Where the rifleman's clip starts or ends with his rifle across him at the port, or anywhere else the gun
         would lie inside him, and his own carry (ref: idle's first pose, carried with his chest) would lie CLEAR_PORT
@@ -1197,8 +1205,9 @@ class Fit:
         """Where the gun as the clip has it lies deeper inside him than `deep_at` (the rifleman takes his rifle
         through himself as he sits down on a lorry's bench or gets up from it, where a gun twice its bulk cannot go;
         the gun swung from his carry into the hip hold through his hip), it goes instead straight from where it is at
-        the clip's start to where it is at its end, relative to his hips (their place and the way they face, not
-        their tilt), as his body goes from its first pose to its last; eased in and out over the keys either side;
+        the clip's start to where it is at its end, relative to his chest's place and the way his hips face (not
+        their tilt: the gun stays upright as he bends, and goes where his arms go, so his fists can stay on it), as
+        his body goes from its first pose to its last; eased in and out over the keys either side;
         each holding hand turned with it (`held`: the clip his fists are read from, default this one; `hold` as in
         grasps). `clear` then keeps it out of him on that path."""
         man = self.man
@@ -1229,10 +1238,12 @@ class Fit:
         Gs, Xs = man.fk(*man.locals_of(clip, 0.0))
         Rs = Gs[pv]
 
+        ch = man.b("chest")
+
         def frame(G, X):
             f = (G[pv] @ Rs.T)[:, 0]
             yaw = math.degrees(math.atan2(f[1], f[0])) if math.hypot(f[0], f[1]) > 0.2 else 0.0
-            return fc.R_axis((0.0, 0.0, 1.0), yaw), X[pv]
+            return fc.R_axis((0.0, 0.0, 1.0), yaw), X[ch]
         G1, X1 = man.fk(*man.locals_of(clip, L))
         F0, F1 = frame(Gs, Xs), frame(G1, X1)
         A0 = (F0[0].T @ Gs[self.wi], F0[0].T @ (Xs[self.wi] - F0[1]))
@@ -1329,7 +1340,7 @@ class Fit:
             out.append(M @ R.T + tr)
         return np.array(out)
 
-    def clear(self, clip, wc, hold=None, pins=None, loop=False):
+    def clear(self, clip, wc, hold=None, pins=None, loop=False, fine=False):
         """The gun kept out of him (CLEAR_NAMES): wherever the gun, placed as `wc` has it (where the rifleman's rifle
         was, or the hold it is coming into), would lie inside his body, it is turned about its bore, swung about its
         pistol grip and set off from him by the least that clears it, key by key (15 a second): a search over such
@@ -1338,7 +1349,9 @@ class Fit:
         shortest path, so the gun turns no more than CLEAR_STEP a key and moves no more than CLEAR_MOVE, and a loop
         ends as it starts) and eased. `pins` {key index: candidate} holds the choice at a key (none where the gun hands
         on to a hold, as another clip has it where it hands on to that one). Each hand that holds the gun turns with it
-        (refit then brings the arms). Returns the clip and what was done (or wc itself where nothing needed doing)."""
+        (refit then brings the arms). `fine`: the set-offs CLEAR_OFFS_FINE, and any leap the shortest path still
+        makes spread over the keys either side. Returns the clip and what was done (or wc itself where nothing needed
+        doing)."""
         man = self.man
         _ = self.solid
         ts = fc.times_of(wc["long"])
@@ -1347,13 +1360,14 @@ class Fit:
         rp = self.rifle + man.H[self.wi]
         rl = self.lows(clip, rp, np.full(len(rp), self.wi))
         Z = (0.0, 0.0, 0.0, 0.0, 0.0)
+        offs = CLEAR_OFFS_FINE if fine else CLEAR_OFFS
         rolls = [float(a) for a in range(-165, 181, 15) if a]
         swings = [-45.0, -30.0, -15.0, 15.0, 30.0, 45.0]
         dirs = [(math.cos(math.radians(a)), math.sin(math.radians(a))) for a in range(0, 360, 45)]
         fam = {"roll": [(r_, 0.0, 0.0, 0.0, 0.0) for r_ in rolls],
                "yaw": [(0.0, y_, 0.0, 0.0, 0.0) for y_ in swings],
                "pitch": [(0.0, 0.0, p_, 0.0, 0.0) for p_ in swings],
-               "off": [(0.0, 0.0, 0.0, m * dy, m * dz) for (dy, dz) in dirs for m in CLEAR_OFFS]}
+               "off": [(0.0, 0.0, 0.0, m * dy, m * dz) for (dy, dz) in dirs for m in offs]}
         cands = [Z] + [c for v in fam.values() for c in v]
         poses, aims_k, hands_k = [], [], []
         for i, t in enumerate(ts):
@@ -1418,7 +1432,7 @@ class Fit:
             for nm in ("roll", "yaw", "pitch"):
                 for j in np.array(idx[nm])[np.argsort(U1[i, idx[nm]])[:3]]:
                     votes[nm][cands[j][:3]] = votes[nm].get(cands[j][:3], 0) + 1
-            od = U1[i, idx["off"]].reshape(len(dirs), len(CLEAR_OFFS)).min(1)
+            od = U1[i, idx["off"]].reshape(len(dirs), len(offs)).min(1)
             for d in np.argsort(od)[:2]:
                 votes["off"][int(d)] = votes["off"].get(int(d), 0) + 1
         top = {nm: [k for k, _ in sorted(v.items(), key=lambda kv: -kv[1])[:{"roll": 6, "off": 3}.get(nm, 4)]]
@@ -1427,7 +1441,7 @@ class Fit:
         more = []
         for tt in turns:
             for d in top["off"]:
-                for m in CLEAR_OFFS:
+                for m in offs:
                     more.append(tt + (m * dirs[d][0], m * dirs[d][1]))
         for r_ in top["roll"]:
             for sw in top["yaw"] + top["pitch"]:
@@ -1486,8 +1500,41 @@ class Fit:
             best, pth = path(U)
         raw = C[pth].copy()
         raw[:, 0] = np.degrees(np.unwrap(np.radians(raw[:, 0])))
-        # (then each key's choice nudged, finer and finer, to the least cost with its neighbours' as they stand)
         pinned = {k_ % n for k_ in (pins or {})}
+        if fine:
+            # (where the choice still leaps from one key to the next by more than a key's turn or move (a pinned end
+            # the grid reaches only by a leap: a swing about the grip, the gun as another clip has it), the change is
+            # spread evenly over as many keys either side as it takes, never past a pinned key)
+            def leap(a, b):
+                da_ = float(np.abs((a[:3] - b[:3] + 180.0) % 360.0 - 180.0).max()) / CLEAR_STEP
+                ma, mb = self.clear_marks([tuple(a), tuple(b)])
+                return max(da_, float(np.linalg.norm(ma - mb, axis=1).max()) / CLEAR_MOVE)
+            m_ = n - 1 if loop else n
+            for _ in range(2 * n):
+                worst, i = max((leap(raw[(k_ - 1) % m_], raw[k_ % m_]), k_) for k_ in range(0 if loop else 1, m_))
+                if worst <= 1.0:
+                    break
+                need = int(math.ceil(worst * 1.2))
+                a, b = i - 1, i
+                grew = True
+                while b - a < need and grew and (not loop or b - a < m_ - 1):
+                    grew = False
+                    if (loop or a > 0) and a % m_ not in pinned:
+                        a -= 1
+                        grew = True
+                    if b - a < need and (loop or b < m_ - 1) and b % m_ not in pinned:
+                        b += 1
+                        grew = True
+                if b - a < 2:
+                    break
+                ra = raw[a % m_].copy()
+                d = raw[b % m_] - ra
+                d[:3] = (d[:3] + 180.0) % 360.0 - 180.0
+                for k_ in range(a + 1, b):
+                    raw[k_ % m_] = ra + d * (k_ - a) / (b - a)
+            if loop:
+                raw[n - 1] = raw[0]
+        # (then each key's choice nudged, finer and finer, to the least cost with its neighbours' as they stand)
 
         def pair(a, b):
             da_ = np.abs(a[:3] - b[:3])
@@ -1547,8 +1594,17 @@ class Fit:
                 keep |= {0, n - 1}
         if np.abs(par).max() < 1e-6:
             return wc, {"before": before, "after": before, "turn": 0.0, "off": 0.0}
+        out = self.turn_by(wc, par, hands_k)
+        return out, {"before": before, "after": float(max(after)), "turn": float(np.abs(par[:, :3]).max()),
+                     "off": float(np.linalg.norm(par[:, 3:], axis=1).max()), "par": par, "hands": hands_k,
+                     "keys": (P1[:, 0], raw_pen, np.array(after))}
+
+    def turn_by(self, wc, par, hands_k):
+        """wc with the gun turned and set off at each key (15 a second) by par (see `turned`), each hand that holds
+        it (hands_k: per key, how much each holds) turned with it as much as it holds."""
+        man = self.man
         hs = {s: man.b("hand_" + s) for s in ("l", "r")}
-        k_of = {round(t, 4): i for i, t in enumerate(ts)}
+        k_of = {round(t, 4): i for i, t in enumerate(fc.times_of(wc["long"]))}
 
         def fn(t, lq, mv):
             i = k_of[round(t, 4)]
@@ -1558,7 +1614,6 @@ class Fit:
             Gw2 = Gw @ R
             Xw2 = Xw + Gw @ tr
             lq, mv = self.place_weapon(lq, mv, Gw2, Xw2)
-            # (a hand that holds the gun turns with it, as much as it holds)
             Rc = Gw2 @ Gw.T
             G2, _ = man.fk(lq, mv)
             for s, h in hs.items():
@@ -1566,10 +1621,7 @@ class Fit:
                 if w > 0.0:
                     lq[h] = G2[man.par[h]].T @ fc.qpow(Rc, min(w, 1.0)) @ G[h]
             return lq, mv
-        out = self.rebake(wc, fn)
-        return out, {"before": before, "after": float(max(after)), "turn": float(np.abs(par[:, :3]).max()),
-                     "off": float(np.linalg.norm(par[:, 3:], axis=1).max()), "par": par,
-                     "keys": (P1[:, 0], raw_pen, np.array(after))}
+        return self.rebake(wc, fn)
 
     def clear_log_add(self, name, clip, rep):
         if not hasattr(self, "clear_log"):
@@ -1780,7 +1832,7 @@ def gun_clips(fit, clips, log):
                              weight=wfn, t_ref=(L if at_end else 0.0), delta=True)
                 if clears(name):
                     # (kept out of him between the carry and the hold, neither of which changes: where the blend would
-                    # swing the gun through his hip, straight from the one to the other relative to his hips)
+                    # swing the gun through his hip, straight from the one to the other about his chest)
                     hold = {k: (lambda t, k=k, wfn=wfn, c=c: wfn(t) * fit.by_rifle(c, k, t)) for k in ("l", "r")}
                     hp = fit.steer(hp, deep_at=CLEAR_TOL + 0.01, held=c, hold=hold)
                     hp = fit.clear_log_add(name, *fit.clear(
@@ -1809,7 +1861,8 @@ def gun_clips(fit, clips, log):
                     # bench_ride has it; one that starts or ends with the rifle at the port, with his own carry; between,
                     # where the rifle went through him, straight from the one to the other; and kept out of him)
                     # (where his own carry leaves the gun no clearer of him than the rifle's hold, after the search, as
-                    # crouching in a doorway, the rifle's hold is kept)
+                    # crouching in a doorway, the rifle's hold is kept; where a search leaves the gun in him, the finer
+                    # search is tried too, and the clearest kept)
                     pins0 = fit.hand_on(c, out, clips) or {}
                     tried = []
                     for carry in (True, False):
@@ -1821,15 +1874,36 @@ def gun_clips(fit, clips, log):
                             if e_:
                                 pins[k_] = (0.0,) * 5
                         wv = cv if cv.get("loop") else fit.steer(cv)
-                        got, rep = fit.clear(cv, wv, pins=pins or None, loop=bool(cv.get("loop")))
-                        tried.append((rep["after"] + (0.0 if carry else CLEAR_KEEP), cv, ends, got, rep))
-                        if rep["after"] <= CLEAR_TOL + CLEAR_KEEP:
+                        for fine in (False, True):
+                            got, rep = fit.clear(cv, wv, pins=pins or None, loop=bool(cv.get("loop")), fine=fine)
+                            tried.append((rep["after"] + (0.0 if carry else CLEAR_KEEP), cv, ends, got, rep, pins))
+                            if rep["after"] <= CLEAR_TOL + CLEAR_KEEP:
+                                break
+                        if tried[-1][4]["after"] <= CLEAR_TOL + CLEAR_KEEP:
                             break
-                    _, c, _, got, rep = min(tried, key=lambda r: r[0])
+                    _, c, _, got, rep, pins = min(tried, key=lambda r: r[0])
                     wc = fit.clear_log_add(name, got, rep)
                 wc, up = fit.lift(wc, c)
                 c2, worst, used = fit.refit(c, wclip=wc, final=name.startswith("die_"),
                                             shrug=CLEAR_SHRUG if clears(name) else 0.0)
+                if clears(name):
+                    # (his arms brought onto the gun where the search put it can put his upper arm, or the hollow of
+                    # his shoulder, where the search had none of him: where the gun now lies deeper in him than the
+                    # search left it, it is searched again with his arms as they now are (the keys the first search
+                    # held, held), that search's turns and set-offs are added to the gun as the first left it (his
+                    # hands as they were before his arms came to it), and his arms brought onto it again; the clearer
+                    # of the two kept)
+                    now = fit.depth_keys(c2)
+                    if now > max(rep["after"], CLEAR_TOL) + CLEAR_SETTLE:
+                        _, rep2 = fit.clear(c, c2, pins={k_: (0.0,) * 5 for k_ in (pins or {})} or None,
+                                            loop=bool(c.get("loop")))
+                        if rep2.get("par") is not None:
+                            wc2, up2 = fit.lift(fit.turn_by(wc, rep2["par"], rep2["hands"]), c)
+                            c3, worst3, used3 = fit.refit(c, wclip=wc2, shrug=CLEAR_SHRUG)
+                            now2 = fit.depth_keys(c3)
+                            fit.settle_log = getattr(fit, "settle_log", []) + [(name, now, min(now, now2))]
+                            if now2 < now:
+                                c2, worst, used, up = c3, worst3, used3, max(up, up2)
             out[name] = c2
             log.append((name, kind + "".join(s_ for s_ in used if used[s_]), round(worst * 100, 1), round(up * 100, 1)))
         elif wpn == "slung":
@@ -1999,6 +2073,8 @@ def checks(D, Tw, fit, notes, tw_notes, D0, log=print):
         log(f"kept out of him: {name:18s} {rep['before'] * 100:5.1f} -> {rep['after'] * 100:5.1f} cm inside (his solid), "
             f"turned up to {rep['turn']:.0f} deg, set off up to {rep['off'] * 100:.0f} cm; worst fist miss "
             f"{miss.get(name, 0.0):.1f} cm")
+    for name, a, b in getattr(fit, "settle_log", []):
+        log(f"kept out of him, his arms on the gun: {name:18s} {a * 100:5.1f} -> {b * 100:5.1f} cm inside (his solid)")
     lo, hi, a0, a1 = bipod_feet(fit, D["clips"]["lmg_burst"])
     log(f"lmg_burst: the bipod's feet {lo * 100:.1f} to {hi * 100:.1f} cm over the ground, {a0 * 100:.0f} to "
         f"{a1 * 100:.0f} cm apart")

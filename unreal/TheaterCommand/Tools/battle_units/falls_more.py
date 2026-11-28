@@ -7,11 +7,11 @@ barely move in their first 0.3 s ("he just drops"). So seven more, each opening 
 first 0.3 s, then ending flat and still as the others do:
 
     die_prone_d   struck in the left side: he rolls half onto his right side, then sinks back
-    die_prone_e   he kicks and arches (the legs kick, the back arches off the ground), then goes limp
+    die_prone_e   he arches and kicks (a spasm throws the back up, each knee kicks twice), then goes limp
     die_prone_f   a hand goes to the wound under him (he half-lifts to get it there), then he is still
-    die_prone_g   he pushes up slowly on his arms, fails, and sinks down onto his face
-    die_cover_d   he slides down where he knelt: onto his heel, a shoulder dragging down, then tips over
-    die_cover_e   thrown back off his cover: a hard blow to the chest from in front, over backwards, knees bent
+    die_prone_g   his right arm knocked from under him, he pushes up slowly on his arms, fails, sinks onto his face
+    die_cover_d   struck in the left shoulder: he sinks where he knelt, then tips over onto his right side and front
+    die_cover_e   knocked back off his cover: a blow to the chest from in front, over backwards, knees bent
     die_cover_f   slumps forward over his cover: folds forward and down (the chest's forward travel kept short:
                   the clip cannot know the wall, bank or sandbags in front of him)
 
@@ -32,11 +32,20 @@ toward keyed joint poses with a wounded man's strength, as falls.py's crawl_deat
     his weight and the ground) is calmed and each joint held as it then is, so every clip ends still;
   - a blow can roll a lying man (a recipe's `roll`: see roll_him);
   - the reaction test does not count the ragdoll's own lift of the man clear of the ground at its start;
-  - a man the recipe leaves outside the checks is made again with its tries (nudged blows; die_cover_f also leans
-    him the other way), and the first try inside them is kept, else the nearest, its faults reported;
+  - a man the recipe leaves outside the checks is made again with its tries (nudged blows; die_cover_f also turns
+    his trunk toward his aim), and the first try inside them is kept, else the nearest, its faults reported;
+  - (after the review of 27 November) the last END_BLEND of every fall is eased into its last pose and held
+    END_HOLD, so the last 5 keys move under STILL_MM; every frame after the start's ease is lifted clear of the
+    ground (ground_clamp: no point of him lower than GROUND_TO, the rifle by itself once it is let go); a start time
+    past a man's shorter loop is taken at the same point of it (start_for); the rifle's first frames, where the
+    ragdoll puts it out of his arm's way in one step, are eased from its start place (EASE_GUN); the calm lets his
+    neck and head go limp (CALM_LIMP); late_check and shape_check say how each fall ends (a limb moving again once
+    he is still, how high each hand, foot and knee ends, where his hips and head end against where he knelt);
   - die_prone_d and die_cover_f must end on his front (`face_down`: "sinks back", "slumps forward"), a check and a
-    retry if not; where every clip ends (front down, roll) is in the checks of all seven (die_prone_f may end half on
-    his side, curled over the drawn-up knee: said in its checks, not required).
+    retry if not; and die_cover_f with his head forward of his hips (`ahead`: a man who went down sideways or
+    backwards off his knee and only then rolled onto his face does not read as slumping forward; more tries shove
+    his weight forward over the knee); where every clip ends (front down, roll) is in the checks of all seven
+    (die_prone_f may end half on his side, curled over the drawn-up knee: said in its checks, not required).
 Speed, not behaviour: np.cross on two 3-vectors is replaced, for the ragdoll's run, by the same three products and
 differences without numpy's axis shuffling (the same bits: checked on a whole fall, every frame equal), and --build
 keeps one pool over every (file, fall) so no worker waits at a file's end.
@@ -129,17 +138,25 @@ SET = "falls_more"
 TOOL = "falls_more.py"
 
 SEVEN = ["die_prone_d", "die_prone_e", "die_prone_f", "die_prone_g", "die_cover_d", "die_cover_e", "die_cover_f"]
-# deaths[stance][kind] gains these, after the lists the file has (the game's picker takes them with no code change)
+# deaths[stance][kind] gains these, after the lists the file has (the game's picker takes them with no code change).
+# Each only under kinds its own `hit` agrees with, as the game's ChooseFall weighs them by where the round came from
+# (FromWhere: "back" x3 for a round from in front, "forward" x3 from behind, "side" x3 and "spin" x2 from the side;
+# "knees" goes by the stance; "thrown" is a shell's, "head", "gut" and "leg" where he was struck): die_prone_d (struck
+# on his left) is a side fall, not a back one; die_prone_e (the chest, from in front) only a back one; die_cover_d
+# (struck on his left shoulder from his left, he sinks and tips to his right) side, spin and knees, not gut or leg;
+# die_cover_f (the head, from in front) knees and head, not forward. (A first table, before the review of 27
+# November, also had prone back +d, spin +e, thrown +e, leg +e; cover forward +f, gut +d, leg +d.)
 DEATHS_ADD = {
-    "prone": {"back": ["die_prone_d", "die_prone_e"], "forward": ["die_prone_g"], "side": ["die_prone_d"],
-              "knees": ["die_prone_f", "die_prone_g"], "spin": ["die_prone_d", "die_prone_e"],
-              "thrown": ["die_prone_e"], "gut": ["die_prone_f"], "leg": ["die_prone_e"]},
-    "cover": {"back": ["die_cover_e"], "forward": ["die_cover_f"], "side": ["die_cover_d"],
-              "knees": ["die_cover_d", "die_cover_f"], "spin": ["die_cover_d"], "thrown": ["die_cover_e"],
-              "gut": ["die_cover_d"], "leg": ["die_cover_d"], "head": ["die_cover_f"]},
+    "prone": {"back": ["die_prone_e"], "forward": ["die_prone_g"], "side": ["die_prone_d"],
+              "knees": ["die_prone_f", "die_prone_g"], "spin": ["die_prone_d"], "gut": ["die_prone_f"]},
+    "cover": {"back": ["die_cover_e"], "side": ["die_cover_d"], "knees": ["die_cover_d", "die_cover_f"],
+              "spin": ["die_cover_d"], "thrown": ["die_cover_e"], "head": ["die_cover_f"]},
 }
+# Which faces of him a kind's pick agrees with (the game's weights above); the other kinds by bone (see kind_agrees)
+KIND_SIDES = {"back": ("front",), "forward": ("back",), "side": ("left", "right"), "spin": ("left", "right")}
 
 EASE = 0.2                          # s: the ragdoll's start eased out of the named start pose over this
+EASE_GUN, GUN_JUMP = 0.4, 0.04      # s, m: the rifle's over this instead where the ragdoll's moves it more in a frame
 LIE_MAX = F.LIE_MAX                 # m: his chest bone's head under this at the end, he lies (falls.py's)
 HEAD_MAX = 0.36                     # m: and his head bone's head under this (the existing falls' ends: 0.33 at most)
 STILL_CM, STILL_DEG = 1.0, 3.0      # the last 0.2 s of a clip: no bone's head moves more, no bone turns more
@@ -147,6 +164,7 @@ REACT_DEG, REACT_CM = 15.0, 4.0     # the first 0.3 s: head or chest turned this
 APART_DEG, APART_CM = 8.0, 5.0      # at 0.3 s: from every other fall of its row by this much of chest or head, or pelvis
 OPEN_T = (0.1, 0.2, 0.3)
 TRAVEL_MAX = 0.35                   # m: die_cover_f's chest bone, forward of where it started, at most
+AHEAD_MIN = 0.10                    # m: die_cover_f's head ends at least this far forward of his hips (his own axes)
 SETTLE = 0.5                        # s: all but still this long (ragdoll.py's measure), and the fall is over
 REST_SLOW, REST_AFTER, REST_DAMP = 0.12, 0.35, 45.0   # m/s, s, 1/s: see Touch (the last of a fall's motion)
 REST_LAST = 1.0                     # s: after REST_AFTER, every part damped so (see Touch: a rocking limb)
@@ -154,6 +172,18 @@ REST_END = 0.8                      # s: and in the last this of a fall's longes
 CALM_TONE = 0.6                     # (then the joints held as they are, this strong: a wounded man's tone is 0.3-1)
 REST_GUN_Z = 0.25                   # m: the rifle's centre under this, once he is at rest, it is held by it too
 HIT_CAP = 0.03                      # m: the cap of surface points taken as "farthest along minus push"
+HIT_FACE = 0.6                      # (`at` is taken among the bone's points at least this far out on the struck face)
+RIFLE_LOW, RIFLE_MID = 0.025, 0.15  # m: the weapon lies on the ground: its mesh's lowest point and its middle under these
+REF_LONG = 1.4                      # s: the fire_prone / fire_kneel loops the start times were picked on (see start_for)
+END_BLEND, END_HOLD = 0.4, 0.27     # s: the fall's last END_BLEND eased into its last pose, then that pose held END_HOLD
+GROUND_TO = -0.006                  # m: after the start's ease no point of him (or of the rifle) lower than this
+CALM_LIMP = {"neck": 0.0, "head": 0.0}   # (the calm's tone on these: limp, so his head goes down onto the ground or
+                                          # his pack, not held up off it)
+STILL_MM = 2.0                      # mm: the last 5 keys (30 a second): no skinned point moves more (the review's bar)
+LATE_STILL, LATE_MOVE = 0.5, 0.03   # s, m: once all of him has been still this long, no limb moves this far again
+LIMB_LOW = 0.12                     # m: die_cover_d/_e: each foot and hand ends with its lowest point under this
+KNEE_LOW = 0.15                     # m: die_cover_e: each knee (calf bone's head) ends under this
+LATE_SPEED = 0.02                   # m a 0.1 s: die_cover_e: knees and feet slower than this over the last 1 s
 
 
 # ------------------------------------------------------------------------------------------------ joints, by angle
@@ -253,12 +283,17 @@ class Ctx:
         return ph + Rh @ (0.075 * ax), Rh @ nn, RG._unit(ph - pl), pl, ph
 
     def reach(self, side, target, normal=None, fore=None, seed=0, elbow_up=None, w_n=0.02, w_f=0.02, point="palm",
-              keep=0.0):
+              keep=0.0, elev_max=None):
         """The arm's joint angles (upper arm's three, the elbow's bend) inside their ranges that bring the palm (or,
         point="elbow", the elbow) nearest `target` (a point where the man is now; the chest is taken as it is), the
         palm facing `normal` and the forearm along `fore` where given; `keep` holds the angles near the ones he has
-        (a weight). A seeded search, so every run finds the same."""
+        (a weight); `elev_max` (degrees) keeps the upper arm's elevation off the chest's down line under it, as rom.py
+        measures it (an arm raised past 90 degrees out to the side and turned in is past a shoulder's range). A seeded
+        search, so every run finds the same."""
         pt = 3 if point == "elbow" else 0
+        kc = self.rd.pix["chest"]
+        sh = self.x0[kc] + self.R0[kc] @ self.j["upperarm_" + side]["rp"]
+        up = self.R0[kc] @ np.array((0.0, 0.0, 1.0))
         c_now = np.concatenate([self.c0["upperarm_" + side], self.c0["lowerarm_" + side][:1]])
         ju, jl = self.j["upperarm_" + side], self.j["lowerarm_" + side]
         ru, rl = np.degrees(ju["rng"]), np.degrees(jl["rng"])
@@ -278,6 +313,10 @@ class Ctx:
                 c += w_f * (1.0 - float(fa @ fore))
             if elbow_up is not None:
                 c += 0.02 * max(0.0, elbow_up - float(el[2])) ** 2 * 25.0
+            if elev_max is not None:
+                u = RG._unit(el - sh)
+                ev = math.degrees(math.acos(max(-1.0, min(1.0, -float(u @ up)))))
+                c += math.radians(max(0.0, ev - elev_max)) ** 2
             return c
 
         rs = np.random.RandomState((zlib.crc32((self.name + side).encode()) + seed) % (2 ** 31))
@@ -359,6 +398,7 @@ class Drive:
 #            its own; each: {"push": scale} and/or {"later": more blows}, {"later_own": more shoves of his own},
 #            {"drive": strength scale}, {"lean": his lean, die_cover_f's})
 #   face_down  he must end on his front (the chest's front at least 45 degrees down): a check, and a retry if not
+#   ahead    die_cover_f: his head must end forward of his hips (see ahead_check): a check, and a retry if not
 #   hold_r   die_prone_d: his right arm held this strong (in the pose he was hit in) while he rolls onto it
 #   sit      die_cover_f, a try's: False leaves out the drive that sits him back onto his heel
 #   hit      (part, change of speed) the round itself, for the `hit` block: the first blow's part and its way, level
@@ -417,29 +457,33 @@ def plan_prone_d(c):
 
 
 def plan_prone_e(c):
-    """He kicks and arches: his elbows still prop him, the back and neck straighten hard and the head wrenches round,
-    the thighs lift a little off the ground and one knee then the other kicks; all of it gone by 1 s."""
+    """He kicks and arches: his elbows still prop him, the back and neck straighten hard (an arch, the spine
+    keyed back 15 degrees, by 0.15 s) and the head wrenches round, the thighs lift a little off the ground and one
+    knee then the other kicks once, a short jerk of the shin (40 degrees), over by 0.6 s; all of it gone by 0.8 s.
+    (A first take kicked each shin to 90 degrees three times until 0.9 s, the heels up to the vertical: a swimmer, not
+    a death spasm; and its arch, 7 degrees, lifted his chest 2 to 7 cm and did not show.)"""
     p = {}
     for s in "lr":
         # (his elbows on the ground: the spasm straightens them and his shoulders come up off his forearms)
-        p["upperarm_" + s] = [(0.0, None, 2.0), (0.55, None, 1.6), (0.9, None, 0.0)]
-        p["lowerarm_" + s] = [(0.0, None, 2.0), (0.2, c.A("lowerarm_" + s, flex=15.0), 2.2),
-                              (0.55, c.A("lowerarm_" + s, flex=15.0), 1.8), (0.9, None, 0.0)]
+        p["upperarm_" + s] = [(0.0, None, 2.2), (0.45, None, 1.8), (0.75, None, 0.0)]
+        p["lowerarm_" + s] = [(0.0, None, 2.2), (0.15, c.A("lowerarm_" + s, flex=12.0), 2.6),
+                              (0.45, c.A("lowerarm_" + s, flex=12.0), 2.0), (0.75, None, 0.0)]
     for n in ("spine_01", "spine_02", "chest"):
-        p[n] = [(0.02, None, 1.2), (0.22, c.A(n, flex=-7.0), 1.7), (0.6, c.A(n, flex=-7.0), 1.3),
-                (0.95, c.A(n, flex=0.0), 0.0)]
+        p[n] = [(0.0, None, 1.4), (0.15, c.A(n, flex=-15.0), 2.6), (0.45, c.A(n, flex=-15.0), 2.0),
+                (0.8, c.A(n, flex=0.0), 0.0)]
     for n in ("neck", "head"):
         sg = c.way(n, 2, (1.0, 0.0, 0.0), (0.0, 1.0, 0.0))        # (the turn of his face to his right)
         tw = float(c.hold(n)[2]) + sg * 22.0
-        p[n] = [(0.02, None, None), (0.25, c.A(n, flex=-24.0, twist=tw), 1.0), (0.6, c.A(n, flex=-24.0, twist=tw), 0.8),
-                (0.95, c.A(n, flex=0.0), 0.0)]
+        p[n] = [(0.02, None, None), (0.2, c.A(n, flex=-24.0, twist=tw), 1.0), (0.5, c.A(n, flex=-24.0, twist=tw), 0.8),
+                (0.8, c.A(n, flex=0.0), 0.0)]
     for s in "lr":
         n = "thigh_" + s
-        p[n] = [(0.02, None, 0.8), (0.3, c.D(n, flex=-8.0), 0.55), (0.55, c.D(n, flex=-3.0), 0.4), (0.8, None, 0.0)]
-    p["calf_r"] = [(0.03, None, None), (0.26, c.A("calf_r", flex=90.0), 0.3), (0.5, c.A("calf_r", flex=30.0), 0.3),
-                   (0.72, c.A("calf_r", flex=70.0), 0.25), (1.0, c.A("calf_r", flex=25.0), 0.0)]
-    p["calf_l"] = [(0.03, None, None), (0.28, c.A("calf_l", flex=30.0), 0.3), (0.52, c.A("calf_l", flex=95.0), 0.3),
-                   (0.78, c.A("calf_l", flex=30.0), 0.25), (1.0, c.A("calf_l", flex=25.0), 0.0)]
+        p[n] = [(0.02, None, 0.8), (0.2, c.D(n, flex=-10.0), 0.6), (0.45, c.D(n, flex=-4.0), 0.4), (0.65, None, 0.0)]
+    k0 = {s: float(c.hold("calf_" + s)[0]) for s in "lr"}
+    p["calf_r"] = [(0.03, None, None), (0.2, c.A("calf_r", flex=max(k0["r"], 0.0) + 40.0), 0.35),
+                   (0.38, c.A("calf_r", flex=k0["r"]), 0.3), (0.6, c.A("calf_r", flex=k0["r"]), 0.0)]
+    p["calf_l"] = [(0.12, None, None), (0.32, c.A("calf_l", flex=max(k0["l"], 0.0) + 40.0), 0.35),
+                   (0.5, c.A("calf_l", flex=k0["l"]), 0.3), (0.65, c.A("calf_l", flex=k0["l"]), 0.0)]
     return p
 
 
@@ -450,8 +494,17 @@ def plan_prone_f(c):
     p = {}
     wound = c.wound if c.wound is not None else c.H0[c.rd.pix["spine_02"]]
     kc = c.rd.pix["chest"]
-    cu, ce, miss = c.reach("r", wound, normal=RG._unit(c.H0[kc] - wound + np.array((0.0, 0.0, 0.15))), w_n=0.004)
+    cu, ce, miss = c.reach("r", wound, normal=RG._unit(c.H0[kc] - wound + np.array((0.0, 0.0, 0.15))), w_n=0.004,
+                           elev_max=c.rc.get("elev_max"))
     c.note["reach_miss_cm"] = round(miss * 100.0, 1)
+    # (his left arm, under him as he heaves onto that side, held a while in the pose he was hit in, as die_prone_d's
+    # right: limp, his weight wrung it round past what a shoulder turns, 70 to 94 degrees on most men's bodies)
+    # (let go while he still moves, by 1.8 s: let go at 2.8 s, after he had all but stilled, a hand flicked at 2.97 s
+    # and his head moved 12 cm at 3.3 s on the American's body)
+    hl = c.rc.get("hold_l", 0.0)
+    if hl:
+        for n in ("upperarm_l", "lowerarm_l"):
+            p[n] = [(0.0, None, hl), (0.6, None, 0.8 * hl), (1.2, None, 0.6 * hl), (1.8, None, 0.0)]
     p["upperarm_r"] = [(0.08, None, None), (0.45, cu, 1.4), (1.2, cu, 1.0), (1.7, cu, 0.0)]
     p["lowerarm_r"] = [(0.08, None, None), (0.45, (ce, 0.0, 0.0), 1.4), (1.2, (ce, 0.0, 0.0), 1.0),
                        (1.7, (ce, 0.0, 0.0), 0.0)]
@@ -474,7 +527,10 @@ def plan_prone_f(c):
 
 def plan_prone_g(c):
     """He pushes up on his arms, slowly, fails and sinks: the hands drawn in and planted under his shoulders, the
-    arms straightening against his weight for more than a second, the head lifting; then they go."""
+    arms straightening against his weight for more than a second, the head lifting; then they go. The arms' strength
+    comes on slowly (from nothing at 0.3 s to 1.5 at 0.9 s, 2.5 at 1.15 s; the recipe's `cap` keeps every arm joint
+    under 600 degrees a second while he gathers): a first take reached 1.5 by 0.62 s and 3.2 at 0.85 s and the arms
+    popped in, 1400 to 1800 degrees a second."""
     p = {}
     kc = c.rd.pix["chest"]
     down = c.frame("chest") @ np.array((1.0, 0.0, 0.0))          # (the chest's front: toward the ground, lying)
@@ -487,17 +543,17 @@ def plan_prone_g(c):
         cu1, ce1, m1 = c.reach(s, push, normal=down, fore=down, seed=2)
         c.note["plant_miss_cm_" + s] = round(m0 * 100.0, 1)
         c.note["push_miss_cm_" + s] = round(m1 * 100.0, 1)
-        p["upperarm_" + s] = [(0.3, None, 0.0), (0.62, cu0, 1.5), (0.85, cu0, 3.2), (2.0, cu1, 3.6), (2.2, cu1, 3.2),
-                              (2.45, cu1, 0.0)]
-        p["lowerarm_" + s] = [(0.3, None, 0.0), (0.62, (ce0, 0.0, 0.0), 1.5), (0.85, (ce0, 0.0, 0.0), 3.2),
-                              (2.0, (ce1, 0.0, 0.0), 3.6), (2.2, (ce1, 0.0, 0.0), 3.2), (2.45, (ce1, 0.0, 0.0), 0.0)]
-        p["hand_" + s] = [(0.3, None, 0.0), (0.62, (-40.0, 0.0, 0.0), 2.0), (2.2, (-55.0, 0.0, 0.0), 2.0),
-                          (2.45, (-40.0, 0.0, 0.0), 0.0)]
+        p["upperarm_" + s] = [(0.3, None, 0.0), (0.9, cu0, 1.5), (1.15, cu0, 2.5), (2.1, cu1, 3.6), (2.3, cu1, 3.2),
+                              (2.55, cu1, 0.0)]
+        p["lowerarm_" + s] = [(0.3, None, 0.0), (0.9, (ce0, 0.0, 0.0), 1.5), (1.15, (ce0, 0.0, 0.0), 2.5),
+                              (2.1, (ce1, 0.0, 0.0), 3.6), (2.3, (ce1, 0.0, 0.0), 3.2), (2.55, (ce1, 0.0, 0.0), 0.0)]
+        p["hand_" + s] = [(0.3, None, 0.0), (0.9, (-40.0, 0.0, 0.0), 2.0), (2.3, (-55.0, 0.0, 0.0), 2.0),
+                          (2.55, (-40.0, 0.0, 0.0), 0.0)]
     for n in ("spine_01", "spine_02", "chest"):
-        p[n] = [(0.0, None, 0.7), (2.2, c.A(n, flex=-5.0), 0.9), (2.5, c.A(n, flex=0.0), 0.0)]
+        p[n] = [(0.0, None, 0.7), (2.3, c.A(n, flex=-5.0), 0.9), (2.6, c.A(n, flex=0.0), 0.0)]
     for n in ("neck", "head"):
-        p[n] = [(0.25, c.A(n, flex=10.0), 0.3), (0.85, c.A(n, flex=0.0), 0.6), (1.9, c.A(n, flex=-20.0), 0.9),
-                (2.2, c.A(n, flex=-10.0), 0.6), (2.45, c.A(n, flex=5.0), 0.0)]
+        p[n] = [(0.25, c.A(n, flex=10.0), 0.3), (0.95, c.A(n, flex=0.0), 0.6), (2.0, c.A(n, flex=-20.0), 0.9),
+                (2.3, c.A(n, flex=-10.0), 0.6), (2.55, c.A(n, flex=5.0), 0.0)]
     return p
 
 
@@ -506,18 +562,29 @@ def plan_cover_d(c):
     he sinks back onto his heel; his trunk is held up over his heels a moment but sags to his right, that shoulder
     dragging down, the head dropping, the struck arm hanging, his right hand going down to the ground; then the
     strength goes and he tips over onto his front. (The forward leg is left to itself: driven, it turns him round on
-    his knee.)"""
+    his knee.) The knee under him folds hard, its foot laid flat (toes back) and the thigh let back, so his seat
+    comes down and back onto that heel with his trunk still up (with the drop of his weight, the recipe's shove at
+    0.12 s): a first take, the knee driven at 0.4 and the foot left on its toes, kept his seat where it was (0.47 m)
+    while he sagged, and it did not read as sliding down."""
     p = {}
-    p["calf_r"] = [(0.1, None, None), (0.6, c.A("calf_r", flex=137.0), 0.4), (1.3, c.A("calf_r", flex=137.0), 0.3),
-                   (1.7, c.A("calf_r", flex=130.0), 0.0)]
+    kn = c.rc.get("d_knee", 137.0)                # (how far the knee under him folds: his seat's way down and back)
+    p["calf_r"] = [(0.06, None, None), (0.45, c.A("calf_r", flex=kn), 0.9), (1.0, c.A("calf_r", flex=kn), 0.6),
+                   (1.4, c.A("calf_r", flex=kn - 7.0), 0.0)]
+    p["foot_r"] = [(0.06, None, None), (0.35, c.A("foot_r", flex=-40.0), 0.5), (1.0, c.A("foot_r", flex=-40.0), 0.3),
+                   (1.4, None, 0.0)]
+    p["thigh_r"] = [(0.06, None, None), (0.45, c.D("thigh_r", flex=10.0), 0.4), (1.0, c.D("thigh_r", flex=10.0), 0.3),
+                    (1.4, None, 0.0)]
+    # (his trunk held up over his heel while he sinks (to 0.6 s), sagging to his right; then it gives as the shove of
+    # his own weight, 0.7 s, tips him over to that side)
+    fx = c.rc.get("d_flex", 0.0)                  # (a forward bend added: his weight kept over his knees)
     for n in ("spine_01", "spine_02", "chest"):
         sg = c.way(n, 1, (0.0, 0.0, 1.0), (0.0, 1.0, 0.0))        # (the bend that leans him to his right)
-        p[n] = [(0.06, None, 1.0), (0.45, c.A(n, flex=-3.0, side=sg * 3.0), 1.0),
-                (1.25, c.A(n, flex=2.0, side=sg * 6.0), 0.7), (1.7, c.A(n, flex=4.0, side=sg * 7.0), 0.0)]
+        p[n] = [(0.06, None, 1.0), (0.4, c.A(n, flex=fx, side=sg * 4.0), 0.8),
+                (0.65, c.A(n, flex=fx + 2.0, side=sg * 9.0), 0.6), (1.1, c.A(n, flex=fx + 4.0, side=sg * 12.0), 0.0)]
     for n in ("neck", "head"):
         sg = c.way(n, 1, (0.0, 0.0, 1.0), (0.0, 1.0, 0.0))
-        p[n] = [(0.2, None, None), (0.75, c.A(n, flex=14.0, side=sg * 9.0), 0.5),
-                (1.5, c.A(n, flex=18.0, side=sg * 9.0), 0.0)]
+        p[n] = [(0.2, None, None), (0.6, c.A(n, flex=14.0, side=sg * 9.0), 0.5),
+                (1.2, c.A(n, flex=18.0, side=sg * 9.0), 0.0)]
     return p
 
 
@@ -526,18 +593,29 @@ def plan_cover_f(c):
     the knee under him gives too (he sinks back as he folds, so his chest goes down, not on), leaning a little to his
     right, the way he comes off his own knee."""
     p = {}
-    lean = c.rc.get("lean", 1.0)                  # (to his right: 1; a try may lean him the other way)
+    lean = c.rc.get("lean", 0.0)                  # (a side bend, to his right +; toward his raised left knee -)
+    fold, fk = c.rc.get("fold", 24.0), c.rc.get("fold_k", 0.5)
+    tw = c.rc.get("turn", 0.0)                    # (degrees a joint: his chest turned back toward his aim, to his left)
     for n in ("spine_01", "spine_02", "chest"):
         sg = c.way(n, 1, (0.0, 0.0, 1.0), (0.0, 1.0, 0.0))
-        p[n] = [(0.1, None, None), (0.5, c.A(n, flex=20.0, side=sg * 4.0 * lean), 0.5),
-                (0.8, c.A(n, flex=22.0, side=sg * 5.0 * lean), 0.3), (1.1, c.A(n, flex=22.0), 0.0)]
+        st = c.way(n, 2, (1.0, 0.0, 0.0), (0.0, -1.0, 0.0))      # (the twist that turns his front to his left)
+        t0 = float(c.hold(n)[2])
+        p[n] = [(0.1, None, None), (0.45, c.A(n, flex=fold, side=sg * 5.0 * lean, twist=t0 + st * tw), fk),
+                (0.8, c.A(n, flex=fold + 2.0, side=sg * 5.0 * lean, twist=t0 + st * tw), 0.6 * fk),
+                (1.1, c.A(n, flex=fold + 2.0, twist=t0 + st * tw), 0.0)]
     if c.rc.get("sit", True):
         # (a try may leave these out: a man with a heavy pack who sits back onto his heel can go over backwards)
-        p["calf_r"] = [(0.08, None, None), (0.6, c.A("calf_r", flex=137.0), 0.8), (0.9, c.A("calf_r", flex=137.0), 0.4),
-                       (1.3, c.A("calf_r", flex=125.0), 0.0)]
-        p["thigh_r"] = [(0.08, None, None), (0.6, c.D("thigh_r", flex=45.0), 0.6), (0.9, c.D("thigh_r", flex=50.0), 0.3),
-                        (1.3, c.D("thigh_r", flex=40.0), 0.0)]
-    p["thigh_l"] = [(0.08, None, None), (0.6, c.A("thigh_l", flex=108.0), 0.3), (1.0, c.A("thigh_l", flex=108.0), 0.0)]
+        k = c.rc.get("sit_k", 1.0)
+        p["calf_r"] = [(0.05, None, None), (0.5, c.A("calf_r", flex=137.0), 0.8 * k),
+                       (0.9, c.A("calf_r", flex=137.0), 0.4 * k), (1.3, c.A("calf_r", flex=125.0), 0.0)]
+        p["thigh_r"] = [(0.05, None, None), (0.5, c.D("thigh_r", flex=45.0), 0.6 * k),
+                        (0.9, c.D("thigh_r", flex=50.0), 0.3 * k), (1.3, c.D("thigh_r", flex=40.0), 0.0)]
+    # (his left knee, up in front of him, held where it is a while, so he folds down over it and onto his cover,
+    # not off it to the side: a first take let it go and leaned him, and he went down across, 0.6 to 0.75 m to his
+    # right, as die_cover_a and _b do)
+    kl, ku = c.rc.get("knee_hold", 0.6), c.rc.get("knee_until", 1.2)
+    for n in ("thigh_l", "calf_l"):
+        p[n] = [(0.0, None, kl), (ku, None, kl), (ku + 0.3, None, 0.0)]
     return p
 
 
@@ -549,7 +627,8 @@ MORE = [
     # most, the hips with it) and he pushes off the ground hard with his left hand, the left knee drawn up and out,
     # half onto his right side (that arm, under him, held a little: limp, it was wrung 90 degrees and more past a
     # shoulder's turn); then the arm gives, the back untwists and he sinks back onto his front (a last shove of his
-    # own weight, 1.15 s, back toward it)
+    # own weight, 1.15 s, back toward it). The rifle is let fall where it is (no throw, no spin: lying, a throw sent it
+    # 15-22 cm a frame in its first frames)
     dict(name="die_prone_d", stance="prone", kind="side", start=("fire_prone", 0.5),
          push=[(0.0, "chest", (-0.3, 0.7, 0.6)), (0.0, "head", (-0.2, 0.4, 0.2)),
                (1.15, "chest", (0.0, -0.45, -0.25)), (1.15, "upperarm_l", (0.0, -0.3, -0.35))],
@@ -561,66 +640,89 @@ MORE = [
          tries=TRIES_D,
          hit=("chest", (-0.3, 0.7, 0.0)), hold_r=1.0,
          tone={"legs": (0.3, 0.4), "trunk": (0.6, 0.5), "neck": (0.4, 0.4), "arms": (0.0, 0.1)},
-         plan=plan_prone_d, release=0.04, throw=(0.4, -0.5, 0.3), t_min=2.8, t_max=6.0, face_down=True),
+         plan=plan_prone_d, release=0.04, throw=(0.0, 0.0, 0.0), throw_spin=(0.0, 0.0, 0.0), t_min=2.8, t_max=6.0,
+         face_down=True),
     # ---- lying. Struck in the chest from in front (through the shoulders, into the spine): a spasm (0.07 s, his
-    # own muscles: the chest and head thrown up) and he kicks and arches, then goes limp
+    # own muscles: the chest and back thrown up, an arch) and he kicks once with each leg, then goes limp
     dict(name="die_prone_e", stance="prone", kind="back", start=("fire_prone", 1.15),
          push=[(0.0, "chest", (-0.5, 0.25, 0.2)), (0.0, "spine_01", (-0.2, 0.15, 0.2)),
-               (0.07, "chest", (0.0, 0.0, 1.0)), (0.07, "spine_02", (0.0, 0.0, 0.6)), (0.07, "head", (0.0, 0.0, 0.6))],
+               (0.07, "chest", (0.0, 0.0, 1.6)), (0.07, "spine_02", (0.0, 0.0, 1.1)), (0.07, "spine_01", (0.0, 0.0, 0.5)),
+               (0.07, "head", (0.0, 0.0, 0.4))],
          tone={"legs": (0.0, 0.15), "trunk": (0.1, 0.2), "neck": (0.1, 0.2), "arms": (0.3, 0.3)},
          hit=("chest", (-0.5, 0.25, -0.1)),
-         plan=plan_prone_e, release=0.04, throw=(0.1, 0.2, 0.0), throw_spin=(0.0, 0.5, 0.3), t_min=1.5, t_max=5.0),
+         plan=plan_prone_e, release=0.04, throw=(0.0, 0.0, 0.0), throw_spin=(0.0, 0.0, 0.0), t_min=1.5, t_max=5.0),
     # ---- lying. Struck in the body under him from his right front: he heaves half onto his left side (that arm
-    # folding under him: held a moment, as limp it is wrung past what a shoulder turns), his right hand goes in under
-    # him to the wound, the right knee drawn up; he curls over it and is still, on his front or, on some men's
-    # bodies, left half on his side over the drawn-up knee (not required: the checks say which, `front`)
+    # folding under him: held a moment, as limp it is wrung past what a shoulder turns, let go by 1.8 s), his right
+    # hand goes in under him to the wound, the right knee drawn up; he curls over it and is still, on his front or, on
+    # some men's bodies, left half on his side over the drawn-up knee (not required: the checks say which, `front`)
     dict(name="die_prone_f", stance="prone", kind="gut", start=("fire_prone", 0.15),
          push=[(0.0, "spine_02", (-0.6, -0.5, 0.3)), (0.0, "head", (-0.2, -0.2, 0.0))],
          roll=dict(w=4.0, to="left", share={"pelvis": 0.5, "spine_01": 0.7, "spine_02": 0.9, "thigh": 0.2,
                                             "calf": 0.1, "foot": 0.05}),
          tone={"legs": (0.3, 0.6), "trunk": (0.2, 0.4), "neck": (0.2, 0.4), "arms": (0.1, 0.2)},
          tone_part={"upperarm_l": (0.45, 0.45), "lowerarm_l": (0.45, 0.45)},
-         hit=("spine_02", (-0.6, -0.5, 0.0)),
-         plan=plan_prone_f, wound=True, release=0.03, throw=(0.1, 0.1, 0.0), throw_spin=(0.0, 0.5, 0.3),
+         hit=("spine_02", (-0.6, -0.5, 0.0)), hold_l=1.0, elev_max=84.0,
+         plan=plan_prone_f, wound=True, release=0.03, throw=(0.0, 0.0, 0.0), throw_spin=(0.0, 0.0, 0.0),
          t_min=2.1, t_max=6.0),
-    # ---- lying. Struck from behind in the right shoulder: that arm is knocked from under him and his face goes
-    # down (half way: he is not dead yet, his neck holds a moment, so it opens unlike the falls whose head drops
-    # limp, die_prone_a and die_crawl_c); he gathers his hands under him and pushes up, slowly, fails and sinks onto
-    # his face
+    # ---- lying. Struck from behind and to his right in the right shoulder: that arm is knocked out from under him,
+    # the shoulder drops and his chest rolls onto that side (the blow and a roll, 3 rad/s), his face going down only
+    # with it (his neck holds: so it opens unlike the falls whose head drops limp, die_prone_a and die_crawl_c); he
+    # gathers his hands under him and pushes up, slowly, fails and sinks onto his face
     dict(name="die_prone_g", stance="prone", kind="forward", start=("fire_prone", 1.3),
-         push=[(0.0, "upperarm_r", (1.4, -1.0, 0.3)), (0.0, "chest", (0.5, -0.2, 0.0)), (0.0, "head", (0.7, 0.0, -0.3))],
+         push=[(0.0, "upperarm_r", (1.6, -1.6, 0.6)), (0.0, "chest", (0.8, -0.6, -0.3)), (0.0, "head", (0.3, 0.0, -0.1))],
+         roll=dict(w=3.0, to="right", share={"pelvis": 0.4, "spine_01": 0.6, "spine_02": 0.85, "thigh": 0.1,
+                                             "calf": 0.05, "foot": 0.03}),
          tone={"legs": (1.6, 0.6), "trunk": (0.5, 0.5), "neck": (0.2, 0.3), "arms": (0.0, 0.1)},
-         hit=("upperarm_r", (1.4, -1.0, -0.3)),
-         plan=plan_prone_g, release=0.04, throw=(0.6, 0.5, 0.2), t_min=3.0, t_max=6.0),
-    # ---- in cover, kneeling at it. Struck in the left shoulder from in front: it is knocked back and he with it, his
-    # legs give and he slides down where he knelt, onto his heel, his trunk held up a moment and sagging to his
-    # right, the shoulder dragging down; then (a shove of his own weight, 1.35 s, to his right as he then faces) he
-    # tips over
+         hit=("upperarm_r", (1.6, -1.4, 0.0)), cap=(0.3, 2.6, 600.0, ("upperarm", "lowerarm", "hand")),
+         plan=plan_prone_g, release=0.04, throw=(0.0, 0.0, 0.0), throw_spin=(0.0, 0.0, 0.0), t_min=3.0, t_max=6.0),
+    # ---- in cover, kneeling at it. Struck in the left shoulder from his left: it is knocked back and round (the
+    # blow, and his chest turned by it, 0 to 0.15 s), his legs give and he slides down where he knelt, back onto his
+    # heel, his trunk held up a moment over it and sagging to his right, the struck shoulder dragging down; then (a
+    # shove of his own weight, 0.7 s, to his right as he then faces) he tips over onto that side. His legs go slack in
+    # the cloth once he is down (`settle`): a first take whipped a leg up at 2 s and left it frozen in the air.
+    # (A first take also knocked his pelvis and chest back, -0.6 and -0.4 m/s: some men went over backwards.)
     dict(name="die_cover_d", stance="cover", kind="side", start=("fire_kneel", 0.15),
-         push=[(0.0, "upperarm_l", (-1.0, 0.5, -0.1)), (0.0, "chest", (-0.4, 0.2, 0.0)), (0.0, "head", (-0.4, 0.3, 0.0)),
-               (0.0, "pelvis", (-0.6, 0.1, 0.0))],
-         tone={"legs": (0.15, 0.3), "trunk": (0.3, 0.6), "neck": (0.1, 0.4), "arms": (0.05, 0.3)},
+         push=[(0.0, "upperarm_l", (-1.5, 2.2, -0.1)), (0.0, "chest", (-0.15, 0.3, 0.0)), (0.0, "head", (-0.2, 0.3, 0.0))],
+         spin=[(0.0, "chest", (0.0, 0.0, -2.4)), (0.0, "spine_02", (0.0, 0.0, -1.4))],
+         tone={"legs": (0.15, 0.3), "trunk": (0.6, 0.5), "neck": (0.1, 0.4), "arms": (0.05, 0.3)},
          tone_part={"upperarm_l": (0.0, 0.05), "lowerarm_l": (0.0, 0.05), "hand_l": (0.0, 0.05)},
-         plan=plan_cover_d, later_own=[(1.35, "chest", (-0.1, 0.5, 0.0))], release=0.15, throw=(0.2, 0.3, 0.0),
-         t_min=2.0, t_max=5.5),
-    # ---- in cover. A hard blow to the chest from in front throws him back off it: over backwards, the knees bent
+         hit=("upperarm_l", (-1.5, 2.2, 0.0)),
+         plan=plan_cover_d, d_flex=14.0, d_knee=115.0,
+         later_own=[(0.35, "pelvis", (0.4, 0.0, 0.0)), (0.7, "chest", (0.35, 1.0, -0.3)), (0.7, "spine_02", (0.15, 0.5, 0.0)),
+                    (1.0, "chest", (0.1, 0.6, -0.3))],
+         settle=dict(t=1.3, damp=10.0, fams=("thigh", "calf", "foot")),
+         ends=dict(right_or_front=True, back_max=0.2, limbs_low=True),
+         tries=[dict(), dict(d_knee=125.0), dict(push=0.8, d_flex=10.0), dict(d_knee=105.0, d_flex=16.0)],
+         release=0.15, throw=(0.2, 0.3, 0.0), t_min=2.0, t_max=5.0),
+    # ---- in cover. A hard blow to the chest from in front knocks him back off it: his legs give, he sits back
+    # and topples over backwards, the knees bent under him. (A first take threw him with -3.2 m/s on the chest: he
+    # flew 0.5-0.8 m back, the rifle thrown forward and up out of his hands, and one man's knee pumped for 3 s.)
     dict(name="die_cover_e", stance="cover", kind="back", start=("fire_kneel", 1.05),
-         push=[(0.0, "chest", (-3.2, 0.2, 0.6)), (0.0, "head", (-1.6, 0.0, 0.3)), (0.0, "spine_02", (-1.2, 0.0, 0.2))],
-         tone={"legs": (0.0, 0.12), "trunk": (0.0, 0.15), "neck": (0.0, 0.1), "arms": (0.0, 0.08)},
-         hit=("chest", (-3.2, 0.2, 0.0)),
-         release=0.03, throw=(0.8, 0.4, 1.4), t_min=1.2, t_max=5.0),
-    # ---- in cover, up at it. Struck in the head from in front: it snaps back, and he folds forward and down (his own
-    # weight going forward as the head snaps back, 0.32 s: without it some men's bodies, JAP's, went over backwards
-    # off the knee and the radio man's onto his side)
-    dict(name="die_cover_f", stance="cover", kind="forward", start=("fire_kneel", 1.3),
-         push=[(0.0, "head", (-1.5, 0.15, 0.3))],
-         later_own=[(0.32, "chest", (0.8, 0.0, -0.1)), (0.32, "spine_02", (0.4, 0.0, 0.0))],
-         tone={"legs": (0.2, 0.5), "trunk": (0.04, 0.2), "neck": (0.0, 0.04), "arms": (0.0, 0.1)},
+         push=[(0.0, "chest", (-1.2, 0.15, 0.3)), (0.0, "head", (-0.8, 0.0, 0.2)), (0.0, "spine_02", (-0.5, 0.0, 0.1))],
+         tone={"legs": (0.0, 0.1), "trunk": (0.0, 0.15), "neck": (0.0, 0.1), "arms": (0.0, 0.08)},
+         hit=("chest", (-1.2, 0.15, 0.0)),
+         settle=dict(t=1.0, damp=12.0, fams=("thigh", "calf", "foot")),
+         ends=dict(limbs_low=True, legs_settled=True, back_max=0.45),
+         tries=[dict(), dict(push=1.25), dict(push=0.85), dict(push=1.5)],
+         release=0.03, throw=(-0.4, 0.2, 0.2), t_min=1.2, t_max=3.5),
+    # ---- in cover, up at it. Struck in the head from in front: it snaps back and his shoulders and chest jerk back
+    # (0 s), his legs give at once and he folds forward and down over his raised left knee and onto his cover (his
+    # weight going forward and down, 0.25 s; the left knee held up until 1.2 s). (A first take leaned him to the
+    # side and let the knee go: he went down across, as die_cover_a and _b do.)
+    dict(name="die_cover_f", stance="cover", kind="head", start=("fire_kneel", 1.3),
+         push=[(0.0, "head", (-1.5, 0.15, 0.3)), (0.0, "chest", (-0.6, 0.0, 0.25)), (0.0, "spine_02", (-0.25, 0.0, 0.1))],
+         later_own=[(0.25, "chest", (0.5, 0.0, -0.4)), (0.25, "spine_02", (0.25, 0.0, -0.2))],
+         tone={"legs": (0.0, 0.15), "trunk": (0.04, 0.2), "neck": (0.0, 0.04), "arms": (0.0, 0.1)},
          hit=("head", (-1.5, 0.15, 0.0)),
-         plan=plan_cover_f, release=0.1, throw=(0.3, 0.2, 0.0), t_min=1.6, t_max=5.5, travel=True, face_down=True,
-         # (a man who sits back onto his heel as he folds can keel over onto his right side, off his raised left knee
-         # (USA, JAP); leaning him the other way, and a softer blow that knocks him back less, put him on his face)
-         tries=[dict(), dict(lean=-1.2), dict(push=0.5, lean=-1.2)]),
+         plan=plan_cover_f, release=0.02, throw=(0.3, 0.2, 0.0), t_min=1.6, t_max=5.0, travel=True, face_down=True,
+         ahead=True, ends=dict(side_max=0.25, axis_max=35.0),
+         settle=dict(t=1.6, damp=8.0, fams=("thigh", "calf", "foot")),
+         # (the second try turns his trunk back toward his aim, 35 degrees a joint, and leans his weight to his left
+         # as it goes forward: on some men's bodies that folds him nearer straight ahead)
+         tries=[dict(), dict(turn=35.0, fold=30.0, fold_k=1.0,
+                             own_only=[(0.25, "chest", (0.5, -0.4, -0.4)), (0.25, "spine_02", (0.25, -0.2, -0.2)),
+                                       (0.25, "pelvis", (0.0, -0.4, 0.0))]),
+                dict(push=0.8)]),
 ]
 
 
@@ -633,9 +735,10 @@ class Touch:
     """What comes down when: each part's landings (a touch after 0.1 s clear of the ground), with the speed it came
     down at, for the events; and the drive's step."""
 
-    def __init__(self, f, drive=None, after=1.0, own=(), t_end=None):
+    def __init__(self, f, drive=None, after=1.0, own=(), t_end=None, settle=None, cap=None, spin=()):
         self.f, self.drive, self.after, self.t_end = f, drive, after, t_end
         self.own = sorted(own, key=lambda e: e[0])  # (t, part index, dv): a later shove in his own axes AT THAT TIME
+        self.spin = sorted(spin, key=lambda e: e[0])   # (t, part index, w): a turn given to a part (world axes)
         self.slow = 0.0
         self.trunk = [f.rd.pix[n] for n in ("pelvis", "spine_01", "spine_02", "chest", "head")]
         n = len(f.rd.parts)
@@ -644,20 +747,61 @@ class Touch:
         self.vz = np.zeros(n)
         self.was = set()
         self.calm = False
+        # (a recipe's `settle`: from its time on, the joints of these families damped this much more, a man's limbs
+        # going slack in the cloth and the soil, not a pendulum: a leg folded under him or flung up does not pump or
+        # whip for seconds; `cap`: (t0, t1, deg/s, families) no joint of these turns faster than that between t0 and
+        # t1, a wounded man's slow strength)
+        self.settle = settle
+        self.cap = cap
+        fam = lambda fams: [j for j in f.joints if j["fam"] in fams]
+        self.settle_j = fam(settle["fams"]) if settle else []
+        self.cap_j = fam(cap[3]) if cap else []
+
+    @staticmethod
+    def _rel(f, j, scale):
+        """A joint's own turning (child against parent) scaled by `scale`, shared between the two by their inertia as
+        ragdoll.py's joint damping does."""
+        kp, kc = j["parent"], j["child"]
+        rel = f.w[kc] - f.w[kp]
+        n = float(np.linalg.norm(rel))
+        if n < 1e-9:
+            return
+        u = rel / n
+        Ip, Ic = f._Iinv(kp), f._Iinv(kc)
+        wp, wc = float(u @ Ip @ u), float(u @ Ic @ u)
+        dw = rel * (1.0 - scale)
+        f.w[kc] -= dw * wc / (wp + wc)
+        f.w[kp] += dw * wp / (wp + wc)
 
     def step(self, f):
         if self.t_end is not None and f.t > self.t_end - REST_END and not self.calm:
             # (see the end of this step: from here on every joint is held, gently, as it now is, and the drives
-            # are done)
+            # are done; but not the neck and head: they are let go, so his head goes down onto the ground or his
+            # pack, not held up off it with nothing under it)
             self.calm = True
             self.drive = None
             t0 = f.t
             for j in f.joints:
                 kc = j["child"]
                 f.target[kc] = j["R0"].T @ f.R[j["parent"]].T @ f.R[kc]
-                f.tone[kc] = (lambda t, t0=t0: CALM_TONE * sm((t - t0) / 0.3))
+                ct = CALM_LIMP.get(j["fam"], CALM_TONE)
+                f.tone[kc] = (lambda t, t0=t0, ct=ct: ct * sm((t - t0) / 0.3))
         if self.drive is not None:
             self.drive.step(f)
+        while self.spin and self.spin[0][0] <= f.t:
+            _, k, w = self.spin.pop(0)
+            f.w[k] += w
+        h = 1.0 / f.hz
+        if self.settle and f.t >= self.settle["t"]:
+            sc = math.exp(-self.settle["damp"] * h * min(1.0, (f.t - self.settle["t"]) / 0.2))
+            for j in self.settle_j:
+                self._rel(f, j, sc)
+        if self.cap and self.cap[0] <= f.t <= self.cap[1]:
+            top = math.radians(self.cap[2])
+            for j in self.cap_j:
+                n = float(np.linalg.norm(f.w[j["child"]] - f.w[j["parent"]]))
+                if n > top:
+                    self._rel(f, j, top / n)
         while self.own and self.own[0][0] <= f.t:
             # (his heading then: the pelvis's forward, level; a shove "to his right" goes to his right as he is now
             # turned, not as he was hit)
@@ -678,7 +822,6 @@ class Touch:
         # between him and the ground can go on pushing him along a few cm a second for seconds. Once his act is over
         # and his trunk has been slow for REST_AFTER, the parts that LIE ON THE GROUND get the same damping,
         # REST_DAMP strong; a part still in the air (a shin standing on its knee) is left to fall)
-        h = 1.0 / f.hz
         lin = float(np.max(np.linalg.norm(f.v[self.trunk], axis=1)))
         self.slow = self.slow + h if (f.t > self.after and lin < REST_SLOW and (not f.held or f.rd.unarmed)) else 0.0
         if self.slow > REST_AFTER and f.touch:
@@ -760,12 +903,17 @@ def changed(rc, tr):
     r["push"] = ([(t, p, tuple(v * k for v in dv)) for (t, p, dv) in rc.get("push", [])] + list(rc.get("later", []))
                  + list(tr.get("later", [])))
     r["later_own"] = list(rc.get("later_own", [])) + list(tr.get("later_own", []))
+    if "own_only" in tr:                          # (a try's own shoves in place of the recipe's)
+        r["later_own"] = list(tr["own_only"])
     r["drive_scale"] = tr.get("drive", 1.0)
     r["push_scale"] = k
-    for k in ("lean", "sit"):
+    for k in ("lean", "sit", "sit_k", "turn", "fold", "fold_k", "knee_hold", "knee_until", "d_knee", "d_flex"):
         if k in tr:
             r[k] = tr[k]
     return r
+
+
+BLEND_EASE = {"hand_l", "hand_r", "fingers_l", "fingers_r", "thumb_l", "thumb_r"}
 
 
 def ease_in(man, frames, start_loc):
@@ -783,15 +931,43 @@ def ease_in(man, frames, start_loc):
         dm = (np.zeros(3) if ms is None else np.asarray(ms, float)) - (np.zeros(3) if m0 is None else np.asarray(m0, float))
         if np.linalg.norm(RG.rotvec(dq)) > 1e-5 or np.linalg.norm(dm) > 1e-5:
             off[n] = (dq, dm)
+    # (the rifle: where the ragdoll's own moves it more than GUN_JUMP in its first frame (the prone men's: their
+    # rifle, laid along the arm, is put out of the arm's and the ground's way in one step, 15-17 cm), its offset is
+    # eased out over EASE_GUN instead, so it goes down out of his hands, not in a jump)
+    gun = EASE
+    if len(frames) > 1 and "weapon" in loc0 and "weapon" in frames[1][1]:
+        m0, m1 = loc0["weapon"][1], frames[1][1]["weapon"][1]
+        if m0 is not None and m1 is not None and float(np.linalg.norm(np.asarray(m1, float) - np.asarray(m0, float))) > GUN_JUMP:
+            gun = EASE_GUN
     for i, (t, loc) in enumerate(frames):
         w = 1.0 - sm(t / EASE)
-        if w <= 0.0:
+        wg = 1.0 - sm(t / gun)
+        if w <= 0.0 and wg <= 0.0:
             break
         for n, (dq, dm) in off.items():
+            gun_n = n in ("weapon", "bolt", "bipod") and n not in (getattr(man, "bag", None) or {})
+            ww = wg if gun_n else w
+            if ww <= 0.0:
+                continue
             q, mv = loc.get(n, (one, None))
-            q2 = RG.matq(RG.qmat(q) @ RG.frac(dq, w))
+            if gun_n and gun > EASE:
+                # (from the start pose's own place toward the ragdoll's, as a hand is: the ragdoll's own first
+                # frames' jump is what is eased, not only the offset at its first frame)
+                qs, ms = start_loc.get(n, (one, None))
+                qs = RG.qmat(qs)
+                if ms is not None and mv is not None:
+                    mv = np.asarray(ms, float) + (np.asarray(mv, float) - np.asarray(ms, float)) * (1.0 - ww)
+                loc[n] = (RG.matq(qs @ RG.frac(qs.T @ RG.qmat(q), 1.0 - ww)), mv)
+                continue
+            if n in BLEND_EASE:
+                # (a hand: from the start pose's own turn toward the ragdoll's, never the ragdoll's flop with the
+                # offset on top of it: that bent a wrist 40-50 degrees past its range in the first 0.1 s)
+                qs = RG.qmat(start_loc.get(n, (one, None))[0])
+                loc[n] = (RG.matq(qs @ RG.frac(qs.T @ RG.qmat(q), 1.0 - ww)), mv)
+                continue
+            q2 = RG.matq(RG.qmat(q) @ RG.frac(dq, ww))
             if np.linalg.norm(dm) > 1e-5 or mv is not None:
-                mv = (np.zeros(3) if mv is None else np.asarray(mv, float)) + dm * w
+                mv = (np.zeros(3) if mv is None else np.asarray(mv, float)) + dm * ww
             loc[n] = (q2, mv)
     # (a bone eased from a turn to none, or a move to none, needs its keys to end: clip_from keeps a track only for
     # bones that turn, and these now do; nothing more to do)
@@ -826,6 +1002,116 @@ def ease_chain(man, c, start_loc):
             rest = [[k[0]] + [-v for v in k[1:]] for k in rest]
         tr["rot"] = F._thin(new + rest)
     return c
+
+
+def start_for(man, rc):
+    """The recipe's start (clip, time) on this man's own clip: the times were picked on 1.4 s loops (REF_LONG); where
+    his loop is shorter (the American files' 1.0 s fire_prone and fire_kneel) a time past its end is taken at the same
+    point of his loop (t * long / 1.4), so the falls still start from poses that differ (a time taken modulo his loop
+    would put die_prone_e and _f on one pose, 0.15 s, and die_prone_g on die_prone_a's), and the `start` written is
+    the time used. (Before the review of 27 November the time was held at the clip's last key.)"""
+    clip, t = rc["start"]
+    L = float(man.clips[clip]["long"])
+    t = float(t)
+    if t > L + 1e-9:
+        t = round(t * L / REF_LONG, 3)
+        if t > L:
+            t = round(t % L, 3)
+    return clip, t
+
+
+def hold_end(frames):
+    """The fall's last END_BLEND seconds eased into its last pose, and that pose held END_HOLD more (keys at 30 a
+    second), so the clip ends still to the last point: _trim cuts the fall where it is within 4 mm and a degree of its
+    rest and puts the rest pose on the next frame, a last step of up to 5 mm on him and 2 cm at the radio man's whip
+    tip, and the keys thinned between drifted a millimetre a frame. Frames [(t, {bone: (q, move)})], changed."""
+    tL, locL = frames[-1]
+    t0 = tL - END_BLEND
+    QL = {n: RG.qmat(q) for n, (q, mv) in locL.items()}
+    for i, (t, loc) in enumerate(frames):
+        if t <= t0 or i == len(frames) - 1:
+            continue
+        w = sm((t - t0) / (END_BLEND - 0.1))
+        new = {}
+        for n, (q, mv) in loc.items():
+            Q = RG.qmat(q)
+            qq = RG.matq(Q @ RG.frac(Q.T @ QL[n], w))
+            mL = locL[n][1]
+            if mv is None and mL is None:
+                m = None
+            else:
+                a = np.zeros(3) if mv is None else np.asarray(mv, float)
+                b = np.zeros(3) if mL is None else np.asarray(mL, float)
+                m = a + (b - a) * w
+            new[n] = (qq, m)
+        frames[i] = (t, new)
+    n = int(round(END_HOLD * 30.0))
+    for k in range(1, n + 1):
+        frames.append((round(tL + k / 30.0, 5), dict(locL)))
+    return frames
+
+
+def _masks(man):
+    """The near mesh's points of the weapon (and what rides it) and of his body (not the whip: kept out of his shape)."""
+    if not hasattr(man, "_gmask"):
+        wb = [man.i(b) for b in ("weapon", "bolt", "bipod") if b in man.ix and not (b in (getattr(man, "bag", {}) or {}))]
+        wv = np.isin(man.part, wb)
+        lo = getattr(man, "loose", None)
+        bv = ~wv if lo is None else (~wv & ~lo)
+        man._gmask = (bv, wv)
+    return man._gmask
+
+
+def _lift_curve(need, r=3):
+    """A lift that is at least `need` at every frame and smooth: the most over +-r frames, then a triangle mean."""
+    n = len(need)
+    d = np.array([need[max(0, i - r):i + r + 1].max() for i in range(n)])
+    w = np.array([r + 1 - abs(k) for k in range(-r, r + 1)], float)
+    out = np.zeros(n)
+    for i in range(n):
+        lo, hi = max(0, i - r), min(n, i + r + 1)
+        ww = w[lo - i + r:hi - i + r]
+        out[i] = float((d[lo:hi] * ww).sum() / ww.sum())
+    return np.maximum(out, need)
+
+
+def ground_clamp(man, frames, release, unarmed):
+    """No point of him more than a centimetre under the ground once the start is eased out (GROUND_TO): where the
+    near mesh dips under it (a boot's toe, a pouch, a pack the ragdoll's spheres do not cover) his pelvis, and so all
+    of him, is lifted by as much, smoothly over a few frames; the rifle, once it has left his hand, by its own. From
+    nothing at the first key (the start pose itself, whose own dips are the living clip's) to all of it at EASE.
+    Returns the largest lifts (body, rifle) in m. Frames changed."""
+    bv, wv = _masks(man)
+    rel = getattr(man, "bag_rel", None)
+    ts = np.array([t for t, _ in frames])
+    nb, nw = np.zeros(len(frames)), np.zeros(len(frames))
+    for i, (t, loc) in enumerate(frames):
+        lc = F.bag_place(man, loc, rel) if rel else loc
+        Gw, X = man.fk(lc)
+        P = man.skin(Gw, X)
+        nb[i] = max(0.0, GROUND_TO - float(P[bv, 2].min()))
+        if wv.any() and not unarmed:
+            nw[i] = max(0.0, GROUND_TO - float(P[wv, 2].min()))
+    # (the floor: at the first key as deep as the start pose itself goes (fire_kneel's toe is 8-10 cm under on every
+    # man), rising to GROUND_TO as the start is eased out; so the start pose's own dip, eased out with it, is never
+    # lifted out of (a first take lifted him 6 cm in his first 0.2 s for it, a bob), only the fall's own dips)
+    w0 = np.array([1.0 - sm(t / EASE) for t in ts])
+    nb = np.maximum(0.0, nb - (nb[0] * w0))
+    nw = np.maximum(0.0, nw - (nw[0] * w0))
+    lb = _lift_curve(nb)
+    held = np.array([1.0 if t < release else max(0.0, 1.0 - (t - release) / 0.2) for t in ts])
+    lw = _lift_curve(np.maximum(nw * (1.0 - held), lb * held))
+    lb[0] = lw[0] = 0.0
+    for i, (t, loc) in enumerate(frames):
+        loc = dict(loc)
+        if lb[i] > 0.0:
+            q, mv = loc["pelvis"]
+            loc["pelvis"] = (q, (np.zeros(3) if mv is None else np.asarray(mv, float)) + np.array((0.0, 0.0, lb[i])))
+        if lw[i] > 0.0 and "weapon" in loc:
+            q, mv = loc["weapon"]
+            loc["weapon"] = (q, (np.zeros(3) if mv is None else np.asarray(mv, float)) + np.array((0.0, 0.0, lw[i])))
+        frames[i] = (t, loc)
+    return round(float(lb.max()), 4), round(float(lw.max()), 4)
 
 
 ROLL_SHARE = {"pelvis": 1.0, "spine_01": 1.0, "spine_02": 1.0, "chest": 1.0, "neck": 1.0, "head": 1.0,
@@ -881,7 +1167,7 @@ def simulate(man, rd, rc):
     hit = hit_of_recipe(rc)
     if rc.get("wound"):
         # (where he was struck, as the `hit` block has it, where it is on him now)
-        at = hit_point(man, hit["bone"], np.array(hit["push"]), Gs[man.i(hit["bone"])])
+        at = hit_point(man, hit["bone"], np.array(hit["push"]), Gs[man.i(hit["bone"])], hit["side"])
         ctx.wound = Xs[man.i(hit["bone"])] + Gs[man.i(hit["bone"])] @ (at - man.head[man.i(hit["bone"])])
         ctx.wound = ctx.wound + np.array((0.0, 0.0, lift))
     drive = None
@@ -898,7 +1184,9 @@ def simulate(man, rd, rc):
     f.throw = np.array(rc.get("throw", (0.0, 0.0, 0.0)), float)
     f.throw_w = np.array(rc.get("throw_spin", (0.0, 6.0, 2.0)), float)
     own = [(t, rd.pix[p], np.array(dv, float) * rc.get("push_scale", 1.0)) for (t, p, dv) in rc.get("later_own", [])]
-    tch = Touch(f, drive, after=rc.get("t_min", 1.0) - 0.2, own=own, t_end=rc.get("t_max", 4.0))
+    spin = [(t, rd.pix[p], np.array(w, float) * rc.get("push_scale", 1.0)) for (t, p, w) in rc.get("spin", [])]
+    tch = Touch(f, drive, after=rc.get("t_min", 1.0) - 0.2, own=own, t_end=rc.get("t_max", 4.0),
+                settle=rc.get("settle"), cap=rc.get("cap"), spin=spin)
     f.run(t_max=rc.get("t_max", 4.0), t_min=rc.get("t_min", 1.0), settle=SETTLE, on_step=tch.step)
     rest = bool(f.still >= SETTLE)
     F._trim(f, rc.get("t_min", 1.0))
@@ -906,6 +1194,8 @@ def simulate(man, rd, rc):
             "frame lies still" % (TOOL, clip, t0, rc["kind"], ABOUT_EACH[rc["name"]]))
     frames = [(t, F.frame_local(rd, R, H, t, None)) for (t, R, H) in f.rec]
     ease_in(man, frames, start_loc)
+    hold_end(frames)
+    lifts = ground_clamp(man, frames, rc.get("release", 0.1), rd.unarmed)
     c = F.clip_from(man, frames, note, events_of(f, rd, tch, down0))
     ease_chain(man, c, start_loc)
     c["start"] = [clip, t0]
@@ -913,6 +1203,7 @@ def simulate(man, rd, rc):
     kv, kw = int(np.argmax(np.linalg.norm(f.v, axis=1))), int(np.argmax(np.linalg.norm(f.w, axis=1)))
     ctx.note["end_fastest"] = [rd.parts[kv], round(float(np.linalg.norm(f.v[kv])), 3), rd.parts[kw],
                                round(float(np.linalg.norm(f.w[kw])), 2)]
+    ctx.note["ground_lift_m"] = list(lifts)
     info = dict(rest=rest, lift=round(lift, 3), note=ctx.note,
                 rifle_land=None if f.weapon_land is None else [round(float(v), 3) for v in f.weapon_land[1]])
     return c, f, info
@@ -922,20 +1213,25 @@ ABOUT_EACH = {
     "die_prone_d": "struck in the left side, he rolls half onto his right side (the blow, and joints driven: his left "
                    "hand planted and pushing, the back turning that side up, the left knee drawn up), then the arm "
                    "gives and he sinks back onto his front",
-    "die_prone_e": "he kicks and arches (a spasm; joints driven: the elbows straightened under him, back and neck "
-                   "straightened, the head wrenched round, the thighs lifted, the knees kicking in turn), then goes "
-                   "limp",
+    "die_prone_e": "he arches and kicks (a spasm, 0.07 s, throws his chest and back up; joints driven: the elbows "
+                   "straightened under him, the back arched 15 degrees, the head wrenched round, each knee kicking "
+                   "30-45 degrees, twice, over by 0.65 s), then goes limp",
     "die_prone_f": "his right hand goes to the wound under him (the blow and joints driven: he heaves half onto his "
                    "left side, the arm to the struck point, the right knee drawn up, the back curling), then he is "
                    "still",
-    "die_prone_g": "he pushes up slowly on his arms (joints driven: hands planted, arms straightening), fails and "
-                   "sinks onto his face",
-    "die_cover_d": "struck in the left shoulder, he slides down onto his heel (his legs going; joints driven: the "
-                   "knee under him folding, the trunk held up and sagging to his right, that shoulder dragging down), "
-                   "then tips over",
-    "die_cover_e": "a hard blow to the chest from in front throws him over backwards, knees bent",
-    "die_cover_f": "struck in the head, it snaps back and he folds forward and down where he is (his weight going "
-                   "forward; joints driven: back and hips folding as the knee under him gives)",
+    "die_prone_g": "struck from behind in the right shoulder, that arm is knocked out from under him and his chest "
+                   "rolls onto it; he gathers his hands under him and pushes up slowly (joints driven, the drive "
+                   "ramped up from 0.3 to 0.9 s, the arms' turn capped at 600 degrees a second), fails and sinks onto "
+                   "his face",
+    "die_cover_d": "struck in the left shoulder (knocked back and round), he sinks down where he knelt (his legs "
+                   "going; joints driven: the knee under him folding part way, the trunk held up over his knees and "
+                   "sagging to his right), then a shove of his own weight at 0.7 s tips him over onto his right side "
+                   "and front, his legs going slack",
+    "die_cover_e": "a blow to the chest from in front (and the head snapped back) knocks him off his cover: his legs "
+                   "give, he sits back and goes over backwards, the knees bent and then let down (damped from 1 s)",
+    "die_cover_f": "struck in the head, it snaps back with a jerk of his shoulders, his legs give at once and he "
+                   "folds forward and down where he is (his weight going forward and down at 0.25 s; joints driven: "
+                   "back and hips folding, the knee under him folding, the raised left knee held up to 1.2 s)",
 }
 
 
@@ -1061,20 +1357,41 @@ def table_with(deaths):
 _ROM = {}
 
 
+_START_ROM = {}
+
+
+def start_rom(man, start):
+    """rom.py's faults of the named start pose itself, held still: {key+side: value}."""
+    key = (id(man), start[0], float(start[1]))
+    if key not in _START_ROM:
+        loc = man.local_at(start[0], float(start[1]))
+        c = F.clip_from(man, [(0.0, dict(loc)), (0.5, dict(loc))], "start pose", [])
+        _START_ROM[key] = {r["key"] + r["side"]: float(r["value"]) for r in F.rom_check(man, c)["faults"]}
+    return _START_ROM[key]
+
+
 def rom_faults(man, c):
-    """rom.py's faults of a clip (falls.rom_check), and which of them the start pose itself has (the first EASE
-    seconds are the file's own start pose easing out). None if rom.py is not there."""
+    """rom.py's faults of a clip (falls.rom_check), and which of them the start pose itself has: the same joint
+    measure over its limit in the named start pose held still, and no further over in the fall than it is there
+    (a fault the fall makes, early or late, is the fall's). None if rom.py is not there."""
     try:
         import rom  # noqa: F401
     except Exception as e:                           # (not beside the tools: said, not hidden)
         return None
     rep = F.rom_check(man, c)
+    st = start_rom(man, c["start"])
     out = []
     for r in rep["faults"]:
-        out.append({"key": r["key"] + r["side"], "value": round(float(r["value"]), 1), "limit": r["limit"],
-                    "t": r["t"], "in_start_pose": bool(r["t"] <= EASE + 1e-6)})
+        k = r["key"] + r["side"]
+        out.append({"key": k, "value": round(float(r["value"]), 1), "limit": r["limit"], "t": r["t"],
+                    "in_start_pose": bool(k in st and float(r["value"]) <= st[k] + 1.0)})
     fast = [(n, d["deg_s"], d["t"]) for n, d in rep["fast"]]
     return {"faults": out, "fast": fast}
+
+
+def rom_late(ch):
+    """The range-of-motion faults a fall makes (not the start pose's own)."""
+    return [r for r in (ch.get("rom") or {}).get("faults", []) if not r["in_start_pose"]]
 
 
 def first_key_check(man, c):
@@ -1110,12 +1427,37 @@ def end_check(man, rd, c):
     g["flat"] = bool(g["chest_z"] < LIE_MAX and g["head_z"] < HEAD_MAX)
     g["last_0.2s_cm"] = round(100.0 * mv, 2)
     g["last_0.2s_deg"] = round(tn, 2)
-    g["still"] = bool(100.0 * mv <= STILL_CM and tn <= STILL_DEG)
+    # (and the review's bar: the last 5 keys at 30 a second, every skinned point (the whip too) within STILL_MM of
+    # the last frame)
+    Pl = man.skin(G1, X1)
+    m5 = 0.0
+    for k in range(1, 5):
+        Gk, Xk = pose_at(man, c, max(0.0, L - k / 30.0))
+        m5 = max(m5, float(np.linalg.norm(man.skin(Gk, Xk) - Pl, axis=1).max()))
+    g["last5_mm"] = round(1000.0 * m5, 2)
+    g["still"] = bool(100.0 * mv <= STILL_CM and tn <= STILL_DEG and 1000.0 * m5 <= STILL_MM)
     wp = X1[man.i("weapon")]
-    g["rifle"] = None if rd.unarmed else {
-        "at": [round(float(v), 3) for v in wp], "from_pelvis_m": round(float(np.linalg.norm((wp - X1[man.i("pelvis")])[:2])), 2),
-        "z": round(float(wp[2]), 3), "on_ground": bool(wp[2] < 0.12)}
+    if rd.unarmed:
+        g["rifle"] = None
+    else:
+        # (on the ground: its own mesh's lowest point at the ground and its middle low, lying, not propped on him.
+        # Read from the mesh, not the bone: the bazooka's bone rides 0.12 m over the ground on a tube lying flat)
+        W = man.skin(G1, X1)[man.part == man.i("weapon")]
+        lo, mid = float(W[:, 2].min()), float(W[:, 2].mean())
+        g["rifle"] = {"at": [round(float(v), 3) for v in wp],
+                      "from_pelvis_m": round(float(np.linalg.norm((wp - X1[man.i("pelvis")])[:2])), 2),
+                      "z": round(float(wp[2]), 3), "mesh_low_z": round(lo, 3), "mesh_mid_z": round(mid, 3),
+                      "on_ground": bool(lo < RIFLE_LOW and mid < RIFLE_MID)}
     return g
+
+
+def ahead_check(man, c):
+    """Which way he ends lying, in his own axes at the first key: his head bone's head forward of his pelvis's by at
+    least AHEAD_MIN. A man who "slumps forward over his cover" ends with his head toward it; one who went down
+    sideways or backwards off his knee and only then rolled onto his face ends with it beside or behind his hips."""
+    G, X = pose_at(man, c, c["long"])
+    v = float(X[man.i("head")][0] - X[man.i("pelvis")][0])
+    return {"head_ahead_of_pelvis_m": round(v, 3), "ok": bool(v >= AHEAD_MIN)}
 
 
 def travel_check(man, c):
@@ -1133,6 +1475,78 @@ def travel_check(man, c):
             "head_forward_max_m": round(mh, 3), "ok": bool(mc < TRAVEL_MAX)}
 
 
+LIMBS = {"hand_l": ("hand_l", "fingers_l", "thumb_l"), "hand_r": ("hand_r", "fingers_r", "thumb_r"),
+         "foot_l": ("foot_l", "ball_l"), "foot_r": ("foot_r", "ball_r")}
+
+
+def late_check(man, c, t_from):
+    """A limb that moves again once he has been still: every 0.1 s from t_from, the most any point of him (not the
+    rifle) moved; when that has stayed under 2 cm for LATE_STILL, nothing may move LATE_MOVE or more in a 0.1 s
+    after (a leg left standing and then thrown over, an arm let go and flicking: a puppet's). Also how high each
+    hand and foot ends (its lowest point) and each knee (the calf bone's head), and the knees' and feet's fastest
+    0.1 s in the last second."""
+    bv, wv = _masks(man)
+    L = c["long"]
+    ts = list(np.arange(max(0.0, t_from), L + 1e-6, 0.1))
+    if not ts or ts[-1] < L - 1e-6:
+        ts.append(L)
+    prev, steps = None, []
+    for t in ts:
+        Gw, X = pose_at(man, c, t)
+        P = man.skin(Gw, X)[bv]
+        if prev is not None:
+            d = np.linalg.norm(P - prev, axis=1)
+            steps.append((round(float(t), 2), float(d.max())))
+        prev = P
+    still_at, again = None, []
+    n = int(round(LATE_STILL / 0.1))
+    for i in range(len(steps) - n + 1):
+        if all(s[1] < 0.02 for s in steps[i:i + n]):
+            still_at = steps[i][0] - 0.1
+            break
+    if still_at is not None:
+        again = [(t, round(100.0 * d, 1)) for t, d in steps if t > still_at + LATE_STILL + 1e-6 and d >= LATE_MOVE]
+    G1, X1 = pose_at(man, c, L)
+    P1 = man.skin(G1, X1)
+    low = {k: round(float(P1[np.isin(man.part, [man.i(b) for b in bs if b in man.ix]), 2].min()), 3)
+           for k, bs in LIMBS.items()}
+    knees = {s: round(float(X1[man.i("calf_" + s)][2]), 3) for s in "lr"}
+    sp = 0.0
+    for t in np.arange(max(0.0, L - 1.0), L - 0.1 + 1e-6, 0.1):
+        Ga, Xa = pose_at(man, c, t)
+        Gb, Xb = pose_at(man, c, t + 0.1)
+        for b in ("calf_l", "calf_r", "foot_l", "foot_r"):
+            sp = max(sp, float(np.linalg.norm(Xb[man.i(b)] - Xa[man.i(b)])))
+    return {"still_from": still_at, "moves_again": again[:6], "ok": not again, "limb_low_m": low,
+            "knee_z": knees, "legs_last_1s_cm": round(100.0 * sp, 2)}
+
+
+def shape_check(man, c, want):
+    """Where and how he ends against where he started (his own axes at the first key): the pelvis's travel back
+    (-x) and to the side, the line from his pelvis to his head on the ground against forward (degrees), and what a
+    recipe's `ends` asks of it (see MORE)."""
+    G0, X0 = pose_at(man, c, 0.0)
+    G1, X1 = pose_at(man, c, c["long"])
+    ip, ih = man.i("pelvis"), man.i("head")
+    d = X1[ip] - X0[ip]
+    ax = X1[ih] - X1[ip]
+    yaw = math.degrees(math.atan2(float(ax[1]), float(ax[0])))
+    fr = front_check(man, c)
+    out = {"pelvis_back_m": round(-float(d[0]), 3), "pelvis_side_m": round(float(d[1]), 3), "axis_deg": round(yaw, 1),
+           "head_ahead_m": round(float(ax[0]), 3), "faults": []}
+    if "back_max" in want and -float(d[0]) > want["back_max"]:
+        out["faults"].append("pelvis %.2f m back (%.2f at most)" % (-float(d[0]), want["back_max"]))
+    if "side_max" in want and abs(float(d[1])) > want["side_max"]:
+        out["faults"].append("pelvis %.2f m to the side (%.2f at most)" % (float(d[1]), want["side_max"]))
+    if "axis_max" in want and abs(yaw) > want["axis_max"]:
+        out["faults"].append("lies %.0f deg off forward (%.0f at most)" % (yaw, want["axis_max"]))
+    if want.get("right_or_front") and not (fr["chest_front_z"] <= 0.25 and fr["roll_deg"] >= -20.0):
+        out["faults"].append("ends on his back or left side (chest front %.2f down, roll %.0f)" % (
+            -fr["chest_front_z"], fr["roll_deg"]))
+    out["ok"] = not out["faults"]
+    return out
+
+
 def checks_of(man, rd, rc, c, info):
     """Every check of one new clip (but the opening table, which needs its row)."""
     out = {"long": c["long"], "start": c["start"], "end_offset": c["end_offset"], "events": [(e["fx"], e["t"]) for e in c["events"]],
@@ -1145,8 +1559,23 @@ def checks_of(man, rd, rc, c, info):
     out["reacts"] = reacting(mv, out["lift_cm"])
     if rc.get("travel"):
         out["travel"] = travel_check(man, c)
+    if rc.get("ahead"):
+        out["ahead"] = ahead_check(man, c)
     out["front"] = front_check(man, c)
     out["front"]["required"] = bool(rc.get("face_down"))
+    lt = late_check(man, c, rc.get("t_min", 1.0))
+    want = rc.get("ends", {})
+    if want.get("limbs_low"):
+        hi = [k for k, z in lt["limb_low_m"].items() if z > LIMB_LOW]
+        if hi:
+            lt["ok"] = False
+            lt["limbs_high"] = hi
+    if want.get("legs_settled"):
+        if max(lt["knee_z"].values()) > KNEE_LOW or lt["legs_last_1s_cm"] >= 100.0 * LATE_SPEED:
+            lt["ok"] = False
+            lt["legs_not_settled"] = True
+    out["late"] = lt
+    out["shape"] = shape_check(man, c, want)
     return out
 
 
@@ -1167,13 +1596,17 @@ def front_check(man, c):
 
 def passes(ch):
     """Whether a try is inside the checks a retry can mend (flat, still, reacting, the first key, the travel, the
-    rifle on the ground, opening apart from the file's own falls of its row). Still is read from the baked keys (the
+    rifle on the ground, opening apart from the file's own falls of its row, no joint past rom.py's range that the
+    start pose was not already past; the try with the fewest and smallest is kept when none is inside: see score).
+    Still is read from the baked keys (the
     last 0.2 s); `came_to_rest` (ragdoll.py's own measure held for SETTLE before the longest time allowed) is kept
     beside it as a note: a hand pressed under him can tremble on unseen."""
     g = ch["ground"]
     return bool(g["flat"] and g["still"] and ch["reacts"] and ch["first_key"]["ok"]
-                and g["under_1cm"] <= 60 and ch.get("travel", {"ok": True})["ok"] and front_ok(ch)
-                and (g["rifle"] is None or g["rifle"]["on_ground"]) and not ch.get("too_like_old"))
+                and g["under_1cm"] == 0 and ch.get("travel", {"ok": True})["ok"] and front_ok(ch)
+                and (g["rifle"] is None or g["rifle"]["on_ground"]) and not ch.get("too_like_old")
+                and ch.get("ahead", {"ok": True})["ok"] and not rom_late(ch)
+                and ch.get("late", {"ok": True})["ok"] and ch.get("shape", {"ok": True})["ok"])
 
 
 def score(ch):
@@ -1181,9 +1614,13 @@ def score(ch):
     return ((0 if g["flat"] else 4) + (0 if g["still"] else 2) + (0 if ch["reacts"] else 2)
             + (0 if ch.get("travel", {"ok": True})["ok"] else 3) + (0 if ch["first_key"]["ok"] else 1)
             + (0 if front_ok(ch) else 3)
-            + (0 if g["under_1cm"] <= 60 else 1)
+            + (0 if ch.get("ahead", {"ok": True})["ok"] else 3)
+            + (0 if ch.get("shape", {"ok": True})["ok"] else 2 + len(ch["shape"]["faults"]))
+            + (0 if ch.get("late", {"ok": True})["ok"] else 2)
+            + (0 if g["under_1cm"] == 0 else 1)
             + (0 if g["rifle"] is None or g["rifle"]["on_ground"] else 1)
-            + (1 if ch.get("too_like_old") else 0))
+            + (1 if ch.get("too_like_old") else 0)
+            + min(2.0, sum(r["value"] - r["limit"] for r in rom_late(ch)) / 10.0))
 
 
 _OLD_OPEN = {}
@@ -1217,11 +1654,23 @@ def side_of(push):
     return "left" if y > 0 else "right"
 
 
+# Old falls whose first blow is no round's (falls.py's lying falls): die_prone_a's is a jerk up of his head and chest
+# (-0.3, 0, 0.6), die_crawl_c's a lift of his head straight up (0, 0, 0.3); level, the one is a round from in front and
+# the other nothing at all. Both are struck in the head from in front ("the head drops").
+HIT_OF = {"die_prone_a": ("head", (-1.0, 0.0, 0.0)), "die_crawl_c": ("head", (-1.0, 0.0, 0.0))}
+
+
 def hit_of_recipe(rc):
-    """A recipe's hit: {bone, push (unit), from, side[, blast]} (no `at` yet: that is each man's own)."""
+    """A recipe's hit: {bone, push (unit), from, side[, blast]} (no `at` yet: that is each man's own). A round comes
+    level or from above, never from under the ground: the first blow's up (a lying man's heave or jerk up, his own) is
+    left out, for every recipe (the 39 of falls.py and the seven); a blast keeps its throw up (the burst is on the
+    ground)."""
     kind = rc["kind"]
     r = rc["fall"] if kind == "crawl" else rc
-    if rc.get("hit"):
+    if rc["name"] in HIT_OF:
+        bone, dv = HIT_OF[rc["name"]]
+        blast = False
+    elif rc.get("hit"):
         bone, dv, blast = rc["hit"][0], rc["hit"][1], False      # (the seven: the round's own blow, see MORE)
     elif "blast" in r and not r.get("push"):
         bone, dv, blast = "chest", r["blast"], True
@@ -1231,11 +1680,31 @@ def hit_of_recipe(rc):
     if rc["name"].startswith("die_leg_") and rc.get("tone_part") and not rc.get("hit"):
         bone = next(iter(rc["tone_part"]))            # (the leg taken from under him: its thigh, as the README has it)
     v = np.array(dv, float)
-    u = v / max(float(np.linalg.norm(v)), 1e-9)
+    if not blast:
+        v[2] = min(v[2], 0.0)
+    if float(np.linalg.norm(v)) < 1e-9:
+        v = np.array((-1.0, 0.0, 0.0))
+    u = v / float(np.linalg.norm(v))
     h = {"bone": bone, "side": side_of(u), "push": [round(float(x), 3) for x in u], "from": kind}
     if blast or kind == "thrown":
         h["blast"] = True
     return h
+
+
+def kind_agrees(kind, h):
+    """Whether a pick of this kind agrees with a clip's `hit` (see KIND_SIDES; thrown: a blast; head, gut and leg: the
+    bone; knees and crawl: any)."""
+    if kind in KIND_SIDES:
+        return h["side"] in KIND_SIDES[kind]
+    if kind == "thrown":
+        return bool(h.get("blast"))
+    if kind == "head":
+        return h["bone"] in ("head", "neck")
+    if kind == "gut":
+        return h["bone"] in ("pelvis", "spine_01", "spine_02")
+    if kind == "leg":
+        return h["bone"].startswith(("thigh", "calf", "foot"))
+    return True
 
 
 # The deaths that have no recipe: the three older takes (the README's words: die_back "hit in front, the feet go from
@@ -1250,15 +1719,25 @@ OLD_TAKES = {
 SEAT = {"bone": "chest", "side": "front", "push": [-1.0, 0.0, 0.0], "from": "back", "seat": True}
 
 
-def hit_point(man, bone, push, G0):
-    """A point of the bone's own surface on the struck side, in the rest pose's axes: see the module's note."""
+SIDE_DIR = {"front": (1.0, 0.0, 0.0), "back": (-1.0, 0.0, 0.0), "left": (0.0, -1.0, 0.0), "right": (0.0, 1.0, 0.0)}
+
+
+def hit_point(man, bone, push, G0, side=None):
+    """A point of the bone's own surface on the struck side, in the rest pose's axes: see the module's note. Taken
+    among the bone's points at least HIT_FACE of the way out on the struck face (`side`, his own axes at the first
+    key), so a round that comes in aslant (a lying man's upper arm struck from behind and to his right) is put on that
+    face, not round the corner of the bone."""
     b = man.i(bone)
     pts = man.P[man.part == b]
     if not len(pts):
         return man.head[b].copy()
+    mid = pts.mean(0)
+    if side in SIDE_DIR:
+        e = G0.T @ np.array(SIDE_DIR[side])
+        s = (pts - mid) @ e
+        pts = pts[s >= HIT_FACE * float(s.max())]
     d = G0.T @ (-np.asarray(push, float))             # (toward the gun, in the bone's rest frame)
     d = d / max(float(np.linalg.norm(d)), 1e-9)
-    mid = pts.mean(0)
     s = (pts - mid) @ d
     cap = pts[s >= s.max() - HIT_CAP]
     off = (cap - mid) - np.outer((cap - mid) @ d, d)
@@ -1287,7 +1766,7 @@ def hits_of(man, clips, new_recipes=()):
             left.append(n)
             continue
         G0, X0 = pose_at(man, clips[n], 0.0)
-        at = hit_point(man, h["bone"], np.array(h["push"]), G0[man.i(h["bone"])])
+        at = hit_point(man, h["bone"], np.array(h["push"]), G0[man.i(h["bone"])], h["side"])
         blk = {"bone": h["bone"], "side": h["side"], "at": [round(float(v), 4) for v in at], "push": h["push"],
                "from": h["from"]}
         for k in ("blast", "seat"):
@@ -1301,13 +1780,13 @@ ABOUT = (
     "More deaths and where each was struck (Tools/battle_units/falls_more.py on the ragdoll of falls.py and "
     "ragdoll.py; for the effects team, 25 November 2026). Seven more physics falls for men shot lying or in cover, "
     "each opening its own way and reacting in its first 0.3 s, in the `deaths` table after the ones it had: "
-    "die_prone_d (struck in the left side, rolls half onto his right side, sinks back), die_prone_e (kicks and "
-    "arches, goes limp), die_prone_f (his right hand goes to the wound under him, then still), die_prone_g (pushes up "
-    "slowly on his arms, fails, sinks onto his face), die_cover_d (slides down onto his heel, a shoulder "
-    "dragging down, tips over), die_cover_e (thrown back off his cover, over backwards with the knees bent), "
-    "die_cover_f (struck in the head, folds forward and down; its chest bone goes at most 0.35 m forward of where it "
-    "started: the clip cannot know the cover in front of him). Their first key is the `start` pose itself (every "
-    "bone). Events as the other deaths': knee_down, body_fall, rifle_drop, elbow_down, at the moment they touch. "
+    "die_prone_d (struck in the left side, rolls half onto his right side, sinks back), die_prone_e (arches and "
+    "kicks, goes limp), die_prone_f (his right hand goes to the wound under him, then still), die_prone_g (his right "
+    "arm knocked from under him, pushes up slowly on his arms, fails, sinks onto his face), die_cover_d (struck in the "
+    "left shoulder, sinks where he knelt, tips over onto his right side and front), die_cover_e (knocked back off his "
+    "cover, over backwards with the knees bent), die_cover_f (struck in the head, folds forward and down; see its "
+    "checks for where he ends: the clip cannot know the cover in front of him). Their first key is the `start` pose itself (every "
+    "bone); their last 0.4 s eased into the last pose and held (the last keys still). Events as the other deaths': knee_down, body_fall, rifle_drop, elbow_down, at the moment they touch. "
     "Every die_* clip carries `hit`: bone (the bone struck), side (front, back, left or right: the face of his body "
     "struck, in his own axes at the clip's first key), at ([x, y, z], a point of that bone's surface on that side in "
     "the rest pose's axes: skin it with `bone` alone and it rides on him), push ([x, y, z] unit, his own axes at the "
@@ -1322,6 +1801,7 @@ _W = {}
 def _init(path):
     F._BODY.clear()                                  # (falls.rom_check keys its body by id(man): a new man may reuse it)
     _OLD_OPEN.clear()                                # (and too_like_old the same)
+    _START_ROM.clear()                               # (and start_rom)
     F._init(path)
     _W["m"], _W["rd"], _W["path"] = F._W["m"], F._W["rd"], path
 
@@ -1330,6 +1810,7 @@ def _job(rc):
     """One recipe on the worker's man: tried as it is, then with its tries' changes while it is outside the checks;
     the first inside them is kept, else the nearest."""
     m, rd = _W["m"], _W["rd"]
+    rc = dict(rc, start=start_for(m, rc))
     st = rc["start"]
     m.bag_rel = F.bag_rel(m, st[0], st[1], m.bag) if m.bag else None
     best = None
@@ -1471,12 +1952,21 @@ def faults_of(name, bundle):
         if not g["flat"]:
             out.append("%s %s: not flat at the end (chest %.2f m, head %.2f m)" % (name, n, g["chest_z"], g["head_z"]))
         if not g["still"]:
-            out.append("%s %s: not still at the end (%.1f cm, %.1f deg in the last 0.2 s)" %
-                       (name, n, g["last_0.2s_cm"], g["last_0.2s_deg"]))
-        if g["under_1cm"] > 60:
+            out.append("%s %s: not still at the end (%.1f cm, %.1f deg in the last 0.2 s; %.1f mm in the last 5 keys)"
+                       % (name, n, g["last_0.2s_cm"], g["last_0.2s_deg"], g.get("last5_mm", -1.0)))
+        lt = ch.get("late")
+        if lt and not lt["ok"]:
+            out.append("%s %s: late limbs: %s" % (name, n, json.dumps(
+                {k: lt[k] for k in ("moves_again", "limbs_high", "legs_not_settled", "knee_z", "legs_last_1s_cm")
+                 if k in lt and lt[k]})))
+        sh = ch.get("shape")
+        if sh and not sh["ok"]:
+            out.append("%s %s: ends: %s" % (name, n, "; ".join(sh["faults"])))
+        if g["under_1cm"] > 0:
             out.append("%s %s: %d points more than 1 cm under the ground (lowest %.3f m)" % (name, n, g["under_1cm"], g["min_z"]))
         if g["rifle"] is not None and not g["rifle"]["on_ground"]:
-            out.append("%s %s: the rifle ends %.2f m up" % (name, n, g["rifle"]["z"]))
+            out.append("%s %s: the rifle does not end on the ground (its lowest point %.2f m up, its middle %.2f m)" % (
+                name, n, g["rifle"].get("mesh_low_z", g["rifle"]["z"]), g["rifle"].get("mesh_mid_z", g["rifle"]["z"])))
         if not ch["first_key"]["ok"]:
             out.append("%s %s: first key %.1f deg off the start pose (%s)" % (name, n, ch["first_key"]["deg"], ch["first_key"]["bone"]))
         if not ch["reacts"]:
@@ -1486,6 +1976,10 @@ def faults_of(name, bundle):
             out.append("%s %s: opens too like %s" % (name, n, ", ".join(ch["too_like"])))
         if "travel" in ch and not ch["travel"]["ok"]:
             out.append("%s %s: chest goes %.2f m forward (%.2f at most)" % (name, n, ch["travel"]["chest_forward_max_m"], TRAVEL_MAX))
+        if "ahead" in ch and not ch["ahead"]["ok"]:
+            v = ch["ahead"]["head_ahead_of_pelvis_m"]
+            out.append("%s %s: ends with his head %.2f m %s his hips (%.2f m forward at least): he did not slump "
+                       "forward" % (name, n, abs(v), "forward of" if v >= 0 else "behind", AHEAD_MIN))
         if not front_ok(ch):
             out.append("%s %s: ends on his %s, not his front (chest front %.2f down, roll %.0f deg)" % (
                 name, n, "back" if ch["front"]["chest_front_z"] > 0.3 else "side", -ch["front"]["chest_front_z"],
@@ -1516,6 +2010,7 @@ def report_line(name, bundle, secs=None):
             n[4:], ch["long"], ch["tries"], g["chest_z"], g["head_z"], g["under_1cm"], ch["first_key"]["deg"],
             "/".join("%.0f" % v for v in ch["opening"]["most"]),
             ((" fwd %.2f" % ch["travel"]["chest_forward_max_m"]) if "travel" in ch else "")
+            + ((" ahead %.2f" % ch["ahead"]["head_ahead_of_pelvis_m"]) if "ahead" in ch else "")
             + ((" ends front %.2f roll %.0f" % (-ch["front"]["chest_front_z"], ch["front"]["roll_deg"])) if "front" in ch else "")))
     fl = faults_of(name, bundle)
     return "%s%s  %s  hits %d  %s" % (name, (" %.0f s" % secs) if secs is not None else "", " | ".join(parts),
@@ -1546,7 +2041,8 @@ def print_table(name, table):
 # ------------------------------------------------------------------------------------------------ apply, check, deliver
 def merged(data, bundle):
     """A soldier file's data with a bundle merged in: the seven clips (replacing ones of those names), the table's
-    additions after its own lists, `hit` on every die_* clip, `about_falls_more`. Nothing else changes."""
+    additions after its own lists, `hit` on every die_* clip. Nothing else changes (no new top-level key: the
+    bundle's `about` is for the README; a first pass also wrote it to the file as `about_falls_more`)."""
     for n, c in bundle["clips"].items():
         data["clips"].pop(n, None)
     for n, c in bundle["clips"].items():
@@ -1562,7 +2058,6 @@ def merged(data, bundle):
     for n, h in bundle["hit"].items():
         if n in data["clips"]:
             data["clips"][n]["hit"] = h
-    data["about_falls_more"] = bundle["about"]
     return data
 
 
@@ -1590,7 +2085,7 @@ def only_added(before, after, bundle):
     """Whether `after` is `before` with nothing changed but what a bundle adds: a list of what else differs."""
     bad = []
     for k in set(before) | set(after):
-        if k in ("clips", "deaths", "about_falls_more"):
+        if k in ("clips", "deaths"):
             continue
         if before.get(k) != after.get(k):
             bad.append("key " + k)
@@ -1640,7 +2135,7 @@ def check_staged(names, src, stage, tables=("GER", "USA", "JAP")):
                     "lift": ck[n]["lift_cm"] / 100.0}
             st = rc["start"]
             again = checks_of(man, rd, rc, c, info)
-            for k in ("ground", "first_key", "opening", "reacts", "travel", "front"):
+            for k in ("ground", "first_key", "opening", "reacts", "travel", "ahead", "front", "late", "shape"):
                 if again.get(k) != ck[n].get(k):
                     bad.append("%s %s: staged check differs from the keys" % (n, k))
         man2 = RG.Man(after)
@@ -1677,9 +2172,14 @@ def deliver(names, stage, content=False):
             print(nm, "not staged: skipped", flush=True)
             continue
         bundle = json.load(open(bp))
-        targets = [(SHARED, "shared")] + ([(CONTENT, "content")] if content else [])
-        for folder, tag in targets:
-            path = os.path.join(folder, "soldier_%s.json" % nm)
+        targets = [(os.path.join(SHARED, "soldier_%s.json" % nm), "shared")]
+        if content:
+            # (the game reads the detail rifleman from Content/Models/Soldiers/Detail/soldier_<ARMY>.json, LandBattle's
+            # detail men; the shared folder keeps him as soldier_GER_detail.json)
+            cp = (os.path.join(CONTENT, "Detail", "soldier_%s.json" % nm[:-len("_detail")]) if nm.endswith("_detail")
+                  else os.path.join(CONTENT, "soldier_%s.json" % nm))
+            targets.append((cp, "content"))
+        for path, tag in targets:
             if not os.path.exists(path):
                 print(nm, tag, "no file there: skipped", flush=True)
                 continue

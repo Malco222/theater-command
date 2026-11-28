@@ -1268,6 +1268,7 @@ def loop_weights(K, st, exclude=(), ramp=0.07):
     Wl[order], sl[order] = W, slip
     return Wl, sl, chain
 
+
 # ======================================================================================= the American tank commander
 # Tints (the game draws paint x shade x tint; these are the kit's own darkness on paints that are there).
 USA_CUP = 0.50          # the earphones' rubber cups, on steel: near black
@@ -1292,9 +1293,15 @@ USA_HOLSTER_CLEAR = 0.004
 USA_BACK_STATIONS = {"mid": 10, "far": 7}
 USA_STRAP_NOT = ("neck",)                                       # bones the holster's strap never rides
 USA_SWAP = "jump"                                               # how its pair of bones changes (chain_weights)
-USA_ARM_SIDE = (-0.07, 0.08)       # (y under, x under): his left side and the left of his back below the shoulder
+USA_ARM_SIDE = {"mid": (-0.055, 0.08), "far": (-0.07, 0.08)}
+                                   # (y under, x under): his left side and the left of his back below the shoulder
                                    # blade, where the left arm comes down against him in the bail; the coarse levels'
-                                   # strap stops short of it (their band stands 1 to 2 cm off the cloth)
+                                   # strap stops short of it (their band stands 1 to 2 cm off the cloth). Mid stops a
+                                   # station sooner: its band's left edge (1.6 cm past the station) met the left arm in
+                                   # bail_step_down by 7 mm when it stopped at -0.07
+USA_BACK_EASE = ("mid",)           # the levels whose straight run across the back has its weights eased (ease_run)
+USA_OFF_ARM_X = -0.04              # the coarse levels' straight run behind the shoulder rides his back, not his right
+                                   # arm, where its foot is behind this x
 USA_THIN_CLEAR = 0.008                                          # the glasses' strap's most lift clear of the cloth
 # The glasses' strap's way (its right half, from the back of the neck; the left is its mirror): round the back of the
 # neck over the collar, down the side of the chest to a point high on the breastbone
@@ -1317,8 +1324,10 @@ USA_GRIP_WAY = (0.92, 0.40, 0.0)           # the pistol's butt out of the mouth:
 
 # The holster strap's way round him (guide points about 1 cm off the cloth; the tool lays it on and pulls it taut):
 # from the top of the right shoulder, over its middle (y 0.17 to 0.18: the jacket's cloth nearer the collar rides the
-# neck, which the strap may not), down across the back on a long slant to his left hip, round his left side low (1.12
-# to 1.14 m at the front, clear of the pistol belt's left pouch and under the reach of the hanging left arm), forward
+# neck, which the strap may not), down across the back on a long slant to his left hip, round his left side low (its
+# middle 1.10 to 1.12 m at the front, just over the pistol belt and its left pouch, so that its upper edge stays under
+# the reach of the hanging left hand and forearm in idle and run: an upper edge at 1.13 to 1.14 m went 6 mm into the
+# left forearm in idle at 2.0 s), forward
 # and up to the holster's toe; the holster itself in the loop (the strap on its toe and on its mouth); from the mouth
 # up to the top of the chest and across it at the height of the armpit's top (1.42 m: there the jacket's share on the
 # upper arm changes across the chest, not up it, so one set of weights a cross-section serves both its edges), then up
@@ -1326,8 +1335,8 @@ USA_GRIP_WAY = (0.92, 0.40, 0.0)           # the pistol's butt out of the mouth:
 USA_STRAP_WAY = [(0.010, 0.176, 1.482), (-0.035, 0.162, 1.468), (-0.072, 0.118, 1.442), (-0.088, 0.075, 1.405),
                  (-0.121, 0.038, 1.370), (-0.117, 0.000, 1.335), (-0.106, -0.034, 1.298), (-0.105, -0.072, 1.258),
                  (-0.089, -0.109, 1.218), (-0.059, -0.136, 1.180), (-0.029, -0.151, 1.150), (0.003, -0.160, 1.127),
-                 (0.037, -0.162, 1.112), (0.073, -0.164, 1.116), (0.104, -0.145, 1.122), (0.125, -0.125, 1.126),
-                 (0.137, -0.106, 1.132), (0.145, -0.091, 1.140), (0.151, -0.079, 1.150), (0.156, -0.069, 1.170),
+                 (0.037, -0.162, 1.112), (0.073, -0.164, 1.106), (0.104, -0.145, 1.108), (0.125, -0.125, 1.112),
+                 (0.137, -0.106, 1.120), (0.145, -0.091, 1.132), (0.151, -0.079, 1.150), (0.156, -0.069, 1.170),
                  (0.161, -0.063, 1.200), (0.165, -0.056, 1.245), (0.164, -0.050, 1.285), (0.156, -0.041, 1.335),
                  (0.144, -0.017, 1.362), (0.131, 0.006, 1.388), (0.117, 0.026, 1.412), (0.112, 0.060, 1.420),
                  (0.104, 0.095, 1.424), (0.095, 0.125, 1.428), (0.086, 0.150, 1.436), (0.074, 0.168, 1.452),
@@ -1493,8 +1502,51 @@ def straight_back(K, ground, st, near_back, lift, stations=10):
     c = out["at"]
     out["along"] = unit(np.roll(c, -1, 0) - np.roll(c, 1, 0)) if out["closed"] else unit(np.gradient(c, axis=0))
     out["straight"] = (a, a + n_new)
+    out["is_straight"] = np.zeros(len(out["at"]), bool)
+    out["is_straight"][a:a + n_new] = True
     out["straight_standoff_mm"] = (round(float(h.min()) * 1000, 1), round(float(h.max()) * 1000, 1))
     return out
+
+
+def ease_run(W, idx):
+    """A strap's weights (one set a station) eased along a run of its stations (idx, in order): the run's two end
+    sets kept, and between them each end's bone that the other end does not have handed over in an even ramp to the
+    bone the two ends share, the end with the larger such share taking the longer ramp (all but the last station),
+    the other the last two steps; at most two bones a station. So the band across his back bends evenly when he
+    moves, instead of in steps where the fit changed its bones from one station to the next (the mid band's kink in
+    the hatch). A run whose ends share no bone is left as it was."""
+    W = np.array(W, float)
+    idx = np.asarray(idx, int)
+    n = len(idx)
+    if n < 4:
+        return W
+    A, B = W[idx[0]], W[idx[-1]]
+    common = np.where((A > 1e-6) & (B > 1e-6))[0]
+    if len(common) == 0:
+        return W
+    c = int(common[np.argmax(np.minimum(A[common], B[common]))])
+    ra = [int(x) for x in np.where(A > 1e-6)[0] if x != c]
+    rb = [int(x) for x in np.where(B > 1e-6)[0] if x != c]
+    if len(ra) > 1 or len(rb) > 1:
+        return W
+    sa = float(A[ra[0]]) if ra else 0.0
+    sb = float(B[rb[0]]) if rb else 0.0
+    k = np.arange(n, dtype=float)
+    if sa >= sb:                                  # (A's bone over all but the last step, B's over the last two)
+        fa = np.clip(1.0 - k / (n - 2), 0.0, 1.0)
+        fb = np.clip((k - (n - 3)) / 2.0, 0.0, 1.0)
+    else:
+        fa = np.clip(1.0 - k / 2.0, 0.0, 1.0)
+        fb = np.clip((k - 1.0) / (n - 2), 0.0, 1.0)
+    for j, i in enumerate(idx):
+        w = np.zeros(W.shape[1])
+        if ra:
+            w[ra[0]] += sa * fa[j]
+        if rb:
+            w[rb[0]] += sb * fb[j]
+        w[c] = 1.0 - w.sum()
+        W[i] = top_two(w[None])[0]
+    return W
 
 
 def usa_holster(K):
@@ -1522,7 +1574,7 @@ def usa_holster(K):
     if "straight" in st:                  # (the straight run behind his shoulder rides his back, not his right arm:
         a, b = st["straight"]             # the arm's share there bent the band in the hatch)
         st["off_arm"] = np.zeros(n, bool)
-        st["off_arm"][a:b] = foot[a:b, 0] < -0.04
+        st["off_arm"][a:b] = foot[a:b, 0] < USA_OFF_ARM_X
     # ---- over the top of the right shoulder the strap stands further off (the cloth there is pulled 2 to 4 times
     # its length when the arm moves): USA_SHOULDER over 11 cm of strap, eased back over 4 cm each side
     top = np.where(foot[:, 1] > 0.05)[0]
@@ -1560,7 +1612,7 @@ def usa_holster(K):
                 if foot[i, 0] > 0.035 and i > 2:
                     break
                 back[i] = True
-        arm = (foot[:, 1] < USA_ARM_SIDE[0]) & (foot[:, 0] < USA_ARM_SIDE[1])
+        arm = (foot[:, 1] < USA_ARM_SIDE[L][0]) & (foot[:, 0] < USA_ARM_SIDE[L][1])
         if arm[back].any():               # (the band stops at the first station where his left arm comes against him)
             back[int(np.where(back & arm)[0][0]):] = False
         idx = np.where(back)[0]
@@ -1649,13 +1701,15 @@ def usa_holster(K):
     order = [i for i in order if not inside[i]]
     caps = (False, False)
     if L == "mid":                        # (from the holster's mouth over the shoulder and down the back, stopping
-        arm = (foot[:, 1] < USA_ARM_SIDE[0]) & (foot[:, 0] < USA_ARM_SIDE[1])     # short of his left side)
+        arm = (foot[:, 1] < USA_ARM_SIDE[L][0]) & (foot[:, 0] < USA_ARM_SIDE[L][1])     # short of his left side)
         k = next((j for j, i in enumerate(order) if arm[i]), len(order))
         if k < len(order):
             order, caps = order[:k], (False, True)
     so = part_of(st, order)
     W, slip, chain = chain_weights(K, so, exclude=USA_STRAP_NOT, ramp=USA_RAMP[L], swap=USA_SWAP,
                                     bar={"upperarm_r": so["off_arm"]} if "off_arm" in so else None)
+    if L in USA_BACK_EASE and "is_straight" in so:
+        W = ease_run(W, np.where(so["is_straight"])[0])
     K.ribbon(pc, ground, so, width, leather, USA_STRAP, "leather", lift=lift, caps=caps,
              shape="box" if L == "near" else "flat",       # (mid: a band a centimetre off the cloth, no sides)
              clear=so["cap"], weights=W)
@@ -2194,10 +2248,17 @@ def check(name, out_dir=STAGE, log=print, clips=True, source=None):
         arm_test = ArmTest(old, Pn, an, bn, wn)
         R["clips"] = {}
         sock = np.array([s["at"] for s in tank["sockets"] if s["name"] == "commander"][0], float)
+        absent = [cn for cn in spec["clips"] if cn not in D["clips"]]
+        if absent:              # (a clip the file does not have yet: not checked, and said so)
+            rep["clips_not_in_the_file"] = absent
+            log(f"7. {L}: clips not in this file, not checked: {absent}")
         for cn in spec["clips"]:
+            if cn in absent:
+                continue
             c = D["clips"][cn]
             ts = gore.clip_times(c)
             worst, worst_at, pairs, ever = 0.0, None, 0, np.zeros(nn, bool)
+            unconf, unconf_most = np.zeros(nn, bool), 0.0
             cross, cross_most, cloth_most = np.zeros(nn, bool), 0.0, 1.0
             fold_pts, fold_most = np.zeros(nn, bool), 0.0
             st_most, st_at = 1.0, None
@@ -2239,8 +2300,20 @@ def check(name, out_dir=STAGE, log=print, clips=True, source=None):
                 if other.any():
                     cross |= other
                     cross_most = max(cross_most, float(dep[other].max()))
-                sd = -np.where(other, 0.0, dep)
                 u = u & ~other
+                # (under by the nearest posed triangle's side alone can be the wrong side of a crease the pose folds
+                # the cloth into, beside a point that is over it: a point counts as under only when it is shut in,
+                # 12 of 14 rays meeting the posed body within 0.5 m (shut_in, as the reviews counted it); the others
+                # are kept apart in the report, unconfirmed)
+                unc = np.zeros(nn, bool)
+                if u.any():
+                    w_ = np.where(u)[0]
+                    unc[w_[shut_in(Sm.only(okt), Wn[w_]) < 0.85]] = True
+                    if unc.any():
+                        unconf |= unc
+                        unconf_most = max(unconf_most, float(dep[unc].max()))
+                    u = u & ~unc
+                sd = -np.where(other | unc, 0.0, dep)
                 pairs += int(u.sum())
                 if len(CE):
                     cloth_most = max(cloth_most, float((np.linalg.norm(Wo[CE[:, 0]] - Wo[CE[:, 1]], axis=1) / cloth_len).max()))
@@ -2271,6 +2344,9 @@ def check(name, out_dir=STAGE, log=print, clips=True, source=None):
                  "points_ever_under_2mm": int(ever.sum()), "point_keys_under_2mm": pairs,
                  "pieces_under_2mm": sorted({piece_names[k] for k in np.unique(pid[ever])}),
                  "points_by_piece_under_2mm": {piece_names[k]: int((ever & (pid == k)).sum()) for k in np.unique(pid[ever])},
+                 "points_under_2mm_not_shut_in": int(unconf.sum()),
+                 "deepest_not_shut_in_mm": round(unconf_most * 1000, 1),
+                 "pieces_not_shut_in": sorted({piece_names[k] for k in np.unique(pid[unconf])}),
                  "points_inside_another_part_of_the_body": int(cross.sum()),
                  "points_under_only_a_fold_of_the_body": int(fold_pts.sum()),
                  "deepest_under_a_fold_mm": round(fold_most * 1000, 1),
@@ -2304,7 +2380,9 @@ def check(name, out_dir=STAGE, log=print, clips=True, source=None):
                 faults.append(f"{L}: {cn}: a strap edge stretches to {st_most:.2f} of its rest length at {st_at} "
                               f"(the jacket's own cloth under the straps to {cloth_most:.2f})")
             log(f"7. {L}: {cn} ({len(ts)} keys): deepest under the body {worst * 1000:.1f} mm {worst_at}, "
-                f"{int(ever.sum())} points ever past 2 mm ({int(cross.sum())} more inside another part of his body "
+                f"{int(ever.sum())} points ever past 2 mm, shut in ({int(unconf.sum())} more past 2 mm by the nearest "
+                f"cloth's side but not shut in, deepest {unconf_most * 1000:.1f} mm; "
+                f"{int(cross.sum())} more inside another part of his body "
                 f"that passes through their cloth; {int(fold_pts.sum())} more under only a fold of his own cloth turned "
                 f"inside out, deepest {fold_most * 1000:.1f} mm; {int(arm_own.sum())} inside an arm with their cloth outside it, "
                 f"deepest {arm_most * 1000:.1f} mm {arm_at or ''}); strap stretch at most {st_most:.3f} {st_at or ''} (the cloth "
@@ -2390,9 +2468,11 @@ def landing(name, content=False, out_dir=STAGE):
             if _compact(X) == base:
                 out.append((d, True, "the file the kit was built on, with an older kit of this tool's"))
                 continue
-        keys = sorted(k for k in set(X) | set(json.loads(base)) if json.dumps(X.get(k)) != json.dumps(json.loads(base).get(k)))
-        out.append((d, False, f"it differs from the file the kit was built on (keys {keys}): another tool's work is "
-                               "there that the staged file does not have"))
+        B0 = json.loads(base)
+        keys = sorted(k for k in set(X) | set(B0) if json.dumps(X.get(k)) != json.dumps(B0.get(k)))
+        out.append((d, False, f"it is not the file the kit was built on (md5 {base_md5(B0)}; they differ in {keys}): "
+                               "either that file has not landed there yet (deliver the tool that staged it first, "
+                               "then this), or another tool's work is there that the staged file does not have"))
     return out
 
 
@@ -2414,8 +2494,8 @@ def deliver(name, content=False, out_dir=STAGE, log=print):
     refused = [(d, why) for d, ok, why in lands if not ok]
     if refused:
         for d, why in refused:
-            log(f"LEFT ALONE {d}: {why}; build again from it (--build {name} --source {d}), check it, and deliver "
-                "again")
+            log(f"LEFT ALONE {d}: {why}; once it holds everything the kit should sit on, build again from it "
+                f"(--build {name} --source {d}), check it, and deliver again")
         log("NOT DELIVERED: nothing written")
         return len(dests)
     # (the structural checks against the file it lands on: by landing() that is the file the kit was built on)

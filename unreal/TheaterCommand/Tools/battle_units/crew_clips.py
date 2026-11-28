@@ -29,7 +29,8 @@ every key, the root's frame) and `holds` (which fist is on which socket when), s
 clips refitted when they are posted.
 
     python3 crew_clips.py --stage DIR [names...]      write DIR/<name>.crew_clips.json (the 10 clips) and its checks
-    python3 crew_clips.py --check DIR [names...]      the checks of staged clips, clip by clip
+    python3 crew_clips.py --check DIR [names...]      the checks of staged clips, clip by clip (remade with their
+                                                      fits; DIR/crew_checks.json's rows refreshed; !! = stage again)
     python3 crew_clips.py --pictures DIR OUT [names...]   picture sheets of staged clips (near mesh, stand-in props)
     python3 crew_clips.py --deliver DIR [names...]    add the staged clips to the shared soldier files (only these
                                                       clips; each file read fresh, backed up, written whole, read back)
@@ -39,11 +40,11 @@ clips refitted when they are posted.
 Every clip is made on the file's own skeleton and checked from its baked keys (check_file): the loop's gap (a
 one-shot: its first and last keys against the poses it chains from and to), each bone's step between keys and the
 head's turn, his feet, knees and elbows under the ground (skinned near mesh), the prone rest of hips and chest, the
-head's turn from the chest, each held fist on its socket, a hand or a forearm inside his body or kit (found by knn
-against the skinned mesh, measured exactly to the surface of its triangles, past an allowance per bone: his trunk his
-own idle's and walk's, elsewhere 1.5 cm for a forearm and 0.5 cm for a hand), his body in a stand-in prop (a free hand
-too, but for a fist closing on or opening from a held part within HOLD_GRACE), his weapon and the kit on his bolt bone
-in a prop, a laid weapon's lowest point, a slung rifle's gap to his back (every point), the bolt-bone kit's height and
+head's turn from the chest, each held fist on its socket, a hand or a forearm inside his body or kit (every point of
+them, found by knn against the skinned mesh, measured exactly to the surface of its triangles, past an allowance per
+bone: his trunk his own idle's and walk's, elsewhere 1.5 cm for a forearm and 0.5 cm for a hand), his body in a
+stand-in prop (a free hand too, but for a fist closing on or opening from a held part within HOLD_GRACE), his weapon
+and the kit on his bolt bone in a prop, a laid weapon's lowest point, a slung rifle's gap to his back (every point), the bolt-bone kit's height and
 its place on his body (kit_off), the gunners' eye over the receiver along the sights, and the two-man gun crew's
 overlap (hmg_fire_prone beside hmg_feed).
 A one-shot may go as far as the poses it must start and end on have it themselves (low_limit, hand_limit: a capture's
@@ -693,9 +694,10 @@ class Body:
         n = np.einsum("nij,nj->ni", G[a], N) * (1 - w)[:, None] + np.einsum("nij,nj->ni", G[b], N) * w[:, None]
         return n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-9)
 
-    def through(self, G, X, Q=None, step=2, probe="hands", gun=True, lim=None):
+    def through(self, G, X, Q=None, step=1, probe="hands", gun=True, lim=None):
         """How deep a hand (probe "hands") or a forearm ("fore") goes into his body or his kit (his slung or laid
-        rifle unless `gun` is False, the kit on his bolt bone): knn_depth of each probe point against the rest of him
+        rifle unless `gun` is False, the kit on his bolt bone): every probe point (`step` 1; every other point missed
+        a forearm 2 cm into a thigh that the next point found), knn_depth of each against the rest of him
         (not his arms), so a point deep in a thigh is found too, not only one within a few cm of the skin; each point
         it finds inside then measured exactly to the surface (surface_depth), as an independent check would. With `lim`
         (a depth allowed for each bone the point goes into) also how far the worst point goes past its allowance:
@@ -2781,17 +2783,24 @@ FITS = {"hmg_fire_prone": [("PRONE_TIP", ((8.0, 12.0, 0.0), (14.0, 20.0, 10.0)))
                                        {"DUCK_WAIT": 0.0, "DUCK_T": 0.62, "T_GRAB": 0.74, "REACH_EASE": 0.12})),
                         # (his right elbow higher and further back as he reaches down past his raised left thigh to the
                         # round (a greatcoat's thigh: the forearm over it, not into it), the reach evener so that
-                        # elbow's wider swing keeps under 15 cm a key: lower-case keys go into LOAD_FIT)
+                        # elbow's wider swing keeps under 15 cm a key: lower-case keys go into LOAD_FIT; last, his
+                        # right elbow only a little higher at the old pace (a bazooka man paced slower by LOAD_PACE
+                        # after his reach was picked at the brisker pace: his forearm 1.9 cm into his raised left
+                        # thigh at 0.67 s with GRAB_POLE, clear with GRAB_POLES[0], his elbow's top step unchanged))
                         ("LOAD_REACH", (None, {"grab_pole": [-0.4, 0.8, -0.8], "REACH_EASE": 0.18},
                                         {"grab_pole": [-0.4, 0.8, -0.8], "REACH_EASE": 0.12},
-                                        {"way": [[0.08, 0.13], [0.04, 0.16]], "REACH_EASE": 0.18}))],
+                                        {"way": [[0.08, 0.13], [0.04, 0.16]], "REACH_EASE": 0.18},
+                                        {"grab_pole": list(GRAB_POLES[0])}))],
         "mortar_sight": [("SIGHT_STANDOFF", (0.012, 0.025, 0.04))]}
 
 
 class tuned:
-    """Module tunables set for a while: `with tuned({"BOX_OUT": 0.36}): ...`."""
+    """Module tunables set for a while: `with tuned({"BOX_OUT": 0.36}): ...`. A tunable read back from
+    crew_checks.json's `fits` comes as a list: it is set as the tuple FITS gave (the makers key their memos on them)."""
     def __init__(self, over):
-        self.over = dict(over or {})
+        def tup(v):
+            return tuple(tup(x) for x in v) if isinstance(v, list) else v
+        self.over = {k: tup(v) for k, v in (over or {}).items()}
 
     def __enter__(self):
         g = globals()
@@ -3564,6 +3573,9 @@ def fits_of(dirpath, nm):
 
 
 def check_staged(dirpath, names, src):
+    """The checks of staged clips, remade from the file and their recorded fits; each file's `checks` rows in
+    DIR/crew_checks.json replaced by these (its rigs and fits kept), when its skeleton is the one staged on. A clip
+    that now breaks a limit is flagged (!!): stage that file again."""
     summary = {}
     for nm in names:
         D = json.load(open(os.path.join(src, nm + ".json")))
@@ -3579,11 +3591,15 @@ def check_staged(dirpath, names, src):
             d, where = pair_overlap(man, staged["hmg_fire_prone"], staged["hmg_feed"])
             res["hmg_feed"]["pair_overlap_cm"], res["hmg_feed"]["pair_overlap_at"] = round(d * 100, 2), where
         summary[nm] = res
-        print(nm)
+        rigs = json.load(open(os.path.join(dirpath, "crew_checks.json"))).get("rigs", {})
+        same = rigs.get(nm) == rig_print(man)
+        if same:
+            record(dirpath, nm, res, rigs[nm], fits)
+        print(nm, "" if same else "(skeleton changed since staging: checks not recorded; stage it again)", flush=True)
         for name, r in res.items():
             fl = flags(r, name)
             print(f"    {name:17s} " + " ".join(f"{k}={v}" for k, v in r.items() if k not in ("loop",)) +
-                  (f"  !! {fl}" if fl else ""))
+                  (f"  !! {fl}" if fl else ""), flush=True)
     return summary
 
 
