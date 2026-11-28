@@ -429,6 +429,9 @@ int main(int Argc, char** Argv)
 		FieldNotes::Book Off;
 		Off.bOn = false;
 		Check(!FieldNotes::ReadBook(FieldNotes::WriteBook(Off)).bOn, "NOTES OFF kept");
+		Off.bMapOffOwed = true;
+		Check(FieldNotes::ReadBook(FieldNotes::WriteBook(Off)).bMapOffOwed, "the map's staff notes still owed off, kept across a quit");
+		Check(!FieldNotes::ReadBook(FieldNotes::WriteBook(FieldNotes::Book())).bMapOffOwed && FieldNotes::WriteBook(FieldNotes::Book()).find("mapOff") == std::string::npos, "none owed: the notebook as before");
 	}
 
 	// ---- A first battle with a setup step, every deed done in turn ----

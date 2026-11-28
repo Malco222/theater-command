@@ -34,7 +34,8 @@ namespace FieldNotesStore
 	 * switch), the done ones kept. */
 	void SetOn(bool bOn);
 	/** NOTES OFF pressed on a battle's note (the notebook already off): the staff notes are one switch, so the campaign
-	 * map's go off too once it asks for its notes again (TakeOffAsked, once). */
+	 * map's go off too once it asks for its notes again (TakeOffAsked, once). Owed in the notebook itself, so a game quit
+	 * from the battle still owes it at the next start. */
 	void OffInBattle();
 	bool TakeOffAsked();
 	/** The attack card's tip: its line while it is still to be seen ("" none). Asked each frame the card offers FIGHT IT

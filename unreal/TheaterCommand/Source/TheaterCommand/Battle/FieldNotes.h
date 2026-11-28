@@ -52,6 +52,9 @@ namespace FieldNotes
 		std::vector<std::string> Seen;
 		/** The closing note has been shown. */
 		bool bClosed = false;
+		/** NOTES OFF pressed in a battle: the campaign map's staff notes are still to be turned off (one switch), kept
+		 * in the notebook so that a game quit from the battle still owes it at the next start. */
+		bool bMapOffOwed = false;
 
 		bool IsDone(const std::string& Id) const;
 		bool HasSeen(const std::string& Id) const;

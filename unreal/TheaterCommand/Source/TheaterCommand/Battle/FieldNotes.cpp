@@ -192,13 +192,14 @@ namespace FieldNotes
 		B.Done = Strings(Root["done"]);
 		B.Seen = Strings(Root["seen"]);
 		B.bClosed = Root["closed"].Truth(false);
+		B.bMapOffOwed = Root["mapOff"].Truth(false);
 		return B;
 	}
 
 	std::string WriteBook(const Book& B)
 	{
 		return std::string("{\"on\":") + (B.bOn ? "true" : "false") + ",\"done\":" + Listed(B.Done) + ",\"seen\":" + Listed(B.Seen)
-			+ ",\"closed\":" + (B.bClosed ? "true" : "false") + "}\n";
+			+ ",\"closed\":" + (B.bClosed ? "true" : "false") + (B.bMapOffOwed ? ",\"mapOff\":true" : "") + "}\n";
 	}
 
 	// ---- The desk ----

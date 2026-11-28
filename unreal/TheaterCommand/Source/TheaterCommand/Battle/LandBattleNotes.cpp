@@ -120,7 +120,7 @@ void ALandBattle::FieldNotesDo(const FString& Word)
 			{
 				State->Note = Words->OffLine;
 				State->NoteAge = 0.0;
-				State->NoteFor = 5.0;
+				State->NoteLong = Words->OffLine;
 			}
 		}
 	}

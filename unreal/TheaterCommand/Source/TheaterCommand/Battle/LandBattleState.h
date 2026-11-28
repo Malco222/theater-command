@@ -309,8 +309,8 @@ struct FLandBattleState
 	/** A short note in the middle of the screen (the camera held, a cut asked for), and how long it has shown. */
 	std::string Note;
 	double NoteAge = -1.0;
-	/** How long the middle note stays (field notes' NOTES OFF line is longer than a command's answer). */
-	double NoteFor = 2.5;
+	/** The middle note that stays 5 s, not a command's 2.5 (field notes' NOTES OFF line): only while that one is up. */
+	std::string NoteLong;
 
 	// What each frame hands on, kept to save the allocations.
 	std::vector<LandPlay::Effect> Fx;

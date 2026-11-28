@@ -7853,10 +7853,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 	if (S.NoteAge >= 0.0)
 	{
 		S.NoteAge += Real;
-		if (S.NoteAge > S.NoteFor)
+		if (S.NoteAge > (!S.NoteLong.empty() && S.Note == S.NoteLong ? 5.0 : 2.5))
 		{
 			S.NoteAge = -1.0;
-			S.NoteFor = 2.5;
 			S.Note.clear();
 		}
 	}
