@@ -21,6 +21,7 @@ FLinearColor ACampaignEnvironment_DuskShade();
 #include "Campaign/CampaignTextures.h"
 #include "Campaign/FrontLine.h" // (release 2, the front you can read)
 #include "Campaign/EnemyMoves.h" // (release 2, the enemy's month near you)
+#include "Campaign/FleetBerths.h" // (release 2, fleets that lie apart)
 #include "Campaign/FleetHeading.h" // (release 2, fleets that keep their heading)
 #include "Campaign/ShipWay.h" // (release 2, a fleet under way)
 #include "Campaign/ShipSmoke.h" // (release 2, funnel smoke)
@@ -145,6 +146,18 @@ namespace
 	TAutoConsoleVariable<int32> CVarFleetHeading(
 		TEXT("tc.Map.FleetHeading"), 0,
 		TEXT("1: a fleet at sea keeps the heading she arrived on, her wake trailing back the way she came, and only her flag turns to face the eye; 0: every fleet is turned to face the eye, as before. Release 2; off as it comes."));
+
+	// (Release 2, the campaign map: the art director's finds on the Mac's pictures of 26 November 2026, the Home Fleet
+	// and the Dover Fleet in the Channel.) The first fleet in a sea lay on the sea's middle and every other one 16 units
+	// from it, on a ring: two fleets in one sea stood on each other, ships through ships, and where a sea's middle lies
+	// close under a coast (the Channel's, 13 units off Cotentin's tip) a ship lay over the land. With this each sea has
+	// berths, found once (Campaign/FleetBerths.h): places on its own open water, each well clear of the last, and the
+	// sea's fleets take them in the order they are told of. Fleets in harbour lie as before. Off as it comes, until the
+	// Mac has shown the one beside the other; "-TheaterFleetBerths" turns it on, switch or no switch. It is read when
+	// the fleets are next laid.
+	TAutoConsoleVariable<int32> CVarFleetBerths(
+		TEXT("tc.Map.FleetBerths"), 0,
+		TEXT("1: the fleets of a sea lie apart, each on open water of its own (the sea's berths); 0: the first on the sea's middle and the rest on a ring round it, as before. Release 2; off as it comes."));
 
 	// (Release 2, a fleet under way: the art director's campaign map upgrade 1, 25 November 2026, on Brian's "I want to
 	// keep upleveling the graphics and smoothness of how they move and act to make it feel as real as possible" and
@@ -12139,6 +12152,115 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 		return Piece->IsSailing();
 	};
 
+	// (Release 2, fleets that lie apart: see CVarFleetBerths.) A sea's berths are found when a fleet first lies in it,
+	// and kept while the chart and its ground are the same. A sea with none to give (its ground not yet laid, or no
+	// open water in reach of its middle) keeps an empty list, and its fleets lie as before. With the switch off nothing
+	// here is found or kept, and every fleet lies as before.
+	static const bool bFleetBerthsAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterFleetBerths"));
+	const bool bFleetBerths = bFleetBerthsAsked || CVarFleetBerths.GetValueOnGameThread() != 0;
+	static TMap<int32, TArray<FVector2D>> BerthsKept;
+	static TArray<FVector> BerthsIslets; // (the chart's islets, each as a round: its middle, and in Z its radius)
+	static FIntVector4 BerthsChart(-1, -1, -1, -1);
+	const FIntVector4 ChartNow(Data.Seas.Num(), Terrain.NX, WorldTerrain.NX, Data.bFar ? 2 : Data.bWorld ? 1 : 0);
+	if (bFleetBerths && BerthsChart != ChartNow)
+	{
+		BerthsChart = ChartNow;
+		BerthsKept.Reset();
+		// (A land under a dozen units across may be lost to the ground's grid, whose smoothed shore puts a rock of
+		// three or four units under the sea: the ground then says open water where the chart has an islet. Each such
+		// land is kept as a round of its own size, for the berths to stand clear of whatever the ground says.)
+		BerthsIslets.Reset();
+		for (const TArray<FVector2D>& EachCoast : Data.Land)
+		{
+			if (EachCoast.Num() < 3)
+			{
+				continue;
+			}
+			FVector2D CoastLow = EachCoast[0], CoastHigh = EachCoast[0];
+			for (const FVector2D& CoastCorner : EachCoast)
+			{
+				CoastLow = FVector2D(FMath::Min(CoastLow.X, CoastCorner.X), FMath::Min(CoastLow.Y, CoastCorner.Y));
+				CoastHigh = FVector2D(FMath::Max(CoastHigh.X, CoastCorner.X), FMath::Max(CoastHigh.Y, CoastCorner.Y));
+			}
+			if (FMath::Max(CoastHigh.X - CoastLow.X, CoastHigh.Y - CoastLow.Y) < 12.0)
+			{
+				BerthsIslets.Add(FVector(0.5 * (CoastLow.X + CoastHigh.X), 0.5 * (CoastLow.Y + CoastHigh.Y), 0.5 * FVector2D::Distance(CoastLow, CoastHigh)));
+			}
+		}
+	}
+	auto SeaBerths = [this](int32 SeaNumber) -> const TArray<FVector2D>*
+	{
+		if (const TArray<FVector2D>* KeptBerths = BerthsKept.Find(SeaNumber))
+		{
+			return KeptBerths;
+		}
+		const FVector2D OwnMiddle = Data.Seas[SeaNumber].Center;
+		// (the islets within reach of this sea's berths, in the turn of the world its middle is counted in)
+		TArray<FVector> NearIslets;
+		for (const FVector& Islet : BerthsIslets)
+		{
+			const FVector IsletNear(NearX(Islet.X, OwnMiddle.X), Islet.Y, Islet.Z);
+			if (FMath::Abs(IsletNear.X - OwnMiddle.X) < TheaterFleetBerths::Reach + 48.0 && FMath::Abs(IsletNear.Y - OwnMiddle.Y) < TheaterFleetBerths::Reach + 48.0)
+			{
+				NearIslets.Add(IsletNear);
+			}
+		}
+		// How far the nearest shore is from a place at sea, in map units: nought or less on land and off the table.
+		auto ShoreOff = [this, &NearIslets](double AskedX, double AskedY) -> double
+		{
+			double IsletOff = TNumericLimits<double>::Max();
+			for (const FVector& IsletNear : NearIslets)
+			{
+				IsletOff = FMath::Min(IsletOff, FMath::Sqrt(FMath::Square(IsletNear.X - AskedX) + FMath::Square(IsletNear.Y - AskedY)) - IsletNear.Z);
+			}
+			const double ShoreX = WrapX(AskedX);
+			const bool bOnChart = ShoreX >= 0.0 && AskedY >= 0.0 && ShoreX <= Data.Width && AskedY <= Data.Height;
+			const double ChartEdge = FMath::Min(FMath::Min(ShoreX, Data.Width - ShoreX), FMath::Min(AskedY, Data.Height - AskedY));
+			if (!Data.bWorld)
+			{
+				// (Europe's own table: its edge is a shore, for a fleet must not lie half off it.)
+				return bOnChart ? FMath::Min3(-static_cast<double>(Terrain.ShoreAt(ShoreX, AskedY)), ChartEdge, IsletOff) : 0.0;
+			}
+			// (The whole world.) Beyond Europe's own sheet the shore is the world's coarse sheet's, which may lie half
+			// one of its cells from the coast the eye sees: that much is taken off. On Europe's sheet the coarse one
+			// is asked only about a shore beyond the sheet's edge, which the sheet itself cannot know of (and which is
+			// no nearer than the edge). The world has no sides; its top and its foot are shores.
+			const double CoarseShore = WorldTerrain.NX > 0 ? -static_cast<double>(WorldTerrain.ShoreAt(ShoreX, AskedY)) - 0.5 * WorldTerrain.Cell : 0.0;
+			const double ShoreHere = bOnChart
+				? FMath::Min(-static_cast<double>(Terrain.ShoreAt(ShoreX, AskedY)), FMath::Max(CoarseShore, ChartEdge))
+				: CoarseShore;
+			return FMath::Min3(ShoreHere, IsletOff, FMath::Min(AskedY - Data.WorldMinY, Data.WorldMinY + Data.WorldHeight - AskedY));
+		};
+		// Is a place in this sea, and not in a neighbour's? (A sea is known by its middle alone: its water is the
+		// water nearer its middle than any other sea's, the short way round where the far side is on.)
+		auto InOwnSea = [this, SeaNumber, OwnMiddle](double AskedX, double AskedY) -> bool
+		{
+			const double OwnFar = FMath::Square(AskedX - OwnMiddle.X) + FMath::Square(AskedY - OwnMiddle.Y);
+			for (int32 OtherSea = 0; OtherSea < Data.Seas.Num(); ++OtherSea)
+			{
+				const FVector2D& OtherMiddle = Data.Seas[OtherSea].Center;
+				if (OtherSea != SeaNumber && FMath::Square(NearX(OtherMiddle.X, AskedX) - AskedX) + FMath::Square(OtherMiddle.Y - AskedY) < OwnFar)
+				{
+					return false;
+				}
+			}
+			return true;
+		};
+		// (Six berths a sea: a seventh fleet and those after her lie on the old ring. The turn the search starts from
+		// is the sea's number, so that two seas do not lay their second fleets the same way.)
+		const std::vector<TheaterFleetBerths::FBerth> FoundBerths = TheaterFleetBerths::Berths(
+			TheaterFleetBerths::FSpot{ OwnMiddle.X, OwnMiddle.Y }, 6, static_cast<double>(SeaNumber) * 2.4, ShoreOff, InOwnSea);
+		TArray<FVector2D>& LaidBerths = BerthsKept.Add(SeaNumber);
+		if (!FoundBerths.empty() && FoundBerths[0].bFound)
+		{
+			for (const TheaterFleetBerths::FBerth& EachBerth : FoundBerths)
+			{
+				LaidBerths.Add(FVector2D(EachBerth.At.X, EachBerth.At.Y));
+			}
+		}
+		return &LaidBerths;
+	};
+
 	// ---- Fleets. One at sea lies in the middle of its sea; one in harbour lies off the coast of its base.
 	TSet<int32> Afloat;
 	TMap<FIntPoint, int32> Crowd; // how many pieces are already at a place: (1, sea) or (2, base)
@@ -12170,9 +12292,18 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 		}
 		else
 		{
-			// Several fleets in one sea lie in a ring round its middle.
-			const double Angle = Others * 2.1 + Fleet.Zone;
-			At += FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * (Others > 0 ? 16.0 : 0.0);
+			// (Release 2, fleets that lie apart.) Each fleet of a sea takes the next of the sea's berths, while it has one.
+			const TArray<FVector2D>* HadBerths = bFleetBerths ? SeaBerths(Fleet.Zone) : nullptr;
+			if (HadBerths && HadBerths->IsValidIndex(Others))
+			{
+				At = (*HadBerths)[Others];
+			}
+			else
+			{
+				// Several fleets in one sea lie in a ring round its middle.
+				const double Angle = Others * 2.1 + Fleet.Zone;
+				At += FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * (Others > 0 ? 16.0 : 0.0);
+			}
 		}
 		At.X = LaidX(At.X); // (the far side: laid in the chart's own turn of the world, wherever the steps out ended)
 		++Others;
