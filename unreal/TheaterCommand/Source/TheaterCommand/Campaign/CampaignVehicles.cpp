@@ -2,8 +2,10 @@
 #include "Campaign/CampaignMiniatureParts.h"
 #include "Campaign/CampaignUnitTable.h"
 #include "TheaterCommand.h"
+#include "HAL/CriticalSection.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Misc/ScopeLock.h"
 
 /**
  * The real vehicles, each built in code from the measurements of the real thing.
@@ -1668,6 +1670,10 @@ namespace
 	{
 		FString Kind = Name;
 		Name.Split(TEXT(":"), &Kind, nullptr);
+		// (Asked on the game thread on the map's line. The lock is for a line that warms its models on other threads:
+		// the joiner's caution of 28 November 2026. It is held over the one read of a file, which is rare.)
+		static FCriticalSection Guard;
+		FScopeLock Lock(&Guard);
 		static TMap<FString, FFileFlyer> Looked; // (a file that is not there, or is no aircraft, is remembered as that)
 		if (const FFileFlyer* Had = Looked.Find(Kind))
 		{
