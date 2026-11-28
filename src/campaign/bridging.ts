@@ -158,7 +158,7 @@ export function bridgingMonth(g: Game, nat: string): { x: Crossing; why: 'bridge
 export function columnLine(g: Game, c: Corps): string {
   if (c.kind !== 'eng' || !bridgingOn(g)) return '';
   const col = columnsOf(g, c.nat).find((k) => k.by === c.id);
-  if (!col) return 'Its bridging column is free: where the bridges are down, the first of your corps on wheels to cross within its march lays it.';
+  if (!col) return 'Its bridging column is free: where the bridges are down and this corps can reach the bank this month, the first of your corps on wheels to cross there lays it.';
   const other = col.x.a === col.from ? col.x.b : col.x.a;
   return `Its bridging column is laid over the ${riverName(col.x)} between ${g.regions[col.from].name} and ${g.regions[other].name}. Wheels and tracks cross by it while your troops use it and hold the bank.`;
 }

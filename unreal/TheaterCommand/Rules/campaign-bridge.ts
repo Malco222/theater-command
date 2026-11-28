@@ -8152,7 +8152,7 @@ function act(action: string, region = -1, fought?: FoughtAir) {
     // (Release 2, bridging.ts) Bridging columns, switched in any month.
     ok = setBridging(s, part[1] === 'on');
     note = bridgingOn(s)
-      ? 'Bridging columns are on: each engineer corps carries one. Where the bridges are down, the first of your corps on wheels to cross within its march lays it, and it stays while your troops use it and hold the bank. The same for every army.'
+      ? 'Bridging columns are on: each engineer corps carries one. Where the bridges are down and one of your engineer corps can reach the bank this month, the first of your corps on wheels to cross there lays its column. It stays while your troops cross by it every month and hold the bank, until the bridge is rebuilt. The same for every army.'
       : 'Bridging columns are off: every column is taken up.';
     return { ok, note, fly, flies, open, view: view() };
   }
