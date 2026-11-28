@@ -3,7 +3,7 @@
 // railway troops re-lay captured track a few provinces a month; in the east the line is counted from the invader's own
 // railheads and every step costs the roads' alone. With the switch off nothing is written or read.
 import { describe, expect, it } from 'vitest';
-import { GAUGE, fitsGauge, gaugeOn, homeGauge, relayChoice, setGauge, trackGauge } from '../src/campaign/gauge';
+import { GAUGE, fitsGauge, gaugeOn, homeGauge, relay, relayChoice, setGauge, trackGauge } from '../src/campaign/gauge';
 import { railheads, railsAt, relayMonth, onNet } from '../src/campaign/rails';
 import { EASTERN, addCorps, computeSupply, removeCorps, createGame, ensureSupply, freshStep, railReach, weather, whyNoTrain } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
@@ -100,6 +100,25 @@ describe('railway gauge (release 2)', () => {
     expect(trackGauge(loadGame(saveGame(g))!, sov)).toBe(homeGauge('GER'));
     setGauge(g, false);
     expect(gaugeFlags(g)).toEqual([]);
+  });
+
+  it('the track keeps its gauge when its province changes owner; switching on again re-lays nothing', () => {
+    const g = war();
+    setGauge(g, true);
+    const { pol, sov } = into(g);
+    // A treaty, a claim or a liberation hands the ground over: the track is what it was.
+    g.regions[pol].owner = 'SOV';
+    g.regions[sov].owner = 'GER';
+    expect(trackGauge(g, pol)).toBe(homeGauge('POL'));
+    expect(trackGauge(g, sov)).toBe(homeGauge('SOV'));
+    expect(fitsGauge(g, 'SOV', pol)).toBe(false);
+    expect(fitsGauge(g, 'GER', sov)).toBe(false);
+    // Re-laid, it stays re-laid; the switch turned on again changes nothing.
+    relay(g, sov, 'GER');
+    expect(trackGauge(g, sov)).toBe(homeGauge('GER'));
+    const before = JSON.stringify(Object.entries(g.flags).filter(([k]) => k.startsWith('ga:')));
+    expect(setGauge(g, true)).toBe(true);
+    expect(JSON.stringify(Object.entries(g.flags).filter(([k]) => k.startsWith('ga:')))).toBe(before);
   });
 
   it('re-lays up to the relay figure a month, main lines first, never cut track nor track off its working net', () => {

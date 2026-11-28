@@ -3,9 +3,11 @@
 // Brian, 27 November 2026 17:10Z, "Yes to all" to the idea; the design director's rulings of 17:15Z and 17:48Z on
 // r2-three-ideas/FORM-rails-rivers-1127.md, part A. Behind the grand campaign's flag 'gauge', OFF until its gate.
 //
-// 1. Each province's track has a gauge: at the war's opening its owner's (data/campaign/gauge.json 'home'; every nation
-//    not listed is standard), and after that whatever the last railway troops to re-lay it laid (flag 'ga:<id>').
-//    It is a fact of the map, never a date.
+// 1. Each province's track has a gauge: the day the switch comes on (the war's opening, on the ship list) its owner's
+//    that day (data/campaign/gauge.json 'home'; every nation not listed is standard), and after that whatever the last
+//    railway troops to re-lay it laid. Both are written on the province (flag 'ga:<id>'; none is standard), so a
+//    province that changes owner by a treaty, a claim or a liberation keeps the track it had. It is a fact of the map,
+//    never a date.
 // 2. A nation's trains run only on track of its own gauge. One reading, in rails.ts: the working net a nation's
 //    railheads are counted over (railheads), its trains' walk (game.ts railWalk, whyNoTrain, nearestBreak), and the
 //    long line in the east (game.ts reachInto). So supply, rail moves, the railhead's worth and every staff read it.
@@ -37,19 +39,27 @@ export const homeGauge = (nat: string): number => HOME.get(nat) ?? 0;
 
 const KEYS: string[] = [];
 const key = (r: number): string => (KEYS[r] ??= `ga:${r}`);
-/** The gauge of a province's track, by number: what its last railway troops laid, or its owner's at the war's opening. */
-export const trackGauge = (g: Game, r: number): number => g.flags[key(r)] ?? homeGauge(g.regions[r].owner);
+/** The gauge of a province's track, by number: what its owner had when the switch came on, or its last railway troops laid since. */
+export const trackGauge = (g: Game, r: number): number => g.flags[key(r)] ?? 0;
 /** The gauge's name, for the words: "broad", "standard", "Iberian". */
 export const gaugeName = (code: number): string => GAUGE.names[CODES[code] ?? 'standard'];
 
 /** Whether a nation's trains run on a province's track: always with the switch off. */
 export const fitsGauge = (g: Game, nat: string, r: number): boolean => !gaugeOn(g) || trackGauge(g, r) === homeGauge(nat);
 
-/** Turns the switch on or off at any time. Off forgets every track re-laid. The supply picture is drawn afresh. */
+/**
+ * Turns the switch on or off at any time. On, the track is laid as it lies that day: each province its owner's gauge.
+ * On again while on, nothing changes. Off forgets every gauge. The supply picture is drawn afresh.
+ */
 export function setGauge(g: Game, on: boolean): boolean {
   if (on) {
     if (g.flags.open !== 1) return false;
+    if (g.flags.gauge === 1) return true;
     g.flags.gauge = 1;
+    for (const r of g.regions) {
+      const k = homeGauge(r.owner);
+      if (k) g.flags[key(r.id)] = k;
+    }
   } else {
     delete g.flags.gauge;
     for (const k of Object.keys(g.flags)) if (k.startsWith('ga:')) delete g.flags[k];
@@ -58,11 +68,11 @@ export function setGauge(g: Game, on: boolean): boolean {
   return true;
 }
 
-/** Re-lays a province's track to a nation's gauge; its own owner's gauge again is no flag at all. */
+/** Re-lays a province's track to a nation's gauge; standard is no flag at all. */
 export function relay(g: Game, r: number, nat: string): void {
   const k = homeGauge(nat);
-  if (k === homeGauge(g.regions[r].owner)) delete g.flags[key(r)];
-  else g.flags[key(r)] = k;
+  if (k) g.flags[key(r)] = k;
+  else delete g.flags[key(r)];
   g.supplyDirty = true;
 }
 
