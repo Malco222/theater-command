@@ -1366,6 +1366,509 @@ namespace
 				      + Fmt(" (%.0f unlike the word off)", static_cast<double>(DOff)));
 		}
 	}
+
+	// ------------------------------------------------------------------ trees struck by shells (the trial "shattered")
+
+	/** LAND_FIELD_STRIKE="x y up across; ...": the rounds that strike the trees (Ground::StrikeTrees), for a picture or a count. */
+	std::vector<std::array<double, 4>> ShatterRounds()
+	{
+		std::vector<std::array<double, 4>> Out;
+		if (const char* Text = std::getenv("LAND_FIELD_STRIKE"))
+			for (const char* At = Text; At && *At;)
+			{
+				std::array<double, 4> R{};
+				if (std::sscanf(At, "%lf %lf %lf %lf", &R[0], &R[1], &R[2], &R[3]) == 4) Out.push_back(R);
+				At = std::strchr(At, ';');
+				if (At) ++At;
+			}
+		return Out;
+	}
+
+	/** A leaf's or a twig's distance from the nearest wood: the furthest any leafy piece of a tree's near level (its main mesh's
+	 * leafy pieces, its cards, its sprigs) stands from a wood point of its main mesh, metres. */
+	double ShatterLeafReach(const LandField::BaseMesh& Bm)
+	{
+		auto Kind = [](const LandField::Rgb8& C) {
+			const int Lo = std::min({ C.R, C.G, C.B }), Hi = std::max({ C.R, C.G, C.B });
+			if (Lo > 160 && Hi - Lo < 48 && C.B + 2 >= C.R) return 2;
+			if (C.G > C.R + 6) return 1;
+			if (Hi - Lo > 60 && C.B + 30 < C.G && (Hi - Lo) * 100 > 42 * Hi) return 1;
+			return 0;
+		};
+		std::vector<std::array<float, 3>> Wood;
+		for (size_t K = 0; K < Bm.Near.Points(); ++K)
+			if (Kind(Bm.Near.Colours[K]) == 0) Wood.push_back({ Bm.Near.Positions[K * 3], Bm.Near.Positions[K * 3 + 1], Bm.Near.Positions[K * 3 + 2] });
+		if (Wood.empty()) return 0.0;
+		double Worst = 0.0;
+		auto Pieces = [&](const LandField::Mesh& M, bool bLeafOnly) {
+			const size_t N = M.Points();
+			std::vector<uint32_t> Up(N);
+			for (size_t K = 0; K < N; ++K) Up[K] = static_cast<uint32_t>(K);
+			auto Find = [&Up](uint32_t A) {
+				while (Up[A] != A) A = Up[A] = Up[Up[A]];
+				return A;
+			};
+			for (size_t T = 0; T + 2 < M.Triangles.size(); T += 3)
+				for (int C = 1; C < 3; ++C)
+				{
+					const uint32_t A = Find(M.Triangles[T]), B = Find(M.Triangles[T + static_cast<size_t>(C)]);
+					if (A != B) Up[std::max(A, B)] = std::min(A, B);
+				}
+			std::map<uint32_t, std::array<double, 5>> Sum; // x, y, z, points, leafy points
+			for (size_t K = 0; K < N; ++K)
+			{
+				auto& S = Sum[Find(static_cast<uint32_t>(K))];
+				S[0] += M.Positions[K * 3];
+				S[1] += M.Positions[K * 3 + 1];
+				S[2] += M.Positions[K * 3 + 2];
+				S[3] += 1.0;
+				S[4] += Kind(M.Colours[K]) == 1 ? 1.0 : 0.0;
+			}
+			for (const auto& Kv : Sum)
+			{
+				const auto& S = Kv.second;
+				if (bLeafOnly && S[4] * 2.0 < S[3]) continue;
+				double Best = 1e18;
+				for (const auto& W : Wood) Best = std::min(Best, (W[0] - S[0] / S[3]) * (W[0] - S[0] / S[3]) + (W[1] - S[1] / S[3]) * (W[1] - S[1] / S[3]) + (W[2] - S[2] / S[3]) * (W[2] - S[2] / S[3]));
+				Worst = std::max(Worst, std::sqrt(Best));
+			}
+		};
+		Pieces(Bm.Near, true);
+		Pieces(Bm.Cards, false);
+		Pieces(Bm.Sprigs, false);
+		return Worst;
+	}
+
+	/** Each tree's form (StrikeFormOf), base by base, instance by instance: what a set of rounds left. */
+	std::vector<int> ShatterState(const LandField::Ground& G)
+	{
+		std::vector<int> Out;
+		for (int B = 0; B < static_cast<int>(LandField::Base::Tuft); ++B)
+			for (size_t K = 0; K < G.Instances(static_cast<LandField::Base>(B)).size(); ++K) Out.push_back(G.StrikeFormOf(static_cast<LandField::Base>(B), K));
+		return Out;
+	}
+
+	/**
+	 * The trial "shattered": the struck forms of every tree laid here checked, then the rounds struck (after every other check,
+	 * so they see the ground as laid); with LAND_FIELD_STRIKE_ORDER=1, the same rounds struck on two more grounds in shuffled
+	 * orders, a hostile list on one and 20,000 rounds on the other. With the word off: the rounds do nothing.
+	 */
+	void ShatterStrike(LandField::Ground& G, const LandField::Field& F, std::vector<std::array<double, 4>> Rounds)
+	{
+		using LandField::Base;
+		const bool bOn = !F.Trial.empty() && F.Tried("shattered");
+		if (!bOn)
+		{
+			if (Rounds.empty()) return;
+			int Did = 0;
+			for (const auto& R : Rounds) Did += G.StrikeTrees(R[0], R[1], R[2], R[3]);
+			std::vector<LandField::TreeHit> Hits;
+			G.TakeTreeHits(Hits);
+			std::vector<LandField::TreeCrown> Crowns;
+			const size_t Asked = G.CrownsNear(Rounds.front()[0], Rounds.front()[1], 50.0, Crowns);
+			Check(Did == 0 && Hits.empty() && Asked == 0 && !G.StrikeForm(static_cast<int>(Base::Oak) * LandField::StruckForms), "the word \"shattered\" off: a round strikes nothing, the crowns query answers nothing", Fmt("%.0f rounds", static_cast<double>(Rounds.size())));
+			return;
+		}
+		std::printf("shattered: the struck forms of the trees laid here (%d a base: 6 torn, 12 snapped, and 10 of them with nothing laid at the foot)\n", LandField::StruckForms);
+		bool bTaller = false, bMore = false, bBreak = true, bLeaf = true, bPale = true, bCrown = true, bFarMore = false, bCrownMore = false, bTornBare = true;
+		const bool bLobed = !F.Trial.empty() && F.Tried("farcrowns");
+		std::string Worst;
+		size_t Bytes = 0, Forms = 0, BytesLaid = 0;
+		double FormSeconds = 0.0, SlowestForm = 0.0;
+		int TreeKinds = 0;
+		for (int B = 0; B < static_cast<int>(Base::Tuft); ++B)
+		{
+			const Base Bs = static_cast<Base>(B);
+			const LandField::BaseMesh& Whole = G.BaseOf(Bs);
+			if (!G.Instances(Bs).empty() && ((B >= static_cast<int>(Base::Oak) && B <= static_cast<int>(Base::Apple)) || Bs == Base::Birch || Whole.bTree || Whole.Class == LandField::BaseMesh::Draw::Tree)) ++TreeKinds;
+			if (G.Instances(Bs).empty() || !G.StrikeForm(B * LandField::StruckForms)) continue;
+			const double WholeReach = ShatterLeafReach(Whole);
+			std::map<uint32_t, int> WholeColours;
+			std::map<uint32_t, bool> FarFromWhole;
+			double BarkLuma = 0.0, BarkWarm = 0.0, BarkN = 0.0;
+			for (const LandField::Rgb8& C : Whole.Near.Colours)
+			{
+				WholeColours[(static_cast<uint32_t>(C.R) << 16) | (static_cast<uint32_t>(C.G) << 8) | C.B] = 1;
+				const int Spread = std::max({ C.R, C.G, C.B }) - std::min({ C.R, C.G, C.B });
+				const bool bSnow = std::min({ C.R, C.G, C.B }) > 160 && Spread < 48 && C.B + 2 >= C.R; // (snow on the boughs is no bark)
+				if (C.G <= C.R + 6 && !bSnow && !(Spread > 60 && C.B + 30 < C.G && Spread * 100 > 42 * std::max({ C.R, C.G, C.B })))
+				{
+					BarkLuma += 0.299 * C.R + 0.587 * C.G + 0.114 * C.B;
+					BarkWarm += C.R - C.B;
+					BarkN += 1.0;
+				}
+			}
+			BarkLuma /= std::max(1.0, BarkN);
+			BarkWarm /= std::max(1.0, BarkN);
+			double PaleWarm = 1e9;
+			double NearMost = 0.0, HighMost = 0.0, WideMost = 0.0, BreakLo = 1.0, BreakHi = 0.0, ReachMost = 0.0, PaleLeast = 1e9, PaleLuma = 1e9, TornPale = 1e9, CrownOver = -1e9, Ms = 0.0;
+			double LeafShareTorn = 0.0, LeafShareSnap = 0.0, TornMost = 0.0, FarMost = 0.0;
+			const LandField::Mesh StandingCrown = bLobed ? LandField::CrownLobed(Whole.Far.Empty() ? Whole.Near : Whole.Far) : LandField::CrownOf(Whole.Far.Empty() ? Whole.Near : Whole.Far);
+			auto Leafy = [](const LandField::Mesh& M) {
+				double N = 0.0;
+				for (size_t T = 0; T + 2 < M.Triangles.size(); T += 3)
+				{
+					const LandField::Rgb8& C = M.Colours[M.Triangles[T]];
+					N += C.G > C.R + 6 ? 1.0 : 0.0;
+				}
+				return N;
+			};
+			const double WholeLeaves = Leafy(Whole.Near) + static_cast<double>(Whole.Cards.Tris() + Whole.Sprigs.Tris());
+			for (int V = 0; V < LandField::StruckForms; ++V)
+			{
+				const int Form = B * LandField::StruckForms + V;
+				const auto T0 = std::chrono::steady_clock::now();
+				const LandField::BaseMesh* S = G.StrikeForm(Form);
+				const double Took = Seconds(T0);
+				Ms += 1000.0 * Took;
+				SlowestForm = std::max(SlowestForm, Took);
+				FormSeconds += Took;
+				const LandField::Mesh* Crown = G.StrikeCrown(Form);
+				if (!S || !Crown) continue;
+				const bool bTornForm = S->Name.find("_Torn") != std::string::npos;
+				++Forms;
+				for (const LandField::Mesh* M : { &S->Near, &S->Mid, &S->Far, &S->Cards, &S->Sprigs, Crown })
+				{
+					const size_t Of = M->Positions.size() * 4 + M->Normals.size() * 4 + M->Colours.size() * 3 + M->Uvs.size() * 4 + M->Triangles.size() * 4;
+					Bytes += Of;
+					if (V < LandField::StruckLaid) BytesLaid += Of;
+				}
+				bTaller = bTaller || S->Height > Whole.Height + 1e-4f || S->Radius > Whole.Radius + 1e-4f;
+				HighMost = std::max(HighMost, static_cast<double>(S->Height / std::max(0.01f, Whole.Height)));
+				WideMost = std::max(WideMost, static_cast<double>(S->Radius / std::max(0.01f, Whole.Radius)));
+				const bool bOver = S->Near.Tris() > Whole.Near.Tris() || S->Cards.Tris() > Whole.Cards.Tris() || S->Sprigs.Tris() > Whole.Sprigs.Tris();
+				bMore = bMore || bOver;
+				NearMost = std::max(NearMost, static_cast<double>(S->Near.Tris()) / std::max<size_t>(1, Whole.Near.Tris()));
+				const double Reach = ShatterLeafReach(*S);
+				ReachMost = std::max(ReachMost, Reach);
+				if (Reach > WholeReach + 0.3) bLeaf = false;
+				// (the leaves still on the tree, not on what fell: the ground's own count)
+				const double Left = G.StrikeLeafShare(Form);
+				(bTornForm ? LeafShareTorn : LeafShareSnap) += Left / (bTornForm ? 12.0 : 16.0);
+				if (bTornForm) TornMost = std::max(TornMost, Left);
+				// (the further levels and the far crown: no more triangles than the standing tree's)
+				if (S->Far.Tris() > Whole.Far.Tris() || S->Mid.Tris() > Whole.Mid.Tris()) bFarMore = true;
+				if (Crown->Tris() > StandingCrown.Tris()) bCrownMore = true;
+				FarMost = std::max(FarMost, static_cast<double>(S->Far.Tris()) / std::max<size_t>(1, Whole.Far.Tris()));
+				// (the fresh wood: warm pale points the standing tree has none of)
+				double PaleN = 0.0, PaleSum = 0.0, PaleWarmSum = 0.0, BarkTop = 0.0;
+				std::vector<double> PaleLumas;
+				std::vector<char> Barky(S->Near.Points(), 0), Woody(S->Near.Points(), 0);
+				for (size_t K = 0; K < S->Near.Points(); ++K)
+				{
+					const LandField::Rgb8& C = S->Near.Colours[K];
+					const int Spread = std::max({ C.R, C.G, C.B }) - std::min({ C.R, C.G, C.B });
+					const bool bLeafy = C.G > C.R + 6 || (Spread > 60 && C.B + 30 < C.G && Spread * 100 > 42 * std::max({ C.R, C.G, C.B }));
+					// (new: no colour of the standing tree within 20 of it, so a cut's blend of two bark colours is not counted)
+					const uint32_t Key = (static_cast<uint32_t>(C.R) << 16) | (static_cast<uint32_t>(C.G) << 8) | C.B;
+					auto Seen = FarFromWhole.find(Key);
+					if (Seen == FarFromWhole.end())
+					{
+						bool bFar = true;
+						for (const auto& Wc : WholeColours)
+						{
+							const int Dr = static_cast<int>(Wc.first >> 16) - C.R, Dg = static_cast<int>((Wc.first >> 8) & 255) - C.G, Db = static_cast<int>(Wc.first & 255) - C.B;
+							if (Dr * Dr + Dg * Dg + Db * Db <= 400)
+							{
+								bFar = false;
+								break;
+							}
+						}
+						Seen = FarFromWhole.emplace(Key, bFar).first;
+					}
+					const bool bNew = Seen->second;
+					const bool bPaleWood = bNew && !bLeafy && C.R - C.B >= 40 && C.R >= 140;
+					if (bPaleWood)
+					{
+						PaleN += 1.0;
+						PaleSum += 0.299 * C.R + 0.587 * C.G + 0.114 * C.B;
+						PaleLumas.push_back(0.299 * C.R + 0.587 * C.G + 0.114 * C.B);
+						PaleWarmSum += C.R - C.B;
+					}
+					else if (!bLeafy && C.G <= C.R + 6) Barky[K] = 1;
+					Woody[K] = !bLeafy;
+				}
+				// (the break's height: the highest point of a triangle all bark, so the bark up to the rim of the break, not the
+				// splinters standing out of it, whose feet are dark with torn bark)
+				for (size_t T = 0; T + 2 < S->Near.Triangles.size(); T += 3)
+				{
+					const uint32_t* Tr = &S->Near.Triangles[T];
+					if (!Barky[Tr[0]] || !Barky[Tr[1]] || !Barky[Tr[2]]) continue;
+					for (int J = 0; J < 3; ++J) BarkTop = std::max(BarkTop, static_cast<double>(S->Near.Positions[Tr[J] * 3 + 2]));
+				}
+				(void)Woody;
+				if (bTornForm) TornPale = std::min(TornPale, PaleN);
+				else
+				{
+					if (PaleN < 12.0) std::printf("  %-8s form %d: only %.0f fresh points at its break\n", BaseNames[B], V, PaleN);
+					PaleLeast = std::min(PaleLeast, PaleN);
+					// (the break's brightness by its brighter fresh wood, the faces and the splinters' tips: three in four fresh
+					// points are darker, the splinters' feet shaded with the torn bark on purpose)
+					std::sort(PaleLumas.begin(), PaleLumas.end());
+					PaleLuma = std::min(PaleLuma, PaleLumas.empty() ? 0.0 : PaleLumas[PaleLumas.size() * 3 / 4]);
+					(void)PaleSum;
+					PaleWarm = std::min(PaleWarm, PaleN > 0.0 ? PaleWarmSum / PaleN : 0.0);
+					const double Share = BarkTop / std::max(0.01f, Whole.Height);
+					BreakLo = std::min(BreakLo, Share);
+					BreakHi = std::max(BreakHi, Share);
+					if (Share < 1.0 / 3.0 - 0.03 || Share > 2.0 / 3.0 + 0.03) bBreak = false;
+					double CrownTop = 0.0;
+					for (size_t K = 2; K < Crown->Positions.size(); K += 3) CrownTop = std::max(CrownTop, static_cast<double>(Crown->Positions[K]));
+					CrownOver = std::max(CrownOver, CrownTop - BarkTop);
+					if (CrownTop > BarkTop + 1.5) bCrown = false;
+				}
+			}
+			// (pale: at least a dozen fresh points at a snapped tree's break and a few at a torn one's stubs, half again
+			// as bright as the bark (the brighter quarter of them), or, on a bark already pale (a beech's, a palm's; under snow, kept to four fifths of the
+			// snow), 1.2 times it, or on a white bark (a birch's) warmer than it by 40 (red over blue): broken wood, not more white)
+			const bool bPaleOk = PaleLeast >= 12.0 && TornPale >= 3.0
+				&& (PaleLuma >= 1.5 * BarkLuma || (BarkLuma > 110.0 && PaleLuma >= 1.2 * BarkLuma) || (BarkLuma > 120.0 && PaleWarm >= BarkWarm + 40.0));
+			bPale = bPale && bPaleOk;
+			// (torn: half the leaves or more gone, every torn form of every kind)
+			if (TornMost > 0.5 && WholeLeaves > 0.0) bTornBare = false;
+			std::printf("  %-8s %s: %zu tris standing, struck at most %.2f of them (far level %.2f); at most %.3f as high, %.3f as wide; snapped break at %.2f to %.2f of its height, its far crown at most %.1f m over the break; leaves left on the tree %.0f%% torn (at most %.0f%%), %.0f%% snapped; leaf to wood at most %.2f m (standing %.2f); fresh wood %.0f points at least (torn %.0f), luma %.0f (its brighter quarter) warmth %.0f (bark %.0f, warmth %.0f); %d forms asked in %.1f ms (made as the ground was built)\n",
+				BaseNames[B], Whole.Name.c_str(), Whole.Near.Tris(), NearMost, FarMost, HighMost, WideMost, BreakLo, BreakHi, CrownOver, 100.0 * LeafShareTorn, 100.0 * TornMost, 100.0 * LeafShareSnap, ReachMost, WholeReach, PaleLeast, TornPale, PaleLuma, PaleWarm, BarkLuma, BarkWarm, LandField::StruckForms, Ms);
+			if (!bPaleOk || ReachMost > WholeReach + 0.3 || TornMost > 0.5) Worst += std::string(" ") + BaseNames[B];
+		}
+		Check(Forms > 0 || TreeKinds == 0, "a tree laid here has struck forms", (TreeKinds == 0 ? std::string("no tree laid here; ") : std::string()) + Fmt("%.0f forms, %.1f MB (%.1f MB of them made as the ground was built, the rest when first asked)", static_cast<double>(Forms), Bytes / 1048576.0, BytesLaid / 1048576.0) + Fmt(", asked in %.2f s (the slowest %.1f ms)", FormSeconds, 1000.0 * SlowestForm));
+		Check(!bTaller, "a struck tree is never taller or wider than it stood", "");
+		Check(!bMore, "a struck tree's near level (and its cards and sprigs) has no more triangles than the standing tree's", "");
+		Check(!bFarMore, "a struck tree's middle and far levels have no more triangles than the standing tree's", "");
+		Check(!bCrownMore, "a struck tree's far crown has no more triangles than the standing tree's", bLobed ? "(the trial \"farcrowns\": CrownLobed)" : "(CrownOf)");
+		Check(bTornBare, "a torn tree has lost half its leaves or more (every torn form of every kind)", Worst);
+		Check(bBreak, "a snapped tree's trunk breaks between a third and two thirds of its height (its ragged top within 0.03 of them)", "");
+		Check(bCrown, "a snapped tree's far crown is no round crown: none of it more than 1.5 m over its break", "");
+		Check(bLeaf, "no leaf of a struck tree hangs further from its wood than on the standing tree (0.3 m allowed)", Worst);
+		Check(bPale, "pale fresh wood at the break and the stubs, half again the bark's brightness (1.2 times, on a pale bark)", Worst);
+		if (Rounds.empty() && !std::getenv("LAND_FIELD_STRIKE_ORDER")) return;
+		// The rounds: given, or forty bursts beside the trees of the first kind laid.
+		if (Rounds.empty())
+			for (int B = 0; B < static_cast<int>(Base::Tuft) && Rounds.empty(); ++B)
+			{
+				const auto& Of = G.Instances(static_cast<Base>(B));
+				if (Of.size() < 50 || !G.StrikeForm(B * LandField::StruckForms)) continue;
+				for (size_t K = 0; K < 40; ++K)
+				{
+					const LandField::Placed& P = Of[(K * 7919) % Of.size()];
+					Rounds.push_back({ P.X + 1.5, P.Y - 1.0, K % 7 == 0 ? 9.0 : 0.0, K % 3 == 0 ? 4.0 : 2.8 });
+				}
+				// (and twenty canopy bursts with a ground burst at the very same place: a reversed list strikes each pair the other
+				// way round)
+				for (size_t K = 0; K < 20; ++K)
+				{
+					const LandField::Placed& P = Of[(K * 104729 + 13) % Of.size()];
+					const double Up = 0.6 * G.BaseOf(static_cast<Base>(B)).Height * P.ScaleZ;
+					Rounds.push_back({ P.X + 0.7, P.Y + 0.4, Up, 2.8 });
+					Rounds.push_back({ P.X + 0.7, P.Y + 0.4, 0.0, 2.8 });
+				}
+			}
+		if (Rounds.empty())
+		{
+			std::printf("  struck: no tree kind laid here 50 times or more, no rounds to strike\n");
+			return;
+		}
+		auto Strike = [](LandField::Ground& On, const std::vector<std::array<double, 4>>& Rs, int* OutMost) {
+			int Most = 0;
+			for (const auto& R : Rs) Most = std::max(Most, On.StrikeTrees(R[0], R[1], R[2], R[3]));
+			if (OutMost) *OutMost = Most;
+		};
+		const auto T0 = std::chrono::steady_clock::now();
+		int Most = 0;
+		Strike(G, Rounds, &Most);
+		const double StrikeMs = 1000.0 * Seconds(T0);
+		std::vector<LandField::TreeHit> Hits;
+		G.TakeTreeHits(Hits);
+		const std::vector<int> Once = ShatterState(G);
+		size_t Torn = 0, Snapped = 0;
+		uint64_t Digest = 1469598103934665603ull;
+		for (const int Fm : Once)
+		{
+			if (Fm >= 0) ++(G.StrikeForm(Fm)->Name.find("_Torn") != std::string::npos ? Torn : Snapped);
+			Digest = (Digest ^ static_cast<uint64_t>(Fm + 1)) * 1099511628211ull;
+		}
+		std::printf("  struck: %zu rounds in %.2f ms (the strongest a round did: %d), %zu trees changed, %zu torn and %zu snapped; struck digest %016llx\n", Rounds.size(), StrikeMs, Most, Hits.size(), Torn, Snapped,
+			static_cast<unsigned long long>(Digest));
+		{
+			// What fell, on each struck tree's own ground: its near level's low points more than 1.5 m out from the trunk, the
+			// lowest a 0.75 m square, against the ground's height there (HeightAt: banks, ditches, slopes): sunk, any of them
+			// more than 0.35 m under it; clear, a point meant to touch it (0.2 m or less over the tree's foot) more than 0.3 m
+			// over it.
+			size_t Lying = 0, Clear = 0, Sunk = 0;
+			double ClearMost = 0.0, SunkMost = 0.0;
+			for (int B = 0; B < static_cast<int>(Base::Tuft); ++B)
+				for (size_t K = 0; K < G.Instances(static_cast<Base>(B)).size(); ++K)
+				{
+					const int Fm = G.StrikeFormOf(static_cast<Base>(B), K);
+					if (Fm < 0) continue;
+					const LandField::Placed& Pl = G.Instances(static_cast<Base>(B))[K];
+					const LandField::Mesh& M = G.StrikeForm(Fm)->Near;
+					std::map<std::pair<int, int>, double> Low;
+					double Hi = -1e9;
+					const double C = std::cos(Pl.Yaw), Sn = std::sin(Pl.Yaw);
+					for (size_t Q = 0; Q < M.Points(); ++Q)
+					{
+						const double X = M.Positions[Q * 3], Y = M.Positions[Q * 3 + 1], Z = M.Positions[Q * 3 + 2];
+						if (Z > 0.6 || std::hypot(X, Y) < 1.5) continue;
+						const double Wx = Pl.X + (X * C - Y * Sn) * Pl.Scale, Wy = Pl.Y + (X * Sn + Y * C) * Pl.Scale;
+						const double Over = Pl.Z + Z * Pl.ScaleZ - G.HeightAt(Wx, Wy);
+						if (Z <= 0.2) Hi = std::max(Hi, Over);
+						const auto Key = std::make_pair(static_cast<int>(std::floor(X / 0.75)), static_cast<int>(std::floor(Y / 0.75)));
+						const auto Found = Low.find(Key);
+						if (Found == Low.end() || Over < Found->second) Low[Key] = Over;
+					}
+					if (Low.empty()) continue;
+					++Lying;
+					double Lo = 1e9;
+					for (const auto& Kv : Low) Lo = std::min(Lo, Kv.second);
+					if (Hi > 0.3) ++Clear;
+					if (std::getenv("LAND_FIELD_STRIKE_FIT") && (Hi > 0.3 || Lo < -0.35))
+						std::printf("    fit %-8s %.1f %.1f form %d: clear %.2f, into %.2f, ground at foot %.2f\n", BaseNames[B], Pl.X, Pl.Y, Fm % LandField::StruckForms, Hi, -Lo, Pl.Z);
+					if (Lo < -0.35) ++Sunk;
+					ClearMost = std::max(ClearMost, Hi);
+					SunkMost = std::max(SunkMost, -Lo);
+				}
+			std::printf("  what fell on its own ground: %zu struck trees with pieces lying, %zu with a piece more than 0.3 m clear of the ground (at most %.2f m), %zu with one more than 0.35 m into it (at most %.2f m)\n", Lying, Clear, ClearMost, Sunk, SunkMost);
+		}
+		{
+			// Variety among the struck trees: the forms they take, neighbours within 15 m in the same form, and snapped
+			// neighbours within 15 m broken within 0.5 m of the same height (the stump's highest all-bark triangle, as laid).
+			struct StruckOne
+			{
+				double X, Y, BreakM;
+				int Form;
+				bool bSnapped;
+			};
+			std::vector<StruckOne> Struck;
+			std::map<int, double> BarkTopOf;
+			for (int B = 0; B < static_cast<int>(Base::Tuft); ++B)
+				for (size_t K = 0; K < G.Instances(static_cast<Base>(B)).size(); ++K)
+				{
+					const int Fm = G.StrikeFormOf(static_cast<Base>(B), K);
+					if (Fm < 0) continue;
+					const LandField::BaseMesh& Sf = *G.StrikeForm(Fm);
+					auto Found = BarkTopOf.find(Fm);
+					if (Found == BarkTopOf.end())
+					{
+						double Top = 0.0;
+						const LandField::Mesh& M = Sf.Near;
+						auto Barky = [&M](uint32_t I) {
+							const LandField::Rgb8& C = M.Colours[I];
+							return C.G <= C.R + 6 && !(C.R >= 140 && C.R - C.B >= 40);
+						};
+						for (size_t T = 0; T + 2 < M.Triangles.size(); T += 3)
+							if (Barky(M.Triangles[T]) && Barky(M.Triangles[T + 1]) && Barky(M.Triangles[T + 2]))
+								for (int J = 0; J < 3; ++J) Top = std::max(Top, static_cast<double>(M.Positions[M.Triangles[T + J] * 3 + 2]));
+						Found = BarkTopOf.emplace(Fm, Top).first;
+					}
+					const LandField::Placed& Pl = G.Instances(static_cast<Base>(B))[K];
+					Struck.push_back({ Pl.X, Pl.Y, Found->second * Pl.ScaleZ, Fm, Sf.Name.find("_Snapped") != std::string::npos });
+				}
+			std::map<int, int> FormsUsed;
+			size_t Pairs = 0, Same = 0, SnapPairs = 0, SameHeight = 0;
+			for (size_t A = 0; A < Struck.size(); ++A)
+			{
+				++FormsUsed[Struck[A].Form];
+				for (size_t Bq = A + 1; Bq < Struck.size(); ++Bq)
+				{
+					if (std::hypot(Struck[A].X - Struck[Bq].X, Struck[A].Y - Struck[Bq].Y) > 15.0) continue;
+					++Pairs;
+					Same += Struck[A].Form == Struck[Bq].Form ? 1 : 0;
+					if (Struck[A].bSnapped && Struck[Bq].bSnapped)
+					{
+						++SnapPairs;
+						SameHeight += std::fabs(Struck[A].BreakM - Struck[Bq].BreakM) < 0.5 ? 1 : 0;
+					}
+				}
+			}
+			std::printf("  variety: %zu struck trees in %zu forms; of %zu neighbours within 15 m, %zu in the same form; of %zu snapped neighbours, %zu broken within 0.5 m of the same height\n", Struck.size(), FormsUsed.size(), Pairs, Same, SnapPairs, SameHeight);
+		}
+		int Again = 0;
+		Strike(G, Rounds, &Again);
+		std::vector<LandField::TreeHit> Hits2;
+		G.TakeTreeHits(Hits2);
+		Check(Again == 0 && Hits2.empty() && ShatterState(G) == Once, "a round struck twice is struck once", Fmt("again: strongest %.0f, %.0f trees changed", Again, static_cast<double>(Hits2.size())));
+		if (!std::getenv("LAND_FIELD_STRIKE_ORDER")) return;
+		// The same rounds, reversed and shuffled (by a hash), on two more grounds laid from the same field.
+		std::vector<std::array<double, 4>> Back(Rounds.rbegin(), Rounds.rend()), Shuffled = Rounds;
+		for (size_t K = Shuffled.size(); K > 1; --K)
+		{
+			const size_t J = static_cast<size_t>((K * 2654435761ull + 977ull) % K);
+			std::swap(Shuffled[K - 1], Shuffled[J]);
+		}
+		LandField::Ground G2(F), G3(F);
+		Strike(G2, Back, nullptr);
+		Strike(G3, Shuffled, nullptr);
+		Check(ShatterState(G2) == Once && ShatterState(G3) == Once, "the same rounds in three orders leave the same trees", Fmt("%.0f rounds, %.0f trees struck", static_cast<double>(Rounds.size()), static_cast<double>(Torn + Snapped)));
+		// Hostile rounds on G2: not a number, infinite, off the field, a hole of nothing or less, far up, and one too wide.
+		const std::vector<int> Before = ShatterState(G2);
+		const double Nan = std::nan(""), Inf = HUGE_VAL;
+		LandField::Placed Any;
+		Any.X = static_cast<float>(Rounds.front()[0]);
+		Any.Y = static_cast<float>(Rounds.front()[1]);
+		int Bad = 0;
+		Bad += G2.StrikeTrees(Nan, Any.Y, 0.0, 3.0);
+		Bad += G2.StrikeTrees(Any.X, Inf, 0.0, 3.0);
+		Bad += G2.StrikeTrees(Any.X, Any.Y, Nan, 3.0);
+		Bad += G2.StrikeTrees(Any.X, Any.Y, 0.0, Nan);
+		Bad += G2.StrikeTrees(Any.X, Any.Y, 0.0, -5.0);
+		Bad += G2.StrikeTrees(Any.X, Any.Y, 0.0, 0.5);
+		Bad += G2.StrikeTrees(1e9, -1e9, 0.0, 3.0);
+		Bad += G2.StrikeTrees(Any.X, Any.Y, 1e6, 3.0);
+		Check(Bad == 0 && ShatterState(G2) == Before && !G2.StrikeForm(-1) && !G2.StrikeForm(1 << 30) && !G2.StrikeCrown(-7), "hostile rounds (not a number, infinite, off the field, no hole, 1,000 km up) and form numbers are refused", "");
+		const auto T1 = std::chrono::steady_clock::now();
+		const int Wide = G2.StrikeTrees(Any.X, Any.Y, 0.0, 1e6);
+		std::vector<LandField::TreeHit> WideHits;
+		G2.TakeTreeHits(WideHits);
+		std::printf("  a hole 1,000 km across strikes as one 30 m across (what the cap loses: every tree past 75 m of it stands): strongest %d, %zu trees changed, in %.1f ms\n", Wide, WideHits.size(), 1000.0 * Seconds(T1));
+		// 20,000 rounds over the whole field on G3 (a barrage of hundreds a battle, a hundred times over).
+		const auto T2 = std::chrono::steady_clock::now();
+		for (int K = 0; K < 20000; ++K)
+		{
+			const double U = ((K * 7919) % 20000) / 20000.0, V = ((K * 104729) % 20011) / 20011.0;
+			G3.StrikeTrees(U * F.Width(), V * F.Depth(), K % 11 == 0 ? 12.0 : 0.0, K % 5 == 0 ? 4.0 : 2.8);
+		}
+		const double ManyMs = 1000.0 * Seconds(T2);
+		std::vector<LandField::TreeHit> ManyHits;
+		G3.TakeTreeHits(ManyHits);
+		size_t Struck = 0, Trees = 0;
+		for (const int Fm : ShatterState(G3)) Struck += Fm >= 0 ? 1 : 0;
+		for (int B = 0; B < static_cast<int>(Base::Tuft); ++B)
+			if (G3.StrikeForm(B * LandField::StruckForms)) Trees += G3.Instances(static_cast<Base>(B)).size();
+		Check(ManyHits.size() <= Trees && ManyMs < 2000.0, "20,000 rounds: told once a tree, no more trees than are laid, in under 2 s",
+			Fmt("%.0f ms (%.1f us a round), %.0f trees struck of ", ManyMs, 1000.0 * ManyMs / 20000.0, static_cast<double>(Struck)) + Fmt("%.0f, %.0f told", static_cast<double>(Trees), static_cast<double>(ManyHits.size())));
+		std::vector<LandField::TreeCrown> Crowns;
+		const auto T3 = std::chrono::steady_clock::now();
+		size_t Seen = 0;
+		for (int K = 0; K < 1000; ++K) Seen += G3.CrownsNear(Any.X + (K % 40) - 20.0, Any.Y + (K / 40) - 12.0, 12.0, Crowns);
+		std::printf("  crowns near a point (12 m): %.1f us a question, %.1f crowns an answer\n", 1000.0 * Seconds(T3), Seen / 1000.0);
+	}
+
+	/** LAND_FIELD_STRIKE_EYES="x y a [up pitch] | ...": each eye painted before the rounds (<key>-e<N>-before-field-eye.png),
+	 * then the rounds struck (ShatterStrike), then each eye again (<key>-e<N>-after-field-eye.png). */
+	int ShatterPairs(LandField::Ground& G, const LandField::Field& F, const LandFieldPicture::Sky& Sk, const std::string& Key, const std::string& Dir, const char* Eyes, const std::vector<std::array<double, 4>>& Rounds)
+	{
+		std::vector<std::string> List;
+		for (const char* At = Eyes; At && *At;)
+		{
+			const char* End = std::strchr(At, '|');
+			List.push_back(End ? std::string(At, End) : std::string(At));
+			At = End ? End + 1 : nullptr;
+		}
+		setenv("LAND_FIELD_EYE_ONLY", "1", 1);
+		int Bad = 0;
+		for (size_t K = 0; K < List.size(); ++K)
+		{
+			setenv("LAND_FIELD_EYE", List[K].c_str(), 1);
+			if (!LandFieldPicture::Paint(G, F, Sk, Key + "-e" + std::to_string(K) + "-before", Dir)) ++Bad;
+		}
+		ShatterStrike(G, F, Rounds);
+		for (size_t K = 0; K < List.size(); ++K)
+		{
+			setenv("LAND_FIELD_EYE", List[K].c_str(), 1);
+			if (!LandFieldPicture::Paint(G, F, Sk, Key + "-e" + std::to_string(K) + "-after", Dir)) ++Bad;
+		}
+		return Bad;
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -4384,6 +4887,9 @@ int main(int Argc, char** Argv)
 		Check(DriveUs < DriveMost && FlatUs < 3.0, "marks cheap enough for every tank every frame", Fmt("Drive %.2f us (%.2f with the dearest 1 in 100), Flat %.2f us", DriveUs, DriveAllUs, FlatUs));
 	}
 
+	// (the trial "shattered": trees struck by shells, after every check above: ShatterStrike; with LAND_FIELD_STRIKE_EYES, ShatterPairs)
+	const std::vector<std::array<double, 4>> StrikeRounds = ShatterRounds();
+	if (!(Argc >= 3 && std::getenv("LAND_FIELD_STRIKE_EYES"))) ShatterStrike(GroundMade, F, StrikeRounds);
 	if (Argc >= 3)
 	{
 		const auto P0 = std::chrono::steady_clock::now();
@@ -4417,7 +4923,8 @@ int main(int Argc, char** Argv)
 			if (Air.Cover >= 0.0) Sk.Cover = Air.Cover;
 		}
 		std::printf("look laid: %s, snow %.2f%s\n", G.LookWord(), G.SnowLying(), Air.bSet ? Fmt(", haze %.2f %.2f %.2f x%.2f", Air.HazeInk[0], Air.HazeInk[1], Air.HazeInk[2], Sk.HazeThick).c_str() : "");
-		if (!LandFieldPicture::Paint(G, F, Sk, Key, Argv[2])) ++Failures;
+		if (const char* Eyes = std::getenv("LAND_FIELD_STRIKE_EYES")) Failures += ShatterPairs(GroundMade, F, Sk, Key, Argv[2], Eyes, StrikeRounds);
+		else if (!LandFieldPicture::Paint(G, F, Sk, Key, Argv[2])) ++Failures;
 		std::printf("pictures painted in %.1f s\n", Seconds(P0));
 	}
 	std::printf("%s\n", Failures ? "SOME CHECKS FAILED" : "all checks passed");

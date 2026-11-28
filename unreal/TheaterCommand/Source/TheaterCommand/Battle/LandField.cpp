@@ -947,6 +947,12 @@ namespace LandField
 		std::vector<BaseMesh> Bases;
 		std::vector<Tile> TileList, RingList;
 		Tally Count;
+		/** Trees struck by shells (the trial "shattered", Ground::StrikeTrees): the word, read once as the ground is built; what
+		 * was struck, the struck forms and the trees by squares, made as the ground is built when the word is on (Shattering). */
+		bool bShattered = false;
+		struct Shatter;
+		mutable std::shared_ptr<Shatter> Shatters;
+		Shatter& Shattering() const;
 
 		explicit Impl(const Field& F);
 
@@ -11173,6 +11179,7 @@ namespace LandField
 		SnowIs = LandScape::SnowOf(Fd, LookIs);
 		SnowLay = LandScape::MakeSnow(SnowIs, LookIs, Seed ^ 0x5D0Bull, Fd);
 		if (!SnowLay) SnowIs = 0.0;
+		bShattered = !Fd.Trial.empty() && Fd.Tried("shattered"); // (trees struck by shells: Ground::StrikeTrees, on trial)
 		ReadCells();
 		MakeLanes();
 		MakeRaster();
@@ -11206,7 +11213,14 @@ namespace LandField
 		Count.MeshSeconds = std::chrono::duration<double>(T2 - T1).count();
 	}
 
-	Ground::Ground(const Field& F) : In(std::make_unique<Impl>(F)) {}
+	Ground::Ground(const Field& F) : In(std::make_unique<Impl>(F))
+	{
+		// (the trial "shattered": the trees read and every struck form made now, as the ground is built, so a shell mid-battle
+		// costs a lookup and no frame waits on a form; nothing with the word off)
+		if (In->bShattered)
+			for (int Form = 0; Form < static_cast<int>(Base::Count) * StruckForms; ++Form)
+				if (Form % StruckForms < StruckLaid) StrikeForm(Form);
+	}
 	Ground::~Ground() = default;
 
 	double Ground::HeightAt(double X, double Y, Drawn* OutWhat) const
@@ -12638,4 +12652,2289 @@ namespace LandField
 		Out.LeanY = -Slope * CY;
 		return Out;
 	}
+}
+
+// ====================================================================== trees struck by shells (the trial "shattered")
+
+namespace LandField
+{
+	/**
+	 * A tree that a shell burst in or beside stands for the rest of the battle as a struck tree (Brian, 26 November: "grass and
+	 * dust flattened by blasts, trees that splinter or lose branches"; the effects thread's brief, item 8.3). Its forms are made
+	 * from the standing tree's own levels, whatever its region (the bocage's oaks and pollards, the steppe's birches, the
+	 * Mediterranean's olives and cypresses, the jungle's trees and palms, the snow's spruces), after the winter and the snow have
+	 * been laid on them: TORN (a burst near by: the boughs on the burst's side broken to pale stubs and lying at the foot, the
+	 * leaves on that side gone, those left duller) and SNAPPED (a burst in the crown or at the foot: the trunk or its limbs broken
+	 * through between a third and two thirds of its height, a pale splintered break, the boughs below it broken to stubs, most of
+	 * its leaves gone, its top hanging from the break by its hinge or lying at its foot on the side away from the burst). Nothing
+	 * is drawn at random: a form is a pure function of the tree's base and the form's number, a tree's form of its own place and
+	 * of the rounds that reached it (the strongest counts).
+	 */
+	namespace Shattered
+	{
+		constexpr uint8_t KWood = 0, KLeaf = 1, KSnow = 2;
+		constexpr uint32_t NoPoint = 0xFFFFFFFFu;
+		/** The forms of a base (StruckForms): torn, the burst toward the tree's own bearing V x 60 degrees (V 0 to 5); snapped,
+		 * the burst toward (V - 6) / 3 x 90 degrees, its break low, middle or high in its kind's band ((V - 6) % 3). */
+		constexpr int TornForms = 6, SnapBearings = 4, SnapHeights = 3;
+		/** The same with nothing laid at the foot (a tree whose ground would not take what fell): torn by bearing, snapped by
+		 * bearing at its middle height. */
+		constexpr int BareFrom = TornForms + SnapBearings * SnapHeights, SnapBareFrom = BareFrom + TornForms;
+		static_assert(SnapBareFrom + SnapBearings == StruckForms && BareFrom == StruckLaid, "a base's struck forms: six torn, twelve snapped, six torn and four snapped bare");
+
+		/** What a point of a tree is by its colour: snow (bright, as blue as it is red: not a birch's bark), leaves (green over
+		 * red, or strongly coloured with little blue: dry fronds, dead leaves, dates), else wood. */
+		uint8_t KindOfColour(const Rgb8& C)
+		{
+			const int Lo = std::min({ C.R, C.G, C.B }), Hi = std::max({ C.R, C.G, C.B });
+			if (Lo > 160 && Hi - Lo < 48 && C.B + 2 >= C.R) return KSnow;
+			if (C.G > C.R + 6) return KLeaf;
+			if (Hi - Lo > 60 && C.B + 30 < C.G && (Hi - Lo) * 100 > 42 * Hi) return KLeaf;
+			return KWood;
+		}
+
+		struct Sets
+		{
+			std::vector<uint32_t> Up;
+			explicit Sets(size_t N) : Up(N)
+			{
+				for (size_t K = 0; K < N; ++K) Up[K] = static_cast<uint32_t>(K);
+			}
+			uint32_t Find(uint32_t A)
+			{
+				while (Up[A] != A)
+				{
+					Up[A] = Up[Up[A]];
+					A = Up[A];
+				}
+				return A;
+			}
+			void Join(uint32_t A, uint32_t B)
+			{
+				A = Find(A);
+				B = Find(B);
+				if (A != B) Up[std::max(A, B)] = std::min(A, B);
+			}
+		};
+
+		uint64_t CellKey(int64_t I, int64_t J, int64_t K) { return Hash(static_cast<uint64_t>(I), static_cast<uint64_t>(J), static_cast<uint64_t>(K)); }
+
+		/** Points by the cube they fall in, Size a side. */
+		struct PointGrid
+		{
+			double Size = 0.6;
+			std::unordered_map<uint64_t, std::vector<uint32_t>> Cells;
+			int64_t Of(double V) const { return static_cast<int64_t>(std::floor(V / Size)); }
+			void Add(const V3& P, uint32_t I) { Cells[CellKey(Of(P.X), Of(P.Y), Of(P.Z))].push_back(I); }
+			/** The nearest point to P within Reach (NoPoint where none), PointAt giving a point's place. */
+			template <class F>
+			uint32_t Nearest(const V3& P, double Reach, const F& PointAt) const
+			{
+				const int64_t CI = Of(P.X), CJ = Of(P.Y), CK = Of(P.Z);
+				const int64_t Shells = static_cast<int64_t>(std::ceil(Reach / Size)) + 1;
+				uint32_t Best = NoPoint;
+				double BestD = Reach * Reach;
+				for (int64_t S = 0; S <= Shells; ++S)
+				{
+					for (int64_t I = -S; I <= S; ++I)
+						for (int64_t J = -S; J <= S; ++J)
+						{
+							const bool bRim = I == -S || I == S || J == -S || J == S;
+							for (int64_t K = -S; K <= S; K += bRim || S == 0 ? 1 : 2 * S)
+							{
+								const auto Found = Cells.find(CellKey(CI + I, CJ + J, CK + K));
+								if (Found == Cells.end()) continue;
+								for (const uint32_t Q : Found->second)
+								{
+									const V3 D = PointAt(Q) - P;
+									const double DD = Dot3(D, D);
+									if (DD < BestD || (DD == BestD && Q < Best))
+									{
+										BestD = DD;
+										Best = Q;
+									}
+								}
+							}
+						}
+					if (Best != NoPoint && std::sqrt(BestD) <= S * Size) break;
+				}
+				return Best;
+			}
+			/** Every point within one cube of P's (P's cube and its 26 neighbours). */
+			template <class F>
+			void Round(const V3& P, const F& Each) const
+			{
+				const int64_t CI = Of(P.X), CJ = Of(P.Y), CK = Of(P.Z);
+				for (int64_t I = -1; I <= 1; ++I)
+					for (int64_t J = -1; J <= 1; ++J)
+						for (int64_t K = -1; K <= 1; ++K)
+						{
+							const auto Found = Cells.find(CellKey(CI + I, CJ + J, CK + K));
+							if (Found == Cells.end()) continue;
+							for (const uint32_t Q : Found->second) Each(Q);
+						}
+			}
+		};
+
+		/** A bunch of a mesh's triangles that go together: one connected piece (a leaf card, a cluster of leaves, a limb), or
+		 * where a piece is a large part of its mesh (a kit model's welded crown), a metre's cube of it. */
+		struct Bunch
+		{
+			uint8_t Kind = KWood;
+			V3 Mid;
+			uint32_t Tris = 0;
+			/** The nearest wood point of the level's main mesh (a leaf's or a snow's bunch): it goes where that point goes. */
+			uint32_t Owner = NoPoint;
+			/** A metre's cube of a large piece (a cypress's column), not a whole piece: cut by its triangles, not kept or lost whole. */
+			bool bCubed = false;
+		};
+		struct LeafSheet
+		{
+			std::vector<uint32_t> BunchOf; // a triangle's
+			std::vector<Bunch> Bunches;
+		};
+
+		V3 VertAt(const Mesh& M, uint32_t I) { return { M.Positions[I * 3], M.Positions[I * 3 + 1], M.Positions[I * 3 + 2] }; }
+
+		LeafSheet ReadSheet(const Mesh& M, bool bAllLeaf)
+		{
+			LeafSheet S;
+			const size_t N = M.Points(), T = M.Tris();
+			if (N == 0 || M.Positions.size() < N * 3) return S;
+			Sets U(N);
+			for (size_t K = 0; K < T; ++K)
+			{
+				U.Join(M.Triangles[K * 3], M.Triangles[K * 3 + 1]);
+				U.Join(M.Triangles[K * 3], M.Triangles[K * 3 + 2]);
+			}
+			// (a kit model's facets share their places, not their points: points at one place are one)
+			std::unordered_map<uint64_t, uint32_t> Place;
+			for (size_t K = 0; K < N; ++K)
+			{
+				const V3 P = VertAt(M, static_cast<uint32_t>(K));
+				const uint64_t Key = CellKey(std::llround(P.X * 1000.0), std::llround(P.Y * 1000.0), std::llround(P.Z * 1000.0));
+				const auto Found = Place.emplace(Key, static_cast<uint32_t>(K));
+				if (!Found.second) U.Join(Found.first->second, static_cast<uint32_t>(K));
+			}
+			std::vector<uint32_t> PieceTris(N, 0);
+			for (size_t K = 0; K < T; ++K) ++PieceTris[U.Find(M.Triangles[K * 3])];
+			// (a leafy piece taller or wider than 3 m, a cypress's whole column of foliage, is bunched by the metre too: as one
+			// bunch it was kept or lost whole, and a snapped cypress kept only its sprays)
+			std::vector<float> Lo(N * 3, 1e30f), Hi(N * 3, -1e30f);
+			std::vector<int32_t> LeafVote(N, 0);
+			for (size_t K = 0; K < N; ++K)
+			{
+				const uint32_t Root = U.Find(static_cast<uint32_t>(K));
+				for (int D = 0; D < 3; ++D)
+				{
+					Lo[Root * 3 + static_cast<size_t>(D)] = std::min(Lo[Root * 3 + static_cast<size_t>(D)], M.Positions[K * 3 + static_cast<size_t>(D)]);
+					Hi[Root * 3 + static_cast<size_t>(D)] = std::max(Hi[Root * 3 + static_cast<size_t>(D)], M.Positions[K * 3 + static_cast<size_t>(D)]);
+				}
+				LeafVote[Root] += bAllLeaf || KindOfColour(M.Colours[K]) == KLeaf ? 1 : -1;
+			}
+			auto Spread = [&](uint32_t Root) {
+				return std::max({ Hi[Root * 3] - Lo[Root * 3], Hi[Root * 3 + 1] - Lo[Root * 3 + 1], Hi[Root * 3 + 2] - Lo[Root * 3 + 2] });
+			};
+			const uint32_t Big = std::max<uint32_t>(200, static_cast<uint32_t>(T * 3 / 10));
+			std::unordered_map<uint64_t, uint32_t> Ids;
+			std::vector<std::array<uint32_t, 3>> Votes;
+			S.BunchOf.resize(T);
+			for (size_t K = 0; K < T; ++K)
+			{
+				const uint32_t A = M.Triangles[K * 3], B = M.Triangles[K * 3 + 1], C = M.Triangles[K * 3 + 2];
+				const uint32_t Root = U.Find(A);
+				const V3 Mid = (VertAt(M, A) + VertAt(M, B) + VertAt(M, C)) * (1.0 / 3.0);
+				uint64_t Key = Root;
+				if (PieceTris[Root] > Big || (LeafVote[Root] > 0 && Spread(Root) > 3.0f)) Key = (1ull << 63) | (Hash(Root, CellKey(static_cast<int64_t>(std::floor(Mid.X)), static_cast<int64_t>(std::floor(Mid.Y)), static_cast<int64_t>(std::floor(Mid.Z)))) >> 1);
+				const auto Found = Ids.emplace(Key, static_cast<uint32_t>(S.Bunches.size()));
+				if (Found.second)
+				{
+					S.Bunches.push_back(Bunch());
+					Votes.push_back({ 0, 0, 0 });
+				}
+				const uint32_t Id = Found.first->second;
+				S.BunchOf[K] = Id;
+				Bunch& Bn = S.Bunches[Id];
+				Bn.bCubed = Key != Root;
+				Bn.Mid = Bn.Mid + Mid;
+				++Bn.Tris;
+				for (const uint32_t I : { A, B, C }) ++Votes[Id][KindOfColour(M.Colours[I])];
+			}
+			for (size_t K = 0; K < S.Bunches.size(); ++K)
+			{
+				Bunch& Bn = S.Bunches[K];
+				Bn.Mid = Bn.Mid * (1.0 / std::max<uint32_t>(1, Bn.Tris));
+				const auto& Vt = Votes[K];
+				Bn.Kind = bAllLeaf ? KLeaf : Vt[KLeaf] > Vt[KWood] && Vt[KLeaf] >= Vt[KSnow] ? KLeaf : Vt[KSnow] > Vt[KWood] ? KSnow : KWood;
+			}
+			return S;
+		}
+
+		/** A level of a tree as read: its main mesh (wood and leaves), and over it, at the near level, its leaf cards and sprigs. */
+		struct LevelRead
+		{
+			const Mesh* Main = nullptr;
+			std::vector<const Mesh*> Extra;
+			LeafSheet MainSheet;
+			std::vector<LeafSheet> ExtraSheets;
+			bool Empty() const { return !Main || Main->Empty(); }
+		};
+
+		void ReadLevelOf(LevelRead& L, const Mesh& Main, const std::vector<const Mesh*>& Extra)
+		{
+			L.Main = &Main;
+			L.Extra = Extra;
+			L.MainSheet = ReadSheet(Main, false);
+			for (const Mesh* E : Extra) L.ExtraSheets.push_back(ReadSheet(*E, true));
+			// Each leaf's and snow's bunch hangs from the nearest wood point.
+			PointGrid Wood;
+			Wood.Size = 0.6;
+			std::vector<char> Seen(Main.Points(), 0);
+			for (size_t K = 0; K < Main.Tris(); ++K)
+			{
+				if (L.MainSheet.Bunches[L.MainSheet.BunchOf[K]].Kind != KWood) continue;
+				for (int C = 0; C < 3; ++C)
+				{
+					const uint32_t I = Main.Triangles[K * 3 + static_cast<size_t>(C)];
+					if (Seen[I]) continue;
+					Seen[I] = 1;
+					Wood.Add(VertAt(Main, I), I);
+				}
+			}
+			if (Wood.Cells.empty()) return;
+			auto PointAt = [&Main](uint32_t I) { return VertAt(Main, I); };
+			for (Bunch& Bn : L.MainSheet.Bunches)
+				if (Bn.Kind != KWood) Bn.Owner = Wood.Nearest(Bn.Mid, 60.0, PointAt);
+			for (LeafSheet& S : L.ExtraSheets)
+				for (Bunch& Bn : S.Bunches) Bn.Owner = Wood.Nearest(Bn.Mid, 60.0, PointAt);
+		}
+
+		/** A kind of tree as a shell breaks it (the look scout's table): the fresh wood's colour at the break, its splinters (how
+		 * many on a trunk, how long), where in its height it breaks, how much of its leaves a torn tree keeps on the side away from
+		 * the burst and on the burst's side, and whether it keeps its low boughs' leaves when snapped (a spruce, a cypress). */
+		struct KindLook
+		{
+			Col Pale = Rgb(204, 186, 140);
+			int SpikesLo = 5, SpikesHi = 9;
+			double SpikeLo = 0.8, SpikeHi = 1.4;
+			double BreakLo = 0.42, BreakHi = 0.62;
+			double TornFar = 0.62, TornNear = 0.05, SnapKeep = 0.2, TopKeep = 0.42;
+			/** How far each limb's own break strays above or below the trunk's (a share of the tree's height: no two limbs of a
+			 * snapped broadleaf broken on one level), and how steeply the break falls toward the burst (an apple or an olive split
+			 * down through its fork rather than snapped across: metres down a metre toward the burst). */
+			double LimbStray = 0.09, SplitSlope = 0.2;
+			/** A snapped tree's top that hangs from its hinge rather than lying (a share of those that can). */
+			double HingeShare = 0.6;
+			bool bKeepLow = false, bPalm = false;
+			const char* Word = "broadleaf";
+		};
+
+		/** A tree as read once, for its forms and its crown: its height and reach as built, its trunk's middle up its height (a
+		 * palm leans, a gnarled oak kinks), the trunk's girth, how far its leaves reach from it, its crown's shape (CrownClass),
+		 * and its crown's middle, reach, foot and top (for Ground::CrownsNear). */
+		struct TreeRead
+		{
+			bool bOk = false;
+			double High = 1.0, Wide = 1.0, TrunkR = 0.3, Reach = 3.0;
+			std::vector<V2> Axis;
+			double Slice = 1.0;
+			int Class = 0;
+			double CrownX = 0.0, CrownY = 0.0, CrownR = 1.0, CrownFoot = 0.0, CrownTop = 1.0;
+			Col Bark = Rgb(92, 80, 66);
+			KindLook Look;
+			LevelRead Near, Mid, Far;
+			V2 AxisAt(double Z) const
+			{
+				if (Axis.empty()) return {};
+				const double F = std::clamp(Z / Slice - 0.5, 0.0, static_cast<double>(Axis.size() - 1));
+				const size_t K = std::min(Axis.size() - 1, static_cast<size_t>(F));
+				const size_t J = std::min(Axis.size() - 1, K + 1);
+				return Lerp2(Axis[K], Axis[J], F - static_cast<double>(K));
+			}
+		};
+
+		std::string LowerCase(std::string S)
+		{
+			for (char& Ch : S) Ch = static_cast<char>(std::tolower(static_cast<unsigned char>(Ch)));
+			return S;
+		}
+
+		KindLook StruckLookOf(Base B, const std::string& Name, int Class, double High)
+		{
+			KindLook K;
+			const std::string N = LowerCase(Name);
+			auto Has = [&N](const char* W) { return N.find(W) != std::string::npos; };
+			if (B == Base::Oak || B == Base::Elm)
+			{
+				K.Pale = Rgb(196, 168, 120);
+				K.SpikeLo = B == Base::Elm ? 1.0 : 0.8;
+				K.SpikeHi = B == Base::Elm ? 1.7 : 1.5;
+				K.BreakLo = B == Base::Elm ? 0.38 : 0.34;
+				K.BreakHi = B == Base::Elm ? 0.60 : 0.56;
+				if (B == Base::Elm) K.TornFar = 0.45;
+				K.Word = B == Base::Elm ? "elm" : "oak";
+			}
+			else if (B == Base::Ash || B == Base::Beech)
+			{
+				K.Pale = B == Base::Ash ? Rgb(210, 190, 150) : Rgb(224, 204, 164); // (a beech's fresh wood a shade paler, its bark grey)
+				K.SpikesLo = B == Base::Ash ? 4 : 6;
+				K.SpikesHi = B == Base::Ash ? 6 : 9;
+				K.SpikeLo = B == Base::Ash ? 0.4 : 0.5;
+				K.SpikeHi = B == Base::Ash ? 1.0 : 1.1;
+				K.BreakLo = B == Base::Ash ? 0.34 : 0.36;
+				K.BreakHi = B == Base::Ash ? 0.55 : 0.60;
+				if (B == Base::Ash)
+				{
+					K.TornFar = 0.55;
+					K.TopKeep = 0.35;
+				}
+				K.Word = B == Base::Ash ? "ash" : "beech";
+			}
+			else if (B == Base::Pollard)
+			{
+				K.Pale = Rgb(200, 176, 128);
+				K.SpikesLo = 4;
+				K.SpikesHi = 7;
+				K.SpikeLo = 0.4;
+				K.SpikeHi = 0.9;
+				K.BreakLo = 0.36;
+				K.BreakHi = 0.44;
+				K.LimbStray = 0.04;
+				K.TornFar = 0.3;
+				K.TornNear = 0.03;
+				K.Word = "pollard";
+			}
+			else if (B == Base::Apple || Has("olive"))
+			{
+				// (an apple or an olive splits at its fork rather than snapping: a few short spikes, its limbs torn off)
+				K.Pale = Rgb(212, 188, 132);
+				K.SpikesLo = 2;
+				K.SpikesHi = 4;
+				K.SpikeLo = 0.3;
+				K.SpikeHi = 0.6;
+				K.BreakLo = 0.36;
+				K.BreakHi = B == Base::Apple ? 0.48 : 0.5;
+				K.LimbStray = 0.04;
+				K.SplitSlope = B == Base::Apple ? 0.8 : 1.1;
+				K.TornFar = 0.36;
+				K.Word = B == Base::Apple ? "apple" : "olive";
+			}
+			else if (B == Base::Birch || Has("birch") || Has("poplar"))
+			{
+				// (a birch's fresh wood warm and darker than its white bark, so its break reads as broken wood, not a white pole;
+				// no more saturated than that, or it reads as a dry leaf's colour)
+				K.Pale = Rgb(206, 172, 124);
+				K.SpikesLo = 5;
+				K.SpikesHi = 8;
+				K.SpikeLo = 0.5;
+				K.SpikeHi = 1.1;
+				K.BreakLo = 0.34;
+				K.BreakHi = 0.60;
+				K.TornFar = 0.72;
+				K.TornNear = 0.1;
+				K.HingeShare = 0.85;
+				K.LimbStray = 0.06;
+				K.Word = "birch";
+			}
+			else if (Class == 2 || Has("palm") || Has("coconut") || Has("date"))
+			{
+				// (a palm's head blown off, its stem left as a pole, a pale tan fibrous brush at its top, many thin spikes)
+				K.Pale = Rgb(198, 172, 126); // (a palm's stem a light tan fibre, not pale wood)
+				K.SpikesLo = 6;
+				K.SpikesHi = 10;
+				K.SpikeLo = 0.3;
+				K.SpikeHi = 0.8;
+				K.BreakLo = 0.55;
+				K.BreakHi = 0.66;
+				K.SnapKeep = 0.0;
+				K.TornFar = 0.24;
+				K.TornNear = 0.04;
+				K.TopKeep = 0.35;
+				K.LimbStray = 0.0;
+				K.bPalm = true;
+				K.Word = "palm";
+			}
+			else if (Class == 1 || Has("spruce") || Has("pine") || Has("fir") || Has("cypress") || Class == 3)
+			{
+				K.Pale = Rgb(216, 196, 140);
+				K.SpikesLo = 4;
+				K.SpikesHi = 6;
+				K.SpikeLo = 0.4;
+				K.SpikeHi = 1.0;
+				K.BreakLo = 0.40;
+				K.BreakHi = 0.64;
+				K.TornFar = 0.56;
+				K.TornNear = 0.06;
+				K.SnapKeep = 1.0;
+				K.TopKeep = 0.7;
+				K.LimbStray = 0.0;
+				K.bKeepLow = true;
+				K.Word = "conifer";
+			}
+			else if (Has("bamboo"))
+			{
+				K.Pale = Rgb(240, 214, 150); // (split culms a warm straw, apart from the standing culms' own yellows)
+				K.SpikesLo = 3;
+				K.SpikesHi = 5;
+				K.SpikeLo = 0.3;
+				K.SpikeHi = 0.6;
+				K.BreakLo = 0.36;
+				K.BreakHi = 0.6;
+				K.LimbStray = 0.0;
+				K.TornFar = 0.36; // (a clump's leaves spread wide round it: torn, half of them gone or more, as every kind's)
+				K.TornNear = 0.04;
+				K.Word = "bamboo";
+			}
+			else
+			{
+				// (a jungle's tree, a giant, a kit's broadleaf; the tallest broken high, or too little of it is left standing)
+				K.Pale = Rgb(204, 186, 140);
+				K.BreakLo = High > 28.0 ? 0.50 : 0.36;
+				K.BreakHi = High > 28.0 ? 0.65 : 0.62;
+			}
+			return K;
+		}
+
+		bool ReadTree(TreeRead& R, Base B, const BaseMesh& Bm)
+		{
+			if (Bm.Near.Empty()) return false;
+			R.High = std::max(0.5, static_cast<double>(Bm.Height));
+			R.Wide = std::max(0.3, static_cast<double>(Bm.Radius));
+			std::vector<const Mesh*> Extra;
+			Extra.push_back(&Bm.Cards);
+			Extra.push_back(&Bm.Sprigs);
+			ReadLevelOf(R.Near, Bm.Near, Extra);
+			if (!Bm.Mid.Empty()) ReadLevelOf(R.Mid, Bm.Mid, {});
+			if (!Bm.Far.Empty()) ReadLevelOf(R.Far, Bm.Far, {});
+			// The trunk's middle: the median of the wood's points in each of 16 slices of its height (the limbs spread round it).
+			const Mesh& M = Bm.Near;
+			const LeafSheet& S = R.Near.MainSheet;
+			std::vector<uint8_t> PointKind(M.Points(), KLeaf);
+			for (size_t K = 0; K < M.Tris(); ++K)
+				for (int C = 0; C < 3; ++C) PointKind[M.Triangles[K * 3 + static_cast<size_t>(C)]] = S.Bunches[S.BunchOf[K]].Kind;
+			const int Slices = 16;
+			R.Slice = R.High / Slices;
+			std::vector<std::vector<double>> Xs(Slices), Ys(Slices);
+			double BarkSum[3] = { 0, 0, 0 };
+			size_t BarkN = 0;
+			for (size_t K = 0; K < M.Points(); ++K)
+			{
+				if (PointKind[K] != KWood) continue;
+				const V3 P = VertAt(M, static_cast<uint32_t>(K));
+				if (P.Z < 0.0 || P.Z > R.High) continue;
+				const int Sl = std::clamp(static_cast<int>(P.Z / R.Slice), 0, Slices - 1);
+				Xs[static_cast<size_t>(Sl)].push_back(P.X);
+				Ys[static_cast<size_t>(Sl)].push_back(P.Y);
+				BarkSum[0] += M.Colours[K].R;
+				BarkSum[1] += M.Colours[K].G;
+				BarkSum[2] += M.Colours[K].B;
+				++BarkN;
+			}
+			if (BarkN) R.Bark = Rgb(BarkSum[0] / BarkN, BarkSum[1] / BarkN, BarkSum[2] / BarkN);
+			auto Median = [](std::vector<double>& V) {
+				std::sort(V.begin(), V.end());
+				return V[V.size() / 2];
+			};
+			R.Axis.assign(static_cast<size_t>(Slices), V2{});
+			std::vector<char> Have(static_cast<size_t>(Slices), 0);
+			for (int Sl = 0; Sl < Slices; ++Sl)
+				if (!Xs[static_cast<size_t>(Sl)].empty())
+				{
+					R.Axis[static_cast<size_t>(Sl)] = { Median(Xs[static_cast<size_t>(Sl)]), Median(Ys[static_cast<size_t>(Sl)]) };
+					Have[static_cast<size_t>(Sl)] = 1;
+				}
+			for (int Sl = 1; Sl < Slices; ++Sl)
+				if (!Have[static_cast<size_t>(Sl)] && Have[static_cast<size_t>(Sl) - 1])
+				{
+					R.Axis[static_cast<size_t>(Sl)] = R.Axis[static_cast<size_t>(Sl) - 1];
+					Have[static_cast<size_t>(Sl)] = 1;
+				}
+			for (int Sl = Slices - 2; Sl >= 0; --Sl)
+				if (!Have[static_cast<size_t>(Sl)] && Have[static_cast<size_t>(Sl) + 1])
+				{
+					R.Axis[static_cast<size_t>(Sl)] = R.Axis[static_cast<size_t>(Sl) + 1];
+					Have[static_cast<size_t>(Sl)] = 1;
+				}
+			// The trunk's girth: the median of the wood's reach from its middle low on it.
+			std::vector<double> Girth;
+			const double GirthTop = std::max(0.12 * R.High, 1.0);
+			for (size_t K = 0; K < M.Points(); ++K)
+			{
+				if (PointKind[K] != KWood) continue;
+				const V3 P = VertAt(M, static_cast<uint32_t>(K));
+				if (P.Z < 0.03 * R.High || P.Z > GirthTop) continue;
+				const V2 C = R.AxisAt(P.Z);
+				Girth.push_back(std::hypot(P.X - C.X, P.Y - C.Y));
+			}
+			R.TrunkR = Girth.empty() ? 0.25 : std::clamp(Median(Girth), 0.05, 1.5);
+			// The leaves: how far they reach from the trunk, and the crown's middle, reach, foot and top.
+			std::vector<V3> Leaves;
+			auto TakeLeaves = [&Leaves](const Mesh& Of, const LeafSheet& Sh) {
+				for (size_t K = 0; K < Of.Tris(); ++K)
+				{
+					if (Sh.Bunches[Sh.BunchOf[K]].Kind == KWood) continue;
+					Leaves.push_back(VertAt(Of, Of.Triangles[K * 3]));
+				}
+			};
+			TakeLeaves(M, S);
+			for (size_t E = 0; E < R.Near.Extra.size(); ++E) TakeLeaves(*R.Near.Extra[E], R.Near.ExtraSheets[E]);
+			if (!Leaves.empty())
+			{
+				std::vector<double> Out, Zs;
+				double SX = 0.0, SY = 0.0;
+				for (const V3& P : Leaves)
+				{
+					const V2 C = R.AxisAt(P.Z);
+					Out.push_back(std::hypot(P.X - C.X, P.Y - C.Y));
+					Zs.push_back(P.Z);
+					SX += P.X;
+					SY += P.Y;
+				}
+				std::sort(Out.begin(), Out.end());
+				std::sort(Zs.begin(), Zs.end());
+				R.Reach = Out[Out.size() * 9 / 10];
+				R.CrownX = SX / Leaves.size();
+				R.CrownY = SY / Leaves.size();
+				std::vector<double> Round;
+				for (const V3& P : Leaves) Round.push_back(std::hypot(P.X - R.CrownX, P.Y - R.CrownY));
+				std::sort(Round.begin(), Round.end());
+				R.CrownR = std::max(0.3, Round[Round.size() * 9 / 10]);
+				R.CrownFoot = Zs[Zs.size() / 10];
+				R.CrownTop = Zs.back();
+			}
+			else
+			{
+				R.Reach = 0.6 * R.Wide;
+				R.CrownR = 0.6 * R.Wide;
+				R.CrownFoot = 0.4 * R.High;
+				R.CrownTop = R.High;
+			}
+			R.Class = std::max(0, CrownClass(Bm.Far.Empty() ? Bm.Near : Bm.Far));
+			R.Look = StruckLookOf(B, Bm.Name, R.Class, R.High);
+			R.bOk = true;
+			return true;
+		}
+
+		/** A turn about From and a move to To: P' = To + M (P - From). */
+		struct Xf
+		{
+			double M[3][3] = { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } };
+			V3 From, To;
+			double Squash = 1.0; // (a fallen crown settles: its height after the turn, over To, pressed by this)
+			V3 Turn(V3 N) const { return { M[0][0] * N.X + M[0][1] * N.Y + M[0][2] * N.Z, M[1][0] * N.X + M[1][1] * N.Y + M[1][2] * N.Z, M[2][0] * N.X + M[2][1] * N.Y + M[2][2] * N.Z }; }
+			V3 Dir(V3 N) const
+			{
+				V3 D = Turn(N);
+				if (Squash == 1.0) return D;
+				D.Z /= Squash;
+				const double L = std::sqrt(Dot3(D, D));
+				return L > 1e-12 ? D * (1.0 / L) : D;
+			}
+			V3 Point(V3 P) const
+			{
+				V3 D = Turn(P - From);
+				D.Z *= Squash;
+				return To + D;
+			}
+		};
+		/** A turn by Angle about the unit Axis (right-handed). */
+		Xf Turning(V3 Axis, double Angle)
+		{
+			Xf T;
+			const double C = std::cos(Angle), S = std::sin(Angle), U = 1.0 - C;
+			const double X = Axis.X, Y = Axis.Y, Z = Axis.Z;
+			const double R[3][3] = { { C + X * X * U, X * Y * U - Z * S, X * Z * U + Y * S }, { Y * X * U + Z * S, C + Y * Y * U, Y * Z * U - X * S }, { Z * X * U - Y * S, Z * Y * U + X * S, C + Z * Z * U } };
+			for (int I = 0; I < 3; ++I)
+				for (int J = 0; J < 3; ++J) T.M[I][J] = R[I][J];
+			return T;
+		}
+		/** The turn that takes the unit A to the unit B (the shortest). */
+		Xf TurnOnto(V3 A, V3 B)
+		{
+			const V3 K = Cross(A, B);
+			const double S = std::sqrt(Dot3(K, K)), C = Dot3(A, B);
+			if (S < 1e-9) return C > 0.0 ? Xf() : Turning(Unit3(Cross(A, std::fabs(A.Z) < 0.9 ? V3{ 0, 0, 1 } : V3{ 1, 0, 0 })), Pi);
+			return Turning(K * (1.0 / S), std::atan2(S, C));
+		}
+
+		/** A copy of a mesh that cuts add points to: each cut point made once an edge, so the pieces on either side meet. */
+		struct Work
+		{
+			Mesh M;
+			std::vector<uint8_t> Cut;
+			bool bUv = false;
+			explicit Work(const Mesh& Src) : M(Src), Cut(Src.Points(), 0), bUv(Src.Uvs.size() == 2 * Src.Points() && !Src.Uvs.empty()) {}
+			V3 P(uint32_t I) const { return VertAt(M, I); }
+			uint32_t EdgePoint(uint32_t A, uint32_t B, double FA, double FB, std::unordered_map<uint64_t, uint32_t>& Seen)
+			{
+				if (A > B)
+				{
+					std::swap(A, B);
+					std::swap(FA, FB);
+				}
+				const uint64_t Key = (static_cast<uint64_t>(A) << 32) | B;
+				const auto Found = Seen.find(Key);
+				if (Found != Seen.end()) return Found->second;
+				const double T = std::clamp(FA / (FA - FB), 0.0, 1.0);
+				const uint32_t I = static_cast<uint32_t>(M.Points());
+				for (int D = 0; D < 3; ++D) M.Positions.push_back(static_cast<float>(Lerp(M.Positions[A * 3 + static_cast<uint32_t>(D)], M.Positions[B * 3 + static_cast<uint32_t>(D)], T)));
+				const V3 N = Unit3(V3{ Lerp(M.Normals[A * 3], M.Normals[B * 3], T), Lerp(M.Normals[A * 3 + 1], M.Normals[B * 3 + 1], T), Lerp(M.Normals[A * 3 + 2], M.Normals[B * 3 + 2], T) });
+				M.Normals.push_back(static_cast<float>(N.X));
+				M.Normals.push_back(static_cast<float>(N.Y));
+				M.Normals.push_back(static_cast<float>(N.Z));
+				const Rgb8 CA = M.Colours[A], CB = M.Colours[B];
+				M.Colours.push_back(Byte(Mixed(Rgb(CA.R, CA.G, CA.B), Rgb(CB.R, CB.G, CB.B), T)));
+				if (bUv)
+					for (int D = 0; D < 2; ++D) M.Uvs.push_back(static_cast<float>(Lerp(M.Uvs[A * 2 + static_cast<uint32_t>(D)], M.Uvs[B * 2 + static_cast<uint32_t>(D)], T)));
+				Cut.push_back(1);
+				Seen[Key] = I;
+				return I;
+			}
+			/** The triangles of Tris cut by F: where F <= 0 to In, where F > 0 to Out; each cut triangle's two cut points to Seg. */
+			template <class F>
+			void Split(const std::vector<uint32_t>& Tris, const F& Field, std::vector<uint32_t>& In, std::vector<uint32_t>& Out, std::vector<std::pair<uint32_t, uint32_t>>* Seg)
+			{
+				std::unordered_map<uint64_t, uint32_t> Seen;
+				std::unordered_map<uint32_t, double> Values;
+				auto Value = [&](uint32_t I) {
+					const auto Found = Values.find(I);
+					if (Found != Values.end()) return Found->second;
+					const double V = Field(P(I));
+					Values[I] = V;
+					return V;
+				};
+				for (size_t K = 0; K + 2 < Tris.size(); K += 3)
+				{
+					const uint32_t V[3] = { Tris[K], Tris[K + 1], Tris[K + 2] };
+					const double Fv[3] = { Value(V[0]), Value(V[1]), Value(V[2]) };
+					const bool bIn[3] = { Fv[0] <= 0.0, Fv[1] <= 0.0, Fv[2] <= 0.0 };
+					if (bIn[0] && bIn[1] && bIn[2])
+					{
+						In.insert(In.end(), { V[0], V[1], V[2] });
+						continue;
+					}
+					if (!bIn[0] && !bIn[1] && !bIn[2])
+					{
+						Out.insert(Out.end(), { V[0], V[1], V[2] });
+						continue;
+					}
+					uint32_t PIn[4], POut[4], Made[2];
+					int NIn = 0, NOut = 0, NMade = 0;
+					for (int C = 0; C < 3; ++C)
+					{
+						const int D = (C + 1) % 3;
+						(bIn[C] ? PIn[NIn++] : POut[NOut++]) = V[C];
+						if (bIn[C] != bIn[D])
+						{
+							const uint32_t X = EdgePoint(V[C], V[D], Fv[C], Fv[D], Seen);
+							PIn[NIn++] = X;
+							POut[NOut++] = X;
+							if (NMade < 2) Made[NMade++] = X;
+						}
+					}
+					for (int C = 1; C + 1 < NIn; ++C) In.insert(In.end(), { PIn[0], PIn[C], PIn[C + 1] });
+					for (int C = 1; C + 1 < NOut; ++C) Out.insert(Out.end(), { POut[0], POut[C], POut[C + 1] });
+					if (Seg && NMade == 2) Seg->push_back({ Made[0], Made[1] });
+				}
+			}
+		};
+
+		/** Connected pieces of a list of triangles: by shared points, and points within Near metres of each other. */
+		std::vector<std::vector<uint32_t>> PiecesOf(const Work& W, const std::vector<uint32_t>& Tris, double NearBy)
+		{
+			std::vector<std::vector<uint32_t>> Out;
+			const size_t T = Tris.size() / 3;
+			if (T == 0) return Out;
+			std::unordered_map<uint32_t, uint32_t> Local;
+			std::vector<uint32_t> Points;
+			for (const uint32_t I : Tris)
+				if (Local.emplace(I, static_cast<uint32_t>(Points.size())).second) Points.push_back(I);
+			Sets U(Points.size());
+			for (size_t K = 0; K < T; ++K)
+			{
+				U.Join(Local[Tris[K * 3]], Local[Tris[K * 3 + 1]]);
+				U.Join(Local[Tris[K * 3]], Local[Tris[K * 3 + 2]]);
+			}
+			if (NearBy > 0.0)
+			{
+				PointGrid G;
+				G.Size = NearBy;
+				for (size_t K = 0; K < Points.size(); ++K) G.Add(W.P(Points[K]), static_cast<uint32_t>(K));
+				for (size_t K = 0; K < Points.size(); ++K)
+				{
+					const V3 P = W.P(Points[K]);
+					G.Round(P, [&](uint32_t Q) {
+						const V3 D = W.P(Points[Q]) - P;
+						if (Dot3(D, D) <= NearBy * NearBy) U.Join(static_cast<uint32_t>(K), Q);
+					});
+				}
+			}
+			std::unordered_map<uint32_t, size_t> Which;
+			for (size_t K = 0; K < T; ++K)
+			{
+				const uint32_t Root = U.Find(Local[Tris[K * 3]]);
+				const auto Found = Which.emplace(Root, Out.size());
+				if (Found.second) Out.emplace_back();
+				std::vector<uint32_t>& Pc = Out[Found.first->second];
+				Pc.insert(Pc.end(), { Tris[K * 3], Tris[K * 3 + 1], Tris[K * 3 + 2] });
+			}
+			return Out;
+		}
+
+		/** What the form is: torn or snapped, the bearing (radians, in the tree's own frame) from its trunk toward the burst,
+		 * the break's height as a share of the tree's, and its own number for every hashed choice. */
+		struct StrikePlan
+		{
+			int Degree = 1;
+			double Bearing = 0.0, Break = 0.5;
+			uint64_t Seed = 1;
+			bool bLobed = false;
+			/** Nothing laid at the foot: what fell is gone. */
+			bool bBare = false;
+			double SnowIs = 0.0;
+		};
+
+		StrikePlan StrikePlanOf(Base B, int V, const TreeRead& R)
+		{
+			StrikePlan P;
+			// (a bare form is its laid twin's cut, the same in every choice, with nothing laid)
+			if (V >= SnapBareFrom)
+			{
+				P = StrikePlanOf(B, TornForms + (V - SnapBareFrom) * SnapHeights + 1, R);
+				P.bBare = true;
+				return P;
+			}
+			if (V >= BareFrom)
+			{
+				P = StrikePlanOf(B, V - BareFrom, R);
+				P.bBare = true;
+				return P;
+			}
+			if (V < TornForms)
+			{
+				P.Degree = 1;
+				P.Bearing = 2.0 * Pi * V / TornForms;
+				P.Break = 1.0;
+			}
+			else
+			{
+				const int W = V - TornForms;
+				P.Degree = 2;
+				P.Bearing = 2.0 * Pi * (W / SnapHeights) / SnapBearings + Pi / SnapBearings;
+				P.Break = Lerp(R.Look.BreakLo, R.Look.BreakHi, (W % SnapHeights) / static_cast<double>(SnapHeights - 1));
+			}
+			P.Seed = Hash(0x5A77E3ull, static_cast<uint64_t>(B), static_cast<uint64_t>(V));
+			return P;
+		}
+
+		/** One level cut: its main mesh (and at the near level its cards and sprigs), and the main mesh's stump alone, as the
+		 * far crown reads it. */
+		struct LevelOut
+		{
+			Mesh Main;
+			std::vector<Mesh> Extra;
+			Mesh Stump;
+			/** What lies on the ground (the fallen top, the torn boughs), as laid: its lowest points, one a 0.75 m square. */
+			std::vector<V3> Lie;
+			/** How the top fell (the near level's, which the further levels follow). */
+			bool bTopLaid = false;
+			Xf TopXf;
+			/** The level's leaf triangles standing (its main mesh's, cards' and sprigs'), and of them those still on the tree. */
+			size_t LeafWhole = 0, LeafLeft = 0;
+			/** Where what fell begins in Main and in each of Extra (its points, its triangles): what stands comes first. */
+			std::pair<size_t, size_t> MainStand;
+			std::vector<std::pair<size_t, size_t>> ExtraStand;
+		};
+
+		/** A ring of cut points (where a cut went through a trunk, a limb or a stub): its middle, its mean radius, its points
+		 * in order round it. */
+		struct BreakRing
+		{
+			V3 C;
+			double R = 0.0;
+			std::vector<V3> P;
+		};
+
+		std::vector<BreakRing> RingsOf(const Work& W, const std::vector<std::pair<uint32_t, uint32_t>>& Seg, const std::vector<char>* Keep)
+		{
+			std::vector<BreakRing> Out;
+			std::unordered_map<uint32_t, uint32_t> Local;
+			std::vector<uint32_t> Points;
+			for (const auto& S : Seg)
+				for (const uint32_t I : { S.first, S.second })
+					if (Local.emplace(I, static_cast<uint32_t>(Points.size())).second) Points.push_back(I);
+			Sets U(Points.size());
+			for (const auto& S : Seg) U.Join(Local[S.first], Local[S.second]);
+			std::unordered_map<uint32_t, size_t> Which;
+			std::vector<std::vector<uint32_t>> Groups;
+			for (size_t K = 0; K < Points.size(); ++K)
+			{
+				const auto Found = Which.emplace(U.Find(static_cast<uint32_t>(K)), Groups.size());
+				if (Found.second) Groups.emplace_back();
+				Groups[Found.first->second].push_back(Points[K]);
+			}
+			for (const std::vector<uint32_t>& G : Groups)
+			{
+				if (G.size() < 3) continue;
+				if (Keep)
+				{
+					bool bAll = true;
+					for (const uint32_t I : G) bAll = bAll && I < Keep->size() && (*Keep)[I];
+					if (!bAll) continue;
+				}
+				BreakRing Rg;
+				for (const uint32_t I : G) Rg.C = Rg.C + W.P(I);
+				Rg.C = Rg.C * (1.0 / G.size());
+				for (const uint32_t I : G) Rg.R += std::sqrt(Dot3(W.P(I) - Rg.C, W.P(I) - Rg.C));
+				Rg.R /= G.size();
+				for (const uint32_t I : G) Rg.P.push_back(W.P(I));
+				Out.push_back(std::move(Rg));
+			}
+			return Out;
+		}
+
+		/** The fresh wood's colour, a little varied by place, and under snow kept to four fifths of the snow's brightness. */
+		Col PaleAt(const KindLook& K, const StrikePlan& P, V3 At_, uint64_t Salt)
+		{
+			Col C = Varied(K.Pale, 0.9 + 0.12 * Unit(Hash(P.Seed ^ Salt, CellKey(std::llround(At_.X * 50.0), std::llround(At_.Y * 50.0), std::llround(At_.Z * 50.0)))), 0.0);
+			const double Luma = 0.299 * C.R + 0.587 * C.G + 0.114 * C.B;
+			if (P.SnowIs > 0.0 && Luma > 184.0) C = Scaled(C, 184.0 / Luma);
+			C.R = std::min(C.R, 226.0);
+			C.G = std::min(C.G, 226.0);
+			C.B = std::min(C.B, 226.0);
+			return C;
+		}
+
+		/** A cut's face, pale, a low cone over the ring facing N; and on it Spikes splinters (three-sided, 3 triangles each),
+		 * Long metres or so, leaning out 5 to 30 degrees, the longest on the side away from the burst (Away, flat), no tip over
+		 * Top: each its own width, length and shade, darker at its foot (fibres torn from the bark) and pale at its tip, a few
+		 * long thin shards among short stubby ones. A ring drawn out along a limb (a cut that grazed it) gets no splinters,
+		 * and one more than three times as long as it is wide no face either: it would stand out of the limb's side. Returns
+		 * false where it drew nothing. */
+		bool CapRing(Mesh& M, const BreakRing& Rg0, V3 N, const KindLook& K, const StrikePlan& P, int Spikes, double Long, V3 Away, double Top, uint64_t Salt, const Col& Bark)
+		{
+			// (the ring's points in order round N)
+			BreakRing Rg = Rg0;
+			const V3 Ua = Unit3(Cross(N, std::fabs(N.Z) < 0.9 ? V3{ 0, 0, 1 } : V3{ 1, 0, 0 }));
+			const V3 Va = Cross(N, Ua);
+			std::sort(Rg.P.begin(), Rg.P.end(), [&](const V3& A, const V3& B) { return std::atan2(Dot3(A - Rg.C, Va), Dot3(A - Rg.C, Ua)) < std::atan2(Dot3(B - Rg.C, Va), Dot3(B - Rg.C, Ua)); });
+			double Most = 0.0, Least = 1e9;
+			for (const V3& Q : Rg.P)
+			{
+				const double Dq = std::hypot(Dot3(Q - Rg.C, Ua), Dot3(Q - Rg.C, Va));
+				Most = std::max(Most, Dq);
+				Least = std::min(Least, Dq);
+			}
+			if (Most > 3.0 * std::max(Rg.R, 1e-6) || Most - Least > 2.4 * std::max(Rg.R, 1e-6)) return false;
+			if (Most > 2.0 * std::max(Rg.R, 1e-6)) Spikes = 0;
+			Builder Bd(M);
+			const Col Face = PaleAt(K, P, Rg.C, Salt);
+			const V3 Mid = Rg.C + N * (0.3 * Rg.R);
+			const uint32_t Hub = Bd.Vert(Mid, N, Scaled(Face, 1.02));
+			std::vector<uint32_t> Rim;
+			for (const V3& Q : Rg.P) Rim.push_back(Bd.Vert(Q, Unit3(N * 0.7 + Unit3(Q - Rg.C) * 0.3, N), Mixed(Face, Bark, 0.3)));
+			for (size_t I = 0; I < Rim.size(); ++I) TriFacing(M, Hub, Rim[I], Rim[(I + 1) % Rim.size()], N);
+			for (int S = 0; S < Spikes; ++S)
+			{
+				const uint64_t H = Hash(P.Seed ^ Salt, static_cast<uint64_t>(S), 0x5B1);
+				const double A = 2.0 * Pi * (S + 0.6 * Unit(Hash(H, 1))) / Spikes;
+				const V3 Out = Ua * std::cos(A) + Va * std::sin(A);
+				const V3 Foot = Rg.C + Out * (Rg.R * (0.2 + 0.6 * Unit(Hash(H, 2))));
+				const double AwayShare = std::max(0.0, Dot3(Out, Away));
+				// (lengths spread wide: most short and stubby, one in four a long thin shard)
+				const bool bShard = Unit(Hash(H, 9)) < 0.25;
+				double L = Long * (bShard ? 0.9 + 0.5 * Unit(Hash(H, 3)) : 0.25 + 0.6 * Unit(Hash(H, 3))) * (1.0 + 0.6 * AwayShare);
+				const double Lean = (5.0 + 25.0 * Unit(Hash(H, 4))) * Pi / 180.0;
+				V3 Dir = Unit3(N * std::cos(Lean) + Out * std::sin(Lean));
+				if (Dir.Z > 0.05) L = std::min(L, (Top - Foot.Z) / Dir.Z);
+				if (L < 0.05) continue;
+				const V3 Tip = Foot + Dir * L;
+				const double W = std::max(0.02, Rg.R * (bShard ? 0.1 + 0.1 * Unit(Hash(H, 5)) : 0.18 + 0.3 * Unit(Hash(H, 5))) * (K.bPalm ? 0.45 : 1.0));
+				// (flattened a little across: a blade of wood, not a cone)
+				const double Flat = 0.45 + 0.55 * Unit(Hash(H, 10));
+				V3 Base3[3];
+				for (int C = 0; C < 3; ++C)
+				{
+					const double B = A + 2.0 * Pi * C / 3.0 + 0.4 * Unit(Hash(H, 6 + static_cast<uint64_t>(C)));
+					const V3 Rad = Ua * std::cos(B) + Va * std::sin(B);
+					const double Along = Dot3(Rad, Out);
+					Base3[C] = Foot + (Rad - Out * (Along * (1.0 - Flat))) * W - N * (0.1 * Rg.R);
+				}
+				const double Shade = 0.88 + 0.22 * Unit(Hash(H, 11));
+				const Col Tc = Scaled(Face, 1.04 * Shade), Bc = Mixed(Scaled(Face, 0.86 * Shade), Bark, 0.25 + 0.3 * Unit(Hash(H, 12)));
+				for (int C = 0; C < 3; ++C)
+				{
+					const V3 A0 = Base3[C], A1 = Base3[(C + 1) % 3];
+					const V3 Fn = Unit3(Cross(A1 - A0, Tip - A0));
+					const V3 Side = Unit3((A0 + A1) * 0.5 - Foot, Out);
+					const V3 Nrm = Dot3(Fn, Side) < 0.0 ? Fn * -1.0 : Fn;
+					const uint32_t I0 = Bd.Vert(A0, Nrm, Bc), I1 = Bd.Vert(A1, Nrm, Bc), I2 = Bd.Vert(Tip, Unit3(Nrm + Dir * 0.4), Tc);
+					TriFacing(M, I0, I1, I2, Nrm);
+				}
+			}
+			return true;
+		}
+
+		/** The triangles Tris of W into Out, each point moved by T, coloured by Paint (its index and colour): one copy of each
+		 * point. */
+		template <class F>
+		void Append(Mesh& Out, const Work& W, const std::vector<uint32_t>& Tris, const Xf& T, const F& Paint, double Floor = -1e9)
+		{
+			std::unordered_map<uint32_t, uint32_t> Map;
+			const bool bUv = W.bUv;
+			for (const uint32_t I : Tris)
+			{
+				const auto Found = Map.emplace(I, static_cast<uint32_t>(Out.Points()));
+				if (Found.second)
+				{
+					V3 P = T.Point(W.P(I));
+					P.Z = std::max(P.Z, Floor);
+					const V3 N = T.Dir(V3{ W.M.Normals[I * 3], W.M.Normals[I * 3 + 1], W.M.Normals[I * 3 + 2] });
+					Out.Positions.insert(Out.Positions.end(), { static_cast<float>(P.X), static_cast<float>(P.Y), static_cast<float>(P.Z) });
+					Out.Normals.insert(Out.Normals.end(), { static_cast<float>(N.X), static_cast<float>(N.Y), static_cast<float>(N.Z) });
+					Out.Colours.push_back(Paint(I, W.M.Colours[I]));
+					if (bUv)
+					{
+						Out.Uvs.push_back(W.M.Uvs[I * 2]);
+						Out.Uvs.push_back(W.M.Uvs[I * 2 + 1]);
+					}
+				}
+				Out.Triangles.push_back(Found.first->second);
+			}
+		}
+
+		/** The first points and triangles of a mesh (a struck level's standing part: what fell comes after it). */
+		Mesh Prefix(const Mesh& M, std::pair<size_t, size_t> Stand)
+		{
+			Mesh Out;
+			const size_t Pts = std::min(Stand.first, M.Points()), Tris = std::min(Stand.second, M.Tris());
+			Out.Positions.assign(M.Positions.begin(), M.Positions.begin() + static_cast<std::ptrdiff_t>(Pts * 3));
+			Out.Normals.assign(M.Normals.begin(), M.Normals.begin() + static_cast<std::ptrdiff_t>(Pts * 3));
+			Out.Colours.assign(M.Colours.begin(), M.Colours.begin() + static_cast<std::ptrdiff_t>(Pts));
+			if (M.Uvs.size() >= Pts * 2 && !M.Uvs.empty()) Out.Uvs.assign(M.Uvs.begin(), M.Uvs.begin() + static_cast<std::ptrdiff_t>(Pts * 2));
+			Out.Triangles.assign(M.Triangles.begin(), M.Triangles.begin() + static_cast<std::ptrdiff_t>(Tris * 3));
+			return Out;
+		}
+
+		void AppendMesh(Mesh& Out, const Mesh& In, const Xf& T)
+		{
+			const uint32_t Base0 = static_cast<uint32_t>(Out.Points());
+			for (size_t K = 0; K < In.Points(); ++K)
+			{
+				const V3 P = T.Point(VertAt(In, static_cast<uint32_t>(K)));
+				const V3 N = T.Dir(V3{ In.Normals[K * 3], In.Normals[K * 3 + 1], In.Normals[K * 3 + 2] });
+				Out.Positions.insert(Out.Positions.end(), { static_cast<float>(P.X), static_cast<float>(P.Y), static_cast<float>(P.Z) });
+				Out.Normals.insert(Out.Normals.end(), { static_cast<float>(N.X), static_cast<float>(N.Y), static_cast<float>(N.Z) });
+				Out.Colours.push_back(In.Colours[K]);
+			}
+			for (const uint32_t I : In.Triangles) Out.Triangles.push_back(Base0 + I);
+		}
+
+		/** Leaves that stay on a struck tree, 15 to 25 hundredths of the way to a dry grey-brown near by; far off (Style 2) 32 to
+		 * 42 of the way to a paler dry brown, so a struck stretch reads browner and paler from the general's height (not a dark
+		 * hollow), where its stubs are too small to see. */
+		Rgb8 Duller(const Rgb8& C, uint64_t H, int Style = 0)
+		{
+			return Byte(Mixed(Rgb(C.R, C.G, C.B), Style == 2 ? Rgb(150, 134, 100) : Rgb(110, 100, 80), (Style == 2 ? 0.32 : 0.15) + 0.1 * Unit(H)));
+		}
+
+		/**
+		 * One level of a tree cut to its form (Style 0 near, 1 middle, 2 far). The wood: snapped, cut through by a break at
+		 * the form's height, each limb at its own height round it (a few tenths of the tree's height above or below the trunk's
+		 * break, never past a third or two thirds of it), sloping down toward the burst (an apple's or an olive's steeply: split
+		 * down through its fork), ragged; above it the top. Then the boughs left cut back by distance from the trunk: on the
+		 * burst's side to stubs 0.3 to 0.6 m out, on the far side (snapped) to half their reach or (torn) not at all; what was
+		 * left hanging from nothing (a liana, a limb's end) goes. Each cut face pale and splintered. The leaves and the snow go
+		 * where the wood point they hang from goes, a clump of the main mesh whole, its cards and sprigs with it; of those left
+		 * on the tree a share stays by the side they face, lost in patches (the burst's side bare). A conifer snapped keeps its
+		 * low skirts, stripped a metre or two under the break so its broken stem stands out of them; a column of foliage with no
+		 * stem (a cypress) gets a thin pole. The top hangs from its hinge to the ground or lies at the foot, the torn boughs lie
+		 * round the foot, all on the side away from the burst and inside the tree's own reach. FallAs: the near level's cut,
+		 * whose top's fall the further levels follow, so they lie as it does.
+		 */
+		void CutLevel(const LevelRead& L, const TreeRead& R, const StrikePlan& P, int Style, double LeafShare, LevelOut& Out, size_t Budget = SIZE_MAX, const LevelOut* FallAs = nullptr)
+		{
+			const KindLook& K = R.Look;
+			// (with a Budget, the level's triangles at most that: the stump's furthest twigs left out past three fifths of it,
+			// its cut faces and splinters, the biggest first, in half the room left, one that would go past that taken off again;
+			// the fallen top's twigs, the furthest from its break first, and the torn boughs left out where there is no more room)
+			size_t CapRoom = SIZE_MAX;
+			size_t CapTris = 0;
+			auto Cap = [&](Mesh& M, const BreakRing& Rg, V3 N, int Spikes, double Long, double Top, uint64_t Salt) {
+				const size_t P0 = M.Positions.size(), N0 = M.Normals.size(), C0 = M.Colours.size(), U0 = M.Uvs.size(), T0 = M.Triangles.size();
+				const bool bDrawn = CapRing(M, Rg, N, K, P, Spikes, Long, V3{ -std::cos(P.Bearing), -std::sin(P.Bearing), 0.0 }, Top, Salt, R.Bark);
+				const size_t Added = (M.Triangles.size() - T0) / 3;
+				if (bDrawn && CapTris + Added <= CapRoom)
+				{
+					CapTris += Added;
+					return true;
+				}
+				M.Positions.resize(P0);
+				M.Normals.resize(N0);
+				M.Colours.resize(C0);
+				M.Uvs.resize(U0);
+				M.Triangles.resize(T0);
+				return false;
+			};
+			const Mesh& Src = *L.Main;
+			Work W(Src);
+			const size_t Orig = Src.Points();
+			const V3 Toward{ std::cos(P.Bearing), std::sin(P.Bearing), 0.0 }; // from the trunk toward the burst
+			const V3 Away = Toward * -1.0;
+			const double H = R.High, Zb = P.Break * H, Wd = R.Wide;
+			const V2 Cb = R.AxisAt(Zb);
+			const bool bSnap = P.Degree == 2;
+			const bool bSplit = K.SplitSlope > 0.5;
+			std::vector<uint32_t> Wood;
+			const LeafSheet& S = L.MainSheet;
+			for (size_t T = 0; T < Src.Tris(); ++T)
+				if (S.Bunches[S.BunchOf[T]].Kind == KWood) Wood.insert(Wood.end(), { Src.Triangles[T * 3], Src.Triangles[T * 3 + 1], Src.Triangles[T * 3 + 2] });
+			// The break (snapped): the trunk's at the form's height, each limb's round it at its own (by its bearing round the
+			// trunk, smoothly, so a limb is cut once), sloping down toward the burst, ragged by 0.12 m, and never under a third or
+			// over two thirds of the tree's height.
+			const double Stray = K.LimbStray * H;
+			const double Ph1 = 2.0 * Pi * Unit(Hash(P.Seed, 0x1B1)), Ph2 = 2.0 * Pi * Unit(Hash(P.Seed, 0x1B2));
+			const double ZLo = (1.0 / 3.0 + 0.01) * H, ZHi = (2.0 / 3.0 - 0.01) * H;
+			auto BreakAt = [&](V3 Q) {
+				const double Dx = Q.X - Cb.X, Dy = Q.Y - Cb.Y, Dq = std::hypot(Dx, Dy);
+				const double Proj = Dx * Toward.X + Dy * Toward.Y;
+				double Z = Zb - K.SplitSlope * (bSplit ? std::clamp(Proj, -Wd, Wd) : std::clamp(Proj, -0.8, 0.8));
+				if (Stray > 0.0 && Dq > 1e-6)
+				{
+					const double Az = std::atan2(Dy, Dx);
+					const double Limbward = Smooth(R.TrunkR * 1.1, R.TrunkR * 1.1 + 1.2, Dq);
+					Z += Stray * Limbward * (0.65 * std::sin(2.0 * Az + Ph1) + 0.45 * std::sin(3.0 * Az + Ph2));
+				}
+				Z += 0.08 * Noise3(Q.X * 2.3, Q.Y * 2.3, Q.Z * 2.3, P.Seed ^ 0xB4E);
+				return std::clamp(Z, ZLo, ZHi);
+			};
+			auto Break = [&](V3 Q) { return Q.Z - BreakAt(Q); };
+			const V3 BreakN = bSplit ? Unit3(V3{ K.SplitSlope * Toward.X, K.SplitSlope * Toward.Y, 1.0 }) : V3{ 0, 0, 1 };
+			// (a conifer snapped: its skirts stripped a metre or two under the break, so its broken stem stands out of them)
+			const double StripBy = 0.06 * H;
+			auto StripAt = [&](V3 Q) { return BreakAt(Q) - StripBy * (1.0 + 0.6 * Noise3(Q.X * 0.9, Q.Y * 0.9, 0.0, P.Seed ^ 0x57A)); };
+			auto LeafCut = [&](V3 Q) { return K.bKeepLow ? Q.Z - StripAt(Q) : Break(Q); };
+			// The boughs' stubs: the wood's distance from the trunk's middle, over how far it may reach on its side.
+			const double Near_ = R.TrunkR * 1.15 + 0.3 + 0.3 * Unit(Hash(P.Seed, 0x57B)), Far_ = bSnap ? R.TrunkR + 0.5 * R.Reach : 1e4;
+			auto Stub = [&](V3 Q) {
+				const V2 C = R.AxisAt(Q.Z);
+				const double DX = Q.X - C.X, DY = Q.Y - C.Y, D = std::hypot(DX, DY);
+				const double Off = D > 1e-6 ? std::fabs(std::remainder(std::atan2(DY, DX) - P.Bearing, 2.0 * Pi)) : 0.0;
+				const double Side = Smooth(55.0 * Pi / 180.0, 85.0 * Pi / 180.0, Off);
+				return D - Lerp(Near_, Far_, Side);
+			};
+			std::vector<uint32_t> Stump, Top, Off, Gone;
+			std::vector<std::pair<uint32_t, uint32_t>> SegBreak, SegStub, SegEnd;
+			if (bSnap) W.Split(Wood, Break, Stump, Top, &SegBreak);
+			else Stump = Wood;
+			// (a conifer snapped keeps its skirts below the break whole: a spruce's boughs, a cypress's column, whose dark
+			// foliage reads as wood by its colour and would be pared to a pole; but stripped off the stem under the break)
+			if (!(bSnap && K.bKeepLow))
+			{
+				std::vector<uint32_t> Kept;
+				W.Split(Stump, Stub, Kept, Off, &SegStub);
+				Stump.swap(Kept);
+			}
+			else
+			{
+				std::vector<uint32_t> Kept, Stripped;
+				const double Stem = R.TrunkR * 1.2 + 0.05;
+				W.Split(Stump, [&](V3 Q) {
+					const V2 C = R.AxisAt(Q.Z);
+					return std::min(std::hypot(Q.X - C.X, Q.Y - C.Y) - Stem, Q.Z - StripAt(Q));
+				}, Kept, Stripped, nullptr);
+				Stump.swap(Kept);
+			}
+			// (what was left hanging from nothing: a piece of wood broken by a cut whose lowest point is well out from the trunk, a
+			// liana that hung from the crown, a limb's end beyond a break that dips under it; a conifer's skirts stand on the stem)
+			if (!K.bKeepLow)
+			{
+				std::vector<uint32_t> Kept;
+				for (const std::vector<uint32_t>& Pc : PiecesOf(W, Stump, 0.0))
+				{
+					double Low = 1e9;
+					V3 LowP;
+					bool bBroke = false;
+					for (const uint32_t I : Pc)
+					{
+						if (W.P(I).Z < Low)
+						{
+							Low = W.P(I).Z;
+							LowP = W.P(I);
+						}
+						bBroke = bBroke || W.Cut[I];
+					}
+					const V2 C = R.AxisAt(Low);
+					if (bBroke && Low > 0.05 * H && std::hypot(LowP.X - C.X, LowP.Y - C.Y) > R.TrunkR + 1.0) continue;
+					Kept.insert(Kept.end(), Pc.begin(), Pc.end());
+				}
+				Stump.swap(Kept);
+			}
+			// The top, no longer than it can lie inside the tree's reach (its far end broken off: splintered too).
+			const double LieFrom = R.TrunkR + 0.4;
+			const double TopLong = std::max(0.0, 0.95 * Wd - LieFrom);
+			if (bSnap)
+			{
+				std::vector<uint32_t> Kept;
+				W.Split(Top, [&](V3 Q) { return Q.Z - (Zb + TopLong); }, Kept, Gone, &SegEnd);
+				Top.swap(Kept);
+			}
+			// The torn boughs: the pieces cut off, the longest two to four laid at the foot, each no longer than 4 m.
+			std::vector<std::vector<uint32_t>> Boughs;
+			std::vector<Xf> BoughXf;
+			if (!bSnap && !Off.empty())
+			{
+				std::vector<std::pair<double, size_t>> ByLong;
+				std::vector<std::vector<uint32_t>> Pieces = PiecesOf(W, Off, Style == 2 ? 0.3 : 0.2);
+				std::vector<V3> Ends(Pieces.size()), Dirs(Pieces.size());
+				for (size_t Pc = 0; Pc < Pieces.size(); ++Pc)
+				{
+					V3 End;
+					int Cuts = 0;
+					for (const uint32_t I : Pieces[Pc])
+						if (W.Cut[I])
+						{
+							End = End + W.P(I);
+							++Cuts;
+						}
+					if (Cuts) End = End * (1.0 / Cuts);
+					else
+					{
+						double Best = 1e9;
+						for (const uint32_t I : Pieces[Pc])
+						{
+							const V2 C = R.AxisAt(W.P(I).Z);
+							const double D = std::hypot(W.P(I).X - C.X, W.P(I).Y - C.Y);
+							if (D < Best)
+							{
+								Best = D;
+								End = W.P(I);
+							}
+						}
+					}
+					double Long = 0.0;
+					V3 Tip = End;
+					for (const uint32_t I : Pieces[Pc])
+					{
+						const double D = std::sqrt(Dot3(W.P(I) - End, W.P(I) - End));
+						if (D > Long)
+						{
+							Long = D;
+							Tip = W.P(I);
+						}
+					}
+					Ends[Pc] = End;
+					Dirs[Pc] = Unit3(Tip - End, Away);
+					if (Long >= 1.0) ByLong.push_back({ -Long, Pc });
+				}
+				std::sort(ByLong.begin(), ByLong.end());
+				const size_t Lay = P.bBare ? 0 : std::min(ByLong.size(), static_cast<size_t>(2 + Hash(P.Seed, 0xB0) % 3));
+				for (size_t J = 0; J < Lay; ++J)
+				{
+					const size_t Pc = ByLong[J].second;
+					const double Room = std::min(4.0, 0.95 * Wd - (R.TrunkR + 0.3) - 0.25 * Wd * Unit(Hash(P.Seed, 0xB1, J)));
+					if (Room < 0.8) continue;
+					std::vector<uint32_t> Kept, Lost;
+					const V3 E = Ends[Pc], D = Dirs[Pc];
+					W.Split(Pieces[Pc], [&](V3 Q) { return Dot3(Q - E, D) - Room; }, Kept, Lost, nullptr);
+					if (Kept.empty()) continue;
+					// (each its own way, 25 to 70 degrees either side of straight away from the burst, flat on the ground)
+					const double Turn = (J % 2 == 0 ? 1.0 : -1.0) * (25.0 + 45.0 * Unit(Hash(P.Seed, 0xB2, J))) * Pi / 180.0;
+					const V3 Hd{ Away.X * std::cos(Turn) - Away.Y * std::sin(Turn), Away.X * std::sin(Turn) + Away.Y * std::cos(Turn), 0.0 };
+					Xf T = TurnOnto(D, Hd);
+					T.From = E;
+					const V2 C0 = R.AxisAt(0.0);
+					const double Lie = R.TrunkR + 0.3 + 0.2 * Wd * Unit(Hash(P.Seed, 0xB3, J));
+					T.To = V3{ C0.X, C0.Y, 0.0 } + Hd * Lie;
+					double Low = 1e9;
+					for (const uint32_t I : Kept) Low = std::min(Low, T.Point(W.P(I)).Z);
+					T.To.Z -= Low + 0.04;
+					Boughs.push_back(std::move(Kept));
+					BoughXf.push_back(T);
+				}
+			}
+			// Which piece each point is in: 1 the stump, 2 the top, 3 on a laid bough (none: gone).
+			std::vector<int> PieceOf(W.M.Points(), 0);
+			for (const uint32_t I : Stump) PieceOf[I] = 1;
+			for (const uint32_t I : Top) PieceOf[I] = 2;
+			for (size_t J = 0; J < Boughs.size(); ++J)
+				for (const uint32_t I : Boughs[J]) PieceOf[I] = 3 + static_cast<int>(J);
+			// The leaves: a clump of the main mesh kept or lost whole, by the wood it hangs from and the side it faces, lost in
+			// patches (a smooth noise over the tree, the same at every level, so its near and far levels lose the same side) more
+			// than one by one; a metre's cube of a large piece (a cypress's column) kept, then cut at the break by its triangles.
+			const double Patch = std::clamp(3.5 / Wd, 0.35, 1.5); // (some three or four patches across the crown)
+			auto Chance = [&](const Bunch& Bn, uint64_t Key) {
+				const double Nz = Noise3(Bn.Mid.X * Patch, Bn.Mid.Y * Patch, Bn.Mid.Z * Patch, P.Seed ^ 0x1EAF);
+				return std::clamp(0.5 + 1.2 * Nz + 0.35 * (Unit(Hash(P.Seed, Key)) - 0.5), 0.0, 1.0);
+			};
+			auto Decide = [&](const Bunch& Bn, uint64_t Key) {
+				if (Bn.Owner == NoPoint || Bn.Owner >= Orig) return 0;
+				const int Pc = PieceOf[Bn.Owner];
+				const double U = Chance(Bn, Key);
+				if (Pc == 0) return 0;
+				if (Pc == 1)
+				{
+					if (bSnap && !Bn.bCubed && Bn.Mid.Z > (K.bKeepLow ? StripAt(Bn.Mid) : BreakAt(Bn.Mid) + 0.2)) return 0;
+					const V2 C = R.AxisAt(Bn.Mid.Z);
+					const double Dx = Bn.Mid.X - C.X, Dy = Bn.Mid.Y - C.Y, D = std::hypot(Dx, Dy);
+					const double Facing = D > 1e-6 ? (Dx * Toward.X + Dy * Toward.Y) / D : 0.0;
+					const double Side = Smooth(-0.3, 0.5, Facing);
+					double Keep = bSnap ? (K.bKeepLow ? Lerp(1.0, 0.65, Side) : K.SnapKeep) : Lerp(K.TornFar, K.TornNear, Side);
+					if (Bn.Kind == KSnow) Keep = Side > 0.3 || (bSnap && Bn.Mid.Z > Zb - 0.5) ? 0.0 : 1.0;
+					return U < Keep ? 1 : 0;
+				}
+				if (Bn.Kind == KSnow) return 0; // (no snow on what fell)
+				if (Pc == 2) return U < K.TopKeep * LeafShare ? 2 : 0;
+				return U < 0.5 * LeafShare ? Pc : 0;
+			};
+			std::vector<int> MainChoice(S.Bunches.size(), -1);
+			for (size_t Bk = 0; Bk < S.Bunches.size(); ++Bk)
+				if (S.Bunches[Bk].Kind != KWood) MainChoice[Bk] = Decide(S.Bunches[Bk], Bk);
+			std::vector<std::vector<int>> ExtraChoice(L.ExtraSheets.size());
+			for (size_t E = 0; E < L.ExtraSheets.size(); ++E)
+				for (size_t Bk = 0; Bk < L.ExtraSheets[E].Bunches.size(); ++Bk) ExtraChoice[E].push_back(Decide(L.ExtraSheets[E].Bunches[Bk], (static_cast<uint64_t>(E) + 1) << 40 | Bk));
+			// The top's fall: about the hinge at the break's far rim down to the ground (where it is long and narrow enough to
+			// swing down whole, in its kind's share of trees), else lying from beside the foot; turned until its lowest point meets
+			// the ground. A further level falls as the near level did.
+			Xf TopXf;
+			bool bTopLaid = false;
+			std::vector<uint32_t> TopLeafMain;
+			if (bSnap)
+				for (size_t T = 0; T < Src.Tris(); ++T)
+					if (MainChoice[S.BunchOf[T]] == 2) TopLeafMain.insert(TopLeafMain.end(), { Src.Triangles[T * 3], Src.Triangles[T * 3 + 1], Src.Triangles[T * 3 + 2] });
+			if (bSnap && FallAs)
+			{
+				bTopLaid = FallAs->bTopLaid;
+				TopXf = FallAs->TopXf;
+			}
+			else if (bSnap && !P.bBare && (!Top.empty() || !TopLeafMain.empty()))
+			{
+				// (it comes to rest where its wood meets the ground: its leaves, under it, are pressed flat)
+				std::vector<V3> Pts;
+				for (const uint32_t I : Top) Pts.push_back(W.P(I));
+				if (Pts.empty())
+				{
+					for (const uint32_t I : TopLeafMain) Pts.push_back(W.P(I));
+					for (size_t E = 0; E < L.ExtraSheets.size(); ++E)
+					{
+						const Mesh& Em = *L.Extra[E];
+						for (size_t T = 0; T < Em.Tris(); ++T)
+							if (ExtraChoice[E][L.ExtraSheets[E].BunchOf[T]] == 2) Pts.push_back(VertAt(Em, Em.Triangles[T * 3]));
+					}
+				}
+				const double Turn = (Unit(Hash(P.Seed, 0x70)) - 0.5) * 50.0 * Pi / 180.0;
+				const V3 Hd{ Away.X * std::cos(Turn) - Away.Y * std::sin(Turn), Away.X * std::sin(Turn) + Away.Y * std::cos(Turn), 0.0 };
+				const V3 Axis{ -Hd.Y, Hd.X, 0.0 };
+				double Highest = 0.0;
+				for (const V3& Q : Pts) Highest = std::max(Highest, Q.Z - Zb);
+				// (a hinge only for a top long and narrow enough to swing down whole; a wide crown lies down beside the foot)
+				double Spread = 0.0;
+				for (const V3& Q : Pts) Spread = std::max(Spread, std::hypot(Q.X - Cb.X, Q.Y - Cb.Y));
+				const bool bHinge = Unit(Hash(P.Seed, 0x71)) < K.HingeShare && Highest >= 0.9 * Zb && Spread <= 0.5 * Highest;
+				auto Fall = [&](bool bOnHinge) {
+					const V3 From{ Cb.X, Cb.Y, Zb };
+					const V2 C0 = R.AxisAt(0.0);
+					const V3 To = bOnHinge ? V3{ Cb.X + Hd.X * R.TrunkR, Cb.Y + Hd.Y * R.TrunkR, Zb } : V3{ C0.X + Hd.X * LieFrom, C0.Y + Hd.Y * LieFrom, 0.8 * R.TrunkR };
+					auto LowOf = [&](const Xf& T) {
+						double Low = 1e9;
+						for (const V3& Q : Pts) Low = std::min(Low, T.Point(Q).Z);
+						return Low;
+					};
+					auto HighOf = [&](const Xf& T) {
+						double High = -1e9;
+						for (const V3& Q : Pts) High = std::max(High, T.Point(Q).Z);
+						return High;
+					};
+					if (bOnHinge)
+					{
+						for (double Deg = 55.0; Deg <= 176.0; Deg += 3.0)
+						{
+							Xf T = Turning(Axis, Deg * Pi / 180.0);
+							T.From = From;
+							T.To = To;
+							const double Low = LowOf(T);
+							if (Low <= 0.02)
+							{
+								if (Deg == 55.0) break; // (it would dig in at once: it lies instead)
+								T.To.Z -= Low + 0.06;
+								if (HighOf(T) > 0.85 * Zb) break; // (a fan of stems would stand up past the stump: it lies instead)
+								return std::make_pair(true, T);
+							}
+						}
+						return std::make_pair(false, Xf());
+					}
+					// Lying: turned over near flat (its first touch in 80 to 100 degrees, else 90), its low side set just under
+					// the ground and its height pressed to six tenths, as a crown that came down settles on its limbs.
+					double Deg = 90.0;
+					for (double D = 80.0; D <= 100.0; D += 2.0)
+					{
+						Xf T = Turning(Axis, D * Pi / 180.0);
+						T.From = From;
+						T.To = To;
+						if (LowOf(T) <= 0.02)
+						{
+							Deg = D;
+							break;
+						}
+					}
+					Xf T = Turning(Axis, Deg * Pi / 180.0);
+					T.From = From;
+					T.To = To;
+					T.To.Z -= LowOf(T) + 0.1;
+					const double Up = HighOf(T);
+					// (and never standing past seven tenths of the stump, nor past a heap's height, 1.2 m and 0.08 of the tree's: a
+					// crown lying higher left its limbs as sticks in the air at a man's eye)
+					const double Heap = std::min(0.7 * Zb, 1.2 + 0.08 * H);
+					T.Squash = Up > 0.1 ? std::min(0.6, Heap / Up) : 0.6;
+					T.To.Z = T.Squash * T.To.Z; // (pressed about the ground, not about the hinge)
+					return std::make_pair(true, T);
+				};
+				auto Got = Fall(bHinge);
+				if (!Got.first && bHinge) Got = Fall(false);
+				bTopLaid = Got.first;
+				TopXf = Got.second;
+			}
+			// What is laid must stay inside the tree's reach and under its height, and not sink.
+			auto Inside = [&](V3 Q) { return std::hypot(Q.X, Q.Y) <= 0.97 * Wd && Q.Z <= 0.95 * H && Q.Z >= -0.35; };
+			auto FilterTris = [&](std::vector<uint32_t>& Tris, const Xf& T) {
+				std::vector<uint32_t> Kept;
+				for (size_t I = 0; I + 2 < Tris.size(); I += 3)
+					if (Inside(T.Point(W.P(Tris[I]))) && Inside(T.Point(W.P(Tris[I + 1]))) && Inside(T.Point(W.P(Tris[I + 2])))) Kept.insert(Kept.end(), { Tris[I], Tris[I + 1], Tris[I + 2] });
+				Tris.swap(Kept);
+			};
+			if (bSnap)
+			{
+				if (bTopLaid) FilterTris(Top, TopXf);
+				else Top.clear();
+			}
+			for (size_t J = 0; J < Boughs.size(); ++J) FilterTris(Boughs[J], BoughXf[J]);
+			// A leaf on what fell stays only where its wood stayed, and all of it, pressed onto the ground, inside the reach.
+			std::vector<char> Present(W.M.Points(), 0);
+			for (const uint32_t I : Top) Present[I] = 1;
+			for (const std::vector<uint32_t>& Bg : Boughs)
+				for (const uint32_t I : Bg) Present[I] = 1;
+			auto Fell = [&](int Ch) -> const Xf* { return Ch == 2 ? (bTopLaid ? &TopXf : nullptr) : Ch >= 3 && static_cast<size_t>(Ch - 3) < Boughs.size() ? &BoughXf[static_cast<size_t>(Ch - 3)] : nullptr; };
+			auto Settle = [&](const Mesh& Of, const LeafSheet& Sh, std::vector<int>& Choice) {
+				for (size_t Bk = 0; Bk < Sh.Bunches.size(); ++Bk)
+					if (Choice[Bk] >= 2 && (!Fell(Choice[Bk]) || Sh.Bunches[Bk].Owner >= Orig || !Present[Sh.Bunches[Bk].Owner])) Choice[Bk] = 0;
+				for (size_t T = 0; T < Of.Tris(); ++T)
+				{
+					const int Ch = Choice[Sh.BunchOf[T]];
+					if (Ch < 2) continue;
+					const Xf* Xt = Fell(Ch);
+					for (int C = 0; C < 3; ++C)
+					{
+						V3 Q = Xt->Point(VertAt(Of, Of.Triangles[T * 3 + static_cast<size_t>(C)]));
+						Q.Z = std::max(Q.Z, 0.04);
+						if (!Inside(Q)) Choice[Sh.BunchOf[T]] = 0;
+					}
+				}
+			};
+			Settle(Src, S, MainChoice);
+			// The paint: leaves left duller, the snow off what fell (a fallen top's wood its bark). A cut point keeps its bark:
+			// painted pale it bled pale down a limb's long triangles (an ash's whole limbs went tan); the pale is the cut's own
+			// face and splinters (CapRing).
+			auto PaintOf = [&](bool bFallen) {
+				return [&, bFallen](uint32_t I, const Rgb8& C) {
+					const uint8_t Kd = KindOfColour(C);
+					if (Kd == KSnow && bFallen) return Byte(R.Bark);
+					if (Kd != KWood) return Duller(C, Hash(P.Seed, I), Style);
+					return C;
+				};
+			};
+			const Xf Still;
+			if (Budget != SIZE_MAX && Stump.size() / 3 > Budget * 3 / 5)
+			{
+				std::vector<std::pair<double, size_t>> ByOut;
+				for (size_t T = 0; T + 2 < Stump.size(); T += 3)
+				{
+					double Far = 0.0;
+					for (size_t J = 0; J < 3; ++J)
+					{
+						const V3 Q = W.P(Stump[T + J]);
+						const V2 C = R.AxisAt(Q.Z);
+						Far = std::max(Far, std::hypot(Q.X - C.X, Q.Y - C.Y));
+					}
+					ByOut.push_back({ Far, T });
+				}
+				std::sort(ByOut.begin(), ByOut.end());
+				std::vector<uint32_t> Kept;
+				for (size_t J = 0; J < Budget * 3 / 5 && J < ByOut.size(); ++J) Kept.insert(Kept.end(), { Stump[ByOut[J].second], Stump[ByOut[J].second + 1], Stump[ByOut[J].second + 2] });
+				Stump.swap(Kept);
+				// (and a leaf whose wood was left out goes with it)
+				std::vector<char> Held(W.M.Points(), 0);
+				for (const uint32_t I : Stump) Held[I] = 1;
+				for (size_t Bk = 0; Bk < S.Bunches.size(); ++Bk)
+					if (MainChoice[Bk] == 1 && (S.Bunches[Bk].Owner >= Orig || !Held[S.Bunches[Bk].Owner])) MainChoice[Bk] = 0;
+				for (size_t E = 0; E < L.ExtraSheets.size(); ++E)
+					for (size_t Bk = 0; Bk < L.ExtraSheets[E].Bunches.size(); ++Bk)
+						if (ExtraChoice[E][Bk] == 1 && (L.ExtraSheets[E].Bunches[Bk].Owner >= Orig || !Held[L.ExtraSheets[E].Bunches[Bk].Owner])) ExtraChoice[E][Bk] = 0;
+			}
+			// The cards and the sprigs go with the clump of the main mesh they sit on (the nearest within 1.5 m): a clump kept
+			// keeps its fringe, a clump lost takes its cards with it, so no bald clump and no card left floating where its clump
+			// went. A card with no clump near (a tree whose leaves are all on cards) goes by its own wood as above.
+			{
+				PointGrid Clumps;
+				Clumps.Size = 1.5;
+				std::vector<V3> ClumpAt;
+				std::vector<uint32_t> ClumpOf;
+				for (size_t Bk = 0; Bk < S.Bunches.size(); ++Bk)
+					if (S.Bunches[Bk].Kind == KLeaf && !S.Bunches[Bk].bCubed)
+					{
+						Clumps.Add(S.Bunches[Bk].Mid, static_cast<uint32_t>(ClumpAt.size()));
+						ClumpAt.push_back(S.Bunches[Bk].Mid);
+						ClumpOf.push_back(static_cast<uint32_t>(Bk));
+					}
+				if (!ClumpAt.empty())
+				{
+					auto ClumpPoint = [&ClumpAt](uint32_t I) { return ClumpAt[I]; };
+					for (size_t E = 0; E < L.ExtraSheets.size(); ++E)
+						for (size_t Bk = 0; Bk < L.ExtraSheets[E].Bunches.size(); ++Bk)
+						{
+							const uint32_t Near = Clumps.Nearest(L.ExtraSheets[E].Bunches[Bk].Mid, 1.5, ClumpPoint);
+							if (Near != NoPoint) ExtraChoice[E][Bk] = MainChoice[ClumpOf[Near]];
+						}
+				}
+			}
+			for (size_t E = 0; E < L.Extra.size(); ++E) Settle(*L.Extra[E], L.ExtraSheets[E], ExtraChoice[E]);
+			// (the leaves of the standing level, and of them those still on the tree: the form's own count)
+			for (size_t Bk = 0; Bk < S.Bunches.size(); ++Bk)
+				if (S.Bunches[Bk].Kind == KLeaf)
+				{
+					Out.LeafWhole += S.Bunches[Bk].Tris;
+					if (MainChoice[Bk] == 1) Out.LeafLeft += S.Bunches[Bk].Tris;
+				}
+			for (size_t E = 0; E < L.ExtraSheets.size(); ++E)
+				for (size_t Bk = 0; Bk < L.ExtraSheets[E].Bunches.size(); ++Bk)
+				{
+					Out.LeafWhole += L.ExtraSheets[E].Bunches[Bk].Tris;
+					if (ExtraChoice[E][Bk] == 1) Out.LeafLeft += L.ExtraSheets[E].Bunches[Bk].Tris;
+				}
+			Append(Out.Main, W, Stump, Still, PaintOf(false));
+			std::vector<uint32_t> StumpLeaves, FallenLeaves;
+			std::vector<std::vector<uint32_t>> BoughLeaves(Boughs.size());
+			for (size_t T = 0; T < Src.Tris(); ++T)
+			{
+				const int Ch = MainChoice[S.BunchOf[T]];
+				if (Ch <= 0) continue;
+				std::vector<uint32_t>& To = Ch == 1 ? StumpLeaves : Ch == 2 ? FallenLeaves : BoughLeaves[static_cast<size_t>(Ch - 3)];
+				To.insert(To.end(), { Src.Triangles[T * 3], Src.Triangles[T * 3 + 1], Src.Triangles[T * 3 + 2] });
+			}
+			if (bSnap)
+			{
+				std::vector<uint32_t> Below, Above;
+				W.Split(StumpLeaves, LeafCut, Below, Above, nullptr);
+				StumpLeaves.swap(Below);
+			}
+			Append(Out.Main, W, StumpLeaves, Still, PaintOf(false));
+			if (Budget != SIZE_MAX) CapRoom = Budget > Out.Main.Tris() ? (Budget - Out.Main.Tris()) / 2 : 0;
+			// The cut faces and their splinters, on the stump.
+			std::vector<char> OnStump(W.M.Points(), 0);
+			for (const uint32_t I : Stump) OnStump[I] = 1;
+			std::vector<BreakRing> Rings = RingsOf(W, SegBreak, &OnStump);
+			double Biggest = 0.0;
+			for (const BreakRing& Rg : Rings) Biggest = std::max(Biggest, Rg.R);
+			const int SpikesOf = K.SpikesLo + static_cast<int>(Hash(P.Seed, 0x5C) % static_cast<uint64_t>(K.SpikesHi - K.SpikesLo + 1));
+			const double LongOf = Lerp(K.SpikeLo, K.SpikeHi, Unit(Hash(P.Seed, 0x5D)));
+			std::vector<std::pair<double, size_t>> BySize;
+			for (size_t J = 0; J < Rings.size(); ++J) BySize.push_back({ -Rings[J].R, J });
+			std::sort(BySize.begin(), BySize.end());
+			bool bTrunkCapped = false;
+			for (size_t Jx = 0; Jx < BySize.size(); ++Jx)
+			{
+				const BreakRing& Rg = Rings[BySize[Jx].second];
+				if (Rg.R < 0.03 && Jx > 0) continue;
+				const double Share = std::clamp(Rg.R / std::max(1e-6, Biggest), 0.3, 1.0);
+				// (the trunk's own break always splintered, a spruce's thin top too: never under 0.09 m across its ring; a limb's
+				// broken end too, down to a wrist's thickness)
+				int Spikes = Rg.R >= 0.06 || Jx == 0 ? std::max(Jx == 0 ? 3 : 1, static_cast<int>(std::lround(SpikesOf * Share))) : 0;
+				if (Style == 1) Spikes = (Spikes + 1) / 2;
+				if (Style == 2) Spikes = Jx < 3 ? 3 : 0;
+				BreakRing Wide_ = Rg;
+				if (Style == 2 && Jx == 0 && Wide_.R < 0.65) // (far off, the trunk's break a pale cap 1.3 m across: four pixels at 300 m)
+				{
+					for (V3& Q : Wide_.P) Q = Wide_.C + Unit3(Q - Wide_.C) * 0.65;
+					Wide_.R = 0.65;
+				}
+				else if (Style == 2 && Wide_.R < 0.32)
+				{
+					for (V3& Q : Wide_.P) Q = Wide_.C + Unit3(Q - Wide_.C) * 0.32;
+					Wide_.R = 0.32;
+				}
+				else if (Style < 2 && Jx == 0 && Wide_.R < 0.09 && Wide_.R > 1e-6)
+				{
+					for (V3& Q : Wide_.P) Q = Wide_.C + Unit3(Q - Wide_.C) * 0.09;
+					Wide_.R = 0.09;
+				}
+				const bool bCapped = Cap(Out.Main, Wide_, BreakN, Spikes, LongOf * (0.45 + 0.55 * Share) * (Style == 2 ? 1.4 : 1.0), 0.97 * H, 0xCA0 + Jx);
+				bTrunkCapped = bTrunkCapped || (Jx == 0 && bCapped);
+			}
+			// (the trunk's break always pale: where its cut ring was too ragged to cap (a hill pine's, cut through the whorl of
+			// its limbs), a round face on the stem's axis at the break, splintered as the trunk's)
+			if (bSnap && !bTrunkCapped && !Stump.empty())
+			{
+				double WoodTop = 0.0;
+				for (const uint32_t I : Stump) WoodTop = std::max(WoodTop, W.P(I).Z);
+				if (WoodTop >= Zb - 0.6)
+				{
+					const double Rr = Style == 2 ? 0.65 : std::clamp(R.TrunkR, 0.09, 0.6);
+					BreakRing Rg;
+					Rg.C = V3{ Cb.X, Cb.Y, std::min(Zb, WoodTop) };
+					Rg.R = Rr;
+					for (int J = 0; J < 8; ++J) Rg.P.push_back(Rg.C + V3{ std::cos(2.0 * Pi * J / 8.0), std::sin(2.0 * Pi * J / 8.0), 0.0 } * Rr);
+					Cap(Out.Main, Rg, BreakN, Style == 2 ? 3 : Style == 1 ? (SpikesOf + 1) / 2 : SpikesOf, LongOf * (Style == 2 ? 1.4 : 1.0), 0.97 * H, 0xCB8);
+				}
+			}
+			{
+				std::vector<BreakRing> Stubs = RingsOf(W, SegStub, &OnStump);
+				int Capped = 0;
+				for (size_t J = 0; J < Stubs.size(); ++J)
+				{
+					BreakRing& Rg = Stubs[J];
+					if (Rg.R < 0.03 || Style == 2) continue;
+					const V2 C = R.AxisAt(Rg.C.Z);
+					const V3 Out_ = Unit3(V3{ Rg.C.X - C.X, Rg.C.Y - C.Y, 0.0 }, Toward);
+					if (Cap(Out.Main, Rg, Out_, Style == 0 ? (Rg.R >= 0.12 ? 3 : Rg.R >= 0.06 ? 2 : 0) : 0, 0.35 * LongOf, 0.97 * H, 0xD00 + J)) ++Capped;
+				}
+				// (torn with no wood broken, a palm's fronds only: a splinter wound on the stem's burst side, a hand across)
+				if (!bSnap && Capped == 0 && Style <= 1)
+				{
+					const double Zw = Lerp(0.3, 0.5, Unit(Hash(P.Seed, 0x5E))) * R.High;
+					const V2 C = R.AxisAt(Zw);
+					const double Rw = std::clamp(0.6 * R.TrunkR, 0.06, 0.14);
+					const V3 Side = Unit3(V3{ -Toward.Y, Toward.X, 0.0 }, V3{ 1, 0, 0 });
+					BreakRing Rg;
+					Rg.C = V3{ C.X + Toward.X * 0.95 * R.TrunkR, C.Y + Toward.Y * 0.95 * R.TrunkR, Zw };
+					Rg.R = Rw;
+					for (int J = 0; J < 6; ++J)
+					{
+						const double A = 2.0 * Pi * J / 6.0;
+						Rg.P.push_back(Rg.C + Side * (Rw * std::cos(A)) + V3{ 0, 0, 1.6 * Rw * std::sin(A) });
+					}
+					Rg.R = 1.3 * Rw; // (the wound is taller than it is wide)
+					Cap(Out.Main, Rg, Unit3(V3{ Toward.X, Toward.Y, 0.0 }, V3{ 1, 0, 0 }), 1, 0.25 * LongOf, 0.97 * H, 0xD80);
+				}
+			}
+			// (a stem with no wood up to the break, a cypress's column of foliage: a thin pole to the break, splintered; torn, a
+			// thin pole up through the column, seen where the burst bit into it)
+			{
+				double WoodTop = 0.0;
+				for (const uint32_t I : Stump) WoodTop = std::max(WoodTop, W.P(I).Z);
+				const V2 C0 = R.AxisAt(0.0);
+				const double Rp = std::clamp(R.TrunkR, 0.1, 0.15);
+				if (bSnap && WoodTop < 0.6 * Zb)
+				{
+					Limb(Out.Main, V3{ C0.X, C0.Y, -0.2 }, V3{ Cb.X, Cb.Y, Zb }, Rp * 1.2, Rp, 6, Scaled(R.Bark, 0.9), R.Bark);
+					BreakRing Rg;
+					Rg.C = V3{ Cb.X, Cb.Y, Zb };
+					Rg.R = Rp;
+					for (int J = 0; J < 6; ++J) Rg.P.push_back(Rg.C + V3{ std::cos(2.0 * Pi * J / 6.0), std::sin(2.0 * Pi * J / 6.0), 0.0 } * Rp);
+					Cap(Out.Main, Rg, V3{ 0, 0, 1 }, Style == 2 ? 3 : K.SpikesHi, Style == 2 ? 0.8 : LongOf * 0.9, 0.97 * H, 0xE00);
+				}
+				else if (!bSnap && Style <= 1 && WoodTop < 0.3 * H && R.CrownTop > 0.6 * H)
+				{
+					const double Zt = 0.78 * H;
+					const V2 Ct = R.AxisAt(Zt);
+					Limb(Out.Main, V3{ C0.X, C0.Y, -0.2 }, V3{ Ct.X, Ct.Y, Zt }, Rp * 1.2, Rp * 0.4, 5, Scaled(R.Bark, 0.9), R.Bark);
+				}
+			}
+			Out.Stump = Out.Main;
+			Out.MainStand = { Out.Main.Points(), Out.Main.Tris() };
+			size_t Left = Budget == SIZE_MAX ? SIZE_MAX : Budget > Out.Main.Tris() ? Budget - Out.Main.Tris() : 0;
+			if (Left != SIZE_MAX && bSnap && bTopLaid)
+			{
+				const size_t Leaves = FallenLeaves.size() / 3;
+				const size_t Keep = Left > Leaves ? Left - Leaves : 0;
+				if (Top.size() / 3 > Keep)
+				{
+					// (the top's stem and big limbs first: its triangles nearest its break's middle kept)
+					std::vector<std::pair<double, size_t>> ByNear;
+					for (size_t T = 0; T + 2 < Top.size(); T += 3)
+					{
+						double Far = 0.0;
+						for (size_t J = 0; J < 3; ++J)
+						{
+							const V3 Q = W.P(Top[T + J]);
+							Far = std::max(Far, std::hypot(Q.X - Cb.X, Q.Y - Cb.Y) + 0.3 * std::max(0.0, Q.Z - Zb));
+						}
+						ByNear.push_back({ Far, T });
+					}
+					std::sort(ByNear.begin(), ByNear.end());
+					std::vector<uint32_t> Kept;
+					for (size_t J = 0; J < Keep && J < ByNear.size(); ++J) Kept.insert(Kept.end(), { Top[ByNear[J].second], Top[ByNear[J].second + 1], Top[ByNear[J].second + 2] });
+					Top.swap(Kept);
+				}
+				Left -= std::min(Left, Top.size() / 3 + Leaves);
+			}
+			// What lies on the ground, as laid: in each half-metre square its lowest point, and its highest of those meant to touch
+			// the ground (0.2 m or less up) (for the ground under each tree that takes this form: Ground::StrikeTrees picks the
+			// form whose fallen pieces lie on its ground).
+			std::vector<std::pair<std::pair<int64_t, int64_t>, V3>> LieBy;
+			auto Lies = [&](const Mesh& M, size_t From) {
+				for (size_t K2 = From; K2 < M.Points(); ++K2)
+				{
+					const V3 Q = VertAt(M, static_cast<uint32_t>(K2));
+					if (Q.Z > 0.6) continue;
+					LieBy.push_back({ { static_cast<int64_t>(std::floor(Q.X / 0.5)), static_cast<int64_t>(std::floor(Q.Y / 0.5)) }, Q });
+				}
+			};
+			// The top, its break pale and splintered, its far end broken off, as it fell.
+			if (bSnap && bTopLaid)
+			{
+				const size_t From = Out.Main.Points();
+				Append(Out.Main, W, Top, TopXf, PaintOf(true));
+				Append(Out.Main, W, FallenLeaves, TopXf, PaintOf(true), 0.04);
+				if (Style == 0)
+				{
+					std::vector<char> OnTop(W.M.Points(), 0);
+					for (const uint32_t I : Top) OnTop[I] = 1;
+					Mesh Faces;
+					std::vector<BreakRing> TopRings = RingsOf(W, SegBreak, &OnTop);
+					for (size_t J = 0; J < TopRings.size(); ++J)
+						if (TopRings[J].R >= 0.03) CapRing(Faces, TopRings[J], BreakN * -1.0, K, P, TopRings[J].R >= 0.08 ? 3 : 0, 0.5 * LongOf, Away, 1e9, 0xF00 + J, R.Bark);
+					std::vector<BreakRing> EndRings = RingsOf(W, SegEnd, &OnTop);
+					for (size_t J = 0; J < EndRings.size(); ++J)
+						if (EndRings[J].R >= 0.03) CapRing(Faces, EndRings[J], V3{ 0, 0, 1 }, K, P, EndRings[J].R >= 0.06 ? 2 : 0, 0.35 * LongOf, Away, 1e9, 0xF80 + J, R.Bark);
+					// (only where it stays inside the tree's reach, and the room left)
+					bool bIn = Left == SIZE_MAX || Faces.Tris() <= Left;
+					for (size_t J = 0; J < Faces.Points() && bIn; ++J) bIn = Inside(TopXf.Point(VertAt(Faces, static_cast<uint32_t>(J))));
+					if (bIn)
+					{
+						AppendMesh(Out.Main, Faces, TopXf);
+						if (Left != SIZE_MAX) Left -= Faces.Tris();
+					}
+				}
+				Lies(Out.Main, From);
+			}
+			for (size_t J = 0; J < Boughs.size(); ++J)
+			{
+				const size_t Has = (Boughs[J].size() + BoughLeaves[J].size()) / 3;
+				if (Left != SIZE_MAX)
+				{
+					if (Has > Left) continue;
+					Left -= Has;
+				}
+				const size_t From = Out.Main.Points();
+				Append(Out.Main, W, Boughs[J], BoughXf[J], PaintOf(true));
+				Append(Out.Main, W, BoughLeaves[J], BoughXf[J], PaintOf(true), 0.04);
+				// (its broken end pale, toward the trunk it was torn from)
+				if (Style == 0)
+				{
+					std::vector<char> OnBough(W.M.Points(), 0);
+					for (const uint32_t I : Boughs[J]) OnBough[I] = 1;
+					Mesh Faces;
+					std::vector<BreakRing> Ends = RingsOf(W, SegStub, &OnBough);
+					for (size_t Q = 0; Q < Ends.size(); ++Q)
+					{
+						if (Ends[Q].R < 0.03) continue;
+						const V2 C = R.AxisAt(Ends[Q].C.Z);
+						CapRing(Faces, Ends[Q], Unit3(V3{ C.X - Ends[Q].C.X, C.Y - Ends[Q].C.Y, 0.0 }, Away), K, P, Ends[Q].R >= 0.06 ? 2 : 0, 0.3 * LongOf, Away, 1e9, 0xF40 + J * 16 + Q, R.Bark);
+					}
+					if (Left == SIZE_MAX || Faces.Tris() <= Left)
+					{
+						AppendMesh(Out.Main, Faces, BoughXf[J]);
+						if (Left != SIZE_MAX) Left -= Faces.Tris();
+					}
+				}
+				Lies(Out.Main, From);
+			}
+			std::sort(LieBy.begin(), LieBy.end(), [](const auto& A, const auto& B) {
+				if (A.first != B.first) return A.first < B.first;
+				if (A.second.Z != B.second.Z) return A.second.Z < B.second.Z;
+				return A.second.X != B.second.X ? A.second.X < B.second.X : A.second.Y < B.second.Y;
+			});
+			for (size_t J = 0; J < LieBy.size(); ++J)
+			{
+				const bool bFirst = J == 0 || LieBy[J].first != LieBy[J - 1].first, bLast = J + 1 == LieBy.size() || LieBy[J].first != LieBy[J + 1].first;
+				if (bFirst) Out.Lie.push_back(LieBy[J].second);
+				else if (LieBy[J].second.Z <= 0.2 && (bLast || LieBy[J + 1].second.Z > 0.2)) Out.Lie.push_back(LieBy[J].second);
+			}
+			Out.bTopLaid = bTopLaid;
+			Out.TopXf = TopXf;
+			// The cards and the sprigs: as the leaves of the main mesh they go with.
+			Out.Extra.assign(L.Extra.size(), Mesh());
+			Out.ExtraStand.assign(L.Extra.size(), { 0, 0 });
+			for (size_t E = 0; E < L.Extra.size(); ++E)
+			{
+				const Mesh& Em = *L.Extra[E];
+				if (Em.Empty()) continue;
+				Work We(Em);
+				const LeafSheet& Se = L.ExtraSheets[E];
+				std::vector<std::vector<uint32_t>> By(3 + Boughs.size());
+				for (size_t T = 0; T < Em.Tris(); ++T)
+				{
+					const int Ch = ExtraChoice[E][Se.BunchOf[T]];
+					if (Ch <= 0) continue;
+					if (Ch == 2 && !bTopLaid) continue;
+					By[static_cast<size_t>(Ch)].insert(By[static_cast<size_t>(Ch)].end(), { Em.Triangles[T * 3], Em.Triangles[T * 3 + 1], Em.Triangles[T * 3 + 2] });
+				}
+				auto Paint = [&](uint32_t I, const Rgb8& C) { return Duller(C, Hash(P.Seed ^ 0xE7, I), Style); };
+				if (bSnap)
+				{
+					std::vector<uint32_t> Below, Above;
+					We.Split(By[1], LeafCut, Below, Above, nullptr);
+					By[1].swap(Below);
+				}
+				Append(Out.Extra[E], We, By[1], Still, Paint);
+				Out.ExtraStand[E] = { Out.Extra[E].Points(), Out.Extra[E].Tris() };
+				if (bTopLaid) Append(Out.Extra[E], We, By[2], TopXf, Paint, 0.04);
+				for (size_t J = 0; J < Boughs.size(); ++J) Append(Out.Extra[E], We, By[3 + J], BoughXf[J], Paint, 0.04);
+			}
+		}
+
+		/** A snapped tree far off: a post to its break (its bark), a pale splintered cap a metre across, and its top a dark
+		 * stroke on the ground away from the burst; some dozen triangles. Never a round crown. */
+		Mesh PoleCrown(const TreeRead& R, const StrikePlan& P, double BarkTop)
+		{
+			Mesh Out;
+			Builder Bd(Out);
+			const double Zb = std::min(P.Break * R.High, BarkTop > 0.5 ? BarkTop : 1e9), Rp = std::clamp(R.TrunkR * 1.1, 0.25, 0.5);
+			const V2 C0 = R.AxisAt(0.0), Cb = R.AxisAt(Zb);
+			uint32_t Foot[3], Head[3];
+			for (int J = 0; J < 3; ++J)
+			{
+				const double A = 2.0 * Pi * J / 3.0;
+				const V3 D{ std::cos(A), std::sin(A), 0.0 };
+				Foot[J] = Bd.Vert(V3{ C0.X, C0.Y, 0.0 } + D * Rp, D, Scaled(R.Bark, 0.85));
+				Head[J] = Bd.Vert(V3{ Cb.X, Cb.Y, Zb } + D * (Rp * 0.8), D, R.Bark);
+			}
+			for (int J = 0; J < 3; ++J)
+			{
+				const int N = (J + 1) % 3;
+				const double A = 2.0 * Pi * (J + 0.5) / 3.0;
+				const V3 D{ std::cos(A), std::sin(A), 0.0 };
+				TriFacing(Out, Foot[J], Foot[N], Head[N], D);
+				TriFacing(Out, Foot[J], Head[N], Head[J], D);
+			}
+			const Col Pale = PaleAt(R.Look, P, V3{ Cb.X, Cb.Y, Zb }, 0xCC);
+			const uint32_t Tip = Bd.Vert(V3{ Cb.X, Cb.Y, Zb + 0.7 }, V3{ 0, 0, 1 }, Pale);
+			uint32_t Rim[3];
+			for (int J = 0; J < 3; ++J)
+			{
+				const double A = 2.0 * Pi * (J + 0.25) / 3.0;
+				const V3 D{ std::cos(A), std::sin(A), 0.0 };
+				Rim[J] = Bd.Vert(V3{ Cb.X, Cb.Y, Zb - 0.1 } + D * 0.55, Unit3(D + V3{ 0, 0, 0.6 }), Scaled(Pale, 0.9));
+			}
+			for (int J = 0; J < 3; ++J)
+			{
+				const double A = 2.0 * Pi * (J + 0.75) / 3.0;
+				TriFacing(Out, Tip, Rim[J], Rim[(J + 1) % 3], V3{ std::cos(A), std::sin(A), 0.5 });
+			}
+			const V3 Away{ -std::cos(P.Bearing), -std::sin(P.Bearing), 0.0 }, Side{ -Away.Y, Away.X, 0.0 };
+			const double Long = std::min((1.0 - P.Break) * R.High, 0.9 * R.Wide - R.TrunkR - 0.4);
+			if (Long > 0.8 && !P.bBare)
+			{
+				const V3 A0 = V3{ C0.X, C0.Y, 0.25 } + Away * (R.TrunkR + 0.4);
+				const V3 A1 = A0 + Away * Long;
+				const Col Dark = Mixed(R.Bark, Rgb(70, 66, 50), 0.4);
+				Bd.Quad(A0 - Side * 0.45, A1 - Side * 0.8, A1 + Side * 0.8, A0 + Side * 0.45, Dark, Dark, Dark, Dark, V3{ 0, 0, 1 });
+			}
+			return Out;
+		}
+	}
+
+	/** What was struck, the struck forms, and the trees by squares: made as the ground is built, the word on (Ground::Ground). */
+	struct Ground::Impl::Shatter
+	{
+		struct StruckRef
+		{
+			Base Kind = Base::Oak;
+			uint32_t Index = 0;
+		};
+		/** The trees by 16 m squares over the field and its band (Start: each square's first in Trees, one past its end the next's). */
+		double X0 = 0.0, Y0 = 0.0, Square = 16.0;
+		int NX = 0, NY = 0;
+		std::vector<uint32_t> Start;
+		std::vector<StruckRef> Trees;
+		/** Each tree base as read (none for any other base). */
+		std::vector<std::unique_ptr<Shattered::TreeRead>> Reads;
+		/** A struck tree's record: its degree (1 torn, 2 snapped) and the burst that set it (the strongest: its metres from the
+		 * trunk, its place and height), its form, and whether the game has yet to be told. */
+		struct StrikeMark
+		{
+			uint8_t Degree = 0;
+			bool bTold = true;
+			int Form = -1;
+			double Dist = 0.0, BX = 0.0, BY = 0.0, BUp = 0.0;
+		};
+		std::unordered_map<uint64_t, StrikeMark> Marks;
+		std::vector<uint64_t> Untold;
+		struct StruckMade
+		{
+			BaseMesh Look;
+			Mesh Crown;
+			/** What lies on the ground (Shattered::LevelOut::Lie), the tree's own metres before its scale and turn. */
+			std::vector<V3> Lie;
+			/** The share of the standing tree's leaves (near level) still on it. */
+			double LeafShare = 1.0;
+			double Seconds = 0.0;
+			/** Where what fell begins in Near, Cards, Sprigs, Mid and Far (Shattered::LevelOut::MainStand); the stump's bark top;
+			 * whether its far crown is a pole (Shattered::PoleCrown): for its bare twin. */
+			std::array<std::pair<size_t, size_t>, 5> Stand{};
+			double BarkTop = 0.0;
+			bool bPole = false;
+		};
+		std::vector<std::unique_ptr<StruckMade>> Forms;
+		size_t Strikes = 0, Refused = 0, Capped = 0;
+		static uint64_t KeyOf(Base B, uint32_t I) { return (static_cast<uint64_t>(B) << 32) | I; }
+	};
+
+	namespace Shattered
+	{
+		bool TreeBase(Base B, const BaseMesh& Bm)
+		{
+			return B == Base::Oak || B == Base::Elm || B == Base::Ash || B == Base::Beech || B == Base::Pollard || B == Base::Apple || B == Base::Birch || Bm.bTree || Bm.Class == BaseMesh::Draw::Tree;
+		}
+	}
+
+	Ground::Impl::Shatter& Ground::Impl::Shattering() const
+	{
+		if (Shatters) return *Shatters;
+		Shatters = std::make_shared<Shatter>();
+		Shatter& S = *Shatters;
+		S.Reads.resize(static_cast<size_t>(Base::Count));
+		S.Forms.resize(static_cast<size_t>(Base::Count) * StruckForms);
+		S.X0 = -Band - 50.0;
+		S.Y0 = -Band - 50.0;
+		S.NX = std::max(1, static_cast<int>(std::ceil((FW + 2.0 * Band + 100.0) / S.Square)));
+		S.NY = std::max(1, static_cast<int>(std::ceil((FH + 2.0 * Band + 100.0) / S.Square)));
+		std::vector<uint32_t> Count_(static_cast<size_t>(S.NX) * S.NY + 1, 0);
+		auto SquareOf = [&S](double X, double Y) {
+			const int I = std::clamp(static_cast<int>(std::floor((X - S.X0) / S.Square)), 0, S.NX - 1), J = std::clamp(static_cast<int>(std::floor((Y - S.Y0) / S.Square)), 0, S.NY - 1);
+			return static_cast<size_t>(J) * S.NX + I;
+		};
+		for (int B = 0; B < static_cast<int>(Base::Count); ++B)
+		{
+			const BaseMesh& Bm = Bases[static_cast<size_t>(B)];
+			if (!Shattered::TreeBase(static_cast<Base>(B), Bm) || Inst[static_cast<size_t>(B)].empty() || Bm.Near.Empty()) continue;
+			auto R = std::make_unique<Shattered::TreeRead>();
+			if (!Shattered::ReadTree(*R, static_cast<Base>(B), Bm)) continue;
+			S.Reads[static_cast<size_t>(B)] = std::move(R);
+			for (const Placed& Pl : Inst[static_cast<size_t>(B)]) ++Count_[SquareOf(Pl.X, Pl.Y) + 1];
+		}
+		for (size_t K = 1; K < Count_.size(); ++K) Count_[K] += Count_[K - 1];
+		S.Start = Count_;
+		S.Trees.resize(Count_.back());
+		std::vector<uint32_t> Fill(Count_.begin(), Count_.end() - 1);
+		for (int B = 0; B < static_cast<int>(Base::Count); ++B)
+		{
+			if (!S.Reads[static_cast<size_t>(B)]) continue;
+			const std::vector<Placed>& Of = Inst[static_cast<size_t>(B)];
+			for (size_t K = 0; K < Of.size(); ++K) S.Trees[Fill[SquareOf(Of[K].X, Of[K].Y)]++] = { static_cast<Base>(B), static_cast<uint32_t>(K) };
+		}
+		return S;
+	}
+
+	int Ground::StrikeTrees(double X, double Y, double Up, double Across)
+	{
+		Impl& G = *In;
+		if (!G.bShattered || !G.Shatters) return 0;
+		Impl::Shatter& S = *G.Shatters;
+		++S.Strikes;
+		// (a burst that is not a number, or off the field and its band, is refused; a hole wider than 30 m, more than the
+		// heaviest bomb's (an endless one too), strikes as one 30 m across; a burst more than 100 m up reaches no tree)
+		if (!std::isfinite(X) || !std::isfinite(Y) || !std::isfinite(Up) || std::isnan(Across) || X < -Band || Y < -Band || X > G.FW + Band || Y > G.FH + Band || Up > 100.0)
+		{
+			++S.Refused;
+			return 0;
+		}
+		if (Across < 0.8) return 0;
+		if (Across > 30.0)
+		{
+			Across = 30.0;
+			++S.Capped;
+		}
+		Up = std::max(0.0, Up);
+		const double TornR = 2.5 * Across, SnapR = 0.8 * Across;
+		const bool bCanopy = Up > 0.5;
+		const double Reach = bCanopy ? std::max(1.5 * TornR, 30.0) : TornR;
+		using Ref = Impl::Shatter::StruckRef;
+		auto Each = [&](const auto& Do) {
+			const int I0 = std::max(0, static_cast<int>(std::floor((X - Reach - S.X0) / S.Square))), I1 = std::min(S.NX - 1, static_cast<int>(std::floor((X + Reach - S.X0) / S.Square)));
+			const int J0 = std::max(0, static_cast<int>(std::floor((Y - Reach - S.Y0) / S.Square))), J1 = std::min(S.NY - 1, static_cast<int>(std::floor((Y + Reach - S.Y0) / S.Square)));
+			for (int J = J0; J <= J1; ++J)
+				for (int I = I0; I <= I1; ++I)
+				{
+					const size_t Box = static_cast<size_t>(J) * S.NX + I;
+					for (uint32_t K = S.Start[Box]; K < S.Start[Box + 1]; ++K) Do(S.Trees[K]);
+				}
+		};
+		// A canopy burst: the tree whose crown holds the burst (the nearest to its crown's middle, as a share of its size).
+		uint64_t Held = ~0ull;
+		if (bCanopy)
+		{
+			double Best = 1.0;
+			Each([&](const Ref& T) {
+				const Placed& Pl = G.Inst[static_cast<size_t>(T.Kind)][T.Index];
+				const Shattered::TreeRead& R = *S.Reads[static_cast<size_t>(T.Kind)];
+				const double C = std::cos(Pl.Yaw), Sn = std::sin(Pl.Yaw);
+				const double CX = Pl.X + (R.CrownX * C - R.CrownY * Sn) * Pl.Scale, CY = Pl.Y + (R.CrownX * Sn + R.CrownY * C) * Pl.Scale;
+				const double Half = 0.5 * std::max(0.5, R.CrownTop - R.CrownFoot) * Pl.ScaleZ, Mid = 0.5 * (R.CrownTop + R.CrownFoot) * Pl.ScaleZ;
+				const double Rad = std::max(0.5, R.CrownR * Pl.Scale);
+				const double Q = Sq((X - CX) / Rad) + Sq((Y - CY) / Rad) + Sq((Up - Mid) / Half);
+				if (Q < Best || (Q == Best && Impl::Shatter::KeyOf(T.Kind, T.Index) < Held))
+				{
+					Best = Q;
+					Held = Impl::Shatter::KeyOf(T.Kind, T.Index);
+				}
+			});
+		}
+		// How badly a form's fallen pieces lie on a tree's ground (metres): a point meant to touch it (0.2 m or less over the
+		// foot) more than 0.3 m clear of it, any point more than 0.35 m into it (a hedge bank, a slope, a ditch), or a piece on
+		// a house's floor or wall or in water, is a misfit.
+		auto Misfit = [&](const Placed& Pl, int Form) {
+			const Impl::Shatter::StruckMade* Fm = S.Forms[static_cast<size_t>(Form)].get();
+			if (!Fm) return 0.0;
+			const double C = std::cos(Pl.Yaw), Sn = std::sin(Pl.Yaw);
+			double Worst = 0.0;
+			for (const V3& Q : Fm->Lie)
+			{
+				const double WX = Pl.X + (Q.X * C - Q.Y * Sn) * Pl.Scale, WY = Pl.Y + (Q.X * Sn + Q.Y * C) * Pl.Scale;
+				Drawn What = Drawn::Pasture;
+				const double Over = Pl.Z + Q.Z * Pl.ScaleZ - HeightAt(WX, WY, &What); // (the point over the ground under it)
+				double Bad = std::max(0.0, -Over - 0.35);
+				if (Q.Z <= 0.2) Bad += std::max(0.0, Over - 0.3);
+				if (What == Drawn::Floor || What == Drawn::Wall || What == Drawn::Water) Bad += 1.0;
+				Worst = std::max(Worst, Bad);
+			}
+			return Worst < 0.05 ? 0.0 : Worst;
+		};
+		int Did = 0;
+		Each([&](const Ref& T) {
+			const Placed& Pl = G.Inst[static_cast<size_t>(T.Kind)][T.Index];
+			const double D = std::hypot(X - Pl.X, Y - Pl.Y);
+			const uint64_t Key = Impl::Shatter::KeyOf(T.Kind, T.Index);
+			// (each tree its own toughness, 0.7 to 1.0 of the reach, from its place alone)
+			const double Tough = 0.7 + 0.3 * Unit(Hash(0x70F6ull, static_cast<uint64_t>(std::llround(Pl.X * 16.0)), static_cast<uint64_t>(std::llround(Pl.Y * 16.0))));
+			int Degree = 0;
+			if (Key == Held) Degree = 2;
+			else if (bCanopy) Degree = D <= 1.5 * TornR * Tough ? 1 : 0;
+			else Degree = D <= SnapR * Tough ? 2 : D <= TornR * Tough ? 1 : 0;
+			if (Degree == 0) return;
+			Impl::Shatter::StrikeMark& M = S.Marks[Key];
+			// (the strongest counts: snapped over torn, then the nearer burst, then the burst further west, then south, then the
+			// lower: a total order on the bursts, so the same rounds in any order leave the same record)
+			const bool bStronger = Degree > M.Degree
+				|| (Degree == M.Degree && (D < M.Dist || (D == M.Dist && (X < M.BX || (X == M.BX && (Y < M.BY || (Y == M.BY && Up < M.BUp)))))));
+			if (!bStronger) return;
+			const uint8_t Was = M.Degree;
+			const int WasForm = M.Form;
+			M.Degree = static_cast<uint8_t>(Degree);
+			M.Dist = D;
+			M.BX = X;
+			M.BY = Y;
+			M.BUp = Up;
+			// The form: the burst's bearing in the tree's own frame (a burst at its foot: a bearing of its own), and snapped,
+			// its break low, middle or high (a burst in the crown: never low); of the forms near that bearing (the nearest and
+			// the next, each within 90 degrees of it) and those heights, the first whose fallen pieces lie on this tree's ground.
+			double Bearing = D > 0.05 ? std::atan2(Y - Pl.Y, X - Pl.X) - Pl.Yaw : 2.0 * Pi * Unit(Hash(Key, 0xBEA));
+			Bearing = std::fmod(Bearing + 8.0 * Pi, 2.0 * Pi);
+			const uint64_t Own = Hash(0x5E1Full, static_cast<uint64_t>(std::llround(Pl.X * 16.0)), static_cast<uint64_t>(std::llround(Pl.Y * 16.0)));
+			int Tries[6] = { 0, 0, 0, 0, 0, 0 };
+			int NTries = 0;
+			if (Degree == 1)
+			{
+				const double Step = 2.0 * Pi / Shattered::TornForms;
+				const int V0 = static_cast<int>(std::lround(Bearing / Step)) % Shattered::TornForms;
+				const double Off = std::remainder(Bearing - V0 * Step, 2.0 * Pi);
+				const int Next = (V0 + (Off >= 0.0 ? 1 : Shattered::TornForms - 1)) % Shattered::TornForms;
+				Tries[NTries++] = V0;
+				Tries[NTries++] = Next;
+			}
+			else
+			{
+				const double Step = 2.0 * Pi / Shattered::SnapBearings;
+				const int Way = static_cast<int>(std::floor(Bearing / Step)) % Shattered::SnapBearings;
+				const double Off = Bearing - (Way + 0.5) * Step;
+				const int Next = (Way + (Off >= 0.0 ? 1 : Shattered::SnapBearings - 1)) % Shattered::SnapBearings;
+				const int Heights[3] = { Key == Held ? 1 + static_cast<int>(Own % 2) : static_cast<int>(Own % 3), Key == Held ? 2 - static_cast<int>(Own % 2) : static_cast<int>((Own + 1) % 3),
+					static_cast<int>((Own + 2) % 3) };
+				const int NHeights = Key == Held ? 2 : 3;
+				for (const int W : { Way, Next })
+					for (int Hh = 0; Hh < NHeights; ++Hh) Tries[NTries++] = Shattered::TornForms + W * Shattered::SnapHeights + Heights[Hh];
+			}
+			// (none whose fallen pieces lie on it, a hedge bank's top or a steep side: the nearest one with nothing laid, what
+			// fell gone over the bank or into the hedge)
+			int V = Degree == 1 ? Shattered::BareFrom + Tries[0] : Shattered::SnapBareFrom + (Tries[0] - Shattered::TornForms) / Shattered::SnapHeights;
+			for (int J = 0; J < NTries; ++J)
+				if (Misfit(Pl, static_cast<int>(T.Kind) * StruckForms + Tries[J]) == 0.0)
+				{
+					V = Tries[J];
+					break;
+				}
+			M.Form = static_cast<int>(T.Kind) * StruckForms + V;
+			if (M.Form != WasForm && M.bTold)
+			{
+				M.bTold = false;
+				S.Untold.push_back(Key);
+			}
+			if (Was < 2 && (Degree > Was || M.Form != WasForm)) Did = std::max(Did, Degree);
+		});
+		return Did;
+	}
+
+	size_t Ground::TakeTreeHits(std::vector<TreeHit>& Out)
+	{
+		Out.clear();
+		if (!In->Shatters) return 0;
+		Impl::Shatter& S = *In->Shatters;
+		for (const uint64_t Key : S.Untold)
+		{
+			Impl::Shatter::StrikeMark& M = S.Marks[Key];
+			M.bTold = true;
+			TreeHit H;
+			H.Kind = static_cast<Base>(Key >> 32);
+			H.Index = static_cast<uint32_t>(Key & 0xFFFFFFFFu);
+			H.Form = M.Form;
+			Out.push_back(H);
+		}
+		S.Untold.clear();
+		return Out.size();
+	}
+
+	int Ground::StrikeFormOf(Base B, size_t Index) const
+	{
+		if (!In->Shatters || Index > 0xFFFFFFFFu) return -1;
+		const auto Found = In->Shatters->Marks.find(Impl::Shatter::KeyOf(B, static_cast<uint32_t>(Index)));
+		return Found == In->Shatters->Marks.end() ? -1 : Found->second.Form;
+	}
+
+	const BaseMesh* Ground::StrikeForm(int Form) const
+	{
+		const Impl& G = *In;
+		if (!G.bShattered || Form < 0 || Form >= static_cast<int>(Base::Count) * StruckForms) return nullptr;
+		Impl::Shatter& S = G.Shattering();
+		const size_t B = static_cast<size_t>(Form / StruckForms);
+		if (!S.Reads[B]) return nullptr;
+		std::unique_ptr<Impl::Shatter::StruckMade>& Slot = S.Forms[static_cast<size_t>(Form)];
+		const int V = Form % StruckForms;
+		if (!Slot && V >= StruckLaid)
+		{
+			// (a bare form: its laid twin's levels up to where what fell begins, its crown the twin's (a pole without the stroke
+			// of its top on the ground))
+			const auto T0 = std::chrono::steady_clock::now();
+			const int TwinV = V >= Shattered::SnapBareFrom ? Shattered::TornForms + (V - Shattered::SnapBareFrom) * Shattered::SnapHeights + 1 : V - Shattered::BareFrom;
+			if (!StrikeForm(static_cast<int>(B) * StruckForms + TwinV)) return nullptr;
+			const Impl::Shatter::StruckMade& Twin = *S.Forms[B * StruckForms + static_cast<size_t>(TwinV)];
+			const Shattered::TreeRead& R = *S.Reads[B];
+			const Shattered::StrikePlan P = Shattered::StrikePlanOf(static_cast<Base>(B), V, R);
+			auto Made = std::make_unique<Impl::Shatter::StruckMade>(Twin);
+			BaseMesh& Out = Made->Look;
+			Out.Name = Twin.Look.Name + "Bare";
+			Out.Near = Shattered::Prefix(Twin.Look.Near, Twin.Stand[0]);
+			Out.Cards = Shattered::Prefix(Twin.Look.Cards, Twin.Stand[1]);
+			Out.Sprigs = Shattered::Prefix(Twin.Look.Sprigs, Twin.Stand[2]);
+			Out.Mid = Shattered::Prefix(Twin.Look.Mid, Twin.Stand[3]);
+			Out.Far = Shattered::Prefix(Twin.Look.Far, Twin.Stand[4]);
+			Measure(Out);
+			Made->Lie.clear();
+			if (Twin.bPole) Made->Crown = Shattered::PoleCrown(R, P, Twin.BarkTop);
+			Made->Seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - T0).count();
+			Slot = std::move(Made);
+		}
+		if (!Slot)
+		{
+			const auto T0 = std::chrono::steady_clock::now();
+			auto Made = std::make_unique<Impl::Shatter::StruckMade>();
+			const Shattered::TreeRead& R = *S.Reads[B];
+			const BaseMesh& Whole = G.Bases[B];
+			Shattered::StrikePlan P = Shattered::StrikePlanOf(static_cast<Base>(B), V, R);
+			P.bLobed = !G.Fd.Trial.empty() && G.Fd.Tried("farcrowns");
+			P.SnowIs = G.SnowIs;
+			BaseMesh& Out = Made->Look;
+			Out.Name = Whole.Name + (P.Degree == 1 ? "_Torn" : "_Snapped") + std::to_string(Form % StruckForms);
+			Out.FarFrom = Whole.FarFrom;
+			Out.MidFrom = Whole.MidFrom;
+			Out.bSight = Whole.bSight;
+			Out.SightMid = Whole.SightMid;
+			Out.SightHalf = Whole.SightHalf;
+			Out.SightAcross = Whole.SightAcross;
+			Out.SightTrunk = Whole.SightTrunk;
+			Out.Paint = Whole.Paint;
+			Out.bTree = Whole.bTree;
+			Out.Class = Whole.Class;
+			// The near level, its leaves fewer on the fallen pieces until it has no more triangles than the standing tree (last,
+			// its splinters as few as the middle level's).
+			auto BarkTopOf = [](const Mesh& Stump) {
+				double Top = 0.0; // (the stump's highest bark, not its pale splinters: the far pole stands no higher)
+				for (size_t K = 0; K < Stump.Points(); ++K)
+				{
+					const Rgb8& C = Stump.Colours[K];
+					if (C.G <= C.R + 6 && (C.R - C.B < 40 || C.R < 140)) Top = std::max(Top, static_cast<double>(Stump.Positions[K * 3 + 2]));
+				}
+				return Top;
+			};
+			Shattered::LevelOut NearCut;
+			for (const std::pair<int, double>& Try : { std::pair<int, double>{ 0, 1.0 }, { 0, 0.6 }, { 0, 0.3 }, { 0, 0.0 }, { 1, 0.0 } })
+			{
+				NearCut = Shattered::LevelOut();
+				Shattered::CutLevel(R.Near, R, P, Try.first, Try.second, NearCut);
+				if (NearCut.Main.Tris() <= Whole.Near.Tris() && (NearCut.Extra.size() < 1 || NearCut.Extra[0].Tris() <= Whole.Cards.Tris()) && (NearCut.Extra.size() < 2 || NearCut.Extra[1].Tris() <= Whole.Sprigs.Tris())) break;
+			}
+			// (a bare tree, a winter's, has few triangles and many cut twigs: the level held to the standing tree's count, its
+			// cut faces and splinters a fifth of it, its fallen top's furthest twigs and its torn boughs left out past that)
+			if (NearCut.Main.Tris() > Whole.Near.Tris())
+			{
+				NearCut = Shattered::LevelOut();
+				Shattered::CutLevel(R.Near, R, P, 1, 0.0, NearCut, Whole.Near.Tris());
+			}
+			const double BarkTop = BarkTopOf(NearCut.Stump);
+			Out.Near = std::move(NearCut.Main);
+			Out.Cards = NearCut.Extra.size() > 0 ? std::move(NearCut.Extra[0]) : Mesh();
+			Out.Sprigs = NearCut.Extra.size() > 1 ? std::move(NearCut.Extra[1]) : Mesh();
+			Made->Lie = std::move(NearCut.Lie);
+			Made->Stand[0] = NearCut.MainStand;
+			Made->Stand[1] = NearCut.ExtraStand.size() > 0 ? NearCut.ExtraStand[0] : std::pair<size_t, size_t>{ 0, 0 };
+			Made->Stand[2] = NearCut.ExtraStand.size() > 1 ? NearCut.ExtraStand[1] : std::pair<size_t, size_t>{ 0, 0 };
+			Made->BarkTop = BarkTop;
+			Made->LeafShare = NearCut.LeafWhole ? static_cast<double>(NearCut.LeafLeft) / static_cast<double>(NearCut.LeafWhole) : 0.0;
+			// The further levels cut as the near level was, their top fallen where its top fell, each held to the standing
+			// tree's own count (the far level is drawn by the thousand): its fallen leaves fewer, then its twigs.
+			auto Further = [&](const Shattered::LevelRead& Level, int Style, size_t Most, std::initializer_list<double> Shares, Shattered::LevelOut& Cut) {
+				for (const double Share : Shares)
+				{
+					Cut = Shattered::LevelOut();
+					Shattered::CutLevel(Level, R, P, Style, Share, Cut, SIZE_MAX, &NearCut);
+					if (Cut.Main.Tris() <= Most) return;
+				}
+				Cut = Shattered::LevelOut();
+				Shattered::CutLevel(Level, R, P, Style, 0.0, Cut, Most, &NearCut);
+			};
+			Mesh FarStump;
+			if (!R.Mid.Empty())
+			{
+				Shattered::LevelOut L;
+				Further(R.Mid, 1, Whole.Mid.Tris(), { 1.0, 0.5, 0.0 }, L);
+				Out.Mid = std::move(L.Main);
+				Made->Stand[3] = L.MainStand;
+			}
+			if (!R.Far.Empty())
+			{
+				Shattered::LevelOut L;
+				Further(R.Far, 2, Whole.Far.Tris(), { 0.35, 0.0 }, L);
+				Out.Far = std::move(L.Main);
+				Made->Stand[4] = L.MainStand;
+				FarStump = std::move(L.Stump);
+			}
+			else
+			{
+				Shattered::LevelOut L;
+				Shattered::CutLevel(R.Near, R, P, 2, 0.35, L, SIZE_MAX, &NearCut);
+				FarStump = std::move(L.Stump);
+			}
+			Measure(Out);
+			// The crown far off: torn, the game's crown of what is left, a little duller; snapped, a pole with a pale cap (a
+			// conifer that kept its low boughs: the crown of what is left, stopped flat under its break, its flat top pale: no
+			// more triangles than the standing tree's crown).
+			size_t Leafy = 0;
+			for (const Rgb8& C : FarStump.Colours) Leafy += C.G > C.R + 6 ? 1 : 0;
+			if (P.Degree == 1 || (R.Look.bKeepLow && Leafy >= 24))
+			{
+				Made->Crown = P.bLobed ? CrownLobed(FarStump) : CrownOf(FarStump);
+				for (Rgb8& C : Made->Crown.Colours) C = Byte(Mixed(Rgb(C.R, C.G, C.B), Rgb(150, 134, 100), 0.12)); // (its far level already a third duller)
+				if (P.Degree == 2)
+				{
+					const float Flat = static_cast<float>(std::min(P.Break * R.High, BarkTop > 0.5 ? BarkTop : 1e9) + 0.5);
+					const Col Pale = Shattered::PaleAt(R.Look, P, V3{ 0.0, 0.0, Flat }, 0xCB);
+					for (size_t K = 0; K < Made->Crown.Points(); ++K)
+						if (Made->Crown.Positions[K * 3 + 2] >= Flat - 0.05f)
+						{
+							Made->Crown.Positions[K * 3 + 2] = Flat;
+							Made->Crown.Colours[K] = Byte(Pale);
+						}
+				}
+			}
+			else
+			{
+				Made->Crown = Shattered::PoleCrown(R, P, BarkTop);
+				Made->bPole = true;
+			}
+			Made->Seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - T0).count();
+			Slot = std::move(Made);
+		}
+		return &Slot->Look;
+	}
+
+	const Mesh* Ground::StrikeCrown(int Form) const
+	{
+		if (!StrikeForm(Form)) return nullptr;
+		return &In->Shatters->Forms[static_cast<size_t>(Form)]->Crown;
+	}
+
+	double Ground::StrikeLeafShare(int Form) const
+	{
+		if (!StrikeForm(Form)) return -1.0;
+		return In->Shatters->Forms[static_cast<size_t>(Form)]->LeafShare;
+	}
+
+	size_t Ground::CrownsNear(double X, double Y, double R, std::vector<TreeCrown>& Out) const
+	{
+		Out.clear();
+		const Impl& G = *In;
+		if (!G.bShattered || !G.Shatters || !std::isfinite(X) || !std::isfinite(Y) || !std::isfinite(R) || R <= 0.0) return 0;
+		R = std::min(R, 100.0);
+		const Impl::Shatter& S = *G.Shatters;
+		const int I0 = std::max(0, static_cast<int>(std::floor((X - R - S.X0) / S.Square))), I1 = std::min(S.NX - 1, static_cast<int>(std::floor((X + R - S.X0) / S.Square)));
+		const int J0 = std::max(0, static_cast<int>(std::floor((Y - R - S.Y0) / S.Square))), J1 = std::min(S.NY - 1, static_cast<int>(std::floor((Y + R - S.Y0) / S.Square)));
+		for (int J = J0; J <= J1; ++J)
+			for (int I = I0; I <= I1; ++I)
+			{
+				const size_t Box = static_cast<size_t>(J) * S.NX + I;
+				for (uint32_t K = S.Start[Box]; K < S.Start[Box + 1]; ++K)
+				{
+					const Impl::Shatter::StruckRef& T = S.Trees[K];
+					const Placed& Pl = G.Inst[static_cast<size_t>(T.Kind)][T.Index];
+					const Shattered::TreeRead& Rd = *S.Reads[static_cast<size_t>(T.Kind)];
+					const double C = std::cos(Pl.Yaw), Sn = std::sin(Pl.Yaw);
+					double CX = Rd.CrownX, CY = Rd.CrownY, Rad = Rd.CrownR, Foot = Rd.CrownFoot, Top = Rd.CrownTop;
+					uint8_t State = 0;
+					const auto Found = S.Marks.empty() ? S.Marks.end() : S.Marks.find(Impl::Shatter::KeyOf(T.Kind, T.Index));
+					if (Found != S.Marks.end() && Found->second.Form >= 0)
+					{
+						const Shattered::StrikePlan P = Shattered::StrikePlanOf(T.Kind, Found->second.Form % StruckForms, Rd);
+						const V2 Ax = Rd.AxisAt(0.0);
+						State = static_cast<uint8_t>(P.Degree);
+						if (P.Degree == 1)
+						{
+							// (torn: the crown smaller, its middle moved away from the burst)
+							CX -= 0.2 * Rd.CrownR * std::cos(P.Bearing);
+							CY -= 0.2 * Rd.CrownR * std::sin(P.Bearing);
+							Rad *= 0.8;
+						}
+						else
+						{
+							const double Zb = P.Break * Rd.High;
+							Top = Zb + 0.4;
+							if (Rd.Look.bKeepLow && Rd.CrownFoot < Zb)
+							{
+								Rad *= 0.8;
+								Top = Zb;
+							}
+							else
+							{
+								CX = Ax.X;
+								CY = Ax.Y;
+								Rad = Rd.TrunkR + (Rd.Look.bPalm ? 0.3 : 0.8);
+								Foot = std::max(0.0, Zb - 1.2);
+							}
+						}
+					}
+					TreeCrown Tc;
+					Tc.Kind = T.Kind;
+					Tc.Index = T.Index;
+					Tc.X = static_cast<float>(Pl.X + (CX * C - CY * Sn) * Pl.Scale);
+					Tc.Y = static_cast<float>(Pl.Y + (CX * Sn + CY * C) * Pl.Scale);
+					if (std::hypot(Tc.X - X, Tc.Y - Y) > R) continue;
+					Tc.Z = Pl.Z;
+					Tc.Radius = static_cast<float>(Rad * Pl.Scale);
+					Tc.Foot = static_cast<float>(std::min(Foot, Top) * Pl.ScaleZ);
+					Tc.Top = static_cast<float>(Top * Pl.ScaleZ);
+					Tc.Shape = static_cast<uint8_t>(Rd.Look.bPalm ? 2 : Rd.Class == 1 ? 1 : 0);
+					Tc.State = State;
+					Out.push_back(Tc);
+				}
+			}
+		return Out.size();
+	}
+
 }

@@ -877,14 +877,17 @@ namespace LandFieldPicture
 			}
 			for (const LandField::Tile& T : G.Ring())
 				if (Boxed(T)) Add(T.Near, TileMat);
-			auto Place = [&](const LandField::Placed& P) {
-				const LandField::BaseMesh& Bm = G.BaseOf(P.Kind);
+			auto Place = [&](const LandField::Placed& P, size_t Index) {
+				// (a tree struck by shells, the trial "shattered": its struck form at every level, and its own far crown)
+				const int Struck = Index != static_cast<size_t>(-1) ? G.StrikeFormOf(P.Kind, Index) : -1;
+				const LandField::BaseMesh* StruckLook = Struck >= 0 ? G.StrikeForm(Struck) : nullptr;
+				const LandField::BaseMesh& Bm = StruckLook ? *StruckLook : G.BaseOf(P.Kind);
 				const double Dist = bAllNear ? 1e9 : std::hypot(P.X - Eye.X, P.Y - Eye.Y, P.Z - Eye.Z);
 				const bool bTree = (TreeFarFrom > 0.0 || CrownFrom > 0.0) && IsTree(P.Kind, Bm);
 				const bool bNear = bTree && TreeFarFrom > 0.0 ? Dist < TreeFarFrom : Dist < Bm.FarFrom;
 				const bool bCrown = bTree && !bNear && CrownFrom > 0.0 && Dist >= CrownFrom;
 				if (bCrown && bShadows) return;
-				const LandField::Mesh& M = bCrown ? CrownMesh(P.Kind, Bm) : bNear ? Bm.Near : Bm.Far;
+				const LandField::Mesh& M = bCrown ? (StruckLook ? *G.StrikeCrown(Struck) : CrownMesh(P.Kind, Bm)) : bNear ? Bm.Near : Bm.Far;
 				if (M.Empty()) return;
 				const double R = std::max(static_cast<double>(Bm.Radius) * P.Scale, 0.5 * Bm.Height * P.ScaleZ) + 0.5;
 				if (!Cull.Sees({ P.X, P.Y, P.Z + 0.5 * Bm.Height * P.ScaleZ }, R)) return;
@@ -933,8 +936,8 @@ namespace LandFieldPicture
 				S.Tris += M.Tris();
 			};
 			for (int B = 0; B < static_cast<int>(LandField::Base::Count); ++B)
-				for (const LandField::Placed& P : G.Instances(static_cast<LandField::Base>(B))) Place(P);
-			for (const LandField::Placed& P : Clutter) Place(P);
+				for (size_t K = 0; K < G.Instances(static_cast<LandField::Base>(B)).size(); ++K) Place(G.Instances(static_cast<LandField::Base>(B))[K], K);
+			for (const LandField::Placed& P : Clutter) Place(P, static_cast<size_t>(-1));
 		}
 
 		// ------------------------------------------------------------------ light

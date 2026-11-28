@@ -599,6 +599,35 @@ namespace LandField
 		double MeshSeconds = 0.0; // the tiles and the ring
 	};
 
+	/** (the trial "shattered") A base's struck forms: Ground::StrikeForm's number is Base x StruckForms + V, V 0 to 5 torn (the
+	 * burst toward the tree's own bearing V x 60 degrees), 6 to 17 snapped (the burst toward (V - 6) / 3 x 90 + 45 degrees, its
+	 * break low, middle or high in its kind's band by (V - 6) % 3); and the same with nothing lying at the foot, for a tree whose
+	 * ground would not take it (a hedge bank's top, a steep side): 18 to 23 torn as 0 to 5, 24 to 27 snapped as 7, 10, 13, 16. */
+	constexpr int StruckForms = 28;
+	/** The struck forms with their fallen pieces (V under this), all made as the ground is built; a bare one (V this or over)
+	 * is its laid twin's levels without what lies at the foot, made from the twin when first asked (a few milliseconds at
+	 * most: 5 ms measured for the jungle's largest tree on a loaded machine). */
+	constexpr int StruckLaid = 18;
+	/** A laid tree whose form changed (Ground::TakeTreeHits): its base, its index in Instances(Kind), and the form it now
+	 * takes (Ground::StrikeForm; never -1). */
+	struct TreeHit
+	{
+		Base Kind = Base::Oak;
+		uint32_t Index = 0;
+		int Form = -1;
+	};
+	/** A tree's crown as it stands now (Ground::CrownsNear): its middle (field metres), the ground at its foot (Z), how far its
+	 * leaves reach round the middle and how high their foot and top stand over the ground (metres, as laid: its own scale);
+	 * its shape (0 leafy, 1 a conifer, 2 a palm) and state (0 whole, 1 torn, 2 snapped: what still stands, never the top lying
+	 * at its foot); and which tree (Instances(Kind)[Index]). */
+	struct TreeCrown
+	{
+		Base Kind = Base::Oak;
+		uint32_t Index = 0;
+		float X = 0.0f, Y = 0.0f, Z = 0.0f, Radius = 0.0f, Foot = 0.0f, Top = 0.0f;
+		uint8_t Shape = 0, State = 0;
+	};
+
 	class Ground
 	{
 	public:
@@ -706,6 +735,48 @@ namespace LandField
 		double SnowLying() const;
 		/** The shell holes' earth for this ground (LandCrater::SetEarth), empty for the bocage's own. */
 		const char* EarthWord() const;
+
+		/**
+		 * Trees struck by shells (the trial "shattered"; with the word off every call here does nothing, at no cost). A shell
+		 * or bomb burst at X, Y (field metres), Up metres over the ground (0 on it; a canopy burst's height), its hole Across
+		 * metres wide (LandCrater::SizeOf(...).Across): a tree whose trunk stands within 2.5 x Across is TORN, within 0.8 x Across
+		 * SNAPPED (each tree's own toughness takes 0.7 to 1.0 of that reach; nothing where Across is under 0.8); a canopy burst
+		 * snaps the tree whose crown holds it and tears those within 1.5 x its reach. The strongest counts (snapped over torn,
+		 * then the nearer burst, then the one further west, south, lower: a total order), so the order the rounds come in does
+		 * not matter and a round struck twice is struck once. Of the forms facing the burst, a tree takes the first whose top or
+		 * boughs lie on its own ground (not sunk in a bank, not hung over a ditch, not on a house). What is struck lasts until
+		 * the ground is built again. Returns the strongest thing this burst did: 0 nothing (a tree already snapped counts as
+		 * nothing), 1 torn, 2 snapped. Refused (0, nothing kept): a value that is not a number, a burst off the field and its
+		 * band, or more than 100 m up; a hole over 30 m across strikes as one of 30 m. Game thread only, at any time, never
+		 * inside a ParallelFor: a lookup in a 16 m grid of the trees, made with the forms as the ground is built.
+		 */
+		int StrikeTrees(double X, double Y, double Up, double Across);
+		/** The trees whose form changed since the last call, each once, with the form it now takes: Out cleared, then filled
+		 * (no allocation once Out has room); returns how many. Game thread. */
+		size_t TakeTreeHits(std::vector<TreeHit>& Out);
+		/** A tree's form (Instances(B)[Index]): -1 while it stands whole. Game thread. */
+		int StrikeFormOf(Base B, size_t Index) const;
+		/**
+		 * A struck form's levels (StruckForms: its number), made from the standing tree's own as the ground is built (the word
+		 * on: every form of every tree laid) and kept, never moved, for the ground's life: Near (no more triangles than the standing tree's; its top
+		 * or boughs lying at its foot), Cards and Sprigs (its leaves left, as the standing tree's), Mid (a region kit's, where it
+		 * has one) and Far (neither with more triangles than the standing tree's), drawn as the standing tree's are (its FarFrom,
+		 * MidFrom, Class, Paint); null where the number is not a
+		 * struck form of a tree laid here, or with the word off. Game thread.
+		 */
+		const BaseMesh* StrikeForm(int Form) const;
+		/** The crown the game draws far off for a struck form, in CrownOf's (or on trial "farcrowns" CrownLobed's) place: torn,
+		 * the crown of what is left, its leaves some two fifths duller; snapped, a post to the break with a pale cap and its top a dark stroke on
+		 * the ground (a conifer that kept its low boughs, their crown stopped flat at the break, pale), never a round crown; no
+		 * more triangles than the standing tree's crown. Null as StrikeForm. Game thread. */
+		const Mesh* StrikeCrown(int Form) const;
+		/** The share of the standing tree's leaves (its near level's, by triangles) still on a struck form (not on what fell):
+		 * -1 as StrikeForm's null. */
+		double StrikeLeafShare(int Form) const;
+		/** The crowns whose middle stands within R metres (at most 100) of X, Y, as they stand now (struck or whole): Out cleared,
+		 * then filled (no allocation once Out has room); returns how many. With the word off: none (0), and nothing done. Reads
+		 * only what the ground built: any thread, but not while StrikeTrees runs. */
+		size_t CrownsNear(double X, double Y, double R, std::vector<TreeCrown>& Out) const;
 
 	private:
 		struct Impl;
