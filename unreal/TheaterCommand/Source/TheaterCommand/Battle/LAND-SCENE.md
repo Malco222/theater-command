@@ -2394,28 +2394,36 @@ Two exposure words came with it (`LandScape::AirOf`): `desertstop` takes the des
 
 Brian's guided start (27 November 2026, "add all of them": a builder to teach a new player, with a guided first battle
 and a first campaign turn). The first campaign turn is FIRST COMMAND's ten staff notes, already in the game; the field
-had none. Field notes carry the same staff note onto the general's screen of a live ground battle: one note at a time,
-30 words at most and one deed, stamped DONE when he does it, never taking the controls; the brass corners frame what it
-names. Seven, in this order, each when its moment comes: set out your army (only in the setup step; placing a unit or
-BEGIN THE BATTLE), look over the field (the view moved 25 m, turned 20 degrees, zoomed a fifth, or the top view), take a
-unit in hand, give an order, take your time (PAUSE or a pace of his own), what decides it (the core idea: nothing is
-scripted, men and machines, training, doctrine, supply, the ground and the air decide; a unit pointed at), and who gives
-up the field (the bar and HOW NEAR TO BREAKING OFF; a minute fought). Then the closing note, once. LATER puts a note away
-for this battle, NOTES OFF for good, and FIRST COMMAND turns them on again (all of them again once all were done). One tip
-leads into the field: on the first attack card that offers FIGHT IT YOURSELF, a TIP line says what it and SEND THEM IN
-are, and that what each side brings decides it either way.
+had none. Field notes carry the same staff note (headed STAFF NOTE, as FIRST COMMAND's) onto the general's screen of a
+live ground battle: one note at a time, 30 words at most and one deed, stamped DONE when he does it, never taking the
+controls; the brass corners frame what it names. Seven, in this order (the design director 28 November 2026: the pace
+before the first unit in hand), each when its moment comes: set out your army (only in the setup step; placing a unit or
+BEGIN THE BATTLE), look over the field (the view moved 25 m, turned 20 degrees, zoomed a fifth, or the top view), take
+your time (PAUSE or a pace of his own), take a unit in hand, give an order, what decides it (the core idea: nothing is
+scripted; men and machines, training, doctrine, the ground and his orders decide who holds the field; a unit pointed
+at), and who gives up the field (the bar and HOW NEAR TO BREAKING OFF; a minute fought). Then the closing note, once
+(CLOSE alone). LATER puts a note away for this battle; NOTES OFF for good, and says once that the Guide turns them on
+again: the staff notes are one switch, the Guide's on the campaign map and NOTES OFF in a battle; FIRST COMMAND turns
+them on too (all of them again once all were done). One tip leads into the field: on the first attack card that offers
+FIGHT IT YOURSELF, a TIP line says what it and SEND THEM IN are. Hidden while FILM has the camera.
+
+Every claim a note makes is traced to the file and line that makes it true (joins/guided-start/NOTES.md's table); a
+claim with no line comes out (supply and the air above are out of note 6 until the live battle reads them as such:
+today they reach it only inside each side's starting strength). The test reads every key a note names against
+`OnKeyDown`'s branch for his screen and fails where it does another deed, and every screen word against the screen.
 
 - `FieldNotes.h/.cpp`: the words, the notebook and the desk (which note is up from the battle's facts). Plain C++;
-  `Tools/field_notes/run.sh` plays a first battle through it with both compilers' strict flags (86 checks, the shipped
-  words among them: 30 words a note at most).
+  `Tools/field_notes/run.sh` plays a first battle through it with both compilers' strict flags (145 checks, the shipped
+  words among them: 30 words a note at most, each key and screen word against `LandBattleScreen.cpp`).
 - `FieldNotesStore.h/.cpp`: the switch, the words file, the player's notebook (`Saved/Campaign/field-notes.json`, kept
-  with the player, never a save), the attack card's tip.
+  with the player, never a save), the attack card's tip, the Guide's switch (`SetOn`, `OffInBattle`, `TakeOffAsked`).
 - `LandBattleNotes.cpp`: ALandBattle's side: the desk begun when his screen first comes up, its facts each frame (after
   `ShowGeneral`), the notebook written when a note is stamped. `OrderLive` and `PlaceLive` count his orders and units set
   down; the screen hands it the unit under his pointer (a tag or a card).
-- `SLandBattleScreen::PaintFieldNote`: the note (the art director's first-hour look: paper, clip, head row FIELD NOTE
-  and "3 OF 7", LATER, heading, sentences, the deed line, DONE), at the left edge under the dispatches, or the right edge
-  where it would lie on a unit in hand or on what it points at; never over ALL FALL BACK's question or the after card.
+- `SLandBattleScreen::PaintFieldNote`: the note (the art director's first-hour look: paper, clip, head row STAFF NOTE
+  and "3 OF 7", LATER, heading, sentences, the deed line, DONE), at the left edge under a full dispatches strip (its top
+  at y 146: the strip holds `GeneralStripLines`, three), or the right edge where it would lie on a unit in hand or on
+  what it points at; never over ALL FALL BACK's question or the after card.
 - Words: `Content/Data/Battle/field-notes.json` (the design director's to rule; the UI director rules the look).
 - Switch: the ship list's row `fieldnotes` (`-TheaterFieldNotes`), OFF. A run (pictures, steps, a scripted walk) keeps
   its own notebook (`field-notes-runs.json`) with the notes off: `-TheaterFieldNotesRun` starts it as a new general with

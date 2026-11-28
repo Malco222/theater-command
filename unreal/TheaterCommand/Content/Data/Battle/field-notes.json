@@ -1,6 +1,6 @@
 {
-  "_about": "Field notes (release 2): a new general's first battle on the field, taught as he plays it. The staff note of FIRST COMMAND (ruling 129, look ruling 147) carried onto the general's screen: one note at a time, 30 words at most, one deed, stamped DONE when he does it, never taking the controls. Kept with the player (Saved/Campaign/field-notes.json), not the save. Words for the design director and the UI director to rule; the notes run in this order, each when its moment comes. when: setup (only while he sets out his army), fight (once the clock runs), any. aim: what the brass corners frame (begin: BEGIN THE BATTLE; pause: PAUSE; tag: one of his units' tags; bar: the tug of war; none).",
-  "label": "FIELD NOTE",
+  "_about": "Field notes (release 2), headed STAFF NOTE: a new general's first battle on the field, taught as he plays it. The staff note of FIRST COMMAND (ruling 129, look ruling 147) carried onto the general's screen: one note at a time, 30 words at most, one deed, stamped DONE when he does it, never taking the controls. Kept with the player (Saved/Campaign/field-notes.json), not the save. Words for the design director and the UI director to rule; the notes run in this order, each when its moment comes. when: setup (only while he sets out his army), fight (once the clock runs), any. off: said once in the middle line when NOTES OFF is pressed (the staff notes are one switch with the Guide's). aim: what the brass corners frame (begin: BEGIN THE BATTLE; pause: PAUSE; tag: one of his units' tags; bar: the tug of war; none). keys: each key a note names and what it must do on his screen (view:N the view key's bit, pace:N, pause, do:word his GeneralDo word), and shows: the words on his screen a note names; Tools/field_notes checks both against LandBattleScreen.cpp's OnKeyDown and its buttons, and every claim's file and line is in joins/guided-start/NOTES.md (the design director 28 November 2026 23:58Z: a claim with no line comes out).",
+  "label": "STAFF NOTE",
   "notes": [
     {
       "id": "ground",
@@ -8,15 +8,79 @@
       "aim": "begin",
       "heading": "Set out your army",
       "text": "The clock waits while you place your units. Drag any of them inside the brass line. A unit set down in woods starts hidden from the enemy.",
-      "deed": "Place one unit, or BEGIN THE BATTLE."
+      "deed": "Place one unit, or BEGIN THE BATTLE.",
+      "keys": [],
+      "shows": [
+        "BEGIN THE BATTLE"
+      ]
     },
     {
       "id": "look",
       "when": "any",
       "aim": "none",
       "heading": "Look over the field",
-      "text": "W A S D, or the pointer at the screen's edge, moves your view. The wheel zooms, Q and E turn, and O looks straight down.",
-      "deed": "Move your view."
+      "text": "W, A, S and D, or the pointer at the screen's edge, move your view. The wheel zooms, Q and E turn, and O looks almost straight down.",
+      "deed": "Move your view.",
+      "keys": [
+        [
+          "W",
+          "view:4"
+        ],
+        [
+          "A",
+          "view:1"
+        ],
+        [
+          "S",
+          "view:8"
+        ],
+        [
+          "D",
+          "view:2"
+        ],
+        [
+          "Q",
+          "view:16"
+        ],
+        [
+          "E",
+          "view:32"
+        ],
+        [
+          "O",
+          "do:topview"
+        ]
+      ],
+      "shows": []
+    },
+    {
+      "id": "clock",
+      "when": "fight",
+      "aim": "pause",
+      "heading": "Take your time",
+      "text": "SPACE pauses the battle. You can still give orders; they reach your units once it runs again. 1, 2 and 3 set the pace. Pause whenever you need to think.",
+      "deed": "Pause, or change the pace.",
+      "keys": [
+        [
+          "SpaceBar",
+          "pause"
+        ],
+        [
+          "One",
+          "pace:1"
+        ],
+        [
+          "Two",
+          "pace:2"
+        ],
+        [
+          "Three",
+          "pace:4"
+        ]
+      ],
+      "shows": [
+        "PAUSE"
+      ]
     },
     {
       "id": "pick",
@@ -24,7 +88,14 @@
       "aim": "tag",
       "heading": "Take a unit in hand",
       "text": "Click a unit's tag over the field, or its card along the bottom. Shift-click adds another; drag a box round several. TAB finds your next unit.",
-      "deed": "Pick up one unit."
+      "deed": "Pick up one unit.",
+      "keys": [
+        [
+          "Tab",
+          "do:next"
+        ]
+      ],
+      "shows": []
     },
     {
       "id": "order",
@@ -32,43 +103,57 @@
       "aim": "none",
       "heading": "Give an order",
       "text": "With units in hand, click ground to send them there, or an enemy to attack. Click twice to go at the double. Orders go by radio and take a moment.",
-      "deed": "Give one order."
-    },
-    {
-      "id": "clock",
-      "when": "fight",
-      "aim": "pause",
-      "heading": "Take your time",
-      "text": "SPACE pauses the battle, and your orders still go out. 1, 2 and 3 set the pace. Pause whenever you need to think.",
-      "deed": "Pause, or change the pace."
+      "deed": "Give one order.",
+      "keys": [],
+      "shows": []
     },
     {
       "id": "decides",
       "when": "fight",
       "aim": "tag",
       "heading": "What decides it",
-      "text": "Nothing here is scripted. Men and machines, training, doctrine, supply, the ground and the air above decide who breaks first. Point at a unit to see it.",
-      "deed": "Point at one unit."
+      "text": "Nothing here is scripted. Men and machines, training, doctrine, the ground and your orders decide who holds the field. Point at a unit to see its name, kind and men.",
+      "deed": "Point at one unit.",
+      "keys": [],
+      "shows": []
     },
     {
       "id": "break",
       "when": "fight",
       "aim": "bar",
       "heading": "Who gives up the field",
-      "text": "The bar at the top leans toward whoever is winning. Under it, HOW NEAR TO BREAKING OFF fills as each side's nerve goes. The first to fill falls back.",
-      "deed": "Let the battle run one minute."
+      "text": "The bar between the flags weighs both sides' losses. Under it, each side's HOW NEAR TO BREAKING OFF fills as men fall and run; the first to fill falls back.",
+      "deed": "Let the battle run one minute.",
+      "keys": [],
+      "shows": [
+        "HOW NEAR TO BREAKING OFF"
+      ]
     }
   ],
   "closing": {
     "id": "yours",
     "heading": "The field is yours",
-    "text": "H holds a unit where it stands, R falls it back, and FILM watches the fight as a camera would. Any unit you never touch, your staff fights for you."
+    "text": "With a unit in hand, H holds it and R pulls it off the field. FILM watches as a camera would. Your staff fights any unit you never order.",
+    "keys": [
+      [
+        "H",
+        "do:hold"
+      ],
+      [
+        "R",
+        "do:fallback"
+      ]
+    ],
+    "shows": [
+      "FILM"
+    ]
   },
   "tips": [
     {
       "id": "fight",
       "where": "the attack card, under its orders, the first time it offers FIGHT IT YOURSELF",
-      "text": "FIGHT IT YOURSELF puts you on the field as the general; SEND THEM IN leaves it to your generals. Either way, what each side brings decides it."
+      "text": "FIGHT IT YOURSELF puts you on the field as the general; SEND THEM IN leaves it to your generals."
     }
-  ]
+  ],
+  "off": "STAFF NOTES ARE OFF. THE GUIDE, ON THE CAMPAIGN MAP, TURNS THEM ON AGAIN."
 }

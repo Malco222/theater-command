@@ -20,7 +20,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Battle/AirBattle.h"
-#include "Battle/FieldNotesStore.h" // (release 2, field notes: FIRST COMMAND arms them again)
+#include "Battle/FieldNotesStore.h" // (release 2, field notes: FIRST COMMAND arms them again; the Guide's switch is theirs too)
 #include "Battle/LandBattle.h"
 #include "Battle/LandField.h"
 #include "Battle/LandScape.h"
@@ -4036,6 +4036,11 @@ void ACampaignPlayerController::PressGuide(const FString& Action)
 		return;
 	}
 	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	if (Action == TEXT("on") || Action == TEXT("off"))
+	{
+		// (release 2, field notes: the Guide's staff notes are the field's too; NOTES OFF in a battle says so)
+		FieldNotesStore::SetOn(Action == TEXT("on"));
+	}
 	if (Action.StartsWith(TEXT("back:")))
 	{
 		// (a row waiting for him: its note comes back, and the Guide closes on it, as the browser's does)
@@ -5315,6 +5320,12 @@ void ACampaignPlayerController::AskLessons()
 			bLessonNote = false;
 		}
 		return;
+	}
+	// (release 2, field notes: NOTES OFF pressed in a battle turned the staff notes off; one switch, so the map's go too,
+	// and the Guide shows them off and turns both on again)
+	if (FieldNotesStore::TakeOffAsked())
+	{
+		LessonActsOwed.Insert(FString(TEXT("off")), 0);
 	}
 	// What is owed first, in the order it was done; then the desk as the screen stands now. Every lesson stamped on
 	// the way is gathered, for the note on the screen to take its stamp. (Lesson 10's note says its words for the

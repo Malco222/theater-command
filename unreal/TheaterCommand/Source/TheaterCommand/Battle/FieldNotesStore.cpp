@@ -21,6 +21,8 @@ namespace FieldNotesStore
 		 * gap of frames: the card it was shown on has closed). */
 		bool bTipShown = false;
 		uint64 TipFrame = 0;
+		/** NOTES OFF pressed in a battle, for the campaign map's staff notes to follow once it is back. */
+		bool bOffAsked = false;
 
 		std::string Narrow(const FString& Text)
 		{
@@ -113,6 +115,29 @@ namespace FieldNotesStore
 		}
 		Book().ArmAgain(*Words());
 		Save();
+	}
+
+	void SetOn(bool bOn)
+	{
+		bOffAsked = bOffAsked && !bOn;
+		if (!FeatureOn() || !Words() || Book().bOn == bOn)
+		{
+			return;
+		}
+		Book().bOn = bOn;
+		Save();
+	}
+
+	void OffInBattle()
+	{
+		bOffAsked = FeatureOn();
+	}
+
+	bool TakeOffAsked()
+	{
+		const bool bWas = bOffAsked;
+		bOffAsked = false;
+		return bWas;
 	}
 
 	FString FightTip()

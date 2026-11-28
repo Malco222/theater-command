@@ -30,6 +30,13 @@ namespace FieldNotesStore
 	void Save();
 	/** FIRST COMMAND begun: the notes on, and all of them again where every one was done. */
 	void ArmAgain();
+	/** The Guide's staff notes switched on or off on the campaign map: the field's notes follow it (one paper, one
+	 * switch), the done ones kept. */
+	void SetOn(bool bOn);
+	/** NOTES OFF pressed on a battle's note (the notebook already off): the staff notes are one switch, so the campaign
+	 * map's go off too once it asks for its notes again (TakeOffAsked, once). */
+	void OffInBattle();
+	bool TakeOffAsked();
 	/** The attack card's tip: its line while it is still to be seen ("" none). Asked each frame the card offers FIGHT IT
 	 * YOURSELF: the card it was first shown on keeps it while it stays open; the next card to open finds it seen. */
 	FString FightTip();

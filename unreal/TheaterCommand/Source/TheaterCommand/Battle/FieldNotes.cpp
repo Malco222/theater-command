@@ -103,7 +103,7 @@ namespace FieldNotes
 			return false;
 		}
 		Words Read;
-		Read.Label = Root["label"].Str("FIELD NOTE");
+		Read.Label = Root["label"].Str("STAFF NOTE");
 		const LandJson::Json& List = Root["notes"];
 		for (size_t K = 0; K < List.Count(); ++K)
 		{
@@ -147,6 +147,7 @@ namespace FieldNotes
 				Read.FightTip = Tips.At(K)["text"].Str("");
 			}
 		}
+		Read.OffLine = Root["off"].Str("");
 		Out = Read;
 		return true;
 	}

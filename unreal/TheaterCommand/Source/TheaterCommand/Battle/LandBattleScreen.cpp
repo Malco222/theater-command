@@ -36,6 +36,9 @@ namespace
 	const FLinearColor LeafInk = FLinearColor(FColor::FromHex(TEXT("3F6B36")));  // the kit's --gain-deep
 	/** The kit's --alarm-deep: something being lost (men running), the one thing besides a deadline given red. */
 	const FLinearColor Alarm = FLinearColor(FColor::FromHex(TEXT("8C2F22")));
+	/** The dispatches strip on his screen: three lines at most, 20 apart (the field notes' home lies under a full one). */
+	constexpr int32 GeneralStripLines = 3;
+	constexpr double GeneralStripLineH = 20.0;
 
 	/** PT Serif from Content/Fonts (SIL OFL 1.1), as the campaign frame's: names and titles. */
 	FSlateFontInfo Serif(const TCHAR* Weight, float Size)
@@ -464,13 +467,13 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 			// the older fading; the foot is the cards' alone: the UI director, 18:26Z)
 			double NY = BarH + 4.0;
 			int32 Shown = 0;
-			for (int32 K = Pieces.Num() - 1; K >= 0 && Shown < 3; --K)
+			for (int32 K = Pieces.Num() - 1; K >= 0 && Shown < GeneralStripLines; --K)
 			{
 				const LandDesk::Line& L = W.Lines[static_cast<size_t>(K)];
 				const float Fade = static_cast<float>(FMath::Clamp(1.0 - (L.Age - 0.7) / 0.3, 0.0, 1.0)) * (Shown == 0 ? 1.0f : Shown == 1 ? 0.8f : 0.6f);
 				for (const FString& Text : Pieces[K])
 				{
-					if (Shown >= 3)
+					if (Shown >= GeneralStripLines)
 					{
 						break;
 					}
@@ -479,7 +482,7 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 						Fill(18.0, NY, WideOf(Text, Face) + 16.0, 19.0, Leather * FLinearColor(1.0f, 1.0f, 1.0f, 0.88f * Fade), 2);
 						Write(Text, 26.0, NY + 1.0, Face, (L.Side == 0 ? Cream : Paper) * FLinearColor(1.0f, 1.0f, 1.0f, Fade), 3);
 					}
-					NY += 20.0;
+					NY += GeneralStripLineH;
 					++Shown;
 				}
 			}
@@ -2048,13 +2051,13 @@ void SLandBattleScreen::PaintFieldNote(const FGeometry& Geometry, FSlateWindowEl
 	const double NW = FMath::Min(340.0, FMath::Max(240.0, Size.X - 48.0)), Pad = 16.0, Inner = NW - Pad * 2.0;
 	const FSlateFontInfo HeadFace = Typed(11.0f, true, 140), CountFace = Typed(11.0f), HeadingFace = Serif(TEXT("Bold"), 18.0f),
 		TextFace = Serif(TEXT("Regular"), 15.0f), DeedFace = Typed(13.0f), QuietFace = Typed(9.0f, true, 60);
-	const FString Label = Wide(S.FieldDesk.TheWords().Label.empty() ? std::string("FIELD NOTE") : S.FieldDesk.TheWords().Label);
+	const FString Label = Wide(S.FieldDesk.TheWords().Label.empty() ? std::string("STAFF NOTE") : S.FieldDesk.TheWords().Label);
 	const FString Count = bClosing ? FString() : FString::Printf(TEXT("%d OF %d"), NoteUp.Number, NoteUp.Of);
 	const FString Quiet = bClosing || NoteUp.bStamped ? FString(TEXT("CLOSE")) : FString(TEXT("LATER"));
 	const TArray<FString> Heading = Wrap(Wide(N->Heading), HeadingFace, Inner);
 	const TArray<FString> Text = Wrap(Wide(N->Text), TextFace, Inner);
 	const bool bDeed = !bClosing && !N->Deed.empty();
-	const double HeadH = 18.0, DeedH = bDeed ? 1.0 + 10.0 + 22.0 : 0.0, FootH = 20.0;
+	const double HeadH = 18.0, DeedH = bDeed ? 1.0 + 10.0 + 22.0 : 0.0, FootH = bClosing ? 0.0 : 20.0; // (the closing note: no foot)
 	const double NH = 18.0 + HeadH + 10.0 + 24.0 * Heading.Num() + 6.0 + 22.0 * Text.Num() + 10.0 + DeedH + FootH + 12.0;
 
 	// What it points at (the brass corners), as drawn this frame: a button, one of his units' tags, the tug of war.
@@ -2108,7 +2111,9 @@ void SLandBattleScreen::PaintFieldNote(const FGeometry& Geometry, FSlateWindowEl
 	// Home: the left edge under the dispatches; the right edge where it would lie on a unit in hand or on what it points
 	// at; it chooses when it comes and does not move while he reads (kept by the desk's note: the side is worked out
 	// from the first frame's tags and held).
-	const double LeftX = 24.0, RightX = Size.X - 24.0 - NW, NY = BarH + 4.0 + 3.0 * 20.0 + 16.0;
+	// (the UI director 28 November 00:08Z: its top a gap below the dispatches strip's last line, y 146 the least; the strip
+	// on his screen holds GeneralStripLines at most, so the home under a full strip is the one place, and it never moves)
+	const double LeftX = 24.0, RightX = Size.X - 24.0 - NW, NY = FMath::Max(146.0, BarH + 4.0 + GeneralStripLines * GeneralStripLineH + 16.0);
 	auto Covers = [&](double X)
 	{
 		const FSlateRect Sheet = Rect(X, NY - 10.0, NW, NH + 10.0);
@@ -2199,9 +2204,10 @@ void SLandBattleScreen::PaintFieldNote(const FGeometry& Geometry, FSlateWindowEl
 			Write(Done, SX + 10.0 + Grow * 0.5, SY + 3.0 + Grow * 0.5, StampFace, LeafInk, 16);
 		}
 	}
-	// The foot: NOTES OFF, quiet, at the right (no more notes in any battle; FIRST COMMAND brings them back); not under
-	// the DONE stamp, whose note goes in two seconds anyway.
-	if (!NoteUp.bStamped)
+	// The foot: NOTES OFF, quiet, at the right (no more notes in any battle; the Guide or FIRST COMMAND brings them back);
+	// not under the DONE stamp, whose note goes in two seconds anyway, and not on the closing note, where nothing follows
+	// (the UI director 28 November 00:08Z: CLOSE alone).
+	if (!NoteUp.bStamped && !bClosing)
 	{
 		const FString Off = TEXT("NOTES OFF");
 		const double OW = WideOf(Off, QuietFace), OX = NX + NW - Pad - OW, OY = NY + NH - 12.0 - 14.0;

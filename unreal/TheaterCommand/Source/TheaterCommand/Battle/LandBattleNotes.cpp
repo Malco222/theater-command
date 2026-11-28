@@ -114,6 +114,14 @@ void ALandBattle::FieldNotesDo(const FString& Word)
 		{
 			UE_LOG(LogTheater, Display, TEXT("Land battle (live): field notes turned off"));
 			Keep(Desk.TheBook());
+			FieldNotesStore::OffInBattle();
+			// (once, where they come back: the UI director 28 November 00:08Z)
+			if (const FieldNotes::Words* Words = FieldNotesStore::Words(); Words && !Words->OffLine.empty())
+			{
+				State->Note = Words->OffLine;
+				State->NoteAge = 0.0;
+				State->NoteFor = 5.0;
+			}
 		}
 	}
 	else if (Word == TEXT("close"))

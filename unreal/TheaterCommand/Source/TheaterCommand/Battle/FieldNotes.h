@@ -27,13 +27,15 @@ namespace FieldNotes
 
 	struct Words
 	{
-		/** The head row's word ("FIELD NOTE"). */
+		/** The head row's word ("STAFF NOTE", as FIRST COMMAND's: the UI director 28 November 00:08Z). */
 		std::string Label;
 		std::vector<Note> Notes;
 		/** The closing note (no deed), once every note is done. */
 		Note Closing;
 		/** The attack card's one-line tip the first time it offers FIGHT IT YOURSELF. */
 		std::string FightTip;
+		/** Said once, in the middle line, when NOTES OFF is pressed: where they come back. */
+		std::string OffLine;
 	};
 
 	/** The words from the data file's text; false (and why) when it cannot be read or a note lacks a part. */
