@@ -70,6 +70,19 @@ namespace LandTeamGun
 		bool Read(const LandKit::Model& M, std::string& OutWhy);
 	};
 
+	/** How far a weapon on her mount reaches over the ground from her mount's origin (metres: before her, behind her
+	 * and to either side, her traverse in it), for the walls she and the men at her are stepped clear of
+	 * (Battle/LandStone.h): the widest of the files of her sort (measured from the models, 27 November 2026: the
+	 * Hotchkiss before, the MG 42 behind, the Maxim aside; a mortar's plate and bipod). */
+	struct Footprint
+	{
+		double Fore = 0.0, Aft = 0.0, Aside = 0.0;
+	};
+	inline Footprint FootprintOf(const Kind& K)
+	{
+		return K.bMortar ? Footprint{ 0.75, 0.70, 0.90 } : Footprint{ 0.80, 0.92, 0.65 };
+	}
+
 	/** What a weapon's key man is doing this frame. */
 	struct Crew
 	{

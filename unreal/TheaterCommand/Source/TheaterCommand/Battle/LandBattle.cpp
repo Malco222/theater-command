@@ -4122,6 +4122,11 @@ void ALandBattle::MakeMen()
 				const double Heading = static_cast<double>(Facing);
 				return Stone->Clear(X, Y, FMath::Sin(Heading), FMath::Cos(Heading), LandStone::BodyOf(static_cast<double>(Lie)), bStood, StoodX, StoodY, OutDx, OutDy);
 			});
+			// (a gun and the men whose hands are on her take one step: MakeTeamGuns tells the crowd of each gun)
+			S.Men->SetStoneTeam([Stone](const LandMen::StoneMember* Them, int Count, bool bStood, double StoodDx, double StoodDy, double& OutDx, double& OutDy, int& OutHow)
+			{
+				return LandStone::ClearAllOf(Stone.Get(), Them, Count, bStood, StoodDx, StoodDy, OutDx, OutDy, OutHow);
+			});
 		}
 	}
 	S.ManOf.assign(S.Rec.Tracks.size(), -1);
@@ -9288,6 +9293,10 @@ void ALandBattle::MakeTeamGuns(double LifeDt)
 			if (!G.bServed)
 			{
 				S.Men->Serve(Man, Kind.bKneels ? 2 : 1);
+				// (she, he and the men at her are one thing by a wall: one step clear of its stone, Battle/LandStone.h;
+				// her mount stands at her seat from him, LandTeamGun::Gun::Step)
+				const LandTeamGun::Footprint Foot = LandTeamGun::FootprintOf(Kind);
+				S.Men->AddStoneTeam(Man, -Kind.Seat.X, -Kind.Seat.Y, Foot.Fore, Foot.Aft, Foot.Aside);
 				G.bServed = true;
 			}
 			C.bDown = C.bDown || S.Men->IsFalling(Man) || S.Men->Frozen(Man);

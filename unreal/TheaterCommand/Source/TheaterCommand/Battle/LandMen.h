@@ -298,6 +298,21 @@ namespace LandMen
 	 * his answer already and stands, or is stepping to, StoodX, StoodY (the last answer's place): he keeps the side of a
 	 * wall he chose. False where he is clear as he stands. Asked from several threads at once, as GroundFn is. */
 	using StoneFn = std::function<bool(double X, double Y, float Facing, float Lie, bool bStood, double StoodX, double StoodY, double& OutDx, double& OutDy)>;
+	/** One of several that stand as one thing by a wall (Crowd::AddStoneTeam): a man, his reach by how far he lies
+	 * (Lie), or his weapon's own mount (bPiece: Fore, Aft and Aside her reach from her place); where the rules have
+	 * them and the way they face (radians clockwise from north). */
+	struct StoneMember
+	{
+		double X = 0.0, Y = 0.0;
+		float Facing = 0.f, Lie = 0.f;
+		bool bPiece = false;
+		double Fore = 0.0, Aft = 0.0, Aside = 0.0;
+	};
+	/** The one step for several that stand as one thing (Them[0] leads; Battle/LandStone.h's ClearAll): as StoneFn,
+	 * the step they stand at already given as a step (bStood, StoodDx, StoodDy). OutHow: 0 they are clear as the
+	 * rules have them, 1 one step clears them all, 2 the men are clear (by a step, or as they are) and her mount is
+	 * left in the stone, 3 no step clears the men and none is taken. Asked from several threads at once. */
+	using StoneTeamFn = std::function<bool(const StoneMember* Them, int Count, bool bStood, double StoodDx, double StoodDy, double& OutDx, double& OutDy, int& OutHow)>;
 
 	/**
 	 * Where a man stands: his root on the field (x, y), his heading, and how far his body lies along the ground's slope
@@ -577,6 +592,42 @@ namespace LandMen
 		 * asked for him as he will face when the pivot ends, or StoneSettle on if it lasts longer, so that he is not
 		 * stepped off for every facing he sweeps on the way round. A slower turn is asked for as he faces. */
 		static constexpr double StoneTurn = 0.2;
+		/**
+		 * A gun and the men whose hands are on her are one thing (the art director, 27 November 2026, 20:54Z and
+		 * 21:10Z). SetStoneTeam: the one step for several, set once with SetStone. AddStoneTeam: a gun served by
+		 * Gunner (her key man). As he comes in to a rest, stops there or starts the battle there, the walls are
+		 * asked for him, for her and for every man of his team (his block and k) whose own track has him stay
+		 * within StoneTeamReach of that place then, or brings him to stay there within StoneTeamAhead, together:
+		 * one step. Each of those men comes in to it as he comes in to his rest there, and stands at it with his
+		 * gunner from then on (when the gunner turns or goes down and steps on, they step with him). No man slides
+		 * for it as he holds a rest pose: one who stood there on a step of his own before the gun came keeps it
+		 * (and the gun has hers), and one her gunner's step does not clear (he came
+		 * later than StoneTeamAhead, or he faces another way than his gun: the team's step is for men who face as
+		 * she does) steps on from it by himself, as a rifleman does. His other crew step each on his own, but never
+		 * on to her ground (within StoneTeamReach of where her gunner or her mount stand) nor before her muzzle
+		 * (within StoneMuzzleFar of her mount and StoneMuzzleCos of her facing: her traverse and a little): one
+		 * whose step would take him there stays where the rules have him. A team is kept a little clear of the
+		 * stone (LandStone's AsOneClear), so that a man at her whose facing is a hair off his gunner's is clear at
+		 * her step by his own asking; and a team that stands with her mount left in the stone (bodies before metal)
+		 * stays so while its men are clear, and is asked for with her again only when the men must step. Ahead,
+		 * Right: where her mount's origin stands from her gunner (metres along his facing and to his right); Fore,
+		 * Aft, Aside: her reach from it. Once for a gun; again changes her numbers.
+		 */
+		void SetStoneTeam(StoneTeamFn Fn);
+		void AddStoneTeam(int Gunner, double Ahead, double Right, double Fore, double Aft, double Aside);
+		static constexpr double StoneTeamReach = 1.5;
+		static constexpr double StoneTeamAhead = 20.0;
+		static constexpr double StoneMuzzleFar = 10.0;
+		static constexpr double StoneMuzzleCos = 0.866;
+		/** For the tests and the log: the guns told of (in AddStoneTeam's order) and each one's gunner; how the walls
+		 * answered for a gun at the last Update (StoneTeamFn's OutHow, or -1 where her gunner was on his way with
+		 * no rest ahead); whether a man stood at, or was coming in to, his gun's step then (a man of her crew at
+		 * her); and whether he was held to the rules' place off her ground. */
+		int StoneTeamCount() const;
+		int StoneTeamGunner(int Team) const;
+		int StoneTeamHow(int Team) const;
+		bool StoneAsOne(int Man) const;
+		bool StoneKeptOff(int Man) const;
 		/** Whether a man is aboard a vehicle now (the stance he shows), and the rules' word for it: his block, her k in it
 		 * and his seat in her bed (each -1 where the rules did not say). */
 		bool AboardOf(int Man, int& OutBlock, int& OutSeatOn, int& OutSeat) const;

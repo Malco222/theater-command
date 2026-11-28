@@ -1490,6 +1490,65 @@ namespace LandMen
 				return false;
 			}
 
+			/** Where a man's track has him stay within Reach of the place Px, Py: the stay he is in at Tm (the points
+			 * either side of it at one place, or his last point), else the first he comes to within Ahead seconds of Tm
+			 * (Stay seconds or more at one place, as RestAhead). Its place; OAt, Tm for the stay he is in, else when he
+			 * comes to it; and his facing then (Settle seconds into a stay he comes to, as RestAhead). */
+			bool StayNear(double Tm, double Ahead, double Px, double Py, double Reach, double Stay, double Settle, double& OX, double& OY, float& OF, double& OAt) const
+			{
+				const size_t N = T.size();
+				if (N == 0)
+				{
+					return false;
+				}
+				const size_t Here = Tm <= T[0] ? 0 : CursorAt(Tm);
+				if ((Tm <= T[0] || Here + 1 >= N || std::hypot(X[Here + 1] - X[Here], Y[Here + 1] - Y[Here]) < 1e-6)
+					&& std::hypot(X[Here] - Px, Y[Here] - Py) <= Reach)
+				{
+					size_t Cursor = Here;
+					float Speed = 0.f;
+					At(Tm, Cursor, OX, OY, OF, Speed);
+					OAt = Tm;
+					return true;
+				}
+				for (size_t I = Here + 1; I < N; ++I)
+				{
+					if (T[I] > Tm + Ahead)
+					{
+						return false;
+					}
+					size_t Last = I;
+					while (Last + 1 < N && std::hypot(X[Last + 1] - X[I], Y[Last + 1] - Y[I]) < 1e-6)
+					{
+						++Last;
+					}
+					if (((Last + 1 >= N && !bTail) || T[Last] - T[I] >= Stay) && std::hypot(X[I] - Px, Y[I] - Py) <= Reach)
+					{
+						OX = X[I];
+						OY = Y[I];
+						OAt = T[I];
+						size_t Faced = I;
+						while (Faced < Last && T[Faced + 1] <= T[I] + Settle)
+						{
+							++Faced;
+						}
+						if (Faced < Last)
+						{
+							const double Between = T[Faced + 1] - T[Faced];
+							const double U = Between > 1e-9 ? std::min(1.0, std::max(0.0, (T[I] + Settle - T[Faced]) / Between)) : 0.0;
+							OF = static_cast<float>(F[Faced] + Turn(F[Faced], F[Faced + 1]) * U);
+						}
+						else
+						{
+							OF = F[Last];
+						}
+						return true;
+					}
+					I = Last;
+				}
+				return false;
+			}
+
 			/** The facing a man at rest is turning to. Where his track has him turning at Tm (Cursor: the point at or
 			 * before Tm) as fast as Rate (radians a second) or faster: his facing as that turn ends where he stands,
 			 * or Settle seconds on, whichever is first. A man who pivots where he stands is asked for as he will face,
@@ -1740,6 +1799,13 @@ namespace LandMen
 			double StoneComeAt = -1e18, StoneFromX = 0.0, StoneFromY = 0.0;
 			double StoneAtX = 0.0, StoneAtY = 0.0;       // where the rules had him when he took the step he stands at
 			bool bStoneWay = false;                      // on his way since the walls were last asked for where he stands
+			// A gun's team (AddStoneTeam). The rules' place his step is for (where he rests, or the rest he is coming
+			// to); how the walls answered for him, her gunner, and her at rest (-1: not asked); whether he takes her
+			// gunner's step this frame, a man of her crew at her; and whether he is held to the rules' place because
+			// his own step would take him on to her ground.
+			bool bStoneFor = false, bStoneAsOne = false, bStoneKeptOff = false;
+			double StoneForX = 0.0, StoneForY = 0.0;
+			int StoneHow = -1;
 			double StillFor = 0.0;
 			float Fade = 1.f;
 			bool bVisible = true;
@@ -1848,6 +1914,24 @@ namespace LandMen
 		GroundFn GroundAt;
 		SeatFn SeatAt;              // the men aboard vehicles: their benches (SetSeats)
 		StoneFn StoneAt;            // the stone no man is drawn inside: the field's walls (SetStone)
+		// A gun and the men at her, one thing by a wall (SetStoneTeam, AddStoneTeam). Her gunner is stepped before
+		// the other men each Update (StepStoneLeads), so that her crew read the step he has this frame; what he
+		// tells of then is held and given in the men's order.
+		StoneTeamFn StoneTeamAt;
+		struct StoneTeamState
+		{
+			int Lead = -1;
+			double Ahead = 0.0, Right = 0.0, Fore = 0.0, Aft = 0.0, Aside = 0.0;
+			std::vector<int> Crew;             // the men of her gunner's block and k
+			size_t Sized = 0;                  // the men there were when Crew was found
+			uint64_t SteppedAt = 0;            // the StoneTick her gunner was stepped ahead at
+			std::vector<Event> Told;
+		};
+		std::vector<StoneTeamState> StoneTeams;
+		std::vector<int> StoneCrewOf;   // by man: the gun whose crew he is of (not her gunner), or -1
+		std::vector<int> StoneLeadOf;   // by man: the gun he serves as her gunner, or -1
+		uint64_t StoneTick = 0;
+		static constexpr int StoneMostAtHer = 6;
 		uint64_t Seed = 1;
 		int MonthNo = 0;
 		std::string SeasonName = "summer", Front = "west";
@@ -3487,6 +3571,159 @@ namespace LandMen
 			if (M.Fade <= 0.f) M.bVisible = false;
 		}
 
+		// ---------------------------------------------------------------------------------------------------------
+		// A gun and the men whose hands are on her, one thing by a wall (AddStoneTeam).
+
+		/** Aboard a vehicle or carried: not on the field's ground. */
+		static bool HeldNow(const Man& M)
+		{
+			return M.Shown >= 0 && static_cast<size_t>(M.Shown) < M.Stances.size()
+				&& (M.Stances[static_cast<size_t>(M.Shown)].Aboard || M.Stances[static_cast<size_t>(M.Shown)].Lift > 0.f);
+		}
+
+		/** A man's reach by the stance the rules have him in at a time of his track: 1 lying, 0 on his feet or his knee. */
+		static float LieByStance(const Man& M, double TrackT)
+		{
+			size_t Lo = 0, Hi = M.Stances.size();
+			while (Lo + 1 < Hi)
+			{
+				const size_t Mid = (Lo + Hi) / 2;
+				if (M.Stances[Mid].T <= TrackT)
+				{
+					Lo = Mid;
+				}
+				else
+				{
+					Hi = Mid;
+				}
+			}
+			return !M.Stances.empty() && M.Stances[Lo].Cl == Prone ? 1.f : 0.f;
+		}
+
+		/** The men of a gun's team: those of her gunner's block and k. */
+		void FindStoneCrew(StoneTeamState& Tm, int Team)
+		{
+			Tm.Crew.clear();
+			Tm.Sized = Men.size();
+			StoneCrewOf.resize(Men.size(), -1);
+			StoneLeadOf.resize(Men.size(), -1);
+			if (Tm.Lead < 0 || static_cast<size_t>(Tm.Lead) >= Men.size()) return;
+			const Man& G = Men[static_cast<size_t>(Tm.Lead)];
+			if (G.bRider || G.Track < 0) return;
+			StoneLeadOf[static_cast<size_t>(Tm.Lead)] = Team;
+			const TrackData& Lt = Tracks[static_cast<size_t>(G.Track)];
+			for (size_t I = 0; I < Men.size(); ++I)
+			{
+				const Man& C = Men[I];
+				if (static_cast<int>(I) == Tm.Lead || C.bRider || C.Track < 0) continue;
+				const TrackData& Ct = Tracks[static_cast<size_t>(C.Track)];
+				if (Ct.B != Lt.B || Ct.K != Lt.K || Ct.J < 1) continue;
+				Tm.Crew.push_back(static_cast<int>(I));
+				StoneCrewOf[I] = Team;
+			}
+		}
+
+		/** Whether a gun's gunner is on the field's ground, alive, at a battle time. */
+		static bool OnTheField(const Man& G, double Now)
+		{
+			return !G.bRider && G.Track >= 0 && G.State == Man::Alive && G.bVisible && !G.bLeaving && !HeldNow(G)
+				&& !(G.Info.Dead >= 0.0 && Now >= G.Info.Dead) && !(G.Info.Out >= 0.0 && Now - G.Info.Delay > G.Info.Out);
+		}
+
+		/** Whether a place is on a gun's ground (within StoneTeamReach of where her gunner or her mount stand: the
+		 * place his step is for, and the step he stands at or is coming in to) or before her muzzle within her
+		 * traverse. Not where her gunner is on his way with no rest ahead. */
+		static bool OnHerGround(const Man& G, const StoneTeamState& Tm, double Now, double X, double Y)
+		{
+			if (!G.bStoneFor || !OnTheField(G, Now)) return false;
+			const double Sf = std::sin(static_cast<double>(G.F)), Cf = std::cos(static_cast<double>(G.F));
+			const double Gx = G.StoneForX + G.StoneWantX, Gy = G.StoneForY + G.StoneWantY;
+			const double PieceX = Gx + Sf * Tm.Ahead + Cf * Tm.Right, PieceY = Gy + Cf * Tm.Ahead - Sf * Tm.Right;
+			if (std::hypot(X - Gx, Y - Gy) < Crowd::StoneTeamReach || std::hypot(X - PieceX, Y - PieceY) < Crowd::StoneTeamReach) return true;
+			const double Dx = X - PieceX, Dy = Y - PieceY, Far = std::hypot(Dx, Dy);
+			return Far <= Crowd::StoneMuzzleFar && Far > 1e-6 && (Dx * Sf + Dy * Cf) / Far > Crowd::StoneMuzzleCos;
+		}
+
+		/** The walls asked for a gun's team as one thing (SetStoneTeam): her gunner at Px, Py facing Face and lying by
+		 * Lie at a battle time, her mount where she stands from him, and the men of his crew who stand there with him:
+		 * those whose own tracks have them stay within StoneTeamReach of the place then, or bring them to stay there
+		 * within StoneTeamAhead. A man at her is asked for as her gunner faces and lies (the men at a gun face as she
+		 * does), so that the team's step changes when her gunner turns or goes down and never because another man
+		 * of hers looked round: he asks the walls for himself where he stands at it (Step). Whom: 0 as the team forms (her gunner comes in to the place, stops there or starts
+		 * the battle there), all of them but one who stands there already on a step of his own;
+		 * 2 once the team stands, those who took her gunner's step; 3 those, without her mount (the men alone).
+		 * bStood, HintX, HintY: the step they stand at. OutHow: as StoneTeamFn's. */
+		bool StoneTeamStep(const StoneTeamState& Tm, double Px, double Py, float Face, float Lie, double BattleT, int Whom, bool bStood, double HintX, double HintY, double& OutX, double& OutY, int& OutHow) const
+		{
+			StoneMember Them[2 + StoneMostAtHer];
+			int Count = 0;
+			const double Sf = std::sin(static_cast<double>(Face)), Cf = std::cos(static_cast<double>(Face));
+			Them[Count].X = Px;
+			Them[Count].Y = Py;
+			Them[Count].Facing = Face;
+			Them[Count].Lie = Lie;
+			++Count;
+			if (Whom != 3)
+			{
+				Them[Count].X = Px + Sf * Tm.Ahead + Cf * Tm.Right;
+				Them[Count].Y = Py + Cf * Tm.Ahead - Sf * Tm.Right;
+				Them[Count].Facing = Face;
+				Them[Count].bPiece = true;
+				Them[Count].Fore = Tm.Fore;
+				Them[Count].Aft = Tm.Aft;
+				Them[Count].Aside = Tm.Aside;
+				++Count;
+			}
+			for (size_t K = 0; K < Tm.Crew.size() && Count < 2 + StoneMostAtHer; ++K)
+			{
+				const Man& C = Men[static_cast<size_t>(Tm.Crew[K])];
+				if (!OnTheField(C, BattleT)) continue;
+				const bool bOwn = C.bStoneFor && !C.bStoneWay && !C.bStoneAsOne
+					&& std::hypot(C.StoneForX - Px, C.StoneForY - Py) <= Crowd::StoneTeamReach;
+				if (Whom >= 2 ? !C.bStoneAsOne : bOwn) continue;
+				const TrackData& Ct = Tracks[static_cast<size_t>(C.Track)];
+				const double Cl = BattleT - C.Info.Delay;
+				double Cx = 0.0, Cy = 0.0, CAt = 0.0;
+				float CFace = 0.f;
+				if (!Ct.StayNear(Cl, Crowd::StoneTeamAhead, Px, Py, Crowd::StoneTeamReach, Crowd::StoneStay, Crowd::StoneSettle, Cx, Cy, CFace, CAt)) continue;
+				Them[Count].X = Cx;
+				Them[Count].Y = Cy;
+				Them[Count].Facing = Face;
+				Them[Count].Lie = Lie;
+				++Count;
+			}
+			return StoneTeamAt(Them, Count, bStood, HintX, HintY, OutX, OutY, OutHow);
+		}
+
+		/** The guns' gunners, stepped before the other men and by one thread: each but one who may start his fall this
+		 * frame (the falls are chosen in the men's order). bAllPosed: every one posed, as the silent catching up does. */
+		void StepStoneLeads(double Now, double Dt, bool bQuiet, bool bAllPosed)
+		{
+			++StoneTick;
+			if (!StoneAt || !StoneTeamAt) return;
+			for (size_t Team = 0; Team < StoneTeams.size(); ++Team)
+			{
+				StoneTeamState& Tm = StoneTeams[Team];
+				Tm.Told.clear();
+				if (Tm.Lead < 0 || static_cast<size_t>(Tm.Lead) >= Men.size()) continue;
+				if (Tm.Sized != Men.size()) FindStoneCrew(Tm, static_cast<int>(Team));
+				Man& G = Men[static_cast<size_t>(Tm.Lead)];
+				if (G.bRider || (G.State == Man::Alive && G.Info.Dead >= 0.0 && Now >= G.Info.Dead)) continue;
+				const int Every = bThrift && !bAllPosed ? EveryOf(G) : 1;
+				Step(G, Now, Dt, Tm.Told, bQuiet, Every == 1 || (Frame + static_cast<uint64_t>(Tm.Lead)) % static_cast<uint64_t>(Every) == 0);
+				Tm.SteppedAt = StoneTick;
+			}
+		}
+
+		/** Whether a man was stepped ahead of the others this Update, a gun's gunner (StepStoneLeads); and what he told
+		 * of then. */
+		const std::vector<Event>* StoneLedNow(size_t K) const
+		{
+			if (K >= StoneLeadOf.size() || StoneLeadOf[K] < 0) return nullptr;
+			const StoneTeamState& Tm = StoneTeams[static_cast<size_t>(StoneLeadOf[K])];
+			return Tm.SteppedAt == StoneTick ? &Tm.Told : nullptr;
+		}
+
 		/** One man one frame. bPose false (a thrifty frame, far from the eye): all he does, his place, his turns of
 		 * pose, his shots and his clips' events, but not his bones (they keep the last frame's; his Stamp stays). A man
 		 * who starts to fall is posed. */
@@ -3561,22 +3798,29 @@ namespace LandMen
 					double FromX = M.StoneFromX, FromY = M.StoneFromY;
 					// (his reach by the stance the rules have him in: a man going down has a lying man's from the moment
 					// he is told to, so his step is spent as he goes down, and one getting up keeps his until he is up)
-					const auto LieBy = [&M](double TrackT)
+					const auto LieBy = [&M](double TrackT) { return LieByStance(M, TrackT); };
+					// A gun's team (AddStoneTeam): the gun he serves as her gunner, or the gun whose crew he is of and
+					// her gunner.
+					const size_t Me = static_cast<size_t>(&M - Men.data());
+					const int Led = StoneTeamAt && Me < StoneLeadOf.size() ? StoneLeadOf[Me] : -1;
+					const int Hers = StoneTeamAt && Me < StoneCrewOf.size() ? StoneCrewOf[Me] : -1;
+					const Man* Gunner = Hers >= 0 ? &Men[static_cast<size_t>(StoneTeams[static_cast<size_t>(Hers)].Lead)] : nullptr;
+					// (whether a place of his is at her: within StoneTeamReach of the place her gunner's step is for)
+					const auto AtHer = [&](double Px, double Py)
 					{
-						size_t Lo = 0, Hi = M.Stances.size();
-						while (Lo + 1 < Hi)
+						return Gunner && Gunner->bStoneFor && OnTheField(*Gunner, Now)
+							&& std::hypot(Px - Gunner->StoneForX, Py - Gunner->StoneForY) <= Crowd::StoneTeamReach;
+					};
+					// The walls asked for him at Px, Py at a time of his track, the step he stands at given as a step:
+					// for a gun's gunner, for his team as one thing (StoneTeamStep, and its Whom).
+					const auto Ask = [&](double Px, double Py, float Face, float Lie, double TrackT, int Whom, bool bStood, double HintX, double HintY, double& OutX, double& OutY, int& OutHow)
+					{
+						OutHow = -1;
+						if (Led < 0)
 						{
-							const size_t Mid = (Lo + Hi) / 2;
-							if (M.Stances[Mid].T <= TrackT)
-							{
-								Lo = Mid;
-							}
-							else
-							{
-								Hi = Mid;
-							}
+							return StoneAt(Px, Py, Face, Lie, bStood, Px + HintX, Py + HintY, OutX, OutY);
 						}
-						return !M.Stances.empty() && M.Stances[Lo].Cl == Prone ? 1.f : 0.f;
+						return StoneTeamStep(StoneTeams[static_cast<size_t>(Led)], Px, Py, Face, Lie, TrackT + M.Info.Delay, Whom, bStood, HintX, HintY, OutX, OutY, OutHow);
 					};
 					if (bHeld || M.bLeaving)
 					{
@@ -3585,6 +3829,8 @@ namespace LandMen
 						FromX = FromY = 0.0;
 						M.StoneComeAt = -1e18;
 						M.bStoneWay = true;
+						M.bStoneFor = M.bStoneAsOne = M.bStoneKeptOff = false;
+						M.StoneHow = -1;
 					}
 					else if (V < Crowd::StoneStill)
 					{
@@ -3592,9 +3838,12 @@ namespace LandMen
 						{
 							// (the place he stands at: as he stops, where he is drawn, and after that where he is stepping
 							// to if he is. He stays there while it is clear, and keeps the side of a wall he has; one who
-							// has crept StoneCrept from where he took the step is asked afresh)
+							// has crept StoneCrept from where he took the step is asked afresh. A man of a gun's crew who
+							// came in one with her stands at the step he came in to, her team's, not a hair short of it
+							// where he happens to be drawn as he stops)
 							const bool bStops = M.bStoneWay;
-							const double HintX = bStops ? M.StoneX : M.StoneWantX, HintY = bStops ? M.StoneY : M.StoneWantY;
+							const bool bDrawn = bStops && !M.bStoneAsOne;
+							const double HintX = bDrawn ? M.StoneX : M.StoneWantX, HintY = bDrawn ? M.StoneY : M.StoneWantY;
 							const bool bStood = (HintX != 0.0 || HintY != 0.0)
 								&& (bStops || std::hypot(M.X - M.StoneAtX, M.Y - M.StoneAtY) <= Crowd::StoneCrept);
 							if (bStops || !bStood)
@@ -3602,12 +3851,81 @@ namespace LandMen
 								M.StoneAtX = M.X;
 								M.StoneAtY = M.Y;
 							}
+							const bool bWasAsOne = M.bStoneAsOne, bWasKeptOff = M.bStoneKeptOff;
+							const int WasHow = M.StoneHow;
+							M.bStoneAsOne = M.bStoneKeptOff = false;
+							M.StoneHow = -1;
 							// (asked for as he will face, where he is turning: FacingTo)
 							const float FaceTo = Tr.FacingTo(Tl, M.AtCursor, Crowd::StoneSettle, Crowd::StoneTurn, F);
-							if (!StoneAt(M.X, M.Y, FaceTo, std::max(M.Lie, LieBy(Tl)), bStood, M.X + HintX, M.Y + HintY, WantX, WantY))
+							const float LieNow = std::max(M.Lie, LieBy(Tl));
+							if ((bFirst || bWasAsOne) && AtHer(M.X, M.Y))
 							{
-								WantX = WantY = 0.0;
+								// (one thing with his gun: a man of her crew at her stands at her gunner's step, where it
+								// has him clear, and steps on from it by himself where it has not; where no step clears
+								// the team's men he stays, as they do, where the rules have him)
+								const double GoX = Gunner->StoneWantX, GoY = Gunner->StoneWantY;
+								if (Gunner->StoneHow == 3)
+								{
+									WantX = WantY = 0.0;
+									M.bStoneAsOne = true;
+								}
+								else
+								{
+									if (!StoneAt(M.X, M.Y, FaceTo, LieNow, GoX != 0.0 || GoY != 0.0, M.X + GoX, M.Y + GoY, WantX, WantY))
+									{
+										WantX = WantY = 0.0;
+									}
+									M.bStoneAsOne = std::hypot(WantX - GoX, WantY - GoY) <= 1e-6;
+								}
+								M.StoneAtX = M.X;
+								M.StoneAtY = M.Y;
 							}
+							else
+							{
+								int How = -1;
+								// (a team that stands with her mount left in the stone stays so while its men are clear
+								// there: bodies before metal, and men holding their rest are not moved to clear her
+								// when her gunner's slow turn brings a step for her within reach. When the men must
+								// step, she is asked for with them again)
+								bool bStays = false;
+								if (Led >= 0 && WasHow == 2 && bStood && !bStops && !bFirst)
+								{
+									double MenX = 0.0, MenY = 0.0;
+									int MenHow = -1;
+									Ask(M.X, M.Y, FaceTo, LieNow, Tl, 3, true, HintX, HintY, MenX, MenY, MenHow);
+									if ((MenHow == 0 || MenHow == 1) && std::hypot(MenX - HintX, MenY - HintY) <= 1e-9)
+									{
+										WantX = HintX;
+										WantY = HintY;
+										How = 2;
+										bStays = true;
+									}
+								}
+								if (!bStays && !Ask(M.X, M.Y, FaceTo, LieNow, Tl, bStops || bFirst ? 0 : 2, bStood, HintX, HintY, WantX, WantY, How))
+								{
+									WantX = WantY = 0.0;
+								}
+								M.StoneHow = Led >= 0 ? How : -1;
+								if (Gunner)
+								{
+									const StoneTeamState& Tm = StoneTeams[static_cast<size_t>(Hers)];
+									// (a man of a gun's crew who steps on his own: never on to her ground, nor before her
+									// muzzle, unless the rules have him there. Decided as his step is formed, as he came
+									// in or where he starts; while he holds his rest it stands, so he does not slide)
+									const bool bForms = bFirst || (bStops && !bWasKeptOff && M.StoneX == 0.0 && M.StoneY == 0.0);
+									if (bForms ? (WantX != 0.0 || WantY != 0.0) && OnHerGround(*Gunner, Tm, Now, M.X + WantX, M.Y + WantY) && !OnHerGround(*Gunner, Tm, Now, M.X, M.Y) : bWasKeptOff)
+									{
+										WantX = WantY = 0.0;
+										M.bStoneKeptOff = true;
+									}
+									// (one who stood at her before she came, and whose own step is her gunner's: one with her)
+									M.bStoneAsOne = !M.bStoneKeptOff && AtHer(M.X, M.Y) && Gunner->StoneHow != 3
+										&& std::hypot(WantX - Gunner->StoneWantX, WantY - Gunner->StoneWantY) <= 1e-6;
+								}
+							}
+							M.bStoneFor = true;
+							M.StoneForX = M.X;
+							M.StoneForY = M.Y;
 							Share = 1.0;
 							FromX = FromY = 0.0;
 							M.StoneComeAt = -1e18;
@@ -3626,6 +3944,8 @@ namespace LandMen
 						WantX = WantY = 0.0;
 						Share = 1.0;
 						M.bStoneWay = true;
+						M.bStoneFor = M.bStoneAsOne = M.bStoneKeptOff = false;
+						M.StoneHow = -1;
 						// (not one who has left the field and walks on as he fades: his track is behind him)
 						const bool bOff = bLeaves || (M.Info.Out >= 0.0 && Tl > M.Info.Out);
 						if (!bFirst && !bOff && Tr.RestAhead(Tl, M.AtCursor, Crowd::StoneAhead, Crowd::StoneStay, Crowd::StoneSettle, RestX, RestY, RestF, RestAt))
@@ -3647,19 +3967,94 @@ namespace LandMen
 							// the side of the wall his present step has him, unless that is StoneKeepFar further than
 							// the nearest)
 							const float RestLie = LieBy(RestAt + Crowd::StoneSettle);
-							if (!StoneAt(RestX, RestY, RestF, RestLie, false, 0.0, 0.0, WantX, WantY))
+							const double RestT = RestAt + Crowd::StoneSettle;
+							int How = -1;
+							M.bStoneFor = true;
+							M.StoneForX = RestX;
+							M.StoneForY = RestY;
+							// (a man of a gun's crew: whether this rest is at her. Her gunner stands there or is coming in
+							// to it; or he is not yet, and his track brings him to stay within StoneTeamReach of it
+							// within StoneTeamAhead: then the step her team will have there, as her gunner will ask
+							// for it, so that the man who is there first stands where the gun will come)
+							bool bAtHer = AtHer(RestX, RestY);
+							double GoX = 0.0, GoY = 0.0;
+							int GoHow = -1;
+							if (bAtHer)
 							{
-								WantX = WantY = 0.0;
-								FromX = FromY = 0.0;
+								GoX = Gunner->StoneWantX;
+								GoY = Gunner->StoneWantY;
+								GoHow = Gunner->StoneHow;
 							}
-							else if (FromX != 0.0 || FromY != 0.0)
+							else if (Gunner && OnTheField(*Gunner, Now))
 							{
-								double KeptX = 0.0, KeptY = 0.0;
-								if (StoneAt(RestX, RestY, RestF, RestLie, true, RestX + FromX, RestY + FromY, KeptX, KeptY)
-									&& std::hypot(KeptX, KeptY) <= std::hypot(WantX, WantY) + Crowd::StoneKeepFar)
+								const TrackData& Gt = Tracks[static_cast<size_t>(Gunner->Track)];
+								const double Gl = Now - Gunner->Info.Delay;
+								double Gx = 0.0, Gy = 0.0, GAt = 0.0;
+								float GFace = 0.f;
+								if (Gt.StayNear(Gl, Crowd::StoneTeamAhead, RestX, RestY, Crowd::StoneTeamReach, Crowd::StoneStay, Crowd::StoneSettle, Gx, Gy, GFace, GAt) && GAt > Gl)
 								{
-									WantX = KeptX;
-									WantY = KeptY;
+									bAtHer = true;
+									const double Gs = GAt + Crowd::StoneSettle;
+									if (!StoneTeamStep(StoneTeams[static_cast<size_t>(Hers)], Gx, Gy, GFace, LieByStance(*Gunner, Gs), Gs + Gunner->Info.Delay, 0, false, 0.0, 0.0, GoX, GoY, GoHow))
+									{
+										GoX = GoY = 0.0;
+									}
+								}
+							}
+							if (bAtHer)
+							{
+								// (one thing with his gun: a man of her crew comes in to her gunner's step, where it has
+								// him clear, and to a step on from it of his own where it has not)
+								if (GoHow == 3)
+								{
+									WantX = WantY = 0.0;
+									M.bStoneAsOne = true;
+								}
+								else
+								{
+									if (!StoneAt(RestX, RestY, RestF, RestLie, GoX != 0.0 || GoY != 0.0, RestX + GoX, RestY + GoY, WantX, WantY))
+									{
+										WantX = WantY = 0.0;
+									}
+									M.bStoneAsOne = std::hypot(WantX - GoX, WantY - GoY) <= 1e-6;
+								}
+								if (WantX == 0.0 && WantY == 0.0)
+								{
+									FromX = FromY = 0.0;
+								}
+							}
+							else
+							{
+								// (a gun's gunner asks for the team as it forms. A man of his crew who stands at the place
+								// already on a step of his own keeps it, and the gun has hers)
+								if (!Ask(RestX, RestY, RestF, RestLie, RestT, 0, false, 0.0, 0.0, WantX, WantY, How))
+								{
+									WantX = WantY = 0.0;
+									FromX = FromY = 0.0;
+								}
+								else if (FromX != 0.0 || FromY != 0.0)
+								{
+									double KeptX = 0.0, KeptY = 0.0;
+									int KeptHow = -1;
+									if (Ask(RestX, RestY, RestF, RestLie, RestT, 0, true, FromX, FromY, KeptX, KeptY, KeptHow)
+										&& std::hypot(KeptX, KeptY) <= std::hypot(WantX, WantY) + Crowd::StoneKeepFar)
+									{
+										WantX = KeptX;
+										WantY = KeptY;
+										How = KeptHow;
+									}
+								}
+								M.StoneHow = Led >= 0 ? How : -1;
+								// (a man of a gun's crew who steps on his own: never on to her ground, nor before her
+								// muzzle, unless the rules have him there)
+								if (Gunner && (WantX != 0.0 || WantY != 0.0))
+								{
+									const StoneTeamState& Tm = StoneTeams[static_cast<size_t>(Hers)];
+									if (OnHerGround(*Gunner, Tm, Now, RestX + WantX, RestY + WantY) && !OnHerGround(*Gunner, Tm, Now, RestX, RestY))
+									{
+										WantX = WantY = 0.0;
+										M.bStoneKeptOff = true;
+									}
 								}
 							}
 							const double Span = std::min(Crowd::StoneAhead, std::max(0.5, 1.5 * std::hypot(WantX - FromX, WantY - FromY) / Crowd::StoneSpeed));
@@ -4075,6 +4470,8 @@ namespace LandMen
 			M.StoneComeAt = -1e18;
 			M.StoneFromX = M.StoneFromY = 0.0;
 			M.bStoneWay = false;
+			M.bStoneFor = M.bStoneAsOne = M.bStoneKeptOff = false;
+			M.StoneHow = -1;
 			M.StillFor = 0.0;
 			M.Last = -1.0;
 			M.FallClip = -1;
@@ -4097,6 +4494,11 @@ namespace LandMen
 			GoredN = 0;
 			Falls = FallMemory();
 			Clock = -1.0;
+			for (StoneTeamState& Tm : StoneTeams)
+			{
+				Tm.SteppedAt = 0;
+				Tm.Told.clear();
+			}
 		}
 
 		// ---------------------------------------------------------------------------------------------------------
@@ -5010,6 +5412,48 @@ namespace LandMen
 
 	void Crowd::SetStone(StoneFn Fn) { Inner->StoneAt = std::move(Fn); }
 
+	void Crowd::SetStoneTeam(StoneTeamFn Fn) { Inner->StoneTeamAt = std::move(Fn); }
+
+	void Crowd::AddStoneTeam(int Gunner, double Ahead, double Right, double Fore, double Aft, double Aside)
+	{
+		Impl& I = *Inner;
+		if (Gunner < 0) return;
+		Impl::StoneTeamState* Tm = nullptr;
+		for (Impl::StoneTeamState& Had : I.StoneTeams)
+		{
+			if (Had.Lead == Gunner) Tm = &Had;
+		}
+		if (!Tm)
+		{
+			I.StoneTeams.emplace_back();
+			Tm = &I.StoneTeams.back();
+			Tm->Lead = Gunner;
+		}
+		Tm->Ahead = Ahead;
+		Tm->Right = Right;
+		Tm->Fore = Fore;
+		Tm->Aft = Aft;
+		Tm->Aside = Aside;
+		Tm->Sized = 0;   // (her crew are found at the next Update)
+	}
+
+	int Crowd::StoneTeamCount() const { return static_cast<int>(Inner->StoneTeams.size()); }
+
+	int Crowd::StoneTeamGunner(int Team) const
+	{
+		return Team >= 0 && static_cast<size_t>(Team) < Inner->StoneTeams.size() ? Inner->StoneTeams[static_cast<size_t>(Team)].Lead : -1;
+	}
+
+	int Crowd::StoneTeamHow(int Team) const
+	{
+		const int Lead = StoneTeamGunner(Team);
+		return Lead >= 0 && Lead < Count() ? Inner->Men[static_cast<size_t>(Lead)].StoneHow : -1;
+	}
+
+	bool Crowd::StoneAsOne(int Man) const { return Man >= 0 && Man < Count() && Inner->Men[static_cast<size_t>(Man)].bStoneAsOne; }
+
+	bool Crowd::StoneKeptOff(int Man) const { return Man >= 0 && Man < Count() && Inner->Men[static_cast<size_t>(Man)].bStoneKeptOff; }
+
 	void Crowd::StoneStep(int Man, double& OutDx, double& OutDy) const
 	{
 		OutDx = OutDy = 0.0;
@@ -5044,18 +5488,32 @@ namespace LandMen
 			std::vector<Event> Quiet;
 			for (double T = 0.0; T < BattleTime; T += 0.1)
 			{
-				for (Impl::Man& Mn : I.Men) I.Step(Mn, T, I.Clock < 0.0 ? 0.0 : T - I.Clock, Quiet, true);
+				I.StepStoneLeads(T, I.Clock < 0.0 ? 0.0 : T - I.Clock, true, true);
+				for (size_t K = 0; K < I.Men.size(); ++K)
+				{
+					if (!I.StoneLedNow(K)) I.Step(I.Men[K], T, I.Clock < 0.0 ? 0.0 : T - I.Clock, Quiet, true);
+				}
 				I.Clock = T;
 			}
 		}
 		const double Dt = I.Clock < 0.0 ? 0.0 : std::min(0.25, BattleTime - I.Clock);
 		++I.Frame;
+		// (the guns' gunners first: StepStoneLeads)
+		I.StepStoneLeads(BattleTime, Dt, false, false);
 		const auto StepOne = [&I, BattleTime, Dt](size_t K, std::vector<Event>& Out)
 		{
 			Impl::Man& Mn = I.Men[K];
-			// (thrifty: a far man posed in his turn, the men spread over the frames by their number)
-			const int Every = I.bThrift ? Impl::EveryOf(Mn) : 1;
-			I.Step(Mn, BattleTime, Dt, Out, false, Every == 1 || (I.Frame + K) % static_cast<uint64_t>(Every) == 0);
+			if (const std::vector<Event>* Told = I.StoneLedNow(K))
+			{
+				// (stepped already this Update: what he told of then, in his place in the men's order)
+				Out.insert(Out.end(), Told->begin(), Told->end());
+			}
+			else
+			{
+				// (thrifty: a far man posed in his turn, the men spread over the frames by their number)
+				const int Every = I.bThrift ? Impl::EveryOf(Mn) : 1;
+				I.Step(Mn, BattleTime, Dt, Out, false, Every == 1 || (I.Frame + K) % static_cast<uint64_t>(Every) == 0);
+			}
 			// The level of detail by the eye's distance, with a little give so a man at the edge does not flicker.
 			if (!Mn.bVisible) return;
 			const double DX = Mn.X - I.EyeX, DY = Mn.Y - I.EyeY, DZ = static_cast<double>(Mn.World.T[2]) - I.EyeZ;
