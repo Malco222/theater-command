@@ -4,7 +4,10 @@
 # facts: the setup step, his view, a unit in hand, an order, the pace, a unit pointed at, a minute fought, then the
 # closing note; LATER, NOTES OFF, a note held behind the after card, the notebook written and read back, FIRST
 # COMMAND's arming again, and the shipped words (Content/Data/Battle/field-notes.json: 30 words a note at most), every
-# key a note names against LandBattleScreen.cpp's OnKeyDown, and every screen word it names against the screen.
+# key a note names against LandBattleScreen.cpp's OnKeyDown, and every screen word it names against the screen. With
+# them, release 2's chief of staff's whisper (Battle/StaffWhisper, Content/Data/Battle/staff-whispers.json: its words,
+# its keys, its desk) and the practice battle's STAFF NOTES FROM THE FIRST (the notebook from the first note again, the
+# front door's card read from CampaignHUD.cpp, the rows off in Release2Ship.cpp).
 # Usage: Tools/field_notes/run.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -18,6 +21,7 @@ for CC in g++ clang++; do
     continue
   fi
   $CC -std=c++20 -O1 -Wall -Wextra -Wshadow -Wconversion -Wno-sign-conversion -Werror -I"$SRC" \
-    "$HERE/field_notes_test.cpp" "$SRC/Battle/FieldNotes.cpp" "$SRC/Battle/LandJson.cpp" -o "$OUT/field_notes_$CC"
-  "$OUT/field_notes_$CC" "$ROOT/Content/Data/Battle/field-notes.json" "$SRC/Battle/LandBattleScreen.cpp"
+    "$HERE/field_notes_test.cpp" "$SRC/Battle/FieldNotes.cpp" "$SRC/Battle/StaffWhisper.cpp" "$SRC/Battle/LandJson.cpp" -o "$OUT/field_notes_$CC"
+  "$OUT/field_notes_$CC" "$ROOT/Content/Data/Battle/field-notes.json" "$SRC/Battle/LandBattleScreen.cpp" \
+    "$ROOT/Content/Data/Battle/staff-whispers.json" "$SRC/Campaign/CampaignHUD.cpp" "$SRC/Release2Ship.cpp"
 done

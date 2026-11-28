@@ -12,6 +12,7 @@
 #include "Battle/LandFeed.h"
 #include "Battle/LandField.h"
 #include "Battle/FieldNotes.h"
+#include "Battle/StaffWhisper.h"
 #include "Battle/LandGeneral.h"
 #include "Battle/LandGeneralEye.h"
 #include "Battle/LandHulk.h"
@@ -19,6 +20,7 @@
 #include "Battle/LandMen.h"
 #include "Battle/LandNight.h"
 #include "Battle/LandPlay.h"
+#include "Battle/LandReplay.h"
 #include "Battle/LandSight.h"
 #include "Battle/LandSound.h"
 #include "Battle/LandTeamGun.h"
@@ -251,6 +253,15 @@ struct FLandBattleState
 	FieldNotes::Desk FieldDesk;
 	bool bFieldBegun = false;
 	int FieldPlaced = 0, FieldOrders = 0, FieldHover = -1;
+	/** The chief of staff's whisper (release 2, -TheaterStaffWhisper; StaffWhisper.h): one line about the unit in his
+	 * hand, begun with his screen as the notes are (LandBattleNotes.cpp), drawn by SLandBattleScreen. */
+	StaffWhisper::Desk WhisperDesk;
+	bool bWhisperBegun = false;
+	/** The replay map (release 2, -TheaterReplayMap; LandReplay.h): laid from the recording once the after card is up
+	 * (LandBattleReplay.cpp; 1 laid, -1 it could not be, 0 not yet), and its 20 seconds, drawn by SLandBattleScreen. */
+	LandReplay::Map ReplayMap;
+	LandReplay::Player Replay;
+	int ReplayLaid = 0;
 	/** The camera's world as the film has it (Open), kept for the general's view. */
 	LandEye::World EyeWorld;
 	/** The general's view (LandGeneralEye, the camera thread's): his own camera over the field while the film is not

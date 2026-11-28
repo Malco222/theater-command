@@ -7850,6 +7850,8 @@ void ALandBattle::Tick(float DeltaSeconds)
 			S.bCard = true;
 		}
 	}
+	// (the replay map, release 2: laid once the after card is up, and its 20 seconds)
+	TickReplay(Real);
 	if (S.NoteAge >= 0.0)
 	{
 		S.NoteAge += Real;
@@ -8581,6 +8583,10 @@ void ALandBattle::Press(const FString& Button)
 		{
 			Finish();
 		}
+	}
+	else if (Button.StartsWith(TEXT("replay:")))
+	{
+		ReplayDo(Button.Mid(7));
 	}
 	else if (Button == TEXT("cut"))
 	{

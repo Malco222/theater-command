@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Battle/FieldNotes.h"
+#include "Battle/StaffWhisper.h"
 
 /**
  * Field notes' engine side (release 2): the switch, the words file and the player's notebook (FieldNotes.h is the plain
@@ -38,9 +39,24 @@ namespace FieldNotesStore
 	 * from the battle still owes it at the next start. */
 	void OffInBattle();
 	bool TakeOffAsked();
+	/** The practice battle with the staff notes (release 2): the ship list's row "practicenotes" (-TheaterPracticeNotes),
+	 * which works only beside the field notes' own row. */
+	bool PracticeOn();
+	/** PRACTISE WITH STAFF NOTES pressed: the notes from the first again (Book::StartOver), written out; the campaign
+	 * map's staff notes owed on (TakeOnAsked, once), the one switch. */
+	void StartOver();
+	bool TakeOnAsked();
 	/** The attack card's tip: its line while it is still to be seen ("" none). Asked each frame the card offers FIGHT IT
 	 * YOURSELF: the card it was first shown on keeps it while it stays open; the next card to open finds it seen. */
 	FString FightTip();
 	/** A live battle he fights himself has begun: the tip has done its work. */
 	void FightTipSeen();
+
+	/** The chief of staff's whisper (release 2, StaffWhisper.h): the ship list's row "whisper" (-TheaterStaffWhisper). */
+	bool WhisperOn();
+	/** Its words, read once from Content/Data/Battle/staff-whispers.json; null where they cannot be read. */
+	const StaffWhisper::Words* Whispers();
+	/** Whispers to be said at all: the row on, the words read, and the staff notes' one switch on (a run's notebook
+	 * starts with it off, as the notes'). */
+	bool WhispersShown();
 }

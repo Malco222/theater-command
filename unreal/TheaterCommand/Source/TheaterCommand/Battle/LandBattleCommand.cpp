@@ -2277,6 +2277,21 @@ void ALandBattle::TickScript()
 			return;
 		}
 		ScriptStill(TEXT("11-after-card"));
+		if (ReplayShown())
+		{
+			// (the replay map, release 2, -TheaterReplayMap: REPLAY MAP pressed as his hand would, stills at its start, half
+			// way and its end, then CLOSE, back to the after card)
+			Say(TEXT("REPLAY MAP pressed: stills at its start, half way and its end"));
+			Press(TEXT("replay:open"));
+			ScriptNext(72);
+			return;
+		}
+		[[fallthrough]];
+	case 75:
+		if (ScriptStep == 75 && Since < 1.0)
+		{
+			return;
+		}
 		if (HandBack)
 		{
 			// (a campaign battle he opened with FIGHT IT YOURSELF: CONTINUE pressed as his hand would, and the campaign's
@@ -2289,6 +2304,32 @@ void ALandBattle::TickScript()
 		Say(FString::Printf(TEXT("the walk done: %d stills; the game quits"), ScriptStills));
 		QuitAt = RealT + 3.0;
 		ScriptStep = 99;
+		return;
+	case 72:
+		if (Since < 0.5)
+		{
+			return;
+		}
+		ScriptStill(TEXT("12-replay-start"));
+		ScriptNext(73);
+		return;
+	case 73:
+		if (Since < 9.5)
+		{
+			return;
+		}
+		ScriptStill(TEXT("13-replay-half-way"));
+		ScriptNext(74);
+		return;
+	case 74:
+		if (Since < 10.5)
+		{
+			return;
+		}
+		ScriptStill(TEXT("14-replay-end"));
+		Say(TEXT("REPLAY MAP: CLOSE, back to the after card"));
+		Press(TEXT("replay:close"));
+		ScriptNext(75);
 		return;
 	default:
 		return;

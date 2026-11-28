@@ -1,0 +1,69 @@
+{
+  "_about": "The chief of staff's whisper (release 2; Brian's yes 28 November 2026 00:09Z): one quiet line on the general's screen about the first unit in his hand, said once a battle (scope once) or once for each unit (each), 20 words at most, never over a staff note. when: radio (an order on the air: {s} the seconds of battle till it lands), wavering (its state), hidden (in cover, not found; never a sniper team, which fires from hiding and is found only by odds), cutters (a tank with hedge cutters, once the clock runs), smoke (smoke left to lay, once the clock runs), guns (every unit in hand a gun, once the clock runs). keys and shows as field-notes.json's: Tools/field_notes checks them against LandBattleScreen.cpp. Every line's file and line is in joins/guided-start/NOTES.md; a line with none comes out. Behind the ship list's row whisper (-TheaterStaffWhisper), OFF, and the staff notes' one switch.",
+  "label": "CHIEF OF STAFF",
+  "lines": [
+    {
+      "id": "radio",
+      "when": "radio",
+      "scope": "once",
+      "text": "The order is on the radio. It reaches them in about {s} seconds of battle.",
+      "keys": [],
+      "shows": []
+    },
+    {
+      "id": "wavering",
+      "when": "wavering",
+      "scope": "each",
+      "text": "Their nerve is going. R pulls them off the field.",
+      "keys": [
+        [
+          "R",
+          "do:fallback"
+        ]
+      ],
+      "shows": []
+    },
+    {
+      "id": "hidden",
+      "when": "hidden",
+      "scope": "once",
+      "text": "Hidden in cover. Their first shots spring an ambush and give them away, and so does leaving cover.",
+      "keys": [],
+      "shows": []
+    },
+    {
+      "id": "cutters",
+      "when": "cutters",
+      "scope": "once",
+      "text": "This tank carries hedge cutters. X, then click a hedge, and it punches a gap through.",
+      "keys": [
+        [
+          "X",
+          "bar:general:gap"
+        ]
+      ],
+      "shows": []
+    },
+    {
+      "id": "smoke",
+      "when": "smoke",
+      "scope": "once",
+      "text": "They have smoke to lay. K, then click where it goes, or drag a line for it.",
+      "keys": [
+        [
+          "K",
+          "bar:general:smoke"
+        ]
+      ],
+      "shows": []
+    },
+    {
+      "id": "guns",
+      "when": "guns",
+      "scope": "once",
+      "text": "Guns fire from where they stand. Click an enemy and they fire on it.",
+      "keys": [],
+      "shows": []
+    }
+  ]
+}

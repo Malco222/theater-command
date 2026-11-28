@@ -55,6 +55,9 @@ namespace FieldNotes
 		/** NOTES OFF pressed in a battle: the campaign map's staff notes are still to be turned off (one switch), kept
 		 * in the notebook so that a game quit from the battle still owes it at the next start. */
 		bool bMapOffOwed = false;
+		/** The practice battle's PRACTISE WITH STAFF NOTES pressed on the front door (release 2): the campaign map's are
+		 * still to be turned on (one switch), owed as the off is. */
+		bool bMapOnOwed = false;
 
 		bool IsDone(const std::string& Id) const;
 		bool HasSeen(const std::string& Id) const;
@@ -64,6 +67,9 @@ namespace FieldNotes
 		bool AllDone(const Words& W) const;
 		/** On again; when every note was done, all of them armed again (FIRST COMMAND's rule for its ten). */
 		void ArmAgain(const Words& W);
+		/** From the first note again (the practice battle's PRACTISE WITH STAFF NOTES): on, none done, the closing note
+		 * not yet shown, and the map's owed on in place of any off. The tips seen stay seen. */
+		void StartOver();
 	};
 
 	/** A notebook from its file's text (an empty or unreadable text: a new player's). */

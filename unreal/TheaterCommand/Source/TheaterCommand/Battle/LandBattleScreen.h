@@ -122,6 +122,9 @@ private:
 	 * the brass corners round what it points at. Painted after the rest of his screen, so the buttons it points at are
 	 * known. */
 	void PaintFieldNote(const FGeometry& Geometry, FSlateWindowElementList& OutDrawElements, int32 LayerId, double BarH) const;
+	/** The replay map (release 2, LandReplay.h), open over the after card: the field from above, the blocks where the
+	 * battle had them at the time its 20 seconds have reached, the ways they went, its clock, its key, AGAIN and CLOSE. */
+	void PaintReplay(const FGeometry& Geometry, FSlateWindowElementList& OutDrawElements, int32 LayerId) const;
 	/** Which note the home was chosen for (-2 none yet), when, and whether it stands at the right edge. */
 	mutable int32 NoteShown = -2;
 	mutable double NoteSince = 0.0;

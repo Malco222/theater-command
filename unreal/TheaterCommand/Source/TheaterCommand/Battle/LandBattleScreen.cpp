@@ -578,6 +578,39 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 		PaintFieldNote(Geometry, OutDrawElements, LayerId, BarH);
 	}
 
+	// ---- The chief of staff's whisper (release 2, -TheaterStaffWhisper; StaffWhisper.h): one quiet line about the unit
+	// in his hand, low on the left above his cards, CHIEF OF STAFF in brass before it and QUIET after it; in for a
+	// quarter second, out over its last half. The desk holds it under a staff note, a question or the after card. ----
+	if (bGeneral && !S.General.bAllBackAsk && !S.bCard && S.WhisperDesk.Showing() && S.WhisperDesk.Now().bShown)
+	{
+		const StaffWhisper::Up& Whisper = S.WhisperDesk.Now();
+		const float Fade = static_cast<float>(FMath::Clamp(FMath::Min(Whisper.Age / 0.25, (StaffWhisper::Desk::Stays - Whisper.Age) / 0.5), 0.0, 1.0));
+		const FSlateFontInfo TagFace = Typed(9.0f, true, 120), SaidFace = Typed(10.5f), QuietFace = Typed(9.0f, true, 60);
+		const FString Head = Wide(S.WhisperDesk.TheWords().Label.empty() ? std::string("CHIEF OF STAFF") : S.WhisperDesk.TheWords().Label);
+		const FString Quiet = TEXT("QUIET");
+		const double HeadW = WideOf(Head, TagFace), QuietW = WideOf(Quiet, QuietFace);
+		const double Room = FMath::Clamp(Size.X - 300.0 - HeadW - QuietW, 240.0, 820.0);
+		const TArray<FString> Said = Wrap(Wide(Whisper.Text), SaidFace, Room);
+		double SaidW = 0.0;
+		for (const FString& Line : Said)
+		{
+			SaidW = FMath::Max(SaidW, WideOf(Line, SaidFace));
+		}
+		const double LineH = 20.0, X = 18.0, PlateH = 8.0 + LineH * Said.Num();
+		const double Y = Size.Y - CardsH - 10.0 - PlateH;
+		const FLinearColor Seen(1.0f, 1.0f, 1.0f, Fade);
+		Fill(X, Y, 12.0 + HeadW + 12.0 + SaidW + 16.0 + QuietW + 12.0, PlateH, Plate * FLinearColor(1.0f, 1.0f, 1.0f, Fade), 6);
+		Fill(X, Y, 3.0, PlateH, Brass * Seen, 7);
+		Write(Head, X + 12.0, Y + 6.0, TagFace, Brass * Seen, 7);
+		for (int32 K = 0; K < Said.Num(); ++K)
+		{
+			Write(Said[K], X + 12.0 + HeadW + 12.0, Y + 4.0 + LineH * K, SaidFace, Cream * Seen, 7);
+		}
+		const double QX = X + 12.0 + HeadW + 12.0 + SaidW + 16.0;
+		Write(Quiet, QX, Y + 6.0, QuietFace, Muted * Seen, 7);
+		Buttons.Add({ FSlateRect(static_cast<float>(QX - 6.0), static_cast<float>(Y), static_cast<float>(QX + QuietW + 6.0), static_cast<float>(Y + PlateH)), FString(TEXT("notes:quiet")) });
+	}
+
 	// ---- ALL FALL BACK's question (release 1.5; Brian, 23 November 14:47Z): asked once, in the middle of the screen;
 	// ALL FALL BACK gives the order, KEEP FIGHTING (or Esc) takes the question away. ----
 	if (bGeneral && S.General.bAllBackAsk && !S.General.bAllBack && !S.bCard)
@@ -602,8 +635,14 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 		Button(TEXT("KEEP FIGHTING  ESC"), TEXT("general:allback:no"), Next, QLine, false, 16);
 	}
 
-	// ---- The after card: the result's stamp, the battle's name, its lines, CONTINUE. ----
-	if (S.bCard)
+	// ---- The after card: the result's stamp, the battle's name, its lines, CONTINUE (and, release 2, REPLAY MAP). The
+	// replay map, open, lies over it in its place. ----
+	const bool bReplayOpen = S.bCard && S.Replay.IsOpen() && Scene->ReplayShown();
+	if (bReplayOpen)
+	{
+		PaintReplay(Geometry, OutDrawElements, LayerId);
+	}
+	if (S.bCard && !bReplayOpen)
 	{
 		const FSlateFontInfo TitleFace = Serif(TEXT("Bold"), 21.0f), LineFace = Typed(10.0f);
 		// (the verdict as a stamp in the kit's brass, never a box where a close button goes; "Close" read as "shut this",
@@ -687,9 +726,27 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 			Fill(CapX + 1.0, BY + 5.0, CapW - 2.0, Ht - 10.0, FLinearColor(Brass.R, Brass.G, Brass.B, 1.0f), 28);
 			Write(Key, CapX + 5.0, BY + 5.0, CapFace, DeskInk, 29);
 			Buttons.Add({ FSlateRect(static_cast<float>(BX), static_cast<float>(BY), static_cast<float>(BX + Wd), static_cast<float>(BY + Ht)), FString(TEXT("continue")) });
+			// (the replay map, release 2, -TheaterReplayMap: REPLAY MAP and its key M to CONTINUE's left, unlit, where the
+			// row is on and the map was laid from the recording)
+			if (Scene->ReplayShown())
+			{
+				const FString MapLabel = TEXT("REPLAY MAP"), MapKey = TEXT("M");
+				const double MapLabelW = WideOf(MapLabel, Face), MapCapW = WideOf(MapKey, CapFace) + 10.0;
+				const double MapW = MapLabelW + 22.0 + MapCapW + 8.0;
+				const double MX = BX - 10.0 - MapW;
+				Fill(MX, BY, MapW, Ht, Brass, 25);
+				Fill(MX + 1.0, BY + 1.0, MapW - 2.0, Ht - 2.0, Leather, 26);
+				Write(MapLabel, MX + 11.0, BY + 5.0, Face, Cream, 27);
+				const double MapCapX = MX + 11.0 + MapLabelW + 8.0;
+				Fill(MapCapX, BY + 4.0, MapCapW, Ht - 8.0, Cream * FLinearColor(1.0f, 1.0f, 1.0f, 0.7f), 27);
+				Fill(MapCapX + 1.0, BY + 5.0, MapCapW - 2.0, Ht - 10.0, Leather, 28);
+				Write(MapKey, MapCapX + 5.0, BY + 5.0, CapFace, Cream, 29);
+				Buttons.Add({ FSlateRect(static_cast<float>(MX), static_cast<float>(BY), static_cast<float>(MX + MapW), static_cast<float>(BY + Ht)), FString(TEXT("replay:open")) });
+			}
 		}
 	}
-	return LayerId + 30;
+	// (the replay map's buttons reach layer 35)
+	return LayerId + 36;
 }
 
 // ---- The general's screen (a live battle of his own) ---------------------------------------------------------
@@ -2239,6 +2296,237 @@ void SLandBattleScreen::PaintFieldNote(const FGeometry& Geometry, FSlateWindowEl
 	}
 }
 
+void SLandBattleScreen::PaintReplay(const FGeometry& Geometry, FSlateWindowElementList& OutDrawElements, int32 LayerId) const
+{
+	const ALandBattle* Scene = Battle.Get();
+	const FLandBattleState* State = Scene ? Scene->GetState() : nullptr;
+	if (!State || State->ReplayLaid <= 0)
+	{
+		return;
+	}
+	const FLandBattleState& S = *State;
+	const LandReplay::Map& M = S.ReplayMap;
+	static const FSlateColorBrush Solid(FLinearColor::White);
+	const FVector2D Size = Geometry.GetLocalSize();
+	const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+	const float TextScale = FMath::Max(Geometry.GetAccumulatedLayoutTransform().GetScale(), 0.01f);
+	auto WideOf = [&Measure, TextScale](const FString& Words, const FSlateFontInfo& Face) { return static_cast<double>(Measure->Measure(Words, Face, TextScale).X) / TextScale; };
+	auto Fill = [&](double X, double Y, double Wd, double Ht, const FLinearColor& Ink, int32 Layer)
+	{
+		if (DrawnBox(X, Y, Wd, Ht))
+		{
+			FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(Wd, Ht), FSlateLayoutTransform(FVector2D(X, Y))), &Solid, ESlateDrawEffect::None, Ink);
+		}
+	};
+	auto Write = [&](const FString& Words, double X, double Y, const FSlateFontInfo& Face, const FLinearColor& Ink, int32 Layer)
+	{
+		if (DrawnWords(Words, X, Y))
+		{
+			FSlateDrawElement::MakeText(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(1400.0, 60.0), FSlateLayoutTransform(FVector2D(X, Y))), Words, Face, ESlateDrawEffect::None, Ink);
+		}
+	};
+	auto Lines = [&](const TArray<FVector2D>& Points, const FLinearColor& Ink, float Thick, int32 Layer)
+	{
+		const TArray<FVector2D> Trimmed = DrawnLine(Points);
+		if (Trimmed.Num() >= 2)
+		{
+			FSlateDrawElement::MakeLines(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(), Trimmed, ESlateDrawEffect::None, Ink, true, Thick);
+		}
+	};
+	// A button with its key's cap after it, as the after card's CONTINUE: its width first, for laying them from the right.
+	const FSlateFontInfo KeyFace = Typed(10.0f, true, 30), KeyCapFace = Typed(10.0f, true, 0);
+	auto KeyWidth = [&](const FString& Label, const FString& Key) { return WideOf(Label, KeyFace) + 22.0 + WideOf(Key, KeyCapFace) + 10.0 + 8.0; };
+	auto KeyButton = [&](const FString& Label, const FString& Key, const FString& Action, double X, double Y, bool bLit)
+	{
+		const double LabelW = WideOf(Label, KeyFace), CapW = WideOf(Key, KeyCapFace) + 10.0;
+		const double Wd = LabelW + 22.0 + CapW + 8.0, Ht = 26.0;
+		const FLinearColor Face = bLit ? FLinearColor(Brass.R, Brass.G, Brass.B, 1.0f) : Leather, Ink = bLit ? DeskInk : Cream;
+		Fill(X, Y, Wd, Ht, Brass, 31);
+		Fill(X + 1.0, Y + 1.0, Wd - 2.0, Ht - 2.0, Face, 32);
+		Write(Label, X + 11.0, Y + 5.0, KeyFace, Ink, 33);
+		const double CapX = X + 11.0 + LabelW + 8.0;
+		Fill(CapX, Y + 4.0, CapW, Ht - 8.0, Ink * FLinearColor(1.0f, 1.0f, 1.0f, 0.7f), 33);
+		Fill(CapX + 1.0, Y + 5.0, CapW - 2.0, Ht - 10.0, Face, 34);
+		Write(Key, CapX + 5.0, Y + 5.0, KeyCapFace, Ink, 35);
+		Buttons.Add({ FSlateRect(static_cast<float>(X), static_cast<float>(Y), static_cast<float>(X + Wd), static_cast<float>(Y + Ht)), Action });
+	};
+
+	// The panel: the map as large as the screen allows, its head (REPLAY MAP and the battle's name) above, its clock,
+	// key and buttons below; paper, with a brass edge, over the dimmed battle.
+	const double Pad = 26.0, HeadH = 62.0, FootH = 84.0;
+	const double MostW = FMath::Max(320.0, FMath::Min(Size.X - 40.0, 1400.0)), MostH = FMath::Max(240.0, Size.Y - 40.0);
+	LandReplay::Fit Fit;
+	Fit.Into(M.W, M.H, 0.0, 0.0, MostW - 2.0 * Pad, FMath::Max(120.0, MostH - HeadH - FootH));
+	const double MapW = M.W * Fit.Scale, MapH = M.H * Fit.Scale;
+	const double PW = FMath::Min(MostW, FMath::Max(MapW + 2.0 * Pad, 620.0)), PH = HeadH + MapH + FootH;
+	const double PX = (Size.X - PW) * 0.5, PY = FMath::Max(10.0, (Size.Y - PH) * 0.5);
+	Fit.Into(M.W, M.H, PX + (PW - MapW) * 0.5, PY + HeadH, MapW, MapH);
+	Fill(0.0, 0.0, Size.X, Size.Y, FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), 20);
+	Fill(PX - 1.0, PY - 1.0, PW + 2.0, PH + 2.0, Brass, 21);
+	Fill(PX, PY, PW, PH, Paper, 22);
+	Write(TEXT("REPLAY MAP"), PX + Pad, PY + 16.0, SmallCaps(), InkSoft, 23);
+	Write(Wide(M.Title), PX + Pad, PY + 30.0, Serif(TEXT("Bold"), 17.0f), DeskInk, 23);
+
+	// The field: lighter paper, its woods, town and wet ground, the town's name, a hairline round it, north, a scale.
+	auto On = [&](double X, double Y)
+	{
+		const std::pair<double, double> P = Fit.On(X, Y);
+		return FVector2D(P.first, P.second);
+	};
+	const FLinearColor FieldPaper = FMath::Lerp(Paper, Cream, 0.55f);
+	const FLinearColor Woods = Leaf * FLinearColor(1.0f, 1.0f, 1.0f, 0.85f), Town = InkSoft * FLinearColor(1.0f, 1.0f, 1.0f, 0.45f);
+	const FLinearColor Wet = FLinearColor(FColor::FromHex(TEXT("A9C2C9")));
+	Fill(Fit.X0, Fit.Y0, MapW, MapH, FieldPaper, 23);
+	for (const LandReplay::Patch& P : M.Patches)
+	{
+		const FVector2D TopLeft = On(P.X0, P.Y1), BottomRight = On(P.X1, P.Y0);
+		Fill(TopLeft.X, TopLeft.Y, BottomRight.X - TopLeft.X, BottomRight.Y - TopLeft.Y, P.Kind == LandReplay::Look::Woods ? Woods : P.Kind == LandReplay::Look::Town ? Town : Wet, 24);
+	}
+	if (!M.TownName.empty() && M.TownR > 0.0)
+	{
+		// (on a pale plate of the field's paper, so it reads over the town's own shading; the blocks lie over it)
+		const FString Name = Wide(M.TownName).ToUpper();
+		const FVector2D At = On(M.TownX, M.TownY);
+		const double NameW = WideOf(Name, SmallCaps());
+		Fill(At.X - NameW * 0.5 - 4.0, At.Y - 7.0, NameW + 8.0, 15.0, FieldPaper * FLinearColor(1.0f, 1.0f, 1.0f, 0.85f), 25);
+		Write(Name, At.X - NameW * 0.5, At.Y - 6.0, SmallCaps(), DeskInk * FLinearColor(1.0f, 1.0f, 1.0f, 0.75f), 26);
+	}
+	Lines({ FVector2D(Fit.X0, Fit.Y0), FVector2D(Fit.X0 + MapW, Fit.Y0), FVector2D(Fit.X0 + MapW, Fit.Y0 + MapH), FVector2D(Fit.X0, Fit.Y0 + MapH), FVector2D(Fit.X0, Fit.Y0) }, DeskInk, 1.0f, 25);
+	{
+		// (north: an arrow up in the top right corner, N under it)
+		const double NX = Fit.X0 + MapW - 22.0, NY = Fit.Y0 + 10.0;
+		Lines({ FVector2D(NX, NY + 22.0), FVector2D(NX, NY) }, DeskInk, 1.5f, 26);
+		Lines({ FVector2D(NX - 5.0, NY + 7.0), FVector2D(NX, NY), FVector2D(NX + 5.0, NY + 7.0) }, DeskInk, 1.5f, 26);
+		Write(TEXT("N"), NX - WideOf(TEXT("N"), SmallCaps()) * 0.5, NY + 24.0, SmallCaps(), DeskInk, 26);
+		// (the scale: a kilometre, or 500 metres where a kilometre would take more than a third of the map's width)
+		const double Metres = 1000.0 * Fit.Scale <= MapW / 3.0 ? 1000.0 : 500.0;
+		const double SX = Fit.X0 + 12.0, SY = Fit.Y0 + MapH - 14.0, Long = Metres * Fit.Scale;
+		Lines({ FVector2D(SX, SY - 4.0), FVector2D(SX, SY), FVector2D(SX + Long, SY), FVector2D(SX + Long, SY - 4.0) }, DeskInk, 1.5f, 26);
+		Write(Metres >= 1000.0 ? FString(TEXT("1 KM")) : FString(TEXT("500 M")), SX + Long + 6.0, SY - 11.0, SmallCaps(), DeskInk, 26);
+	}
+
+	// The blocks at the battle time the 20 seconds have reached: the way each went behind it (one that moved far enough),
+	// itself as a bar of its side's ink its frontage long and its depth thick (one not yet found: its outline only), an
+	// arrowhead ahead of it the way it last went, and a cross on one gone.
+	const double T = S.Replay.BattleAt(M);
+	auto InkOf = [&](const LandReplay::Piece& P)
+	{
+		const bool bBrass = M.Me >= 0 ? P.Side == M.Me : P.Side == 0;
+		return bBrass ? Brass : Slate;
+	};
+	for (const LandReplay::Piece& P : M.Pieces)
+	{
+		const LandReplay::Pose At = LandReplay::PoseAt(P, T);
+		if (!At.bThere)
+		{
+			continue;
+		}
+		const FLinearColor Ink = InkOf(P) * FLinearColor(1.0f, 1.0f, 1.0f, At.bGone ? 0.45f : 1.0f);
+		const std::vector<std::pair<double, double>> Way = LandReplay::WayTo(P, T);
+		const bool bMoved = LandReplay::Length(Way) >= LandReplay::LeastMove;
+		if (bMoved)
+		{
+			TArray<FVector2D> Drawn;
+			for (const std::pair<double, double>& Each : Way)
+			{
+				Drawn.Add(On(Each.first, Each.second));
+			}
+			Lines(Drawn, Ink * FLinearColor(1.0f, 1.0f, 1.0f, 0.7f), 2.0f, 27);
+		}
+		const std::vector<std::pair<double, double>> C = LandReplay::Corners(P, At);
+		const FVector2D Middle = On(At.X, At.Y);
+		FVector2D Left = (On(C[0].first, C[0].second) + On(C[3].first, C[3].second)) * 0.5, Right = (On(C[1].first, C[1].second) + On(C[2].first, C[2].second)) * 0.5;
+		// (never smaller than 8 by 4 on the screen, so a small field's blocks still read)
+		const double Across = FVector2D::Distance(Left, Right);
+		if (Across < 8.0)
+		{
+			const FVector2D Half = Across > 1.0e-6 ? (Right - Left) * (4.0 / Across) : FVector2D(4.0, 0.0);
+			Left = Middle - Half;
+			Right = Middle + Half;
+		}
+		const double Deep = FMath::Max(4.0, P.D * Fit.Scale);
+		if (At.bSeen)
+		{
+			Lines({ Left, Right }, Ink, static_cast<float>(Deep), 28);
+		}
+		else
+		{
+			// (not yet found by his side: the outline of where it stood, its true ground unknown to him then)
+			const FVector2D Along = (Right - Left).GetSafeNormal(), Ahead(Along.Y, -Along.X);
+			const FVector2D A = Left + Ahead * (Deep * 0.5), B = Right + Ahead * (Deep * 0.5), D = Right - Ahead * (Deep * 0.5), E = Left - Ahead * (Deep * 0.5);
+			Lines({ A, B, D, E, A }, Ink, 1.5f, 28);
+		}
+		if (At.bGone)
+		{
+			Lines({ Middle + FVector2D(-5.0, -5.0), Middle + FVector2D(5.0, 5.0) }, DeskInk, 2.0f, 29);
+			Lines({ Middle + FVector2D(-5.0, 5.0), Middle + FVector2D(5.0, -5.0) }, DeskInk, 2.0f, 29);
+		}
+		else if (bMoved)
+		{
+			// (the arrowhead: the way's last stretch longer than 2 on the screen gives its heading)
+			FVector2D Heading = FVector2D::ZeroVector;
+			for (size_t K = Way.size() - 1; K > 0; --K)
+			{
+				const FVector2D Step = On(Way[K].first, Way[K].second) - On(Way[K - 1].first, Way[K - 1].second);
+				if (Step.Size() > 2.0)
+				{
+					Heading = Step.GetSafeNormal();
+					break;
+				}
+			}
+			if (!Heading.IsNearlyZero())
+			{
+				const FVector2D Side(-Heading.Y, Heading.X);
+				const FVector2D Tip = Middle + Heading * (Deep * 0.5 + 9.0);
+				Lines({ Tip - Heading * 8.0 + Side * 5.0, Tip, Tip - Heading * 8.0 - Side * 5.0 }, Ink, 2.0f, 29);
+			}
+		}
+	}
+
+	// The foot: the battle's clock and how far through it the map is, the key to its marks, AGAIN and CLOSE.
+	const double FY = Fit.Y0 + MapH + 14.0, Left = Fit.X0, Wd = MapW;
+	const double Share = M.T1 > M.T0 ? FMath::Clamp((T - M.T0) / (M.T1 - M.T0), 0.0, 1.0) : 1.0;
+	Fill(Left, FY, Wd, 4.0, Track * FLinearColor(1.0f, 1.0f, 1.0f, 0.45f), 30);
+	Fill(Left, FY, Wd * Share, 4.0, Brass, 31);
+	const FSlateFontInfo FootFace = Typed(10.0f, true, 20);
+	Write(FString(TEXT("BATTLE TIME ")) + Wide(LandReplay::Clock(T - M.T0)) + TEXT(" OF ") + Wide(LandReplay::Clock(M.T1 - M.T0)), Left, FY + 12.0, FootFace, DeskInk, 31);
+	{
+		double KX = Left;
+		const double KY = FY + 38.0;
+		auto Swatch = [&](const FLinearColor& Ink, bool bHollow, const FString& Words)
+		{
+			if (bHollow)
+			{
+				Lines({ FVector2D(KX, KY + 3.0), FVector2D(KX + 18.0, KY + 3.0), FVector2D(KX + 18.0, KY + 11.0), FVector2D(KX, KY + 11.0), FVector2D(KX, KY + 3.0) }, Ink, 1.5f, 31);
+			}
+			else
+			{
+				Fill(KX, KY + 3.0, 18.0, 8.0, Ink, 31);
+			}
+			Write(Words, KX + 24.0, KY, SmallCaps(), DeskInk, 31);
+			KX += 24.0 + WideOf(Words, SmallCaps()) + 18.0;
+		};
+		if (M.Me >= 0)
+		{
+			Swatch(Brass, false, TEXT("YOURS"));
+			Swatch(Slate, false, TEXT("THE ENEMY"));
+			Swatch(Slate, true, TEXT("NOT YET FOUND"));
+		}
+		else
+		{
+			Swatch(Brass, false, Wide(M.Adj[0]).ToUpper());
+			Swatch(Slate, false, Wide(M.Adj[1]).ToUpper());
+		}
+		Lines({ FVector2D(KX + 4.0, KY + 2.0), FVector2D(KX + 14.0, KY + 12.0) }, DeskInk, 2.0f, 31);
+		Lines({ FVector2D(KX + 4.0, KY + 12.0), FVector2D(KX + 14.0, KY + 2.0) }, DeskInk, 2.0f, 31);
+		Write(TEXT("GONE"), KX + 24.0, KY, SmallCaps(), DeskInk, 31);
+	}
+	const FString Again = TEXT("AGAIN"), Space = TEXT("SPACE"), Close = TEXT("CLOSE"), Esc = TEXT("ESC");
+	const double CloseX = Left + Wd - KeyWidth(Close, Esc), AgainX = CloseX - 10.0 - KeyWidth(Again, Space);
+	KeyButton(Again, Space, TEXT("replay:again"), AgainX, FY + 14.0, S.Replay.IsDone());
+	KeyButton(Close, Esc, TEXT("replay:close"), CloseX, FY + 14.0, false);
+}
+
 bool SLandBattleScreen::PressDrawn(const FString& Action)
 {
 	for (const FButton& Shown : Buttons)
@@ -2284,7 +2572,8 @@ void SLandBattleScreen::Do(const FString& Action)
 	}
 	else if (Action.StartsWith(TEXT("notes:")))
 	{
-		// (field notes: LATER, NOTES OFF, or a click on a stamped note or the closing note, which sends it)
+		// (field notes: LATER, NOTES OFF, or a click on a stamped note or the closing note, which sends it; the whisper's
+		// QUIET)
 		const FString Word = Action.Mid(6);
 		Scene->FieldNotesDo(Word == TEXT("paper") ? FString(TEXT("close")) : Word);
 	}
@@ -2606,6 +2895,25 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 	if (S->NightNow.bNight)
 	{
 		Scene->Press(TEXT("night"));
+		return FReply::Handled();
+	}
+	// (the replay map open over the after card, release 2: SPACE plays it again, ESC (or M, or Enter) closes it, back to
+	// the card; nothing else reaches the battle under it)
+	if (S->bCard && S->Replay.IsOpen() && Scene->ReplayShown())
+	{
+		if (Key == EKeys::SpaceBar)
+		{
+			Scene->Press(TEXT("replay:again"));
+		}
+		else if (Key == EKeys::Escape || Key == EKeys::M || Key == EKeys::Enter)
+		{
+			Scene->Press(TEXT("replay:close"));
+		}
+		return FReply::Handled();
+	}
+	if (Key == EKeys::M && S->bCard && Scene->ReplayShown())
+	{
+		Scene->Press(TEXT("replay:open"));
 		return FReply::Handled();
 	}
 	if (Key == EKeys::Enter && S->bCard)

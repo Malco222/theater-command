@@ -179,6 +179,15 @@ namespace FieldNotes
 		}
 	}
 
+	void Book::StartOver()
+	{
+		bOn = true;
+		Done.clear();
+		bClosed = false;
+		bMapOffOwed = false;
+		bMapOnOwed = true;
+	}
+
 	Book ReadBook(const std::string& Json)
 	{
 		Book B;
@@ -193,13 +202,14 @@ namespace FieldNotes
 		B.Seen = Strings(Root["seen"]);
 		B.bClosed = Root["closed"].Truth(false);
 		B.bMapOffOwed = Root["mapOff"].Truth(false);
+		B.bMapOnOwed = Root["mapOn"].Truth(false) && !B.bMapOffOwed;
 		return B;
 	}
 
 	std::string WriteBook(const Book& B)
 	{
 		return std::string("{\"on\":") + (B.bOn ? "true" : "false") + ",\"done\":" + Listed(B.Done) + ",\"seen\":" + Listed(B.Seen)
-			+ ",\"closed\":" + (B.bClosed ? "true" : "false") + (B.bMapOffOwed ? ",\"mapOff\":true" : "") + "}\n";
+			+ ",\"closed\":" + (B.bClosed ? "true" : "false") + (B.bMapOffOwed ? ",\"mapOff\":true" : "") + (B.bMapOnOwed ? ",\"mapOn\":true" : "") + "}\n";
 	}
 
 	// ---- The desk ----

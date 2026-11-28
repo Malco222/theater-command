@@ -3,6 +3,7 @@
 
 #include "Battle/FieldNotes.h"
 #include "Battle/LandJson.h"
+#include "Battle/StaffWhisper.h"
 
 #include <cctype>
 #include <cstdio>
@@ -79,13 +80,22 @@ namespace
 		return Out;
 	}
 
-	/** His keys: OnKeyDown's branch for the general's screen, from its head to the watcher's fallback (the film's keys). */
+	/** His keys: OnKeyDown's branch for the general's screen, from its head to the watcher's fallback (the film's keys);
+	 * the after card's and the replay map's keys before it are not his screen's. */
 	std::vector<std::string> GeneralKeys(const std::vector<std::string>& All)
 	{
 		size_t Head = All.size();
 		for (size_t K = 0; K < All.size(); ++K)
 		{
 			if (All[K].rfind("FReply SLandBattleScreen::OnKeyDown(", 0) == 0)
+			{
+				Head = K;
+				break;
+			}
+		}
+		for (size_t K = Head; K < All.size(); ++K)
+		{
+			if (All[K] == "\tif (S->General.bOn && !S->bCard)")
 			{
 				Head = K;
 				break;
@@ -162,7 +172,7 @@ namespace
 			Why = "not the view's bit " + Does.substr(5);
 			return Line.compare(After, Want.size(), Want) == 0;
 		}
-		if (Line.find("else if (Key == EKeys::" + Key) == std::string::npos)
+		if (Line.find("else if (Key == EKeys::" + Key) == std::string::npos && Does.rfind("bar:", 0) != 0)
 		{
 			Why = "bound in a shared line, not a key of its own";
 			return false;
@@ -185,6 +195,12 @@ namespace
 				}
 			}
 			return false;
+		}
+		if (Does.rfind("bar:", 0) == 0)
+		{
+			// (the orders bar's keys: one shared line, each key's button named right after it)
+			Why = "not the orders bar's " + Does.substr(4);
+			return Line.find("Key == EKeys::" + Key + " ? TEXT(\"" + Does.substr(4) + "\")") != std::string::npos;
 		}
 		if (Does.rfind("do:", 0) == 0)
 		{
@@ -316,6 +332,11 @@ namespace
 	void CheckKeys(const LandJson::Json& N, const std::vector<std::string>& G, const std::string& Screen)
 	{
 		const std::string Id = N["id"].Str("closing");
+		if (N["text"].Str("").empty())
+		{
+			Check(false, Id + ": no words to check");
+			return;
+		}
 		const std::string Text = N["text"].Str("") + " " + N["deed"].Str("");
 		const std::vector<std::string> Named = KeysNamed(Text);
 		const LandJson::Json& Keys = N["keys"];
@@ -385,6 +406,131 @@ int main(int Argc, char** Argv)
 		Check(!DoesIt(G, "E", "view:16", Wrong), "the test catches E named for Q's turn");
 		Check(KeysNamed("A unit set down. W, A, S and D move. Press 2.") == std::vector<std::string>({ "W", "A", "S", "D", "Two" }), "the keys read out of words");
 		Check(NamesShown("Press BEGIN THE BATTLE, or SPACE. FILM watches.") == std::vector<std::string>({ "BEGIN THE BATTLE", "FILM" }), "the screen's words read out of words");
+		Check(!DoesIt(G, "X", "bar:general:smoke", Wrong), "the test catches X named for K's smoke");
+
+		// ---- The chief of staff's whisper: its words, each line's keys against his screen, and its desk ----
+		// ---- The practice battle with the staff notes (the front door's card): its line, its press, its row off ----
+		{
+			std::string Hud, Ship;
+			const bool bHud = LandJson::ReadFile(Argc > 4 ? Argv[4] : "Source/TheaterCommand/Campaign/CampaignHUD.cpp", Hud);
+			const bool bShip = LandJson::ReadFile(Argc > 5 ? Argv[5] : "Source/TheaterCommand/Release2Ship.cpp", Ship);
+			Check(bHud && bShip, "the front door's code and the ship list read");
+			const size_t Card = Hud.find("TSharedRef<SWidget> MakePractice()"), End = Hud.find("TSharedRef<SWidget> MakeBattleRules()");
+			const std::string Practice = Card != std::string::npos && End != std::string::npos && End > Card ? Hud.substr(Card, End - Card) : std::string();
+			Check(!Practice.empty(), "the practice card read");
+			const size_t Guard = Practice.find("if (FieldNotesStore::PracticeOn())"), Press = Practice.find("TEXT(\"STAFF NOTES FROM THE FIRST\")");
+			Check(Guard != std::string::npos && Press != std::string::npos && Guard < Press, "STAFF NOTES FROM THE FIRST only with its row on");
+			Check(Practice.find("Open(true)") != std::string::npos && Practice.find("Open(false)") != std::string::npos, "the press opens the battle with the notes over, the card as before without");
+			const size_t Over = Practice.find("FieldNotesStore::StartOver()"), Spawn = Practice.find("SpawnActor<ALandBattle>");
+			Check(Over != std::string::npos && Spawn != std::string::npos && Over < Spawn && Practice.find("TActorIterator<ALandBattle>(World)") < Over,
+				"the notes start over once nothing is opening, before the battle is made (it reads the notebook as it begins)");
+			const size_t Row = Ship.find("{ TEXT(\"practicenotes\")");
+			const std::string RowLine = Row == std::string::npos ? std::string() : Ship.substr(Row, Ship.find('\n', Row) - Row);
+			Check(RowLine.find("TEXT(\"-TheaterPracticeNotes\"), false,") != std::string::npos, "the ship list: practicenotes, -TheaterPracticeNotes, OFF");
+			const size_t Whisper = Ship.find("{ TEXT(\"whisper\")");
+			Check(Whisper != std::string::npos && Ship.substr(Whisper, Ship.find('\n', Whisper) - Whisper).find("TEXT(\"-TheaterStaffWhisper\"), false,") != std::string::npos,
+				"the ship list: whisper, -TheaterStaffWhisper, OFF");
+		}
+
+		const char* WhisperPath = Argc > 3 ? Argv[3] : "Content/Data/Battle/staff-whispers.json";
+		std::string WText, WWhy;
+		StaffWhisper::Words SW;
+		Check(LandJson::ReadFile(WhisperPath, WText) && StaffWhisper::ReadWords(WText, SW, WWhy), "the whisper's words read (" + WWhy + ")");
+		Check(SW.Label == "CHIEF OF STAFF" && SW.Lines.size() == 6, "the whisper: its tag and six lines");
+		LandJson::Json WRoot;
+		Check(LandJson::Parse(WText, WRoot, WWhy), "the whisper's words read for their keys");
+		for (size_t K = 0; K < WRoot["lines"].Count(); ++K)
+		{
+			CheckKeys(WRoot["lines"].At(K), G, Screen);
+		}
+		for (const StaffWhisper::Line& L : SW.Lines)
+		{
+			Check(FieldNotes::CountWords(L.Text) <= 20, L.Id + ": 20 words at most (" + std::to_string(FieldNotes::CountWords(L.Text)) + ")");
+		}
+		StaffWhisper::Words Bad;
+		Check(!StaffWhisper::ReadWords("{\"lines\":[{\"id\":\"a\",\"when\":\"luck\",\"text\":\"t\"}]}", Bad, WWhy), "a whisper for a moment the desk does not know is refused");
+
+		// A battle: a unit hidden in the woods picked up in the setup step, then a tank with cutters, an order on the air,
+		// a gun, QUIET.
+		StaffWhisper::Desk D;
+		D.Begin(SW, true);
+		StaffWhisper::Facts F;
+		F.bGeneral = true;
+		F.bDeploying = true;
+		auto Run = [&](double Seconds)
+		{
+			for (int K = 0; K < static_cast<int>(Seconds * 30.0 + 0.5); ++K)
+			{
+				F.Real += 1.0 / 30.0;
+				D.Tick(F);
+			}
+		};
+		auto Up = [&]() { const StaffWhisper::Line* L = D.Current(); return L ? L->Id : std::string("-"); };
+		Run(1.0);
+		Check(Up() == "-", "nothing in hand: the staff says nothing");
+		F.Block = 4;
+		F.Kind = "inf";
+		F.bHidden = true;
+		Run(0.3);
+		Check(Up() == "-", "a quick click past a unit says nothing");
+		Run(0.5);
+		Check(Up() == "hidden", "a unit hidden in cover, in hand a moment: the hidden line (" + Up() + ")");
+		F.bNoteUp = true;
+		Run(10.0);
+		Check(Up() == "hidden", "under a staff note it holds, its time not counted");
+		F.bNoteUp = false;
+		Run(7.5);
+		Check(Up() == "-", "its time up: gone");
+		F.Block = 7;
+		F.Kind = "arm";
+		F.bHidden = true;
+		F.bCutter = true;
+		Run(12.0);
+		Check(Up() == "-", "the hidden line is said once a battle; cutters wait for the clock");
+		F.bDeploying = false;
+		Run(1.0);
+		Check(Up() == "cutters", "the clock running: the cutters' line (" + Up() + ")");
+		F.Block = -1;
+		Run(0.1);
+		Check(Up() == "-", "his hand emptied: the line goes at once");
+		F.Block = 7;
+		F.OrderIn = 12.4;
+		Run(10.5);
+		Check(Up() == "radio" && D.Now().Text.find("about 12 seconds") != std::string::npos, "an order on the air: when it lands (" + D.Now().Text + ")");
+		F.OrderIn = 3.0;
+		Run(1.0);
+		Check(D.Now().Text.find("about 12 seconds") != std::string::npos, "its seconds as first said, not counting down under his eyes");
+		F.OrderIn = -1.0;
+		F.Block = 9;
+		F.Kind = "art";
+		F.bAllGuns = true;
+		F.bCutter = false;
+		F.bHidden = false;
+		F.State = "wavering";
+		Run(11.0);
+		Check(Up() == "wavering", "a wavering unit's warning before the guns' lesson (" + Up() + ")");
+		Run(18.0);
+		Check(Up() == "guns", "then the guns' (" + Up() + ")");
+		D.Quiet();
+		F.Block = 11;
+		F.State = "wavering";
+		Run(20.0);
+		Check(Up() == "-" && !D.Showing(), "QUIET: none more this battle");
+		StaffWhisper::Desk Off;
+		Off.Begin(SW, false);
+		F.Block = 3;
+		F.bHidden = true;
+		for (int K = 0; K < 60; ++K)
+		{
+			F.Real += 1.0 / 30.0;
+			Off.Tick(F);
+		}
+		Check(!Off.Now().bShown, "switched off (the row, a run, or the staff notes off): none");
+		StaffWhisper::Facts Snp;
+		Snp.Block = 2;
+		Snp.bHidden = true;
+		Snp.Team = "snp";
+		Check(!StaffWhisper::Holds(SW.Lines[2], Snp), "a sniper team, found only by odds, has no hidden line");
 	}
 
 	// ---- The words: ruling 147's rule (30 words at most a note), one short deed line, the tip and the closing note ----
@@ -432,6 +578,32 @@ int main(int Argc, char** Argv)
 		Off.bMapOffOwed = true;
 		Check(FieldNotes::ReadBook(FieldNotes::WriteBook(Off)).bMapOffOwed, "the map's staff notes still owed off, kept across a quit");
 		Check(!FieldNotes::ReadBook(FieldNotes::WriteBook(FieldNotes::Book())).bMapOffOwed && FieldNotes::WriteBook(FieldNotes::Book()).find("mapOff") == std::string::npos, "none owed: the notebook as before");
+
+		// (the practice battle's STAFF NOTES FROM THE FIRST: on, none done, the closing note to come, the map owed on in
+		// place of off, the tips seen kept)
+		FieldNotes::Book Over = Off;
+		for (const FieldNotes::Note& N : W.Notes)
+		{
+			Over.MarkDone(N.Id);
+		}
+		Over.bClosed = true;
+		Over.MarkSeen("fight");
+		Over.StartOver();
+		Check(Over.bOn && Over.Done.empty() && !Over.bClosed, "from the first: on, none done, the closing note to come");
+		Check(Over.bMapOnOwed && !Over.bMapOffOwed, "from the first: the map's owed on, its off no longer");
+		Check(Over.HasSeen("fight"), "from the first: the attack card's tip stays seen");
+		const FieldNotes::Book OverRead = FieldNotes::ReadBook(FieldNotes::WriteBook(Over));
+		Check(OverRead.bMapOnOwed && OverRead.bOn && OverRead.Done.empty(), "the map's owed on, kept across a quit");
+		Check(FieldNotes::WriteBook(FieldNotes::Book()).find("mapOn") == std::string::npos, "none owed on: the notebook as before");
+		Check(!FieldNotes::ReadBook("{\"on\":false,\"mapOff\":true,\"mapOn\":true}").bMapOnOwed, "owed both ways (a hand-made notebook): the off stands");
+		FieldNotes::Desk Again2;
+		Again2.Begin(W, Over, true);
+		FieldNotes::Facts First;
+		First.bGeneral = true;
+		First.bDeploying = true;
+		First.Real = 1.0;
+		Again2.Tick(First);
+		Check(Again2.Current() && Again2.Current()->Id == "ground", "from the first: the next battle's first note is the ground's again");
 	}
 
 	// ---- A first battle with a setup step, every deed done in turn ----

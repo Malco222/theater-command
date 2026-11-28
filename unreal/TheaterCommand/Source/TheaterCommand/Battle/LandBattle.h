@@ -152,6 +152,11 @@ public:
 	/** Field notes (release 2): a word from the note's buttons: later (this note away for this battle), off (no more
 	 * notes), close (a stamped note or the closing note sent at once). LandBattleNotes.cpp. */
 	void FieldNotesDo(const FString& Word);
+	/** The replay map (release 2): open (from the after card), again (its 20 seconds from the start), close (back to the
+	 * after card). LandBattleReplay.cpp. */
+	void ReplayDo(const FString& Word);
+	/** The after card offers REPLAY MAP: its row on and the map laid. */
+	bool ReplayShown() const;
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
@@ -873,6 +878,8 @@ private:
 	/** Field notes: the desk begun when his screen first comes up, its facts read this frame, the notebook written when
 	 * it changed (LandBattleNotes.cpp). */
 	void TickFieldNotes();
+	/** The replay map: laid once the after card is up (its row on), its 20 seconds played (LandBattleReplay.cpp). */
+	void TickReplay(double Real);
 	/** Each frame, after the film's pose: the general's own view takes the picture while his map is up (the film's
 	 * again on C), cutting where the two switch. */
 	void GeneralView(double Real);

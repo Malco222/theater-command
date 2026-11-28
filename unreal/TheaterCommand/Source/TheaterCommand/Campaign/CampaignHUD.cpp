@@ -20476,21 +20476,52 @@ namespace
 					Folding(TEXT("Practice.Aside"), SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true).LineHeightPercentage(1.15f)
 					.Text(FText::FromString(TEXT("A battle on its own, in the 3D field: nothing in a campaign changes."))))
 				];
-			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 10.0f, 14.0f, 12.0f)).IsFocusable(false)
-				.OnClicked_Lambda([this]()
+			// (one at a time: a second click while the first is opening does nothing; bNotesOver, the staff notes from the
+			// first note again before it opens)
+			auto Open = [this](bool bNotesOver)
+			{
+				UWorld* World = Controller.IsValid() ? Controller->GetWorld() : nullptr;
+				if (!World || TActorIterator<ALandBattle>(World))
 				{
-					UWorld* World = Controller.IsValid() ? Controller->GetWorld() : nullptr;
-					// (one at a time: a second click while the first is opening does nothing)
-					if (!World || TActorIterator<ALandBattle>(World))
-					{
-						return FReply::Handled();
-					}
-					if (ALandBattle* Land = World->SpawnActor<ALandBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
-					{
-						Land->LiveWhenReady(TEXT("normandy-1944"), TEXT("att"), 0, true);
-					}
 					return FReply::Handled();
-				})
+				}
+				if (bNotesOver)
+				{
+					FieldNotesStore::StartOver();
+				}
+				if (ALandBattle* Land = World->SpawnActor<ALandBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
+				{
+					Land->LiveWhenReady(TEXT("normandy-1944"), TEXT("att"), 0, true);
+				}
+				return FReply::Handled();
+			};
+			// (release 2, -TheaterPracticeNotes beside -TheaterFieldNotes; Brian's yes, 28 November 00:09Z: the practice
+			// battle is where the staff notes are learnt without a campaign at stake. The line says whether they come
+			// with it as it stands; STAFF NOTES FROM THE FIRST begins them again from the first note, and opens it.)
+			if (FieldNotesStore::PracticeOn())
+			{
+				Body->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true).LineHeightPercentage(1.15f)
+					.Text_Lambda([]()
+					{
+						const FieldNotes::Words* Notes = FieldNotesStore::Words();
+						const bool bComing = FieldNotesStore::Shown() && Notes && !FieldNotesStore::Book().AllDone(*Notes);
+						return FText::FromString(bComing ? TEXT("Your staff notes come with it, one short note at a time.")
+							: TEXT("STAFF NOTES FROM THE FIRST: this battle with your staff notes again, one short note at a time."));
+					})
+				];
+				Body->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0.0f, 6.0f, 0.0f, 0.0f)
+				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(0.0f, 4.0f)).IsFocusable(false)
+					.OnClicked_Lambda([Open]() { return Open(true); })
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("STAFF NOTES FROM THE FIRST"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(BrightBrass)
+					]
+				];
+			}
+			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 10.0f, 14.0f, 12.0f)).IsFocusable(false)
+				.OnClicked_Lambda([Open]() { return Open(false); })
 				[
 					Body
 				];

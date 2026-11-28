@@ -1,4 +1,5 @@
-// Field notes on a live ground battle (release 2, -TheaterFieldNotes): ALandBattle's part. It begins the desk once his
+// Field notes on a live ground battle (release 2, -TheaterFieldNotes), and the chief of staff's whisper with them
+// (-TheaterStaffWhisper, StaffWhisper.h): ALandBattle's part. It begins the desk once his
 // general's screen first comes up, reads the battle's facts for it each frame (his screen, the setup step, his view,
 // his hand, his orders, the pace, the unit under his pointer, the clock), and writes the notebook out when a note is
 // stamped or the notes are turned off. The note itself is drawn by SLandBattleScreen (FieldNotes.h has the rest).
@@ -23,6 +24,61 @@ namespace
 		Kept.bClosed = Kept.bClosed || Now.bClosed;
 		FieldNotesStore::Save();
 	}
+
+	/** The chief of staff's whisper: begun with his screen, its facts each frame from the first unit in his hand. */
+	void TickWhisper(FLandBattleState& S)
+	{
+		FLandGeneralShown& G = S.General;
+		if (!S.bWhisperBegun)
+		{
+			if (!G.bOn || !FieldNotesStore::WhisperOn())
+			{
+				return;
+			}
+			S.bWhisperBegun = true;
+			const StaffWhisper::Words* Words = FieldNotesStore::Whispers();
+			S.WhisperDesk.Begin(Words ? *Words : StaffWhisper::Words(), Words && FieldNotesStore::WhispersShown());
+			UE_LOG(LogTheater, Display, TEXT("Land battle (live): the chief of staff's whisper %s"), S.WhisperDesk.Showing() ? TEXT("on") : TEXT("off"));
+		}
+		if (!S.WhisperDesk.Showing())
+		{
+			return;
+		}
+		StaffWhisper::Facts F;
+		F.bGeneral = G.bOn && !G.bFilm;
+		F.bBusy = S.bCard || S.bOver || G.bAllBackAsk || S.NightNow.bNight;
+		F.bNoteUp = S.FieldDesk.Showing() && S.FieldDesk.Now().bShown;
+		F.bDeploying = G.Clipboard.Deploying();
+		F.Real = S.Real;
+		const std::vector<int> Hand = G.Clipboard.Chosen();
+		if (!Hand.empty())
+		{
+			if (const LandCommand::Tag* T = G.Clipboard.TagOf(Hand.front()); T && T->bMine)
+			{
+				F.Block = T->Block;
+				F.Kind = T->Kind;
+				F.Team = T->Team;
+				F.State = T->State;
+				F.bHidden = T->bHidden;
+				F.bCutter = T->bCutter;
+				F.Smoke = T->Smoke;
+				F.OrderIn = T->OrderIn;
+			}
+			F.bAllGuns = true;
+			for (const int Id : Hand)
+			{
+				const LandCommand::Tag* T = G.Clipboard.TagOf(Id);
+				F.bAllGuns = F.bAllGuns && T && T->Kind == "art";
+			}
+		}
+		if (S.WhisperDesk.Tick(F) && S.WhisperDesk.Now().bShown)
+		{
+			if (const StaffWhisper::Line* L = S.WhisperDesk.Current())
+			{
+				UE_LOG(LogTheater, Display, TEXT("Land battle (live): the chief of staff's whisper \"%s\" at %.1f s"), UTF8_TO_TCHAR(L->Id.c_str()), S.Battle);
+			}
+		}
+	}
 }
 
 void ALandBattle::TickFieldNotes()
@@ -33,6 +89,7 @@ void ALandBattle::TickFieldNotes()
 	}
 	FLandBattleState& S = *State;
 	FLandGeneralShown& G = S.General;
+	TickWhisper(S);
 	if (!S.bFieldBegun)
 	{
 		if (!G.bOn || !FieldNotesStore::FeatureOn())
@@ -115,6 +172,7 @@ void ALandBattle::FieldNotesDo(const FString& Word)
 			UE_LOG(LogTheater, Display, TEXT("Land battle (live): field notes turned off"));
 			Keep(Desk.TheBook());
 			FieldNotesStore::OffInBattle();
+			State->WhisperDesk.Quiet(); // (the staff notes are one switch: the whisper with them)
 			// (once, where they come back: the UI director 28 November 00:08Z)
 			if (const FieldNotes::Words* Words = FieldNotesStore::Words(); Words && !Words->OffLine.empty())
 			{
@@ -127,5 +185,10 @@ void ALandBattle::FieldNotesDo(const FString& Word)
 	else if (Word == TEXT("close"))
 	{
 		Desk.Close();
+	}
+	else if (Word == TEXT("quiet"))
+	{
+		// (the whisper's QUIET: none more this battle)
+		State->WhisperDesk.Quiet();
 	}
 }

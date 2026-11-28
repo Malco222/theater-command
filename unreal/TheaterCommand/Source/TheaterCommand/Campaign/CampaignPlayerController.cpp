@@ -5327,6 +5327,11 @@ void ACampaignPlayerController::AskLessons()
 	{
 		LessonActsOwed.Insert(FString(TEXT("off")), 0);
 	}
+	// (and the practice battle's PRACTISE WITH STAFF NOTES turned them on from the first: the map's on too)
+	else if (FieldNotesStore::TakeOnAsked())
+	{
+		LessonActsOwed.Insert(FString(TEXT("on")), 0);
+	}
 	// What is owed first, in the order it was done; then the desk as the screen stands now. Every lesson stamped on
 	// the way is gathered, for the note on the screen to take its stamp. (Lesson 10's note says its words for the
 	// ARSENAL while the ARSENAL is open: the UI director, build 1640.)
