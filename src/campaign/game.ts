@@ -1452,7 +1452,10 @@ function desertLines(g: Game, ok: Uint8Array, head: Float32Array, sand: Uint8Arr
  */
 function trackStamp(g: Game): string {
   const keys: string[] = [];
-  for (const k in g.flags) if (k.startsWith('rail:') || k.startsWith('br:') || k.startsWith('ga:')) keys.push(k);
+  for (const k in g.flags) {
+    const c = k.charCodeAt(0); // ('r', 'b', 'g': most flags are passed over on their first letter)
+    if ((c === 114 && k.startsWith('rail:')) || (c === 98 && k.startsWith('br:')) || (c === 103 && k.startsWith('ga:'))) keys.push(k);
+  }
   keys.sort();
   return keys.map((k) => (k.startsWith('ga:') ? `${k}=${g.flags[k]}` : k)).join(',');
 }
