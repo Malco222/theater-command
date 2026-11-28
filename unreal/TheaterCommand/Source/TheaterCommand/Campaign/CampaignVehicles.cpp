@@ -2,6 +2,8 @@
 #include "Campaign/CampaignMiniatureParts.h"
 #include "Campaign/CampaignUnitTable.h"
 #include "TheaterCommand.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 
 /**
  * The real vehicles, each built in code from the measurements of the real thing.
@@ -1601,6 +1603,123 @@ namespace VehicleParts
 	}
 }
 
+namespace
+{
+	/**
+	 * An aircraft that came as a model file alone, with no row among the code-built models (the carrier machines):
+	 * what the parade, the portraits and the map need to know of it, read once from its own file. The art director's
+	 * find on the Mac's parade of 26 November 2026: six carrier machines stood on the floor, half buried, and their
+	 * portraits were framed as ground vehicles, because only the code-built rows were asked whether a thing flies.
+	 * A machine with a row is never asked here.
+	 */
+	struct FFileFlyer
+	{
+		bool bFlies = false, bTableMesh = false;
+		double Room = 12.0, Aloft = 0.0; // (what VehicleRoom and VehicleAloft answer for a thing with no row)
+		FString Title;
+	};
+
+	// Where a word stands in a file's bytes between two places, the first of them or the last; INDEX_NONE where it does not.
+	int32 WordIn(const TArray<uint8>& Bytes, const ANSICHAR* Word, int32 From, int32 Until, bool bLast = false)
+	{
+		const int32 Length = FCStringAnsi::Strlen(Word);
+		const int32 Low = FMath::Max(From, 0), High = FMath::Min(Until, Bytes.Num()) - Length;
+		for (int32 Step = 0; Length > 0 && Low + Step <= High; ++Step)
+		{
+			const int32 At = bLast ? High - Step : Low + Step;
+			if (Bytes[At] == static_cast<uint8>(Word[0]) && FMemory::Memcmp(Bytes.GetData() + At, Word, static_cast<SIZE_T>(Length)) == 0)
+			{
+				return At;
+			}
+		}
+		return INDEX_NONE;
+	}
+
+	// The place of a key's value in a file's bytes, past its colon and any spaces; INDEX_NONE where the key is not there.
+	int32 ValueIn(const TArray<uint8>& Bytes, const ANSICHAR* Key, int32 Until, bool bLast = false)
+	{
+		int32 At = WordIn(Bytes, Key, 0, Until, bLast);
+		if (At == INDEX_NONE)
+		{
+			return INDEX_NONE;
+		}
+		At += FCStringAnsi::Strlen(Key);
+		while (At < Bytes.Num() && (Bytes[At] == ' ' || Bytes[At] == ':'))
+		{
+			++At;
+		}
+		return At;
+	}
+
+	// The number written at a place in a file's bytes; nought where there is none.
+	double NumberIn(const TArray<uint8>& Bytes, int32 At)
+	{
+		ANSICHAR Digits[32];
+		int32 Count = 0;
+		while (At >= 0 && At < Bytes.Num() && Count < 31 && ((Bytes[At] >= '0' && Bytes[At] <= '9') || Bytes[At] == '.'))
+		{
+			Digits[Count++] = static_cast<ANSICHAR>(Bytes[At++]);
+		}
+		Digits[Count] = 0;
+		return Count > 0 ? FCStringAnsi::Atod(Digits) : 0.0;
+	}
+
+	FFileFlyer FileFlyer(const FString& Name)
+	{
+		FString Kind = Name;
+		Name.Split(TEXT(":"), &Kind, nullptr);
+		static TMap<FString, FFileFlyer> Looked; // (a file that is not there, or is no aircraft, is remembered as that)
+		if (const FFileFlyer* Had = Looked.Find(Kind))
+		{
+			return *Had;
+		}
+		FFileFlyer Fresh;
+		TArray<uint8> Bytes;
+		const FString Path = FPaths::ProjectContentDir() / TEXT("Models") / (Kind + TEXT(".json"));
+		if (!Kind.IsEmpty() && FPaths::FileExists(Path) && FFileHelper::LoadFileToArray(Bytes, *Path))
+		{
+			// (Both of the aircraft's makers write "kind" and "name" among the first keys of the file. One writes the
+			// span and the length there too, the other at the file's foot after parts that have lengths of their own:
+			// so the head is asked what it is and what it is called, and the last of each measure is the machine's.)
+			const int32 KindAt = ValueIn(Bytes, "\"kind\"", 4096);
+			if (KindAt != INDEX_NONE && WordIn(Bytes, "\"aircraft\"", KindAt, KindAt + 10) == KindAt)
+			{
+				Fresh.bFlies = true;
+				const int32 FarAt = ValueIn(Bytes, "\"far\"", Bytes.Num());
+				Fresh.bTableMesh = FarAt != INDEX_NONE && FarAt < Bytes.Num() && Bytes[FarAt] == '{';
+				// (Room in the row and height of the stand as the rows give them to machines of the same span: a
+				// fighter 14 to 16 m and 3 m up, a twin 26 to 28 m and 4 m, a four-engined bomber 38 m and 4.5 m.)
+				const double Wingspan = NumberIn(Bytes, ValueIn(Bytes, "\"span\"", Bytes.Num(), true));
+				const double Nose = NumberIn(Bytes, ValueIn(Bytes, "\"long\"", Bytes.Num(), true));
+				Fresh.Room = Wingspan > 0.0 ? FMath::Max(12.0, Wingspan * 1.12 + 3.0) : 14.0;
+				Fresh.Aloft = Wingspan < 13.5 ? 3.0 : Wingspan < 28.0 ? 4.0 : 4.5;
+				int32 NameAt = ValueIn(Bytes, "\"name\"", 4096);
+				if (NameAt != INDEX_NONE && NameAt < Bytes.Num() && Bytes[NameAt] == '"')
+				{
+					for (++NameAt; NameAt < Bytes.Num() && Bytes[NameAt] >= 32 && Bytes[NameAt] < 127 && Bytes[NameAt] != '"' && Bytes[NameAt] != '\\' && Fresh.Title.Len() < 80; ++NameAt)
+					{
+						Fresh.Title.AppendChar(static_cast<TCHAR>(Bytes[NameAt]));
+					}
+					if (NameAt < Bytes.Num() && Bytes[NameAt] == '"')
+					{
+						Fresh.Title.RemoveFromEnd(TEXT(" (our own model)"));
+						if (Wingspan > 0.0 && Nose > 0.0)
+						{
+							Fresh.Title += FString::Printf(TEXT("  -  span %.1f m, length %.1f m"), Wingspan, Nose);
+						}
+					}
+					else
+					{
+						Fresh.Title.Reset(); // (a name this cannot read whole: the machine goes by its file's name)
+					}
+				}
+			}
+		}
+		Looked.Add(Kind, Fresh);
+		return Fresh;
+	}
+}
+
 FString& MiniatureParts::NationWanted()
 {
 	static FString Tag;
@@ -1622,8 +1741,10 @@ bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double M
 			Whose = Listed->Nation;
 		}
 		// (An aircraft asked for plainly is its table mesh: a formation carries five of them, and a raid several
-		// formations. The cards, the parade and the airfields have the fine one.)
-		if (Sculpted(Kind, Whose, Where, Metre, Turn, Listed && Listed->Aloft > 0.0 && !bFine))
+		// formations. The cards, the parade and the airfields have the fine one. A machine that came as a model file
+		// alone, with no row here, is asked of its own file: see FileFlyer.)
+		const bool bTableMesh = !bFine && (Listed ? Listed->Aloft > 0.0 : FileFlyer(Kind).bTableMesh);
+		if (Sculpted(Kind, Whose, Where, Metre, Turn, bTableMesh))
 		{
 			return true;
 		}
@@ -1741,6 +1862,15 @@ static const VehicleParts::FModel* ModelCalled(const FString& Name)
 FString FMiniatureMesh::VehicleTitle(const FString& Name)
 {
 	const VehicleParts::FModel* Known = ModelCalled(Name);
+	if (!Known)
+	{
+		// (an aircraft that came as a model file alone is called what its own file calls it)
+		const FFileFlyer Flown = FileFlyer(Name);
+		if (!Flown.Title.IsEmpty())
+		{
+			return Flown.Title;
+		}
+	}
 	return Known ? FString(Known->Title) : Name;
 }
 
@@ -1758,13 +1888,15 @@ FString FMiniatureMesh::VehicleNation(const FString& Name)
 double FMiniatureMesh::VehicleRoom(const FString& Name)
 {
 	const VehicleParts::FModel* Known = ModelCalled(Name);
-	return Known ? Known->Room : 12.0;
+	return Known ? Known->Room : FileFlyer(Name).Room;
 }
 
 double FMiniatureMesh::VehicleAloft(const FString& Name)
 {
+	// (An aircraft that came as a model file alone flies as the rest do: on the parade's stand, and framed in its
+	// portrait as a machine in the air. See FileFlyer.)
 	const VehicleParts::FModel* Known = ModelCalled(Name);
-	return Known ? Known->Aloft : 0.0;
+	return Known ? Known->Aloft : FileFlyer(Name).Aloft;
 }
 
 int32 FMiniatureMesh::Year = 1939;
