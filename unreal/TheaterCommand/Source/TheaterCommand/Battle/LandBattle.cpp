@@ -2733,6 +2733,7 @@ bool ALandBattle::Open()
 			BattleKey->ContactShadowLength = Contact > 0.0f ? FMath::Clamp(Contact, 0.02f, 3.0f) * static_cast<float>(UnitsPerMetre) : 0.05f;
 			BattleKey->MarkRenderStateDirty();
 		}
+		TheaterSpeed::LayLeanLand(); // (tc.Speed.LeanLand: the battle's lighter frame over the light just set; nothing with the switch off)
 	}
 	// The film's shallow focus (the graphics audit's E9, Brian's D3): depth of field drawn only while the camera holds a
 	// close follow shot (LandEye::Pose::Focus), the map's trims keeping it off everywhere else; put back as it ends.
@@ -12606,6 +12607,7 @@ void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 	StopDarkRead();
 	CloseLive();
 	HideScreen();
+	TheaterSpeed::LiftLeanLand(); // (tc.Speed.LeanLand, first: its settings as the battle's light had them, for the trims below to put back the map's)
 	// (the map's own light trims again, and its sun's contact shadow)
 	for (const TPair<FString, FString>& Kept : KeptTrims)
 	{

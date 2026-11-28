@@ -172,6 +172,14 @@ namespace
 		TEXT("tc.Speed.PaceTry"), -1,
 		TEXT("tc.Speed.Pace, for a test: the heat the pace is told (0 nominal, 1 moderate, 2 heavy) in place of the Mac's own word; -1 the Mac's own."));
 
+	TAutoConsoleVariable<int32> CVarLeanLand(
+		TEXT("tc.Speed.LeanLand"), 0,
+		TEXT("0 leaves a land battle's frame as it was. 1 lays the settings in tc.Speed.LeanLandSet as the battle sets its light and lifts them as it ends: a lighter frame for the battle alone, the map and the sea as they were. Each is laid at the rank it already had (a quality group's, or code's), so that nothing is held against a later change of the group; one set by hand or by -TheaterSet is left alone. Read as the battle begins. It changes the picture a little: not on without the art director's pairs."));
+	TAutoConsoleVariable<FString> CVarLeanLandSet(
+		TEXT("tc.Speed.LeanLandSet"),
+		TEXT("r.Shadow.Virtual.ResolutionLodBiasDirectional:-0.75;r.Shadow.Virtual.ResolutionLodBiasDirectionalMoving:-0.75;r.Shadow.Virtual.SMRT.RayCountDirectional:4;r.Shadow.Virtual.SMRT.SamplesPerRayDirectional:2;r.TSR.History.UpdateQuality:1;r.TSR.RejectionAntiAliasingQuality:1"),
+		TEXT("tc.Speed.LeanLand: the settings laid, as name:value;name:value (so that -TheaterSet, which parts at commas and the first equals sign, can carry it as one word). As it stands: the sun's shadow detail half way from the battle's to the map's, the soft shadow's rays halved, the upscaler's lighter history. The speed hunter's S1b on the Mac prices and pictures this same set as 'lean'."));
+
 	FRWLock HoldersGuard; // (tc.Speed.HoldersLock: see TheaterSpeed::FHoldersRead)
 
 	thread_local int32 QuietHere = 0; // (tc.Speed.QuietModel: this thread is modelling a fine sheet quietly, and how)
@@ -281,6 +289,12 @@ namespace
 	double PaceReadAt = 0.0; // (...when the heat was last read: once a second)
 	double PaceLowerSince = 0.0; // (...since when the heat has been below the step in force; 0: it is not)
 	double PaceLiftedAt = 0.0; // (...when a step was last lifted; 0: none has been)
+	struct FLeanKept
+	{
+		FString Name, Was;
+		EConsoleVariableFlags By = ECVF_SetByScalability;
+	};
+	TArray<FLeanKept> LeanKept; // (tc.Speed.LeanLand: each setting laid, as it stood before and the rank it was laid at)
 	int32 Summaries = 0;
 	// (the last five seconds the log closed, its frames a second and worst frame, for a reader that prints them beside
 	// its own counts: TheaterSpeed::LastWindow, the air battle's timing eye)
@@ -1016,6 +1030,73 @@ namespace TheaterSpeed
 				}
 			}
 		}
+	}
+
+	/**
+	 * tc.Speed.LeanLand: a land battle's lighter frame. (The speed hunter's finding 1, 27 November: a frame must cost the
+	 * chip about 15.5 ms or less on a cool Mac to hold 45 frames a second on a hot one; Prokhorovka's costs 15 and
+	 * Normandy's 18 to 19.) Laid by the battle once its own light is set (the shadows' quality group at 3), and lifted as
+	 * it ends before the battle puts its own trims back, so that the group's change back to the map's finds every
+	 * setting at the group's rank. A setting is laid at the rank it already has, never a higher: Unreal ignores a
+	 * lower rank's set after a higher one's, and a setting of the shadows' group laid by code would keep the battle's
+	 * value on the map, and the map's at sea, for the rest of the evening.
+	 */
+	void LayLeanLand()
+	{
+		LiftLeanLand(); // (never two laid: a battle begun before the last one's end was seen)
+		if (CVarLeanLand.GetValueOnGameThread() == 0)
+		{
+			return;
+		}
+		TArray<FString> Each;
+		CVarLeanLandSet.GetValueOnGameThread().ParseIntoArray(Each, TEXT(";"), true);
+		FString Laid;
+		for (const FString& One : Each)
+		{
+			FString Name, Value;
+			if (!One.Split(TEXT(":"), &Name, &Value))
+			{
+				continue;
+			}
+			Name.TrimStartAndEndInline();
+			Value.TrimStartAndEndInline();
+			IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*Name);
+			if (!Variable)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Speed: tc.Speed.LeanLandSet names no console variable called %s"), *Name);
+				continue;
+			}
+			const uint32 RankNow = static_cast<uint32>(Variable->GetFlags()) & static_cast<uint32>(ECVF_SetByMask);
+			if (RankNow > static_cast<uint32>(ECVF_SetByCode))
+			{
+				UE_LOG(LogTheater, Display, TEXT("Speed: %s left at %s, set by hand or by -TheaterSet (tc.Speed.LeanLand)"), *Name, *Variable->GetString());
+				continue;
+			}
+			FLeanKept Kept;
+			Kept.Name = Name;
+			Kept.Was = Variable->GetString();
+			Kept.By = static_cast<EConsoleVariableFlags>(FMath::Max(RankNow, static_cast<uint32>(ECVF_SetByScalability)));
+			Variable->Set(*Value, Kept.By);
+			Laid += FString::Printf(TEXT("%s%s %s (was %s)"), Laid.IsEmpty() ? TEXT("") : TEXT(", "), *Name, *Variable->GetString(), *Kept.Was);
+			LeanKept.Add(MoveTemp(Kept));
+		}
+		UE_LOG(LogTheater, Display, TEXT("Speed: the land battle's lighter frame laid: %s (tc.Speed.LeanLand)"), Laid.IsEmpty() ? TEXT("nothing") : *Laid);
+	}
+
+	void LiftLeanLand()
+	{
+		for (int32 Index = LeanKept.Num() - 1; Index >= 0; --Index)
+		{
+			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*LeanKept[Index].Name))
+			{
+				Variable->Set(*LeanKept[Index].Was, LeanKept[Index].By);
+			}
+		}
+		if (LeanKept.Num() > 0)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Speed: the land battle's lighter frame lifted, %d settings as they stood (tc.Speed.LeanLand)"), LeanKept.Num());
+		}
+		LeanKept.Reset();
 	}
 
 	/** tc.Speed.Pace: the seconds of a lower heat before a step is lifted, now: twice as long for each relapse. */

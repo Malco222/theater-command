@@ -224,6 +224,14 @@ class APlayerController;
  *                         for each time it warmed again soon after a lift. tc.Speed.PaceTry (0, 1, 2; -1 the Mac's own)
  *                         tells the pace a heat for a test. The same picture either way; nothing is done where the
  *                         machine does not tell its heat. With the switch off the log is as it was, letter for letter.
+ *   tc.Speed.LeanLand     0 (default): nothing, as before. 1: a land battle lays the settings in
+ *                         tc.Speed.LeanLandSet (name:value;name:value) once its own light is set and lifts them as it
+ *                         ends: a lighter frame for the battle alone. As it stands the set is the sun's shadow detail
+ *                         half way from the battle's to the map's, the soft shadow's rays halved and the upscaler's
+ *                         lighter history, the set the Mac's S1b prices and pictures as "lean". Each setting is laid
+ *                         at the rank it already has, so nothing is held against a later change of its quality group;
+ *                         one set by hand or by -TheaterSet is left alone. It changes the picture a little: off until
+ *                         the art director has passed the pairs.
  * And the log's line on held frames, each five seconds: the cap in force, how long the engine waited each frame to
  * keep to it and by how much its waits overran what it asked, and in how many frames the game's window was in front.
  * And the log's line on the machine itself, each five seconds, on a Mac: the system's own word on its heat (nominal,
@@ -246,6 +254,11 @@ namespace TheaterSpeed
 
 	/** Once a frame, from the player's controller: keeps the frame count, and writes the summary when it is due. */
 	void NoteFrame(float DeltaSeconds, UWorld* World);
+
+	/** tc.Speed.LeanLand: a land battle's lighter frame, laid once the battle has set its own light and lifted as it
+	 * ends, before the battle's own trims are put back. Nothing with the switch at 0. */
+	void LayLeanLand();
+	void LiftLeanLand();
 	/** The last five seconds the log closed (its line "Speed: N s, F frames a second (worst frame W ms ..."): false before
 	 * the first. For a reader that prints them beside its own counts, so that there is one meter (the air battle's
 	 * timing eye, -TheaterAirTimeEye, which turns the log on). Game thread. */
