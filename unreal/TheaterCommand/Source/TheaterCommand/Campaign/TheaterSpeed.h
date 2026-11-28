@@ -212,6 +212,18 @@ class APlayerController;
  *                         macOS stretches those sleeps when the screen is dark or the window hidden (capture 4's void
  *                         run Q, 21 to 26 frames a second): so a timing with a cap wants a lit screen and the window in
  *                         front, and the log's line on held frames (below) says whether it had them.
+ *   tc.Speed.Pace         0 (default): nothing, as before. 1: a steady pace by the Mac's own word on its heat (the
+ *                         speed hunter's finding 1, 27 November: in all eleven fair legs of the Mac's P56 the chip's
+ *                         time for a frame stepped up by a quarter to nearly a half 25 to 35 s after the Mac first said
+ *                         heavy heat, whatever the battle was doing; the same battle second read 60 frames a second in
+ *                         the leg whose heat came nine seconds later and 48 in the other two). While the Mac is cool
+ *                         nothing is touched. When it says moderate the game holds itself to tc.Speed.PaceWarm frames
+ *                         a second (50), and when it says heavy or worse, to tc.Speed.PaceHot (45): the cap is put in
+ *                         force as tc.Speed.FrameCap's is, and a lower tc.Speed.FrameCap stands. A step is lifted once
+ *                         the Mac has said the lower level for tc.Speed.PaceRest seconds together (60), twice as long
+ *                         for each time it warmed again soon after a lift. tc.Speed.PaceTry (0, 1, 2; -1 the Mac's own)
+ *                         tells the pace a heat for a test. The same picture either way; nothing is done where the
+ *                         machine does not tell its heat. With the switch off the log is as it was, letter for letter.
  * And the log's line on held frames, each five seconds: the cap in force, how long the engine waited each frame to
  * keep to it and by how much its waits overran what it asked, and in how many frames the game's window was in front.
  * And the log's line on the machine itself, each five seconds, on a Mac: the system's own word on its heat (nominal,

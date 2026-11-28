@@ -156,6 +156,22 @@ namespace
 		TEXT("tc.Speed.FrameCap"), 0,
 		TEXT("0 leaves the frames free, as before (a cool Mac draws 80 to 97 pictures a second for a screen that shows 60, and the chip's work for the rest is only heat). 20 to 240 holds the game to that many frames a second (t.MaxFPS, set by code: a value set by hand or by -TheaterSet stays); -1 has each frame wait for the screen's refresh (r.VSync 1). Seen at once; set back to 0, both are put back as they stood. The same picture either way. A capped game sleeps between frames, and macOS stretches the sleeps when the screen is dark or the window hidden: time it on a lit screen, the window in front."));
 
+	TAutoConsoleVariable<int32> CVarPace(
+		TEXT("tc.Speed.Pace"), 0,
+		TEXT("0 leaves the frames as tc.Speed.FrameCap has them, as before. 1 keeps a steady pace by the Mac's own word on its heat: while the Mac is cool nothing is touched; when it says it is warming (moderate, 1 of 4) the game holds itself to tc.Speed.PaceWarm frames a second, and when it says heavy (2 of 4) or worse, to tc.Speed.PaceHot. A step is lifted again once the Mac has said the lower level for tc.Speed.PaceRest seconds together, and twice as long each time it warms again soon after one was lifted. A Mac with no fan slows its own chip about half a minute after it says heavy, by a quarter to nearly a half: a game that asks less of it before then keeps an even pace where it had 60 and then a fall. The same picture either way. Where the machine does not tell its heat, nothing is done."));
+	TAutoConsoleVariable<int32> CVarPaceWarm(
+		TEXT("tc.Speed.PaceWarm"), 50,
+		TEXT("tc.Speed.Pace: the frames a second the game holds itself to while the Mac says moderate heat (20 to 240; 0 none). A lower tc.Speed.FrameCap stands."));
+	TAutoConsoleVariable<int32> CVarPaceHot(
+		TEXT("tc.Speed.PaceHot"), 45,
+		TEXT("tc.Speed.Pace: the frames a second the game holds itself to while the Mac says heavy heat or worse (20 to 240; 0 none). A lower tc.Speed.FrameCap stands."));
+	TAutoConsoleVariable<float> CVarPaceRest(
+		TEXT("tc.Speed.PaceRest"), 60.0f,
+		TEXT("tc.Speed.Pace: the seconds the Mac must say a lower heat, together, before one step of the pace is lifted (5 to 600)."));
+	TAutoConsoleVariable<int32> CVarPaceTry(
+		TEXT("tc.Speed.PaceTry"), -1,
+		TEXT("tc.Speed.Pace, for a test: the heat the pace is told (0 nominal, 1 moderate, 2 heavy) in place of the Mac's own word; -1 the Mac's own."));
+
 	FRWLock HoldersGuard; // (tc.Speed.HoldersLock: see TheaterSpeed::FHoldersRead)
 
 	thread_local int32 QuietHere = 0; // (tc.Speed.QuietModel: this thread is modelling a fine sheet quietly, and how)
@@ -258,6 +274,13 @@ namespace
 	bool bCapSetMax = false, bCapSetSync = false; // (...whether it set t.MaxFPS or r.VSync itself, and so has them to put back)
 	float CapMaxWas = 0.0f; // (...t.MaxFPS as it stood before)
 	int32 CapSyncWas = 0; // (...and r.VSync)
+	bool bCapPaced = false; // (...and whether it was tc.Speed.Pace that asked for the cap in force)
+	int32 PaceLevel = 0; // (tc.Speed.Pace: the step in force: 0 none, 1 the warm pace, 2 the hot one)
+	int32 PaceHeat = -1; // (...the heat it was last told: the Mac's own word, or tc.Speed.PaceTry's)
+	int32 PaceRelapses = 0; // (...how many times running the Mac warmed again soon after a step was lifted, to three)
+	double PaceReadAt = 0.0; // (...when the heat was last read: once a second)
+	double PaceLowerSince = 0.0; // (...since when the heat has been below the step in force; 0: it is not)
+	double PaceLiftedAt = 0.0; // (...when a step was last lifted; 0: none has been)
 	int32 Summaries = 0;
 	// (the last five seconds the log closed, its frames a second and worst frame, for a reader that prints them beside
 	// its own counts: TheaterSpeed::LastWindow, the air battle's timing eye)
@@ -995,6 +1018,85 @@ namespace TheaterSpeed
 		}
 	}
 
+	/** tc.Speed.Pace: the seconds of a lower heat before a step is lifted, now: twice as long for each relapse. */
+	static double PaceRestNow()
+	{
+		return static_cast<double>(FMath::Clamp(CVarPaceRest.GetValueOnGameThread(), 5.0f, 600.0f)) * static_cast<double>(1 << FMath::Clamp(PaceRelapses, 0, 3));
+	}
+
+	/** tc.Speed.Pace: the frames a second the step in force asks the game to hold itself to; 0 none. */
+	static int32 PaceCap()
+	{
+		const int32 Asked = PaceLevel >= 2 ? CVarPaceHot.GetValueOnGameThread() : PaceLevel == 1 ? CVarPaceWarm.GetValueOnGameThread() : 0;
+		return Asked <= 0 ? 0 : FMath::Clamp(Asked, 20, 240);
+	}
+
+	/**
+	 * tc.Speed.Pace: the step the Mac's heat asks for, read once a second. (The speed hunter's finding 1, 27 November: in
+	 * all eleven fair legs of the Mac's P56 the chip's time for a frame stepped up by a quarter to nearly a half 25 to
+	 * 35 s after the Mac first said heavy heat, whatever the battle was doing, and fell further than it settled in the
+	 * seconds after: the "first clash" at 39 to 43 frames a second. The game had kept the chip nine parts in ten busy
+	 * from the first second.) A step up is taken at once. A step down is taken one at a time, after the heat has been
+	 * lower for the rest asked, and the rest is doubled each time the Mac warms again within two rests of a lift, so
+	 * that the pace settles on what the Mac can keep up and does not swing. ApplyFrameCap puts the cap in force.
+	 */
+	static void TickPace(double Now)
+	{
+		if (CVarPace.GetValueOnGameThread() == 0)
+		{
+			if (PaceLevel != 0)
+			{
+				UE_LOG(LogTheater, Display, TEXT("Speed: the pace is let go (tc.Speed.Pace 0)"));
+			}
+			PaceLevel = 0;
+			PaceHeat = -1;
+			PaceRelapses = 0;
+			PaceReadAt = PaceLowerSince = PaceLiftedAt = 0.0;
+			return;
+		}
+		if (PaceReadAt > 0.0 && Now - PaceReadAt < 1.0)
+		{
+			return;
+		}
+		PaceReadAt = Now;
+		const int32 Tried = CVarPaceTry.GetValueOnGameThread();
+		PaceHeat = Tried >= 0 ? Tried : ReadHeat();
+		const int32 Want = FMath::Clamp(PaceHeat, 0, 2); // (not told: none)
+		const int32 Was = PaceLevel;
+		if (Want > PaceLevel)
+		{
+			const bool bRelapse = PaceLiftedAt > 0.0 && Now - PaceLiftedAt < 2.0 * PaceRestNow();
+			PaceRelapses = bRelapse ? FMath::Min(PaceRelapses + 1, 3) : FMath::Max(PaceRelapses - 1, 0);
+			PaceLevel = Want;
+			PaceLowerSince = 0.0;
+		}
+		else if (Want < PaceLevel)
+		{
+			if (PaceLowerSince <= 0.0)
+			{
+				PaceLowerSince = Now;
+			}
+			else if (Now - PaceLowerSince >= PaceRestNow())
+			{
+				--PaceLevel;
+				PaceLiftedAt = Now;
+				PaceLowerSince = Want < PaceLevel ? Now : 0.0;
+			}
+		}
+		else
+		{
+			PaceLowerSince = 0.0;
+		}
+		if (PaceLevel != Was)
+		{
+			static const TCHAR* const Steps[] = { TEXT("none"), TEXT("the warm pace"), TEXT("the hot pace") };
+			const int32 Cap = PaceCap();
+			const FString Holds = Cap > 0 ? FString::Printf(TEXT("the game holds itself to %d frames a second"), Cap) : FString(TEXT("the frames as tc.Speed.FrameCap has them"));
+			UE_LOG(LogTheater, Display, TEXT("Speed: the pace: %s, was %s (heat %d of 4%s): %s; a step is lifted after %.0f s of lower heat (tc.Speed.Pace)"),
+				Steps[PaceLevel], Steps[Was], PaceHeat, Tried >= 0 ? TEXT(", told by tc.Speed.PaceTry") : TEXT(""), *Holds, PaceRestNow());
+		}
+	}
+
 	/**
 	 * tc.Speed.FrameCap: puts the cap asked for in force when the switch changes, and takes it off again. With the switch
 	 * at 0 from the start nothing is touched. (Capture 4, 19 November: nothing in the game's code or settings limited its
@@ -1004,11 +1106,22 @@ namespace TheaterSpeed
 	static void ApplyFrameCap()
 	{
 		const int32 Asked = CVarFrameCap.GetValueOnGameThread();
-		const int32 Want = Asked < 0 ? -1 : Asked == 0 ? 0 : FMath::Clamp(Asked, 20, 240);
+		int32 Want = Asked < 0 ? -1 : Asked == 0 ? 0 : FMath::Clamp(Asked, 20, 240);
+		// (tc.Speed.Pace: the pace's cap where there is none, or the screen's refresh, or a higher one. With the pace off
+		// or the Mac cool it asks for nothing and this is as it was.)
+		const int32 Paced = PaceCap();
+		const bool bPaced = Paced > 0 && (Want <= 0 || Paced < Want);
+		if (bPaced)
+		{
+			Want = Paced;
+		}
 		if (Want == CapInForce)
 		{
 			return;
 		}
+		const TCHAR* const Why = bPaced ? TEXT("tc.Speed.Pace") : TEXT("tc.Speed.FrameCap");
+		const TCHAR* const WhyWas = bCapPaced ? TEXT("tc.Speed.Pace") : TEXT("tc.Speed.FrameCap"); // (whose cap is put back)
+		bCapPaced = bPaced;
 		static const TCHAR* const MaxName = TEXT("t.MaxFPS");
 		static const TCHAR* const SyncName = TEXT("r.VSync");
 		IConsoleVariable* MaxFPS = IConsoleManager::Get().FindConsoleVariable(MaxName);
@@ -1017,12 +1130,12 @@ namespace TheaterSpeed
 		if (bCapSetMax && MaxFPS)
 		{
 			MaxFPS->Set(CapMaxWas, ECVF_SetByCode);
-			UE_LOG(LogTheater, Display, TEXT("Speed: %s put back to %.0f (tc.Speed.FrameCap)"), MaxName, MaxFPS->GetFloat());
+			UE_LOG(LogTheater, Display, TEXT("Speed: %s put back to %.0f (%s)"), MaxName, MaxFPS->GetFloat(), WhyWas);
 		}
 		if (bCapSetSync && Sync)
 		{
 			Sync->Set(CapSyncWas, ECVF_SetByCode);
-			UE_LOG(LogTheater, Display, TEXT("Speed: %s put back to %d (tc.Speed.FrameCap)"), SyncName, Sync->GetInt());
+			UE_LOG(LogTheater, Display, TEXT("Speed: %s put back to %d (%s)"), SyncName, Sync->GetInt(), WhyWas);
 		}
 		bCapSetMax = bCapSetSync = false;
 		CapInForce = Want;
@@ -1030,27 +1143,27 @@ namespace TheaterSpeed
 		{
 			if (!MaxFPS)
 			{
-				UE_LOG(LogTheater, Warning, TEXT("Speed: tc.Speed.FrameCap found no console variable called %s"), MaxName);
+				UE_LOG(LogTheater, Warning, TEXT("Speed: %s found no console variable called %s"), Why, MaxName);
 				return;
 			}
 			CapMaxWas = MaxFPS->GetFloat();
 			MaxFPS->Set(static_cast<float>(Want), ECVF_SetByCode);
 			bCapSetMax = FMath::IsNearlyEqual(MaxFPS->GetFloat(), static_cast<float>(Want), 0.5f);
-			UE_LOG(LogTheater, Display, TEXT("Speed: %s %s %.0f%s (tc.Speed.FrameCap)"), MaxName, bCapSetMax ? TEXT("set to") : TEXT("left at"), MaxFPS->GetFloat(),
-				bCapSetMax ? TEXT("") : TEXT(", set by hand or by -TheaterSet"));
+			UE_LOG(LogTheater, Display, TEXT("Speed: %s %s %.0f%s (%s)"), MaxName, bCapSetMax ? TEXT("set to") : TEXT("left at"), MaxFPS->GetFloat(),
+				bCapSetMax ? TEXT("") : TEXT(", set by hand or by -TheaterSet"), Why);
 		}
 		else if (Want < 0)
 		{
 			if (!Sync)
 			{
-				UE_LOG(LogTheater, Warning, TEXT("Speed: tc.Speed.FrameCap found no console variable called %s"), SyncName);
+				UE_LOG(LogTheater, Warning, TEXT("Speed: %s found no console variable called %s"), Why, SyncName);
 				return;
 			}
 			CapSyncWas = Sync->GetInt();
 			Sync->Set(1, ECVF_SetByCode);
 			bCapSetSync = Sync->GetInt() == 1;
-			UE_LOG(LogTheater, Display, TEXT("Speed: %s %s %d%s (tc.Speed.FrameCap)"), SyncName, bCapSetSync ? TEXT("set to") : TEXT("left at"), Sync->GetInt(),
-				bCapSetSync ? TEXT("") : TEXT(", set by hand or by -TheaterSet"));
+			UE_LOG(LogTheater, Display, TEXT("Speed: %s %s %d%s (%s)"), SyncName, bCapSetSync ? TEXT("set to") : TEXT("left at"), Sync->GetInt(),
+				bCapSetSync ? TEXT("") : TEXT(", set by hand or by -TheaterSet"), Why);
 		}
 	}
 
@@ -1065,6 +1178,7 @@ namespace TheaterSpeed
 	void NoteFrame(float DeltaSeconds, UWorld* World)
 	{
 		ApplyCommandLineSets(); // (in case no table was laid first: it is done once)
+		TickPace(FPlatformTime::Seconds()); // (tc.Speed.Pace: the step the Mac's heat asks for, which the cap below puts in force)
 		ApplyFrameCap(); // (after the command line's sets, so that -TheaterSet=tc.Speed.FrameCap=60 is in force from the first frame)
 		// (Speed: tc.Speed.TidyAside, the second half. The frame just ended by the machine's own clock, which the game's
 		// speed and its pauses do not stretch; and when the engine last cleared out, whoever asked.)
@@ -1314,7 +1428,12 @@ namespace TheaterSpeed
 			const IConsoleVariable* Sync = IConsoleManager::Get().FindConsoleVariable(TEXT("r.VSync"));
 			const float MaxNow = MaxFPS ? MaxFPS->GetFloat() : 0.0f;
 			const int32 SyncNow = Sync ? Sync->GetInt() : 0;
-			const FString Cap = CapInForce > 0 ? FString::Printf(TEXT("%d a second"), CapInForce) : CapInForce < 0 ? FString(TEXT("the screen's refresh")) : FString(TEXT("none"));
+			FString Cap = CapInForce > 0 ? FString::Printf(TEXT("%d a second"), CapInForce) : CapInForce < 0 ? FString(TEXT("the screen's refresh")) : FString(TEXT("none"));
+			if (CVarPace.GetValueOnGameThread() != 0)
+			{
+				// (tc.Speed.Pace on: its step, and whether the cap in force is its own. Off, the line is as it was.)
+				Cap += FString::Printf(TEXT(", tc.Speed.Pace at step %d of 2%s"), PaceLevel, bCapPaced ? TEXT(" and the cap its own") : TEXT(""));
+			}
 			UE_LOG(LogTheater, Display, TEXT("Speed: held frames: tc.Speed.FrameCap %s (t.MaxFPS %.0f, r.VSync %d); the engine waited %.1f ms a frame to keep to it, its waits overran by %.1f; the game's window in front in %d of %d frames"),
 				*Cap, MaxNow, SyncNow, WindowIdle / Frames, WindowOverslept / Frames, WindowInFront, WindowFrames);
 			const double Rate = Frames / WindowClock;
