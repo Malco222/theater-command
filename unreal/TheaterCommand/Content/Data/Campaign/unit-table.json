@@ -2442,18 +2442,18 @@
    "ground": "forest and bog",
    "winter_wash": true,
    "marking": [
-    "C8102E",
+    "9E3039",
     "F2EEE2",
-    "C8102E"
+    "9E3039"
    ],
-   "marking_words": "red, white, red",
+   "marking_words": "carmine, white, carmine",
    "insignia": [
     {
      "ring": [
       0.0,
       1.0
      ],
-     "c": "C8102E"
+     "c": "9E3039"
     },
     {
      "ring": [
@@ -2467,19 +2467,19 @@
       0.0,
       0.33
      ],
-     "c": "C8102E"
+     "c": "9E3039"
     }
    ],
    "insignia_checked": true,
-   "insignia_words": "plain ring of the flag's colours: red, white, red; its 1918 to 1940 mark was a fire cross, which the game never shows",
+   "insignia_words": "plain ring of the flag's colours: carmine, white, carmine; its 1918 to 1940 mark was a fire cross, which the game never shows",
    "fin": {
     "dir": "h",
     "bands": [
-     "C8102E",
+     "9E3039",
      "F2EEE2",
-     "C8102E"
+     "9E3039"
     ],
-    "words": "red, white, red"
+    "words": "carmine, white, carmine"
    },
    "battleship": {
     "src": "captured",

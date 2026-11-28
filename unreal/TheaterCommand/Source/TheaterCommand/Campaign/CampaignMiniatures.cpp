@@ -1194,7 +1194,9 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		// Its markings: the nation's own on each side of the turret, and a number behind it.
 		if (!bFigure && !Raw->bAircraft && !Raw->bPiece)
 		{
-			const FString Mark = Tag == TEXT("SOV") ? FString(TEXT("SOV-ARMY")) : Tag == TEXT("USA") ? FString(TEXT("USA-ARMY")) : Tag == TEXT("UK") ? FString(TEXT("UK-FLASH")) : Tag;
+			// (Canada's tanks wear the flash as Britain's do: the art director's ruling of 26 November 2026, one nation,
+			// one mark, and the same on the map as in the battles. The other dominions wear their own roundels.)
+			const FString Mark = Tag == TEXT("SOV") ? FString(TEXT("SOV-ARMY")) : Tag == TEXT("USA") ? FString(TEXT("USA-ARMY")) : (Tag == TEXT("UK") || Tag == TEXT("CAN")) ? FString(TEXT("UK-FLASH")) : Tag;
 			const int32 Number = 100 + static_cast<int32>(GetTypeHash(Tag) % 500);
 			const FBox Bounds(Fresh.Vertices);
 			const double TurretUp = Bounds.Max.Z * 0.76, TurretOut = FMath::Max(FMath::Abs(Bounds.Min.Y), Bounds.Max.Y) * 0.56;

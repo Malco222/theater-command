@@ -458,7 +458,7 @@ namespace AircraftParts
 		}
 		F.Tail = { { 0.0, -4.35, -5.25, 0.36, 0.1 }, { 0.9, -4.5, -5.25, 0.36, 0.08 }, { 1.35, -4.72, -5.2, 0.36, 0.05 }, { 1.6, -4.95, -5.1, 0.36, 0.01 } };
 		F.Fin = { { 0.0, -4.0, -5.56, 0.35, 0.12 }, { 0.0, -4.5, -5.7, 1.0, 0.09 }, { 0.0, -4.85, -5.66, 1.35, 0.05 }, { 0.0, -5.15, -5.5, 1.5, 0.01 } };
-		F.Coat = { Hex(TEXT("4A5237")), Hex(TEXT("7A6748")), Hex(TEXT("B5C4A8")), 2.1 };
+		F.Coat = { Hex(TEXT("4A5237")), Hex(TEXT("605239")), Hex(TEXT("B5C4A8")), 2.1 };
 		F.Nose = F.Coat.Upper;
 		F.Boss = Black;
 		F.Screw = 1.63;
@@ -617,7 +617,7 @@ namespace AircraftParts
 		F.Wing = { { 0.0, 1.6, -1.1, -0.5, 0.48 }, { 1.4, 1.5, -1.2, -0.44, 0.46 }, { 5.2, 0.78, -0.58, -0.03, 0.2 }, { 5.8, 0.45, -0.34, 0.03, 0.11 }, { 6.05, 0.15, -0.16, 0.05, 0.05 }, { 6.095, 0.0, -0.08, 0.06, 0.01 } };
 		F.Tail = { { 0.0, -5.0, -6.0, 0.36, 0.11 }, { 1.4, -5.25, -5.95, 0.36, 0.07 }, { 1.68, -5.55, -5.85, 0.36, 0.01 } };
 		F.Fin = { { 0.0, -4.7, -6.35, 0.36, 0.12 }, { 0.0, -5.2, -6.5, 1.1, 0.09 }, { 0.0, -5.6, -6.45, 1.55, 0.05 }, { 0.0, -5.9, -6.3, 1.68, 0.01 } };
-		F.Coat = { Hex(TEXT("4A5237")), Hex(TEXT("7A6748")), Hex(TEXT("B5C4A8")), 2.1 };
+		F.Coat = { Hex(TEXT("4A5237")), Hex(TEXT("605239")), Hex(TEXT("B5C4A8")), 2.1 };
 		F.Nose = F.Coat.Upper;
 		F.Boss = Black;
 		F.Screw = 1.7;
@@ -852,7 +852,9 @@ namespace AircraftParts
 	 */
 	static void Lancaster(FMiniatureMesh& M)
 	{
-		const FCoat Coat{ Hex(TEXT("4A5237")), Hex(TEXT("7A6748")), Hex(TEXT("1B1C1E")), 3.4 };
+		// (One RAF dark earth, 605239, on the Spitfire, the Hurricane and here: the art director's ruling of
+		// 27 November 2026 on the aircraft workshop's sheets. It was 7A6748, which read as sand beside the green.)
+		const FCoat Coat{ Hex(TEXT("4A5237")), Hex(TEXT("605239")), Hex(TEXT("1B1C1E")), 3.4 };
 		// (the black of the night bombers comes well up the sides)
 		auto Night = [&Coat](const FVector& Place, const FVector& Facing, int32) { return Facing.Z < 0.45 ? Coat.Under : Coat(Place, Facing); };
 		auto Plain = [&Coat](const FVector& Place, const FVector& Facing, int32) { return Coat(Place, Facing); };
