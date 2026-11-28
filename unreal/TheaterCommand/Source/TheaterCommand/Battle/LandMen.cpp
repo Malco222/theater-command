@@ -1799,6 +1799,7 @@ namespace LandMen
 			double StoneComeAt = -1e18, StoneFromX = 0.0, StoneFromY = 0.0;
 			double StoneAtX = 0.0, StoneAtY = 0.0;       // where the rules had him when he took the step he stands at
 			bool bStoneWay = false;                      // on his way since the walls were last asked for where he stands
+			double StonePlainX = 0.0, StonePlainY = 0.0, StonePlainAt = -1e18; // the rules' place a frame ago, and when
 			// A gun's team (AddStoneTeam). The rules' place his step is for (where he rests, or the rest he is coming
 			// to); how the walls answered for him, her gunner, and her at rest (-1: not asked); whether he takes her
 			// gunner's step this frame, a man of her crew at her; and whether he is held to the rules' place because
@@ -3784,12 +3785,19 @@ namespace LandMen
 				M.F = F;
 				M.V = V;
 				// Never drawn in a wall's stone (SetStone): at rest on the field he stands a step clear of it, a step he
-				// takes as he comes in to his rest (his track shows it ahead) and no faster than he walks, and gives
-				// back as he moves off; where he starts the battle (or the film is wound to) he stands clear at once.
+				// takes as he comes in to his rest (his track shows it ahead), no faster than he walks or, running, than
+				// he runs, and gives back as he moves off; where he starts the battle (or the film is wound to) he
+				// stands clear at once.
 				// X and Y are the drawn place from here on: his frames, his fall and his body are there.
 				if (StoneAt)
 				{
 					const bool bFirst = M.Last < 0.0;
+					// (how far he himself went this frame: the rules' place now from where it was a frame ago; none
+					// where the frame before was not his last one, the film wound on)
+					const double Went = !bFirst && Now - M.StonePlainAt <= Dt + 1e-9 ? std::hypot(M.X - M.StonePlainX, M.Y - M.StonePlainY) : 0.0;
+					M.StonePlainX = M.X;
+					M.StonePlainY = M.Y;
+					M.StonePlainAt = Now;
 					M.StillFor = V < Crowd::StoneStill ? M.StillFor + Dt : 0.0;
 					const bool bHeld = M.Shown >= 0 && static_cast<size_t>(M.Shown) < M.Stances.size()
 						&& (M.Stances[static_cast<size_t>(M.Shown)].Aboard || M.Stances[static_cast<size_t>(M.Shown)].Lift > 0.f);
@@ -3937,8 +3945,8 @@ namespace LandMen
 						// On his way. Where his track shows the rest he is coming to, the step he will stand at there,
 						// taken as he comes in over the time a walk takes to make it (the art director, 27 November
 						// 2026, 20:54Z: he arrives at the clear place; the step is spent inside his approach, never
-						// while he holds a rest pose, never faster than he walks). Else none: he is where the rules
-						// have him.
+						// while he holds a rest pose; and 23:35Z: while his legs are moving, as fast as he himself is
+						// going and no faster). Else none: he is where the rules have him.
 						double RestX = 0.0, RestY = 0.0, RestAt = 0.0;
 						float RestF = 0.f;
 						WantX = WantY = 0.0;
@@ -4076,7 +4084,10 @@ namespace LandMen
 					// (where he is to be drawn now: on from the step his coming in began with to the one he will stand at)
 					const double AimX = FromX + (WantX - FromX) * Share, AimY = FromY + (WantY - FromY) * Share;
 					const double GapX = AimX - M.StoneX, GapY = AimY - M.StoneY, Gap = std::hypot(GapX, GapY);
-					const double Most = bFirst ? 1e9 : Crowd::StoneSpeed * Dt;
+					// (no faster than a walk; or, while his legs carry him on his way, than he himself went this
+					// frame: the art director, 27 November 2026, 23:35Z. A man who dashes to his rest veers to his
+					// place as he runs and is there as he stops; once he is still, a walk)
+					const double Most = bFirst ? 1e9 : std::max(Crowd::StoneSpeed * Dt, M.bStoneWay ? Went : 0.0);
 					if (Gap <= Most)
 					{
 						M.StoneX = AimX;

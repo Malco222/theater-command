@@ -11,10 +11,11 @@
 // The men's crowd on a recorded battle: for men who rest some seconds, a wall laid through where each rests (as the
 // rules might have had it), the battle played at 60 frames a second with the walls and, beside it, without. With them
 // a man at rest stands clear of the stone (his middle a shoulder's breadth from its face at least); he takes the step
-// no faster than a walk, never a jump, save at the battle's first frame where he starts clear; he takes it as he comes
-// in to his rest (the art director, 27 November 2026, 20:54Z: he arrives at the clear place), so that as he stops he
-// stands where the walls put him as he came, short only by what a walk could not cover in a bound of a few tenths of a
-// second; while he holds a rest pose, a quarter of a second and more without turning or going down or getting up, his
+// no faster than a walk or, while his legs carry him faster, than he is going himself (the art director, 27 November
+// 2026, 23:35Z), never a jump, save at the battle's first frame where he starts clear; he takes it as he comes in to
+// his rest (20:54Z: he arrives at the clear place), so that as he stops he stands where the walls put him as he came,
+// short only by what his own pace could not cover in a bound of a few tenths of a second, and of that no more than
+// 0.1 m is finished in a held pose; while he holds a rest pose, a quarter of a second and more without turning or going down or getting up, his
 // step does not move at all; on the move, once he has had the time a walk takes to give his step back and is not
 // about to rest by a wall, he is where the rules have him; a man who falls lies where he was drawn; the step the
 // crowd reports is the whole difference from the crowd without walls; and every man nowhere near a wall is the same
@@ -562,7 +563,7 @@ namespace
 	 * third man and the crew stand clear on their own steps, never on to her ground, and one held off it stands where
 	 * the rules have him; so does a man who walks up to a gun that stands, at no frame of his way drawn on her
 	 * ground. No man's step moves while he holds a rest pose (but with his gunner's, as the gunner turns
-	 * or goes down), none faster than a walk; the step is the whole difference from the plain crowd; and the crowd
+	 * or goes down), none faster than a walk or than he is going; the step is the whole difference from the plain crowd; and the crowd
 	 * tells of the same things at the same times with the guns as without. */
 	void TeamsInBattle(const std::string& RecText, const LandJson::Value& Rec, const std::map<std::string, std::shared_ptr<Soldier>>& Files, const std::string& Armies, const char* Name)
 	{
@@ -876,7 +877,7 @@ namespace
 		double End = 0.0;
 		for (const Gun& G : Guns) End = std::max(End, G.To + 3.0);
 		End = std::min(End, 150.0);
-		const double Dt = 1.0 / 60.0, Pace = Crowd::StoneSpeed * Dt;
+		const double Dt = 1.0 / 60.0;
 		const int Frames = static_cast<int>(std::ceil(End / Dt)) + 1;
 		int Jumps = 0, NotRules = 0, EventsOff = 0, EventsSeen = 0, CoresOff = 0;
 		int SkateChecks = 0, SkateFrames = 0, BoundFrames = 0, WithFrames = 0;
@@ -932,12 +933,13 @@ namespace
 				const double DeadAt = Pl.Info(Man).Dead;
 				S.bAlive = (DeadAt < 0.0 || T < DeadAt) && Cw.Visible(Man) && Pl.Visible(Man);
 				S.Moved = Fr > 0 ? std::hypot(S.Sx - S.LastSx, S.Sy - S.LastSy) : 0.0;
-				if (S.Moved > Pace + 1e-9) ++Jumps;
 				S.LastSx = S.Sx;
 				S.LastSy = S.Sy;
 				Longest = std::max(Longest, std::hypot(S.Sx, S.Sy));
 				if (S.bAlive && std::hypot(S.X - S.Qx - S.Sx, S.Y - S.Qy - S.Sy) > 1e-6) ++NotRules;
 				S.Speed = Fr > 0 ? std::hypot(S.Qx - S.PlainX, S.Qy - S.PlainY) / Dt : 0.0;
+				// (no faster than a walk or than he himself went this frame)
+				if (S.Moved > std::max(Crowd::StoneSpeed, S.Speed) * Dt + 1e-9) ++Jumps;
 				S.PlainX = S.Qx;
 				S.PlainY = S.Qy;
 				const float LieNow = Cw.LieOf(Man);
@@ -1168,7 +1170,7 @@ namespace
 		if (LateOnHers > 0) Fail("%d frames a man who walked up to a gun that stands was drawn on her ground from a place off it", LateOnHers);
 		if (OnHers > 0) Fail("%d times a man of her crew was stepped on to her ground or before her muzzle", OnHers);
 		if (SkateFrames > 0) Fail("%d times the step of a gun's man holding a rest pose moved: %d men slid where they stood, the longest %.3f m", SkateFrames, Skaters, LongestSkate);
-		if (Jumps > 0) Fail("%d times a gun's man's step moved faster than a walk", Jumps);
+		if (Jumps > 0) Fail("%d times a gun's man's step moved faster than a walk and than he was going himself", Jumps);
 		if (NotRules > 0) Fail("%d times a gun's man's step was not the whole difference from the plain crowd", NotRules);
 		if (EventsOff > 0) Fail("%d frames where the crowd told of other things with the guns than without", EventsOff);
 		if (CoresOff > 0) Fail("%d frames where the guns' men over the cores were not the men one after another", CoresOff);
@@ -1389,9 +1391,11 @@ int main(int Argc, char** Argv)
 	double WorstIn = -1e9, LongestStep = 0.0, FastestStep = 0.0;
 	std::vector<double> FellX(Rests.size(), 0.0), FellY(Rests.size(), 0.0), ClearFor(Rests.size(), 0.0), ClearX(Rests.size(), 0.0), ClearY(Rests.size(), 0.0);
 	// (the arrival: a man who comes in to his rest stands, as he stops, at the place the walls gave for it as he came:
-	// how far short of it he is drawn at that frame. One who had less time on his way than a walk takes to make the
-	// step, a bound of a few tenths of a second from where he lay, may be short by what a walk could not cover.)
+	// how far short of it he is drawn at that frame. One who had less time on his way than he needs to make the step
+	// at his own pace, a walk at the least: a bound of a few tenths of a second from where he lay, may be short by what
+	// that could not cover. WayReach: how far the step could have gone since he set off.)
 	std::vector<double> ArrivalGap(Rests.size(), -1.0), ArrivalStep(Rests.size(), 0.0), ArrivalNotice(Rests.size(), 0.0);
+	std::vector<double> WayReach(Rests.size(), 0.0), ArrivalReach(Rests.size(), 0.0);
 	std::vector<double> RestPlainX(Rests.size(), 0.0), RestPlainY(Rests.size(), 0.0), StillSince(Rests.size(), 0.0), LeftAt(Rests.size(), 0.0);
 	std::vector<char> bStopped(Rests.size(), 0), bWasThere(Rests.size(), 0);
 	int Arrivals = 0, ArrivedShort = 0, Bounds = 0;
@@ -1434,7 +1438,6 @@ int main(int Argc, char** Argv)
 			if (Fr > 0)
 			{
 				FastestStep = std::max(FastestStep, Moved);
-				if (Moved > Pace + 1e-9) ++Jumps;
 			}
 			LastDx[static_cast<size_t>(Man)] = Sx;
 			LastDy[static_cast<size_t>(Man)] = Sy;
@@ -1451,6 +1454,8 @@ int main(int Argc, char** Argv)
 			{
 				const size_t M = static_cast<size_t>(Man);
 				const double Speed = Fr > 0 ? std::hypot(Px - PlainX[M], Py - PlainY[M]) / Dt : 0.0;
+				// (no faster than a walk, or than the man himself went this frame: the plain crowd's place)
+				if (MovedNow > std::max(Crowd::StoneSpeed, Speed) * Dt + 1e-9) ++Jumps;
 				const float LieNow = W.LieOf(Man);
 				const bool bPose = Fr > 0 && Speed < 1e-6 && std::fabs(Pf - PoseF[M]) < 1e-4f && std::fabs(LieNow - PoseLie[M]) < 1e-4f
 					&& (DeadAt < 0.0 || T < DeadAt) && W.Visible(Man);
@@ -1542,9 +1547,14 @@ int main(int Argc, char** Argv)
 				}
 				if (Speed >= static_cast<double>(Crowd::StoneStill))
 				{
-					if (T - StillSince[K] >= Crowd::StoneStay + Dt) LeftAt[K] = T - Dt;
+					if (T - StillSince[K] >= Crowd::StoneStay + Dt)
+					{
+						LeftAt[K] = T - Dt;
+						WayReach[K] = 0.0;
+					}
 					StillSince[K] = T;
 				}
+				WayReach[K] += std::max(Crowd::StoneSpeed, Speed) * Dt;
 				if (!bStopped[K] && T >= R.From - 0.01 && std::hypot(Px - R.X, Py - R.Y) < 1e-6)
 				{
 					bStopped[K] = 1;
@@ -1554,6 +1564,7 @@ int main(int Argc, char** Argv)
 						ArrivalStep[K] = std::hypot(A.AnsX - R.X, A.AnsY - R.Y);
 						ArrivalGap[K] = std::hypot(R.X + Sx - A.AnsX, R.Y + Sy - A.AnsY);
 						ArrivalNotice[K] = T - LeftAt[K];
+						ArrivalReach[K] = WayReach[K];
 					}
 				}
 			}
@@ -1664,8 +1675,8 @@ int main(int Argc, char** Argv)
 	{
 		if (ArrivalGap[K] < 0.0) continue;
 		++Arrivals;
-		// (what a walk could not cover in the time he was on his way)
-		const double Bound = std::max(0.0, ArrivalStep[K] - Crowd::StoneSpeed * std::max(0.0, ArrivalNotice[K] - 0.05));
+		// (what his own pace, a walk at the least, could not cover in the time he was on his way, less three frames)
+		const double Bound = std::max(0.0, ArrivalStep[K] - ArrivalReach[K] * std::max(0.0, 1.0 - 0.05 / std::max(ArrivalNotice[K], 1e-9)));
 		if (Bound > 0.0)
 		{
 			++Bounds;
@@ -1697,14 +1708,14 @@ int main(int Argc, char** Argv)
 	std::printf("sides: %d of the %d stepped through their wall to have it at their back (%d of them as they came to rest in the battle); %d at some time faced their wall squarely from their own side\n", Crossed, Found, CrossedLater, FacedIt);
 	std::printf("the side kept: %d of the %d asked for afresh at their resting place; %d checks of the side they are drawn on, %d on the other; %d answers on the other side from the first of their stay; %d times the place stood at was not where the last answer put him\n",
 		AskedAfresh, Found, SideChecks, WrongSide, SideFlips, HintOff);
-	std::printf("at rest: %d checks, %d in the stone, the nearest %.3f m clear of his need; the longest step %.2f m; the fastest %.4f m a frame (a walk is %.4f); %d jumps\n",
+	std::printf("at rest: %d checks, %d in the stone, the nearest %.3f m clear of his need; the longest step %.2f m; the fastest %.4f m a frame (a walk is %.4f); %d faster than a walk and than he was going himself\n",
 		AtRestChecks, InStone, -WorstIn, LongestStep, FastestStep, Pace, Jumps);
 	std::printf("turning or going down at rest: %d checks in the second after, the furthest in the stone %.3f m, %d over a hand's breadth; %d as he pivots, his reach as it sweeps round the furthest in the stone %.3f m\n",
 		TurningChecks, std::max(0.0, WorstTurning), TurningIn, PivotChecks, std::max(0.0, WorstPivot));
 	std::printf("on the move a second and a half or more: %d checks, %d of them within a wall's reach, %d as he came in to a rest, %d stepped off the rules' place for longer than that\n", MovingChecks, MovingByWall, ComingIn, MovingStepped);
-	std::printf("the arrival: %d men came in to a rest in a wall; as they stopped the furthest from the place the walls gave as they came %.3f m; %d more made a bound to it too short for a walk to take the step (the furthest short %.3f m); %d not there by more than that\n",
+	std::printf("the arrival: %d men came in to a rest in a wall; as they stopped the furthest from the place the walls gave as they came %.3f m; %d more made a bound to it too short for him to take the step at his own pace (the furthest short %.3f m); %d not there by more than that\n",
 		Arrivals - Bounds, WorstArrival, Bounds, WorstBound, ArrivedShort);
-	std::printf("no skating: %d frames of a man holding a rest pose a step off the rules' place; in %d of them his step moved, %d men, the longest %.3f m in all; %d more frames as a man finished the step of a bound too short for a walk to make it, %d men, the longest %.3f m in all\n",
+	std::printf("no skating: %d frames of a man holding a rest pose a step off the rules' place; in %d of them his step moved, %d men, the longest %.3f m in all; %d more frames as a man finished the step of a bound too short for him to make it, %d men, the longest %.3f m in all\n",
 		SkateChecks, SkateFrames, Skaters, LongestSkate, BoundFrames, Bounders, LongestBound);
 	std::printf("first frame: %d of %d men who start in a wall start clear; the rules' place clear of every wall a second: %d checks, %d still stepped; fallen at rest: %d checks, %d moved\n",
 		FirstClear, FirstAsked, OnTheMove, MovedOff, FellChecks, FellMoved);
@@ -1726,7 +1737,8 @@ int main(int Argc, char** Argv)
 	if (SkateChecks < 2000) Fail("only %d frames of a man holding a rest pose a step off the rules' place: the skating was not tried", SkateChecks);
 	if (SkateFrames > 0) Fail("%d times the step of a man holding a rest pose moved: %d men slid where they stood, the longest %.3f m", SkateFrames, Skaters, LongestSkate);
 	if (MovingByWall < 20) Fail("only %d checks of a man on the move by a wall: the walk past was not tried", MovingByWall);
-	if (Jumps > 0) Fail("%d times a man's step moved faster than a walk", Jumps);
+	if (Jumps > 0) Fail("%d times a man's step moved faster than a walk and than he was going himself", Jumps);
+	if (LongestBound > 0.1) Fail("%d men finished a bound's step in a held rest pose, the longest %.3f m of it: over 0.1 m is the art director's to see, with the count", Bounders, LongestBound);
 	if (FirstAsked > 0 && FirstClear != FirstAsked) Fail("%d of %d men who start the battle in a wall did not start clear of it", FirstAsked - FirstClear, FirstAsked);
 	if (MovedOff > 0) Fail("%d times a man whose place the rules had clear of every wall a second was still drawn off it", MovedOff);
 	if (OnTheMove < 2000) Fail("only %d checks of these men clear of their walls: the way on was not tried", OnTheMove);

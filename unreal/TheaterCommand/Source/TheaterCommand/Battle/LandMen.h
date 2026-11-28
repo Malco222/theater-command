@@ -558,7 +558,9 @@ namespace LandMen
 		 * walk takes to make it, and for the way he will face and the stance he will have as he settles there
 		 * (StoneSettle), so he arrives at the clear place and does not slide to it as he holds his rest pose (the art
 		 * director, 27 November 2026); where it does not (a stop the rules had not yet told of) he takes it as he
-		 * settles. Never faster than a walk (StoneSpeed). Where he stops he stays while that place is clear: a step
+		 * settles. Never faster than a walk (StoneSpeed), or, while his legs carry him faster, than he is going
+		 * himself (the art director, 27 November 2026, 23:35Z: a man who dashes to his rest veers to his place as he
+		 * runs). Where he stops he stays while that place is clear: a step
 		 * moves at rest only as he turns, goes down, or must still come out of the stone (a bound of a few tenths of
 		 * a second from one place by a wall to another leaves a walk too little time). A man told to go down is asked
 		 * for as a lying man from that moment, one who pivots where he stands as he will face (StoneTurn). The step
@@ -573,7 +575,8 @@ namespace LandMen
 		 * for StoneDwell (battle seconds: a walking man between two kept points of a live battle is not at rest). */
 		static constexpr float StoneStill = 0.3f;
 		static constexpr double StoneDwell = 0.1;
-		/** How fast he takes the step (metres a battle second, as the field sees him go): a walk, never faster. */
+		/** How fast he takes the step (metres a battle second, as the field sees him go): a walk; faster only while
+		 * he himself is moving faster on his way, and then no faster than he goes. */
 		static constexpr double StoneSpeed = 1.4;
 		/** How far ahead on his track a man on his way is looked for a rest (battle seconds), and how long he must
 		 * stay at a place for it to be one (a halt of a moment between two bounds is not). */
